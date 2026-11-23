@@ -30,7 +30,7 @@ export fn ztcl_free(ptr: [*]u8, len: usize) void {
     gpa.free(ptr[0..len]);
 }
 
-/// Makes an interpreter with a memory limit of 2 GiB and no fuel limit.
+/// Makes an interpreter with a memory limit of 2 GiB and no step limit.
 export fn ztcl_new() ?*Handle {
     const h = gpa.create(Handle) catch return null;
     h.* = .{ .it = undefined };
@@ -50,8 +50,8 @@ export fn ztcl_delete(h: *Handle) void {
 }
 
 /// Sets the steps that the next scripts can use.
-export fn ztcl_set_fuel(h: *Handle, fuel: u64) void {
-    h.it.fuel = fuel;
+export fn ztcl_set_step_limit(h: *Handle, step_limit: u64) void {
+    h.it.step_limit = step_limit;
 }
 
 export fn ztcl_set_mem_limit(h: *Handle, bytes: usize) void {

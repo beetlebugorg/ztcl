@@ -85,7 +85,7 @@ The semantics of Tcl stay:
 - `upvar`, `global`, `variable`, `uplevel`, and `info locals` use the same cells in `Frame.vars`. A slot can hold a link to a cell of another frame.
 - A table of ranges maps an address to its commands and loops. An error adds each enclosing command to `errorInfo`. A `break` or a `continue` from a general command goes to the innermost loop.
 - A cell can own a dict. `dict incr` or `dict set` with a dropped result then writes to the buffer in place. Each general read of the cell ends the ownership first, so a copy of the value never changes.
-- The guard, each loop pass, and each `invoke` use one step of fuel and check the memory limit.
+- The guard, each loop pass, and each `invoke` use one step of the step limit and check the memory limit.
 
 ## The evaluator
 
@@ -114,7 +114,7 @@ A namespace is a prefix of names (`ns.zig`).
 
 `regex.zig` compiles a pattern to a small program (`char`, `any`, `set`, `assert`, `save`, `split`, `jmp`, `backref`, `match`). A backtracking matcher runs the program with a stack of its own, so a pattern does not use the native stack.
 
-- Each 32 steps of the matcher use one step of the fuel. `(a*)*b` on a long string stops with the fuel error.
+- Each 32 steps of the matcher use one step of the step limit. `(a*)*b` on a long string stops with the step limit error.
 - The backtrack stack has a limit of about one million entries.
 - A loop whose body matched no character does not run again, so `(a*)*` ends.
 - A repeat count is at most 255, and a program has at most 20 000 instructions.
@@ -138,13 +138,13 @@ The functions are those of Tcl 8.6, and four additions for zslice: `clamp`, `ler
 
 - The commands `open`, `socket`, `exec`, `file`, `clock`, `source`, `exit`, `cd`, `glob`, `load`, and `after` do not exist. A test checks this.
 - `puts` writes to a callback of the embedder.
-- Fuel: each command and each loop pass uses one step. At zero, the script stops with an error. `catch` cannot catch this error.
+- Step limit: each command and each loop pass uses one step. At zero, the script stops with an error. `catch` cannot catch this error.
 - The nesting of scripts in scripts has a limit (2000 levels): `eval`, a loop body, a command substitution, `try`, `catch`. Before, `set s {eval $s}; eval $s` used up the native stack and crashed the process.
 - `lsort` uses a merge sort with its buffer in the arena, so a compare command that sorts again uses little native stack.
 - The nested scripts can use at most 5 MiB of native stack (`max_native`). A frame of the bytecode loop is large in a debug build, so the count of levels alone is not safe.
 - The nesting of calls has a limit (600 levels). The nesting of command substitutions and of an expression has a limit (200 levels), and an expression has at most 2000 nodes. A deep script gives an error and does not use up the native stack.
-- A glob match goes back only to the last `*`. Its time is at most the pattern length times the string length. `string match`, `switch -glob`, `lsearch -glob`, and `dict filter` pay one step of fuel for each 4096 units of that product.
-- A regular expression uses the fuel (see above).
+- A glob match goes back only to the last `*`. Its time is at most the pattern length times the string length. `string match`, `switch -glob`, `lsearch -glob`, and `dict filter` pay one step of the step limit for each 4096 units of that product.
+- A regular expression uses the step limit (see above).
 - All memory comes from one arena on the allocator that the embedder gives. `deinit` frees it in one step. The interpreter frees no memory before `deinit` or `reset`, so a script that makes many strings grows the arena.
 - A memory limit (`mem_limit`). A counter between the arena and the allocator of the embedder counts the bytes. When the count is above the limit, the next command or loop pass stops the script with the error `the script used too much memory`. `catch` and `try` cannot catch it. One command can go above the limit by the size of its own result, for example one `string repeat`.
 - `reset` makes the interpreter new and frees the arena. The limits, the output, the seed, and the data of the embedder stay. The embedder loads its scripts again after a reset. A reset that keeps the commands and frees only the values of one evaluation is not there yet.

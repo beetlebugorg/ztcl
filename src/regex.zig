@@ -1,7 +1,7 @@
 //! Regular expressions: `regexp`, `regsub`, and the `-regexp` options.
 //!
 //! The pattern compiles to a small program. A backtracking matcher runs
-//! the program. Each 32 steps of the matcher use one step of the fuel,
+//! the program. Each 32 steps of the matcher use one step of the step limit,
 //! and the backtrack stack has a fixed limit, so a pattern cannot run
 //! without end.
 //!
@@ -551,8 +551,8 @@ pub const Matcher = struct {
             m.steps += 1;
             if (m.steps >= 32) {
                 m.steps = 0;
-                if (m.it.fuel == 0) return m.it.fail("the script ran out of fuel", .{});
-                m.it.fuel -= 1;
+                if (m.it.step_limit == 0) return m.it.fail("step limit reached", .{});
+                m.it.step_limit -= 1;
             }
             var ok = true;
             switch (prog[pc]) {

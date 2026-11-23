@@ -8,7 +8,7 @@
 //! braced `expr` is not parsed again.
 //!
 //! `Interp` runs a script. All memory comes from one arena on the given
-//! allocator, and `deinit` frees it in one step. A fuel counter stops a
+//! allocator, and `deinit` frees it in one step. A step limit stops a
 //! script that runs too long. Commands that reach the outside world do
 //! not exist; `puts` writes to a callback.
 //!
@@ -577,7 +577,7 @@ pub const Interp = struct {
     /// The line of the last failed command in its own script.
     proc_line: u32 = 0,
     /// Steps left. Each command and each loop pass uses one step.
-    fuel: u64 = std.math.maxInt(u64),
+    step_limit: u64 = std.math.maxInt(u64),
     depth: u32 = 0,
     max_depth: u32 = 600,
     /// The nesting of scripts in scripts, and its limit.
@@ -640,7 +640,7 @@ pub const Interp = struct {
         const keep = it.*;
         it.* = .{ .counter = counter, .arena = arena };
         it.mem_limit = keep.mem_limit;
-        it.fuel = keep.fuel;
+        it.step_limit = keep.step_limit;
         it.max_depth = keep.max_depth;
         it.max_nest = keep.max_nest;
         it.max_native = keep.max_native;
@@ -877,8 +877,8 @@ pub const Interp = struct {
     }
 
     pub fn evalCmd(it: *Interp, c: *Cmd) Error!Value {
-        if (it.fuel == 0) return it.fail("the script ran out of fuel", .{});
-        it.fuel -= 1;
+        if (it.step_limit == 0) return it.fail("step limit reached", .{});
+        it.step_limit -= 1;
         if (it.counter.used > it.mem_limit) return it.fail("the script used too much memory", .{});
         if (c.fast != .none and c.epoch == it.epoch and c.ns == it.ns.ptr) {
             if (it.evalFast(c) catch |e| return it.noteLine(c, e)) |v| return v;
@@ -1048,8 +1048,8 @@ pub const Interp = struct {
         if (e != error.TclError) return e;
         if (it.error_line == 0) it.error_line = c.line;
         it.proc_line = c.line;
-        // The end of the fuel leaves no trace: the unwind stays cheap.
-        if (it.fuel != 0 and !it.overLimit()) it.addErrorInfo(c) catch {};
+        // The end of the step limit leaves no trace: the unwind stays cheap.
+        if (it.step_limit != 0 and !it.overLimit()) it.addErrorInfo(c) catch {};
         return e;
     }
 
@@ -1095,8 +1095,8 @@ pub const Interp = struct {
     /// Runs a command given as a list of words.
     pub fn callWords(it: *Interp, argv: []const Value) Error!Value {
         if (argv.len == 0) return Value.empty;
-        if (it.fuel == 0) return it.fail("the script ran out of fuel", .{});
-        it.fuel -= 1;
+        if (it.step_limit == 0) return it.fail("step limit reached", .{});
+        it.step_limit -= 1;
         const name = try it.str(argv[0]);
         const command = it.findCommand(name) orelse return it.fail("invalid command name \"{s}\"", .{name});
         return it.call(command, argv, null);

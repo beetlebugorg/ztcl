@@ -252,8 +252,8 @@ fn cmdIf(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
 }
 
 fn step(it: *Interp) Error!void {
-    if (it.fuel == 0) return it.fail("the script ran out of fuel", .{});
-    it.fuel -= 1;
+    if (it.step_limit == 0) return it.fail("step limit reached", .{});
+    it.step_limit -= 1;
     if (it.overLimit()) return it.fail("the script used too much memory", .{});
 }
 
@@ -387,7 +387,7 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             if (index_var) |iv| try it.setVar(try it.str(iv), Value.empty);
         } else switch (match) {
             .exact => hit = if (nocase) std.ascii.eqlIgnoreCase(pat, subject) else eql(pat, subject),
-            .glob => hit = try globFuel(it, pat, subject, nocase),
+            .glob => hit = try globSteps(it, pat, subject, nocase),
             .regexp => {
                 const re = try regex.compile(it, pat, .{ .nocase = nocase });
                 var m = try regex.Matcher.init(it, re, subject);
@@ -633,7 +633,7 @@ pub const Caught = struct {
     }
 };
 
-/// Runs a script and catches its end. The end of the fuel is not
+/// Runs a script and catches its end. The end of the step limit is not
 /// caught: it stays an error.
 pub fn runCaught(it: *Interp, script: Error!*interp.Script) Error!Caught {
     const depth = it.depth;
@@ -658,8 +658,8 @@ pub fn runCaught(it: *Interp, script: Error!*interp.Script) Error!Caught {
         }
     }
     if (c.code == 1) {
-        // A script cannot catch the end of its fuel or of its memory.
-        if (it.fuel == 0 or it.overLimit()) return error.TclError;
+        // A script cannot catch the end of its step limit or of its memory.
+        if (it.step_limit == 0 or it.overLimit()) return error.TclError;
         c.error_line = it.proc_line;
         try it.finishError();
         c.error_code = it.error_code;
@@ -994,7 +994,7 @@ fn cmdLsearch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         };
         var order: std.math.Order = .eq;
         const hit = switch (match) {
-            .glob => try globFuel(it, pat, try it.str(key), nocase),
+            .glob => try globSteps(it, pat, try it.str(key), nocase),
             .regexp => try regex.matches(it, pat, try it.str(key), nocase),
             .exact, .sorted => blk: {
                 order = switch (kind) {
@@ -1151,15 +1151,15 @@ fn globOne(pat: []const u8, p_in: usize, c_in: u8, nocase: bool) ?usize {
     return if (lit == ch) p + 1 else null;
 }
 
-/// A glob match that uses the fuel: one step for each 4096 units of
+/// A glob match that uses the step limit: one step for each 4096 units of
 /// the pattern length times the string length.
-pub fn globFuel(it: *Interp, pat: []const u8, s: []const u8, nocase: bool) Error!bool {
+pub fn globSteps(it: *Interp, pat: []const u8, s: []const u8, nocase: bool) Error!bool {
     const cost = (pat.len *| s.len) / 4096;
-    if (cost > it.fuel) {
-        it.fuel = 0;
-        return it.fail("the script ran out of fuel", .{});
+    if (cost > it.step_limit) {
+        it.step_limit = 0;
+        return it.fail("step limit reached", .{});
     }
-    it.fuel -= cost;
+    it.step_limit -= cost;
     return globMatch(pat, s, nocase);
 }
 
@@ -1382,7 +1382,7 @@ fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (args.len == 3 and eql(try it.str(args[0]), "-nocase")) nocase = true else if (args.len != 2) return it.wrongArgs("string match ?-nocase? pattern string");
             var pat = try it.str(args[args.len - 2]);
             if (nocase) pat = try std.ascii.allocLowerString(a, pat);
-            return .{ .int = @intFromBool(try globFuel(it, pat, try it.str(args[args.len - 1]), nocase)) };
+            return .{ .int = @intFromBool(try globSteps(it, pat, try it.str(args[args.len - 1]), nocase)) };
         },
         .wordstart, .wordend => {
             if (args.len != 2) {

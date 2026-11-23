@@ -28,7 +28,7 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 2. Run the suite before a change to the interpreter is done. The pass count of a file must not drop. The total is 19 241 for `core-8-6-16`.
 3. Add no command that reaches the host: no files, sockets, processes, clock, or environment. `puts` goes to the embedder callback.
 4. Keep scripts deterministic. Output depends only on the script, the seed, and the embedder inputs.
-5. Keep the limits: fuel, memory, nesting, and native stack. A script must not crash the host.
+5. Keep the limits: step limit, memory, nesting, and native stack. A script must not crash the host.
 6. Keep the fast path and the slow path of a point proc equal, bit for bit.
 7. Add no dependency. Copy no code from Tcl or from a project with a copyleft license. Credit each source in `docs/references/`.
 8. Start each source file with a `//!` comment that explains its algorithm, and an SPDX line for BSD-2-Clause.

@@ -17,7 +17,7 @@ fn check(cases: []const Case) !void {
         var it: tcl.Interp = undefined;
         try it.init(std.testing.allocator);
         defer it.deinit();
-        it.fuel = 10_000_000;
+        it.step_limit = 10_000_000;
         var got: []const u8 = undefined;
         if (it.eval(c[0])) |v| {
             got = try it.str(v);
@@ -264,9 +264,9 @@ test "control flow" {
         .{ "switch a {a - b {set r ab} c {set r c}}", "ab" },
         .{ "switch -glob abc {a* {set r glob} default {set r no}}", "glob" },
         .{ "switch x {a {set r 1}}", "" },
-        .{ "while 1 {}", "!the script ran out of fuel" },
-        .{ "catch {while 1 {}}", "!the script ran out of fuel" },
-        .{ "proc f {} {f2}; proc f2 {} {catch {while 1 {}}}; f", "!the script ran out of fuel" },
+        .{ "while 1 {}", "!step limit reached" },
+        .{ "catch {while 1 {}}", "!step limit reached" },
+        .{ "proc f {} {f2}; proc f2 {} {catch {while 1 {}}}; f", "!step limit reached" },
     });
 }
 
@@ -480,15 +480,15 @@ test "deep nesting is an error and no crash" {
     try std.testing.expectEqualStrings("the expression is too large", try it.str(it.result));
 }
 
-test "the fuel counter stops a long script" {
+test "the step limit stops a long script" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    it.fuel = 1000;
+    it.step_limit = 1000;
     try std.testing.expectError(error.TclError, it.eval("set i 0; while {1} {incr i}"));
-    try std.testing.expectEqualStrings("the script ran out of fuel", try it.str(it.result));
-    // More fuel lets the interpreter run again.
-    it.fuel = 1000;
+    try std.testing.expectEqualStrings("step limit reached", try it.str(it.result));
+    // A higher step limit lets the interpreter run again.
+    it.step_limit = 1000;
     const v = try it.eval("set i");
     try std.testing.expect(v.asInt().? > 100);
 }
@@ -576,7 +576,7 @@ test "regexp, regsub, and the -regexp options" {
         .{ "regexp {[[:digit:]]+} ab123 m; set m", "123" },
         .{ "regexp {(a)\\1} xaa", "1" },
         .{ "regexp {\\mfoo\\M} {a foo b}", "1" },
-        .{ "regexp {(a*)*b} aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac", "!the script ran out of fuel" },
+        .{ "regexp {(a*)*b} aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac", "!step limit reached" },
         .{ "regexp {(} x", "!couldn't compile regular expression pattern: parentheses () not balanced" },
         .{ "regsub -all {a} banana A", "bAnAnA" },
         .{ "regsub {(\\w+) (\\w+)} {hello world} {\\2 \\1}", "world hello" },
@@ -820,7 +820,7 @@ test "compact keeps the commands and returns the memory" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    it.fuel = 100_000_000;
+    it.step_limit = 100_000_000;
     _ = try it.eval(
         \\proc add {a {b 2}} { expr {$a + $b} }
         \\namespace eval m { variable n 5; proc f {} { variable n; incr n }; namespace export f; namespace ensemble create }
@@ -857,7 +857,7 @@ test "compact keeps a root value and leaves shared data shared" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    it.fuel = 100_000_000;
+    it.step_limit = 100_000_000;
     var roots = [_]tcl.Value{
         try it.eval("list a {b c} [list d [expr {1 + 2}]]"),
         try it.eval("set s [string repeat abc 10]; string range $s 3 8"),

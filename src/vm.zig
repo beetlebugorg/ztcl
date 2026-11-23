@@ -38,9 +38,9 @@ pub const Op = enum(u8) {
     load,
     /// Writes the top of the stack to slot `a`. The value stays.
     store,
-    /// Jumps to `a` when a core command changed. Uses one step of fuel.
+    /// Jumps to `a` when a core command changed. Uses one step of the step limit.
     guard,
-    /// Uses one step of fuel. A loop pass runs this.
+    /// Uses one step of the step limit. A loop pass runs this.
     step,
     jump,
     /// Pops a condition. Jumps to `a` when it is false.
@@ -911,8 +911,8 @@ inline fn writeCell(comptime named: bool, it: *Interp, f: *Frame, code: *const C
 }
 
 fn step(it: *Interp) Error!void {
-    if (it.fuel == 0) return it.fail("the script ran out of fuel", .{});
-    it.fuel -= 1;
+    if (it.step_limit == 0) return it.fail("step limit reached", .{});
+    it.step_limit -= 1;
     if (it.counter.used > it.mem_limit) return it.fail("the script used too much memory", .{});
 }
 

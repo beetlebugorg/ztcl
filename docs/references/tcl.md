@@ -36,7 +36,7 @@ Russ Cox, "Regular Expression Matching: the Virtual Machine Approach", 2009. htt
 
 **License:** Article
 
-**How ztcl uses it:** `src/regex.zig` compiles a pattern to the instruction set of the article (`char`, `split`, `jmp`, `save`, `match`) and runs it with a backtracking matcher. ztcl has its own code. It adds the sets, the assertions, the back references, a check that stops an empty loop, and the fuel. The syntax follows the manual page `re_syntax.n` of Tcl.
+**How ztcl uses it:** `src/regex.zig` compiles a pattern to the instruction set of the article (`char`, `split`, `jmp`, `save`, `match`) and runs it with a backtracking matcher. ztcl has its own code. It adds the sets, the assertions, the back references, a check that stops an empty loop, and the step limit. The syntax follows the manual page `re_syntax.n` of Tcl.
 
 ## Not used
 

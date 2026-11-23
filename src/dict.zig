@@ -57,7 +57,7 @@ fn sameKey(it: *Interp, x: Value, y: Value) Error!bool {
 }
 
 /// The place of a key in a table, or the empty place where it can go.
-/// A long probe uses fuel, so keys with equal hashes cannot run without
+/// A long probe uses steps, so keys with equal hashes cannot run without
 /// a limit.
 fn probe(it: *Interp, slots: []const value.DictSlot, items: []const Value, key: Value, h: u32) Error!usize {
     const mask = slots.len - 1;
@@ -335,8 +335,8 @@ fn eql(a: []const u8, b: []const u8) bool {
 }
 
 fn step(it: *Interp) Error!void {
-    if (it.fuel == 0) return it.fail("the script ran out of fuel", .{});
-    it.fuel -= 1;
+    if (it.step_limit == 0) return it.fail("step limit reached", .{});
+    it.step_limit -= 1;
 }
 
 /// The subcommands remove, replace, map, filter, update, and with.
@@ -389,7 +389,7 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
             var i: usize = 0;
             while (i < items.len) : (i += 2) {
                 for (args[2..]) |pat| {
-                    if (try cmds.globFuel(it, try it.str(pat), try it.str(items[i + off]), false)) {
+                    if (try cmds.globSteps(it, try it.str(pat), try it.str(items[i + off]), false)) {
                         try out.appendSlice(a, items[i .. i + 2]);
                         break;
                     }
@@ -541,8 +541,8 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
             const body = try it.scriptOf(argv, 4, cmd);
             var i: usize = 0;
             while (i < items.len) : (i += 2) {
-                if (it.fuel == 0) return it.fail("the script ran out of fuel", .{});
-                it.fuel -= 1;
+                if (it.step_limit == 0) return it.fail("step limit reached", .{});
+                it.step_limit -= 1;
                 try it.setVar(try it.str(names[0]), items[i]);
                 try it.setVar(try it.str(names[1]), items[i + 1]);
                 _ = it.evalScript(body) catch |e| switch (e) {

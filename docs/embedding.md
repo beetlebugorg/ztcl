@@ -20,7 +20,7 @@ An `Interp` must not move after `init`. Set the limits before you run a script f
 var it: ztcl.Interp = undefined;
 try it.init(gpa);
 defer it.deinit();
-it.fuel = 1_000_000;
+it.step_limit = 1_000_000;
 it.mem_limit = 64 << 20;
 const v = try it.eval("expr {6 * 7}");
 const text = try it.str(v);
@@ -30,7 +30,7 @@ On `error.TclError`, `it.result` holds the message and `it.error_line` holds the
 
 | Field or function | Use |
 |---|---|
-| `fuel` | The steps left. The default has no limit. |
+| `step_limit` | The steps left. The default has no limit. |
 | `mem_limit` | The memory limit in bytes. |
 | `output` | The callback of `puts`. With no callback, the output is dropped. |
 | `noise_seed` | The seed of `noise2` and `noise3`. |
@@ -52,7 +52,7 @@ pub fn main(init: std.process.Init) !void {
     var it: ztcl.Interp = undefined;
     try it.init(gpa);
     defer it.deinit();
-    it.fuel = 1_000_000;
+    it.step_limit = 1_000_000;
     it.mem_limit = 64 << 20;
     try ztcl.point.install(&it, &state);
 
@@ -97,6 +97,6 @@ A program is read-only when it runs. Two threads can run one program if each thr
 | `ztcl_eval(h, ptr, len)` | Runs a script. Returns 0 or 1. |
 | `ztcl_result_ptr`, `ztcl_result_len` | The result or the error message. |
 | `ztcl_output_ptr`, `ztcl_output_len`, `ztcl_output_clear` | The text of `puts`. |
-| `ztcl_set_fuel`, `ztcl_set_mem_limit` | The limits. |
+| `ztcl_set_step_limit`, `ztcl_set_mem_limit` | The limits. |
 
 `tools/wasm-smoke.mjs` is a working example for Node.js.

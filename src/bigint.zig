@@ -8,7 +8,7 @@
 //! Each operation reads the operands into `std.math.big.int.Managed`,
 //! computes the result, and writes the text. The memory of the
 //! operation goes through the counter of the interpreter and is free
-//! at the end. An operation uses fuel in proportion to the square of
+//! at the end. An operation uses steps in proportion to the square of
 //! the operand size, and a result has at most `max_bits` bits.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
@@ -36,14 +36,14 @@ fn mem(e: anyerror) Error {
     return if (e == error.OutOfMemory) error.OutOfMemory else unreachable;
 }
 
-/// Uses fuel for an operation on `limbs` limbs.
+/// Uses steps for an operation on `limbs` limbs.
 fn charge(it: *Interp, limbs: usize) Error!void {
     const cost = limbs * limbs / 64 + 1;
-    if (it.fuel < cost) {
-        it.fuel = 0;
-        return it.fail("the script ran out of fuel", .{});
+    if (it.step_limit < cost) {
+        it.step_limit = 0;
+        return it.fail("step limit reached", .{});
     }
-    it.fuel -= cost;
+    it.step_limit -= cost;
 }
 
 const Parts = struct { neg: bool, base: u8, body: []const u8 };

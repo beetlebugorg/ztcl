@@ -1,4 +1,4 @@
-//! A runner for Tcl scripts: `ztcl [--time] [--fuel N] [--mem N] [--repeat N] file.tcl ...`.
+//! A runner for Tcl scripts: `ztcl [--time] [--max-steps N] [--mem N] [--repeat N] file.tcl ...`.
 //!
 //! It runs the files in order in one interpreter and writes the output
 //! of `puts` to stdout. With no file, it reads commands from stdin, one
@@ -57,9 +57,9 @@ pub fn main(init: std.process.Init) !void {
             _ = try it.eval("set tt_verbose 1");
             continue;
         }
-        if (std.mem.eql(u8, arg, "--fuel") and i + 1 < args.len) {
+        if (std.mem.eql(u8, arg, "--max-steps") and i + 1 < args.len) {
             i += 1;
-            it.fuel = try std.fmt.parseInt(u64, args[i], 10);
+            it.step_limit = try std.fmt.parseInt(u64, args[i], 10);
             continue;
         }
         if (std.mem.eql(u8, arg, "--repeat") and i + 1 < args.len) {

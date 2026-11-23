@@ -309,8 +309,8 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     dead.deinit();
 
     if (opts.vars == .clear) {
-        const fuel = it.fuel;
-        defer it.fuel = fuel;
+        const steps = it.step_limit;
+        defer it.step_limit = steps;
         try it.startVars();
     }
 }

@@ -7,7 +7,7 @@
 //! var it: ztcl.Interp = undefined;
 //! try it.init(gpa);
 //! defer it.deinit();
-//! it.fuel = 1_000_000;
+//! it.step_limit = 1_000_000;
 //! const v = try it.eval("expr {6 * 7}");
 //! ```
 //!

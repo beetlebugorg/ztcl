@@ -9,7 +9,7 @@
 #   -s  A folder of Tcl test files. It replaces -t.
 #
 # Prints one line for each file (the counts of the tests that pass,
-# fail, and are skipped), then the totals. Fuel stops a test that loops.
+# fail, and are skipped), then the totals. The step limit stops a test that loops.
 # The memory limit (2 GiB) stops a test that allocates without end.
 # SPDX-License-Identifier: BSD-2-Clause
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -36,7 +36,7 @@ fi
     lset.test namespace.test regexp.test binary.test info.test dict.test scan.test
 tp=0; tf=0; ts=0
 for f in "$@"; do
-    out=$(timeout 60 "$tcl" --fuel 200000000 --mem 2147483648 --keep-going "$here/tcltest.tcl" "$tests/$f" 2>&1 | grep -E '^pass [0-9]+ fail' | tail -1)
+    out=$(timeout 60 "$tcl" --max-steps 200000000 --mem 2147483648 --keep-going "$here/tcltest.tcl" "$tests/$f" 2>&1 | grep -E '^pass [0-9]+ fail' | tail -1)
     printf '%-16s %s\n' "$f" "${out:-no result (the file stopped early or crashed)}"
     if [ -n "$out" ]; then
         read -r _ p _ x _ y _ <<EOF
