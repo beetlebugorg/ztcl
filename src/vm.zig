@@ -1175,6 +1175,12 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             },
             .store => {
                 const cell = try writeCell(named, it, f, code, i.a);
+                if (cell.v == .val) {
+                    cell.v.val = stack[sp - 1];
+                    pc += 1;
+                    i = &ins[pc];
+                    continue :sw i.op;
+                }
                 if (!cell.plainStore()) {
                     @branchHint(.cold);
                     try slowStore(it, code.names[i.a], &stack[sp - 1]);
@@ -1379,6 +1385,12 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             .store_pop => {
                 const cell = try writeCell(named, it, f, code, i.a);
                 sp -= 1;
+                if (cell.v == .val) {
+                    cell.v.val = stack[sp];
+                    pc += 1;
+                    i = &ins[pc];
+                    continue :sw i.op;
+                }
                 if (!cell.plainStore()) {
                     @branchHint(.cold);
                     try slowStore(it, code.names[i.a], &stack[sp]);
@@ -1543,6 +1555,12 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 try step(it);
                 for (table, 0..) |slot, k| {
                     const cell = try writeCell(named, it, f, code, slot);
+                    const src: *const Value = if (at + k < items.len) &items[at + k] else &Value.empty;
+                    // A cell with a value needs no new tag.
+                    if (cell.v == .val) {
+                        cell.v.val = src.*;
+                        continue;
+                    }
                     // An array, a traced cell, or an element link.
                     if (!cell.plainStore()) {
                         @branchHint(.cold);
@@ -1552,7 +1570,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                         i = &ins[pc];
                         continue :sw i.op;
                     }
-                    cell.v = .{ .val = if (at + k < items.len) items[at + k] else Value.empty };
+                    cell.v = .{ .val = src.* };
                 }
                 stack[sp - 1] = .{ .int = @intCast(at + table.len) };
                 pc += 1;

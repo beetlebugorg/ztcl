@@ -102,7 +102,7 @@ Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2
 | `dictgrow.tcl` (200 000 new keys, 200 000 `dict get`) | 61.4 | 104.9 | 144.2 |
 | `readloop.tcl` (200 000 `llength` and `lindex` on a string) | 17.7 | 27.9 | 32.7 |
 
-The table above is from the commit before the work on the 152 test files. Against that commit, user-mode instructions change by -0.02 % to +1.5 % on these benchmarks. The best of 21 runs in user cycles is within 3 % on six of the eight benchmarks. `foreach.tcl` costs 4.1 % more, and `fib.tcl` measures between 1.9 % and 3.8 % more across builds. A store must now test for a traced cell and an element link. The machine had other load during these runs.
+The table above is from the commit before the work on the 152 test files. A store to a cell that already has a value now writes only the payload, and a traced or linked cell goes to a cold path.
 
 The fuzzy skin proc (`zig build bench`):
 

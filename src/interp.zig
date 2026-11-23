@@ -1059,6 +1059,10 @@ pub const Interp = struct {
             .set => {
                 const v = try it.evalWord(&c.words[2]);
                 const cell = try it.cellOf(c.words[1].kind.lit.str, &c.hint);
+                if (cell.v == .val) {
+                    cell.v.val = v;
+                    return v;
+                }
                 if (!cell.plainStore()) {
                     @branchHint(.cold);
                     try it.setVar(c.words[1].kind.lit.str, v);
