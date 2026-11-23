@@ -24,11 +24,21 @@ pub fn main(init: std.process.Init) !void {
 fn setup(it: *Interp) anyerror!void {
     try it.register("testregexp", cmdTestRegexp);
     try it.register("testevalex", cmdTestEvalEx);
+    try it.register("testlsetdrop", cmdTestLsetDrop);
     try it.register("testexprlong", exprCmd(.long));
     try it.register("testexprdouble", exprCmd(.double));
     try it.register("testexprstring", exprCmd(.string));
     try it.register("testexprlongobj", exprCmd(.long_obj));
     try it.register("testexprdoubleobj", exprCmd(.double_obj));
+}
+
+/// `testlsetdrop name index value`: the dropped form of `lset`. It writes
+/// in place when the variable owns its list and returns the empty string.
+fn cmdTestLsetDrop(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len != 4) return it.wrongArgs("testlsetdrop name index value");
+    const cell = (try it.findVar(it.frame, try it.str(argv[1]), false)) orelse return it.fail("can't read \"{s}\": no such variable", .{try it.str(argv[1])});
+    if (!try tcl.more.lsetOwned(it, cell, argv[2], argv[3])) return it.fail("testlsetdrop: not a plain case", .{});
+    return Value.empty;
 }
 
 fn eql(a: []const u8, b: []const u8) bool {

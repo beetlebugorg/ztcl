@@ -1549,6 +1549,23 @@ pub const Interp = struct {
         it.nest -= 1;
     }
 
+    /// The items of the list in a plain cell, as a buffer that only the
+    /// cell holds. A cell that does not own its list gets a copy and
+    /// takes the form `.owned`. Returns null for a cell that is not plain.
+    /// A write to the items changes the list of the cell and no other
+    /// value. Each general read of the cell ends the ownership.
+    pub fn ownList(it: *Interp, cell: *Var) Error!?[]Value {
+        const cur = switch (cell.v) {
+            .owned => |x| if (x == .list) return @constCast(x.list.items()) else x,
+            .val => |x| x,
+            else => return null,
+        };
+        const items = try it.list(cur);
+        const copy = try it.alloc().dupe(Value, items);
+        cell.v = .{ .owned = try value.wrapList(it.alloc(), copy) };
+        return copy;
+    }
+
     /// Runs a command given as a list of words.
     pub fn callWords(it: *Interp, argv: []const Value) Error!Value {
         if (argv.len == 0) return Value.empty;

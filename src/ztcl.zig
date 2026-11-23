@@ -22,6 +22,7 @@ pub const noise = @import("noise.zig");
 pub const point = @import("point.zig");
 pub const compact = @import("compact.zig");
 pub const heap = @import("heap.zig");
+pub const more = @import("more.zig");
 pub const regex = @import("regex.zig");
 pub const fsroot = @import("fsroot.zig");
 pub const sys = @import("sys.zig");

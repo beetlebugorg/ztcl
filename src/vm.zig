@@ -1499,7 +1499,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 const nv: u32 = 1 + @as(u32, i.x);
                 const cell = f.vars.items[i.a].cell.target();
                 const new: ?Value = if (i.x == 1) stack[sp - 1] else null;
-                if (cell.v != .owned or !try dict.updateOwned(it, cell.v.owned, stack[sp - nv], 1, new)) {
+                if (cell.v != .owned or !dict.isMarked(cell.v.owned) or !try dict.updateOwned(it, cell.v.owned, stack[sp - nv], 1, new)) {
                     const old: ?*value.ListObj = switch (cell.v) {
                         .owned => |v| v.list.obj,
                         .val => |v| if (v == .list) v.list.obj else null,

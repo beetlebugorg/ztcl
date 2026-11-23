@@ -1480,3 +1480,56 @@ test "a loop under the limit gives the same result with the collector on or off"
         try std.testing.expectEqualStrings("490000", try it.str(v));
     }
 }
+
+// ---- lset in place ----
+
+/// Runs `setup`, then the dropped form of `lset` on `name`, then `check`.
+fn dropCheck(setup: []const u8, name: []const u8, index: []const u8, v: []const u8, script: []const u8, want: []const u8) !void {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.step_limit = 1_000_000;
+    _ = try it.eval(setup);
+    const cell = (try it.findVar(it.frame, name, false)).?;
+    try std.testing.expect(try tcl.more.lsetOwned(&it, cell, .{ .str = index }, .{ .str = v }));
+    try std.testing.expectEqualStrings(want, try it.str(try it.eval(script)));
+}
+
+test "lset in place leaves a shared list alone" {
+    try dropCheck("set a {1 2 3}; set b $a", "a", "0", "9", "list $a $b", "{9 2 3} {1 2 3}");
+    // A result of the general command keeps its value.
+    try check(&.{
+        .{ "set a {1 2 3}; set b [lset a 0 9]; lset a 1 8; list $a $b", "{9 8 3} {9 2 3}" },
+        .{ "set a {1 2 3}; set b $a; lset a 0 9; list $a $b", "{9 2 3} {1 2 3}" },
+        .{ "set a {1 2 3}; lset a end 7; lset a end-1 6; lset a {0} 5", "5 6 7" },
+        .{ "set a {a b}; lset a 2 c", "a b c" },
+        .{ "set a {a b}; catch {lset a 3 c} m; set m", "list index out of range" },
+    });
+}
+
+test "a second dropped lset writes in place" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.step_limit = 1_000_000;
+    _ = try it.eval("set a [lrepeat 100 0]");
+    const cell = (try it.findVar(it.frame, "a", false)).?;
+    try std.testing.expect(try tcl.more.lsetOwned(&it, cell, .{ .int = 3 }, .{ .int = 5 }));
+    const buf = cell.v.owned.list.obj.buf.ptr;
+    const used = it.memUsed();
+    for (0..1000) |i| try std.testing.expect(try tcl.more.lsetOwned(&it, cell, .{ .int = 4 }, .{ .int = @intCast(i) }));
+    try std.testing.expectEqual(buf, cell.v.owned.list.obj.buf.ptr);
+    try std.testing.expectEqual(used, it.memUsed());
+    // A general read ends the ownership.
+    try std.testing.expectEqualStrings("999", try it.str(try it.eval("lindex $a 4")));
+    try std.testing.expect(cell.v == .val);
+}
+
+test "lset in a proc does not change the list of the caller" {
+    try check(&.{
+        .{ "proc f {l} {for {set i 0} {$i < 50} {incr i} {lset l 1 $i}; return $l}; set x {a b c}; list [f $x] $x", "{a 49 c} {a b c}" },
+        .{ "proc g {} {upvar 1 v w; lset w 0 z}; set v {a b}; g; set v", "z b" },
+        .{ "set v {a b c}; trace add variable v read {apply {{n i o} {set ::seen 1}}}; lset v 1 q; list $v $seen", "{a q c} 1" },
+        .{ "set v {a b c}; set r {}; foreach e $v {lset v 0 X; lappend r $e}; list $r $v", "{a b c} {X b c}" },
+    });
+}

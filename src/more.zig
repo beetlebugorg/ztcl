@@ -30,13 +30,48 @@ fn lsetRec(it: *Interp, list: Value, idxs: []const Value, v: Value) Error!Value 
     return value.wrapList(it.alloc(), copy);
 }
 
+/// Writes `v` at `index` of the list in a plain cell. The cell keeps the
+/// list as its own: a later call writes in place. Returns false for a
+/// case that needs the general path: a cell that is not plain, an index
+/// outside the list, or an index that is not valid.
+pub fn lsetOwned(it: *Interp, cell: *interp.Var, index: Value, v: Value) Error!bool {
+    const c = cell.target();
+    if (c.v != .val and c.v != .owned) return false;
+    const len = (try it.list(if (c.v == .val) c.v.val else c.v.owned)).len;
+    const at = cmds.index(it, index, len) catch return false;
+    if (at < 0 or at >= len) return false;
+    const items = (try it.ownList(c)).?;
+    items[@intCast(at)] = v;
+    // The write changes the keys of a dict, so its marks go.
+    const obj = c.v.owned.list.obj;
+    obj.dict_len = 0;
+    obj.index = null;
+    return true;
+}
+
+/// `lset` with one index on a plain variable: the general command writes
+/// through `lsetOwned` and then ends the ownership, because it returns
+/// the list.
+fn lsetPlain(it: *Interp, name: []const u8, index: Value, v: Value) Error!?Value {
+    if (std.mem.indexOfScalar(u8, name, '(') != null) return null;
+    const cell = (try it.findVar(it.frame, name, false)) orelse return null;
+    if (!try lsetOwned(it, cell, index, v)) return null;
+    const c = cell.target();
+    const out = c.v.owned;
+    c.v = .{ .val = out };
+    return out;
+}
+
 pub fn cmdLset(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 3) return it.wrongArgs("lset listVar ?index? ?index ...? value");
     const name = try it.str(argv[1]);
-    const old = try it.getVar(name);
     // One index word is a list of indexes.
     var idxs = argv[2 .. argv.len - 1];
     if (idxs.len == 1) idxs = try it.list(idxs[0]);
+    if (idxs.len == 1) {
+        if (try lsetPlain(it, name, idxs[0], argv[argv.len - 1])) |out| return out;
+    }
+    const old = try it.getVar(name);
     const out = try lsetRec(it, old, idxs, argv[argv.len - 1]);
     try it.setVar(name, out);
     return out;
