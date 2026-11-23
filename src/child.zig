@@ -125,8 +125,9 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
         // A child shares the jail of its parent through its own descriptor.
         if (comptime @import("fsroot.zig").supported) {
             if (it.fs.fd >= 0) {
-                const rc = std.os.linux.fcntl(it.fs.fd, std.os.linux.F.DUPFD_CLOEXEC, 3);
-                if (std.os.linux.errno(rc) == .SUCCESS) child.fs.fd = @intCast(rc);
+                const sys_os = @import("sys.zig").os;
+                const rc = sys_os.fcntl(it.fs.fd, sys_os.F.DUPFD_CLOEXEC, 3);
+                if (sys_os.errno(rc) == .SUCCESS) child.fs.fd = @intCast(rc);
             }
             child.fs.cwd = try child.alloc().dupe(u8, it.fs.cwd);
             child.fs.path = try child.alloc().dupe(u8, it.fs.path);
