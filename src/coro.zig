@@ -10,8 +10,13 @@
 //! coroutine runs, so the parser and `expr` have room below the check.
 //! The stacks come from the arena, so the memory limit counts them.
 //!
-//! The switch exists for x86-64 Linux and arm64 macOS. On other targets,
-//! including WebAssembly, `coroutine` gives an error.
+//! The switch exists for x86-64 Linux, arm64 macOS, and x86-64 Windows.
+//! On other targets, including WebAssembly, `coroutine` gives an error.
+//!
+//! On Windows, the thread block names the bounds of the current stack,
+//! and the stack probe `__chkstk` reads them. The switch saves and
+//! restores these three fields with the registers. No SEH unwinding
+//! crosses a switch.
 //!
 //! `tailcall` ends the proc with a private return code. The proc call
 //! runs the new command after the frame is gone, in a loop, so a chain
@@ -30,7 +35,8 @@ const Error = interp.Error;
 
 const on_arm = builtin.cpu.arch == .aarch64 and builtin.os.tag == .macos;
 const on_x86 = builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux;
-pub const supported = on_arm or on_x86;
+const on_win = builtin.cpu.arch == .x86_64 and builtin.os.tag == .windows;
+pub const supported = on_arm or on_x86 or on_win;
 
 const stack_size: usize = if (builtin.mode == .Debug) 16 << 20 else 1 << 20;
 
@@ -82,6 +88,14 @@ pub const Coro = struct {
 // is 160 bytes, so the stack pointer stays 16-byte aligned. It holds x19
 // to x28, x29, x30, and d8 to d15. The routines do not touch x18, which
 // macOS reserves.
+//
+// The Microsoft x64 frame is 248 bytes under the return address, so the
+// stack pointer is 16-byte aligned for `movaps`. It holds xmm6 to xmm15
+// at 0, then rbx, rbp, rdi, rsi, and r12 to r15 at 160, then StackBase,
+// StackLimit, and DeallocationStack of the thread block at 224. The
+// arguments are in rcx and rdx. On a new stack, `ztcl_coro_start` calls
+// the function in `rbp` with the value in `rbx`, with 32 bytes of shadow
+// space.
 fn swapAsm() callconv(.naked) void {
     if (on_arm) asm volatile (
         \\ sub sp, sp, #160
@@ -110,6 +124,60 @@ fn swapAsm() callconv(.naked) void {
         \\ ldp d14, d15, [sp, #144]
         \\ add sp, sp, #160
         \\ ret
+    ) else if (on_win) asm volatile (
+        \\ subq $248, %%rsp
+        \\ movaps %%xmm6, 0(%%rsp)
+        \\ movaps %%xmm7, 16(%%rsp)
+        \\ movaps %%xmm8, 32(%%rsp)
+        \\ movaps %%xmm9, 48(%%rsp)
+        \\ movaps %%xmm10, 64(%%rsp)
+        \\ movaps %%xmm11, 80(%%rsp)
+        \\ movaps %%xmm12, 96(%%rsp)
+        \\ movaps %%xmm13, 112(%%rsp)
+        \\ movaps %%xmm14, 128(%%rsp)
+        \\ movaps %%xmm15, 144(%%rsp)
+        \\ movq %%rbx, 160(%%rsp)
+        \\ movq %%rbp, 168(%%rsp)
+        \\ movq %%rdi, 176(%%rsp)
+        \\ movq %%rsi, 184(%%rsp)
+        \\ movq %%r12, 192(%%rsp)
+        \\ movq %%r13, 200(%%rsp)
+        \\ movq %%r14, 208(%%rsp)
+        \\ movq %%r15, 216(%%rsp)
+        \\ movq %%gs:0x08, %%rax
+        \\ movq %%rax, 224(%%rsp)
+        \\ movq %%gs:0x10, %%rax
+        \\ movq %%rax, 232(%%rsp)
+        \\ movq %%gs:0x1478, %%rax
+        \\ movq %%rax, 240(%%rsp)
+        \\ movq %%rsp, (%%rcx)
+        \\ movq %%rdx, %%rsp
+        \\ movq 224(%%rsp), %%rax
+        \\ movq %%rax, %%gs:0x08
+        \\ movq 232(%%rsp), %%rax
+        \\ movq %%rax, %%gs:0x10
+        \\ movq 240(%%rsp), %%rax
+        \\ movq %%rax, %%gs:0x1478
+        \\ movaps 0(%%rsp), %%xmm6
+        \\ movaps 16(%%rsp), %%xmm7
+        \\ movaps 32(%%rsp), %%xmm8
+        \\ movaps 48(%%rsp), %%xmm9
+        \\ movaps 64(%%rsp), %%xmm10
+        \\ movaps 80(%%rsp), %%xmm11
+        \\ movaps 96(%%rsp), %%xmm12
+        \\ movaps 112(%%rsp), %%xmm13
+        \\ movaps 128(%%rsp), %%xmm14
+        \\ movaps 144(%%rsp), %%xmm15
+        \\ movq 160(%%rsp), %%rbx
+        \\ movq 168(%%rsp), %%rbp
+        \\ movq 176(%%rsp), %%rdi
+        \\ movq 184(%%rsp), %%rsi
+        \\ movq 192(%%rsp), %%r12
+        \\ movq 200(%%rsp), %%r13
+        \\ movq 208(%%rsp), %%r14
+        \\ movq 216(%%rsp), %%r15
+        \\ addq $248, %%rsp
+        \\ retq
     ) else asm volatile (
         \\ pushq %%rbp
         \\ pushq %%rbx
@@ -134,6 +202,11 @@ fn startAsm() callconv(.naked) void {
         \\ mov x0, x19
         \\ blr x20
         \\ brk #1
+    ) else if (on_win) asm volatile (
+        \\ movq %%rbx, %%rcx
+        \\ subq $32, %%rsp
+        \\ callq *%%rbp
+        \\ ud2
     ) else asm volatile (
         \\ movq %%rbx, %%rdi
         \\ callq *%%rbp
@@ -300,6 +373,16 @@ fn cmdCoroutine(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         slots[1] = @intFromPtr(&entry); // x20
         slots[11] = @intFromPtr(&ztcl_coro_start); // x30
         c.sp = top - 160;
+    } else if (on_win) {
+        const slots: [*]usize = @ptrFromInt(top - 256);
+        @memset(slots[0..32], 0);
+        slots[20] = @intFromPtr(c); // rbx
+        slots[21] = @intFromPtr(&entry); // rbp
+        slots[28] = @intFromPtr(stack.ptr) + stack.len; // StackBase
+        slots[29] = @intFromPtr(stack.ptr); // StackLimit
+        slots[30] = @intFromPtr(stack.ptr); // DeallocationStack
+        slots[31] = @intFromPtr(&ztcl_coro_start);
+        c.sp = top - 256;
     } else {
         const slots: [*]usize = @ptrFromInt(top - 56);
         @memset(slots[0..8], 0);
