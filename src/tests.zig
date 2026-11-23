@@ -1533,3 +1533,30 @@ test "lset in a proc does not change the list of the caller" {
         .{ "set v {a b c}; set r {}; foreach e $v {lset v 0 X; lappend r $e}; list $r $v", "{a b c} {X b c}" },
     });
 }
+
+// ---- switch as bytecode ----
+
+test "switch in a proc: the forms that compile" {
+    try check(&.{
+        .{ "proc t {op} {set s 0; switch -exact -- $op {INC {incr s} MOVE {incr s 2}}}; list [t INC] [t MOVE] [t X]", "1 2 {}" },
+        .{ "proc t {x} {switch -- $x {a - b {return AB} c {return C} default {return D}}}; list [t a] [t b] [t c] [t q]", "AB AB C D" },
+        .{ "proc t {x} {switch $x a {return A} b {return B}}; list [t a] [t b] [t c]", "A B {}" },
+        .{ "proc t {x} {switch -exact -- $x {1 {return one} 2 {return two}}}; list [t 1] [t 2] [t 3] [t 02]", "one two {} {}" },
+        .{ "proc t {x} {switch -- $x {{a b} {return sp} default {return no}}}; list [t {a b}] [t a]", "sp no" },
+        .{ "proc t {x} {switch -- $x {default {return d} x {return x}}}; list [t default] [t x]", "d x" },
+        .{ "proc t {x} {set r [switch -- $x {a {string cat 1 2} b - c {string cat 3}}]; return $r}; list [t a] [t b] [t c] [t d]", "12 3 3 {}" },
+        .{ "proc t {x} {set r {}; foreach i {1 2 3} {switch -- $i {2 continue 3 break}; lappend r $i}; return $r}; t 0", "1" },
+        .{ "proc t {i} {switch -- [incr i] {1 {return a} 2 {return b}}}; list [t 0] [t 1] [t 5]", "a b {}" },
+    });
+}
+
+test "switch: the guard and the cases of the general path" {
+    try check(&.{
+        .{ "proc t {x} {switch -- $x {a {return A}}}; rename switch sw2; proc switch {args} {return hijack}; t a", "hijack" },
+        .{ "namespace eval n {proc switch {args} {return ns}}; proc t {x} {switch -- $x {a {return A}}}; t a", "A" },
+        .{ "proc t {x} {switch -- $x {a {error boom}}}; catch {t a} m; set m", "boom" },
+        .{ "proc t {x} {switch -glob -- $x {a* {return glob}}}; t abc", "glob" },
+        .{ "proc t {x} {switch $x {a {return A}}}; catch {t -x} m; set m", "bad option \"-x\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --" },
+        .{ "proc t {x} {switch -- $x {a}}; catch {t a} m; set m", "extra switch pattern with no body" },
+    });
+}

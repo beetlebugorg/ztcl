@@ -86,7 +86,7 @@ What compiles:
 
 - A proc body compiles at the first call. Each plain local name has a slot: its index in `Frame.vars`. The parameters come first. The call makes the other cells with no value.
 - A script outside a proc compiles at its second run. Its variables use names, each with a hint, because the frame is not known.
-- Each command with a literal name and a known form runs inline: `set`, `incr`, `append`, `lappend`, `expr`, `if`, `while`, `for`, `foreach` with one list, `return`, `break`, `continue`, `dict incr`, `dict set`, `llength`, `lindex` with one index, `string length`, and `string index`.
+- Each command with a literal name and a known form runs inline: `set`, `incr`, `append`, `lappend`, `expr`, `if`, `while`, `for`, `foreach` with one list, `return`, `break`, `continue`, `dict incr`, `dict set`, `llength`, `lindex` with one index, `string length`, `string index`, and `switch` with literal patterns and bodies (see below).
 - A braced expression becomes stack instructions with an integer fast path. The functions and the array elements use the tree of `expr.zig`.
 - All other commands push their words and use `invoke`. A word with `{*}` uses the general path.
 
@@ -98,8 +98,12 @@ The instructions:
 | Reads | `access` |
 | Variables | `load`, `store`, `store_pop`, `incr`, `incr_drop`, `incr_value`, `append`, `lappend`, `dict_update`, `dict_update_drop` |
 | Operators | `binary`, `unary`, `to_bool`, `number_form`, `bin_vv`, `bin_vi` |
-| Control | `guard`, `step`, `jump`, `jump_false`, `jump_true`, `jf_vv`, `jf_vi`, `foreach_init`, `foreach_next`, `ret` |
+| Control | `guard`, `step`, `jump`, `jump_false`, `jump_true`, `jf_vv`, `jf_vi`, `str_eq_jump`, `foreach_init`, `foreach_next`, `ret` |
 | General path | `invoke`, `eval_cmd`, `word`, `node` |
+
+`switch` compiles for `switch ?-exact? ?--? string {pattern body ...}` and for the same form with the patterns and the bodies as separate literal words. Each pattern and each body is a literal. Without `--`, the string is a literal that does not start with a minus sign, because the general command reads such a value as an option. `str_eq_jump` compares the string form of the top of the stack with a pattern and jumps to the body, and an integer needs no string. A body of `-` falls through to the next body. A last pattern `default` takes each string. The other options and each other form use the general command. The guard of the form uses one step.
+
+A cell that holds the canonical text of an integer gets the integer when a compare or an operator reads it (`shimmer`). The string form does not change. A loop bound that comes from `argv` then needs no parse in each pass.
 
 The semantics of Tcl stay:
 

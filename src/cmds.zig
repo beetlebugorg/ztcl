@@ -89,6 +89,7 @@ pub fn coreFn(name: []const u8) ?interp.NativeFn {
         .{ "foreach", cmdForeach }, .{ "return", cmdReturn }, .{ "break", cmdBreak },
         .{ "continue", cmdContinue }, .{ "lappend", cmdLappend }, .{ "append", cmdAppend }, .{ "dict", @import("dict.zig").cmdDict },
         .{ "lindex", cmdLindex },   .{ "llength", cmdLlength }, .{ "string", cmdString },
+        .{ "switch", cmdSwitch },
     };
     for (table) |e| if (eql(e[0], name)) return e[1];
     return null;

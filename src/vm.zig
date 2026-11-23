@@ -98,6 +98,9 @@ pub const Op = enum(u8) {
     dict_update_drop,
     /// Appends the top `b` values to the string in slot `a`.
     append,
+    /// Jumps to `b` when the string form of the top of the stack equals
+    /// literal `a`. The value stays on the stack.
+    str_eq_jump,
 };
 
 pub const Ins = extern struct {
@@ -147,6 +150,7 @@ const inline_names = [_][]const u8{
     "set",     "incr",   "expr",    "if",       "while",   "for",
     "foreach", "return", "break",   "continue", "lappend", "dict",
     "append",  "lindex", "llength", "string",
+    "switch",
 };
 
 /// The read forms of the `access` instruction.
@@ -605,6 +609,8 @@ const Compiler = struct {
             return c.compileFor(cmd);
         } else if (eql(u8, name, "foreach")) {
             return c.compileForeach(cmd);
+        } else if (eql(u8, name, "switch")) {
+            return c.compileSwitch(cmd);
         } else return false;
 
         const base = c.depth;
@@ -692,6 +698,118 @@ const Compiler = struct {
         try c.colds.append(c.a, .{ .guard = g, .site = try c.site(cmd), .back = c.here() });
         c.depth = base;
         c.push(1);
+    }
+
+    /// The script of the text of a body, or null when it does not compile.
+    fn textScript(c: *Compiler, text: []const u8) Error!?*interp.Script {
+        const it = c.it;
+        const r, const code, const line = .{ it.result, it.error_code, it.error_line };
+        return it.compile(text) catch |e| {
+            if (e == error.OutOfMemory) return e;
+            it.result, it.error_code, it.error_line = .{ r, code, line };
+            return null;
+        };
+    }
+
+    /// `switch ?-exact? ?--? string {pattern body ...}`, also with the
+    /// patterns and bodies as separate literal words. Each pattern and
+    /// each body is literal. Without `--`, the string must be a literal
+    /// that does not start with "-", because the general command reads
+    /// such a value as an option. The code tests each pattern with
+    /// `str_eq_jump`, and each body ends with a jump to the end.
+    fn compileSwitch(c: *Compiler, cmd: *Cmd) Error!bool {
+        const it = c.it;
+        const w = cmd.words;
+        var i: usize = 1;
+        if (i < w.len and isWord(w[i], "-exact")) i += 1;
+        const dashes = i < w.len and isWord(w[i], "--");
+        if (dashes) i += 1;
+        if (i + 1 >= w.len) return false;
+        const subject = i;
+        if (!dashes) {
+            if (w[subject].kind != .lit) return false;
+            const s = try it.str(w[subject].kind.lit);
+            if (s.len > 0 and s[0] == '-') return false;
+        }
+        i += 1;
+        const Arm = struct { pat: []const u8, body: ?*interp.Script };
+        var arms: std.ArrayList(Arm) = .empty;
+        if (w.len - i == 1) {
+            if (w[i].kind != .lit) return false;
+            const items = try it.list(w[i].kind.lit);
+            if (items.len == 0 or items.len % 2 != 0) return false;
+            var k: usize = 0;
+            while (k < items.len) : (k += 2) {
+                const body = try it.str(items[k + 1]);
+                const s: ?*interp.Script = if (std.mem.eql(u8, body, "-")) null else try c.textScript(body) orelse return false;
+                try arms.append(c.a, .{ .pat = try it.str(items[k]), .body = s });
+            }
+        } else {
+            if ((w.len - i) % 2 != 0) return false;
+            if (!allLiteral(cmd)) return false;
+            var k = i;
+            while (k < w.len) : (k += 2) {
+                const body = try it.str(w[k + 1].kind.lit);
+                const s: ?*interp.Script = if (std.mem.eql(u8, body, "-")) null else try c.bodyScript(cmd, k + 1) orelse return false;
+                try arms.append(c.a, .{ .pat = try it.str(w[k].kind.lit), .body = s });
+            }
+        }
+        const last = arms.items.len - 1;
+        if (arms.items[last].body == null) return false;
+        const has_default = std.mem.eql(u8, arms.items[last].pat, "default");
+
+        const base = c.depth;
+        const g = try c.emit(.{ .op = .guard });
+        const start = c.here();
+        try c.compileWord(&w[subject]);
+        // The tests. The jump targets are set after the bodies.
+        const tests = try c.a.alloc(u32, arms.items.len);
+        for (arms.items, 0..) |arm, k| {
+            if (has_default and k == last) {
+                tests[k] = no_target;
+                continue;
+            }
+            try c.lits.append(c.a, .{ .str = arm.pat });
+            tests[k] = try c.emit(.{ .op = .str_eq_jump, .a = @intCast(c.lits.items.len - 1) });
+        }
+        var ends: std.ArrayList(u32) = .empty;
+        var default_jump: u32 = no_target;
+        if (has_default) {
+            default_jump = try c.emit(.{ .op = .jump });
+        } else {
+            _ = try c.emit(.{ .op = .pop });
+            _ = try c.emit(.{ .op = .push_empty });
+            try ends.append(c.a, try c.emit(.{ .op = .jump }));
+        }
+        // The bodies. A "-" body shares the body of the next arm.
+        const labels = try c.a.alloc(u32, arms.items.len);
+        for (arms.items, 0..) |arm, k| {
+            const body = arm.body orelse {
+                labels[k] = no_target;
+                continue;
+            };
+            labels[k] = c.here();
+            c.label = c.here();
+            _ = try c.emit(.{ .op = .pop });
+            c.depth = base;
+            try c.compileScript(body);
+            if (k != last) try ends.append(c.a, try c.emit(.{ .op = .jump }));
+        }
+        var next: u32 = no_target;
+        var k = arms.items.len;
+        while (k > 0) {
+            k -= 1;
+            if (labels[k] != no_target) next = labels[k] else labels[k] = next;
+        }
+        for (tests, 0..) |t, n| {
+            if (t != no_target) c.ins.items[t].b = labels[n];
+        }
+        if (default_jump != no_target) c.ins.items[default_jump].a = labels[last];
+        const end = c.here();
+        c.label = end;
+        for (ends.items) |e| c.ins.items[e].a = end;
+        try c.closeGuard(cmd, base, g, start);
+        return true;
     }
 
     fn compileIf(c: *Compiler, cmd: *Cmd) Error!bool {
@@ -976,6 +1094,20 @@ inline fn intSlot(comptime named: bool, it: *Interp, f: *Frame, code: *const Cod
     return null;
 }
 
+/// A plain cell that holds the text of an integer in its canonical form
+/// gets the integer. The string form stays the same, and the next read
+/// of the cell needs no parse.
+fn shimmer(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, slot: u32) void {
+    const cell = readCell(named, it, f, code, slot) orelse return;
+    if (cell.v != .val or cell.v.val != .str) return;
+    const text = cell.v.val.str;
+    if (text.len == 0 or text.len > 20) return;
+    const n = value.parseInt(text) orelse return;
+    var buf: [24]u8 = undefined;
+    if (!std.mem.eql(u8, value.writeInt(&buf, n), text)) return;
+    cell.v = .{ .val = .{ .int = n } };
+}
+
 /// Reads a slot on the slow path. An unset variable is an error.
 fn readSlot(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, slot: u32) Error!Value {
     if (readCell(named, it, f, code, slot)) |cell| {
@@ -1238,6 +1370,16 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 pc = i.a;
                 continue;
             },
+            .str_eq_jump => {
+                const top = stack[sp - 1];
+                var buf: [24]u8 = undefined;
+                const s: []const u8 = if (top == .int) value.writeInt(&buf, top.int) else try it.str(top);
+                if (std.mem.eql(u8, s, code.lits[i.a].str)) {
+                    pc = i.b;
+                } else pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
+            },
             .jump_false => {
                 sp -= 1;
                 const v = stack[sp];
@@ -1424,6 +1566,8 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 if (x != null and y != null) {
                     stack[sp] = if (intFast(op, x.?, y.?)) |r| .{ .int = r } else try expr.intOp(it, op, x.?, y.?);
                 } else {
+                    shimmer(named, it, f, code, i.a);
+                    shimmer(named, it, f, code, i.b);
                     const vx = try readSlot(named, it, f, code, i.a);
                     const vy = try readSlot(named, it, f, code, i.b);
                     stack[sp] = try slowBinary(it, op, vx, vy);
@@ -1439,6 +1583,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 if (intSlot(named, it, f, code, i.a)) |x| {
                     stack[sp] = if (intFast(op, x, y)) |r| .{ .int = r } else try expr.intOp(it, op, x, y);
                 } else {
+                    shimmer(named, it, f, code, i.a);
                     const vx = try readSlot(named, it, f, code, i.a);
                     stack[sp] = try slowBinary(it, op, vx, .{ .int = y });
                 }
@@ -1455,6 +1600,8 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 if (x != null and y != null) {
                     t = intCompare(op, x.?, y.?);
                 } else {
+                    shimmer(named, it, f, code, i.a);
+                    shimmer(named, it, f, code, i.b);
                     const vx = try readSlot(named, it, f, code, i.a);
                     const vy = try readSlot(named, it, f, code, i.b);
                     t = try expr.truthy(it, try slowBinary(it, op, vx, vy));
@@ -1474,6 +1621,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 if (intSlot(named, it, f, code, i.a)) |x| {
                     t = intCompare(op, x, y);
                 } else {
+                    shimmer(named, it, f, code, i.a);
                     const vx = try readSlot(named, it, f, code, i.a);
                     t = try expr.truthy(it, try slowBinary(it, op, vx, .{ .int = y }));
                 }
