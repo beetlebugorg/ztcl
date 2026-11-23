@@ -181,9 +181,11 @@ pub const Program = struct {
     regs: usize,
     params: []const Field,
 
-    /// The count of f64 that `run` needs as scratch memory.
+    /// The count of f64 that `run` needs as scratch memory: a block for
+    /// each register, and one slot for each register in the table of
+    /// register addresses.
     pub fn scratchLen(p: *const Program) usize {
-        return p.regs * block;
+        return p.regs * block + p.regs;
     }
 
     /// Runs the program over all points. `scratch` has `scratchLen()`
@@ -191,30 +193,55 @@ pub const Program = struct {
     pub fn run(p: *const Program, pts: *const Points, scratch: []f64) void {
         std.debug.assert(scratch.len >= p.scratchLen());
         for (p.setup) |op| @memset(scratch[@as(usize, op.dst) * block ..][0..block], op.imm);
+        // A register of an input field points into the input column, so
+        // the field needs no copy. No operation writes to that register.
+        // An output column that overlaps an input column needs the copy.
+        const direct = !outputsOverlapInputs(pts);
+        const table: [*][*]f64 = @ptrCast(scratch.ptr + p.regs * block);
+        for (0..p.regs) |r| table[r] = scratch.ptr + r * block;
         var start: usize = 0;
         while (start < pts.len) : (start += block) {
             const n = @min(block, pts.len - start);
-            for (p.ops) |op| exec(op, pts, scratch, start, n);
+            for (p.ops) |op| exec(op, pts, table, direct, start, n);
         }
         bound(pts);
     }
 };
 
-inline fn reg(scratch: []f64, r: u16, n: usize) []f64 {
-    return scratch[@as(usize, r) * block ..][0..n];
+fn outputsOverlapInputs(pts: *const Points) bool {
+    for (pts.out) |maybe_out| {
+        const o = maybe_out orelse continue;
+        const lo = @intFromPtr(o.ptr);
+        const hi = lo + o.len * @sizeOf(f64);
+        for (pts.in) |maybe_in| {
+            const c = maybe_in orelse continue;
+            const c_lo = @intFromPtr(c.ptr);
+            if (lo < c_lo + c.len * @sizeOf(f64) and c_lo < hi) return true;
+        }
+    }
+    return false;
+}
+
+inline fn reg(table: [*][*]f64, r: u16, n: usize) []f64 {
+    return table[r][0..n];
 }
 
 fn b2f(b: bool) f64 {
     return @floatFromInt(@intFromBool(b));
 }
 
-fn exec(op: Op, pts: *const Points, scratch: []f64, start: usize, n: usize) void {
+fn exec(op: Op, pts: *const Points, scratch: [*][*]f64, direct: bool, start: usize, n: usize) void {
+    if (op.code == .field) {
+        if (pts.in[op.col]) |col| {
+            if (direct) {
+                scratch[op.dst] = @constCast(col[start..].ptr);
+            } else @memcpy(reg(scratch, op.dst, n), col[start..][0..n]);
+        } else @memset(reg(scratch, op.dst, n), 0);
+        return;
+    }
     const d = reg(scratch, op.dst, n);
     switch (op.code) {
-        .konst => {},
-        .field => {
-            if (pts.in[op.col]) |col| @memcpy(d, col[start..][0..n]) else @memset(d, 0);
-        },
+        .konst, .field => {},
         .feature => {
             if (pts.feature) |col| {
                 for (d, col[start..][0..n]) |*o, f| o.* = @floatFromInt(f);
@@ -1038,6 +1065,37 @@ test "branches, locals, and outputs give equal results on both paths" {
         \\    speed [expr {max(10, min(60, hypot($x - 100, $y - 100)))}]
         \\}
     , "p", 3000);
+}
+
+test "an output column that is also an input column reads the old input" {
+    var it: Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    var state: State = .{};
+    try install(&it, &state);
+    _ = try it.eval("point proc half {x} { offset [expr {$x * 0.5}]; move [expr {$x * 0.25}] 0 }");
+    const prog = state.program("half").?;
+    var col: [block + 3]f64 = undefined;
+    var mx: [block + 3]f64 = undefined;
+    var my: [block + 3]f64 = undefined;
+    for (&col, &mx, &my, 0..) |*c, *m, *o, i| {
+        c.* = @as(f64, @floatFromInt(i % 7)) * 0.01;
+        m.* = 0;
+        o.* = 0;
+    }
+    const start = col;
+    var pts: Points = .{ .len = col.len };
+    pts.in[@intFromEnum(Field.x)] = &col;
+    pts.out[@intFromEnum(Out.offset)] = &col;
+    pts.out[@intFromEnum(Out.move_x)] = &mx;
+    pts.out[@intFromEnum(Out.move_y)] = &my;
+    const scratch = try std.testing.allocator.alloc(f64, prog.scratchLen());
+    defer std.testing.allocator.free(scratch);
+    prog.run(&pts, scratch);
+    for (col, mx, start) |c, m, x| {
+        try std.testing.expectEqual(x * 0.5, c);
+        try std.testing.expectEqual(x * 0.25, m);
+    }
 }
 
 test "the check names the line and the reason" {
