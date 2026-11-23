@@ -57,7 +57,7 @@ incr.test	in	66	language and core commands
 indexObj.test	na	45	C API
 info.test	in	266	language and core commands
 init.test	decide	24	library loading, `auto_load`
-interp.test	decide	352	`interp`
+interp.test	decide	352	optional capability `interp`
 io.test	decide	524	channels
 ioCmd.test	decide	348	channels
 ioTrans.test	decide	106	channel transforms
@@ -91,7 +91,7 @@ obj.test	na	92	C API
 oo.test	in	306	TclOO
 ooNext2.test	in	62	TclOO
 opt.test	decide	31	`tcl::OptProc` package
-package.test	decide	180	`package`
+package.test	decide	402	optional capability `package`
 parse.test	in	271	the parser, partly through the C API
 parseExpr.test	in	284	the expression parser, partly through the C API
 parseOld.test	in	158	language and core commands
@@ -118,7 +118,7 @@ socket.test	decide	98	`socket`
 source.test	decide	23	`source`
 split.test	in	17	language and core commands
 stack.test	decide	3	host stack limits, `exec`
-string.test	in	634	language and core commands
+string.test	in	1266	language and core commands
 stringComp.test	in	279	language and core commands
 stringObj.test	na	75	C API
 subst.test	in	63	language and core commands
@@ -139,7 +139,7 @@ unload.test	decide	27	`unload`
 uplevel.test	in	57	language and core commands
 upvar.test	in	65	language and core commands
 utf.test	in	498	characters, partly through the C API
-util.test	in	1059	number parsing and output, partly through the C API
+util.test	in	2291	number parsing and output, partly through the C API
 var.test	in	110	language and core commands
 while-old.test	in	15	language and core commands
 while.test	in	46	language and core commands

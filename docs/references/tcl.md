@@ -46,13 +46,21 @@ Ken Perlin, "Improving Noise", SIGGRAPH 2002. https://doi.org/10.1145/566654.566
 
 **How ztcl uses it:** `src/noise.zig` uses the method of the paper: a gradient at each corner of the cell from 12 edge directions, and the fade curve 6t^5 - 15t^4 + 10t^3. ztcl has its own code, and uses a hash of the corner in place of the table of the paper.
 
+### Longest match and the split of a span
+
+Henry Spencer, the regular expression package of Tcl, described in `re_syntax.n` and in `generic/regexp` documentation of the Tcl source.
+
+**License:** BSD style
+
+**How ztcl uses it:** `src/regex.zig` uses the idea of two phases: find the span of the match, then split the span over the parts of the pattern. It has its own code and no code of that package.
+
 ### A regular expression as a small program
 
 Russ Cox, "Regular Expression Matching: the Virtual Machine Approach", 2009. https://swtch.com/~rsc/regexp/regexp2.html
 
 **License:** Article
 
-**How ztcl uses it:** `src/regex.zig` compiles a pattern to the instruction set of the article (`char`, `split`, `jmp`, `save`, `match`) and runs it with a backtracking matcher. ztcl has its own code. It adds the sets, the assertions, the back references, a check that stops an empty loop, and the step limit. The syntax follows the manual page `re_syntax.n` of Tcl.
+**How ztcl uses it:** `src/regex.zig` compiles a pattern to a program of the kind in the article (`char`, `split`, `jmp`, `match`) and runs it with a Thompson simulation. ztcl has its own code. It adds the sets, the assertions, lookahead, and the step limit. The syntax follows the manual page `re_syntax.n` of Tcl.
 
 ### Copying collection
 

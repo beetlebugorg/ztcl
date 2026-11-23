@@ -19,10 +19,10 @@ The counts are pass / fail / skip for the test file of the command.
 | `dict` | 311 / 29 / 2 | Has a hash table from 16 keys. |
 | `error` | 300 / 9 / 8 |  |
 | `eval` | 11 / 1 / 0 |  |
-| `expr` | 14121 / 15 / 49 | Big integers up to 2^20 bits. Adds `clamp`, `lerp`, `noise2`, and `noise3`. |
+| `expr` | 14122 / 14 / 49 | Big integers up to 2^20 bits. Adds `clamp`, `lerp`, `noise2`, and `noise3`. |
 | `for` | 60 / 4 / 24 |  |
 | `foreach` | 41 / 2 / 0 |  |
-| `format` | 225 / 32 / 9 |  |
+| `format` | 233 / 24 / 9 |  |
 | `global` | no own test file |  |
 | `if` | 73 / 0 / 0 |  |
 | `incr` | 62 / 4 / 0 |  |
@@ -34,28 +34,28 @@ The counts are pass / fail / skip for the test file of the command.
 | `linsert` | 28 / 0 / 0 |  |
 | `list` | 77 / 1 / 0 |  |
 | `llength` | 6 / 0 / 0 |  |
-| `lmap` | 60 / 6 / 0 |  |
+| `lmap` | 62 / 4 / 0 |  |
 | `lrange` | 32 / 0 / 2 |  |
 | `lrepeat` | no own test file |  |
 | `lreplace` | 1787 / 0 / 0 |  |
 | `lreverse` | no own test file |  |
 | `lsearch` | 111 / 7 / 0 |  |
-| `lset` | 0 / 0 / 89 | All 89 tests need the `testevalex` command of the Tcl test binary. |
+| `lset` | 0 / 0 / 89 | These tests need `testevalex`. The suite runner has a stand-in. |
 | `lsort` | no own test file |  |
-| `namespace` | 230 / 80 / 3 | Has `path`, `unknown`, `forget`, and `ensemble configure`. |
+| `namespace` | 233 / 77 / 3 | Has `path`, `unknown`, `forget`, and `ensemble configure`. |
 | `noise3` | no own test file | A ztcl addition. |
-| `proc` | 25 / 12 / 1 |  |
+| `proc` | 26 / 3 / 9 |  |
 | `puts` | no own test file | Writes to the embedder callback. |
-| `regexp` | 209 / 31 / 4 | Longest match, lookahead, and the ARE, ERE, and BRE syntaxes. |
+| `regexp` | 239 / 1 / 4 | Longest match, lookahead, and the ARE, ERE, and BRE syntaxes. |
 | `regsub` | no own test file | Uses the matcher of `regexp`. |
 | `rename` | 10 / 1 / 8 |  |
 | `return` | no own test file |  |
-| `scan` | 145 / 35 / 1 |  |
+| `scan` | 162 / 18 / 1 |  |
 | `set` | 61 / 2 / 1 |  |
 | `split` | 16 / 1 / 0 |  |
 | `string` | 618 / 6 / 10 | Works on characters. Unicode classes and case maps are a small model. |
 | `subst` | no own test file |  |
-| `switch` | 105 / 8 / 0 |  |
+| `switch` | 106 / 7 / 0 |  |
 | `throw` | no own test file |  |
 | `tcl::mathop`, `tcl::mathfunc` | see `mathop` in Compatibility | Each operator and math function is a command. |
 | `tcl::prefix` | see `string` | |
@@ -64,7 +64,7 @@ The counts are pass / fail / skip for the test file of the command.
 | `try` | no own test file |  |
 | `unset` | no own test file |  |
 | `uplevel` | 49 / 8 / 0 |  |
-| `upvar` | 42 / 15 / 8 |  |
+| `upvar` | 43 / 14 / 8 |  |
 | `variable` | no own test file |  |
 | `while` | 45 / 1 / 0 |  |
 
@@ -76,7 +76,13 @@ The counts are pass / fail / skip for the test file of the command.
 
 ## Intentionally absent
 
-`open`, `socket`, `exec`, `file`, `clock`, `source`, `exit`, `cd`, `glob`, `load`, and `after` do not exist. C extensions and Tk are out of scope. `interp` is also absent.
+`open`, `socket`, `exec`, `file`, `clock`, `source`, `exit`, `cd`, `glob`, `load`, and `after` do not exist. C extensions and Tk are out of scope.
+
+## Optional commands
+
+`package` and `interp` are capabilities. The default interpreter does not have them. An embedder turns them on with `Interp.allow`, and the runner with `--allow package,interp`. A child interpreter has at most the capabilities of its parent, and a safe child has none.
+
+`coroutine`, `yield`, `yieldto`, and `tailcall` are core commands. `coroutine` needs a stack switch, which exists for x86-64 Linux. On other targets, including WebAssembly, it gives an error.
 
 ## Differences from Tcl
 

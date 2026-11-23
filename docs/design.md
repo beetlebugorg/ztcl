@@ -22,6 +22,9 @@ ztcl uses only the Zig standard library. [References](references/tcl.md) lists t
 | `mathns.zig` | The commands of `tcl::mathop` and `tcl::mathfunc`. |
 | `extra.zig` | `array`, `case`, `tcl::prefix`, and the word boundary procs. |
 | `trace.zig` | The `trace` command and the traced cell form. |
+| `coro.zig` | `coroutine`, `yield`, `yieldto`, and `tailcall`. |
+| `pkg.zig` | The optional `package` command. |
+| `child.zig` | The optional `interp` command. |
 | `ucd.zig` | A small model of Unicode classes and case maps. |
 | `noise.zig` | The gradient noise of `noise3`. |
 | `point.zig` | The point procs: the check, the vector program, and both paths. |
@@ -150,6 +153,16 @@ The functions are those of Tcl 8.6, and four additions for zslice: `clamp`, `ler
 ## Traces and element links
 
 A variable with a trace has the cell form `.traced`, and `upvar a(i) x` makes the cell form `.elem`. The fast paths of the bytecode read only `.val`, so a read of these forms goes to the general path. A store checks the tag with one compare (`Var.plainStore`). While `var_traces` is above zero, the inline forms are off, and `foreach` stores through `setVar`. A command with an execution trace has a wrapper as its function, so a call of another command has no added cost. `tcl_precision` is a `.traced` cell that does not count in `var_traces`. Its write check sets the precision of the double output.
+
+## Coroutines and tail calls
+
+A coroutine has its own native stack, word stack, and frame chain. An exported assembly routine switches the stack on x86-64 Linux. The resumer swaps the fields of the interpreter around each switch. `max_native` is half of the stack of the coroutine. `compact` gives `InterpBusy` while a coroutine is suspended.
+
+`tailcall` ends the proc with a private return code. The proc call then runs the command in a loop, so a chain of tail calls uses no native stack.
+
+## Capabilities
+
+`Interp.allow` turns on optional commands. The default interpreter has none. A child interpreter allocates through the counter of its parent, so the parent limit counts it. A call into a child passes the step limit, the nesting counts, and the native stack base. A child that is deleted while it runs is freed when the last call leaves it. `compact` gives `InterpBusy` for an interpreter with capabilities.
 
 ## Safety and determinism
 

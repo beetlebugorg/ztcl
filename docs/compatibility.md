@@ -20,38 +20,38 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 
 | Scope | Files | Total | Pass | Stand-in | Fail | Blocked | Pass rate | Rate with no stand-in |
 |---|---|---|---|---|---|---|---|---|
-| In scope | 77 | 29990 | 26786 | 1732 | 1398 | 1806 | 89.3 % | 83.5 % |
-| Needs a decision | 49 | 15027 | 31 | 0 | 9173 | 5823 | 0.2 % | 0.2 % |
+| In scope | 77 | 29990 | 26841 | 1733 | 1335 | 1814 | 89.5 % | 83.7 % |
+| Needs a decision | 49 | 15249 | 529 | 0 | 9014 | 5706 | 3.5 % | 3.5 % |
 | Cannot apply | 26 | 1178 | 4 | 0 | 283 | 891 | 0.3 % | 0.3 % |
-| **All** | **152** | **46195** | **26821** | **1732** | **10854** | **8520** | **58.1 %** | **54.3 %** |
+| **All** | **152** | **46417** | **27374** | **1733** | **10632** | **8411** | **59.0 %** | **55.2 %** |
 
 ## In scope
 
 | File | Total | Pass | Stand-in | Fail | Blocked | Blocked by | Reason |
 |---|---|---|---|---|---|---|---|
 | `append.test` | 45 | 42 | 0 | 3 | 0 |  | language and core commands |
-| `appendComp.test` | 48 | 39 | 0 | 4 | 5 | `expr:bug-3057639` 5 | language and core commands |
+| `appendComp.test` | 48 | 40 | 0 | 3 | 5 | `expr:bug-3057639` 5 | language and core commands |
 | `apply.test` | 42 | 33 | 0 | 5 | 4 | `memory` 3, `applylambda` 1 | language and core commands |
-| `basic.test` | 146 | 91 | 42 | 16 | 39 | `emptyTest` 27, `exec` 4, `testcmdtoken` 3 | core, partly through the C API |
+| `basic.test` | 146 | 99 | 43 | 8 | 39 | `emptyTest` 27, `exec` 4, `testcmdtoken` 3 | core, partly through the C API |
 | `binary.test` | 717 | 602 | 0 | 36 | 79 | `bigEndian` 76, `testsetbytearraylength` 2, `win` 1 | language and core commands |
 | `case.test` | 15 | 15 | 0 | 0 | 0 |  | language and core commands |
 | `cmdIL.test` | 146 | 128 | 0 | 12 | 6 | `hasIsoLocale` 2, `memory` 2, `testWithLimit` 1 | language and core commands |
 | `cmdMZ.test` | 92 | 49 | 0 | 16 | 27 | `Unix` 1, unreached 26 | language and core commands |
 | `compExpr-old.test` | 190 | 183 | 0 | 0 | 7 | `testmathfunctions` 5, `expr:!ieeeFloatingPoint` 1, `longIs32bit` 1 | language and core commands |
 | `compExpr.test` | 80 | 76 | 0 | 0 | 4 | `memory` 2, `testmathfunctions` 2 | language and core commands |
-| `compile.test` | 171 | 93 | 22 | 66 | 12 | `knownBug` 9, `memory` 2, `exec` 1 | the compiler, through scripts |
+| `compile.test` | 171 | 95 | 22 | 64 | 12 | `knownBug` 9, `memory` 2, `exec` 1 | the compiler, through scripts |
 | `concat.test` | 9 | 9 | 0 | 0 | 0 |  | language and core commands |
-| `coroutine.test` | 59 | 35 | 0 | 21 | 3 | `testnrelevels` 2, `memory` 1 | coroutines |
+| `coroutine.test` | 59 | 37 | 0 | 19 | 3 | `testnrelevels` 2, `memory` 1 | coroutines |
 | `dict.test` | 342 | 311 | 0 | 29 | 2 | `memory` 2 | language and core commands |
 | `error.test` | 317 | 300 | 0 | 9 | 8 | `memory` 8 | language and core commands |
 | `eval.test` | 12 | 11 | 0 | 1 | 0 |  | language and core commands |
-| `execute.test` | 157 | 63 | 0 | 14 | 80 | `testobj` 77, `longIs32bit` 3 | the bytecode engine, through scripts |
+| `execute.test` | 157 | 71 | 0 | 6 | 80 | `testobj` 77, `longIs32bit` 3 | the bytecode engine, through scripts |
 | `expr-old.test` | 460 | 432 | 11 | 12 | 16 | `longIs32bit` 10, `expr:!ieeeFloatingPoint` 3, `testmathfunctions` 3 | language and core commands |
 | `expr.test` | 14185 | 14124 | 2 | 27 | 34 | `longIs32bit` 18, `testmathfunctions` 11, `expr:!ieeeFloatingPoint` 5 | language and core commands |
 | `for-old.test` | 9 | 9 | 0 | 0 | 0 |  | language and core commands |
 | `for.test` | 88 | 60 | 0 | 4 | 24 | `memory` 24 | language and core commands |
 | `foreach.test` | 43 | 41 | 0 | 2 | 0 |  | language and core commands |
-| `format.test` | 266 | 225 | 0 | 32 | 9 | `longIs32bit` 7, `wideBiggerThanInt` 2 | language and core commands |
+| `format.test` | 266 | 233 | 0 | 24 | 9 | `longIs32bit` 7, `wideBiggerThanInt` 2 | language and core commands |
 | `get.test` | 22 | 5 | 0 | 1 | 16 | `testgetint` 15, `testdoubleobj` 1 | language and core commands |
 | `if-old.test` | 33 | 33 | 0 | 0 | 0 |  | language and core commands |
 | `if.test` | 73 | 73 | 0 | 0 | 0 |  | language and core commands |
@@ -74,20 +74,20 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `mathop.test` | 349 | 347 | 0 | 2 | 0 |  | language and core commands |
 | `misc.test` | 301 | 1 | 0 | 1 | 299 | `testhashsystemhash` 299 | language and core commands |
 | `namespace-old.test` | 126 | 114 | 0 | 12 | 0 |  | language and core commands |
-| `namespace.test` | 313 | 230 | 0 | 80 | 3 | `knownBug` 1, `memory` 1, `testevalobjv` 1 | language and core commands |
-| `nre.test` | 28 | 3 | 0 | 2 | 23 | `testnrelevels` 23 | non-recursive evaluation |
+| `namespace.test` | 313 | 233 | 0 | 77 | 3 | `knownBug` 1, `memory` 1, `testevalobjv` 1 | language and core commands |
+| `nre.test` | 28 | 4 | 0 | 1 | 23 | `testnrelevels` 23 | non-recursive evaluation |
 | `oo.test` | 306 | 0 | 0 | 288 | 18 | `memory` 14, `knownBug` 3, unreached 1 | TclOO |
 | `ooNext2.test` | 62 | 0 | 0 | 57 | 5 | `memory` 5 | TclOO |
 | `parse.test` | 271 | 110 | 26 | 9 | 152 | `testparser` 117, `testparsevarname` 12, `testevalobjv` 10 | the parser, partly through the C API |
 | `parseExpr.test` | 284 | 13 | 0 | 54 | 217 | `testexprparser` 215 | the expression parser, partly through the C API |
 | `parseOld.test` | 158 | 153 | 0 | 2 | 3 | `testbytestring` 3 | language and core commands |
 | `proc-old.test` | 74 | 64 | 0 | 10 | 0 |  | language and core commands |
-| `proc.test` | 38 | 25 | 0 | 12 | 1 | `memory` 1 | language and core commands |
+| `proc.test` | 38 | 26 | 0 | 3 | 9 | `procbodytest` 9 | language and core commands |
 | `reg.test` | 1141 | 925 | 892 | 106 | 110 | `localeRegexp` 100, `knownBug` 9, `nonPortable` 1 | regular expressions; most tests use `testregexp` |
 | `regexp.test` | 244 | 239 | 0 | 1 | 4 | `knownBug` 3, `exec` 1 | language and core commands |
 | `regexpComp.test` | 179 | 176 | 0 | 2 | 1 | `exec` 1 | language and core commands |
 | `rename.test` | 19 | 10 | 0 | 1 | 8 | `testdel` 8 | language and core commands |
-| `scan.test` | 181 | 145 | 0 | 35 | 1 | `nonPortable` 1 | language and core commands |
+| `scan.test` | 181 | 162 | 0 | 18 | 1 | `nonPortable` 1 | language and core commands |
 | `set-old.test` | 153 | 142 | 0 | 11 | 0 |  | language and core commands |
 | `set.test` | 64 | 61 | 0 | 2 | 1 | `testset2` 1 | language and core commands |
 | `split.test` | 17 | 16 | 0 | 1 | 0 |  | language and core commands |
@@ -96,10 +96,10 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `subst.test` | 63 | 56 | 0 | 6 | 1 | `testbytestring` 1 | language and core commands |
 | `switch.test` | 113 | 106 | 0 | 7 | 0 |  | language and core commands |
 | `tailcall.test` | 37 | 20 | 0 | 9 | 8 | `testnrelevels` 8 | `tailcall` |
-| `trace.test` | 295 | 209 | 0 | 69 | 17 | `testcmdtrace` 11, `memory` 3, `testevalobjv` 2 | `trace` |
+| `trace.test` | 295 | 212 | 0 | 66 | 17 | `testcmdtrace` 11, `memory` 3, `testevalobjv` 2 | `trace` |
 | `unknown.test` | 7 | 7 | 0 | 0 | 0 |  | language and core commands |
 | `uplevel.test` | 57 | 49 | 0 | 8 | 0 |  | language and core commands |
-| `upvar.test` | 65 | 42 | 0 | 15 | 8 | `testupvar` 8 | language and core commands |
+| `upvar.test` | 65 | 43 | 0 | 14 | 8 | `testupvar` 8 | language and core commands |
 | `utf.test` | 498 | 123 | 0 | 21 | 354 | `testutfnext` 152, `testutfprev` 103, `testbytestring` 26 | characters, partly through the C API |
 | `util.test` | 2291 | 2123 | 0 | 24 | 144 | `testdoubledigits` 126, `testdstring` 10, `testprint` 6 | number parsing and output, partly through the C API |
 | `var.test` | 110 | 64 | 0 | 26 | 20 | `testsetnoerr` 12, `memory` 3, `testgetvarfullname` 3 | language and core commands |
@@ -127,27 +127,27 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `fileSystem.test` | 137 | 0 | 0 | 0 | 137 | unreached 137 | `file` |
 | `fileSystemEncoding.test` | 1 | 0 | 0 | 0 | 1 | unreached 1 | `file`, `encoding` |
 | `history.test` | 62 | 0 | 0 | 0 | 62 | `history` 62 | `history` |
-| `http.test` | 75 | 1 | 0 | 72 | 2 | `knownBug` 1, `nonPortable` 1 | `http`, `socket` |
+| `http.test` | 75 | 1 | 0 | 63 | 11 | `http2.9.7` 7, `http2.9.8` 2, `knownBug` 1 | `http`, `socket` |
 | `http11.test` | 43 | 0 | 0 | 42 | 1 | `knownBug` 1 | `http`, `socket` |
 | `httpPipeline.test` | 1996 | 0 | 0 | 0 | 1996 | unreached 1996 | `http`, `socket` |
 | `httpold.test` | 32 | 0 | 0 | 0 | 32 | unreached 32 | `http`, `socket` |
 | `init.test` | 24 | 0 | 0 | 10 | 14 | unreached 14 | library loading, `auto_load` |
-| `interp.test` | 352 | 1 | 0 | 338 | 13 | `knownBug` 7, `testinterpdelete` 6 | `interp` |
+| `interp.test` | 352 | 146 | 0 | 193 | 13 | `knownBug` 7, `testinterpdelete` 6 | optional capability `interp` |
 | `io.test` | 524 | 0 | 0 | 0 | 524 | unreached 524 | channels |
 | `ioCmd.test` | 348 | 4 | 0 | 223 | 121 | `testchannel` 99, `fcopy` 10, `nonPortable` 3, unreached 3 | channels |
 | `ioTrans.test` | 106 | 0 | 0 | 69 | 37 | `testchannel` 37 | channel transforms |
 | `iogt.test` | 17 | 0 | 0 | 0 | 17 | unreached 17 | channel transforms |
 | `load.test` | 30 | 0 | 0 | 8 | 22 | `teststaticpkg` 4, `teststaticpkg_8.x` 1, unreached 17 | `load` |
 | `main.test` | 67 | 0 | 0 | 0 | 67 | unreached 67 | the `tclsh` main loop, `exec` |
-| `msgcat.test` | 109 | 0 | 0 | 47 | 62 | unreached 62 | `msgcat` package |
+| `msgcat.test` | 109 | 0 | 0 | 0 | 109 | unreached 109 | `msgcat` package |
 | `opt.test` | 31 | 0 | 0 | 30 | 1 | unreached 1 | `tcl::OptProc` package |
-| `package.test` | 180 | 0 | 0 | 0 | 180 | unreached 180 | `package` |
+| `package.test` | 402 | 352 | 0 | 50 | 0 |  | optional capability `package` |
 | `pid.test` | 5 | 0 | 0 | 0 | 5 | `pidDefined` 4, `unixExecs` 1 | `pid` |
 | `pkgMkIndex.test` | 27 | 0 | 0 | 17 | 10 | unreached 10 | package index, `file` |
-| `platform.test` | 6 | 1 | 0 | 3 | 2 | `notValgrind` 1, `testCPUID` 1 | `platform` package |
+| `platform.test` | 6 | 1 | 0 | 2 | 3 | `testCPUID` 1, unreached 2 | `platform` package |
 | `pwd.test` | 3 | 0 | 0 | 3 | 0 |  | `pwd`, `cd` |
 | `safe-stock.test` | 4 | 0 | 0 | 4 | 0 |  | `interp -safe` |
-| `safe.test` | 102 | 0 | 0 | 94 | 8 | `emptyTest` 2, unreached 6 | `interp -safe` |
+| `safe.test` | 102 | 1 | 0 | 87 | 14 | `TcltestPackage` 6, `emptyTest` 2, unreached 6 | `interp -safe` |
 | `security.test` | 1 | 1 | 0 | 0 | 0 |  | `interp`, host access |
 | `socket.test` | 98 | 0 | 0 | 0 | 98 | `socket` 37, unreached 61 | `socket` |
 | `source.test` | 23 | 0 | 0 | 23 | 0 |  | `source` |
@@ -183,7 +183,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `stringObj.test` | 75 | 0 | 0 | 0 | 75 | `testobj` 75 | C API |
 | `thread.test` | 52 | 0 | 0 | 0 | 52 | `thread` 52 | threads |
 | `unixForkEvent.test` | 1 | 0 | 0 | 0 | 1 | `testfork` 1 | needs fork |
-| `unixNotfy.test` | 4 | 0 | 0 | 0 | 4 | `noTk` 4 | threads and the notifier |
+| `unixNotfy.test` | 4 | 0 | 0 | 0 | 4 | `thread` 2, `unthreaded` 2 | threads and the notifier |
 | `winConsole.test` | 1 | 0 | 0 | 0 | 1 | `win` 1 | Windows only |
 | `winDde.test` | 50 | 0 | 0 | 0 | 50 | `dde` 49, `win` 1 | Windows only |
 | `winFCmd.test` | 178 | 0 | 0 | 0 | 178 | `win` 156, `nt` 4, `winVista` 3, unreached 12 | Windows only |

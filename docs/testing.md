@@ -20,8 +20,6 @@ The test files of the Tcl source measure compatibility. The repository has no co
 zig build
 tools/suite.sh                        # the 37 core files of core-8-6-16
 tools/suite.sh -a                     # all 152 files
-tools/suite.sh -a -o run.tsv          # all files, with a log for the table
-python3 -I tools/suite-table.py run.tsv > docs/compatibility.md
 tools/suite.sh -t <tag>               # another Tcl release
 tools/suite.sh -s <tcl source>/tests  # a local folder
 tools/suite.sh set.test expr.test     # some files
@@ -30,6 +28,14 @@ tools/suite.sh set.test expr.test     # some files
 `tools/tcltest.tcl` is a small stand-in for the `tcltest` package. It evaluates the constraints in the three forms of `tcltest`, and it checks `-output`, `-errorOutput`, and the `exact`, `glob`, `regexp`, and custom match modes. A failed cleanup is a failure. A test with a false constraint counts as skipped, and the log records the constraint. `tools/tcltest-end.tcl` prints the counts after each file.
 
 `tools/suite-count.tcl` counts the tests of a file with a real `tclsh`, in a safe interpreter. `tools/suite-scope.tsv` has the count and the scope of each file.
+
+`zig build suite-runner` builds `zig-out/bin/ztcl-suite`, the runner with the test commands of `tools/suite_cmds.zig`: `testregexp`, `testevalex`, and the `testexpr` commands. Each one calls real ztcl code. The library, the default runner, and the WebAssembly build do not have them. `tools/suite.sh` passes `--allow package,interp` to the runner. To make the table, run the suite with both runners:
+
+```sh
+tools/suite.sh -a -o plain.tsv
+tools/suite.sh -a -r zig-out/bin/ztcl-suite -o full.tsv
+python3 -I tools/suite-table.py full.tsv plain.tsv > docs/compatibility.md
+```
 
 [Compatibility](compatibility.md) has the table for all 152 files. A test that did not run counts as blocked. It does not count as a pass.
 
@@ -45,10 +51,10 @@ With the same stand-in, the commit before this work has 19 291 pass, 1 013 fail,
 | `while.test` | 45 | 1 | 0 |
 | `for.test` | 60 | 4 | 24 |
 | `foreach.test` | 41 | 2 | 0 |
-| `proc.test` | 25 | 12 | 1 |
+| `proc.test` | 26 | 3 | 9 |
 | `uplevel.test` | 49 | 8 | 0 |
-| `upvar.test` | 42 | 15 | 8 |
-| `expr.test` | 14121 | 15 | 49 |
+| `upvar.test` | 43 | 14 | 8 |
+| `expr.test` | 14122 | 14 | 49 |
 | `list.test` | 77 | 1 | 0 |
 | `lindex.test` | 44 | 2 | 37 |
 | `llength.test` | 6 | 0 | 0 |
@@ -61,24 +67,24 @@ With the same stand-in, the commit before this work has 19 291 pass, 1 013 fail,
 | `concat.test` | 9 | 0 | 0 |
 | `append.test` | 42 | 3 | 0 |
 | `string.test` | 618 | 6 | 10 |
-| `format.test` | 225 | 32 | 9 |
-| `switch.test` | 105 | 8 | 0 |
+| `format.test` | 233 | 24 | 9 |
+| `switch.test` | 106 | 7 | 0 |
 | `eval.test` | 11 | 1 | 0 |
 | `parse.test` | 84 | 6 | 181 |
-| `lmap.test` | 60 | 6 | 0 |
+| `lmap.test` | 62 | 4 | 0 |
 | `apply.test` | 33 | 5 | 4 |
 | `rename.test` | 10 | 1 | 8 |
 | `error.test` | 300 | 9 | 8 |
 | `lset.test` | 0 | 0 | 89 |
-| `namespace.test` | 230 | 80 | 3 |
-| `regexp.test` | 209 | 31 | 4 |
+| `namespace.test` | 233 | 77 | 3 |
+| `regexp.test` | 239 | 1 | 4 |
 | `binary.test` | 602 | 36 | 79 |
 | `info.test` | 97 | 161 | 5 |
 | `dict.test` | 311 | 29 | 2 |
-| `scan.test` | 145 | 35 | 1 |
-| **Total** | **19781** | **523** | **525** |
+| `scan.test` | 162 | 18 | 1 |
+| **Total** | **19845** | **451** | **533** |
 
-The largest groups of tests that still fail in scope: TclOO (`oo`, `ooNext2`), `info frame`, step traces, `coroutine`, `tailcall`, the bytecode tools (`tcl::unsupported::disassemble`), the `%n$` forms of `format` and `scan`, and the longest-match rules of regular expressions.
+The largest groups of tests that still fail in scope: TclOO (`oo`, `ooNext2`), `info frame`, step traces, and the bytecode tools (`tcl::unsupported::disassemble`).
 
 ## Benchmarks
 

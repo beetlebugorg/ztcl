@@ -228,10 +228,16 @@ if {[llength [info commands package]] == 0} {
     package provide tcltest 2.5.9
 }
 set tcl_library /usr/lib/tcl8.6
+# The variables that tclsh sets for a script with no arguments.
+set argv {}
+set argc 0
+set auto_path {}
 
 # Loads the test commands into a child. Its counts go to this file.
 proc tcltest::loadIntoChildInterpreter {child args} {
-    interp eval $child {set ::tt_child 1; set ::tt_verbose 0}
+    interp eval $child [list set ::tt_child 1]
+    interp eval $child [list set ::tt_verbose $::tt_verbose]
+    interp eval $child {set ::auto_path {}; set ::argv {}; set ::argc 0}
     interp eval $child $::tt_script
     interp alias $child tt_note {} tt_note
     interp eval $child {catch {package provide tcltest 2.5.9}; catch {package provide Tcl 8.6.16}}
