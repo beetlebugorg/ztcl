@@ -7,7 +7,7 @@
 //! kernel handle in the low 32 bits, so the value fits in an `i32`. A
 //! handle at or above the tag is closed and reported as an error.
 //!
-//! `WSAPoll` accepts only sockets, so `poll` asks each other handle by
+//! `WSAPoll` accepts only sockets, so `poll` checks each other handle by
 //! its type. A disk file is always ready. A pipe is ready when
 //! `PeekNamedPipe` finds data or an end. While a pipe or a console
 //! waits, the wait runs in slices of 10 ms.
@@ -141,6 +141,13 @@ fn handleOf(fd: Fd) HANDLE {
     return @ptrFromInt(@as(usize, @intCast(fd)));
 }
 
+/// The `Fd` of a file handle, or null for one outside the range.
+pub fn fdOfHandle(h: HANDLE) ?Fd {
+    const v = @intFromPtr(h);
+    if (v <= 2 or v >= @as(usize, @intCast(sock_tag))) return null;
+    return @intCast(v);
+}
+
 fn wsaError() u32 {
     return @intCast(WSAGetLastError());
 }
@@ -150,7 +157,29 @@ fn fdOfSocket(s: SOCKET) ?Fd {
     return @as(Fd, @intCast(s)) + sock_tag;
 }
 
-pub fn failOf(e: u32) Fail {
+/// A host error. The names are the POSIX names that `fsroot.posixError`
+/// reads, and the values are Win32 codes. Another code stays as it is.
+pub const E = enum(u32) {
+    NOENT = 2,
+    ACCES = 5,
+    XDEV = 17,
+    EXIST = 80,
+    INVAL = 87,
+    NOSYS = 120,
+    NOTEMPTY = 145,
+    NAMETOOLONG = 206,
+    NOTDIR = 267,
+    ISDIR = 336,
+    PERM = 1314,
+    LOOP = 1921,
+    _,
+};
+
+pub fn failOf(e: E) Fail {
+    return failCode(@intFromEnum(e));
+}
+
+fn failCode(e: u32) Fail {
     return switch (e) {
         2, 3 => .{ .name = "ENOENT", .text = "no such file or directory" },
         5, 10013 => .{ .name = "EACCES", .text = "permission denied" },
@@ -165,6 +194,7 @@ pub fn failOf(e: u32) Fail {
         87, 10022 => .{ .name = "EINVAL", .text = "invalid argument" },
         6, 10009, 10038 => .{ .name = "EBADF", .text = "bad file number" },
         267 => .{ .name = "ENOTDIR", .text = "not a directory" },
+        336 => .{ .name = "EISDIR", .text = "illegal operation on a directory" },
         4, 10024 => .{ .name = "EMFILE", .text = "too many open files" },
         8, 14, 10055 => .{ .name = "ENOMEM", .text = "not enough memory" },
         else => .{ .name = "EIO", .text = "I/O error" },
@@ -181,22 +211,22 @@ pub fn read(fd: Fd, buf: []u8) IoResult {
             const n = recv(socketOf(fd), buf.ptr, clampLen(buf.len), 0);
             // After a failed connect, Winsock can report the end of the
             // data. The socket has no peer, so the read is an error.
-            if (n == 0 and buf.len > 0 and peerName(fd) == null) return .{ .err = failOf(wsaenotconn) };
+            if (n == 0 and buf.len > 0 and peerName(fd) == null) return .{ .err = failCode(wsaenotconn) };
             if (n != socket_error) return .{ .n = @intCast(n) };
             const e = wsaError();
             if (e == wsaeintr) continue;
             if (e == wsaewouldblock) return .again;
             // A read after `shutdown` is the end of the data.
             if (e == wsaeshutdown) {
-                if (peerName(fd) == null) return .{ .err = failOf(wsaenotconn) };
+                if (peerName(fd) == null) return .{ .err = failCode(wsaenotconn) };
                 return .{ .n = 0 };
             }
-            return .{ .err = failOf(e) };
+            return .{ .err = failCode(e) };
         }
     }
     return switch (readFile(fd, buf)) {
         .n => |n| .{ .n = n },
-        .err => |e| if (e == error_no_data) .again else .{ .err = failOf(e) },
+        .err => |e| if (@intFromEnum(e) == error_no_data) .again else .{ .err = failOf(e) },
     };
 }
 
@@ -207,7 +237,16 @@ pub fn readFile(fd: Fd, buf: []u8) sys.FileRead {
     const e = GetLastError();
     // The other end of a pipe closed: the end of the data.
     if (e == error_broken_pipe or e == error_handle_eof) return .{ .n = 0 };
-    return .{ .err = e };
+    // ReadFile on the handle of a folder.
+    if (e == error_invalid_function) return .{ .err = .ISDIR };
+    return .{ .err = @enumFromInt(e) };
+}
+
+pub fn writeFile(fd: Fd, buf: []const u8) sys.FileRead {
+    var put: DWORD = 0;
+    const size: DWORD = @intCast(@min(buf.len, std.math.maxInt(i32)));
+    if (WriteFile(handleOf(fd), buf.ptr, size, &put, null) == 0) return .{ .err = @enumFromInt(GetLastError()) };
+    return .{ .n = put };
 }
 
 pub fn write(fd: Fd, buf: []const u8) IoResult {
@@ -218,12 +257,12 @@ pub fn write(fd: Fd, buf: []const u8) IoResult {
             const e = wsaError();
             if (e == wsaeintr) continue;
             if (e == wsaewouldblock) return .again;
-            return .{ .err = failOf(e) };
+            return .{ .err = failCode(e) };
         }
     }
     var put: DWORD = 0;
     const size: DWORD = @intCast(@min(buf.len, std.math.maxInt(i32)));
-    if (WriteFile(handleOf(fd), buf.ptr, size, &put, null) == 0) return .{ .err = failOf(GetLastError()) };
+    if (WriteFile(handleOf(fd), buf.ptr, size, &put, null) == 0) return .{ .err = failCode(GetLastError()) };
     // A pipe with no wait and no room writes no bytes.
     if (put == 0 and size > 0) return .again;
     return .{ .n = put };
@@ -256,7 +295,7 @@ fn socketError(s: SOCKET) u32 {
     return code;
 }
 
-/// Asks a handle that is not a socket. Gives true when it is ready.
+/// Checks a handle that is not a socket. Gives true when it is ready.
 fn otherReady(w: *sys.Want, waits: *bool) bool {
     w.can_write = w.write;
     if (!w.read) return w.write;
@@ -370,17 +409,17 @@ fn nameOf(a: *const Sock) Addr {
 fn newSocket(v6: bool) sys.SockResult {
     startup();
     const s = WSASocketW(if (v6) af_inet6 else af_inet, sock_stream, ipproto_tcp, null, 0, wsa_flag_no_handle_inherit);
-    if (s == invalid_socket) return .{ .err = failOf(wsaError()) };
+    if (s == invalid_socket) return .{ .err = failCode(wsaError()) };
     const fd = fdOfSocket(s) orelse {
         _ = closesocket(s);
-        return .{ .err = failOf(10024) };
+        return .{ .err = failCode(10024) };
     };
     if (v6) {
         const one: u32 = 1;
         if (setsockopt(s, ipproto_ipv6, ipv6_v6only, std.mem.asBytes(&one), 4) != 0) {
             const e = wsaError();
             _ = closesocket(s);
-            return .{ .err = failOf(e) };
+            return .{ .err = failCode(e) };
         }
     }
     return .{ .fd = fd };
@@ -401,7 +440,7 @@ pub fn listenAt(addr: Addr, reuse: bool) sys.SockResult {
     if (bind(s, &sa, len) != 0 or listen(s, 128) != 0) {
         const e = wsaError();
         close(fd);
-        return .{ .err = failOf(e) };
+        return .{ .err = failCode(e) };
     }
     return .{ .fd = fd };
 }
@@ -419,7 +458,7 @@ pub fn connectTo(addr: Addr, mine: ?Addr, wait: bool) sys.SockResult {
         if (bind(s, &sa, len) != 0) {
             const e = wsaError();
             close(fd);
-            return .{ .err = failOf(e) };
+            return .{ .err = failCode(e) };
         }
     }
     if (!wait) setBlocking(fd, false);
@@ -430,7 +469,7 @@ pub fn connectTo(addr: Addr, mine: ?Addr, wait: bool) sys.SockResult {
         if (e == wsaeintr) continue;
         if (e == wsaewouldblock) return .{ .fd = fd };
         close(fd);
-        return .{ .err = failOf(e) };
+        return .{ .err = failCode(e) };
     }
 }
 
@@ -476,7 +515,7 @@ pub fn connectError(fd: Fd) ?Fail {
     // A read of SO_ERROR leaves it set on Windows, so this call clears it.
     const zero: u32 = 0;
     _ = setsockopt(s, sol_socket, so_error, std.mem.asBytes(&zero), 4);
-    return failOf(code);
+    return failCode(code);
 }
 
 pub fn acceptOn(fd: Fd) ?sys.Accepted {
@@ -520,11 +559,11 @@ pub fn shutdownOn(fd: Fd, how: i32) void {
 }
 
 pub fn seek(fd: Fd, off: i64, whence: u8) sys.SeekResult {
-    if (isSocket(fd)) return .{ .err = error_invalid_function };
+    if (isSocket(fd)) return .{ .err = @enumFromInt(error_invalid_function) };
     const h = handleOf(fd);
-    if (GetFileType(h) != file_type_disk) return .{ .err = error_invalid_function };
+    if (GetFileType(h) != file_type_disk) return .{ .err = @enumFromInt(error_invalid_function) };
     var at: i64 = 0;
-    if (SetFilePointerEx(h, off, &at, whence) == 0) return .{ .err = GetLastError() };
+    if (SetFilePointerEx(h, off, &at, whence) == 0) return .{ .err = @enumFromInt(GetLastError()) };
     return .{ .at = at };
 }
 

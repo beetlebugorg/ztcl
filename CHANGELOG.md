@@ -34,4 +34,5 @@
 - Adds `time` to the `clock` capability, and the runner option `--tclsh` for the child processes of the Tcl tests.
 - Adds a test-only suite runner with commands that call real ztcl code.
 - Sets the error codes of Tcl for arithmetic, argument counts, list syntax, and lookups.
-- Adds channels, the event loop on sockets, and `socket` for x86-64 Windows. A file open gives an error there until the root folder jail is ported.
+- Adds channels, the event loop on sockets, and `socket` for x86-64 Windows.
+- Adds `file` and file channels for x86-64 Windows, with a root folder jail that walks each path and gives an error for each reparse point.
