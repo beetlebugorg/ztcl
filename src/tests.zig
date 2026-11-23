@@ -1187,7 +1187,7 @@ test "clock reads the time only from the host callback" {
 
 test "file and channels cannot leave the root folder" {
     if (!tcl.fsroot.supported) return error.SkipZigTest;
-    const linux = std.os.linux;
+    const linux = tcl.sys.os;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const base: i32 = tmp.dir.handle;
@@ -1203,7 +1203,10 @@ test "file and channels cannot leave the root folder" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    const rc = linux.openat(base, "root", .{ .DIRECTORY = true, .PATH = true, .CLOEXEC = true }, 0);
+    const rc = if (@import("builtin").os.tag == .macos)
+        linux.openat(base, "root", .{ .DIRECTORY = true, .CLOEXEC = true }, 0)
+    else
+        linux.openat(base, "root", .{ .DIRECTORY = true, .PATH = true, .CLOEXEC = true }, 0);
     try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(rc));
     it.fs.fd = @intCast(rc);
     try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.file));
@@ -1226,6 +1229,57 @@ test "file and channels cannot leave the root folder" {
     try std.testing.expectEqualStrings("hidden", buf[0..n]);
     try std.testing.expectEqual(linux.E.NOENT, linux.errno(linux.openat(base, "made", .{}, 0)));
     try std.testing.expectEqualStrings("ok", try it.str(try it.eval("set f [open sub/a.txt w]; puts $f ok; close $f; set f [open sub/a.txt]; set l [gets $f]; close $f; set l")));
+}
+
+test "a folder swapped for a symlink during an open stays in the root" {
+    if (!tcl.fsroot.supported or @import("builtin").os.tag != .macos) return error.SkipZigTest;
+    const linux = tcl.sys.os;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const base: i32 = tmp.dir.handle;
+    for ([_][*:0]const u8{ "root", "root/d", "root/keep", "outside" }) |d| {
+        try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.mkdirat(base, d, 0o777)));
+    }
+    for ([_][*:0]const u8{ "outside/f", "root/d/f" }) |f| {
+        const rc = linux.openat(base, f, .{ .ACCMODE = .WRONLY, .CREAT = true }, 0o666);
+        try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(rc));
+        const text: []const u8 = if (f[0] == 'o') "hidden" else "inside";
+        _ = linux.write(@intCast(rc), text.ptr, text.len);
+        _ = linux.close(@intCast(rc));
+    }
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.symlinkat("../outside", base, "root/link")));
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.fs.fd = @intCast(linux.openat(base, "root", .{ .DIRECTORY = true, .CLOEXEC = true }, 0));
+    const Swap = struct {
+        fn run(dir: i32, stop: *std.atomic.Value(bool)) void {
+            while (!stop.load(.monotonic)) {
+                _ = linux.renameat(dir, "root/d", dir, "root/keep/d");
+                _ = linux.renameat(dir, "root/link", dir, "root/d");
+                _ = linux.renameat(dir, "root/d", dir, "root/link");
+                _ = linux.renameat(dir, "root/keep/d", dir, "root/d");
+            }
+        }
+    };
+    var stop = std.atomic.Value(bool).init(false);
+    const t = try std.Thread.spawn(.{}, Swap.run, .{ base, &stop });
+    defer t.join();
+    defer stop.store(true, .monotonic);
+    var opened: usize = 0;
+    for (0..20000) |_| {
+        switch (try tcl.fsroot.openRel(&it, "d/f", .{}, 0)) {
+            .fd => |fd| {
+                var buf: [8]u8 = undefined;
+                const n = linux.read(fd, &buf, buf.len);
+                _ = linux.close(fd);
+                try std.testing.expectEqualStrings("inside", buf[0..n]);
+                opened += 1;
+            },
+            .err => {},
+        }
+    }
+    try std.testing.expect(opened > 0);
 }
 
 var fake_ticks: i64 = 0;
