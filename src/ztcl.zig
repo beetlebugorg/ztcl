@@ -29,6 +29,7 @@ pub const regex = @import("regex.zig");
 pub const fsroot = @import("fsroot.zig");
 pub const sys = @import("sys.zig");
 pub const thread = @import("thread.zig");
+pub const proc = @import("proc.zig");
 pub const chan = @import("chan.zig");
 pub const event = @import("event.zig");
 pub const sock = @import("sock.zig");
