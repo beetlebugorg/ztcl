@@ -1,0 +1,75 @@
+name: CI
+
+# Builds and tests ztcl on each push to main and each pull request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ZIG_VERSION: "0.16.0"
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      # ulimit -v is enforced on Linux only. On macOS and Windows, the
+      # memory limit of the interpreter is the only cap.
+      - name: Build and test
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then ulimit -v 6000000; fi
+          zig build
+          zig build test
+      - name: Run a script
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then ulimit -v 6000000; fi
+          test "$(zig build run -- bench/sum.tcl | tr -d '\r')" = 499999500000
+
+  suite:
+    name: Tcl 8.6.16 suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Run the suite
+        run: |
+          ulimit -v 6000000
+          zig build
+          tools/suite.sh -t core-8-6-16 | tee suite.txt
+          awk '$1 == "total" { found = 1; ok = ($3 >= 19241) } END { exit !(found && ok) }' suite.txt
+
+  wasm:
+    name: WebAssembly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: zig build wasm
+      - run: node tools/wasm-smoke.mjs zig-out/lib/ztcl.wasm
