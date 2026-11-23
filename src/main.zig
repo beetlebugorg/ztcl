@@ -63,7 +63,8 @@ pub fn main(init: std.process.Init) !void {
 }
 
 var host_io: Io = undefined;
-const exec_ok = @import("builtin").os.tag == .linux;
+const chan_ok = tcl.sys.supported;
+const exec_ok = tcl.proc.supported;
 
 fn hostNow(_: ?*anyopaque) i64 {
     const t = Io.Clock.real.now(host_io);
@@ -131,8 +132,8 @@ fn leave(it: *tcl.Interp, code: u8) noreturn {
 /// The part of `tclsh` that the Tcl tests use for a child process.
 fn runTclsh(it: *tcl.Interp, out: *Io.Writer, words: []const [:0]const u8, root: ?[]const u8, cwd: ?[]const u8) !void {
     exit_out = out;
-    const channels = exec_ok and it.capabilities & @intFromEnum(tcl.interp.Capability.channels) != 0;
-    if (comptime exec_ok) {
+    const channels = chan_ok and it.capabilities & @intFromEnum(tcl.interp.Capability.channels) != 0;
+    if (comptime chan_ok) {
         tcl.sys.ignorePipeSignal();
         if (channels) try tcl.chan.useStdio(it);
         if (root != null and cwd != null and std.mem.startsWith(u8, cwd.?, root.?)) {
@@ -178,7 +179,7 @@ fn tclshError(it: *tcl.Interp, e: tcl.Error) noreturn {
         it.finishError() catch {};
         const info = it.getVarPlain("::errorInfo") catch it.result;
         const text = it.str(info) catch "error";
-        if (comptime exec_ok) {
+        if (comptime chan_ok) {
             _ = tcl.sys.write(2, text);
             _ = tcl.sys.write(2, "\n");
         }
@@ -354,7 +355,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             it.event_host = .{ .now = hostTicks, .sleep = hostSleep };
             // A write to a closed pipe or socket is an error of the
             // script. It must not end the runner.
-            if (comptime exec_ok) tcl.sys.ignorePipeSignal();
+            if (comptime chan_ok) tcl.sys.ignorePipeSignal();
             try it.allow(bits);
             continue;
         }

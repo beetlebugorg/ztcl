@@ -16,6 +16,7 @@ const builtin = @import("builtin");
 const interp = @import("interp.zig");
 const Interp = interp.Interp;
 const Error = interp.Error;
+const sys = @import("sys.zig");
 const linux = std.os.linux;
 
 pub const supported = builtin.os.tag == .linux;
@@ -44,7 +45,8 @@ pub fn setRoot(it: *Interp, path: []const u8) !void {
     it.fs.path = try it.alloc().dupe(u8, std.mem.trimEnd(u8, path, "/"));
 }
 
-pub fn posixError(it: *Interp, e: linux.E, what: []const u8) Error {
+pub fn posixError(it: *Interp, e: sys.Errno, what: []const u8) Error {
+    if (comptime !supported) return it.failCode("POSIX EACCES {permission denied}", "{s}permission denied", .{what});
     const name: []const u8, const text: []const u8 = switch (e) {
         .NOENT => .{ "ENOENT", "no such file or directory" },
         .ACCES, .PERM, .XDEV, .LOOP => .{ "EACCES", "permission denied" },
@@ -89,12 +91,31 @@ fn escaped(it: *Interp, path: []const u8) Error {
     return it.failCode("POSIX EACCES {permission denied}", "couldn't access \"{s}\": permission denied", .{path});
 }
 
+/// The Linux open flags, with close-on-exec.
+pub fn hostFlags(flags: sys.OpenFlags) linux.O {
+    return .{
+        .ACCMODE = switch (flags.access) {
+            .read => .RDONLY,
+            .write => .WRONLY,
+            .read_write => .RDWR,
+        },
+        .CREAT = flags.create,
+        .EXCL = flags.exclusive,
+        .TRUNC = flags.truncate,
+        .APPEND = flags.append,
+        .DIRECTORY = flags.directory,
+        .PATH = flags.path_only,
+        .CLOEXEC = true,
+    };
+}
+
 /// Opens a normal path below the root. Gives the descriptor or an errno.
-pub fn openRel(it: *Interp, rel: []const u8, flags: linux.O, mode: u32) Error!union(enum) { fd: i32, err: linux.E } {
+pub fn openRel(it: *Interp, rel: []const u8, flags: sys.OpenFlags, mode: u32) Error!union(enum) { fd: i32, err: sys.Errno } {
+    // With no jail for this target, each open is an error.
+    if (comptime !supported) return it.fail("the file system is not available on this target", .{});
     if (it.fs.fd < 0) return it.fail("the embedder gave no root folder", .{});
     const z = try it.alloc().dupeZ(u8, if (rel.len == 0) "." else rel);
-    var f = flags;
-    f.CLOEXEC = true;
+    const f = hostFlags(flags);
     var how: OpenHow = .{ .flags = @as(u32, @bitCast(f)), .mode = if (f.CREAT) mode else 0, .resolve = resolve_flags };
     const rc = linux.syscall4(.openat2, @as(usize, @bitCast(@as(isize, it.fs.fd))), @intFromPtr(z.ptr), @intFromPtr(&how), @sizeOf(OpenHow));
     const e = linux.errno(rc);
@@ -110,7 +131,7 @@ pub fn parentOf(it: *Interp, rel: []const u8) Error!union(enum) { ok: Parent, er
     const dir = if (cut) |c| rel[0..c] else "";
     const base = if (cut) |c| rel[c + 1 ..] else rel;
     if (base.len == 0) return .{ .err = .ACCES };
-    switch (try openRel(it, dir, .{ .DIRECTORY = true, .PATH = true }, 0)) {
+    switch (try openRel(it, dir, .{ .directory = true, .path_only = true }, 0)) {
         .fd => |fd| return .{ .ok = .{ .fd = fd, .base = try it.alloc().dupeZ(u8, base) } },
         .err => |e| return .{ .err = e },
     }
@@ -147,7 +168,7 @@ pub fn isFile(mode: u32) bool {
 
 /// The names in a folder, with no `.` or `..`.
 pub fn listDir(it: *Interp, rel: []const u8) Error!union(enum) { ok: []const []const u8, err: linux.E } {
-    const fd = switch (try openRel(it, rel, .{ .DIRECTORY = true }, 0)) {
+    const fd = switch (try openRel(it, rel, .{ .directory = true }, 0)) {
         .fd => |x| x,
         .err => |e| return .{ .err = e },
     };
