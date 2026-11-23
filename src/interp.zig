@@ -877,11 +877,16 @@ pub const Capability = enum(u32) {
     }
 };
 
-const fs_supported = @import("builtin").os.tag == .linux;
-const FsState = if (fs_supported) @import("fsroot.zig").State else struct { fd: i32 = -1 };
-const ProcHost = if (fs_supported) @import("proc.zig").Host else struct {};
-const ProcState = if (fs_supported) @import("proc.zig").State else struct {};
-const ChanState = if (fs_supported) @import("chan.zig").State else struct {};
+// Each group of host commands has its own gate. A target gets channels
+// and sockets from `sys.zig`, the file commands from the jail of
+// `fsroot.zig`, and `exec` from `proc.zig`.
+const chan_supported = @import("sys.zig").supported;
+const fs_supported = @import("fsroot.zig").supported;
+const exec_supported = @import("proc.zig").supported;
+const FsState = @import("fsroot.zig").State;
+const ProcHost = if (exec_supported) @import("proc.zig").Host else struct {};
+const ProcState = if (exec_supported) @import("proc.zig").State else struct {};
+const ChanState = if (chan_supported) @import("chan.zig").State else struct {};
 
 pub const ReturnCode = enum(u32) { ok = 0, @"error" = 1, @"return" = 2, @"break" = 3, @"continue" = 4, _ };
 
@@ -1366,10 +1371,8 @@ pub const Interp = struct {
         if (comptime thread_mod.supported) thread_mod.endGroup(it);
         @import("child.zig").destroyAll(it);
         @import("event.zig").forget(it);
-        if (comptime fs_supported) {
-            @import("chan.zig").closeAll(it);
-            @import("proc.zig").abandonAll(it);
-        }
+        if (comptime chan_supported) @import("chan.zig").closeAll(it);
+        if (comptime exec_supported) @import("proc.zig").abandonAll(it);
         const fs_keep = it.fs;
         defer it.fs = fs_keep;
         const caps = it.capabilities;
@@ -1463,11 +1466,16 @@ pub const Interp = struct {
         if (new & @intFromEnum(Capability.interp) != 0) try it.register("interp", @import("child.zig").cmdInterp);
         if (new & @intFromEnum(Capability.clock) != 0) try @import("clock.zig").register(it);
         if (new & @intFromEnum(Capability.event) != 0) try @import("event.zig").register(it);
-        // The file commands exist on Linux, where `openat2` is the jail.
-        if (comptime fs_supported) {
+        if (comptime chan_supported) {
             if (new & @intFromEnum(Capability.channels) != 0) try @import("chan.zig").register(it);
+        }
+        if (comptime fs_supported) {
             if (new & @intFromEnum(Capability.file) != 0) try @import("filecmd.zig").register(it);
+        }
+        if (comptime exec_supported) {
             if (new & @intFromEnum(Capability.exec) != 0) try @import("proc.zig").register(it);
+        }
+        if (comptime chan_supported) {
             if (new & @intFromEnum(Capability.socket) != 0) try it.register("socket", @import("sock.zig").cmdSocket);
         }
         if (comptime thread_mod.supported) {
@@ -1490,10 +1498,10 @@ pub const Interp = struct {
             root.counter.unfollow(&it.counter);
         }
         @import("child.zig").destroyAll(it);
+        if (comptime chan_supported) @import("chan.zig").closeAll(it);
+        if (comptime exec_supported) @import("proc.zig").abandonAll(it);
         if (comptime fs_supported) {
-            @import("chan.zig").closeAll(it);
-            @import("proc.zig").abandonAll(it);
-            if (it.fs.fd >= 0) _ = std.os.linux.close(it.fs.fd);
+            if (it.fs.fd >= 0) @import("sys.zig").close(it.fs.fd);
         }
         it.freeCaches();
         it.gc_roots.deinit(it.heap.backing);
