@@ -123,7 +123,7 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
     child.net = it.net;
     if (!child.is_safe) {
         // A child shares the jail of its parent through its own descriptor.
-        if (comptime @import("builtin").os.tag == .linux) {
+        if (comptime @import("fsroot.zig").supported) {
             if (it.fs.fd >= 0) {
                 const rc = std.os.linux.fcntl(it.fs.fd, std.os.linux.F.DUPFD_CLOEXEC, 3);
                 if (std.os.linux.errno(rc) == .SUCCESS) child.fs.fd = @intCast(rc);

@@ -15,8 +15,8 @@ const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
-const linux = std.os.linux;
 const sys = @import("sys.zig");
+const proc_ok = @import("proc.zig").supported;
 const event = @import("event.zig");
 
 const Translation = enum { auto, lf, cr, crlf, binary };
@@ -258,8 +258,8 @@ pub fn putsTo(it: *Interp, name: []const u8, text: []const u8, newline: bool) Er
     return true;
 }
 
-fn parseMode(it: *Interp, text: []const u8) Error!struct { flags: linux.O, read: bool, write: bool, append: bool } {
-    var f: linux.O = .{};
+fn parseMode(it: *Interp, text: []const u8) Error!struct { flags: sys.OpenFlags, read: bool, write: bool, append: bool } {
+    var f: sys.OpenFlags = .{};
     var r = false;
     var w = false;
     var ap = false;
@@ -275,13 +275,13 @@ fn parseMode(it: *Interp, text: []const u8) Error!struct { flags: linux.O, read:
                 w = true;
             } else if (eql(m, "APPEND")) {
                 ap = true;
-                f.APPEND = true;
+                f.append = true;
             } else if (eql(m, "CREAT")) {
-                f.CREAT = true;
+                f.create = true;
             } else if (eql(m, "EXCL")) {
-                f.EXCL = true;
+                f.exclusive = true;
             } else if (eql(m, "TRUNC")) {
-                f.TRUNC = true;
+                f.truncate = true;
             } else if (!eql(m, "NOCTTY") and !eql(m, "NONBLOCK") and !eql(m, "BINARY")) {
                 return it.failCode("TCL LOOKUP INDEX flag", "invalid access mode \"{s}\": must be APPEND, BINARY, CREAT, EXCL, NOCTTY, NONBLOCK, RDONLY, RDWR, TRUNC, or WRONLY", .{m});
             }
@@ -299,27 +299,27 @@ fn parseMode(it: *Interp, text: []const u8) Error!struct { flags: linux.O, read:
             w = true;
         } else if (eql(body, "w")) {
             w = true;
-            f.CREAT = true;
-            f.TRUNC = true;
+            f.create = true;
+            f.truncate = true;
         } else if (eql(body, "w+")) {
             r = true;
             w = true;
-            f.CREAT = true;
-            f.TRUNC = true;
+            f.create = true;
+            f.truncate = true;
         } else if (eql(body, "a")) {
             w = true;
             ap = true;
-            f.CREAT = true;
-            f.APPEND = true;
+            f.create = true;
+            f.append = true;
         } else if (eql(body, "a+")) {
             r = true;
             w = true;
             ap = true;
-            f.CREAT = true;
-            f.APPEND = true;
+            f.create = true;
+            f.append = true;
         } else return it.fail("illegal access mode \"{s}\"", .{text});
     }
-    f.ACCMODE = if (r and w) .RDWR else if (w) .WRONLY else .RDONLY;
+    f.access = if (r and w) .read_write else if (w) .write else .read;
     return .{ .flags = f, .read = r, .write = w, .append = ap };
 }
 
@@ -332,6 +332,7 @@ fn cmdOpen(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (path.len > 0 and path[0] == '|') {
         // A command pipeline needs the capability `exec`.
         if (it.capabilities & @intFromEnum(interp.Capability.exec) == 0) return it.fail("couldn't open \"{s}\": command pipelines are not available", .{path});
+        if (comptime !proc_ok) return it.fail("couldn't open \"{s}\": exec is not available on this target", .{path});
         return @import("proc.zig").openPipeline(it, path[1..], m.read, m.write);
     }
     var perm: u32 = 0o666;
@@ -382,7 +383,9 @@ fn closeChan(it: *Interp, c: *Channel) Error!void {
     }
     if (c.draining) return;
     try r;
-    if (c.pids.len > 0) try @import("proc.zig").reap(it, c);
+    if (comptime proc_ok) {
+        if (c.pids.len > 0) try @import("proc.zig").reap(it, c);
+    }
 }
 
 /// Closes all channels when the interpreter ends.
@@ -390,7 +393,9 @@ pub fn closeAll(it: *Interp) void {
     for (it.chans.table.values()) |c| {
         flushOut(it, c) catch {};
         closeFds(c);
-        if (c.pids.len > 0) @import("proc.zig").abandon(c);
+        if (comptime proc_ok) {
+            if (c.pids.len > 0) @import("proc.zig").abandon(c);
+        }
     }
     it.chans.table = .empty;
 }
@@ -727,9 +732,10 @@ fn cmdSeek(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }
     }
     try flushOut(it, c);
-    const rc = linux.lseek(c.fd, off + adjust, whence);
-    const e = linux.errno(rc);
-    if (e != .SUCCESS) return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "error during seek on \"{s}\": ", .{c.name}));
+    switch (sys.seek(c.fd, off + adjust, @intCast(whence))) {
+        .at => {},
+        .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "error during seek on \"{s}\": ", .{c.name})),
+    }
     c.rbuf.clearRetainingCapacity();
     c.rpos = 0;
     c.at_eof = false;
@@ -740,9 +746,10 @@ fn cmdSeek(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 fn cmdTell(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2) return it.wrongArgs("tell channelId");
     const c = try find(it, argv[1]);
-    const rc = linux.lseek(c.fd, 0, 1);
-    if (linux.errno(rc) != .SUCCESS) return .{ .int = -1 };
-    const at: i64 = @intCast(rc);
+    const at: i64 = switch (sys.seek(c.fd, 0, 1)) {
+        .at => |x| x,
+        .err => return .{ .int = -1 },
+    };
     return .{ .int = at - @as(i64, @intCast(c.rbuf.items.len - c.rpos)) + @as(i64, @intCast(c.wbuf.items.len)) };
 }
 
@@ -887,17 +894,17 @@ fn cmdSource(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         .fd => |x| x,
         .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(a, "couldn't read file \"{s}\": ", .{path})),
     };
-    defer _ = linux.close(fd);
+    defer sys.close(fd);
     var text: std.ArrayList(u8) = .empty;
     while (true) {
         try text.ensureUnusedCapacity(a, 16384);
         const room = text.unusedCapacitySlice();
-        const rc = linux.read(fd, room.ptr, room.len);
-        const e = linux.errno(rc);
-        if (e == .INTR) continue;
-        if (e != .SUCCESS) return fsroot.posixError(it, e, try std.fmt.allocPrint(a, "couldn't read file \"{s}\": ", .{path}));
-        if (rc == 0) break;
-        text.items.len += rc;
+        const got = switch (sys.readFile(fd, room)) {
+            .n => |x| x,
+            .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(a, "couldn't read file \"{s}\": ", .{path})),
+        };
+        if (got == 0) break;
+        text.items.len += got;
         if (it.overLimit()) return it.fail("the script used too much memory", .{});
     }
     // The ^Z character ends a script.

@@ -40,6 +40,8 @@ const Cmd = interp.Cmd;
 const Error = interp.Error;
 const linux = std.os.linux;
 
+pub const supported = @import("builtin").os.tag == .linux;
+
 pub const Host = struct {
     /// The programs that a script can run, as the word of the script
     /// or as a full path. Null allows each program.
@@ -134,7 +136,7 @@ fn noTilde(it: *Interp, path: []const u8) Error!void {
     return it.fail("user \"{s}\" doesn't exist", .{path[1..end]});
 }
 
-fn openFile(it: *Interp, path: []const u8, flags: linux.O, what: []const u8) Error!i32 {
+fn openFile(it: *Interp, path: []const u8, flags: sys.OpenFlags, what: []const u8) Error!i32 {
     const a = it.alloc();
     try noTilde(it, path);
     if (it.fs_ok()) {
@@ -144,9 +146,7 @@ fn openFile(it: *Interp, path: []const u8, flags: linux.O, what: []const u8) Err
             .err => |e| posix(it, e, try std.fmt.allocPrint(a, "couldn't {s} file \"{s}\": ", .{ what, path })),
         };
     }
-    var f = flags;
-    f.CLOEXEC = true;
-    const rc = linux.open(try a.dupeZ(u8, path), f, 0o666);
+    const rc = linux.open(try a.dupeZ(u8, path), fsroot.hostFlags(flags), 0o666);
     if (linux.errno(rc) != .SUCCESS) return posix(it, linux.errno(rc), try std.fmt.allocPrint(a, "couldn't {s} file \"{s}\": ", .{ what, path }));
     return @intCast(rc);
 }
@@ -217,8 +217,8 @@ fn parse(it: *Interp, words: []const []const u8, plan: *Plan) Error!void {
         } else if (is_in) {
             t = .{ .owned = try openFile(it, arg, .{}, "read") };
         } else {
-            var flags: linux.O = .{ .ACCMODE = .WRONLY, .CREAT = true };
-            if (std.mem.indexOf(u8, f, ">>") != null) flags.APPEND = true else flags.TRUNC = true;
+            var flags: sys.OpenFlags = .{ .access = .write, .create = true };
+            if (std.mem.indexOf(u8, f, ">>") != null) flags.append = true else flags.truncate = true;
             t = .{ .owned = try openFile(it, arg, flags, "write") };
         }
         if (is_in) {
@@ -331,7 +331,7 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
     // The working folder: the current folder below the root.
     var cwd_fd: i32 = -1;
     if (it.fs_ok()) {
-        cwd_fd = switch (try fsroot.openRel(it, it.fs.cwd, .{ .DIRECTORY = true }, 0)) {
+        cwd_fd = switch (try fsroot.openRel(it, it.fs.cwd, .{ .directory = true }, 0)) {
             .fd => |x| x,
             .err => |e| return posix(it, e, "couldn't open the working folder: "),
         };

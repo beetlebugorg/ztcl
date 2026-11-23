@@ -24,6 +24,21 @@ pub const supported = builtin.os.tag == .linux;
 
 pub const Fd = i32;
 
+/// A host error number. Each port sets its own type.
+pub const Errno = if (builtin.os.tag == .linux) linux.E else u32;
+
+/// How to open a file. `fsroot.zig` maps these flags to the system.
+pub const OpenFlags = struct {
+    access: enum { read, write, read_write } = .read,
+    create: bool = false,
+    exclusive: bool = false,
+    truncate: bool = false,
+    append: bool = false,
+    directory: bool = false,
+    /// A descriptor for path operations, with no access to the data.
+    path_only: bool = false,
+};
+
 /// A host error, as the POSIX name and the text of Tcl.
 pub const Fail = struct { name: []const u8, text: []const u8 };
 
@@ -68,6 +83,19 @@ pub fn read(fd: Fd, buf: []u8) IoResult {
             // The end of a closed connection reads as the end of data.
             .CONNRESET => return .{ .err = failOf(.CONNRESET) },
             else => |e| return .{ .err = failOf(e) },
+        }
+    }
+}
+
+/// Reads a file for a caller that reports the host error itself. A
+/// read of 0 bytes is the end of the file.
+pub fn readFile(fd: Fd, buf: []u8) union(enum) { n: usize, err: Errno } {
+    while (true) {
+        const rc = linux.read(fd, buf.ptr, buf.len);
+        switch (linux.errno(rc)) {
+            .SUCCESS => return .{ .n = rc },
+            .INTR => continue,
+            else => |e| return .{ .err = e },
         }
     }
 }
@@ -382,7 +410,7 @@ pub fn shutdown(fd: Fd, how: i32) void {
 
 /// Moves the position of a file: `whence` is 0 for the start, 1 for
 /// the current position, and 2 for the end. Gives the new position.
-pub fn seek(fd: Fd, off: i64, whence: u8) union(enum) { at: i64, err: linux.E } {
+pub fn seek(fd: Fd, off: i64, whence: u8) union(enum) { at: i64, err: Errno } {
     const rc = linux.lseek(fd, off, whence);
     const e = linux.errno(rc);
     if (e != .SUCCESS) return .{ .err = e };
