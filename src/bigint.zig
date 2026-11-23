@@ -144,7 +144,101 @@ fn finish(it: *Interp, b: *Big) Error!Value {
     if (b.fits(i64)) return .{ .int = b.toInt(i64) catch unreachable };
     if (b.bitCountAbs() > max_bits) return it.fail(too_large, .{});
     try charge(it, b.len());
-    return .{ .str = b.toString(it.alloc(), 10, .lower) catch |e| return mem(e) };
+    return .{ .str = decimal(it.alloc(), b) catch |e| return mem(e) };
+}
+
+/// 10^19, the largest power of 10 in a 64-bit limb. Its top bit is set,
+/// so a division by it needs no normalize step.
+const chunk: u64 = 10_000_000_000_000_000_000;
+const chunk_digits = 19;
+/// The reciprocal of `chunk`: floor((2^128 - 1) / chunk) - 2^64.
+const chunk_inverse: u64 = @truncate(std.math.maxInt(u128) / @as(u128, chunk));
+
+/// Divides the two limbs (`hi`, `lo`) by `chunk`, with `hi` < `chunk`.
+/// A multiply by the reciprocal replaces the hardware divide, as in
+/// Moller and Granlund, "Improved division by invariant integers".
+inline fn divChunk(hi: u64, lo: u64) struct { q: u64, r: u64 } {
+    const n = (@as(u128, hi) << 64) | lo;
+    const p = @as(u128, chunk_inverse) *% hi +% n;
+    var q: u64 = @truncate(p >> 64);
+    q +%= 1;
+    var r: u64 = lo -% q *% chunk;
+    if (r > @as(u64, @truncate(p))) {
+        q -%= 1;
+        r +%= chunk;
+    }
+    if (r >= chunk) {
+        q +%= 1;
+        r -= chunk;
+    }
+    return .{ .q = q, .r = r };
+}
+
+/// The decimal text of `b`. Each pass divides the limbs by 10^19 and
+/// writes 19 digits, so the time is quadratic with a small constant.
+fn decimal(a: std.mem.Allocator, b: *const Big) ![]const u8 {
+    if (@bitSizeOf(std.math.big.Limb) != 64) return b.toString(a, 10, .lower);
+    const c = b.toConst();
+    if (c.eqlZero()) return a.dupe(u8, "0");
+    const limbs = try b.allocator.dupe(std.math.big.Limb, c.limbs);
+    defer b.allocator.free(limbs);
+    // A chunk removes more than 63 bits.
+    const size = (limbs.len * 64 / 63 + 1) * chunk_digits + 1;
+    const buf = try a.alloc(u8, size);
+    var w = size;
+    var n = limbs.len;
+    while (n > 0) {
+        var r: u64 = 0;
+        var i = n;
+        while (i > 0) {
+            i -= 1;
+            const d = divChunk(r, limbs[i]);
+            limbs[i] = d.q;
+            r = d.r;
+        }
+        while (n > 0 and limbs[n - 1] == 0) n -= 1;
+        var left: usize = chunk_digits;
+        while (left > 0 and (n > 0 or r != 0)) : (left -= 1) {
+            w -= 1;
+            buf[w] = '0' + @as(u8, @intCast(r % 10));
+            r /= 10;
+        }
+    }
+    if (!c.positive) {
+        w -= 1;
+        buf[w] = '-';
+    }
+    return buf[w..];
+}
+
+test "decimal text equals the text of the standard library" {
+    const gpa_t = std.testing.allocator;
+    var prng = std.Random.DefaultPrng.init(7);
+    const rng = prng.random();
+    var x = try Big.init(gpa_t);
+    defer x.deinit();
+    for (0..400) |round| {
+        const size = 1 + round % 40;
+        try x.ensureCapacity(size);
+        const m = x.toMutable();
+        const words = x.limbs[0..size];
+        for (words) |*l| l.* = switch (rng.int(u8) % 4) {
+            0 => 0,
+            1 => std.math.maxInt(std.math.big.Limb),
+            2 => chunk,
+            else => rng.int(std.math.big.Limb),
+        };
+        var v = m;
+        v.len = size;
+        v.positive = rng.boolean();
+        v.normalize(size);
+        x.setMetadata(v.positive, v.len);
+        const want = try x.toString(gpa_t, 10, .lower);
+        defer gpa_t.free(want);
+        var arena = std.heap.ArenaAllocator.init(gpa_t);
+        defer arena.deinit();
+        try std.testing.expectEqualStrings(want, try decimal(arena.allocator(), &x));
+    }
 }
 
 fn isNegative(v: Value) bool {
@@ -366,5 +460,6 @@ pub fn digits(it: *Interp, v: Value, base: u8, case: std.fmt.Case) Error![]const
     var a = try load(it, v);
     defer a.deinit();
     try charge(it, a.len());
+    if (base == 10) return decimal(it.alloc(), &a) catch |e| return mem(e);
     return a.toString(it.alloc(), base, case) catch |e| return mem(e);
 }
