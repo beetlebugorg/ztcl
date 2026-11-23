@@ -1593,3 +1593,28 @@ test "lset in a proc" {
         .{ "proc t {} {set l {a b}; lset l 0 1}; rename lset ls2; proc lset {args} {return hijack}; t", "hijack" },
     });
 }
+
+// ---- base64 ----
+
+test "binary encode and decode base64" {
+    try check(&.{
+        .{ "binary encode base64 {}", "" },
+        .{ "binary encode base64 a", "YQ==" },
+        .{ "binary encode base64 ab", "YWI=" },
+        .{ "binary encode base64 abc", "YWJj" },
+        .{ "binary encode base64 abcd", "YWJjZA==" },
+        .{ "binary decode base64 YQ==", "a" },
+        .{ "binary decode base64 YWI=", "ab" },
+        .{ "binary decode base64 YWJj", "abc" },
+        .{ "binary decode base64 \"YWJj\\nZA==\"", "abcd" },
+        .{ "binary decode base64 YWJj====", "!invalid base64 character \"=\" at position 6" },
+        .{ "binary decode base64 -strict \"YWJj ZA==\"", "!invalid base64 character \" \" at position 4" },
+        .{ "binary decode base64 YQ==Y", "!invalid base64 character \"Y\" at position 4" },
+        .{ "binary decode base64 \"Y!Q=\"", "!invalid base64 character \"!\" at position 1" },
+        .{ "binary encode base64 -maxlen 4 -wrapchar | abcdefgh", "YWJj|ZGVm|Z2g=" },
+        .{ "string length [binary decode base64 [binary encode base64 [string repeat ab 1000]]]", "2000" },
+        .{ "binary encode base64 \"\\u00e9\\u00ff\"", "6f8=" },
+        .{ "string length [binary decode base64 6f8=]", "2" },
+        .{ "binary encode hex abc", "616263" },
+    });
+}

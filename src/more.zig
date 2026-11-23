@@ -288,14 +288,19 @@ pub fn cmdLsort(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 
 // ---- binary ----
 
+/// True when no byte has the top bit. The scan reads 8 bytes at a time.
+fn isAscii(s: []const u8) bool {
+    var i: usize = 0;
+    while (i + 8 <= s.len) : (i += 8) {
+        if (std.mem.readInt(u64, s[i..][0..8], .little) & 0x8080808080808080 != 0) return false;
+    }
+    while (i < s.len) : (i += 1) if (s[i] >= 0x80) return false;
+    return true;
+}
+
 /// The bytes of a string: each character below 256 is one byte.
 fn toBytes(it: *Interp, s: []const u8) Error![]const u8 {
-    var plain = true;
-    for (s) |c| if (c >= 0x80) {
-        plain = false;
-        break;
-    };
-    if (plain) return s;
+    if (isAscii(s)) return s;
     var out: std.ArrayList(u8) = .empty;
     var i: usize = 0;
     while (i < s.len) {
@@ -319,12 +324,7 @@ fn toBytes(it: *Interp, s: []const u8) Error![]const u8 {
 /// The string of bytes: a byte above 127 becomes the character with
 /// that number.
 fn fromBytes(it: *Interp, b: []const u8) Error![]const u8 {
-    var plain = true;
-    for (b) |c| if (c >= 0x80) {
-        plain = false;
-        break;
-    };
-    if (plain) return b;
+    if (isAscii(b)) return b;
     var out: std.ArrayList(u8) = .empty;
     for (b) |c| {
         if (c < 0x80) {
@@ -698,6 +698,7 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
             }
             return .{ .str = out.items };
         }
+        if (maxlen == 0) return .{ .str = try encode64(a, bytes) };
         var col: usize = 0;
         var k: usize = 0;
         while (k < bytes.len) : (k += 3) {
@@ -736,25 +737,61 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
     var acc: u32 = 0;
     var have: u32 = 0;
     var pad: usize = 0;
+    // Each four characters give three bytes at most.
+    const buf = try a.alloc(u8, data.len / 4 * 3 + 3);
+    var made: usize = 0;
     for (data, 0..) |ch, pos| {
+        const d = b64_value[ch];
+        if (d < 64 and pad == 0) {
+            acc = acc << 6 | d;
+            have += 6;
+            if (have >= 8) {
+                have -= 8;
+                buf[made] = @truncate(acc >> @intCast(have));
+                made += 1;
+            }
+            continue;
+        }
         if (ch == '=') {
             pad += 1;
             if (pad > 2) return it.fail("invalid base64 character \"=\" at position {d}", .{pos});
             continue;
         }
-        const d = std.mem.indexOfScalar(u8, b64, ch) orelse {
-            if (!strict and std.ascii.isWhitespace(ch)) continue;
-            return it.fail("invalid base64 character \"{c}\" at position {d}", .{ ch, pos });
-        };
-        if (pad > 0) return it.fail("invalid base64 character \"{c}\" at position {d}", .{ ch, pos });
-        acc = acc << 6 | @as(u32, @intCast(d));
-        have += 6;
-        if (have >= 8) {
-            have -= 8;
-            try out.append(a, @truncate(acc >> @intCast(have)));
-        }
+        if (d >= 64 and !strict and std.ascii.isWhitespace(ch)) continue;
+        return it.fail("invalid base64 character \"{c}\" at position {d}", .{ ch, pos });
     }
-    return .{ .str = try fromBytes(it, out.items) };
+    return .{ .str = try fromBytes(it, buf[0..made]) };
+}
+
+/// The value of each base64 character, and 255 for any other byte.
+const b64_value: [256]u8 = blk: {
+    var t: [256]u8 = @splat(255);
+    for (b64, 0..) |c, i| t[c] = @intCast(i);
+    break :blk t;
+};
+
+/// The base64 text of `bytes` with no line breaks. One allocation.
+fn encode64(a: std.mem.Allocator, bytes: []const u8) Error![]const u8 {
+    const out = try a.alloc(u8, (bytes.len + 2) / 3 * 4);
+    var o: usize = 0;
+    var k: usize = 0;
+    while (k + 3 <= bytes.len) : (k += 3) {
+        const v = @as(u32, bytes[k]) << 16 | @as(u32, bytes[k + 1]) << 8 | bytes[k + 2];
+        out[o] = b64[v >> 18];
+        out[o + 1] = b64[(v >> 12) & 63];
+        out[o + 2] = b64[(v >> 6) & 63];
+        out[o + 3] = b64[v & 63];
+        o += 4;
+    }
+    const rest = bytes.len - k;
+    if (rest > 0) {
+        const v = @as(u32, bytes[k]) << 16 | (if (rest > 1) @as(u32, bytes[k + 1]) << 8 else 0);
+        out[o] = b64[v >> 18];
+        out[o + 1] = b64[(v >> 12) & 63];
+        out[o + 2] = if (rest > 1) b64[(v >> 6) & 63] else '=';
+        out[o + 3] = '=';
+    }
+    return out;
 }
 
 // ---- scan ----
