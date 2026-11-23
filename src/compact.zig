@@ -344,6 +344,9 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.exports = exports;
     it.ns_paths = ns_paths;
     it.script_name = "";
+    it.pending_during = null;
+    it.last_during = null;
+    it.last_info = Value.empty;
     it.ns_unknown = ns_unknown;
     it.searches = .empty;
     it.var_traces = c.elem_links;

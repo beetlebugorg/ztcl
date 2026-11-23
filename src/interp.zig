@@ -663,6 +663,12 @@ pub const Interp = struct {
     unknown_depth: u32 = 0,
     /// The command that runs for a name with no command.
     missing: Command = .{ .name = "unknown", .impl = .{ .native = ns_mod.dispatchUnknown } },
+    /// The `-during` options of an error that `try` raises again.
+    pending_during: ?Value = null,
+    /// The trace of the error that `finishError` ended.
+    last_info: Value = Value.empty,
+    /// The `-during` options of the error that `finishError` ended.
+    last_during: ?Value = null,
     /// The value of `info script`. The runner does not set it.
     script_name: []const u8 = "",
     /// The value of `tcl_precision`.
@@ -1206,12 +1212,32 @@ pub const Interp = struct {
     /// Ends the current error: stores the trace in the global variables
     /// `errorInfo` and `errorCode`. `catch` and the top level call it.
     pub fn finishError(it: *Interp) Allocator.Error!void {
+        it.last_during = it.pending_during;
+        it.pending_during = null;
         const info: Value = .{ .str = if (it.in_error) it.error_info.items else try it.str(it.result) };
         it.in_error = false;
         it.error_info = .empty;
-        (try it.findVar(&it.global, "errorInfo", true)).?.v = .{ .val = info };
+        it.last_info = info;
+        const code = it.error_code;
+        try it.storeGlobal("errorInfo", info);
         it.skip_info = false;
-        (try it.findVar(&it.global, "errorCode", true)).?.v = .{ .val = it.error_code };
+        try it.storeGlobal("errorCode", code);
+        it.error_code = code;
+    }
+
+    /// Writes a global variable of the error state. A trace on it runs,
+    /// and the error of a trace does not replace the current error.
+    fn storeGlobal(it: *Interp, name: []const u8, v: Value) Allocator.Error!void {
+        const cell = (try it.findVar(&it.global, name, true)).?;
+        if (cell.v != .traced) {
+            cell.v = .{ .val = v };
+            return;
+        }
+        const saved = it.result;
+        trace.write(it, cell, name, null, v) catch |e| {
+            if (e == error.OutOfMemory) return error.OutOfMemory;
+        };
+        it.result = saved;
     }
 
     /// Runs a command with its words. `argv[0]` is the name.

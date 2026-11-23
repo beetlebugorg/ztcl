@@ -618,10 +618,12 @@ pub const Caught = struct {
     error_code: Value = .{ .str = "NONE" },
     error_info: Value = Value.empty,
     error_line: u32 = 0,
+    /// The options of the exception that this one replaced in `try`.
+    during: ?Value = null,
 
     /// The options dict: the third argument of `catch`.
     pub fn options(c: Caught, it: *Interp) Error!Value {
-        var o: [10]Value = undefined;
+        var o: [12]Value = undefined;
         o[0] = .{ .str = "-code" };
         o[1] = .{ .int = if (c.code == 2) @intFromEnum(c.ret_code) else c.code };
         o[2] = .{ .str = "-level" };
@@ -633,7 +635,12 @@ pub const Caught = struct {
         o[7] = c.error_info;
         o[8] = .{ .str = "-errorline" };
         o[9] = .{ .int = c.error_line };
-        return value.newList(it.alloc(), &o);
+        if (c.during) |d| {
+            o[10] = .{ .str = "-during" };
+            o[11] = d;
+            return value.newList(it.alloc(), &o);
+        }
+        return value.newList(it.alloc(), o[0..10]);
     }
 
     /// Gives the end of the script again to the caller.
@@ -645,6 +652,7 @@ pub const Caught = struct {
                 it.error_code = c.error_code;
                 try startInfo(it, c.error_info);
                 it.skip_info = false;
+                it.pending_during = c.during;
                 return error.TclError;
             },
             2 => {
@@ -692,7 +700,8 @@ pub fn runCaught(it: *Interp, script: Error!*interp.Script) Error!Caught {
         c.error_line = it.proc_line;
         try it.finishError();
         c.error_code = it.error_code;
-        c.error_info = (try it.findVar(&it.global, "errorInfo", true)).?.v.val;
+        c.error_info = it.last_info;
+        c.during = it.last_during;
     }
     std.debug.assert(it.depth == depth and it.frame == frame);
     it.error_line = 0;
@@ -721,6 +730,14 @@ fn cmdTry(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if ((end - 2) % 4 != 0) {
         if (end == argv.len - 0 and (end - 2) % 4 == 1 and eql(try it.str(argv[end - 1]), "finally"))
             return it.fail("wrong # args to finally clause: must be \"... finally script\"", .{});
+        // The first clause with too few words names the error.
+        var k: usize = 2;
+        while (k + 4 <= end) k += 4;
+        if (k < end) {
+            const kind = try it.str(argv[k]);
+            if (eql(kind, "on")) return it.fail("wrong # args to on clause: must be \"... on code variableList script\"", .{});
+            if (eql(kind, "trap")) return it.fail("wrong # args to trap clause: must be \"... trap pattern variableList script\"", .{});
+        }
         return it.wrongArgs(usage);
     }
     // Check the handlers before the body runs.
@@ -761,13 +778,18 @@ fn cmdTry(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         out = blk: {
             if (vars.len >= 1) it.setVar(try it.str(vars[0]), res) catch |e| break :blk try runCaught(it, e);
             if (vars.len == 2) it.setVar(try it.str(vars[1]), opts) catch |e| break :blk try runCaught(it, e);
-            break :blk try runCaught(it, it.scriptOf(argv, body, cmd));
+            var next = try runCaught(it, it.scriptOf(argv, body, cmd));
+            if (next.code == 1) next.during = opts;
+            break :blk next;
         };
         break;
     }
     if (finally) |f| {
-        const fin = try runCaught(it, it.scriptOf(argv, f, cmd));
-        if (fin.code != 0) out = fin;
+        var fin = try runCaught(it, it.scriptOf(argv, f, cmd));
+        if (fin.code != 0) {
+            if (fin.code == 1) fin.during = try out.options(it);
+            out = fin;
+        }
     }
     return out.raise(it);
 }
