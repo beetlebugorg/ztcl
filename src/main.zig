@@ -23,6 +23,8 @@
 //! address, or an address range such as `10.0.0.0/8`, with an optional
 //! `:port` or `:port-port`.
 //! `--mem N` sets the memory limit in bytes. The default is 2 GiB.
+//! `--report` writes one line to stderr at the end: the steps used, the
+//! bytes held now, and the highest number of bytes held.
 //! `--repeat N` runs each file N times in one interpreter. With `--time`,
 //! it prints the best time: the warm time of the file.
 //!
@@ -79,8 +81,19 @@ fn cmdExit(it: *tcl.Interp, argv: []const tcl.Value, _: ?*tcl.interp.Cmd) tcl.Er
     leave(it, @truncate(@as(u64, @bitCast(code))));
 }
 
+/// True for `--report`.
+var report_on = false;
+/// The value of `--max-steps`, to find the steps used.
+var max_steps: u64 = std.math.maxInt(u64);
+
+fn report(it: *const tcl.Interp) void {
+    if (!report_on) return;
+    std.debug.print("report steps={d} mem={d} peak={d}\n", .{ max_steps - it.step_limit, it.counter.used, it.counter.mem_peak });
+}
+
 fn leave(it: *tcl.Interp, code: u8) noreturn {
     exit_out.flush() catch {};
+    report(it);
     it.deinit();
     std.process.exit(code);
 }
@@ -160,6 +173,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     var it: tcl.Interp = undefined;
     try it.init(init.gpa);
     defer it.deinit();
+    defer report(&it);
     it.output = .{ .ctx = out, .write = write };
     it.mem_limit = 2 << 30;
     if (setup) |f| try f(&it);
@@ -195,6 +209,11 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
         if (std.mem.eql(u8, arg, "--max-steps") and i + 1 < args.len) {
             i += 1;
             it.step_limit = try std.fmt.parseInt(u64, args[i], 10);
+            max_steps = it.step_limit;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--report")) {
+            report_on = true;
             continue;
         }
         if (std.mem.eql(u8, arg, "--tclsh")) {
@@ -313,6 +332,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
                 const msg = if (e == error.TclError) it.str(it.result) catch "out of memory" else @errorName(e);
                 try out.print("{s}:{d}: {s}\n", .{ arg, it.error_line, msg });
                 out.flush() catch {};
+                report(&it);
                 std.process.exit(1);
             };
             best = @min(best, start.untilNow(io, .awake).toNanoseconds());

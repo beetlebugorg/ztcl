@@ -4,3 +4,6 @@ zig-cache/
 dist/
 # The Tcl source that tools/fetch-tcl.sh downloads.
 .tcl-src/
+
+# The benchmark files that tools/fetch-kostya.sh downloads.
+.kostya/

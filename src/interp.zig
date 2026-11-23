@@ -532,6 +532,8 @@ pub const Output = struct {
 pub const Counting = struct {
     child: Allocator,
     used: usize = 0,
+    /// The highest value that `used` had.
+    mem_peak: usize = 0,
 
     const Alignment = std.mem.Alignment;
 
@@ -543,6 +545,7 @@ pub const Counting = struct {
         const c: *Counting = @ptrCast(@alignCast(ctx));
         const p = c.child.rawAlloc(len, alignment, ra) orelse return null;
         c.used += len;
+        c.mem_peak = @max(c.mem_peak, c.used);
         return p;
     }
 
@@ -550,6 +553,7 @@ pub const Counting = struct {
         const c: *Counting = @ptrCast(@alignCast(ctx));
         if (!c.child.rawResize(memory, alignment, new_len, ra)) return false;
         c.used = c.used - memory.len + new_len;
+        c.mem_peak = @max(c.mem_peak, c.used);
         return true;
     }
 
@@ -557,6 +561,7 @@ pub const Counting = struct {
         const c: *Counting = @ptrCast(@alignCast(ctx));
         const p = c.child.rawRemap(memory, alignment, new_len, ra) orelse return null;
         c.used = c.used - memory.len + new_len;
+        c.mem_peak = @max(c.mem_peak, c.used);
         return p;
     }
 
