@@ -1057,7 +1057,7 @@ test "clock reads the time only from the host callback" {
 }
 
 test "file and channels cannot leave the root folder" {
-    if (@import("builtin").os.tag != .linux) return error.SkipZigTest;
+    if (!tcl.fsroot.supported) return error.SkipZigTest;
     const linux = std.os.linux;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -1131,7 +1131,7 @@ test "the event loop runs timers and idle scripts in order" {
 }
 
 test "socket accepts only loopback addresses by default" {
-    if (@import("builtin").os.tag != .linux) return error.SkipZigTest;
+    if (!tcl.sys.supported) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
@@ -1164,7 +1164,7 @@ test "socket accepts only loopback addresses by default" {
 }
 
 test "exec has an allowlist and a time limit, and leaves no process" {
-    if (@import("builtin").os.tag != .linux) return error.SkipZigTest;
+    if (!tcl.proc.supported) return error.SkipZigTest;
     const linux = std.os.linux;
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
@@ -1258,7 +1258,7 @@ test "the network policy of socket: allowlist, ranges, ports, and peers" {
 }
 
 test "socket refuses a blocked address and closes a blocked peer" {
-    if (@import("builtin").os.tag != .linux) return error.SkipZigTest;
+    if (!tcl.sys.supported) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
