@@ -265,7 +265,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     // A suspended coroutine has pointers on its native stack.
     if (it.frame != &it.global or it.nest != 0 or it.depth != 0 or it.coro_count != 0 or it.children.count() != 0 or it.capabilities != 0) return error.InterpBusy;
 
-    var next = Heap.init(it.heap.backing, it.heap.used, it.heap.limit);
+    var next = Heap.init(it.heap.backing);
     errdefer next.deinit();
     var temp_arena = std.heap.ArenaAllocator.init(it.counter.child);
     defer temp_arena.deinit();
@@ -379,6 +379,9 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.next_tail = 0;
     it.epoch +%= 1;
     const old = it.own_heap;
+    next.stress = old.stress;
+    next.stress_alloc = old.stress_alloc;
+    next.collections = old.collections;
     it.own_heap = next;
     it.setRoots();
     var dead = old;

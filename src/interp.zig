@@ -536,6 +536,11 @@ pub const Counting = struct {
     used: usize = 0,
     /// The highest value that `used` had.
     mem_peak: usize = 0,
+    /// The value that a limit check reads: `used`, or the largest number
+    /// when a collection is due. One compare serves both checks.
+    trip: usize = 0,
+    /// The value of `used` at which a collection is due.
+    gc_at: usize = @import("heap.zig").min_threshold,
     /// The counters of the child interpreters. A child shares the heap
     /// of its root, so its `used` follows the count of the root. This
     /// keeps the check of the memory limit one load in each interpreter.
@@ -544,12 +549,23 @@ pub const Counting = struct {
 
     fn sync(c: *Counting) void {
         c.mem_peak = @max(c.mem_peak, c.used);
+        c.trip = if (c.used >= c.gc_at) std.math.maxInt(usize) else c.used;
         var f = c.followers;
-        while (f) |x| : (f = x.next_follower) x.used = c.used;
+        while (f) |x| : (f = x.next_follower) {
+            x.used = c.used;
+            x.trip = c.trip;
+        }
+    }
+
+    /// Sets the value of `used` at which the next collection is due.
+    pub fn rearm(c: *Counting, at: usize) void {
+        c.gc_at = at;
+        c.sync();
     }
 
     pub fn follow(c: *Counting, x: *Counting) void {
         x.used = c.used;
+        x.trip = c.trip;
         x.next_follower = c.followers;
         c.followers = x;
     }
@@ -650,6 +666,10 @@ const ListCacheEntry = struct {
     text: []const u8 = &.{},
     items: ?[]const Value = null,
 };
+
+/// The bytes above the frame address that the stack scan also reads. A
+/// target can keep locals of a frame above its frame record.
+const host_margin: usize = 128;
 
 pub const Interp = struct {
     counter: Counting,
@@ -781,6 +801,21 @@ pub const Interp = struct {
     held: std.ArrayList(Value) = .empty,
     /// True while `collect` runs, so a collection can run outside a script.
     gc_manual: bool = false,
+    /// Above zero, `native_base` is valid and a collection can scan the
+    /// native stack. Only `evalTop` and `enterHost` set it. A host call
+    /// of `evalCmd`, `call`, or `callWords` at nest 0 leaves it at zero,
+    /// so the frames of the host stay safe and no collection runs.
+    gc_scope: u32 = 0,
+    /// Precise builds: the `nest` of the innermost clean `vm.run`. The
+    /// chain is clean only when this equals `nest`, so a frame of any
+    /// other kind between two runs ends it. Zero means no clean run.
+    gc_clean_nest: u32 = 0,
+    /// Precise builds: the next `vm.run` continues a clean chain.
+    gc_token: bool = false,
+    /// Precise builds: the current safe point is in `vm.exec`.
+    gc_vm_point: bool = false,
+    /// Precise builds: addresses that only a clean native frame holds.
+    pins: std.ArrayList(usize) = .empty,
     parent: ?*Interp = null,
     is_safe: bool = false,
     /// The count of calls into this interpreter that are running.
@@ -828,7 +863,7 @@ pub const Interp = struct {
     /// free all its memory. The interpreter must not move after `init`.
     pub fn init(it: *Interp, gpa: Allocator) Allocator.Error!void {
         it.* = .{ .counter = .{ .child = gpa }, .own_heap = undefined, .heap = undefined };
-        it.own_heap = Heap.init(it.counter.allocator(), &it.counter.used, &it.mem_limit);
+        it.own_heap = Heap.init(it.counter.allocator());
         it.heap = &it.own_heap;
         it.setRoots();
         try it.start();
@@ -837,9 +872,12 @@ pub const Interp = struct {
     /// Makes a child interpreter that uses the heap of `parent`.
     pub fn initChild(it: *Interp, parent: *Interp) Allocator.Error!void {
         const backing = parent.heap.backing;
-        it.* = .{ .counter = .{ .child = backing }, .own_heap = Heap.init(backing, parent.heap.used, parent.heap.limit), .heap = parent.heap };
+        it.* = .{ .counter = .{ .child = backing }, .own_heap = Heap.init(backing), .heap = parent.heap };
         // The family list makes the child a root of the collector. The
         // child joins it before its first allocation.
+        // The collector finds the root through this field, also while
+        // the child runs its startup script.
+        it.parent = parent;
         var root = parent;
         while (root.parent) |p| root = p;
         try root.kids.append(backing, it);
@@ -855,6 +893,10 @@ pub const Interp = struct {
     pub fn setGcStress(it: *Interp, n: u32) void {
         it.heap.stress = n;
         it.heap.stress_left = 0;
+        it.heap.stress_alloc = n != 0 and gc.native_scan;
+        var root = it;
+        while (root.parent) |p| root = p;
+        root.counter.rearm(if (n != 0) 0 else @import("heap.zig").min_threshold);
     }
 
     /// The count of collections that the heap ran.
@@ -867,7 +909,46 @@ pub const Interp = struct {
     pub fn collect(it: *Interp) void {
         it.gc_manual = true;
         defer it.gc_manual = false;
-        @import("heap.zig").collect(it.heap);
+        it.heap.roots_ctx = it;
+        if (gc.allowed(it)) @import("heap.zig").collect(it.heap);
+    }
+
+    /// The limit check of a safe point. `trip` is at or above the limit:
+    /// the memory limit is reached, or a collection is due. `vm_point`
+    /// is true only in `vm.exec`, where each live value is in memory
+    /// that the collector reads.
+    pub noinline fn memPoint(it: *Interp, vm_point: bool) Error!void {
+        @branchHint(.cold);
+        const heap_mod = @import("heap.zig");
+        const h = it.heap;
+        var root = it;
+        while (root.parent) |p| root = p;
+        const c = &root.counter;
+        var want = c.used >= c.gc_at or it.counter.used > it.mem_limit;
+        const stress = h.stress != 0;
+        if (stress) want = (!gc.precise or vm_point) and h.stressDue() or it.counter.used > it.mem_limit;
+        var next = c.used +| (1 << 20);
+        var collected = false;
+        if (want) {
+            it.gc_vm_point = vm_point;
+            defer it.gc_vm_point = false;
+            h.roots_ctx = it;
+            if (gc.allowed(it)) {
+                heap_mod.collect(h);
+                collected = h.mark_ok;
+                if (collected) next = @max(h.threshold, c.used +| (1 << 20));
+            }
+        }
+        // A precise build that waits for a clean safe point keeps `trip`
+        // high, so the next clean point of `vm.exec` collects.
+        const waiting = gc.precise and !collected and root.gc_on and it.gc_scope != 0;
+        if (stress) c.rearm(0) else if (!waiting) c.rearm(next);
+        if (it.counter.used > it.mem_limit) return it.fail("the script used too much memory", .{});
+    }
+
+    /// The limit check of each safe point outside `vm.exec`.
+    pub inline fn checkMem(it: *Interp) Error!void {
+        if (it.counter.trip >= it.mem_limit) try it.memPoint(false);
     }
 
     /// Keeps `v` and each block that it reaches until `release(v)`. A
@@ -936,8 +1017,10 @@ pub const Interp = struct {
         const own = it.own_heap;
         const heap = it.heap;
         const keep = it.*;
-        it.* = .{ .counter = counter, .own_heap = own, .heap = heap, .kids = keep.kids, .gc_on = keep.gc_on, .gc_roots = keep.gc_roots, .held = keep.held };
+        it.* = .{ .counter = counter, .own_heap = own, .heap = heap, .kids = keep.kids, .gc_on = keep.gc_on, .gc_roots = keep.gc_roots, .held = keep.held, .pins = keep.pins };
         it.held.clearRetainingCapacity();
+        it.pins.clearRetainingCapacity();
+        if (it.isRoot()) it.counter.rearm(if (it.heap.stress != 0) 0 else @import("heap.zig").min_threshold);
         it.mem_limit = keep.mem_limit;
         it.step_limit = keep.step_limit;
         it.max_depth = keep.max_depth;
@@ -1029,10 +1112,11 @@ pub const Interp = struct {
             @import("proc.zig").abandonAll(it);
             if (it.fs.fd >= 0) _ = std.os.linux.close(it.fs.fd);
         }
+        it.gc_roots.deinit(it.heap.backing);
+        it.held.deinit(it.heap.backing);
+        it.pins.deinit(it.heap.backing);
         if (it.isRoot()) {
             it.kids.deinit(it.heap.backing);
-            it.gc_roots.deinit(it.heap.backing);
-            it.held.deinit(it.heap.backing);
             it.own_heap.deinit();
         }
     }
@@ -1131,6 +1215,25 @@ pub const Interp = struct {
     /// Runs a script at the top level: a `return` ends it with a value.
     pub fn evalTop(it: *Interp, s: *Script) Error!Value {
         value.precision = it.precision;
+        // Inside any other entry of the tree, the frames above this one
+        // can hold values. This call then adds no scan range.
+        const outer = it.heap.scopes == 0;
+        it.heap.scopes += 1;
+        defer it.heap.scopes -= 1;
+        if (outer) {
+            it.native_base = @frameAddress() + host_margin;
+            it.gc_scope = 1;
+            if (gc.precise) {
+                // The top level runs as bytecode, so a long loop reaches
+                // the safe points of `vm.exec`.
+                s.runs = @max(s.runs, 1);
+                it.gc_token = true;
+            }
+        }
+        defer if (outer) {
+            it.gc_scope = 0;
+            if (gc.precise) it.gc_token = false;
+        };
         return it.evalTopInner(s) catch |e| {
             if (e == error.TclError) try it.finishError();
             return e;
@@ -1216,13 +1319,14 @@ pub const Interp = struct {
     /// stack grows down. The outermost script sets the base.
     pub inline fn checkNative(it: *Interp) Error!void {
         const here = @frameAddress();
-        if (it.nest == 0) it.native_base = here;
+        if (it.nest == 0 and it.gc_scope == 0) it.native_base = here;
         if (it.native_base -| here > it.max_native) {
             return it.fail("too many nested evaluations (infinite loop?)", .{});
         }
     }
 
     pub fn evalScript(it: *Interp, s: *Script) Error!Value {
+        if (it.nest == 0 and it.heap.scopes == 0) return it.hostEntry(evalScript, .{ it, s });
         try it.checkNative();
         if (s.code) |bc| return vm.run(it, bc);
         // A script that runs one time stays on the general path.
@@ -1284,9 +1388,10 @@ pub const Interp = struct {
     }
 
     pub fn evalCmd(it: *Interp, c: *Cmd) Error!Value {
+        if (it.nest == 0) return it.hostEntry(evalCmd, .{ it, c });
         if (it.step_limit == 0) return it.fail("step limit reached", .{});
         it.step_limit -= 1;
-        if (it.counter.used > it.mem_limit) return it.fail("the script used too much memory", .{});
+        try it.checkMem();
         if (c.fast != .none and c.epoch == it.epoch and c.ns == it.ns.ptr) {
             if (it.evalFast(c) catch |e| return it.noteLine(c, e)) |v| return v;
         }
@@ -1529,24 +1634,49 @@ pub const Interp = struct {
 
     /// Runs a command with its words. `argv[0]` is the name.
     pub fn call(it: *Interp, command: *Command, argv: []const Value, c: ?*Cmd) Error!Value {
+        if (it.nest == 0) return it.hostEntry(call, .{ it, command, argv, c });
         switch (command.impl) {
             .native => |f| return f(it, argv, c),
             .proc => |p| return it.callProc(p, argv),
         }
     }
 
-    /// Call this in a host function before it calls `evalCmd`,
-    /// `callWords`, or `call` outside `eval`, and call `leaveHost` before
-    /// the function returns. Then the collector scans the frames of the
-    /// host function. `eval` needs neither call. The function is inline,
-    /// so it records the frame of the host function.
+    /// Lets the collector run during host calls of `evalCmd`,
+    /// `callWords`, or `call`, and scans the frame of the calling
+    /// function. Call `leaveHost` before the function returns. With no
+    /// `enterHost`, such a call runs with no collection: the frames of
+    /// the host stay safe, and the memory limit stops a long script.
+    /// `eval` needs neither call. The function is inline, so it records
+    /// the frame of the host function.
     pub inline fn enterHost(it: *Interp) void {
-        if (it.nest == 0) it.native_base = @frameAddress();
+        if (it.heap.scopes == 0) {
+            it.native_base = @frameAddress() + host_margin;
+            it.gc_scope = 1;
+        }
+        it.heap.scopes += 1;
         it.nest += 1;
     }
 
     pub fn leaveHost(it: *Interp) void {
         it.nest -= 1;
+        it.heap.scopes -= 1;
+        if (it.heap.scopes == 0) it.gc_scope = 0;
+    }
+
+    /// Runs a host call of `evalCmd`, `call`, or `callWords` at nest 0.
+    /// The frames of the host are not scanned, so `gc_scope` stays zero
+    /// and no collection runs. The count stops a nested `eval` from
+    /// starting a scan range below the host frames.
+    pub noinline fn hostEntry(it: *Interp, comptime f: anytype, args: anytype) Error!Value {
+        @branchHint(.cold);
+        it.native_base = @frameAddress();
+        it.heap.scopes += 1;
+        it.nest += 1;
+        defer {
+            it.nest -= 1;
+            it.heap.scopes -= 1;
+        }
+        return @call(.auto, f, args);
     }
 
     /// The items of the list in a plain cell, as a buffer that only the
@@ -1568,6 +1698,7 @@ pub const Interp = struct {
 
     /// Runs a command given as a list of words.
     pub fn callWords(it: *Interp, argv: []const Value) Error!Value {
+        if (it.nest == 0) return it.hostEntry(callWords, .{ it, argv });
         if (argv.len == 0) return Value.empty;
         if (it.step_limit == 0) return it.fail("step limit reached", .{});
         it.step_limit -= 1;
@@ -1664,6 +1795,13 @@ pub const Interp = struct {
         it.ns = p.ns;
         it.frame.space = p.ns;
         defer it.ns = saved_ns;
+        // A clean frame holds the name of the old namespace only here.
+        const pinned = gc.precise and it.gc_token;
+        const pin_mark = if (gc.precise) it.pins.items.len else 0;
+        defer if (pinned) {
+            it.pins.items.len = pin_mark;
+        };
+        if (pinned) try it.pins.append(it.heap.backing, @intFromPtr(saved_ns.ptr));
         for (p.params, 0..) |prm, i| {
             if (i < args.len) {
                 try it.newLocal(prm.name, args[i]);

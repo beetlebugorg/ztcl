@@ -1,6 +1,6 @@
 //! The heap of an interpreter: pages of blocks in size classes.
 //!
-//! A page has 16 KiB or more and holds blocks of one size class. A request
+//! A page has 4 KiB or more and holds blocks of one size class. A request
 //! above 8 KiB, or with an alignment above 16, is a large block with a
 //! span of its own. Each span has a free bitmap and a mark bitmap. A set
 //! free bit means that the block can be handed out. An allocation uses
@@ -18,6 +18,19 @@
 //! block, and `remap` never moves a block. The mark and the sweep are at
 //! the end of the file. They free the blocks that no root reaches.
 //!
+//! Each span starts on a 4 KiB boundary. At the start of a collection,
+//! a hash table of the 4 KiB chunks of the spans gives the span of an
+//! address in about one probe. The mark uses it for each candidate word.
+//!
+//! An allocation does not start a collection. The interpreter starts
+//! one at a safe point (see `Interp.memPoint`). Only the stress mode of
+//! a native build collects inside an allocation.
+//!
+//! An optimizing compiler can keep a pointer just outside a block in a
+//! native frame: the end of a slice, or one element before the start.
+//! So a word of a native stack also keeps the block before it and the
+//! block after it. A word in a heap block has no such margin.
+//!
 //! All memory comes from the backing allocator, so the counting
 //! allocator of the interpreter sees each byte. The heap is not thread
 //! safe.
@@ -29,13 +42,19 @@ const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const Alignment = std.mem.Alignment;
 
-/// The bytes of a page: 16 KiB, and at least eight blocks.
-fn pageBytes(size: usize) usize {
+/// The bytes of a page. A small heap uses pages of 4 KiB and at least
+/// four blocks, so a short script holds little memory. A larger heap
+/// uses 16 KiB and at least eight blocks.
+fn pageBytes(size: usize, heap_bytes: usize) usize {
+    if (heap_bytes < small_heap) return @max(4096, std.mem.alignForward(usize, size * 4, 4096));
     return @max(16 * 1024, std.mem.alignForward(usize, size * 8, 4096));
 }
+const small_heap: usize = 2 << 20;
 /// The largest block of a size class.
 pub const max_small: usize = 8192;
 const max_small_align = 16;
+const chunk_shift = 12;
+const span_align: Alignment = .fromByteUnits(1 << chunk_shift);
 pub const class_count = 32;
 const kinds = 2;
 /// The least heap size for a collection.
@@ -98,11 +117,6 @@ pub const Span = struct {
 
 pub const Heap = struct {
     backing: Allocator,
-    /// The bytes that the counting allocator holds.
-    used: *const usize,
-    /// The memory limit of the root interpreter. A collection starts
-    /// when an allocation brings the heap above it.
-    limit: *const usize,
     /// The bytes of the heap at which the next collection starts.
     threshold: usize = min_threshold,
     /// The spans, sorted by address.
@@ -124,17 +138,28 @@ pub const Heap = struct {
     mark_ok: bool = true,
     live_bytes: usize = 0,
     collections: u64 = 0,
-    /// Above zero, each allocation of this count starts a collection
-    /// first. The count grows by its own value for each 16 MiB of heap.
+    /// Above zero, each safe point of this count starts a collection.
+    /// The count grows by its own value for each 16 MiB of heap.
     stress: u32 = 0,
+    /// The count of host entries that run in this interpreter tree. Only
+    /// the first entry can make the native stack scannable.
+    scopes: u32 = 0,
+    /// True when the stress mode also collects inside an allocation.
+    /// This needs a scan of the native stack.
+    stress_alloc: bool = false,
+    /// The span of each 4 KiB chunk during a mark. Empty when the table
+    /// could not grow: the mark then uses the sorted list.
+    table: []?*Span = &.{},
+    table_on: bool = false,
+    table_shift: std.math.Log2Int(usize) = 0,
     /// The span of the last address that the mark found.
     last: ?*Span = null,
     stress_left: u32 = 0,
 
-    pub const Range = struct { ptr: usize, len: usize };
+    pub const Range = struct { ptr: usize, len: usize, stack: bool = false };
 
-    pub fn init(backing: Allocator, used: *const usize, limit: *const usize) Heap {
-        return .{ .backing = backing, .used = used, .limit = limit };
+    pub fn init(backing: Allocator) Heap {
+        return .{ .backing = backing };
     }
 
     /// Frees all memory of the heap.
@@ -142,6 +167,9 @@ pub const Heap = struct {
         h.reset();
         h.spans.deinit(h.backing);
         h.work.deinit(h.backing);
+        h.backing.free(h.table);
+        h.table = &.{};
+        h.table_on = false;
         h.spans = .empty;
         h.work = .empty;
     }
@@ -157,6 +185,7 @@ pub const Heap = struct {
         h.hi = 0;
         h.bytes = 0;
         h.live_bytes = 0;
+        h.threshold = min_threshold;
     }
 
     pub fn allocator(h: *Heap) Allocator {
@@ -200,6 +229,49 @@ pub const Heap = struct {
         return lo;
     }
 
+    /// Builds the chunk table for one mark.
+    fn buildTable(h: *Heap) void {
+        h.table_on = false;
+        var chunks: usize = 0;
+        for (h.spans.items) |s| chunks += (s.len + (1 << chunk_shift) - 1) >> chunk_shift;
+        if (chunks == 0) return;
+        const want = std.math.ceilPowerOfTwo(usize, chunks * 2) catch return;
+        if (h.table.len < want) {
+            const t = h.backing.alloc(?*Span, want) catch return;
+            h.backing.free(h.table);
+            h.table = t;
+        }
+        const size = std.math.ceilPowerOfTwo(usize, h.table.len) catch return;
+        const table = h.table[0..size];
+        @memset(table, null);
+        h.table_shift = @intCast(@bitSizeOf(usize) - @ctz(size));
+        for (h.spans.items) |s| {
+            var c = s.base >> chunk_shift;
+            const end = (s.base + s.len - 1) >> chunk_shift;
+            while (c <= end) : (c += 1) {
+                var i = chunkHash(c) >> h.table_shift;
+                while (table[i] != null) i = (i + 1) & (size - 1);
+                table[i] = s;
+            }
+        }
+        h.table_on = true;
+    }
+
+    inline fn chunkHash(c: usize) usize {
+        return c *% @as(usize, @truncate(0x9e3779b97f4a7c15));
+    }
+
+    /// The span of a candidate word during a mark.
+    inline fn lookup(h: *const Heap, addr: usize) ?*Span {
+        if (!h.table_on) return h.find(addr);
+        const mask = (@as(usize, 1) << @intCast(@bitSizeOf(usize) - @as(usize, h.table_shift))) - 1;
+        var i = chunkHash(addr >> chunk_shift) >> h.table_shift;
+        while (h.table[i]) |s| : (i = (i + 1) & mask) {
+            if (addr -% s.base < s.len) return s;
+        }
+        return null;
+    }
+
     /// The span that holds `addr`, or null.
     pub fn find(h: *const Heap, addr: usize) ?*Span {
         if (addr < h.lo or addr >= h.hi) return null;
@@ -221,9 +293,9 @@ pub const Heap = struct {
     fn newPage(h: *Heap, index: usize) ?*Span {
         const class = index % class_count;
         const size = class_size[class];
-        const page = pageBytes(size);
+        const page = pageBytes(size, h.bytes);
         const count: usize = page / size;
-        const mem = h.backing.rawAlloc(page, .@"16", 0) orelse return null;
+        const mem = h.backing.rawAlloc(page, span_align, 0) orelse return null;
         const s = h.makeSpan((count + 63) / 64, .{
             .base = @intFromPtr(mem),
             .len = page,
@@ -233,10 +305,11 @@ pub const Heap = struct {
             .class = @intCast(class),
             .noscan = index >= class_count,
             .large = false,
+            .alignment = span_align,
             .free = &.{},
             .mark = &.{},
         }) orelse {
-            h.backing.rawFree(mem[0..page], .@"16", 0);
+            h.backing.rawFree(mem[0..page], span_align, 0);
             return null;
         };
         var i: usize = 0;
@@ -248,18 +321,8 @@ pub const Heap = struct {
         return s;
     }
 
-    /// Starts a collection when the heap is at its threshold, or when an
-    /// allocation of `extra` bytes goes above the memory limit. The test
-    /// reads byte counts only.
-    fn maybeCollect(h: *Heap, extra: usize) void {
-        if (h.roots_fn == null) return;
-        if (h.bytes + extra < h.threshold and h.used.* + extra <= h.limit.*) return;
-        collect(h);
-    }
-
     fn allocLarge(h: *Heap, len: usize, alignment: Alignment) ?[*]u8 {
-        h.maybeCollect(len);
-        const a = alignment.max(.@"16");
+        const a = alignment.max(span_align);
         const size = std.mem.alignForward(usize, len, 16);
         const mem = h.backing.rawAlloc(size, a, 0) orelse return null;
         const s = h.makeSpan(1, .{
@@ -287,7 +350,7 @@ pub const Heap = struct {
 
     fn alloc(ctx: *anyopaque, len: usize, alignment: Alignment, _: usize) ?[*]u8 {
         const h: *Heap = @ptrCast(@alignCast(ctx));
-        if (h.stress != 0) h.stressTick();
+        if (h.stress_alloc) h.stressTick();
         if (len > max_small or alignment.toByteUnits() > max_small_align) return h.allocLarge(len, alignment);
         const kind: usize = @intFromBool(alignment.toByteUnits() < @sizeOf(usize));
         const index = kind * class_count + classOf(len);
@@ -321,21 +384,24 @@ pub const Heap = struct {
                 h.cur[index] = p;
                 continue;
             }
-            h.maybeCollect(pageBytes(class_size[index % class_count]));
-            if (h.cur[index] != null or h.partial[index] != null) continue;
             h.cur[index] = h.newPage(index) orelse return null;
         }
     }
 
     fn stressTick(h: *Heap) void {
+        if (h.stressDue()) collect(h);
+    }
+
+    /// Counts one stress event. True when a collection is due.
+    pub fn stressDue(h: *Heap) bool {
         if (h.stress_left > 1) {
             h.stress_left -= 1;
-            return;
+            return false;
         }
         // A large heap makes a collection slow, so the gap grows with the
         // heap: one more step for each 16 MiB.
         h.stress_left = h.stress * @as(u32, @intCast(@min(1 + (h.bytes >> 24), 1 << 16)));
-        collect(h);
+        return true;
     }
 
     fn resize(ctx: *anyopaque, memory: []u8, _: Alignment, new_len: usize, _: usize) bool {
@@ -358,14 +424,19 @@ pub const Heap = struct {
 /// pointer.
 pub fn markWord(h: *Heap, w: usize) void {
     if (w < h.lo or w >= h.hi) return;
+    markHit(h, w);
+}
+
+/// `markWord` for a word inside the bounds of the heap.
+fn markHit(h: *Heap, w: usize) void {
     // Pointers cluster, so the span of the last hit often serves.
-    const s = if (h.last) |l| (if (w -% l.base < l.len) l else h.find(w)) else h.find(w);
+    const s = if (h.last) |l| (if (w -% l.base < l.len) l else h.lookup(w)) else h.lookup(w);
     const sp = s orelse return;
     h.last = sp;
     return markIn(h, sp, w);
 }
 
-fn markIn(h: *Heap, s: *Span, w: usize) void {
+inline fn markIn(h: *Heap, s: *Span, w: usize) void {
     var idx: usize = 0;
     if (!s.large) {
         idx = (w - s.base) / s.size;
@@ -377,9 +448,37 @@ fn markIn(h: *Heap, s: *Span, w: usize) void {
     s.mark[word] |= bit;
     if (s.noscan) return;
     const start = if (s.large) s.base else s.base + idx * s.size;
-    h.work.append(h.backing, .{ .ptr = start, .len = if (s.large) s.len else s.size }) catch {
+    const is_stack = s.large and s.len == coro_stack_bytes;
+    h.work.append(h.backing, .{ .ptr = start, .len = if (s.large) s.len else s.size, .stack = is_stack }) catch {
         h.mark_ok = false;
     };
+}
+
+/// The bytes of a coroutine stack. A block of this size is scanned as a
+/// native stack. A list of the same size gets a wider margin, and that
+/// is safe. A test checks this number against `coro.zig`.
+pub const coro_stack_bytes: usize = if (builtin.mode == .Debug) 16 << 20 else 1 << 20;
+/// The bytes that a native pointer can be before the start of its block.
+const stack_margin: usize = 64;
+
+/// Reads each aligned word of a native stack as a possible pointer, with
+/// the margin for a pointer just outside a block.
+pub fn markStack(h: *Heap, ptr: usize, len: usize) void {
+    scanStack(h, ptr, len);
+    drain(h);
+}
+
+fn scanStack(h: *Heap, ptr: usize, len: usize) void {
+    const first = std.mem.alignForward(usize, ptr, @sizeOf(usize));
+    const end = ptr +| len;
+    if (end < first + @sizeOf(usize)) return;
+    var p = first;
+    while (p + @sizeOf(usize) <= end) : (p += @sizeOf(usize)) {
+        const w = @as(*const usize, @ptrFromInt(p)).*;
+        markWord(h, w);
+        markWord(h, w -% 1);
+        markWord(h, w +% stack_margin);
+    }
 }
 
 /// Reads each aligned word of the range as a possible pointer and marks
@@ -393,30 +492,41 @@ fn scan(h: *Heap, ptr: usize, len: usize) void {
     const first = std.mem.alignForward(usize, ptr, @sizeOf(usize));
     const end = ptr +| len;
     if (end < first + @sizeOf(usize)) return;
+    // Most words are not addresses of the heap, so the bound check is
+    // inline and the lookup is a call.
+    const lo = h.lo;
+    const span = h.hi -% lo;
     var p = first;
     while (p + @sizeOf(usize) <= end) : (p += @sizeOf(usize)) {
         const w = @as(*const usize, @ptrFromInt(p)).*;
-        markWord(h, w);
+        if (w -% lo < span) markHit(h, w);
     }
 }
 
 fn drain(h: *Heap) void {
-    while (h.work.pop()) |r| scan(h, r.ptr, r.len);
+    while (h.work.pop()) |r| {
+        if (r.stack) scanStack(h, r.ptr, r.len) else scan(h, r.ptr, r.len);
+    }
 }
 
 /// Runs a collection. The roots come from `roots_fn`. The sweep frees
 /// each block that no root reached. A failed mark frees no block.
 pub fn collect(h: *Heap) void {
     const roots = h.roots_fn orelse return;
-    h.collections += 1;
     h.mark_ok = true;
     h.work.clearRetainingCapacity();
+    h.buildTable();
+    defer h.table_on = false;
     if (!roots(h.roots_ctx, h)) {
+        // A mark that stopped early leaves mark bits.
+        h.mark_ok = false;
         h.work.clearRetainingCapacity();
+        for (h.spans.items) |s| @memset(s.mark, 0);
         return;
     }
     drain(h);
     h.work.clearRetainingCapacity();
+    if (h.mark_ok) h.collections += 1;
     sweep(h);
 }
 
@@ -428,13 +538,17 @@ fn sweep(h: *Heap) void {
     h.cur = @splat(null);
     h.partial = @splat(null);
     h.last = null;
+    // The stress mode poisons in each build, so a suite run in
+    // ReleaseFast also shows a use of a freed block.
+    const poison = fill_dead or h.stress != 0;
+    const before = h.bytes;
     var live_bytes: usize = 0;
     var keep: usize = 0;
     const items = h.spans.items;
     for (items) |s| {
         if (s.large) {
             if (s.mark[0] == 0) {
-                if (fill_dead) @memset(@as([*]u8, @ptrFromInt(s.base))[0..s.len], dead_byte);
+                if (poison) @memset(@as([*]u8, @ptrFromInt(s.base))[0..s.len], dead_byte);
                 h.bytes -= s.len;
                 h.freeSpan(s);
                 continue;
@@ -453,7 +567,7 @@ fn sweep(h: *Heap) void {
             if (rest < 64) valid = (@as(u64, 1) << @intCast(rest)) - 1;
             const m = s.mark[w];
             const new_free = ~m & valid;
-            if (fill_dead) {
+            if (poison) {
                 var dead = new_free & ~s.free[w];
                 while (dead != 0) : (dead &= dead - 1) {
                     const i = w * 64 + @ctz(dead);
@@ -481,15 +595,17 @@ fn sweep(h: *Heap) void {
         keep += 1;
     }
     h.spans.shrinkRetainingCapacity(keep);
+    // A collection that frees under half of the heap shows a heap that
+    // grows with live data. The next one then waits for four times the
+    // live bytes, so the mark cost of a growing structure stays low.
+    const grew = live_bytes * 2 > before;
     h.live_bytes = live_bytes;
-    h.threshold = @max(min_threshold, 2 * live_bytes);
+    h.threshold = @max(min_threshold, (if (grew) @as(usize, 4) else 2) *| live_bytes);
     // The bounds may be wider than the spans. That is safe.
 }
 
 test "each size class serves its block size" {
-    var used: usize = 0;
-    var limit: usize = std.math.maxInt(usize);
-    var h = Heap.init(std.testing.allocator, &used, &limit);
+    var h = Heap.init(std.testing.allocator);
     defer h.deinit();
     const a = h.allocator();
     for (class_size, 0..) |size, c| {
@@ -507,9 +623,7 @@ test "each size class serves its block size" {
 }
 
 test "blocks do not overlap and keep their data" {
-    var used: usize = 0;
-    var limit: usize = std.math.maxInt(usize);
-    var h = Heap.init(std.testing.allocator, &used, &limit);
+    var h = Heap.init(std.testing.allocator);
     defer h.deinit();
     const a = h.allocator();
     var ptrs: [2000][]u64 = undefined;
@@ -521,9 +635,7 @@ test "blocks do not overlap and keep their data" {
 }
 
 test "large blocks and the address lookup" {
-    var used: usize = 0;
-    var limit: usize = std.math.maxInt(usize);
-    var h = Heap.init(std.testing.allocator, &used, &limit);
+    var h = Heap.init(std.testing.allocator);
     defer h.deinit();
     const a = h.allocator();
     const big = try a.alloc(u64, 5000);
@@ -545,9 +657,7 @@ test "large blocks and the address lookup" {
 }
 
 test "resize stays inside the block and remap never moves" {
-    var used: usize = 0;
-    var limit: usize = std.math.maxInt(usize);
-    var h = Heap.init(std.testing.allocator, &used, &limit);
+    var h = Heap.init(std.testing.allocator);
     defer h.deinit();
     const a = h.allocator();
     var buf = try a.alloc(u64, 5);
@@ -560,9 +670,7 @@ test "resize stays inside the block and remap never moves" {
 }
 
 test "reset frees all pages" {
-    var used: usize = 0;
-    var limit: usize = std.math.maxInt(usize);
-    var h = Heap.init(std.testing.allocator, &used, &limit);
+    var h = Heap.init(std.testing.allocator);
     defer h.deinit();
     const a = h.allocator();
     for (0..1000) |_| _ = try a.alloc(u8, 70);

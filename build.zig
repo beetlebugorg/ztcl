@@ -5,12 +5,20 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // `-Dgc-precise=true` builds the root rules of WebAssembly on a
+    // native target, so the stress tests run them with safety checks.
+    const gc_options = b.addOptions();
+    gc_options.addOption(bool, "gc_precise", b.option(bool, "gc-precise", "Use the precise roots of WebAssembly") orelse false);
+    // `-Drunner-optimize` sets the mode of the runner and the suite runner.
+    const runner_optimize = b.option(std.builtin.OptimizeMode, "runner-optimize", "The mode of the runners") orelse .ReleaseFast;
+
     // The module that other packages import.
     const ztcl = b.addModule("ztcl", .{
         .root_source_file = b.path("src/ztcl.zig"),
         .target = target,
         .optimize = optimize,
     });
+    ztcl.addOptions("build_options", gc_options);
 
     const tests = b.addTest(.{ .root_module = ztcl });
     b.step("test", "Run the tests of the interpreter").dependOn(&b.addRunArtifact(tests).step);
@@ -19,13 +27,14 @@ pub fn build(b: *std.Build) void {
     const fast = b.createModule(.{
         .root_source_file = b.path("src/ztcl.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = runner_optimize,
     });
+    fast.addOptions("build_options", gc_options);
 
     const exe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = runner_optimize,
         .imports = &.{.{ .name = "ztcl", .module = fast }},
     }) });
     b.installArtifact(exe);
@@ -49,13 +58,13 @@ pub fn build(b: *std.Build) void {
     const runner_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = runner_optimize,
         .imports = &.{.{ .name = "ztcl", .module = fast }},
     });
     const suite_exe = b.addExecutable(.{ .name = "ztcl-suite", .root_module = b.createModule(.{
         .root_source_file = b.path("tools/suite_cmds.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = runner_optimize,
         .imports = &.{ .{ .name = "ztcl", .module = fast }, .{ .name = "runner", .module = runner_mod } },
     }) });
     b.step("suite-runner", "Build the runner with the test commands").dependOn(&b.addInstallArtifact(suite_exe, .{}).step);
@@ -66,6 +75,7 @@ pub fn build(b: *std.Build) void {
         .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
         .optimize = .ReleaseSmall,
     }) });
+    wasm.root_module.addOptions("build_options", gc_options);
     wasm.entry = .disabled;
     wasm.rdynamic = true;
     // The interpreter can use 5 MiB of native stack (`max_native`).

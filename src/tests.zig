@@ -1330,6 +1330,93 @@ fn gcSame(script: []const u8, n: u32) !void {
     try std.testing.expect(b.gcCount() > 0);
 }
 
+fn gcNested(it: *tcl.Interp, _: []const tcl.Value, _: ?*tcl.interp.Cmd) tcl.Error!tcl.Value {
+    return it.eval("for {set i 0} {$i < 400} {incr i} {set t [string repeat u 200]}; set i");
+}
+
+test "a host call at nest 0 runs no collection, also through a nested eval" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.register("nested", gcNested);
+    it.setGcStress(1);
+    const script = try it.compile("nested; set a [string repeat k 300]; nested");
+    // Only this frame holds the script, and it has no `enterHost`.
+    const before = it.gcCount();
+    for (script.cmds) |*c| _ = try it.evalCmd(c);
+    const words = [_]tcl.Value{.{ .str = "nested" }};
+    _ = try it.callWords(&words);
+    try std.testing.expectEqual(before, it.gcCount());
+    try std.testing.expectEqual(@as(u32, 0), it.heap.scopes);
+    try std.testing.expectEqual(@as(u32, 0), it.nest);
+    // A later `eval` collects again.
+    _ = try it.eval("for {set i 0} {$i < 20} {incr i} {set t [string repeat v 50]}");
+    if (tcl.gc.supported) try std.testing.expect(it.gcCount() > before);
+}
+
+test "enterHost scans the frame of the host" {
+    if (tcl.gc.precise) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.setGcStress(1);
+    const script = try it.compile("set a [string repeat k 300]; set b [string repeat m 300]; string length $a$b");
+    it.enterHost();
+    defer it.leaveHost();
+    const before = it.gcCount();
+    var last: tcl.Value = tcl.Value.empty;
+    for (script.cmds) |*c| last = try it.evalCmd(c);
+    try std.testing.expect(it.gcCount() > before);
+    try std.testing.expectEqualStrings("600", try it.str(last));
+}
+
+test "the block size of a coroutine stack is the size that the mark reads" {
+    if (!tcl.coro.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    _ = try it.eval("coroutine g apply {{} {yield 1; return 2}}");
+    const c: *tcl.coro.Coro = @ptrCast(@alignCast(it.findCommand("g").?.ctx.?));
+    try std.testing.expectEqual(tcl.heap.coro_stack_bytes, c.stack.len);
+}
+
+test "a child that runs a coroutine keeps the values of each stack" {
+    try gcSame(
+        \\set keep [string repeat p 90]
+        \\interp create c
+        \\c eval {
+        \\    coroutine g apply {{} {
+        \\        set s [string repeat k 40]
+        \\        for {set i 0} {$i < 30} {incr i} {yield [string length $s[string repeat z $i]]}
+        \\        return $s
+        \\    }}
+        \\    set out {}
+        \\    for {set i 0} {$i < 29} {incr i} {lappend out [g]}
+        \\    lappend out [g]
+        \\}
+        \\set r [c eval {set out}]
+        \\interp delete c
+        \\list $r [string length $keep]
+    , 1);
+}
+
+test "a compare keeps the text of each string that looks like a number" {
+    for ([_][]const u8{ "0", "-0", "+1", "007", "0x10", "0b1", " 1", "1 ", "1e3", "1.0", "9223372036854775807", "-9223372036854775808", "9223372036854775808", "-9223372036854775809" }) |text| {
+        var it: tcl.Interp = undefined;
+        try it.init(std.testing.allocator);
+        defer it.deinit();
+        const q = try std.fmt.allocPrint(std.testing.allocator, "proc f {{x}} {{ if {{$x < 5}} {{ set r 1 }} else {{ set r 0 }}; if {{$x == 5}} {{ incr r }}; return [list $x [string length $x] [string is integer -strict $x] [string is wideinteger -strict $x] [catch {{incr x 0}}]] }}; f {{{s}}}", .{text});
+        defer std.testing.allocator.free(q);
+        const got = try it.str(try it.eval(q));
+        var chk: tcl.Interp = undefined;
+        try chk.init(std.testing.allocator);
+        defer chk.deinit();
+        const list = try chk.list(.{ .str = got });
+        try std.testing.expectEqualStrings(text, try chk.str(list[0]));
+        try std.testing.expectEqual(@as(i64, @intCast(text.len)), try std.fmt.parseInt(i64, try chk.str(list[1]), 10));
+    }
+}
+
 test "the collector keeps a value in a variable, a list, a dict, an array, and a namespace" {
     try gcSame(
         \\set x [string repeat a 50]

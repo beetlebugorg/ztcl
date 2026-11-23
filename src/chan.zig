@@ -898,7 +898,7 @@ fn cmdSource(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (e != .SUCCESS) return fsroot.posixError(it, e, try std.fmt.allocPrint(a, "couldn't read file \"{s}\": ", .{path}));
         if (rc == 0) break;
         text.items.len += rc;
-        if (it.overLimit()) return it.fail("the script used too much memory", .{});
+        try it.checkMem();
     }
     // The ^Z character ends a script.
     var body = text.items;

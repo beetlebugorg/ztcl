@@ -273,7 +273,7 @@ fn cmdIf(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
 fn step(it: *Interp) Error!void {
     if (it.step_limit == 0) return it.fail("step limit reached", .{});
     it.step_limit -= 1;
-    if (it.overLimit()) return it.fail("the script used too much memory", .{});
+    try it.checkMem();
 }
 
 fn cmdWhile(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {

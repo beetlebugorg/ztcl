@@ -40,16 +40,18 @@ fn carry(from: *Interp, to: *Interp, v: Value) Error!Value {
     return .{ .str = try to.alloc().dupe(u8, try from.str(v)) };
 }
 
-const Saved = struct { depth: u32, nest: u32, base: usize, native: usize, limit: usize };
+const Saved = struct { depth: u32, nest: u32, base: usize, native: usize, limit: usize, scope: u32 };
 
 pub fn enter(from: *Interp, to: *Interp) Saved {
-    const s: Saved = .{ .depth = to.depth, .nest = to.nest, .base = to.native_base, .native = to.max_native, .limit = to.mem_limit };
+    const s: Saved = .{ .depth = to.depth, .nest = to.nest, .base = to.native_base, .native = to.max_native, .limit = to.mem_limit, .scope = to.gc_scope };
     to.active += 1;
     to.step_limit = from.step_limit;
     to.depth += from.depth;
     to.nest += from.nest + 1;
     to.native_base = from.native_base;
     to.max_native = from.max_native;
+    to.gc_scope = from.gc_scope;
+    to.heap.roots_ctx = to;
     // A child counts in its parent, so the room of the child is the
     // limit of the parent less the rest of the memory of the parent.
     if (to.parent == from) to.mem_limit = @min(to.mem_limit, from.mem_limit -| (from.memUsed() -| to.memUsed()));
@@ -63,6 +65,8 @@ pub fn leave(from: *Interp, to: *Interp, s: Saved) void {
     to.native_base = s.base;
     to.max_native = s.native;
     to.mem_limit = s.limit;
+    to.gc_scope = s.scope;
+    to.heap.roots_ctx = from;
     value.precision = from.precision;
     to.active -= 1;
     reap(to);

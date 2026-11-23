@@ -13,6 +13,7 @@
 
 const std = @import("std");
 const interp = @import("interp.zig");
+const gc = @import("gc.zig");
 const expr = @import("expr.zig");
 const value = @import("value.zig");
 const cmds = @import("cmds.zig");
@@ -1130,7 +1131,8 @@ noinline fn slowForeach(it: *Interp, code: *const Code, table: []const u32, item
 fn step(it: *Interp) Error!void {
     if (it.step_limit == 0) return it.fail("step limit reached", .{});
     it.step_limit -= 1;
-    if (it.counter.used > it.mem_limit) return it.fail("the script used too much memory", .{});
+    // Each value of this run is on the value stack or in a cell here.
+    if (it.counter.trip >= it.mem_limit) try it.memPoint(true);
 }
 
 /// The integer of a slot, or null for any other content.
@@ -1264,10 +1266,25 @@ fn concatValues(it: *Interp, vals: []const Value) Error!Value {
 
 /// Runs the code of a proc in the current frame.
 pub fn run(it: *Interp, code: *const Code) Error!Value {
+    if (it.nest == 0 and it.heap.scopes == 0) return it.hostEntry(run, .{ it, code });
+    // Each path into this function that does not set the token ends the
+    // clean chain, so a new caller is safe with no change.
+    const clean = gc.precise and it.gc_token;
+    if (gc.precise) it.gc_token = false;
     try it.checkNative();
     if (it.nest >= it.max_nest) return it.fail("too many nested evaluations (infinite loop?)", .{});
     it.nest += 1;
     defer it.nest -= 1;
+    const outer_clean = it.gc_clean_nest;
+    const pin_mark = if (gc.precise) it.pins.items.len else 0;
+    defer if (clean) {
+        it.gc_clean_nest = outer_clean;
+        it.pins.items.len = pin_mark;
+    };
+    if (clean) {
+        try it.pins.append(it.heap.backing, @intFromPtr(code));
+        it.gc_clean_nest = it.nest;
+    }
     const mark = it.stackMark();
     defer it.stackRelease(mark);
     const stack = try it.stackAllocPub(code.max_stack);
@@ -1507,7 +1524,12 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 const c = code.sites[i.a];
                 const argv = stack[sp - i.b .. sp];
                 const command = try it.resolve(c, argv);
-                const r = try it.call(command, argv, c);
+                // A proc call keeps its values in the frame and the word
+                // stack. A native command can hold values in locals.
+                if (gc.precise and command.impl == .proc) it.gc_token = gc.isClean(it);
+                const called = it.call(command, argv, c);
+                if (gc.precise) it.gc_token = false;
+                const r = try called;
                 sp -= i.b;
                 stack[sp] = r;
                 sp += 1;
