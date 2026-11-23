@@ -104,6 +104,8 @@ pub const Parser = struct {
     /// The nesting of command substitutions. A limit keeps the parser
     /// off the end of the native stack.
     depth: u32 = 0,
+    /// The commands before a syntax error in the outermost script.
+    partial: []Cmd = &.{},
 
     pub const max_depth = 200;
 
@@ -137,9 +139,13 @@ pub const Parser = struct {
     /// a command substitution when `bracket` is true.
     pub fn parseScript(p: *Parser, bracket: bool) PError!*Script {
         if (p.depth >= max_depth) return p.fail("too many nested command substitutions");
+        const outermost = p.depth == 0;
         p.depth += 1;
         defer p.depth -= 1;
         var list: std.ArrayList(Cmd) = .empty;
+        errdefer if (outermost) {
+            p.partial = list.items;
+        };
         while (true) {
             // Rule 1: commands end at a newline or a semicolon.
             while (p.pos < p.src.len) {
@@ -657,6 +663,8 @@ pub const Interp = struct {
     unknown_depth: u32 = 0,
     /// The command that runs for a name with no command.
     missing: Command = .{ .name = "unknown", .impl = .{ .native = ns_mod.dispatchUnknown } },
+    /// The value of `info script`. The runner does not set it.
+    script_name: []const u8 = "",
     /// The value of `tcl_precision`.
     precision: u8 = 0,
     /// The count of variables with traces. Above zero, the inline
@@ -731,7 +739,7 @@ pub const Interp = struct {
     /// everywhere.
     pub fn startVars(it: *Interp) Allocator.Error!void {
         trace.installPrecision(it) catch return error.OutOfMemory;
-        _ = it.eval("array set tcl_platform {platform unix byteOrder littleEndian wordSize 8 pointerSize 8 engine ztcl}; set tcl_version 8.6; set tcl_patchLevel 8.6.0; set errorInfo {}; set errorCode NONE") catch |e| switch (e) {
+        _ = it.eval("array set tcl_platform {platform unix byteOrder littleEndian wordSize 8 pointerSize 8 engine ztcl}; set tcl_version 8.6; set tcl_patchLevel 8.6.16; set errorInfo {}; set errorCode NONE") catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
             else => unreachable,
         };

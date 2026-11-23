@@ -152,7 +152,7 @@ fn pairs(it: *Interp, v: Value) Error![]Value {
         @memcpy(out[0..v.list.len], v.list.items());
         return out[0..v.list.len];
     }
-    const items = try it.list(v);
+    const items = it.list(v) catch |e| return dictListError(it, e);
     if (items.len % 2 != 0) return it.fail("missing value to go with key", .{});
     if (items.len >= index_min) return pairsLarge(it, items);
     var out: std.ArrayList(Value) = .empty;
@@ -463,6 +463,20 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
         return try res;
     }
     return null;
+}
+
+/// The list error of a value that is read as a dict names a dict.
+fn dictListError(it: *Interp, e: Error) Error {
+    if (e != error.TclError) return e;
+    const msg = try it.str(it.result);
+    const code = try it.str(it.error_code);
+    if (!std.mem.startsWith(u8, code, "TCL VALUE LIST ")) return e;
+    const a = it.alloc();
+    var text = try std.mem.replaceOwned(u8, a, msg, "in list", "in dict");
+    if (std.mem.startsWith(u8, text, "list element")) text = try std.mem.concat(a, u8, &.{ "dict element", text["list element".len..] });
+    it.result = .{ .str = text };
+    it.error_code = .{ .str = try std.mem.concat(a, u8, &.{ "TCL VALUE DICTIONARY ", code["TCL VALUE LIST ".len..] }) };
+    return e;
 }
 
 pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value {

@@ -797,14 +797,117 @@ fn cmdEval(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
 }
 
 fn cmdSubst(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len != 2) return it.wrongArgs("subst string");
-    var p: interp.Parser = .{ .a = it.alloc(), .src = try it.str(argv[1]) };
-    var parts: interp.Parts = .{ .a = it.alloc() };
-    p.parseParts(&parts, .all) catch |e| switch (e) {
-        error.OutOfMemory => return error.OutOfMemory,
-        error.TclError => return it.fail("{s}", .{p.message}),
-    };
-    return .{ .str = try it.concatParts(try parts.finish()) };
+    if (argv.len < 2) return it.wrongArgs("subst ?-nobackslashes? ?-nocommands? ?-novariables? string");
+    // A substituted command can call `subst`, so each call is one level.
+    try it.checkNative();
+    if (it.nest >= it.max_nest) return it.fail("too many nested evaluations (infinite loop?)", .{});
+    it.nest += 1;
+    defer it.nest -= 1;
+    const a = it.alloc();
+    var do_bs = true;
+    var do_cmd = true;
+    var do_var = true;
+    for (argv[1 .. argv.len - 1]) |v| {
+        const o = try it.str(v);
+        const names = [_][]const u8{ "-nobackslashes", "-nocommands", "-novariables" };
+        var hit: ?usize = null;
+        var count: usize = 0;
+        for (names, 0..) |n, k| {
+            if (o.len > 0 and std.mem.startsWith(u8, n, o)) {
+                hit = k;
+                count += 1;
+            }
+        }
+        if (count != 1) return it.failCode("TCL LOOKUP INDEX option", "{s} option \"{s}\": must be -nobackslashes, -nocommands, or -novariables", .{ if (count > 1) "ambiguous" else "bad", o });
+        switch (hit.?) {
+            0 => do_bs = false,
+            1 => do_cmd = false,
+            else => do_var = false,
+        }
+    }
+    const s = try it.str(argv[argv.len - 1]);
+    var out: std.ArrayList(u8) = .empty;
+    var i: usize = 0;
+    while (i < s.len) {
+        const c = s[i];
+        if (c == '\\' and do_bs) {
+            i = try value.backslash(a, s, i, &out);
+        } else if (c == '$' and do_var) {
+            var q: interp.Parser = .{ .a = a, .src = s, .pos = i };
+            const r = q.parseVar() catch |e| switch (e) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.TclError => return it.fail("{s}", .{q.message}),
+            };
+            if (r) |ref| {
+                i = q.pos;
+                const v = it.readRef(&ref) catch |e| switch (substCode(it, e)) {
+                    .stop => return .{ .str = out.items },
+                    .skip => continue,
+                    .use => it.result,
+                    .fail => return e,
+                };
+                try out.appendSlice(a, try it.str(v));
+            } else {
+                try out.append(a, '$');
+                i += 1;
+            }
+        } else if (c == '[' and do_cmd) {
+            var q: interp.Parser = .{ .a = a, .src = s, .pos = i + 1 };
+            var bad = false;
+            const cmd_list: []interp.Cmd = if (q.parseScript(true)) |sc| sc.cmds else |e| blk: {
+                if (e == error.OutOfMemory) return error.OutOfMemory;
+                bad = true;
+                // A command that the end of the text cut off does not run.
+                var done = q.partial;
+                if (done.len > 0) {
+                    const last = done[done.len - 1].text;
+                    if (@intFromPtr(last.ptr) + last.len >= @intFromPtr(s.ptr) + s.len) done = done[0 .. done.len - 1];
+                }
+                break :blk done;
+            };
+            var res: Value = Value.empty;
+            var skip = false;
+            for (cmd_list) |*one| {
+                res = it.evalCmd(one) catch |e| switch (substCode(it, e)) {
+                    .stop => return .{ .str = out.items },
+                    .skip => {
+                        skip = true;
+                        break;
+                    },
+                    .use => {
+                        res = it.result;
+                        break;
+                    },
+                    .fail => return e,
+                };
+            }
+            if (bad and !skip) return it.fail("{s}", .{q.message});
+            if (bad) return .{ .str = out.items };
+            i = q.pos;
+            if (!skip) try out.appendSlice(a, try it.str(res));
+        } else {
+            try out.append(a, c);
+            i += 1;
+        }
+    }
+    return .{ .str = out.items };
+}
+
+const SubstAction = enum { stop, skip, use, fail };
+
+/// What `subst` does with the code of a substitution.
+fn substCode(it: *Interp, e: Error) SubstAction {
+    switch (e) {
+        error.TclBreak => return .stop,
+        error.TclContinue => return .skip,
+        error.TclReturn => {
+            it.ret_code = .ok;
+            it.ret_level = 1;
+            return .use;
+        },
+        error.TclCustom => return .use,
+        else => return .fail,
+    }
 }
 
 // ---- Lists ----
@@ -1796,11 +1899,60 @@ fn namesList(it: *Interp, frame: *interp.Frame, pattern: ?[]const u8, links: boo
     return value.wrapList(it.alloc(), out.items);
 }
 
+const info_names = [_][]const u8{ "args", "body", "cmdcount", "commands", "complete", "default", "exists", "functions", "globals", "level", "library", "loaded", "locals", "nameofexecutable", "patchlevel", "procs", "script", "sharedlibextension", "tclversion", "vars" };
+
 fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("info subcommand ?arg ...?");
     const a = it.alloc();
-    const sub = try it.str(argv[1]);
+    const word = try it.str(argv[1]);
+    var sub: []const u8 = word;
+    var hits: usize = 0;
+    for (info_names) |n| {
+        if (eql(n, word)) {
+            sub = n;
+            hits = 1;
+            break;
+        }
+        if (word.len > 0 and std.mem.startsWith(u8, n, word)) {
+            sub = n;
+            hits += 1;
+        }
+    }
+    if (hits != 1) sub = word;
     const pattern: ?[]const u8 = if (argv.len > 2) try it.str(argv[2]) else null;
+    for ([_][]const u8{ "commands", "globals", "locals", "procs", "vars" }) |n| {
+        if (eql(sub, n) and argv.len > 3) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"info {s} ?pattern?\"", .{n});
+    }
+    for ([_][]const u8{ "cmdcount", "nameofexecutable", "patchlevel", "sharedlibextension", "tclversion", "library" }) |n| {
+        if (eql(sub, n) and argv.len != 2) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"info {s}\"", .{n});
+    }
+    if (eql(sub, "cmdcount")) return .{ .int = @bitCast(std.math.maxInt(u64) - it.step_limit) };
+    if (eql(sub, "sharedlibextension")) return .{ .str = ".so" };
+    if (eql(sub, "library")) {
+        return (try it.getVarOpt("::tcl_library")) orelse it.fail("no library has been specified for Tcl", .{});
+    }
+    if (eql(sub, "loaded")) {
+        if (argv.len > 3) return it.wrongArgs("info loaded ?interp?");
+        if (argv.len == 3 and pattern.?.len > 0) return it.failCode("TCL LOOKUP INTERP", "could not find interpreter \"{s}\"", .{pattern.?});
+        return Value.empty;
+    }
+    if (eql(sub, "functions")) {
+        if (argv.len > 3) return it.wrongArgs("info functions ?pattern?");
+        var out: std.ArrayList(Value) = .empty;
+        var iter = it.commands.keyIterator();
+        while (iter.next()) |k| {
+            if (!std.mem.startsWith(u8, k.*, "tcl::mathfunc::")) continue;
+            const name = k.*["tcl::mathfunc::".len..];
+            if (pattern) |p| if (!globMatch(p, name, false)) continue;
+            try out.append(a, .{ .str = name });
+        }
+        std.mem.sort(Value, out.items, {}, struct {
+            fn less(_: void, x: Value, y: Value) bool {
+                return std.mem.order(u8, x.str, y.str) == .lt;
+            }
+        }.less);
+        return value.wrapList(a, out.items);
+    }
     if (eql(sub, "exists")) {
         if (argv.len != 3) return it.wrongArgs("info exists varName");
         const name, const idx = Interp.splitName(pattern.?);
@@ -1862,10 +2014,7 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const want = try it.str(argv[3]);
         for (c.?.impl.proc.params) |prm| {
             if (!eql(prm.name, want)) continue;
-            it.setVar(try it.str(argv[4]), prm.default orelse Value.empty) catch |e| {
-                if (e != error.TclError) return e;
-                return it.fail("can't set \"{s}\": variable isn't array", .{try it.str(argv[4])});
-            };
+            try it.setVar(try it.str(argv[4]), prm.default orelse Value.empty);
             return .{ .int = @intFromBool(prm.default != null) };
         }
         if (c.?.impl.proc.has_args and eql(want, "args")) {
@@ -1884,6 +2033,7 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (p.has_args) try out.append(a, .{ .str = "args" });
         return value.wrapList(a, out.items);
     } else if (eql(sub, "level")) {
+        if (argv.len > 3) return it.wrongArgs("info level ?number?");
         if (argv.len == 2) return .{ .int = it.frame.level };
         const n = try it.int(argv[2]);
         const target: i64 = if (n <= 0) @as(i64, it.frame.level) + n else n;
@@ -1906,13 +2056,17 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             return .{ .int = @intFromBool(std.mem.indexOf(u8, p.message, "missing") == null) };
         }
     } else if (eql(sub, "tclversion")) {
-        return .{ .str = "8.6" };
+        return it.getVar("::tcl_version");
     } else if (eql(sub, "patchlevel")) {
-        return .{ .str = "8.6.0" };
-    } else if (eql(sub, "script") or eql(sub, "nameofexecutable")) {
+        return it.getVar("::tcl_patchLevel");
+    } else if (eql(sub, "script")) {
+        if (argv.len > 3) return it.wrongArgs("info script ?filename?");
+        if (argv.len == 3) it.script_name = try a.dupe(u8, pattern.?);
+        return .{ .str = it.script_name };
+    } else if (eql(sub, "nameofexecutable")) {
         return Value.empty;
     }
-    return it.fail("unknown or ambiguous subcommand \"{s}\": must be args, body, commands, complete, exists, globals, level, locals, patchlevel, procs, script, tclversion, or vars", .{sub});
+    return it.failCode("TCL LOOKUP INDEX subcommand", "unknown or ambiguous subcommand \"{s}\": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, library, loaded, locals, nameofexecutable, patchlevel, procs, script, sharedlibextension, tclversion, or vars", .{word});
 }
 
 fn cmdPuts(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {

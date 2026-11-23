@@ -976,3 +976,21 @@ test "the inline list and string reads keep the command semantics" {
         .{ "namespace eval n {proc llength {x} {return inner}; proc q {} {llength {a b}}}; n::q", "inner" },
     });
 }
+
+test "recursion through subst, an ensemble, and unknown stays bounded" {
+    try check(&.{
+        .{ "set s {[subst $s]}; catch {subst $s} m; set m", "too many nested evaluations (infinite loop?)" },
+        .{ "namespace ensemble create -command e1 -map {a {e1 a}}; catch {e1 a} m; set m", "too many nested evaluations (infinite loop?)" },
+        .{ "proc unknown args {nosuch2 x}; catch {nosuch1} m; set m", "invalid command name \"nosuch2\"" },
+    });
+}
+
+test "traces, upvar to an element, and tcl_precision" {
+    try check(&.{
+        .{ "proc w {n i o} {set ::log [list $n $i $o]}; trace add variable x write w; set x 1; set log", "x {} write" },
+        .{ "proc u {} {upvar 1 q(1) y; set y 5}; u; set q(1)", "5" },
+        .{ "set tcl_precision 3; set r [string cat [expr {1/3.0}]]; set tcl_precision 0; set r", "0.333" },
+        .{ "::tcl::mathop::+ 1 2 3", "6" },
+        .{ "tcl::prefix match {apple banana} b", "banana" },
+    });
+}

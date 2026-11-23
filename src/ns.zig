@@ -220,6 +220,11 @@ fn ensembleNames(it: *Interp, e: *Ensemble) Error![]const []const u8 {
 }
 
 fn ensembleCall(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    // A map can name the ensemble itself, so each call is one level.
+    try it.checkNative();
+    if (it.nest >= it.max_nest) return it.fail("too many nested evaluations (infinite loop?)", .{});
+    it.nest += 1;
+    defer it.nest -= 1;
     const a = it.alloc();
     const self = it.findCommand(try it.str(argv[0])) orelse return it.fail("invalid command name \"{s}\"", .{try it.str(argv[0])});
     const e: *Ensemble = @ptrCast(@alignCast(self.ctx orelse return it.fail("\"{s}\" is not an ensemble", .{try it.str(argv[0])})));
@@ -345,6 +350,7 @@ pub fn dispatchUnknown(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const first = try it.str(handler[0]);
     const target = it.findCommand(first) orelse return lookupError(it, name);
     if (target.impl == .native and target.impl.native == &cmdUnknown) return lookupError(it, name);
+    try it.checkNative();
     if (it.unknown_depth >= 64) return lookupError(it, name);
     it.unknown_depth += 1;
     defer it.unknown_depth -= 1;
