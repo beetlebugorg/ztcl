@@ -44,6 +44,22 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| bench_run.addArgs(args);
     b.step("bench", "Run the benchmark of the point procs").dependOn(&bench_run.step);
 
+    // The suite runner: the runner with the test commands of
+    // tools/suite_cmds.zig. Only `zig build suite-runner` builds it.
+    const runner_mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+        .imports = &.{.{ .name = "ztcl", .module = fast }},
+    });
+    const suite_exe = b.addExecutable(.{ .name = "ztcl-suite", .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/suite_cmds.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+        .imports = &.{ .{ .name = "ztcl", .module = fast }, .{ .name = "runner", .module = runner_mod } },
+    }) });
+    b.step("suite-runner", "Build the runner with the test commands").dependOn(&b.addInstallArtifact(suite_exe, .{}).step);
+
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
     const wasm = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
         .root_source_file = b.path("src/wasm.zig"),
