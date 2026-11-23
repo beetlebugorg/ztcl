@@ -79,22 +79,35 @@ pub fn noise3Seed(seed: u32, x: f64, y: f64, z: f64) f64 {
 /// The lanes of the vector form: 4 doubles fill one AVX2 register.
 const lanes = 4;
 const F = @Vector(lanes, f64);
-const U = @Vector(lanes, u32);
 const I = @Vector(lanes, i32);
+/// A hash in each lane, as a u32 in a 64-bit lane. The lane has the
+/// width of a double, so a mask needs no widening, and the low 32 bits
+/// of a product come from the 32 x 32 multiply of AVX2.
+const U = @Vector(lanes, u64);
+const low32: U = @splat(0xffff_ffff);
 
-inline fn mixV(h: U, v: I, k: u32) U {
-    var r = h ^ (@as(U, @bitCast(v)) *% @as(U, @splat(k)));
-    r = (r ^ (r >> @splat(15))) *% @as(U, @splat(0x2c1b3c6d));
+inline fn widen(v: I) U {
+    const w: @Vector(lanes, u32) = @bitCast(v);
+    return @intCast(w);
+}
+
+inline fn mixV(h: U, v: U, k: u32) U {
+    var r = h ^ ((v *% @as(U, @splat(k))) & low32);
+    r = ((r ^ (r >> @splat(15))) *% @as(U, @splat(0x2c1b3c6d))) & low32;
     return r ^ (r >> @splat(13));
 }
 
 inline fn gradV(h: U, x: F, y: F, z: F) F {
     const b = (h >> @splat(7)) & @as(U, @splat(15));
     const zero: U = @splat(0);
-    const u = @select(f64, b < @as(U, @splat(8)), x, y);
-    const xz = @select(f64, b == @as(U, @splat(12)), x, @select(f64, b == @as(U, @splat(14)), x, z));
-    const v = @select(f64, b < @as(U, @splat(4)), y, xz);
-    return @select(f64, (b & @as(U, @splat(1))) == zero, u, -u) + @select(f64, (b & @as(U, @splat(2))) == zero, v, -v);
+    const u = @select(f64, (b & @as(U, @splat(8))) == zero, x, y);
+    // The directions 12 and 14 use x in place of z.
+    const xz = @select(f64, (b & @as(U, @splat(13))) == @as(U, @splat(12)), x, z);
+    const v = @select(f64, (b & @as(U, @splat(12))) == zero, y, xz);
+    // Bits 0 and 1 of the direction are the signs of the two parts.
+    const su: U = @as(U, @bitCast(u)) ^ (b << @splat(63));
+    const sv: U = @as(U, @bitCast(v)) ^ ((b & @as(U, @splat(2))) << @splat(62));
+    return @as(F, @bitCast(su)) + @as(F, @bitCast(sv));
 }
 
 inline fn fadeV(t: F) F {
@@ -129,16 +142,21 @@ fn noise3V(seed: u32, x: F, y: F, z: F) F {
     const w = fadeV(fz);
     const step: I = @splat(1);
     const s: U = @splat(seed);
-    const hx0 = mixV(s, xi, 0x8da6b343);
-    const hx1 = mixV(s, xi +% step, 0x8da6b343);
-    const h00 = mixV(hx0, yi, 0xd8163841);
-    const h10 = mixV(hx1, yi, 0xd8163841);
-    const h01 = mixV(hx0, yi +% step, 0xd8163841);
-    const h11 = mixV(hx1, yi +% step, 0xd8163841);
-    const z1 = zi +% step;
+    const x0 = widen(xi);
+    const x1 = widen(xi +% step);
+    const y0 = widen(yi);
+    const y1 = widen(yi +% step);
+    const z0 = widen(zi);
+    const z1 = widen(zi +% step);
+    const hx0 = mixV(s, x0, 0x8da6b343);
+    const hx1 = mixV(s, x1, 0x8da6b343);
+    const h00 = mixV(hx0, y0, 0xd8163841);
+    const h10 = mixV(hx1, y0, 0xd8163841);
+    const h01 = mixV(hx0, y1, 0xd8163841);
+    const h11 = mixV(hx1, y1, 0xd8163841);
     const k: u32 = 0xcb1ab31f;
-    const a = lerpV(gradV(mixV(h00, zi, k), fx, fy, fz), gradV(mixV(h10, zi, k), fx - one, fy, fz), u);
-    const b = lerpV(gradV(mixV(h01, zi, k), fx, fy - one, fz), gradV(mixV(h11, zi, k), fx - one, fy - one, fz), u);
+    const a = lerpV(gradV(mixV(h00, z0, k), fx, fy, fz), gradV(mixV(h10, z0, k), fx - one, fy, fz), u);
+    const b = lerpV(gradV(mixV(h01, z0, k), fx, fy - one, fz), gradV(mixV(h11, z0, k), fx - one, fy - one, fz), u);
     const c = lerpV(gradV(mixV(h00, z1, k), fx, fy, fz - one), gradV(mixV(h10, z1, k), fx - one, fy, fz - one), u);
     const d = lerpV(gradV(mixV(h01, z1, k), fx, fy - one, fz - one), gradV(mixV(h11, z1, k), fx - one, fy - one, fz - one), u);
     return lerpV(lerpV(a, b, v), lerpV(c, d, v), w);
@@ -178,6 +196,45 @@ test "the block form of the noise gives the bits of the scalar form" {
     noise3Block(&out, &xs, &ys, &zs);
     for (out, xs, ys, zs) |o, x, y, z| {
         try std.testing.expectEqual(@as(u64, @bitCast(noise3(x, y, z))), @as(u64, @bitCast(o)));
+    }
+}
+
+test "the block form equals the scalar form on random and edge inputs" {
+    const edge = [_]f64{
+        0,                  -0.0,                1,                 -1,
+        0.5,                -0.5,                1.9999999999999998, -1.0000000000000002,
+        2e9,                -2e9,                2e9 - 1,           -2e9 + 1,
+        2147483647.5,       -2147483648.5,       1e300,             -1e300,
+        5e-324,             -5e-324,             std.math.inf(f64), -std.math.inf(f64),
+        std.math.nan(f64),
+    };
+    var prng = std.Random.DefaultPrng.init(11);
+    const rng = prng.random();
+    const n = 4096;
+    var xs: [n]f64 = undefined;
+    var ys: [n]f64 = undefined;
+    var zs: [n]f64 = undefined;
+    var out: [n]f64 = undefined;
+    for ([_]*[n]f64{ &xs, &ys, &zs }) |col| {
+        for (col) |*c| c.* = switch (rng.int(u8) % 4) {
+            0 => edge[rng.uintLessThan(usize, edge.len)],
+            1 => (rng.float(f64) - 0.5) * 8,
+            2 => (rng.float(f64) - 0.5) * 4e9,
+            else => @bitCast(rng.int(u64)),
+        };
+    }
+    for ([_]u32{ default_seed, 0, 0xffff_ffff, 12345 }) |seed| {
+        noise3BlockSeed(seed, &out, &xs, &ys, &zs);
+        for (out, xs, ys, zs) |o, x, y, z| {
+            const scalar = noise3Seed(seed, x, y, z);
+            // The sign of a NaN depends on the operand order that the
+            // optimizer picks. `point.bound` replaces each NaN output.
+            if (std.math.isNan(scalar)) {
+                try std.testing.expect(std.math.isNan(o));
+            } else {
+                try std.testing.expectEqual(@as(u64, @bitCast(scalar)), @as(u64, @bitCast(o)));
+            }
+        }
     }
 }
 
