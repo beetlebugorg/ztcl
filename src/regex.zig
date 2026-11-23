@@ -1441,9 +1441,9 @@ pub const Matcher = struct {
             rest_min +|= x.min_len;
             rest_max = if (x.max_len == inf or rest_max == inf) inf else rest_max +| x.max_len;
         }
-        if (hi - lo < h.min_len + rest_min) return false;
+        if (hi - lo < h.min_len +| rest_min) return false;
         var first = lo + h.min_len;
-        if (rest_max != inf and hi - rest_max > first and hi >= rest_max) first = hi - rest_max;
+        if (rest_max != inf and hi >= rest_max and hi - rest_max > first) first = hi - rest_max;
         var last = hi - rest_min;
         if (h.max_len != inf) last = @min(last, lo + h.max_len);
         if (first > last) return false;
