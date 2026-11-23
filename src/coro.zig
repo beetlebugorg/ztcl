@@ -10,7 +10,7 @@
 //! coroutine runs, so the parser and `expr` have room below the check.
 //! The stacks come from the arena, so the memory limit counts them.
 //!
-//! The switch exists for x86-64 Linux. On other targets,
+//! The switch exists for x86-64 Linux and arm64 macOS. On other targets,
 //! including WebAssembly, `coroutine` gives an error.
 //!
 //! `tailcall` ends the proc with a private return code. The proc call
@@ -28,7 +28,9 @@ const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
 
-pub const supported = builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux;
+const on_arm = builtin.cpu.arch == .aarch64 and builtin.os.tag == .macos;
+const on_x86 = builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux;
+pub const supported = on_arm or on_x86;
 
 const stack_size: usize = if (builtin.mode == .Debug) 16 << 20 else 1 << 20;
 
@@ -74,10 +76,41 @@ pub const Coro = struct {
 
 // `ztcl_coro_swap(from, to)` saves the registers, stores the stack
 // pointer in `from.*`, and continues on the stack `to`. On a new stack,
-// `ztcl_coro_start` calls the function in `rbp` with the value in `rbx`.
-// Both are exported, so the compiler cannot inline them.
+// `ztcl_coro_start` calls the function in `rbp` with the value in `rbx`
+// on x86-64, and the function in `x20` with the value in `x19` on arm64.
+// Both are exported, so the compiler cannot inline them. The arm64 frame
+// is 160 bytes, so the stack pointer stays 16-byte aligned. It holds x19
+// to x28, x29, x30, and d8 to d15. The routines do not touch x18, which
+// macOS reserves.
 fn swapAsm() callconv(.naked) void {
-    asm volatile (
+    if (on_arm) asm volatile (
+        \\ sub sp, sp, #160
+        \\ stp x19, x20, [sp, #0]
+        \\ stp x21, x22, [sp, #16]
+        \\ stp x23, x24, [sp, #32]
+        \\ stp x25, x26, [sp, #48]
+        \\ stp x27, x28, [sp, #64]
+        \\ stp x29, x30, [sp, #80]
+        \\ stp d8, d9, [sp, #96]
+        \\ stp d10, d11, [sp, #112]
+        \\ stp d12, d13, [sp, #128]
+        \\ stp d14, d15, [sp, #144]
+        \\ mov x9, sp
+        \\ str x9, [x0]
+        \\ mov sp, x1
+        \\ ldp x19, x20, [sp, #0]
+        \\ ldp x21, x22, [sp, #16]
+        \\ ldp x23, x24, [sp, #32]
+        \\ ldp x25, x26, [sp, #48]
+        \\ ldp x27, x28, [sp, #64]
+        \\ ldp x29, x30, [sp, #80]
+        \\ ldp d8, d9, [sp, #96]
+        \\ ldp d10, d11, [sp, #112]
+        \\ ldp d12, d13, [sp, #128]
+        \\ ldp d14, d15, [sp, #144]
+        \\ add sp, sp, #160
+        \\ ret
+    ) else asm volatile (
         \\ pushq %%rbp
         \\ pushq %%rbx
         \\ pushq %%r12
@@ -97,7 +130,11 @@ fn swapAsm() callconv(.naked) void {
 }
 
 fn startAsm() callconv(.naked) void {
-    asm volatile (
+    if (on_arm) asm volatile (
+        \\ mov x0, x19
+        \\ blr x20
+        \\ brk #1
+    ) else asm volatile (
         \\ movq %%rbx, %%rdi
         \\ callq *%%rbp
         \\ ud2
@@ -253,14 +290,24 @@ fn cmdCoroutine(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             .max_native = stack.len / 2,
         },
     };
-    // The first switch pops six registers and returns to the trampoline.
+    // The first switch restores the registers of this frame and returns
+    // to the trampoline.
     const top = std.mem.alignBackward(usize, @intFromPtr(stack.ptr) + stack.len, 16) - 16;
-    const slots: [*]usize = @ptrFromInt(top - 56);
-    @memset(slots[0..8], 0);
-    slots[4] = @intFromPtr(c);
-    slots[5] = @intFromPtr(&entry);
-    slots[6] = if (supported) @intFromPtr(&ztcl_coro_start) else 0;
-    c.sp = top - 56;
+    if (on_arm) {
+        const slots: [*]usize = @ptrFromInt(top - 160);
+        @memset(slots[0..20], 0);
+        slots[0] = @intFromPtr(c); // x19
+        slots[1] = @intFromPtr(&entry); // x20
+        slots[11] = @intFromPtr(&ztcl_coro_start); // x30
+        c.sp = top - 160;
+    } else {
+        const slots: [*]usize = @ptrFromInt(top - 56);
+        @memset(slots[0..8], 0);
+        slots[4] = @intFromPtr(c);
+        slots[5] = @intFromPtr(&entry);
+        slots[6] = if (supported) @intFromPtr(&ztcl_coro_start) else 0;
+        c.sp = top - 56;
+    }
     const command = try a.create(interp.Command);
     command.* = .{ .name = name, .impl = .{ .native = resumeCmd }, .ctx = c };
     try it.commands.put(a, name, command);
