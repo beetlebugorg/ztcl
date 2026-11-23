@@ -9,14 +9,20 @@
 //!
 //! The text check runs before any system call. These names are errors: a
 //! name with a stream (`:`), a separator, a wildcard, or a control
-//! character, a name that ends with a dot or a space, and a device name
-//! with or without an extension. A name with `~` and a digit can be an 8.3 short name, so it
+//! character, a name that ends with a dot or a space, a device name with
+//! or without an extension, and an NTFS metafile name such as `$MFT`. A name with `~` and a digit can be an 8.3 short name, so it
 //! must be byte-equal to the long name on the disk.
 //!
 //! After each open, `GetFinalPathNameByHandleW` gives the real path of
 //! the object, and it must be below the real path of the root. This is
 //! the second check, and it fails closed. A truncate runs after both
 //! checks, so a name that fails a check is never changed.
+//!
+//! One limit needs a process outside the sandbox with write access to the
+//! root. If that process moves a folder out of the root right after
+//! `parentOf` checks it, `mkdirAt`, `removeAt`, or `renameAt` acts in the
+//! moved folder. An open and a stat check the object itself, so they give
+//! an error.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -144,6 +150,14 @@ fn isDevice(name: []const u8) bool {
     return tail.len == 2 and tail[0] == 0xC2 and (tail[1] == 0xB9 or tail[1] == 0xB2 or tail[1] == 0xB3);
 }
 
+/// True for a metafile of NTFS, which exists at the top of a volume.
+fn isMetafile(name: []const u8) bool {
+    for ([_][]const u8{ "$MFT", "$MFTMirr", "$LogFile", "$Volume", "$AttrDef", "$Bitmap", "$Boot", "$BadClus", "$Secure", "$UpCase", "$Extend" }) |m| {
+        if (std.ascii.eqlIgnoreCase(name, m)) return true;
+    }
+    return false;
+}
+
 /// The text check of one name. It makes no system call.
 pub fn nameOk(name: []const u8) bool {
     if (name.len == 0) return false;
@@ -152,7 +166,7 @@ pub fn nameOk(name: []const u8) bool {
     for (name) |c| {
         if (c < 0x20 or std.mem.indexOfScalar(u8, "\\/:*?\"<>|", c) != null) return false;
     }
-    return !isDevice(name);
+    return !isDevice(name) and !isMetafile(name);
 }
 
 /// True when a name can be an 8.3 short name.
@@ -476,7 +490,6 @@ fn parentHandle(p: fsroot.Parent) HANDLE {
 
 /// Deletes the last name. A reparse point is an error.
 pub fn removeAt(p: fsroot.Parent, dir: bool) ?E {
-    _ = dir;
     var buf: [name_cap]u16 = undefined;
     const wide = toWide(p.base, &buf) orelse return .ACCES;
     var h: HANDLE = null;
@@ -485,6 +498,13 @@ pub fn removeAt(p: fsroot.Parent, dir: bool) ?E {
     defer _ = CloseHandle(h);
     if (verified(h, wide)) |e| return e;
     var io: IoStatus = undefined;
+    // As with `unlinkat`, the kind of the object must match the call.
+    var tag: TagInfo = undefined;
+    const kind = NtQueryInformationFile(h, &io, &tag, @sizeOf(TagInfo), class_attribute_tag);
+    if (kind < 0) return ntError(kind);
+    const is_dir = tag.attributes & attr_directory != 0;
+    if (dir and !is_dir) return .NOTDIR;
+    if (!dir and is_dir) return .ISDIR;
     // DELETE, POSIX semantics, and a read-only file too.
     const flags: u32 = 0x1 | 0x2 | 0x10;
     var rc = NtSetInformationFile(h, &io, &flags, 4, class_disposition_ex);
