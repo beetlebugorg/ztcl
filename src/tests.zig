@@ -816,6 +816,27 @@ fn evalStr(it: *tcl.Interp, script: []const u8) ![]const u8 {
     return it.str(try it.eval(script));
 }
 
+test "the list parse cache keeps each read correct" {
+    try check(&.{
+        // Reads of one string, then an append that extends the string.
+        .{ "set s [string repeat {a b } 20]; llength $s; llength $s; append s {c d}; list [llength $s] [lindex $s end]", "42 d" },
+        // A write to a parsed copy leaves the string as it was.
+        .{ "set s [string repeat {a b } 20]; llength $s; llength $s; set t $s; lset t 0 z; list [lindex $s 0] [lindex $t 0]", "a z" },
+        .{ "set s [string repeat {a b } 20]; llength $s; llength $s; lappend s q; list [llength $s] [lindex $s end]", "41 q" },
+        // A bad list gives the error at each read.
+        .{ "set s \"[string repeat {a } 20]\\{\"; catch {llength $s}; catch {llength $s}; llength $s", "!unmatched open brace or quote in list" },
+    });
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.step_limit = 10_000_000;
+    _ = try it.eval("set s [string repeat {x y } 30]; llength $s; llength $s");
+    try it.compact(&.{}, .{});
+    _ = try it.eval("set junk [string repeat {p q r } 30]");
+    try std.testing.expectEqualStrings("60", try evalStr(&it, "llength $s"));
+    try std.testing.expectEqualStrings("y", try evalStr(&it, "lindex $s 59"));
+}
+
 test "compact keeps the commands and returns the memory" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);

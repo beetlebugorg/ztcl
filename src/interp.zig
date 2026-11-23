@@ -538,6 +538,18 @@ pub const Counting = struct {
 
 pub const ReturnCode = enum(u32) { ok = 0, @"error" = 1, @"return" = 2, @"break" = 3, @"continue" = 4, _ };
 
+const list_cache_bits = 4;
+const list_cache_size = 1 << list_cache_bits;
+/// A shorter string parses in about the time of a cache lookup.
+const list_cache_min = 32;
+
+const ListCacheEntry = struct {
+    ptr: ?[*]const u8 = null,
+    len: usize = 0,
+    text: []const u8 = &.{},
+    items: ?[]const Value = null,
+};
+
 pub const Interp = struct {
     counter: Counting,
     arena: std.heap.ArenaAllocator,
@@ -593,6 +605,8 @@ pub const Interp = struct {
     /// The scripts and expressions of strings that are not literal words.
     script_cache: std.AutoHashMapUnmanaged(SliceKey, *Script) = .empty,
     expr_cache: std.AutoHashMapUnmanaged(SliceKey, *expr.Node) = .empty,
+    /// The parsed form of strings that a read command sees again.
+    list_cache: [list_cache_size]ListCacheEntry = @splat(.{}),
     /// The stack of command words.
     chunks: std.ArrayList([]Value) = .empty,
     chunk: usize = 0,
@@ -719,6 +733,32 @@ pub const Interp = struct {
             error.OutOfMemory => return error.OutOfMemory,
             error.BadList => return it.fail("unmatched open brace or quote in list", .{}),
         };
+    }
+
+    /// The elements of `v` for a command that only reads them. A string
+    /// that comes again at the same address has a cached parse. The
+    /// entry has its own copy of the text, and a compare with that copy
+    /// guards each hit. The first use of a string makes no copy.
+    pub fn readList(it: *Interp, v: Value) Error![]const Value {
+        if (v == .list) return v.list.items();
+        if (v != .str or v.str.len < list_cache_min) return it.list(v);
+        const s = v.str;
+        const h = (@intFromPtr(s.ptr) >> 3 ^ s.len) *% 0x9e3779b97f4a7c15;
+        const e = &it.list_cache[h >> (@bitSizeOf(usize) - list_cache_bits)];
+        if (e.ptr != s.ptr or e.len != s.len) {
+            e.* = .{ .ptr = s.ptr, .len = s.len };
+            return it.list(v);
+        }
+        if (e.items) |items| {
+            if (std.mem.eql(u8, e.text, s)) return items;
+            e.items = null;
+            return it.list(v);
+        }
+        const text = try it.alloc().dupe(u8, s);
+        const items = try it.list(.{ .str = text });
+        e.text = text;
+        e.items = items;
+        return items;
     }
 
     pub fn int(it: *Interp, v: Value) Error!i64 {

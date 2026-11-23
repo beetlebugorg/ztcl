@@ -1148,7 +1148,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             .access => switch (@as(Access, @enumFromInt(i.x))) {
                 .llength => {
                     const v = stack[sp - 1];
-                    const n = if (v == .list) v.list.len else (try it.list(v)).len;
+                    const n = if (v == .list) v.list.len else (try it.readList(v)).len;
                     stack[sp - 1] = .{ .int = @intCast(n) };
                 },
                 .lindex => {

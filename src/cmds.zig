@@ -816,7 +816,7 @@ pub fn cmdLindex(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var idxs = argv[2..];
     if (idxs.len == 1) idxs = try it.list(idxs[0]);
     for (idxs) |iv| {
-        const items = try it.list(cur);
+        const items = try it.readList(cur);
         const i = try index(it, iv, items.len);
         if (i < 0 or i >= items.len) return Value.empty;
         cur = items[@intCast(i)];
@@ -826,7 +826,7 @@ pub fn cmdLindex(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 
 fn cmdLlength(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2) return it.wrongArgs("llength list");
-    return .{ .int = @intCast((try it.list(argv[1])).len) };
+    return .{ .int = @intCast((try it.readList(argv[1])).len) };
 }
 
 pub fn cmdLappend(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
