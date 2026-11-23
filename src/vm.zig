@@ -17,6 +17,7 @@ const expr = @import("expr.zig");
 const value = @import("value.zig");
 const cmds = @import("cmds.zig");
 const dict = @import("dict.zig");
+const more = @import("more.zig");
 
 const Allocator = std.mem.Allocator;
 const Value = value.Value;
@@ -101,6 +102,16 @@ pub const Op = enum(u8) {
     /// Jumps to `b` when the string form of the top of the stack equals
     /// literal `a`. The value stays on the stack.
     str_eq_jump,
+    /// Takes the list on the top of the stack and writes its items to the
+    /// slots of table `a`. The top becomes the list of the items left.
+    lassign,
+    /// `lassign` with no result: the list leaves the stack.
+    lassign_drop,
+    /// `lset` on slot `a` with the index and the value on the stack, for
+    /// command site `b`. The result is the new list.
+    lset,
+    /// `lset` with no result. The cell then owns the list.
+    lset_drop,
 };
 
 pub const Ins = extern struct {
@@ -150,7 +161,7 @@ const inline_names = [_][]const u8{
     "set",     "incr",   "expr",    "if",       "while",   "for",
     "foreach", "return", "break",   "continue", "lappend", "dict",
     "append",  "lindex", "llength", "string",
-    "switch",
+    "switch", "lassign", "lset",
 };
 
 /// The read forms of the `access` instruction.
@@ -266,10 +277,12 @@ const Compiler = struct {
         if (n > 0 and c.label != c.here() and c.colds.items.len > 0) {
             const cold = &c.colds.items[c.colds.items.len - 1];
             const last = &c.ins.items[n - 1];
-            if (cold.back == c.here() and (last.op == .store or last.op == .incr or last.op == .dict_update)) {
+            if (cold.back == c.here() and (last.op == .store or last.op == .incr or last.op == .dict_update or last.op == .lassign or last.op == .lset)) {
                 last.op = switch (last.op) {
                     .store => .store_pop,
                     .incr => .incr_drop,
+                    .lassign => .lassign_drop,
+                    .lset => .lset_drop,
                     else => .dict_update_drop,
                 };
                 cold.drop = true;
@@ -611,6 +624,20 @@ const Compiler = struct {
             return c.compileForeach(cmd);
         } else if (eql(u8, name, "switch")) {
             return c.compileSwitch(cmd);
+        } else if (eql(u8, name, "lassign")) {
+            return c.compileLassign(cmd);
+        } else if (eql(u8, name, "lset")) {
+            // Slots of a proc only: a named cell has no owned form.
+            if (c.named or n != 4 or nameWord(cmd, 1) == null) return false;
+            const base = c.depth;
+            const g = try c.emit(.{ .op = .guard });
+            const start = c.here();
+            const s = try c.slot(nameWord(cmd, 1).?);
+            try c.compileWord(&cmd.words[2]);
+            try c.compileWord(&cmd.words[3]);
+            _ = try c.emit(.{ .op = .lset, .a = s, .b = try c.site(cmd) });
+            try c.closeGuard(cmd, base, g, start);
+            return true;
         } else return false;
 
         const base = c.depth;
@@ -808,6 +835,25 @@ const Compiler = struct {
         const end = c.here();
         c.label = end;
         for (ends.items) |e| c.ins.items[e].a = end;
+        try c.closeGuard(cmd, base, g, start);
+        return true;
+    }
+
+    /// `lassign list name ...` with 1 to 8 literal plain names.
+    fn compileLassign(c: *Compiler, cmd: *Cmd) Error!bool {
+        const n = cmd.words.len;
+        if (n < 3 or n > 10) return false;
+        for (1..n) |k| {
+            if (k > 1 and (nameWord(cmd, k) == null or std.mem.eql(u8, nameWord(cmd, k).?, "tcl_precision"))) return false;
+        }
+        const table = try c.a.alloc(u32, n - 2);
+        for (table, 2..) |*t, k| t.* = try c.slot(nameWord(cmd, k).?);
+        try c.tables.append(c.a, table);
+        const base = c.depth;
+        const g = try c.emit(.{ .op = .guard });
+        const start = c.here();
+        try c.compileWord(&cmd.words[1]);
+        _ = try c.emit(.{ .op = .lassign, .a = @intCast(c.tables.items.len - 1) });
         try c.closeGuard(cmd, base, g, start);
         return true;
     }
@@ -1369,6 +1415,50 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             .jump => {
                 pc = i.a;
                 continue;
+            },
+            .lassign, .lassign_drop => {
+                const table = code.tables[i.a];
+                const items = try it.list(stack[sp - 1]);
+                for (table, 0..) |slot, k| {
+                    const v = if (k < items.len) items[k] else Value.empty;
+                    const cell = try writeCell(named, it, f, code, slot);
+                    if (cell.v == .val) {
+                        cell.v.val = v;
+                    } else if (cell.plainStore()) {
+                        cell.v = .{ .val = v };
+                    } else {
+                        try slowStore(it, code.names[slot], &v);
+                    }
+                }
+                if (i.op == .lassign) {
+                    stack[sp - 1] = try value.newList(it.alloc(), items[@min(items.len, table.len)..]);
+                } else sp -= 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
+            },
+            .lset, .lset_drop => {
+                const cell = f.vars.items[i.a].cell.target();
+                if (try more.lsetOwned(it, cell, stack[sp - 2], stack[sp - 1])) {
+                    if (i.op == .lset) {
+                        const out = cell.v.owned;
+                        cell.v = .{ .val = out };
+                        stack[sp - 2] = out;
+                        sp -= 1;
+                    } else sp -= 2;
+                } else {
+                    const site = code.sites[i.b];
+                    const argv = [4]Value{ site.words[0].kind.lit, site.words[1].kind.lit, stack[sp - 2], stack[sp - 1] };
+                    const r = try more.cmdLset(it, &argv, site);
+                    sp -= 2;
+                    if (i.op == .lset) {
+                        stack[sp] = r;
+                        sp += 1;
+                    }
+                }
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .str_eq_jump => {
                 const top = stack[sp - 1];

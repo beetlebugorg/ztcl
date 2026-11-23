@@ -1560,3 +1560,36 @@ test "switch: the guard and the cases of the general path" {
         .{ "proc t {x} {switch -- $x {a}}; catch {t a} m; set m", "extra switch pattern with no body" },
     });
 }
+
+// ---- lassign and lset as bytecode ----
+
+test "lassign in a proc" {
+    try check(&.{
+        .{ "proc t {} {lassign {1 2 3 4} x y; list $x $y}; t", "1 2" },
+        .{ "proc t {} {set r [lassign {1 2 3 4} x y]; list $x $y $r}; t", "1 2 {3 4}" },
+        .{ "proc t {} {set r [lassign {1} x y z]; list $x $y $z $r}; t", "1 {} {} {}" },
+        .{ "proc t {} {lassign {a b} v(1) w; list [array get v] $w}; t", "{1 a} b" },
+        .{ "proc t {} {upvar 1 g l; lassign {p q} l m; list $l $m}; set g 0; t; set g", "p" },
+        .{ "proc t {} {trace add variable x write {apply {{a b c} {set ::hit 1}}}; lassign {5 6} x y; list $x $y $::hit}; t", "5 6 1" },
+        .{ "proc t {} {lassign {a {b c} d} x y; list $y}; t", "{b c}" },
+        .{ "proc t {} {catch {lassign {a {b} c} x y z} m; set m}; set hit {}; t", "" },
+        .{ "set s \"a \\{b\"; proc t {s} {catch {lassign $s x} m; set m}; t $s", "unmatched open brace in list" },
+        .{ "proc t {} {lassign {1 2} x y}; rename lassign la2; proc lassign {args} {return hijack}; t", "hijack" },
+    });
+}
+
+test "lset in a proc" {
+    try check(&.{
+        .{ "proc t {} {set l {a b c}; lset l 1 Z; lset l end Q; lset l 0 {x y}; set l}; t", "{x y} Z Q" },
+        .{ "proc t {} {set l {a b c}; catch {lset l 5 Z} m; list $l $m}; t", "{a b c} {list index out of range}" },
+        .{ "proc t {} {set l {a b c}; set m [lset l 0 Z]; lset l 1 Y; list $l $m}; t", "{Z Y c} {Z b c}" },
+        .{ "proc t {} {set l {a b c}; set k $l; lset l 0 Z; lset l 1 Y; list $l $k}; t", "{Z Y c} {a b c}" },
+        .{ "set gl {o p}; proc t {} {global gl; lset gl 0 NEW; set gl}; t", "NEW p" },
+        .{ "proc t {} {lset nope 0 x}; catch {t} m; set m", "can't read \"nope\": no such variable" },
+        .{ "proc t {} {set l {a b c}; foreach e $l {lset l 0 X}; set l}; t", "X b c" },
+        .{ "proc t {} {set l {a b c}; set r {}; foreach e $l {lset l 0 X; lappend r $e}; list $r $l}; t", "{a b c} {X b c}" },
+        .{ "proc t {} {set l {a b}; lset l 0 1; lappend l c; lset l 1 2; set l}; t", "1 2 c" },
+        .{ "proc t {} {set l {1 2 3 4}; lset l 0 9; dict set l 5 6; dict incr l 9; set l}; t", "9 3 3 4 5 6" },
+        .{ "proc t {} {set l {a b}; lset l 0 1}; rename lset ls2; proc lset {args} {return hijack}; t", "hijack" },
+    });
+}
