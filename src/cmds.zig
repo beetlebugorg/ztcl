@@ -16,6 +16,7 @@ const regex = @import("regex.zig");
 const ns = @import("ns.zig");
 const ucd = @import("ucd.zig");
 const trace = @import("trace.zig");
+const coro = @import("coro.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
@@ -46,6 +47,7 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     inline for (table) |t| try it.register(t[0], t[1]);
     try @import("mathns.zig").register(it);
     try @import("extra.zig").register(it);
+    try coro.register(it);
 }
 
 /// The direct form of a command site, or `.none`. The site must have a
@@ -530,6 +532,7 @@ fn cmdRename(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     it.epoch += 1;
     if (new.len == 0) {
         try trace.commandEvent(it, kv.value, old, "", 2);
+        coro.commandGone(it, kv.value);
         // The imports of a deleted command go away.
         if (eql(kv.value.name, old)) {
             var gone: std.ArrayList([]const u8) = .empty;
@@ -730,7 +733,7 @@ pub fn runCaught(it: *Interp, script: Error!*interp.Script) Error!Caught {
     }
     if (c.code == 1) {
         // A script cannot catch the end of its step limit or of its memory.
-        if (it.step_limit == 0 or it.overLimit()) return error.TclError;
+        if (it.step_limit == 0 or it.overLimit() or coro.unwinding(it)) return error.TclError;
         c.error_line = it.proc_line;
         try it.finishError();
         c.error_code = it.error_code;
@@ -1955,7 +1958,7 @@ fn namesList(it: *Interp, frame: *interp.Frame, pattern: ?[]const u8, links: boo
     return value.wrapList(it.alloc(), out.items);
 }
 
-const info_names = [_][]const u8{ "args", "body", "cmdcount", "commands", "complete", "default", "exists", "functions", "globals", "level", "library", "loaded", "locals", "nameofexecutable", "patchlevel", "procs", "script", "sharedlibextension", "tclversion", "vars" };
+const info_names = [_][]const u8{ "args", "body", "cmdcount", "commands", "complete", "coroutine", "default", "exists", "functions", "globals", "level", "library", "loaded", "locals", "nameofexecutable", "patchlevel", "procs", "script", "sharedlibextension", "tclversion", "vars" };
 
 fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("info subcommand ?arg ...?");
@@ -1983,6 +1986,10 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (eql(sub, n) and argv.len != 2) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"info {s}\"", .{n});
     }
     if (eql(sub, "cmdcount")) return .{ .int = @bitCast(std.math.maxInt(u64) - it.step_limit) };
+    if (eql(sub, "coroutine")) {
+        if (argv.len != 2) return it.wrongArgs("info coroutine");
+        return coro.current(it);
+    }
     if (eql(sub, "sharedlibextension")) return .{ .str = ".so" };
     if (eql(sub, "library")) {
         return (try it.getVarOpt("::tcl_library")) orelse it.fail("no library has been specified for Tcl", .{});

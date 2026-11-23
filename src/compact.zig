@@ -261,7 +261,8 @@ pub const Copier = struct {
 /// embedder that stay valid: each gets its new address. Any other value
 /// from before the call is invalid after it. `it.result` becomes empty.
 pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
-    if (it.frame != &it.global or it.nest != 0 or it.depth != 0) return error.InterpBusy;
+    // A suspended coroutine has pointers on its native stack.
+    if (it.frame != &it.global or it.nest != 0 or it.depth != 0 or it.coro_count != 0) return error.InterpBusy;
 
     var next = std.heap.ArenaAllocator.init(it.counter.allocator());
     errdefer next.deinit();
@@ -344,6 +345,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.exports = exports;
     it.ns_paths = ns_paths;
     it.script_name = "";
+    it.coro_stacks = .empty;
     it.pending_during = null;
     it.last_during = null;
     it.last_info = Value.empty;

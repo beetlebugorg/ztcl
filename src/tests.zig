@@ -994,3 +994,16 @@ test "traces, upvar to an element, and tcl_precision" {
         .{ "tcl::prefix match {apple banana} b", "banana" },
     });
 }
+
+test "coroutines and tail calls" {
+    if (!@import("coro.zig").supported) return error.SkipZigTest;
+    try check(&.{
+        .{ "proc g {} {set i 0; while 1 {yield [incr i]}}; list [coroutine c g] [c] [c]", "1 2 3" },
+        .{ "proc g {} {yield 1; return 2}; coroutine c g; list [c] [info commands c]", "2 {}" },
+        .{ "proc g {} {set x [yield a]; return $x}; coroutine c g; c hello", "hello" },
+        .{ "catch {yield 1} m; set m", "yield can only be called in a coroutine" },
+        .{ "proc g {} {catch {yield 1}; set ::after 1}; coroutine c g; rename c {}; info exists ::after", "0" },
+        .{ "proc r {n} {r [incr n]}; catch {coroutine c r 0} m; set m", "too many nested evaluations (infinite loop?)" },
+        .{ "proc f {n a} {if {$n == 0} {return $a}; tailcall f [expr {$n-1}] [expr {$a+1}]}; f 5000 0", "5000" },
+    });
+}

@@ -22,6 +22,7 @@ const cmds = @import("cmds.zig");
 const vm = @import("vm.zig");
 const trace = @import("trace.zig");
 const ns_mod = @import("ns.zig");
+const coro = @import("coro.zig");
 pub const Value = value.Value;
 
 /// The return codes of Tcl other than "ok". The result of the
@@ -658,6 +659,14 @@ pub const Interp = struct {
     /// leading "::".
     ns_paths: std.StringHashMapUnmanaged([]const []const u8) = .empty,
 
+    /// The running coroutine, the count of live ones, and free stacks.
+    coro: ?*coro.Coro = null,
+    coro_count: u32 = 0,
+    coro_stacks: std.ArrayList([]u8) = .empty,
+    /// The size of a new chunk of the word stack, in values.
+    word_chunk: usize = chunk_size,
+    /// The command of a pending `tailcall`.
+    tail_words: ?[]const Value = null,
     /// The handler of `namespace unknown` for each namespace.
     ns_unknown: std.StringHashMapUnmanaged(Value) = .empty,
     unknown_depth: u32 = 0,
@@ -990,7 +999,7 @@ pub const Interp = struct {
         if (it.chunks.items.len == 0 or it.top + n > it.chunks.items[it.chunk].len) {
             if (it.chunks.items.len != 0) it.chunk += 1;
             if (it.chunk >= it.chunks.items.len) {
-                try it.chunks.append(it.alloc(), try it.alloc().alloc(Value, @max(chunk_size, n)));
+                try it.chunks.append(it.alloc(), try it.alloc().alloc(Value, @max(it.word_chunk, n)));
             } else if (it.chunks.items[it.chunk].len < n) {
                 it.chunks.items[it.chunk] = try it.alloc().alloc(Value, n);
             }
@@ -1298,12 +1307,40 @@ pub const Interp = struct {
     }
 
     fn callProc(it: *Interp, p: *Proc, argv: []const Value) Error!Value {
-        return it.runProc(p, argv, argv[1..], null);
+        return it.runProc(p, argv, argv[1..], null) catch |e| {
+            if (e == error.TclCustom and it.custom_code == coro.tail_code) return it.runTail();
+            return e;
+        };
+    }
+
+    /// Runs pending tail calls in a loop, in the frame of the caller.
+    noinline fn runTail(it: *Interp) Error!Value {
+        while (true) {
+            const words = it.tail_words.?;
+            it.tail_words = null;
+            if (it.step_limit == 0) return it.fail("step limit reached", .{});
+            it.step_limit -= 1;
+            const name = try it.str(words[0]);
+            const command = it.findCommand(name) orelse &it.missing;
+            const r = switch (command.impl) {
+                .proc => |p| it.runProc(p, words, words[1..], null),
+                .native => |f| f(it, words, null),
+            };
+            if (r) |v| {
+                return v;
+            } else |e| {
+                if (e == error.TclCustom and it.custom_code == coro.tail_code) continue;
+                return e;
+            }
+        }
     }
 
     /// Runs a lambda of `apply`. The frame has all the words of the call.
     pub fn callLambda(it: *Interp, p: *Proc, argv: []const Value) Error!Value {
-        return it.runProc(p, argv, argv[2..], argv[1]);
+        return it.runProc(p, argv, argv[2..], argv[1]) catch |e| {
+            if (e == error.TclCustom and it.custom_code == coro.tail_code) return it.runTail();
+            return e;
+        };
     }
 
     inline fn runProc(it: *Interp, p: *Proc, argv: []const Value, args: []const Value, lambda: ?Value) Error!Value {
