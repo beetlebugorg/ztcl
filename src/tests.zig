@@ -1434,6 +1434,57 @@ test "a child on the shared heap stops at the memory limit of its parent" {
     }
 }
 
+test "compact keeps a string in tcl_precision" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.heap.page_allocator);
+    defer it.deinit();
+    _ = try it.eval("set tcl_precision [string range 66 0 0]; set p [format %d 6]; set tcl_precision $p; unset p");
+    var roots = [_]tcl.Value{};
+    try it.compact(&roots, .{});
+    // Reuse of the freed pages must not change the value.
+    _ = try it.eval("for {set i 0} {$i < 200} {incr i} {set junk [string repeat z 64]}");
+    try std.testing.expectEqualStrings("6", try it.str(try it.eval("set tcl_precision")));
+    try std.testing.expectEqualStrings("3.333333", try it.str(try it.eval("set tcl_precision 7; expr {10.0 / 3}")));
+    try std.testing.expectError(error.TclError, it.eval("set tcl_precision 99"));
+    try std.testing.expectEqualStrings("7", try it.str(try it.eval("set tcl_precision")));
+}
+
+test "compact refuses an interpreter with objects, and the objects stay" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.heap.page_allocator);
+    defer it.deinit();
+    _ = try it.eval("oo::class create C {variable v; constructor {} {set v [string repeat q 40]}; method get {} {return $v}}; C create o");
+    var roots = [_]tcl.Value{};
+    try std.testing.expectError(error.InterpBusy, it.compact(&roots, .{}));
+    try std.testing.expectEqual(@as(usize, 40), (try it.str(try it.eval("o get"))).len);
+    try std.testing.expectEqual(@as(usize, 40), (try it.str(try it.eval("[C new] get"))).len);
+}
+
+test "tcl_precision holds no array" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try std.testing.expectError(error.TclError, it.eval("array set tcl_precision {a 1}"));
+    try std.testing.expectError(error.TclError, it.eval("set tcl_precision(a) 1"));
+    _ = try it.eval("catch {unset tcl_precision}");
+    try std.testing.expectError(error.TclError, it.eval("array set tcl_precision {a 1}"));
+    try std.testing.expectError(error.TclError, it.eval("set tcl_precision(a) 1"));
+    var roots = [_]tcl.Value{};
+    try it.compact(&roots, .{});
+}
+
+test "compact ends each hold" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const v = try it.eval("string repeat h 40");
+    try it.hold(v);
+    var roots = [_]tcl.Value{v};
+    try it.compact(&roots, .{});
+    try std.testing.expectEqual(@as(usize, 0), it.held.items.len);
+    try std.testing.expectEqual(@as(usize, 40), (try it.str(roots[0])).len);
+}
+
 test "the modulo of the smallest integer does not overflow" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);

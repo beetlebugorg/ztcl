@@ -124,7 +124,16 @@ pub const Copier = struct {
             // A compact drops the traces and keeps the value.
             .traced => |t| if (t.precision) {
                 const copy = try c.a.create(@import("trace.zig").Traced);
+                // The value moves with the heap. The script traces go
+                // away, as for each other variable.
                 copy.* = .{ .inner = t.inner, .precision = true };
+                switch (copy.inner) {
+                    .val => |*v| try c.val(v),
+                    .undef => {},
+                    // Each array command on this name fails, and a test
+                    // checks that. The default value is the safe result.
+                    .arr => copy.inner = .{ .val = .{ .int = 0 } },
+                }
                 job.new.v = .{ .traced = copy };
             } else switch (t.inner) {
                 .undef => {},
@@ -262,8 +271,9 @@ pub const Copier = struct {
 /// embedder that stay valid: each gets its new address. Any other value
 /// from before the call is invalid after it. `it.result` becomes empty.
 pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
-    // A suspended coroutine has pointers on its native stack.
-    if (it.frame != &it.global or it.nest != 0 or it.depth != 0 or it.coro_count != 0 or it.children.count() != 0 or it.capabilities != 0) return error.InterpBusy;
+    // A suspended coroutine has pointers on its native stack. The state of
+    // TclOO has no copy routine, so an interpreter with objects stays.
+    if (it.frame != &it.global or it.nest != 0 or it.depth != 0 or it.coro_count != 0 or it.children.count() != 0 or it.capabilities != 0 or it.oo != null) return error.InterpBusy;
 
     var next = Heap.init(it.heap.backing);
     errdefer next.deinit();
@@ -348,6 +358,9 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.script_name = "";
     it.re_memo = .empty;
     it.coro_stacks = .empty;
+    // The address of each held value changes, and the embedder has only
+    // the old one. A value that must stay goes in `roots`.
+    it.held.clearRetainingCapacity();
     it.pending_during = null;
     it.last_during = null;
     it.last_info = Value.empty;
