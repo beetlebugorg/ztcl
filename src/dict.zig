@@ -1,8 +1,16 @@
 //! The `dict` command.
 //!
 //! A dict is a list of keys and values in the order of the first insert,
-//! as in Tcl. There is no hash table yet: a lookup reads the pairs in
-//! order, so a large dict is slow.
+//! as in Tcl. A dict with fewer than 16 keys uses a linear search. A
+//! larger dict has a hash table with open addressing and linear probing.
+//! The table maps the hash of the string form of a key to the position
+//! of the key in the buffer.
+//!
+//! A new key goes after the end of the view when the view ends at the
+//! used part of the buffer. An older view keeps its length, so it stays
+//! the same value, and a lookup for it ignores positions past its end.
+//! The buffer doubles when it is full, so a new key is amortized O(1).
+//! A write to an existing key of a shared dict copies the buffer.
 //!
 //! Subcommands: create, get, exists, set, unset, keys, values, size,
 //! for, merge, incr, lappend, and append.
@@ -18,6 +26,124 @@ const Value = value.Value;
 const Interp = interp.Interp;
 const Error = interp.Error;
 
+/// The item count where a dict starts to use a hash table.
+const index_min = 32;
+
+fn intText(b: *[24]u8, i: i64) []const u8 {
+    return std.fmt.bufPrint(b, "{d}", .{i}) catch unreachable;
+}
+
+fn hashText(s: []const u8) u32 {
+    return @truncate(std.hash.Wyhash.hash(0x7a74636c, s));
+}
+
+/// The hash of the string form of a key. An integer uses no arena.
+fn hashKey(it: *Interp, key: Value) Error!u32 {
+    if (key == .int) {
+        var b: [24]u8 = undefined;
+        return hashText(intText(&b, key.int));
+    }
+    return hashText(try it.str(key));
+}
+
+/// True when two keys have the same string form.
+fn sameKey(it: *Interp, x: Value, y: Value) Error!bool {
+    if (x == .int and y == .int) return x.int == y.int;
+    var bx: [24]u8 = undefined;
+    var by: [24]u8 = undefined;
+    const sx = if (x == .int) intText(&bx, x.int) else try it.str(x);
+    const sy = if (y == .int) intText(&by, y.int) else try it.str(y);
+    return std.mem.eql(u8, sx, sy);
+}
+
+/// The place of a key in a table, or the empty place where it can go.
+/// A long probe uses fuel, so keys with equal hashes cannot run without
+/// a limit.
+fn probe(it: *Interp, slots: []const value.DictSlot, items: []const Value, key: Value, h: u32) Error!usize {
+    const mask = slots.len - 1;
+    var at: usize = h & mask;
+    var n: u32 = 0;
+    while (true) : (at = (at + 1) & mask) {
+        const s = slots[at];
+        if (s.pos == value.DictSlot.empty_pos) return at;
+        if (s.hash == h and try sameKey(it, items[s.pos], key)) return at;
+        n +%= 1;
+        if (n & 63 == 0) try step(it);
+    }
+}
+
+fn newSlots(it: *Interp, want: usize) Error![]value.DictSlot {
+    const cap = std.math.ceilPowerOfTwo(usize, @max(64, want)) catch return error.OutOfMemory;
+    const slots = try it.alloc().alloc(value.DictSlot, cap);
+    @memset(slots, .{ .hash = 0, .pos = value.DictSlot.empty_pos });
+    return slots;
+}
+
+fn checkPos(it: *Interp, n: usize) Error!void {
+    if (n >= value.DictSlot.empty_pos) return it.fail("dictionary is too large", .{});
+}
+
+/// Makes the table of all keys of the marked part of the buffer.
+fn buildIndex(it: *Interp, obj: *value.ListObj) Error!*value.DictIndex {
+    try checkPos(it, obj.dict_len);
+    const items = obj.buf[0..obj.dict_len];
+    const slots = try newSlots(it, items.len);
+    var i: usize = 0;
+    while (i < items.len) : (i += 2) {
+        const h = try hashKey(it, items[i]);
+        slots[try probe(it, slots, items, items[i], h)] = .{ .hash = h, .pos = @intCast(i) };
+    }
+    const idx = try it.alloc().create(value.DictIndex);
+    idx.* = .{ .slots = slots, .count = items.len / 2 };
+    obj.index = idx;
+    return idx;
+}
+
+/// Adds a new key to a table. The table doubles at a load of 3/4.
+fn indexAdd(it: *Interp, idx: *value.DictIndex, h: u32, pos: usize) Error!void {
+    try checkPos(it, pos);
+    if ((idx.count + 1) * 4 > idx.slots.len * 3) {
+        const slots = try newSlots(it, idx.slots.len * 2);
+        const mask = slots.len - 1;
+        for (idx.slots) |s| {
+            if (s.pos == value.DictSlot.empty_pos) continue;
+            var at: usize = s.hash & mask;
+            while (slots[at].pos != value.DictSlot.empty_pos) at = (at + 1) & mask;
+            slots[at] = s;
+        }
+        idx.slots = slots;
+    }
+    const mask = idx.slots.len - 1;
+    var at: usize = h & mask;
+    while (idx.slots[at].pos != value.DictSlot.empty_pos) at = (at + 1) & mask;
+    idx.slots[at] = .{ .hash = h, .pos = @intCast(pos) };
+    idx.count += 1;
+}
+
+/// A copy of the table of `from` for a new buffer with the same keys at
+/// the same positions. A table with keys past the view is left out, and
+/// the next lookup makes a new one.
+fn copyIndex(it: *Interp, from: Value, to: *value.ListObj) Error!void {
+    if (!isChecked(from)) return;
+    const obj = from.list.obj;
+    const idx = obj.index orelse return;
+    if (from.list.len != obj.dict_len) return;
+    const copy = try it.alloc().create(value.DictIndex);
+    copy.* = .{ .slots = try it.alloc().dupe(value.DictSlot, idx.slots), .count = idx.count };
+    to.index = copy;
+}
+
+/// The position of a key in a dict. `items` are the pairs of `d`.
+fn lookup(it: *Interp, d: Value, items: []const Value, key: Value) Error!?usize {
+    if (items.len < index_min or !isChecked(d)) return find(it, items, key);
+    const obj = d.list.obj;
+    const idx = obj.index orelse try buildIndex(it, obj);
+    const h = try hashKey(it, key);
+    const s = idx.slots[try probe(it, idx.slots, obj.buf[0..obj.dict_len], key, h)];
+    if (s.pos == value.DictSlot.empty_pos or s.pos >= items.len) return null;
+    return s.pos;
+}
+
 /// The pairs of a dict value, each key one time. A key that comes twice
 /// keeps its first place and its last value.
 fn pairs(it: *Interp, v: Value) Error![]Value {
@@ -28,6 +154,7 @@ fn pairs(it: *Interp, v: Value) Error![]Value {
     }
     const items = try it.list(v);
     if (items.len % 2 != 0) return it.fail("missing value to go with key", .{});
+    if (items.len >= index_min) return pairsLarge(it, items);
     var out: std.ArrayList(Value) = .empty;
     try out.ensureTotalCapacity(it.alloc(), items.len + 2);
     var i: usize = 0;
@@ -42,9 +169,31 @@ fn pairs(it: *Interp, v: Value) Error![]Value {
     return out.allocatedSlice()[0..out.items.len];
 }
 
+/// The same result as `pairs` for a long list, with a temporary table.
+fn pairsLarge(it: *Interp, items: []const Value) Error![]Value {
+    try checkPos(it, items.len);
+    const out = try it.alloc().alloc(Value, items.len + 2);
+    const slots = try newSlots(it, items.len);
+    var n: usize = 0;
+    var i: usize = 0;
+    while (i < items.len) : (i += 2) {
+        const h = try hashKey(it, items[i]);
+        const at = try probe(it, slots, out[0..n], items[i], h);
+        if (slots[at].pos == value.DictSlot.empty_pos) {
+            slots[at] = .{ .hash = h, .pos = @intCast(n) };
+            out[n] = items[i];
+            out[n + 1] = items[i + 1];
+            n += 2;
+        } else {
+            out[slots[at].pos + 1] = items[i + 1];
+        }
+    }
+    return out[0..n];
+}
+
 /// True when the value has the mark of a valid dict.
 fn isChecked(v: Value) bool {
-    return v == .list and v.list.len > 0 and v.list.obj.dict_len == v.list.len;
+    return v == .list and v.list.len > 0 and v.list.len % 2 == 0 and v.list.len <= v.list.obj.dict_len;
 }
 
 /// The pairs for a read. A marked dict gives its items with no copy.
@@ -66,7 +215,7 @@ fn wrapDict(it: *Interp, items: []Value) Error!Value {
 /// or when the value is not an integer for an add.
 pub fn updateOwned(it: *Interp, d: Value, key: Value, by: i64, new: ?Value) Error!bool {
     const items = @constCast(d.list.items());
-    const at = try find(it, items, key) orelse return false;
+    const at = try lookup(it, d, items, key) orelse return false;
     if (new) |v| {
         items[at + 1] = v;
         return true;
@@ -108,42 +257,71 @@ fn find(it: *Interp, items: []const Value, key: Value) Error!?usize {
     return null;
 }
 
+/// The dict `d` with one more pair. The pair goes after the view when
+/// the view ends at the used part of the buffer. Other views stay the
+/// same values. In the other case the pairs go to a new buffer with
+/// twice the room.
+fn appendPair(it: *Interp, d: Value, items: []const Value, key: Value, v: Value) Error!Value {
+    if (isChecked(d)) {
+        const l = d.list;
+        const o = l.obj;
+        if (o.used == l.len and o.dict_len == l.len and l.len + 2 <= o.buf.len) {
+            if (o.index) |idx| try indexAdd(it, idx, try hashKey(it, key), l.len);
+            o.buf[l.len] = key;
+            o.buf[l.len + 1] = v;
+            o.used += 2;
+            o.dict_len += 2;
+            return .{ .list = .{ .obj = o, .len = l.len + 2 } };
+        }
+    }
+    const a = it.alloc();
+    const n = items.len;
+    const buf = try a.alloc(Value, @max(4, n * 2));
+    @memcpy(buf[0..n], items);
+    buf[n] = key;
+    buf[n + 1] = v;
+    const obj = try a.create(value.ListObj);
+    obj.* = .{ .buf = buf, .used = n + 2, .dict_len = n + 2 };
+    try copyIndex(it, d, obj);
+    if (obj.index) |idx| try indexAdd(it, idx, try hashKey(it, key), n);
+    return .{ .list = .{ .obj = obj, .len = n + 2 } };
+}
+
 /// The dict with a value at a path of keys.
 fn setIn(it: *Interp, d: Value, keys: []const Value, v: Value) Error!Value {
-    const items = try pairs(it, d);
-    const at = try find(it, items, keys[0]);
+    const items = try readPairs(it, d);
+    const at = try lookup(it, d, items, keys[0]);
     const inner = if (keys.len == 1) v else try setIn(it, if (at) |i| items[i + 1] else Value.empty, keys[1..], v);
     if (at) |i| {
-        items[i + 1] = inner;
-        return wrapDict(it, items);
+        const out = try it.alloc().dupe(Value, items);
+        out[i + 1] = inner;
+        const r = try wrapDict(it, out);
+        try copyIndex(it, d, r.list.obj);
+        return r;
     }
-    const out = try it.alloc().alloc(Value, items.len + 2);
-    @memcpy(out[0..items.len], items);
-    out[items.len] = keys[0];
-    out[items.len + 1] = inner;
-    return wrapDict(it, out);
+    return appendPair(it, d, items, keys[0], inner);
 }
 
 /// The dict with no value at a path of keys.
 fn unsetIn(it: *Interp, d: Value, keys: []const Value) Error!Value {
     const items = try pairs(it, d);
-    const at = try find(it, items, keys[0]) orelse {
-        if (keys.len == 1) return value.wrapList(it.alloc(), items);
+    const at = try lookup(it, d, items, keys[0]) orelse {
+        if (keys.len == 1) return wrapDict(it, items);
         return it.fail("key \"{s}\" not known in dictionary", .{try it.str(keys[0])});
     };
     if (keys.len > 1) {
         items[at + 1] = try unsetIn(it, items[at + 1], keys[1..]);
-        return value.wrapList(it.alloc(), items);
+        return wrapDict(it, items);
     }
     std.mem.copyForwards(Value, items[at..], items[at + 2 ..]);
-    return value.wrapList(it.alloc(), items[0 .. items.len - 2]);
+    return wrapDict(it, items[0 .. items.len - 2]);
 }
 
 fn getIn(it: *Interp, d: Value, keys: []const Value) Error!Value {
     var cur = d;
     for (keys) |k| {
         const items = try readPairs(it, cur);
-        const at = try find(it, items, k) orelse
+        const at = try lookup(it, cur, items, k) orelse
             return it.fail("key \"{s}\" not known in dictionary", .{try it.str(k)});
         cur = items[at + 1];
     }
@@ -297,13 +475,13 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
     switch (sub) {
         .create => {
             if (args.len % 2 != 0) return it.wrongArgs("dict create ?key value ...?");
-            return value.wrapList(a, try pairs(it, try value.newList(a, args)));
+            return wrapDict(it, try pairs(it, try value.newList(a, args)));
         },
         .get => {
             if (args.len < 1) return it.wrongArgs("dict get dictionary ?key ...?");
             if (args.len == 1) {
-                const items = try pairs(it, args[0]);
-                return value.wrapList(a, items);
+                if (isChecked(args[0])) return args[0];
+                return wrapDict(it, try pairs(it, args[0]));
             }
             return getIn(it, args[0], args[1..]);
         },
@@ -311,11 +489,11 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
             if (args.len < 2) return it.wrongArgs("dict exists dictionary key ?key ...?");
             var cur = args[0];
             for (args[1..]) |k| {
-                const items = pairs(it, cur) catch |e| {
+                const items = readPairs(it, cur) catch |e| {
                     if (e != error.TclError) return e;
                     return .{ .int = 0 };
                 };
-                const at = try find(it, items, k) orelse return .{ .int = 0 };
+                const at = try lookup(it, cur, items, k) orelse return .{ .int = 0 };
                 cur = items[at + 1];
             }
             return .{ .int = 1 };
@@ -351,7 +529,7 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
         },
         .size => {
             if (args.len != 1) return it.wrongArgs("dict size dictionary");
-            return .{ .int = @intCast((try pairs(it, args[0])).len / 2) };
+            return .{ .int = @intCast((try readPairs(it, args[0])).len / 2) };
         },
         .@"for" => {
             if (args.len != 3) return it.wrongArgs("dict for {{keyVarName valueVarName}} dictionary script");
@@ -376,14 +554,14 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
         .merge => {
             var out: std.ArrayList(Value) = .empty;
             for (args) |d| try out.appendSlice(a, try pairs(it, d));
-            return value.wrapList(a, try pairs(it, try value.wrapList(a, out.items)));
+            return wrapDict(it, try pairs(it, try value.wrapList(a, out.items)));
         },
         .incr, .lappend, .append => {
             if (args.len < 2 or (sub == .incr and args.len > 3)) return it.fail("wrong # args: should be \"dict {s} dictVarName key ?value ...?\"", .{name});
             const var_name = try it.str(args[0]);
             const cur = try it.getVarOpt(var_name) orelse Value.empty;
             const items = try readPairs(it, cur);
-            const at = try find(it, items, args[1]);
+            const at = try lookup(it, cur, items, args[1]);
             const old: Value = if (at) |i| items[i + 1] else Value.empty;
             var new: Value = undefined;
             switch (sub) {

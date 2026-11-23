@@ -788,3 +788,26 @@ test "the bytecode: append" {
         .{ "proc f {} {set i 7; append i \"x$i\"; set l [list a b]; append l c; list $i $l}; f", "7x7 {a bc}" },
     });
 }
+
+test "a large dict keeps the order and the value semantics" {
+    try check(&.{
+        // New keys, then reads in the order of the first insert.
+        .{ "set d {}; for {set i 0} {$i < 1000} {incr i} {dict set d k$i $i}; list [dict size $d] [dict get $d k777] [lindex [dict keys $d] 999] [dict exists $d k1000]", "1000 777 k999 0" },
+        // A copy keeps its keys when the first dict gets more keys.
+        .{ "set d {}; for {set i 0} {$i < 100} {incr i} {dict set d $i x}; set c $d; for {} {$i < 200} {incr i} {dict set d $i y}; list [dict size $c] [dict exists $c 150] [dict size $d] [dict exists $d 150]", "100 0 200 1" },
+        // Two copies grow apart from one buffer.
+        .{ "set d {}; for {set i 0} {$i < 40} {incr i} {dict set d $i x}; set a $d; set b $d; dict set a new 1; dict set b new 2; dict set b other 3; list [dict get $a new] [dict get $b new] [dict size $a] [dict size $b] [dict exists $a other]", "1 2 41 42 0" },
+        // An integer key and its string form are one key.
+        .{ "set d {}; for {set i 0} {$i < 40} {incr i} {dict set d $i x}; dict set d [string trim { 7 }] y; list [dict size $d] [dict get $d 7] [dict get $d [expr {3 + 4}]]", "40 y y" },
+        // A key with another text of the same number is a new key.
+        .{ "set d {}; for {set i 0} {$i < 40} {incr i} {dict set d $i x}; dict set d 07 y; list [dict size $d] [dict get $d 7] [dict get $d 07]", "41 x y" },
+        // In a proc: new keys and updates, with a copy in the middle.
+        .{ "proc p {} {set d {}; for {set i 0} {$i < 100} {incr i} {dict set d $i 0; dict incr d $i 5}; set c $d; dict incr d 3 10; dict set d new 1; list [dict get $c 3] [dict get $d 3] [dict size $c] [dict size $d]}; p", "5 15 100 101" },
+        // Remove and insert after a large dict.
+        .{ "set d {}; for {set i 0} {$i < 50} {incr i} {dict set d $i $i}; dict unset d 25; dict set d 25 back; list [dict size $d] [lindex [dict keys $d] end] [dict exists $d 24]", "50 25 1" },
+        // A list with repeated keys becomes a dict with the last value.
+        .{ "set l {}; for {set i 0} {$i < 100} {incr i} {lappend l [expr {$i % 20}] $i}; list [dict size $l] [dict get $l 3] [lindex [dict keys $l] 19]", "20 83 19" },
+        // A list append after a dict view does not change the dict.
+        .{ "set d {}; for {set i 0} {$i < 40} {incr i} {dict set d $i x}; set l $d; lappend l extra; dict set d new 1; list [llength $l] [lindex $l end] [dict size $d] [dict get $d new]", "81 extra 41 1" },
+    });
+}

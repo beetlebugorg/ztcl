@@ -118,9 +118,30 @@ pub const List = struct {
 pub const ListObj = struct {
     buf: []Value,
     used: usize,
-    /// The length of a view that is a valid dict with unique keys.
+    /// The length of the longest view that is a valid dict with unique
+    /// keys. Each shorter view of even length is also a valid dict.
     /// Zero means that no view has this mark.
     dict_len: usize = 0,
+    /// The hash table of the keys in `buf[0..dict_len]`, made at the
+    /// first lookup in a large dict.
+    index: ?*DictIndex = null,
+};
+
+/// One place of a dict hash table: the hash of a key and the position
+/// of the key in the buffer.
+pub const DictSlot = struct {
+    hash: u32,
+    pos: u32,
+
+    pub const empty_pos = std.math.maxInt(u32);
+};
+
+/// An open-addressing table with linear probing. The size is a power of
+/// two. A dict that loses a key gets a new buffer, so there are no
+/// deleted places.
+pub const DictIndex = struct {
+    slots: []DictSlot,
+    count: usize,
 };
 
 /// A new list value that owns a copy of `items`.

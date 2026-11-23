@@ -1312,15 +1312,17 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                         .val => |v| if (v == .list) v.list.obj else null,
                         else => null,
                     };
-                    if (cell.v == .owned) {
+                    const was_owned = cell.v == .owned;
+                    if (was_owned) {
                         const v = cell.v.owned;
                         cell.v = .{ .val = v };
                     }
                     _ = try dictSlow(it, code.sites[i.b], stack[sp - nv .. sp]);
-                    // The general command made a new buffer, and only
-                    // this cell holds it.
+                    // A new buffer has only this cell as a holder. An
+                    // owned buffer that got a new key also has only
+                    // this cell.
                     const now = f.vars.items[i.a].cell.target();
-                    if (now.v == .val and dict.isMarked(now.v.val) and now.v.val.list.obj != old) {
+                    if (now.v == .val and dict.isMarked(now.v.val) and (was_owned or now.v.val.list.obj != old)) {
                         const v = now.v.val;
                         now.v = .{ .owned = v };
                     }
