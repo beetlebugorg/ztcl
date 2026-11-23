@@ -1,0 +1,154 @@
+# The scope of each Tcl 8.6.16 test file: file, scope (in, decide, na),
+# the test count, and the reason. See docs/compatibility.md.
+aaa_exit.test	decide	2	`exit`
+append.test	in	45	language and core commands
+appendComp.test	in	48	language and core commands
+apply.test	in	42	language and core commands
+assemble.test	na	284	Tcl bytecode assembler; ztcl has its own bytecode
+assocd.test	na	11	C API
+async.test	na	12	C API
+autoMkindex.test	decide	11	the library index, needs `file`
+basic.test	in	146	core, partly through the C API
+binary.test	in	717	language and core commands
+case.test	in	15	language and core commands
+chan.test	decide	41	`chan`
+chanio.test	decide	471	channels
+clock.test	decide	8532	`clock`
+cmdAH.test	decide	323	mostly `file` and `encoding`
+cmdIL.test	in	146	language and core commands
+cmdInfo.test	na	12	C API
+cmdMZ.test	in	92	language and core commands
+compExpr-old.test	in	190	language and core commands
+compExpr.test	in	80	language and core commands
+compile.test	in	171	the compiler, through scripts
+concat.test	in	9	language and core commands
+config.test	decide	9	`tcl::pkgconfig`
+coroutine.test	in	59	coroutines
+dcall.test	na	6	C API
+dict.test	in	342	language and core commands
+dstring.test	na	44	C API
+encoding.test	decide	86	`encoding`
+env.test	decide	26	`env`, the host environment
+error.test	in	317	language and core commands
+eval.test	in	12	language and core commands
+event.test	decide	66	`after`, `vwait`, `update`
+exec.test	decide	100	`exec`
+execute.test	in	157	the bytecode engine, through scripts
+expr-old.test	in	460	language and core commands
+expr.test	in	14185	language and core commands
+fCmd.test	decide	256	`file`
+fileName.test	decide	300	`file`, `glob`
+fileSystem.test	decide	137	`file`
+fileSystemEncoding.test	decide	1	`file`, `encoding`
+for-old.test	in	9	language and core commands
+for.test	in	88	language and core commands
+foreach.test	in	43	language and core commands
+format.test	in	266	language and core commands
+get.test	in	22	language and core commands
+history.test	decide	62	`history`
+http.test	decide	75	`http`, `socket`
+http11.test	decide	43	`http`, `socket`
+httpPipeline.test	decide	1996	`http`, `socket`
+httpold.test	decide	32	`http`, `socket`
+if-old.test	in	33	language and core commands
+if.test	in	73	language and core commands
+incr-old.test	in	14	language and core commands
+incr.test	in	66	language and core commands
+indexObj.test	na	45	C API
+info.test	in	266	language and core commands
+init.test	decide	24	library loading, `auto_load`
+interp.test	decide	352	`interp`
+io.test	decide	524	channels
+ioCmd.test	decide	348	channels
+ioTrans.test	decide	106	channel transforms
+iogt.test	decide	17	channel transforms
+join.test	in	10	language and core commands
+lindex.test	in	83	language and core commands
+link.test	na	29	C API
+linsert.test	in	28	language and core commands
+list.test	in	78	language and core commands
+listObj.test	in	47	lists, partly through the C API
+llength.test	in	6	language and core commands
+lmap.test	in	66	language and core commands
+load.test	decide	30	`load`
+lrange.test	in	34	language and core commands
+lrepeat.test	in	12	language and core commands
+lreplace.test	in	1787	language and core commands
+lsearch.test	in	118	language and core commands
+lset.test	in	89	language and core commands
+lsetComp.test	in	19	language and core commands
+macOSXFCmd.test	na	14	macOS only
+macOSXLoad.test	na	0	macOS only
+main.test	decide	67	the `tclsh` main loop, `exec`
+mathop.test	in	349	language and core commands
+misc.test	in	301	language and core commands
+msgcat.test	decide	109	`msgcat` package
+namespace-old.test	in	126	language and core commands
+namespace.test	in	313	language and core commands
+notify.test	na	23	C API
+nre.test	in	28	non-recursive evaluation
+obj.test	na	92	C API
+oo.test	in	306	TclOO
+ooNext2.test	in	62	TclOO
+opt.test	decide	31	`tcl::OptProc` package
+package.test	decide	180	`package`
+parse.test	in	271	the parser, partly through the C API
+parseExpr.test	in	284	the expression parser, partly through the C API
+parseOld.test	in	158	language and core commands
+pid.test	decide	5	`pid`
+pkgMkIndex.test	decide	27	package index, `file`
+platform.test	decide	6	`platform` package
+proc-old.test	in	74	language and core commands
+proc.test	in	38	language and core commands
+pwd.test	decide	3	`pwd`, `cd`
+reg.test	in	1141	regular expressions; most tests use `testregexp`
+regexp.test	in	244	language and core commands
+regexpComp.test	in	179	language and core commands
+registry.test	na	125	Windows only
+rename.test	in	19	language and core commands
+resolver.test	na	10	C API
+result.test	na	26	C API
+safe-stock.test	decide	4	`interp -safe`
+safe.test	decide	102	`interp -safe`
+scan.test	in	181	language and core commands
+security.test	decide	1	`interp`, host access
+set-old.test	in	153	language and core commands
+set.test	in	64	language and core commands
+socket.test	decide	98	`socket`
+source.test	decide	23	`source`
+split.test	in	17	language and core commands
+stack.test	decide	3	host stack limits, `exec`
+string.test	in	634	language and core commands
+stringComp.test	in	279	language and core commands
+stringObj.test	na	75	C API
+subst.test	in	63	language and core commands
+switch.test	in	113	language and core commands
+tailcall.test	in	37	`tailcall`
+tcltest.test	decide	159	the real `tcltest` package
+thread.test	na	52	threads
+timer.test	decide	54	`after`
+tm.test	decide	21	Tcl modules, `file`
+trace.test	in	295	`trace`
+unixFCmd.test	decide	49	`file`
+unixFile.test	decide	7	`file`
+unixForkEvent.test	na	1	needs fork
+unixInit.test	decide	8	`exec` of tclsh
+unixNotfy.test	na	4	threads and the notifier
+unknown.test	in	7	language and core commands
+unload.test	decide	27	`unload`
+uplevel.test	in	57	language and core commands
+upvar.test	in	65	language and core commands
+utf.test	in	498	characters, partly through the C API
+util.test	in	1059	number parsing and output, partly through the C API
+var.test	in	110	language and core commands
+while-old.test	in	15	language and core commands
+while.test	in	46	language and core commands
+winConsole.test	na	1	Windows only
+winDde.test	na	50	Windows only
+winFCmd.test	na	178	Windows only
+winFile.test	na	11	Windows only
+winNotify.test	na	14	Windows only
+winPipe.test	na	56	Windows only
+winTime.test	na	3	Windows only
+word.test	in	50	`tcl_endOfWord` and related procs
+zlib.test	decide	73	`zlib`

@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # A small stand-in for the tcltest package, for the test files of Tcl.
 #
-# Run it before a test file:
-#   ztcl --keep-going tools/tcltest.tcl path/to/tcl/tests/set.test
+# Run it before a test file, and run tools/tcltest-end.tcl after it:
+#   ztcl --keep-going tools/tcltest.tcl path/to/tcl/tests/set.test \
+#       tools/tcltest-end.tcl
 #
-# It has `test` (both forms), `testConstraint`, and `cleanupTests`,
-# which prints the counts. A test with an unknown constraint, a regexp
-# match, or an -output check counts as skipped.
+# It has `test` (both forms), `testConstraint`, `customMatch`, and
+# `cleanupTests`. It checks -output and -errorOutput. The check of the
+# constraints follows the three forms of tcltest: a Tcl expression, an
+# expression of names, and a list of names. A test that cannot run
+# counts as skipped, with the reason in tt_why.
 
 set tt_pass 0
 set tt_fail 0
@@ -28,21 +31,74 @@ proc tcltest::testConstraint {name args} {
     return 0
 }
 
-# The truth of one constraint word: a name, or "!name".
-proc tt_allowed {c} {
+# The value of one named constraint. An unknown name is false.
+proc tt_con {c} {
     global tt_cons
-    set want 1
-    if {[string index $c 0] eq "!"} {
-        set want 0
-        set c [string range $c 1 end]
+    return [expr {[info exists tt_cons($c)] && $tt_cons($c)}]
+}
+
+# Gives the first constraint that stops a test, or an empty string.
+proc tt_blocked {constraints} {
+    global tt_cons
+    if {[string match {*[$\[]*} $constraints]} {
+        if {[catch {uplevel #0 [list expr $constraints]} ok] || !$ok} {
+            return "expr:$constraints"
+        }
+        return {}
     }
-    if {![info exists tt_cons($c)]} { return 0 }
-    if {$tt_cons($c)} { return $want }
-    return [expr {!$want}]
+    if {[regexp {[^.:_a-zA-Z0-9 \n\r\t]} $constraints]} {
+        regsub -all {[.\w]+} $constraints {[tt_con &]} e
+        if {[catch {expr $e} ok] || !$ok} { return "expr:$constraints" }
+        return {}
+    }
+    foreach c $constraints {
+        if {![tt_con $c]} { return $c }
+    }
+    return {}
+}
+
+proc tt_skip {why} {
+    global tt_skip tt_why
+    incr tt_skip
+    if {[info exists tt_why($why)]} { incr tt_why($why) } else { set tt_why($why) 1 }
+}
+
+# The match modes. `customMatch` adds a mode.
+array set tt_match {exact {string equal} glob {string match} regexp {regexp --}}
+proc tcltest::customMatch {mode script} {
+    set ::tt_match($mode) $script
+}
+proc tt_same {mode want got} {
+    global tt_match
+    return [uplevel #0 $tt_match($mode) [list $want $got]]
+}
+
+# Takes the place of `puts` while a test checks its output.
+rename puts tt_puts
+set tt_capture 0
+proc puts {args} {
+    global tt_capture tt_out tt_err
+    if {!$tt_capture} { return [tt_puts {*}$args] }
+    set nl \n
+    if {[lindex $args 0] eq "-nonewline"} {
+        set nl {}
+        set args [lrange $args 1 end]
+    }
+    switch [llength $args] {
+        1 { set ch stdout; set text [lindex $args 0] }
+        2 { lassign $args ch text }
+        default { error {wrong # args: should be "puts ?-nonewline? ?channelId? string"} }
+    }
+    switch -- $ch {
+        stdout { append tt_out $text $nl }
+        stderr { append tt_err $text $nl }
+        default { error "can not find channel named \"$ch\"" }
+    }
+    return
 }
 
 proc tcltest::test {name desc args} {
-    global tt_pass tt_fail tt_skip tt_verbose
+    global tt_pass tt_fail tt_verbose tt_match tt_capture tt_out tt_err
     set constraints {}
     set setup {}
     set cleanup {}
@@ -60,7 +116,8 @@ proc tcltest::test {name desc args} {
                 -result { set result $v }
                 -returnCodes { set codes $v }
                 -match { set match $v }
-                -output - -errorOutput { incr tt_skip; return }
+                -output { set want_out $v }
+                -errorOutput { set want_err $v }
                 default {}
             }
         }
@@ -69,17 +126,24 @@ proc tcltest::test {name desc args} {
     } else {
         lassign $args body result
     }
-    foreach c $constraints {
-        if {![tt_allowed $c]} { incr tt_skip; return }
-    }
-    if {$match ne "exact" && $match ne "glob"} { incr tt_skip; return }
-    if {[catch {uplevel 1 $setup} msg]} {
+    set why [tt_blocked $constraints]
+    if {$why ne ""} { tt_skip $why; return }
+    if {![info exists tt_match($match)]} { tt_skip "match:$match"; return }
+    set tt_out {}
+    set tt_err {}
+    set capture [expr {[info exists want_out] || [info exists want_err]}]
+    set tt_capture $capture
+    set setup_code [catch {uplevel 1 $setup} setup_msg]
+    if {$setup_code == 1} {
+        set tt_capture 0
         incr tt_fail
-        if {$tt_verbose} { puts "FAIL $name: setup: $msg" }
+        if {$tt_verbose} { puts "FAIL $name: setup: $setup_msg" }
+        catch {uplevel 1 $cleanup}
         return
     }
     set code [catch {uplevel 1 $body} actual]
-    catch {uplevel 1 $cleanup}
+    set clean_code [catch {uplevel 1 $cleanup} clean_msg]
+    set tt_capture 0
     set code_ok 0
     foreach c $codes {
         switch -- $c {
@@ -91,12 +155,16 @@ proc tcltest::test {name desc args} {
         }
         if {$c == $code} { set code_ok 1 }
     }
-    if {$match eq "exact"} {
-        set same [string equal $actual $result]
-    } else {
-        set same [string match $result $actual]
+    if {[catch {tt_same $match $result $actual} same]} { set same 0 }
+    set out_ok 1
+    if {[info exists want_out] && [catch {tt_same $match $want_out $tt_out} out_ok]} {
+        set out_ok 0
     }
-    if {$code_ok && $same} {
+    set err_ok 1
+    if {[info exists want_err] && [catch {tt_same $match $want_err $tt_err} err_ok]} {
+        set err_ok 0
+    }
+    if {$code_ok && $same && $out_ok && $err_ok && $clean_code != 1} {
         incr tt_pass
     } else {
         incr tt_fail
@@ -104,6 +172,9 @@ proc tcltest::test {name desc args} {
             puts "FAIL $name: code $code"
             puts "  got:  $actual"
             puts "  want: $result"
+            if {$clean_code == 1} { puts "  cleanup: $clean_msg" }
+            if {!$out_ok} { puts "  output: $tt_out" }
+            if {!$err_ok} { puts "  errorOutput: $tt_err" }
         }
     }
 }
