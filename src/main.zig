@@ -5,7 +5,7 @@
 //! line at a time. The runner reads the files itself; a script has no
 //! command that reads a file.
 //!
-//! `--allow a,b` turns on capabilities (`package`, `interp`). Only the
+//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`). Only the
 //! suite passes it.
 //! `--mem N` sets the memory limit in bytes. The default is 2 GiB.
 //! `--repeat N` runs each file N times in one interpreter. With `--time`,
@@ -24,6 +24,19 @@ fn write(ctx: ?*anyopaque, bytes: []const u8) void {
 
 pub fn main(init: std.process.Init) !void {
     return runWith(init, null);
+}
+
+var host_io: Io = undefined;
+
+fn hostNow(_: ?*anyopaque) i64 {
+    const t = Io.Clock.real.now(host_io);
+    return @intCast(@divFloor(t.toNanoseconds(), 1000));
+}
+
+/// The TZif file of a zone. The clock module checks the name.
+fn hostZone(_: ?*anyopaque, name: []const u8, a: std.mem.Allocator) ?[]const u8 {
+    const path = std.fmt.allocPrint(a, "/usr/share/zoneinfo/{s}", .{name}) catch return null;
+    return Io.Dir.cwd().readFileAlloc(host_io, path, a, .limited(1 << 20)) catch null;
 }
 
 /// Runs the runner. `setup` adds commands to the interpreter: the
@@ -78,6 +91,8 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
                 out.flush() catch {};
                 std.process.exit(2);
             };
+            host_io = io;
+            it.clock_host = .{ .now = hostNow, .zone = hostZone };
             try it.allow(bits);
             continue;
         }

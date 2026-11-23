@@ -80,7 +80,9 @@ The counts are pass / fail / skip for the test file of the command.
 
 ## Optional commands
 
-`package` and `interp` are capabilities. The default interpreter does not have them. An embedder turns them on with `Interp.allow`, and the runner with `--allow package,interp`. A child interpreter has at most the capabilities of its parent, and a safe child has none.
+`package`, `interp`, and `clock` are capabilities. The default interpreter does not have them. An embedder turns them on with `Interp.allow`, and the runner with `--allow package,interp,clock`. A child interpreter has at most the capabilities of its parent, and a safe child has none.
+
+`clock` reads the time and the zone data only through `Interp.clock_host`, a callback of the embedder. Named zones are TZif data from that callback.
 
 `coroutine`, `yield`, `yieldto`, and `tailcall` are core commands. `coroutine` needs a stack switch, which exists for x86-64 Linux. On other targets, including WebAssembly, it gives an error.
 

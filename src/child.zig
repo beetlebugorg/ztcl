@@ -115,6 +115,7 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
     child.output = it.output;
     child.user = it.user;
     child.noise_seed = it.noise_seed;
+    child.clock_host = it.clock_host;
     if (!child.is_safe) try child.allow(it.capabilities);
     const c = try a.create(Child);
     c.* = .{ .name = try a.dupe(u8, name), .it = child };

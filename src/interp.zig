@@ -572,6 +572,7 @@ pub const Counting = struct {
 pub const Capability = enum(u32) {
     package = 1,
     interp = 2,
+    clock = 4,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -687,6 +688,9 @@ pub const Interp = struct {
     tail_words: ?[]const Value = null,
     /// The bits of the capabilities that are on.
     capabilities: u32 = 0,
+    /// The time and zone callbacks of the `clock` capability.
+    clock_host: ?@import("clock.zig").Host = null,
+    clock: @import("clock.zig").State = .{},
     /// The state of the `package` command.
     pkg: @import("pkg.zig").State = .{},
     /// The child interpreters of the `interp` command.
@@ -759,6 +763,7 @@ pub const Interp = struct {
         it.output = keep.output;
         it.user = keep.user;
         it.noise_seed = keep.noise_seed;
+        it.clock_host = keep.clock_host;
         it.parent = keep.parent;
         it.is_safe = keep.is_safe;
         try it.start();
@@ -806,6 +811,7 @@ pub const Interp = struct {
         it.capabilities |= bits;
         if (new & @intFromEnum(Capability.package) != 0) try it.register("package", @import("pkg.zig").cmdPackage);
         if (new & @intFromEnum(Capability.interp) != 0) try it.register("interp", @import("child.zig").cmdInterp);
+        if (new & @intFromEnum(Capability.clock) != 0) try @import("clock.zig").register(it);
     }
 
     pub fn deinit(it: *Interp) void {

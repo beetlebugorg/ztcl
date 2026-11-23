@@ -1038,3 +1038,20 @@ test "a child that deletes itself through an alias stays safe" {
     try std.testing.expectEqualStrings("done", try it.str(try it.eval("c eval {proc p {} {set x [k]; return $x}; p}")));
     try std.testing.expectEqualStrings("0", try it.str(try it.eval("interp exists c")));
 }
+
+fn fixedClock(_: ?*anyopaque) i64 {
+    return 86_400_000_000;
+}
+
+test "clock reads the time only from the host callback" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@intFromEnum(tcl.interp.Capability.clock));
+    _ = it.eval("clock seconds") catch {};
+    try std.testing.expectEqualStrings("the embedder gave no clock", try it.str(it.result));
+    it.clock_host = .{ .now = fixedClock };
+    try std.testing.expectEqualStrings("86400", try it.str(try it.eval("clock seconds")));
+    try std.testing.expectEqualStrings("1970-01-02", try it.str(try it.eval("clock format [clock seconds] -format %Y-%m-%d -gmt 1")));
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {clock format 0 -timezone :../../etc/passwd}")));
+}
