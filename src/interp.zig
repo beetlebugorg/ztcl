@@ -23,6 +23,7 @@ const vm = @import("vm.zig");
 const trace = @import("trace.zig");
 const ns_mod = @import("ns.zig");
 const coro = @import("coro.zig");
+const Heap = @import("heap.zig").Heap;
 pub const Value = value.Value;
 
 /// The return codes of Tcl other than "ok". The result of the
@@ -623,7 +624,7 @@ const ListCacheEntry = struct {
 
 pub const Interp = struct {
     counter: Counting,
-    arena: std.heap.ArenaAllocator,
+    heap: Heap,
     /// The most bytes that the arena can hold. Above the limit, the
     /// next command or loop pass stops the script with an error, and
     /// `catch` cannot catch this error. Call `reset` to free the memory.
@@ -780,8 +781,8 @@ pub const Interp = struct {
     /// Makes an interpreter with the core commands. Call `deinit` to
     /// free all its memory. The interpreter must not move after `init`.
     pub fn init(it: *Interp, gpa: Allocator) Allocator.Error!void {
-        it.* = .{ .counter = .{ .child = gpa }, .arena = undefined };
-        it.arena = std.heap.ArenaAllocator.init(it.counter.allocator());
+        it.* = .{ .counter = .{ .child = gpa }, .heap = undefined };
+        it.heap = Heap.init(it.counter.allocator());
         try it.start();
     }
 
@@ -800,11 +801,11 @@ pub const Interp = struct {
         const caps = it.capabilities;
         defer it.capabilities = caps;
         if (it.points) |s| s.programs = .empty;
-        _ = it.arena.reset(.free_all);
+        it.heap.reset();
         const counter = it.counter;
-        const arena = it.arena;
+        const heap = it.heap;
         const keep = it.*;
-        it.* = .{ .counter = counter, .arena = arena };
+        it.* = .{ .counter = counter, .heap = heap };
         it.mem_limit = keep.mem_limit;
         it.step_limit = keep.step_limit;
         it.max_depth = keep.max_depth;
@@ -891,11 +892,11 @@ pub const Interp = struct {
             @import("proc.zig").abandonAll(it);
             if (it.fs.fd >= 0) _ = std.os.linux.close(it.fs.fd);
         }
-        it.arena.deinit();
+        it.heap.deinit();
     }
 
     pub fn alloc(it: *Interp) Allocator {
-        return it.arena.allocator();
+        return it.heap.allocator();
     }
 
     pub fn register(it: *Interp, name: []const u8, f: NativeFn) Allocator.Error!void {

@@ -24,6 +24,7 @@ const value = @import("value.zig");
 const ns = @import("ns.zig");
 const point = @import("point.zig");
 const Allocator = std.mem.Allocator;
+const Heap = @import("heap.zig").Heap;
 const Value = value.Value;
 const Interp = interp.Interp;
 const Var = interp.Var;
@@ -264,7 +265,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     // A suspended coroutine has pointers on its native stack.
     if (it.frame != &it.global or it.nest != 0 or it.depth != 0 or it.coro_count != 0 or it.children.count() != 0 or it.capabilities != 0) return error.InterpBusy;
 
-    var next = std.heap.ArenaAllocator.init(it.counter.allocator());
+    var next = Heap.init(it.counter.allocator());
     errdefer next.deinit();
     var temp_arena = std.heap.ArenaAllocator.init(it.counter.child);
     defer temp_arena.deinit();
@@ -377,8 +378,8 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.tails = @splat(.{});
     it.next_tail = 0;
     it.epoch +%= 1;
-    const old = it.arena;
-    it.arena = next;
+    const old = it.heap;
+    it.heap = next;
     var dead = old;
     dead.deinit();
 

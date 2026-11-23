@@ -499,12 +499,12 @@ test "a loop body and a braced expr compile once" {
     defer it.deinit();
     _ = try it.eval("proc sum n {set s 0; for {set i 0} {$i < $n} {incr i} {set s [expr {$s + $i}]}; return $s}");
     _ = try it.eval("sum 10");
-    const before = it.arena.queryCapacity();
+    const before = it.heap.bytes;
     const v = try it.eval("sum 20000");
     try std.testing.expectEqual(@as(?i64, 199990000), v.asInt());
     // 20 000 passes add no memory: the words of a command live on a
     // stack, and an integer needs no allocation.
-    try std.testing.expect(it.arena.queryCapacity() - before < 64 * 1024);
+    try std.testing.expect(it.heap.bytes - before < 64 * 1024);
 }
 
 test "try, throw, and the error code" {
