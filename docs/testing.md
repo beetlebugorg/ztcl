@@ -1,0 +1,113 @@
+# Testing and benchmarks
+
+Run each command under a memory cap. On Linux with systemd:
+
+```sh
+systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
+```
+
+## Unit tests
+
+```sh
+zig build test
+```
+
+## The Tcl suite
+
+The test files of the Tcl source measure compatibility. The repository has no copy of them. `tools/fetch-tcl.sh` downloads a release into the ignored folder `.tcl-src/`.
+
+```sh
+zig build
+tools/suite.sh                        # core-8-6-16
+tools/suite.sh -t <tag>               # another Tcl release
+tools/suite.sh -s <tcl source>/tests  # a local folder
+tools/suite.sh set.test expr.test     # some files
+```
+
+`tools/tcltest.tcl` is a small stand-in for the `tcltest` package. A test with an unknown constraint, a regexp match, or an `-output` check counts as skipped.
+
+### Results with Tcl 8.6.16 (`core-8-6-16`)
+
+| File | Pass | Fail | Skip |
+|---|---|---|---|
+| `set.test` | 61 | 2 | 1 |
+| `incr.test` | 61 | 4 | 0 |
+| `if.test` | 72 | 1 | 0 |
+| `while.test` | 45 | 1 | 0 |
+| `for.test` | 60 | 4 | 24 |
+| `foreach.test` | 38 | 5 | 0 |
+| `proc.test` | 20 | 17 | 1 |
+| `uplevel.test` | 40 | 17 | 0 |
+| `upvar.test` | 34 | 23 | 8 |
+| `expr.test` | 14034 | 100 | 49 |
+| `list.test` | 77 | 1 | 0 |
+| `lindex.test` | 37 | 9 | 37 |
+| `llength.test` | 5 | 1 | 0 |
+| `lrange.test` | 30 | 2 | 2 |
+| `linsert.test` | 27 | 1 | 0 |
+| `lreplace.test` | 1787 | 0 | 0 |
+| `lsearch.test` | 109 | 9 | 0 |
+| `join.test` | 7 | 3 | 0 |
+| `split.test` | 14 | 3 | 0 |
+| `concat.test` | 9 | 0 | 0 |
+| `append.test` | 28 | 17 | 0 |
+| `string.test` | 455 | 169 | 10 |
+| `format.test` | 224 | 32 | 10 |
+| `switch.test` | 93 | 20 | 0 |
+| `eval.test` | 11 | 1 | 0 |
+| `parse.test` | 65 | 25 | 181 |
+| `lmap.test` | 55 | 11 | 0 |
+| `apply.test` | 22 | 16 | 4 |
+| `rename.test` | 8 | 3 | 8 |
+| `error.test` | 283 | 19 | 15 |
+| `lset.test` | 0 | 0 | 89 |
+| `namespace.test` | 161 | 149 | 3 |
+| `regexp.test` | 207 | 32 | 5 |
+| `binary.test` | 565 | 72 | 80 |
+| `info.test` | 61 | 188 | 14 |
+| `dict.test` | 291 | 49 | 2 |
+| `scan.test` | 145 | 35 | 1 |
+| **Total** | **19241** | **1041** | **544** |
+
+The largest groups of tests that still fail: `info frame` (about 120), `trace` (about 45), `tcl::prefix` (37), the big integers of `expr` (about 100), `upvar` to an array element, the error codes of the core commands (`ARITH DIVZERO`), `-during` in the options of `try`, and the details of `namespace`.
+
+## Benchmarks
+
+```sh
+zig build bench                                 # the point procs
+python3 -I tools/bench.py --tclsh <path to tclsh>  # the scripts in bench/
+```
+
+`--tclsh` selects the Tcl version. All results below are against Tcl 8.6.16.
+
+Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2026-11-22. `tclsh` is Tcl 8.6.16. Each time is the best of 5 runs of the whole process, in CPU milliseconds (user and system). The machine had other load, and CPU time stays stable under that load.
+
+| Benchmark (`bench/`) | ztcl | tclsh 8.6.16 |
+|---|---|---|
+| `sum.tcl` (1 million `expr` and `incr`) | 26.5 | 58.7 |
+| `fib.tcl` (fib 25, about 250 000 calls) | 16.6 | 51.1 |
+| `nested.tcl` (1000 x 1000, `lappend`, `llength`) | 38.2 | 74.1 |
+| `strbuild.tcl` (500 000 `append`) | 35.2 | 64.0 |
+| `foreach.tcl` (10 passes over 100 000 items) | 19.4 | 33.3 |
+| `dict.tcl` (200 000 `dict incr`, 200 000 `dict get`) | 36.1 | 48.9 |
+
+The warm times are the best of 5 runs of the file in one process, in wall milliseconds:
+
+| Benchmark | ztcl | tclsh 8.6.16 |
+|---|---|---|
+| `sum.tcl` | 25.7 | 56.3 |
+| `fib.tcl` | 15.8 | 48.9 |
+| `nested.tcl` | 31.5 | 75.8 |
+| `strbuild.tcl` | 32.8 | 59.9 |
+| `foreach.tcl` | 17.2 | 28.4 |
+| `dict.tcl` | 35.4 | 46.7 |
+
+The fuzzy skin proc (`zig build bench`):
+
+| Points | Fast path | Slow path |
+|---|---|---|
+| 1 million, a third on the outer wall | 23 ns for each point | 155 ns for each point |
+| 1 million, all on the outer wall | 23 ns for each point | 242 ns for each point |
+| 10 million, all on the outer wall | 23 ns for each point (0.23 s) | 241 ns for each point (2.4 s) |
+
+The slow path uses the bytecode.
