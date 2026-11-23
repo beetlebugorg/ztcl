@@ -211,11 +211,10 @@ fn cmdUplevel(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("uplevel ?level? command ?arg ...?");
     var i: usize = 1;
     var frame = it.frame.parent orelse it.frame;
-    if (argv.len > 2) {
-        if (try it.frameAt(try it.str(argv[1]))) |f| {
-            frame = f;
-            i = 2;
-        }
+    if (try it.frameAt(try it.str(argv[1]))) |f| {
+        if (argv.len == 2) return it.wrongArgs("uplevel ?level? command ?arg ...?");
+        frame = f;
+        i = 2;
     }
     const saved = it.frame;
     const saved_ns = it.ns;
@@ -364,35 +363,56 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     var nocase = false;
     var match_var: ?Value = null;
     var index_var: ?Value = null;
+    var mode_word: ?[]const u8 = null;
     while (i < argv.len) : (i += 1) {
         const s = try it.str(argv[i]);
         if (s.len == 0 or s[0] != '-') break;
         if (eql(s, "--")) {
             i += 1;
             break;
-        } else if (eql(s, "-glob")) {
-            match = .glob;
-        } else if (eql(s, "-exact")) {
-            match = .exact;
-        } else if (eql(s, "-regexp")) {
-            match = .regexp;
-        } else if (eql(s, "-nocase")) {
+        }
+        var opt: []const u8 = s;
+        var hits: usize = 0;
+        for ([_][]const u8{ "-exact", "-glob", "-indexvar", "-matchvar", "-nocase", "-regexp" }) |n| {
+            if (s.len > 1 and std.mem.startsWith(u8, n, s)) {
+                opt = n;
+                hits += 1;
+            }
+        }
+        if (hits != 1) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", .{s});
+        if (eql(opt, "-glob") or eql(opt, "-exact") or eql(opt, "-regexp")) {
+            if (mode_word) |prev| return it.fail("bad option \"{s}\": {s} option already found", .{ s, prev });
+            mode_word = opt;
+            match = if (eql(opt, "-glob")) .glob else if (eql(opt, "-exact")) .exact else .regexp;
+        } else if (eql(opt, "-nocase")) {
             nocase = true;
-        } else if (eql(s, "-matchvar") or eql(s, "-indexvar")) {
+        } else {
             i += 1;
-            if (i >= argv.len) return it.fail("missing variable name argument to {s} option", .{s});
-            if (eql(s, "-matchvar")) match_var = argv[i] else index_var = argv[i];
-        } else return it.fail("bad option \"{s}\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", .{s});
+            if (i >= argv.len) return it.fail("missing variable name argument to {s} option", .{opt});
+            if (eql(opt, "-matchvar")) match_var = argv[i] else index_var = argv[i];
+        }
     }
     if (match != .regexp and match_var != null) return it.fail("-matchvar option requires -regexp option", .{});
     if (match != .regexp and index_var != null) return it.fail("-indexvar option requires -regexp option", .{});
-    if (i >= argv.len) return it.wrongArgs("switch ?-option ...? string ?pattern body ... ?default body?");
+    if (i + 1 >= argv.len) return it.wrongArgs("switch ?-option ...? string ?pattern body ...? ?default body?");
     const subject = try it.str(argv[i]);
     i += 1;
     var arms = argv[i..];
     const one_list = arms.len == 1;
     if (one_list) arms = try it.list(arms[0]);
-    if (arms.len == 0 or arms.len % 2 != 0) return it.fail("extra switch pattern with no body", .{});
+    if (arms.len == 0) return it.wrongArgs("switch ?-option ...? string ?pattern body ...? ?default body?");
+    if (arms.len % 2 != 0) {
+        // A comment in a braced body is a common cause of this error.
+        if (one_list) for (arms) |w| {
+            if ((try it.str(w)).len > 0 and (try it.str(w))[0] == '#') {
+                return it.fail("extra switch pattern with no body, this may be due to a comment incorrectly placed outside of a switch body - see the \"switch\" documentation", .{});
+            }
+        };
+        return it.fail("extra switch pattern with no body", .{});
+    }
+    if (eql(try it.str(arms[arms.len - 1]), "-")) {
+        return it.fail("no body specified for pattern \"{s}\"", .{try it.str(arms[arms.len - 2])});
+    }
     var k: usize = 0;
     while (k < arms.len) : (k += 2) {
         const pat = try it.str(arms[k]);
@@ -1017,7 +1037,7 @@ pub fn cmdLappend(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const cur = try it.getVarOpt(name) orelse Value.empty;
     var l = cur.toList(it.alloc()) catch |e| switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
-        error.BadList => return it.fail("unmatched open brace or quote in list", .{}),
+        error.BadList => return it.listError(cur),
     };
     for (argv[2..]) |v| l = try l.append(it.alloc(), v);
     const out: Value = .{ .list = l };

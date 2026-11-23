@@ -797,7 +797,7 @@ pub const Interp = struct {
     }
 
     /// The error of a value that is not a list.
-    fn listError(it: *Interp, v: Value) Error {
+    pub fn listError(it: *Interp, v: Value) Error {
         const f = value.listFault(try it.str(v)) orelse return it.fail("unmatched open brace or quote in list", .{});
         return switch (f.kind) {
             .brace => it.failCode("TCL VALUE LIST BRACE", "unmatched open brace in list", .{}),
@@ -1714,14 +1714,14 @@ pub const Interp = struct {
     /// Returns null when the word is not a level.
     pub fn frameAt(it: *Interp, spec: []const u8) Error!?*Frame {
         var target: u32 = undefined;
-        if (spec.len > 1 and spec[0] == '#') {
-            target = std.fmt.parseInt(u32, spec[1..], 10) catch return null;
+        if (spec.len > 0 and spec[0] == '#') {
+            target = std.fmt.parseInt(u32, spec[1..], 10) catch return it.fail("bad level \"{s}\"", .{spec});
             if (target > it.frame.level) return it.fail("bad level \"{s}\"", .{spec});
-        } else {
-            const up = std.fmt.parseInt(u32, spec, 10) catch return null;
+        } else if (spec.len > 0 and std.ascii.isDigit(spec[0])) {
+            const up = std.fmt.parseInt(u32, spec, 10) catch return it.fail("bad level \"{s}\"", .{spec});
             if (up > it.frame.level) return it.fail("bad level \"{s}\"", .{spec});
             target = it.frame.level - up;
-        }
+        } else return null;
         var f = it.frame;
         while (f.level > target) f = f.parent.?;
         return f;

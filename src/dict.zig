@@ -593,7 +593,7 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
                 .lappend => {
                     var l = old.toList(a) catch |e| switch (e) {
                         error.OutOfMemory => return error.OutOfMemory,
-                        error.BadList => return it.fail("unmatched open brace or quote in list", .{}),
+                        error.BadList => return it.listError(old),
                     };
                     for (args[2..]) |v| l = try l.append(a, v);
                     new = .{ .list = l };
