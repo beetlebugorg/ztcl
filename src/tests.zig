@@ -1017,6 +1017,16 @@ test "the optional commands are absent by default" {
     }
 }
 
+test "package provides Tcl at the patch level" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@intFromEnum(tcl.interp.Capability.package));
+    try std.testing.expectEqualStrings("1 1 1", try it.str(try it.eval(
+        \\list [expr {[package require Tcl 8.6] eq $tcl_patchLevel}] [catch {package require Tcl 9}] [expr {"Tcl" in [package names]}]
+    )));
+}
+
 test "a child has no more capabilities than its parent" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);

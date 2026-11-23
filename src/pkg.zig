@@ -20,6 +20,8 @@ pub const Pkg = struct {
 };
 
 pub const State = struct {
+    /// True after the first `package` call provides `Tcl`.
+    tcl_provided: bool = false,
     table: std.StringArrayHashMapUnmanaged(*Pkg) = .empty,
     unknown: ?Value = null,
     prefer_latest: bool = false,
@@ -188,8 +190,18 @@ fn require(it: *Interp, name: []const u8, reqs: []const Value, exact: bool) Erro
     }
 }
 
+/// Provides the package `Tcl` once, at the patch level of the interpreter.
+/// A script can forget it after that, as in Tcl.
+fn provideTcl(it: *Interp) Error!void {
+    if (it.pkg.tcl_provided) return;
+    it.pkg.tcl_provided = true;
+    const level = it.getVar("::tcl_patchLevel") catch Value{ .str = "8.6.16" };
+    (try entry(it, "Tcl")).version = try it.alloc().dupe(u8, try it.str(level));
+}
+
 pub fn cmdPackage(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("package option ?arg ...?");
+    try provideTcl(it);
     const a = it.alloc();
     const word = try it.str(argv[1]);
     const names = [_][]const u8{ "forget", "ifneeded", "names", "prefer", "present", "provide", "require", "unknown", "vcompare", "versions", "vsatisfies" };
