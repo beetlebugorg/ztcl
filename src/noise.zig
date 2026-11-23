@@ -124,41 +124,63 @@ inline fn cellV(f: F) I {
     return @intFromFloat(@select(f64, f < @as(F, @splat(2e9)), lo, zero));
 }
 
+/// The corner hashes of the last 4 points. A path moves in small steps,
+/// so the next 4 points are often in the same cells, and the hashes
+/// stay valid. A hash depends only on the seed and the cell.
+const Corners = struct {
+    valid: bool = false,
+    xi: I = undefined,
+    yi: I = undefined,
+    zi: I = undefined,
+    h: [8]U = undefined,
+
+    inline fn update(c: *Corners, seed: u32, xi: I, yi: I, zi: I) void {
+        if (c.valid and @reduce(.And, (xi ^ c.xi) | (yi ^ c.yi) | (zi ^ c.zi) == @as(I, @splat(0)))) return;
+        c.valid = true;
+        c.xi = xi;
+        c.yi = yi;
+        c.zi = zi;
+        const step: I = @splat(1);
+        const s: U = @splat(seed);
+        const x0 = widen(xi);
+        const x1 = widen(xi +% step);
+        const y0 = widen(yi);
+        const y1 = widen(yi +% step);
+        const z0 = widen(zi);
+        const z1 = widen(zi +% step);
+        const hx0 = mixV(s, x0, 0x8da6b343);
+        const hx1 = mixV(s, x1, 0x8da6b343);
+        const h00 = mixV(hx0, y0, 0xd8163841);
+        const h10 = mixV(hx1, y0, 0xd8163841);
+        const h01 = mixV(hx0, y1, 0xd8163841);
+        const h11 = mixV(hx1, y1, 0xd8163841);
+        const k: u32 = 0xcb1ab31f;
+        c.h = .{
+            mixV(h00, z0, k), mixV(h10, z0, k), mixV(h01, z0, k), mixV(h11, z0, k),
+            mixV(h00, z1, k), mixV(h10, z1, k), mixV(h01, z1, k), mixV(h11, z1, k),
+        };
+    }
+};
+
 /// `noise3` for 4 points at once. Each lane does the operations of
 /// `noise3` in the same order, so the bits are equal.
-fn noise3V(seed: u32, x: F, y: F, z: F) F {
+inline fn noise3V(corners: *Corners, seed: u32, x: F, y: F, z: F) F {
     const one: F = @splat(1);
     const flx = @floor(x);
     const fly = @floor(y);
     const flz = @floor(z);
-    const xi = cellV(flx);
-    const yi = cellV(fly);
-    const zi = cellV(flz);
+    corners.update(seed, cellV(flx), cellV(fly), cellV(flz));
+    const h = &corners.h;
     const fx = x - flx;
     const fy = y - fly;
     const fz = z - flz;
     const u = fadeV(fx);
     const v = fadeV(fy);
     const w = fadeV(fz);
-    const step: I = @splat(1);
-    const s: U = @splat(seed);
-    const x0 = widen(xi);
-    const x1 = widen(xi +% step);
-    const y0 = widen(yi);
-    const y1 = widen(yi +% step);
-    const z0 = widen(zi);
-    const z1 = widen(zi +% step);
-    const hx0 = mixV(s, x0, 0x8da6b343);
-    const hx1 = mixV(s, x1, 0x8da6b343);
-    const h00 = mixV(hx0, y0, 0xd8163841);
-    const h10 = mixV(hx1, y0, 0xd8163841);
-    const h01 = mixV(hx0, y1, 0xd8163841);
-    const h11 = mixV(hx1, y1, 0xd8163841);
-    const k: u32 = 0xcb1ab31f;
-    const a = lerpV(gradV(mixV(h00, z0, k), fx, fy, fz), gradV(mixV(h10, z0, k), fx - one, fy, fz), u);
-    const b = lerpV(gradV(mixV(h01, z0, k), fx, fy - one, fz), gradV(mixV(h11, z0, k), fx - one, fy - one, fz), u);
-    const c = lerpV(gradV(mixV(h00, z1, k), fx, fy, fz - one), gradV(mixV(h10, z1, k), fx - one, fy, fz - one), u);
-    const d = lerpV(gradV(mixV(h01, z1, k), fx, fy - one, fz - one), gradV(mixV(h11, z1, k), fx - one, fy - one, fz - one), u);
+    const a = lerpV(gradV(h[0], fx, fy, fz), gradV(h[1], fx - one, fy, fz), u);
+    const b = lerpV(gradV(h[2], fx, fy - one, fz), gradV(h[3], fx - one, fy - one, fz), u);
+    const c = lerpV(gradV(h[4], fx, fy, fz - one), gradV(h[5], fx - one, fy, fz - one), u);
+    const d = lerpV(gradV(h[6], fx, fy - one, fz - one), gradV(h[7], fx - one, fy - one, fz - one), u);
     return lerpV(lerpV(a, b, v), lerpV(c, d, v), w);
 }
 
@@ -171,8 +193,9 @@ pub fn noise3Block(out: []f64, xs: []const f64, ys: []const f64, zs: []const f64
 /// `noise3Seed` of each point of a block, with the same bits.
 pub fn noise3BlockSeed(seed: u32, out: []f64, xs: []const f64, ys: []const f64, zs: []const f64) void {
     var i: usize = 0;
+    var corners: Corners = .{};
     while (i + lanes <= out.len) : (i += lanes) {
-        const r = noise3V(seed, xs[i..][0..lanes].*, ys[i..][0..lanes].*, zs[i..][0..lanes].*);
+        const r = noise3V(&corners, seed, xs[i..][0..lanes].*, ys[i..][0..lanes].*, zs[i..][0..lanes].*);
         out[i..][0..lanes].* = r;
     }
     while (i < out.len) : (i += 1) out[i] = noise3Seed(seed, xs[i], ys[i], zs[i]);
@@ -235,6 +258,25 @@ test "the block form equals the scalar form on random and edge inputs" {
                 try std.testing.expectEqual(@as(u64, @bitCast(scalar)), @as(u64, @bitCast(o)));
             }
         }
+    }
+}
+
+test "the block form equals the scalar form on a path in small steps" {
+    const n = 4099;
+    var xs: [n]f64 = undefined;
+    var ys: [n]f64 = undefined;
+    var zs: [n]f64 = undefined;
+    var out: [n]f64 = undefined;
+    for (0..n) |i| {
+        const t: f64 = @floatFromInt(i);
+        // Each cell has many points, and the path crosses cell borders.
+        xs[i] = -3 + t * 0.013;
+        ys[i] = 2 - t * 0.007;
+        zs[i] = @floor(t / 900) * 0.2;
+    }
+    noise3BlockSeed(default_seed, &out, &xs, &ys, &zs);
+    for (out, xs, ys, zs) |o, x, y, z| {
+        try std.testing.expectEqual(@as(u64, @bitCast(noise3(x, y, z))), @as(u64, @bitCast(o)));
     }
 }
 
