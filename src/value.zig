@@ -23,10 +23,18 @@ pub const Value = union(enum) {
     pub const empty: Value = .{ .str = "" };
 
     /// The string form. An int, a double, or a list allocates in `a`.
-    pub fn toStr(v: Value, a: Allocator) Allocator.Error![]const u8 {
+    pub inline fn toStr(v: Value, a: Allocator) Allocator.Error![]const u8 {
+        if (v == .str) return v.str;
+        return v.toStrSlow(a);
+    }
+
+    fn toStrSlow(v: Value, a: Allocator) Allocator.Error![]const u8 {
         return switch (v) {
             .str => |s| s,
-            .int => |i| std.fmt.allocPrint(a, "{d}", .{i}),
+            .int => |i| blk: {
+                var buf: [24]u8 = undefined;
+                break :blk a.dupe(u8, writeInt(&buf, i));
+            },
             .double => |d| formatDouble(a, d),
             .list => |l| listToString(a, l.items()),
         };
@@ -85,6 +93,50 @@ pub const Value = union(enum) {
         };
     }
 };
+
+/// The decimal text of an integer. It writes two digits at each step.
+pub fn writeInt(buf: *[24]u8, i: i64) []const u8 {
+    const pairs = "00010203040506070809" ++ "10111213141516171819" ++
+        "20212223242526272829" ++ "30313233343536373839" ++
+        "40414243444546474849" ++ "50515253545556575859" ++
+        "60616263646566676869" ++ "70717273747576777879" ++
+        "80818283848586878889" ++ "90919293949596979899";
+    var w: usize = buf.len;
+    var u: u64 = @abs(i);
+    while (u >= 100) {
+        const r: usize = @intCast(u % 100);
+        u /= 100;
+        w -= 2;
+        buf[w..][0..2].* = pairs[r * 2..][0..2].*;
+    }
+    if (u >= 10) {
+        w -= 2;
+        buf[w..][0..2].* = pairs[@as(usize, @intCast(u)) * 2..][0..2].*;
+    } else {
+        w -= 1;
+        buf[w] = '0' + @as(u8, @intCast(u));
+    }
+    if (i < 0) {
+        w -= 1;
+        buf[w] = '-';
+    }
+    return buf[w..];
+}
+
+test "writeInt equals the standard format" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var prng = std.Random.DefaultPrng.init(3);
+    const rng = prng.random();
+    var buf: [24]u8 = undefined;
+    const edge = [_]i64{ 0, 1, -1, 9, 10, -10, 99, 100, -100, 101, 999, 1000, std.math.maxInt(i64), std.math.minInt(i64), std.math.minInt(i64) + 1 };
+    for (edge) |v| try std.testing.expectEqualStrings(try std.fmt.allocPrint(a, "{d}", .{v}), writeInt(&buf, v));
+    for (0..5000) |_| {
+        const v = rng.int(i64) >> rng.uintLessThan(u6, 63);
+        try std.testing.expectEqualStrings(try std.fmt.allocPrint(a, "{d}", .{v}), writeInt(&buf, v));
+    }
+}
 
 /// A list value: a view of the first `len` elements of a shared buffer.
 /// An append writes after the view when the view ends at the used part

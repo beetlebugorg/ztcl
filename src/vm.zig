@@ -1036,7 +1036,7 @@ fn appendValues(comptime named: bool, it: *Interp, f: *Frame, code: *const Code,
     var nums: [max_append][24]u8 = undefined;
     var texts: [max_append][]const u8 = undefined;
     for (vals, 0..) |v, k| {
-        texts[k] = if (v == .int) std.fmt.bufPrint(&nums[k], "{d}", .{v.int}) catch unreachable else try it.str(v);
+        texts[k] = if (v == .int) value.writeInt(&nums[k], v.int) else try it.str(v);
     }
     const out: Value = .{ .str = try it.appendStr(found.?.v.val.str, texts[0..vals.len]) };
     found.?.v = .{ .val = out };
@@ -1052,7 +1052,7 @@ fn concatValues(it: *Interp, vals: []const Value) Error!Value {
     var total: usize = 0;
     for (vals, texts, 0..) |v, *t, k| {
         if (v == .int and k < nums.len) {
-            t.* = std.fmt.bufPrint(&nums[k], "{d}", .{v.int}) catch unreachable;
+            t.* = value.writeInt(&nums[k], v.int);
         } else t.* = try it.str(v);
         total += t.len;
     }
