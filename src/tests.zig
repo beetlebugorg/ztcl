@@ -1157,7 +1157,7 @@ test "clock reads the time only from the host callback" {
 }
 
 test "file and channels cannot leave the root folder" {
-    if (!tcl.fsroot.supported) return error.SkipZigTest;
+    if (!tcl.fsroot.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
     const linux = tcl.sys.os;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -1264,6 +1264,174 @@ test "a folder swapped for a symlink during an open stays in the root" {
         }
     }
     try std.testing.expect(opened > 0);
+}
+
+const WinFs = struct {
+    const H = ?*anyopaque;
+    extern "kernel32" fn CreateDirectoryW(name: [*:0]const u16, security: ?*anyopaque) callconv(.winapi) i32;
+    extern "kernel32" fn RemoveDirectoryW(name: [*:0]const u16) callconv(.winapi) i32;
+    extern "kernel32" fn DeleteFileW(name: [*:0]const u16) callconv(.winapi) i32;
+    extern "kernel32" fn CreateFileW(name: [*:0]const u16, access: u32, share: u32, security: ?*anyopaque, disposition: u32, flags: u32, template: H) callconv(.winapi) H;
+    extern "kernel32" fn CloseHandle(h: H) callconv(.winapi) i32;
+    extern "kernel32" fn WriteFile(h: H, buf: [*]const u8, n: u32, put: *u32, over: ?*anyopaque) callconv(.winapi) i32;
+    extern "kernel32" fn ReadFile(h: H, buf: [*]u8, n: u32, got: *u32, over: ?*anyopaque) callconv(.winapi) i32;
+    extern "kernel32" fn DeviceIoControl(h: H, code: u32, in: ?*const anyopaque, in_len: u32, out: ?*anyopaque, out_len: u32, got: *u32, over: ?*anyopaque) callconv(.winapi) i32;
+    extern "kernel32" fn GetFullPathNameW(name: [*:0]const u16, size: u32, buf: [*]u16, file: ?*?[*]u16) callconv(.winapi) u32;
+    extern "kernel32" fn GetShortPathNameW(name: [*:0]const u16, buf: [*]u16, size: u32) callconv(.winapi) u32;
+    extern "kernel32" fn GetFileAttributesW(name: [*:0]const u16) callconv(.winapi) u32;
+    extern "kernel32" fn GetCurrentProcessId() callconv(.winapi) u32;
+    extern "kernel32" fn GetTickCount64() callconv(.winapi) u64;
+    const bad: H = @ptrFromInt(~@as(usize, 0));
+
+    fn w(a: std.mem.Allocator, text: []const u8) ![:0]u16 {
+        return std.unicode.utf8ToUtf16LeAllocZ(a, text);
+    }
+
+    fn writeNew(a: std.mem.Allocator, path: []const u8, text: []const u8) !void {
+        const h = CreateFileW((try w(a, path)).ptr, 0x4000_0000, 0, null, 2, 0x80, null);
+        if (h == bad) return error.TestUnexpectedResult;
+        defer _ = CloseHandle(h);
+        var put: u32 = 0;
+        if (WriteFile(h, text.ptr, @intCast(text.len), &put, null) == 0) return error.TestUnexpectedResult;
+    }
+
+    fn readAll(a: std.mem.Allocator, path: []const u8, buf: []u8) ![]u8 {
+        const h = CreateFileW((try w(a, path)).ptr, 0x8000_0000, 7, null, 3, 0x80, null);
+        if (h == bad) return error.TestUnexpectedResult;
+        defer _ = CloseHandle(h);
+        var got: u32 = 0;
+        if (ReadFile(h, buf.ptr, @intCast(buf.len), &got, null) == 0) return error.TestUnexpectedResult;
+        return buf[0..got];
+    }
+
+    /// A junction at `link` to the absolute folder `target`. It needs no
+    /// privilege.
+    fn junction(a: std.mem.Allocator, link: []const u8, target: []const u8) !void {
+        const wl = try w(a, link);
+        if (CreateDirectoryW(wl.ptr, null) == 0) return error.TestUnexpectedResult;
+        // GENERIC_WRITE, with BACKUP_SEMANTICS and OPEN_REPARSE_POINT.
+        const h = CreateFileW(wl.ptr, 0x4000_0000, 0, null, 3, 0x0200_0000 | 0x0020_0000, null);
+        if (h == bad) return error.TestUnexpectedResult;
+        defer _ = CloseHandle(h);
+        const sub = try w(a, try std.fmt.allocPrint(a, "\\??\\{s}", .{target}));
+        const sub_bytes: u16 = @intCast(sub.len * 2);
+        var data: [2048]u8 align(4) = @splat(0);
+        std.mem.writeInt(u32, data[0..4], 0xA000_0003, .little);
+        std.mem.writeInt(u16, data[4..6], 8 + sub_bytes + 2 + 2, .little);
+        std.mem.writeInt(u16, data[8..10], 0, .little);
+        std.mem.writeInt(u16, data[10..12], sub_bytes, .little);
+        std.mem.writeInt(u16, data[12..14], sub_bytes + 2, .little);
+        std.mem.writeInt(u16, data[14..16], 0, .little);
+        @memcpy(data[16..][0..sub_bytes], std.mem.sliceAsBytes(sub));
+        var got: u32 = 0;
+        if (DeviceIoControl(h, 0x0009_00A4, &data, 8 + 8 + @as(u32, sub_bytes) + 4, null, 0, &got, null) == 0) return error.TestUnexpectedResult;
+    }
+};
+
+test "the Windows jail gives an error for each escape" {
+    const builtin = @import("builtin");
+    if (builtin.os.tag != .windows or !tcl.fsroot.supported) return error.SkipZigTest;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    _ = WinFs.CreateDirectoryW((try WinFs.w(a, ".zig-cache\\tmp")).ptr, null);
+    var full: [1024]u16 = undefined;
+    const name = try std.fmt.allocPrint(a, ".zig-cache\\tmp\\ztcl-jail-{d}-{d}", .{ WinFs.GetCurrentProcessId(), WinFs.GetTickCount64() });
+    const n = WinFs.GetFullPathNameW((try WinFs.w(a, name)).ptr, full.len, &full, null);
+    try std.testing.expect(n > 0 and n < full.len);
+    const base = try std.unicode.utf16LeToUtf8Alloc(a, full[0..n]);
+    const at = struct {
+        fn p(x: std.mem.Allocator, dir: []const u8, rest: []const u8) ![]const u8 {
+            return std.fmt.allocPrint(x, "{s}\\{s}", .{ dir, rest });
+        }
+    }.p;
+    const root = try at(a, base, "root");
+    try std.testing.expect(WinFs.CreateDirectoryW((try WinFs.w(a, base)).ptr, null) != 0);
+    try std.testing.expect(WinFs.CreateDirectoryW((try WinFs.w(a, root)).ptr, null) != 0);
+    try std.testing.expect(WinFs.CreateDirectoryW((try WinFs.w(a, try at(a, root, "sub"))).ptr, null) != 0);
+    try WinFs.writeNew(a, try at(a, base, "secret"), "hidden");
+    const long_name = try at(a, root, "longfilename-for-short.txt");
+    try WinFs.writeNew(a, long_name, "long");
+    // `out` and `sub\up` lead to a folder of this test. `win` is the real
+    // Windows folder, so only the scripts that read go through it.
+    try WinFs.junction(a, try at(a, root, "out"), base);
+    try WinFs.junction(a, try at(a, root, "sub\\up"), base);
+    try WinFs.junction(a, try at(a, root, "win"), "C:\\Windows");
+    defer {
+        _ = WinFs.RemoveDirectoryW((WinFs.w(a, at(a, root, "out") catch "") catch unreachable).ptr);
+        _ = WinFs.RemoveDirectoryW((WinFs.w(a, at(a, root, "sub\\up") catch "") catch unreachable).ptr);
+        _ = WinFs.RemoveDirectoryW((WinFs.w(a, at(a, root, "win") catch "") catch unreachable).ptr);
+    }
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try tcl.fsroot.setRoot(&it, root);
+    try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.file) | @intFromEnum(tcl.interp.Capability.interp));
+    var scripts: std.ArrayList([]const u8) = .empty;
+    try scripts.appendSlice(a, &.{
+        "open ../secret",          "open /../secret",           "open sub/../../secret",   "open out",
+        "open out/secret",         "open sub/up/secret",        "open out/secret w",       "open out/new w",
+        "open win/win.ini",        "open win/system.ini",       "source ../secret",        "source out/secret",
+        "source win/win.ini",      "cd ..",                     "cd out",                  "cd win",
+        "file size ../secret",     "file size out/secret",      "file size win/win.ini",   "file delete ../secret",
+        "file delete out/secret",  "file delete -force out",    "file mkdir ../made",      "file mkdir out/made",
+        "file rename sub ../moved", "file rename sub out/moved", "file copy ../secret here", "file copy out/secret here",
+        "file link -symbolic x C:/Windows",                     "file readlink out",       "glob -directory out *",
+        "open {plain.txt::$DATA} w", "open {plain.txt:hid} w",   "open {..\\..\\x}",         "open {..\\secret}",
+        "open C:x",                "open {C:\\Windows\\win.ini}", "open {\\\\?\\C:\\x}",       "open {\\\\.\\C:}",
+        "open {\\\\localhost\\c$\\x}", "open PROGRA~1",            "open nul",                "open NUL.txt",
+        "open con w",              "open {COM1.log} w",         "open {LPT9} w",           "open {AUX .txt} w",
+        "open {trailing.} w",      "open {trailing } w",        "open {a*b} w",            "open {a?b} w",
+    });
+    // The 8.3 name of the long file, on a volume that makes one.
+    var short: [1024]u16 = undefined;
+    const sn = WinFs.GetShortPathNameW((try WinFs.w(a, long_name)).ptr, &short, short.len);
+    if (sn > 0 and sn < short.len) {
+        const text = try std.unicode.utf16LeToUtf8Alloc(a, short[0..sn]);
+        const leaf = text[(std.mem.lastIndexOfScalar(u8, text, '\\') orelse 0) + 1..];
+        if (std.mem.indexOfScalar(u8, leaf, '~') != null) try scripts.append(a, try std.fmt.allocPrint(a, "open {s}", .{leaf}));
+    }
+    for (scripts.items) |script| {
+        if (it.eval(script)) |_| {
+            std.debug.print("escaped: {s}\n", .{script});
+            return error.TestUnexpectedResult;
+        } else |e| try std.testing.expectEqual(error.TclError, e);
+    }
+    // The file outside still has its text, and no new name exists there.
+    var buf: [16]u8 = undefined;
+    try std.testing.expectEqualStrings("hidden", try WinFs.readAll(a, try at(a, base, "secret"), &buf));
+    for ([_][]const u8{ "made", "moved", "new" }) |gone| {
+        try std.testing.expectEqual(~@as(u32, 0), WinFs.GetFileAttributesW((try WinFs.w(a, try at(a, base, gone))).ptr));
+    }
+    // The junctions are still there.
+    try std.testing.expect(WinFs.GetFileAttributesW((try WinFs.w(a, try at(a, root, "win"))).ptr) & 0x400 != 0);
+    try std.testing.expect(WinFs.GetFileAttributesW((try WinFs.w(a, try at(a, root, "out"))).ptr) & 0x400 != 0);
+    // Work inside the root still runs.
+    for ([_][2][]const u8{
+        .{ "set f [open sub/a.txt w]; puts $f ok; close $f; set f [open sub/a.txt]; set x [gets $f]; close $f; set x", "ok" },
+        .{ "set f [open sub/a.txt a]; puts $f more; close $f; file size sub/a.txt", "8" },
+        .{ "set f [open sub/a.txt r+]; seek $f 3; set x [gets $f]; close $f; set x", "more" },
+        .{ "set f [open sub/a.txt w]; close $f; file size sub/a.txt", "0" },
+        .{ "file rename sub/a.txt sub/b.txt; list [file exists sub/a.txt] [file exists sub/b.txt]", "0 1" },
+        .{ "file copy sub/b.txt sub/c.txt; file isfile sub/c.txt", "1" },
+        .{ "file mkdir sub/d/e; file isdirectory sub/d/e", "1" },
+        .{ "lsort [glob -directory sub -tails *]", "b.txt c.txt d up" },
+        .{ "file type out", "link" },
+        .{ "file delete -force sub/d sub/b.txt sub/c.txt; file exists sub/d", "0" },
+        .{ "set f [open a~1.txt w]; close $f; set x [file exists a~1.txt]; file delete a~1.txt; set x", "1" },
+        .{ "file mkdir sub/k; cd sub/k; set f [open here w]; close $f; cd /; set x [file exists sub/k/here]; file delete -force sub/k; set x", "1" },
+    }) |case| {
+        try std.testing.expectEqualStrings(case[1], try it.str(try it.eval(case[0])));
+    }
+    // A child interpreter has the same jail.
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("interp create kid; set x [kid eval {catch {open ../secret}}]; interp delete kid; set x")));
+    // The test files go away. The junctions go first, so no delete walks them.
+    _ = WinFs.RemoveDirectoryW((try WinFs.w(a, try at(a, root, "out"))).ptr);
+    _ = WinFs.RemoveDirectoryW((try WinFs.w(a, try at(a, root, "sub\\up"))).ptr);
+    _ = WinFs.RemoveDirectoryW((try WinFs.w(a, try at(a, root, "win"))).ptr);
+    _ = WinFs.DeleteFileW((try WinFs.w(a, long_name)).ptr);
+    _ = WinFs.RemoveDirectoryW((try WinFs.w(a, try at(a, root, "sub"))).ptr);
+    _ = WinFs.DeleteFileW((try WinFs.w(a, try at(a, base, "secret"))).ptr);
 }
 
 var fake_ticks: i64 = 0;
