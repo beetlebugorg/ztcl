@@ -1156,13 +1156,13 @@ test "socket accepts only loopback addresses by default" {
     }
     const script =
         \\proc accept {s a p} {set ::peer $a; fileevent $s readable [list echo $s]}
-        \\proc echo {s} {if {[gets $s line] < 0} {close $s; return}; puts $s "got $line"; flush $s}
+        \\proc echo {s} {if {[gets $s line] < 0} {close $s; set ::ended 1; return}; puts $s "got $line"; flush $s}
         \\set srv [socket -server accept 0]
         \\set c [socket 127.0.0.1 [lindex [fconfigure $srv -sockname] 2]]
         \\puts $c hello; flush $c
         \\fileevent $c readable {set reply [gets $c]}
         \\vwait reply
-        \\close $c; update; close $srv
+        \\close $c; vwait ended; close $srv
         \\list $peer $reply [lindex [chan names] end]
     ;
     try std.testing.expectEqualStrings("127.0.0.1 {got hello} stdout", try it.str(try it.eval(script)));
@@ -1271,6 +1271,30 @@ test "socket refuses a blocked address and closes a blocked peer" {
     try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.event) | @intFromEnum(cap.socket) | @intFromEnum(cap.interp));
     fake_ticks = 0;
     it.event_host = .{ .now = fakeNow, .sleep = fakeSleep };
+    // macOS has no 127.0.0.2 without an alias on the loopback device.
+    if (@import("builtin").os.tag != .linux) {
+        it.net = (try tcl.sock.parsePolicy(it.alloc(), "allow=127.0.0.1")).?;
+        try std.testing.expectEqualStrings("1 1", try it.str(try it.eval("list [catch {socket ::1 9}] [catch {socket -server x -myaddr ::1 0}]")));
+        try std.testing.expectEqualStrings("ZTCL NET DENIED", try it.str(try it.eval("catch {socket ::1 9}; set errorCode")));
+        _ = try it.eval(
+            \\set got none
+            \\set srv [socket -server {apply {{s a p} {set ::got $a; close $s}}} -myaddr 127.0.0.1 0]
+            \\set c [socket 127.0.0.1 [lindex [fconfigure $srv -sockname] 2]]
+        );
+        // The policy no longer has the peer, so the server closes it and
+        // the accept command does not run.
+        it.net = (try tcl.sock.parsePolicy(it.alloc(), "allow=::1")).?;
+        const mac_script =
+            \\fconfigure $c -blocking 0
+            \\set n 0
+            \\while {![eof $c] && [incr n] < 20000} {update; read $c}
+            \\set end [eof $c]
+            \\close $c; close $srv
+            \\list $got $end
+        ;
+        try std.testing.expectEqualStrings("none 1", try it.str(try it.eval(mac_script)));
+        return;
+    }
     // The list allows the address 127.0.0.2 and no other address. A
     // name that gives another address is refused: `localhost` gives
     // 127.0.0.1 and ::1.
