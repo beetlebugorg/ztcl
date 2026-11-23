@@ -10,8 +10,9 @@
 # the output.
 #
 # The reference run uses `--gc off`. The test run uses `--gc-stress N`.
-# The exit code, stdout, and steps must be equal. A difference or a crash
-# prints the seed and keeps the program in the folder of -k.
+# The exit code, stdout, and steps must be equal. A run that stops at the
+# memory limit compares only the output that both runs have. A difference
+# or a crash prints the seed and keeps the program in the folder of -k.
 # SPDX-License-Identifier: BSD-2-Clause
 import argparse
 import os
@@ -144,6 +145,13 @@ def main():
             if ref is None or got is None:
                 slow += 1
                 continue
+            # The place of the memory error can differ with the collector
+            # on, so a run that ends there compares its common output.
+            limit = b"too much memory"
+            if limit in ref[1] + ref[3] or limit in got[1] + got[3]:
+                k = min(len(ref[1]), len(got[1]))
+                if ref[1][:k] == got[1][:k] and got[0] in (0, 1):
+                    continue
             if ref[:3] != got[:3]:
                 bad += 1
                 keep = os.path.join(o.k, f"gc-fuzz-{seed}.tcl")

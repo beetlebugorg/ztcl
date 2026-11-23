@@ -262,7 +262,7 @@ pub const Heap = struct {
     }
 
     /// The span of a candidate word during a mark.
-    inline fn lookup(h: *const Heap, addr: usize) ?*Span {
+    pub inline fn lookup(h: *const Heap, addr: usize) ?*Span {
         if (!h.table_on) return h.find(addr);
         const mask = (@as(usize, 1) << @intCast(@bitSizeOf(usize) - @as(usize, h.table_shift))) - 1;
         var i = chunkHash(addr >> chunk_shift) >> h.table_shift;
@@ -452,6 +452,19 @@ inline fn markIn(h: *Heap, s: *Span, w: usize) void {
     h.work.append(h.backing, .{ .ptr = start, .len = if (s.large) s.len else s.size, .stack = is_stack }) catch {
         h.mark_ok = false;
     };
+}
+
+/// True when the block of `addr` has its mark bit. An address outside
+/// the heap counts as marked: such memory does not go away.
+pub fn isMarked(h: *const Heap, addr: usize) bool {
+    if (addr < h.lo or addr >= h.hi) return true;
+    const s = h.lookup(addr) orelse return true;
+    var idx: usize = 0;
+    if (!s.large) {
+        idx = (addr - s.base) / s.size;
+        if (idx >= s.count) return true;
+    }
+    return s.mark[idx >> 6] >> @intCast(idx & 63) & 1 != 0;
 }
 
 /// The bytes of a coroutine stack. A block of this size is scanned as a

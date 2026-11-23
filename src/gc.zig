@@ -33,10 +33,14 @@
 //! default. Native builds can build this mode with `-Dgc-precise=true`,
 //! so the stress tests run it with safety checks.
 //!
-//! The caches that key a value by its address (`script_cache`,
-//! `expr_cache`, the list cache, and the tails of `append`) go away at
-//! each collection. The address of a freed block can come back for
-//! another string.
+//! The address of a freed block can come back for another string, so a
+//! cache that keys a value by its address must not outlive the text.
+//! `script_cache` and `expr_cache` have tables outside the heap. An
+//! entry stays while its text is live, and the mark then keeps its
+//! compiled form. So a collection does not change which run of a script
+//! is its second run, and the step counts stay equal. The list cache and
+//! the tails of `append` hold no state that a script can see. They go
+//! away at each collection.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -159,7 +163,7 @@ pub fn allowed(it: *const Interp) bool {
 /// Precise builds: true when each native frame of the run is clean. A
 /// coroutine holds values on its own native stack, so a live coroutine
 /// stops collection. WebAssembly has no coroutines.
-pub fn isClean(it: *const Interp) bool {
+pub inline fn isClean(it: *const Interp) bool {
     return it.gc_clean_nest == it.nest and it.coro == null and it.coro_count == 0;
 }
 
@@ -185,11 +189,48 @@ fn markInterp(it: *const Interp, h: *Heap) bool {
 
 /// Forgets what an address names. Each cache here compares an address.
 fn dropAddressCaches(it: *Interp) void {
-    it.script_cache.clearRetainingCapacity();
-    it.expr_cache.clearRetainingCapacity();
     it.list_cache = @splat(.{});
     it.tails = @splat(.{});
     it.next_tail = 0;
+}
+
+/// Marks the value of each cache entry whose text is live. A compiled
+/// form can hold the text of another entry, so this runs to a fixed point.
+fn markCaches(root: *Interp, h: *Heap) void {
+    var changed = true;
+    while (changed) {
+        changed = false;
+        if (markCache(root, h)) changed = true;
+        for (root.kids.items) |k| {
+            if (markCache(k, h)) changed = true;
+        }
+    }
+}
+
+fn markCache(it: *Interp, h: *Heap) bool {
+    var changed = false;
+    inline for (.{ &it.script_cache, &it.expr_cache }) |map| {
+        var e = map.iterator();
+        while (e.next()) |x| {
+            const key = x.key_ptr.*;
+            const target = @intFromPtr(x.value_ptr.*);
+            if (key.len == 0 or !heap_mod.isMarked(h, key.ptr) or heap_mod.isMarked(h, target)) continue;
+            heap_mod.markRange(h, @intFromPtr(x.value_ptr), @sizeOf(usize));
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+/// Removes each cache entry whose text is dead.
+fn sweepCaches(it: *Interp, h: *Heap) void {
+    inline for (.{ &it.script_cache, &it.expr_cache }) |map| {
+        var e = map.iterator();
+        while (e.next()) |x| {
+            const key = x.key_ptr.*;
+            if (key.len == 0 or !heap_mod.isMarked(h, key.ptr)) map.removeByPtr(x.key_ptr);
+        }
+    }
 }
 
 /// Marks the roots of the running interpreter in `ctx` and of its tree.
@@ -206,7 +247,12 @@ pub fn markRoots(ctx: *anyopaque, h: *Heap) bool {
     if (native_scan and it.gc_scope != 0) {
         var job: Job = .{ .h = h, .base = it.native_base, .ok = true };
         ztcl_gc_spill(&job, &scanFrom);
-        return job.ok;
+        if (!job.ok) return false;
     }
+    markCaches(root, h);
+    // A work list that could not grow leaves some live text unmarked.
+    if (!h.mark_ok) return false;
+    sweepCaches(root, h);
+    for (root.kids.items) |k| sweepCaches(k, h);
     return true;
 }

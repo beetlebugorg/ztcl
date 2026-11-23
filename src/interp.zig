@@ -729,6 +729,8 @@ pub const Interp = struct {
     native_base: usize = 0,
     output: ?Output = null,
     /// The scripts and expressions of strings that are not literal words.
+    /// The tables of the two caches live outside the heap. The collector
+    /// keeps an entry while its text is live (see `gc.zig`).
     script_cache: std.AutoHashMapUnmanaged(SliceKey, *Script) = .empty,
     expr_cache: std.AutoHashMapUnmanaged(SliceKey, *expr.Node) = .empty,
     /// The parsed form of strings that a read command sees again.
@@ -954,7 +956,7 @@ pub const Interp = struct {
     /// Precise builds: records a call from `vm.exec`. A proc continues
     /// the clean chain. A native command continues it only when
     /// `cmds.isBodyCommand` lists it.
-    pub fn markDirect(it: *Interp, command: *const Command, words: [*]const Value) void {
+    pub inline fn markDirect(it: *Interp, command: *const Command, words: [*]const Value) void {
         if (!gc.isClean(it)) return;
         switch (command.impl) {
             .proc => it.gc_token = true,
@@ -965,7 +967,7 @@ pub const Interp = struct {
     }
 
     /// Precise builds: ends the record of `markDirect`.
-    pub fn clearDirect(it: *Interp) void {
+    pub inline fn clearDirect(it: *Interp) void {
         it.gc_token = false;
         it.gc_direct = 0;
     }
@@ -1053,6 +1055,14 @@ pub const Interp = struct {
         }
     }
 
+    /// Frees the tables of the caches that key a value by its address.
+    pub fn freeCaches(it: *Interp) void {
+        it.script_cache.deinit(it.heap.backing);
+        it.expr_cache.deinit(it.heap.backing);
+        it.script_cache = .empty;
+        it.expr_cache = .empty;
+    }
+
     /// True when this interpreter owns its heap.
     pub fn isRoot(it: *const Interp) bool {
         return it.heap == &it.own_heap;
@@ -1079,6 +1089,7 @@ pub const Interp = struct {
         const caps = it.capabilities;
         defer it.capabilities = caps;
         if (it.points) |s| s.programs = .empty;
+        it.freeCaches();
         if (it.isRoot()) it.own_heap.reset();
         const counter = it.counter;
         const own = it.own_heap;
@@ -1179,6 +1190,7 @@ pub const Interp = struct {
             @import("proc.zig").abandonAll(it);
             if (it.fs.fd >= 0) _ = std.os.linux.close(it.fs.fd);
         }
+        it.freeCaches();
         it.gc_roots.deinit(it.heap.backing);
         it.held.deinit(it.heap.backing);
         it.pins.deinit(it.heap.backing);
@@ -1358,7 +1370,7 @@ pub const Interp = struct {
         } else if (v == .str) {
             // Strings live in the arena and do not change, so the address
             // and the length name the text.
-            try it.script_cache.put(it.alloc(), key, sc);
+            try it.script_cache.put(it.heap.backing, key, sc);
         }
         return sc;
     }
@@ -1377,7 +1389,7 @@ pub const Interp = struct {
         if (slot) |s| {
             s.expr = n;
         } else if (v == .str) {
-            try it.expr_cache.put(it.alloc(), key, n);
+            try it.expr_cache.put(it.heap.backing, key, n);
         }
         return n;
     }
@@ -1393,7 +1405,11 @@ pub const Interp = struct {
     }
 
     pub fn evalScript(it: *Interp, s: *Script) Error!Value {
-        if (it.nest == 0 and it.heap.scopes == 0) return it.hostEntry(evalScript, .{ it, s });
+        const host = it.nest == 0 and it.heap.scopes == 0;
+        if (host) it.heap.scopes = 1;
+        defer if (host) {
+            it.heap.scopes = 0;
+        };
         try it.checkNative();
         if (s.code) |bc| return vm.run(it, bc);
         // A script that runs one time stays on the general path.
@@ -1455,7 +1471,7 @@ pub const Interp = struct {
     }
 
     pub fn evalCmd(it: *Interp, c: *Cmd) Error!Value {
-        if (it.nest == 0) return it.hostEntry(evalCmd, .{ it, c });
+        if (it.nest == 0) return it.hostCmd(c);
         const from_exec = gc.precise and it.gc_from_exec;
         if (gc.precise) it.gc_from_exec = false;
         if (it.step_limit == 0) return it.fail("step limit reached", .{});
@@ -1705,9 +1721,11 @@ pub const Interp = struct {
 
     /// Runs a command with its words. `argv[0]` is the name.
     pub fn call(it: *Interp, command: *Command, argv: []const Value, c: ?*Cmd) Error!Value {
-        if (it.nest == 0) return it.hostEntry(call, .{ it, command, argv, c });
         switch (command.impl) {
-            .native => |f| return f(it, argv, c),
+            .native => |f| {
+                if (it.nest == 0) return it.hostNative(f, argv, c);
+                return f(it, argv, c);
+            },
             .proc => |p| return it.callProc(p, argv),
         }
     }
@@ -1734,11 +1752,25 @@ pub const Interp = struct {
         if (it.heap.scopes == 0) it.gc_scope = 0;
     }
 
-    /// Runs a host call of `evalCmd`, `call`, or `callWords` at nest 0.
-    /// The frames of the host are not scanned, so `gc_scope` stays zero
-    /// and no collection runs. The count stops a nested `eval` from
-    /// starting a scan range below the host frames.
-    pub noinline fn hostEntry(it: *Interp, comptime f: anytype, args: anytype) Error!Value {
+    /// Runs a native command that a host calls at nest 0. The frames of
+    /// the host are not scanned, so `gc_scope` stays zero and no
+    /// collection runs. The count stops a nested `eval` from starting a
+    /// scan range below the host frames. A proc call needs no wrapper:
+    /// `vm.run` and `evalScript` count the entry.
+    noinline fn hostNative(it: *Interp, f: NativeFn, argv: []const Value, c: ?*Cmd) Error!Value {
+        @branchHint(.unlikely);
+        it.native_base = @frameAddress();
+        it.heap.scopes += 1;
+        it.nest += 1;
+        defer {
+            it.nest -= 1;
+            it.heap.scopes -= 1;
+        }
+        return f(it, argv, c);
+    }
+
+    /// Runs `evalCmd` for a host at nest 0, as `hostNative` does.
+    noinline fn hostCmd(it: *Interp, c: *Cmd) Error!Value {
         @branchHint(.cold);
         it.native_base = @frameAddress();
         it.heap.scopes += 1;
@@ -1747,7 +1779,17 @@ pub const Interp = struct {
             it.nest -= 1;
             it.heap.scopes -= 1;
         }
-        return @call(.auto, f, args);
+        return it.evalCmd(c);
+    }
+
+    /// Precise builds: adds one address to the pin list.
+    pub inline fn pin(it: *Interp, w: usize) Allocator.Error!void {
+        if (it.pins.items.len < it.pins.capacity) {
+            it.pins.items.ptr[it.pins.items.len] = w;
+            it.pins.items.len += 1;
+            return;
+        }
+        try it.pins.append(it.heap.backing, w);
     }
 
     /// The items of the list in a plain cell, as a buffer that only the
@@ -1769,7 +1811,6 @@ pub const Interp = struct {
 
     /// Runs a command given as a list of words.
     pub fn callWords(it: *Interp, argv: []const Value) Error!Value {
-        if (it.nest == 0) return it.hostEntry(callWords, .{ it, argv });
         if (argv.len == 0) return Value.empty;
         if (it.step_limit == 0) return it.fail("step limit reached", .{});
         it.step_limit -= 1;
@@ -1830,7 +1871,7 @@ pub const Interp = struct {
             const command = it.findCommand(name) orelse &it.missing;
             const r = switch (command.impl) {
                 .proc => |p| it.runProc(p, words, words[1..], null),
-                .native => |f| f(it, words, null),
+                .native => it.call(command, words, null),
             };
             if (r) |v| {
                 return v;
@@ -1872,7 +1913,7 @@ pub const Interp = struct {
         defer if (pinned) {
             it.pins.items.len = pin_mark;
         };
-        if (pinned) try it.pins.append(it.heap.backing, @intFromPtr(saved_ns.ptr));
+        if (pinned) try it.pin(@intFromPtr(saved_ns.ptr));
         for (p.params, 0..) |prm, i| {
             if (i < args.len) {
                 try it.newLocal(prm.name, args[i]);

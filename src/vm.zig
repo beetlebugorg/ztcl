@@ -1266,7 +1266,11 @@ fn concatValues(it: *Interp, vals: []const Value) Error!Value {
 
 /// Runs the code of a proc in the current frame.
 pub fn run(it: *Interp, code: *const Code) Error!Value {
-    if (it.nest == 0 and it.heap.scopes == 0) return it.hostEntry(run, .{ it, code });
+    const host = it.nest == 0 and it.heap.scopes == 0;
+    if (host) it.heap.scopes = 1;
+    defer if (host) {
+        it.heap.scopes = 0;
+    };
     // Each path into this function that does not set the token ends the
     // clean chain, so a new caller is safe with no change.
     const clean = gc.precise and it.gc_token;
@@ -1282,7 +1286,7 @@ pub fn run(it: *Interp, code: *const Code) Error!Value {
         it.pins.items.len = pin_mark;
     };
     if (clean) {
-        try it.pins.append(it.heap.backing, @intFromPtr(code));
+        try it.pin(@intFromPtr(code));
         it.gc_clean_nest = it.nest;
     }
     const mark = it.stackMark();

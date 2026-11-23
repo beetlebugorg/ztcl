@@ -368,8 +368,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.global.argv = &.{};
     it.free_vars = null;
     it.free_frames = .empty;
-    it.script_cache = .empty;
-    it.expr_cache = .empty;
+    it.freeCaches();
     it.list_cache = @splat(.{});
     it.chunks = .empty;
     it.chunk = 0;

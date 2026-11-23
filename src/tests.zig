@@ -1381,6 +1381,7 @@ test "the block size of a coroutine stack is the size that the mark reads" {
 }
 
 test "a child that runs a coroutine keeps the values of each stack" {
+    if (!tcl.coro.supported) return error.SkipZigTest;
     try gcSame(
         \\set keep [string repeat p 90]
         \\interp create c
@@ -1461,6 +1462,7 @@ test "the collector keeps a value on the word stack and the last result" {
 }
 
 test "the collector keeps the locals of a suspended coroutine" {
+    if (!tcl.coro.supported) return error.SkipZigTest;
     try gcSame(
         \\coroutine g apply {{} {set s [string repeat k 40]; set l [list $s $s]; yield 1; yield $s; return $l}}
         \\list [g] [g]
