@@ -22,5 +22,6 @@
 - Replaces the regular expression engine: ARE, ERE, BRE, and literal syntax, lookahead, and the leftmost-longest match in linear time.
 - Adds the `%n$` forms of `scan` and `format`.
 - Adds the optional capabilities `package` and `interp`, off by default.
+- Adds the optional capabilities `clock`, `channels`, and `file`. `clock` uses a host callback. `file` and channels stay inside one root folder.
 - Adds a test-only suite runner with commands that call real ztcl code.
 - Sets the error codes of Tcl for arithmetic, argument counts, list syntax, and lookups.

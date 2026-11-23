@@ -12,8 +12,8 @@ A sandboxed Tcl interpreter in Zig, with a bytecode VM and a vector path for num
 
 ## Status
 
-- The test suite of Tcl 8.6.16 is the measure of compatibility. Of the 29 990 tests in the 77 files in scope, ztcl passes 26 841 on the suite runner, fails 1 335, and 1 814 are blocked. Of those passes, 1 733 need a test-only command. With the default runner, the pass rate is 83.7 %. [Compatibility](docs/compatibility.md) has the result for each of the 152 test files.
-- On the 37 core test files of Tcl 9.1.0, ztcl passes 9 272 tests, fails 2 821, and skips 530. ztcl follows Tcl 8.6 and makes no claim of Tcl 9 compatibility. [Tcl 8.6 and Tcl 9](docs/tcl9.md) lists the differences and the proposed choices.
+- The test suite of Tcl 8.6.16 is the measure of compatibility. Of the 29 990 tests in the 77 files in scope, ztcl passes 26 851 on the suite runner, fails 1 354, and 1 785 are blocked. Of those passes, 1 733 need a test-only command. With the default runner, the pass rate is 83.8 %. [Compatibility](docs/compatibility.md) has the result for each of the 152 test files.
+- On the 37 core test files of Tcl 9.1.0, ztcl passes 9 273 tests, fails 2 823, and skips 530. ztcl follows Tcl 8.6 and makes no claim of Tcl 9 compatibility. [Tcl 8.6 and Tcl 9](docs/tcl9.md) lists the differences and the proposed choices.
 
 ## Example
 

@@ -49,6 +49,8 @@ tp=0; tf=0; ts=0
 for f in "$@"; do
     # A fresh root folder for each file, outside the repository.
     root=$(mktemp -d "${TMPDIR:-/tmp}/ztcl-suite.XXXXXX") || exit 1
+    # The support scripts of the Tcl tests, as a copy in the root.
+    cp -- "$tests"/*.tcl "$root"/ 2>/dev/null
     raw=$(timeout 60 "$tcl" --max-steps 200000000 --mem 2147483648 --allow package,interp,clock,channels,file --root "$root" --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
     rc=$?
     rm -rf -- "$root"

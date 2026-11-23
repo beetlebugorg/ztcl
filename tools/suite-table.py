@@ -17,7 +17,7 @@ import os
 import sys
 
 here = os.path.dirname(os.path.abspath(__file__))
-NAMES = {"in": "In scope", "decide": "Needs a decision", "na": "Cannot apply"}
+NAMES = {"in": "In scope", "decide": "Optional or host", "na": "Cannot apply"}
 
 scope = {}
 with open(os.path.join(here, "suite-scope.tsv")) as f:
@@ -76,7 +76,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 ## Scopes
 
 - **In scope:** the language and the core commands.
-- **Needs a decision:** tests of commands that the sandbox omits today, such as `file`, `open`, `socket`, `exec`, `clock`, and `interp`.
+- **Optional or host:** tests of commands that the default interpreter omits. `clock`, `package`, `interp`, channels, and `file` are optional capabilities that the suite turns on. `socket` is not built yet. `exec` is never added.
 - **Cannot apply:** tests of the C API through the `test*` commands of the Tcl test binary, tests for Windows or macOS only, and tests of threads.
 
 ## Totals

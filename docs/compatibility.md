@@ -13,17 +13,17 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 ## Scopes
 
 - **In scope:** the language and the core commands.
-- **Needs a decision:** tests of commands that the sandbox omits today, such as `file`, `open`, `socket`, `exec`, `clock`, and `interp`.
+- **Optional or host:** tests of commands that the default interpreter omits. `clock`, `package`, `interp`, channels, and `file` are optional capabilities that the suite turns on. `socket` is not built yet. `exec` is never added.
 - **Cannot apply:** tests of the C API through the `test*` commands of the Tcl test binary, tests for Windows or macOS only, and tests of threads.
 
 ## Totals
 
 | Scope | Files | Total | Pass | Stand-in | Fail | Blocked | Pass rate | Rate with no stand-in |
 |---|---|---|---|---|---|---|---|---|
-| In scope | 77 | 29990 | 26841 | 1733 | 1335 | 1814 | 89.5 % | 83.7 % |
-| Needs a decision | 49 | 15249 | 529 | 0 | 9014 | 5706 | 3.5 % | 3.5 % |
+| In scope | 77 | 29990 | 26851 | 1733 | 1354 | 1785 | 89.5 % | 83.8 % |
+| Optional or host | 49 | 15249 | 9648 | 0 | 1771 | 3830 | 63.3 % | 63.3 % |
 | Cannot apply | 26 | 1178 | 4 | 0 | 283 | 891 | 0.3 % | 0.3 % |
-| **All** | **152** | **46417** | **27374** | **1733** | **10632** | **8411** | **59.0 %** | **55.2 %** |
+| **All** | **152** | **46417** | **36503** | **1733** | **3408** | **6506** | **78.6 %** | **74.9 %** |
 
 ## In scope
 
@@ -36,7 +36,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `binary.test` | 717 | 602 | 0 | 36 | 79 | `bigEndian` 76, `testsetbytearraylength` 2, `win` 1 | language and core commands |
 | `case.test` | 15 | 15 | 0 | 0 | 0 |  | language and core commands |
 | `cmdIL.test` | 146 | 128 | 0 | 12 | 6 | `hasIsoLocale` 2, `memory` 2, `testWithLimit` 1 | language and core commands |
-| `cmdMZ.test` | 92 | 49 | 0 | 16 | 27 | `Unix` 1, unreached 26 | language and core commands |
+| `cmdMZ.test` | 92 | 56 | 0 | 35 | 1 | `Unix` 1 | language and core commands |
 | `compExpr-old.test` | 190 | 183 | 0 | 0 | 7 | `testmathfunctions` 5, `expr:!ieeeFloatingPoint` 1, `longIs32bit` 1 | language and core commands |
 | `compExpr.test` | 80 | 76 | 0 | 0 | 4 | `memory` 2, `testmathfunctions` 2 | language and core commands |
 | `compile.test` | 171 | 95 | 22 | 64 | 12 | `knownBug` 9, `memory` 2, `exec` 1 | the compiler, through scripts |
@@ -49,7 +49,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `expr-old.test` | 460 | 432 | 11 | 12 | 16 | `longIs32bit` 10, `expr:!ieeeFloatingPoint` 3, `testmathfunctions` 3 | language and core commands |
 | `expr.test` | 14185 | 14124 | 2 | 27 | 34 | `longIs32bit` 18, `testmathfunctions` 11, `expr:!ieeeFloatingPoint` 5 | language and core commands |
 | `for-old.test` | 9 | 9 | 0 | 0 | 0 |  | language and core commands |
-| `for.test` | 88 | 60 | 0 | 4 | 24 | `memory` 24 | language and core commands |
+| `for.test` | 88 | 61 | 0 | 3 | 24 | `memory` 24 | language and core commands |
 | `foreach.test` | 43 | 41 | 0 | 2 | 0 |  | language and core commands |
 | `format.test` | 266 | 233 | 0 | 24 | 9 | `longIs32bit` 7, `wideBiggerThanInt` 2 | language and core commands |
 | `get.test` | 22 | 5 | 0 | 1 | 16 | `testgetint` 15, `testdoubleobj` 1 | language and core commands |
@@ -57,7 +57,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `if.test` | 73 | 73 | 0 | 0 | 0 |  | language and core commands |
 | `incr-old.test` | 14 | 12 | 0 | 2 | 0 |  | language and core commands |
 | `incr.test` | 66 | 62 | 0 | 4 | 0 |  | language and core commands |
-| `info.test` | 266 | 97 | 0 | 163 | 6 | `knownBug` 3, unreached 3 | language and core commands |
+| `info.test` | 266 | 97 | 0 | 166 | 3 | `knownBug` 3 | language and core commands |
 | `join.test` | 10 | 10 | 0 | 0 | 0 |  | language and core commands |
 | `lindex.test` | 83 | 80 | 36 | 3 | 0 |  | language and core commands |
 | `linsert.test` | 28 | 28 | 0 | 0 | 0 |  | language and core commands |
@@ -93,7 +93,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `split.test` | 17 | 16 | 0 | 1 | 0 |  | language and core commands |
 | `string.test` | 1266 | 1236 | 618 | 12 | 18 | `testbytestring` 8, `memory` 6, `testindexobj` 2 | language and core commands |
 | `stringComp.test` | 279 | 278 | 0 | 0 | 1 | `memory` 1 | language and core commands |
-| `subst.test` | 63 | 56 | 0 | 6 | 1 | `testbytestring` 1 | language and core commands |
+| `subst.test` | 63 | 57 | 0 | 5 | 1 | `testbytestring` 1 | language and core commands |
 | `switch.test` | 113 | 106 | 0 | 7 | 0 |  | language and core commands |
 | `tailcall.test` | 37 | 20 | 0 | 9 | 8 | `testnrelevels` 8 | `tailcall` |
 | `trace.test` | 295 | 212 | 0 | 66 | 17 | `testcmdtrace` 11, `memory` 3, `testevalobjv` 2 | `trace` |
@@ -102,63 +102,63 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `upvar.test` | 65 | 43 | 0 | 14 | 8 | `testupvar` 8 | language and core commands |
 | `utf.test` | 498 | 123 | 0 | 21 | 354 | `testutfnext` 152, `testutfprev` 103, `testbytestring` 26 | characters, partly through the C API |
 | `util.test` | 2291 | 2123 | 0 | 24 | 144 | `testdoubledigits` 126, `testdstring` 10, `testprint` 6 | number parsing and output, partly through the C API |
-| `var.test` | 110 | 64 | 0 | 26 | 20 | `testsetnoerr` 12, `memory` 3, `testgetvarfullname` 3 | language and core commands |
+| `var.test` | 110 | 65 | 0 | 25 | 20 | `testsetnoerr` 12, `memory` 3, `testgetvarfullname` 3 | language and core commands |
 | `while-old.test` | 15 | 14 | 0 | 1 | 0 |  | language and core commands |
 | `while.test` | 46 | 45 | 0 | 1 | 0 |  | language and core commands |
 | `word.test` | 50 | 45 | 0 | 5 | 0 |  | `tcl_endOfWord` and related procs |
 
-## Needs a decision
+## Optional or host
 
 | File | Total | Pass | Stand-in | Fail | Blocked | Blocked by | Reason |
 |---|---|---|---|---|---|---|---|
 | `aaa_exit.test` | 2 | 0 | 0 | 2 | 0 |  | `exit` |
-| `autoMkindex.test` | 11 | 0 | 0 | 8 | 3 | unreached 3 | the library index, needs `file` |
-| `chan.test` | 41 | 0 | 0 | 41 | 0 |  | `chan` |
-| `chanio.test` | 471 | 0 | 0 | 0 | 471 | unreached 471 | channels |
-| `clock.test` | 8532 | 4 | 0 | 7704 | 824 | `detroit` 796, `win` 1, unreached 27 | `clock` |
-| `cmdAH.test` | 323 | 11 | 0 | 129 | 183 | `testsetplatform` 120, `win` 22, `nonPortable` 7, unreached 31 | mostly `file` and `encoding` |
+| `autoMkindex.test` | 11 | 1 | 0 | 9 | 1 | `knownBug` 1 | the library index, needs `file` |
+| `chan.test` | 41 | 4 | 0 | 37 | 0 |  | `chan` |
+| `chanio.test` | 471 | 178 | 0 | 106 | 187 | `stdio` 56, `testchannel` 31, `fileevent` 25, unreached 29 | channels |
+| `clock.test` | 8532 | 8384 | 0 | 138 | 10 | `win` 7, unreached 3 | `clock` |
+| `cmdAH.test` | 323 | 81 | 0 | 64 | 178 | `testsetplatform` 145, `win` 22, `nonPortable` 8 | mostly `file` and `encoding` |
 | `config.test` | 9 | 0 | 0 | 9 | 0 |  | `tcl::pkgconfig` |
 | `encoding.test` | 86 | 4 | 0 | 47 | 35 | `testencoding` 8, `ucs2` 2, `testbytestring` 1, unreached 23 | `encoding` |
 | `env.test` | 26 | 3 | 0 | 10 | 13 | `exec` 9, `win` 4 | `env`, the host environment |
 | `event.test` | 66 | 0 | 0 | 34 | 32 | `testfilehandler` 22, `stdio` 6, `testfilewait` 2 | `after`, `vwait`, `update` |
-| `exec.test` | 100 | 0 | 0 | 0 | 100 | `exec` 93, `win` 5, unreached 2 | `exec` |
-| `fCmd.test` | 256 | 0 | 0 | 0 | 256 | unreached 256 | `file` |
-| `fileName.test` | 300 | 1 | 0 | 99 | 200 | `testsetplatform` 133, `win` 26, `nonPortable` 7, unreached 33 | `file`, `glob` |
-| `fileSystem.test` | 137 | 0 | 0 | 0 | 137 | unreached 137 | `file` |
-| `fileSystemEncoding.test` | 1 | 0 | 0 | 0 | 1 | unreached 1 | `file`, `encoding` |
+| `exec.test` | 100 | 0 | 0 | 0 | 100 | `exec` 95, `win` 5 | `exec` |
+| `fCmd.test` | 256 | 120 | 0 | 85 | 51 | `testchmod` 19, `win` 11, `xdev` 6, unreached 1 | `file` |
+| `fileName.test` | 300 | 50 | 0 | 69 | 181 | `testsetplatform` 133, `win` 35, `nonPortable` 7, unreached 5 | `file`, `glob` |
+| `fileSystem.test` | 137 | 37 | 0 | 41 | 59 | `win` 21, `hasLinks` 16, `testsimplefilesystem` 10 | `file` |
+| `fileSystemEncoding.test` | 1 | 0 | 0 | 1 | 0 |  | `file`, `encoding` |
 | `history.test` | 62 | 0 | 0 | 0 | 62 | `history` 62 | `history` |
-| `http.test` | 75 | 1 | 0 | 63 | 11 | `http2.9.7` 7, `http2.9.8` 2, `knownBug` 1 | `http`, `socket` |
+| `http.test` | 75 | 2 | 0 | 62 | 11 | `http2.9.7` 7, `http2.9.8` 2, `knownBug` 1 | `http`, `socket` |
 | `http11.test` | 43 | 0 | 0 | 42 | 1 | `knownBug` 1 | `http`, `socket` |
 | `httpPipeline.test` | 1996 | 0 | 0 | 0 | 1996 | unreached 1996 | `http`, `socket` |
 | `httpold.test` | 32 | 0 | 0 | 0 | 32 | unreached 32 | `http`, `socket` |
 | `init.test` | 24 | 0 | 0 | 10 | 14 | unreached 14 | library loading, `auto_load` |
-| `interp.test` | 352 | 146 | 0 | 193 | 13 | `knownBug` 7, `testinterpdelete` 6 | optional capability `interp` |
-| `io.test` | 524 | 0 | 0 | 0 | 524 | unreached 524 | channels |
-| `ioCmd.test` | 348 | 4 | 0 | 223 | 121 | `testchannel` 99, `fcopy` 10, `nonPortable` 3, unreached 3 | channels |
-| `ioTrans.test` | 106 | 0 | 0 | 69 | 37 | `testchannel` 37 | channel transforms |
-| `iogt.test` | 17 | 0 | 0 | 0 | 17 | unreached 17 | channel transforms |
-| `load.test` | 30 | 0 | 0 | 8 | 22 | `teststaticpkg` 4, `teststaticpkg_8.x` 1, unreached 17 | `load` |
-| `main.test` | 67 | 0 | 0 | 0 | 67 | unreached 67 | the `tclsh` main loop, `exec` |
-| `msgcat.test` | 109 | 0 | 0 | 0 | 109 | unreached 109 | `msgcat` package |
+| `interp.test` | 352 | 150 | 0 | 189 | 13 | `knownBug` 7, `testinterpdelete` 6 | optional capability `interp` |
+| `io.test` | 524 | 184 | 0 | 118 | 222 | `stdio` 59, `testchannel` 31, `fileevent` 25, unreached 58 | channels |
+| `ioCmd.test` | 348 | 71 | 0 | 170 | 107 | `testchannel` 99, `nonPortable` 3, `unixExecs` 3 | channels |
+| `ioTrans.test` | 106 | 2 | 0 | 67 | 37 | `testchannel` 37 | channel transforms |
+| `iogt.test` | 17 | 0 | 0 | 0 | 17 | `testchannel` 17 | channel transforms |
+| `load.test` | 30 | 0 | 0 | 8 | 22 | `pkga.soRequired` 12, `teststaticpkg` 5, `teststaticpkg_8.x` 5 | `load` |
+| `main.test` | 67 | 0 | 0 | 0 | 67 | `stdio` 1, unreached 66 | the `tclsh` main loop, `exec` |
+| `msgcat.test` | 109 | 3 | 0 | 100 | 6 | unreached 6 | `msgcat` package |
 | `opt.test` | 31 | 0 | 0 | 30 | 1 | unreached 1 | `tcl::OptProc` package |
 | `package.test` | 402 | 352 | 0 | 50 | 0 |  | optional capability `package` |
 | `pid.test` | 5 | 0 | 0 | 0 | 5 | `pidDefined` 4, `unixExecs` 1 | `pid` |
-| `pkgMkIndex.test` | 27 | 0 | 0 | 17 | 10 | unreached 10 | package index, `file` |
+| `pkgMkIndex.test` | 27 | 0 | 0 | 25 | 2 | `exec` 2 | package index, `file` |
 | `platform.test` | 6 | 1 | 0 | 2 | 3 | `testCPUID` 1, unreached 2 | `platform` package |
-| `pwd.test` | 3 | 0 | 0 | 3 | 0 |  | `pwd`, `cd` |
+| `pwd.test` | 3 | 3 | 0 | 0 | 0 |  | `pwd`, `cd` |
 | `safe-stock.test` | 4 | 0 | 0 | 4 | 0 |  | `interp -safe` |
-| `safe.test` | 102 | 1 | 0 | 87 | 14 | `TcltestPackage` 6, `emptyTest` 2, unreached 6 | `interp -safe` |
+| `safe.test` | 102 | 1 | 0 | 90 | 11 | `TcltestPackage` 6, `emptyTest` 2, unreached 3 | `interp -safe` |
 | `security.test` | 1 | 1 | 0 | 0 | 0 |  | `interp`, host access |
 | `socket.test` | 98 | 0 | 0 | 0 | 98 | `socket` 37, unreached 61 | `socket` |
-| `source.test` | 23 | 0 | 0 | 23 | 0 |  | `source` |
+| `source.test` | 23 | 13 | 0 | 10 | 0 |  | `source` |
 | `stack.test` | 3 | 0 | 0 | 3 | 0 |  | host stack limits, `exec` |
-| `tcltest.test` | 159 | 0 | 0 | 0 | 159 | unreached 159 | the real `tcltest` package |
+| `tcltest.test` | 159 | 1 | 0 | 35 | 123 | `exec` 3, `unixExecs` 3, `expr:!singleTestInterp notWsl` 1, unreached 116 | the real `tcltest` package |
 | `timer.test` | 54 | 0 | 0 | 48 | 6 | unreached 6 | `after` |
-| `tm.test` | 21 | 0 | 0 | 19 | 2 | unreached 2 | Tcl modules, `file` |
-| `unixFCmd.test` | 49 | 0 | 0 | 28 | 21 | `emptyTest` 11, `readonlyAttr` 4, `nonPortable` 3 | `file` |
-| `unixFile.test` | 7 | 0 | 0 | 0 | 7 | `testfindexecutable` 2, unreached 5 | `file` |
+| `tm.test` | 21 | 0 | 0 | 21 | 0 |  | Tcl modules, `file` |
+| `unixFCmd.test` | 49 | 2 | 0 | 26 | 21 | `emptyTest` 11, `readonlyAttr` 4, `nonPortable` 3 | `file` |
+| `unixFile.test` | 7 | 0 | 0 | 0 | 7 | `testfindexecutable` 7 | `file` |
 | `unixInit.test` | 8 | 0 | 0 | 1 | 7 | `stdio` 5, `emptyTest` 2 | `exec` of tclsh |
-| `unload.test` | 27 | 0 | 0 | 7 | 20 | unreached 20 | `unload` |
+| `unload.test` | 27 | 0 | 0 | 7 | 20 | `pkgua.soRequired` 20 | `unload` |
 | `zlib.test` | 73 | 0 | 0 | 1 | 72 | `zlib` 71, `knownBug` 1 | `zlib` |
 
 ## Cannot apply
@@ -186,7 +186,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `unixNotfy.test` | 4 | 0 | 0 | 0 | 4 | `thread` 2, `unthreaded` 2 | threads and the notifier |
 | `winConsole.test` | 1 | 0 | 0 | 0 | 1 | `win` 1 | Windows only |
 | `winDde.test` | 50 | 0 | 0 | 0 | 50 | `dde` 49, `win` 1 | Windows only |
-| `winFCmd.test` | 178 | 0 | 0 | 0 | 178 | `win` 156, `nt` 4, `winVista` 3, unreached 12 | Windows only |
+| `winFCmd.test` | 178 | 0 | 0 | 0 | 178 | `win` 168, `nt` 4, `winVista` 3, unreached 2 | Windows only |
 | `winFile.test` | 11 | 0 | 0 | 0 | 11 | `win` 11 | Windows only |
 | `winNotify.test` | 14 | 0 | 0 | 0 | 14 | `win` 14 | Windows only |
 | `winPipe.test` | 56 | 0 | 0 | 0 | 56 | `win` 56 | Windows only |

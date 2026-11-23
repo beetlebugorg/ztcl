@@ -811,7 +811,7 @@ pub const Interp = struct {
     /// everywhere.
     pub fn startVars(it: *Interp) Allocator.Error!void {
         trace.installPrecision(it) catch return error.OutOfMemory;
-        _ = it.eval("array set tcl_platform {platform unix byteOrder littleEndian wordSize 8 pointerSize 8 engine ztcl}; set tcl_version 8.6; set tcl_patchLevel 8.6.16; set errorInfo {}; set errorCode NONE") catch |e| switch (e) {
+        _ = it.eval("array set tcl_platform {platform unix os ztcl osVersion 0 machine generic user {} byteOrder littleEndian wordSize 8 pointerSize 8 engine ztcl}; set tcl_version 8.6; set tcl_patchLevel 8.6.16; set errorInfo {}; set errorCode NONE") catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
             else => unreachable,
         };

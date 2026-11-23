@@ -29,7 +29,7 @@ tools/suite.sh set.test expr.test     # some files
 
 `tools/suite-count.tcl` counts the tests of a file with a real `tclsh`, in a safe interpreter. `tools/suite-scope.tsv` has the count and the scope of each file.
 
-`zig build suite-runner` builds `zig-out/bin/ztcl-suite`, the runner with the test commands of `tools/suite_cmds.zig`: `testregexp`, `testevalex`, and the `testexpr` commands. Each one calls real ztcl code. The library, the default runner, and the WebAssembly build do not have them. `tools/suite.sh` passes `--allow package,interp` to the runner. To make the table, run the suite with both runners:
+`zig build suite-runner` builds `zig-out/bin/ztcl-suite`, the runner with the test commands of `tools/suite_cmds.zig`: `testregexp`, `testevalex`, and the `testexpr` commands. Each one calls real ztcl code. The library, the default runner, and the WebAssembly build do not have them. `tools/suite.sh` passes `--allow package,interp,clock,channels,file` and a fresh `--root` folder for each test file, with a copy of the support scripts of the Tcl tests. It deletes that folder after the file. To make the table, run the suite with both runners:
 
 ```sh
 tools/suite.sh -a -o plain.tsv
