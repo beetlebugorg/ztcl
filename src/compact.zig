@@ -109,6 +109,23 @@ pub const Copier = struct {
                 try c.val(&job.new.v.val);
             },
             .link => |t| job.new.v = .{ .link = try c.cell(t) },
+            // A compact drops the traces and keeps the value.
+            .traced => |t| switch (t.inner) {
+                .undef => {},
+                .val => |v| {
+                    job.new.v = .{ .val = v };
+                    try c.val(&job.new.v.val);
+                },
+                .arr => |m| {
+                    const map = try c.a.create(interp.ArrayMap);
+                    map.* = .empty;
+                    try map.ensureTotalCapacity(c.a, m.count());
+                    for (m.keys(), m.values()) |k, v| map.putAssumeCapacity(k, v);
+                    for (map.keys()) |*k| try c.text(k);
+                    for (map.values()) |*v| try c.val(v);
+                    job.new.v = .{ .arr = map };
+                },
+            },
             .arr => |m| {
                 const map = try c.a.create(interp.ArrayMap);
                 map.* = .empty;
@@ -127,8 +144,13 @@ pub const Copier = struct {
         const new = try c.a.create(interp.Command);
         gop.value_ptr.* = new;
         new.* = old.*;
+        // A compact drops the traces, so the wrapper goes away.
+        new.traces = null;
+        if (old.traces) |t| if (t.orig) |orig| {
+            new.impl = orig;
+        };
         try c.text(&new.name);
-        switch (old.impl) {
+        switch (new.impl) {
             .proc => |p| new.impl = .{ .proc = try c.proc(p) },
             .native => |f| if (ns.isEnsemble(f)) {
                 new.ctx = try ns.copyEnsemble(c, old.ctx.?);
@@ -297,6 +319,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.exports = exports;
     it.ns_paths = ns_paths;
     it.searches = .empty;
+    it.var_traces = 0;
     it.global.vars = globals;
     it.error_code = error_code;
     it.result = Value.empty;

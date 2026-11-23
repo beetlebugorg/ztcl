@@ -11,6 +11,7 @@ const interp = @import("interp.zig");
 const value = @import("value.zig");
 const cmds = @import("cmds.zig");
 const regex = @import("regex.zig");
+const trace = @import("trace.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
@@ -321,7 +322,9 @@ fn cmdArray(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     const name = try it.str(argv[2]);
     const cell = try it.findVar(it.frame, name, false);
-    const map: ?*interp.ArrayMap = if (cell != null and cell.?.v == .arr) cell.?.v.arr else null;
+    if (cell != null and cell.?.v == .traced) try trace.arrayOp(it, cell.?, name);
+    var map: ?*interp.ArrayMap = if (cell != null and cell.?.v == .arr) cell.?.v.arr else null;
+    if (cell != null and cell.?.v == .traced and cell.?.v.traced.inner == .arr) map = cell.?.v.traced.inner.arr;
     switch (sub) {
         .exists => {
             if (argv.len != 3) return it.wrongArgs("array exists arrayName");
@@ -337,10 +340,14 @@ fn cmdArray(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (items.len % 2 != 0) return it.failCode("TCL WRONGARGS", "list must have an even number of elements", .{});
             if (map == null) {
                 const c = (try it.findVar(it.frame, name, true)).?;
-                if (c.v != .undef) return it.fail("can't array set \"{s}\": variable isn't array", .{name});
+                if (c.v == .traced) {
+                    if (c.v.traced.inner == .val) return it.fail("can't array set \"{s}\": variable isn't array", .{name});
+                } else if (c.v != .undef) return it.fail("can't array set \"{s}\": variable isn't array", .{name});
                 const m = try a.create(interp.ArrayMap);
                 m.* = .empty;
-                c.v = .{ .arr = m };
+                if (c.v == .traced) {
+                    c.v.traced.inner = .{ .arr = m };
+                } else c.v = .{ .arr = m };
             }
             var i: usize = 0;
             while (i < items.len) : (i += 2) {
@@ -390,6 +397,8 @@ fn cmdArray(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                     while (i > 0) : (i -= 1) {
                         if (cmds.globMatch(p, m.keys()[i - 1], false)) m.orderedRemoveAt(i - 1);
                     }
+                } else if (cell.?.v == .traced) {
+                    _ = try it.unsetVar(name);
                 } else cell.?.v = .undef;
             }
             return Value.empty;

@@ -157,6 +157,10 @@ const Access = enum(u8) { llength, lindex, string_length, string_index };
 /// Runs one time for each change of the epoch.
 fn recheck(it: *Interp) bool {
     if (it.unsafe_epoch == it.epoch) return false;
+    if (it.var_traces != 0) {
+        it.unsafe_epoch = it.epoch;
+        return false;
+    }
     var found: usize = 0;
     var iter = it.commands.iterator();
     while (iter.next()) |e| {
@@ -1157,7 +1161,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             .store => {
                 const cell = try writeCell(named, it, f, code, i.a);
                 if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[i.a]});
-                cell.v = .{ .val = stack[sp - 1] };
+                if (cell.v == .traced) {
+                    try it.setVar(code.names[i.a], stack[sp - 1]);
+                } else cell.v = .{ .val = stack[sp - 1] };
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
@@ -1355,7 +1361,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 const cell = try writeCell(named, it, f, code, i.a);
                 if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[i.a]});
                 sp -= 1;
-                cell.v = .{ .val = stack[sp] };
+                if (cell.v == .traced) {
+                    try it.setVar(code.names[i.a], stack[sp]);
+                } else cell.v = .{ .val = stack[sp] };
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
@@ -1513,7 +1521,10 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 for (table, 0..) |slot, k| {
                     const cell = try writeCell(named, it, f, code, slot);
                     if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[slot]});
-                    cell.v = .{ .val = if (at + k < items.len) items[at + k] else Value.empty };
+                    const item = if (at + k < items.len) items[at + k] else Value.empty;
+                    if (cell.v == .traced) {
+                        try it.setVar(code.names[slot], item);
+                    } else cell.v = .{ .val = item };
                 }
                 stack[sp - 1] = .{ .int = @intCast(at + table.len) };
                 pc += 1;

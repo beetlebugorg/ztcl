@@ -15,6 +15,7 @@ const more = @import("more.zig");
 const regex = @import("regex.zig");
 const ns = @import("ns.zig");
 const ucd = @import("ucd.zig");
+const trace = @import("trace.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
@@ -40,7 +41,7 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
         .{ "lset", more.cmdLset },    .{ "binary", more.cmdBinary }, .{ "scan", more.cmdScan },
         .{ "regexp", regex.cmdRegexp }, .{ "regsub", regex.cmdRegsub },
         .{ "variable", cmdVariable }, .{ "namespace", ns.cmdNamespace }, .{ "try", cmdTry },           .{ "throw", cmdThrow },
-        .{ "dict", @import("dict.zig").cmdDict },
+        .{ "dict", @import("dict.zig").cmdDict }, .{ "trace", trace.cmdTrace },
     };
     inline for (table) |t| try it.register(t[0], t[1]);
     try @import("mathns.zig").register(it);
@@ -99,7 +100,10 @@ fn eql(a: []const u8, b: []const u8) bool {
 
 fn cmdSet(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len == 3) {
-        try it.setVar(try it.str(argv[1]), argv[2]);
+        const name = try it.str(argv[1]);
+        try it.setVar(name, argv[2]);
+        // A write trace can change the value.
+        if (it.var_traces != 0) return it.getVarPlain(name);
         return argv[2];
     }
     if (argv.len == 2) return it.getVar(try it.str(argv[1]));
@@ -453,6 +457,7 @@ fn cmdProc(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const name = try it.qualify(try it.str(argv[1]));
     // The proc runs in the namespace of its name.
     p.ns = try it.internNs(ns.qualifiers(name));
+    if (it.commands.get(name)) |old| try trace.commandEvent(it, old, name, "", 2);
     const c = try a.create(interp.Command);
     c.* = .{ .name = name, .impl = .{ .proc = p } };
     try it.commands.put(a, name, c);
@@ -482,12 +487,16 @@ fn cmdRename(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const kv = it.commands.fetchRemove(old) orelse
         return it.fail("can't {s} \"{s}\": command doesn't exist", .{ if (new.len == 0) "delete" else "rename", old });
     it.epoch += 1;
-    if (new.len == 0) return Value.empty;
+    if (new.len == 0) {
+        try trace.commandEvent(it, kv.value, old, "", 2);
+        return Value.empty;
+    }
     if (it.commands.contains(new)) {
         try it.commands.put(it.alloc(), kv.key, kv.value);
         return it.fail("can't rename to \"{s}\": command already exists", .{new});
     }
     try it.commands.put(it.alloc(), try it.alloc().dupe(u8, new), kv.value);
+    try trace.commandEvent(it, kv.value, old, new, 1);
     return Value.empty;
 }
 
@@ -1763,7 +1772,7 @@ fn namesList(it: *Interp, frame: *interp.Frame, pattern: ?[]const u8, links: boo
         var c = e.cell;
         if (c.v == .link and !links) continue;
         while (c.v == .link) c = c.v.link;
-        if (c.v == .undef) continue;
+        if (c.v == .undef or (c.v == .traced and c.v.traced.inner == .undef)) continue;
         if (pattern) |p| if (!globMatch(p, e.name, false)) continue;
         try out.append(it.alloc(), .{ .str = e.name });
     }
@@ -1779,6 +1788,11 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (argv.len != 3) return it.wrongArgs("info exists varName");
         const name, const idx = Interp.splitName(pattern.?);
         const cell = try it.findVar(it.frame, name, false) orelse return .{ .int = 0 };
+        if (cell.v == .traced) {
+            const inner = cell.v.traced.inner;
+            if (idx) |i| return .{ .int = @intFromBool(inner == .arr and inner.arr.contains(i)) };
+            return .{ .int = @intFromBool(inner != .undef) };
+        }
         if (idx) |i| return .{ .int = @intFromBool(cell.v == .arr and cell.v.arr.contains(i)) };
         return .{ .int = @intFromBool(cell.v == .val or cell.v == .arr) };
     } else if (eql(sub, "commands") or eql(sub, "procs")) {

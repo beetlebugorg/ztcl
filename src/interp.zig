@@ -20,6 +20,7 @@ const value = @import("value.zig");
 const expr = @import("expr.zig");
 const cmds = @import("cmds.zig");
 const vm = @import("vm.zig");
+const trace = @import("trace.zig");
 pub const Value = value.Value;
 
 /// The return codes of Tcl other than "ok". The result of the
@@ -422,6 +423,8 @@ pub const Var = struct {
         /// A dict that only this cell can see. The bytecode updates it
         /// in place. Each general read makes it a plain value first.
         owned: Value,
+        /// A variable with traces. Only the general path reads it.
+        traced: *trace.Traced,
     } = .undef,
     next_free: ?*Var = null,
 
@@ -488,6 +491,8 @@ pub const Command = struct {
     impl: union(enum) { native: NativeFn, proc: *Proc },
     /// Data of the embedder for a native command.
     ctx: ?*anyopaque = null,
+    /// The command and execution traces.
+    traces: ?*trace.CmdTraces = null,
 };
 
 /// Where `puts` writes.
@@ -628,6 +633,9 @@ pub const Interp = struct {
     /// leading "::".
     ns_paths: std.StringHashMapUnmanaged([]const []const u8) = .empty,
 
+    /// The count of variables with traces. Above zero, the inline
+    /// forms of the bytecode and the direct forms are off.
+    var_traces: u32 = 0,
     /// The active searches of `array startsearch`.
     searches: std.ArrayList(@import("extra.zig").Search) = .empty,
     /// The last compiled regular expressions.
@@ -996,7 +1004,7 @@ pub const Interp = struct {
             c.resolved = command;
             c.epoch = it.epoch;
             c.ns = it.ns.ptr;
-            c.fast = cmds.classify(command, c);
+            c.fast = if (it.var_traces != 0) .none else cmds.classify(command, c);
         }
         return command;
     }
@@ -1207,6 +1215,7 @@ pub const Interp = struct {
 
     pub fn popFrame(it: *Interp) void {
         const f = it.frame;
+        if (it.var_traces != 0) trace.frameGone(it, f);
         for (f.vars.items) |e| {
             e.cell.next_free = it.free_vars;
             it.free_vars = e.cell;
@@ -1481,6 +1490,7 @@ pub const Interp = struct {
         if (cell) |c| switch (c.v) {
             .val => |v| return v,
             .arr => return it.fail("can't read \"{s}\": variable is array", .{r.name}),
+            .traced => return trace.read(it, c, r.name, null),
             else => {},
         };
         return it.fail("can't read \"{s}\": no such variable", .{r.name});
@@ -1494,6 +1504,7 @@ pub const Interp = struct {
                 return it.fail("can't read \"{s}({s})\": no such element in array", .{ name, idx });
             },
             .val => return it.fail("can't read \"{s}({s})\": variable isn't array", .{ name, idx }),
+            .traced => return trace.read(it, c, name, idx),
             else => {},
         };
         return it.fail("can't read \"{s}({s})\": no such variable", .{ name, idx });
@@ -1507,9 +1518,18 @@ pub const Interp = struct {
         return it.readRef(&r);
     }
 
+    /// Reads a variable and runs no read trace.
+    pub fn getVarPlain(it: *Interp, full: []const u8) Error!Value {
+        const name, const idx = splitName(full);
+        const cell = try it.findVar(it.frame, name, false);
+        if (cell != null and cell.?.v == .traced) return trace.after(it, cell.?, name, idx);
+        return it.getVar(full);
+    }
+
     pub fn getVarOpt(it: *Interp, full: []const u8) Error!?Value {
         const name, const idx = splitName(full);
         const cell = try it.findVar(it.frame, name, false) orelse return null;
+        if (cell.v == .traced) return trace.readOpt(it, cell, name, idx);
         if (idx) |i| return if (cell.v == .arr) cell.v.arr.get(i) else null;
         return if (cell.v == .val) cell.v.val else null;
     }
@@ -1518,6 +1538,7 @@ pub const Interp = struct {
     pub fn setVar(it: *Interp, full: []const u8, v: Value) Error!void {
         const name, const idx = splitName(full);
         const cell = (try it.findVar(it.frame, name, true)).?;
+        if (cell.v == .traced) return trace.write(it, cell, name, idx, v);
         if (idx) |i| {
             switch (cell.v) {
                 .undef => {
@@ -1541,6 +1562,7 @@ pub const Interp = struct {
     pub fn unsetVar(it: *Interp, full: []const u8) Error!bool {
         const name, const idx = splitName(full);
         const cell = try it.findVar(it.frame, name, false) orelse return false;
+        if (cell.v == .traced) return trace.unset(it, cell, name, idx);
         if (idx) |i| {
             if (cell.v != .arr) return false;
             return cell.v.arr.orderedRemove(i);
