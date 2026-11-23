@@ -1185,9 +1185,58 @@ fn cmdTime(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     return .{ .str = try std.fmt.allocPrint(a, "{d:.2} microseconds per iteration", .{mean}) };
 }
 
+/// `timerate ?-direct? ?-calibrate? ?-overhead double? command ?time
+/// ?max-count??`: runs a script until a time in milliseconds ends, and
+/// gives the mean time, the count, the rate, and the net time.
+fn cmdTimerate(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
+    const usage = "timerate ?-direct? ?-calibrate? ?-overhead double? command ?time ?max-count??";
+    const a = it.alloc();
+    var i: usize = 1;
+    var overhead: f64 = 0;
+    while (i < argv.len) : (i += 1) {
+        const o = try it.str(argv[i]);
+        if (eql(o, "-direct") or eql(o, "-calibrate")) continue;
+        if (eql(o, "-overhead")) {
+            i += 1;
+            if (i >= argv.len) return it.wrongArgs(usage);
+            const n = argv[i].asNumber() orelse return it.fail("expected floating-point number but got \"{s}\"", .{try it.str(argv[i])});
+            overhead = if (n == .int) @floatFromInt(n.int) else n.double;
+            continue;
+        }
+        if (eql(o, "--")) i += 1;
+        break;
+    }
+    const rest = argv[i..];
+    if (rest.len < 1 or rest.len > 3) return it.wrongArgs(usage);
+    var limit_ms: i64 = 1000;
+    var max_count: i64 = std.math.maxInt(i64);
+    if (rest.len >= 2) limit_ms = try it.int(rest[1]);
+    if (rest.len == 3) max_count = try it.int(rest[2]);
+    const script = try it.scriptOf(argv, i, cmd);
+    const start = try nowMicros(it);
+    var count: i64 = 0;
+    while (count < max_count) {
+        count += 1;
+        _ = it.evalScript(script) catch |e| switch (e) {
+            error.TclBreak => break,
+            error.TclContinue => {},
+            else => return e,
+        };
+        if ((try nowMicros(it)) - start >= limit_ms * 1000) break;
+    }
+    if (count == 0) return .{ .str = "0 \u{b5}s/# 0 # 0 #/sec 0 net-ms" };
+    const total: f64 = @floatFromInt((try nowMicros(it)) - start);
+    const n: f64 = @floatFromInt(count);
+    const net = @max(total - overhead * n, 0);
+    const each = net / n;
+    const rate: f64 = if (net > 0) n * 1e6 / net else 1e6;
+    return .{ .str = try std.fmt.allocPrint(a, "{d:.6} \u{b5}s/# {d} # {d:.3} #/sec {d:.3} net-ms", .{ each, count, rate, net / 1000 }) };
+}
+
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try it.register("clock", cmdClock);
     try it.register("time", cmdTime);
+    try it.register("timerate", cmdTimerate);
     try it.register("msgcat::mcset", cmdMcset);
     try it.register("msgcat::mcmset", cmdMcmset);
     try it.register("msgcat::mc", cmdMc);

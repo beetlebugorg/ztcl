@@ -28,6 +28,9 @@
 - Adds TclOO: `oo::class`, `oo::object`, `oo::define`, `oo::objdefine`, `oo::copy`, `my`, `self`, `next`, `nextto`, mixins, filters, forwards, and `info object` and `info class`.
 - Adds `encoding` to the channel capability, for the encodings with no table.
 - Adds the optional capability `exec`: `exec`, `pid`, and command pipelines, with a program list, a time limit, and a fixed environment from the embedder. `exec` is not sandboxed.
+- Adds `timerate` to the `clock` capability.
+- Fixes `format`: the `h` size, `%#x` and `%#b` of zero, `%#e`, `%#f`, and `%#g`, a `*` width with `%n$`, zero padding of strings, and widths in characters.
+- Accepts the options of `interp create` in any place.
 - Adds `time` to the `clock` capability, and the runner option `--tclsh` for the child processes of the Tcl tests.
 - Adds a test-only suite runner with commands that call real ztcl code.
 - Sets the error codes of Tcl for arithmetic, argument counts, list syntax, and lookups.

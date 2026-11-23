@@ -66,6 +66,7 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
             saw_seq = true;
         }
         var sp: Spec = .{};
+        var short = false;
         while (i < f.len) : (i += 1) {
             switch (f[i]) {
                 '-' => sp.left = true,
@@ -76,10 +77,18 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
                 else => break,
             }
         }
+        // With %n$, a `*` reads the argument n and the value follows it.
+        var pos: ?usize = positional;
         if (i < f.len and f[i] == '*') {
-            if (next >= argv.len) return it.fail("not enough arguments for all format specifiers", .{});
-            const w = try it.int(argv[next]);
-            next += 1;
+            var w: i64 = 0;
+            if (pos) |k| {
+                w = try it.int(argv[k]);
+                pos = k + 1;
+            } else {
+                if (next >= argv.len) return it.fail("not enough arguments for all format specifiers", .{});
+                w = try it.int(argv[next]);
+                next += 1;
+            }
             if (w < 0) sp.left = true;
             sp.width = @intCast(@min(@abs(w), 1 << 20));
             i += 1;
@@ -90,9 +99,16 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
             i += 1;
             var p: usize = 0;
             if (i < f.len and f[i] == '*') {
-                if (next >= argv.len) return it.fail("not enough arguments for all format specifiers", .{});
-                const w = try it.int(argv[next]);
-                next += 1;
+                var w: i64 = 0;
+                if (pos) |k| {
+                    if (k >= argv.len) return it.fail("\"%n$\" argument index out of range", .{});
+                    w = try it.int(argv[k]);
+                    pos = k + 1;
+                } else {
+                    if (next >= argv.len) return it.fail("not enough arguments for all format specifiers", .{});
+                    w = try it.int(argv[next]);
+                    next += 1;
+                }
                 p = @intCast(std.math.clamp(w, 0, 1 << 20));
                 i += 1;
             } else while (i < f.len and std.ascii.isDigit(f[i])) : (i += 1) {
@@ -104,7 +120,7 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
             if (f[i] != 'h') {
                 if (sp.long and f[i] == 'l') sp.full = true;
                 sp.long = true;
-            }
+            } else short = true;
         }
         if (i >= f.len) return it.fail("format string ended in middle of field specifier", .{});
         const conv = f[i];
@@ -113,8 +129,9 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
             return it.fail("bad field specifier \"{c}\"", .{conv});
         }
         var arg_at = next;
-        if (positional) |k| {
-            arg_at = k;
+        if (positional != null) {
+            arg_at = pos.?;
+            if (arg_at >= argv.len) return it.fail("\"%n$\" argument index out of range", .{});
         } else {
             if (next >= argv.len) return it.fail("not enough arguments for all format specifiers", .{});
             next += 1;
@@ -126,7 +143,15 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
         sw: switch (conv) {
             's' => {
                 body = try it.str(arg);
-                if (sp.prec) |p| body = body[0..@min(p, body.len)];
+                // The precision counts characters.
+                if (sp.prec) |p| {
+                    var end: usize = 0;
+                    var count: usize = 0;
+                    while (end < body.len and count < p) : (count += 1) {
+                        end += std.unicode.utf8ByteSequenceLength(body[end]) catch 1;
+                    }
+                    body = body[0..@min(end, body.len)];
+                }
                 numeric = false;
             },
             'c' => {
@@ -146,13 +171,14 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
                     body = if (neg) t[1..] else t;
                     break :sw;
                 }
-                const n = try bigint.low64(it, iv);
-
+                var n = try bigint.low64(it, iv);
+                if (short) n = @as(i16, @truncate(n));
                 sign = if (n < 0) "-" else if (sp.plus) "+" else if (sp.space) " " else "";
                 body = try std.fmt.allocPrint(a, "{d}", .{@abs(n)});
             },
             'u', 'x', 'X', 'o', 'b' => {
                 const uv = try expr.intArg(it, arg);
+                if (sp.full and conv == 'u' and (uv == .str or uv.int < 0)) return it.fail("unsigned bignum format is invalid", .{});
                 if (sp.full and (uv == .str or uv.int < 0)) {
                     const base: u8 = switch (conv) {
                         'u' => 10,
@@ -167,7 +193,8 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
                     break :sw;
                 }
                 const n = try bigint.low64(it, uv);
-                const u: u64 = @bitCast(n);
+                var u: u64 = @bitCast(n);
+                if (short) u &= 0xffff;
                 body = switch (conv) {
                     'u' => try std.fmt.allocPrint(a, "{d}", .{u}),
                     'x' => try std.fmt.allocPrint(a, "{x}", .{u}),
@@ -175,10 +202,10 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
                     'o' => try std.fmt.allocPrint(a, "{o}", .{u}),
                     else => try std.fmt.allocPrint(a, "{b}", .{u}),
                 };
-                if (sp.alt and u != 0) sign = switch (conv) {
+                if (sp.alt) sign = switch (conv) {
                     'x' => "0x",
                     'X' => "0X",
-                    'o' => "0",
+                    'o' => if (u != 0) "0" else "",
                     'b' => "0b",
                     else => "",
                 };
@@ -191,6 +218,11 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
                 sign = if (neg) "-" else if (sp.plus) "+" else if (sp.space) " " else "";
                 x = @abs(x);
                 body = try formatFloat(a, x, conv, sp.prec, sp.alt);
+                if (sp.alt and std.math.isFinite(x) and std.mem.indexOfScalar(u8, body, '.') == null) {
+                    // The alternate form always has a decimal point.
+                    const e = std.mem.indexOfAny(u8, body, "eE") orelse body.len;
+                    body = try std.mem.concat(a, u8, &.{ body[0..e], ".", body[e..] });
+                }
                 if (std.math.isNan(x) or std.math.isInf(x)) sp.zero = false;
             },
         }
@@ -203,13 +235,17 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
             }
             sp.zero = false;
         }
-        const len = sign.len + body.len;
+        // The width counts characters.
+        var len = sign.len;
+        for (body) |ch| {
+            if (ch & 0xC0 != 0x80) len += 1;
+        }
         const pad = if (sp.width > len) sp.width - len else 0;
         if (sp.left) {
             try out.appendSlice(a, sign);
             try out.appendSlice(a, body);
             try out.appendNTimes(a, ' ', pad);
-        } else if (sp.zero and numeric) {
+        } else if (sp.zero) {
             try out.appendSlice(a, sign);
             try out.appendNTimes(a, '0', pad);
             try out.appendSlice(a, body);

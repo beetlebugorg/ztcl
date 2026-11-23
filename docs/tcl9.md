@@ -34,6 +34,10 @@ CPU milliseconds, best of 11 runs of the whole process, `ReleaseFast`, on an Int
 | `dictgrow.tcl` | 61.4 | 104.9 | 144.2 |
 | `readloop.tcl` | 17.7 | 27.9 | 32.7 |
 
+## The state of the choices
+
+No choice of this page is in the code. Where Tcl 8.6 and Tcl 9 differ, ztcl keeps the behavior of 8.6 as the default. The work on the 152 test files of 8.6.16 added the event loop, `socket`, `exec`, TclOO, and `encoding`. These commands are the same in both versions for the inputs of the tests that ran, so they needed no choice. The owner of the project decides each proposal below.
+
 ## Differences and proposed choices
 
 "ztcl now" is the result of ztcl before the work on the 8.6.16 test suite. Some rows are out of date.

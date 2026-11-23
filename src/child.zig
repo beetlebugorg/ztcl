@@ -437,24 +437,36 @@ pub fn cmdInterp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const args = argv[2..];
     if (eql(sub, "create")) {
         var safe = false;
-        var i: usize = 0;
-        while (i < args.len) : (i += 1) {
-            const o = try it.str(args[i]);
-            if (eql(o, "-safe")) {
-                safe = true;
-            } else if (eql(o, "--")) {
-                i += 1;
-                break;
-            } else break;
+        var path: ?Value = null;
+        var k: usize = 0;
+        var end_opts = false;
+        while (k < args.len) : (k += 1) {
+            const o = try it.str(args[k]);
+            if (!end_opts and o.len > 0 and o[0] == '-') {
+                if (eql(o, "-safe")) {
+                    safe = true;
+                    continue;
+                }
+                if (eql(o, "--")) {
+                    end_opts = true;
+                    continue;
+                }
+                return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -safe or --", .{o});
+            }
+            if (path != null) return it.wrongArgs("interp create ?-safe? ?--? ?path?");
+            path = args[k];
         }
-        if (args.len > i + 1) return it.wrongArgs("interp create ?-safe? ?--? ?path?");
+        const i: usize = 0;
+        var one: [1]Value = undefined;
+        if (path) |p| one[0] = p;
+        const path_args: []const Value = if (path != null) one[0..1] else one[0..0];
         var parent = it;
         var name: []const u8 = undefined;
-        if (i < args.len) {
-            const parts = try it.list(args[i]);
+        if (i < path_args.len) {
+            const parts = try it.list(path_args[i]);
             if (parts.len == 0) return it.fail("cannot create an interpreter with an empty path", .{});
             for (parts[0 .. parts.len - 1]) |w| {
-                const c = parent.children.get(try it.str(w)) orelse return it.fail("could not find interpreter \"{s}\"", .{try it.str(args[i])});
+                const c = parent.children.get(try it.str(w)) orelse return it.fail("could not find interpreter \"{s}\"", .{try it.str(path_args[i])});
                 parent = c.it;
             }
             name = try it.str(parts[parts.len - 1]);
@@ -467,7 +479,7 @@ pub fn cmdInterp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             }
         }
         _ = try create(parent, name, safe);
-        return if (i < args.len) args[i] else .{ .str = name };
+        return if (i < path_args.len) path_args[i] else .{ .str = name };
     }
     if (eql(sub, "delete")) {
         for (args) |v| {

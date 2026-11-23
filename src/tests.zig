@@ -1012,7 +1012,7 @@ test "the optional commands are absent by default" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    for ([_][]const u8{ "package", "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror" }) |name| {
+    for ([_][]const u8{ "package", "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror" }) |name| {
         try std.testing.expect(it.findCommand(name) == null);
     }
 }
@@ -1128,6 +1128,11 @@ test "the event loop runs timers and idle scripts in order" {
     // A child uses the loop of its parent, and its events end with it.
     try std.testing.expectEqualStrings("2 0", try it.str(try it.eval("interp create c; c eval {after 1 {set z 2}}; update; after 1; update; set r [c eval {set z}]; c eval {after 1000 {set q 1}}; interp delete c; list $r [llength [after info]]")));
     try std.testing.expectEqualStrings("{} {}", try it.str(try it.eval("interp create -safe s; list [s eval {info commands socket}] [s eval {info commands exec}]")));
+    // An event script and an error handler can delete their interpreter.
+    try std.testing.expectEqualStrings("0", try it.str(try it.eval("interp create d; interp alias d kill {} interp delete d; d eval {after 0 kill; after 0 {set never 1}}; update; interp exists d")));
+    try std.testing.expectEqualStrings("0", try it.str(try it.eval("interp create e; interp alias e kill {} interp delete e; e eval {proc bgerror {m} {kill}; after 0 {error x}}; update; update; interp exists e")));
+    // A long delay does not overflow.
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("set id [after 99999999999999 {set z 1}]; after cancel $id; llength [list $id]")));
 }
 
 test "socket accepts only loopback addresses by default" {

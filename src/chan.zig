@@ -479,9 +479,11 @@ pub fn serve(cur: *Interp, it: *Interp, name: []const u8, can_read: bool, can_wr
             try text.appendSlice(it.alloc(), c.accept);
             try text.print(it.alloc(), " {s} {s} {d}", .{ n.name, try @import("sock.zig").addrText(it, conn.peer), conn.peer.port });
             ran = true;
-            if (!try event.runHandler(cur, it, text.items)) {
+            switch (try event.runHandler(cur, it, text.items)) {
+                .ok => {},
+                .gone => return true,
                 // A failed accept command closes the connection.
-                if (it.chans.table.get(n.name) == n) closeChan(it, n) catch {};
+                .failed => if (it.chans.table.get(n.name) == n) closeChan(it, n) catch {},
             }
             if (it.chans.table.get(name) != c) break;
         }
@@ -508,15 +510,23 @@ pub fn serve(cur: *Interp, it: *Interp, name: []const u8, can_read: bool, can_wr
     }
     if (can_read) if (c.on_read) |script| {
         ran = true;
-        if (!try event.runHandler(cur, it, script)) {
-            if (it.chans.table.get(name) == c) c.on_read = null;
+        switch (try event.runHandler(cur, it, script)) {
+            .ok => {},
+            .gone => return true,
+            .failed => if (it.chans.table.get(name) == c) {
+                c.on_read = null;
+            },
         }
         if (it.chans.table.get(name) != c) return ran;
     };
     if (can_write) if (c.on_write) |script| {
         ran = true;
-        if (!try event.runHandler(cur, it, script)) {
-            if (it.chans.table.get(name) == c) c.on_write = null;
+        switch (try event.runHandler(cur, it, script)) {
+            .ok => {},
+            .gone => return true,
+            .failed => if (it.chans.table.get(name) == c) {
+                c.on_write = null;
+            },
         }
     };
     return ran;

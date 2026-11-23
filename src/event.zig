@@ -118,20 +118,35 @@ pub fn unwatch(it: *Interp, name: []const u8) void {
 }
 
 /// Runs a script at the global level of `x`. `cur` is the interpreter
-/// that runs the loop.
-fn runGlobal(cur: *Interp, x: *Interp, text: []const u8) Error!cmds.Caught {
+/// that runs the loop. Gives null when the script deleted `x`: the
+/// memory of `x` is free then, and the result is gone with it.
+fn runGlobal(cur: *Interp, x: *Interp, text: []const u8) Error!?cmds.Caught {
     const frame = x.frame;
     const ns = x.ns;
     x.frame = &x.global;
     x.ns = "";
-    defer {
-        x.frame = frame;
-        x.ns = ns;
+    if (x == cur) {
+        defer {
+            x.frame = frame;
+            x.ns = ns;
+        }
+        return try cmds.runCaught(x, x.compile(text));
     }
-    if (x == cur) return cmds.runCaught(x, x.compile(text));
     const s = child.enter(cur, x);
-    defer child.leave(cur, x, s);
-    return cmds.runCaught(x, x.compile(text)) catch |e| return child.passError(cur, x, e);
+    const r = cmds.runCaught(x, x.compile(text));
+    x.frame = frame;
+    x.ns = ns;
+    // `leave` frees a deleted interpreter when its last call ends.
+    var gone = false;
+    var up: ?*Interp = x;
+    while (up) |u| : (up = u.parent) {
+        if (u.doomed) gone = true;
+    }
+    const failure: ?Error = if (r) |_| null else |e| child.passError(cur, x, e);
+    child.leave(cur, x, s);
+    if (failure) |e| return e;
+    if (gone) return null;
+    return r catch unreachable;
 }
 
 /// Queues a background error of `x`: the end of an event script with a
@@ -151,7 +166,7 @@ pub fn background(x: *Interp, c: cmds.Caught) Error!void {
 }
 
 fn runEvent(cur: *Interp, x: *Interp, text: []const u8) Error!void {
-    var c = try runGlobal(cur, x, text);
+    var c = (try runGlobal(cur, x, text)) orelse return;
     if (c.code == 1) c.error_info = .{ .str = try std.fmt.allocPrint(x.alloc(), "{s}\n    (\"after\" script)", .{try x.str(c.error_info)}) };
     if (c.code != 0) try background(x, c);
 }
@@ -183,7 +198,7 @@ fn report(cur: *Interp, s: *State, x: *Interp, b: BgError) Error!void {
     const a = x.alloc();
     const h = x.bg_handler orelse "::tcl::Bgerror";
     const text = try std.fmt.allocPrint(a, "{s} {s}", .{ h, try quoted(x, &.{ b.msg, b.opts }) });
-    const c = try runGlobal(cur, x, text);
+    const c = (try runGlobal(cur, x, text)) orelse return;
     if (c.code == 3) dropBackground(s, x);
     if (c.code == 1) errOut(x, try std.fmt.allocPrint(a, "{s}\n", .{try x.str(c.res)}));
 }
@@ -354,11 +369,14 @@ pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
     }
 }
 
-/// Runs a script of a channel handler for `chan.zig`.
-pub fn runHandler(cur: *Interp, x: *Interp, text: []const u8) Error!bool {
-    const c = try runGlobal(cur, x, text);
+pub const Ran = enum { ok, failed, gone };
+
+/// Runs a script of a channel handler for `chan.zig`. `gone` means
+/// that the script deleted the interpreter: its memory is free.
+pub fn runHandler(cur: *Interp, x: *Interp, text: []const u8) Error!Ran {
+    const c = (try runGlobal(cur, x, text)) orelse return .gone;
     if (c.code != 0) try background(x, c);
-    return c.code == 0;
+    return if (c.code == 0) .ok else .failed;
 }
 
 fn idText(a: std.mem.Allocator, id: u64) ![]const u8 {
@@ -397,7 +415,7 @@ fn cmdAfter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const h = it.event_host orelse return it.fail("the embedder gave no event clock", .{});
         if (argv.len == 2) {
             // A plain sleep. Each second of it uses one step.
-            var left: i64 = @min(ms, 1 << 40) * 1000;
+            var left: i64 = @as(i64, @min(ms, 1 << 40)) * 1000;
             while (left > 0) {
                 const part = @min(left, 1_000_000);
                 h.sleep(h.ctx, part);
@@ -408,7 +426,7 @@ fn cmdAfter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             return Value.empty;
         }
         const t = try s.a.create(Timer);
-        t.* = .{ .id = s.next_id, .it = it, .script = try a.dupe(u8, try joined(it, argv[2..])), .at = h.now(h.ctx) + @min(ms, 1 << 40) * 1000 };
+        t.* = .{ .id = s.next_id, .it = it, .script = try a.dupe(u8, try joined(it, argv[2..])), .at = h.now(h.ctx) + @as(i64, @min(ms, 1 << 40)) * 1000 };
         s.next_id += 1;
         try s.timers.append(s.a, t);
         return .{ .str = try idText(a, t.id) };
