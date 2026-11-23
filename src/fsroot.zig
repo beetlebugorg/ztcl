@@ -46,7 +46,8 @@ pub fn setRoot(it: *Interp, path: []const u8) !void {
 }
 
 pub fn posixError(it: *Interp, e: sys.Errno, what: []const u8) Error {
-    if (comptime !supported) return it.failCode("POSIX EACCES {permission denied}", "{s}permission denied", .{what});
+    // With no jail, only a seek on a socket or a pipe reaches this call.
+    if (comptime !supported) return it.failCode("POSIX EIO {input/output error}", "{s}input/output error", .{what});
     const name: []const u8, const text: []const u8 = switch (e) {
         .NOENT => .{ "ENOENT", "no such file or directory" },
         .ACCES, .PERM, .XDEV, .LOOP => .{ "EACCES", "permission denied" },
