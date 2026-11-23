@@ -35,7 +35,8 @@ A value is a tagged union: an integer (64 bits), a double, a string, or a list.
 - A list is a view of the first `len` elements of a shared buffer. `lappend` writes after the view when the view ends at the used part of the buffer, so an append is amortized constant time. Other views of the buffer stay correct.
 - A dict is a list of keys and values in insert order. A list object can have a mark that says its pairs are a valid dict, so a read does not check the keys again. A shorter view of even length of a marked buffer is also a valid dict.
 - A dict with 16 or more keys has a hash table with open addressing and linear probing. The table maps the hash of the string form of a key to its position. A new key goes after the view when the view ends at the used part of the buffer, so a new key is amortized O(1). An older view stays the same value, because a lookup ignores positions past its end. A write to an existing key of a shared dict copies the buffer.
-- A big integer is a string with canonical decimal text. An integer that fits in 64 bits is always an `int`. The integer operators check for overflow and call `bigint.zig` only on an overflow.
+- A big integer is a string with canonical decimal text. An integer that fits in 64 bits is always an `int`. The integer operators check for overflow and call `bigint.zig` only on an overflow. The decimal text comes from repeated division of the limbs by 10^19, with a multiply by the reciprocal in place of a hardware divide. The parse of decimal text multiplies the limbs by 10^19 and adds 19 digits at each step.
+- `llength` and `lindex` keep the parse of a string in a table with 16 places. A string of at least 32 bytes goes in the table at its second read at the same address. An entry has a private copy of the text, and each hit compares the string with that copy.
 - `append` writes after the string when the string ends at the used part of its buffer. Other views of the buffer stay correct, because their bytes do not change.
 
 ## The parser and the compiled form
@@ -62,7 +63,7 @@ A string that is not a literal word (for example the argument of `eval`) uses a 
 
 ## The bytecode
 
-`vm.zig` compiles a parsed script to a flat list of instructions. An instruction has 16 bytes: the operation, a small operand `x`, and three numbers `a`, `b`, and `c`. `run` executes the list on a small stack of values.
+`vm.zig` compiles a parsed script to a flat list of instructions. An instruction has 16 bytes: the operation, a small operand `x`, and three numbers `a`, `b`, and `c`. `run` executes the list on a small stack of values. A labeled switch dispatches the next instruction from the end of most handlers, so each handler has its own indirect branch.
 
 What compiles:
 
@@ -171,6 +172,7 @@ The vector program:
 
 - Each value is a register: one f64 for each point of a block of 1024 points.
 - Each operation runs over the whole block, so the cost of the interpreter is paid once for each block. The compiler of Zig turns the simple loops into SIMD code.
+- A register of an input field points into the input column, so the field has no copy. When an output column overlaps an input column, the field is copied to its register.
 - An `if` makes a mask register. A `set` or an output in a branch is a select between the new value and the old value. A `return` adds the mask of its branch to the mask of the points that returned.
 - `noise3` skips the points outside the mask.
 - The check tracks if a value is an integer or a double in the normal interpreter. Two integers divide as integers on both paths. The check refuses a division where the kind differs between points.
@@ -186,6 +188,6 @@ Both paths apply the same limits to the outputs at the end (`point.bound`), so t
 - `width` stays between 0.25 and 2 times the width input.
 - `flow` and `speed` have no limit yet.
 
-The embedder changes the numbers in `Points.limits`. The seed of `noise2` and `noise3` is `Points.seed` on both paths, and `Interp.noise_seed` for a normal script. The vector code has 4 lanes; 8 lanes were not tried.
+The embedder changes the numbers in `Points.limits`. The seed of `noise2` and `noise3` is `Points.seed` on both paths, and `Interp.noise_seed` for a normal script. The noise code has 8 lanes in two AVX2 registers, with each hash in a 64-bit lane. It keeps the 8 corner hashes of the last group of points and uses them again when the next group is in the same cells.
 
 Known differences of the two paths: an integer division by zero is an error on the slow path and gives Inf or NaN on the fast path, and integers above 2^53 lose bits on the fast path.

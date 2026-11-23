@@ -10,3 +10,8 @@
 - Adds big integers up to 2^20 bits. An integer that overflows 64 bits no longer wraps.
 - Adds `bench/dictgrow.tcl` and the Tcl 9.1.0 baseline in `docs/tcl9.md`.
 - Adds inline bytecode for `llength`, `lindex`, `string length`, and `string index`.
+- Dispatches bytecode from the end of each handler. The script benchmarks use 4% to 27% less CPU time from this change.
+- Caches the list parse of a string for `llength` and `lindex`, and adds `bench/readloop.tcl`. That benchmark goes from 571 ms to 17.7 ms.
+- Runs the noise of the point proc fast path on 8 lanes, keeps the corner hashes within a cell, and reads the input columns with no copy. The fuzzy skin proc goes from 23.5 to 14.8 ns for each point.
+- Writes and parses the decimal text of big integers in steps of 19 digits. The Tcl 8.6.16 suite goes from 26 s to 4 s.
+- Fixes the arena growth of `lindex` with an integer index.

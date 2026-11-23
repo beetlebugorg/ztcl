@@ -80,24 +80,25 @@ python3 -I tools/bench.py --tclsh <path to tclsh>  # the scripts in bench/
 
 `--tclsh` selects the Tcl version. [Tcl 8.6 and Tcl 9](tcl9.md) has the results for both versions and the suite totals of Tcl 9.1.0.
 
-Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2026-11-22. Each time is the best of 9 runs of the whole process, in CPU milliseconds (user and system). The machine had other load, and CPU time stays stable under that load.
+Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2026-11-23. Each time is the best of 11 runs of the whole process, in CPU milliseconds (user and system). The machine had other load, and CPU time stays stable under that load.
 
 | Benchmark (`bench/`) | ztcl | tclsh 8.6.16 | tclsh 9.1.0 |
 |---|---|---|---|
-| `sum.tcl` (1 million `expr` and `incr`) | 24.8 | 58.4 | 57.9 |
-| `fib.tcl` (fib 25, about 250 000 calls) | 16.7 | 51.0 | 49.2 |
-| `nested.tcl` (1000 x 1000, `lappend`, `llength`) | 36.4 | 73.5 | 84.8 |
-| `strbuild.tcl` (500 000 `append`) | 35.2 | 63.7 | 98.7 |
-| `foreach.tcl` (10 passes over 100 000 items) | 19.6 | 33.4 | 38.5 |
-| `dict.tcl` (200 000 `dict incr`, 200 000 `dict get`) | 30.5 | 48.7 | 58.4 |
-| `dictgrow.tcl` (200 000 new keys, 200 000 `dict get`) | 84.5 | 104.2 | 143.3 |
+| `sum.tcl` (1 million `expr` and `incr`) | 20.2 | 58.3 | 57.8 |
+| `fib.tcl` (fib 25, about 250 000 calls) | 14.4 | 50.8 | 49.4 |
+| `nested.tcl` (1000 x 1000, `lappend`, `llength`) | 31.8 | 73.7 | 84.7 |
+| `strbuild.tcl` (500 000 `append`) | 23.0 | 63.8 | 99.2 |
+| `foreach.tcl` (10 passes over 100 000 items) | 16.2 | 33.2 | 38.6 |
+| `dict.tcl` (200 000 `dict incr`, 200 000 `dict get`) | 22.8 | 48.6 | 58.5 |
+| `dictgrow.tcl` (200 000 new keys, 200 000 `dict get`) | 61.4 | 104.9 | 144.2 |
+| `readloop.tcl` (200 000 `llength` and `lindex` on a string) | 17.7 | 27.9 | 32.7 |
 
 The fuzzy skin proc (`zig build bench`):
 
 | Points | Fast path | Slow path |
 |---|---|---|
-| 1 million, a third on the outer wall | 23 ns for each point | about 160 ns for each point |
-| 1 million, all on the outer wall | 23 ns for each point | about 250 ns for each point |
-| 10 million, all on the outer wall | 23 ns for each point (0.23 s) | about 250 ns for each point (2.5 s) |
+| 1 million, a third on the outer wall | 14.9 ns for each point | about 139 ns for each point |
+| 1 million, all on the outer wall | 14.8 ns for each point | about 225 ns for each point |
+| 10 million, all on the outer wall | 14.8 ns for each point (0.15 s) | about 219 ns for each point (2.2 s) |
 
-The slow path uses the bytecode.
+The slow path uses the bytecode. The points of this benchmark are 0.04 mm apart. At a spacing of 0.5 mm the fast path uses about 15.9 ns for each point.

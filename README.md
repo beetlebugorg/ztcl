@@ -85,19 +85,20 @@ const v = try it.eval("expr {6 * 7}");
 
 ## Benchmarks
 
-Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2026-11-22. Each time is the best of 9 runs of the whole process, in CPU milliseconds. The two `tclsh` builds can differ in compiler flags.
+Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2026-11-23. Each time is the best of 11 runs of the whole process, in CPU milliseconds. The two `tclsh` builds can differ in compiler flags.
 
 | Benchmark | ztcl | tclsh 8.6.16 | tclsh 9.1.0 |
 |---|---|---|---|
-| `sum.tcl` (1 million `expr` and `incr`) | 24.8 | 58.4 | 57.9 |
-| `fib.tcl` (fib 25, about 250 000 calls) | 16.7 | 51.0 | 49.2 |
-| `nested.tcl` (1000 x 1000, `lappend`, `llength`) | 36.4 | 73.5 | 84.8 |
-| `strbuild.tcl` (500 000 `append`) | 35.2 | 63.7 | 98.7 |
-| `foreach.tcl` (10 passes over 100 000 items) | 19.6 | 33.4 | 38.5 |
-| `dict.tcl` (200 000 `dict incr`, 200 000 `dict get`) | 30.5 | 48.7 | 58.4 |
-| `dictgrow.tcl` (200 000 new keys, 200 000 `dict get`) | 84.5 | 104.2 | 143.3 |
+| `sum.tcl` (1 million `expr` and `incr`) | 20.2 | 58.3 | 57.8 |
+| `fib.tcl` (fib 25, about 250 000 calls) | 14.4 | 50.8 | 49.4 |
+| `nested.tcl` (1000 x 1000, `lappend`, `llength`) | 31.8 | 73.7 | 84.7 |
+| `strbuild.tcl` (500 000 `append`) | 23.0 | 63.8 | 99.2 |
+| `foreach.tcl` (10 passes over 100 000 items) | 16.2 | 33.2 | 38.6 |
+| `dict.tcl` (200 000 `dict incr`, 200 000 `dict get`) | 22.8 | 48.6 | 58.5 |
+| `dictgrow.tcl` (200 000 new keys, 200 000 `dict get`) | 61.4 | 104.9 | 144.2 |
+| `readloop.tcl` (200 000 `llength` and `lindex` on a string) | 17.7 | 27.9 | 32.7 |
 
-The fuzzy skin `point proc` over 10 million points uses 23.5 ns for each point on the vector path and about 250 ns on the normal path. [Testing](docs/testing.md) has all results.
+The fuzzy skin `point proc` over 10 million points uses 14.8 ns for each point on the vector path and about 219 ns on the normal path. [Testing](docs/testing.md) has all results.
 
 ## Compatibility
 
