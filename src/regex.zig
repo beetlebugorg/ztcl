@@ -351,10 +351,11 @@ const Parser = struct {
         return p.node(.{ .kind = .{ .char = c } });
     }
 
-    fn atClose(p: *const Parser) bool {
+    fn atClose(p: *const Parser, depth_open: bool) bool {
         if (!p.more()) return true;
         if (p.bre()) return p.peek() == '\\' and p.at(1) == ')';
-        return p.peek() == ')' or p.peek() == '|';
+        if (p.peek() == ')') return depth_open or p.opts.syntax != .ere;
+        return p.peek() == '|';
     }
 
     fn parseAlt(p: *Parser, depth_open: bool) Error!*Node {
@@ -383,9 +384,10 @@ const Parser = struct {
         var first = true;
         while (true) {
             p.skip();
-            if (p.atClose()) break;
+            if (p.atClose(depth_open)) break;
             var a = try p.parseAtom(first, depth_open);
-            first = false;
+            // In a BRE, a `*` after a leading `^` is a plain character.
+            first = p.bre() and first and a.kind == .assert;
             p.skip();
             a = try p.quantify(a);
             if (pref == .none) pref = a.pref;
@@ -429,7 +431,8 @@ const Parser = struct {
                     p.pos += 1;
                     max = p.number() orelse inf;
                 }
-                if (!(p.more() and p.peek() == '\\' and p.at(1) == '}')) return p.fail(Fault.brace);
+                if (!p.more()) return p.fail(Fault.brace);
+                if (!(p.peek() == '\\' and p.at(1) == '}')) return p.fail(Fault.badbr);
                 p.pos += 2;
             } else return atom;
         } else if (q == '*') {
@@ -449,7 +452,8 @@ const Parser = struct {
                 p.pos += 1;
                 max = p.number() orelse inf;
             }
-            if (!p.more() or p.peek() != '}') return p.fail(Fault.brace);
+            if (!p.more()) return p.fail(Fault.brace);
+            if (p.peek() != '}') return p.fail(Fault.badbr);
             p.pos += 1;
         } else return atom;
         if (is_bound) {
@@ -537,7 +541,7 @@ const Parser = struct {
                     }
                     if (k == '=' or k == '!') {
                         p.pos += 2;
-                        p.info |= Info.lookahead;
+                        p.info |= Info.lookahead | Info.nonposix;
                         const saved = p.ncap;
                         const sub = try p.parseAlt(true);
                         if (!p.more() or p.peek() != ')') return p.fail(Fault.paren);
@@ -558,7 +562,7 @@ const Parser = struct {
             '*', '+', '?' => return p.fail(Fault.badrpt),
             '{' => {
                 if (p.more() and p.peek() >= '0' and p.peek() <= '9') return p.fail(Fault.badrpt);
-                p.info |= Info.braces;
+                p.info |= Info.braces | Info.unspec;
                 return p.charNode('{');
             },
             '.' => return p.anyNode(),
@@ -567,7 +571,10 @@ const Parser = struct {
             '[' => return p.parseBracket(),
             '\\' => return p.parseEscape(),
             ')' => {
-                _ = depth_open;
+                if (p.opts.syntax == .ere and !depth_open) {
+                    p.info |= Info.pbotch;
+                    return p.charNode(')');
+                }
                 return p.fail(Fault.paren);
             },
             else => return p.charNode(c),
@@ -584,11 +591,17 @@ const Parser = struct {
             '.' => return p.anyNode(),
             '[' => return p.parseBracket(),
             '^' => {
-                if (first) return p.assertNode(if (p.opts.lineanchor) .line_bol else .bol);
+                if (first) {
+                    if (p.depth > 1) p.info |= Info.unspec;
+                    return p.assertNode(if (p.opts.lineanchor) .line_bol else .bol);
+                }
                 return p.charNode('^');
             },
             '$' => {
-                if (!p.more() or (p.peek() == '\\' and p.at(1) == ')')) return p.assertNode(if (p.opts.lineanchor) .line_eol else .eol);
+                if (!p.more() or (p.peek() == '\\' and p.at(1) == ')')) {
+                    if (p.more()) p.info |= Info.unspec;
+                    return p.assertNode(if (p.opts.lineanchor) .line_eol else .eol);
+                }
                 return p.charNode('$');
             },
             '\\' => {
@@ -606,11 +619,13 @@ const Parser = struct {
                     },
                     ')' => return p.fail(Fault.paren),
                     '{' => return p.fail(Fault.badrpt),
-                    '<' => return p.assertNode(.word_start),
-                    '>' => return p.assertNode(.word_end),
+                    '<', '>' => {
+                        p.info |= Info.nonposix | Info.locale;
+                        return p.assertNode(if (e == '<') .word_start else .word_end);
+                    },
                     '1'...'9' => return p.backref(e - '0'),
                     else => {
-                        if (e < 128 and std.ascii.isAlphanumeric(@intCast(e))) p.info |= Info.bsalnum;
+                        if (e < 128 and std.ascii.isAlphanumeric(@intCast(e))) p.info |= Info.bsalnum | Info.unspec;
                         return p.charNode(e);
                     },
                 }
@@ -657,15 +672,12 @@ const Parser = struct {
                 return x & 31;
             },
             'u' => {
-                const start = p.pos;
                 const n = p.hexDigits(4) orelse return p.fail(Fault.escape);
-                if (p.pos != start + 4) return p.fail(Fault.escape);
                 return @intCast(n);
             },
             'U' => {
-                const start = p.pos;
                 const n = p.hexDigits(8) orelse return p.fail(Fault.escape);
-                if (p.pos != start + 8 or n > 0x10FFFF) return p.fail(Fault.escape);
+                if (n > 0x10FFFF) return 0xFFFD;
                 return @intCast(n);
             },
             'x' => {
@@ -697,18 +709,26 @@ const Parser = struct {
         const e = p.peek();
         p.pos += 1;
         if (p.opts.syntax == .ere) {
-            if (e < 128 and std.ascii.isAlphanumeric(@intCast(e))) p.info |= Info.bsalnum;
+            if (e < 128 and std.ascii.isAlphanumeric(@intCast(e))) p.info |= Info.bsalnum | Info.unspec;
             return p.charNode(e);
         }
-        p.info |= Info.nonposix;
+        if (e < 128 and std.ascii.isAlphanumeric(@intCast(e))) p.info |= Info.nonposix;
         switch (e) {
-            'd', 'D', 's', 'S', 'w', 'W' => return p.classNode(@intCast(e)),
+            'd', 'D', 's', 'S', 'w', 'W' => {
+                p.info |= Info.locale;
+                return p.classNode(@intCast(e));
+            },
             'A' => return p.assertNode(.text_start),
             'Z' => return p.assertNode(.text_end),
-            'm' => return p.assertNode(.word_start),
-            'M' => return p.assertNode(.word_end),
-            'y' => return p.assertNode(.word_b),
-            'Y' => return p.assertNode(.not_word_b),
+            'm', 'M', 'y', 'Y' => {
+                p.info |= Info.locale;
+                return p.assertNode(switch (e) {
+                    'm' => .word_start,
+                    'M' => .word_end,
+                    'y' => .word_b,
+                    else => .not_word_b,
+                });
+            },
             '1'...'9' => {
                 // More digits are a back reference when a group has that
                 // number, and otherwise an octal value.
@@ -719,6 +739,7 @@ const Parser = struct {
                     p.pos = k;
                     return p.backref(n);
                 }
+                p.info |= Info.unport;
                 var o: u32 = e - '0';
                 if (e > '7') return p.fail(Fault.subreg);
                 var used: usize = 0;
@@ -730,6 +751,8 @@ const Parser = struct {
             },
             else => {},
         }
+        if (e == 'c' or e == 'x' or e == '0') p.info |= Info.unport;
+        if (e == 'e') p.info |= Info.unport | Info.locale;
         if (try p.charEscape(e)) |c| return p.charNode(c);
         if (e < 128 and std.ascii.isAlphanumeric(@intCast(e))) return p.fail(Fault.escape);
         return p.charNode(e);
@@ -752,10 +775,13 @@ const Parser = struct {
             if (name.len == 1) return name[0];
             return collateName(name) orelse p.fail(Fault.collate);
         }
+        if (c == '\\') p.info |= Info.bbs;
         if (c == '\\' and p.are()) {
             if (!p.more()) return p.fail(Fault.brack);
             const e = p.peek();
             p.pos += 1;
+            p.info |= Info.nonposix;
+            if (e == 'x' or e == 'c' or e == '0') p.info |= Info.unport;
             if (try p.charEscape(e)) |x| return x;
             if (e < 128 and std.ascii.isAlphanumeric(@intCast(e))) return p.fail(Fault.escape);
             c = e;
@@ -803,6 +829,7 @@ const Parser = struct {
             if (c == '\\' and p.are() and p.at(1) != null) {
                 const e = p.at(1).?;
                 if (e == 'd' or e == 's' or e == 'w') {
+                    p.info |= Info.bbs | Info.nonposix | Info.locale;
                     p.pos += 2;
                     switch (e) {
                         'd' => s.addClass(.digit),
@@ -911,6 +938,33 @@ const Emitter = struct {
     }
 };
 
+/// True when two neighbors of a concatenation can never both match:
+/// a text start after a character, a text end before one, or a word
+/// boundary next to a character that rules it out.
+fn impossible(n: *const Node, opts: Options) bool {
+    const items = switch (n.kind) {
+        .cat => |x| x,
+        .group => |g| return impossible(g.sub, opts),
+        else => return false,
+    };
+    var k: usize = 0;
+    while (k + 1 < items.len) : (k += 1) {
+        const x = items[k];
+        const y = items[k + 1];
+        const x_char = x.kind == .char or x.kind == .set;
+        const y_char = y.kind == .char or y.kind == .set;
+        if (x_char and y.kind == .assert) {
+            if (y.kind.assert == .bol or y.kind.assert == .text_start) return true;
+            if (y.kind.assert == .word_start and x.kind == .char and ucd.isWordChar(x.kind.char)) return true;
+        }
+        if (y_char and x.kind == .assert) {
+            if (x.kind.assert == .eol or x.kind.assert == .text_end) return true;
+            if (x.kind.assert == .word_end and y.kind == .char and ucd.isWordChar(y.kind.char)) return true;
+        }
+    }
+    return false;
+}
+
 fn canBeEmpty(n: *const Node) bool {
     return switch (n.kind) {
         .empty, .assert, .look, .backref => true,
@@ -972,6 +1026,7 @@ fn readDirector(p: *Parser) Error!void {
     } else if (p.opts.syntax == .are and src.len >= 3 and src[0] == '*' and src[1] == '*' and src[2] == '*') {
         return p.fail(Fault.badrpt);
     }
+    if (p.pos > 0) p.info |= Info.nonposix;
     if (p.opts.syntax != .are) return;
     if (p.pos + 2 < src.len and src[p.pos] == '(' and src[p.pos + 1] == '?' and src[p.pos + 2] < 128 and std.ascii.isAlphabetic(@intCast(src[p.pos + 2]))) {
         var k = p.pos + 2;
@@ -1004,6 +1059,7 @@ fn readDirector(p: *Parser) Error!void {
             }
         }
         if (k >= src.len) return p.fail(Fault.badopt);
+        p.info |= Info.nonposix;
         p.pos = k + 1;
     }
 }
@@ -1027,6 +1083,8 @@ fn compileNew(it: *Interp, pat: []const u8, opts: Options) Error!*Regex {
     try e.emit(root);
     _ = try e.add(.match);
     var info = p.info;
+    if (p.opts.expanded) info |= Info.nonposix;
+    if (impossible(root, p.opts)) info |= Info.impossible;
     if (root.pref == .lazy) info |= Info.shortest;
     if (canBeEmpty(root)) info |= Info.emptymatch;
     const re = try it.alloc().create(Regex);
@@ -1514,7 +1572,7 @@ fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 
-fn capValue(it: *Interp, m: *const Matcher, k: usize, indices: bool) Error!Value {
+pub fn capValue(it: *Interp, m: *const Matcher, k: usize, indices: bool) Error!Value {
     const lo = if (k < m.re.ncap) m.spans[2 * k] else null;
     const hi = if (k < m.re.ncap) m.spans[2 * k + 1] else null;
     if (lo == null or hi == null) {

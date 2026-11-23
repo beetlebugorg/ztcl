@@ -21,6 +21,12 @@ fn write(ctx: ?*anyopaque, bytes: []const u8) void {
 }
 
 pub fn main(init: std.process.Init) !void {
+    return runWith(init, null);
+}
+
+/// Runs the runner. `setup` adds commands to the interpreter: the
+/// suite runner passes its test commands here.
+pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!void) !void {
     const arena = init.arena.allocator();
     const io = init.io;
     const args = try init.minimal.args.toSlice(arena);
@@ -35,6 +41,7 @@ pub fn main(init: std.process.Init) !void {
     defer it.deinit();
     it.output = .{ .ctx = out, .write = write };
     it.mem_limit = 2 << 30;
+    if (setup) |f| try f(&it);
 
     var timed = false;
     var keep_going = false;
