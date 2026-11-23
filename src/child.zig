@@ -42,7 +42,7 @@ fn carry(from: *Interp, to: *Interp, v: Value) Error!Value {
 
 const Saved = struct { depth: u32, nest: u32, base: usize, native: usize, limit: usize };
 
-fn enter(from: *Interp, to: *Interp) Saved {
+pub fn enter(from: *Interp, to: *Interp) Saved {
     const s: Saved = .{ .depth = to.depth, .nest = to.nest, .base = to.native_base, .native = to.max_native, .limit = to.mem_limit };
     to.active += 1;
     to.step_limit = from.step_limit;
@@ -56,7 +56,7 @@ fn enter(from: *Interp, to: *Interp) Saved {
     return s;
 }
 
-fn leave(from: *Interp, to: *Interp, s: Saved) void {
+pub fn leave(from: *Interp, to: *Interp, s: Saved) void {
     from.step_limit = to.step_limit;
     to.depth = s.depth;
     to.nest = s.nest;
@@ -69,7 +69,7 @@ fn leave(from: *Interp, to: *Interp, s: Saved) void {
 }
 
 /// Gives the error of `to` to `from`.
-fn passError(from: *Interp, to: *Interp, e: Error) Error {
+pub fn passError(from: *Interp, to: *Interp, e: Error) Error {
     if (e == error.OutOfMemory) return e;
     from.result = carry(to, from, to.result) catch return error.OutOfMemory;
     from.error_code = carry(to, from, to.error_code) catch return error.OutOfMemory;
@@ -116,6 +116,8 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
     child.user = it.user;
     child.noise_seed = it.noise_seed;
     child.clock_host = it.clock_host;
+    child.event_host = it.event_host;
+    child.exec_host = it.exec_host;
     if (!child.is_safe) {
         // A child shares the jail of its parent through its own descriptor.
         if (comptime @import("builtin").os.tag == .linux) {
@@ -124,9 +126,13 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
                 if (std.os.linux.errno(rc) == .SUCCESS) child.fs.fd = @intCast(rc);
             }
             child.fs.cwd = try child.alloc().dupe(u8, it.fs.cwd);
+            child.fs.path = try child.alloc().dupe(u8, it.fs.path);
         }
         try child.allow(if (child.fs_ok()) it.capabilities else it.capabilities & ~@as(u32, 8 | 16));
     }
+    // A safe child has the event loop of its parent. A timer reaches
+    // no host data.
+    if (child.is_safe) try child.allow(it.capabilities & @intFromEnum(interp.Capability.event));
     const c = try a.create(Child);
     c.* = .{ .name = try a.dupe(u8, name), .it = child };
     try it.children.put(a, c.name, c);
@@ -201,6 +207,7 @@ pub fn destroy(it: *Interp, name: []const u8) void {
     var root = it;
     while (root.parent) |p| root = p;
     dropAliases(root, child);
+    @import("event.zig").forget(child);
     if (busy(child)) {
         child.doomed = true;
         return;
@@ -367,6 +374,16 @@ fn common(it: *Interp, target: *Interp, sub: []const u8, args: []const Value) Er
         }
         return .{ .int = target.max_depth };
     }
+    if (eql(sub, "bgerror")) {
+        if (args.len > 1) return it.wrongArgs("interp bgerror path ?cmdPrefix?");
+        if (args.len == 1) {
+            const l = try it.list(args[0]);
+            if (l.len == 0) return it.fail("cmdPrefix must be list of length >= 1", .{});
+            const text = try it.str(args[0]);
+            target.bg_handler = if (eql(text, "::tcl::Bgerror")) null else try target.alloc().dupe(u8, text);
+        }
+        return .{ .str = try it.alloc().dupe(u8, target.bg_handler orelse "::tcl::Bgerror") };
+    }
     if (eql(sub, "marktrusted")) {
         if (it.is_safe) return it.fail("permission denied: safe interpreter cannot mark trusted", .{});
         target.is_safe = false;
@@ -399,7 +416,7 @@ pub fn cmdInterp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("interp cmd ?arg ...?");
     const a = it.alloc();
     const word = try it.str(argv[1]);
-    const names = [_][]const u8{ "alias", "aliases", "children", "create", "delete", "eval", "exists", "expose", "hide", "hidden", "invokehidden", "issafe", "marktrusted", "recursionlimit", "slaves", "target" };
+    const names = [_][]const u8{ "alias", "aliases", "bgerror", "children", "create", "delete", "eval", "exists", "expose", "hide", "hidden", "invokehidden", "issafe", "marktrusted", "recursionlimit", "slaves", "target" };
     var sub: []const u8 = word;
     var hits: usize = 0;
     for (names) |n| {

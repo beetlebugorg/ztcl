@@ -5,9 +5,19 @@
 //! line at a time. The runner reads the files itself; a script has no
 //! command that reads a file.
 //!
-//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`, `channels`, `file`). `--root DIR` is
+//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, `exec`). `--root DIR` is
 //! the one folder of `file` and channels. Only the
 //! suite passes it.
+//! `--exec-timeout MS`, `--exec-env NAME=value`, and `--exec-allow a,b`
+//! set the time limit, the environment, and the program list of `exec`.
+//! A program of `exec` gets only the environment of `--exec-env`.
+//! `--tclsh` makes the runner act as `tclsh` for the Tcl test suite. The
+//! first file is the script, and the other words are its `argv`. With
+//! the channel capability, `stdin`, `stdout`, and `stderr` are channels
+//! on the descriptors of the process, and the script comes from the
+//! root folder. With no file, the commands come from `stdin` with no
+//! prompt. The mode adds the command `exit`.
+//! `--cwd DIR` sets the current folder to a folder below the root.
 //! `--mem N` sets the memory limit in bytes. The default is 2 GiB.
 //! `--repeat N` runs each file N times in one interpreter. With `--time`,
 //! it prints the best time: the warm time of the file.
@@ -21,17 +31,32 @@ const tcl = @import("ztcl");
 fn write(ctx: ?*anyopaque, bytes: []const u8) void {
     const w: *Io.Writer = @ptrCast(@alignCast(ctx.?));
     w.writeAll(bytes) catch {};
+    if (flush_each) w.flush() catch {};
 }
+
+/// True for `--verbose`: each write goes out at once, so the output of
+/// a file that stops early is complete.
+var flush_each = false;
 
 pub fn main(init: std.process.Init) !void {
     return runWith(init, null);
 }
 
 var host_io: Io = undefined;
+const exec_ok = @import("builtin").os.tag == .linux;
 
 fn hostNow(_: ?*anyopaque) i64 {
     const t = Io.Clock.real.now(host_io);
     return @intCast(@divFloor(t.toNanoseconds(), 1000));
+}
+
+fn hostTicks(_: ?*anyopaque) i64 {
+    const t = Io.Clock.awake.now(host_io);
+    return @intCast(@divFloor(t.toNanoseconds(), 1000));
+}
+
+fn hostSleep(_: ?*anyopaque, micros: i64) void {
+    Io.sleep(host_io, .fromNanoseconds(micros * 1000), .awake) catch {};
 }
 
 /// The TZif file of a zone. The clock module checks the name.
@@ -40,11 +65,87 @@ fn hostZone(_: ?*anyopaque, name: []const u8, a: std.mem.Allocator) ?[]const u8 
     return Io.Dir.cwd().readFileAlloc(host_io, path, a, .limited(1 << 20)) catch null;
 }
 
+var exit_out: *Io.Writer = undefined;
+
+/// `exit ?returnCode?`: writes the pending output and ends the process.
+fn cmdExit(it: *tcl.Interp, argv: []const tcl.Value, _: ?*tcl.interp.Cmd) tcl.Error!tcl.Value {
+    if (argv.len > 2) return it.wrongArgs("exit ?returnCode?");
+    var code: i64 = 0;
+    if (argv.len == 2) code = argv[1].asInt() orelse return it.fail("expected integer but got \"{s}\"", .{try it.str(argv[1])});
+    leave(it, @truncate(@as(u64, @bitCast(code))));
+}
+
+fn leave(it: *tcl.Interp, code: u8) noreturn {
+    exit_out.flush() catch {};
+    it.deinit();
+    std.process.exit(code);
+}
+
+/// The part of `tclsh` that the Tcl tests use for a child process.
+fn runTclsh(it: *tcl.Interp, out: *Io.Writer, words: []const [:0]const u8, root: ?[]const u8, cwd: ?[]const u8) !void {
+    exit_out = out;
+    const channels = exec_ok and it.capabilities & @intFromEnum(tcl.interp.Capability.channels) != 0;
+    if (comptime exec_ok) {
+        tcl.sys.ignorePipeSignal();
+        if (channels) try tcl.chan.useStdio(it);
+        if (root != null and cwd != null and std.mem.startsWith(u8, cwd.?, root.?)) {
+            it.fs.cwd = std.mem.trim(u8, cwd.?[root.?.len..], "/");
+        }
+    }
+    try it.register("exit", cmdExit);
+    const a = it.alloc();
+    var list: std.ArrayList(tcl.Value) = .empty;
+    if (words.len > 1) for (words[1..]) |w| try list.append(a, .{ .str = w });
+    try it.setVar("argv", try tcl.value.wrapList(a, list.items));
+    try it.setVar("argc", .{ .int = @intCast(list.items.len) });
+    try it.setVar("argv0", .{ .str = if (words.len > 0) words[0] else "tclsh" });
+    try it.setVar("tcl_interactive", .{ .int = 0 });
+    const script: []const u8 = if (words.len > 0)
+        try std.fmt.allocPrint(a, "source {s}", .{try it.str(try tcl.value.newList(a, &.{.{ .str = words[0] }}))})
+    else
+        // The commands of stdin, one complete command at a time.
+        \\apply {{} {
+        \\    set cmd {}
+        \\    while {[gets stdin line] >= 0} {
+        \\        append cmd $line \n
+        \\        if {![info complete $cmd]} continue
+        \\        set now $cmd
+        \\        set cmd {}
+        \\        if {[catch {uplevel #0 $now} msg]} { puts stderr $msg }
+        \\    }
+        \\    if {$cmd ne {}} { catch {uplevel #0 $cmd} }
+        \\}}
+    ;
+    if (words.len > 0 and !channels) {
+        const text = try Io.Dir.cwd().readFileAlloc(host_io, words[0], a, .limited(64 << 20));
+        it.script_name = words[0];
+        _ = it.eval(text) catch |e| return tclshError(it, e);
+        leave(it, 0);
+    }
+    _ = it.eval(script) catch |e| return tclshError(it, e);
+    leave(it, 0);
+}
+
+fn tclshError(it: *tcl.Interp, e: tcl.Error) noreturn {
+    if (e == error.TclError) {
+        it.finishError() catch {};
+        const info = it.getVarPlain("::errorInfo") catch it.result;
+        const text = it.str(info) catch "error";
+        if (comptime exec_ok) {
+            _ = tcl.sys.write(2, text);
+            _ = tcl.sys.write(2, "\n");
+        }
+        leave(it, 1);
+    }
+    leave(it, 0);
+}
+
 /// Runs the runner. `setup` adds commands to the interpreter: the
 /// suite runner passes its test commands here.
 pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!void) !void {
     const arena = init.arena.allocator();
     const io = init.io;
+    host_io = io;
     const args = try init.minimal.args.toSlice(arena);
 
     var out_buf: [1 << 16]u8 = undefined;
@@ -59,6 +160,10 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     it.mem_limit = 2 << 30;
     if (setup) |f| try f(&it);
 
+    var exec_env: std.ArrayList([:0]const u8) = .empty;
+    var tclsh = false;
+    var cwd: ?[]const u8 = null;
+    var root: ?[]const u8 = null;
     var timed = false;
     var keep_going = false;
     var verbose = false;
@@ -67,6 +172,8 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
         const arg: []const u8 = args[i];
+        // After `--tclsh`, the script and its arguments end the options.
+        if (tclsh and !std.mem.eql(u8, arg, "--cwd")) return runTclsh(&it, out, args[i..], root, cwd);
         if (std.mem.eql(u8, arg, "--time")) {
             timed = true;
             continue;
@@ -77,6 +184,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
         }
         if (std.mem.eql(u8, arg, "--verbose")) {
             verbose = true;
+            flush_each = true;
             _ = try it.eval("set tt_verbose 1");
             continue;
         }
@@ -85,8 +193,23 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             it.step_limit = try std.fmt.parseInt(u64, args[i], 10);
             continue;
         }
+        if (std.mem.eql(u8, arg, "--tclsh")) {
+            tclsh = true;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--cwd") and i + 1 < args.len) {
+            i += 1;
+            cwd = args[i];
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--exe-name") and i + 1 < args.len) {
+            i += 1;
+            it.exe_name = args[i];
+            continue;
+        }
         if (std.mem.eql(u8, arg, "--root") and i + 1 < args.len) {
             i += 1;
+            root = args[i];
             tcl.fsroot.setRoot(&it, args[i]) catch {
                 try out.print("cannot open the root folder \"{s}\"\n", .{args[i]});
                 out.flush() catch {};
@@ -103,7 +226,34 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             };
             host_io = io;
             it.clock_host = .{ .now = hostNow, .zone = hostZone };
+            it.event_host = .{ .now = hostTicks, .sleep = hostSleep };
+            // A write to a closed pipe or socket is an error of the
+            // script. It must not end the runner.
+            if (comptime exec_ok) tcl.sys.ignorePipeSignal();
             try it.allow(bits);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--exec-timeout") and i + 1 < args.len) {
+            i += 1;
+            if (comptime exec_ok) it.exec_host.timeout_ms = try std.fmt.parseInt(u32, args[i], 10);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--exec-env") and i + 1 < args.len) {
+            i += 1;
+            if (comptime exec_ok) {
+                try exec_env.append(arena, try arena.dupeZ(u8, args[i]));
+                it.exec_host.env = exec_env.items;
+            }
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--exec-allow") and i + 1 < args.len) {
+            i += 1;
+            if (comptime exec_ok) {
+                var list: std.ArrayList([]const u8) = .empty;
+                var iter = std.mem.tokenizeScalar(u8, args[i], ',');
+                while (iter.next()) |w| try list.append(arena, w);
+                it.exec_host.allow = list.items;
+            }
             continue;
         }
         if (std.mem.eql(u8, arg, "--repeat") and i + 1 < args.len) {
@@ -157,6 +307,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
         if (timed) try out.print("{s}: {d:.1} ms\n", .{ arg, @as(f64, @floatFromInt(best)) / 1e6 });
     }
     if (ran) return;
+    if (tclsh) return runTclsh(&it, out, &.{}, root, cwd);
 
     // The command line: one command for each line of stdin.
     var in_buf: [1 << 16]u8 = undefined;

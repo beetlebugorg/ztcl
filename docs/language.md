@@ -76,15 +76,21 @@ The counts are pass / fail / skip for the test file of the command.
 
 ## Intentionally absent
 
-`open`, `socket`, `exec`, `file`, `clock`, `source`, `exit`, `cd`, `glob`, `load`, and `after` do not exist. C extensions and Tk are out of scope.
+In the default interpreter, `open`, `socket`, `exec`, `file`, `clock`, `source`, `cd`, `glob`, `after`, `vwait`, and `update` do not exist. `load` and `exit` do not exist in the library. C extensions and Tk are out of scope.
 
 ## Optional commands
 
-`package`, `interp`, `clock`, `channels`, and `file` are capabilities. The default interpreter does not have them. An embedder turns them on with `Interp.allow`, and the runner with `--allow package,interp,clock,channels,file --root DIR`. A child interpreter has at most the capabilities of its parent, and a safe child has none.
+`package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, and `exec` are capabilities. The default interpreter does not have them. An embedder turns them on with `Interp.allow`, and the runner with `--allow package,interp,clock,channels,file,event,socket,exec --root DIR`. A child interpreter has at most the capabilities of its parent. A safe child has only the event loop of its parent.
 
 `clock` reads the time and the zone data only through `Interp.clock_host`, a callback of the embedder. Named zones are TZif data from that callback.
 
-`file` and the channel commands exist on Linux and stay inside one root folder from the embedder. A script sees that folder as `/`. Each open uses `openat2` with `RESOLVE_BENEATH` and `RESOLVE_NO_SYMLINKS`, so `..` and symlinks cannot leave it. `file link` is an error. `exec` and command pipelines do not exist.
+`file` and the channel commands exist on Linux and stay inside one root folder from the embedder. A script sees that folder as `/`. Each open uses `openat2` with `RESOLVE_BENEATH` and `RESOLVE_NO_SYMLINKS`, so `..` and symlinks cannot leave it. `file link` is an error.
+
+`event` is the event loop: `after`, `vwait`, `update`, `fileevent`, `interp bgerror`, and the default handler `::tcl::Bgerror`. The time comes only from `Interp.event_host`, a callback of the embedder. One loop serves an interpreter and its children. `clock` also adds the command `time`.
+
+`socket` makes TCP channels on Linux. It needs the channel capability. It accepts only `127.0.0.1`, `::1`, and `localhost`, and it makes no name lookup. A server with no `-myaddr` listens on both loopback addresses. A connection from an address that is not loopback is closed.
+
+`exec` adds `exec`, `pid`, and command pipelines (`open "|cmd"`) on Linux. **`exec` is not sandboxed.** A process is outside the root folder and outside the step, memory, and nesting limits, so a script with `exec` has the full power of the user that runs the embedder. `file` does not turn it on. Each program runs directly from its argument list, with no shell. The embedder sets `Interp.exec_host`: a list of allowed programs, a time limit after which the process group is killed, and the whole environment of each program. A background process ends when the interpreter ends. A program name with a `/` names a file below the root folder first.
 
 `coroutine`, `yield`, `yieldto`, and `tailcall` are core commands. `coroutine` needs a stack switch, which exists for x86-64 Linux. On other targets, including WebAssembly, it gives an error.
 

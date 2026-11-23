@@ -1012,7 +1012,7 @@ test "the optional commands are absent by default" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    for ([_][]const u8{ "package", "interp", "clock", "file", "open", "socket", "exec", "chan", "encoding", "source", "load", "cd", "pwd", "glob" }) |name| {
+    for ([_][]const u8{ "package", "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror" }) |name| {
         try std.testing.expect(it.findCommand(name) == null);
     }
 }
@@ -1097,4 +1097,108 @@ test "file and channels cannot leave the root folder" {
     try std.testing.expectEqualStrings("hidden", buf[0..n]);
     try std.testing.expectEqual(linux.E.NOENT, linux.errno(linux.openat(base, "made", .{}, 0)));
     try std.testing.expectEqualStrings("ok", try it.str(try it.eval("set f [open sub/a.txt w]; puts $f ok; close $f; set f [open sub/a.txt]; set l [gets $f]; close $f; set l")));
+}
+
+var fake_ticks: i64 = 0;
+
+fn fakeNow(_: ?*anyopaque) i64 {
+    return fake_ticks;
+}
+
+fn fakeSleep(_: ?*anyopaque, micros: i64) void {
+    fake_ticks += micros;
+}
+
+test "the event loop runs timers and idle scripts in order" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const cap = tcl.interp.Capability;
+    try it.allow(@intFromEnum(cap.event) | @intFromEnum(cap.interp));
+    _ = it.eval("after 10 {set x 1}") catch {};
+    try std.testing.expectEqualStrings("the embedder gave no event clock", try it.str(it.result));
+    fake_ticks = 0;
+    it.event_host = .{ .now = fakeNow, .sleep = fakeSleep };
+    try std.testing.expectEqualStrings("c a b", try it.str(try it.eval("after 20 {lappend l b; set done 1}; after 10 {lappend l a}; after idle {lappend l c}; vwait done; set l")));
+    // The clock of the test moved only through the sleep callback.
+    try std.testing.expectEqual(@as(i64, 20_000), fake_ticks);
+    try std.testing.expectEqualStrings("can't wait for variable \"never\": would wait forever", try it.str(try it.eval("catch {vwait never} m; set m")));
+    try std.testing.expectEqualStrings("1 {}", try it.str(try it.eval("set id [after 5 {set y 1}]; set n [llength [after info]]; after cancel $id; list $n [after info]")));
+    try std.testing.expectEqualStrings("boom", try it.str(try it.eval("proc bgerror {m} {set ::got $m}; after 0 {error boom}; vwait got; set got")));
+    // A child uses the loop of its parent, and its events end with it.
+    try std.testing.expectEqualStrings("2 0", try it.str(try it.eval("interp create c; c eval {after 1 {set z 2}}; update; after 1; update; set r [c eval {set z}]; c eval {after 1000 {set q 1}}; interp delete c; list $r [llength [after info]]")));
+    try std.testing.expectEqualStrings("{} {}", try it.str(try it.eval("interp create -safe s; list [s eval {info commands socket}] [s eval {info commands exec}]")));
+}
+
+test "socket accepts only loopback addresses" {
+    if (@import("builtin").os.tag != .linux) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const cap = tcl.interp.Capability;
+    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.event) | @intFromEnum(cap.socket));
+    fake_ticks = 0;
+    it.event_host = .{ .now = fakeNow, .sleep = fakeSleep };
+    for ([_][]const u8{
+        "socket example.com 80",     "socket 192.0.2.1 80",                "socket 10.0.0.1 80",
+        "socket 0.0.0.0 80",         "socket ::ffff:192.0.2.1 80",         "socket -server x -myaddr 0.0.0.0 0",
+        "socket -server x -myaddr :: 0", "socket -myaddr 192.0.2.1 localhost 80", "socket 127.0.0.1.example.com 80",
+    }) |script| {
+        if (it.eval(script)) |_| {
+            std.debug.print("opened: {s}\n", .{script});
+            return error.TestUnexpectedResult;
+        } else |e| try std.testing.expectEqual(error.TclError, e);
+    }
+    const script =
+        \\proc accept {s a p} {set ::peer $a; fileevent $s readable [list echo $s]}
+        \\proc echo {s} {if {[gets $s line] < 0} {close $s; return}; puts $s "got $line"; flush $s}
+        \\set srv [socket -server accept 0]
+        \\set c [socket 127.0.0.1 [lindex [fconfigure $srv -sockname] 2]]
+        \\puts $c hello; flush $c
+        \\fileevent $c readable {set reply [gets $c]}
+        \\vwait reply
+        \\close $c; update; close $srv
+        \\list $peer $reply [lindex [chan names] end]
+    ;
+    try std.testing.expectEqualStrings("127.0.0.1 {got hello} stdout", try it.str(try it.eval(script)));
+}
+
+test "exec has an allowlist and a time limit, and leaves no process" {
+    if (@import("builtin").os.tag != .linux) return error.SkipZigTest;
+    const linux = std.os.linux;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const cap = tcl.interp.Capability;
+    // `file` and channels do not turn on `exec`.
+    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.file) | @intFromEnum(cap.interp));
+    try std.testing.expect(it.findCommand("exec") == null);
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {open |echo}")));
+    try std.testing.expectEqualStrings("{}", try it.str(try it.eval("interp create c; list [c eval {info commands exec}]")));
+    try it.allow(@intFromEnum(cap.exec));
+    it.exec_host = .{ .allow = &.{ "echo", "/usr/bin/cat", "sleep", "sh" }, .timeout_ms = 300, .env = &.{"PATH=/usr/bin:/bin"} };
+    try std.testing.expectEqualStrings("a b", try it.str(try it.eval("exec echo a b")));
+    try std.testing.expectEqualStrings("A", try it.str(try it.eval("exec echo A | cat")));
+    try std.testing.expectEqualStrings("in", try it.str(try it.eval("exec cat << in")));
+    // A program that is not in the list does not start.
+    try std.testing.expectEqualStrings("1 {couldn't execute \"ls\": the embedder does not allow this program}", try it.str(try it.eval("list [catch {exec ls} m] $m")));
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {exec echo x | tr x y}")));
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {exec /bin/ls}")));
+    // The words go to the program as they are. No shell reads them.
+    try std.testing.expectEqualStrings("$HOME; ls `id`", try it.str(try it.eval("exec echo {$HOME; ls `id`}")));
+    // The program gets only the environment of the embedder.
+    try std.testing.expectEqualStrings("PATH=/usr/bin:/bin", try it.str(try it.eval("exec sh -c {export -p | cut -d' ' -f2- | tr -d \\\" | grep -v -e PWD -e OLDPWD -e SHLVL -e '^_=' ; true}")));
+    // The time limit ends the program and each process that it made.
+    const before = linux.getpid();
+    _ = before;
+    try std.testing.expectEqualStrings("1 {child killed: the time limit of 300 ms ended}", try it.str(try it.eval("list [catch {exec sh -c {sleep 60 & echo $! > /dev/null; wait}} m] $m")));
+    // A background process ends with the interpreter.
+    const pid_text = try it.str(try it.eval("exec sleep 60 &"));
+    const pid = try std.fmt.parseInt(i32, pid_text, 10);
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.kill(pid, @enumFromInt(0))));
+    const pipe_pid = try std.fmt.parseInt(i32, try it.str(try it.eval("set f [open {|sleep 60} r]; pid $f")), 10);
+    it.deinit();
+    try std.testing.expectEqual(linux.E.SRCH, linux.errno(linux.kill(pid, @enumFromInt(0))));
+    try std.testing.expectEqual(linux.E.SRCH, linux.errno(linux.kill(pipe_pid, @enumFromInt(0))));
+    try it.init(std.testing.allocator);
 }

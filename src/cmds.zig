@@ -175,7 +175,9 @@ fn cmdVariable(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const target = try it.globalVar(name);
         if (i + 1 < argv.len) {
             if (target.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{name});
-            target.v = .{ .val = argv[i + 1] };
+            if (target.v == .traced) {
+                try @import("trace.zig").write(it, target, name, null, argv[i + 1]);
+            } else target.v = .{ .val = argv[i + 1] };
         }
         if (it.frame != &it.global and it.frame.ns == null) try it.linkVar(ns.tail(given), target);
     }
@@ -1287,7 +1289,7 @@ fn cmdSplit(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return value.wrapList(a, out.items);
 }
 
-fn concat(it: *Interp, args: []const Value) Error![]const u8 {
+pub fn concat(it: *Interp, args: []const Value) Error![]const u8 {
     var out: std.ArrayList(u8) = .empty;
     for (args) |v| {
         const s = value.trimSpace(try it.str(v));
@@ -2127,7 +2129,7 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (argv.len == 3) it.script_name = try a.dupe(u8, pattern.?);
         return .{ .str = it.script_name };
     } else if (eql(sub, "nameofexecutable")) {
-        return Value.empty;
+        return .{ .str = it.exe_name };
     }
     return it.failCode("TCL LOOKUP INDEX subcommand", "unknown or ambiguous subcommand \"{s}\": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, library, loaded, locals, nameofexecutable, patchlevel, procs, script, sharedlibextension, tclversion, or vars", .{word});
 }
@@ -2139,6 +2141,7 @@ fn cmdPuts(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         newline = false;
         args = args[1..];
     }
+    var std_name: []const u8 = "stdout";
     if (args.len == 2) {
         const chan = try it.str(args[0]);
         if (!eql(chan, "stdout") and !eql(chan, "stderr")) {
@@ -2147,9 +2150,16 @@ fn cmdPuts(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             }
             return it.fail("can not find channel named \"{s}\"", .{chan});
         }
+        if (eql(chan, "stderr")) std_name = "stderr";
         args = args[1..];
     }
     if (args.len != 1) return it.wrongArgs("puts ?-nonewline? ?channelId? string");
+    if (comptime @import("builtin").os.tag == .linux) {
+        // A runner that acts as `tclsh` has real standard channels.
+        if (it.chans.table.count() > 0) {
+            if (try @import("chan.zig").putsTo(it, std_name, try it.str(args[0]), newline)) return Value.empty;
+        }
+    }
     if (it.output) |out| {
         out.write(out.ctx, try it.str(args[0]));
         if (newline) out.write(out.ctx, "\n");

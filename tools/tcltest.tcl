@@ -42,6 +42,32 @@ array set tt_cons {
     unixCrash 0 winCrash 1 pcCrash 1 macCrash 1
 }
 
+# A constraint for a command is true only when ztcl has the command.
+set tt_cons(socket) [llength [info commands socket]]
+
+set tt_cons(exec) [llength [info commands exec]]
+# The `tclsh` of the tests is the ztcl runner, through the script
+# `ztclsh` of tools/suite.sh. `stdio` is true when a pipeline to it
+# opens. `unixExecs` is true when the host has the programs that
+# tcltest looks for.
+proc tcltest::interpreter {args} { return /ztclsh }
+set tt_cons(stdio) 0
+set tt_cons(unixExecs) 0
+if {$tt_cons(exec) && [llength [info commands file]] && [file exists /ztclsh]} {
+    catch {
+        set tt_f [open "|[list [tcltest::interpreter]]" w]
+        puts $tt_f exit
+        close $tt_f
+        set tt_cons(stdio) 1
+    }
+    catch {
+        foreach tt_p {cat echo sh wc sleep fgrep ps chmod mkdir} {
+            exec sh -c "command -v $tt_p"
+        }
+        set tt_cons(unixExecs) 1
+    }
+}
+
 proc tcltest::testConstraint {name args} {
     global tt_cons
     if {[llength $args] > 0} {
@@ -145,6 +171,7 @@ proc tcltest::test {name desc args} {
     set why [tt_blocked $constraints]
     if {$why ne ""} { tt_skip $why; return }
     if {![info exists tt_match($match)]} { tt_skip "match:$match"; return }
+    if {$tt_verbose > 1} { puts "RUN $name" }
     set tt_out {}
     set tt_err {}
     set capture [expr {[info exists want_out] || [info exists want_err]}]
@@ -203,6 +230,8 @@ proc tcltest::cleanupTests {args} {
 proc tcltest::loadTestedCommands {args} {}
 proc tcltest::configure {args} {}
 proc tcltest::verbose {args} {}
+# The variables of tcltest that test files read.
+set tcltest::verbose {body error}
 
 }
 eval $tt_script

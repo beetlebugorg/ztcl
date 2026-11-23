@@ -29,14 +29,19 @@ pub const State = struct {
     fd: i32 = -1,
     /// The current folder, relative to the root, with no leading `/`.
     cwd: []const u8 = "",
+    /// The host path of the root. `exec` uses it to find a program
+    /// that a script names with a path.
+    path: []const u8 = "",
 };
 
 /// Opens the root. The runner calls it. Later paths stay below it.
 pub fn setRoot(it: *Interp, path: []const u8) !void {
+    if (comptime !supported) return error.BadRoot;
     const z = try it.alloc().dupeZ(u8, path);
     const rc = linux.openat(linux.AT.FDCWD, z, .{ .DIRECTORY = true, .CLOEXEC = true, .PATH = true }, 0);
     if (linux.errno(rc) != .SUCCESS) return error.BadRoot;
     it.fs.fd = @intCast(rc);
+    it.fs.path = try it.alloc().dupe(u8, std.mem.trimEnd(u8, path, "/"));
 }
 
 pub fn posixError(it: *Interp, e: linux.E, what: []const u8) Error {

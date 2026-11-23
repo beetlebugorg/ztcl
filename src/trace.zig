@@ -34,6 +34,9 @@ pub const VarTrace = struct {
     elem: ?[]const u8 = null,
     /// The letters of a trace from `trace variable`, or null.
     old: ?[]const u8 = null,
+    /// A trace of `vwait`: a write or an unset sets the flag and runs
+    /// no script. `trace info` does not list it.
+    flag: ?*bool = null,
 };
 
 pub const Traced = struct {
@@ -150,6 +153,10 @@ fn fire(it: *Interp, t: *Traced, name: []const u8, idx: ?[]const u8, op: u8) Err
         }
         // A trace can remove a later trace of the same variable.
         if (!still(t, tr)) continue;
+        if (tr.flag) |f| {
+            f.* = true;
+            continue;
+        }
         const word = if (tr.old != null) oldLetter(op) else opName(op);
         if (try runHook(it, tr.cmd, &.{ name, idx orelse "", word })) |msg| return msg;
     }
@@ -397,6 +404,7 @@ fn varInfo(it: *Interp, name: []const u8, old_form: bool) Error!Value {
         if (idx) |i| {
             if (tr.elem == null or !eql(tr.elem.?, i)) continue;
         } else if (tr.elem != null) continue;
+        if (tr.flag != null) continue;
         if (old_form != (tr.old != null)) {
             if (old_form) continue;
         }
@@ -428,6 +436,38 @@ fn varAdd(it: *Interp, name: []const u8, ops: u8, cmd: Value, old: ?[]const u8) 
     const t = try tracedOf(it, base);
     const copy: ?[]const u8 = if (idx) |i| try it.alloc().dupe(u8, i) else null;
     try t.list.insert(it.alloc(), 0, .{ .ops = ops, .cmd = cmd, .elem = copy, .old = old });
+}
+
+/// Adds the trace of `vwait` to a variable of the current frame.
+pub fn addFlag(it: *Interp, name: []const u8, flag: *bool) Error!void {
+    const base, const idx = Interp.splitName(name);
+    if (idx != null) {
+        if (try it.findVar(it.frame, base, false)) |cell| {
+            const scalar = switch (cell.target().v) {
+                .val, .owned => true,
+                .traced => |t| t.inner == .val,
+                else => false,
+            };
+            if (scalar) return it.fail("can't trace \"{s}\": variable isn't array", .{name});
+        }
+    }
+    const t = try tracedOf(it, base);
+    const copy: ?[]const u8 = if (idx) |i| try it.alloc().dupe(u8, i) else null;
+    try t.list.insert(it.alloc(), 0, .{ .ops = op_write | op_unset, .cmd = Value.empty, .elem = copy, .flag = flag });
+}
+
+pub fn removeFlag(it: *Interp, name: []const u8, flag: *bool) void {
+    const base, _ = Interp.splitName(name);
+    const cell = (it.findVar(it.frame, base, false) catch return) orelse return;
+    if (cell.v != .traced) return;
+    const t = cell.v.traced;
+    for (t.list.items, 0..) |tr, k| {
+        if (tr.flag == flag) {
+            _ = t.list.orderedRemove(k);
+            break;
+        }
+    }
+    if (t.list.items.len == 0) drop(it, cell);
 }
 
 fn traceData(it: *Interp, c: *interp.Command) Error!*CmdTraces {

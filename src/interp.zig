@@ -575,6 +575,14 @@ pub const Capability = enum(u32) {
     clock = 4,
     channels = 8,
     file = 16,
+    /// The event loop: `after`, `vwait`, `update`, and `fileevent`.
+    event = 32,
+    /// `socket`, for loopback addresses only.
+    socket = 64,
+    /// `exec`, `pid`, and command pipelines. A process is outside the
+    /// root folder and outside each limit: this capability gives a
+    /// script the full power of the user. It is not sandboxed.
+    exec = 128,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -590,6 +598,8 @@ pub const Capability = enum(u32) {
 
 const fs_supported = @import("builtin").os.tag == .linux;
 const FsState = if (fs_supported) @import("fsroot.zig").State else struct { fd: i32 = -1 };
+const ProcHost = if (fs_supported) @import("proc.zig").Host else struct {};
+const ProcState = if (fs_supported) @import("proc.zig").State else struct {};
 const ChanState = if (fs_supported) @import("chan.zig").State else struct {};
 
 pub const ReturnCode = enum(u32) { ok = 0, @"error" = 1, @"return" = 2, @"break" = 3, @"continue" = 4, _ };
@@ -697,6 +707,15 @@ pub const Interp = struct {
     /// The time and zone callbacks of the `clock` capability.
     clock_host: ?@import("clock.zig").Host = null,
     clock: @import("clock.zig").State = .{},
+    /// The clock and the sleep of the event loop, from the embedder.
+    event_host: ?@import("event.zig").Host = null,
+    /// The event loop that this interpreter shares with its parent.
+    events: ?*@import("event.zig").State = null,
+    /// The command prefix of `interp bgerror`, or null for the default.
+    bg_handler: ?[]const u8 = null,
+    /// The program list, the time limit, and the environment of `exec`.
+    exec_host: ProcHost = .{},
+    execs: ProcState = .{},
     /// The root folder and the channels of the file capabilities.
     fs: FsState = .{},
     chans: ChanState = .{},
@@ -725,6 +744,8 @@ pub const Interp = struct {
     last_during: ?Value = null,
     /// The value of `info script`. The runner does not set it.
     script_name: []const u8 = "",
+    /// The result of `info nameofexecutable`, from the embedder.
+    exe_name: []const u8 = "",
     /// The value of `tcl_precision`.
     precision: u8 = 0,
     /// The count of variables with traces. Above zero, the inline
@@ -757,7 +778,11 @@ pub const Interp = struct {
     /// limits, the output, and the data of the embedder stay.
     pub fn reset(it: *Interp) Allocator.Error!void {
         @import("child.zig").destroyAll(it);
-        if (comptime fs_supported) @import("chan.zig").closeAll(it);
+        @import("event.zig").forget(it);
+        if (comptime fs_supported) {
+            @import("chan.zig").closeAll(it);
+            @import("proc.zig").abandonAll(it);
+        }
         const fs_keep = it.fs;
         defer it.fs = fs_keep;
         const caps = it.capabilities;
@@ -777,6 +802,8 @@ pub const Interp = struct {
         it.user = keep.user;
         it.noise_seed = keep.noise_seed;
         it.clock_host = keep.clock_host;
+        it.event_host = keep.event_host;
+        it.exec_host = keep.exec_host;
         it.parent = keep.parent;
         it.is_safe = keep.is_safe;
         try it.start();
@@ -825,10 +852,13 @@ pub const Interp = struct {
         if (new & @intFromEnum(Capability.package) != 0) try it.register("package", @import("pkg.zig").cmdPackage);
         if (new & @intFromEnum(Capability.interp) != 0) try it.register("interp", @import("child.zig").cmdInterp);
         if (new & @intFromEnum(Capability.clock) != 0) try @import("clock.zig").register(it);
+        if (new & @intFromEnum(Capability.event) != 0) try @import("event.zig").register(it);
         // The file commands exist on Linux, where `openat2` is the jail.
         if (comptime fs_supported) {
             if (new & @intFromEnum(Capability.channels) != 0) try @import("chan.zig").register(it);
             if (new & @intFromEnum(Capability.file) != 0) try @import("filecmd.zig").register(it);
+            if (new & @intFromEnum(Capability.exec) != 0) try @import("proc.zig").register(it);
+            if (new & @intFromEnum(Capability.socket) != 0) try it.register("socket", @import("sock.zig").cmdSocket);
         }
     }
 
@@ -841,6 +871,7 @@ pub const Interp = struct {
         @import("child.zig").destroyAll(it);
         if (comptime fs_supported) {
             @import("chan.zig").closeAll(it);
+            @import("proc.zig").abandonAll(it);
             if (it.fs.fd >= 0) _ = std.os.linux.close(it.fs.fd);
         }
         it.arena.deinit();

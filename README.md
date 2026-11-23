@@ -104,7 +104,7 @@ The fuzzy skin `point proc` over 10 million points uses 14.8 ns for each point o
 
 ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: lists, strings, dicts, arrays, `expr`, `format`, `scan`, `binary`, `regexp`, namespaces, `try`, `apply`, `lmap`, `upvar`, and `uplevel`. The [language reference](docs/language.md) gives the status of each command.
 
-**Intentionally absent:** files, sockets, `exec`, `clock`, C extensions, and Tk. A script has no command that reaches the host. `puts` writes to a callback of the embedder.
+**Absent by default:** files, sockets, `exec`, `clock`, and the event loop. A script has no command that reaches the host. `puts` writes to a callback of the embedder. An embedder can turn on each of these as a capability. `exec` is not sandboxed: it gives a script the full power of the user. C extensions and Tk are out of scope.
 
 ## Known limits
 

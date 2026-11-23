@@ -45,13 +45,26 @@ fi
     string.test format.test switch.test eval.test parse.test \
     lmap.test apply.test rename.test error.test \
     lset.test namespace.test regexp.test binary.test info.test dict.test scan.test
+caps=package,interp,clock,channels,file,event,socket,exec
+# The script `ztclsh` runs in another folder, so the runner path is absolute.
+case $tcl in /*) ;; *) tcl=$PWD/$tcl ;; esac
 tp=0; tf=0; ts=0
 for f in "$@"; do
     # A fresh root folder for each file, outside the repository.
     root=$(mktemp -d "${TMPDIR:-/tmp}/ztcl-suite.XXXXXX") || exit 1
     # The support scripts of the Tcl tests, as a copy in the root.
-    cp -- "$tests"/*.tcl "$root"/ 2>/dev/null
-    raw=$(timeout 60 "$tcl" --max-steps 200000000 --mem 2147483648 --allow package,interp,clock,channels,file --root "$root" --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
+    cp -- "$tests"/*.tcl "$tests"/httpd "$root"/ 2>/dev/null
+    # `exec` runs only for the test files, in the root folder, with a
+    # program list, a time limit, and an environment with no data of
+    # the caller. `ztclsh` is the `tclsh` of the tests: this runner.
+    progs=cat,echo,sh,/bin/sh,sleep,ls,grep,fgrep,wc,id,groups,whoami,ps,kill,mknod,true,false,/ztclsh
+    set_exec="--exec-timeout 20000 --exec-env PATH=/usr/bin:/bin --exec-env HOME=$root --exec-env LANG=C --exec-allow $progs --exe-name /ztclsh"
+    cat > "$root/ztclsh" <<EOF
+#!/bin/sh
+exec "$tcl" --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --cwd "\$PWD" --tclsh "\$@"
+EOF
+    chmod +x "$root/ztclsh"
+    raw=$(timeout 300 "$tcl" --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
     rc=$?
     rm -rf -- "$root"
     out=$(printf '%s\n' "$raw" | grep -aE '^pass [0-9]+ fail' | tail -1)

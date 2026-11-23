@@ -26,6 +26,10 @@ ztcl uses only the Zig standard library. [References](references/tcl.md) lists t
 | `clock.zig` | The optional `clock` command and a small `msgcat`. |
 | `fsroot.zig` | The root folder jail of `file` and channels. |
 | `chan.zig` | The optional channel commands and `source`. |
+| `sys.zig` | The platform interface of channels, the event loop, and `socket`. |
+| `event.zig` | The optional event loop: `after`, `vwait`, `update`, and `fileevent`. |
+| `sock.zig` | The optional `socket` command, for loopback addresses. |
+| `proc.zig` | The optional `exec`, `pid`, and command pipelines. |
 | `filecmd.zig` | The optional `file`, `glob`, `cd`, and `pwd`. |
 | `pkg.zig` | The optional `package` command. |
 | `child.zig` | The optional `interp` command. |
@@ -168,9 +172,23 @@ A coroutine has its own native stack, word stack, and frame chain. An exported a
 
 `Interp.allow` turns on optional commands. The default interpreter has none. A child interpreter allocates through the counter of its parent, so the parent limit counts it. A call into a child passes the step limit, the nesting counts, and the native stack base. A child that is deleted while it runs is freed when the last call leaves it. `compact` gives `InterpBusy` for an interpreter with capabilities.
 
+### The event loop
+
+One loop serves an interpreter and its children (`event.zig`). The state has the timers, the idle scripts, and the channels with a handler. One pass waits until a timer is due or a descriptor is ready, runs the due timers in the order of their times, runs the handlers of the ready channels, and runs the idle scripts when no other script ran. A script of the pass cannot make the pass longer: a new timer or idle script runs in a later pass. Each script runs at the global level of its interpreter. An error goes to the handler of `interp bgerror` as an idle entry. `vwait` adds a trace to the variable that sets a flag and runs no script.
+
+A channel that does not block keeps output that the peer has no room for. The loop writes the rest when the descriptor is ready. A close of such a channel keeps the descriptor under a hidden name until the output is gone.
+
+### Sockets and processes
+
+`sock.zig` gives the address to `sys.zig` as an enum of the two loopback addresses, so no other address can reach a system call. `proc.zig` starts each pipeline as one process group and keeps the groups of background pipelines. The interpreter sends SIGKILL to each group when it ends, at the time limit of the embedder, and at a failed start. `exec` is not sandboxed.
+
+### The platform interface
+
+`sys.zig` has the host operations of channels, the event loop, and `socket`: read, write, close, seek, poll, the blocking mode, and the loopback socket calls. `fsroot.zig` has the root folder jail, and `proc.zig` has the process calls. These files have the Linux forms. A port to another system writes the same functions again.
+
 ## Safety and determinism
 
-- The commands `open`, `socket`, `exec`, `file`, `clock`, `source`, `exit`, `cd`, `glob`, `load`, and `after` do not exist. A test checks this.
+- In the default interpreter the commands `open`, `socket`, `exec`, `file`, `clock`, `source`, `cd`, `glob`, `after`, `vwait`, and `update` do not exist. The library has no `exit` and no `load`. A test checks this.
 - `puts` writes to a callback of the embedder.
 - Step limit: each command and each loop pass uses one step. At zero, the script stops with an error. `catch` cannot catch this error.
 - The nesting of scripts in scripts has a limit (2000 levels): `eval`, a loop body, a command substitution, `try`, `catch`. Before, `set s {eval $s}; eval $s` used up the native stack and crashed the process.

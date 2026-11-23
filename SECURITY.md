@@ -4,7 +4,9 @@ ztcl is experimental. Do not use it as the only barrier around hostile scripts.
 
 ## The sandbox
 
-- A script has no command for files, sockets, processes, or the clock.
+- By default, a script has no command for files, sockets, processes, timers, or the clock.
+- An embedder can turn on capabilities. `file` and channels stay inside one root folder. `socket` reaches only loopback addresses.
+- The capability `exec` is not part of the sandbox. A process that a script starts is outside the root folder and outside each limit. Turn it on only for scripts that you trust as much as the user account.
 - The step limit bounds the steps of a script. The embedder must set `step_limit`. The default has no limit.
 - `mem_limit` limits memory. One command can go above the limit by the size of its own result.
 - Nesting limits protect the native stack.

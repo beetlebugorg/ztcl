@@ -1169,8 +1169,25 @@ pub fn cmdClock(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return .{ .int = us };
 }
 
+/// `time script ?count?`: the mean time of a script in microseconds.
+fn cmdTime(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
+    if (argv.len != 2 and argv.len != 3) return it.wrongArgs("time command ?count?");
+    const count: i64 = if (argv.len == 3) try it.int(argv[2]) else 1;
+    const script = try it.scriptOf(argv, 1, cmd);
+    const start = try nowMicros(it);
+    var i: i64 = 0;
+    while (i < count) : (i += 1) _ = try it.evalScript(script);
+    const total = (try nowMicros(it)) - start;
+    const a = it.alloc();
+    if (count <= 0) return .{ .str = "0 microseconds per iteration" };
+    if (@rem(total, count) == 0) return .{ .str = try std.fmt.allocPrint(a, "{d} microseconds per iteration", .{@divTrunc(total, count)}) };
+    const mean = @as(f64, @floatFromInt(total)) / @as(f64, @floatFromInt(count));
+    return .{ .str = try std.fmt.allocPrint(a, "{d:.2} microseconds per iteration", .{mean}) };
+}
+
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try it.register("clock", cmdClock);
+    try it.register("time", cmdTime);
     try it.register("msgcat::mcset", cmdMcset);
     try it.register("msgcat::mcmset", cmdMcmset);
     try it.register("msgcat::mc", cmdMc);
