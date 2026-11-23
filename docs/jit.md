@@ -1,0 +1,560 @@
+# A JIT compiler for ztcl
+
+This page is the design of a compiler from the ztcl bytecode to machine code, and of the work that must come before it. It is a plan. No part of it is in the source yet. [The tasks](jit-tasks/README.md) give the order of the work, and [the review checklist](jit-review.md) is for the reviewer. [References](references/jit.md) lists the sources.
+
+## Summary
+
+- **Memory comes first.** A long-running script holds each value that it ever made, so two outside benchmarks stop at the memory limit. A JIT does not fix this. Milestone 0 gives memory back while a script runs. Milestone B makes four builtins faster. Both are work on the interpreter, and the JIT starts after them.
+- **Two tiers above the interpreter.** Tier 1 is a template compiler: each bytecode instruction becomes a fixed piece of machine code, and the state at each instruction boundary equals the state of the interpreter. Tier 2 compiles hot loops of numbers with values in registers and exits to tier 1 when a guess fails.
+- **The interpreter stays.** It is the fallback on each platform, the target of each exit, and the reference for each test.
+- **Own assemblers.** ztcl has no dependency, so the project writes a small assembler for x86-64 and one for arm64.
+- **Off by default.** The JIT is a build option and an embedder option. A script cannot turn it on. [The condition for a default of on](#the-condition-for-a-default-of-on) is in the security section.
+- **Honest gains.** Tier 1 removes about two thirds of the instructions of an integer loop. It removes 10 % to 40 % for the benchmarks that allocation, hashing, or string work bound. Tier 2 helps only loops of numbers.
+
+## The measured profile
+
+All numbers in this section are from commit `0900a7e`, `ReleaseFast`, x86-64 Linux, Intel Core i7-6700K, measured on 2026-11-23 with `perf stat -e instructions:u` and `perf record`. The machine had other load. In that session `tools/bench.py` gave times about 1.8 times the times in the README for ztcl and for `tclsh`, and the ratio of the two stayed the same. Instruction counts do not change with the load, so each gate in this plan is an instruction count.
+
+### Instruction counts
+
+| Script | Instructions | Bytecode instructions run | Share of `vm.exec` |
+|---|---|---|---|
+| `puts hi` (startup) | 0.70 M | | |
+| `sum.tcl` | 296.8 M | 9.00 M | 99.4 % |
+| `fib.tcl` | 163.3 M | 2.55 M | 57.1 % |
+| `nested.tcl` | 344.7 M | 10.02 M | 98.4 % |
+| `strbuild.tcl` | 328.9 M | 5.50 M | 67.9 % |
+| `foreach.tcl` | 211.5 M | 6.90 M | 99.2 % |
+| `dict.tcl` | 282.7 M | 4.60 M | 49.6 % |
+| `dictgrow.tcl` | 628.3 M | 5.20 M | 25.9 % |
+| `readloop.tcl` | 213.9 M | 4.00 M | 55.9 % |
+
+The interpreter uses about 33 machine instructions for one bytecode instruction in `sum.tcl`, `nested.tcl`, and `foreach.tcl`. The handler of `jf_vv` alone has about 45 instructions on its integer path. The dispatch, the decode of the operands, the two checks of each cell tag, and the spills of optional values make this cost.
+
+### Where the time goes
+
+| Script | Time outside `vm.exec` | What bounds it |
+|---|---|---|
+| `sum.tcl` | none above 0.3 % | The bytecode loop: 9 instructions for each pass. |
+| `fib.tcl` | `callProc` 30.7 %, `vm.run` 5.1 %, the frame list 3.8 %, `resolve` 2.4 % | The proc call: the frame, the cells of the parameters, and the entry of `run`. |
+| `nested.tcl` | `memcpy` 0.8 % | The bytecode loop and the append to the list. |
+| `strbuild.tcl` | `appendStr` 19.1 %, `memcpy` 12.3 % | String work. The append code inside `vm.exec` is also string work. |
+| `foreach.tcl` | none above 0.3 % | The bytecode loop: 6 instructions for each item. |
+| `dict.tcl` | `dict.lookup` 9.3 %, Wyhash 8.4 %, `cmdDict` 7.5 %, `expr.intOp` 7.5 %, `hashKey` 6.7 %, `probe` 6.5 %, `getIn` 3.9 % | Hashing and the lookup. |
+| `dictgrow.tcl` | `concatValues` 10.8 %, Wyhash 7.6 %, `cmdDict` 7.1 %, `probe` 6.9 %, `lookup` 5.9 %, the arena 5.8 %, `findVar` 5.7 %, `memcpy` 3.9 % | Allocation, hashing, and string work. |
+| `readloop.tcl` | `mem.eql` 30.7 %, `readList` 7.3 %, `expr.intOp` 5.6 % | The compare of the 599-byte string with its copy in the list cache. |
+
+### The cost of one statement
+
+Each row is one loop of one million passes in a proc. The first row is the empty loop.
+
+| Body of `for {set i 0} {$i < $n} {incr i} {...}` | Instructions for each pass |
+|---|---|
+| empty | 169 |
+| `set s [expr {$s + $i}]` | 296 |
+| `set s [expr {$i % 100}]` | 301 |
+| `incr s $x` | 248 |
+| `set s [llength $l]` | 265 |
+| `lappend row [expr {$i * $i}]` | 341 |
+| `append s "x$i,"` | 623 |
+| `dict incr d [expr {$i % 100}]` | 554 |
+| `incr s [dict get $d [expr {$i % 100}]]` | 856 |
+| `set s [f $i]` with `proc f {x} {return $x}` | 733 |
+| `dict set d key$i $i` | 1934 |
+
+### A model of the compiled loop
+
+A hand-written model of the machine code for the loop of `sum.tcl` gives a measured number for both tiers. The model uses the data layout of the `ReleaseFast` build: the cell pointer in the frame entry, the two tag checks, the step limit, the memory limit, and the epoch check. It is not in the repository.
+
+| Code for the loop of `sum.tcl` | Instructions | Cycles in the same session |
+|---|---|---|
+| The interpreter | 296.8 M | 171.1 M |
+| Tier 1 form: one template for each bytecode, values in cells | 94.2 M | 53.4 M |
+| Tier 2 form: `i`, `s`, and `n` in registers, one step check for each pass | 10.2 M | 6.7 M |
+
+### What each tier can remove
+
+The numbers are ratios of instruction counts against the interpreter of today. Only the `sum.tcl` rows come from a measured model. The other rows are estimates from the statement costs above.
+
+| Script | Tier 1, milestone 1 | Tier 1, milestone 2 | Tier 2 | Bound by |
+|---|---|---|---|---|
+| `sum.tcl` | 2.7 to 3.1 | the same | about 20 | The bytecode. |
+| `fib.tcl` | 1.3 to 1.5 | 1.45 to 1.65 | no more gain | The proc frame. |
+| `nested.tcl` | 2.1 to 2.5 | 2.4 to 2.8 | 3 to 4 | The append to the list. |
+| `foreach.tcl` | 1.9 to 2.3 | 2.4 to 2.9 | about 4 | The bytecode. |
+| `strbuild.tcl` | 1.2 to 1.4 | the same | no more gain | String work. |
+| `dict.tcl` | 1.25 to 1.45 | the same | no more gain | Hashing. |
+| `dictgrow.tcl` | 1.1 to 1.2 | the same | no more gain | Allocation, hashing, and string work. |
+| `readloop.tcl` | 1.3 to 1.5 | 1.5 to 1.7 | no more gain | The list cache compare. |
+
+This plan promises no gain for the work that a helper function does: the hash of a key, the growth of a string, the copy of a list buffer, the arena, and the frame of a proc call. For `dictgrow.tcl`, `dict.tcl`, `strbuild.tcl`, and `readloop.tcl`, a change to that code has more effect than a JIT. The roadmap has such items: a cached list form for a string value, and cheaper proc frames. They are separate work.
+
+### The outside benchmarks
+
+The Tcl programs of [kostya/benchmarks](https://github.com/kostya/benchmarks) (MIT), at commit `5bc68b3705`, are an outside gate: `brainfuck/bf.tcl` and `brainfuck/bf_oo.tcl` with `bench.b`, and `base64/test.tcl`. The repository has no copy of them. `matmul` needs the tcllib package `math::linearalgebra`, which ztcl does not have, so it is not a gate.
+
+A first run on the busy machine, against `tclsh` 8.6.16, with each capability on, a step limit of 10^11, and a memory limit of 6 GiB:
+
+| Program | ztcl | `tclsh` 8.6.16 |
+|---|---|---|
+| `bf.tcl bench.b` | Stops after 11 s with `the script used too much memory`. | 344 s |
+| `bf_oo.tcl bench.b` | Stops with the same error. | Not done after 420 s. |
+| `base64/test.tcl`, encode | 4.50 s | 3.27 s |
+| `base64/test.tcl`, decode | 9.29 s | 5.75 s |
+
+With the default limit of 2 GiB, `base64/test.tcl` also stops with the memory error.
+
+**The cause is the arena.** All memory of the interpreter comes from one arena, and the arena frees memory only at `compact`, `reset`, or `deinit`. `compact` cannot run while a script runs. So each value that a loop makes stays until the script ends. `tclsh` counts the references of each value and frees a value at its last use. These loops of 200 000 to 1 million passes show the growth and the cost of the commands that the programs use:
+
+| Body of one pass | ztcl memory for each pass | ztcl instructions | `tclsh` instructions | `tclsh` memory |
+|---|---|---|---|---|
+| `lset tape 3 5` on a list of 100 items | 2460 bytes | 1420 | 750 | flat |
+| `lassign [f $tape $pos] tape pos`, where `f` returns `[list $tape $pos]` | 127 bytes | | | flat |
+| `lassign $x op val` | 30 bytes | 980 | 740 | flat |
+| `switch -exact -- $op {INC {...} MOVE {...}}` | 128 bytes | 2140 | 660 | flat |
+| A method call `$o p 3` | 125 bytes | 5200 | 3900 | flat |
+| `binary encode base64` of 131 072 bytes | 242 KiB | 6.9 M | 4.3 M | flat |
+| `binary decode base64` of 174 764 bytes | 168 KiB | 16.1 M | 4.7 M | flat |
+
+`lset` copies the whole list at each call, because no code can prove that the cell is the one holder of the buffer. `binary encode base64` runs 8192 times in the benchmark, so the results alone are 1.9 GiB.
+
+**Where each gain comes from.** The JIT removes the dispatch of bytecode. In `bf.tcl`, each step of the inner loop is `lassign`, `switch`, `lset`, and `lindex`. Three of them are general commands today, so the JIT has little to remove.
+
+| Program | Milestone 0: memory | Milestone B: builtins | The JIT |
+|---|---|---|---|
+| `bf.tcl`, `bf_oo.tcl` | The program ends with the correct checksum. Without this, each other gain is zero. | The largest gain. `switch`, `lassign`, and `lset` use about 4500 instructions for one step against about 1800 in `tclsh`. As bytecode with an in-place `lset`, the estimate is about 400. | An estimate of 1.5 to 2 times on top, after the commands are bytecode. |
+| `base64/test.tcl` | The program ends at the default limit. | All of the gain: the two codec loops. Decode uses 3.4 times the instructions of `tclsh`. | None. The script loop has 16 384 passes. |
+
+The estimates of this table come from the loops above. No one measured them on the whole programs.
+
+### Point procs
+
+The vector path of a point proc is about 15 ns for each point. It pays the dispatch one time for each block of 1024 points: the fuzzy skin program has 16 operations for each block. The loops of the operations are SIMD code from the Zig compiler. A JIT has no dispatch cost to remove there. This plan does not compile vector programs. The author did not measure the share of `noise3` on the vector path.
+
+The slow path of a point proc is a normal proc, so tier 1 compiles it. Rule 6 of AGENTS.md stays: tier 1 calls the same functions as the interpreter for each operation on a double, so the bits stay equal.
+
+## Milestone 0: memory that a script no longer uses
+
+### The decision
+
+ztcl replaces the arena with a heap that has a mark-and-sweep collector. The collector does not move a block, and it finds pointers conservatively: each aligned word in a root or in a live block that has the address of a heap block keeps that block.
+
+| Choice | Why not |
+|---|---|
+| Count references, as `tclsh` does | A `Value` is a plain 24-byte copy at about 440 allocation sites and each place that stores a value. Each copy needs a count change. One missed change is a use after free. |
+| Run `compact` inside a script | `compact` moves each block, so it must know each pointer exactly. Values in the native frames of Zig code have no map. |
+| A region for each proc call, with a copy of each value that leaves it | Each store into a longer-lived place needs the copy: a variable, a list buffer, an array, a cache. One missed store is a use after free. |
+| A conservative collector that does not move (the choice) | A missed root is still a use after free, but the roots are few: the interpreter struct, the native stack, the registers, and the coroutine stacks. A number that looks like an address keeps a dead block. That costs memory, never safety. |
+
+### The parts
+
+- **The heap** (`src/heap.zig`). Size classes in pages, a mark bit for each block, large blocks of whole pages, and a table from an address to its block. A pointer into the middle of a block keeps the block, because a string is often a part of a buffer. The heap has the `Allocator` interface, so `it.alloc()` stays as it is.
+- **The roots.** The bytes of the `Interp` struct, the native stack from the current stack pointer to `native_base`, the callee-saved registers, the used part of each coroutine stack, and each range that the embedder registers. A child interpreter is a root of its parent.
+- **The trigger.** A collection starts inside an allocation, when the heap holds two times the bytes that were live after the last collection, and at least 16 MiB. The numbers are a function of the allocation history alone.
+- **The sweep.** A dead block goes to the free list of its size class. A page with no live block goes back to the allocator of the embedder.
+- **`compact`, `reset`, `deinit`.** They stay. `reset` and `deinit` free the heap in one step. `compact` copies the live data to a new heap as today.
+- **A stress mode.** `--gc-stress N` collects at each Nth allocation. The unit tests and the suite run in this mode, in a build with safety checks, and a freed block is filled with a pattern. This mode finds a missed root.
+- **`lset` in place.** A cell can own a list, as a cell can own a dict today. Then `lset` writes to the buffer and makes no garbage. This removes the largest source of garbage in `bf.tcl` and the copy of the list.
+
+### What changes for the embedder and for the limits
+
+- **A value from `eval`.** Today a `Value` that `eval` returns is valid until `compact` or `reset`. With the collector, it is valid until the next call into the interpreter. A new call `Interp.hold(v)` keeps a value longer, and `Interp.release` ends that. This is an API change for zslice.
+- **The memory limit.** `mem_limit` bounds the bytes of the heap. A script that stays below the limit gives the same output on each run. The exact place of the memory error can differ between two runs, because a word on the native stack can look like an address. Today that place is exact. `--gc off` turns the collector off, and the limit is then exact as today. The differential tests of the JIT use `--gc off` for the memory count.
+- **Speed.** An allocation from a size class costs more than a bump of the arena. The gate is at most 3 % more instructions for each of the eight benchmarks.
+- **The JIT.** The collector scans the value stack and the cells, where tier 1 keeps each value. Tier 2 keeps only integers and doubles in registers. The rule for each later change is: no pointer to a heap block is only in a register of machine code across a helper call. The data of the JIT is outside the heap and holds no pointer that keeps a block.
+
+### The gates of milestone 0
+
+| Gate | Limit |
+|---|---|
+| A loop of each row of the table above, with N passes and with 10 N passes | The peak of `memUsed` differs by at most 10 %. |
+| `bf.tcl bench.b`, `bf_oo.tcl bench.b`, `base64/test.tcl` at the default limit of 2 GiB | Each one ends. The output equals the output of `tclsh` 8.6.16, with the two time fields of `base64` removed. The peak of `memUsed` is at most 64 MiB. |
+| The eight benchmarks | At most 3 % more instructions than today. |
+| The unit tests and the suite with `--gc-stress 1` on a small set and `--gc-stress 64` on all files | The counts of today, and no safety check fails. |
+
+## Milestone B: the builtins of the outside benchmarks
+
+| Work | Today | Target |
+|---|---|---|
+| `switch -exact` with literal patterns and bodies, as bytecode | 2140 instructions for one pass, 128 bytes | At most the count of `tclsh` (660), no allocation |
+| `lassign` with plain variable names, as bytecode | 980 | At most 740, no allocation |
+| `lset var index value` with one index, as bytecode, in place for an owned list | 1420 | At most 750, no allocation |
+| `binary encode base64` and `binary decode base64` | 6.9 M and 16.1 M for 131 072 bytes | At most the counts of `tclsh` (4.3 M and 4.7 M) |
+
+The gate of the whole programs is a ratio of instruction counts against `tclsh` 8.6.16 in the same session, with the same output:
+
+| Program | After milestone 0 | After milestone B | After milestone 2 of the JIT |
+|---|---|---|---|
+| `base64/test.tcl` | ends | at most 1.0 | at most 1.0 |
+| `bf.tcl bench.b` | ends | at most 0.5 | at most 0.35 |
+| `bf_oo.tcl bench.b` | ends | at most 0.5 | at most 0.35 |
+
+The two `bf` ratios are provisional. Task 06 measures the first full run, and the user sets the final numbers then. A full run of `bench.b` needs minutes, so this gate runs one time at the end of each milestone.
+
+## The design of the JIT
+
+### The tiers
+
+| Tier | What it is | State at an instruction boundary |
+|---|---|---|
+| 0 | The interpreter (`vm.exec`). | The value stack, the cells, `pc`, and `sp`. |
+| 1 | A template compiler. One bytecode instruction gives one fixed piece of machine code with an inline fast path and a call of a helper for the slow path. | The same as tier 0. No value is in a register across a boundary. |
+| 2 | A compiler for one hot loop. Integers and doubles are in registers. Guards check the guesses. | Registers and constants. A table for each exit gives the place of each value. |
+
+**Why tier 1 is a template compiler.** The state of tier 1 equals the state of the interpreter at each boundary. So a switch between the two needs only `pc` and `sp`, and tier 1 needs no on-stack replacement tables. Each slow path calls the function that the interpreter calls, so each rare case has one implementation. V8 uses this design for Sparkplug, and SpiderMonkey and JavaScriptCore use it for their baseline compilers.
+
+**Why not copy-and-patch.** Copy-and-patch makes the templates from compiled C code at build time and needs Clang or LLVM tools for the stencils. ztcl builds with the Zig toolchain alone and for five targets. The templates of tier 1 are small, so an assembler by hand is less work than a stencil tool.
+
+**Why tier 2 is a loop compiler and not a trace compiler.** A trace compiler records one path through a loop. A patent on trace compilation may be active: US 8,769,511, "Dynamic incremental compiler and method", filed 2007-02-16 and granted 2014-07-01 to the University of California. LuaJIT and PyPy ship trace compilers as open source. The author is not a lawyer and did not check the claims or the legal status. A compiler for a whole loop with type guesses avoids the question. Method compilers with type speculation and deoptimization date from the Self system (1992), and each claim of that age has expired.
+
+### What compiles, and when
+
+- A proc body compiles to tier 1 at its second call. A body with a loop compiles at its first call. The compile is linear in the count of bytecode instructions, so a low threshold is safe.
+- A script outside a proc (`Code.named`) compiles to tier 1 from task 23 on. Its variables use names, so each variable access calls a helper.
+- With `--jit-threshold 0`, each `Code` compiles before its first run. The tests use this mode.
+- A `Code` that the verifier refuses, or that fails to compile, stays in the interpreter. The compiler tries each `Code` one time.
+- A loop compiles to tier 2 when its tier 1 code counts 1000 passes. The count is a field of the JIT data of the loop.
+
+Tier 1 needs no entry in the middle of an interpreter run, because it compiles before the run starts. After an error that `vm.run` handles (`break` or `continue` from a general command), `run` enters the tier 1 code again at the target `pc`.
+
+### The entry and the exit of tier 1
+
+`vm.run` keeps its form. It calls `jit.enter` in place of `exec` when the `Code` has machine code:
+
+```zig
+const out = if (code.jit) |j| jit.enter(it, j, code, stack.ptr, &pc, &sp) else exec(...);
+```
+
+- The machine code of a `Code` is one function with the C calling convention and one argument: a pointer to an `EnterCtx` on the native stack. The context has the interpreter, the `Code`, the frame, the value stack, the helper table, the target address, `pc`, `sp`, and the error.
+- `jit.enter` computes the target address from a table with one entry for each bytecode address. It checks that `pc` is in range, that `sp` equals the static depth of that address, and that the target is inside the function. A failed check runs `exec`.
+- The function returns a status: 0 for a result (at `stack[sp - 1]`), 1 for a Zig error (in the context), 2 for a fallback to `exec` at `ctx.pc` and `ctx.sp`.
+- A call of a helper that can fail has a cold stub. The stub writes the bytecode address and the static depth to the context and returns status 1. So `run` sees the same `pc` and `sp` as with `exec`, and the error trace, `break`, and `continue` work with no change.
+- The depth of the value stack is static at each address. The verifier computes it. So the machine code has no `sp` register: each stack value has a fixed offset.
+
+### The machine code has no absolute address and no script constant
+
+- A helper call is an indirect call through a table of function pointers. The table is a constant of the binary. A pinned register holds its address.
+- A literal comes from `code.lits` at run time. An integer literal of a script is never an immediate operand.
+- The instruction stream has only opcodes, register numbers, branch offsets, and small numbers that the compiler bounds: a slot index, a literal index, a stack offset, a bytecode address, and a field offset.
+
+So the code is position independent, has no pointer that an attacker can read, and has no bytes that a script selects freely. This is the defense against JIT spraying. See [Security](#security).
+
+### The pinned registers
+
+| Purpose | x86-64 | arm64 |
+|---|---|---|
+| The interpreter | `r15` | `x19` |
+| The `Code` | `r14` | `x20` |
+| The value stack | `r13` | `x22` |
+| The helper table | `r12` | `x23` |
+| The frame | `rbx` | `x21` |
+| The frame pointer | `rbp` | `x29` |
+| Scratch | `rax`, `rcx`, `rdx`, `r8` to `r11` | `x9` to `x15` |
+
+Each pinned register is callee-saved in the System V ABI, the Microsoft x64 ABI, and AAPCS64. The scratch set is caller-saved in all three. `rsi` and `rdi` are callee-saved on Windows, so the templates use them only for arguments. arm64 code never uses `x18`. A helper has at most four integer arguments, so each ABI passes them in registers.
+
+### The layout of values
+
+`Value` and `Var` are Zig tagged unions, and Zig does not fix their layout. The JIT reads four facts at start: the offset and the mask of the tag of `Value`, the offset and the mask of the tag of `Var.v`, the offset of each payload, and the number of each tag. `jit/layout.zig` finds them with a probe: it writes two values that differ only in the tag and compares the bytes. In the builds of today, the tag of `Value` is at byte 16 of 24, and the tag of `Var.v` is at byte 24 of 40.
+
+If the probe finds a layout that it does not understand, the JIT stays off for the process. A copy of a `Value` in machine code is two 8-byte moves and one byte move for the tag. A 16-byte load after an 8-byte store of the same bytes stalls the processor.
+
+### The helpers
+
+Each slow path of `vm.exec` becomes a named function in `vm.zig` that both the interpreter and the helpers call. `jit/helpers.zig` wraps each one with the C calling convention: the wrapper returns 0, or stores the Zig error in the context and returns 1. The helper table is an array of these wrappers.
+
+The inline fast paths of tier 1, in the order of their gain:
+
+1. `guard`, `step`: the epoch compare, the step limit, and the memory limit.
+2. `jump`, `jf_vv`, `jf_vi`, `jump_false`, `jump_true`: integer compares.
+3. `bin_vv`, `bin_vi`, `binary`: `+`, `-`, `*`, and the six compares on two integers, with the overflow check.
+4. `load`, `store`, `store_pop`, `push`, `push_empty`, `pop`.
+5. `incr`, `incr_drop`, `incr_value` on an integer cell.
+6. Milestone 2: `foreach_next`, `lappend` when the list has room, `llength` and `lindex` on a list value, `/` and `%` on integers, and a direct call of a proc.
+
+Each other case calls a helper. A slot that holds a link (`upvar`, `global`) follows the link in a small loop outside the hot path. A cell with a trace, an array, an element link, or an owned dict goes to the helper.
+
+### Tier 2
+
+Tier 2 compiles one loop: the instructions from a loop head to its back jump. The work has these parts.
+
+- **The guess.** At the 1000th pass, tier 2 reads the kind of each slot that the loop uses. An `int` cell gives the guess `int`, and a `double` cell gives `double`. Other kinds stay in their cells. Tier 1 needs no type feedback code.
+- **The check.** A forward pass over the loop gives a type to each stack value and each slot at each instruction. A loop compiles only when the types at the back jump equal the types at the head.
+- **The entry.** The tier 1 code calls `jit.tierUp` at the loop head. The entry block of the tier 2 code checks that each slot is a direct `.val` cell of the guessed kind, and loads it into a register. Two slots that link to one cell fail this check, so the registers have no alias.
+- **Guards.** A guard is at an instruction boundary, before any effect of that instruction. A failed guard is an exit.
+- **Exits.** Each exit has a record: the bytecode address, the place and kind of each slot and stack value, and the count of steps to give back. `jit.deopt` writes the values to the cells and the value stack and returns to `run`, and tier 1 continues at that address.
+- **Calls out.** Before a call of a helper that can run a script, tier 2 writes each changed register to its cell. After the call, it checks the epoch and each slot again and loads the registers. So `upvar`, `uplevel`, traces, and a redefined command see and change the true cells.
+- **A loop that exits often.** After 8 exits of one loop, the JIT drops its tier 2 code and never compiles that loop again.
+
+Tier 2 uses at most 5 registers for values on x86-64. Other values stay in their cells, with no tag check inside a part of the loop that has no call. The first version has no inlining of procs.
+
+### The step limit and the memory limit
+
+Tier 1 runs the same bytecode instructions as the interpreter, in the same order. Each `guard`, `step`, `invoke`, and `foreach_next` has the same check at the same place: the step count is zero, then the count goes down by one, then the memory count is above the limit. So the step count after a script is equal in both modes, and a script stops at the same instruction. Each helper that the interpreter also calls counts its own steps as today.
+
+Tier 2 can join the checks of a part of a loop that has no call and no branch target. The part has `k` steps. The code checks that at least `k` steps are left and subtracts `k`. If fewer are left, it exits at the start of the part with no step used, and the interpreter stops at the exact instruction. An exit in the middle of a part gives back the steps of the instructions that did not run. No code in such a part allocates, so one memory check at the entry of the loop and one after each call equal the checks of the interpreter.
+
+**JIT memory does not count in `mem_limit`.** All memory of the JIT comes from the allocator of the embedder and from the executable region, and it has its own limit (`jit_mem_limit`, 16 MiB by default). The counter of the heap never sees it. So a script reaches the memory limit at the same instruction in both modes, and rule 4 of AGENTS.md stays true: the output of a script does not depend on the JIT. When the JIT limit is reached, the compiler stops, and the interpreter runs the rest.
+
+### How the semantics of Tcl stay exact
+
+| Feature | Mechanism |
+|---|---|
+| A redefined or renamed command | Each inline form keeps its `guard`. The machine code compares `epoch` with `safe_epoch`, calls `recheck`, and jumps to the cold block, as the interpreter does. `invoke` calls `Interp.resolve`, which checks the epoch and the namespace of the site. |
+| Variable traces | `var_traces` above zero makes `recheck` fail, so each inline form runs on the general path. A traced cell does not have the tag `.val`, so each inline read and write goes to the helper. |
+| `upvar`, `global`, `variable` | The cells of `Frame.vars` are the one place of each variable in tier 1. The code loads `vars.items` again at each access, because a helper can grow the list. Tier 2 writes its registers back before each call. |
+| `uplevel`, `eval`, `namespace eval` | They run on the general path or as named code. They read and write the same cells. |
+| Shimmering | A value never changes its kind in place. The code reads the tag at each use. A string that looks like a number goes to the helper, which gives the result of the interpreter. |
+| Errors and `errorInfo` | A stub for each call writes the exact bytecode address. `run` adds the commands of the ranges to the trace as today. The helpers set `errorCode` and the line. |
+| `return`, `break`, `continue`, custom codes | They are Zig errors in a helper. The status path gives them to `run`, which has the range table. |
+| `catch`, `try` | They are general commands. The step limit error and the memory error stay uncatchable, because the helpers raise them as today. |
+| Coroutines | A coroutine runs machine code on its own native stack. `yield` is a helper call, so the switch saves the callee-saved registers as for Zig code. The JIT frame has a fixed size below 256 bytes, and `checkNative` runs before each entry. `coro.zig` does not change. |
+| `tailcall` | It is a private return code. The status path gives it to `callProc`. |
+| TclOO | A method body is a proc body: `callMethod` calls `runProc`. `my`, `next`, and `self` are commands. |
+| The event loop | An event script runs at the global level through `evalScript`. No code interrupts machine code, so the JIT needs no safe points. |
+| `interp` | Each interpreter has its own JIT state. A child has the JIT only when its parent has it. |
+| `compact`, `reset`, `deinit` | Each one frees all machine code of the interpreter first. They cannot run while a script runs, so no native frame returns into freed code. |
+| The native stack limit | The machine code of one proc call must use no more native stack than `exec`. A test measures it. A deep recursion can pass in one mode and fail in the other only at the `max_native` limit, as between a debug build and a release build today. |
+| Point procs | The slow path compiles as a proc. Tier 1 has no inline code for doubles. Tier 2 uses only `addsd`, `subsd`, `mulsd`, `divsd`, and the compares, with no fused multiply-add, so each result has the bits of the Zig code. |
+
+### Files
+
+All new code is in new files. The JIT changes no line of `src/coro.zig`, `src/sys.zig`, `src/sys_windows.zig`, `src/fsroot.zig`, or `src/proc.zig`, so it does not collide with the ports on `ports3`.
+
+| File | What it has |
+|---|---|
+| `src/jit.zig` | The state, the options, `enable`, `maybeCompile`, `enter`, `flush`, and the counts. |
+| `src/jit/mem.zig` | The executable region for each system. |
+| `src/jit/layout.zig` | The layout probe. |
+| `src/jit/verify.zig` | The bytecode verifier and the static stack depths. |
+| `src/jit/helpers.zig` | The helper table. |
+| `src/jit/abi.zig` | The registers and the calling convention of each target. |
+| `src/jit/x64.zig`, `src/jit/a64.zig` | The assemblers. |
+| `src/jit/tier1.zig`, `src/jit/tier1_x64.zig`, `src/jit/tier1_a64.zig` | The template compiler and the templates. |
+| `src/jit/tier2.zig` and its parts | The loop compiler. |
+| `src/jit/unwind_win.zig` | The unwind tables for Windows. |
+| `src/jit/tests.zig` | The unit tests. |
+| `tests/jit/` | The scripts of the differential tests. |
+| `tools/jit-diff.sh`, `tools/jit-perf.sh`, `tools/jit-fuzz.zig`, `tools/jit-asm-golden.sh` | The test tools. |
+
+Small changes go in `build.zig`, `src/ztcl.zig`, `src/vm.zig`, `src/interp.zig`, `src/compact.zig`, `src/child.zig`, `src/main.zig`, and `tools/suite.sh`. `ports3` also changes `interp.zig`, `main.zig`, and `ztcl.zig`. Each task names its hunks, and they rebase by hand.
+
+## Targets
+
+The order is x86-64 Linux, arm64 macOS, x86-64 macOS, x86-64 Windows, arm64 Linux.
+
+| Target | ABI | Executable memory | Instruction cache | Unwinding | State of this plan |
+|---|---|---|---|---|---|
+| x86-64 Linux | System V | `mmap` read-write, then `mprotect` read-execute | no call needed | Frame pointers. No table. | Measured on this machine. |
+| arm64 macOS | AAPCS64 with the Apple rules | `mmap` with `MAP_JIT`, `pthread_jit_write_protect_np` | `sys_icache_invalidate` | Frame pointers (`x29`). No table. | Not tested. No machine was available. |
+| x86-64 macOS | System V | `mmap` read-write with `MAP_JIT`, then `mprotect` read-execute | no call needed | Frame pointers. No table. | Not tested. |
+| x86-64 Windows | Microsoft x64 | `VirtualAlloc` read-write, then `VirtualProtect` to `PAGE_EXECUTE_READ` | `FlushInstructionCache` | `RtlAddFunctionTable` with one unwind record for each function | Not tested. |
+| arm64 Linux | AAPCS64 | `mmap` read-write, then `mprotect` read-execute | `__clear_cache` of the Zig runtime | Frame pointers. No table. | Not tested. |
+| WebAssembly | | none | | | The interpreter only. |
+
+### Rules for each ABI
+
+- **System V x86-64.** Arguments are in `rdi`, `rsi`, `rdx`, `rcx`. The stack pointer is 16-byte aligned at each call. The code does not use the red zone.
+- **Microsoft x64.** Arguments are in `rcx`, `rdx`, `r8`, `r9`. Each call has 32 bytes of shadow space. `rsi`, `rdi`, and `xmm6` to `xmm15` are callee-saved. Tier 2 uses only `xmm0` to `xmm5`.
+- **AAPCS64.** Arguments are in `x0` to `x3`. The stack pointer is 16-byte aligned at all times. `x29` and `x30` make the frame record. The code never uses `x18`. Tier 2 uses only `d0` to `d7` and `d16` to `d31`. Plain arm64 builds have no pointer authentication.
+
+### Stack probes
+
+A JIT frame has a fixed size below 256 bytes: the saved registers, the context pointer, and the shadow space on Windows. It is smaller than one page, so it needs no probe (`__chkstk`) on Windows and no probe on the other systems. The code has no variable stack allocation. `checkNative` in `vm.run` bounds the depth before each entry, as for `exec`.
+
+### Unwinding
+
+ztcl has no exceptions: an error is a return value. No unwinder must cross a JIT frame for correct results. Each JIT frame keeps the frame pointer chain, so a profiler and the stack walk of a Zig panic can pass it.
+
+Windows is the exception. The system unwinder treats code with no function table entry as a leaf function, and a walk through such a frame fails. An embedder with a crash handler needs correct walks. So the Windows port registers one `RUNTIME_FUNCTION` for each compiled function with `RtlAddFunctionTable`, and removes it with `RtlDeleteFunctionTable` before the memory is free. The prologue has one fixed form, so one unwind record form serves all functions.
+
+### Coroutine stacks
+
+A coroutine stack is 1 MiB in a release build and comes from the arena, with no guard page. `max_native` is half of it. The JIT adds no rule: its frame is small and fixed, and it calls `checkNative` through `vm.run`. On Windows, `coro.zig` on `ports3` swaps the stack bounds of the thread block. The JIT code does not read them. No unwind crosses a switch.
+
+### WebAssembly
+
+A WebAssembly module cannot make machine code and jump to it. A module can ask its host to compile a new module, but ztcl is a freestanding library with no host interface for that, and each call between two modules has a cost. So the WebAssembly build keeps the interpreter, and `build.zig` forces the JIT option off for it.
+
+A faster path for WebAssembly is work on the interpreter itself: shorter handlers and fused instructions. The profile shows about 33 machine instructions for one bytecode instruction, so that work has room. It needs its own measurement on a WebAssembly runtime, and it is an open decision.
+
+## Security
+
+ztcl runs scripts that the embedder does not trust. The JIT adds machine code that a script shapes, so it adds risk. SECURITY.md already says that ztcl must not be the only barrier.
+
+### The threat model
+
+The attacker controls the script. The attacker does not control the embedder, the process, or other threads. The goals of the attacker are to run machine code of their choice, to read or write memory outside the values of the script, to pass a limit, and to crash the host.
+
+### No page is writable and executable
+
+- The region is one reservation with no access. The compiler assembles each function in a normal buffer first. It then makes new pages of the region writable, copies the function, fills the rest of the last page with trap instructions, makes the pages executable, and flushes the instruction cache. A page is writable or executable at each instant, never both.
+- The code is write-once. On Linux, Windows, and an Intel Mac, each function starts on a new page, and a page that is executable never becomes writable again. So a failed protection change cannot harm a function that exists. On Apple silicon the write switch is a state of the thread for all `MAP_JIT` pages, so the functions pack with 16-byte alignment.
+- No byte of a function changes after the copy: the code has no inline cache and no patch. A stress mode keeps a checksum of each function and checks it.
+- The page before the region and the pages after the used part have no access.
+- The trap instructions are `int3` on x86-64 and zero words (`udf`) on arm64.
+- ztcl never maps one page two times with different rights.
+
+| System | Calls | When the call fails |
+|---|---|---|
+| Linux | `mmap(PROT_NONE)`, `mprotect(PROT_READ or PROT_WRITE)`, `mprotect(PROT_READ or PROT_EXEC)` | The JIT is off. This is the case under SELinux `execmem` rules, a seccomp filter, or `PR_SET_MDWE`. |
+| arm64 macOS | `mmap` with `MAP_JIT`, `pthread_jit_write_protect_np(0)` to write, `pthread_jit_write_protect_np(1)` to run, `sys_icache_invalidate` | The JIT is off. With the hardened runtime, the embedder needs the entitlement `com.apple.security.cs.allow-jit`. |
+| x86-64 macOS | `mmap(PROT_READ or PROT_WRITE)` with `MAP_JIT`, then `mprotect(PROT_READ or PROT_EXEC)` | The JIT is off. |
+| Windows | `VirtualAlloc(MEM_RESERVE)`, `VirtualAlloc(MEM_COMMIT, PAGE_READWRITE)`, `VirtualProtect(PAGE_EXECUTE_READ)`, `FlushInstructionCache` | The JIT is off. This is the case under the dynamic code policy (ACG). |
+
+Notes on macOS:
+
+- On Apple silicon, the write protection of `MAP_JIT` memory is a state of the thread. The compiler turns it off only around the one copy, on the thread of the interpreter. One thread uses one interpreter at a time.
+- On an Intel Mac, `pthread_jit_write_protect_np` does no work, and a `MAP_JIT` region with write and execute rights is writable and executable at once. So the Intel port never asks for both rights. The author did not test that `mprotect` works on a `MAP_JIT` region under the hardened runtime. The task has this test.
+- ztcl never needs `com.apple.security.cs.allow-unsigned-executable-memory` or `com.apple.security.cs.disable-executable-page-protection`. An embedder must not add them for ztcl.
+- The entitlement belongs to the app that embeds ztcl. zslice decides if it ships with `allow-jit`. With no entitlement, the `mmap` fails, and ztcl runs the interpreter.
+- Apple also has `pthread_jit_write_with_callback_np` with the entitlement `com.apple.security.cs.jit-write-allowlist`. It limits the code that can write to the region. It is an open decision.
+
+Notes on Windows: ztcl never uses `PAGE_EXECUTE_READWRITE`. Zig does not emit Control Flow Guard checks, so the call from `jit.enter` needs no call target registration. The machine code uses only `call` and `ret` pairs, so it is correct under a shadow stack.
+
+Notes on arm64: a core can run old bytes from its instruction cache. The compiler flushes the cache for the exact range of each new function before the first run.
+
+### A build or a system with no executable memory
+
+`jit.enable` returns false, and the interpreter runs each script, when one of these is true:
+
+- The build has `-Djit=false`, or the target has no backend.
+- The layout probe fails.
+- The reservation or the first protection change fails.
+- A self-test function (it returns a constant) does not return its value.
+
+A later failure of a protection change stops the compiler for that interpreter. Machine code that exists stays valid. No failure of the JIT is an error of a script.
+
+### JIT spraying and constant blinding
+
+JIT spraying puts bytes of the attacker in executable memory through constants of the script, then jumps into the middle of an instruction. Constant blinding is the usual defense: the compiler masks each constant with a random number.
+
+ztcl uses a stronger and simpler rule. **No value of a script is an immediate operand.** Integer literals, the step of `incr`, and string bytes stay in `code.lits`. That array is data. The numbers that a script can influence in the instruction stream are indexes and offsets, and the compiler bounds each one:
+
+| Number | Bound |
+|---|---|
+| Bytecode instructions of one `Code` | 32 768 |
+| Slots of one `Code` | 2048 |
+| Depth of the value stack | 2048 |
+| Literals, sites, words, nodes, tables | 65 536 each |
+
+A `Code` above a bound stays in the interpreter. So a 32-bit operand that a script influences has at most 20 bits that can vary, and its value is a multiple of a slot size plus a fixed offset. Blinding is then not needed. If a later task puts a script value in an instruction, that task must add blinding.
+
+Other limits on the attacker:
+
+- The address of the region comes from the system (ASLR). The code has no absolute address, so a read of the code gives no address.
+- The entry table has offsets. `jit.enter` checks that each target is inside its function.
+- The helper table is a constant of the binary.
+
+### Bounds and type guards
+
+- **The verifier.** Before a `Code` compiles, `jit/verify.zig` checks each instruction: the opcode, each jump target, each index (slot, literal, site, word, node, table), the stack depth at each instruction (at least the inputs of the instruction, at most `max_stack`, and equal on each path to one address), the depth at each `break` and `continue` target, and that `ret` ends each path. A `Code` that fails stays in the interpreter. The machine code reads memory only at offsets that the verifier proved.
+- **The frame.** The function checks at its entry that the frame has at least `code.names.len` entries. A smaller frame runs `exec`.
+- **Tags.** Each inline path checks the tag of the cell and the tag of the value before it reads a payload. An unknown tag goes to the helper. No inline path trusts a tag from an earlier instruction in tier 1.
+- **Lists.** An inline index into a list buffer checks the index against the length of the view with an unsigned compare.
+- **Integers.** `+`, `-`, `*`, and `incr` check the overflow flag. A division checks for zero and for the one case that overflows. A shift goes to the helper.
+- **Tier 2.** Each guess has a guard. An exit record has a bound check when `jit.deopt` reads it.
+
+### Limits that hold in machine code
+
+- The step limit and the memory limit are exact. See [above](#the-step-limit-and-the-memory-limit).
+- `max_depth`, `max_nest`, and `max_native` are checked by the same functions as today: `pushFrame`, `vm.run`, and `checkNative`.
+- The JIT memory limit bounds the region and all JIT data. A script that defines procs without end fills the limit, and the compiler stops. The script then runs in the interpreter and still has its own limits.
+- The compile time of one `Code` is linear, and the bound on bytecode instructions bounds it.
+
+### Fuzzing
+
+- **Differential fuzzing.** `tools/jit-fuzz.zig` makes random Tcl programs from a grammar: procs, loops, `expr`, lists, dicts, strings, `upvar`, `uplevel`, `catch`, `rename`, traces, and errors. It runs each program in the interpreter and in each JIT mode, with a random step limit, a random memory limit, and the collector off (`--gc off`). The output, the result, `errorInfo`, `errorCode`, the steps used, and the memory count must be equal.
+- **Assembler fuzzing.** Each instruction form of each assembler is checked against the assembler of `zig cc` for each register and for the edge values of each operand.
+- **Verifier fuzzing.** Random and mutated bytecode goes to the verifier. Each `Code` that passes then compiles and runs under a step limit in a build with safety checks. The process must not crash.
+- **Stress modes.** One mode compiles each `Code` at once. One mode forces each tier 2 guard to fail on a schedule. One mode makes each allocation of the compiler fail in turn.
+
+### On by default, or a capability
+
+The JIT is not a `Capability`. A capability adds commands that a script can see, and `compact` refuses an interpreter with capabilities. The JIT adds no command, and a script cannot see it or turn it on.
+
+- **The build option** `-Djit` is true by default on a target with a backend. With false, the binary has no JIT code.
+- **The embedder option** is off by default: `Interp.enableJit(options)` turns it on and returns false when the system has no executable memory. A child interpreter has the JIT only when its parent has it.
+- **The runner** has `--jit`, off by default.
+
+### The condition for a default of on
+
+The runner flag can default to on for one target when all of these are true for that target. The library option stays an explicit call of the embedder in each case.
+
+1. The differential suite passes on all 152 test files in three modes (threshold 0, default threshold, and tier 2 stress), with each count equal to the count of the interpreter.
+2. The differential fuzzer ran 72 hours of processor time with no difference and no crash, and the assembler and verifier fuzzers ran 24 hours each.
+3. The unit tests and the suite pass in a `Debug` build and a `ReleaseSafe` build with the JIT on.
+4. A reviewer who did not write the code completed [the review checklist](jit-review.md), and no security finding is open.
+5. Each performance gate passes, also the outside gates, and no benchmark is slower than the interpreter.
+6. The JIT ran in zslice as an opt-in for 30 days with no bug from the JIT.
+
+## Verification
+
+| Check | What it proves | Task |
+|---|---|---|
+| `zig build test` and `zig build test -Djit=false` | The unit tests pass with and without the JIT code. | each |
+| `tools/jit-diff.sh` | Each script of `tests/jit/` and `bench/` gives the same output, exit code, step count, and memory count in each mode. The memory count uses `--gc off`. | 18 |
+| `tools/suite.sh -j` | The suite with `--jit --jit-threshold 0`. Each file has the pass count of the interpreter: 19 877 for the 37 core files and 37 383 for all 152 files with the suite runner. | 18 |
+| The step limit sweep | A script runs with each step limit from 0 to its full count. Both modes stop with the same output. | 18 |
+| `zig build jit-fuzz` | See [Fuzzing](#fuzzing). | 19, 20 |
+| The stress modes | Compile failures, the tier 2 exit schedule, and the checksum of the code. | 21, 35 |
+| `Debug` and `ReleaseSafe` runs | The Zig safety checks find a bad index or a bad union read in the helpers and in the compiler. | 21 |
+| `tools/jit-perf.sh` | The instruction count of each benchmark is at or below its gate. | 17, 24, 25, 36 |
+| `tools/kostya.sh` | The outside programs end with the output of `tclsh`, and each ratio is at or below its gate. | 6, 9, 25 |
+
+### Performance gates
+
+Each gate is an instruction count (`perf stat -e instructions:u`) of the whole process on x86-64 Linux, `ReleaseFast`, with `--jit`. A gate is the estimate plus a margin of about 15 %. If a gate fails, the implementer reports the measured count and the cause, and the reviewer and the user decide. A gate changes only with a recorded reason. The tier 2 gates are provisional until task 32 measures a model of each loop.
+
+| Script | Today | After milestone 1 | After milestone 2 | After tier 2 |
+|---|---|---|---|---|
+| `sum.tcl` | 296.8 M | 110 M | 110 M | 16 M |
+| `fib.tcl` | 163.3 M | 125 M | 112 M | 112 M |
+| `nested.tcl` | 344.7 M | 165 M | 135 M | 100 M |
+| `strbuild.tcl` | 328.9 M | 270 M | 270 M | 270 M |
+| `foreach.tcl` | 211.5 M | 110 M | 88 M | 45 M |
+| `dict.tcl` | 282.7 M | 230 M | 215 M | 215 M |
+| `dictgrow.tcl` | 628.3 M | 580 M | 580 M | 580 M |
+| `readloop.tcl` | 213.9 M | 165 M | 150 M | 150 M |
+
+### Cost limits
+
+| Cost | Limit |
+|---|---|
+| Each benchmark with the JIT in the build and off at run time | At most 1 % above the count of today. |
+| Each benchmark with `-Djit=false` | At most 0.2 % above the count of today. |
+| Startup (`puts hi`) with the JIT off | At most 5000 instructions above 0.70 M. |
+| Startup with `--jit` | At most 50 000 instructions above 0.70 M. The region is reserved at the first compile. |
+| Compile time of tier 1 | At most 400 machine instructions for one bytecode instruction. |
+| Code size of tier 1 | At most 96 bytes for one bytecode instruction, as a mean over the eight benchmarks. |
+| JIT memory | At most `jit_mem_limit` (16 MiB by default) for the region and all JIT data of one interpreter and its children. A function uses whole pages on Linux, Windows, and an Intel Mac. |
+| Size of the runner binary | At most 200 KiB more for one backend. |
+| Native stack of one proc call level | At most the stack that the interpreter uses for the same call. |
+
+## Risks
+
+- **The collector is a larger change than tier 1.** It replaces the base of all memory. A missed root is a use after free that a script can reach. The stress mode is the defense, and the collector has its own part in the review checklist.
+- **A conservative collector can keep dead memory.** A number that equals an address keeps a block. The memory limit still bounds the script.
+- **The collector changes when a value of the embedder is valid.** zslice must follow the new rule before it updates ztcl.
+
+- **The layout of Zig unions.** A new Zig version can move a tag. The probe finds each layout of the form "payload, then a tag byte". Another form turns the JIT off. A test fails when the probe fails on a supported target, so a Zig update shows it.
+- **Two implementations of one instruction.** An inline fast path can differ from the interpreter. The differential tests and the fuzzer are the defense. Each fast path is small, and each slow path is shared.
+- **The helper refactor of `vm.zig`.** Moving the slow paths to named functions can change the code of the interpreter. The 1 % limit above catches it.
+- **Ports that the author could not run.** Each fact about macOS, Windows, and arm64 in this page is from documentation. The first task of each port is a test of the memory calls on a real machine.
+- **Tier 2 is the largest part and helps the fewest scripts.** Its gain is real only for loops of numbers. The tasks put it last, and the user can stop before it.
+- **Indirect branch tracking.** If a system enforces IBT or BTI on JIT pages, each entry needs a landing pad. No target of this plan enforces it for such pages today. The author did not test this.
+- **A JIT in a sandbox raises the cost of each bug.** A wrong template is a memory safety bug that a script can reach. This is the reason for the default of off.
+
+## Open decisions for the user
+
+0. **The collector.** Milestone 0 replaces the arena with a conservative mark-and-sweep heap. It changes three rules: a value from `eval` is valid only until the next call, the place of the memory error is exact only with the collector off, and an allocation costs a little more. The other choices are reference counts and regions, and both are more code with a worse failure. The user must accept this before task 2 starts.
+1. **The order after milestone 2.** The plan does the ports before tier 2, because zslice runs on macOS and Windows. The other order gives the large gain for number loops on Linux first.
+2. **Tier 2 at all.** Tier 2 gives about 20 times for `sum.tcl` and no gain for strings, dicts, and proc calls. The scripts of zslice decide its value. A profile of real zslice scripts is the input for this decision.
+3. **The default.** The plan keeps the library option off in each case, and lets the runner flag default to on after the condition above. The other choice is off everywhere.
+4. **The JIT memory limit.** 16 MiB, outside `mem_limit`, so that a script gives the same result in both modes. The other choice counts it in `mem_limit`, and a script near the limit then stops at a different place with the JIT on.
+5. **The entitlement on macOS.** zslice needs `com.apple.security.cs.allow-jit` to use the JIT under the hardened runtime. With no entitlement, the JIT is off on macOS.
+6. **The write allowlist on macOS.** `pthread_jit_write_with_callback_np` is more work and a stronger limit.
+7. **Unwind tables on Windows.** The plan registers them. The other choice is less code, and a crash handler of the embedder then fails inside JIT frames.
+8. **Procs with no frame.** A proc such as `fib` could run with its parameters in registers and make its frame only at an exit. This is the one way to a large gain for `fib.tcl`. It is a large and risky change, and it is not in the tasks.
+9. **Work on the interpreter and on the helpers.** Shorter handlers help each platform, also WebAssembly. A list cache with no compare, a cheaper frame, and a hash for integer keys help the four benchmarks that the JIT helps least. Each one is separate from this plan.
+10. **Machines for the ports.** The acceptance tests of the ports need an Apple silicon Mac, an Intel Mac, a Windows x86-64 machine, and an arm64 Linux machine or an emulator.
