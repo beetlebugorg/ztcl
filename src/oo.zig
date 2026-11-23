@@ -649,6 +649,9 @@ fn run(it: *Interp, st: *State, call: *Call) Error!Value {
             if (args.len < last_required or (args.len > p.params.len and !p.has_args)) return usage(it, call, p);
             p.ns = call.obj.ns;
             call.level = it.frame.level + 1;
+            // `st.stack` names this record, and its fields stay in use.
+            const mark = try it.beginProcBody(call.argv, &.{ @intFromPtr(call.obj), @intFromPtr(call.chain.ptr), @intFromPtr(call.name.ptr), @intFromPtr(m), @intFromPtr(p) });
+            defer it.endProcBody(mark);
             return it.callMethod(p, call.argv, call.skip) catch |e| {
                 if (e == error.TclError and it.in_error) rewriteTrace(it, call, m) catch {};
                 return e;
@@ -705,7 +708,7 @@ fn invoke(it: *Interp, st: *State, o: *Object, argv: []const Value, skip: usize,
     return run(it, st, &call);
 }
 
-fn objCmd(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+pub fn objCmd(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const st = try state(it);
     const self = it.findCommand(try it.str(argv[0])) orelse return it.fail("invalid command name \"{s}\"", .{try it.str(argv[0])});
     const o: *Object = @ptrCast(@alignCast(self.ctx.?));

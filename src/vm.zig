@@ -1526,9 +1526,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 const command = try it.resolve(c, argv);
                 // A proc call keeps its values in the frame and the word
                 // stack. A native command can hold values in locals.
-                if (gc.precise and command.impl == .proc) it.gc_token = gc.isClean(it);
+                if (gc.precise) it.markDirect(command, argv.ptr);
                 const called = it.call(command, argv, c);
-                if (gc.precise) it.gc_token = false;
+                if (gc.precise) it.clearDirect();
                 const r = try called;
                 sp -= i.b;
                 stack[sp] = r;
@@ -1538,6 +1538,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 continue :sw i.op;
             },
             .eval_cmd => {
+                if (gc.precise) it.gc_from_exec = gc.isClean(it);
                 stack[sp] = try it.evalCmd(code.sites[i.a]);
                 sp += 1;
                 pc += 1;

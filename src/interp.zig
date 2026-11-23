@@ -812,6 +812,11 @@ pub const Interp = struct {
     gc_clean_nest: u32 = 0,
     /// Precise builds: the next `vm.run` continues a clean chain.
     gc_token: bool = false,
+    /// Precise builds: the address of the words of a body command that
+    /// `vm.exec` called directly. Zero means no such call.
+    gc_direct: usize = 0,
+    /// Precise builds: the next `evalCmd` comes from `vm.exec`.
+    gc_from_exec: bool = false,
     /// Precise builds: the current safe point is in `vm.exec`.
     gc_vm_point: bool = false,
     /// Precise builds: addresses that only a clean native frame holds.
@@ -944,6 +949,68 @@ pub const Interp = struct {
         const waiting = gc.precise and !collected and root.gc_on and it.gc_scope != 0;
         if (stress) c.rearm(0) else if (!waiting) c.rearm(next);
         if (it.counter.used > it.mem_limit) return it.fail("the script used too much memory", .{});
+    }
+
+    /// Precise builds: records a call from `vm.exec`. A proc continues
+    /// the clean chain. A native command continues it only when
+    /// `cmds.isBodyCommand` lists it.
+    pub fn markDirect(it: *Interp, command: *const Command, words: [*]const Value) void {
+        if (!gc.isClean(it)) return;
+        switch (command.impl) {
+            .proc => it.gc_token = true,
+            .native => |f| if (cmds.isBodyCommand(f)) {
+                it.gc_direct = @intFromPtr(words);
+            },
+        }
+    }
+
+    /// Precise builds: ends the record of `markDirect`.
+    pub fn clearDirect(it: *Interp) void {
+        it.gc_token = false;
+        it.gc_direct = 0;
+    }
+
+    /// True once for the direct call with the words `argv`. The caller
+    /// then pins each value that only its frame holds.
+    fn takeDirect(it: *Interp, argv: []const Value) bool {
+        if (!gc.precise or argv.len == 0) return false;
+        if (it.gc_direct != @intFromPtr(argv.ptr) or !gc.isClean(it)) return false;
+        it.gc_direct = 0;
+        return true;
+    }
+
+    /// Runs the body script of a command. In a direct call of a precise
+    /// build, the body stays in the clean chain. `keep` has each address
+    /// that only the frame of the command holds across the body.
+    pub fn evalBody(it: *Interp, s: *Script, argv: []const Value, keep: []const usize) Error!Value {
+        if (!it.takeDirect(argv)) return it.evalScript(s);
+        const mark = it.pins.items.len;
+        defer {
+            it.pins.items.len = mark;
+            it.gc_token = false;
+        }
+        try it.pins.append(it.heap.backing, @intFromPtr(argv.ptr));
+        try it.pins.appendSlice(it.heap.backing, keep);
+        s.runs = @max(s.runs, 1);
+        it.gc_token = true;
+        return it.evalScript(s);
+    }
+
+    /// Prepares a proc call from a body command, as `evalBody` does.
+    /// Returns the mark for `endProcBody`, or null.
+    pub fn beginProcBody(it: *Interp, argv: []const Value, keep: []const usize) Allocator.Error!?usize {
+        if (!it.takeDirect(argv)) return null;
+        const mark = it.pins.items.len;
+        try it.pins.append(it.heap.backing, @intFromPtr(argv.ptr));
+        try it.pins.appendSlice(it.heap.backing, keep);
+        it.gc_token = true;
+        return mark;
+    }
+
+    pub fn endProcBody(it: *Interp, mark: ?usize) void {
+        const m = mark orelse return;
+        it.pins.items.len = m;
+        it.gc_token = false;
     }
 
     /// The limit check of each safe point outside `vm.exec`.
@@ -1389,6 +1456,8 @@ pub const Interp = struct {
 
     pub fn evalCmd(it: *Interp, c: *Cmd) Error!Value {
         if (it.nest == 0) return it.hostEntry(evalCmd, .{ it, c });
+        const from_exec = gc.precise and it.gc_from_exec;
+        if (gc.precise) it.gc_from_exec = false;
         if (it.step_limit == 0) return it.fail("step limit reached", .{});
         it.step_limit -= 1;
         try it.checkMem();
@@ -1419,6 +1488,8 @@ pub const Interp = struct {
             argv = tmp.items;
         }
         const command = it.resolve(c, argv) catch |e| return it.noteLine(c, e);
+        if (from_exec) it.markDirect(command, argv.ptr);
+        defer if (from_exec) it.clearDirect();
         return it.call(command, argv, c) catch |e| it.noteLine(c, e);
     }
 

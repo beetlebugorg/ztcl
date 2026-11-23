@@ -58,6 +58,12 @@ export fn ztcl_set_mem_limit(h: *Handle, bytes: usize) void {
     h.it.mem_limit = bytes;
 }
 
+/// Starts a collection at each Nth safe point. Zero turns the mode off.
+/// A test uses it to find a missed root.
+export fn ztcl_set_gc_stress(h: *Handle, n: u32) void {
+    h.it.setGcStress(n);
+}
+
 /// Runs a script. Returns 0 on success and 1 on an error. The result
 /// or the error message stays valid until the next call.
 export fn ztcl_eval(h: *Handle, ptr: [*]const u8, len: usize) i32 {

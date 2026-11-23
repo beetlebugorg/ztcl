@@ -369,13 +369,13 @@ fn evalIn(it: *Interp, space: []const u8, script: *interp.Script, argv: []const 
         const saved = it.frame;
         it.frame = &it.global;
         defer it.frame = saved;
-        return it.evalScript(script);
+        return it.evalBody(script, argv, &.{ @intFromPtr(saved), @intFromPtr(saved_ns.ptr) });
     }
     const f = try it.pushFrame(argv);
     defer it.popFrame();
     f.ns = it.ns;
     f.space = it.ns;
-    return it.evalScript(script) catch |e| {
+    return it.evalBody(script, argv, &.{ @intFromPtr(saved_ns.ptr), @intFromPtr(space.ptr) }) catch |e| {
         if (e == error.TclError and it.in_error) {
             it.error_info.print(it.alloc(), "\n    (in namespace eval \"::{s}\" script line {d})", .{ space, it.proc_line }) catch {};
         }

@@ -229,8 +229,19 @@ fn cmdUplevel(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         it.frame = saved;
         it.ns = saved_ns;
     }
-    if (i == argv.len - 1) return it.evalScript(try it.scriptOf(argv, i, cmd));
-    return it.evalScript(try it.scriptOfValue(.{ .str = try concat(it, argv[i..]) }, null));
+    // The frame of the caller is not in the chain of `frame`.
+    const keep = [_]usize{ @intFromPtr(saved), @intFromPtr(saved_ns.ptr) };
+    if (i == argv.len - 1) return it.evalBody(try it.scriptOf(argv, i, cmd), argv, &keep);
+    return it.evalBody(try it.scriptOfValue(.{ .str = try concat(it, argv[i..]) }, null), argv, &keep);
+}
+
+/// True for a native command whose frame keeps each value across its
+/// body in `argv` or in the `keep` list of `Interp.evalBody`. Add a
+/// command here only after a check of its locals. A stress run of a
+/// precise build shows a missed value.
+pub fn isBodyCommand(f: interp.NativeFn) bool {
+    return f == &cmdCatch or f == &cmdTry or f == &cmdEval or f == &cmdUplevel or f == &cmdApply or
+        f == &ns.cmdNamespace or f == &@import("oo.zig").objCmd;
 }
 
 // ---- Control flow ----
@@ -522,6 +533,8 @@ fn cmdApply(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }
         p.ns = try it.internNs(space);
     }
+    const mark = try it.beginProcBody(argv, &.{@intFromPtr(p)});
+    defer it.endProcBody(mark);
     return it.callLambda(p, argv);
 }
 
@@ -714,10 +727,15 @@ pub const Caught = struct {
 /// Runs a script and catches its end. The end of the step limit is not
 /// caught: it stays an error.
 pub fn runCaught(it: *Interp, script: Error!*interp.Script) Error!Caught {
+    return runCaughtBody(it, script, &.{});
+}
+
+/// `runCaught` for the body of a command with the words `argv`.
+fn runCaughtBody(it: *Interp, script: Error!*interp.Script, argv: []const Value) Error!Caught {
     const depth = it.depth;
     const frame = it.frame;
     var c: Caught = .{};
-    const r = if (script) |sc| it.evalScript(sc) else |e| e;
+    const r = if (script) |sc| it.evalBody(sc, argv, &.{}) else |e| e;
     if (r) |v| {
         c.res = v;
     } else |e| {
@@ -751,7 +769,7 @@ pub fn runCaught(it: *Interp, script: Error!*interp.Script) Error!Caught {
 
 fn cmdCatch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2 or argv.len > 4) return it.wrongArgs("catch script ?resultVarName? ?optionVarName?");
-    const c = try runCaught(it, it.scriptOf(argv, 1, cmd));
+    const c = try runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv);
     if (argv.len >= 3) try it.setVar(try it.str(argv[2]), c.res);
     if (argv.len == 4) try it.setVar(try it.str(argv[3]), try c.options(it));
     return .{ .int = c.code };
@@ -794,7 +812,7 @@ fn cmdTry(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     }
     if (end > 2 and eql(try it.str(argv[end - 1]), "-")) return it.fail("last non-finally clause must not have a body of \"-\"", .{});
 
-    var out = try runCaught(it, it.scriptOf(argv, 1, cmd));
+    var out = try runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv);
     h = 2;
     while (h < end) : (h += 4) {
         const kind = try it.str(argv[h]);
@@ -855,8 +873,8 @@ fn cmdExpr(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
 
 fn cmdEval(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("eval arg ?arg ...?");
-    if (argv.len == 2) return it.evalScript(try it.scriptOf(argv, 1, cmd));
-    return it.evalScript(try it.scriptOfValue(.{ .str = try concat(it, argv[1..]) }, null));
+    if (argv.len == 2) return it.evalBody(try it.scriptOf(argv, 1, cmd), argv, &.{});
+    return it.evalBody(try it.scriptOfValue(.{ .str = try concat(it, argv[1..]) }, null), argv, &.{});
 }
 
 fn cmdSubst(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
