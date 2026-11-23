@@ -3,8 +3,9 @@
 //! Each function here is one small host operation on a descriptor. The
 //! callers (`event.zig`, `sock.zig`, `proc.zig`, `chan.zig`) have no
 //! other platform code. This file has the Linux form, with direct
-//! system calls. A port to another system writes these functions again
-//! with the same contracts and sets `supported`.
+//! system calls, and `sys_windows.zig` has the Windows form. A port to
+//! another system writes these functions again with the same contracts
+//! and sets `supported`.
 //!
 //! The rules of a port:
 //! - `resolve` is the only name lookup. `listenAt` and `connectTo` get
@@ -20,7 +21,10 @@ const std = @import("std");
 const builtin = @import("builtin");
 const linux = std.os.linux;
 
-pub const supported = builtin.os.tag == .linux;
+const is_win = builtin.os.tag == .windows;
+/// The Windows form. ARM64 Windows stays off until its tests can run.
+pub const win = @import("sys_windows.zig");
+pub const supported = builtin.os.tag == .linux or (is_win and builtin.cpu.arch == .x86_64);
 
 pub const Fd = i32;
 
@@ -42,7 +46,8 @@ pub const OpenFlags = struct {
 /// A host error, as the POSIX name and the text of Tcl.
 pub const Fail = struct { name: []const u8, text: []const u8 };
 
-pub fn failOf(e: linux.E) Fail {
+pub fn failOf(e: Errno) Fail {
+    if (comptime is_win) return win.failOf(e);
     return switch (e) {
         .NOENT => .{ .name = "ENOENT", .text = "no such file or directory" },
         .ACCES, .PERM => .{ .name = "EACCES", .text = "permission denied" },
@@ -74,6 +79,7 @@ pub const IoResult = union(enum) {
 };
 
 pub fn read(fd: Fd, buf: []u8) IoResult {
+    if (comptime is_win) return win.read(fd, buf);
     while (true) {
         const rc = linux.read(fd, buf.ptr, buf.len);
         switch (linux.errno(rc)) {
@@ -87,9 +93,12 @@ pub fn read(fd: Fd, buf: []u8) IoResult {
     }
 }
 
+pub const FileRead = union(enum) { n: usize, err: Errno };
+
 /// Reads a file for a caller that reports the host error itself. A
 /// read of 0 bytes is the end of the file.
-pub fn readFile(fd: Fd, buf: []u8) union(enum) { n: usize, err: Errno } {
+pub fn readFile(fd: Fd, buf: []u8) FileRead {
+    if (comptime is_win) return win.readFile(fd, buf);
     while (true) {
         const rc = linux.read(fd, buf.ptr, buf.len);
         switch (linux.errno(rc)) {
@@ -101,6 +110,7 @@ pub fn readFile(fd: Fd, buf: []u8) union(enum) { n: usize, err: Errno } {
 }
 
 pub fn write(fd: Fd, buf: []const u8) IoResult {
+    if (comptime is_win) return win.write(fd, buf);
     while (true) {
         // MSG_NOSIGNAL is not possible on a pipe, so SIGPIPE is ignored
         // by `ignorePipeSignal` at the start of a runner.
@@ -115,10 +125,12 @@ pub fn write(fd: Fd, buf: []const u8) IoResult {
 }
 
 pub fn close(fd: Fd) void {
+    if (comptime is_win) return win.close(fd);
     _ = linux.close(fd);
 }
 
 pub fn setBlocking(fd: Fd, on: bool) void {
+    if (comptime is_win) return win.setBlocking(fd, on);
     const fl = linux.fcntl(fd, linux.F.GETFL, 0);
     if (linux.errno(fl) != .SUCCESS) return;
     const bit: usize = @as(u32, @bitCast(linux.O{ .NONBLOCK = true }));
@@ -127,6 +139,8 @@ pub fn setBlocking(fd: Fd, on: bool) void {
 
 /// A write to a closed pipe or socket gives an error and no signal.
 pub fn ignorePipeSignal() void {
+    // Windows has no SIGPIPE.
+    if (comptime is_win) return;
     var act: linux.Sigaction = .{ .handler = .{ .handler = linux.SIG.IGN }, .mask = std.mem.zeroes(linux.sigset_t), .flags = 0 };
     _ = linux.sigaction(linux.SIG.PIPE, &act, null);
 }
@@ -144,6 +158,7 @@ pub const Want = struct {
 /// has no end. An error or a closed peer counts as ready, so the
 /// next read or write reports it.
 pub fn poll(a: std.mem.Allocator, wants: []Want, timeout_ms: i32) void {
+    if (comptime is_win) return win.poll(a, wants, timeout_ms);
     const fds = a.alloc(linux.pollfd, wants.len) catch return;
     defer a.free(fds);
     for (wants, fds) |w, *p| {
@@ -217,6 +232,7 @@ fn newSocket(v6: bool) SockResult {
 /// A listening socket on an address. Port 0 selects a free port. The
 /// caller checks the address against the network policy first.
 pub fn listenAt(addr: Addr, reuse: bool) SockResult {
+    if (comptime is_win) return win.listenAt(addr, reuse);
     const fd = switch (newSocket(addr.v6)) {
         .fd => |x| x,
         .err => |e| return .{ .err = e },
@@ -240,6 +256,7 @@ pub fn listenAt(addr: Addr, reuse: bool) SockResult {
 /// and `connectError` gives its end. The caller checks the address
 /// against the network policy first.
 pub fn connectTo(addr: Addr, mine: ?Addr, wait: bool) SockResult {
+    if (comptime is_win) return win.connectTo(addr, mine, wait);
     const fd = switch (newSocket(addr.v6)) {
         .fd => |x| x,
         .err => |e| return .{ .err = e },
@@ -324,6 +341,7 @@ pub fn parseAddr(text: []const u8) ?Addr {
 /// name `localhost`, and the hosts file of the system. It sends no
 /// query to a name server yet, so another name gives no address.
 pub fn resolve(a: std.mem.Allocator, host: []const u8, out: *std.ArrayList(Addr)) std.mem.Allocator.Error!void {
+    if (comptime is_win) return win.resolve(a, host, out);
     if (parseAddr(host)) |addr| {
         try out.append(a, addr);
         return;
@@ -352,7 +370,12 @@ pub fn resolve(a: std.mem.Allocator, host: []const u8, out: *std.ArrayList(Addr)
         }
         break;
     }
-    var lines = std.mem.splitScalar(u8, text.items, '\n');
+    try hostsMatch(a, text.items, host, out);
+}
+
+/// Adds each address that the text of a hosts file gives for `host`.
+pub fn hostsMatch(a: std.mem.Allocator, text: []const u8, host: []const u8, out: *std.ArrayList(Addr)) std.mem.Allocator.Error!void {
+    var lines = std.mem.splitScalar(u8, text, '\n');
     while (lines.next()) |line_in| {
         const line = line_in[0 .. std.mem.indexOfScalar(u8, line_in, '#') orelse line_in.len];
         var words = std.mem.tokenizeAny(u8, line, " \t\r");
@@ -366,6 +389,7 @@ pub fn resolve(a: std.mem.Allocator, host: []const u8, out: *std.ArrayList(Addr)
 
 /// The pending error of a socket, or null. The call clears the error.
 pub fn connectError(fd: Fd) ?Fail {
+    if (comptime is_win) return win.connectError(fd);
     var code: u32 = 0;
     var len: linux.socklen_t = 4;
     const rc = linux.getsockopt(fd, linux.SOL.SOCKET, linux.SO.ERROR, std.mem.asBytes(&code), &len);
@@ -377,6 +401,7 @@ pub const Accepted = struct { fd: Fd, peer: Addr };
 
 /// The next connection of a listening socket, or null when none waits.
 pub fn accept(fd: Fd) ?Accepted {
+    if (comptime is_win) return win.acceptOn(fd);
     var a: Sock = undefined;
     var len: linux.socklen_t = @sizeOf(Sock);
     while (true) {
@@ -390,6 +415,7 @@ pub fn accept(fd: Fd) ?Accepted {
 }
 
 pub fn sockName(fd: Fd) ?Addr {
+    if (comptime is_win) return win.sockName(fd);
     var a: Sock = undefined;
     var len: linux.socklen_t = @sizeOf(Sock);
     if (linux.errno(linux.getsockname(fd, &a.any, &len)) != .SUCCESS) return null;
@@ -397,6 +423,7 @@ pub fn sockName(fd: Fd) ?Addr {
 }
 
 pub fn peerName(fd: Fd) ?Addr {
+    if (comptime is_win) return win.peerName(fd);
     var a: Sock = undefined;
     var len: linux.socklen_t = @sizeOf(Sock);
     if (linux.errno(linux.getpeername(fd, &a.any, &len)) != .SUCCESS) return null;
@@ -405,12 +432,16 @@ pub fn peerName(fd: Fd) ?Addr {
 
 /// Ends one direction of a socket: 0 for reads, 1 for writes.
 pub fn shutdown(fd: Fd, how: i32) void {
+    if (comptime is_win) return win.shutdownOn(fd, how);
     _ = linux.shutdown(fd, how);
 }
 
+pub const SeekResult = union(enum) { at: i64, err: Errno };
+
 /// Moves the position of a file: `whence` is 0 for the start, 1 for
 /// the current position, and 2 for the end. Gives the new position.
-pub fn seek(fd: Fd, off: i64, whence: u8) union(enum) { at: i64, err: Errno } {
+pub fn seek(fd: Fd, off: i64, whence: u8) SeekResult {
+    if (comptime is_win) return win.seek(fd, off, whence);
     const rc = linux.lseek(fd, off, whence);
     const e = linux.errno(rc);
     if (e != .SUCCESS) return .{ .err = e };

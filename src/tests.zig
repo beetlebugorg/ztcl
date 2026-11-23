@@ -1262,6 +1262,69 @@ test "the network policy of socket: allowlist, ranges, ports, and peers" {
     try std.testing.expect(sys.parseAddr("256.1.1.1") == null);
 }
 
+test "Windows sockets keep the rules of sys.zig" {
+    if (@import("builtin").os.tag != .windows or !tcl.sys.supported) return error.SkipZigTest;
+    const sys = tcl.sys;
+    const a = std.testing.allocator;
+    const v4: sys.Addr = sys.parseAddr("127.0.0.1").?;
+    const srv = sys.listenAt(v4, false).fd;
+    defer sys.close(srv);
+    try std.testing.expect(!sys.win.inheritable(srv));
+    var to = sys.sockName(srv).?;
+    to.bytes = v4.bytes;
+    const client = sys.connectTo(to, null, true).fd;
+    defer sys.close(client);
+    try std.testing.expect(!sys.win.inheritable(client));
+    var wants = [_]sys.Want{.{ .fd = srv, .read = true }};
+    sys.poll(a, &wants, 5000);
+    try std.testing.expect(wants[0].can_read);
+    const got = sys.accept(srv).?;
+    defer sys.close(got.fd);
+    try std.testing.expect(!sys.win.inheritable(got.fd));
+    try std.testing.expectEqual(sys.sockName(client).?.port, got.peer.port);
+    try std.testing.expectEqual(to.port, sys.peerName(client).?.port);
+    try std.testing.expectEqual(@as(usize, 2), sys.write(client, "hi").n);
+    wants = .{.{ .fd = got.fd, .read = true }};
+    sys.poll(a, &wants, 5000);
+    try std.testing.expect(wants[0].can_read);
+    var buf: [8]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 2), sys.read(got.fd, &buf).n);
+    try std.testing.expectEqualStrings("hi", buf[0..2]);
+    // With no data, a socket that does not block gives `.again`.
+    sys.setBlocking(got.fd, false);
+    try std.testing.expect(sys.read(got.fd, &buf) == .again);
+    sys.setBlocking(got.fd, true);
+    try std.testing.expect(sys.seek(got.fd, 0, 0) == .err);
+    // A closed peer is ready, and its read is the end of the data.
+    sys.shutdown(client, 1);
+    wants = .{.{ .fd = got.fd, .read = true }};
+    sys.poll(a, &wants, 5000);
+    try std.testing.expect(wants[0].can_read);
+    try std.testing.expectEqual(@as(usize, 0), sys.read(got.fd, &buf).n);
+    // An IPv6 socket has no IPv4 side, on a machine with IPv6.
+    switch (sys.listenAt(sys.parseAddr("::1").?, false)) {
+        .fd => |six| {
+            defer sys.close(six);
+            try std.testing.expect(sys.win.v6Only(six));
+        },
+        .err => {},
+    }
+    // A failed connect that does not wait reports once.
+    const gone = sys.listenAt(v4, false).fd;
+    var closed = sys.sockName(gone).?;
+    closed.bytes = v4.bytes;
+    sys.close(gone);
+    const late = sys.connectTo(closed, null, false).fd;
+    defer sys.close(late);
+    wants = .{.{ .fd = late, .write = true }};
+    sys.poll(a, &wants, 10000);
+    try std.testing.expect(wants[0].can_write);
+    try std.testing.expectEqualStrings("ECONNREFUSED", sys.connectError(late).?.name);
+    try std.testing.expect(sys.connectError(late) == null);
+    // That socket has no peer, so a read is an error.
+    try std.testing.expectEqualStrings("ENOTCONN", sys.read(late, &buf).err.name);
+}
+
 test "socket refuses a blocked address and closes a blocked peer" {
     if (!tcl.sys.supported) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
