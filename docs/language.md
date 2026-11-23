@@ -46,7 +46,7 @@ The counts are pass / fail / skip for the test file of the command.
 | `noise3` | no own test file | A ztcl addition. |
 | `proc` | 25 / 12 / 1 |  |
 | `puts` | no own test file | Writes to the embedder callback. |
-| `regexp` | 208 / 31 / 5 | First match wins. No lookahead or `-expanded`. |
+| `regexp` | 209 / 31 / 4 | First match wins. No lookahead or `-expanded`. |
 | `regsub` | no own test file | Uses the matcher of `regexp`. |
 | `rename` | 10 / 1 / 8 |  |
 | `return` | no own test file |  |

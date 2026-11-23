@@ -35,7 +35,7 @@ tools/suite.sh set.test expr.test     # some files
 
 ### Results with Tcl 8.6.16 (`core-8-6-16`), the 37 core files
 
-The stand-in changed, so the totals before this work are 19 290 pass, 1 013 fail, and 526 skip with the same stand-in.
+With the same stand-in, the commit before this work has 19 291 pass, 1 013 fail, and 525 skip.
 
 | File | Pass | Fail | Skip |
 |---|---|---|---|
@@ -71,12 +71,12 @@ The stand-in changed, so the totals before this work are 19 290 pass, 1 013 fail
 | `error.test` | 300 | 9 | 8 |
 | `lset.test` | 0 | 0 | 89 |
 | `namespace.test` | 230 | 80 | 3 |
-| `regexp.test` | 208 | 31 | 5 |
+| `regexp.test` | 209 | 31 | 4 |
 | `binary.test` | 602 | 36 | 79 |
 | `info.test` | 97 | 161 | 5 |
 | `dict.test` | 311 | 29 | 2 |
 | `scan.test` | 145 | 35 | 1 |
-| **Total** | **19780** | **523** | **526** |
+| **Total** | **19781** | **523** | **525** |
 
 The largest groups of tests that still fail in scope: TclOO (`oo`, `ooNext2`), `info frame`, step traces, `coroutine`, `tailcall`, the bytecode tools (`tcl::unsupported::disassemble`), the `%n$` forms of `format` and `scan`, and the longest-match rules of regular expressions.
 
