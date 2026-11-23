@@ -814,7 +814,7 @@ pub fn cmdLindex(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("lindex list ?index ...?");
     var cur = argv[1];
     var idxs = argv[2..];
-    if (idxs.len == 1) idxs = try it.list(idxs[0]);
+    if (idxs.len == 1 and idxs[0] != .int) idxs = try it.list(idxs[0]);
     for (idxs) |iv| {
         const items = try it.readList(cur);
         const i = try index(it, iv, items.len);

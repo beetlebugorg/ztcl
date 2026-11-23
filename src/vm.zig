@@ -1154,8 +1154,8 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 .lindex => {
                     const l = stack[sp - 2];
                     const at = stack[sp - 1];
-                    if (l == .list and at == .int) {
-                        const items = l.list.items();
+                    if (at == .int) {
+                        const items = try it.readList(l);
                         stack[sp - 2] = if (at.int >= 0 and at.int < items.len) items[@intCast(at.int)] else Value.empty;
                     } else {
                         const argv = [_]Value{ .{ .str = "lindex" }, l, at };
