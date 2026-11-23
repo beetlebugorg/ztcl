@@ -103,7 +103,7 @@ A host name resolves through one function. It reads an address literal, the name
 
 `exec` adds `exec`, `pid`, and command pipelines (`open "|cmd"`) on Linux. **`exec` is not sandboxed.** A process is outside the root folder and outside the step, memory, and nesting limits, so a script with `exec` has the full power of the user that runs the embedder. `file` does not turn it on. Each program runs directly from its argument list, with no shell. The embedder sets `Interp.exec_host`: a list of allowed programs, a time limit after which the process group is killed, and the whole environment of each program. A background process ends when the interpreter ends. A program name with a `/` names a file below the root folder first.
 
-`coroutine`, `yield`, `yieldto`, and `tailcall` are core commands. `coroutine` needs a stack switch, which exists for x86-64 Linux. On other targets, including WebAssembly, it gives an error.
+`coroutine`, `yield`, `yieldto`, and `tailcall` are core commands. `coroutine` needs a stack switch, which exists for x86-64 Linux and arm64 macOS. On other targets, including WebAssembly, it gives an error.
 
 ## Differences from Tcl
 
