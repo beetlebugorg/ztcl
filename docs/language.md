@@ -46,7 +46,7 @@ The counts are pass / fail / skip for the test file of the command.
 | `noise3` | no own test file | A ztcl addition. |
 | `proc` | 25 / 12 / 1 |  |
 | `puts` | no own test file | Writes to the embedder callback. |
-| `regexp` | 209 / 31 / 4 | First match wins. No lookahead or `-expanded`. |
+| `regexp` | 209 / 31 / 4 | Longest match, lookahead, and the ARE, ERE, and BRE syntaxes. |
 | `regsub` | no own test file | Uses the matcher of `regexp`. |
 | `rename` | 10 / 1 / 8 |  |
 | `return` | no own test file |  |
@@ -84,7 +84,6 @@ The counts are pass / fail / skip for the test file of the command.
 - `rand()` uses a fixed seed.
 - `tcl_platform` has the same fixed values on all platforms.
 - `info commands` and `array names` have a fixed order.
-- The first regular expression alternative that matches wins.
 - Some errors of core commands still have the error code `NONE`. Arithmetic errors, wrong argument counts, list syntax, and lookups have the codes of Tcl.
 - Unicode classes and case maps use a small model of the Unicode tables.
 - `Interp.compact` drops traces.

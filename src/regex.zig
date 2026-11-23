@@ -1,442 +1,930 @@
 //! Regular expressions: `regexp`, `regsub`, and the `-regexp` options.
 //!
-//! The pattern compiles to a small program. A backtracking matcher runs
-//! the program. Each 32 steps of the matcher use one step of the step limit,
-//! and the backtrack stack has a fixed limit, so a pattern cannot run
-//! without end.
+//! The syntax is that of re_syntax.n: advanced (ARE), extended (ERE),
+//! basic (BRE), and literal patterns, with the embedded options.
 //!
-//! The syntax is the common part of the advanced regular expressions of
-//! Tcl (re_syntax.n): `. [ ] ( ) (?: ) | * + ? {m,n}`, the non-greedy
-//! forms, `^ $`, back references, the class names, and the escapes
-//! `\d \w \s \D \W \S \m \M \y \Y \A \Z`.
+//! A pattern parses to a tree. The tree compiles to a program for a
+//! Thompson simulation, which finds the leftmost match and its longest
+//! end (or its shortest end, when the first quantifier of the pattern
+//! is non-greedy). Its time is the program size times the text length.
+//! A second pass then splits the known span over the tree to find the
+//! capture groups. Each part of a concatenation takes the longest (or
+//! shortest) length that leaves a match for the rest. A pattern with a
+//! back reference has no simulation and searches with the second pass
+//! alone. The step limit bounds each pass.
 //!
-//! Known differences from Tcl: the first alternative that matches wins
-//! (Tcl prefers the longest match), and a position is a byte offset.
+//! Positions in the matcher count characters. `Matcher.caps` has byte
+//! offsets, for the callers that slice the subject.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
+const ucd = @import("ucd.zig");
+const cmds = @import("cmds.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
 
-const Set = [32]u8;
+const inf = std.math.maxInt(u32);
+const max_prog = 40000;
+const max_memo = 1 << 20;
 
-const Assert = enum { bol, eol, word_start, word_end, word_b, not_word_b, text_start, text_end };
+pub const Syntax = enum { are, ere, bre, literal };
 
-const Node = union(enum) {
-    empty,
-    char: u8,
-    any,
-    set: *const Set,
-    assert: Assert,
-    group: struct { cap: ?u16, sub: *Node },
-    cat: []const *Node,
-    alt: []const *Node,
-    repeat: struct { sub: *Node, min: u32, max: u32, greedy: bool },
-    backref: u8,
+pub const Options = struct {
+    nocase: bool = false,
+    /// `.` and `[^x]` do not match a newline.
+    linestop: bool = false,
+    /// `^` and `$` also match at a newline.
+    lineanchor: bool = false,
+    expanded: bool = false,
+    syntax: Syntax = .are,
+    /// The text start is not a line start, or the text end not a line end.
+    notbol: bool = false,
+    noteol: bool = false,
+    /// Tcl has no captures for this pattern (`REG_NOSUB`).
+    nosub: bool = false,
 };
 
+/// The bits of `regex_info`, in the order of `re_info` in the Tcl tests.
+pub const Info = struct {
+    pub const backref: u16 = 1;
+    pub const lookahead: u16 = 2;
+    pub const bounds: u16 = 4;
+    pub const braces: u16 = 8;
+    pub const bsalnum: u16 = 16;
+    pub const pbotch: u16 = 32;
+    pub const bbs: u16 = 64;
+    pub const nonposix: u16 = 128;
+    pub const unspec: u16 = 256;
+    pub const unport: u16 = 512;
+    pub const locale: u16 = 1024;
+    pub const emptymatch: u16 = 2048;
+    pub const impossible: u16 = 4096;
+    pub const shortest: u16 = 8192;
+};
+
+const Range = struct { lo: u21, hi: u21 };
+
+const Class = enum(u4) { alpha, upper, lower, digit, xdigit, alnum, print, blank, space, punct, graph, cntrl };
+
+fn classHas(cl: Class, c: u21) bool {
+    return switch (cl) {
+        .alpha => ucd.isAlpha(c),
+        .upper => ucd.isUpper(c),
+        .lower => ucd.isLower(c),
+        .digit => ucd.isDigit(c),
+        .xdigit => c < 128 and std.ascii.isHex(@intCast(c)),
+        .alnum => ucd.isAlpha(c) or ucd.isDigit(c),
+        .print => ucd.isPrint(c),
+        .blank => c == ' ' or c == '\t' or c == 0xA0 or c == 0x3000 or (c >= 0x2000 and c <= 0x200A),
+        .space => ucd.isSpace(c),
+        .punct => ucd.isPunct(c),
+        .graph => ucd.isGraph(c),
+        .cntrl => ucd.isControl(c),
+    };
+}
+
+const Set = struct {
+    bits: [4]u64 = @splat(0),
+    ranges: std.ArrayList(Range) = .empty,
+    classes: u16 = 0,
+    word: bool = false,
+    negate: bool = false,
+    no_nl: bool = false,
+    nocase: bool = false,
+
+    fn rawHas(s: *const Set, c: u21) bool {
+        if (c < 256) return s.bits[c >> 6] & (@as(u64, 1) << @intCast(c & 63)) != 0;
+        for (s.ranges.items) |r| if (c >= r.lo and c <= r.hi) return true;
+        if (s.word and ucd.isWordChar(c)) return true;
+        var m = s.classes;
+        var i: u4 = 0;
+        while (m != 0) : (i +%= 1) {
+            if (m & 1 != 0 and classHas(@enumFromInt(i), c)) return true;
+            m >>= 1;
+        }
+        return false;
+    }
+
+    fn has(s: *const Set, c: u21) bool {
+        if (s.no_nl and c == '\n') return false;
+        var hit = s.rawHas(c);
+        if (!hit and s.nocase) hit = s.rawHas(ucd.toLower(c)) or s.rawHas(ucd.toUpper(c));
+        return hit != s.negate;
+    }
+
+    fn addRange(s: *Set, a: std.mem.Allocator, lo: u21, hi: u21) !void {
+        var c = lo;
+        while (c <= hi and c < 256) : (c += 1) s.bits[c >> 6] |= @as(u64, 1) << @intCast(c & 63);
+        if (hi >= 256) try s.ranges.append(a, .{ .lo = @max(lo, 256), .hi = hi });
+    }
+
+    fn addClass(s: *Set, cl: Class) void {
+        s.classes |= @as(u16, 1) << @intFromEnum(cl);
+        for (0..256) |i| {
+            if (classHas(cl, @intCast(i))) s.bits[i >> 6] |= @as(u64, 1) << @intCast(i & 63);
+        }
+    }
+
+    fn addWord(s: *Set) void {
+        s.word = true;
+        for (0..256) |i| {
+            if (ucd.isWordChar(@intCast(i))) s.bits[i >> 6] |= @as(u64, 1) << @intCast(i & 63);
+        }
+    }
+};
+
+const Assert = enum { bol, eol, line_bol, line_eol, text_start, text_end, word_start, word_end, word_b, not_word_b };
+
+const Pref = enum { none, greedy, lazy };
+
+const Node = struct {
+    kind: union(enum) {
+        empty,
+        char: u21,
+        set: *const Set,
+        assert: Assert,
+        look: struct { negate: bool, sub: *Node, start: u32 = 0 },
+        group: struct { cap: ?u16, sub: *Node },
+        cat: []const *Node,
+        alt: []const *Node,
+        repeat: struct { sub: *Node, min: u32, max: u32, greedy: bool },
+        backref: u16,
+    },
+    id: u32 = 0,
+    pref: Pref = .none,
+    /// The capture groups inside the node: first and one past the last.
+    cap_lo: u16 = 0,
+    cap_hi: u16 = 0,
+    /// The least and the most characters that the node can match.
+    min_len: u32 = 0,
+    max_len: u32 = inf,
+};
+
+/// Sets `min_len` and `max_len` of a node and of the nodes under it.
+fn measure(n: *Node) void {
+    switch (n.kind) {
+        .empty, .assert => {
+            n.min_len = 0;
+            n.max_len = 0;
+        },
+        .look => |l| {
+            measure(l.sub);
+            n.min_len = 0;
+            n.max_len = 0;
+        },
+        .char, .set => {
+            n.min_len = 1;
+            n.max_len = 1;
+        },
+        .backref => {
+            n.min_len = 0;
+            n.max_len = inf;
+        },
+        .group => |g| {
+            measure(g.sub);
+            n.min_len = g.sub.min_len;
+            n.max_len = g.sub.max_len;
+        },
+        .cat => |items| {
+            var lo: u32 = 0;
+            var hi: u32 = 0;
+            for (items) |x| {
+                measure(x);
+                lo +|= x.min_len;
+                hi = if (hi == inf or x.max_len == inf) inf else hi +| x.max_len;
+            }
+            n.min_len = lo;
+            n.max_len = hi;
+        },
+        .alt => |items| {
+            var lo: u32 = inf;
+            var hi: u32 = 0;
+            for (items) |x| {
+                measure(x);
+                lo = @min(lo, x.min_len);
+                hi = @max(hi, x.max_len);
+            }
+            n.min_len = lo;
+            n.max_len = hi;
+        },
+        .repeat => |r| {
+            measure(r.sub);
+            n.min_len = r.sub.min_len *| r.min;
+            n.max_len = if (r.max == inf) (if (r.sub.max_len == 0) 0 else inf) else if (r.sub.max_len == inf) inf else r.sub.max_len *| r.max;
+        },
+    }
+}
+
 const Inst = union(enum) {
-    char: u8,
-    any,
+    char: u21,
     set: *const Set,
     assert: Assert,
-    save: u16,
+    /// A lookahead: the program at `start`, ended by `match`.
+    look: struct { negate: bool, start: u32 },
     split: struct { first: u32, second: u32 },
     jmp: u32,
-    mark: u16,
-    check: u16,
-    backref: u8,
     match,
 };
 
-const inf = std.math.maxInt(u32);
-const max_prog = 20000;
-const max_stack = 1 << 20;
-
-pub const Options = struct { nocase: bool = false, line: bool = false };
-
 pub const Regex = struct {
     prog: []const Inst,
+    root: *Node,
     ncap: usize,
-    nloop: usize,
+    nodes: u32,
     opts: Options,
+    shortest: bool,
+    has_backref: bool,
+    info: u16,
 };
 
-fn setBit(s: *Set, c: u8) void {
-    s[c >> 3] |= @as(u8, 1) << @intCast(c & 7);
+const Fault = struct {
+    const paren = "REG_EPAREN";
+    const brace = "REG_EBRACE";
+    const brack = "REG_EBRACK";
+    const badrpt = "REG_BADRPT";
+    const badbr = "REG_BADBR";
+    const escape = "REG_EESCAPE";
+    const subreg = "REG_ESUBREG";
+    const range = "REG_ERANGE";
+    const ctype = "REG_ECTYPE";
+    const collate = "REG_ECOLLATE";
+    const badopt = "REG_BADOPT";
+    const toobig = "REG_ETOOBIG";
+    const badpat = "REG_BADPAT";
+};
+
+fn faultText(code: []const u8) []const u8 {
+    const eql_ = std.mem.eql;
+    if (eql_(u8, code, Fault.paren)) return "parentheses () not balanced";
+    if (eql_(u8, code, Fault.brace)) return "braces {} not balanced";
+    if (eql_(u8, code, Fault.brack)) return "brackets [] not balanced";
+    if (eql_(u8, code, Fault.badrpt)) return "quantifier operand invalid";
+    if (eql_(u8, code, Fault.badbr)) return "invalid repetition count(s)";
+    if (eql_(u8, code, Fault.escape)) return "invalid escape \\ sequence";
+    if (eql_(u8, code, Fault.subreg)) return "invalid backreference number";
+    if (eql_(u8, code, Fault.range)) return "invalid character range";
+    if (eql_(u8, code, Fault.ctype)) return "invalid character class";
+    if (eql_(u8, code, Fault.collate)) return "invalid collating element";
+    if (eql_(u8, code, Fault.badopt)) return "invalid embedded option";
+    if (eql_(u8, code, Fault.toobig)) return "regular expression is too big";
+    return "invalid regular expression";
 }
 
-fn hasBit(s: *const Set, c: u8) bool {
-    return s[c >> 3] & (@as(u8, 1) << @intCast(c & 7)) != 0;
-}
-
-fn isWord(c: u8) bool {
-    return std.ascii.isAlphanumeric(c) or c == '_' or c >= 0x80;
-}
-
-fn addClass(s: *Set, name: []const u8) bool {
-    const eq = std.mem.eql;
-    for (0..256) |i| {
-        const c: u8 = @intCast(i);
-        const in = if (eq(u8, name, "alpha")) std.ascii.isAlphabetic(c) //
-            else if (eq(u8, name, "digit")) std.ascii.isDigit(c) //
-            else if (eq(u8, name, "alnum")) std.ascii.isAlphanumeric(c) //
-            else if (eq(u8, name, "upper")) std.ascii.isUpper(c) //
-            else if (eq(u8, name, "lower")) std.ascii.isLower(c) //
-            else if (eq(u8, name, "space")) std.ascii.isWhitespace(c) //
-            else if (eq(u8, name, "blank")) (c == ' ' or c == '\t') //
-            else if (eq(u8, name, "punct")) std.ascii.isPunctuation(c) //
-            else if (eq(u8, name, "xdigit")) std.ascii.isHex(c) //
-            else if (eq(u8, name, "print")) std.ascii.isPrint(c) //
-            else if (eq(u8, name, "graph")) (std.ascii.isPrint(c) and c != ' ') //
-            else if (eq(u8, name, "cntrl")) std.ascii.isControl(c) //
-            else if (eq(u8, name, "word")) isWord(c) //
-            else return false;
-        if (in) setBit(s, c);
-    }
-    return true;
-}
-
-const Compiler = struct {
+const Parser = struct {
     it: *Interp,
-    src: []const u8,
+    src: []const u21,
     pos: usize = 0,
-    ncap: u16 = 1,
-    nloop: u16 = 0,
     opts: Options,
-    prog: std.ArrayList(Inst) = .empty,
+    ncap: u16 = 1,
+    /// A capture group is closed when its bit is set.
+    closed: std.StaticBitSet(1024) = .initEmpty(),
+    nodes: u32 = 0,
     depth: u32 = 0,
+    info: u16 = 0,
+    has_backref: bool = false,
 
-    fn fail(c: *Compiler, msg: []const u8) Error {
-        return c.it.fail("couldn't compile regular expression pattern: {s}", .{msg});
+    fn fail(p: *Parser, code: []const u8) Error {
+        const a = p.it.alloc();
+        const text = faultText(code);
+        p.it.result = .{ .str = try std.fmt.allocPrint(a, "couldn't compile regular expression pattern: {s}", .{text}) };
+        p.it.error_code = try value.newList(a, &.{ .{ .str = "REGEXP" }, .{ .str = code }, .{ .str = text } });
+        return error.TclError;
     }
 
-    fn node(c: *Compiler, n: Node) Error!*Node {
-        const p = try c.it.alloc().create(Node);
-        p.* = n;
-        return p;
+    fn node(p: *Parser, n: Node) Error!*Node {
+        const out = try p.it.alloc().create(Node);
+        out.* = n;
+        out.id = p.nodes;
+        p.nodes += 1;
+        if (p.nodes > max_prog) return p.fail(Fault.toobig);
+        return out;
     }
 
-    fn more(c: *Compiler) bool {
-        return c.pos < c.src.len;
+    fn more(p: *const Parser) bool {
+        return p.pos < p.src.len;
     }
 
-    fn parseAlt(c: *Compiler) Error!*Node {
-        if (c.depth > 100) return c.fail("nesting too deep");
-        c.depth += 1;
-        defer c.depth -= 1;
+    fn peek(p: *const Parser) u21 {
+        return p.src[p.pos];
+    }
+
+    fn at(p: *const Parser, k: usize) ?u21 {
+        return if (p.pos + k < p.src.len) p.src[p.pos + k] else null;
+    }
+
+    fn are(p: *const Parser) bool {
+        return p.opts.syntax == .are;
+    }
+
+    fn bre(p: *const Parser) bool {
+        return p.opts.syntax == .bre;
+    }
+
+    /// Skips white space and comments in expanded mode.
+    fn skip(p: *Parser) void {
+        if (!p.opts.expanded) return;
+        while (p.more()) {
+            const c = p.peek();
+            if (c == ' ' or (c >= 9 and c <= 13)) {
+                p.pos += 1;
+            } else if (c == '#') {
+                while (p.more() and p.peek() != '\n') p.pos += 1;
+            } else break;
+        }
+    }
+
+    fn charNode(p: *Parser, c: u21) Error!*Node {
+        if (p.opts.nocase and (ucd.toLower(c) != c or ucd.toUpper(c) != c)) {
+            const a = p.it.alloc();
+            const s = try a.create(Set);
+            s.* = .{};
+            try s.addRange(a, c, c);
+            try s.addRange(a, ucd.toLower(c), ucd.toLower(c));
+            try s.addRange(a, ucd.toUpper(c), ucd.toUpper(c));
+            return p.node(.{ .kind = .{ .set = s } });
+        }
+        return p.node(.{ .kind = .{ .char = c } });
+    }
+
+    fn atClose(p: *const Parser) bool {
+        if (!p.more()) return true;
+        if (p.bre()) return p.peek() == '\\' and p.at(1) == ')';
+        return p.peek() == ')' or p.peek() == '|';
+    }
+
+    fn parseAlt(p: *Parser, depth_open: bool) Error!*Node {
+        if (p.depth > 100) return p.fail(Fault.toobig);
+        p.depth += 1;
+        defer p.depth -= 1;
+        const first_cap = p.ncap;
         var alts: std.ArrayList(*Node) = .empty;
         while (true) {
-            try alts.append(c.it.alloc(), try c.parseCat());
-            if (c.more() and c.src[c.pos] == '|') {
-                c.pos += 1;
+            try alts.append(p.it.alloc(), try p.parseBranch(depth_open));
+            if (!p.bre() and p.more() and p.peek() == '|') {
+                p.pos += 1;
             } else break;
         }
         if (alts.items.len == 1) return alts.items[0];
-        return c.node(.{ .alt = alts.items });
-    }
-
-    fn parseCat(c: *Compiler) Error!*Node {
-        var items: std.ArrayList(*Node) = .empty;
-        while (c.more() and c.src[c.pos] != '|' and c.src[c.pos] != ')') {
-            var atom = try c.parseAtom();
-            // The quantifiers of the atom.
-            while (c.more()) {
-                const q = c.src[c.pos];
-                var min: u32 = 0;
-                var max: u32 = inf;
-                if (q == '*') {
-                    c.pos += 1;
-                } else if (q == '+') {
-                    min = 1;
-                    c.pos += 1;
-                } else if (q == '?') {
-                    max = 1;
-                    c.pos += 1;
-                } else if (q == '{' and c.pos + 1 < c.src.len and std.ascii.isDigit(c.src[c.pos + 1])) {
-                    c.pos += 1;
-                    min = c.number();
-                    max = min;
-                    if (c.more() and c.src[c.pos] == ',') {
-                        c.pos += 1;
-                        max = if (c.more() and std.ascii.isDigit(c.src[c.pos])) c.number() else inf;
-                    }
-                    if (!c.more() or c.src[c.pos] != '}') return c.fail("braces {} not balanced");
-                    c.pos += 1;
-                    if (min > 255 or (max != inf and (max > 255 or max < min))) return c.fail("invalid repetition count(s)");
-                } else break;
-                var greedy = true;
-                if (c.more() and c.src[c.pos] == '?') {
-                    greedy = false;
-                    c.pos += 1;
-                }
-                if (atom.* == .assert) return c.fail("quantifier operand invalid");
-                atom = try c.node(.{ .repeat = .{ .sub = atom, .min = min, .max = max, .greedy = greedy } });
-            }
-            try items.append(c.it.alloc(), atom);
-        }
-        if (items.items.len == 0) return c.node(.empty);
-        if (items.items.len == 1) return items.items[0];
-        return c.node(.{ .cat = items.items });
-    }
-
-    fn number(c: *Compiler) u32 {
-        var n: u32 = 0;
-        while (c.more() and std.ascii.isDigit(c.src[c.pos])) : (c.pos += 1) n = n *| 10 +| (c.src[c.pos] - '0');
+        const n = try p.node(.{ .kind = .{ .alt = alts.items }, .pref = .greedy });
+        n.cap_lo = first_cap;
+        n.cap_hi = p.ncap;
         return n;
     }
 
-    fn charNode(c: *Compiler, ch: u8) Error!*Node {
-        if (c.opts.nocase and std.ascii.isAlphabetic(ch)) {
-            const s = try c.it.alloc().create(Set);
-            s.* = @splat(0);
-            setBit(s, std.ascii.toLower(ch));
-            setBit(s, std.ascii.toUpper(ch));
-            return c.node(.{ .set = s });
+    fn parseBranch(p: *Parser, depth_open: bool) Error!*Node {
+        const first_cap = p.ncap;
+        var items: std.ArrayList(*Node) = .empty;
+        var pref: Pref = .none;
+        var first = true;
+        while (true) {
+            p.skip();
+            if (p.atClose()) break;
+            var a = try p.parseAtom(first, depth_open);
+            first = false;
+            p.skip();
+            a = try p.quantify(a);
+            if (pref == .none) pref = a.pref;
+            try items.append(p.it.alloc(), a);
         }
-        return c.node(.{ .char = ch });
+        if (items.items.len == 0) {
+            if (!p.bre() and p.more() and p.peek() == '|' and p.opts.syntax == .ere) return p.fail(Fault.badpat);
+            if (p.opts.syntax == .ere and (!p.more() or p.peek() == ')')) return p.fail(Fault.badpat);
+            p.info |= Info.unspec;
+            return p.node(.{ .kind = .empty });
+        }
+        if (items.items.len == 1) return items.items[0];
+        const n = try p.node(.{ .kind = .{ .cat = items.items }, .pref = pref });
+        n.cap_lo = first_cap;
+        n.cap_hi = p.ncap;
+        return n;
     }
 
-    fn classNode(c: *Compiler, name: []const u8, negate: bool) Error!*Node {
-        const s = try c.it.alloc().create(Set);
-        s.* = @splat(0);
-        _ = addClass(s, name);
-        if (negate) for (s) |*b| {
-            b.* = ~b.*;
-        };
-        return c.node(.{ .set = s });
+    fn number(p: *Parser) ?u32 {
+        if (!p.more() or p.peek() < '0' or p.peek() > '9') return null;
+        var n: u32 = 0;
+        while (p.more() and p.peek() >= '0' and p.peek() <= '9') : (p.pos += 1) n = n *| 10 +| (p.peek() - '0');
+        return n;
     }
 
-    fn parseAtom(c: *Compiler) Error!*Node {
-        const ch = c.src[c.pos];
-        c.pos += 1;
-        switch (ch) {
+    fn quantify(p: *Parser, atom: *Node) Error!*Node {
+        if (!p.more()) return atom;
+        const q = p.peek();
+        var min: u32 = 0;
+        var max: u32 = inf;
+        var is_bound = false;
+        if (p.bre()) {
+            if (q == '*') {
+                p.pos += 1;
+            } else if (q == '\\' and p.at(1) == '{') {
+                p.pos += 2;
+                is_bound = true;
+                min = p.number() orelse return p.fail(Fault.badbr);
+                max = min;
+                if (p.more() and p.peek() == ',') {
+                    p.pos += 1;
+                    max = p.number() orelse inf;
+                }
+                if (!(p.more() and p.peek() == '\\' and p.at(1) == '}')) return p.fail(Fault.brace);
+                p.pos += 2;
+            } else return atom;
+        } else if (q == '*') {
+            p.pos += 1;
+        } else if (q == '+') {
+            min = 1;
+            p.pos += 1;
+        } else if (q == '?') {
+            max = 1;
+            p.pos += 1;
+        } else if (q == '{' and p.at(1) != null and p.at(1).? >= '0' and p.at(1).? <= '9') {
+            p.pos += 1;
+            is_bound = true;
+            min = p.number().?;
+            max = min;
+            if (p.more() and p.peek() == ',') {
+                p.pos += 1;
+                max = p.number() orelse inf;
+            }
+            if (!p.more() or p.peek() != '}') return p.fail(Fault.brace);
+            p.pos += 1;
+        } else return atom;
+        if (is_bound) {
+            p.info |= Info.bounds;
+            if (min > 255 or (max != inf and (max > 255 or max < min))) return p.fail(Fault.badbr);
+        }
+        var greedy = true;
+        if (p.are() and p.more() and p.peek() == '?') {
+            greedy = false;
+            p.pos += 1;
+            p.info |= Info.nonposix;
+        }
+        if (atom.kind == .assert or atom.kind == .look) return p.fail(Fault.badrpt);
+        p.skip();
+        if (p.more() and !p.bre()) {
+            const c = p.peek();
+            if (c == '*' or c == '+' or c == '?' or (c == '{' and p.at(1) != null and p.at(1).? >= '0' and p.at(1).? <= '9')) return p.fail(Fault.badrpt);
+        }
+        // A fixed count keeps the preference of the atom.
+        const fixed = min == max;
+        const pref: Pref = if (fixed) atom.pref else if (greedy) .greedy else .lazy;
+        const n = try p.node(.{ .kind = .{ .repeat = .{ .sub = atom, .min = min, .max = max, .greedy = greedy } }, .pref = pref });
+        n.cap_lo = atom.cap_lo;
+        n.cap_hi = atom.cap_hi;
+        return n;
+    }
+
+    fn classNode(p: *Parser, which: u8) Error!*Node {
+        const a = p.it.alloc();
+        const s = try a.create(Set);
+        s.* = .{};
+        switch (which | 32) {
+            'd' => s.addClass(.digit),
+            's' => s.addClass(.space),
+            else => s.addWord(),
+        }
+        if (which < 'a') {
+            s.negate = true;
+            s.no_nl = p.opts.linestop;
+        }
+        return p.node(.{ .kind = .{ .set = s } });
+    }
+
+    fn anyNode(p: *Parser) Error!*Node {
+        const a = p.it.alloc();
+        const s = try a.create(Set);
+        s.* = .{ .negate = true, .no_nl = p.opts.linestop };
+        return p.node(.{ .kind = .{ .set = s } });
+    }
+
+    fn assertNode(p: *Parser, as: Assert) Error!*Node {
+        return p.node(.{ .kind = .{ .assert = as } });
+    }
+
+    fn parseGroup(p: *Parser, cap: ?u16) Error!*Node {
+        const sub = try p.parseAlt(true);
+        if (p.bre()) {
+            if (!(p.more() and p.peek() == '\\' and p.at(1) == ')')) return p.fail(Fault.paren);
+            p.pos += 2;
+        } else {
+            if (!p.more() or p.peek() != ')') return p.fail(Fault.paren);
+            p.pos += 1;
+        }
+        if (cap) |k| {
+            if (k < 1024) p.closed.set(k);
+        }
+        const n = try p.node(.{ .kind = .{ .group = .{ .cap = cap, .sub = sub } }, .pref = sub.pref });
+        n.cap_lo = if (cap) |k| k else sub.cap_lo;
+        n.cap_hi = p.ncap;
+        return n;
+    }
+
+    fn parseAtom(p: *Parser, first: bool, depth_open: bool) Error!*Node {
+        const c = p.peek();
+        if (p.opts.syntax == .bre) return p.parseBreAtom(c, first);
+        p.pos += 1;
+        switch (c) {
             '(' => {
-                var cap: ?u16 = null;
-                if (std.mem.startsWith(u8, c.src[c.pos..], "?:")) {
-                    c.pos += 2;
-                } else {
-                    cap = c.ncap;
-                    c.ncap += 1;
-                }
-                const sub = try c.parseAlt();
-                if (!c.more() or c.src[c.pos] != ')') return c.fail("parentheses () not balanced");
-                c.pos += 1;
-                return c.node(.{ .group = .{ .cap = cap, .sub = sub } });
-            },
-            ')' => return c.fail("parentheses () not balanced"),
-            '*', '+', '?' => return c.fail("quantifier operand invalid"),
-            '.' => {
-                if (!c.opts.line) return c.node(.any);
-                const s = try c.it.alloc().create(Set);
-                s.* = @splat(0xff);
-                s['\n' >> 3] &= ~(@as(u8, 1) << ('\n' & 7));
-                return c.node(.{ .set = s });
-            },
-            '^' => return c.node(.{ .assert = .bol }),
-            '$' => return c.node(.{ .assert = .eol }),
-            '[' => return c.parseSet(),
-            '\\' => return c.parseEscape(),
-            else => {
-                // The bytes of one character stay together.
-                if (ch >= 0xC0) {
-                    var bytes: std.ArrayList(*Node) = .empty;
-                    try bytes.append(c.it.alloc(), try c.node(.{ .char = ch }));
-                    while (c.more() and c.src[c.pos] & 0xC0 == 0x80) : (c.pos += 1) {
-                        try bytes.append(c.it.alloc(), try c.node(.{ .char = c.src[c.pos] }));
+                if (p.are() and p.more() and p.peek() == '?') {
+                    const k = p.at(1) orelse return p.fail(Fault.badrpt);
+                    if (k == ':') {
+                        p.pos += 2;
+                        p.info |= Info.nonposix;
+                        return p.parseGroup(null);
                     }
-                    return c.node(.{ .cat = bytes.items });
+                    if (k == '=' or k == '!') {
+                        p.pos += 2;
+                        p.info |= Info.lookahead;
+                        const saved = p.ncap;
+                        const sub = try p.parseAlt(true);
+                        if (!p.more() or p.peek() != ')') return p.fail(Fault.paren);
+                        p.pos += 1;
+                        // A group in a lookahead has no capture.
+                        _ = saved;
+                        return p.node(.{ .kind = .{ .look = .{ .negate = k == '!', .sub = sub } } });
+                    }
+                    return p.fail(Fault.badrpt);
                 }
-                return c.charNode(ch);
+                const cap = if (p.opts.nosub) null else blk: {
+                    const k = p.ncap;
+                    p.ncap += 1;
+                    break :blk @as(?u16, k);
+                };
+                return p.parseGroup(cap);
             },
+            '*', '+', '?' => return p.fail(Fault.badrpt),
+            '{' => {
+                if (p.more() and p.peek() >= '0' and p.peek() <= '9') return p.fail(Fault.badrpt);
+                p.info |= Info.braces;
+                return p.charNode('{');
+            },
+            '.' => return p.anyNode(),
+            '^' => return p.assertNode(if (p.opts.lineanchor) .line_bol else .bol),
+            '$' => return p.assertNode(if (p.opts.lineanchor) .line_eol else .eol),
+            '[' => return p.parseBracket(),
+            '\\' => return p.parseEscape(),
+            ')' => {
+                _ = depth_open;
+                return p.fail(Fault.paren);
+            },
+            else => return p.charNode(c),
         }
     }
 
-    /// The byte of a character escape, or null for a class escape.
-    fn escapeByte(c: *Compiler, e: u8) ?u8 {
-        return switch (e) {
-            'n' => '\n',
-            't' => '\t',
-            'r' => '\r',
-            'f' => 12,
-            'v' => 11,
-            'a' => 7,
-            'e' => 27,
-            'B' => '\\',
-            '0' => 0,
-            'x' => blk: {
-                var n: u8 = 0;
-                var k: usize = 0;
-                while (k < 2 and c.more() and std.ascii.isHex(c.src[c.pos])) : (k += 1) {
-                    n = n *% 16 +% (std.fmt.charToDigit(c.src[c.pos], 16) catch 0);
-                    c.pos += 1;
-                }
-                break :blk n;
+    fn parseBreAtom(p: *Parser, c: u21, first: bool) Error!*Node {
+        p.pos += 1;
+        switch (c) {
+            '*' => {
+                if (first) return p.charNode('*');
+                return p.fail(Fault.badrpt);
             },
-            else => null,
-        };
+            '.' => return p.anyNode(),
+            '[' => return p.parseBracket(),
+            '^' => {
+                if (first) return p.assertNode(if (p.opts.lineanchor) .line_bol else .bol);
+                return p.charNode('^');
+            },
+            '$' => {
+                if (!p.more() or (p.peek() == '\\' and p.at(1) == ')')) return p.assertNode(if (p.opts.lineanchor) .line_eol else .eol);
+                return p.charNode('$');
+            },
+            '\\' => {
+                if (!p.more()) return p.fail(Fault.escape);
+                const e = p.peek();
+                p.pos += 1;
+                switch (e) {
+                    '(' => {
+                        const cap = if (p.opts.nosub) null else blk: {
+                            const k = p.ncap;
+                            p.ncap += 1;
+                            break :blk @as(?u16, k);
+                        };
+                        return p.parseGroup(cap);
+                    },
+                    ')' => return p.fail(Fault.paren),
+                    '{' => return p.fail(Fault.badrpt),
+                    '<' => return p.assertNode(.word_start),
+                    '>' => return p.assertNode(.word_end),
+                    '1'...'9' => return p.backref(e - '0'),
+                    else => {
+                        if (e < 128 and std.ascii.isAlphanumeric(@intCast(e))) p.info |= Info.bsalnum;
+                        return p.charNode(e);
+                    },
+                }
+            },
+            else => return p.charNode(c),
+        }
     }
 
-    fn parseEscape(c: *Compiler) Error!*Node {
-        if (!c.more()) return c.fail("invalid escape \\ sequence");
-        const e = c.src[c.pos];
-        c.pos += 1;
+    fn backref(p: *Parser, k: u32) Error!*Node {
+        if (k >= p.ncap or k >= 1024 or !p.closed.isSet(k)) return p.fail(Fault.subreg);
+        p.has_backref = true;
+        p.info |= Info.backref;
+        return p.node(.{ .kind = .{ .backref = @intCast(k) } });
+    }
+
+    fn hexDigits(p: *Parser, maxn: usize) ?u32 {
+        var n: u32 = 0;
+        var k: usize = 0;
+        while (k < maxn and p.more()) : (k += 1) {
+            const c = p.peek();
+            if (c >= 128 or !std.ascii.isHex(@intCast(c))) break;
+            n = n *% 16 +% (std.fmt.charToDigit(@intCast(c), 16) catch 0);
+            p.pos += 1;
+        }
+        return if (k == 0) null else n;
+    }
+
+    /// The character of a character escape, or null.
+    fn charEscape(p: *Parser, e: u21) Error!?u21 {
         switch (e) {
-            'd' => return c.classNode("digit", false),
-            'D' => return c.classNode("digit", true),
-            'w' => return c.classNode("word", false),
-            'W' => return c.classNode("word", true),
-            's' => return c.classNode("space", false),
-            'S' => return c.classNode("space", true),
-            'm' => return c.node(.{ .assert = .word_start }),
-            'M' => return c.node(.{ .assert = .word_end }),
-            'y' => return c.node(.{ .assert = .word_b }),
-            'Y' => return c.node(.{ .assert = .not_word_b }),
-            'A' => return c.node(.{ .assert = .text_start }),
-            'Z' => return c.node(.{ .assert = .text_end }),
-            '1'...'9' => {
-                if (e - '0' >= c.ncap) return c.fail("invalid backreference number");
-                return c.node(.{ .backref = e - '0' });
+            'a' => return 7,
+            'b' => return 8,
+            'B' => return '\\',
+            'e' => return 27,
+            'f' => return 12,
+            'n' => return '\n',
+            'r' => return '\r',
+            't' => return '\t',
+            'v' => return 11,
+            'c' => {
+                if (!p.more()) return p.fail(Fault.escape);
+                const x = p.peek();
+                p.pos += 1;
+                return x & 31;
             },
-            else => {
-                if (c.escapeByte(e)) |b| return c.charNode(b);
-                if (std.ascii.isAlphanumeric(e)) return c.fail("invalid escape \\ sequence");
-                return c.node(.{ .char = e });
+            'u' => {
+                const start = p.pos;
+                const n = p.hexDigits(4) orelse return p.fail(Fault.escape);
+                if (p.pos != start + 4) return p.fail(Fault.escape);
+                return @intCast(n);
             },
+            'U' => {
+                const start = p.pos;
+                const n = p.hexDigits(8) orelse return p.fail(Fault.escape);
+                if (p.pos != start + 8 or n > 0x10FFFF) return p.fail(Fault.escape);
+                return @intCast(n);
+            },
+            'x' => {
+                // All hex digits count, and the last two give the value.
+                var n: u32 = 0;
+                var k: usize = 0;
+                while (p.more() and p.peek() < 128 and std.ascii.isHex(@intCast(p.peek()))) : (k += 1) {
+                    n = (n *% 16 +% (std.fmt.charToDigit(@intCast(p.peek()), 16) catch 0)) & 0xFFFF;
+                    p.pos += 1;
+                }
+                if (k == 0) return p.fail(Fault.escape);
+                return @intCast(n);
+            },
+            '0' => {
+                var n: u32 = 0;
+                var k: usize = 0;
+                while (k < 2 and p.more() and p.peek() >= '0' and p.peek() <= '7') : (k += 1) {
+                    n = n * 8 + (p.peek() - '0');
+                    p.pos += 1;
+                }
+                return @intCast(n);
+            },
+            else => return null,
         }
     }
 
-    fn parseSet(c: *Compiler) Error!*Node {
-        const s = try c.it.alloc().create(Set);
-        s.* = @splat(0);
-        var negate = false;
-        if (c.more() and c.src[c.pos] == '^') {
-            negate = true;
-            c.pos += 1;
+    fn parseEscape(p: *Parser) Error!*Node {
+        if (!p.more()) return p.fail(Fault.escape);
+        const e = p.peek();
+        p.pos += 1;
+        if (p.opts.syntax == .ere) {
+            if (e < 128 and std.ascii.isAlphanumeric(@intCast(e))) p.info |= Info.bsalnum;
+            return p.charNode(e);
+        }
+        p.info |= Info.nonposix;
+        switch (e) {
+            'd', 'D', 's', 'S', 'w', 'W' => return p.classNode(@intCast(e)),
+            'A' => return p.assertNode(.text_start),
+            'Z' => return p.assertNode(.text_end),
+            'm' => return p.assertNode(.word_start),
+            'M' => return p.assertNode(.word_end),
+            'y' => return p.assertNode(.word_b),
+            'Y' => return p.assertNode(.not_word_b),
+            '1'...'9' => {
+                // More digits are a back reference when a group has that
+                // number, and otherwise an octal value.
+                var k: usize = p.pos;
+                var n: u32 = e - '0';
+                while (k < p.src.len and p.src[k] >= '0' and p.src[k] <= '9') : (k += 1) n = n *| 10 +| (p.src[k] - '0');
+                if (k == p.pos or n < p.ncap) {
+                    p.pos = k;
+                    return p.backref(n);
+                }
+                var o: u32 = e - '0';
+                if (e > '7') return p.fail(Fault.subreg);
+                var used: usize = 0;
+                while (used < 2 and p.more() and p.peek() >= '0' and p.peek() <= '7') : (used += 1) {
+                    o = o * 8 + (p.peek() - '0');
+                    p.pos += 1;
+                }
+                return p.charNode(@intCast(o));
+            },
+            else => {},
+        }
+        if (try p.charEscape(e)) |c| return p.charNode(c);
+        if (e < 128 and std.ascii.isAlphanumeric(@intCast(e))) return p.fail(Fault.escape);
+        return p.charNode(e);
+    }
+
+    /// One character of a bracket, or a collating element.
+    fn bracketChar(p: *Parser) Error!u21 {
+        if (!p.more()) return p.fail(Fault.brack);
+        var c = p.peek();
+        p.pos += 1;
+        if (c == '[' and p.more() and (p.peek() == '.' or p.peek() == '=')) {
+            const kind = p.peek();
+            p.pos += 1;
+            const start = p.pos;
+            while (p.pos + 1 < p.src.len and !(p.src[p.pos] == kind and p.src[p.pos + 1] == ']')) p.pos += 1;
+            if (p.pos + 1 >= p.src.len) return p.fail(Fault.brack);
+            const name = p.src[start..p.pos];
+            p.pos += 2;
+            if (name.len == 0) return p.fail(Fault.collate);
+            if (name.len == 1) return name[0];
+            return collateName(name) orelse p.fail(Fault.collate);
+        }
+        if (c == '\\' and p.are()) {
+            if (!p.more()) return p.fail(Fault.brack);
+            const e = p.peek();
+            p.pos += 1;
+            if (try p.charEscape(e)) |x| return x;
+            if (e < 128 and std.ascii.isAlphanumeric(@intCast(e))) return p.fail(Fault.escape);
+            c = e;
+        }
+        return c;
+    }
+
+    fn parseBracket(p: *Parser) Error!*Node {
+        const a = p.it.alloc();
+        // [[:<:]] and [[:>:]] are the word boundaries.
+        if (p.pos + 5 < p.src.len + 1 and p.pos + 4 < p.src.len and p.src[p.pos] == '[' and p.src[p.pos + 1] == ':' and (p.src[p.pos + 2] == '<' or p.src[p.pos + 2] == '>') and p.src[p.pos + 3] == ':' and p.src[p.pos + 4] == ']' and p.pos + 5 < p.src.len and p.src[p.pos + 5] == ']') {
+            const start = p.src[p.pos + 2] == '<';
+            p.pos += 6;
+            p.info |= Info.nonposix;
+            return p.assertNode(if (start) .word_start else .word_end);
+        }
+        const s = try a.create(Set);
+        s.* = .{ .nocase = p.opts.nocase };
+        if (p.more() and p.peek() == '^') {
+            s.negate = true;
+            s.no_nl = p.opts.linestop;
+            p.pos += 1;
         }
         var first = true;
         while (true) : (first = false) {
-            if (!c.more()) return c.fail("brackets [] not balanced");
-            var ch = c.src[c.pos];
-            if (ch == ']' and !first) {
-                c.pos += 1;
+            if (!p.more()) return p.fail(Fault.brack);
+            const c = p.peek();
+            if (c == ']' and !first) {
+                p.pos += 1;
                 break;
             }
-            if (ch == '[' and c.pos + 1 < c.src.len and c.src[c.pos + 1] == ':') {
-                const end = std.mem.indexOfPos(u8, c.src, c.pos + 2, ":]") orelse return c.fail("brackets [] not balanced");
-                if (!addClass(s, c.src[c.pos + 2 .. end])) return c.fail("invalid character class");
-                c.pos = end + 2;
+            if (c == '[' and p.at(1) == ':') {
+                var k = p.pos + 2;
+                while (k + 1 < p.src.len and !(p.src[k] == ':' and p.src[k + 1] == ']')) k += 1;
+                if (k + 1 >= p.src.len) return p.fail(Fault.brack);
+                var buf: [16]u8 = undefined;
+                const name = p.src[p.pos + 2 .. k];
+                if (name.len >= buf.len) return p.fail(Fault.ctype);
+                for (name, 0..) |x, i| buf[i] = if (x < 128) @intCast(x) else '?';
+                const cl = std.meta.stringToEnum(Class, buf[0..name.len]) orelse return p.fail(Fault.ctype);
+                s.addClass(cl);
+                p.pos = k + 2;
                 continue;
             }
-            c.pos += 1;
-            if (ch == '\\' and c.more()) {
-                const e = c.src[c.pos];
-                c.pos += 1;
-                if (e == 'd' or e == 'w' or e == 's') {
-                    _ = addClass(s, switch (e) {
-                        'd' => "digit",
-                        'w' => "word",
-                        else => "space",
-                    });
+            if (c == '\\' and p.are() and p.at(1) != null) {
+                const e = p.at(1).?;
+                if (e == 'd' or e == 's' or e == 'w') {
+                    p.pos += 2;
+                    switch (e) {
+                        'd' => s.addClass(.digit),
+                        's' => s.addClass(.space),
+                        else => s.addWord(),
+                    }
                     continue;
                 }
-                ch = c.escapeByte(e) orelse e;
+                if (e == 'D' or e == 'S' or e == 'W') return p.fail(Fault.range);
             }
-            var hi = ch;
-            if (c.pos + 1 < c.src.len and c.src[c.pos] == '-' and c.src[c.pos + 1] != ']') {
-                hi = c.src[c.pos + 1];
-                c.pos += 2;
-                if (hi == '\\' and c.more()) {
-                    hi = c.escapeByte(c.src[c.pos]) orelse c.src[c.pos];
-                    c.pos += 1;
-                }
-                if (hi < ch) return c.fail("invalid character range");
+            const lo = try p.bracketChar();
+            var hi = lo;
+            if (p.more() and p.peek() == '-' and p.at(1) != null and p.at(1).? != ']') {
+                p.pos += 1;
+                hi = try p.bracketChar();
+                if (hi < lo) return p.fail(Fault.range);
             }
-            var x: usize = ch;
-            while (x <= hi) : (x += 1) {
-                const b: u8 = @intCast(x);
-                setBit(s, b);
-                if (c.opts.nocase) {
-                    setBit(s, std.ascii.toLower(b));
-                    setBit(s, std.ascii.toUpper(b));
-                }
-            }
+            try s.addRange(a, lo, hi);
         }
-        if (negate) {
-            for (s) |*b| b.* = ~b.*;
-            if (c.opts.line) s['\n' >> 3] &= ~(@as(u8, 1) << ('\n' & 7));
-        }
-        return c.node(.{ .set = s });
+        return p.node(.{ .kind = .{ .set = s } });
+    }
+};
+
+/// The names of collating elements of the POSIX locale that patterns use.
+fn collateName(name: []const u21) ?u21 {
+    var buf: [32]u8 = undefined;
+    if (name.len > buf.len) return null;
+    for (name, 0..) |x, i| {
+        if (x >= 128) return null;
+        buf[i] = @intCast(x);
+    }
+    const table = [_]struct { []const u8, u21 }{
+        .{ "NUL", 0 },       .{ "tab", 9 },            .{ "newline", 10 },      .{ "space", ' ' },
+        .{ "hyphen", '-' },  .{ "hyphen-minus", '-' }, .{ "period", '.' },      .{ "full-stop", '.' },
+        .{ "slash", '/' },   .{ "solidus", '/' },      .{ "comma", ',' },       .{ "colon", ':' },
+        .{ "semicolon", ';' }, .{ "equals-sign", '=' }, .{ "asterisk", '*' },   .{ "plus-sign", '+' },
+        .{ "left-square-bracket", '[' }, .{ "right-square-bracket", ']' }, .{ "backslash", '\\' },
+        .{ "circumflex", '^' }, .{ "underscore", '_' }, .{ "tilde", '~' },
+    };
+    for (table) |t| if (std.mem.eql(u8, t[0], buf[0..name.len])) return t[1];
+    return null;
+}
+
+// ---- The program ----
+
+const Emitter = struct {
+    p: *Parser,
+    prog: std.ArrayList(Inst) = .empty,
+
+    fn add(e: *Emitter, i: Inst) Error!u32 {
+        if (e.prog.items.len >= max_prog) return e.p.fail(Fault.toobig);
+        try e.prog.append(e.p.it.alloc(), i);
+        return @intCast(e.prog.items.len - 1);
     }
 
-    fn add(c: *Compiler, i: Inst) Error!u32 {
-        if (c.prog.items.len >= max_prog) return c.fail("regular expression is too big");
-        try c.prog.append(c.it.alloc(), i);
-        return @intCast(c.prog.items.len - 1);
+    fn here(e: *const Emitter) u32 {
+        return @intCast(e.prog.items.len);
     }
 
-    fn here(c: *Compiler) u32 {
-        return @intCast(c.prog.items.len);
-    }
-
-    fn emit(c: *Compiler, n: *const Node) Error!void {
-        switch (n.*) {
-            .empty => {},
-            .char => |ch| _ = try c.add(.{ .char = ch }),
-            .any => _ = try c.add(.any),
-            .set => |s| _ = try c.add(.{ .set = s }),
-            .assert => |a| _ = try c.add(.{ .assert = a }),
-            .backref => |k| _ = try c.add(.{ .backref = k }),
-            .group => |g| {
-                if (g.cap) |k| _ = try c.add(.{ .save = 2 * k });
-                try c.emit(g.sub);
-                if (g.cap) |k| _ = try c.add(.{ .save = 2 * k + 1 });
+    fn emit(e: *Emitter, n: *Node) Error!void {
+        switch (n.kind) {
+            .empty, .backref => {},
+            .char => |c| _ = try e.add(.{ .char = c }),
+            .set => |s| _ = try e.add(.{ .set = s }),
+            .assert => |a| _ = try e.add(.{ .assert = a }),
+            .look => |l| {
+                const at = try e.add(.{ .look = .{ .negate = l.negate, .start = 0 } });
+                const over = try e.add(.{ .jmp = 0 });
+                e.prog.items[at].look.start = e.here();
+                n.kind.look.start = e.here();
+                try e.emit(l.sub);
+                _ = try e.add(.match);
+                e.prog.items[over].jmp = e.here();
             },
-            .cat => |items| for (items) |x| try c.emit(x),
+            .group => |g| try e.emit(g.sub),
+            .cat => |items| for (items) |x| try e.emit(x),
             .alt => |alts| {
                 var jumps: std.ArrayList(u32) = .empty;
                 for (alts, 0..) |x, i| {
                     if (i + 1 < alts.len) {
-                        const sp = try c.add(.{ .split = .{ .first = 0, .second = 0 } });
-                        try c.emit(x);
-                        try jumps.append(c.it.alloc(), try c.add(.{ .jmp = 0 }));
-                        c.prog.items[sp].split = .{ .first = sp + 1, .second = c.here() };
-                    } else try c.emit(x);
+                        const sp = try e.add(.{ .split = .{ .first = 0, .second = 0 } });
+                        try e.emit(x);
+                        try jumps.append(e.p.it.alloc(), try e.add(.{ .jmp = 0 }));
+                        e.prog.items[sp].split = .{ .first = sp + 1, .second = e.here() };
+                    } else try e.emit(x);
                 }
-                for (jumps.items) |j| c.prog.items[j].jmp = c.here();
+                for (jumps.items) |j| e.prog.items[j].jmp = e.here();
             },
             .repeat => |r| {
-                for (0..r.min) |_| try c.emit(r.sub);
+                for (0..r.min) |_| try e.emit(r.sub);
                 if (r.max == inf) {
-                    const sp = try c.add(.{ .split = .{ .first = 0, .second = 0 } });
-                    const k = c.nloop;
-                    c.nloop += 1;
-                    _ = try c.add(.{ .mark = k });
-                    try c.emit(r.sub);
-                    _ = try c.add(.{ .check = k });
-                    _ = try c.add(.{ .jmp = sp });
-                    c.setSplit(sp, sp + 1, c.here(), r.greedy);
+                    const sp = try e.add(.{ .split = .{ .first = 0, .second = 0 } });
+                    try e.emit(r.sub);
+                    _ = try e.add(.{ .jmp = sp });
+                    e.prog.items[sp].split = .{ .first = sp + 1, .second = e.here() };
                 } else {
                     var splits: std.ArrayList(u32) = .empty;
                     for (r.min..r.max) |_| {
-                        try splits.append(c.it.alloc(), try c.add(.{ .split = .{ .first = 0, .second = 0 } }));
-                        try c.emit(r.sub);
+                        try splits.append(e.p.it.alloc(), try e.add(.{ .split = .{ .first = 0, .second = 0 } }));
+                        try e.emit(r.sub);
                     }
-                    for (splits.items) |sp| c.setSplit(sp, sp + 1, c.here(), r.greedy);
+                    for (splits.items) |sp| e.prog.items[sp].split = .{ .first = sp + 1, .second = e.here() };
                 }
             },
         }
     }
-
-    fn setSplit(c: *Compiler, at: u32, body: u32, exit: u32, greedy: bool) void {
-        c.prog.items[at].split = if (greedy) .{ .first = body, .second = exit } else .{ .first = exit, .second = body };
-    }
 };
+
+fn canBeEmpty(n: *const Node) bool {
+    return switch (n.kind) {
+        .empty, .assert, .look, .backref => true,
+        .char, .set => false,
+        .group => |g| canBeEmpty(g.sub),
+        .cat => |items| for (items) |x| {
+            if (!canBeEmpty(x)) break false;
+        } else true,
+        .alt => |items| for (items) |x| {
+            if (canBeEmpty(x)) break true;
+        } else false,
+        .repeat => |r| r.min == 0 or canBeEmpty(r.sub),
+    };
+}
 
 /// One entry of the cache of compiled patterns.
 pub const CacheEntry = struct {
@@ -459,79 +947,213 @@ pub fn compile(it: *Interp, pat: []const u8, opts: Options) Error!*Regex {
     return re;
 }
 
-fn compileNew(it: *Interp, pat: []const u8, opts: Options) Error!*Regex {
-    var c: Compiler = .{ .it = it, .src = pat, .opts = opts };
-    // (?i) and its relatives at the start set options.
-    if (std.mem.startsWith(u8, pat, "(?") and pat.len > 3) {
-        if (std.mem.indexOfScalar(u8, pat, ')')) |end| {
-            var ok = true;
-            for (pat[2..end]) |f| ok = ok and std.ascii.isAlphabetic(f);
-            if (ok) {
-                for (pat[2..end]) |f| switch (f) {
-                    'i' => c.opts.nocase = true,
-                    'n' => c.opts.line = true,
-                    else => {},
-                };
-                c.pos = end + 1;
+fn decodeAll(it: *Interp, s: []const u8) Error![]u21 {
+    var out: std.ArrayList(u21) = .empty;
+    var i: usize = 0;
+    while (i < s.len) {
+        const d = ucd.next(s, i);
+        try out.append(it.alloc(), d.cp);
+        i += d.len;
+    }
+    return out.items;
+}
+
+/// Reads the director and the embedded options at the start.
+fn readDirector(p: *Parser) Error!void {
+    const src = p.src;
+    if (p.opts.syntax == .are and src.len >= 4 and src[0] == '*' and src[1] == '*' and src[2] == '*') {
+        if (src[3] == '=') {
+            p.opts.syntax = .literal;
+            p.pos = 4;
+            return;
+        }
+        if (src[3] != ':') return p.fail(Fault.badrpt);
+        p.pos = 4;
+    } else if (p.opts.syntax == .are and src.len >= 3 and src[0] == '*' and src[1] == '*' and src[2] == '*') {
+        return p.fail(Fault.badrpt);
+    }
+    if (p.opts.syntax != .are) return;
+    if (p.pos + 2 < src.len and src[p.pos] == '(' and src[p.pos + 1] == '?' and src[p.pos + 2] < 128 and std.ascii.isAlphabetic(@intCast(src[p.pos + 2]))) {
+        var k = p.pos + 2;
+        while (k < src.len and src[k] != ')') : (k += 1) {
+            switch (src[k]) {
+                'b' => p.opts.syntax = .bre,
+                'e' => p.opts.syntax = .ere,
+                'q' => p.opts.syntax = .literal,
+                'c' => p.opts.nocase = false,
+                'i' => p.opts.nocase = true,
+                'x' => p.opts.expanded = true,
+                't' => p.opts.expanded = false,
+                'n', 'm' => {
+                    p.opts.linestop = true;
+                    p.opts.lineanchor = true;
+                },
+                'p' => {
+                    p.opts.linestop = true;
+                    p.opts.lineanchor = false;
+                },
+                'w' => {
+                    p.opts.linestop = false;
+                    p.opts.lineanchor = true;
+                },
+                's' => {
+                    p.opts.linestop = false;
+                    p.opts.lineanchor = false;
+                },
+                else => return p.fail(Fault.badopt),
             }
         }
+        if (k >= src.len) return p.fail(Fault.badopt);
+        p.pos = k + 1;
     }
-    const tree = try c.parseAlt();
-    if (c.more()) return c.fail("parentheses () not balanced");
-    _ = try c.add(.{ .save = 0 });
-    try c.emit(tree);
-    _ = try c.add(.{ .save = 1 });
-    _ = try c.add(.match);
+}
+
+fn compileNew(it: *Interp, pat: []const u8, opts: Options) Error!*Regex {
+    const src = try decodeAll(it, pat);
+    var p: Parser = .{ .it = it, .src = src, .opts = opts };
+    try readDirector(&p);
+    var root: *Node = undefined;
+    if (p.opts.syntax == .literal) {
+        var items: std.ArrayList(*Node) = .empty;
+        while (p.more()) : (p.pos += 1) try items.append(it.alloc(), try p.charNode(p.peek()));
+        root = try p.node(.{ .kind = .{ .cat = items.items } });
+        if (items.items.len == 0) root.kind = .empty;
+    } else {
+        root = try p.parseAlt(false);
+        if (p.more()) return p.fail(Fault.paren);
+    }
+    measure(root);
+    var e: Emitter = .{ .p = &p };
+    try e.emit(root);
+    _ = try e.add(.match);
+    var info = p.info;
+    if (root.pref == .lazy) info |= Info.shortest;
+    if (canBeEmpty(root)) info |= Info.emptymatch;
     const re = try it.alloc().create(Regex);
-    re.* = .{ .prog = c.prog.items, .ncap = c.ncap, .nloop = c.nloop, .opts = c.opts };
+    re.* = .{ .prog = e.prog.items, .root = root, .ncap = p.ncap, .nodes = p.nodes, .opts = p.opts, .shortest = root.pref == .lazy, .has_backref = p.has_backref, .info = info };
     return re;
 }
 
-const Back = union(enum) {
-    branch: struct { pc: u32, sp: usize },
-    cap: struct { slot: u16, old: ?usize },
-    loop: struct { slot: u16, old: usize },
-};
+// ---- The matcher ----
 
-/// The state of one search. `caps` has two entries for each group:
-/// the start and the end, or null.
+const Thread = struct { pc: u32, start: u32 };
+
+/// The state of one search. `caps` has two byte offsets for each group,
+/// or null. `spans` has the same positions in characters.
 pub const Matcher = struct {
     it: *Interp,
     re: *const Regex,
     s: []const u8,
+    /// The characters of a text that is not ASCII. Null for ASCII.
+    text: ?[]const u21,
+    /// The byte offset of each character of `text`.
+    offs: []const usize = &.{},
+    n: usize,
     caps: []?usize,
-    loops: []usize,
-    stack: std.ArrayList(Back) = .empty,
+    spans: []?usize,
+    cur: []Thread,
+    nxt: []Thread,
+    mark: []u32,
+    gen: u32 = 0,
+    work: std.ArrayList(u32) = .empty,
     steps: u32 = 0,
+    run_node: u32 = inf,
+    run_lo: usize = 0,
+    run_end: usize = 0,
+    frames: std.ArrayList(RepFrame) = .empty,
+    /// The position where the current search started.
+    from: usize = 0,
+
+    const RepFrame = struct { pos: usize, next: usize };
 
     pub fn init(it: *Interp, re: *const Regex, s: []const u8) Error!Matcher {
+        const a = it.alloc();
+        var ascii = true;
+        for (s) |c| {
+            if (c >= 0x80) {
+                ascii = false;
+                break;
+            }
+        }
+        var text: ?[]const u21 = null;
+        var offs: []usize = &.{};
+        var n = s.len;
+        if (!ascii) {
+            var t: std.ArrayList(u21) = .empty;
+            var o: std.ArrayList(usize) = .empty;
+            var i: usize = 0;
+            while (i < s.len) {
+                const d = ucd.next(s, i);
+                try t.append(a, d.cp);
+                try o.append(a, i);
+                i += d.len;
+            }
+            try o.append(a, s.len);
+            text = t.items;
+            offs = o.items;
+            n = t.items.len;
+        }
+        const size = re.prog.len + 1;
+        const mark = try a.alloc(u32, size);
+        @memset(mark, 0);
         return .{
             .it = it,
             .re = re,
             .s = s,
-            .caps = try it.alloc().alloc(?usize, 2 * re.ncap),
-            .loops = try it.alloc().alloc(usize, re.nloop),
+            .text = text,
+            .offs = offs,
+            .n = n,
+            .caps = try a.alloc(?usize, 2 * re.ncap),
+            .spans = try a.alloc(?usize, 2 * re.ncap),
+            .cur = try a.alloc(Thread, size),
+            .nxt = try a.alloc(Thread, size),
+            .mark = mark,
         };
     }
 
-    /// Finds the first match that starts at `from` or later.
-    pub fn search(m: *Matcher, from: usize) Error!bool {
-        var at = from;
-        while (at <= m.s.len) : (at += 1) {
-            if (try m.matchAt(at)) return true;
-        }
-        return false;
+    inline fn ch(m: *const Matcher, i: usize) u21 {
+        return if (m.text) |t| t[i] else m.s[i];
     }
 
-    fn assertOk(m: *Matcher, a: Assert, sp: usize) bool {
-        const s = m.s;
-        const before = sp > 0 and isWord(s[sp - 1]);
-        const after = sp < s.len and isWord(s[sp]);
+    fn byteAt(m: *const Matcher, i: usize) usize {
+        return if (m.text != null) m.offs[i] else i;
+    }
+
+    fn charAt(m: *const Matcher, byte: usize) usize {
+        if (m.text == null) return byte;
+        var lo: usize = 0;
+        var hi: usize = m.n;
+        while (lo < hi) {
+            const mid = (lo + hi) / 2;
+            if (m.offs[mid] < byte) lo = mid + 1 else hi = mid;
+        }
+        return lo;
+    }
+
+    fn tick(m: *Matcher) Error!void {
+        m.steps += 1;
+        if (m.steps >= 32) {
+            m.steps = 0;
+            if (m.it.step_limit == 0) return m.it.fail("step limit reached", .{});
+            m.it.step_limit -= 1;
+        }
+    }
+
+    fn wordAt(m: *const Matcher, i: usize) bool {
+        return i < m.n and ucd.isWordChar(m.ch(i));
+    }
+
+    fn assertOk(m: *const Matcher, a: Assert, i: usize) bool {
+        const before = i > 0 and ucd.isWordChar(m.ch(i - 1));
+        const after = m.wordAt(i);
+        const opts = m.re.opts;
         return switch (a) {
-            .bol => sp == 0 or (m.re.opts.line and s[sp - 1] == '\n'),
-            .eol => sp == s.len or (m.re.opts.line and s[sp] == '\n'),
-            .text_start => sp == 0,
-            .text_end => sp == s.len,
+            .bol => i == 0 and !opts.notbol,
+            .eol => i == m.n and !opts.noteol,
+            .line_bol => (i == 0 and !opts.notbol) or (i > 0 and m.ch(i - 1) == '\n'),
+            .line_eol => (i == m.n and !opts.noteol) or (i < m.n and m.ch(i) == '\n'),
+            .text_start => i == m.from,
+            .text_end => i == m.n,
             .word_start => !before and after,
             .word_end => before and !after,
             .word_b => before != after,
@@ -539,95 +1161,347 @@ pub const Matcher = struct {
         };
     }
 
-    fn matchAt(m: *Matcher, start: usize) Error!bool {
-        const prog = m.re.prog;
-        const s = m.s;
+    /// Runs the program of a lookahead from `pos`.
+    fn lookRun(m: *Matcher, start: u32, pos: usize) Error!bool {
         const a = m.it.alloc();
-        @memset(m.caps, null);
-        m.stack.clearRetainingCapacity();
-        var pc: u32 = 0;
-        var sp = start;
-        while (true) {
-            m.steps += 1;
-            if (m.steps >= 32) {
-                m.steps = 0;
-                if (m.it.step_limit == 0) return m.it.fail("step limit reached", .{});
-                m.it.step_limit -= 1;
+        var seen: std.AutoHashMapUnmanaged(u64, void) = .empty;
+        var todo: std.ArrayList(u64) = .empty;
+        const key = struct {
+            fn f(pc: u32, at: usize) u64 {
+                return @as(u64, pc) << 40 | at;
             }
-            var ok = true;
-            switch (prog[pc]) {
-                .char => |ch| {
-                    ok = sp < s.len and s[sp] == ch;
-                    if (ok) sp += 1;
-                },
-                .any => {
-                    ok = sp < s.len;
-                    if (ok) sp = charEnd(s, sp);
-                },
-                .set => |set| {
-                    ok = sp < s.len and hasBit(set, s[sp]);
-                    if (ok) sp = charEnd(s, sp);
-                },
-                .assert => |as| ok = m.assertOk(as, sp),
-                .save => |slot| {
-                    try m.stack.append(a, .{ .cap = .{ .slot = slot, .old = m.caps[slot] } });
-                    m.caps[slot] = sp;
-                },
-                .mark => |slot| {
-                    try m.stack.append(a, .{ .loop = .{ .slot = slot, .old = m.loops[slot] } });
-                    m.loops[slot] = sp;
-                },
-                .check => |slot| ok = m.loops[slot] != sp,
-                .backref => |k| {
-                    const lo = m.caps[2 * @as(usize, k)];
-                    const hi = m.caps[2 * @as(usize, k) + 1];
-                    if (lo != null and hi != null) {
-                        const text = s[lo.?..hi.?];
-                        ok = std.mem.startsWith(u8, s[sp..], text);
-                        if (ok) sp += text.len;
-                    } else ok = false;
-                },
-                .jmp => |to| {
-                    pc = to;
-                    continue;
-                },
-                .split => |sp2| {
-                    if (m.stack.items.len >= max_stack) return m.it.fail("the regular expression needs too much memory", .{});
-                    try m.stack.append(a, .{ .branch = .{ .pc = sp2.second, .sp = sp } });
-                    pc = sp2.first;
-                    continue;
-                },
+        }.f;
+        try todo.append(a, key(start, pos));
+        while (todo.pop()) |k| {
+            if ((try seen.getOrPut(a, k)).found_existing) continue;
+            try m.tick();
+            const pc: u32 = @intCast(k >> 40);
+            const at: usize = @intCast(k & ((1 << 40) - 1));
+            switch (m.re.prog[pc]) {
                 .match => return true,
+                .jmp => |t| try todo.append(a, key(t, at)),
+                .split => |sp| {
+                    try todo.append(a, key(sp.second, at));
+                    try todo.append(a, key(sp.first, at));
+                },
+                .char => |c| if (at < m.n and m.ch(at) == c) try todo.append(a, key(pc + 1, at + 1)),
+                .set => |s| if (at < m.n and s.has(m.ch(at))) try todo.append(a, key(pc + 1, at + 1)),
+                .assert => |as| if (m.assertOk(as, at)) try todo.append(a, key(pc + 1, at)),
+                .look => |l| if ((try m.lookRun(l.start, at)) != l.negate) try todo.append(a, key(pc + 2, at)),
             }
-            if (ok) {
-                pc += 1;
-                continue;
+        }
+        return false;
+    }
+
+    /// Adds a state and the states that it reaches with no input. Gives
+    /// true when the state `match` is reached.
+    fn addThread(m: *Matcher, list: []Thread, count: *usize, pc0: u32, start: u32, pos: usize) Error!bool {
+        var matched = false;
+        m.work.clearRetainingCapacity();
+        const a = m.it.alloc();
+        try m.work.append(a, pc0);
+        while (m.work.pop()) |pc| {
+            if (m.mark[pc] == m.gen) continue;
+            m.mark[pc] = m.gen;
+            try m.tick();
+            switch (m.re.prog[pc]) {
+                .jmp => |t| try m.work.append(a, t),
+                .split => |sp| {
+                    try m.work.append(a, sp.second);
+                    try m.work.append(a, sp.first);
+                },
+                .assert => |as| if (m.assertOk(as, pos)) try m.work.append(a, pc + 1),
+                .look => |l| if ((try m.lookRun(l.start, pos)) != l.negate) try m.work.append(a, pc + 2),
+                .match => matched = true,
+                else => {
+                    list[count.*] = .{ .pc = pc, .start = start };
+                    count.* += 1;
+                },
             }
-            // Go back to the last branch, and undo the saves on the way.
-            while (true) {
-                const b = m.stack.pop() orelse return false;
-                switch (b) {
-                    .cap => |c| m.caps[c.slot] = c.old,
-                    .loop => |l| m.loops[l.slot] = l.old,
-                    .branch => |br| {
-                        pc = br.pc;
-                        sp = br.sp;
-                        break;
-                    },
+        }
+        return matched;
+    }
+
+    fn nextGen(m: *Matcher) void {
+        m.gen +%= 1;
+        if (m.gen == 0) {
+            @memset(m.mark, 0);
+            m.gen = 1;
+        }
+    }
+
+    /// The leftmost match from `from`, with the longest or shortest end.
+    fn simulate(m: *Matcher, from: usize) Error!?[2]usize {
+        const shortest = m.re.shortest;
+        var best: ?[2]usize = null;
+        var cur = m.cur;
+        var nxt = m.nxt;
+        var ncur: usize = 0;
+        var i = from;
+        while (true) : (i += 1) {
+            // The threads that step into position `i` are in `cur`. Add
+            // a new start until a match exists.
+            if (best == null) {
+                if (i == from) m.nextGen();
+                if (try m.addThread(cur, &ncur, 0, @intCast(i), i)) {
+                    best = .{ i, i };
                 }
+            }
+            if (ncur == 0 and (best != null or i >= m.n)) break;
+            if (i >= m.n) break;
+            const c = m.ch(i);
+            m.nextGen();
+            var nn: usize = 0;
+            for (cur[0..ncur]) |t| {
+                if (best) |b| {
+                    if (t.start > b[0] or (shortest and t.start == b[0])) continue;
+                }
+                try m.tick();
+                const ok = switch (m.re.prog[t.pc]) {
+                    .char => |x| x == c,
+                    .set => |s| s.has(c),
+                    else => false,
+                };
+                if (!ok) continue;
+                if (try m.addThread(nxt, &nn, t.pc + 1, t.start, i + 1)) {
+                    if (best == null or t.start < best.?[0] or (t.start == best.?[0] and !shortest)) {
+                        best = .{ t.start, i + 1 };
+                    }
+                }
+            }
+            const tmp = cur;
+            cur = nxt;
+            nxt = tmp;
+            ncur = nn;
+        }
+        return best;
+    }
+
+    fn clearCaps(m: *Matcher, n: *const Node) void {
+        var k = n.cap_lo;
+        while (k < n.cap_hi) : (k += 1) {
+            m.spans[2 * @as(usize, k)] = null;
+            m.spans[2 * @as(usize, k) + 1] = null;
+        }
+    }
+
+    fn single(n: *const Node) bool {
+        return n.kind == .char or n.kind == .set;
+    }
+
+    fn oneMatches(m: *const Matcher, n: *const Node, i: usize) bool {
+        return switch (n.kind) {
+            .char => |c| m.ch(i) == c,
+            .set => |s| s.has(m.ch(i)),
+            else => false,
+        };
+    }
+
+    /// The end of the run of characters from `lo` that the node matches.
+    fn runEnd(m: *Matcher, n: *const Node, lo: usize) Error!usize {
+        if (m.run_node == n.id and m.run_lo == lo) return m.run_end;
+        var e = lo;
+        while (e < m.n and m.oneMatches(n, e)) : (e += 1) try m.tick();
+        m.run_node = n.id;
+        m.run_lo = lo;
+        m.run_end = e;
+        return e;
+    }
+
+    /// True when the node matches exactly the span, and sets its groups.
+    fn dissect(m: *Matcher, n: *const Node, lo: usize, hi: usize) Error!bool {
+        try m.tick();
+        switch (n.kind) {
+            .empty => return lo == hi,
+            .char, .set => return hi == lo + 1 and m.oneMatches(n, lo),
+            .assert => |a| return lo == hi and m.assertOk(a, lo),
+            .look => |l| {
+                if (lo != hi) return false;
+                return (try m.lookRun(l.start, lo)) != l.negate;
+            },
+            .backref => |k| {
+                const a = m.spans[2 * @as(usize, k)] orelse return false;
+                const b = m.spans[2 * @as(usize, k) + 1] orelse return false;
+                if (hi - lo != b - a) return false;
+                for (0..b - a) |x| {
+                    var p = m.ch(a + x);
+                    var q = m.ch(lo + x);
+                    if (m.re.opts.nocase) {
+                        p = ucd.toLower(p);
+                        q = ucd.toLower(q);
+                    }
+                    if (p != q) return false;
+                }
+                return true;
+            },
+            else => {},
+        }
+        const memo = !m.re.has_backref;
+        const key = @as(u64, n.id) << 44 | @as(u64, lo) << 22 | hi;
+        if (memo and hi < 1 << 22 and m.it.re_memo.contains(key)) return false;
+        const ok = switch (n.kind) {
+            .group => |g| blk: {
+                if (!try m.dissect(g.sub, lo, hi)) break :blk false;
+                if (g.cap) |k| {
+                    m.spans[2 * @as(usize, k)] = lo;
+                    m.spans[2 * @as(usize, k) + 1] = hi;
+                }
+                break :blk true;
+            },
+            .cat => |items| try m.catFrom(items, lo, hi),
+            .alt => |items| blk: {
+                for (items) |x| {
+                    m.clearCaps(x);
+                    if (try m.dissect(x, lo, hi)) break :blk true;
+                }
+                break :blk false;
+            },
+            .repeat => |r| try m.repeat(n, r.sub, r.min, r.max, r.greedy, lo, hi),
+            else => unreachable,
+        };
+        if (!ok and memo and hi < 1 << 22 and m.it.re_memo.count() < max_memo) {
+            try m.it.re_memo.put(m.it.alloc(), key, {});
+        }
+        return ok;
+    }
+
+    fn catFrom(m: *Matcher, items: []const *Node, lo: usize, hi: usize) Error!bool {
+        if (items.len == 1) return m.dissect(items[0], lo, hi);
+        const h = items[0];
+        if (single(h)) {
+            if (lo >= hi or !m.oneMatches(h, lo)) return false;
+            return m.catFrom(items[1..], lo + 1, hi);
+        }
+        if (h.kind == .assert or h.kind == .look or h.kind == .empty) {
+            if (!try m.dissect(h, lo, lo)) return false;
+            return m.catFrom(items[1..], lo, hi);
+        }
+        // The lengths of the parts bound the end of the first part.
+        var rest_min: usize = 0;
+        var rest_max: usize = 0;
+        for (items[1..]) |x| {
+            rest_min +|= x.min_len;
+            rest_max = if (x.max_len == inf or rest_max == inf) inf else rest_max +| x.max_len;
+        }
+        if (hi - lo < h.min_len + rest_min) return false;
+        var first = lo + h.min_len;
+        if (rest_max != inf and hi - rest_max > first and hi >= rest_max) first = hi - rest_max;
+        var last = hi - rest_min;
+        if (h.max_len != inf) last = @min(last, lo + h.max_len);
+        if (first > last) return false;
+        const lazy = h.pref == .lazy;
+        var e: usize = if (lazy) first else last;
+        while (true) {
+            if (try m.dissect(h, lo, e)) {
+                if (try m.catFrom(items[1..], e, hi)) return true;
+            }
+            m.clearCaps(h);
+            if (lazy) {
+                if (e == last) return false;
+                e += 1;
+            } else {
+                if (e == first) return false;
+                e -= 1;
             }
         }
     }
-};
 
-/// The end of the character that starts at `i`.
-fn charEnd(s: []const u8, i: usize) usize {
-    var e = i + 1;
-    if (s[i] >= 0xC0) {
-        while (e < s.len and s[e] & 0xC0 == 0x80) e += 1;
+    fn repeat(m: *Matcher, n: *const Node, sub: *const Node, min: u32, max: u32, greedy: bool, lo: usize, hi: usize) Error!bool {
+        _ = n;
+        if (single(sub)) {
+            const count = hi - lo;
+            if (count < min or (max != inf and count > max)) return false;
+            return (try m.runEnd(sub, lo)) >= hi;
+        }
+        if (lo == hi) {
+            if (min == 0) {
+                if (!try m.dissect(sub, lo, lo)) m.clearCaps(sub);
+                return true;
+            }
+            return m.dissect(sub, lo, lo);
+        }
+        if (max == 0) return false;
+        // Each frame is one pass of the body from `pos`.
+        const base = m.frames.items.len;
+        defer m.frames.shrinkRetainingCapacity(base);
+        const a = m.it.alloc();
+        // A pass takes at least one character and at most `longest`.
+        const longest: usize = if (sub.max_len == inf) m.n else sub.max_len;
+        try m.frames.append(a, .{ .pos = lo, .next = if (greedy) @min(hi, lo +| longest) else lo + 1 });
+        while (m.frames.items.len > base) {
+            try m.tick();
+            const f = &m.frames.items[m.frames.items.len - 1];
+            const count = m.frames.items.len - base;
+            const pos = f.pos;
+            const e = f.next;
+            if (greedy) {
+                if (e <= pos) {
+                    m.frames.items.len -= 1;
+                    continue;
+                }
+                f.next = e - 1;
+            } else {
+                if (e > hi or e - pos > longest) {
+                    m.frames.items.len -= 1;
+                    continue;
+                }
+                f.next = e + 1;
+            }
+            if (!try m.dissect(sub, pos, e)) continue;
+            if (e == hi) {
+                if (count >= min) return true;
+                // The other passes of the minimum match the empty text.
+                if (try m.dissect(sub, hi, hi)) return true;
+                continue;
+            }
+            if (max != inf and count >= max) continue;
+            try m.frames.append(a, .{ .pos = e, .next = if (greedy) @min(hi, e +| longest) else e + 1 });
+        }
+        return false;
     }
-    return e;
-}
+
+    /// Finds the first match that starts at byte offset `from` or later.
+    pub fn search(m: *Matcher, from_byte: usize) Error!bool {
+        const from = m.charAt(from_byte);
+        m.from = from;
+        @memset(m.spans, null);
+        @memset(m.caps, null);
+        m.run_node = inf;
+        m.it.re_memo.clearRetainingCapacity();
+        var span: ?[2]usize = null;
+        if (!m.re.has_backref) {
+            span = try m.simulate(from);
+            if (span) |b| {
+                if (m.re.ncap > 1) {
+                    if (!try m.dissect(m.re.root, b[0], b[1])) @memset(m.spans, null);
+                }
+            }
+        } else {
+            outer: for (from..m.n + 1) |lo| {
+                var e: usize = if (m.re.shortest) lo else m.n;
+                while (true) {
+                    @memset(m.spans, null);
+                    if (try m.dissect(m.re.root, lo, e)) {
+                        span = .{ lo, e };
+                        break :outer;
+                    }
+                    if (m.re.shortest) {
+                        if (e == m.n) break;
+                        e += 1;
+                    } else {
+                        if (e == lo) break;
+                        e -= 1;
+                    }
+                }
+            }
+        }
+        const b = span orelse return false;
+        m.spans[0] = b[0];
+        m.spans[1] = b[1];
+        for (m.spans, m.caps) |x, *y| y.* = if (x) |v| m.byteAt(v) else null;
+        return true;
+    }
+};
 
 /// True when the pattern matches a part of the string.
 pub fn matches(it: *Interp, pat: []const u8, s: []const u8, nocase: bool) Error!bool {
@@ -641,14 +1515,76 @@ fn eql(a: []const u8, b: []const u8) bool {
 }
 
 fn capValue(it: *Interp, m: *const Matcher, k: usize, indices: bool) Error!Value {
-    const lo = if (k < m.re.ncap) m.caps[2 * k] else null;
-    const hi = if (k < m.re.ncap) m.caps[2 * k + 1] else null;
+    const lo = if (k < m.re.ncap) m.spans[2 * k] else null;
+    const hi = if (k < m.re.ncap) m.spans[2 * k + 1] else null;
     if (lo == null or hi == null) {
         if (!indices) return Value.empty;
         return value.newList(it.alloc(), &.{ .{ .int = -1 }, .{ .int = -1 } });
     }
-    if (!indices) return .{ .str = m.s[lo.?..hi.?] };
+    if (!indices) return .{ .str = m.s[m.byteAt(lo.?)..m.byteAt(hi.?)] };
     return value.newList(it.alloc(), &.{ .{ .int = @intCast(lo.?) }, .{ .int = @as(i64, @intCast(hi.?)) - 1 } });
+}
+
+/// The list that `regexp -about` gives: the group count and the names
+/// of the properties of the pattern.
+pub fn aboutValue(it: *Interp, re: *const Regex) Error!Value {
+    const a = it.alloc();
+    const names = [_]struct { u16, []const u8 }{
+        .{ Info.backref, "REG_UBACKREF" },     .{ Info.lookahead, "REG_ULOOKAHEAD" },
+        .{ Info.bounds, "REG_UBOUNDS" },       .{ Info.braces, "REG_UBRACES" },
+        .{ Info.bsalnum, "REG_UBSALNUM" },     .{ Info.pbotch, "REG_UPBOTCH" },
+        .{ Info.bbs, "REG_UBBS" },             .{ Info.nonposix, "REG_UNONPOSIX" },
+        .{ Info.unspec, "REG_UUNSPEC" },       .{ Info.unport, "REG_UUNPORT" },
+        .{ Info.locale, "REG_ULOCALE" },       .{ Info.emptymatch, "REG_UEMPTYMATCH" },
+        .{ Info.impossible, "REG_UIMPOSSIBLE" }, .{ Info.shortest, "REG_USHORTEST" },
+    };
+    var flags: std.ArrayList(Value) = .empty;
+    for (names) |x| if (re.info & x[0] != 0) try flags.append(a, .{ .str = x[1] });
+    return value.newList(a, &.{ .{ .int = @intCast(re.ncap - 1) }, try value.wrapList(a, flags.items) });
+}
+
+const regexp_options = [_][]const u8{ "-all", "-about", "-indices", "-inline", "-expanded", "-line", "-linestop", "-lineanchor", "-nocase", "-start" };
+const regsub_options = [_][]const u8{ "-all", "-nocase", "-expanded", "-line", "-linestop", "-lineanchor", "-start" };
+
+/// The option that a word names: an exact name or a unique prefix.
+fn optionName(word: []const u8, table: []const []const u8) ?[]const u8 {
+    var found: ?[]const u8 = null;
+    var count: usize = 0;
+    for (table) |n| {
+        if (eql(n, word)) return n;
+        if (word.len > 1 and std.mem.startsWith(u8, n, word)) {
+            found = n;
+            count += 1;
+        }
+    }
+    return if (count == 1) found else null;
+}
+
+fn applyOption(o: []const u8, opts: *Options) bool {
+    if (eql(o, "-nocase")) {
+        opts.nocase = true;
+    } else if (eql(o, "-expanded")) {
+        opts.expanded = true;
+    } else if (eql(o, "-line")) {
+        opts.linestop = true;
+        opts.lineanchor = true;
+    } else if (eql(o, "-linestop")) {
+        opts.linestop = true;
+    } else if (eql(o, "-lineanchor")) {
+        opts.lineanchor = true;
+    } else return false;
+    return true;
+}
+
+/// The byte offset of the index of `-start`, or null past the text.
+/// `end` is the position after the last character.
+fn startOffset(it: *Interp, v: Value, s: []const u8) Error!?usize {
+    const n = cmds.charCount(s);
+    const k = try cmds.index(it, v, n + 1);
+    if (k <= 0) return 0;
+    if (k > n) return null;
+    if (k == n) return s.len;
+    return cmds.byteOf(s, n, @intCast(k));
 }
 
 pub fn cmdRegexp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
@@ -656,32 +1592,37 @@ pub fn cmdRegexp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var all = false;
     var inl = false;
     var indices = false;
-    var start: usize = 0;
+    var about = false;
+    var start_word: ?Value = null;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
-        const o = try it.str(argv[i]);
-        if (o.len == 0 or o[0] != '-') break;
-        if (eql(o, "--")) {
+        const w = try it.str(argv[i]);
+        if (w.len == 0 or w[0] != '-') break;
+        if (eql(w, "--")) {
             i += 1;
             break;
-        } else if (eql(o, "-nocase")) {
-            opts.nocase = true;
-        } else if (eql(o, "-line") or eql(o, "-lineanchor") or eql(o, "-linestop")) {
-            opts.line = true;
+        }
+        const o = optionName(w, &regexp_options) orelse
+            return it.failCode("TCL LOOKUP INDEX switch", "bad option \"{s}\": must be -all, -about, -indices, -inline, -expanded, -line, -linestop, -lineanchor, -nocase, -start, or --", .{w});
+        if (applyOption(o, &opts)) {
+            continue;
         } else if (eql(o, "-all")) {
             all = true;
         } else if (eql(o, "-inline")) {
             inl = true;
         } else if (eql(o, "-indices")) {
             indices = true;
-        } else if (eql(o, "-expanded") or eql(o, "-about")) {
-            return it.fail("the option \"{s}\" of regexp is not supported", .{o});
-        } else if (eql(o, "-start")) {
+        } else if (eql(o, "-about")) {
+            about = true;
+        } else {
             i += 1;
-            if (i >= argv.len) return it.fail("missing starting index", .{});
-            const n = try it.int(argv[i]);
-            start = if (n < 0) 0 else @intCast(n);
-        } else return it.fail("bad option \"{s}\": must be -all, -about, -indices, -inline, -expanded, -line, -linestop, -lineanchor, -nocase, -start, or --", .{o});
+            if (i >= argv.len) break;
+            start_word = argv[i];
+        }
+    }
+    if (about) {
+        if (argv.len != i + 1) return it.wrongArgs("regexp ?-option ...? exp string ?matchVar? ?subMatchVar ...?");
+        return aboutValue(it, try compile(it, try it.str(argv[i]), opts));
     }
     if (argv.len < i + 2) return it.wrongArgs("regexp ?-option ...? exp string ?matchVar? ?subMatchVar ...?");
     const vars = argv[i + 2 ..];
@@ -691,7 +1632,8 @@ pub fn cmdRegexp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var m = try Matcher.init(it, re, s);
     var out: std.ArrayList(Value) = .empty;
     var count: i64 = 0;
-    var at = @min(start, s.len);
+    var at: usize = 0;
+    if (start_word) |w| at = try startOffset(it, w, s) orelse s.len + 1;
     while (at <= s.len) {
         if (!try m.search(at)) break;
         count += 1;
@@ -703,7 +1645,9 @@ pub fn cmdRegexp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (!all) break;
         const lo = m.caps[0].?;
         const hi = m.caps[1].?;
-        at = if (hi == lo) hi + 1 else hi;
+        at = if (hi == lo) (if (hi < s.len) hi + ucd.next(s, hi).len else hi + 1) else hi;
+        // An empty match at the end of the text does not count again.
+        if (at >= s.len) break;
     }
     if (inl) return value.wrapList(it.alloc(), out.items);
     return .{ .int = count };
@@ -712,26 +1656,26 @@ pub fn cmdRegexp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 pub fn cmdRegsub(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var opts: Options = .{};
     var all = false;
-    var start: usize = 0;
+    var start_word: ?Value = null;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
-        const o = try it.str(argv[i]);
-        if (o.len == 0 or o[0] != '-') break;
-        if (eql(o, "--")) {
+        const w = try it.str(argv[i]);
+        if (w.len == 0 or w[0] != '-') break;
+        if (eql(w, "--")) {
             i += 1;
             break;
-        } else if (eql(o, "-nocase")) {
-            opts.nocase = true;
-        } else if (eql(o, "-line") or eql(o, "-lineanchor") or eql(o, "-linestop")) {
-            opts.line = true;
+        }
+        const o = optionName(w, &regsub_options) orelse
+            return it.failCode("TCL LOOKUP INDEX switch", "bad option \"{s}\": must be -all, -nocase, -expanded, -line, -linestop, -lineanchor, -start, or --", .{w});
+        if (applyOption(o, &opts)) {
+            continue;
         } else if (eql(o, "-all")) {
             all = true;
-        } else if (eql(o, "-start")) {
+        } else {
             i += 1;
-            if (i >= argv.len) return it.fail("missing starting index", .{});
-            const n = try it.int(argv[i]);
-            start = if (n < 0) 0 else @intCast(n);
-        } else return it.fail("bad option \"{s}\": must be -all, -nocase, -expanded, -line, -linestop, -lineanchor, -start, or --", .{o});
+            if (i >= argv.len) break;
+            start_word = argv[i];
+        }
     }
     if (argv.len != i + 3 and argv.len != i + 4) return it.wrongArgs("regsub ?-option ...? exp string subSpec ?varName?");
     const a = it.alloc();
@@ -741,7 +1685,8 @@ pub fn cmdRegsub(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var m = try Matcher.init(it, re, s);
     var out: std.ArrayList(u8) = .empty;
     var count: i64 = 0;
-    var at = @min(start, s.len);
+    var at: usize = 0;
+    if (start_word) |w| at = try startOffset(it, w, s) orelse s.len + 1;
     var copied: usize = 0;
     while (at <= s.len) {
         if (!try m.search(at)) break;
@@ -751,11 +1696,11 @@ pub fn cmdRegsub(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         try out.appendSlice(a, s[copied..lo]);
         var k: usize = 0;
         while (k < spec.len) : (k += 1) {
-            const ch = spec[k];
+            const c = spec[k];
             var group: ?usize = null;
-            if (ch == '&') {
+            if (c == '&') {
                 group = 0;
-            } else if (ch == '\\' and k + 1 < spec.len) {
+            } else if (c == '\\' and k + 1 < spec.len) {
                 const nx = spec[k + 1];
                 if (std.ascii.isDigit(nx)) {
                     group = nx - '0';
@@ -768,13 +1713,19 @@ pub fn cmdRegsub(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             }
             if (group) |g| {
                 try out.appendSlice(a, try it.str(try capValue(it, &m, g, false)));
-            } else try out.append(a, ch);
+            } else try out.append(a, c);
         }
         copied = hi;
         if (hi == lo) {
-            if (lo < s.len) try out.append(a, s[lo]);
-            copied = @min(lo + 1, s.len);
-            at = lo + 1;
+            if (lo < s.len) {
+                const step = ucd.next(s, lo).len;
+                try out.appendSlice(a, s[lo .. lo + step]);
+                copied = lo + step;
+                at = lo + step;
+            } else {
+                copied = s.len;
+                at = s.len + 1;
+            }
         } else at = hi;
         if (!all) break;
     }

@@ -689,6 +689,8 @@ pub const Interp = struct {
     searches: std.ArrayList(@import("extra.zig").Search) = .empty,
     /// The last compiled regular expressions.
     regex_cache: [@import("regex.zig").cache_size]@import("regex.zig").CacheEntry = @splat(.{}),
+    /// The failed spans of the current regular expression search.
+    re_memo: std.AutoHashMapUnmanaged(u64, void) = .empty,
     /// The strings that `append` can extend in place.
     tails: [4]StrTail = @splat(.{}),
     next_tail: u8 = 0,

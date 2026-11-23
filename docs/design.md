@@ -125,13 +125,13 @@ A namespace is a prefix of names (`ns.zig`).
 
 ## Regular expressions
 
-`regex.zig` compiles a pattern to a small program (`char`, `any`, `set`, `assert`, `save`, `split`, `jmp`, `backref`, `match`). A backtracking matcher runs the program with a stack of its own, so a pattern does not use the native stack.
+`regex.zig` parses a pattern to a tree. It accepts the advanced, extended, basic, and literal syntaxes of `re_syntax.n`, with the embedded options, lookahead, and back references.
 
-- Each 32 steps of the matcher use one step of the step limit. `(a*)*b` on a long string stops with the step limit error.
-- The backtrack stack has a limit of about one million entries.
-- A loop whose body matched no character does not run again, so `(a*)*` ends.
-- A repeat count is at most 255, and a program has at most 20 000 instructions.
-- Known differences from Tcl: the first alternative that matches wins, where Tcl prefers the longest match; the indexes of `-indices` and `-start` are byte offsets; `-expanded`, lookahead, and the `***` prefixes are not there. A cache with 64 places keeps the compiled patterns.
+- A Thompson simulation finds the leftmost match and its longest end, or its shortest end when the first quantifier is non-greedy. Its time is the program size times the text length.
+- A second pass splits the known span over the tree to find the capture groups. Each part of a concatenation takes the longest or shortest length that leaves a match for the rest. A table of failed spans keeps this pass polynomial.
+- A pattern with a back reference has no simulation. It searches with the second pass alone, and the step limit bounds it.
+- Each 32 steps of a matcher use one step of the step limit. A repeat count is at most 255, and a program has at most 40 000 instructions.
+- Positions count characters. A cache with 64 places keeps the compiled patterns.
 
 `regexp`, `regsub`, `switch -regexp` (with `-matchvar` and `-indexvar`), and `lsearch -regexp` use it.
 

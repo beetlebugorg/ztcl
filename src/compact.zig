@@ -345,6 +345,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.exports = exports;
     it.ns_paths = ns_paths;
     it.script_name = "";
+    it.re_memo = .empty;
     it.coro_stacks = .empty;
     it.pending_during = null;
     it.last_during = null;
