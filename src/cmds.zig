@@ -34,7 +34,7 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
         .{ "lassign", cmdLassign },   .{ "lrepeat", cmdLrepeat },   .{ "join", cmdJoin },
         .{ "split", cmdSplit },       .{ "concat", cmdConcat },     .{ "string", cmdString },
         .{ "format", format.cmdFormat }, .{ "info", cmdInfo },      .{ "puts", cmdPuts },
-        .{ "switch", cmdSwitch },     .{ "rename", cmdRename },     .{ "array", cmdArray },
+        .{ "switch", cmdSwitch },     .{ "rename", cmdRename },
         .{ "apply", cmdApply },       .{ "noise3", cmdNoise3 },     .{ "subst", cmdSubst },
         .{ "lset", more.cmdLset },    .{ "binary", more.cmdBinary }, .{ "scan", more.cmdScan },
         .{ "regexp", regex.cmdRegexp }, .{ "regsub", regex.cmdRegsub },
@@ -43,6 +43,7 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     };
     inline for (table) |t| try it.register(t[0], t[1]);
     try @import("mathns.zig").register(it);
+    try @import("extra.zig").register(it);
 }
 
 /// The direct form of a command site, or `.none`. The site must have a
@@ -1597,56 +1598,6 @@ fn cmdPuts(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (newline) out.write(out.ctx, "\n");
     }
     return Value.empty;
-}
-
-fn cmdArray(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len < 3) return it.wrongArgs("array subcommand arrayName ?arg ...?");
-    const a = it.alloc();
-    const sub = try it.str(argv[1]);
-    const name = try it.str(argv[2]);
-    const cell = try it.findVar(it.frame, name, false);
-    const map: ?*interp.ArrayMap = if (cell != null and cell.?.v == .arr) cell.?.v.arr else null;
-    if (eql(sub, "exists")) return .{ .int = @intFromBool(map != null) };
-    if (eql(sub, "size")) return .{ .int = if (map) |m| @intCast(m.count()) else 0 };
-    if (eql(sub, "set")) {
-        if (argv.len != 4) return it.wrongArgs("array set arrayName list");
-        const items = try it.list(argv[3]);
-        if (items.len % 2 != 0) return it.fail("list must have an even number of elements", .{});
-        if (map == null) {
-            const c = (try it.findVar(it.frame, name, true)).?;
-            if (c.v != .undef) return it.fail("can't set \"{s}(...)\": variable isn't array", .{name});
-            const m = try a.create(interp.ArrayMap);
-            m.* = .empty;
-            c.v = .{ .arr = m };
-        }
-        var i: usize = 0;
-        while (i < items.len) : (i += 2) {
-            try it.setVar(try std.fmt.allocPrint(a, "{s}({s})", .{ name, try it.str(items[i]) }), items[i + 1]);
-        }
-        return Value.empty;
-    }
-    const pattern: ?[]const u8 = if (argv.len > 3) try it.str(argv[3]) else null;
-    if (eql(sub, "names") or eql(sub, "get")) {
-        var out: std.ArrayList(Value) = .empty;
-        if (map) |m| for (m.keys(), m.values()) |k, v| {
-            if (pattern) |p| if (!globMatch(p, k, false)) continue;
-            try out.append(a, .{ .str = k });
-            if (eql(sub, "get")) try out.append(a, v);
-        };
-        return value.wrapList(a, out.items);
-    }
-    if (eql(sub, "unset")) {
-        if (map) |m| {
-            if (pattern) |p| {
-                var i: usize = m.count();
-                while (i > 0) : (i -= 1) {
-                    if (globMatch(p, m.keys()[i - 1], false)) m.orderedRemoveAt(i - 1);
-                }
-            } else cell.?.v = .undef;
-        }
-        return Value.empty;
-    }
-    return it.fail("unknown or ambiguous subcommand \"{s}\": must be exists, get, names, set, size, or unset", .{sub});
 }
 
 fn cmdNoise3(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {

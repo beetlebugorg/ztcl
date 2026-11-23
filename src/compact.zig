@@ -296,6 +296,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.namespaces = namespaces;
     it.exports = exports;
     it.ns_paths = ns_paths;
+    it.searches = .empty;
     it.global.vars = globals;
     it.error_code = error_code;
     it.result = Value.empty;

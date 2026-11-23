@@ -628,6 +628,8 @@ pub const Interp = struct {
     /// leading "::".
     ns_paths: std.StringHashMapUnmanaged([]const []const u8) = .empty,
 
+    /// The active searches of `array startsearch`.
+    searches: std.ArrayList(@import("extra.zig").Search) = .empty,
     /// The last compiled regular expressions.
     regex_cache: [@import("regex.zig").cache_size]@import("regex.zig").CacheEntry = @splat(.{}),
     /// The strings that `append` can extend in place.
@@ -741,7 +743,18 @@ pub const Interp = struct {
     pub fn list(it: *Interp, v: Value) Error![]const Value {
         return v.asList(it.alloc()) catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
-            error.BadList => return it.fail("unmatched open brace or quote in list", .{}),
+            error.BadList => return it.listError(v),
+        };
+    }
+
+    /// The error of a value that is not a list.
+    fn listError(it: *Interp, v: Value) Error {
+        const f = value.listFault(try it.str(v)) orelse return it.fail("unmatched open brace or quote in list", .{});
+        return switch (f.kind) {
+            .brace => it.failCode("TCL VALUE LIST BRACE", "unmatched open brace in list", .{}),
+            .quote => it.failCode("TCL VALUE LIST QUOTE", "unmatched open quote in list", .{}),
+            .after_brace => it.failCode("TCL VALUE LIST JUNK", "list element in braces followed by \"{s}\" instead of space", .{f.rest}),
+            .after_quote => it.failCode("TCL VALUE LIST JUNK", "list element in quotes followed by \"{s}\" instead of space", .{f.rest}),
         };
     }
 

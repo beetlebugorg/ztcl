@@ -480,6 +480,53 @@ pub fn parseList(a: Allocator, s: []const u8) ListError![]const Value {
     return out.items;
 }
 
+pub const ListFault = struct { kind: enum { brace, quote, after_brace, after_quote }, rest: []const u8 };
+
+/// The first syntax fault of the text of a list, or null.
+pub fn listFault(s: []const u8) ?ListFault {
+    var i: usize = 0;
+    while (true) {
+        while (i < s.len and isSpace(s[i])) i += 1;
+        if (i >= s.len) return null;
+        if (s[i] == '{') {
+            var depth: usize = 1;
+            i += 1;
+            while (i < s.len) : (i += 1) {
+                if (s[i] == '\\') {
+                    i += 1;
+                } else if (s[i] == '{') {
+                    depth += 1;
+                } else if (s[i] == '}') {
+                    depth -= 1;
+                    if (depth == 0) break;
+                }
+            }
+            if (i >= s.len) return .{ .kind = .brace, .rest = "" };
+            i += 1;
+            if (i < s.len and !isSpace(s[i])) return .{ .kind = .after_brace, .rest = junk(s[i..]) };
+        } else if (s[i] == '"') {
+            i += 1;
+            while (i < s.len and s[i] != '"') : (i += 1) {
+                if (s[i] == '\\') i += 1;
+            }
+            if (i >= s.len) return .{ .kind = .quote, .rest = "" };
+            i += 1;
+            if (i < s.len and !isSpace(s[i])) return .{ .kind = .after_quote, .rest = junk(s[i..]) };
+        } else {
+            while (i < s.len and !isSpace(s[i])) : (i += 1) {
+                if (s[i] == '\\') i += 1;
+            }
+        }
+    }
+}
+
+/// The text after a closed element, up to a space or 20 bytes.
+fn junk(s: []const u8) []const u8 {
+    var n: usize = 0;
+    while (n < s.len and n < 20 and !isSpace(s[n])) n += 1;
+    return s[0..n];
+}
+
 /// The string form of a list: each element quoted so that `parseList`
 /// gives the same elements back.
 pub fn listToString(a: Allocator, items: []const Value) Allocator.Error![]const u8 {

@@ -304,7 +304,7 @@ test "lists" {
         .{ "lindex {a b c}", "a b c" },
         .{ "llength {}", "0" },
         .{ "llength {a b {c d}}", "3" },
-        .{ "llength \"a {b\"", "!unmatched open brace or quote in list" },
+        .{ "llength \"a {b\"", "!unmatched open brace in list" },
         .{ "set l {}; lappend l a; lappend l {b c} d; set l", "a {b c} d" },
         .{ "set a [list 1 2]; set b $a; lappend a 3; lappend b 4; list $a $b", "{1 2 3} {1 2 4}" },
         .{ "lrange {a b c d e} 1 3", "b c d" },
@@ -824,7 +824,7 @@ test "the list parse cache keeps each read correct" {
         .{ "set s [string repeat {a b } 20]; llength $s; llength $s; set t $s; lset t 0 z; list [lindex $s 0] [lindex $t 0]", "a z" },
         .{ "set s [string repeat {a b } 20]; llength $s; llength $s; lappend s q; list [llength $s] [lindex $s end]", "41 q" },
         // A bad list gives the error at each read.
-        .{ "set s \"[string repeat {a } 20]\\{\"; catch {llength $s}; catch {llength $s}; llength $s", "!unmatched open brace or quote in list" },
+        .{ "set s \"[string repeat {a } 20]\\{\"; catch {llength $s}; catch {llength $s}; llength $s", "!unmatched open brace in list" },
     });
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
@@ -968,7 +968,7 @@ test "the inline list and string reads keep the command semantics" {
     try check(&.{
         .{ "proc p {} {set l {a {b c} d}; list [llength $l] [lindex $l 1] [lindex $l end] [lindex $l 9] [lindex $l -1] [lindex $l {1 0}]}; p", "3 {b c} d {} {} b" },
         .{ "proc p {} {set s abc; list [string length $s] [string index $s 1] [string index $s end] [string index $s 9]}; p", "3 b c {}" },
-        .{ "proc p {} {set s \"a \\{b\"; llength $s}; p", "!unmatched open brace or quote in list" },
+        .{ "proc p {} {set s \"a \\{b\"; llength $s}; p", "!unmatched open brace in list" },
         .{ "proc p {} {lindex {a b} x}; p", "!bad index \"x\": must be integer?[+-]integer? or end?[+-]integer?" },
         .{ "proc p {} {llength {a b}}; p; rename llength ll; proc llength {x} {return custom}; p", "custom" },
         .{ "proc p {} {lindex {a b} 1}; p; rename lindex li; proc lindex {l i} {return mine}; p", "mine" },
