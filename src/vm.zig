@@ -955,10 +955,10 @@ noinline fn slowStore(it: *Interp, name: []const u8, v: *const Value) Error!void
     return it.setVar(name, v.*);
 }
 
-/// The stores of one `foreach` pass while a variable has traces.
-noinline fn slowForeach(it: *Interp, code: *const Code, table: []const u32, items: []const Value, at: usize) Error!void {
+/// The stores of one `foreach` pass from the first cell that is not plain.
+noinline fn slowForeach(it: *Interp, code: *const Code, table: []const u32, items: []const Value, at: usize, from: usize) Error!void {
     @branchHint(.cold);
-    for (table, 0..) |slot, k| {
+    for (table[from..], from..) |slot, k| {
         try it.setVar(code.names[slot], if (at + k < items.len) items[at + k] else Value.empty);
     }
 }
@@ -1539,13 +1539,13 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     continue;
                 }
                 try step(it);
-                // A traced cell or an element link exists only while
-                // `var_traces` is above zero.
-                if (it.var_traces != 0) {
-                    try slowForeach(it, code, table, items, at);
-                } else for (table, 0..) |slot, k| {
+                for (table, 0..) |slot, k| {
                     const cell = try writeCell(named, it, f, code, slot);
-                    if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[slot]});
+                    // An array, a traced cell, or an element link.
+                    if (!cell.plainStore()) {
+                        try slowForeach(it, code, table, items, at, k);
+                        break;
+                    }
                     cell.v = .{ .val = if (at + k < items.len) items[at + k] else Value.empty };
                 }
                 stack[sp - 1] = .{ .int = @intCast(at + table.len) };
