@@ -513,6 +513,110 @@ pub fn cmdBinary(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return it.fail("unknown or ambiguous subcommand \"{s}\": must be decode, encode, format, or scan", .{sub});
 }
 
+fn uuChar(v: u32) u8 {
+    return if (v == 0) '`' else @intCast(v + 32);
+}
+
+/// `binary encode uuencode` and `binary decode uuencode`.
+fn uuCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
+    const a = it.alloc();
+    if (argv.len < 4) {
+        if (encode) return it.wrongArgs("binary encode uuencode ?-maxlen len? ?-wrapchar char? data");
+        return it.wrongArgs("binary decode uuencode ?options? data");
+    }
+    var strict = false;
+    var maxlen: i64 = 61;
+    var wrap: []const u8 = "\n";
+    var i: usize = 3;
+    while (i < argv.len - 1) : (i += 1) {
+        const o = try it.str(argv[i]);
+        if (!encode and eql(o, "-strict")) {
+            strict = true;
+        } else if (encode and eql(o, "-maxlen") and i + 1 < argv.len - 1) {
+            i += 1;
+            maxlen = try it.int(argv[i]);
+            if (maxlen < 5 or maxlen > 85) return it.fail("line length out of range", .{});
+        } else if (encode and eql(o, "-wrapchar") and i + 1 < argv.len - 1) {
+            i += 1;
+            wrap = try it.str(argv[i]);
+        } else if (encode) {
+            return it.fail("bad option \"{s}\": must be -maxlen or -wrapchar", .{o});
+        } else return it.fail("bad option \"{s}\": must be -strict", .{o});
+    }
+    const data = try it.str(argv[argv.len - 1]);
+    var out: std.ArrayList(u8) = .empty;
+    if (encode) {
+        const bytes = try toBytes(it, data);
+        const per_line: usize = @intCast(@divFloor(maxlen - 1, 4) * 3);
+        var k: usize = 0;
+        while (k < bytes.len) {
+            const n = @min(per_line, bytes.len - k);
+            try out.append(a, uuChar(@intCast(n)));
+            var g: usize = 0;
+            while (g < n) : (g += 3) {
+                const left = n - g;
+                const b0: u32 = bytes[k + g];
+                const b1: u32 = if (left > 1) bytes[k + g + 1] else 0;
+                const b2: u32 = if (left > 2) bytes[k + g + 2] else 0;
+                try out.append(a, uuChar(b0 >> 2));
+                try out.append(a, uuChar((b0 & 3) << 4 | b1 >> 4));
+                if (left > 1) try out.append(a, uuChar((b1 & 15) << 2 | b2 >> 6));
+                if (left > 2) try out.append(a, uuChar(b2 & 63));
+            }
+            try out.appendSlice(a, wrap);
+            k += n;
+        }
+        return .{ .str = out.items };
+    }
+    var pos: usize = 0;
+    while (pos < data.len) {
+        const c = data[pos];
+        if (c == '\n' or c == '\r' or (!strict and (c <= ' ' or c > '`'))) {
+            pos += 1;
+            continue;
+        }
+        if (c < ' ' or c > '`') return it.fail("invalid uuencode character \"{c}\" at position {d}", .{ c, pos });
+        const want: usize = (c - 32) & 63;
+        pos += 1;
+        var vals: [4]u32 = undefined;
+        var have: usize = 0;
+        var made: usize = 0;
+        while (pos < data.len and data[pos] != '\n' and made < want) {
+            const d = data[pos];
+            if (d < ' ' or d > '`') {
+                if (strict) return it.fail("invalid uuencode character \"{c}\" at position {d}", .{ d, pos });
+                pos += 1;
+                continue;
+            }
+            vals[have] = (d - 32) & 63;
+            have += 1;
+            pos += 1;
+            if (have == 4) {
+                const v = vals[0] << 18 | vals[1] << 12 | vals[2] << 6 | vals[3];
+                for ([3]u8{ @truncate(v >> 16), @truncate(v >> 8), @truncate(v) }) |b| {
+                    if (made < want) try out.append(a, b);
+                    made += 1;
+                }
+                have = 0;
+            }
+        }
+        if (have > 1 and made < want) {
+            for (vals[have..4]) |*x| x.* = 0;
+            const v = vals[0] << 18 | vals[1] << 12 | vals[2] << 6 | vals[3];
+            for ([3]u8{ @truncate(v >> 16), @truncate(v >> 8), @truncate(v) }, 0..) |b, t| {
+                if (t + 1 < have and made < want) {
+                    try out.append(a, b);
+                    made += 1;
+                }
+            }
+        }
+        while (pos < data.len and data[pos] != '\n') : (pos += 1) {
+            if (strict and (data[pos] < ' ' or data[pos] > '`')) return it.fail("invalid uuencode character \"{c}\" at position {d}", .{ data[pos], pos });
+        }
+    }
+    return .{ .str = try fromBytes(it, out.items) };
+}
+
 const b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /// `binary encode` and `binary decode` for hex and base64.
@@ -521,6 +625,7 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
     if (argv.len < 3) return it.wrongArgs("binary encode|decode format ?-option value ...? data");
     const form = try it.str(argv[2]);
     const is_hex = eql(form, "hex");
+    if (eql(form, "uuencode")) return uuCode(it, argv, encode);
     if (!is_hex and !eql(form, "base64")) return it.fail("unknown or ambiguous subcommand \"{s}\": must be base64, hex, or uuencode", .{form});
     if (argv.len < 4) {
         if (encode) return it.fail("wrong # args: should be \"binary encode {s} {s}\"", .{ form, if (is_hex) "data" else "?-maxlen len? ?-wrapchar char? data" });
@@ -590,7 +695,7 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
                 half = null;
             } else half = d;
         }
-        if (half != null) return it.fail("invalid hexadecimal digit \"\" at position {d}", .{data.len});
+        if (half != null and strict) return it.fail("invalid hexadecimal digit \"\" at position {d}", .{data.len});
         return .{ .str = try fromBytes(it, out.items) };
     }
     var acc: u32 = 0;

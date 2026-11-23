@@ -401,11 +401,16 @@ const ExprParser = struct {
     }
 };
 
+/// A boolean word of Tcl: a unique prefix of true, yes, false, no, on,
+/// or off, in any case. "o" alone is ambiguous.
 fn boolWord(s: []const u8) ?bool {
-    const yes = [_][]const u8{ "true", "yes", "on" };
-    const no = [_][]const u8{ "false", "no", "off" };
-    for (yes) |w| if (std.ascii.eqlIgnoreCase(s, w)) return true;
-    for (no) |w| if (std.ascii.eqlIgnoreCase(s, w)) return false;
+    if (s.len == 0) return null;
+    const yes = [_][]const u8{ "true", "yes" };
+    const no = [_][]const u8{ "false", "no" };
+    for (yes) |w| if (s.len <= w.len and std.ascii.eqlIgnoreCase(s, w[0..s.len])) return true;
+    for (no) |w| if (s.len <= w.len and std.ascii.eqlIgnoreCase(s, w[0..s.len])) return false;
+    if (std.ascii.eqlIgnoreCase(s, "on")) return true;
+    if (s.len >= 2 and s.len <= 3 and std.ascii.eqlIgnoreCase(s, "off"[0..s.len])) return false;
     return null;
 }
 
@@ -432,7 +437,7 @@ pub fn truthy(it: *Interp, v: Value) Error!bool {
             if (value.parseIntStrict(s)) |i| return i != 0;
             if (bigint.isIntegerText(s)) return true;
             if (value.parseDouble(s)) |d| return d != 0;
-            if (boolWord(value.trimSpace(s))) |b| return b;
+            if (boolWord(s)) |b| return b;
             return it.fail("expected boolean value but got \"{s}\"", .{s});
         },
     }
