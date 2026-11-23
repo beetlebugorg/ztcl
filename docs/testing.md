@@ -96,8 +96,8 @@ The fuzzy skin proc (`zig build bench`):
 
 | Points | Fast path | Slow path |
 |---|---|---|
-| 1 million, a third on the outer wall | 23 ns for each point | 155 ns for each point |
-| 1 million, all on the outer wall | 23 ns for each point | 242 ns for each point |
-| 10 million, all on the outer wall | 23 ns for each point (0.23 s) | 241 ns for each point (2.4 s) |
+| 1 million, a third on the outer wall | 23 ns for each point | about 160 ns for each point |
+| 1 million, all on the outer wall | 23 ns for each point | about 250 ns for each point |
+| 10 million, all on the outer wall | 23 ns for each point (0.23 s) | about 250 ns for each point (2.5 s) |
 
 The slow path uses the bytecode.

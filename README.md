@@ -95,7 +95,7 @@ Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2
 | `dict.tcl` (200 000 `dict incr`, 200 000 `dict get`) | 30.5 | 48.7 | 58.4 |
 | `dictgrow.tcl` (200 000 new keys, 200 000 `dict get`) | 84.5 | 104.2 | 143.3 |
 
-The fuzzy skin `point proc` over 10 million points uses 23.5 ns for each point on the vector path and 241 ns on the normal path. [Testing](docs/testing.md) has all results.
+The fuzzy skin `point proc` over 10 million points uses 23.5 ns for each point on the vector path and about 250 ns on the normal path. [Testing](docs/testing.md) has all results.
 
 ## Compatibility
 
