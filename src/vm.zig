@@ -144,9 +144,9 @@ pub const Code = struct {
 // ---- The guard ----
 
 const inline_names = [_][]const u8{
-    "set",   "incr",    "expr",   "if",       "while", "for",
-    "foreach", "return", "break", "continue", "lappend", "dict", "append",
-    "lindex", "llength", "string",
+    "set",     "incr",   "expr",    "if",       "while",   "for",
+    "foreach", "return", "break",   "continue", "lappend", "dict",
+    "append",  "lindex", "llength", "string",
 };
 
 /// The read forms of the `access` instruction.
@@ -1176,6 +1176,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             .store => {
                 const cell = try writeCell(named, it, f, code, i.a);
                 if (!cell.plainStore()) {
+                    @branchHint(.cold);
                     try slowStore(it, code.names[i.a], &stack[sp - 1]);
                     pc += 1;
                     i = &ins[pc];
@@ -1379,6 +1380,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 const cell = try writeCell(named, it, f, code, i.a);
                 sp -= 1;
                 if (!cell.plainStore()) {
+                    @branchHint(.cold);
                     try slowStore(it, code.names[i.a], &stack[sp]);
                     pc += 1;
                     i = &ins[pc];
@@ -1543,8 +1545,12 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     const cell = try writeCell(named, it, f, code, slot);
                     // An array, a traced cell, or an element link.
                     if (!cell.plainStore()) {
+                        @branchHint(.cold);
                         try slowForeach(it, code, table, items, at, k);
-                        break;
+                        stack[sp - 1] = .{ .int = @intCast(at + table.len) };
+                        pc += 1;
+                        i = &ins[pc];
+                        continue :sw i.op;
                     }
                     cell.v = .{ .val = if (at + k < items.len) items[at + k] else Value.empty };
                 }

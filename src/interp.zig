@@ -1060,6 +1060,7 @@ pub const Interp = struct {
                 const v = try it.evalWord(&c.words[2]);
                 const cell = try it.cellOf(c.words[1].kind.lit.str, &c.hint);
                 if (!cell.plainStore()) {
+                    @branchHint(.cold);
                     try it.setVar(c.words[1].kind.lit.str, v);
                     return v;
                 }
@@ -1279,7 +1280,10 @@ pub const Interp = struct {
 
     pub fn popFrame(it: *Interp) void {
         const f = it.frame;
-        if (it.var_traces != 0) trace.frameGone(it, f);
+        if (it.var_traces != 0) {
+            @branchHint(.cold);
+            trace.frameGone(it, f);
+        }
         for (f.vars.items) |e| {
             e.cell.next_free = it.free_vars;
             it.free_vars = e.cell;
