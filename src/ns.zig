@@ -6,10 +6,9 @@
 //! namespace. A proc runs in the namespace of its name, and
 //! `namespace eval` runs a script in a frame of the namespace.
 //!
-//! Known differences from Tcl: `namespace path` and `namespace unknown`
-//! have no effect, an imported command does not follow a later rename
-//! of its source, and `namespace ensemble` has only `create` (with
-//! `-command`, `-map`, and `-subcommands`) and `exists`.
+//! An imported command is a second key for the same `Command`, so its
+//! `name` field gives the origin. A name with no command goes to the
+//! unknown handler of the namespace (`dispatchUnknown`).
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -64,37 +63,105 @@ const Ensemble = struct {
     /// Pairs: a subcommand and the words that it stands for.
     map: []const Value = &.{},
     subs: ?[]const Value = null,
+    params: []const Value = &.{},
+    prefixes: bool = true,
+    unknown: ?Value = null,
 };
 
-/// `namespace ensemble create` and `namespace ensemble exists`.
+fn ensembleOf(it: *Interp, name: []const u8) ?*Ensemble {
+    const c = it.findCommand(name) orelse return null;
+    if (c.impl != .native or c.impl.native != &ensembleCall) return null;
+    return @ptrCast(@alignCast(c.ctx.?));
+}
+
+/// Applies one option of `create` or `configure`.
+fn ensembleOption(it: *Interp, e: *Ensemble, o: []const u8, v: Value) Error!void {
+    if (eql(o, "-map")) {
+        const l = try it.list(v);
+        if (l.len % 2 != 0) return it.fail("missing value to go with key", .{});
+        var k: usize = 1;
+        while (k < l.len) : (k += 2) {
+            if ((try it.list(l[k])).len == 0) return it.fail("ensemble subcommand implementations must be non-empty lists", .{});
+        }
+        e.map = l;
+    } else if (eql(o, "-subcommands")) {
+        const l = try it.list(v);
+        e.subs = if (l.len == 0) null else l;
+    } else if (eql(o, "-parameters")) {
+        e.params = try it.list(v);
+    } else if (eql(o, "-prefixes")) {
+        e.prefixes = try @import("expr.zig").truthy(it, v);
+    } else if (eql(o, "-unknown")) {
+        e.unknown = if ((try it.list(v)).len == 0) null else v;
+    } else if (eql(o, "-namespace")) {
+        const space = try resolve(it, try it.str(v));
+        if (space.len > 0 and !it.namespaces.contains(space)) return it.fail("namespace \"{s}\" not found", .{try it.str(v)});
+        e.ns = try it.internNs(space);
+    } else return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -map, -namespace, -parameters, -prefixes, -subcommands, or -unknown", .{o});
+}
+
+fn ensembleOptionName(word: []const u8) []const u8 {
+    for ([_][]const u8{ "-map", "-namespace", "-parameters", "-prefixes", "-subcommands", "-unknown", "-command" }) |n| {
+        if (word.len > 1 and std.mem.startsWith(u8, n, word)) return n;
+    }
+    return word;
+}
+
+fn ensembleRead(it: *Interp, e: *Ensemble, o: []const u8) Error!Value {
+    const a = it.alloc();
+    if (eql(o, "-map")) return value.newList(a, e.map);
+    if (eql(o, "-namespace")) return display(it, e.ns);
+    if (eql(o, "-parameters")) return value.newList(a, e.params);
+    if (eql(o, "-prefixes")) return .{ .int = @intFromBool(e.prefixes) };
+    if (eql(o, "-subcommands")) return value.newList(a, e.subs orelse &.{});
+    if (eql(o, "-unknown")) return e.unknown orelse Value.empty;
+    return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -map, -namespace, -parameters, -prefixes, -subcommands, or -unknown", .{o});
+}
+
+/// `namespace ensemble create`, `configure`, and `exists`.
 fn ensemble(it: *Interp, args: []const Value) Error!Value {
     const a = it.alloc();
     if (args.len < 1) return it.wrongArgs("namespace ensemble subcommand ?arg ...?");
-    const sub = try it.str(args[0]);
+    const word = try it.str(args[0]);
+    var sub: []const u8 = word;
+    for ([_][]const u8{ "configure", "create", "exists" }) |n| {
+        if (word.len >= 2 and std.mem.startsWith(u8, n, word)) sub = n;
+    }
     if (eql(sub, "exists")) {
         if (args.len != 2) return it.wrongArgs("namespace ensemble exists cmdname");
-        const c = it.findCommand(try it.str(args[1])) orelse return .{ .int = 0 };
-        return .{ .int = @intFromBool(c.impl == .native and c.impl.native == &ensembleCall) };
+        return .{ .int = @intFromBool(ensembleOf(it, try it.str(args[1])) != null) };
     }
-    if (!eql(sub, "create")) return it.fail("namespace ensemble {s} is not supported", .{sub});
+    if (eql(sub, "configure")) {
+        if (args.len < 2) return it.wrongArgs("namespace ensemble configure cmdname ?-option value ...?");
+        const name = try it.str(args[1]);
+        const e = ensembleOf(it, name) orelse return it.failCode(try std.fmt.allocPrint(a, "TCL LOOKUP ENSEMBLE {s}", .{name}), "\"{s}\" is not an ensemble command", .{name});
+        if (args.len == 2) {
+            var out: std.ArrayList(Value) = .empty;
+            for ([_][]const u8{ "-map", "-namespace", "-parameters", "-prefixes", "-subcommands", "-unknown" }) |o| {
+                try out.append(a, .{ .str = o });
+                try out.append(a, try ensembleRead(it, e, o));
+            }
+            return value.wrapList(a, out.items);
+        }
+        if (args.len == 3) return ensembleRead(it, e, ensembleOptionName(try it.str(args[2])));
+        if (args.len % 2 != 0) return it.wrongArgs("namespace ensemble configure cmdname ?-option value ...?");
+        var i: usize = 2;
+        while (i + 1 < args.len) : (i += 2) try ensembleOption(it, e, ensembleOptionName(try it.str(args[i])), args[i + 1]);
+        it.epoch += 1;
+        return Value.empty;
+    }
+    if (!eql(sub, "create")) return it.failCode("TCL LOOKUP INDEX subcommand", "bad subcommand \"{s}\": must be configure, create, or exists", .{word});
     if (args.len % 2 != 1) return it.wrongArgs("namespace ensemble create ?option value ...?");
     const e = try a.create(Ensemble);
     e.* = .{ .ns = it.ns };
     var name: []const u8 = it.ns;
     var i: usize = 1;
     while (i + 1 < args.len) : (i += 2) {
-        const o = try it.str(args[i]);
+        const o = ensembleOptionName(try it.str(args[i]));
         if (eql(o, "-command")) {
             name = try it.qualify(try it.str(args[i + 1]));
-        } else if (eql(o, "-map")) {
-            e.map = try it.list(args[i + 1]);
-            if (e.map.len % 2 != 0) return it.fail("missing value to go with key", .{});
-        } else if (eql(o, "-subcommands")) {
-            const l = try it.list(args[i + 1]);
-            e.subs = if (l.len == 0) null else l;
-        } else if (eql(o, "-prefixes") or eql(o, "-unknown") or eql(o, "-parameters")) {
-            // These options have no effect.
-        } else return it.fail("bad option \"{s}\": must be -command, -map, -parameters, -prefixes, -subcommands, or -unknown", .{o});
+            name = std.mem.trimStart(u8, name, ":");
+        } else try ensembleOption(it, e, o, args[i + 1]);
     }
     if (name.len == 0) return it.fail("an ensemble of the global namespace needs -command", .{});
     const c = try a.create(interp.Command);
@@ -116,17 +183,19 @@ pub fn copyEnsemble(c: *@import("compact.zig").Copier, ctx: *anyopaque) Allocato
     e.* = old.*;
     try c.text(&e.ns);
     e.map = try c.vals(old.map);
+    e.params = try c.vals(old.params);
     if (old.subs) |l| e.subs = try c.vals(l);
+    if (old.unknown) |u| {
+        var copy = u;
+        try c.val(&copy);
+        e.unknown = copy;
+    }
     return e;
 }
 
-fn ensembleCall(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+/// The subcommand names of an ensemble, sorted.
+fn ensembleNames(it: *Interp, e: *Ensemble) Error![]const []const u8 {
     const a = it.alloc();
-    const self = it.findCommand(try it.str(argv[0])) orelse return it.fail("invalid command name \"{s}\"", .{try it.str(argv[0])});
-    const e: *Ensemble = @ptrCast(@alignCast(self.ctx orelse return it.fail("\"{s}\" is not an ensemble", .{try it.str(argv[0])})));
-    if (argv.len < 2) return it.fail("wrong # args: should be \"{s} subcommand ?arg ...?\"", .{try it.str(argv[0])});
-    const sub = try it.str(argv[1]);
-    // The names: the given list, or the map, or the exported commands.
     var names: std.ArrayList([]const u8) = .empty;
     if (e.subs) |l| {
         for (l) |v| try names.append(a, try it.str(v));
@@ -134,7 +203,7 @@ fn ensembleCall(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         var k: usize = 0;
         while (k < e.map.len) : (k += 2) try names.append(a, try it.str(e.map[k]));
     } else {
-        const prefix = try std.fmt.allocPrint(a, "{s}::", .{e.ns});
+        const prefix = if (e.ns.len == 0) "" else try std.fmt.allocPrint(a, "{s}::", .{e.ns});
         var iter = it.commands.keyIterator();
         while (iter.next()) |k| {
             if (!std.mem.startsWith(u8, k.*, prefix)) continue;
@@ -147,49 +216,142 @@ fn ensembleCall(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             return std.mem.order(u8, x, y) == .lt;
         }
     }.lt);
-    // An exact name, or the one name that starts with the word.
-    var chosen: ?[]const u8 = null;
-    var count: usize = 0;
-    for (names.items) |n| {
-        if (eql(n, sub)) {
-            chosen = n;
-            count = 1;
-            break;
-        }
-        if (sub.len > 0 and std.mem.startsWith(u8, n, sub)) {
-            chosen = n;
-            count += 1;
-        }
-    }
-    if (count != 1) {
-        var msg: std.ArrayList(u8) = .empty;
-        try msg.print(a, "unknown or ambiguous subcommand \"{s}\": must be ", .{sub});
-        for (names.items, 0..) |n, k| {
-            if (k > 0) try msg.appendSlice(a, ", ");
-            if (k > 0 and k == names.items.len - 1) try msg.appendSlice(a, "or ");
-            try msg.appendSlice(a, n);
-        }
-        it.result = .{ .str = msg.items };
-        it.error_code = .{ .str = "NONE" };
+    return names.items;
+}
+
+fn ensembleCall(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    const a = it.alloc();
+    const self = it.findCommand(try it.str(argv[0])) orelse return it.fail("invalid command name \"{s}\"", .{try it.str(argv[0])});
+    const e: *Ensemble = @ptrCast(@alignCast(self.ctx orelse return it.fail("\"{s}\" is not an ensemble", .{try it.str(argv[0])})));
+    const np = e.params.len;
+    if (argv.len < 2 + np) {
+        var usage: std.ArrayList(u8) = .empty;
+        try usage.print(a, "wrong # args: should be \"{s}", .{try it.str(argv[0])});
+        for (e.params) |p| try usage.print(a, " {s}", .{try it.str(p)});
+        try usage.appendSlice(a, " subcommand ?arg ...?\"");
+        it.result = .{ .str = usage.items };
+        it.error_code = .{ .str = "TCL WRONGARGS" };
         return error.TclError;
     }
-    var words: std.ArrayList(Value) = .empty;
-    var mapped = false;
-    var k: usize = 0;
-    while (k < e.map.len) : (k += 2) {
-        if (eql(try it.str(e.map[k]), chosen.?)) {
-            try words.appendSlice(a, try it.list(e.map[k + 1]));
-            mapped = true;
-            break;
+    const params = argv[1 .. 1 + np];
+    const sub = try it.str(argv[1 + np]);
+    const rest = argv[2 + np..];
+    var tried_unknown = false;
+    while (true) {
+        const names = try ensembleNames(it, e);
+        // An exact name, or the one name that starts with the word.
+        var chosen: ?[]const u8 = null;
+        var count: usize = 0;
+        for (names) |n| {
+            if (eql(n, sub)) {
+                chosen = n;
+                count = 1;
+                break;
+            }
+            if (e.prefixes and sub.len > 0 and std.mem.startsWith(u8, n, sub)) {
+                chosen = n;
+                count += 1;
+            }
         }
+        if (count != 1) {
+            if (e.unknown != null and !tried_unknown) {
+                tried_unknown = true;
+                var words: std.ArrayList(Value) = .empty;
+                try words.appendSlice(a, try it.list(e.unknown.?));
+                try words.append(a, argv[0]);
+                try words.appendSlice(a, params);
+                try words.append(a, argv[1 + np]);
+                try words.appendSlice(a, rest);
+                const got = it.callWords(words.items) catch |err| switch (err) {
+                    error.TclError, error.OutOfMemory => return err,
+                    else => return it.failCode("TCL ENSEMBLE UNKNOWN_RESULT", "unknown subcommand handler returned bad code: {s}", .{codeWord(err)}),
+                };
+                const prefix = it.list(got) catch return error.TclError;
+                if (prefix.len == 0) continue;
+                var run: std.ArrayList(Value) = .empty;
+                try run.appendSlice(a, prefix);
+                try run.appendSlice(a, params);
+                try run.appendSlice(a, rest);
+                return it.callWords(run.items);
+            }
+            var msg: std.ArrayList(u8) = .empty;
+            if (names.len == 0) {
+                try msg.print(a, "unknown subcommand \"{s}\": namespace ::{s} does not export any commands", .{ sub, e.ns });
+            } else {
+                try msg.print(a, "unknown {s}subcommand \"{s}\": must be ", .{ if (e.prefixes) "or ambiguous " else "", sub });
+                for (names, 0..) |n, k| {
+                    if (k > 0) try msg.appendSlice(a, ", ");
+                    if (k > 0 and k == names.len - 1) try msg.appendSlice(a, "or ");
+                    try msg.appendSlice(a, n);
+                }
+            }
+            it.result = .{ .str = msg.items };
+            it.error_code = try value.newList(a, &.{ .{ .str = "TCL" }, .{ .str = "LOOKUP" }, .{ .str = "SUBCOMMAND" }, .{ .str = sub } });
+            return error.TclError;
+        }
+        var words: std.ArrayList(Value) = .empty;
+        var mapped = false;
+        var k: usize = 0;
+        while (k < e.map.len) : (k += 2) {
+            if (eql(try it.str(e.map[k]), chosen.?)) {
+                try words.appendSlice(a, try it.list(e.map[k + 1]));
+                mapped = true;
+                break;
+            }
+        }
+        if (!mapped) try words.append(a, .{ .str = try std.fmt.allocPrint(a, "::{s}::{s}", .{ e.ns, chosen.? }) });
+        try words.appendSlice(a, params);
+        try words.appendSlice(a, rest);
+        // A relative word of the map is a command of the namespace.
+        const saved_ns = it.ns;
+        it.ns = try it.internNs(e.ns);
+        defer it.ns = saved_ns;
+        return it.callWords(words.items);
     }
-    if (!mapped) try words.append(a, .{ .str = try std.fmt.allocPrint(a, "::{s}::{s}", .{ e.ns, chosen.? }) });
-    try words.appendSlice(a, argv[2..]);
-    // A relative word of the map is a command of the namespace.
-    const saved_ns = it.ns;
-    it.ns = try it.internNs(e.ns);
-    defer it.ns = saved_ns;
-    return it.callWords(words.items);
+}
+
+fn codeWord(e: Error) []const u8 {
+    return switch (e) {
+        error.TclBreak => "break",
+        error.TclContinue => "continue",
+        error.TclReturn => "return",
+        else => "error",
+    };
+}
+
+// ---- unknown ----
+
+/// The default `::unknown` command.
+pub fn cmdUnknown(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len < 2) return it.wrongArgs("unknown commandName ?arg ...?");
+    return lookupError(it, try it.str(argv[1]));
+}
+
+fn lookupError(it: *Interp, name: []const u8) Error {
+    const a = it.alloc();
+    it.result = .{ .str = try std.fmt.allocPrint(a, "invalid command name \"{s}\"", .{name}) };
+    it.error_code = try value.newList(a, &.{ .{ .str = "TCL" }, .{ .str = "LOOKUP" }, .{ .str = "COMMAND" }, .{ .str = name } });
+    return error.TclError;
+}
+
+/// The function of a name with no command. It calls the unknown handler
+/// of the current namespace.
+pub fn dispatchUnknown(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    const a = it.alloc();
+    const name = try it.str(argv[0]);
+    var handler: []const Value = &.{.{ .str = "::unknown" }};
+    if (it.ns_unknown.get(it.ns)) |h| handler = try it.list(h);
+    if (handler.len == 0) return lookupError(it, name);
+    const first = try it.str(handler[0]);
+    const target = it.findCommand(first) orelse return lookupError(it, name);
+    if (target.impl == .native and target.impl.native == &cmdUnknown) return lookupError(it, name);
+    if (it.unknown_depth >= 64) return lookupError(it, name);
+    it.unknown_depth += 1;
+    defer it.unknown_depth -= 1;
+    const words = try a.alloc(Value, handler.len + argv.len);
+    @memcpy(words[0..handler.len], handler);
+    @memcpy(words[handler.len..], argv);
+    return it.call(target, words, null);
 }
 
 /// Runs a script in a namespace.
@@ -207,7 +369,12 @@ fn evalIn(it: *Interp, space: []const u8, script: *interp.Script, argv: []const 
     defer it.popFrame();
     f.ns = it.ns;
     f.space = it.ns;
-    return it.evalScript(script);
+    return it.evalScript(script) catch |e| {
+        if (e == error.TclError and it.in_error) {
+            it.error_info.print(it.alloc(), "\n    (in namespace eval \"::{s}\" script line {d})", .{ space, it.proc_line }) catch {};
+        }
+        return e;
+    };
 }
 
 /// `namespace path ?list?`: reads or sets the search path of the
@@ -238,8 +405,22 @@ fn nsPath(it: *Interp, args: []const Value) Error!Value {
 pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("namespace subcommand ?arg ...?");
     const a = it.alloc();
-    const sub = try it.str(argv[1]);
+    const word = try it.str(argv[1]);
     const args = argv[2..];
+    var sub: []const u8 = word;
+    var hits: usize = 0;
+    for ([_][]const u8{ "children", "code", "current", "delete", "ensemble", "eval", "exists", "export", "forget", "import", "inscope", "origin", "parent", "path", "qualifiers", "tail", "unknown", "upvar", "which" }) |n| {
+        if (eql(n, word)) {
+            sub = n;
+            hits = 1;
+            break;
+        }
+        if (word.len > 0 and std.mem.startsWith(u8, n, word)) {
+            sub = n;
+            hits += 1;
+        }
+    }
+    if (hits != 1) sub = word;
     if (eql(sub, "eval")) {
         if (args.len < 2) return it.wrongArgs("namespace eval name arg ?arg...?");
         const space = try resolve(it, try it.str(args[0]));
@@ -355,16 +536,34 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (eql(sub, "origin")) {
         if (args.len != 1) return it.wrongArgs("namespace origin name");
         const key = it.commandKey(try it.str(args[0])) orelse return it.fail("invalid command name \"{s}\"", .{try it.str(args[0])});
-        return display(it, key);
+        return display(it, it.commands.get(key).?.name);
     }
     if (eql(sub, "import")) {
-        for (args) |v| {
-            const word = try it.str(v);
-            if (eql(word, "-force")) continue;
-            const pat = std.mem.trimStart(u8, word, ":");
-            const from = qualifiers(pat);
-            const tail_pat = tail(pat);
-            const prefix = try std.fmt.allocPrint(a, "{s}::", .{from});
+        if (args.len == 0) {
+            var out: std.ArrayList(Value) = .empty;
+            var iter = it.commands.iterator();
+            while (iter.next()) |e| {
+                if (!eql(qualifiers(e.key_ptr.*), it.ns) or eql(e.key_ptr.*, e.value_ptr.*.name)) continue;
+                try out.append(a, .{ .str = tail(e.key_ptr.*) });
+            }
+            return value.wrapList(a, out.items);
+        }
+        var force = false;
+        for (args, 0..) |v, n| {
+            const text = try it.str(v);
+            if (n == 0 and eql(text, "-force")) {
+                force = true;
+                continue;
+            }
+            if (text.len == 0) return it.fail("empty import pattern", .{});
+            const tail_pat = tail(text);
+            if (tail_pat.len == 0) return it.fail("empty import pattern", .{});
+            const from = try resolve(it, qualifiers(text));
+            if (std.mem.indexOf(u8, text, "::") == null or (from.len > 0 and !it.namespaces.contains(from))) {
+                return it.failCode("TCL LOOKUP NAMESPACE", "unknown namespace in import pattern \"{s}\"", .{text});
+            }
+            if (eql(from, it.ns)) return it.fail("import pattern \"{s}\" tries to import from namespace \"{s}\" into itself", .{ text, tail(from) });
+            const prefix = if (from.len == 0) "" else try std.fmt.allocPrint(a, "{s}::", .{from});
             var found: std.ArrayList([]const u8) = .empty;
             var iter = it.commands.keyIterator();
             while (iter.next()) |k| {
@@ -378,11 +577,56 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
                 const target = it.commands.get(k).?;
                 const name = try it.qualify(k[prefix.len..]);
                 if (eql(name, k)) continue;
+                if (it.commands.get(name)) |old| {
+                    if (old == target) continue;
+                    if (eql(old.name, target.name)) continue;
+                    if (eql(old.name, name) and eql(qualifiers(target.name), it.ns)) {
+                        return it.fail("import pattern \"{s}\" would create a loop containing command \"::{s}\"", .{ text, name });
+                    }
+                    if (!force) return it.fail("can't import command \"{s}\": already exists", .{k[prefix.len..]});
+                }
+                if (eql(qualifiers(target.name), it.ns)) {
+                    return it.fail("import pattern \"{s}\" would create a loop containing command \"::{s}\"", .{ text, name });
+                }
                 try it.commands.put(a, name, target);
             }
             it.epoch += 1;
         }
         return Value.empty;
+    }
+    if (eql(sub, "forget")) {
+        for (args) |v| {
+            const text = try it.str(v);
+            const has_ns = std.mem.indexOf(u8, text, "::") != null;
+            const from = if (has_ns) try resolve(it, qualifiers(text)) else "";
+            if (has_ns and from.len > 0 and !it.namespaces.contains(from)) {
+                return it.failCode("TCL LOOKUP NAMESPACE", "unknown namespace in namespace forget pattern \"{s}\"", .{text});
+            }
+            const pat = tail(text);
+            var gone: std.ArrayList([]const u8) = .empty;
+            var iter = it.commands.iterator();
+            while (iter.next()) |e| {
+                const key = e.key_ptr.*;
+                if (!eql(qualifiers(key), it.ns) or eql(key, e.value_ptr.*.name)) continue;
+                if (has_ns and !eql(qualifiers(e.value_ptr.*.name), from)) continue;
+                if (cmds.globMatch(pat, tail(key), false)) try gone.append(a, key);
+            }
+            for (gone.items) |k| _ = it.commands.remove(k);
+            it.epoch += 1;
+        }
+        return Value.empty;
+    }
+    if (eql(sub, "unknown")) {
+        if (args.len > 1) return it.wrongArgs("namespace unknown ?script?");
+        if (args.len == 0) {
+            if (it.ns_unknown.get(it.ns)) |h| return h;
+            if (it.ns.len == 0) return .{ .str = "::unknown" };
+            return Value.empty;
+        }
+        if ((try it.list(args[0])).len == 0) {
+            _ = it.ns_unknown.remove(it.ns);
+        } else try it.ns_unknown.put(a, it.ns, args[0]);
+        return args[0];
     }
     if (eql(sub, "upvar")) {
         if (args.len < 1 or args.len % 2 != 1) return it.wrongArgs("namespace upvar ns ?otherVar myVar ...?");
@@ -404,16 +648,24 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             for (gop.value_ptr.items) |p| try out.append(a, .{ .str = p });
             return value.wrapList(a, out.items);
         }
-        for (args) |v| {
-            const word = try it.str(v);
-            if (eql(word, "-clear")) {
+        for (args, 0..) |v, n| {
+            const pat = try it.str(v);
+            if (n == 0 and eql(pat, "-clear")) {
                 gop.value_ptr.* = .empty;
-            } else try gop.value_ptr.append(a, word);
+                continue;
+            }
+            if (std.mem.indexOf(u8, pat, "::") != null) {
+                return it.fail("invalid export pattern \"{s}\": pattern can't specify a namespace", .{pat});
+            }
+            var seen = false;
+            for (gop.value_ptr.items) |old| {
+                if (eql(old, pat)) seen = true;
+            }
+            if (!seen) try gop.value_ptr.append(a, pat);
         }
         return Value.empty;
     }
     if (eql(sub, "ensemble")) return ensemble(it, args);
     if (eql(sub, "path")) return nsPath(it, args);
-    if (eql(sub, "forget") or eql(sub, "unknown")) return Value.empty;
-    return it.fail("unknown or ambiguous subcommand \"{s}\": must be children, code, current, delete, eval, exists, export, forget, import, inscope, origin, parent, path, qualifiers, tail, unknown, upvar, or which", .{sub});
+    return it.failCode("TCL LOOKUP INDEX subcommand", "unknown or ambiguous subcommand \"{s}\": must be children, code, current, delete, ensemble, eval, exists, export, forget, import, inscope, origin, parent, path, qualifiers, tail, unknown, upvar, or which", .{word});
 }

@@ -41,7 +41,7 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
         .{ "lset", more.cmdLset },    .{ "binary", more.cmdBinary }, .{ "scan", more.cmdScan },
         .{ "regexp", regex.cmdRegexp }, .{ "regsub", regex.cmdRegsub },
         .{ "variable", cmdVariable }, .{ "namespace", ns.cmdNamespace }, .{ "try", cmdTry },           .{ "throw", cmdThrow },
-        .{ "dict", @import("dict.zig").cmdDict }, .{ "trace", trace.cmdTrace },
+        .{ "dict", @import("dict.zig").cmdDict }, .{ "trace", trace.cmdTrace }, .{ "unknown", ns.cmdUnknown },
     };
     inline for (table) |t| try it.register(t[0], t[1]);
     try @import("mathns.zig").register(it);
@@ -496,13 +496,22 @@ fn cmdRename(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     it.epoch += 1;
     if (new.len == 0) {
         try trace.commandEvent(it, kv.value, old, "", 2);
+        // The imports of a deleted command go away.
+        if (eql(kv.value.name, old)) {
+            var gone: std.ArrayList([]const u8) = .empty;
+            var iter = it.commands.iterator();
+            while (iter.next()) |e| if (e.value_ptr.* == kv.value) try gone.append(it.alloc(), e.key_ptr.*);
+            for (gone.items) |k| _ = it.commands.remove(k);
+        }
         return Value.empty;
     }
     if (it.commands.contains(new)) {
         try it.commands.put(it.alloc(), kv.key, kv.value);
         return it.fail("can't rename to \"{s}\": command already exists", .{new});
     }
-    try it.commands.put(it.alloc(), try it.alloc().dupe(u8, new), kv.value);
+    const new_key = try it.alloc().dupe(u8, new);
+    try it.commands.put(it.alloc(), new_key, kv.value);
+    if (eql(kv.value.name, old)) kv.value.name = new_key;
     try trace.commandEvent(it, kv.value, old, new, 1);
     return Value.empty;
 }

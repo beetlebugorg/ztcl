@@ -304,6 +304,16 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
         try c.text(@constCast(gop.key_ptr));
     }
 
+    var ns_unknown: @TypeOf(it.ns_unknown) = .empty;
+    try ns_unknown.ensureTotalCapacity(a, it.ns_unknown.count());
+    var uit = it.ns_unknown.iterator();
+    while (uit.next()) |e| {
+        const gop = ns_unknown.getOrPutAssumeCapacity(e.key_ptr.*);
+        gop.value_ptr.* = e.value_ptr.*;
+        try c.val(gop.value_ptr);
+        try c.text(@constCast(gop.key_ptr));
+    }
+
     var globals: @TypeOf(it.global.vars) = .empty;
     if (opts.vars == .keep) {
         try globals.ensureTotalCapacity(a, it.global.vars.items.len);
@@ -330,6 +340,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.namespaces = namespaces;
     it.exports = exports;
     it.ns_paths = ns_paths;
+    it.ns_unknown = ns_unknown;
     it.searches = .empty;
     it.var_traces = 0;
     if (opts.vars != .keep) {

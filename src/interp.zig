@@ -21,6 +21,7 @@ const expr = @import("expr.zig");
 const cmds = @import("cmds.zig");
 const vm = @import("vm.zig");
 const trace = @import("trace.zig");
+const ns_mod = @import("ns.zig");
 pub const Value = value.Value;
 
 /// The return codes of Tcl other than "ok". The result of the
@@ -642,6 +643,11 @@ pub const Interp = struct {
     /// leading "::".
     ns_paths: std.StringHashMapUnmanaged([]const []const u8) = .empty,
 
+    /// The handler of `namespace unknown` for each namespace.
+    ns_unknown: std.StringHashMapUnmanaged(Value) = .empty,
+    unknown_depth: u32 = 0,
+    /// The command that runs for a name with no command.
+    missing: Command = .{ .name = "unknown", .impl = .{ .native = ns_mod.dispatchUnknown } },
     /// The value of `tcl_precision`.
     precision: u8 = 0,
     /// The count of variables with traces. Above zero, the inline
@@ -1011,8 +1017,7 @@ pub const Interp = struct {
     pub fn resolve(it: *Interp, c: *Cmd, argv: []const Value) Error!*Command {
         if (c.resolved != null and c.epoch == it.epoch and c.ns == it.ns.ptr) return c.resolved.?;
         const name = try it.str(argv[0]);
-        const command = it.findCommand(name) orelse
-            return it.fail("invalid command name \"{s}\"", .{name});
+        const command = it.findCommand(name) orelse return &it.missing;
         if (c.words[0].kind == .lit and !c.has_expand) {
             c.resolved = command;
             c.epoch = it.epoch;
@@ -1207,7 +1212,7 @@ pub const Interp = struct {
         if (it.step_limit == 0) return it.fail("step limit reached", .{});
         it.step_limit -= 1;
         const name = try it.str(argv[0]);
-        const command = it.findCommand(name) orelse return it.fail("invalid command name \"{s}\"", .{name});
+        const command = it.findCommand(name) orelse &it.missing;
         return it.call(command, argv, null);
     }
 
