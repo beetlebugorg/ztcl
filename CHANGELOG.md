@@ -26,7 +26,7 @@
 - Adds `tools/suite.sh -a`, a scope for each of the 152 test files of Tcl 8.6.16, and `docs/compatibility.md`. A test that did not run counts as blocked.
 - Adds `tcl::mathop`, `tcl::mathfunc`, `tcl::prefix`, `trace`, `case`, `unknown`, `namespace path`, `namespace unknown`, `namespace forget`, ensemble options, array searches, `upvar` to an array element, `tcl_precision`, `binary` uuencode, the `subst` options, and the `-during` option of `try`.
 - Makes the `string` commands and glob patterns work on characters.
-- Adds `coroutine`, `yield`, `yieldto`, and `tailcall`. The stack switch exists for x86-64 Linux and arm64 macOS.
+- Adds `coroutine`, `yield`, `yieldto`, and `tailcall`. The stack switch exists for x86-64 Linux, arm64 macOS, and x86-64 Windows.
 - Replaces the regular expression engine: ARE, ERE, BRE, and literal syntax, lookahead, and the leftmost-longest match in linear time.
 - Adds the `%n$` forms of `scan` and `format`.
 - Adds the optional capabilities `package` and `interp`, off by default.
