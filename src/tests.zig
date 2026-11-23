@@ -1383,6 +1383,14 @@ test "the Windows jail gives an error for each escape" {
         "open con w",              "open {COM1.log} w",         "open {LPT9} w",           "open {AUX .txt} w",
         "open {trailing.} w",      "open {trailing } w",        "open {a*b} w",            "open {a?b} w",
     });
+    for ([_][]const u8{ "$MFT", "$MFTMirr", "$LogFile", "$Volume", "$AttrDef", "$Bitmap", "$Boot", "$BadClus", "$Secure", "$UpCase", "$Extend" }) |meta| {
+        const low = try std.ascii.allocLowerString(a, meta);
+        try scripts.append(a, try std.fmt.allocPrint(a, "open {{{s}}}", .{meta}));
+        try scripts.append(a, try std.fmt.allocPrint(a, "open {{{s}}} w", .{low}));
+        try scripts.append(a, try std.fmt.allocPrint(a, "file size {{{s}}}", .{meta}));
+        try scripts.append(a, try std.fmt.allocPrint(a, "file delete {{{s}}}", .{low}));
+        try scripts.append(a, try std.fmt.allocPrint(a, "open {{{s}/x}}", .{meta}));
+    }
     // The 8.3 name of the long file, on a volume that makes one.
     var short: [1024]u16 = undefined;
     const sn = WinFs.GetShortPathNameW((try WinFs.w(a, long_name)).ptr, &short, short.len);
@@ -1423,6 +1431,20 @@ test "the Windows jail gives an error for each escape" {
     }) |case| {
         try std.testing.expectEqualStrings(case[1], try it.str(try it.eval(case[0])));
     }
+    // As with `unlinkat`, a delete must match the kind of the object.
+    _ = try it.eval("file mkdir sub/kind; set f [open sub/plain w]; close $f");
+    const folder = (try tcl.fsroot.parentOf(&it, "sub/kind")).ok;
+    defer tcl.sys.close(folder.fd);
+    try std.testing.expectEqual(tcl.sys.Errno.ISDIR, tcl.fsroot.removeAt(folder, false).?);
+    const plain = (try tcl.fsroot.parentOf(&it, "sub/plain")).ok;
+    defer tcl.sys.close(plain.fd);
+    try std.testing.expectEqual(tcl.sys.Errno.NOTDIR, tcl.fsroot.removeAt(plain, true).?);
+    try std.testing.expectEqualStrings("1 1", try it.str(try it.eval("list [file isdirectory sub/kind] [file isfile sub/plain]")));
+    try std.testing.expect(tcl.fsroot.removeAt(folder, true) == null);
+    try std.testing.expect(tcl.fsroot.removeAt(plain, false) == null);
+    try std.testing.expectEqualStrings("0 0", try it.str(try it.eval("list [file exists sub/kind] [file exists sub/plain]")));
+    // A name that only starts like a metafile is a plain name.
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("set f [open {$MFT.txt} w]; close $f; set x [file exists {$MFT.txt}]; file delete {$MFT.txt}; set x")));
     // A child interpreter has the same jail.
     try std.testing.expectEqualStrings("1", try it.str(try it.eval("interp create kid; set x [kid eval {catch {open ../secret}}]; interp delete kid; set x")));
     // The test files go away. The junctions go first, so no delete walks them.
