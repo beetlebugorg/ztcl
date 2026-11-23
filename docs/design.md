@@ -25,6 +25,7 @@ ztcl uses only the Zig standard library. [References](references/tcl.md) lists t
 | `coro.zig` | `coroutine`, `yield`, `yieldto`, and `tailcall`. |
 | `clock.zig` | The optional `clock` command and a small `msgcat`. |
 | `fsroot.zig` | The root folder jail of `file` and channels. |
+| `fsroot_windows.zig` | The Windows form of that jail. |
 | `chan.zig` | The optional channel commands and `source`. |
 | `sys.zig` | The platform interface of channels, the event loop, and `socket`. |
 | `sys_windows.zig` | The Windows form of that interface, with Winsock. |

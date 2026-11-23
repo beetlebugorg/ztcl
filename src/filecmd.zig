@@ -9,12 +9,12 @@ const std = @import("std");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
 const fsroot = @import("fsroot.zig");
+const sys = @import("sys.zig");
 const cmds = @import("cmds.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
-const linux = @import("sys.zig").os;
 
 fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
@@ -123,10 +123,8 @@ fn deleteTree(it: *Interp, rel: []const u8, force: bool, shown: []const u8) Erro
         .ok => |x| x,
         .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "error deleting \"{s}\": ", .{shown})),
     };
-    defer _ = linux.close(p.fd);
-    const rc = linux.unlinkat(p.fd, p.base, if (fsroot.isDir(st.mode)) linux.AT.REMOVEDIR else 0);
-    const e = linux.errno(rc);
-    if (e != .SUCCESS) return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "error deleting \"{s}\": ", .{shown}));
+    defer sys.close(p.fd);
+    if (fsroot.removeAt(p, fsroot.isDir(st.mode))) |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "error deleting \"{s}\": ", .{shown}));
 }
 
 fn mkdirAll(it: *Interp, rel: []const u8, shown: []const u8) Error!void {
@@ -147,9 +145,10 @@ fn mkdirAll(it: *Interp, rel: []const u8, shown: []const u8) Error!void {
             .ok => |x| x,
             .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "can't create directory \"{s}\": ", .{shown})),
         };
-        defer _ = linux.close(p.fd);
-        const e = linux.errno(linux.mkdirat(p.fd, p.base, 0o777));
-        if (e != .SUCCESS and e != .EXIST) return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "can't create directory \"{s}\": ", .{shown}));
+        defer sys.close(p.fd);
+        if (fsroot.mkdirAt(p)) |e| {
+            if (e != .EXIST) return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "can't create directory \"{s}\": ", .{shown}));
+        }
     }
 }
 
@@ -159,26 +158,25 @@ fn copyFile(it: *Interp, from: []const u8, to: []const u8, shown: []const u8) Er
         .fd => |x| x,
         .err => |e| return fsroot.posixError(it, e, what),
     };
-    defer _ = linux.close(src);
+    defer sys.close(src);
     const dst = switch (try fsroot.openRel(it, to, .{ .access = .write, .create = true, .truncate = true }, 0o666)) {
         .fd => |x| x,
         .err => |e| return fsroot.posixError(it, e, what),
     };
-    defer _ = linux.close(dst);
+    defer sys.close(dst);
     var buf: [65536]u8 = undefined;
     while (true) {
-        const n = linux.read(src, &buf, buf.len);
-        const e = linux.errno(n);
-        if (e == .INTR) continue;
-        if (e != .SUCCESS) return fsroot.posixError(it, e, what);
+        const n = switch (sys.readFile(src, &buf)) {
+            .n => |x| x,
+            .err => |e| return fsroot.posixError(it, e, what),
+        };
         if (n == 0) return;
         var at: usize = 0;
         while (at < n) {
-            const w = linux.write(dst, buf[at..].ptr, n - at);
-            const we = linux.errno(w);
-            if (we == .INTR) continue;
-            if (we != .SUCCESS) return fsroot.posixError(it, we, what);
-            at += w;
+            switch (sys.writeFile(dst, buf[at..n])) {
+                .n => |w| at += w,
+                .err => |e| return fsroot.posixError(it, e, what),
+            }
         }
     }
 }
@@ -249,14 +247,13 @@ fn renameOrCopy(it: *Interp, args: []const Value, is_rename: bool) Error!Value {
             .ok => |x| x,
             .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(a, "error renaming \"{s}\": ", .{src})),
         };
-        defer _ = linux.close(p.fd);
+        defer sys.close(p.fd);
         const q = switch (try fsroot.parentOf(it, drel)) {
             .ok => |x| x,
             .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(a, "error renaming \"{s}\" to \"{s}\": ", .{ src, target })),
         };
-        defer _ = linux.close(q.fd);
-        const e = linux.errno(linux.renameat(p.fd, p.base, q.fd, q.base));
-        if (e != .SUCCESS) return fsroot.posixError(it, e, try std.fmt.allocPrint(a, "error renaming \"{s}\" to \"{s}\": ", .{ src, target }));
+        defer sys.close(q.fd);
+        if (fsroot.renameAt(p, q)) |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(a, "error renaming \"{s}\" to \"{s}\": ", .{ src, target }));
     }
     return Value.empty;
 }
@@ -414,7 +411,7 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             const rel = try fsroot.need(it, name);
             switch (try fsroot.openRel(it, rel, .{ .access = .read_write, .create = true, .exclusive = true }, 0o600)) {
                 .fd => |fd| {
-                    _ = linux.close(fd);
+                    sys.close(fd);
                     const argv2 = [_]Value{ .{ .str = "open" }, .{ .str = name }, .{ .str = "r+" } };
                     const ch = try it.callWords(&argv2);
                     if (args.len >= 1) try it.setVar(try it.str(args[0]), .{ .str = try std.fmt.allocPrint(a, "/{s}", .{rel}) });

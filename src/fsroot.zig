@@ -16,7 +16,8 @@
 //! root. If that process moves a folder out of the root after the walk
 //! opens it, the next name of the walk resolves in the moved folder.
 //! Other operations run on a descriptor of the parent folder, on the
-//! last name, with no symlink followed.
+//! last name, with no symlink followed. `fsroot_windows.zig` has the
+//! Windows form.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -29,7 +30,10 @@ const sys = @import("sys.zig");
 const linux = sys.os;
 
 const on_mac = builtin.os.tag == .macos;
-pub const supported = builtin.os.tag == .linux or (on_mac and builtin.cpu.arch == .aarch64);
+const on_win = builtin.os.tag == .windows and builtin.cpu.arch == .x86_64;
+const win = @import("fsroot_windows.zig");
+/// ARM64 Windows stays off until its tests can run.
+pub const supported = builtin.os.tag == .linux or (on_mac and builtin.cpu.arch == .aarch64) or on_win;
 
 // The macOS open flag that `std.c.O` does not name.
 const o_exec: u32 = 0x40000000;
@@ -46,10 +50,13 @@ pub const State = struct {
     /// The host path of the root. `exec` uses it to find a program
     /// that a script names with a path.
     path: []const u8 = "",
+    /// The real path of the root on Windows, for the second check.
+    final: []const u16 = &.{},
 };
 
 /// Opens the root. The runner calls it. Later paths stay below it.
 pub fn setRoot(it: *Interp, path: []const u8) !void {
+    if (comptime on_win) return win.setRoot(it, path);
     if (comptime !supported) return error.BadRoot;
     const z = try it.alloc().dupeZ(u8, path);
     const rc = if (comptime on_mac)
@@ -62,7 +69,6 @@ pub fn setRoot(it: *Interp, path: []const u8) !void {
 }
 
 pub fn posixError(it: *Interp, e: sys.Errno, what: []const u8) Error {
-    // With no jail, only a seek on a socket or a pipe reaches this call.
     if (comptime !supported) return it.failCode("POSIX EIO {input/output error}", "{s}input/output error", .{what});
     const name: []const u8, const text: []const u8 = switch (e) {
         .NOENT => .{ "ENOENT", "no such file or directory" },
@@ -204,7 +210,10 @@ pub fn hostFlags(flags: sys.OpenFlags) linux.O {
 }
 
 /// Opens a normal path below the root. Gives the descriptor or an errno.
-pub fn openRel(it: *Interp, rel: []const u8, flags: sys.OpenFlags, mode: u32) Error!union(enum) { fd: i32, err: sys.Errno } {
+pub const OpenResult = union(enum) { fd: i32, err: sys.Errno };
+
+pub fn openRel(it: *Interp, rel: []const u8, flags: sys.OpenFlags, mode: u32) Error!OpenResult {
+    if (comptime on_win) return win.openRel(it, rel, flags, mode);
     // With no jail for this target, each open is an error.
     if (comptime !supported) return it.fail("the file system is not available on this target", .{});
     if (it.fs.fd < 0) return it.fail("the embedder gave no root folder", .{});
@@ -224,7 +233,10 @@ pub fn openRel(it: *Interp, rel: []const u8, flags: sys.OpenFlags, mode: u32) Er
 pub const Parent = struct { fd: i32, base: [:0]const u8 };
 
 /// A descriptor of the parent folder and the last name of a normal path.
-pub fn parentOf(it: *Interp, rel: []const u8) Error!union(enum) { ok: Parent, err: linux.E } {
+pub const ParentResult = union(enum) { ok: Parent, err: sys.Errno };
+
+pub fn parentOf(it: *Interp, rel: []const u8) Error!ParentResult {
+    if (comptime on_win) return win.parentOf(it, rel);
     const cut = std.mem.lastIndexOfScalar(u8, rel, '/');
     const dir = if (cut) |c| rel[0..c] else "";
     const base = if (cut) |c| rel[c + 1 ..] else rel;
@@ -237,8 +249,11 @@ pub fn parentOf(it: *Interp, rel: []const u8) Error!union(enum) { ok: Parent, er
 
 pub const Info = struct { mode: u32, size: u64, mtime: i64, atime: i64, ctime: i64, ino: u64, nlink: u32, uid: u32, gid: u32 };
 
+pub const StatResult = union(enum) { ok: Info, err: sys.Errno };
+
 /// The data of a path. A symlink is reported as a symlink.
-pub fn stat(it: *Interp, rel: []const u8) Error!union(enum) { ok: Info, err: linux.E } {
+pub fn stat(it: *Interp, rel: []const u8) Error!StatResult {
+    if (comptime on_win) return win.stat(it, rel);
     if (comptime on_mac) {
         var st: std.c.Stat = undefined;
         var src: usize = undefined;
@@ -291,8 +306,11 @@ pub fn isFile(mode: u32) bool {
     return mode & 0o170000 == 0o100000;
 }
 
+pub const ListResult = union(enum) { ok: []const []const u8, err: sys.Errno };
+
 /// The names in a folder, with no `.` or `..`.
-pub fn listDir(it: *Interp, rel: []const u8) Error!union(enum) { ok: []const []const u8, err: linux.E } {
+pub fn listDir(it: *Interp, rel: []const u8) Error!ListResult {
+    if (comptime on_win) return win.listDir(it, rel);
     const fd = switch (try openRel(it, rel, .{ .directory = true }, 0)) {
         .fd => |x| x,
         .err => |e| return .{ .err = e },
@@ -333,6 +351,36 @@ pub fn listDir(it: *Interp, rel: []const u8) Error!union(enum) { ok: []const []c
 
 fn nameLess(_: void, x: []const u8, y: []const u8) bool {
     return std.mem.order(u8, x, y) == .lt;
+}
+
+/// Gives a child interpreter its own descriptor of the root.
+pub fn shareRoot(it: *const Interp, child: *Interp) std.mem.Allocator.Error!void {
+    if (comptime on_win) return win.shareRoot(it, child);
+    if (it.fs.fd >= 0) {
+        const rc = linux.fcntl(it.fs.fd, linux.F.DUPFD_CLOEXEC, 3);
+        if (linux.errno(rc) == .SUCCESS) child.fs.fd = @intCast(rc);
+    }
+}
+
+/// Deletes the last name of a parent. Gives null or the error.
+pub fn removeAt(p: Parent, dir: bool) ?sys.Errno {
+    if (comptime on_win) return win.removeAt(p, dir);
+    const e = linux.errno(linux.unlinkat(p.fd, p.base, if (dir) linux.AT.REMOVEDIR else 0));
+    return if (e == .SUCCESS) null else e;
+}
+
+/// Makes a folder at the last name of a parent.
+pub fn mkdirAt(p: Parent) ?sys.Errno {
+    if (comptime on_win) return win.mkdirAt(p);
+    const e = linux.errno(linux.mkdirat(p.fd, p.base, 0o777));
+    return if (e == .SUCCESS) null else e;
+}
+
+/// Moves a name between two parents below the root.
+pub fn renameAt(p: Parent, q: Parent) ?sys.Errno {
+    if (comptime on_win) return win.renameAt(p, q);
+    const e = linux.errno(linux.renameat(p.fd, p.base, q.fd, q.base));
+    return if (e == .SUCCESS) null else e;
 }
 
 /// Normalizes a path or gives the error of an escape.
