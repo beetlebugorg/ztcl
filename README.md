@@ -8,6 +8,8 @@ A sandboxed Tcl interpreter in Zig, with a bytecode VM and a vector path for num
 > [!IMPORTANT]
 > **AI disclaimer.** The code and the docs were written largely with AI coding agents, under human direction. Review the code before you depend on it. ztcl comes with no warranty. See [LICENSE](LICENSE).
 
+**Docs:** https://beetlebug.org/ztcl/
+
 ## Status
 
 - The test suite of Tcl 8.6.16 is the measure of compatibility. ztcl passes 19 288 tests, fails 997, and skips 544 over 37 test files.
