@@ -834,8 +834,28 @@ pub const State = struct {
 /// state must outlive the interpreter.
 pub fn install(it: *Interp, state: *State) Allocator.Error!void {
     it.user = state;
+    it.points = state;
     try it.register("point", cmdPoint);
     inline for (.{ "offset", "move", "width", "flow", "speed", "skip" }) |n| try it.register(n, cmdOutput);
+}
+
+/// A copy of the table of programs in the arena of the copier.
+pub fn copyPrograms(s: *State, c: *@import("compact.zig").Copier) Allocator.Error!@TypeOf(s.programs) {
+    var out: @TypeOf(s.programs) = .empty;
+    try out.ensureTotalCapacity(c.a, s.programs.count());
+    var iter = s.programs.iterator();
+    while (iter.next()) |e| {
+        const p = try c.a.create(Program);
+        p.* = e.value_ptr.*.*;
+        p.setup = try c.a.dupe(Op, p.setup);
+        p.ops = try c.a.dupe(Op, p.ops);
+        p.params = try c.a.dupe(Field, p.params);
+        try c.text(&p.name);
+        const gop = out.getOrPutAssumeCapacity(e.key_ptr.*);
+        gop.value_ptr.* = p;
+        try c.text(@constCast(gop.key_ptr));
+    }
+    return out;
 }
 
 fn stateOf(it: *Interp) *State {

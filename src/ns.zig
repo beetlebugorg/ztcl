@@ -14,6 +14,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const interp = @import("interp.zig");
 const value = @import("value.zig");
 const cmds = @import("cmds.zig");
@@ -101,6 +102,22 @@ fn ensemble(it: *Interp, args: []const Value) Error!Value {
     try it.commands.put(a, name, c);
     it.epoch += 1;
     return display(it, name);
+}
+
+/// True when a native function is the call of an ensemble.
+pub fn isEnsemble(f: interp.NativeFn) bool {
+    return f == ensembleCall;
+}
+
+/// A copy of the data of an ensemble in the arena of the copier.
+pub fn copyEnsemble(c: *@import("compact.zig").Copier, ctx: *anyopaque) Allocator.Error!*anyopaque {
+    const old: *Ensemble = @ptrCast(@alignCast(ctx));
+    const e = try c.a.create(Ensemble);
+    e.* = old.*;
+    try c.text(&e.ns);
+    e.map = try c.vals(old.map);
+    if (old.subs) |l| e.subs = try c.vals(l);
+    return e;
 }
 
 fn ensembleCall(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {

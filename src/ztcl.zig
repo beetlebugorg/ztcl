@@ -20,6 +20,7 @@ pub const interp = @import("interp.zig");
 pub const expr = @import("expr.zig");
 pub const noise = @import("noise.zig");
 pub const point = @import("point.zig");
+pub const compact = @import("compact.zig");
 
 pub const Value = value.Value;
 pub const Interp = interp.Interp;
@@ -32,5 +33,6 @@ test {
     _ = expr;
     _ = noise;
     _ = point;
+    _ = compact;
     _ = @import("tests.zig");
 }

@@ -450,7 +450,7 @@ pub const Var = struct {
     }
 };
 
-const VarEntry = struct { name: []const u8, cell: *Var };
+pub const VarEntry = struct { name: []const u8, cell: *Var };
 
 pub const Frame = struct {
     vars: std.ArrayList(VarEntry) = .empty,
@@ -602,6 +602,8 @@ pub const Interp = struct {
     noise_seed: u32 = @import("noise.zig").default_seed,
     /// Data of the embedder (for example the point of a point proc).
     user: ?*anyopaque = null,
+    /// The point procs. `point.install` sets it.
+    points: ?*@import("point.zig").State = null,
     /// The current namespace: its full name with no leading "::". The
     /// global namespace is "". Each name has one address (`internNs`).
     ns: []const u8 = "",
@@ -631,6 +633,7 @@ pub const Interp = struct {
     /// values of scripts go away, and the arena frees its memory. The
     /// limits, the output, and the data of the embedder stay.
     pub fn reset(it: *Interp) Allocator.Error!void {
+        if (it.points) |s| s.programs = .empty;
         _ = it.arena.reset(.free_all);
         const counter = it.counter;
         const arena = it.arena;
@@ -647,6 +650,14 @@ pub const Interp = struct {
         try it.start();
     }
 
+    /// Frees the memory of past evaluations and keeps the commands, the
+    /// procs, the namespaces, and the point programs. Call it between
+    /// evaluations. Each value in `roots` stays valid at a new address.
+    /// All other values from before the call are invalid after it.
+    pub fn compact(it: *Interp, roots: []Value, opts: @import("compact.zig").Options) @import("compact.zig").Error!void {
+        return @import("compact.zig").run(it, roots, opts);
+    }
+
     /// The bytes that the arena holds now.
     pub fn memUsed(it: *const Interp) usize {
         return it.counter.used;
@@ -659,8 +670,13 @@ pub const Interp = struct {
     fn start(it: *Interp) Allocator.Error!void {
         it.frame = &it.global;
         try cmds.register(it);
-        // Fixed values on all platforms: a script gives the same result
-        // everywhere.
+        try it.startVars();
+    }
+
+    /// Sets the variables that each interpreter has. They have fixed
+    /// values on all platforms, so a script gives the same result
+    /// everywhere.
+    pub fn startVars(it: *Interp) Allocator.Error!void {
         _ = it.eval("array set tcl_platform {platform unix byteOrder littleEndian wordSize 8 pointerSize 8 engine ztcl}; set tcl_version 8.6; set tcl_patchLevel 8.6.0; set errorInfo {}; set errorCode NONE") catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
             else => unreachable,

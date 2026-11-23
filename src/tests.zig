@@ -811,3 +811,112 @@ test "a large dict keeps the order and the value semantics" {
         .{ "set d {}; for {set i 0} {$i < 40} {incr i} {dict set d $i x}; set l $d; lappend l extra; dict set d new 1; list [llength $l] [lindex $l end] [dict size $d] [dict get $d new]", "81 extra 41 1" },
     });
 }
+
+fn evalStr(it: *tcl.Interp, script: []const u8) ![]const u8 {
+    return it.str(try it.eval(script));
+}
+
+test "compact keeps the commands and returns the memory" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.fuel = 100_000_000;
+    _ = try it.eval(
+        \\proc add {a {b 2}} { expr {$a + $b} }
+        \\namespace eval m { variable n 5; proc f {} { variable n; incr n }; namespace export f; namespace ensemble create }
+        \\namespace eval u { namespace import ::m::f }
+        \\array set arr {x 1 y {2 3}}
+        \\set big {}; for {set i 0} {$i < 100} {incr i} {dict set big k$i $i}
+        \\upvar #0 arr alias
+    );
+    const before = it.memUsed();
+    _ = try it.eval("for {set i 0} {$i < 2000} {incr i} {set junk [string repeat x 4000]}");
+    try std.testing.expect(it.memUsed() > before + (4 << 20));
+    try it.compact(&.{}, .{});
+    try std.testing.expect(it.memUsed() < before + (1 << 16));
+    try std.testing.expectEqualStrings("5", try evalStr(&it, "add 3"));
+    try std.testing.expectEqualStrings("6", try evalStr(&it, "m f"));
+    try std.testing.expectEqualStrings("7", try evalStr(&it, "u::f"));
+    try std.testing.expectEqualStrings("2 3", try evalStr(&it, "set alias(y)"));
+    try std.testing.expectEqualStrings("77", try evalStr(&it, "dict get $big k77"));
+    try std.testing.expectEqualStrings("4000", try evalStr(&it, "string length $junk"));
+    // A second pass after the proc compiled again.
+    try it.compact(&.{}, .{});
+    try std.testing.expectEqualStrings("9", try evalStr(&it, "add 4 5"));
+    // The memory stays flat over many evaluations.
+    var peak: usize = 0;
+    for (0..50) |n| {
+        _ = try it.eval("set junk [string repeat y 100000]; add 1 1");
+        try it.compact(&.{}, .{});
+        if (n == 5) peak = it.memUsed();
+        if (n > 5) try std.testing.expect(it.memUsed() <= peak + 4096);
+    }
+}
+
+test "compact keeps a root value and leaves shared data shared" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.fuel = 100_000_000;
+    var roots = [_]tcl.Value{
+        try it.eval("list a {b c} [list d [expr {1 + 2}]]"),
+        try it.eval("set s [string repeat abc 10]; string range $s 3 8"),
+    };
+    try it.compact(&roots, .{});
+    try std.testing.expectEqualStrings("a {b c} {d 3}", try it.str(roots[0]));
+    try std.testing.expectEqualStrings("abcabc", try it.str(roots[1]));
+    // Each level holds the last level twice. A copy with no sharing
+    // needs 2^40 cells.
+    _ = try it.eval("set d x; for {set i 0} {$i < 40} {incr i} {set d [list $d $d]}");
+    const used = it.memUsed();
+    try it.compact(&.{}, .{});
+    try std.testing.expect(it.memUsed() <= used);
+    // Many overlapping substrings of one string copy their bytes once.
+    _ = try it.eval("set t [string repeat q 20000]; set l {}; for {set i 0} {$i < 20000} {incr i} {lappend l [string range $t 0 $i]}");
+    const used2 = it.memUsed();
+    try it.compact(&.{}, .{});
+    try std.testing.expect(it.memUsed() <= used2);
+    try std.testing.expectEqualStrings("1234", try evalStr(&it, "string length [lindex $l 1233]"));
+    // A deep list uses the work list and no native stack.
+    _ = try it.eval("set deep x; for {set i 0} {$i < 200000} {incr i} {set deep [list $deep]}");
+    try it.compact(&.{}, .{});
+    try std.testing.expectEqualStrings("1", try evalStr(&it, "llength $deep"));
+}
+
+fn callCompact(it: *tcl.Interp, _: []const tcl.Value, _: ?*tcl.interp.Cmd) tcl.Error!tcl.Value {
+    it.compact(&.{}, .{}) catch |e| switch (e) {
+        error.InterpBusy => return .{ .str = "busy" },
+        error.OutOfMemory => return error.OutOfMemory,
+    };
+    return .{ .str = "done" };
+}
+
+test "compact refuses to run inside a script, and clears variables on request" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.register("callcompact", callCompact);
+    try std.testing.expectEqualStrings("busy", try evalStr(&it, "callcompact"));
+    try std.testing.expectEqualStrings("busy", try evalStr(&it, "proc p {} {callcompact}; p"));
+    _ = it.eval("error boom") catch {};
+    try it.compact(&.{}, .{});
+    try std.testing.expectEqualStrings("boom", try evalStr(&it, "set errorInfo; lindex $errorInfo 0"));
+    _ = try it.eval("set v 1; namespace eval n {variable w 2}; proc q {} {return ok}");
+    try it.compact(&.{}, .{ .vars = .clear });
+    try std.testing.expectEqualStrings("0 0 ok 8.6", try evalStr(&it, "list [info exists v] [info exists n::w] [q] $tcl_version"));
+}
+
+test "compact keeps the point programs" {
+    var state: tcl.point.State = .{};
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try tcl.point.install(&it, &state);
+    _ = try it.eval("point proc f {x} { offset [expr {$x * 2}] }");
+    _ = try it.eval("string repeat z 100000");
+    try it.compact(&.{}, .{});
+    const p = state.program("f") orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqualStrings("f", p.name);
+    try std.testing.expect(p.ops.len > 0);
+    try std.testing.expectEqualStrings("f", (try evalStr(&it, "info procs f")));
+}
