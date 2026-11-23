@@ -743,8 +743,8 @@ pub const Interp = struct {
         if (v == .list) return v.list.items();
         if (v != .str or v.str.len < list_cache_min) return it.list(v);
         const s = v.str;
-        const h = (@intFromPtr(s.ptr) >> 3 ^ s.len) *% 0x9e3779b97f4a7c15;
-        const e = &it.list_cache[h >> (@bitSizeOf(usize) - list_cache_bits)];
+        const h = (@as(u64, @intFromPtr(s.ptr)) >> 3 ^ s.len) *% 0x9e3779b97f4a7c15;
+        const e = &it.list_cache[@intCast(h >> (64 - list_cache_bits))];
         if (e.ptr != s.ptr or e.len != s.len) {
             e.* = .{ .ptr = s.ptr, .len = s.len };
             return it.list(v);
