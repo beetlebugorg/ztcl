@@ -36,7 +36,11 @@ On `error.TclError`, `it.result` holds the message and `it.error_line` holds the
 | `noise_seed` | The seed of `noise2` and `noise3`. |
 | `user` | A pointer for the embedder. |
 | `register(name, fn)` | Adds a native command. |
-| `reset()` | Frees the arena and makes the interpreter new. The limits, output, seed, and `user` stay. |
+| `reset()` | Frees the heap and makes the interpreter new. The limits, output, seed, and `user` stay. |
+| `hold(v)`, `release(v)` | `hold` keeps a value and each block that it reaches until `release`. A value from `eval` is valid until the next call into the interpreter. Hold it for longer. |
+| `addRoot(bytes)`, `removeRoot(bytes)` | Registers a range of memory of the embedder that holds values. The collector reads each aligned word of the range as a possible pointer. |
+| `collect()` | Runs a collection now. |
+| `gc_on` | False turns the collector off. The memory limit is then exact. |
 | `compact(roots, opts)` | Frees the memory of past evaluations and keeps the commands, procs, namespaces, and point programs. `.vars = .clear` also drops the variables. Each value in `roots` gets a new address. All other values from before the call are invalid. Call it between evaluations. |
 
 ## Point procs

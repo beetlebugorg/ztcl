@@ -102,9 +102,9 @@ fn resolve(it: *Interp, path: Value) Error!*Interp {
 
 fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
     const a = it.alloc();
-    const raw = it.counter.allocator();
+    const raw = it.heap.backing;
     const child = raw.create(Interp) catch return error.OutOfMemory;
-    child.init(raw) catch {
+    child.initChild(it) catch {
         raw.destroy(child);
         return error.OutOfMemory;
     };
@@ -185,7 +185,15 @@ fn busy(x: *const Interp) bool {
 fn release(x: *Interp) void {
     const owner = x.parent.?;
     x.deinit();
-    owner.counter.allocator().destroy(x);
+    var root = owner;
+    while (root.parent) |p| root = p;
+    for (root.kids.items, 0..) |k, i| {
+        if (k == x) {
+            _ = root.kids.swapRemove(i);
+            break;
+        }
+    }
+    owner.heap.backing.destroy(x);
 }
 
 /// Frees the topmost deleted interpreter above `x` when nothing in it

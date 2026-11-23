@@ -24,6 +24,7 @@ const trace = @import("trace.zig");
 const ns_mod = @import("ns.zig");
 const coro = @import("coro.zig");
 const Heap = @import("heap.zig").Heap;
+const gc = @import("gc.zig");
 pub const Value = value.Value;
 
 /// The return codes of Tcl other than "ok". The result of the
@@ -535,6 +536,33 @@ pub const Counting = struct {
     used: usize = 0,
     /// The highest value that `used` had.
     mem_peak: usize = 0,
+    /// The counters of the child interpreters. A child shares the heap
+    /// of its root, so its `used` follows the count of the root. This
+    /// keeps the check of the memory limit one load in each interpreter.
+    followers: ?*Counting = null,
+    next_follower: ?*Counting = null,
+
+    fn sync(c: *Counting) void {
+        c.mem_peak = @max(c.mem_peak, c.used);
+        var f = c.followers;
+        while (f) |x| : (f = x.next_follower) x.used = c.used;
+    }
+
+    pub fn follow(c: *Counting, x: *Counting) void {
+        x.used = c.used;
+        x.next_follower = c.followers;
+        c.followers = x;
+    }
+
+    pub fn unfollow(c: *Counting, x: *Counting) void {
+        var link = &c.followers;
+        while (link.*) |f| : (link = &f.next_follower) {
+            if (f == x) {
+                link.* = f.next_follower;
+                return;
+            }
+        }
+    }
 
     const Alignment = std.mem.Alignment;
 
@@ -546,7 +574,7 @@ pub const Counting = struct {
         const c: *Counting = @ptrCast(@alignCast(ctx));
         const p = c.child.rawAlloc(len, alignment, ra) orelse return null;
         c.used += len;
-        c.mem_peak = @max(c.mem_peak, c.used);
+        c.sync();
         return p;
     }
 
@@ -554,7 +582,7 @@ pub const Counting = struct {
         const c: *Counting = @ptrCast(@alignCast(ctx));
         if (!c.child.rawResize(memory, alignment, new_len, ra)) return false;
         c.used = c.used - memory.len + new_len;
-        c.mem_peak = @max(c.mem_peak, c.used);
+        c.sync();
         return true;
     }
 
@@ -562,7 +590,7 @@ pub const Counting = struct {
         const c: *Counting = @ptrCast(@alignCast(ctx));
         const p = c.child.rawRemap(memory, alignment, new_len, ra) orelse return null;
         c.used = c.used - memory.len + new_len;
-        c.mem_peak = @max(c.mem_peak, c.used);
+        c.sync();
         return p;
     }
 
@@ -570,6 +598,7 @@ pub const Counting = struct {
         const c: *Counting = @ptrCast(@alignCast(ctx));
         c.child.rawFree(memory, alignment, ra);
         c.used -= memory.len;
+        c.sync();
     }
 };
 
@@ -624,7 +653,12 @@ const ListCacheEntry = struct {
 
 pub const Interp = struct {
     counter: Counting,
-    heap: Heap,
+    /// The heap of this interpreter when it is the root of a tree.
+    own_heap: Heap,
+    /// The heap that holds the values of this interpreter. A child
+    /// shares the heap of its parent, so a pointer between the two
+    /// interpreters keeps its target alive.
+    heap: *Heap,
     /// The most bytes that the arena can hold. Above the limit, the
     /// next command or loop pass stops the script with an error, and
     /// `catch` cannot catch this error. Call `reset` to free the memory.
@@ -735,6 +769,18 @@ pub const Interp = struct {
     pkg: @import("pkg.zig").State = .{},
     /// The child interpreters of the `interp` command.
     children: std.StringHashMapUnmanaged(*@import("child.zig").Child) = .empty,
+    /// Each interpreter under this one, also a deleted one that still
+    /// runs. Only the root has the list. It lives outside the heap.
+    kids: std.ArrayList(*Interp) = .empty,
+    /// False turns the collector off. The memory limit is then exact.
+    gc_on: bool = true,
+    /// Ranges of embedder memory that can hold values. Each range is a
+    /// root of the collector.
+    gc_roots: std.ArrayList([]const u8) = .empty,
+    /// The values that `hold` keeps. The list lives outside the heap.
+    held: std.ArrayList(Value) = .empty,
+    /// True while `collect` runs, so a collection can run outside a script.
+    gc_manual: bool = false,
     parent: ?*Interp = null,
     is_safe: bool = false,
     /// The count of calls into this interpreter that are running.
@@ -781,9 +827,93 @@ pub const Interp = struct {
     /// Makes an interpreter with the core commands. Call `deinit` to
     /// free all its memory. The interpreter must not move after `init`.
     pub fn init(it: *Interp, gpa: Allocator) Allocator.Error!void {
-        it.* = .{ .counter = .{ .child = gpa }, .heap = undefined };
-        it.heap = Heap.init(it.counter.allocator());
+        it.* = .{ .counter = .{ .child = gpa }, .own_heap = undefined, .heap = undefined };
+        it.own_heap = Heap.init(it.counter.allocator(), &it.counter.used, &it.mem_limit);
+        it.heap = &it.own_heap;
+        it.setRoots();
         try it.start();
+    }
+
+    /// Makes a child interpreter that uses the heap of `parent`.
+    pub fn initChild(it: *Interp, parent: *Interp) Allocator.Error!void {
+        const backing = parent.heap.backing;
+        it.* = .{ .counter = .{ .child = backing }, .own_heap = Heap.init(backing, parent.heap.used, parent.heap.limit), .heap = parent.heap };
+        // The family list makes the child a root of the collector. The
+        // child joins it before its first allocation.
+        var root = parent;
+        while (root.parent) |p| root = p;
+        try root.kids.append(backing, it);
+        root.counter.follow(&it.counter);
+        errdefer {
+            _ = root.kids.pop();
+            root.counter.unfollow(&it.counter);
+        }
+        try it.start();
+    }
+
+    /// Starts a collection at each Nth allocation. Zero turns the mode off.
+    pub fn setGcStress(it: *Interp, n: u32) void {
+        it.heap.stress = n;
+        it.heap.stress_left = 0;
+    }
+
+    /// The count of collections that the heap ran.
+    pub fn gcCount(it: *const Interp) u64 {
+        return it.heap.collections;
+    }
+
+    /// Runs a collection now. Only the roots of the collector keep a
+    /// value: use `hold` for a value of the embedder.
+    pub fn collect(it: *Interp) void {
+        it.gc_manual = true;
+        defer it.gc_manual = false;
+        @import("heap.zig").collect(it.heap);
+    }
+
+    /// Keeps `v` and each block that it reaches until `release(v)`. A
+    /// value from `eval` is valid until the next call into the
+    /// interpreter. `hold` keeps it longer.
+    pub fn hold(it: *Interp, v: Value) Allocator.Error!void {
+        try it.held.append(it.heap.backing, v);
+    }
+
+    /// Ends one `hold` of `v`.
+    pub fn release(it: *Interp, v: Value) void {
+        var i = it.held.items.len;
+        while (i > 0) {
+            i -= 1;
+            if (std.meta.eql(it.held.items[i], v)) {
+                _ = it.held.swapRemove(i);
+                return;
+            }
+        }
+    }
+
+    /// Adds a range of embedder memory that can hold values. Each
+    /// aligned word of the range is a possible pointer.
+    pub fn addRoot(it: *Interp, bytes: []const u8) Allocator.Error!void {
+        try it.gc_roots.append(it.heap.backing, bytes);
+    }
+
+    /// Ends `addRoot` for the same range.
+    pub fn removeRoot(it: *Interp, bytes: []const u8) void {
+        for (it.gc_roots.items, 0..) |r, i| {
+            if (r.ptr == bytes.ptr and r.len == bytes.len) {
+                _ = it.gc_roots.swapRemove(i);
+                return;
+            }
+        }
+    }
+
+    /// True when this interpreter owns its heap.
+    pub fn isRoot(it: *const Interp) bool {
+        return it.heap == &it.own_heap;
+    }
+
+    /// Tells the heap how to find the roots of a collection.
+    pub fn setRoots(it: *Interp) void {
+        it.own_heap.roots_ctx = it;
+        it.own_heap.roots_fn = gc.markRoots;
     }
 
     /// Makes the interpreter new again: all commands, variables, and
@@ -801,11 +931,13 @@ pub const Interp = struct {
         const caps = it.capabilities;
         defer it.capabilities = caps;
         if (it.points) |s| s.programs = .empty;
-        it.heap.reset();
+        if (it.isRoot()) it.own_heap.reset();
         const counter = it.counter;
+        const own = it.own_heap;
         const heap = it.heap;
         const keep = it.*;
-        it.* = .{ .counter = counter, .heap = heap };
+        it.* = .{ .counter = counter, .own_heap = own, .heap = heap, .kids = keep.kids, .gc_on = keep.gc_on, .gc_roots = keep.gc_roots, .held = keep.held };
+        it.held.clearRetainingCapacity();
         it.mem_limit = keep.mem_limit;
         it.step_limit = keep.step_limit;
         it.max_depth = keep.max_depth;
@@ -886,13 +1018,23 @@ pub const Interp = struct {
     }
 
     pub fn deinit(it: *Interp) void {
+        if (!it.isRoot()) {
+            var root = it.parent.?;
+            while (root.parent) |p| root = p;
+            root.counter.unfollow(&it.counter);
+        }
         @import("child.zig").destroyAll(it);
         if (comptime fs_supported) {
             @import("chan.zig").closeAll(it);
             @import("proc.zig").abandonAll(it);
             if (it.fs.fd >= 0) _ = std.os.linux.close(it.fs.fd);
         }
-        it.heap.deinit();
+        if (it.isRoot()) {
+            it.kids.deinit(it.heap.backing);
+            it.gc_roots.deinit(it.heap.backing);
+            it.held.deinit(it.heap.backing);
+            it.own_heap.deinit();
+        }
     }
 
     pub fn alloc(it: *Interp) Allocator {
@@ -1391,6 +1533,20 @@ pub const Interp = struct {
             .native => |f| return f(it, argv, c),
             .proc => |p| return it.callProc(p, argv),
         }
+    }
+
+    /// Call this in a host function before it calls `evalCmd`,
+    /// `callWords`, or `call` outside `eval`, and call `leaveHost` before
+    /// the function returns. Then the collector scans the frames of the
+    /// host function. `eval` needs neither call. The function is inline,
+    /// so it records the frame of the host function.
+    pub inline fn enterHost(it: *Interp) void {
+        if (it.nest == 0) it.native_base = @frameAddress();
+        it.nest += 1;
+    }
+
+    pub fn leaveHost(it: *Interp) void {
+        it.nest -= 1;
     }
 
     /// Runs a command given as a list of words.

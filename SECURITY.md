@@ -8,7 +8,7 @@ ztcl is experimental. Do not use it as the only barrier around hostile scripts.
 - An embedder can turn on capabilities. `file` and channels stay inside one root folder. `socket` reaches only the addresses that the network policy of the embedder allows. The default policy is loopback only.
 - The capability `exec` is not part of the sandbox. A process that a script starts is outside the root folder and outside each limit. Turn it on only for scripts that you trust as much as the user account.
 - The step limit bounds the steps of a script. The embedder must set `step_limit`. The default has no limit.
-- `mem_limit` limits memory. One command can go above the limit by the size of its own result.
+- `mem_limit` limits memory. One command can go above the limit by the size of its own result. With the collector on, the place of the error can differ between two runs.
 - Nesting limits protect the native stack.
 
 The time of `lsort` and of a dict with many keys has no separate limit.

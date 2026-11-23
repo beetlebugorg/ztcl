@@ -547,12 +547,12 @@ Each gate is an instruction count (`perf stat -e instructions:u`) of the whole p
 
 ## Open decisions for the user
 
-0. **The collector.** Milestone 0 replaces the arena with a conservative mark-and-sweep heap. It changes three rules: a value from `eval` is valid only until the next call, the place of the memory error is exact only with the collector off, and an allocation costs a little more. The other choices are reference counts and regions, and both are more code with a worse failure. The user must accept this before task 2 starts.
+0. **The collector. Decided.** The user chose the conservative mark-and-sweep heap that does not move a block, with the `hold` rule for a value from `eval`. Milestone 0 replaces the arena with it. It changes three rules: a value from `eval` is valid only until the next call, the place of the memory error is exact only with the collector off, and an allocation costs a little more.
 1. **The order after milestone 2.** The plan does the ports before tier 2, because zslice runs on macOS and Windows. The other order gives the large gain for number loops on Linux first.
 2. **Tier 2 at all.** Tier 2 gives about 20 times for `sum.tcl` and no gain for strings, dicts, and proc calls. The scripts of zslice decide its value. A profile of real zslice scripts is the input for this decision.
 3. **The default.** The plan keeps the library option off in each case, and lets the runner flag default to on after the condition above. The other choice is off everywhere.
 4. **The JIT memory limit.** 16 MiB, outside `mem_limit`, so that a script gives the same result in both modes. The other choice counts it in `mem_limit`, and a script near the limit then stops at a different place with the JIT on.
-5. **The entitlement on macOS.** zslice needs `com.apple.security.cs.allow-jit` to use the JIT under the hardened runtime. With no entitlement, the JIT is off on macOS.
+5. **The entitlement on macOS. Decided.** zslice gets `com.apple.security.cs.allow-jit` to use the JIT under the hardened runtime. A build with no entitlement keeps the JIT off on macOS.
 6. **The write allowlist on macOS.** `pthread_jit_write_with_callback_np` is more work and a stronger limit.
 7. **Unwind tables on Windows.** The plan registers them. The other choice is less code, and a crash handler of the embedder then fails inside JIT frames.
 8. **Procs with no frame.** A proc such as `fib` could run with its parameters in registers and make its frame only at an exit. This is the one way to a large gain for `fib.tcl`. It is a large and risky change, and it is not in the tasks.

@@ -23,6 +23,8 @@
 //! address, or an address range such as `10.0.0.0/8`, with an optional
 //! `:port` or `:port-port`.
 //! `--mem N` sets the memory limit in bytes. The default is 2 GiB.
+//! `--gc-stress N` starts a collection at each Nth allocation. `--gc off`
+//! turns the collector off.
 //! `--report` writes one line to stderr at the end: the steps used, the
 //! bytes held now, and the highest number of bytes held.
 //! `--repeat N` runs each file N times in one interpreter. With `--time`,
@@ -89,6 +91,7 @@ var max_steps: u64 = std.math.maxInt(u64);
 fn report(it: *const tcl.Interp) void {
     if (!report_on) return;
     std.debug.print("report steps={d} mem={d} peak={d}\n", .{ max_steps - it.step_limit, it.counter.used, it.counter.mem_peak });
+    if (std.debug.runtime_safety) std.debug.print("gc collections={d}\n", .{it.gcCount()});
 }
 
 fn leave(it: *tcl.Interp, code: u8) noreturn {
@@ -212,6 +215,24 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             max_steps = it.step_limit;
             continue;
         }
+        if (std.mem.eql(u8, arg, "--gc-stress") and i + 1 < args.len) {
+            i += 1;
+            it.setGcStress(try std.fmt.parseInt(u32, args[i], 10));
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--gc") and i + 1 < args.len) {
+            i += 1;
+            if (std.mem.eql(u8, args[i], "off")) {
+                it.gc_on = false;
+            } else if (std.mem.eql(u8, args[i], "on")) {
+                it.gc_on = true;
+            } else {
+                try out.print("--gc needs on or off\n", .{});
+                out.flush() catch {};
+                std.process.exit(2);
+            }
+            continue;
+        }
         if (std.mem.eql(u8, arg, "--report")) {
             report_on = true;
             continue;
@@ -312,6 +333,10 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
                 continue;
             };
             var errors: usize = 0;
+            // The script is only in this frame. After `enterHost`, the
+            // collector scans the frame.
+            it.enterHost();
+            defer it.leaveHost();
             for (script.cmds) |*c| {
                 _ = it.evalCmd(c) catch |e| {
                     if (e == error.TclReturn) break;

@@ -29,7 +29,7 @@ pub const max_bits = 1 << 20;
 const too_large = "integer value too large to represent";
 
 fn gpa(it: *Interp) std.mem.Allocator {
-    return it.counter.allocator();
+    return it.heap.backing;
 }
 
 fn mem(e: anyerror) Error {

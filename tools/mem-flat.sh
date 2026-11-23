@@ -21,8 +21,8 @@ shift $((OPTIND - 1))
 printf '%-9s %8s %12s %12s %10s  %s\n' script N peak_N peak_10N B/pass result
 bad=0
 for s in "$@"; do
-    n=2000
-    case $s in b64enc | b64dec) n=20 ;; esac
+    n=300000
+    case $s in b64enc | b64dec) n=300 ;; append | coro) n=1500000 ;; esac
     file="$here/../tests/mem/$s.tcl"
     peak() {
         "$runner" --report --max-steps 100000000000 --mem 6442450944 --tclsh "$file" "$1" 2>&1 >/dev/null |

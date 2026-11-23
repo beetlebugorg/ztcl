@@ -1,7 +1,7 @@
 #!/bin/sh
 # Runs test files of the Tcl source on ztcl and prints the counts.
 #
-#   tools/suite.sh [-a] [-o file] [-r runner] [-t tag | -s tests-dir]
+#   tools/suite.sh [-a] [-g N] [-o file] [-r runner] [-t tag | -s tests-dir]
 #                  [file.test ...]
 #
 #   -r  The ztcl binary. The default is zig-out/bin/ztcl.
@@ -9,6 +9,7 @@
 #       core-8-6-16.
 #   -s  A folder of Tcl test files. It replaces -t.
 #   -a  Runs each .test file of the folder.
+#   -g  A count N: the runner starts a collection at each Nth allocation.
 #   -o  Writes one line for each file and skip reason to this file:
 #       `file<TAB>pass<TAB>fail<TAB>skip<TAB>status`, then
 #       `file<TAB>skipped<TAB>reason<TAB>count`.
@@ -18,13 +19,14 @@
 # The memory limit (2 GiB) stops a test that allocates without end.
 # SPDX-License-Identifier: BSD-2-Clause
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-tcl="$here/../zig-out/bin/ztcl"; tag=core-8-6-16; tests=; all=; log=
-while getopts ar:t:s:o: o; do
+tcl="$here/../zig-out/bin/ztcl"; tag=core-8-6-16; tests=; all=; log=; gc=
+while getopts ar:t:s:o:g: o; do
     case $o in
     r) tcl=$OPTARG ;;
     t) tag=$OPTARG ;;
     s) tests=$OPTARG ;;
     a) all=1 ;;
+    g) gc="--gc-stress $OPTARG" ;;
     o) log=$OPTARG; : > "$log" ;;
     *) exit 2 ;;
     esac
@@ -61,10 +63,10 @@ for f in "$@"; do
     set_exec="--exec-timeout 120000 --exec-env PATH=/usr/bin:/bin --exec-env HOME=$root --exec-env LANG=C --exec-allow $progs --exe-name /ztclsh"
     cat > "$root/ztclsh" <<EOF
 #!/bin/sh
-exec "$tcl" --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --cwd "\$PWD" --tclsh "\$@"
+exec "$tcl" $gc --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --cwd "\$PWD" --tclsh "\$@"
 EOF
     chmod +x "$root/ztclsh"
-    raw=$(timeout 1200 "$tcl" --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
+    raw=$(timeout 1200 "$tcl" $gc --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
     rc=$?
     rm -rf -- "$root"
     out=$(printf '%s\n' "$raw" | grep -aE '^pass [0-9]+ fail' | tail -1)

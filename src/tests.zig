@@ -1303,3 +1303,180 @@ test "socket refuses a blocked address and closes a blocked peer" {
     ;
     try std.testing.expectEqualStrings("none 0", try it.str(try it.eval(script)));
 }
+
+// ---- The collector ----
+
+/// Runs a script with no collection and with a collection at each Nth
+/// allocation. The two results must be equal.
+fn gcSame(script: []const u8, n: u32) !void {
+    var want: []const u8 = undefined;
+    var a: tcl.Interp = undefined;
+    try a.init(std.testing.allocator);
+    defer a.deinit();
+    a.step_limit = 10_000_000;
+    try a.allow(@intFromEnum(tcl.interp.Capability.interp));
+    want = try a.str(try a.eval(script));
+    var b: tcl.Interp = undefined;
+    try b.init(std.testing.allocator);
+    defer b.deinit();
+    b.step_limit = 10_000_000;
+    try b.allow(@intFromEnum(tcl.interp.Capability.interp));
+    b.setGcStress(n);
+    const got = try b.str(b.eval(script) catch |e| {
+        std.debug.print("script: {s}\n{s}\n", .{ script, b.str(b.result) catch "" });
+        return e;
+    });
+    try std.testing.expectEqualStrings(want, got);
+    try std.testing.expect(b.gcCount() > 0);
+}
+
+test "the collector keeps a value in a variable, a list, a dict, an array, and a namespace" {
+    try gcSame(
+        \\set x [string repeat a 50]
+        \\set l [list $x [string repeat b 40]]
+        \\set d [dict create k $x m [string repeat c 40]]
+        \\set arr(k) [string repeat e 40]
+        \\namespace eval n {variable v [string repeat q 40]}
+        \\list $x $l $d $arr(k) $n::v [string length [lindex $l 1]]
+    , 1);
+}
+
+test "the collector keeps a value on the word stack and the last result" {
+    try gcSame(
+        \\list [string repeat a 30] [string repeat b 30] [string repeat c 30] [expr {1 + 2}] [string repeat d 30]
+    , 1);
+    try gcSame("string repeat xy 30; string repeat zw 25", 1);
+}
+
+test "the collector keeps the locals of a suspended coroutine" {
+    try gcSame(
+        \\coroutine g apply {{} {set s [string repeat k 40]; set l [list $s $s]; yield 1; yield $s; return $l}}
+        \\list [g] [g]
+    , 7);
+}
+
+test "the collector keeps a child interpreter and drops a deleted one" {
+    try gcSame(
+        \\interp create c
+        \\c eval {set v [string repeat w 40]; proc f {} {return [string repeat y 20]}}
+        \\set r [list [c eval {string length $v}] [c eval f]]
+        \\interp delete c
+        \\for {set i 0} {$i < 50} {incr i} {set t [string repeat u $i]}
+        \\set r
+    , 3);
+}
+
+test "the collector keeps traced variables, upvar links, and element links" {
+    try gcSame(
+        \\proc p {} {upvar 1 x y; set y [string repeat t 40]}
+        \\set x 1
+        \\p
+        \\trace add variable x write {apply {{a b c} {set ::t [string repeat u 30]}}}
+        \\set x 5
+        \\set arr(a) [string repeat v 30]
+        \\proc q {} {upvar 1 arr(a) e; set e [string repeat n 35]}
+        \\q
+        \\list $x $::t $arr(a)
+    , 1);
+}
+
+test "the collector keeps compiled scripts, expressions, and caches" {
+    try gcSame(
+        \\proc f {n} {set s 0; for {set i 0} {$i < $n} {incr i} {set s [expr {$s + $i}]}; return $s}
+        \\set body {incr z; string repeat a 10}
+        \\set z 0
+        \\for {set i 0} {$i < 30} {incr i} {eval $body}
+        \\list [f 100] [f 200] $z
+    , 5);
+}
+
+test "the collector keeps the buffer of a part of a string" {
+    try gcSame(
+        \\set s [string repeat abcdefghij 20]
+        \\set t [string range $s 10 50]
+        \\set s {}
+        \\for {set i 0} {$i < 100} {incr i} {set u [string repeat z 30]}
+        \\set a {}
+        \\for {set i 0} {$i < 20} {incr i} {append a "x$i,"}
+        \\list $t $a
+    , 1);
+}
+
+test "a collection frees the garbage of a long loop" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.step_limit = 100_000_000;
+    it.collect();
+    const start = it.memUsed();
+    _ = try it.eval("proc go {n} {for {set i 0} {$i < $n} {incr i} {set s x$i; set l [list $i $i]; set d [dict create a $i]}}; go 200000");
+    try std.testing.expect(it.memUsed() > start + (1 << 20));
+    it.collect();
+    try std.testing.expect(it.memUsed() < start + (1 << 20));
+}
+
+test "a held value survives 100 collections and an unheld value is freed" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const kept = try it.eval("string repeat ab 30");
+    try it.hold(kept);
+    const gone = try it.eval("string repeat cd 30");
+    // A third block of the same size keeps the page.
+    const anchor = try it.eval("string repeat ef 30");
+    try it.hold(anchor);
+    _ = try it.eval("set zz 1");
+    for (0..100) |_| it.collect();
+    try std.testing.expectEqualStrings("ab" ** 30, try it.str(kept));
+    if (std.debug.runtime_safety) {
+        try std.testing.expectEqual(@as(u8, 0xDD), gone.str[0]);
+    }
+    it.release(kept);
+    it.collect();
+    if (std.debug.runtime_safety) try std.testing.expectEqual(@as(u8, 0xDD), kept.str[0]);
+}
+
+test "a range from addRoot keeps the values in it" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    var slot: [2]tcl.Value = .{ try it.eval("string repeat xy 30"), try it.eval("string repeat zw 30") };
+    try it.addRoot(std.mem.sliceAsBytes(&slot));
+    _ = try it.eval("set zz 1");
+    it.collect();
+    try std.testing.expectEqualStrings("xy" ** 30, try it.str(slot[0]));
+    try std.testing.expectEqualStrings("zw" ** 30, try it.str(slot[1]));
+    it.removeRoot(std.mem.sliceAsBytes(&slot));
+}
+
+/// The steps left when the script reaches the memory limit.
+fn stepsAtLimit(gc: bool, limit: usize) !u64 {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.gc_on = gc;
+    it.step_limit = 1_000_000_000;
+    it.mem_limit = limit;
+    const r = it.eval("set l {}; for {set i 0} {$i < 100000000} {incr i} {lappend l [string repeat x 50]}");
+    try std.testing.expectError(error.TclError, r);
+    try std.testing.expectEqualStrings("the script used too much memory", try it.str(it.result));
+    return it.step_limit;
+}
+
+test "with the collector off, the memory error stops at the same step" {
+    const a = try stepsAtLimit(false, 8 << 20);
+    const b = try stepsAtLimit(false, 8 << 20);
+    try std.testing.expectEqual(a, b);
+}
+
+test "a loop under the limit gives the same result with the collector on or off" {
+    for ([_]bool{ true, false }) |gc| {
+        var it: tcl.Interp = undefined;
+        try it.init(std.testing.allocator);
+        defer it.deinit();
+        it.gc_on = gc;
+        it.step_limit = 100_000_000;
+        const v = try it.eval("set t 0; for {set i 0} {$i < 20000} {incr i} {set s [string repeat x [expr {$i % 50}]]; incr t [string length $s]}; set t");
+        try std.testing.expectEqualStrings("490000", try it.str(v));
+    }
+}
