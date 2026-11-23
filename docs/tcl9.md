@@ -25,13 +25,13 @@ CPU milliseconds, best of 9 runs of the whole process, `ReleaseFast`, on an Inte
 
 | Benchmark | ztcl | tclsh 8.6.16 | tclsh 9.1.0 |
 |---|---|---|---|
-| `sum.tcl` | 24.8 | 58.3 | 57.9 |
-| `fib.tcl` | 16.4 | 50.8 | 49.2 |
-| `nested.tcl` | 37.2 | 73.5 | 84.8 |
-| `strbuild.tcl` | 34.7 | 63.7 | 98.7 |
-| `foreach.tcl` | 19.8 | 33.0 | 38.5 |
-| `dict.tcl` | 30.6 | 48.7 | 58.4 |
-| `dictgrow.tcl` | 84.0 | 104.8 | 143.3 |
+| `sum.tcl` | 24.8 | 58.4 | 57.9 |
+| `fib.tcl` | 16.7 | 51.0 | 49.2 |
+| `nested.tcl` | 36.4 | 73.5 | 84.8 |
+| `strbuild.tcl` | 35.2 | 63.7 | 98.7 |
+| `foreach.tcl` | 19.6 | 33.4 | 38.5 |
+| `dict.tcl` | 30.5 | 48.7 | 58.4 |
+| `dictgrow.tcl` | 84.5 | 104.2 | 143.3 |
 
 ## Differences and proposed choices
 

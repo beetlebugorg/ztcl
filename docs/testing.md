@@ -84,13 +84,13 @@ Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2
 
 | Benchmark (`bench/`) | ztcl | tclsh 8.6.16 | tclsh 9.1.0 |
 |---|---|---|---|
-| `sum.tcl` (1 million `expr` and `incr`) | 24.8 | 58.3 | 57.9 |
-| `fib.tcl` (fib 25, about 250 000 calls) | 16.4 | 50.8 | 49.2 |
-| `nested.tcl` (1000 x 1000, `lappend`, `llength`) | 37.2 | 73.5 | 84.8 |
-| `strbuild.tcl` (500 000 `append`) | 34.7 | 63.7 | 98.7 |
-| `foreach.tcl` (10 passes over 100 000 items) | 19.8 | 33.0 | 38.5 |
-| `dict.tcl` (200 000 `dict incr`, 200 000 `dict get`) | 30.6 | 48.7 | 58.4 |
-| `dictgrow.tcl` (200 000 new keys, 200 000 `dict get`) | 84.0 | 104.8 | 143.3 |
+| `sum.tcl` (1 million `expr` and `incr`) | 24.8 | 58.4 | 57.9 |
+| `fib.tcl` (fib 25, about 250 000 calls) | 16.7 | 51.0 | 49.2 |
+| `nested.tcl` (1000 x 1000, `lappend`, `llength`) | 36.4 | 73.5 | 84.8 |
+| `strbuild.tcl` (500 000 `append`) | 35.2 | 63.7 | 98.7 |
+| `foreach.tcl` (10 passes over 100 000 items) | 19.6 | 33.4 | 38.5 |
+| `dict.tcl` (200 000 `dict incr`, 200 000 `dict get`) | 30.5 | 48.7 | 58.4 |
+| `dictgrow.tcl` (200 000 new keys, 200 000 `dict get`) | 84.5 | 104.2 | 143.3 |
 
 The fuzzy skin proc (`zig build bench`):
 
