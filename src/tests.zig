@@ -398,7 +398,7 @@ test "strings and format" {
         .{ "string match {a[0-9]} a5", "1" },
         .{ "string match a?c ac", "0" },
         .{ "string reverse abc", "cba" },
-        .{ "string bogus", "!unknown or ambiguous subcommand \"bogus\": must be cat, compare, equal, first, index, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, or trimright" },
+        .{ "string bogus", "!unknown or ambiguous subcommand \"bogus\": must be bytelength, cat, compare, equal, first, index, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, trimright, wordend, or wordstart" },
         .{ "format %d 42", "42" },
         .{ "format %5d|%-5d| 42 42", "   42|42   |" },
         .{ "format %05d -42", "-0042" },

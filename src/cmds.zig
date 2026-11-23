@@ -14,6 +14,7 @@ const noise = @import("noise.zig");
 const more = @import("more.zig");
 const regex = @import("regex.zig");
 const ns = @import("ns.zig");
+const ucd = @import("ucd.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
@@ -790,26 +791,54 @@ fn cmdList(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 /// An index word: "3", "end", "end-1", "2+1". The result may lie
 /// outside the list.
 pub fn index(it: *Interp, v: Value, len: usize) Error!i64 {
-    if (v == .int) return v.int;
+    if (v == .int) return @as(i32, @truncate(v.int));
     const s = try it.str(v);
     const bad = "bad index \"{s}\": must be integer?[+-]integer? or end?[+-]integer?";
+    const t = value.trimSpace(s);
     var base: i64 = undefined;
     var rest: []const u8 = undefined;
-    if (std.mem.startsWith(u8, s, "end")) {
+    if (std.mem.startsWith(u8, t, "end")) {
         base = @as(i64, @intCast(len)) - 1;
-        rest = s[3..];
+        rest = t[3..];
+        if (rest.len == 0) return base;
+        if (rest[0] != '+' and rest[0] != '-') return it.fail(bad, .{s});
     } else {
-        var i: usize = if (s.len > 0 and (s[0] == '-' or s[0] == '+')) 1 else 0;
-        while (i < s.len and std.ascii.isDigit(s[i])) i += 1;
-        base = value.parseInt(s[0..i]) orelse return it.fail(bad, .{s});
-        // A plain number may be octal or hex only as a whole; an index is decimal.
-        base = std.fmt.parseInt(i64, s[0..i], 10) catch base;
-        rest = s[i..];
+        // The first sign after the first character starts the offset.
+        var i: usize = 1;
+        while (i < t.len and t[i] != '+' and t[i] != '-') i += 1;
+        if (t.len == 0) return it.fail(bad, .{s});
+        base = indexInt(t[0..@min(i, t.len)]) orelse return badIndex(it, s, t[0..@min(i, t.len)]);
+        rest = t[@min(i, t.len)..];
+        if (rest.len == 0) return base;
     }
-    if (rest.len == 0) return base;
-    if (rest[0] != '+' and rest[0] != '-') return it.fail(bad, .{s});
-    const off = std.fmt.parseInt(i64, rest[1..], 10) catch return it.fail(bad, .{s});
+    const off = indexInt(rest[1..]) orelse return badIndex(it, s, rest[1..]);
+    if (rest[1] == '+' or rest[1] == '-') return it.fail(bad, .{s});
     return if (rest[0] == '+') base +% off else base -% off;
+}
+
+/// An integer of an index. Tcl 8.6 keeps the low 32 bits of an index.
+fn indexInt(t: []const u8) ?i64 {
+    if (t.len == 0) return null;
+    const n = value.parseInt(t) orelse return null;
+    return @as(i32, @truncate(n));
+}
+
+fn badIndex(it: *Interp, s: []const u8, part: []const u8) Error {
+    var t = part;
+    if (t.len > 0 and (t[0] == '+' or t[0] == '-')) t = t[1..];
+    var octal = t.len > 1 and t[0] == '0';
+    if (octal) {
+        var d = t[1..];
+        if (d.len > 0 and (d[0] == 'o' or d[0] == 'O')) d = d[1..];
+        var high = false;
+        for (d) |c| {
+            if (c < '0' or c > '9') octal = false;
+            if (c >= '8') high = true;
+        }
+        octal = octal and high;
+    }
+    if (octal) return it.fail("bad index \"{s}\": must be integer?[+-]integer? or end?[+-]integer? (looks like invalid octal number)", .{s});
+    return it.fail("bad index \"{s}\": must be integer?[+-]integer? or end?[+-]integer?", .{s});
 }
 
 pub fn cmdLindex(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
@@ -1105,15 +1134,16 @@ pub fn globMatch(pat: []const u8, s: []const u8, nocase: bool) bool {
             continue;
         }
         if (i >= s.len) return p == pat.len;
+        const d = ucd.next(s, i);
         if (p < pat.len) {
-            if (globOne(pat, p, s[i], nocase)) |next| {
-                p = next;
-                i += 1;
+            if (globOne(pat, p, d.cp, nocase)) |after| {
+                p = after;
+                i += d.len;
                 continue;
             }
         }
         const sp = star_p orelse return false;
-        star_i += 1;
+        star_i += ucd.next(s, star_i).len;
         i = star_i;
         p = sp;
     }
@@ -1121,37 +1151,44 @@ pub fn globMatch(pat: []const u8, s: []const u8, nocase: bool) bool {
 
 /// Matches one character with the pattern element at `p_in`. Returns
 /// the position after the element, or null.
-fn globOne(pat: []const u8, p_in: usize, c_in: u8, nocase: bool) ?usize {
+fn globOne(pat: []const u8, p_in: usize, c_in: u21, nocase: bool) ?usize {
     var p = p_in;
     const c = pat[p];
-    const ch = if (nocase) std.ascii.toLower(c_in) else c_in;
-    if (c == '?') return p + 1;
+    const ch = if (nocase) ucd.toLower(c_in) else c_in;
+    if (c == '?') return p + 1 + (ucd.next(pat, p).len - 1);
     if (c == '[') {
         p += 1;
         var hit = false;
         while (p < pat.len and pat[p] != ']') {
-            var lo = pat[p];
+            if (pat[p] == '\\' and p + 1 < pat.len) p += 1;
+            const first = ucd.next(pat, p);
+            var lo = first.cp;
             var hi = lo;
-            if (p + 2 < pat.len and pat[p + 1] == '-' and pat[p + 2] != ']') {
-                hi = pat[p + 2];
-                p += 3;
-            } else p += 1;
+            p += first.len;
+            if (p + 1 < pat.len and pat[p] == '-' and pat[p + 1] != ']') {
+                p += 1;
+                if (pat[p] == '\\' and p + 1 < pat.len) p += 1;
+                const second = ucd.next(pat, p);
+                hi = second.cp;
+                p += second.len;
+            }
             if (nocase) {
-                lo = std.ascii.toLower(lo);
-                hi = std.ascii.toLower(hi);
+                lo = ucd.toLower(lo);
+                hi = ucd.toLower(hi);
             }
             if (ch >= @min(lo, hi) and ch <= @max(lo, hi)) hit = true;
         }
         if (p < pat.len) p += 1;
         return if (hit) p else null;
     }
-    var lit = c;
-    if (c == '\\' and p + 1 < pat.len) {
+    if (c == '\\') {
+        // A backslash at the end of the pattern matches no character.
+        if (p + 1 >= pat.len) return null;
         p += 1;
-        lit = pat[p];
     }
-    if (nocase) lit = std.ascii.toLower(lit);
-    return if (lit == ch) p + 1 else null;
+    const lit = ucd.next(pat, p);
+    const want = if (nocase) ucd.toLower(lit.cp) else lit.cp;
+    return if (want == ch) p + lit.len else null;
 }
 
 /// A glob match that uses the step limit: one step for each 4096 units of
@@ -1166,13 +1203,6 @@ pub fn globSteps(it: *Interp, pat: []const u8, s: []const u8, nocase: bool) Erro
     return globMatch(pat, s, nocase);
 }
 
-fn trimSet(s: []const u8, chars: []const u8, left: bool, right: bool) []const u8 {
-    var b: usize = 0;
-    var e: usize = s.len;
-    if (left) while (b < e and std.mem.indexOfScalar(u8, chars, s[b]) != null) : (b += 1) {};
-    if (right) while (e > b and std.mem.indexOfScalar(u8, chars, s[e - 1]) != null) : (e -= 1) {};
-    return s[b..e];
-}
 
 /// The count of characters of a UTF-8 string: the bytes that do not
 /// continue a character.
@@ -1196,9 +1226,6 @@ pub fn byteOf(s: []const u8, n: usize, k: usize) usize {
     return s.len;
 }
 
-fn isWordChar(c: u8) bool {
-    return std.ascii.isAlphanumeric(c) or c == '_' or c >= 0x80;
-}
 
 /// The one name of the enum that starts with the text, or null.
 fn uniquePrefix(comptime E: type, text: []const u8) ?E {
@@ -1213,22 +1240,20 @@ fn uniquePrefix(comptime E: type, text: []const u8) ?E {
     return found;
 }
 
-fn isClass(class: []const u8, s: []const u8) ?bool {
-    const Pred = *const fn (u8) bool;
-    const f: Pred = if (eql(class, "digit")) std.ascii.isDigit else if (eql(class, "alpha")) std.ascii.isAlphabetic else if (eql(class, "alnum")) std.ascii.isAlphanumeric else if (eql(class, "space")) std.ascii.isWhitespace else if (eql(class, "upper")) std.ascii.isUpper else if (eql(class, "lower")) std.ascii.isLower else if (eql(class, "xdigit")) std.ascii.isHex else if (eql(class, "punct")) std.ascii.isPunctuation else if (eql(class, "ascii")) std.ascii.isAscii else return null;
-    for (s) |c| if (!f(c)) return false;
-    return true;
-}
 
 pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("string subcommand ?arg ...?");
     const a = it.alloc();
     const sub = try it.str(argv[1]);
     const args = argv[2..];
-    const Sub = enum { length, index, range, equal, compare, first, last, map, tolower, toupper, totitle, trim, trimleft, trimright, repeat, is, match, reverse, cat, replace, wordstart, wordend };
+    const Sub = enum { bytelength, length, index, range, equal, compare, first, last, map, tolower, toupper, totitle, trim, trimleft, trimright, repeat, is, match, reverse, cat, replace, wordstart, wordend };
     const which = std.meta.stringToEnum(Sub, sub) orelse uniquePrefix(Sub, sub) orelse
-        return it.fail("unknown or ambiguous subcommand \"{s}\": must be cat, compare, equal, first, index, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, or trimright", .{sub});
+        return it.fail("unknown or ambiguous subcommand \"{s}\": must be bytelength, cat, compare, equal, first, index, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, trimright, wordend, or wordstart", .{sub});
     switch (which) {
+        .bytelength => {
+            if (args.len != 1) return it.wrongArgs("string bytelength string");
+            return .{ .int = @intCast((try it.str(args[0])).len) };
+        },
         .length => {
             if (args.len != 1) return it.wrongArgs("string length string");
             return .{ .int = @intCast(charCount(try it.str(args[0]))) };
@@ -1252,34 +1277,37 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (args.len != 3 and args.len != 4) return it.wrongArgs("string replace string first last ?string?");
             const s = try it.str(args[0]);
             const n = charCount(s);
-            const r = clampRange(try index(it, args[1], n), try index(it, args[2], n), n) orelse return args[0];
+            var first = try index(it, args[1], n);
+            var last = try index(it, args[2], n);
+            const count: i64 = @intCast(n);
+            if (last < first or last < 0 or first >= count and count > 0) return args[0];
+            if (first >= count and count == 0 and first > 0) return args[0];
+            first = @max(first, 0);
+            last = @min(last, count - 1);
             const mid = if (args.len == 4) try it.str(args[3]) else "";
-            return .{ .str = try std.mem.concat(a, u8, &.{ s[0..byteOf(s, n, r[0])], mid, s[byteOf(s, n, r[1] + 1)..] }) };
+            const head = byteOf(s, n, @intCast(first));
+            const tail_at = if (last < first) head else byteOf(s, n, @intCast(last + 1));
+            return .{ .str = try std.mem.concat(a, u8, &.{ s[0..head], mid, s[tail_at..] }) };
         },
         .equal, .compare => {
+            const usage = if (which == .equal) "string equal ?-nocase? ?-length int? string1 string2" else "string compare ?-nocase? ?-length int? string1 string2";
+            if (args.len < 2 or args.len > 5) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"{s}\"", .{usage});
             var nocase = false;
             var limit: ?usize = null;
             var i: usize = 0;
             while (i + 2 < args.len) : (i += 1) {
                 const o = try it.str(args[i]);
-                if (eql(o, "-nocase")) {
+                if (o.len >= 2 and std.mem.startsWith(u8, "-nocase", o)) {
                     nocase = true;
-                } else if (eql(o, "-length") and i + 3 < args.len) {
+                } else if (o.len >= 2 and std.mem.startsWith(u8, "-length", o)) {
+                    if (i + 3 >= args.len) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"{s}\"", .{usage});
                     i += 1;
-                    const n = try it.int(args[i]);
-                    if (n >= 0) limit = @intCast(n);
-                } else return it.fail("bad option \"{s}\": must be -nocase or -length", .{o});
+                    const big = try expr.intArg(it, args[i]);
+                    if (big != .int) return it.fail("integer value too large to represent", .{});
+                    if (big.int >= 0) limit = @intCast(big.int);
+                } else return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -nocase or -length", .{o});
             }
-            if (args.len < 2) {
-                return if (which == .equal) it.wrongArgs("string equal ?-nocase? ?-length int? string1 string2") else it.wrongArgs("string compare ?-nocase? ?-length int? string1 string2");
-            }
-            var x = try it.str(args[args.len - 2]);
-            var y = try it.str(args[args.len - 1]);
-            if (limit) |n| {
-                x = x[0..@min(n, x.len)];
-                y = y[0..@min(n, y.len)];
-            }
-            const o = if (nocase) std.ascii.orderIgnoreCase(x, y) else std.mem.order(u8, x, y);
+            const o = compareStrings(try it.str(args[args.len - 2]), try it.str(args[args.len - 1]), nocase, limit);
             if (which == .equal) return .{ .int = @intFromBool(o == .eq) };
             return .{ .int = switch (o) {
                 .lt => -1,
@@ -1289,7 +1317,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         },
         .first, .last => {
             if (args.len != 2 and args.len != 3) {
-                return if (which == .first) it.wrongArgs("string first needleString haystackString ?startIndex?") else it.wrongArgs("string last needleString haystackString ?lastIndex?");
+                return if (which == .first) it.wrongArgs("string first needleString haystackString ?startIndex?") else it.wrongArgs("string last needleString haystackString ?startIndex?");
             }
             const needle = try it.str(args[0]);
             const hay = try it.str(args[1]);
@@ -1299,18 +1327,31 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             const count: i64 = @intCast(n);
             if (which == .first) {
                 var start: usize = 0;
-                if (args.len == 3) start = byteOf(hay, n, @intCast(std.math.clamp(try index(it, args[2], n), 0, count)));
+                if (args.len == 3) {
+                    const at = try index(it, args[2], n);
+                    if (at >= count) return .{ .int = -1 };
+                    start = byteOf(hay, n, @intCast(@max(at, 0)));
+                }
                 const pos = std.mem.indexOfPos(u8, hay, start, needle) orelse return .{ .int = -1 };
                 return .{ .int = @intCast(charCount(hay[0..pos])) };
             }
             var end: usize = hay.len;
-            if (args.len == 3) end = byteOf(hay, n, @intCast(std.math.clamp(try index(it, args[2], n) + 1, 0, count)));
+            if (args.len == 3) {
+                const at = try index(it, args[2], n);
+                if (at < 0) return .{ .int = -1 };
+                end = byteOf(hay, n, @intCast(@min(at + 1, count)));
+            }
             const pos = std.mem.lastIndexOf(u8, hay[0..end], needle) orelse return .{ .int = -1 };
             return .{ .int = @intCast(charCount(hay[0..pos])) };
         },
         .map => {
             var nocase = false;
-            if (args.len == 3 and eql(try it.str(args[0]), "-nocase")) nocase = true else if (args.len != 2) return it.wrongArgs("string map ?-nocase? charMap string");
+            if (args.len != 2 and args.len != 3) return it.wrongArgs("string map ?-nocase? charMap string");
+            if (args.len == 3) {
+                const o = try it.str(args[0]);
+                if (o.len < 2 or !std.mem.startsWith(u8, "-nocase", o)) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -nocase", .{o});
+                nocase = true;
+            }
             const pairs = try it.list(args[args.len - 2]);
             if (pairs.len % 2 != 0) return it.fail("char map list unbalanced", .{});
             const s = try it.str(args[args.len - 1]);
@@ -1336,19 +1377,42 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             return .{ .str = out.items };
         },
         .tolower, .toupper, .totitle => {
-            if (args.len != 1) return it.fail("wrong # args: should be \"string {s} string ?first? ?last?\"", .{sub});
+            if (args.len < 1 or args.len > 3) return it.fail("wrong # args: should be \"string {s} string ?first? ?last?\"", .{@tagName(which)});
             const s = try it.str(args[0]);
-            const out = try a.alloc(u8, s.len);
-            for (s, out, 0..) |c, *o, i| {
-                const up = which == .toupper or (which == .totitle and i == 0);
-                o.* = if (up) std.ascii.toUpper(c) else std.ascii.toLower(c);
+            const n = charCount(s);
+            var first: i64 = 0;
+            var last: i64 = @as(i64, @intCast(n)) - 1;
+            if (args.len >= 2) {
+                first = try index(it, args[1], n);
+                last = if (args.len == 3) try index(it, args[2], n) else first;
             }
-            return .{ .str = out };
+            if (first < 0) first = 0;
+            if (last >= n) last = @as(i64, @intCast(n)) - 1;
+            if (first > last) return args[0];
+            var out: std.ArrayList(u8) = .empty;
+            var i: usize = 0;
+            var k: i64 = 0;
+            while (i < s.len) : (k += 1) {
+                const d = ucd.next(s, i);
+                if (k < first or k > last) {
+                    try out.appendSlice(a, s[i .. i + d.len]);
+                } else {
+                    const cp = switch (which) {
+                        .tolower => ucd.toLower(d.cp),
+                        .toupper => ucd.toUpper(d.cp),
+                        else => if (k == first) ucd.toTitle(d.cp) else ucd.toLower(d.cp),
+                    };
+                    try ucd.appendCp(a, &out, cp);
+                }
+                i += d.len;
+            }
+            return .{ .str = out.items };
         },
         .trim, .trimleft, .trimright => {
-            if (args.len != 1 and args.len != 2) return it.fail("wrong # args: should be \"string {s} string ?chars?\"", .{sub});
-            const chars = if (args.len == 2) try it.str(args[1]) else " \t\n\r\x0b\x0c\x00";
-            return .{ .str = trimSet(try it.str(args[0]), chars, which != .trimright, which != .trimleft) };
+            if (args.len != 1 and args.len != 2) return it.fail("wrong # args: should be \"string {s} string ?chars?\"", .{@tagName(which)});
+            const s = try it.str(args[0]);
+            const chars: ?[]const u8 = if (args.len == 2) try it.str(args[1]) else null;
+            return .{ .str = trimChars(s, chars, which != .trimright, which != .trimleft) };
         },
         .repeat => {
             if (args.len != 2) return it.wrongArgs("string repeat string count");
@@ -1382,7 +1446,12 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         },
         .match => {
             var nocase = false;
-            if (args.len == 3 and eql(try it.str(args[0]), "-nocase")) nocase = true else if (args.len != 2) return it.wrongArgs("string match ?-nocase? pattern string");
+            if (args.len != 2 and args.len != 3) return it.wrongArgs("string match ?-nocase? pattern string");
+            if (args.len == 3) {
+                const o = try it.str(args[0]);
+                if (o.len < 2 or !std.mem.startsWith(u8, "-nocase", o)) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -nocase", .{o});
+                nocase = true;
+            }
             var pat = try it.str(args[args.len - 2]);
             if (nocase) pat = try std.ascii.allocLowerString(a, pat);
             return .{ .int = @intFromBool(try globSteps(it, pat, try it.str(args[args.len - 1]), nocase)) };
@@ -1393,68 +1462,297 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 return it.wrongArgs("string wordstart string index");
             }
             const s = try it.str(args[0]);
-            const n = try index(it, args[1], s.len);
-            if (s.len == 0) return .{ .int = 0 };
+            var cps: std.ArrayList(u21) = .empty;
+            var bi: usize = 0;
+            while (bi < s.len) {
+                const d = ucd.next(s, bi);
+                try cps.append(a, d.cp);
+                bi += d.len;
+            }
+            const t = cps.items;
+            const n = try index(it, args[1], t.len);
+            if (t.len == 0) return .{ .int = 0 };
             var at: usize = if (n < 0) 0 else @intCast(n);
             if (which == .wordend) {
-                if (at >= s.len) return .{ .int = @intCast(s.len) };
-                if (!isWordChar(s[at])) return .{ .int = @intCast(at + 1) };
-                while (at < s.len and isWordChar(s[at])) at += 1;
+                if (at >= t.len) return .{ .int = @intCast(t.len) };
+                if (!ucd.isWordChar(t[at])) return .{ .int = @intCast(at + 1) };
+                while (at < t.len and ucd.isWordChar(t[at])) at += 1;
                 return .{ .int = @intCast(at) };
             }
-            if (at >= s.len) at = s.len - 1;
-            if (!isWordChar(s[at])) return .{ .int = @intCast(at) };
-            while (at > 0 and isWordChar(s[at - 1])) at -= 1;
+            if (at >= t.len) at = t.len - 1;
+            if (!ucd.isWordChar(t[at])) return .{ .int = @intCast(at) };
+            while (at > 0 and ucd.isWordChar(t[at - 1])) at -= 1;
             return .{ .int = @intCast(at) };
         },
-        .is => {
-            if (args.len < 2) return it.wrongArgs("string is class ?-strict? ?-failindex var? str");
-            const class = try it.str(args[0]);
-            var strict = false;
-            var fail_var: ?Value = null;
-            var oi: usize = 1;
-            while (oi < args.len - 1) : (oi += 1) {
-                const o = try it.str(args[oi]);
-                if (o.len >= 2 and std.mem.startsWith(u8, "-strict", o)) {
-                    strict = true;
-                } else if (o.len >= 2 and std.mem.startsWith(u8, "-failindex", o) and oi + 1 < args.len - 1) {
-                    oi += 1;
-                    fail_var = args[oi];
-                } else return it.fail("bad option \"{s}\": must be -strict or -failindex", .{o});
+        .is => return stringIs(it, args),
+    }
+}
+
+const class_names = [_][]const u8{ "alnum", "alpha", "ascii", "control", "boolean", "digit", "double", "entier", "false", "graph", "integer", "list", "lower", "print", "punct", "space", "true", "upper", "wideinteger", "wordchar", "xdigit" };
+
+fn classOk(class: []const u8, c: u21) bool {
+    if (eql(class, "alnum")) return ucd.isAlpha(c) or ucd.isDigit(c);
+    if (eql(class, "alpha")) return ucd.isAlpha(c);
+    if (eql(class, "ascii")) return c < 128;
+    if (eql(class, "control")) return ucd.isControl(c);
+    if (eql(class, "digit")) return ucd.isDigit(c);
+    if (eql(class, "graph")) return ucd.isGraph(c);
+    if (eql(class, "lower")) return ucd.isLower(c);
+    if (eql(class, "print")) return ucd.isPrint(c);
+    if (eql(class, "punct")) return ucd.isPunct(c);
+    if (eql(class, "space")) return ucd.isSpace(c);
+    if (eql(class, "upper")) return ucd.isUpper(c);
+    if (eql(class, "wordchar")) return ucd.isWordChar(c);
+    return c < 128 and std.ascii.isHex(@intCast(c));
+}
+
+/// The length of the longest start of `s` that is a number of the
+/// kind. The kind is "int" or "double".
+fn numberPrefix(s: []const u8, double: bool) usize {
+    var i: usize = 0;
+    while (i < s.len and std.ascii.isWhitespace(s[i])) i += 1;
+    if (i < s.len and (s[i] == '+' or s[i] == '-')) i += 1;
+    const start = i;
+    if (i + 1 < s.len and s[i] == '0' and (s[i + 1] | 32 == 'x' or s[i + 1] | 32 == 'b' or s[i + 1] | 32 == 'o')) {
+        const kind = s[i + 1] | 32;
+        var j = i + 2;
+        while (j < s.len) : (j += 1) {
+            const c = s[j];
+            const ok = switch (kind) {
+                'x' => std.ascii.isHex(c),
+                'b' => c == '0' or c == '1',
+                else => c >= '0' and c <= '7',
+            };
+            if (!ok) break;
+        }
+        if (j > i + 2) return j;
+        return i + 1;
+    }
+    while (i < s.len and std.ascii.isDigit(s[i])) i += 1;
+    if (!double) return if (i > start) i else 0;
+    if (i < s.len and s[i] == '.') {
+        i += 1;
+        while (i < s.len and std.ascii.isDigit(s[i])) i += 1;
+    }
+    if (i == start or (i == start + 1 and s[start] == '.')) return 0;
+    if (i < s.len and (s[i] == 'e' or s[i] == 'E')) {
+        var j = i + 1;
+        if (j < s.len and (s[j] == '+' or s[j] == '-')) j += 1;
+        if (j < s.len and std.ascii.isDigit(s[j])) {
+            while (j < s.len and std.ascii.isDigit(s[j])) j += 1;
+            i = j;
+        }
+    }
+    return i;
+}
+
+fn stringIs(it: *Interp, args: []const Value) Error!Value {
+    const a = it.alloc();
+    if (args.len < 2 or args.len > 5) return it.wrongArgs("string is class ?-strict? ?-failindex var? str");
+    const word = try it.str(args[0]);
+    var class: ?[]const u8 = null;
+    var hits: usize = 0;
+    for (class_names) |c| {
+        if (eql(c, word)) {
+            class = c;
+            hits = 1;
+            break;
+        }
+        if (word.len > 0 and std.mem.startsWith(u8, c, word)) {
+            class = c;
+            hits += 1;
+        }
+    }
+    if (hits != 1) {
+        var msg: std.ArrayList(u8) = .empty;
+        try msg.print(a, "{s} class \"{s}\": must be ", .{ if (hits > 1) "ambiguous" else "bad", word });
+        for (class_names, 0..) |c, i| {
+            if (i > 0) try msg.appendSlice(a, ", ");
+            if (i == class_names.len - 1) try msg.appendSlice(a, "or ");
+            try msg.appendSlice(a, c);
+        }
+        it.result = .{ .str = msg.items };
+        it.error_code = .{ .str = "TCL LOOKUP INDEX class" };
+        return error.TclError;
+    }
+    const cl = class.?;
+    var strict = false;
+    var fail_var: ?Value = null;
+    var oi: usize = 1;
+    while (oi < args.len - 1) : (oi += 1) {
+        const o = try it.str(args[oi]);
+        if (o.len >= 2 and std.mem.startsWith(u8, "-strict", o)) {
+            strict = true;
+        } else if (o.len >= 2 and std.mem.startsWith(u8, "-failindex", o)) {
+            if (oi + 2 >= args.len) return it.fail("wrong # args: should be \"string is {s} ?-strict? ?-failindex var? str\"", .{cl});
+            oi += 1;
+            fail_var = args[oi];
+        } else return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -strict or -failindex", .{o});
+    }
+    const v = args[args.len - 1];
+    const s = try it.str(v);
+    var ok = true;
+    var at: i64 = 0;
+    if (s.len == 0) {
+        ok = !strict or eql(cl, "list");
+    } else if (eql(cl, "boolean") or eql(cl, "true") or eql(cl, "false")) {
+        ok = boolWordOf(s, cl);
+    } else if (eql(cl, "integer") or eql(cl, "wideinteger") or eql(cl, "entier")) {
+        const n = expr.intArg(it, v) catch |e| blk: {
+            if (e != error.TclError) return e;
+            break :blk null;
+        };
+        ok = n != null;
+        if (ok and !eql(cl, "entier")) {
+            if (n.? != .int) ok = false;
+            if (ok and eql(cl, "integer") and (n.?.int > 0xFFFFFFFF or n.?.int < -0x80000000)) ok = false;
+        }
+        if (!ok) {
+            at = if (n != null) -1 else @intCast(numberPrefix(s, false));
+        }
+    } else if (eql(cl, "double")) {
+        const body = value.trimSpace(s);
+        const prefix = numberPrefix(body, true);
+        const plain = prefix == body.len and value.parseDouble(body) != null;
+        const named = value.parseDouble(body) != null and body.len > 0 and !std.ascii.isDigit(body[body.len - 1]) and body[body.len - 1] != '.';
+        ok = v == .double or v == .int or plain or named or (expr.intArg(it, v) catch null) != null;
+        if (!ok) at = @intCast(numberPrefix(s, true));
+    } else if (eql(cl, "list")) {
+        ok = true;
+        if (value.listFault(s) != null) {
+            ok = false;
+            at = @intCast(listFaultStart(s));
+        }
+    } else {
+        var i: usize = 0;
+        var k: usize = 0;
+        while (i < s.len) : (k += 1) {
+            const d = ucd.next(s, i);
+            if (!classOk(cl, d.cp)) {
+                ok = false;
+                at = @intCast(k);
+                break;
             }
-            const v = args[args.len - 1];
-            const s = try it.str(v);
-            if (s.len == 0) {
-                if (strict) if (fail_var) |fv| try it.setVar(try it.str(fv), .{ .int = 0 });
-                return .{ .int = @intFromBool(!strict) };
-            }
-            // The first character that is not in the class.
-            defer_fail: {
-                const fv = fail_var orelse break :defer_fail;
-                var k: usize = 0;
-                while (k < s.len) : (k += 1) {
-                    const one = isClass(class, s[k .. k + 1]) orelse break;
-                    if (!one) {
-                        try it.setVar(try it.str(fv), .{ .int = @intCast(k) });
-                        break;
-                    }
+            i += d.len;
+        }
+    }
+    if (!ok) if (fail_var) |fv| try it.setVar(try it.str(fv), .{ .int = @intCast(at) });
+    return .{ .int = @intFromBool(ok) };
+}
+
+/// The character index of the element with the open brace or quote.
+fn listFaultStart(s: []const u8) usize {
+    var i: usize = 0;
+    var start: usize = 0;
+    while (i < s.len) {
+        while (i < s.len and std.ascii.isWhitespace(s[i])) i += 1;
+        if (i >= s.len) break;
+        start = i;
+        if (s[i] == '{') {
+            var depth: usize = 0;
+            while (i < s.len) : (i += 1) {
+                if (s[i] == '\\') {
+                    i += 1;
+                } else if (s[i] == '{') {
+                    depth += 1;
+                } else if (s[i] == '}') {
+                    depth -= 1;
+                    if (depth == 0) break;
                 }
             }
-            var ok: bool = undefined;
-            if (eql(class, "integer") or eql(class, "wideinteger") or eql(class, "entier")) {
-                ok = v.asInt() != null;
-            } else if (eql(class, "double")) {
-                ok = v.asNumber() != null;
-            } else if (eql(class, "boolean") or eql(class, "true") or eql(class, "false")) {
-                ok = if (expr.truthy(it, v)) |b| eql(class, "boolean") or b == eql(class, "true") else |_| false;
-            } else if (eql(class, "list")) {
-                ok = if (v.asList(a)) |_| true else |_| false;
-            } else {
-                ok = isClass(class, s) orelse return it.fail("bad class \"{s}\": must be alnum, alpha, ascii, boolean, digit, double, entier, false, integer, list, lower, punct, space, true, upper, wideinteger, or xdigit", .{class});
+            if (i >= s.len) return charCount(s[0..start]);
+            i += 1;
+            if (i < s.len and !std.ascii.isWhitespace(s[i])) return charCount(s[0..start]);
+        } else if (s[i] == '"') {
+            i += 1;
+            while (i < s.len and s[i] != '"') : (i += 1) {
+                if (s[i] == '\\') i += 1;
             }
-            return .{ .int = @intFromBool(ok) };
-        },
+            if (i >= s.len) return charCount(s[0..start]);
+            i += 1;
+            if (i < s.len and !std.ascii.isWhitespace(s[i])) return charCount(s[0..start]);
+        } else {
+            while (i < s.len and !std.ascii.isWhitespace(s[i])) : (i += 1) {
+                if (s[i] == '\\') i += 1;
+            }
+        }
     }
+    return charCount(s[0..start]);
+}
+
+/// True when `s` is a boolean word of the class. Tcl accepts a unique
+/// prefix of the words, in any case.
+fn boolWordOf(s: []const u8, class: []const u8) bool {
+    const t = s;
+    var truth: ?bool = null;
+    if (eql(t, "0") or eql(t, "1")) {
+        truth = t[0] == '1';
+    } else {
+        const yes = [_][]const u8{ "true", "yes", "on" };
+        const no = [_][]const u8{ "false", "no", "off" };
+        const lower = t;
+        for (yes) |w| {
+            if (lower.len <= w.len and std.ascii.eqlIgnoreCase(lower, w[0..lower.len]) and !(eql(w, "on") and lower.len < 2)) truth = true;
+        }
+        for (no) |w| {
+            if (lower.len <= w.len and std.ascii.eqlIgnoreCase(lower, w[0..lower.len]) and !(eql(w, "off") and lower.len < 2)) truth = false;
+        }
+    }
+    const b = truth orelse return false;
+    if (eql(class, "boolean")) return true;
+    return b == eql(class, "true");
+}
+
+/// Compares by characters. A limit counts characters.
+fn compareStrings(x: []const u8, y: []const u8, nocase: bool, limit: ?usize) std.math.Order {
+    var i: usize = 0;
+    var j: usize = 0;
+    var n: usize = 0;
+    while (limit == null or n < limit.?) : (n += 1) {
+        if (i >= x.len or j >= y.len) {
+            if (i >= x.len and j >= y.len) return .eq;
+            return if (i >= x.len) .lt else .gt;
+        }
+        const p = ucd.next(x, i);
+        const q = ucd.next(y, j);
+        const c = if (nocase) ucd.toLower(p.cp) else p.cp;
+        const d = if (nocase) ucd.toLower(q.cp) else q.cp;
+        if (c != d) return std.math.order(c, d);
+        i += p.len;
+        j += q.len;
+    }
+    return .eq;
+}
+
+/// The default set of `string trim`: the Unicode spaces and NUL.
+fn trimChars(s: []const u8, chars: ?[]const u8, left: bool, right: bool) []const u8 {
+    const inSet = struct {
+        fn f(set: ?[]const u8, c: u21) bool {
+            const t = set orelse return c == 0 or ucd.isSpace(c);
+            var i: usize = 0;
+            while (i < t.len) {
+                const d = ucd.next(t, i);
+                if (d.cp == c) return true;
+                i += d.len;
+            }
+            return false;
+        }
+    }.f;
+    var start: usize = 0;
+    var end: usize = s.len;
+    if (left) while (start < end) {
+        const d = ucd.next(s, start);
+        if (!inSet(chars, d.cp)) break;
+        start += d.len;
+    };
+    if (right) while (end > start) {
+        var k = end - 1;
+        while (k > start and s[k] & 0xC0 == 0x80) k -= 1;
+        const d = ucd.next(s, k);
+        if (!inSet(chars, d.cp)) break;
+        end = k;
+    };
+    return s[start..end];
 }
 
 // ---- info, puts, array ----
