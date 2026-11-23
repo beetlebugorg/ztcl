@@ -897,11 +897,23 @@ pub const Interp = struct {
         it.top = m.top;
     }
 
-    pub fn stackAllocPub(it: *Interp, n: usize) Allocator.Error![]Value {
+    pub inline fn stackAllocPub(it: *Interp, n: usize) Allocator.Error![]Value {
         return it.stackAlloc(n);
     }
 
-    fn stackAlloc(it: *Interp, n: usize) Allocator.Error![]Value {
+    inline fn stackAlloc(it: *Interp, n: usize) Allocator.Error![]Value {
+        if (it.chunks.items.len != 0) {
+            const c = it.chunks.items[it.chunk];
+            if (it.top + n <= c.len) {
+                const out = c[it.top .. it.top + n];
+                it.top += n;
+                return out;
+            }
+        }
+        return it.stackGrow(n);
+    }
+
+    fn stackGrow(it: *Interp, n: usize) Allocator.Error![]Value {
         if (it.chunks.items.len == 0 or it.top + n > it.chunks.items[it.chunk].len) {
             if (it.chunks.items.len != 0) it.chunk += 1;
             if (it.chunk >= it.chunks.items.len) {
@@ -1202,7 +1214,7 @@ pub const Interp = struct {
         // The other locals of the body start with no value.
         for (bc.names[it.frame.vars.items.len..]) |name| {
             const cell = try it.newCell();
-            try it.frame.vars.append(it.alloc(), .{ .name = name, .cell = cell });
+            try it.addEntry(.{ .name = name, .cell = cell });
         }
         return vm.run(it, bc) catch |e| switch (e) {
             error.TclReturn => {
@@ -1312,7 +1324,7 @@ pub const Interp = struct {
     fn newCell(it: *Interp) Allocator.Error!*Var {
         if (it.free_vars) |c| {
             it.free_vars = c.next_free;
-            c.* = .{};
+            c.v = .undef;
             return c;
         }
         const c = try it.alloc().create(Var);
@@ -1320,10 +1332,20 @@ pub const Interp = struct {
         return c;
     }
 
+    /// Adds an entry to the current frame. A frame from the free list
+    /// has the capacity of its last call, so the check almost always
+    /// passes.
+    inline fn addEntry(it: *Interp, e: VarEntry) Allocator.Error!void {
+        const vars = &it.frame.vars;
+        if (vars.items.len < vars.capacity) {
+            vars.appendAssumeCapacity(e);
+        } else try vars.append(it.alloc(), e);
+    }
+
     fn newLocal(it: *Interp, name: []const u8, v: Value) Allocator.Error!void {
         const cell = try it.newCell();
         cell.v = .{ .val = v };
-        try it.frame.vars.append(it.alloc(), .{ .name = name, .cell = cell });
+        try it.addEntry(.{ .name = name, .cell = cell });
     }
 
     /// Finds the cell of a name in a frame. Follows links.
