@@ -104,13 +104,75 @@ fn parse(it: *Interp, text: []const u8) Error!?Big {
     var b = Big.init(gpa(it)) catch |e| return mem(e);
     errdefer b.deinit();
     try charge(it, p.body.len / 16);
-    b.setString(p.base, p.body) catch |e| return mem(e);
+    if (p.base == 10 and @bitSizeOf(std.math.big.Limb) == 64 and allDigits(p.body)) {
+        setDecimal(&b, p.body) catch |e| return mem(e);
+    } else {
+        b.setString(p.base, p.body) catch |e| return mem(e);
+    }
     if (p.neg) b.negate();
     if (b.bitCountAbs() > max_bits) {
         b.deinit();
         return null;
     }
     return b;
+}
+
+fn allDigits(s: []const u8) bool {
+    for (s) |c| if (c < '0' or c > '9') return false;
+    return true;
+}
+
+/// Sets `b` from decimal digits. Each step multiplies the limbs by
+/// 10^19 and adds the next 19 digits.
+fn setDecimal(b: *Big, text: []const u8) !void {
+    try b.ensureCapacity(text.len / chunk_digits + 2);
+    const limbs = b.limbs;
+    var n: usize = 0;
+    var at: usize = 0;
+    var take = text.len % chunk_digits;
+    if (take == 0) take = chunk_digits;
+    while (at < text.len) {
+        var carry: u64 = 0;
+        for (text[at..][0..take]) |c| carry = carry * 10 + (c - '0');
+        at += take;
+        take = chunk_digits;
+        for (limbs[0..n]) |*l| {
+            const w = @as(u128, l.*) * chunk + carry;
+            l.* = @truncate(w);
+            carry = @intCast(w >> 64);
+        }
+        if (carry != 0) {
+            limbs[n] = carry;
+            n += 1;
+        }
+    }
+    if (n == 0) {
+        limbs[0] = 0;
+        n = 1;
+    }
+    b.setMetadata(true, n);
+}
+
+test "setDecimal equals setString" {
+    const a = std.testing.allocator;
+    var prng = std.Random.DefaultPrng.init(21);
+    const rng = prng.random();
+    var buf: [400]u8 = undefined;
+    var x = try Big.init(a);
+    defer x.deinit();
+    var y = try Big.init(a);
+    defer y.deinit();
+    for (0..1500) |round| {
+        const len = 1 + round % buf.len;
+        for (buf[0..len]) |*c| c.* = switch (rng.int(u8) % 3) {
+            0 => '0',
+            1 => '9',
+            else => '0' + rng.uintLessThan(u8, 10),
+        };
+        try setDecimal(&x, buf[0..len]);
+        try y.setString(10, buf[0..len]);
+        try std.testing.expect(x.toConst().eql(y.toConst()));
+    }
 }
 
 /// The value of integer text that does not fit in 64 bits: the
