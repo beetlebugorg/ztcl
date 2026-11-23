@@ -201,7 +201,7 @@ pub fn binary(it: *Interp, op: expr.BinOp, x: Value, y: Value) Error!Value {
     return finish(it, &r);
 }
 
-/// Sets `m` to ~v, which is -v - 1.
+/// Sets `m` to ~v. The value is -v - 1.
 fn invert(m: *Big, v: *const Big) !void {
     try m.copy(v.toConst());
     m.negate();

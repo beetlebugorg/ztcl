@@ -13,7 +13,9 @@ ztcl uses only the Zig standard library. [References](references/tcl.md) lists t
 | `expr.zig` | The expression language: the parser and the evaluator. |
 | `cmds.zig` | The core commands. |
 | `format.zig` | The `format` command. |
-| `dict.zig` | The `dict` command. |
+| `dict.zig` | The `dict` command and its hash table. |
+| `bigint.zig` | Integers above 64 bits. |
+| `compact.zig` | The reset that keeps the commands. |
 | `more.zig` | `lset`, `lsort`, `binary`, and `scan`. |
 | `regex.zig` | The regular expressions: `regexp`, `regsub`, and the matcher. |
 | `ns.zig` | The `namespace` command. |
@@ -31,7 +33,9 @@ A value is a tagged union: an integer (64 bits), a double, a string, or a list.
 - A literal keeps its text. `0x10` stays the string `0x10` until a command reads it as a number. A literal that is a canonical decimal integer becomes an int at parse time, because its string form is the same text.
 - A computed number is an int or a double. A double prints with the shortest digits that read back to the same double, as Tcl 8.6 does.
 - A list is a view of the first `len` elements of a shared buffer. `lappend` writes after the view when the view ends at the used part of the buffer, so an append is amortized constant time. Other views of the buffer stay correct.
-- A dict is a list of keys and values in insert order. It has no hash table yet, so a lookup reads the pairs in order. A list object can have a mark that says its pairs are a valid dict, so a read does not check the keys again.
+- A dict is a list of keys and values in insert order. A list object can have a mark that says its pairs are a valid dict, so a read does not check the keys again. A shorter view of even length of a marked buffer is also a valid dict.
+- A dict with 16 or more keys has a hash table with open addressing and linear probing. The table maps the hash of the string form of a key to its position. A new key goes after the view when the view ends at the used part of the buffer, so a new key is amortized O(1). An older view stays the same value, because a lookup ignores positions past its end. A write to an existing key of a shared dict copies the buffer.
+- A big integer is a string with canonical decimal text. An integer that fits in 64 bits is always an `int`. The integer operators check for overflow and call `bigint.zig` only on an overflow.
 - `append` writes after the string when the string ends at the used part of its buffer. Other views of the buffer stay correct, because their bytes do not change.
 
 ## The parser and the compiled form
@@ -130,7 +134,7 @@ A string is UTF-8 bytes. `string length`, `index`, `range`, `replace`, `first`, 
 
 ## expr
 
-`expr.zig` parses an expression into a tree and walks the tree. Two integers use a fast path with no string work. Integers are 64 bits and wrap; Tcl continues with big integers, and this interpreter does not. An overflow error was tried and removed, because the passes of `expr.test` fell from 14034 to 1981.
+`expr.zig` parses an expression into a tree and walks the tree. Two integers use a fast path with no string work. An integer that overflows 64 bits continues as a big integer, as in Tcl. A big integer has at most 2^20 bits. An operation on big integers uses steps of the step limit by the square of its size.
 
 The functions are those of Tcl 8.6, and four additions for zslice: `clamp`, `lerp`, `noise2`, and `noise3`. `rand()` uses a fixed seed.
 
@@ -145,10 +149,11 @@ The functions are those of Tcl 8.6, and four additions for zslice: `clamp`, `ler
 - The nesting of calls has a limit (600 levels). The nesting of command substitutions and of an expression has a limit (200 levels), and an expression has at most 2000 nodes. A deep script gives an error and does not use up the native stack.
 - A glob match goes back only to the last `*`. Its time is at most the pattern length times the string length. `string match`, `switch -glob`, `lsearch -glob`, and `dict filter` pay one step of the step limit for each 4096 units of that product.
 - A regular expression uses the step limit (see above).
-- All memory comes from one arena on the allocator that the embedder gives. `deinit` frees it in one step. The interpreter frees no memory before `deinit` or `reset`, so a script that makes many strings grows the arena.
+- All memory comes from one arena on the allocator that the embedder gives. `deinit` frees it in one step. The interpreter frees no memory before `compact`, `reset`, or `deinit`, so one evaluation that makes many strings grows the arena.
 - A memory limit (`mem_limit`). A counter between the arena and the allocator of the embedder counts the bytes. When the count is above the limit, the next command or loop pass stops the script with the error `the script used too much memory`. `catch` and `try` cannot catch it. One command can go above the limit by the size of its own result, for example one `string repeat`.
-- `reset` makes the interpreter new and frees the arena. The limits, the output, the seed, and the data of the embedder stay. The embedder loads its scripts again after a reset. A reset that keeps the commands and frees only the values of one evaluation is not there yet.
-- Not bounded yet: the size of one string or list below the fixed limits of `string repeat` and `lrepeat`, and the time of `lsort` and of a dict with many keys (a dict has no hash table).
+- `reset` makes the interpreter new and frees the arena. The limits, the output, the seed, and the data of the embedder stay. The embedder loads its scripts again after a reset.
+- `compact` frees the memory of past evaluations and keeps the commands, procs, namespaces, point programs, and variables. It copies them to a new arena and frees the old arena. The embedder lists each value that must stay valid in `roots`, and each root gets its new address. All other values from before the call are invalid. The compiled forms stay behind, so a proc compiles again at its next call. A shared list stays shared, and overlapping strings copy once. After an allocation error the interpreter stays as it was. A call inside a running script returns `error.InterpBusy`. During the call, the old and the new arena both exist.
+- Not bounded yet: the size of one string or list below the fixed limits of `string repeat` and `lrepeat`, and the time of `lsort`.
 - `tcl_platform` has the same fixed values on all platforms.
 - `info commands` and `array names` have a fixed order.
 

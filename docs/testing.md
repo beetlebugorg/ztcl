@@ -31,7 +31,7 @@ tools/suite.sh set.test expr.test     # some files
 | File | Pass | Fail | Skip |
 |---|---|---|---|
 | `set.test` | 61 | 2 | 1 |
-| `incr.test` | 61 | 4 | 0 |
+| `incr.test` | 62 | 4 | 0 |
 | `if.test` | 72 | 1 | 0 |
 | `while.test` | 45 | 1 | 0 |
 | `for.test` | 60 | 4 | 24 |
@@ -39,7 +39,7 @@ tools/suite.sh set.test expr.test     # some files
 | `proc.test` | 20 | 17 | 1 |
 | `uplevel.test` | 40 | 17 | 0 |
 | `upvar.test` | 34 | 23 | 8 |
-| `expr.test` | 14034 | 100 | 49 |
+| `expr.test` | 14080 | 56 | 49 |
 | `list.test` | 77 | 1 | 0 |
 | `lindex.test` | 37 | 9 | 37 |
 | `llength.test` | 5 | 1 | 0 |
@@ -67,9 +67,9 @@ tools/suite.sh set.test expr.test     # some files
 | `info.test` | 61 | 188 | 14 |
 | `dict.test` | 291 | 49 | 2 |
 | `scan.test` | 145 | 35 | 1 |
-| **Total** | **19241** | **1041** | **544** |
+| **Total** | **19288** | **997** | **544** |
 
-The largest groups of tests that still fail: `info frame` (about 120), `trace` (about 45), `tcl::prefix` (37), the big integers of `expr` (about 100), `upvar` to an array element, the error codes of the core commands (`ARITH DIVZERO`), `-during` in the options of `try`, and the details of `namespace`.
+The largest groups of tests that still fail: `info frame` (about 120), `trace` (about 45), `tcl::prefix` (37), `upvar` to an array element, the error codes of the core commands (`ARITH DIVZERO`), `-during` in the options of `try`, and the details of `namespace`.
 
 ## Benchmarks
 
@@ -78,29 +78,19 @@ zig build bench                                 # the point procs
 python3 -I tools/bench.py --tclsh <path to tclsh>  # the scripts in bench/
 ```
 
-`--tclsh` selects the Tcl version. All results below are against Tcl 8.6.16.
+`--tclsh` selects the Tcl version. [Tcl 8.6 and Tcl 9](tcl9.md) has the results for both versions and the suite totals of Tcl 9.1.0.
 
-Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2026-11-22. `tclsh` is Tcl 8.6.16. Each time is the best of 5 runs of the whole process, in CPU milliseconds (user and system). The machine had other load, and CPU time stays stable under that load.
+Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2026-11-22. Each time is the best of 9 runs of the whole process, in CPU milliseconds (user and system). The machine had other load, and CPU time stays stable under that load.
 
-| Benchmark (`bench/`) | ztcl | tclsh 8.6.16 |
-|---|---|---|
-| `sum.tcl` (1 million `expr` and `incr`) | 26.5 | 58.7 |
-| `fib.tcl` (fib 25, about 250 000 calls) | 16.6 | 51.1 |
-| `nested.tcl` (1000 x 1000, `lappend`, `llength`) | 38.2 | 74.1 |
-| `strbuild.tcl` (500 000 `append`) | 35.2 | 64.0 |
-| `foreach.tcl` (10 passes over 100 000 items) | 19.4 | 33.3 |
-| `dict.tcl` (200 000 `dict incr`, 200 000 `dict get`) | 36.1 | 48.9 |
-
-The warm times are the best of 5 runs of the file in one process, in wall milliseconds:
-
-| Benchmark | ztcl | tclsh 8.6.16 |
-|---|---|---|
-| `sum.tcl` | 25.7 | 56.3 |
-| `fib.tcl` | 15.8 | 48.9 |
-| `nested.tcl` | 31.5 | 75.8 |
-| `strbuild.tcl` | 32.8 | 59.9 |
-| `foreach.tcl` | 17.2 | 28.4 |
-| `dict.tcl` | 35.4 | 46.7 |
+| Benchmark (`bench/`) | ztcl | tclsh 8.6.16 | tclsh 9.1.0 |
+|---|---|---|---|
+| `sum.tcl` (1 million `expr` and `incr`) | 24.8 | 58.3 | 57.9 |
+| `fib.tcl` (fib 25, about 250 000 calls) | 16.4 | 50.8 | 49.2 |
+| `nested.tcl` (1000 x 1000, `lappend`, `llength`) | 37.2 | 73.5 | 84.8 |
+| `strbuild.tcl` (500 000 `append`) | 34.7 | 63.7 | 98.7 |
+| `foreach.tcl` (10 passes over 100 000 items) | 19.8 | 33.0 | 38.5 |
+| `dict.tcl` (200 000 `dict incr`, 200 000 `dict get`) | 30.6 | 48.7 | 58.4 |
+| `dictgrow.tcl` (200 000 new keys, 200 000 `dict get`) | 84.0 | 104.8 | 143.3 |
 
 The fuzzy skin proc (`zig build bench`):
 

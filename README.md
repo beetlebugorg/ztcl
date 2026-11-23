@@ -10,8 +10,8 @@ A sandboxed Tcl interpreter in Zig, with a bytecode VM and a vector path for num
 
 ## Status
 
-- The test suite of Tcl 8.6.16 is the measure of compatibility. ztcl passes 19 241 tests, fails 1 041, and skips 544 over 37 test files.
-- All measurements are against Tcl 8.6.16. ztcl makes no claim of Tcl 9 compatibility. See the [roadmap](docs/roadmap.md).
+- The test suite of Tcl 8.6.16 is the measure of compatibility. ztcl passes 19 288 tests, fails 997, and skips 544 over 37 test files.
+- On the test suite of Tcl 9.1.0, ztcl passes 8 756 tests, fails 3 326, and skips 541. ztcl follows Tcl 8.6 and makes no claim of Tcl 9 compatibility. [Tcl 8.6 and Tcl 9](docs/tcl9.md) lists the differences and the proposed choices.
 
 ## Example
 
@@ -83,18 +83,19 @@ const v = try it.eval("expr {6 * 7}");
 
 ## Benchmarks
 
-Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2026-11-22. The reference is `tclsh` 8.6.16. Each time is the best of 5 runs of the whole process, in CPU milliseconds.
+Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2026-11-22. Each time is the best of 9 runs of the whole process, in CPU milliseconds. The two `tclsh` builds can differ in compiler flags.
 
-| Benchmark | ztcl | tclsh 8.6.16 |
-|---|---|---|
-| `sum.tcl` (1 million `expr` and `incr`) | 26.5 | 58.7 |
-| `fib.tcl` (fib 25, about 250 000 calls) | 16.6 | 51.1 |
-| `nested.tcl` (1000 x 1000, `lappend`, `llength`) | 38.2 | 74.1 |
-| `strbuild.tcl` (500 000 `append`) | 35.2 | 64.0 |
-| `foreach.tcl` (10 passes over 100 000 items) | 19.4 | 33.3 |
-| `dict.tcl` (200 000 `dict incr`, 200 000 `dict get`) | 36.1 | 48.9 |
+| Benchmark | ztcl | tclsh 8.6.16 | tclsh 9.1.0 |
+|---|---|---|---|
+| `sum.tcl` (1 million `expr` and `incr`) | 24.8 | 58.3 | 57.9 |
+| `fib.tcl` (fib 25, about 250 000 calls) | 16.4 | 50.8 | 49.2 |
+| `nested.tcl` (1000 x 1000, `lappend`, `llength`) | 37.2 | 73.5 | 84.8 |
+| `strbuild.tcl` (500 000 `append`) | 34.7 | 63.7 | 98.7 |
+| `foreach.tcl` (10 passes over 100 000 items) | 19.8 | 33.0 | 38.5 |
+| `dict.tcl` (200 000 `dict incr`, 200 000 `dict get`) | 30.6 | 48.7 | 58.4 |
+| `dictgrow.tcl` (200 000 new keys, 200 000 `dict get`) | 84.0 | 104.8 | 143.3 |
 
-The fuzzy skin `point proc` over 10 million points uses 23 ns for each point on the vector path and 241 ns on the normal path. [Testing](docs/testing.md) has all results.
+The fuzzy skin `point proc` over 10 million points uses 23.5 ns for each point on the vector path and 241 ns on the normal path. [Testing](docs/testing.md) has all results.
 
 ## Compatibility
 
@@ -104,9 +105,9 @@ ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: list
 
 ## Known limits
 
-- Integers are 64 bits and wrap. Tcl continues with big integers.
-- A dict is a list of pairs with no hash table, so a dict that grows key by key has quadratic cost.
-- The arena frees memory only at `reset` or `deinit`, so a long script that makes many strings grows it. The memory limit stops the script.
+- A big integer has at most 2^20 bits. Tcl has no fixed limit.
+- A write to an existing key of a dict that another value shares copies the dict.
+- The arena frees memory only at `compact`, `reset`, or `deinit`, so one long evaluation that makes many strings grows it. The memory limit stops the script.
 - Regular expressions use the first alternative that matches. Tcl prefers the longest match.
 
 ## Documentation
@@ -115,6 +116,7 @@ ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: list
 - [Language reference](docs/language.md)
 - [Embedding in Zig](docs/embedding.md)
 - [Testing and benchmarks](docs/testing.md)
+- [Tcl 8.6 and Tcl 9](docs/tcl9.md)
 - [Roadmap](docs/roadmap.md)
 - [Release process](docs/release.md)
 - [References](docs/references/tcl.md)

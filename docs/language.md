@@ -16,10 +16,10 @@ The counts are pass / fail / skip for the test file of the command.
 | `catch` | no own test file |  |
 | `concat` | 9 / 0 / 0 |  |
 | `continue` | no own test file |  |
-| `dict` | 291 / 49 / 2 | No hash table. |
+| `dict` | 291 / 49 / 2 | Has a hash table from 16 keys. |
 | `error` | 283 / 19 / 15 |  |
 | `eval` | 11 / 1 / 0 |  |
-| `expr` | 14034 / 100 / 49 | 64-bit integers wrap. Adds `clamp`, `lerp`, `noise2`, and `noise3`. |
+| `expr` | 14080 / 56 / 49 | Big integers up to 2^20 bits. Adds `clamp`, `lerp`, `noise2`, and `noise3`. |
 | `for` | 60 / 4 / 24 |  |
 | `foreach` | 38 / 5 / 0 |  |
 | `format` | 224 / 32 / 10 |  |
@@ -76,7 +76,7 @@ The counts are pass / fail / skip for the test file of the command.
 
 ## Differences from Tcl
 
-- Integers are 64 bits and wrap.
+- A big integer has at most 2^20 bits.
 - `rand()` uses a fixed seed.
 - `tcl_platform` has the same fixed values on all platforms.
 - `info commands` and `array names` have a fixed order.

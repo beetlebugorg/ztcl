@@ -38,6 +38,30 @@ Russ Cox, "Regular Expression Matching: the Virtual Machine Approach", 2009. htt
 
 **How ztcl uses it:** `src/regex.zig` compiles a pattern to the instruction set of the article (`char`, `split`, `jmp`, `save`, `match`) and runs it with a backtracking matcher. ztcl has its own code. It adds the sets, the assertions, the back references, a check that stops an empty loop, and the step limit. The syntax follows the manual page `re_syntax.n` of Tcl.
 
+### Copying collection
+
+C. J. Cheney, "A Nonrecursive List Compacting Algorithm", Communications of the ACM 13(11), 1970. https://doi.org/10.1145/362790.362798
+
+**License:** Paper
+
+**How ztcl uses it:** `src/compact.zig` uses the idea of the paper: it copies the reachable objects to a new space with no recursion and keeps a map from each old object to its copy. ztcl has its own code, and uses a work list in place of the scan pointer of the paper.
+
+### Hash tables with linear probing
+
+Donald E. Knuth, The Art of Computer Programming, Volume 3, section 6.4.
+
+**License:** Book
+
+**How ztcl uses it:** `src/dict.zig` uses open addressing with linear probing. ztcl has its own code. The hash function is `std.hash.Wyhash` of the Zig standard library.
+
+### Big integer arithmetic
+
+`std.math.big.int` of the Zig standard library.
+
+**License:** MIT. The text is in `licenses/zig-std-MIT.txt`.
+
+**How ztcl uses it:** `src/bigint.zig` calls it for the arithmetic. The results and the error messages follow `tclsh` 8.6.16.
+
 ## Not used
 
 Jim Tcl (https://jim.tcl-lang.org/, BSD 2-Clause) is a small Tcl in C. The authors did not read its source for this interpreter, and ztcl has no code of it.

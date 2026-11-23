@@ -37,6 +37,7 @@ On `error.TclError`, `it.result` holds the message and `it.error_line` holds the
 | `user` | A pointer for the embedder. |
 | `register(name, fn)` | Adds a native command. |
 | `reset()` | Frees the arena and makes the interpreter new. The limits, output, seed, and `user` stay. |
+| `compact(roots, opts)` | Frees the memory of past evaluations and keeps the commands, procs, namespaces, and point programs. `.vars = .clear` also drops the variables. Each value in `roots` gets a new address. All other values from before the call are invalid. Call it between evaluations. |
 
 ## Point procs
 
