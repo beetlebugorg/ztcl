@@ -1161,7 +1161,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             .store => {
                 const cell = try writeCell(named, it, f, code, i.a);
                 if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[i.a]});
-                if (cell.v == .traced) {
+                if (cell.v == .traced or cell.v == .elem) {
                     try it.setVar(code.names[i.a], stack[sp - 1]);
                 } else cell.v = .{ .val = stack[sp - 1] };
                 pc += 1;
@@ -1361,7 +1361,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 const cell = try writeCell(named, it, f, code, i.a);
                 if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[i.a]});
                 sp -= 1;
-                if (cell.v == .traced) {
+                if (cell.v == .traced or cell.v == .elem) {
                     try it.setVar(code.names[i.a], stack[sp]);
                 } else cell.v = .{ .val = stack[sp] };
                 pc += 1;
@@ -1522,7 +1522,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     const cell = try writeCell(named, it, f, code, slot);
                     if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[slot]});
                     const item = if (at + k < items.len) items[at + k] else Value.empty;
-                    if (cell.v == .traced) {
+                    if (cell.v == .traced or cell.v == .elem) {
                         try it.setVar(code.names[slot], item);
                     } else cell.v = .{ .val = item };
                 }

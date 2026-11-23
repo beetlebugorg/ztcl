@@ -109,6 +109,14 @@ pub const Copier = struct {
                 try c.val(&job.new.v.val);
             },
             .link => |t| job.new.v = .{ .link = try c.cell(t) },
+            .elem => |e| {
+                const link = try c.a.create(interp.ElemLink);
+                link.* = e.*;
+                link.array = try c.cell(e.array);
+                try c.text(&link.name);
+                try c.text(&link.index);
+                job.new.v = .{ .elem = link };
+            },
             // A compact drops the traces and keeps the value.
             .traced => |t| switch (t.inner) {
                 .undef => {},

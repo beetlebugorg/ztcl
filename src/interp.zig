@@ -425,6 +425,8 @@ pub const Var = struct {
         owned: Value,
         /// A variable with traces. Only the general path reads it.
         traced: *trace.Traced,
+        /// A link to one element of an array (`upvar a(i) x`).
+        elem: *ElemLink,
     } = .undef,
     next_free: ?*Var = null,
 
@@ -451,6 +453,13 @@ pub const Var = struct {
         while (c.v == .link) c = c.v.link;
         return c;
     }
+};
+
+pub const ElemLink = struct {
+    /// The cell of the array and its name.
+    array: *Var,
+    name: []const u8,
+    index: []const u8,
 };
 
 pub const VarEntry = struct { name: []const u8, cell: *Var };
@@ -1019,6 +1028,10 @@ pub const Interp = struct {
                 const v = try it.evalWord(&c.words[2]);
                 const cell = try it.cellOf(c.words[1].kind.lit.str, &c.hint);
                 if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{c.words[1].kind.lit.str});
+                if (cell.v == .elem) {
+                    try it.setVar(c.words[1].kind.lit.str, v);
+                    return v;
+                }
                 cell.v = .{ .val = v };
                 return v;
             },
@@ -1491,6 +1504,7 @@ pub const Interp = struct {
             .val => |v| return v,
             .arr => return it.fail("can't read \"{s}\": variable is array", .{r.name}),
             .traced => return trace.read(it, c, r.name, null),
+            .elem => |e| return it.readElemLink(e),
             else => {},
         };
         return it.fail("can't read \"{s}\": no such variable", .{r.name});
@@ -1526,10 +1540,25 @@ pub const Interp = struct {
         return it.getVar(full);
     }
 
+    /// As `getVarOpt`, with no read trace.
+    pub fn getVarQuiet(it: *Interp, full: []const u8) Error!?Value {
+        const name, const idx = splitName(full);
+        const cell = try it.findVar(it.frame, name, false) orelse return null;
+        if (cell.v == .traced) {
+            return switch (cell.v.traced.inner) {
+                .val => |v| if (idx == null) v else null,
+                .arr => |m| if (idx) |i| m.get(i) else null,
+                .undef => null,
+            };
+        }
+        return it.getVarOpt(full);
+    }
+
     pub fn getVarOpt(it: *Interp, full: []const u8) Error!?Value {
         const name, const idx = splitName(full);
         const cell = try it.findVar(it.frame, name, false) orelse return null;
         if (cell.v == .traced) return trace.readOpt(it, cell, name, idx);
+        if (cell.v == .elem and idx == null) return it.elemValue(cell.v.elem);
         if (idx) |i| return if (cell.v == .arr) cell.v.arr.get(i) else null;
         return if (cell.v == .val) cell.v.val else null;
     }
@@ -1539,6 +1568,10 @@ pub const Interp = struct {
         const name, const idx = splitName(full);
         const cell = (try it.findVar(it.frame, name, true)).?;
         if (cell.v == .traced) return trace.write(it, cell, name, idx, v);
+        if (cell.v == .elem) {
+            if (idx != null) return it.fail("can't set \"{s}\": variable isn't array", .{full});
+            return it.writeElemLink(cell.v.elem, v);
+        }
         if (idx) |i| {
             switch (cell.v) {
                 .undef => {
@@ -1563,6 +1596,11 @@ pub const Interp = struct {
         const name, const idx = splitName(full);
         const cell = try it.findVar(it.frame, name, false) orelse return false;
         if (cell.v == .traced) return trace.unset(it, cell, name, idx);
+        if (cell.v == .elem) {
+            const e = cell.v.elem;
+            if (e.array.v == .traced) return trace.unset(it, e.array, e.name, e.index);
+            return e.array.v == .arr and e.array.v.arr.orderedRemove(e.index);
+        }
         if (idx) |i| {
             if (cell.v != .arr) return false;
             return cell.v.arr.orderedRemove(i);
@@ -1570,6 +1608,47 @@ pub const Interp = struct {
         if (cell.v == .undef) return false;
         cell.v = .undef;
         return true;
+    }
+
+    fn elemValue(it: *Interp, e: *ElemLink) Error!?Value {
+        _ = it;
+        return switch (e.array.v) {
+            .arr => |m| m.get(e.index),
+            .traced => |t| if (t.inner == .arr) t.inner.arr.get(e.index) else null,
+            else => null,
+        };
+    }
+
+    fn readElemLink(it: *Interp, e: *ElemLink) Error!Value {
+        if (e.array.v == .traced) return trace.read(it, e.array, e.name, e.index);
+        if (e.array.v == .arr) {
+            if (e.array.v.arr.get(e.index)) |v| return v;
+            return it.fail("can't read \"{s}({s})\": no such element in array", .{ e.name, e.index });
+        }
+        return it.fail("can't read \"{s}({s})\": no such variable", .{ e.name, e.index });
+    }
+
+    fn writeElemLink(it: *Interp, e: *ElemLink, v: Value) Error!void {
+        const cell = e.array;
+        if (cell.v == .traced) return trace.write(it, cell, e.name, e.index, v);
+        if (cell.v == .undef) {
+            const m = try it.alloc().create(ArrayMap);
+            m.* = .empty;
+            cell.v = .{ .arr = m };
+        }
+        if (cell.v != .arr) return it.fail("can't set \"{s}({s})\": variable isn't array", .{ e.name, e.index });
+        const gop = try cell.v.arr.getOrPut(it.alloc(), e.index);
+        if (!gop.found_existing) gop.key_ptr.* = try it.alloc().dupe(u8, e.index);
+        gop.value_ptr.* = v;
+    }
+
+    /// Makes a cell that links to an element of an array.
+    pub fn elemCell(it: *Interp, array: *Var, name: []const u8, index: []const u8) Allocator.Error!*Var {
+        const e = try it.alloc().create(ElemLink);
+        e.* = .{ .array = array, .name = try it.alloc().dupe(u8, name), .index = try it.alloc().dupe(u8, index) };
+        const c = try it.newCell();
+        c.v = .{ .elem = e };
+        return c;
     }
 
     /// The frame at a level word of `uplevel` and `upvar` ("1", "#0").

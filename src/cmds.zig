@@ -140,7 +140,8 @@ pub fn cmdAppend(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("append varName ?value ...?");
     const name = try it.str(argv[1]);
     if (argv.len == 2) return it.getVar(name);
-    const cur = if (try it.getVarOpt(name)) |v| try it.str(v) else "";
+    // Tcl runs no read trace for `append`.
+    const cur = if (try it.getVarQuiet(name)) |v| try it.str(v) else "";
     var small: [8][]const u8 = undefined;
     const parts = if (argv.len - 2 <= small.len) small[0 .. argv.len - 2] else try it.alloc().alloc([]const u8, argv.len - 2);
     for (argv[2..], parts) |v, *s| s.* = try it.str(v);
@@ -193,7 +194,13 @@ fn cmdUpvar(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     while (i + 1 < argv.len) : (i += 2) {
         const other = try it.str(argv[i]);
-        if (Interp.splitName(other)[1] != null) return it.fail("upvar to an array element is not supported", .{});
+        const base, const elem = Interp.splitName(other);
+        if (elem) |at| {
+            const array = (try it.findVar(frame, base, true)).?;
+            if (array.v == .val) return it.fail("can't upvar from variable to itself", .{});
+            try it.linkVar(try it.str(argv[i + 1]), try it.elemCell(array, base, at));
+            continue;
+        }
         const target = (try it.findVar(frame, other, true)).?;
         try it.linkVar(try it.str(argv[i + 1]), target);
     }
@@ -1788,6 +1795,12 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (argv.len != 3) return it.wrongArgs("info exists varName");
         const name, const idx = Interp.splitName(pattern.?);
         const cell = try it.findVar(it.frame, name, false) orelse return .{ .int = 0 };
+        if (cell.v == .elem) {
+            const e = cell.v.elem;
+            if (e.array.v == .arr) return .{ .int = @intFromBool(e.array.v.arr.contains(e.index)) };
+            if (e.array.v == .traced and e.array.v.traced.inner == .arr) return .{ .int = @intFromBool(e.array.v.traced.inner.arr.contains(e.index)) };
+            return .{ .int = 0 };
+        }
         if (cell.v == .traced) {
             const inner = cell.v.traced.inner;
             if (idx) |i| return .{ .int = @intFromBool(inner == .arr and inner.arr.contains(i)) };

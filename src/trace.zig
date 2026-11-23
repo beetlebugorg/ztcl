@@ -126,10 +126,19 @@ fn fire(it: *Interp, t: *Traced, name: []const u8, idx: ?[]const u8, op: u8) Err
             const i = idx orelse continue;
             if (!eql(e, i)) continue;
         }
+        // A trace can remove a later trace of the same variable.
+        if (!still(t, tr)) continue;
         const word = if (tr.old != null) oldLetter(op) else opName(op);
         if (try runHook(it, tr.cmd, &.{ name, idx orelse "", word })) |msg| return msg;
     }
     return null;
+}
+
+fn still(t: *const Traced, tr: VarTrace) bool {
+    for (t.list.items) |x| {
+        if (x.ops == tr.ops and std.meta.eql(x.cmd, tr.cmd) and (x.old == null) == (tr.old == null)) return true;
+    }
+    return false;
 }
 
 fn fullName(it: *Interp, name: []const u8, idx: ?[]const u8) Error![]const u8 {
@@ -141,6 +150,8 @@ fn fullName(it: *Interp, name: []const u8, idx: ?[]const u8) Error![]const u8 {
 
 pub fn read(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!Value {
     const t = cell.v.traced;
+    // An element of a variable that is not an array has no trace to run.
+    if (idx != null and t.inner != .arr) return peek(it, cell, name, idx);
     if (try fire(it, t, name, idx, op_read)) |msg| {
         return it.fail("can't read \"{s}\": {s}", .{ try fullName(it, name, idx), msg });
     }
@@ -225,25 +236,32 @@ pub fn unset(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!
     if (idx) |i| {
         if (t.inner != .arr) return false;
         if (!t.inner.arr.orderedRemove(i)) return false;
-        _ = try fire(it, t, name, i, op_unset);
-        if (cell.v == .traced) {
-            var k: usize = t.list.items.len;
-            while (k > 0) : (k -= 1) {
-                const e = t.list.items[k - 1].elem orelse continue;
-                if (eql(e, i)) _ = t.list.orderedRemove(k - 1);
+        // The traces of the element go away before they run.
+        var gone: Traced = .{ .inner = .undef };
+        var k: usize = 0;
+        while (k < t.list.items.len) {
+            const tr = t.list.items[k];
+            if (tr.elem != null and eql(tr.elem.?, i)) {
+                try gone.list.append(it.alloc(), tr);
+                _ = t.list.orderedRemove(k);
+            } else {
+                if (tr.elem == null) try gone.list.append(it.alloc(), tr);
+                k += 1;
             }
         }
+        _ = try fire(it, &gone, name, i, op_unset);
         return true;
     }
-    if (t.inner == .undef) return false;
-    if (t.inner == .arr) {
-        const m = t.inner.arr;
-        for (m.keys()) |k| _ = try fire(it, t, name, k, op_unset);
-    }
+    const existed = t.inner != .undef;
+    // All traces go away before they run. A trace can add a new one.
+    var gone: Traced = .{ .inner = t.inner };
+    gone.list = t.list;
+    t.list = .empty;
     t.inner = .undef;
-    _ = try fire(it, t, name, null, op_unset);
     drop(it, cell);
-    return true;
+    gone.inner = .undef;
+    _ = try fire(it, &gone, name, null, op_unset);
+    return existed;
 }
 
 /// Removes the traces of a cell. The cell keeps its value.
@@ -411,7 +429,7 @@ fn parseCmdOps(it: *Interp, v: Value) Error!u8 {
 
 fn parseExecOps(it: *Interp, v: Value) Error!u8 {
     const words = try it.list(v);
-    if (words.len == 0) return it.fail("bad operation list \"\": must be one or more of enter, enterstep, leave, or leavestep", .{});
+    if (words.len == 0) return it.fail("bad operation list \"\": must be one or more of enter, leave, enterstep, or leavestep", .{});
     var ops: u8 = 0;
     for (words) |w| {
         const s = try it.str(w);
@@ -423,7 +441,7 @@ fn parseExecOps(it: *Interp, v: Value) Error!u8 {
             ops |= 4;
         } else if (eql(s, "leavestep")) {
             ops |= 8;
-        } else return it.failCode("TCL LOOKUP INDEX operation", "bad operation \"{s}\": must be enter, enterstep, leave, or leavestep", .{s});
+        } else return it.failCode("TCL LOOKUP INDEX operation", "bad operation \"{s}\": must be enter, leave, enterstep, or leavestep", .{s});
     }
     return ops;
 }
