@@ -43,6 +43,8 @@ pub const Options = struct {
 pub const Copier = struct {
     a: Allocator,
     temp: Allocator,
+    /// The element links that the copy has.
+    elem_links: u32 = 0,
     lists: std.AutoHashMapUnmanaged(*value.ListObj, *value.ListObj) = .empty,
     cells: std.AutoHashMapUnmanaged(*Var, *Var) = .empty,
     commands: std.AutoHashMapUnmanaged(*interp.Command, *interp.Command) = .empty,
@@ -116,6 +118,7 @@ pub const Copier = struct {
                 try c.text(&link.name);
                 try c.text(&link.index);
                 job.new.v = .{ .elem = link };
+                c.elem_links += 1;
             },
             // A compact drops the traces and keeps the value.
             .traced => |t| if (t.precision) {
@@ -342,7 +345,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.ns_paths = ns_paths;
     it.ns_unknown = ns_unknown;
     it.searches = .empty;
-    it.var_traces = 0;
+    it.var_traces = c.elem_links;
     if (opts.vars != .keep) {
         it.precision = 0;
         value.precision = 0;

@@ -835,7 +835,7 @@ const Compiler = struct {
             return false;
         };
         if (names.len == 0) return false;
-        for (names) |v| if (v != .str or !plain(v.str)) return false;
+        for (names) |v| if (v != .str or !plain(v.str) or std.mem.eql(u8, v.str, "tcl_precision")) return false;
         const body = try c.bodyScript(cmd, 3) orelse return false;
         const table = try c.a.alloc(u32, names.len);
         for (names, table) |v, *t| t.* = try c.slot(v.str);
@@ -946,6 +946,21 @@ inline fn readCell(comptime named: bool, it: *Interp, f: *Frame, code: *const Co
 inline fn writeCell(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, slot: u32) Allocator.Error!*Var {
     if (named) return it.cellOf(code.names[slot], &code.hints[slot]);
     return cellAt(f, slot);
+}
+
+/// A store to a cell that is an array, has traces, or links to an
+/// element. It stays out of line to keep the registers of the loop.
+noinline fn slowStore(it: *Interp, name: []const u8, v: *const Value) Error!void {
+    @branchHint(.cold);
+    return it.setVar(name, v.*);
+}
+
+/// The stores of one `foreach` pass while a variable has traces.
+noinline fn slowForeach(it: *Interp, code: *const Code, table: []const u32, items: []const Value, at: usize) Error!void {
+    @branchHint(.cold);
+    for (table, 0..) |slot, k| {
+        try it.setVar(code.names[slot], if (at + k < items.len) items[at + k] else Value.empty);
+    }
 }
 
 fn step(it: *Interp) Error!void {
@@ -1160,10 +1175,13 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             },
             .store => {
                 const cell = try writeCell(named, it, f, code, i.a);
-                if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[i.a]});
-                if (cell.v == .traced or cell.v == .elem) {
-                    try it.setVar(code.names[i.a], stack[sp - 1]);
-                } else cell.v = .{ .val = stack[sp - 1] };
+                if (!cell.plainStore()) {
+                    try slowStore(it, code.names[i.a], &stack[sp - 1]);
+                    pc += 1;
+                    i = &ins[pc];
+                    continue :sw i.op;
+                }
+                cell.v = .{ .val = stack[sp - 1] };
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
@@ -1359,11 +1377,14 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             },
             .store_pop => {
                 const cell = try writeCell(named, it, f, code, i.a);
-                if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[i.a]});
                 sp -= 1;
-                if (cell.v == .traced or cell.v == .elem) {
-                    try it.setVar(code.names[i.a], stack[sp]);
-                } else cell.v = .{ .val = stack[sp] };
+                if (!cell.plainStore()) {
+                    try slowStore(it, code.names[i.a], &stack[sp]);
+                    pc += 1;
+                    i = &ins[pc];
+                    continue :sw i.op;
+                }
+                cell.v = .{ .val = stack[sp] };
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
@@ -1518,13 +1539,14 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     continue;
                 }
                 try step(it);
-                for (table, 0..) |slot, k| {
+                // A traced cell or an element link exists only while
+                // `var_traces` is above zero.
+                if (it.var_traces != 0) {
+                    try slowForeach(it, code, table, items, at);
+                } else for (table, 0..) |slot, k| {
                     const cell = try writeCell(named, it, f, code, slot);
                     if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[slot]});
-                    const item = if (at + k < items.len) items[at + k] else Value.empty;
-                    if (cell.v == .traced or cell.v == .elem) {
-                        try it.setVar(code.names[slot], item);
-                    } else cell.v = .{ .val = item };
+                    cell.v = .{ .val = if (at + k < items.len) items[at + k] else Value.empty };
                 }
                 stack[sp - 1] = .{ .int = @intCast(at + table.len) };
                 pc += 1;

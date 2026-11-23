@@ -419,17 +419,26 @@ pub const Var = struct {
     v: union(enum) {
         undef,
         val: Value,
-        arr: *ArrayMap,
-        link: *Var,
         /// A dict that only this cell can see. The bytecode updates it
         /// in place. Each general read makes it a plain value first.
         owned: Value,
+        // The forms above take a plain store (`plainStore`).
+        arr: *ArrayMap,
+        link: *Var,
         /// A variable with traces. Only the general path reads it.
         traced: *trace.Traced,
         /// A link to one element of an array (`upvar a(i) x`).
         elem: *ElemLink,
     } = .undef,
     next_free: ?*Var = null,
+
+    /// True when a store can overwrite the cell. One compare of the tag
+    /// covers the three plain forms.
+    pub inline fn plainStore(cell: *const Var) bool {
+        const Tag = std.meta.Tag(@TypeOf(cell.v));
+        const tag: Tag = cell.v;
+        return @intFromEnum(tag) <= @intFromEnum(Tag.owned);
+    }
 
     /// The cell at the end of the links, with a plain value.
     pub inline fn settle(cell: *Var) *Var {
@@ -1036,8 +1045,7 @@ pub const Interp = struct {
             .set => {
                 const v = try it.evalWord(&c.words[2]);
                 const cell = try it.cellOf(c.words[1].kind.lit.str, &c.hint);
-                if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{c.words[1].kind.lit.str});
-                if (cell.v == .elem or cell.v == .traced) {
+                if (!cell.plainStore()) {
                     try it.setVar(c.words[1].kind.lit.str, v);
                     return v;
                 }
@@ -1566,6 +1574,7 @@ pub const Interp = struct {
     pub fn getVarOpt(it: *Interp, full: []const u8) Error!?Value {
         const name, const idx = splitName(full);
         const cell = try it.findVar(it.frame, name, false) orelse return null;
+        if (idx == null and cell.v == .val) return cell.v.val;
         if (cell.v == .traced) return trace.readOpt(it, cell, name, idx);
         if (cell.v == .elem and idx == null) return it.elemValue(cell.v.elem);
         if (idx) |i| return if (cell.v == .arr) cell.v.arr.get(i) else null;
@@ -1576,6 +1585,10 @@ pub const Interp = struct {
     pub fn setVar(it: *Interp, full: []const u8, v: Value) Error!void {
         const name, const idx = splitName(full);
         const cell = (try it.findVar(it.frame, name, true)).?;
+        if (idx == null and cell.plainStore()) {
+            cell.v = .{ .val = v };
+            return;
+        }
         if (cell.v == .traced) return trace.write(it, cell, name, idx, v);
         if (cell.v == .elem) {
             if (idx != null) return it.fail("can't set \"{s}\": variable isn't array", .{full});
@@ -1657,6 +1670,9 @@ pub const Interp = struct {
         e.* = .{ .array = array, .name = try it.alloc().dupe(u8, name), .index = try it.alloc().dupe(u8, index) };
         const c = try it.newCell();
         c.v = .{ .elem = e };
+        // The count also turns the inline stores off for element links.
+        it.var_traces += 1;
+        it.epoch += 1;
         return c;
     }
 
