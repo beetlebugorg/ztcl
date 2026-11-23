@@ -1417,6 +1417,22 @@ test "a compare keeps the text of each string that looks like a number" {
     }
 }
 
+test "a child on the shared heap stops at the memory limit of its parent" {
+    for ([_]u32{ 0, 16 }) |stress| {
+        var it: tcl.Interp = undefined;
+        try it.init(std.testing.allocator);
+        defer it.deinit();
+        try it.allow(@intFromEnum(tcl.interp.Capability.interp));
+        it.mem_limit = 8 << 20;
+        it.step_limit = 50_000_000;
+        it.setGcStress(stress);
+        _ = try it.eval("interp create c");
+        const r = it.eval("c eval {set l {}; while 1 {lappend l [string repeat x 4000]}}");
+        try std.testing.expectError(error.TclError, r);
+        try std.testing.expectEqualStrings("the script used too much memory", try it.str(it.result));
+    }
+}
+
 test "the modulo of the smallest integer does not overflow" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);

@@ -669,6 +669,31 @@ test "resize stays inside the block and remap never moves" {
     try std.testing.expect(grown.ptr != buf.ptr);
 }
 
+fn failMark(_: *anyopaque, h: *Heap) bool {
+    // Marks one block, then reports a mark that did not finish.
+    const first = h.spans.items[0];
+    first.mark[0] |= 1;
+    return false;
+}
+
+test "a failed mark frees no block and leaves no mark bit" {
+    var h = Heap.init(std.testing.allocator);
+    defer h.deinit();
+    const a = h.allocator();
+    const p = try a.alloc(u64, 4);
+    @memset(p, 0x1234);
+    const bytes = h.bytes;
+    var ctx: u8 = 0;
+    h.roots_ctx = &ctx;
+    h.roots_fn = failMark;
+    collect(&h);
+    try std.testing.expect(!h.mark_ok);
+    try std.testing.expectEqual(@as(u64, 0), h.collections);
+    try std.testing.expectEqual(bytes, h.bytes);
+    for (h.spans.items) |s| for (s.mark) |w| try std.testing.expectEqual(@as(u64, 0), w);
+    for (p) |w| try std.testing.expectEqual(@as(u64, 0x1234), w);
+}
+
 test "reset frees all pages" {
     var h = Heap.init(std.testing.allocator);
     defer h.deinit();
