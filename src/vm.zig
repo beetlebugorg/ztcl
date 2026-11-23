@@ -38,6 +38,8 @@ pub const Op = enum(u8) {
     load,
     /// Writes the top of the stack to slot `a`. The value stays.
     store,
+    /// Runs the read form `x` (`Access`) on the top values of the stack.
+    access,
     /// Jumps to `a` when a core command changed. Uses one step of the step limit.
     guard,
     /// Uses one step of the step limit. A loop pass runs this.
@@ -144,7 +146,11 @@ pub const Code = struct {
 const inline_names = [_][]const u8{
     "set",   "incr",    "expr",   "if",       "while", "for",
     "foreach", "return", "break", "continue", "lappend", "dict", "append",
+    "lindex", "llength", "string",
 };
+
+/// The read forms of the `access` instruction.
+const Access = enum(u8) { llength, lindex, string_length, string_index };
 
 /// True when each inlined name is the original core command, in the
 /// global namespace, and no namespace has a command of the same name.
@@ -531,7 +537,35 @@ const Compiler = struct {
         return true;
     }
 
+    /// `llength list`, `lindex list index`, `string length s`, and
+    /// `string index s i`. Other forms use the general path.
+    fn compileAccess(c: *Compiler, cmd: *Cmd, name: []const u8) Error!bool {
+        const n = cmd.words.len;
+        const eql = std.mem.eql;
+        var kind: Access = undefined;
+        var first: usize = 1;
+        if (eql(u8, name, "llength") and n == 2) {
+            kind = .llength;
+        } else if (eql(u8, name, "lindex") and n == 3) {
+            kind = .lindex;
+        } else if (eql(u8, name, "string") and n >= 3 and isWord(cmd.words[1], "length") and n == 3) {
+            kind = .string_length;
+            first = 2;
+        } else if (eql(u8, name, "string") and n == 4 and isWord(cmd.words[1], "index")) {
+            kind = .string_index;
+            first = 2;
+        } else return false;
+        const base = c.depth;
+        const g = try c.emit(.{ .op = .guard });
+        const start = c.here();
+        for (cmd.words[first..]) |*w| try c.compileWord(w);
+        _ = try c.emit(.{ .op = .access, .x = @intFromEnum(kind) });
+        try c.closeGuard(cmd, base, g, start);
+        return true;
+    }
+
     fn compileInline(c: *Compiler, cmd: *Cmd, name: []const u8) Error!bool {
+        if (try c.compileAccess(cmd, name)) return true;
         const n = cmd.words.len;
         const eql = std.mem.eql;
         if (eql(u8, name, "set")) {
@@ -1110,6 +1144,36 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 const cell = try writeCell(named, it, f, code, i.a);
                 if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[i.a]});
                 cell.v = .{ .val = stack[sp - 1] };
+            },
+            .access => switch (@as(Access, @enumFromInt(i.x))) {
+                .llength => {
+                    const v = stack[sp - 1];
+                    const n = if (v == .list) v.list.len else (try it.list(v)).len;
+                    stack[sp - 1] = .{ .int = @intCast(n) };
+                },
+                .lindex => {
+                    const l = stack[sp - 2];
+                    const at = stack[sp - 1];
+                    if (l == .list and at == .int) {
+                        const items = l.list.items();
+                        stack[sp - 2] = if (at.int >= 0 and at.int < items.len) items[@intCast(at.int)] else Value.empty;
+                    } else {
+                        const argv = [_]Value{ .{ .str = "lindex" }, l, at };
+                        stack[sp - 2] = try cmds.cmdLindex(it, &argv, null);
+                    }
+                    sp -= 1;
+                },
+                .string_length => {
+                    // A copy first: the new union overlaps the old one.
+                    const v = stack[sp - 1];
+                    const n = cmds.charCount(try it.str(v));
+                    stack[sp - 1] = .{ .int = @intCast(n) };
+                },
+                .string_index => {
+                    const argv = [_]Value{ .{ .str = "string" }, .{ .str = "index" }, stack[sp - 2], stack[sp - 1] };
+                    stack[sp - 2] = try cmds.cmdString(it, &argv, null);
+                    sp -= 1;
+                },
             },
             .guard => {
                 if (it.epoch != it.safe_epoch and !recheck(it)) {

@@ -82,6 +82,7 @@ pub fn coreFn(name: []const u8) ?interp.NativeFn {
         .{ "if", cmdIf },           .{ "while", cmdWhile },   .{ "for", cmdFor },
         .{ "foreach", cmdForeach }, .{ "return", cmdReturn }, .{ "break", cmdBreak },
         .{ "continue", cmdContinue }, .{ "lappend", cmdLappend }, .{ "append", cmdAppend }, .{ "dict", @import("dict.zig").cmdDict },
+        .{ "lindex", cmdLindex },   .{ "llength", cmdLlength }, .{ "string", cmdString },
     };
     for (table) |e| if (eql(e[0], name)) return e[1];
     return null;
@@ -809,7 +810,7 @@ pub fn index(it: *Interp, v: Value, len: usize) Error!i64 {
     return if (rest[0] == '+') base +% off else base -% off;
 }
 
-fn cmdLindex(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+pub fn cmdLindex(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("lindex list ?index ...?");
     var cur = argv[1];
     var idxs = argv[2..];
@@ -1217,7 +1218,7 @@ fn isClass(class: []const u8, s: []const u8) ?bool {
     return true;
 }
 
-fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("string subcommand ?arg ...?");
     const a = it.alloc();
     const sub = try it.str(argv[1]);

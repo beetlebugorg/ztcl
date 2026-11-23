@@ -14,4 +14,5 @@ ztcl follows Tcl 8.6.16 and makes no claim of Tcl 9 compatibility. The baseline 
 - The rest of `namespace`: `path`, `unknown`, and `forget`.
 - A `compact` that keeps the compiled forms of procs.
 - An in-place write to an existing key of a dict at the global level.
-- Inline bytecode for `lindex`, `llength`, `string length`, and `string index`, and cheaper proc frames.
+- Cheaper proc frames.
+- A cached list form for a string value. `llength` and `lindex` parse a string value again at each call.

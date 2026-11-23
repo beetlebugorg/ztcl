@@ -942,3 +942,16 @@ test "big integers follow the overflow of Tcl" {
         .{ "catch {expr {1 << 18446744073709551615}} r; set r", "integer value too large to represent" },
     });
 }
+
+test "the inline list and string reads keep the command semantics" {
+    try check(&.{
+        .{ "proc p {} {set l {a {b c} d}; list [llength $l] [lindex $l 1] [lindex $l end] [lindex $l 9] [lindex $l -1] [lindex $l {1 0}]}; p", "3 {b c} d {} {} b" },
+        .{ "proc p {} {set s abc; list [string length $s] [string index $s 1] [string index $s end] [string index $s 9]}; p", "3 b c {}" },
+        .{ "proc p {} {set s \"a \\{b\"; llength $s}; p", "!unmatched open brace or quote in list" },
+        .{ "proc p {} {lindex {a b} x}; p", "!bad index \"x\": must be integer?[+-]integer? or end?[+-]integer?" },
+        .{ "proc p {} {llength {a b}}; p; rename llength ll; proc llength {x} {return custom}; p", "custom" },
+        .{ "proc p {} {lindex {a b} 1}; p; rename lindex li; proc lindex {l i} {return mine}; p", "mine" },
+        .{ "proc p {} {string length abc}; p; rename string st; proc string {args} {return other}; p", "other" },
+        .{ "namespace eval n {proc llength {x} {return inner}; proc q {} {llength {a b}}}; n::q", "inner" },
+    });
+}

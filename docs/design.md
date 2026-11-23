@@ -68,7 +68,7 @@ What compiles:
 
 - A proc body compiles at the first call. Each plain local name has a slot: its index in `Frame.vars`. The parameters come first. The call makes the other cells with no value.
 - A script outside a proc compiles at its second run. Its variables use names, each with a hint, because the frame is not known.
-- Each command with a literal name and a known form runs inline: `set`, `incr`, `append`, `lappend`, `expr`, `if`, `while`, `for`, `foreach` with one list, `return`, `break`, `continue`, `dict incr`, and `dict set`.
+- Each command with a literal name and a known form runs inline: `set`, `incr`, `append`, `lappend`, `expr`, `if`, `while`, `for`, `foreach` with one list, `return`, `break`, `continue`, `dict incr`, `dict set`, `llength`, `lindex` with one index, `string length`, and `string index`.
 - A braced expression becomes stack instructions with an integer fast path. The functions and the array elements use the tree of `expr.zig`.
 - All other commands push their words and use `invoke`. A word with `{*}` uses the general path.
 
@@ -77,6 +77,7 @@ The instructions:
 | Group | Instructions |
 |---|---|
 | Stack | `push`, `push_empty`, `pop`, `concat` |
+| Reads | `access` |
 | Variables | `load`, `store`, `store_pop`, `incr`, `incr_drop`, `incr_value`, `append`, `lappend`, `dict_update`, `dict_update_drop` |
 | Operators | `binary`, `unary`, `to_bool`, `number_form`, `bin_vv`, `bin_vi` |
 | Control | `guard`, `step`, `jump`, `jump_false`, `jump_true`, `jf_vv`, `jf_vi`, `foreach_init`, `foreach_next`, `ret` |
