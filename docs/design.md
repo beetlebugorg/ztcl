@@ -166,7 +166,7 @@ A variable with a trace has the cell form `.traced`, and `upvar a(i) x` makes th
 
 ## Coroutines and tail calls
 
-A coroutine has its own native stack, word stack, and frame chain. An exported assembly routine switches the stack on x86-64 Linux. The resumer swaps the fields of the interpreter around each switch. `max_native` is half of the stack of the coroutine. `compact` gives `InterpBusy` while a coroutine is suspended.
+A coroutine has its own native stack, word stack, and frame chain. An exported assembly routine switches the stack on x86-64 Linux and arm64 macOS. The resumer swaps the fields of the interpreter around each switch. `max_native` is half of the stack of the coroutine. `compact` gives `InterpBusy` while a coroutine is suspended.
 
 `tailcall` ends the proc with a private return code. The proc call then runs the command in a loop, so a chain of tail calls uses no native stack.
 
