@@ -12,8 +12,9 @@ A sandboxed Tcl interpreter in Zig, with a bytecode VM and a vector path for num
 
 ## Status
 
-- The test suite of Tcl 8.6.16 is the measure of compatibility. Of the 29 990 tests in the 77 files in scope, ztcl passes 26 851 on the suite runner, fails 1 354, and 1 785 are blocked. Of those passes, 1 733 need a test-only command. With the default runner, the pass rate is 83.8 %. [Compatibility](docs/compatibility.md) has the result for each of the 152 test files.
-- On the 37 core test files of Tcl 9.1.0, ztcl passes 9 273 tests, fails 2 823, and skips 530. ztcl follows Tcl 8.6 and makes no claim of Tcl 9 compatibility. [Tcl 8.6 and Tcl 9](docs/tcl9.md) lists the differences and the proposed choices.
+- ztcl aims to become a complete drop-in replacement for Tcl. It is not one yet. The sandbox stays the default, and host access stays an explicit capability of the embedder.
+- The test suite of Tcl 8.6.16 is the measure of compatibility. Of the 46 494 tests in all 152 files, ztcl passes 37 383 on the suite runner (80.4 %), fails 3 044, and 6 067 are blocked. Of the 29 990 tests in the 77 files in scope, it passes 27 182, fails 1 031, and 1 777 are blocked. Of those passes, 1 735 need a test-only command. With the default runner, the pass rate in scope is 84.9 %. [Compatibility](docs/compatibility.md) has the result for each test file.
+- On the 37 core test files of Tcl 9.1.0, ztcl passes 9 298 tests, fails 2 799, and skips 529. ztcl follows Tcl 8.6 and makes no claim of Tcl 9 compatibility. [Tcl 8.6 and Tcl 9](docs/tcl9.md) lists the differences and the proposed choices.
 
 ## Example
 
@@ -98,7 +99,7 @@ Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2
 | `dictgrow.tcl` (200 000 new keys, 200 000 `dict get`) | 61.4 | 104.9 | 144.2 |
 | `readloop.tcl` (200 000 `llength` and `lindex` on a string) | 17.7 | 27.9 | 32.7 |
 
-The fuzzy skin `point proc` over 10 million points uses 14.8 ns for each point on the vector path and about 219 ns on the normal path. [Testing](docs/testing.md) has all results.
+The fuzzy skin `point proc` over 10 million points uses about 15 ns for each point on the vector path and about 230 ns on the normal path. [Testing](docs/testing.md) has all results.
 
 ## Compatibility
 

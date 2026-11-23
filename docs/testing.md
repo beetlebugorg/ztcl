@@ -58,7 +58,7 @@ With the same stand-in, the commit before this work has 19 291 pass, 1 013 fail,
 | `incr.test` | 62 | 4 | 0 |
 | `if.test` | 73 | 0 | 0 |
 | `while.test` | 45 | 1 | 0 |
-| `for.test` | 60 | 4 | 24 |
+| `for.test` | 61 | 3 | 24 |
 | `foreach.test` | 41 | 2 | 0 |
 | `proc.test` | 26 | 3 | 9 |
 | `uplevel.test` | 49 | 8 | 0 |
@@ -75,25 +75,25 @@ With the same stand-in, the commit before this work has 19 291 pass, 1 013 fail,
 | `split.test` | 16 | 1 | 0 |
 | `concat.test` | 9 | 0 | 0 |
 | `append.test` | 42 | 3 | 0 |
-| `string.test` | 618 | 6 | 10 |
-| `format.test` | 233 | 24 | 9 |
+| `string.test` | 620 | 4 | 10 |
+| `format.test` | 255 | 2 | 9 |
 | `switch.test` | 106 | 7 | 0 |
 | `eval.test` | 11 | 1 | 0 |
-| `parse.test` | 84 | 6 | 181 |
+| `parse.test` | 88 | 2 | 181 |
 | `lmap.test` | 62 | 4 | 0 |
 | `apply.test` | 33 | 5 | 4 |
 | `rename.test` | 10 | 1 | 8 |
 | `error.test` | 300 | 9 | 8 |
 | `lset.test` | 0 | 0 | 89 |
-| `namespace.test` | 233 | 77 | 3 |
-| `regexp.test` | 239 | 1 | 4 |
+| `namespace.test` | 235 | 75 | 3 |
+| `regexp.test` | 240 | 1 | 3 |
 | `binary.test` | 602 | 36 | 79 |
-| `info.test` | 97 | 161 | 5 |
+| `info.test` | 97 | 164 | 5 |
 | `dict.test` | 311 | 29 | 2 |
 | `scan.test` | 162 | 18 | 1 |
-| **Total** | **19845** | **451** | **533** |
+| **Total** | **19877** | **423** | **532** |
 
-The largest groups of tests that still fail in scope: TclOO (`oo`, `ooNext2`), `info frame`, step traces, and the bytecode tools (`tcl::unsupported::disassemble`).
+The largest groups of tests that still fail in scope: `info frame`, step traces, the bytecode tools (`tcl::unsupported::disassemble`), the slots and the rest of TclOO, and the details of `namespace`.
 
 ## Benchmarks
 
@@ -119,12 +119,14 @@ Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2
 
 The table above is from the commit before the work on the 152 test files. A store to a cell that already has a value now writes only the payload, and a traced or linked cell goes to a cold path.
 
-The fuzzy skin proc (`zig build bench`):
+The work on the event loop, `socket`, `exec`, and TclOO changed the instruction counts of these eight scripts by less than 0.01 % (`perf stat -e instructions:u`, against the commit before that work). The times of the table stay valid.
+
+The fuzzy skin proc (`zig build bench`), measured again on 2026-11-23 with other load on the machine:
 
 | Points | Fast path | Slow path |
 |---|---|---|
-| 1 million, a third on the outer wall | 14.9 ns for each point | about 139 ns for each point |
-| 1 million, all on the outer wall | 14.8 ns for each point | about 225 ns for each point |
-| 10 million, all on the outer wall | 14.8 ns for each point (0.15 s) | about 219 ns for each point (2.2 s) |
+| 1 million, a third on the outer wall | 15.0 ns for each point | about 137 ns for each point |
+| 1 million, all on the outer wall | 14.9 ns for each point | about 232 ns for each point |
+| 10 million, all on the outer wall | 15.1 ns for each point (0.15 s) | about 231 ns for each point (2.3 s) |
 
 The slow path uses the bytecode. The points of this benchmark are 0.04 mm apart. At a spacing of 0.5 mm the fast path uses about 15.9 ns for each point.

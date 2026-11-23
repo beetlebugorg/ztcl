@@ -14,8 +14,8 @@ This page compares Tcl 8.6.16 and Tcl 9.1.0 for the commands that ztcl has. ztcl
 
 | Test files | Pass | Fail | Skip |
 |---|---|---|---|
-| Tcl 8.6.16 | 19 846 | 453 | 533 |
-| Tcl 9.1.0 | 9 273 | 2 823 | 530 |
+| Tcl 8.6.16 | 19 877 | 423 | 532 |
+| Tcl 9.1.0 | 9 298 | 2 799 | 529 |
 
 The two totals do not compare directly, because the files differ. For example, `expr.test` has about 14 200 tests in 8.6.16 and about 2 200 in 9.1.0. In 9.1.0, `lreplace.test` also tests `ledit`, and ztcl has no `ledit`. Those tests are 1 789 of the 2 823 failures.
 

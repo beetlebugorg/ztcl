@@ -22,7 +22,7 @@ The counts are pass / fail / skip for the test file of the command.
 | `expr` | 14122 / 14 / 49 | Big integers up to 2^20 bits. Adds `clamp`, `lerp`, `noise2`, and `noise3`. |
 | `for` | 60 / 4 / 24 |  |
 | `foreach` | 41 / 2 / 0 |  |
-| `format` | 233 / 24 / 9 |  |
+| `format` | 255 / 2 / 9 |  |
 | `global` | no own test file |  |
 | `if` | 73 / 0 / 0 |  |
 | `incr` | 62 / 4 / 0 |  |
@@ -61,6 +61,7 @@ The counts are pass / fail / skip for the test file of the command.
 | `tcl::prefix` | see `string` | |
 | `trace` | see `trace` in Compatibility | Variable, command, and execution traces. Step traces do not run. |
 | `case` | see `case` in Compatibility | |
+| `oo::class`, `oo::object`, `oo::define`, `oo::objdefine`, `oo::copy` | 214 / 74 / 17 (`oo.test`), 50 / 7 / 5 (`ooNext2.test`) | TclOO: methods, constructors, destructors, `my`, `self`, `next`, `nextto`, mixins, filters, forwards, `info object`, and `info class`. No slot objects (`oo::Slot`) and no `info frame`. |
 | `try` | no own test file |  |
 | `unset` | no own test file |  |
 | `uplevel` | 49 / 8 / 0 |  |
