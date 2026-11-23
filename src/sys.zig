@@ -199,7 +199,7 @@ pub const supported = builtin.os.tag == .linux or (is_win and builtin.cpu.arch =
 pub const Fd = i32;
 
 /// A host error number. Each port sets its own type.
-pub const Errno = if (builtin.os.tag == .linux or on_mac) os.E else u32;
+pub const Errno = if (builtin.os.tag == .linux or on_mac) os.E else if (is_win) win.E else u32;
 
 /// How to open a file. `fsroot.zig` maps these flags to the system.
 pub const OpenFlags = struct {
@@ -271,6 +271,19 @@ pub fn readFile(fd: Fd, buf: []u8) FileRead {
     if (comptime is_win) return win.readFile(fd, buf);
     while (true) {
         const rc = os.read(fd, buf.ptr, buf.len);
+        switch (os.errno(rc)) {
+            .SUCCESS => return .{ .n = rc },
+            .INTR => continue,
+            else => |e| return .{ .err = e },
+        }
+    }
+}
+
+/// Writes a file for a caller that reports the host error itself.
+pub fn writeFile(fd: Fd, buf: []const u8) FileRead {
+    if (comptime is_win) return win.writeFile(fd, buf);
+    while (true) {
+        const rc = os.write(fd, buf.ptr, buf.len);
         switch (os.errno(rc)) {
             .SUCCESS => return .{ .n = rc },
             .INTR => continue,
