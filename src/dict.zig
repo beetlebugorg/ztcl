@@ -470,8 +470,12 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
     const a = it.alloc();
     const Sub = enum { create, get, exists, set, unset, keys, values, size, @"for", merge, incr, lappend, append };
     const name = try it.str(argv[1]);
-    if (try dictMore(it, name, argv, cmd)) |v| return v;
-    const sub = std.meta.stringToEnum(Sub, name) orelse
+    // The common subcommands skip the search of the other names.
+    const common = std.meta.stringToEnum(Sub, name);
+    if (common == null) {
+        if (try dictMore(it, name, argv, cmd)) |v| return v;
+    }
+    const sub = common orelse
         return it.fail("unknown or ambiguous subcommand \"{s}\": must be append, create, exists, filter, for, get, incr, info, keys, lappend, map, merge, remove, replace, set, size, unset, update, values, or with", .{name});
     const args = argv[2..];
     switch (sub) {
