@@ -27,6 +27,7 @@ ztcl uses only the Zig standard library. [References](references/tcl.md) lists t
 | `fsroot.zig` | The root folder jail of `file` and channels. |
 | `chan.zig` | The optional channel commands and `source`. |
 | `sys.zig` | The platform interface of channels, the event loop, and `socket`. |
+| `sys_windows.zig` | The Windows form of that interface, with Winsock. |
 | `event.zig` | The optional event loop: `after`, `vwait`, `update`, and `fileevent`. |
 | `sock.zig` | The optional `socket` command and its network policy. |
 | `enc.zig` | The `encoding` command of the channel capability. |

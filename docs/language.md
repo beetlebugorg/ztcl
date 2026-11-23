@@ -85,11 +85,11 @@ In the default interpreter, `open`, `socket`, `exec`, `file`, `clock`, `source`,
 
 `clock` reads the time and the zone data only through `Interp.clock_host`, a callback of the embedder. Named zones are TZif data from that callback.
 
-`file` and the channel commands exist on Linux and stay inside one root folder from the embedder. A script sees that folder as `/`. Each open uses `openat2` with `RESOLVE_BENEATH` and `RESOLVE_NO_SYMLINKS`, so `..` and symlinks cannot leave it. `file link` is an error.
+`file` and the file form of the channel commands exist on Linux and stay inside one root folder from the embedder. On x86-64 Windows, channels and sockets exist, and each file open gives an error until the root folder jail is ported. A script sees that folder as `/`. Each open uses `openat2` with `RESOLVE_BENEATH` and `RESOLVE_NO_SYMLINKS`, so `..` and symlinks cannot leave it. `file link` is an error.
 
 `event` is the event loop: `after`, `vwait`, `update`, `fileevent`, `interp bgerror`, and the default handler `::tcl::Bgerror`. The time comes only from `Interp.event_host`, a callback of the embedder. One loop serves an interpreter and its children. `clock` also adds the command `time`.
 
-`socket` makes TCP channels on Linux. It needs the channel capability. The embedder sets a network policy in `Interp.net`, and the runner with `--net`:
+`socket` makes TCP channels on Linux and x86-64 Windows. It needs the channel capability. The embedder sets a network policy in `Interp.net`, and the runner with `--net`:
 
 | Policy | What it allows |
 |---|---|
