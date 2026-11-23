@@ -176,6 +176,16 @@ pub fn trimSpace(s: []const u8) []const u8 {
 /// An integer in the forms of Tcl 8.6: decimal, 0x, 0o, 0b, and a
 /// leading 0 for octal. Spaces around it are allowed.
 pub fn parseInt(text: []const u8) ?i64 {
+    return parseIntMode(text, true);
+}
+
+/// As `parseInt`, but a value that does not fit in a signed 64-bit
+/// integer gives null for all bases.
+pub fn parseIntStrict(text: []const u8) ?i64 {
+    return parseIntMode(text, false);
+}
+
+fn parseIntMode(text: []const u8, wrap: bool) ?i64 {
     var s = trimSpace(text);
     if (s.len == 0) return null;
     var neg = false;
@@ -217,7 +227,7 @@ pub fn parseInt(text: []const u8) ?i64 {
         if (acc > @as(u64, 1) << 63) return null;
         return @bitCast(0 -% acc);
     }
-    if (base == 10) {
+    if (base == 10 or !wrap) {
         if (acc > std.math.maxInt(i64)) return null;
         return @intCast(acc);
     }

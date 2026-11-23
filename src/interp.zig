@@ -944,7 +944,9 @@ pub const Interp = struct {
                 switch (cell.v) {
                     .val => |v| {
                         if (v != .int) return null;
-                        const out: Value = .{ .int = v.int +% c.by };
+                        const sum = @addWithOverflow(v.int, c.by);
+                        if (sum[1] != 0) return null;
+                        const out: Value = .{ .int = sum[0] };
                         cell.v = .{ .val = out };
                         return out;
                     },
@@ -954,8 +956,7 @@ pub const Interp = struct {
             .expr => {
                 const n = c.cache[1].expr orelse return null;
                 const v = try expr.eval(it, n);
-                if (v != .str) return v;
-                return v.asNumber() orelse v;
+                return try expr.numberForm(it, v);
             },
             .if_then, .if_else => {
                 const n = c.cache[1].expr orelse return null;

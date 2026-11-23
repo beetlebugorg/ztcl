@@ -121,9 +121,9 @@ fn cmdUnset(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 pub fn cmdIncr(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2 and argv.len != 3) return it.wrongArgs("incr varName ?increment?");
     const name = try it.str(argv[1]);
-    const by: i64 = if (argv.len == 3) try it.int(argv[2]) else 1;
-    const cur: i64 = if (try it.getVarOpt(name)) |v| try it.int(v) else 0;
-    const out: Value = .{ .int = cur +% by };
+    const by: Value = if (argv.len == 3) try expr.intArg(it, argv[2]) else .{ .int = 1 };
+    const cur: Value = if (try it.getVarOpt(name)) |v| try expr.intArg(it, v) else .{ .int = 0 };
+    const out = try expr.addInts(it, cur, by);
     try it.setVar(name, out);
     return out;
 }
@@ -751,21 +751,14 @@ fn tryCode(it: *Interp, v: Value) Error!i64 {
 }
 
 fn cmdExpr(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
-    if (argv.len == 2) return numberForm(try expr.eval(it, try it.exprOf(argv, 1, cmd)));
+    if (argv.len == 2) return expr.numberForm(it, try expr.eval(it, try it.exprOf(argv, 1, cmd)));
     if (argv.len < 2) return it.wrongArgs("expr arg ?arg ...?");
     var out: std.ArrayList(u8) = .empty;
     for (argv[1..], 0..) |v, i| {
         if (i > 0) try out.append(it.alloc(), ' ');
         try out.appendSlice(it.alloc(), try it.str(v));
     }
-    return numberForm(try expr.eval(it, try expr.compile(it, out.items)));
-}
-
-/// The result of `expr`: a string that is a number becomes the number,
-/// so `expr {"0x10"}` gives 16.
-fn numberForm(v: Value) Value {
-    if (v != .str) return v;
-    return v.asNumber() orelse v;
+    return expr.numberForm(it, try expr.eval(it, try expr.compile(it, out.items)));
 }
 
 fn cmdEval(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {

@@ -4,8 +4,9 @@
 //! tree. The interpreter caches the tree of a braced expression, so a
 //! loop does not parse its condition again.
 //!
-//! Integers are 64 bits and wrap. Tcl itself continues with big
-//! integers; this interpreter does not.
+//! An integer that does not fit in 64 bits continues in `bigint.zig`,
+//! as in Tcl. The operators check for overflow and take the slow path
+//! only when it happens.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -13,6 +14,7 @@ const std = @import("std");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
 const noise = @import("noise.zig");
+const bigint = @import("bigint.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Error = interp.Error;
@@ -345,7 +347,8 @@ const ExprParser = struct {
             const text = s[e.p.pos..i];
             e.p.pos = i;
             if (is_int) {
-                if (value.parseInt(text)) |n| return e.node(.{ .constant = .{ .int = n } });
+                if (value.parseIntStrict(text)) |n| return e.node(.{ .constant = .{ .int = n } });
+                if (try bigint.canonical(e.it, text)) |v| return e.node(.{ .constant = v });
             }
             if (value.parseDouble(text)) |d| return e.node(.{ .constant = .{ .double = d } });
             return e.fail("invalid number \"{s}\"", .{text});
@@ -417,7 +420,8 @@ pub fn truthy(it: *Interp, v: Value) Error!bool {
         .double => |d| return d != 0,
         else => {
             const s = try it.str(v);
-            if (value.parseInt(s)) |i| return i != 0;
+            if (value.parseIntStrict(s)) |i| return i != 0;
+            if (bigint.isIntegerText(s)) return true;
             if (value.parseDouble(s)) |d| return d != 0;
             if (boolWord(value.trimSpace(s))) |b| return b;
             return it.fail("expected boolean value but got \"{s}\"", .{s});
@@ -425,11 +429,57 @@ pub fn truthy(it: *Interp, v: Value) Error!bool {
     }
 }
 
+/// The number of a value: an `int`, a `double`, or big integer text.
+/// Null when the value is not a number.
+fn numberOf(it: *Interp, v: Value) Error!?Value {
+    var cur = v;
+    while (cur == .list) {
+        if (cur.list.len != 1) return null;
+        cur = cur.list.items()[0];
+    }
+    switch (cur) {
+        .int, .double => return cur,
+        .str => |s| {
+            if (value.parseIntStrict(s)) |i| return .{ .int = i };
+            if (bigint.isIntegerText(s)) {
+                if (try bigint.canonical(it, s)) |n| return n;
+            }
+            return cur.asNumber();
+        },
+        .list => unreachable,
+    }
+}
+
+/// The result form of `expr`: a string that is a number is the number,
+/// so `expr {"0x10"}` gives 16.
+pub fn numberForm(it: *Interp, v: Value) Error!Value {
+    if (v != .str) return v;
+    return (try numberOf(it, v)) orelse v;
+}
+
+/// An integer argument of a command: an `int` or big integer text.
+pub fn intArg(it: *Interp, v: Value) Error!Value {
+    if (v == .int) return v;
+    if (try numberOf(it, v)) |n| if (n != .double) return n;
+    return it.fail("expected integer but got \"{s}\"", .{try it.str(v)});
+}
+
+/// The sum of two integer arguments.
+pub fn addInts(it: *Interp, x: Value, y: Value) Error!Value {
+    if (x == .int and y == .int) return intOp(it, .add, x.int, y.int);
+    return bigint.binary(it, .add, x, y);
+}
+
+/// The low 64 bits of an integer argument.
+pub fn low64Arg(it: *Interp, v: Value) Error!i64 {
+    return bigint.low64(it, try intArg(it, v));
+}
+
 fn num(it: *Interp, v: Value, op: []const u8) Error!Value {
     switch (v) {
         .int, .double => return v,
         else => {
-            if (v.asNumber()) |n| return n;
+            if (try numberOf(it, v)) |n| return n;
             const s = try it.str(v);
             if (s.len == 0) return it.fail("can't use empty string as operand of \"{s}\"", .{op});
             return it.fail("can't use non-numeric string as operand of \"{s}\"", .{op});
@@ -441,14 +491,16 @@ fn toF(v: Value) f64 {
     return switch (v) {
         .int => |i| @floatFromInt(i),
         .double => |d| d,
+        .str => |s| std.fmt.parseFloat(f64, s) catch std.math.inf(f64),
         else => unreachable,
     };
 }
 
-fn intOnly(it: *Interp, v: Value, op: []const u8) Error!i64 {
+/// An operand of an integer operator: an `int` or big integer text.
+fn intOnly(it: *Interp, v: Value, op: []const u8) Error!Value {
     const n = try num(it, v, op);
     if (n == .double) return it.fail("can't use floating-point value as operand of \"{s}\"", .{op});
-    return n.int;
+    return n;
 }
 
 fn b2v(b: bool) Value {
@@ -520,23 +572,48 @@ pub fn unaryOp(it: *Interp, op: UnOp, v: Value) Error!Value {
             };
             return b2v(!t);
         },
-        .bitnot => return .{ .int = ~try intOnly(it, v, "~") },
+        .bitnot => {
+            const x = try intOnly(it, v, "~");
+            return if (x == .int) .{ .int = ~x.int } else bigint.bitNot(it, x);
+        },
         .neg => {
             const x = try num(it, v, "-");
-            return if (x == .int) .{ .int = 0 -% x.int } else .{ .double = -x.double };
+            return switch (x) {
+                .int => |i| if (i == std.math.minInt(i64)) bigint.negate(it, x) else .{ .int = -i },
+                .double => |d| .{ .double = -d },
+                else => bigint.negate(it, x),
+            };
         },
         .pos => return num(it, v, "+"),
     }
 }
 
+/// The slow path of an integer operator that overflowed.
+pub noinline fn overflowOp(it: *Interp, op: BinOp, x: i64, y: i64) Error!Value {
+    @branchHint(.cold);
+    return bigint.binary(it, op, .{ .int = x }, .{ .int = y });
+}
+
 pub fn intOp(it: *Interp, op: BinOp, x: i64, y: i64) Error!Value {
     switch (op) {
-        .add => return .{ .int = x +% y },
-        .sub => return .{ .int = x -% y },
-        .mul => return .{ .int = x *% y },
+        .add => {
+            const r = @addWithOverflow(x, y);
+            if (r[1] != 0) return overflowOp(it, op, x, y);
+            return .{ .int = r[0] };
+        },
+        .sub => {
+            const r = @subWithOverflow(x, y);
+            if (r[1] != 0) return overflowOp(it, op, x, y);
+            return .{ .int = r[0] };
+        },
+        .mul => {
+            const r = @mulWithOverflow(x, y);
+            if (r[1] != 0) return overflowOp(it, op, x, y);
+            return .{ .int = r[0] };
+        },
         .div => {
             if (y == 0) return it.fail("divide by zero", .{});
-            if (y == -1) return .{ .int = 0 -% x };
+            if (y == -1) return if (x == std.math.minInt(i64)) bigint.negate(it, .{ .int = x }) else .{ .int = -x };
             return .{ .int = @divFloor(x, y) };
         },
         .mod => {
@@ -555,15 +632,28 @@ pub fn intOp(it: *Interp, op: BinOp, x: i64, y: i64) Error!Value {
             var r: i64 = 1;
             var base = x;
             var e: u64 = @intCast(y);
-            while (e != 0) : (e >>= 1) {
-                if (e & 1 != 0) r *%= base;
-                base *%= base;
+            while (e != 0) {
+                if (e & 1 != 0) {
+                    const m = @mulWithOverflow(r, base);
+                    if (m[1] != 0) return overflowOp(it, op, x, y);
+                    r = m[0];
+                }
+                e >>= 1;
+                if (e == 0) break;
+                const sq = @mulWithOverflow(base, base);
+                if (sq[1] != 0) return overflowOp(it, op, x, y);
+                base = sq[0];
             }
             return .{ .int = r };
         },
         .shl => {
             if (y < 0) return it.fail("negative shift argument", .{});
-            return .{ .int = if (y >= 64) 0 else x << @intCast(y) };
+            if (x == 0) return .{ .int = 0 };
+            if (y < 64) {
+                const r = x << @intCast(y);
+                if (r >> @intCast(y) == x) return .{ .int = r };
+            }
+            return overflowOp(it, op, x, y);
         },
         .shr => {
             if (y < 0) return it.fail("negative shift argument", .{});
@@ -603,15 +693,19 @@ pub fn binaryOp(it: *Interp, op: BinOp, x: Value, y: Value) Error!Value {
             return b2v(found == (op == .in));
         },
         .lt, .gt, .le, .ge, .eq, .ne => {
-            const nx = x.asNumber();
-            const ny = y.asNumber();
+            const nx = try numberOf(it, x);
+            const ny = try numberOf(it, y);
             var order: std.math.Order = undefined;
             if (nx != null and ny != null) {
                 if (nx.? == .int and ny.? == .int) return intOp(it, op, nx.?.int, ny.?.int);
-                const fx = toF(nx.?);
-                const fy = toF(ny.?);
-                if (std.math.isNan(fx) or std.math.isNan(fy)) return b2v(op == .ne);
-                order = std.math.order(fx, fy);
+                if (nx.? == .str or ny.? == .str) {
+                    order = try bigint.compare(it, nx.?, ny.?) orelse return b2v(op == .ne);
+                } else {
+                    const fx = toF(nx.?);
+                    const fy = toF(ny.?);
+                    if (std.math.isNan(fx) or std.math.isNan(fy)) return b2v(op == .ne);
+                    order = std.math.order(fx, fy);
+                }
             } else {
                 order = std.mem.order(u8, try it.str(x), try it.str(y));
             }
@@ -626,13 +720,17 @@ pub fn binaryOp(it: *Interp, op: BinOp, x: Value, y: Value) Error!Value {
         },
         .shl, .shr, .bitand, .bitxor, .bitor, .mod => {
             const name = op.text();
-            return intOp(it, op, try intOnly(it, x, name), try intOnly(it, y, name));
+            const nx = try intOnly(it, x, name);
+            const ny = try intOnly(it, y, name);
+            if (nx == .int and ny == .int) return intOp(it, op, nx.int, ny.int);
+            return bigint.binary(it, op, nx, ny);
         },
         .add, .sub, .mul, .div, .pow => {
             const name = op.text();
             const nx = try num(it, x, name);
             const ny = try num(it, y, name);
             if (nx == .int and ny == .int) return intOp(it, op, nx.int, ny.int);
+            if (nx != .double and ny != .double) return bigint.binary(it, op, nx, ny);
             const fx = toF(nx);
             const fy = toF(ny);
             return .{ .double = switch (op) {
@@ -650,17 +748,22 @@ pub fn binaryOp(it: *Interp, op: BinOp, x: Value, y: Value) Error!Value {
     }
 }
 
-fn toInt(it: *Interp, x: Value) Error!i64 {
-    switch (x) {
-        .int => |i| return i,
-        .double => |d| {
-            if (std.math.isNan(d) or std.math.isInf(d)) return it.fail("integer value too large to represent", .{});
-            const t = @trunc(d);
-            if (t >= 9.2233720368547758e18 or t < -9.2233720368547758e18) return it.fail("integer value too large to represent", .{});
-            return @intFromFloat(t);
-        },
-        else => unreachable,
-    }
+/// The whole part of a number as an integer of any size.
+fn toEntier(it: *Interp, x: Value) Error!Value {
+    if (x != .double) return x;
+    const d = x.double;
+    if (std.math.isNan(d) or std.math.isInf(d)) return it.fail("integer value too large to represent", .{});
+    return bigint.fromDouble(it, d);
+}
+
+/// The order of two numbers, or null when one is NaN.
+fn orderOf(it: *Interp, x: Value, y: Value) Error!?std.math.Order {
+    if (x == .int and y == .int) return std.math.order(x.int, y.int);
+    if (x == .str or y == .str) return bigint.compare(it, x, y);
+    const fx = toF(x);
+    const fy = toF(y);
+    if (std.math.isNan(fx) or std.math.isNan(fy)) return null;
+    return std.math.order(fx, fy);
 }
 
 /// One step of the seeded generator of `rand()`.
@@ -680,8 +783,8 @@ fn callFunc(it: *Interp, f: Func, args: []const *Node) Error!Value {
         var best = try num(it, try eval(it, args[0]), name);
         for (args[1..]) |a| {
             const v = try num(it, try eval(it, a), name);
-            const less = if (v == .int and best == .int) v.int < best.int else toF(v) < toF(best);
-            if (less == (f == .min) and (less or toF(v) != toF(best))) best = v;
+            const o = try orderOf(it, v, best) orelse continue;
+            if (o == (if (f == .min) std.math.Order.lt else std.math.Order.gt)) best = v;
         }
         return best;
     }
@@ -690,22 +793,30 @@ fn callFunc(it: *Interp, f: Func, args: []const *Node) Error!Value {
     const x = if (args.len > 0) buf[0] else Value{ .int = 0 };
     const fx = toF(x);
     const d: f64 = switch (f) {
-        .abs => return if (x == .int) .{ .int = if (x.int < 0) 0 -% x.int else x.int } else .{ .double = @abs(fx) },
-        .int, .wide, .entier => return .{ .int = try toInt(it, x) },
+        .abs => return switch (x) {
+            .int => |i| if (i == std.math.minInt(i64)) bigint.negate(it, x) else .{ .int = if (i < 0) -i else i },
+            .double => .{ .double = @abs(fx) },
+            else => bigint.abs(it, x),
+        },
+        .int, .wide => return .{ .int = try bigint.low64(it, try toEntier(it, x)) },
+        .entier => return toEntier(it, x),
         .round => {
-            if (x == .int) return x;
-            return .{ .int = try toInt(it, .{ .double = @round(fx) }) };
+            if (x != .double) return x;
+            return toEntier(it, .{ .double = @round(fx) });
         },
         .isqrt => {
             if (fx < 0) return it.fail("square root of negative argument", .{});
-            return .{ .int = @intFromFloat(@floor(@sqrt(fx))) };
+            return bigint.isqrt(it, try toEntier(it, x));
         },
         .srand => {
-            it.rand_state = @as(u64, @bitCast(try toInt(it, x))) *% 0x9e3779b97f4a7c15 | 1;
+            it.rand_state = @as(u64, @bitCast(try bigint.low64(it, try toEntier(it, x)))) *% 0x9e3779b97f4a7c15 | 1;
             return .{ .double = nextRand(it) };
         },
         .rand => nextRand(it),
-        .double => fx,
+        .double => blk: {
+            if (x == .str and std.math.isInf(fx)) return it.fail("floating-point value too large to represent", .{});
+            break :blk fx;
+        },
         .acos => std.math.acos(fx),
         .asin => std.math.asin(fx),
         .atan => std.math.atan(fx),

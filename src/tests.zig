@@ -211,7 +211,7 @@ test "expr: integers and doubles" {
         .{ "expr {[llength {a b}] + 1}", "3" },
         .{ "expr {\"a\" + 1}", "!can't use non-numeric string as operand of \"+\"" },
         .{ "expr {1.5 % 2}", "!can't use floating-point value as operand of \"%\"" },
-        .{ "expr {9223372036854775807 + 1}", "-9223372036854775808" },
+        .{ "expr {9223372036854775807 + 1}", "9223372036854775808" },
         .{ "expr {1 +}", "!missing operand at _@_\nin expression \"1 +_@_\"" },
     });
 }
@@ -919,4 +919,26 @@ test "compact keeps the point programs" {
     try std.testing.expectEqualStrings("f", p.name);
     try std.testing.expect(p.ops.len > 0);
     try std.testing.expectEqualStrings("f", (try evalStr(&it, "info procs f")));
+}
+
+test "big integers follow the overflow of Tcl" {
+    try check(&.{
+        .{ "expr {2**64}", "18446744073709551616" },
+        .{ "expr {1<<64}", "18446744073709551616" },
+        .{ "expr {-9223372036854775808 - 1}", "-9223372036854775809" },
+        .{ "expr {9223372036854775807 * 2}", "18446744073709551614" },
+        .{ "expr {0xFFFFFFFFFFFFFFFF}", "18446744073709551615" },
+        .{ "expr {~0xFFFFFFFFFFFFFFFF}", "-18446744073709551616" },
+        .{ "expr {18446744073709551616 % 7}", "2" },
+        .{ "expr {(2**70) / (2**68)}", "4" },
+        .{ "expr {abs(-9223372036854775808)}", "9223372036854775808" },
+        .{ "expr {entier(1e30)}", "1000000000000000019884624838656" },
+        .{ "expr {wide(2**64 + 5)}", "5" },
+        .{ "expr {-340282366920938463463374607431768211457 | 0xFFFFFFFFFFFFFFFF}", "-340282366920938463463374607431768211457" },
+        .{ "set i 9223372036854775807; incr i", "9223372036854775808" },
+        .{ "proc p {} {set i 9223372036854775807; incr i; incr i -1; return $i}; p", "9223372036854775807" },
+        .{ "set d {}; dict incr d k 9223372036854775807; dict incr d k; dict get $d k", "9223372036854775808" },
+        .{ "format %lld 18446744073709551616", "18446744073709551616" },
+        .{ "catch {expr {1 << 18446744073709551615}} r; set r", "integer value too large to represent" },
+    });
 }

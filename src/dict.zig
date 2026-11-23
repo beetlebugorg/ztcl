@@ -221,7 +221,9 @@ pub fn updateOwned(it: *Interp, d: Value, key: Value, by: i64, new: ?Value) Erro
         return true;
     }
     if (items[at + 1] != .int) return false;
-    items[at + 1] = .{ .int = items[at + 1].int +% by };
+    const sum = @addWithOverflow(items[at + 1].int, by);
+    if (sum[1] != 0) return false;
+    items[at + 1] = .{ .int = sum[0] };
     return true;
 }
 
@@ -566,8 +568,9 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
             var new: Value = undefined;
             switch (sub) {
                 .incr => {
-                    const by: i64 = if (args.len == 3) try it.int(args[2]) else 1;
-                    new = .{ .int = (if (at != null) try it.int(old) else 0) +% by };
+                    const by: Value = if (args.len == 3) try expr.intArg(it, args[2]) else .{ .int = 1 };
+                    const base: Value = if (at != null) try expr.intArg(it, old) else .{ .int = 0 };
+                    new = try expr.addInts(it, base, by);
                 },
                 .lappend => {
                     var l = old.toList(a) catch |e| switch (e) {

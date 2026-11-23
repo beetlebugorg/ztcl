@@ -9,6 +9,8 @@
 const std = @import("std");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
+const expr = @import("expr.zig");
+const bigint = @import("bigint.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Error = interp.Error;
@@ -22,6 +24,8 @@ const Spec = struct {
     width: usize = 0,
     prec: ?usize = null,
     long: bool = false,
+    /// The size `ll`: an integer prints with all its digits.
+    full: bool = false,
 };
 
 pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value {
@@ -80,7 +84,10 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
             sp.prec = p;
         }
         while (i < f.len and (f[i] == 'l' or f[i] == 'h' or f[i] == 'L')) : (i += 1) {
-            if (f[i] != 'h') sp.long = true;
+            if (f[i] != 'h') {
+                if (sp.long and f[i] == 'l') sp.full = true;
+                sp.long = true;
+            }
         }
         if (i >= f.len) return it.fail("format string ended in middle of field specifier", .{});
         const conv = f[i];
@@ -94,7 +101,7 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
         var sign: []const u8 = "";
         var body: []const u8 = "";
         var numeric = true;
-        switch (conv) {
+        sw: switch (conv) {
             's' => {
                 body = try it.str(arg);
                 if (sp.prec) |p| body = body[0..@min(p, body.len)];
@@ -109,13 +116,35 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
                 numeric = false;
             },
             'd', 'i' => {
-                const n = try it.int(arg);
+                const iv = try expr.intArg(it, arg);
+                if (iv == .str and sp.full) {
+                    const t = value.trimSpace(iv.str);
+                    const neg = t[0] == '-';
+                    sign = if (neg) "-" else if (sp.plus) "+" else if (sp.space) " " else "";
+                    body = if (neg) t[1..] else t;
+                    break :sw;
+                }
+                const n = try bigint.low64(it, iv);
 
                 sign = if (n < 0) "-" else if (sp.plus) "+" else if (sp.space) " " else "";
                 body = try std.fmt.allocPrint(a, "{d}", .{@abs(n)});
             },
             'u', 'x', 'X', 'o', 'b' => {
-                const n = try it.int(arg);
+                const uv = try expr.intArg(it, arg);
+                if (sp.full and (uv == .str or uv.int < 0)) {
+                    const base: u8 = switch (conv) {
+                        'u' => 10,
+                        'o' => 8,
+                        'b' => 2,
+                        else => 16,
+                    };
+                    const t = try bigint.digits(it, uv, base, if (conv == 'X') .upper else .lower);
+                    const neg = t[0] == '-';
+                    sign = if (neg) "-" else "";
+                    body = if (neg) t[1..] else t;
+                    break :sw;
+                }
+                const n = try bigint.low64(it, uv);
                 const u: u64 = @bitCast(n);
                 body = switch (conv) {
                     'u' => try std.fmt.allocPrint(a, "{d}", .{u}),

@@ -932,19 +932,36 @@ fn readSlot(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, slo
     return it.readRef(&r);
 }
 
-inline fn intBinary(it: *Interp, op: expr.BinOp, a: i64, b: i64) Error!Value {
-    return switch (op) {
-        .add => .{ .int = a +% b },
-        .sub => .{ .int = a -% b },
-        .mul => .{ .int = a *% b },
-        .lt => .{ .int = @intFromBool(a < b) },
-        .le => .{ .int = @intFromBool(a <= b) },
-        .gt => .{ .int = @intFromBool(a > b) },
-        .ge => .{ .int = @intFromBool(a >= b) },
-        .eq => .{ .int = @intFromBool(a == b) },
-        .ne => .{ .int = @intFromBool(a != b) },
-        else => expr.intOp(it, op, a, b),
+/// The result of a common operator on two integers, or null for an
+/// overflow or another operator. The integer needs no 32-byte value on
+/// the way, so the common path stays short.
+inline fn intFast(op: expr.BinOp, a: i64, b: i64) ?i64 {
+    const r = switch (op) {
+        .add => @addWithOverflow(a, b),
+        .sub => @subWithOverflow(a, b),
+        .mul => @mulWithOverflow(a, b),
+        .lt => return @intFromBool(a < b),
+        .le => return @intFromBool(a <= b),
+        .gt => return @intFromBool(a > b),
+        .ge => return @intFromBool(a >= b),
+        .eq => return @intFromBool(a == b),
+        .ne => return @intFromBool(a != b),
+        else => return null,
     };
+    if (r[1] != 0) {
+        @branchHint(.cold);
+        return null;
+    }
+    return r[0];
+}
+
+/// True when `a + b` fits in 64 bits.
+inline fn addFits(a: i64, b: i64) bool {
+    if (@addWithOverflow(a, b)[1] != 0) {
+        @branchHint(.cold);
+        return false;
+    }
+    return true;
 }
 
 inline fn intCompare(op: expr.BinOp, a: i64, b: i64) bool {
@@ -1164,18 +1181,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 if (x.* == .int and y.* == .int) {
                     const a = x.int;
                     const b = y.int;
-                    x.* = switch (op) {
-                        .add => .{ .int = a +% b },
-                        .sub => .{ .int = a -% b },
-                        .mul => .{ .int = a *% b },
-                        .lt => .{ .int = @intFromBool(a < b) },
-                        .le => .{ .int = @intFromBool(a <= b) },
-                        .gt => .{ .int = @intFromBool(a > b) },
-                        .ge => .{ .int = @intFromBool(a >= b) },
-                        .eq => .{ .int = @intFromBool(a == b) },
-                        .ne => .{ .int = @intFromBool(a != b) },
-                        else => try expr.intOp(it, op, a, b),
-                    };
+                    x.* = if (intFast(op, a, b)) |r| .{ .int = r } else try expr.intOp(it, op, a, b);
                 } else {
                     x.* = try expr.binaryOp(it, op, x.*, y.*);
                 }
@@ -1184,14 +1190,14 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             .unary => stack[sp - 1] = try expr.unaryOp(it, @enumFromInt(i.x), stack[sp - 1]),
             .number_form => {
                 const v = stack[sp - 1];
-                if (v == .str or v == .list) stack[sp - 1] = if (v == .str) (v.asNumber() orelse v) else v;
+                if (v == .str) stack[sp - 1] = try expr.numberForm(it, v);
             },
             .incr => {
                 const found = readCell(named, it, f, code, i.a);
                 const by: i32 = @bitCast(i.b);
-                if (found != null and found.?.v == .val and found.?.v.val == .int) {
+                if (found != null and found.?.v == .val and found.?.v.val == .int and addFits(found.?.v.val.int, by)) {
                     const cell = found.?;
-                    const out: Value = .{ .int = cell.v.val.int +% by };
+                    const out: Value = .{ .int = cell.v.val.int + by };
                     cell.v = .{ .val = out };
                     stack[sp] = out;
                 } else {
@@ -1202,9 +1208,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             .incr_value => {
                 const found = readCell(named, it, f, code, i.a);
                 const by = stack[sp - 1];
-                if (by == .int and found != null and found.?.v == .val and found.?.v.val == .int) {
+                if (by == .int and found != null and found.?.v == .val and found.?.v.val == .int and addFits(found.?.v.val.int, by.int)) {
                     const cell = found.?;
-                    const out: Value = .{ .int = cell.v.val.int +% by.int };
+                    const out: Value = .{ .int = cell.v.val.int + by.int };
                     cell.v = .{ .val = out };
                     stack[sp - 1] = out;
                 } else {
@@ -1231,9 +1237,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             .incr_drop => {
                 const found = readCell(named, it, f, code, i.a);
                 const by: i32 = @bitCast(i.b);
-                if (found != null and found.?.v == .val and found.?.v.val == .int) {
+                if (found != null and found.?.v == .val and found.?.v.val == .int and addFits(found.?.v.val.int, by)) {
                     const cell = found.?;
-                    const out: Value = .{ .int = cell.v.val.int +% by };
+                    const out: Value = .{ .int = cell.v.val.int + by };
                     cell.v = .{ .val = out };
                 } else {
                     _ = try slowIncr(it, code.names[i.a], .{ .int = by });
@@ -1244,7 +1250,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 const x = intSlot(named, it, f, code, i.a);
                 const y = intSlot(named, it, f, code, i.b);
                 if (x != null and y != null) {
-                    stack[sp] = try intBinary(it, op, x.?, y.?);
+                    stack[sp] = if (intFast(op, x.?, y.?)) |r| .{ .int = r } else try expr.intOp(it, op, x.?, y.?);
                 } else {
                     const vx = try readSlot(named, it, f, code, i.a);
                     const vy = try readSlot(named, it, f, code, i.b);
@@ -1256,7 +1262,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 const op: expr.BinOp = @enumFromInt(i.x);
                 const y = code.lits[i.b].int;
                 if (intSlot(named, it, f, code, i.a)) |x| {
-                    stack[sp] = try intBinary(it, op, x, y);
+                    stack[sp] = if (intFast(op, x, y)) |r| .{ .int = r } else try expr.intOp(it, op, x, y);
                 } else {
                     const vx = try readSlot(named, it, f, code, i.a);
                     stack[sp] = try slowBinary(it, op, vx, .{ .int = y });
