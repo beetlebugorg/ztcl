@@ -39,7 +39,7 @@ The network policy is not platform code. It is in `src/sock.zig` and needs no po
 
 Rules for a port:
 
-1. `resolve` is the only name lookup. It returns every address of the name, so the caller can check each one. It must not connect. macOS: `getaddrinfo` (AF_UNSPEC, SOCK_STREAM, no AI_ADDRCONFIG filter). Windows: `GetAddrInfoW`. Copy only AF_INET and AF_INET6 results. Drop the scope id of a link-local address, or refuse the address.
+1. `resolve` is the only name lookup. It returns every address of the name, so the caller can check each one. It must not connect. It reads an address literal, `localhost`, and the system hosts file. It must not query a name server: `sock.zig` calls it before the policy check, so a query can send data in a host name off the machine. Do not call `getaddrinfo` or `GetAddrInfoW` until `sock.zig` looks up only a name that the policy can allow.
 2. `listenAt` and `connectTo` take address bytes only. They never take a name, and they never widen the address. Set IPV6_V6ONLY = 1 on each IPv6 socket, so an IPv4 peer cannot appear as `::ffff:a.b.c.d`.
 3. `accept` returns the real peer address. `peerName` after a connect returns the address of the connection.
 4. `connectTo(addr, mine, wait=false)` starts a non-blocking connect and returns at once. `connectError` gives the end result once. `chan.zig` then calls `sock.checkPeer`, and shuts the socket down if the policy refuses the peer.
