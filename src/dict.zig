@@ -30,7 +30,7 @@ const Error = interp.Error;
 const index_min = 32;
 
 fn intText(b: *[24]u8, i: i64) []const u8 {
-    return std.fmt.bufPrint(b, "{d}", .{i}) catch unreachable;
+    return value.writeInt(b, i);
 }
 
 fn hashText(s: []const u8) u32 {
