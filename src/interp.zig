@@ -852,6 +852,9 @@ pub const Interp = struct {
     /// The count of variables with traces. Above zero, the inline
     /// forms of the bytecode and the direct forms are off.
     var_traces: u32 = 0,
+    /// The local name of an element link while its trace runs. A trace
+    /// callback gets this name with an empty index, as in Tcl.
+    trace_shown: ?[]const u8 = null,
     /// The active searches of `array startsearch`.
     searches: std.ArrayList(@import("extra.zig").Search) = .empty,
     /// The last compiled regular expressions.
@@ -2189,7 +2192,7 @@ pub const Interp = struct {
             .val => |v| return v,
             .arr => return it.fail("can't read \"{s}\": variable is array", .{r.name}),
             .traced => return trace.read(it, c, r.name, null),
-            .elem => |e| return it.readElemLink(e),
+            .elem => |e| return it.readElemLink(e, r.name),
             else => {},
         };
         return it.fail("can't read \"{s}\": no such variable", .{r.name});
@@ -2222,6 +2225,10 @@ pub const Interp = struct {
         const name, const idx = splitName(full);
         const cell = try it.findVar(it.frame, name, false);
         if (cell != null and cell.?.v == .traced) return trace.after(it, cell.?, name, idx);
+        if (idx == null and cell != null and cell.?.v == .elem) {
+            const e = cell.?.v.elem;
+            if (e.array.v == .traced) return trace.after(it, e.array, e.name, e.index);
+        }
         return it.getVar(full);
     }
 
@@ -2236,6 +2243,7 @@ pub const Interp = struct {
                 .undef => null,
             };
         }
+        if (idx == null and cell.v == .elem) return it.elemValue(cell.v.elem);
         return it.getVarOpt(full);
     }
 
@@ -2244,7 +2252,15 @@ pub const Interp = struct {
         const cell = try it.findVar(it.frame, name, false) orelse return null;
         if (idx == null and cell.v == .val) return cell.v.val;
         if (cell.v == .traced) return trace.readOpt(it, cell, name, idx);
-        if (cell.v == .elem and idx == null) return it.elemValue(cell.v.elem);
+        if (cell.v == .elem and idx == null) {
+            const e = cell.v.elem;
+            if (e.array.v == .traced) {
+                it.trace_shown = name;
+                defer it.trace_shown = null;
+                return trace.readOpt(it, e.array, e.name, e.index);
+            }
+            return it.elemValue(e);
+        }
         if (idx) |i| return if (cell.v == .arr) cell.v.arr.get(i) else null;
         return if (cell.v == .val) cell.v.val else null;
     }
@@ -2260,7 +2276,7 @@ pub const Interp = struct {
         if (cell.v == .traced) return trace.write(it, cell, name, idx, v);
         if (cell.v == .elem) {
             if (idx != null) return it.fail("can't set \"{s}\": variable isn't array", .{full});
-            return it.writeElemLink(cell.v.elem, v);
+            return it.writeElemLink(cell.v.elem, v, name);
         }
         if (idx) |i| {
             switch (cell.v) {
@@ -2288,7 +2304,11 @@ pub const Interp = struct {
         if (cell.v == .traced) return trace.unset(it, cell, name, idx);
         if (cell.v == .elem) {
             const e = cell.v.elem;
-            if (e.array.v == .traced) return trace.unset(it, e.array, e.name, e.index);
+            if (e.array.v == .traced) {
+                it.trace_shown = name;
+                defer it.trace_shown = null;
+                return trace.unset(it, e.array, e.name, e.index);
+            }
             return e.array.v == .arr and e.array.v.arr.orderedRemove(e.index);
         }
         if (idx) |i| {
@@ -2309,8 +2329,12 @@ pub const Interp = struct {
         };
     }
 
-    fn readElemLink(it: *Interp, e: *ElemLink) Error!Value {
-        if (e.array.v == .traced) return trace.read(it, e.array, e.name, e.index);
+    fn readElemLink(it: *Interp, e: *ElemLink, local: []const u8) Error!Value {
+        if (e.array.v == .traced) {
+            it.trace_shown = local;
+            defer it.trace_shown = null;
+            return trace.read(it, e.array, e.name, e.index);
+        }
         if (e.array.v == .arr) {
             if (e.array.v.arr.get(e.index)) |v| return v;
             return it.fail("can't read \"{s}({s})\": no such element in array", .{ e.name, e.index });
@@ -2318,9 +2342,13 @@ pub const Interp = struct {
         return it.fail("can't read \"{s}({s})\": no such variable", .{ e.name, e.index });
     }
 
-    fn writeElemLink(it: *Interp, e: *ElemLink, v: Value) Error!void {
+    fn writeElemLink(it: *Interp, e: *ElemLink, v: Value, local: []const u8) Error!void {
         const cell = e.array;
-        if (cell.v == .traced) return trace.write(it, cell, e.name, e.index, v);
+        if (cell.v == .traced) {
+            it.trace_shown = local;
+            defer it.trace_shown = null;
+            return trace.write(it, cell, e.name, e.index, v);
+        }
         if (cell.v == .undef) {
             const m = try it.alloc().create(ArrayMap);
             m.* = .empty;

@@ -141,6 +141,10 @@ fn runHook(it: *Interp, cmd: Value, words: []const []const u8) Error!?[]const u8
 
 /// Runs the traces of an operation, newest first.
 fn fire(it: *Interp, t: *Traced, name: []const u8, idx: ?[]const u8, op: u8) Error!?[]const u8 {
+    // The name of an element link applies to this event only. A script
+    // that the trace runs starts with no such name.
+    const shown = it.trace_shown;
+    it.trace_shown = null;
     if (t.busy) return null;
     t.busy = true;
     defer t.busy = false;
@@ -158,7 +162,7 @@ fn fire(it: *Interp, t: *Traced, name: []const u8, idx: ?[]const u8, op: u8) Err
             continue;
         }
         const word = if (tr.old != null) oldLetter(op) else opName(op);
-        if (try runHook(it, tr.cmd, &.{ name, idx orelse "", word })) |msg| return msg;
+        if (try runHook(it, tr.cmd, &.{ shown orelse name, if (shown != null) "" else idx orelse "", word })) |msg| return msg;
     }
     return null;
 }
@@ -367,8 +371,18 @@ fn parseOldOps(it: *Interp, text: []const u8) Error!u8 {
     return ops;
 }
 
-fn tracedOf(it: *Interp, base: []const u8) Error!*Traced {
-    const cell = (try it.findVar(it.frame, base, true)).?;
+/// The cell and index that a trace on `name` applies to. A name that is
+/// an element link (`upvar a(i) x`) means that element of the array.
+const Target = struct { cell: *Var, idx: ?[]const u8 };
+
+fn targetOf(it: *Interp, name: []const u8, make: bool) Error!?Target {
+    const base, const idx = Interp.splitName(name);
+    const cell = try it.findVar(it.frame, base, make) orelse return null;
+    if (idx == null and cell.v == .elem) return .{ .cell = cell.v.elem.array, .idx = cell.v.elem.index };
+    return .{ .cell = cell, .idx = idx };
+}
+
+fn tracedOf(it: *Interp, cell: *Var) Error!*Traced {
     if (cell.v == .traced) return cell.v.traced;
     const t = try it.alloc().create(Traced);
     t.* = .{};
@@ -396,8 +410,9 @@ fn opsList(it: *Interp, ops: u8) Error!Value {
 
 fn varInfo(it: *Interp, name: []const u8, old_form: bool) Error!Value {
     const a = it.alloc();
-    const base, const idx = Interp.splitName(name);
-    const cell = try it.findVar(it.frame, base, false) orelse return Value.empty;
+    const target = try targetOf(it, name, false) orelse return Value.empty;
+    const cell = target.cell;
+    const idx = target.idx;
     if (cell.v != .traced) return Value.empty;
     var out: std.ArrayList(Value) = .empty;
     for (cell.v.traced.list.items) |tr| {
@@ -415,8 +430,9 @@ fn varInfo(it: *Interp, name: []const u8, old_form: bool) Error!Value {
 }
 
 fn varRemove(it: *Interp, name: []const u8, ops: u8, cmd: Value, old: bool) Error!void {
-    const base, const idx = Interp.splitName(name);
-    const cell = try it.findVar(it.frame, base, false) orelse return;
+    const target = try targetOf(it, name, false) orelse return;
+    const cell = target.cell;
+    const idx = target.idx;
     if (cell.v != .traced) return;
     const t = cell.v.traced;
     const text = try it.str(cmd);
@@ -432,9 +448,9 @@ fn varRemove(it: *Interp, name: []const u8, ops: u8, cmd: Value, old: bool) Erro
 }
 
 fn varAdd(it: *Interp, name: []const u8, ops: u8, cmd: Value, old: ?[]const u8) Error!void {
-    const base, const idx = Interp.splitName(name);
-    const t = try tracedOf(it, base);
-    const copy: ?[]const u8 = if (idx) |i| try it.alloc().dupe(u8, i) else null;
+    const target = (try targetOf(it, name, true)).?;
+    const t = try tracedOf(it, target.cell);
+    const copy: ?[]const u8 = if (target.idx) |i| try it.alloc().dupe(u8, i) else null;
     try t.list.insert(it.alloc(), 0, .{ .ops = ops, .cmd = cmd, .elem = copy, .old = old });
 }
 
@@ -451,14 +467,15 @@ pub fn addFlag(it: *Interp, name: []const u8, flag: *bool) Error!void {
             if (scalar) return it.fail("can't trace \"{s}\": variable isn't array", .{name});
         }
     }
-    const t = try tracedOf(it, base);
-    const copy: ?[]const u8 = if (idx) |i| try it.alloc().dupe(u8, i) else null;
+    const target = (try targetOf(it, name, true)).?;
+    const t = try tracedOf(it, target.cell);
+    const copy: ?[]const u8 = if (target.idx) |i| try it.alloc().dupe(u8, i) else null;
     try t.list.insert(it.alloc(), 0, .{ .ops = op_write | op_unset, .cmd = Value.empty, .elem = copy, .flag = flag });
 }
 
 pub fn removeFlag(it: *Interp, name: []const u8, flag: *bool) void {
-    const base, _ = Interp.splitName(name);
-    const cell = (it.findVar(it.frame, base, false) catch return) orelse return;
+    const target = (targetOf(it, name, false) catch return) orelse return;
+    const cell = target.cell;
     if (cell.v != .traced) return;
     const t = cell.v.traced;
     for (t.list.items, 0..) |tr, k| {

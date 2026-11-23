@@ -1485,6 +1485,43 @@ test "compact ends each hold" {
     try std.testing.expectEqual(@as(usize, 40), (try it.str(roots[0])).len);
 }
 
+test "a trace on an element link acts on the element, as in tclsh" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@intFromEnum(tcl.interp.Capability.event));
+    it.event_host = .{ .now = fakeNow, .sleep = fakeSleep };
+    _ = try it.eval(
+        \\proc t {args} {lappend ::log $args}
+        \\array set a {k 1 m 5}
+        \\upvar #0 a(k) e
+        \\trace add variable e write t
+        \\set e 2
+        \\lappend out $a(k) $e
+        \\set a(k) 3
+        \\lappend out $a(k) $e [trace info variable e] [trace info variable a(k)] [trace info variable a] $log
+        \\set log {}
+        \\trace remove variable e write t
+        \\set e 4
+        \\lappend out [llength $log] $a(k)
+        \\proc p {} {upvar #0 a(k) x; trace add variable x {read write} t; set x 7; set y $x; trace remove variable x {read write} t; return $y}
+        \\lappend out [p] $a(k) $log
+        \\set log {}
+        \\trace add variable e unset t
+        \\unset e
+        \\lappend out [info exists a(k)] $log
+        \\after 0 {set f 42}
+        \\array set b {q 1}
+        \\upvar #0 b(q) f
+        \\vwait f
+        \\lappend out $b(q) $f
+    );
+    // The output of tclsh 8.6.16 for the same script.
+    try std.testing.expectEqualStrings(
+        \\2 2 3 3 {{write t}} {{write t}} {} {{e {} write} {a k write}} 0 4 7 7 {{x {} write} {x {} read}} 0 {{e {} unset}} 42 42
+    , try it.str(try it.eval("set out")));
+}
+
 test "the modulo of the smallest integer does not overflow" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
