@@ -25,7 +25,7 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 ## Rules
 
 1. Run `zig build test` before each commit. The tests must pass.
-2. Run the suite before a change to the interpreter is done. The pass count of a file must not drop. The total is 19 288 for `core-8-6-16`.
+2. Run the suite before a change to the interpreter is done. The pass count of a file must not drop. The total is 19 780 for the 37 core files of `core-8-6-16`. Use `tools/suite.sh -a` for all 152 files.
 3. Add no command that reaches the host: no files, sockets, processes, clock, or environment. `puts` goes to the embedder callback.
 4. Keep scripts deterministic. Output depends only on the script, the seed, and the embedder inputs.
 5. Keep the limits: step limit, memory, nesting, and native stack. A script must not crash the host.

@@ -46,7 +46,7 @@ for name in sorted(scope):
     cons = ", ".join(f"`{w}` {n}" for n, w in top if "|" not in w and len(w) < 40)
     unreached = total - p - x - s
     if unreached:
-        cons = (cons + ", " if cons else "") + f"not reached {unreached}"
+        cons = (cons + ", " if cons else "") + f"unreached {unreached}"
     rows[sc].append((name, total, p, x, blocked, cons, why))
 
 out = sys.stdout
@@ -58,7 +58,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 
 - **Total** is the number of tests in the file. `tools/suite-count.tcl` counts the `test` calls in a safe tclsh, and a text search counts the test lines. The table uses the larger count, or the count of tests that ran if that is larger.
 - **Pass** and **Fail** are results of ztcl with the stand-in `tools/tcltest.tcl`.
-- **Blocked** is Total minus Pass minus Fail. A blocked test did not run, so it is not a pass. A false constraint blocked it, or the file stopped before it.
+- **Blocked** is Total minus Pass minus Fail. A blocked test did not run, so it is not a pass. A false constraint blocked it, or the file stopped before it (`unreached`).
 - **Blocked by** gives the largest constraints and their counts. Tcl also skips some of these, for example `knownBug` and `emptyTest`.
 
 ## Scopes

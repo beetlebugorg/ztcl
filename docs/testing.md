@@ -18,58 +18,67 @@ The test files of the Tcl source measure compatibility. The repository has no co
 
 ```sh
 zig build
-tools/suite.sh                        # core-8-6-16
+tools/suite.sh                        # the 37 core files of core-8-6-16
+tools/suite.sh -a                     # all 152 files
+tools/suite.sh -a -o run.tsv          # all files, with a log for the table
+python3 -I tools/suite-table.py run.tsv > docs/compatibility.md
 tools/suite.sh -t <tag>               # another Tcl release
 tools/suite.sh -s <tcl source>/tests  # a local folder
 tools/suite.sh set.test expr.test     # some files
 ```
 
-`tools/tcltest.tcl` is a small stand-in for the `tcltest` package. A test with an unknown constraint, a regexp match, or an `-output` check counts as skipped.
+`tools/tcltest.tcl` is a small stand-in for the `tcltest` package. It evaluates the constraints in the three forms of `tcltest`, and it checks `-output`, `-errorOutput`, and the `exact`, `glob`, `regexp`, and custom match modes. A failed cleanup is a failure. A test with a false constraint counts as skipped, and the log records the constraint. `tools/tcltest-end.tcl` prints the counts after each file.
 
-### Results with Tcl 8.6.16 (`core-8-6-16`)
+`tools/suite-count.tcl` counts the tests of a file with a real `tclsh`, in a safe interpreter. `tools/suite-scope.tsv` has the count and the scope of each file.
+
+[Compatibility](compatibility.md) has the table for all 152 files. A test that did not run counts as blocked. It does not count as a pass.
+
+### Results with Tcl 8.6.16 (`core-8-6-16`), the 37 core files
+
+The stand-in changed, so the totals before this work are 19 290 pass, 1 013 fail, and 526 skip with the same stand-in.
 
 | File | Pass | Fail | Skip |
 |---|---|---|---|
 | `set.test` | 61 | 2 | 1 |
 | `incr.test` | 62 | 4 | 0 |
-| `if.test` | 72 | 1 | 0 |
+| `if.test` | 73 | 0 | 0 |
 | `while.test` | 45 | 1 | 0 |
 | `for.test` | 60 | 4 | 24 |
-| `foreach.test` | 38 | 5 | 0 |
-| `proc.test` | 20 | 17 | 1 |
-| `uplevel.test` | 40 | 17 | 0 |
-| `upvar.test` | 34 | 23 | 8 |
-| `expr.test` | 14080 | 56 | 49 |
+| `foreach.test` | 41 | 2 | 0 |
+| `proc.test` | 25 | 12 | 1 |
+| `uplevel.test` | 49 | 8 | 0 |
+| `upvar.test` | 42 | 15 | 8 |
+| `expr.test` | 14121 | 15 | 49 |
 | `list.test` | 77 | 1 | 0 |
-| `lindex.test` | 37 | 9 | 37 |
-| `llength.test` | 5 | 1 | 0 |
-| `lrange.test` | 30 | 2 | 2 |
-| `linsert.test` | 27 | 1 | 0 |
+| `lindex.test` | 44 | 2 | 37 |
+| `llength.test` | 6 | 0 | 0 |
+| `lrange.test` | 32 | 0 | 2 |
+| `linsert.test` | 28 | 0 | 0 |
 | `lreplace.test` | 1787 | 0 | 0 |
-| `lsearch.test` | 109 | 9 | 0 |
-| `join.test` | 7 | 3 | 0 |
-| `split.test` | 14 | 3 | 0 |
+| `lsearch.test` | 111 | 7 | 0 |
+| `join.test` | 10 | 0 | 0 |
+| `split.test` | 16 | 1 | 0 |
 | `concat.test` | 9 | 0 | 0 |
-| `append.test` | 28 | 17 | 0 |
-| `string.test` | 455 | 169 | 10 |
-| `format.test` | 224 | 32 | 10 |
-| `switch.test` | 93 | 20 | 0 |
+| `append.test` | 42 | 3 | 0 |
+| `string.test` | 618 | 6 | 10 |
+| `format.test` | 225 | 32 | 9 |
+| `switch.test` | 105 | 8 | 0 |
 | `eval.test` | 11 | 1 | 0 |
-| `parse.test` | 65 | 25 | 181 |
-| `lmap.test` | 55 | 11 | 0 |
-| `apply.test` | 22 | 16 | 4 |
-| `rename.test` | 8 | 3 | 8 |
-| `error.test` | 283 | 19 | 15 |
+| `parse.test` | 84 | 6 | 181 |
+| `lmap.test` | 60 | 6 | 0 |
+| `apply.test` | 33 | 5 | 4 |
+| `rename.test` | 10 | 1 | 8 |
+| `error.test` | 300 | 9 | 8 |
 | `lset.test` | 0 | 0 | 89 |
-| `namespace.test` | 161 | 149 | 3 |
-| `regexp.test` | 207 | 32 | 5 |
-| `binary.test` | 565 | 72 | 80 |
-| `info.test` | 61 | 188 | 14 |
-| `dict.test` | 291 | 49 | 2 |
+| `namespace.test` | 230 | 80 | 3 |
+| `regexp.test` | 208 | 31 | 5 |
+| `binary.test` | 602 | 36 | 79 |
+| `info.test` | 97 | 161 | 5 |
+| `dict.test` | 311 | 29 | 2 |
 | `scan.test` | 145 | 35 | 1 |
-| **Total** | **19288** | **997** | **544** |
+| **Total** | **19780** | **523** | **526** |
 
-The largest groups of tests that still fail: `info frame` (about 120), `trace` (about 45), `tcl::prefix` (37), `upvar` to an array element, the error codes of the core commands (`ARITH DIVZERO`), `-during` in the options of `try`, and the details of `namespace`.
+The largest groups of tests that still fail in scope: TclOO (`oo`, `ooNext2`), `info frame`, step traces, `coroutine`, `tailcall`, the bytecode tools (`tcl::unsupported::disassemble`), the `%n$` forms of `format` and `scan`, and the longest-match rules of regular expressions.
 
 ## Benchmarks
 

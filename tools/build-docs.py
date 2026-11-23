@@ -28,6 +28,7 @@ PAGES = [
     ("docs/embedding.md", "embedding/", "Use", "Embed in Zig"),
     ("docs/design.md", "design/", "Internals", "Design"),
     ("docs/testing.md", "testing/", "Internals", "Tests and benchmarks"),
+    ("docs/compatibility.md", "compatibility/", "Internals", "Compatibility"),
     ("docs/tcl9.md", "tcl9/", "Internals", "Tcl 8.6 and Tcl 9"),
     ("docs/release.md", "release/", "Project", "Releases"),
     ("docs/roadmap.md", "roadmap/", "Project", "Roadmap"),

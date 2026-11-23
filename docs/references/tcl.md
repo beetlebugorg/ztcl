@@ -18,7 +18,23 @@ The `tests/*.test` files of the Tcl source. https://github.com/tcltk/tcl/tree/co
 
 **License:** Tcl/Tk License (BSD style)
 
-**How ztcl uses it:** `tools/suite.sh` runs the test files on the Zig interpreter and prints the counts for each file. The files are not in the ztcl repository; the script reads them from a copy of the Tcl source. `tools/tcltest.tcl` is a new, small stand-in for the `tcltest` package (the `test`, `testConstraint`, and `cleanupTests` commands). It has no code of the package.
+**How ztcl uses it:** `tools/suite.sh` runs the test files on the Zig interpreter and prints the counts for each file. The files are not in the ztcl repository; the script reads them from a copy of the Tcl source. `tools/tcltest.tcl` is a new, small stand-in for the `tcltest` package (the `test`, `testConstraint`, `customMatch`, and `cleanupTests` commands). It has no code of the package. `tools/suite-count.tcl` counts the tests of each file with a `tclsh`.
+
+### The commands added for the test files
+
+The manual pages `trace.n`, `namespace.n`, `mathop.n`, `mathfunc.n`, `prefix.n`, `array.n`, `subst.n`, `try.n`, and `binary.n` of Tcl 8.6.16.
+
+**License:** Tcl/Tk License (BSD style)
+
+**How ztcl uses it:** `src/trace.zig`, `src/ns.zig`, `src/mathns.zig`, `src/extra.zig`, and `src/more.zig` follow the behavior in these pages, the results of `tclsh` 8.6.16, and the expected results of the test files. They have no C code of Tcl.
+
+### Unicode character classes
+
+The Unicode Character Database. https://www.unicode.org/ucd/
+
+**License:** Unicode License
+
+**How ztcl uses it:** `src/ucd.zig` is a small hand-written model of the classes and the simple case maps for the common blocks. It has no copy of the data files.
 
 ## Methods
 

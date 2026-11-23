@@ -9,9 +9,8 @@ ztcl follows Tcl 8.6.16 and makes no claim of Tcl 9 compatibility. The baseline 
 
 ## Other known gaps
 
-- `info frame`, `trace`, and `tcl::prefix`.
-- Error codes of the core commands, for example `ARITH DIVZERO`.
-- The rest of `namespace`: `path`, `unknown`, and `forget`.
+- The test files in [Compatibility](compatibility.md): TclOO, `info frame`, step traces, `coroutine`, `tailcall`, and the longest-match rules of regular expressions.
+- A decision on the commands that the sandbox omits.
 - A `compact` that keeps the compiled forms of procs.
 - An in-place write to an existing key of a dict at the global level.
 - Cheaper proc frames.

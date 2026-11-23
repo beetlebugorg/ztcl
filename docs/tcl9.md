@@ -14,10 +14,10 @@ This page compares Tcl 8.6.16 and Tcl 9.1.0 for the commands that ztcl has. ztcl
 
 | Test files | Pass | Fail | Skip |
 |---|---|---|---|
-| Tcl 8.6.16 | 19 288 | 997 | 544 |
-| Tcl 9.1.0 | 8 756 | 3 326 | 541 |
+| Tcl 8.6.16 | 19 780 | 523 | 526 |
+| Tcl 9.1.0 | 9 207 | 2 893 | 523 |
 
-The two totals do not compare directly, because the files differ. For example, `expr.test` has about 14 200 tests in 8.6.16 and about 2 200 in 9.1.0. In 9.1.0, `lreplace.test` also tests `ledit`, and ztcl has no `ledit`. Those tests are 1 789 of the 3 326 failures.
+The two totals do not compare directly, because the files differ. For example, `expr.test` has about 14 200 tests in 8.6.16 and about 2 200 in 9.1.0. In 9.1.0, `lreplace.test` also tests `ledit`, and ztcl has no `ledit`. Those tests are about 1 789 of the 2 893 failures.
 
 ## Benchmarks
 
@@ -36,7 +36,7 @@ CPU milliseconds, best of 11 runs of the whole process, `ReleaseFast`, on an Int
 
 ## Differences and proposed choices
 
-"ztcl now" is the result of ztcl today.
+"ztcl now" is the result of ztcl before the work on the 8.6.16 test suite. Some rows are out of date.
 
 ### Numbers
 

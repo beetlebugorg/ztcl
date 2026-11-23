@@ -18,7 +18,11 @@ ztcl uses only the Zig standard library. [References](references/tcl.md) lists t
 | `compact.zig` | The reset that keeps the commands. |
 | `more.zig` | `lset`, `lsort`, `binary`, and `scan`. |
 | `regex.zig` | The regular expressions: `regexp`, `regsub`, and the matcher. |
-| `ns.zig` | The `namespace` command. |
+| `ns.zig` | The `namespace` command, ensembles, and the unknown handler. |
+| `mathns.zig` | The commands of `tcl::mathop` and `tcl::mathfunc`. |
+| `extra.zig` | `array`, `case`, `tcl::prefix`, and the word boundary procs. |
+| `trace.zig` | The `trace` command and the traced cell form. |
+| `ucd.zig` | A small model of Unicode classes and case maps. |
 | `noise.zig` | The gradient noise of `noise3`. |
 | `point.zig` | The point procs: the check, the vector program, and both paths. |
 | `main.zig` | The runner. |
@@ -101,7 +105,7 @@ The semantics of Tcl stay:
 - The return codes are Zig errors: `TclError`, `TclReturn`, `TclBreak`, and `TclContinue`. The result of the interpreter holds the message or the value. `return -code` and `return -level` set the code and the level of a pending return.
 - A return code above 4 (`return -code 5`) is the error `TclCustom`, with the number in `custom_code`.
 - An error builds the trace in `errorInfo`, in the form of Tcl: the message, `while executing`, the command, the procedure and line, and `invoked from within`.
-- An error has a code (`errorCode`). `error msg info code`, `throw`, and `return -code error -errorcode` set it. An error of a core command has the code `NONE`; Tcl gives codes such as `ARITH DIVZERO` there.
+- An error has a code (`errorCode`). `error msg info code`, `throw`, and `return -code error -errorcode` set it. Arithmetic errors, wrong argument counts, list syntax errors, and lookups have the codes of Tcl, such as `ARITH DIVZERO`. Other errors of core commands have the code `NONE`.
 - `catch` and `try` use one function (`runCaught`). It gives the code, the result, and the options dict (`-code`, `-level`, `-errorcode`, `-errorinfo`, `-errorline`). `try` selects a handler (`on`, `trap`), runs `finally`, and gives the end of the script again when no handler matches.
 
 ## Namespaces
@@ -114,7 +118,10 @@ A namespace is a prefix of names (`ns.zig`).
 - `uplevel` switches to the namespace of the frame that it goes to.
 - A command site keeps the namespace of its lookup, so a script that runs in two namespaces looks its commands up again.
 - `namespace import` copies the commands that the source namespace exports. `namespace ensemble create` makes a command that calls the exported commands, the `-subcommands`, or the `-map` words.
-- Not there: `namespace path`, `namespace unknown`, `namespace forget`, `namespace ensemble configure`, and the `tcl::mathfunc` and `tcl::mathop` namespaces. `info commands` and `info procs` do not filter by namespace.
+- `namespace path` adds namespaces to the command lookup. A name with no command goes to the `namespace unknown` handler, and then to `::unknown`.
+- An import is a second key in the command table for one `Command`. The `name` field of the command gives its origin, so `namespace origin`, `rename`, and a delete follow the import.
+- An ensemble has `-map`, `-subcommands`, `-parameters`, `-prefixes`, `-unknown`, and `configure`.
+- `tcl::mathop` and `tcl::mathfunc` are namespaces of native commands. `expr` calls a function that a script defined in `tcl::mathfunc`. The parser selects the function when it compiles the expression, so a replacement after that compile has no effect on that expression.
 
 ## Regular expressions
 
@@ -130,7 +137,7 @@ A namespace is a prefix of names (`ns.zig`).
 
 ## Strings
 
-A string is UTF-8 bytes. `string length`, `index`, `range`, `replace`, `first`, `last`, and `reverse` count characters. A string of ASCII uses the byte offsets directly. Other strings need a pass over the bytes for each call, so `string index` in a loop over a long string that is not ASCII is slow. `string match`, `string map`, `string tolower`, `string is`, `string wordend`, the regular expressions, and `format %c` still work on bytes.
+A string is UTF-8 bytes. The `string` subcommands and glob patterns work on characters. A string of ASCII uses the byte offsets directly. Other strings need a pass over the bytes for each call, so `string index` in a loop over a long string that is not ASCII is slow. `string map`, the regular expressions, and `format %c` still work on bytes. `ucd.zig` is a small model of Unicode classes and case maps. It covers ASCII, Latin, Greek, Cyrillic, the space characters, and the common punctuation blocks.
 
 `binary format` and `binary scan` see a string as bytes: a character below 256 is one byte.
 
@@ -140,6 +147,10 @@ A string is UTF-8 bytes. `string length`, `index`, `range`, `replace`, `first`, 
 
 The functions are those of Tcl 8.6, and four additions for zslice: `clamp`, `lerp`, `noise2`, and `noise3`. `rand()` uses a fixed seed.
 
+## Traces and element links
+
+A variable with a trace has the cell form `.traced`, and `upvar a(i) x` makes the cell form `.elem`. The fast paths of the bytecode read only `.val`, so a read of these forms goes to the general path. A store checks the tag with one compare (`Var.plainStore`). While `var_traces` is above zero, the inline forms are off, and `foreach` stores through `setVar`. A command with an execution trace has a wrapper as its function, so a call of another command has no added cost. `tcl_precision` is a `.traced` cell that does not count in `var_traces`. Its write check sets the precision of the double output.
+
 ## Safety and determinism
 
 - The commands `open`, `socket`, `exec`, `file`, `clock`, `source`, `exit`, `cd`, `glob`, `load`, and `after` do not exist. A test checks this.
@@ -148,6 +159,7 @@ The functions are those of Tcl 8.6, and four additions for zslice: `clamp`, `ler
 - The nesting of scripts in scripts has a limit (2000 levels): `eval`, a loop body, a command substitution, `try`, `catch`. Before, `set s {eval $s}; eval $s` used up the native stack and crashed the process.
 - `lsort` uses a merge sort with its buffer in the arena, so a compare command that sorts again uses little native stack.
 - The nested scripts can use at most 5 MiB of native stack (`max_native`). A frame of the bytecode loop is large in a debug build, so the count of levels alone is not safe.
+- A call of `subst`, an ensemble, or the unknown handler counts as one level of nesting.
 - The nesting of calls has a limit (600 levels). The nesting of command substitutions and of an expression has a limit (200 levels), and an expression has at most 2000 nodes. A deep script gives an error and does not use up the native stack.
 - A glob match goes back only to the last `*`. Its time is at most the pattern length times the string length. `string match`, `switch -glob`, `lsearch -glob`, and `dict filter` pay one step of the step limit for each 4096 units of that product.
 - A regular expression uses the step limit (see above).
