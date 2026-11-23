@@ -567,6 +567,24 @@ pub const Counting = struct {
     }
 };
 
+/// An optional group of commands. The default interpreter has none.
+/// The embedder turns one on with `Interp.allow`.
+pub const Capability = enum(u32) {
+    package = 1,
+    interp = 2,
+
+    /// The bits of a list of names such as "package,interp".
+    pub fn parse(text: []const u8) ?u32 {
+        var bits: u32 = 0;
+        var iter = std.mem.tokenizeScalar(u8, text, ',');
+        while (iter.next()) |w| {
+            const c = std.meta.stringToEnum(Capability, w) orelse return null;
+            bits |= @intFromEnum(c);
+        }
+        return bits;
+    }
+};
+
 pub const ReturnCode = enum(u32) { ok = 0, @"error" = 1, @"return" = 2, @"break" = 3, @"continue" = 4, _ };
 
 const list_cache_bits = 4;
@@ -667,6 +685,19 @@ pub const Interp = struct {
     word_chunk: usize = chunk_size,
     /// The command of a pending `tailcall`.
     tail_words: ?[]const Value = null,
+    /// The bits of the capabilities that are on.
+    capabilities: u32 = 0,
+    /// The state of the `package` command.
+    pkg: @import("pkg.zig").State = .{},
+    /// The child interpreters of the `interp` command.
+    children: std.StringHashMapUnmanaged(*@import("child.zig").Child) = .empty,
+    parent: ?*Interp = null,
+    is_safe: bool = false,
+    /// The count of calls into this interpreter that are running.
+    active: u32 = 0,
+    /// Deleted while it ran. The last call out of it frees it.
+    doomed: bool = false,
+    hidden: std.StringHashMapUnmanaged(*Command) = .empty,
     /// The handler of `namespace unknown` for each namespace.
     ns_unknown: std.StringHashMapUnmanaged(Value) = .empty,
     unknown_depth: u32 = 0,
@@ -711,6 +742,9 @@ pub const Interp = struct {
     /// values of scripts go away, and the arena frees its memory. The
     /// limits, the output, and the data of the embedder stay.
     pub fn reset(it: *Interp) Allocator.Error!void {
+        @import("child.zig").destroyAll(it);
+        const caps = it.capabilities;
+        defer it.capabilities = caps;
         if (it.points) |s| s.programs = .empty;
         _ = it.arena.reset(.free_all);
         const counter = it.counter;
@@ -725,7 +759,10 @@ pub const Interp = struct {
         it.output = keep.output;
         it.user = keep.user;
         it.noise_seed = keep.noise_seed;
+        it.parent = keep.parent;
+        it.is_safe = keep.is_safe;
         try it.start();
+        try it.allow(caps);
     }
 
     /// Frees the memory of past evaluations and keeps the commands, the
@@ -762,7 +799,17 @@ pub const Interp = struct {
         };
     }
 
+    /// Turns on capabilities: the bits of `Capability`. A capability
+    /// adds its commands. The default interpreter has none.
+    pub fn allow(it: *Interp, bits: u32) Allocator.Error!void {
+        const new = bits & ~it.capabilities;
+        it.capabilities |= bits;
+        if (new & @intFromEnum(Capability.package) != 0) try it.register("package", @import("pkg.zig").cmdPackage);
+        if (new & @intFromEnum(Capability.interp) != 0) try it.register("interp", @import("child.zig").cmdInterp);
+    }
+
     pub fn deinit(it: *Interp) void {
+        @import("child.zig").destroyAll(it);
         it.arena.deinit();
     }
 

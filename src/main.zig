@@ -5,6 +5,8 @@
 //! line at a time. The runner reads the files itself; a script has no
 //! command that reads a file.
 //!
+//! `--allow a,b` turns on capabilities (`package`, `interp`). Only the
+//! suite passes it.
 //! `--mem N` sets the memory limit in bytes. The default is 2 GiB.
 //! `--repeat N` runs each file N times in one interpreter. With `--time`,
 //! it prints the best time: the warm time of the file.
@@ -67,6 +69,16 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
         if (std.mem.eql(u8, arg, "--max-steps") and i + 1 < args.len) {
             i += 1;
             it.step_limit = try std.fmt.parseInt(u64, args[i], 10);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--allow") and i + 1 < args.len) {
+            i += 1;
+            const bits = tcl.interp.Capability.parse(args[i]) orelse {
+                try out.print("unknown capability in \"{s}\"\n", .{args[i]});
+                out.flush() catch {};
+                std.process.exit(2);
+            };
+            try it.allow(bits);
             continue;
         }
         if (std.mem.eql(u8, arg, "--repeat") and i + 1 < args.len) {

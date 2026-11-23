@@ -1007,3 +1007,34 @@ test "coroutines and tail calls" {
         .{ "proc f {n a} {if {$n == 0} {return $a}; tailcall f [expr {$n-1}] [expr {$a+1}]}; f 5000 0", "5000" },
     });
 }
+
+test "the optional commands are absent by default" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    for ([_][]const u8{ "package", "interp", "clock", "file", "open", "socket", "exec", "chan", "encoding", "source", "load", "cd", "pwd", "glob" }) |name| {
+        try std.testing.expect(it.findCommand(name) == null);
+    }
+}
+
+test "a child has no more capabilities than its parent" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@intFromEnum(tcl.interp.Capability.interp));
+    try std.testing.expectEqualStrings("{} 0", try it.str(try it.eval("interp create c; list [c eval {info commands package}] [interp issafe c]")));
+    try std.testing.expectEqualStrings("interp", try it.str(try it.eval("c eval {info commands interp}")));
+    try std.testing.expectEqualStrings("{}", try it.str(try it.eval("interp create -safe s; list [s eval {info commands interp}]")));
+    try std.testing.expectEqualStrings("7", try it.str(try it.eval("interp alias c dbl {} expr 3+; c eval {dbl 4}")));
+    _ = try it.eval("interp delete c");
+}
+
+test "a child that deletes itself through an alias stays safe" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@intFromEnum(tcl.interp.Capability.interp));
+    _ = try it.eval("interp create c; proc kill {} {interp delete c; return done}; interp alias c k {} kill");
+    try std.testing.expectEqualStrings("done", try it.str(try it.eval("c eval {proc p {} {set x [k]; return $x}; p}")));
+    try std.testing.expectEqualStrings("0", try it.str(try it.eval("interp exists c")));
+}

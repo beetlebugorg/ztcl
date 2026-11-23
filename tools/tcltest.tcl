@@ -18,6 +18,20 @@ set tt_pass 0
 set tt_fail 0
 set tt_skip 0
 if {![info exists tt_verbose]} { set tt_verbose 0 }
+proc tt_note {kind {why {}}} {
+    global tt_pass tt_fail tt_skip tt_why
+    switch -- $kind {
+        pass { incr tt_pass }
+        fail { incr tt_fail }
+        default {
+            incr tt_skip
+            if {[info exists tt_why($why)]} { incr tt_why($why) } else { set tt_why($why) 1 }
+        }
+    }
+}
+
+# The commands that a child interpreter also gets.
+set tt_script {
 array set tt_cons {
     unix 1 unixOnly 1 notRoot 1 tcl 1 wideIs64bit 1 longIs64bit 1
     ieeeFloatingPoint 1 eformat 1 emptyTest 0 knownBug 0 nonPortable 0
@@ -63,11 +77,7 @@ proc tt_blocked {constraints} {
     return {}
 }
 
-proc tt_skip {why} {
-    global tt_skip tt_why
-    incr tt_skip
-    if {[info exists tt_why($why)]} { incr tt_why($why) } else { set tt_why($why) 1 }
-}
+proc tt_skip {why} { tt_note skip $why }
 
 # The match modes. `customMatch` adds a mode.
 array set tt_match {exact {string equal} glob {string match} regexp {regexp --}}
@@ -104,7 +114,7 @@ proc puts {args} {
 }
 
 proc tcltest::test {name desc args} {
-    global tt_pass tt_fail tt_verbose tt_match tt_capture tt_out tt_err
+    global tt_verbose tt_match tt_capture tt_out tt_err
     set constraints {}
     set setup {}
     set cleanup {}
@@ -142,7 +152,7 @@ proc tcltest::test {name desc args} {
     set setup_code [catch {uplevel 1 $setup} setup_msg]
     if {$setup_code == 1} {
         set tt_capture 0
-        incr tt_fail
+        tt_note fail
         if {$tt_verbose} { puts "FAIL $name: setup: $setup_msg" }
         catch {uplevel 1 $cleanup}
         return
@@ -171,9 +181,9 @@ proc tcltest::test {name desc args} {
         set err_ok 0
     }
     if {$code_ok && $same && $out_ok && $err_ok && $clean_code != 1} {
-        incr tt_pass
+        tt_note pass
     } else {
-        incr tt_fail
+        tt_note fail
         if {$tt_verbose} {
             puts "FAIL $name: code $code"
             puts "  got:  $actual"
@@ -186,6 +196,7 @@ proc tcltest::test {name desc args} {
 }
 
 proc tcltest::cleanupTests {args} {
+    if {[info exists ::tt_child]} return
     global tt_pass tt_fail tt_skip
     puts "pass $tt_pass fail $tt_fail skip $tt_skip"
 }
@@ -193,20 +204,41 @@ proc tcltest::loadTestedCommands {args} {}
 proc tcltest::configure {args} {}
 proc tcltest::verbose {args} {}
 
-# `interp alias {} name {} target ?arg ...?` makes a proc that calls
-# the target. Other subcommands of `interp` are errors.
-proc interp {sub args} {
-    if {$sub ne "alias" || [llength $args] < 4} {
-        error "interp $sub is not supported"
+}
+eval $tt_script
+# The stand-in `interp`, for a runner with no `interp` capability:
+# `interp alias {} name {} target ?arg ...?` makes a proc that calls the
+# target. Other subcommands are errors.
+if {[llength [info commands interp]] == 0} {
+    proc interp {sub args} {
+        if {$sub ne "alias" || [llength $args] < 4} {
+            error "interp $sub is not supported"
+        }
+        set target [lrange $args 3 end]
+        proc [lindex $args 1] args "return \[uplevel 1 \[list $target {*}\$args\]\]"
+        return [lindex $args 1]
     }
-    set target [lrange $args 3 end]
-    proc [lindex $args 1] args "return \[uplevel 1 \[list $target {*}\$args\]\]"
-    return [lindex $args 1]
 }
 
 # The commands that test files call around the tests.
-proc package {args} { return 8.6 }
+if {[llength [info commands package]] == 0} {
+    proc package {args} { return 8.6 }
+} else {
+    package provide Tcl 8.6.16
+    package provide tcltest 2.5.9
+}
 set tcl_library /usr/lib/tcl8.6
+
+# Loads the test commands into a child. Its counts go to this file.
+proc tcltest::loadIntoChildInterpreter {child args} {
+    interp eval $child {set ::tt_child 1; set ::tt_verbose 0}
+    interp eval $child $::tt_script
+    interp alias $child tt_note {} tt_note
+    interp eval $child {catch {package provide tcltest 2.5.9}; catch {package provide Tcl 8.6.16}}
+    interp eval $child {namespace eval tcltest {namespace export *}; namespace import ::tcltest::*}
+    return
+}
+
 # The test commands are in the namespace tcltest, as in Tcl. A test
 # file imports them.
 namespace eval tcltest {namespace export *}

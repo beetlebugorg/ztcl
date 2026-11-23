@@ -262,7 +262,7 @@ pub const Copier = struct {
 /// from before the call is invalid after it. `it.result` becomes empty.
 pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     // A suspended coroutine has pointers on its native stack.
-    if (it.frame != &it.global or it.nest != 0 or it.depth != 0 or it.coro_count != 0) return error.InterpBusy;
+    if (it.frame != &it.global or it.nest != 0 or it.depth != 0 or it.coro_count != 0 or it.children.count() != 0 or it.capabilities != 0) return error.InterpBusy;
 
     var next = std.heap.ArenaAllocator.init(it.counter.allocator());
     errdefer next.deinit();
