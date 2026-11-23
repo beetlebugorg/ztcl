@@ -1102,6 +1102,19 @@ test "file and channels cannot leave the root folder" {
     try std.testing.expectEqualStrings("ok", try it.str(try it.eval("set f [open sub/a.txt w]; puts $f ok; close $f; set f [open sub/a.txt]; set l [gets $f]; close $f; set l")));
 }
 
+test "the parent of a path refuses a last name that is not a plain entry" {
+    if (!tcl.fsroot.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    for ([_][]const u8{ "", ".", "..", "sub/.", "sub/..", "sub/", "a\x00b", "sub/a\x00b" }) |rel| {
+        switch (try tcl.fsroot.parentOf(&it, rel)) {
+            .ok => return error.TestUnexpectedResult,
+            .err => |e| try std.testing.expectEqual(tcl.sys.Errno.ACCES, e),
+        }
+    }
+}
+
 test "a folder swapped for a symlink during an open stays in the root" {
     if (!tcl.fsroot.supported or @import("builtin").os.tag != .macos) return error.SkipZigTest;
     const linux = tcl.sys.os;
