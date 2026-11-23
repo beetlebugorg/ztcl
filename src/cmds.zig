@@ -2141,7 +2141,12 @@ fn cmdPuts(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     if (args.len == 2) {
         const chan = try it.str(args[0]);
-        if (!eql(chan, "stdout") and !eql(chan, "stderr")) return it.fail("can not find channel named \"{s}\"", .{chan});
+        if (!eql(chan, "stdout") and !eql(chan, "stderr")) {
+            if (comptime @import("builtin").os.tag == .linux) {
+                if (try @import("chan.zig").putsTo(it, chan, try it.str(args[1]), newline)) return Value.empty;
+            }
+            return it.fail("can not find channel named \"{s}\"", .{chan});
+        }
         args = args[1..];
     }
     if (args.len != 1) return it.wrongArgs("puts ?-nonewline? ?channelId? string");

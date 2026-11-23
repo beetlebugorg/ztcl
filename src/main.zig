@@ -5,7 +5,8 @@
 //! line at a time. The runner reads the files itself; a script has no
 //! command that reads a file.
 //!
-//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`). Only the
+//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`, `channels`, `file`). `--root DIR` is
+//! the one folder of `file` and channels. Only the
 //! suite passes it.
 //! `--mem N` sets the memory limit in bytes. The default is 2 GiB.
 //! `--repeat N` runs each file N times in one interpreter. With `--time`,
@@ -82,6 +83,15 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
         if (std.mem.eql(u8, arg, "--max-steps") and i + 1 < args.len) {
             i += 1;
             it.step_limit = try std.fmt.parseInt(u64, args[i], 10);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--root") and i + 1 < args.len) {
+            i += 1;
+            tcl.fsroot.setRoot(&it, args[i]) catch {
+                try out.print("cannot open the root folder \"{s}\"\n", .{args[i]});
+                out.flush() catch {};
+                std.process.exit(2);
+            };
             continue;
         }
         if (std.mem.eql(u8, arg, "--allow") and i + 1 < args.len) {

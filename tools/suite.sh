@@ -47,8 +47,11 @@ fi
     lset.test namespace.test regexp.test binary.test info.test dict.test scan.test
 tp=0; tf=0; ts=0
 for f in "$@"; do
-    raw=$(timeout 60 "$tcl" --max-steps 200000000 --mem 2147483648 --allow package,interp,clock --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
+    # A fresh root folder for each file, outside the repository.
+    root=$(mktemp -d "${TMPDIR:-/tmp}/ztcl-suite.XXXXXX") || exit 1
+    raw=$(timeout 60 "$tcl" --max-steps 200000000 --mem 2147483648 --allow package,interp,clock,channels,file --root "$root" --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
     rc=$?
+    rm -rf -- "$root"
     out=$(printf '%s\n' "$raw" | grep -aE '^pass [0-9]+ fail' | tail -1)
     printf '%-16s %s\n' "$f" "${out:-no result (the file stopped early or crashed, status $rc)}"
     p=0; x=0; y=0

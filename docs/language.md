@@ -80,9 +80,11 @@ The counts are pass / fail / skip for the test file of the command.
 
 ## Optional commands
 
-`package`, `interp`, and `clock` are capabilities. The default interpreter does not have them. An embedder turns them on with `Interp.allow`, and the runner with `--allow package,interp,clock`. A child interpreter has at most the capabilities of its parent, and a safe child has none.
+`package`, `interp`, `clock`, `channels`, and `file` are capabilities. The default interpreter does not have them. An embedder turns them on with `Interp.allow`, and the runner with `--allow package,interp,clock,channels,file --root DIR`. A child interpreter has at most the capabilities of its parent, and a safe child has none.
 
 `clock` reads the time and the zone data only through `Interp.clock_host`, a callback of the embedder. Named zones are TZif data from that callback.
+
+`file` and the channel commands exist on Linux and stay inside one root folder from the embedder. A script sees that folder as `/`. Each open uses `openat2` with `RESOLVE_BENEATH` and `RESOLVE_NO_SYMLINKS`, so `..` and symlinks cannot leave it. `file link` is an error. `exec` and command pipelines do not exist.
 
 `coroutine`, `yield`, `yieldto`, and `tailcall` are core commands. `coroutine` needs a stack switch, which exists for x86-64 Linux. On other targets, including WebAssembly, it gives an error.
 

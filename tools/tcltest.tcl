@@ -220,6 +220,48 @@ if {[llength [info commands interp]] == 0} {
     }
 }
 
+# The file helpers of tcltest, for a runner with the `file` capability.
+# Each path is inside the root folder of the runner.
+set tt_files {
+    proc tcltest::temporaryDirectory {args} { return [pwd] }
+    proc tcltest::testsDirectory {args} { return [pwd] }
+    proc tcltest::workingDirectory {args} { return [pwd] }
+    proc tcltest::makeFile {contents name {dir {}}} {
+        if {$dir eq ""} { set dir [pwd] }
+        set path [file join $dir $name]
+        set f [open $path w]
+        fconfigure $f -translation lf
+        if {[string index $contents end] ne "\n"} { append contents \n }
+        puts -nonewline $f $contents
+        close $f
+        return $path
+    }
+    proc tcltest::removeFile {name {dir {}}} {
+        if {$dir eq ""} { set dir [pwd] }
+        file delete -force [file join $dir $name]
+        return
+    }
+    proc tcltest::makeDirectory {name {dir {}}} {
+        if {$dir eq ""} { set dir [pwd] }
+        set path [file join $dir $name]
+        file mkdir $path
+        return $path
+    }
+    proc tcltest::removeDirectory {name {dir {}}} {
+        if {$dir eq ""} { set dir [pwd] }
+        file delete -force [file join $dir $name]
+        return
+    }
+    proc tcltest::viewFile {name {dir {}}} {
+        if {$dir eq ""} { set dir [pwd] }
+        set f [open [file join $dir $name]]
+        set text [read -nonewline $f]
+        close $f
+        return $text
+    }
+}
+if {[llength [info commands file]]} { eval $tt_files }
+
 # The commands that test files call around the tests.
 if {[llength [info commands package]] == 0} {
     proc package {args} { return 8.6 }
@@ -239,6 +281,7 @@ proc tcltest::loadIntoChildInterpreter {child args} {
     interp eval $child [list set ::tt_verbose $::tt_verbose]
     interp eval $child {set ::auto_path {}; set ::argv {}; set ::argc 0}
     interp eval $child $::tt_script
+    if {[interp eval $child {llength [info commands file]}]} { interp eval $child $::tt_files }
     interp alias $child tt_note {} tt_note
     interp eval $child {catch {package provide tcltest 2.5.9}; catch {package provide Tcl 8.6.16}}
     interp eval $child {namespace eval tcltest {namespace export *}; namespace import ::tcltest::*}

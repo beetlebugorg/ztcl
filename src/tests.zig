@@ -1055,3 +1055,46 @@ test "clock reads the time only from the host callback" {
     try std.testing.expectEqualStrings("1970-01-02", try it.str(try it.eval("clock format [clock seconds] -format %Y-%m-%d -gmt 1")));
     try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {clock format 0 -timezone :../../etc/passwd}")));
 }
+
+test "file and channels cannot leave the root folder" {
+    if (@import("builtin").os.tag != .linux) return error.SkipZigTest;
+    const linux = std.os.linux;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const base: i32 = tmp.dir.handle;
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.mkdirat(base, "root", 0o777)));
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.mkdirat(base, "root/sub", 0o777)));
+    const secret = linux.openat(base, "secret", .{ .ACCMODE = .WRONLY, .CREAT = true }, 0o666);
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(secret));
+    _ = linux.write(@intCast(secret), "hidden", 6);
+    _ = linux.close(@intCast(secret));
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.symlinkat("../secret", base, "root/out")));
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.symlinkat("..", base, "root/sub/up")));
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.symlinkat("/etc", base, "root/etc")));
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const rc = linux.openat(base, "root", .{ .DIRECTORY = true, .PATH = true, .CLOEXEC = true }, 0);
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(rc));
+    it.fs.fd = @intCast(rc);
+    try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.file));
+    for ([_][]const u8{
+        "open ../secret", "open /../secret", "open sub/../../secret", "open out", "open sub/up/../secret",
+        "open etc/passwd", "open out w", "source ../secret", "source out", "cd ..", "cd etc",
+        "file size ../secret", "file delete ../secret", "file mkdir ../made", "file rename sub ../moved",
+        "file copy ../secret here", "file copy out here", "file link -symbolic x /etc", "file readlink out",
+    }) |script| {
+        if (it.eval(script)) |_| {
+            std.debug.print("escaped: {s}\n", .{script});
+            return error.TestUnexpectedResult;
+        } else |e| try std.testing.expectEqual(error.TclError, e);
+    }
+    // The file outside still has its text, and no new name exists there.
+    const kept = linux.openat(base, "secret", .{}, 0);
+    var buf: [16]u8 = undefined;
+    const n = linux.read(@intCast(kept), &buf, buf.len);
+    _ = linux.close(@intCast(kept));
+    try std.testing.expectEqualStrings("hidden", buf[0..n]);
+    try std.testing.expectEqual(linux.E.NOENT, linux.errno(linux.openat(base, "made", .{}, 0)));
+    try std.testing.expectEqualStrings("ok", try it.str(try it.eval("set f [open sub/a.txt w]; puts $f ok; close $f; set f [open sub/a.txt]; set l [gets $f]; close $f; set l")));
+}

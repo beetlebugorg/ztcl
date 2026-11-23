@@ -22,6 +22,7 @@ pub const noise = @import("noise.zig");
 pub const point = @import("point.zig");
 pub const compact = @import("compact.zig");
 pub const regex = @import("regex.zig");
+pub const fsroot = @import("fsroot.zig");
 
 pub const Value = value.Value;
 pub const Interp = interp.Interp;

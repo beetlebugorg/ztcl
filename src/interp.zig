@@ -573,6 +573,8 @@ pub const Capability = enum(u32) {
     package = 1,
     interp = 2,
     clock = 4,
+    channels = 8,
+    file = 16,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -585,6 +587,10 @@ pub const Capability = enum(u32) {
         return bits;
     }
 };
+
+const fs_supported = @import("builtin").os.tag == .linux;
+const FsState = if (fs_supported) @import("fsroot.zig").State else struct { fd: i32 = -1 };
+const ChanState = if (fs_supported) @import("chan.zig").State else struct {};
 
 pub const ReturnCode = enum(u32) { ok = 0, @"error" = 1, @"return" = 2, @"break" = 3, @"continue" = 4, _ };
 
@@ -691,6 +697,10 @@ pub const Interp = struct {
     /// The time and zone callbacks of the `clock` capability.
     clock_host: ?@import("clock.zig").Host = null,
     clock: @import("clock.zig").State = .{},
+    /// The root folder and the channels of the file capabilities.
+    fs: FsState = .{},
+    chans: ChanState = .{},
+    temp_next: u32 = 0,
     /// The state of the `package` command.
     pkg: @import("pkg.zig").State = .{},
     /// The child interpreters of the `interp` command.
@@ -747,6 +757,9 @@ pub const Interp = struct {
     /// limits, the output, and the data of the embedder stay.
     pub fn reset(it: *Interp) Allocator.Error!void {
         @import("child.zig").destroyAll(it);
+        if (comptime fs_supported) @import("chan.zig").closeAll(it);
+        const fs_keep = it.fs;
+        defer it.fs = fs_keep;
         const caps = it.capabilities;
         defer it.capabilities = caps;
         if (it.points) |s| s.programs = .empty;
@@ -812,10 +825,24 @@ pub const Interp = struct {
         if (new & @intFromEnum(Capability.package) != 0) try it.register("package", @import("pkg.zig").cmdPackage);
         if (new & @intFromEnum(Capability.interp) != 0) try it.register("interp", @import("child.zig").cmdInterp);
         if (new & @intFromEnum(Capability.clock) != 0) try @import("clock.zig").register(it);
+        // The file commands exist on Linux, where `openat2` is the jail.
+        if (comptime fs_supported) {
+            if (new & @intFromEnum(Capability.channels) != 0) try @import("chan.zig").register(it);
+            if (new & @intFromEnum(Capability.file) != 0) try @import("filecmd.zig").register(it);
+        }
+    }
+
+    /// True when the file capabilities have a root folder.
+    pub fn fs_ok(it: *const Interp) bool {
+        return it.fs.fd >= 0;
     }
 
     pub fn deinit(it: *Interp) void {
         @import("child.zig").destroyAll(it);
+        if (comptime fs_supported) {
+            @import("chan.zig").closeAll(it);
+            if (it.fs.fd >= 0) _ = std.os.linux.close(it.fs.fd);
+        }
         it.arena.deinit();
     }
 

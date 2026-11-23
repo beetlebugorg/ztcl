@@ -116,7 +116,17 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
     child.user = it.user;
     child.noise_seed = it.noise_seed;
     child.clock_host = it.clock_host;
-    if (!child.is_safe) try child.allow(it.capabilities);
+    if (!child.is_safe) {
+        // A child shares the jail of its parent through its own descriptor.
+        if (comptime @import("builtin").os.tag == .linux) {
+            if (it.fs.fd >= 0) {
+                const rc = std.os.linux.fcntl(it.fs.fd, std.os.linux.F.DUPFD_CLOEXEC, 3);
+                if (std.os.linux.errno(rc) == .SUCCESS) child.fs.fd = @intCast(rc);
+            }
+            child.fs.cwd = try child.alloc().dupe(u8, it.fs.cwd);
+        }
+        try child.allow(if (child.fs_ok()) it.capabilities else it.capabilities & ~@as(u32, 8 | 16));
+    }
     const c = try a.create(Child);
     c.* = .{ .name = try a.dupe(u8, name), .it = child };
     try it.children.put(a, c.name, c);

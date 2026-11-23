@@ -24,6 +24,9 @@ ztcl uses only the Zig standard library. [References](references/tcl.md) lists t
 | `trace.zig` | The `trace` command and the traced cell form. |
 | `coro.zig` | `coroutine`, `yield`, `yieldto`, and `tailcall`. |
 | `clock.zig` | The optional `clock` command and a small `msgcat`. |
+| `fsroot.zig` | The root folder jail of `file` and channels. |
+| `chan.zig` | The optional channel commands and `source`. |
+| `filecmd.zig` | The optional `file`, `glob`, `cd`, and `pwd`. |
 | `pkg.zig` | The optional `package` command. |
 | `child.zig` | The optional `interp` command. |
 | `ucd.zig` | A small model of Unicode classes and case maps. |
