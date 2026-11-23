@@ -38,7 +38,12 @@
 //! ends.
 //!
 //! The error output and the text of `<<` use an anonymous memory file,
-//! so the parent waits on one descriptor only.
+//! so the parent waits on one descriptor only. macOS has no memory file,
+//! so it uses a temporary file with its name removed at once.
+//!
+//! Linux starts each program with fork and execve. macOS uses posix_spawn
+//! with POSIX_SPAWN_CLOEXEC_DEFAULT, so a program gets descriptors 0, 1,
+//! and 2 and no other, and with POSIX_SPAWN_SETPGROUP for the group.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -52,9 +57,11 @@ const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
-const linux = std.os.linux;
+const linux = sys.os;
 
-pub const supported = @import("builtin").os.tag == .linux;
+const builtin = @import("builtin");
+const on_mac = builtin.os.tag == .macos;
+pub const supported = builtin.os.tag == .linux or (on_mac and builtin.cpu.arch == .aarch64);
 
 pub const Host = struct {
     /// The host programs that a script can run. An entry with no `/` is
@@ -137,10 +144,89 @@ fn closePlan(p: *Plan) void {
     p.err = .none;
 }
 
+/// A read and write file with no name, on macOS: in the root folder, or
+/// in /tmp when the root has no room for it or there is no root.
+fn namelessFile(it: *Interp) Error!i32 {
+    const flags: linux.O = .{ .ACCMODE = .RDWR, .CREAT = true, .EXCL = true, .NOFOLLOW = true, .CLOEXEC = true };
+    var tmp: i32 = -1;
+    defer if (tmp >= 0) sys.close(tmp);
+    var last: linux.E = .NOENT;
+    for (0..2) |place| {
+        var dir = it.fs.fd;
+        if (place == 1 or !it.fs_ok()) {
+            const rc = linux.open("/tmp", .{ .DIRECTORY = true, .CLOEXEC = true }, 0);
+            if (linux.errno(rc) != .SUCCESS) return posix(it, linux.errno(rc), "couldn't create a temporary file: ");
+            tmp = @intCast(rc);
+            dir = tmp;
+        }
+        for (0..64) |_| {
+            var name: [40:0]u8 = undefined;
+            const z = std.fmt.bufPrintZ(&name, ".ztcl-{d}-{x}", .{ linux.getpid(), arc4random() }) catch unreachable;
+            const rc = linux.openat(dir, z, flags, 0o600);
+            const e = linux.errno(rc);
+            if (e == .EXIST) continue;
+            last = e;
+            if (e != .SUCCESS) break;
+            _ = linux.unlinkat(dir, z, 0);
+            return @intCast(rc);
+        }
+        if (tmp >= 0) break;
+    }
+    return posix(it, last, "couldn't create a temporary file: ");
+}
+
+/// Starts one program on macOS: only the resolved host path of
+/// `resolve`. Gives the pid, or an error in the form of `linux.errno`.
+fn spawnMac(path: [:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8, in_fd: i32, out_fd: i32, err_fd: i32, cwd_fd: i32, pgid: i32) usize {
+    const fail = struct {
+        fn of(e: linux.E) usize {
+            return @bitCast(-@as(isize, @intFromEnum(e)));
+        }
+    }.of;
+    const c = std.c;
+    const set_pgroup: c_short = 0x0002;
+    const cloexec_default: c_short = 0x4000;
+    // Copies above 2, so one dup2 cannot overwrite the source of the next.
+    var copies: [3]i32 = .{ -1, -1, -1 };
+    defer for (copies) |x| {
+        if (x >= 0) sys.close(x);
+    };
+    for ([_]i32{ in_fd, out_fd, err_fd }, 0..) |fd, k| {
+        const rc = linux.fcntl(fd, linux.F.DUPFD_CLOEXEC, 10);
+        if (linux.errno(rc) != .SUCCESS) return fail(linux.errno(rc));
+        copies[k] = @intCast(rc);
+    }
+    var actions: c.posix_spawn_file_actions_t = undefined;
+    if (c.posix_spawn_file_actions_init(&actions) != 0) return fail(.NOMEM);
+    defer _ = c.posix_spawn_file_actions_destroy(&actions);
+    var attr: c.posix_spawnattr_t = undefined;
+    if (c.posix_spawnattr_init(&attr) != 0) return fail(.NOMEM);
+    defer _ = c.posix_spawnattr_destroy(&attr);
+    for (copies, 0..) |x, k| {
+        const rc = c.posix_spawn_file_actions_adddup2(&actions, x, @intCast(k));
+        if (rc != 0) return fail(@enumFromInt(rc));
+    }
+    if (cwd_fd >= 0) {
+        const rc = c.posix_spawn_file_actions_addfchdir_np(&actions, cwd_fd);
+        if (rc != 0) return fail(@enumFromInt(rc));
+    }
+    if (c.posix_spawnattr_setflags(&attr, @bitCast(set_pgroup | cloexec_default)) != 0) return fail(.INVAL);
+    if (posix_spawnattr_setpgroup(&attr, pgid) != 0) return fail(.INVAL);
+    var pid: c.pid_t = 0;
+    const rc = c.posix_spawn(&pid, path.ptr, &actions, &attr, @ptrCast(argv), @ptrCast(envp));
+    if (rc == 0) return @intCast(pid);
+    return fail(@enumFromInt(rc));
+}
+
+extern "c" fn arc4random() u32;
+extern "c" fn posix_spawnattr_setpgroup(attr: *std.c.posix_spawnattr_t, pgroup: std.c.pid_t) c_int;
+
 fn memFile(it: *Interp, text: []const u8) Error!i32 {
-    const rc = linux.memfd_create("ztcl", linux.MFD.CLOEXEC);
-    if (linux.errno(rc) != .SUCCESS) return posix(it, linux.errno(rc), "couldn't create a memory file: ");
-    const fd: i32 = @intCast(rc);
+    const fd: i32 = if (comptime on_mac) try namelessFile(it) else blk: {
+        const rc = linux.memfd_create("ztcl", linux.MFD.CLOEXEC);
+        if (linux.errno(rc) != .SUCCESS) return posix(it, linux.errno(rc), "couldn't create a memory file: ");
+        break :blk @intCast(rc);
+    };
     var at: usize = 0;
     while (at < text.len) {
         switch (sys.write(fd, text[at..])) {
@@ -531,6 +617,8 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
     var prev_read: i32 = -1;
     var failure: ?Error = null;
     var pgid: i32 = 0;
+    // A program that macOS did not start: its index and its error.
+    var spawn_err: ?[2]u32 = null;
     for (0..count) |k| {
         var next: ?[2]i32 = null;
         if (k + 1 < count) next = pipe(it) catch |e| {
@@ -542,16 +630,18 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
         var this_err = err_fd;
         if (plan.err == .to_out and k + 1 == count) this_err = out_fd;
         if (plan.cmds.items[k].err_too) this_err = out_fd;
-        const rc = linux.fork();
+        const rc = if (comptime on_mac) spawnMac(progs[k], argvs[k].ptr, envp.ptr, in_fd, out_fd, this_err, cwd_fd, pgid) else linux.fork();
         if (linux.errno(rc) != .SUCCESS) {
-            failure = posix(it, linux.errno(rc), "couldn't fork child process: ");
+            if (comptime on_mac) {
+                spawn_err = .{ @intCast(k), @intFromEnum(linux.errno(rc)) };
+            } else failure = posix(it, linux.errno(rc), "couldn't fork child process: ");
             if (next) |p| {
                 sys.close(p[0]);
                 sys.close(p[1]);
             }
             break;
         }
-        if (rc == 0) {
+        if (!on_mac and rc == 0) {
             // The child. It uses only system calls from here. It joins
             // the cgroup first, so each process that it starts is in it.
             if (st.tree.procs >= 0) {
@@ -613,6 +703,11 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
         break;
     }
     sys.close(report[0]);
+    // A program that macOS did not start counts as the report pipe of
+    // Linux gives it.
+    if (spawn_err) |g| {
+        if (got == null or g[0] < got.?[0]) got = g;
+    }
     if (failure == null) if (got) |g| {
         failure = cannotRun(it, plan.cmds.items[@min(g[0], count - 1)].words.items[0], @enumFromInt(g[1]));
     };
@@ -849,7 +944,7 @@ fn settle(it: *Interp, tree: Tree, start_ms: i64) Error!void {
 fn waitPid(pid: i32, block: bool) ?u32 {
     var status: u32 = 0;
     while (true) {
-        const rc = linux.wait4(pid, &status, if (block) 0 else linux.W.NOHANG, null);
+        const rc = linux.wait4(pid, &status, if (block) @as(u32, 0) else @as(u32, linux.W.NOHANG), null);
         switch (linux.errno(rc)) {
             .SUCCESS => return if (rc == 0) null else status,
             .INTR => continue,
