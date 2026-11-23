@@ -730,6 +730,20 @@ fn isWs(c: u8) bool {
 
 /// `scan string format ?varName ...?`. With no variables, the result
 /// is the list of the values.
+/// Marks a position of `%n$` that received no value.
+const unset_mark: Value = .{ .str = "\x00unset" };
+
+fn isMark(v: Value) bool {
+    return v == .str and v.str.ptr == unset_mark.str.ptr;
+}
+
+/// Stores a scanned value: in order, or at the index of `%n$`.
+fn place(a: std.mem.Allocator, out: *std.ArrayList(Value), target: ?usize, v: Value) !void {
+    const k = target orelse return out.append(a, v);
+    while (out.items.len <= k) try out.append(a, unset_mark);
+    out.items[k] = v;
+}
+
 pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 3) return it.wrongArgs("scan string format ?varName ...?");
     const a = it.alloc();
@@ -742,6 +756,14 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var wanted: usize = 0;
     var under = false;
     var stopped = false;
+    var saw_xpg = false;
+    var saw_seq = false;
+    var used: std.ArrayList(usize) = .empty;
+    // With no variables, an index of `%n$` is at most this count.
+    var conversions: usize = 0;
+    for (f, 0..) |x, k| {
+        if (x == '%' and (k + 1 >= f.len or f[k + 1] != '%')) conversions += 1;
+    }
     while (fi < f.len) {
         const c = f[fi];
         if (isWs(c)) {
@@ -765,11 +787,29 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }
         var width: usize = 0;
         while (fi < f.len and std.ascii.isDigit(f[fi])) : (fi += 1) width = width *| 10 +| (f[fi] - '0');
-        if (fi < f.len and f[fi] == '$') return it.fail("the \"%n$\" form of scan is not supported", .{});
+        var target: ?usize = null;
+        if (fi < f.len and f[fi] == '$') {
+            if (suppress) return it.fail("bad scan conversion character \"$\"", .{});
+            if (saw_seq) return it.fail("cannot mix \"%\" and \"%n$\" conversion specifiers", .{});
+            saw_xpg = true;
+            if (width == 0 or width > (if (vars.len > 0) vars.len else conversions)) return it.fail("\"%n$\" argument index out of range", .{});
+            target = width - 1;
+            fi += 1;
+            width = 0;
+            while (fi < f.len and std.ascii.isDigit(f[fi])) : (fi += 1) width = width *| 10 +| (f[fi] - '0');
+            for (used.items) |u| if (u == target.?) return it.fail("variable is assigned by multiple \"%n$\" conversion specifiers", .{});
+            try used.append(a, target.?);
+        } else if (!suppress) {
+            if (saw_xpg) return it.fail("cannot mix \"%\" and \"%n$\" conversion specifiers", .{});
+            saw_seq = true;
+        }
         while (fi < f.len and (f[fi] == 'h' or f[fi] == 'l' or f[fi] == 'L')) fi += 1;
         if (fi >= f.len) return it.fail("format string ended in middle of field specifier", .{});
-        const conv = f[fi];
+        var conv = f[fi];
         fi += 1;
+        if (conv == 'E' or conv == 'G') conv = 'e';
+        if (conv == 'X') conv = 'x';
+        if (conv == 'c' and width != 0) return it.fail("field width may not be specified in %c conversion", .{});
         // The set of `%[...]`.
         var set: [32]u8 = @splat(0);
         if (conv == '[') {
@@ -802,7 +842,7 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (!suppress) wanted += 1;
         if (stopped) continue;
         if (conv == 'n') {
-            if (!suppress) try out.append(a, .{ .int = @intCast(cmds.charCount(s[0..si])) });
+            if (!suppress) try place(a, &out, target, .{ .int = @intCast(cmds.charCount(s[0..si])) });
             continue;
         }
         if (conv != 'c' and conv != '[') while (si < s.len and isWs(s[si])) : (si += 1) {};
@@ -897,7 +937,30 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 v = .{ .int = if (neg) 0 -% signed else signed };
             },
         }
-        if (!suppress) try out.append(a, v);
+        if (!suppress) try place(a, &out, target, v);
+    }
+    if (saw_xpg) {
+        const size = if (vars.len > 0) vars.len else blk: {
+            var top: usize = 0;
+            for (used.items) |u| top = @max(top, u + 1);
+            break :blk top;
+        };
+        while (out.items.len < size) try out.append(a, unset_mark);
+        if (vars.len == 0) {
+            for (out.items) |*v| if (isMark(v.*)) {
+                v.* = Value.empty;
+            };
+            if (under) return Value.empty;
+            return value.wrapList(a, out.items);
+        }
+        if (used.items.len < vars.len) return it.fail("variable is not assigned by any conversion specifiers", .{});
+        var n: i64 = 0;
+        for (out.items, 0..) |v, i| {
+            if (isMark(v)) continue;
+            try it.setVar(try it.str(vars[i]), v);
+            n += 1;
+        }
+        return .{ .int = if (under) -1 else n };
     }
     if (vars.len == 0) {
         if (under) return Value.empty;

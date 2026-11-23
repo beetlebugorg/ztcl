@@ -34,6 +34,8 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
     const f = try it.str(argv[1]);
     var out: std.ArrayList(u8) = .empty;
     var next: usize = 2;
+    var saw_pos = false;
+    var saw_seq = false;
     var i: usize = 0;
     while (i < f.len) {
         if (f[i] != '%') {
@@ -47,6 +49,21 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
             try out.append(a, '%');
             i += 1;
             continue;
+        }
+        // The form %n$ names the argument.
+        var positional: ?usize = null;
+        var di = i;
+        while (di < f.len and std.ascii.isDigit(f[di])) di += 1;
+        if (di > i and di < f.len and f[di] == '$') {
+            if (saw_seq) return it.fail("cannot mix \"%\" and \"%n$\" conversion specifiers", .{});
+            saw_pos = true;
+            const n = std.fmt.parseInt(usize, f[i..di], 10) catch std.math.maxInt(usize);
+            if (n == 0 or n > argv.len - 2) return it.fail("\"%n$\" argument index out of range", .{});
+            positional = n + 1;
+            i = di + 1;
+        } else {
+            if (saw_pos) return it.fail("cannot mix \"%\" and \"%n$\" conversion specifiers", .{});
+            saw_seq = true;
         }
         var sp: Spec = .{};
         while (i < f.len) : (i += 1) {
@@ -95,9 +112,14 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
         if (std.mem.indexOfScalar(u8, "diuxXobcsfeEgG", conv) == null) {
             return it.fail("bad field specifier \"{c}\"", .{conv});
         }
-        if (next >= argv.len) return it.fail("not enough arguments for all format specifiers", .{});
-        const arg = argv[next];
-        next += 1;
+        var arg_at = next;
+        if (positional) |k| {
+            arg_at = k;
+        } else {
+            if (next >= argv.len) return it.fail("not enough arguments for all format specifiers", .{});
+            next += 1;
+        }
+        const arg = argv[arg_at];
         var sign: []const u8 = "";
         var body: []const u8 = "";
         var numeric = true;
