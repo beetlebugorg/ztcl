@@ -227,7 +227,7 @@ fn copyFile(it: *Interp, from: []const u8, to: []const u8, shown: []const u8) Er
         .err => |e| return fsroot.posixError(it, e, what),
     };
     defer _ = linux.close(src);
-    const dst = switch (try fsroot.openRel(it, to, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o666)) {
+    const dst = switch (try fsroot.openRel(it, to, .{ .access = .write, .create = true, .truncate = true }, 0o666)) {
         .fd => |x| x,
         .err => |e| return fsroot.posixError(it, e, what),
     };
@@ -540,7 +540,7 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             const name = try std.fmt.allocPrint(a, "tcl_tmp{d}", .{it.temp_next});
             it.temp_next += 1;
             const rel = try fsroot.need(it, name);
-            switch (try fsroot.openRel(it, rel, .{ .ACCMODE = .RDWR, .CREAT = true, .EXCL = true }, 0o600)) {
+            switch (try fsroot.openRel(it, rel, .{ .access = .read_write, .create = true, .exclusive = true }, 0o600)) {
                 .fd => |fd| {
                     _ = linux.close(fd);
                     const argv2 = [_]Value{ .{ .str = "open" }, .{ .str = name }, .{ .str = "r+" } };
