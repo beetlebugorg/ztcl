@@ -59,32 +59,57 @@ limit() {
             exit($? >> 8)' "$@"
     fi
 }
+# Windows: the runner is a native program, so it gets native paths, and
+# the shell leaves its arguments as they are.
+win=
+case $(uname -s) in
+MINGW* | MSYS* | CYGWIN*)
+    win=1
+    export MSYS_NO_PATHCONV=1
+    ;;
+esac
+host_path() {
+    if [ -n "$win" ]; then cygpath -m "$1"; else printf '%s' "$1"; fi
+}
+hhere=$(host_path "$here")
+htests=$(host_path "$tests")
+execpath=/usr/bin:/bin
+[ -z "$win" ] || execpath=$(cygpath -wsp /usr/bin:/bin)
 # A system with no root folder jail runs the files with no `file` and no
 # `exec`, so the runner has no --root.
 jail=1
 probe=$(mktemp -d "${TMPDIR:-/tmp}/ztcl-suite.XXXXXX") || exit 1
 : > "$probe/probe.tcl"
-"$tcl" --root "$probe" "$probe/probe.tcl" >/dev/null 2>&1 || jail=
+"$tcl" --root "$(host_path "$probe")" "$(host_path "$probe/probe.tcl")" >/dev/null 2>&1 || jail=
 rm -rf -- "$probe"
 [ -n "$jail" ] || caps=package,interp,clock,channels,event,socket
 tp=0; tf=0; ts=0
 for f in "$@"; do
     # A fresh root folder for each file, outside the repository.
     root=$(mktemp -d "${TMPDIR:-/tmp}/ztcl-suite.XXXXXX") || exit 1
+    hroot=$(host_path "$root")
     # The support scripts of the Tcl tests, as a copy in the root.
     cp -- "$tests"/*.tcl "$tests"/httpd "$root"/ 2>/dev/null
     # `exec` runs only for the test files, in the root folder, with a
     # program list, a time limit, and an environment with no data of
     # the caller. `ztclsh` is the `tclsh` of the tests: this runner.
     progs=cat,echo,sh,/bin/sh,sleep,ls,grep,fgrep,wc,id,groups,whoami,ps,kill,mknod,true,false,/ztclsh
-    set_exec="--exec-timeout 120000 --exec-env PATH=/usr/bin:/bin --exec-env HOME=$root --exec-env LANG=C --exec-allow $progs --exe-name /ztclsh"
+    # A process id of Windows is not an id of the `kill` and `ps` of Git
+    # Bash, so these two stay off the list there.
+    [ -z "$win" ] || progs=cat,echo,sh,sleep,ls,grep,fgrep,wc,id,groups,whoami,true,false,/ztclsh
+    set_exec="--exec-timeout 120000 --exec-env PATH=$execpath --exec-env HOME=$hroot --exec-env LANG=C --exec-allow $progs --exe-name /ztclsh"
+    [ -z "$win" ] || set_exec="$set_exec --exec-env SYSTEMROOT=$SYSTEMROOT"
     [ -n "$jail" ] || set_exec=
     cat > "$root/ztclsh" <<EOF
 #!/bin/sh
 exec "$tcl" --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --cwd "\$PWD" --tclsh "\$@"
 EOF
     chmod +x "$root/ztclsh"
-    raw=$(limit 1200 "$tcl" --max-steps 200000000 --mem 2147483648 --allow $caps ${jail:+--root} ${jail:+"$root"} $set_exec --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
+    if [ -n "$win" ]; then
+        cp -- "$(dirname -- "$tcl")/ztclsh-launch.exe" "$root/ztclsh.exe"
+        printf '%s\n' "$(cygpath -w "$tcl")" --max-steps 200000000 --mem 2147483648 --allow "$caps" --root "$hroot" $set_exec > "$root/ztclsh.args"
+    fi
+    raw=$(limit 1200 "$tcl" --max-steps 200000000 --mem 2147483648 --allow $caps ${jail:+--root} ${jail:+"$hroot"} $set_exec --keep-going "$hhere/tcltest.tcl" "$htests/$f" "$hhere/tcltest-end.tcl" 2>&1)
     rc=$?
     rm -rf -- "$root"
     out=$(printf '%s\n' "$raw" | grep -aE '^pass [0-9]+ fail' | tail -1)

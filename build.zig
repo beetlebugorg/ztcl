@@ -58,7 +58,17 @@ pub fn build(b: *std.Build) void {
         .optimize = .ReleaseFast,
         .imports = &.{ .{ .name = "ztcl", .module = fast }, .{ .name = "runner", .module = runner_mod } },
     }) });
-    b.step("suite-runner", "Build the runner with the test commands").dependOn(&b.addInstallArtifact(suite_exe, .{}).step);
+    const suite_step = b.step("suite-runner", "Build the runner with the test commands");
+    suite_step.dependOn(&b.addInstallArtifact(suite_exe, .{}).step);
+    if (target.result.os.tag == .windows) {
+        // Windows runs no `#!` script, so `ztclsh` is a small program.
+        const launch = b.addExecutable(.{ .name = "ztclsh-launch", .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/ztclsh_windows.zig"),
+            .target = target,
+            .optimize = .ReleaseFast,
+        }) });
+        suite_step.dependOn(&b.addInstallArtifact(launch, .{}).step);
+    }
 
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
     const wasm = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{

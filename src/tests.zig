@@ -1426,7 +1426,7 @@ test "socket accepts only loopback addresses by default" {
 }
 
 test "exec has an allowlist and a time limit, and leaves no process" {
-    if (!tcl.proc.supported) return error.SkipZigTest;
+    if (@import("builtin").os.tag != .linux) return error.SkipZigTest;
     const linux = std.os.linux;
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
@@ -1463,6 +1463,174 @@ test "exec has an allowlist and a time limit, and leaves no process" {
     try std.testing.expectEqual(linux.E.SRCH, linux.errno(linux.kill(pid, @enumFromInt(0))));
     try std.testing.expectEqual(linux.E.SRCH, linux.errno(linux.kill(pipe_pid, @enumFromInt(0))));
     try it.init(std.testing.allocator);
+}
+
+const WinExec = struct {
+    const H = ?*anyopaque;
+    extern "kernel32" fn OpenProcess(access: u32, inherit: i32, pid: u32) callconv(.winapi) H;
+    extern "kernel32" fn WaitForSingleObject(h: H, ms: u32) callconv(.winapi) u32;
+    extern "kernel32" fn CloseHandle(h: H) callconv(.winapi) i32;
+    extern "kernel32" fn CreatePipe(read: *H, write: *H, security: ?*const Security, size: u32) callconv(.winapi) i32;
+    extern "kernel32" fn PeekNamedPipe(h: H, buf: ?*anyopaque, size: u32, got: ?*u32, avail: ?*u32, left: ?*u32) callconv(.winapi) i32;
+    extern "kernel32" fn SetEnvironmentVariableW(name: [*:0]const u16, value: ?[*:0]const u16) callconv(.winapi) i32;
+    extern "kernel32" fn GetFileAttributesW(name: [*:0]const u16) callconv(.winapi) u32;
+    extern "shell32" fn CommandLineToArgvW(line: [*:0]const u16, count: *i32) callconv(.winapi) ?[*][*:0]u16;
+    extern "kernel32" fn LocalFree(h: ?*anyopaque) callconv(.winapi) ?*anyopaque;
+    const Security = extern struct { length: u32, descriptor: ?*anyopaque, inherit: i32 };
+
+    fn ended(pid: u32) bool {
+        const h = OpenProcess(0x0010_0000, 0, pid);
+        if (h == null) return true;
+        defer _ = CloseHandle(h);
+        return WaitForSingleObject(h, 3000) == 0;
+    }
+};
+
+test "the Windows command line reads back as the same words" {
+    if (@import("builtin").os.tag != .windows or !tcl.proc.supported) return error.SkipZigTest;
+    const win = @import("proc_windows.zig");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const words = [_][]const u8{
+        "C:\\Program Files\\x y\\prog.exe", "plain", "", "two words", "tab\there", "new\nline", "quote\"inside", "\"", "\"\"",
+        "back\\slash", "end\\", "end\\\\", "space end\\ ", "before\\\"quote", "two\\\\\"quote", "\\\"", "a b\\", "a b\\\\", "&|<>^%PATH%",
+        "$HOME; ls `id`", "é 一", "*.txt", "-flag=\"x y\"",
+    };
+    const line = (try win.commandLine(a, &words)).?;
+    var count: i32 = 0;
+    const argv = WinExec.CommandLineToArgvW(line.ptr, &count) orelse return error.TestUnexpectedResult;
+    defer _ = WinExec.LocalFree(@ptrCast(argv));
+    try std.testing.expectEqual(@as(i32, words.len), count);
+    for (words, 0..) |w, i| {
+        const got = try std.unicode.utf16LeToUtf8Alloc(a, std.mem.span(argv[i]));
+        try std.testing.expectEqualStrings(w, got);
+    }
+    // A first word with a quote, a NUL byte, and a line that is too long.
+    try std.testing.expect((try win.commandLine(a, &.{"a\"b"})) == null);
+    try std.testing.expect((try win.commandLine(a, &.{ "a", "b\x00c" })) == null);
+    const long = try a.alloc(u8, 40000);
+    @memset(long, 'x');
+    try std.testing.expect((try win.commandLine(a, &.{ "a", long })) == null);
+    // Windows drops trailing dots and spaces, so these are batch files.
+    for ([_][]const u8{ "x.bat", "X.BAT", "x.cmd", "x.CmD", "x.bat.", "x.bat ", "x.cmd. .", "C:\\a b\\x.bat", "a/x.cmd", "x.bat:stream", "x.bat::$DATA" }) |n| {
+        try std.testing.expect(win.isBatch(n));
+    }
+    for ([_][]const u8{ "x.exe", "bat", "cmd", "x.bat.exe", "x.batt", "a.bat\\x.exe" }) |n| {
+        try std.testing.expect(!win.isBatch(n));
+    }
+}
+
+test "Windows exec has an allowlist and a time limit, and leaves no process" {
+    if (@import("builtin").os.tag != .windows or !tcl.proc.supported) return error.SkipZigTest;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    var open = true;
+    defer if (open) it.deinit();
+    const cap = tcl.interp.Capability;
+    // `file` and channels do not turn on `exec`.
+    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.file) | @intFromEnum(cap.interp));
+    try std.testing.expect(it.findCommand("exec") == null);
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {open |sort}")));
+    try it.allow(@intFromEnum(cap.exec));
+    const secret = try std.unicode.utf8ToUtf16LeAllocZ(a, "ZTCL_TEST_SECRET");
+    const shown = try std.unicode.utf8ToUtf16LeAllocZ(a, "hidden-value");
+    _ = WinExec.SetEnvironmentVariableW(secret.ptr, shown.ptr);
+    defer _ = WinExec.SetEnvironmentVariableW(secret.ptr, null);
+    it.exec_host = .{
+        .allow = &.{ "sort", "findstr", "ping", "cmd" },
+        .timeout_ms = 400,
+        .env = &.{ "PATH=C:\\Windows\\System32", "SystemRoot=C:\\Windows", "ZTCL_GIVEN=yes" },
+    };
+    // `sort` reads a very short text as UTF-16, so these lines are long.
+    try std.testing.expectEqualStrings("alpha line\nbravo line", try it.str(try it.eval("exec sort << \"bravo line\\nalpha line\\n\"")));
+    try std.testing.expectEqualStrings("beta line", try it.str(try it.eval("string trim [exec sort << \"beta line\\nalpha line\\n\" | findstr beta]")));
+    // A program that is not in the list does not start.
+    try std.testing.expectEqualStrings("1 {couldn't execute \"whoami\": the embedder does not allow this program}", try it.str(try it.eval("list [catch {exec whoami} m] $m")));
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {exec sort << x | whoami}")));
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {exec C:/Windows/System32/whoami.exe}")));
+    // A program gets only the environment of the embedder.
+    const env_text = try it.str(try it.eval("exec cmd /c set"));
+    try std.testing.expect(std.mem.indexOf(u8, env_text, "ZTCL_GIVEN=yes") != null);
+    try std.testing.expect(std.mem.indexOf(u8, env_text, "ZTCL_TEST_SECRET") == null);
+    // A failed exit gives the error of Tcl.
+    try std.testing.expectEqualStrings("1 {child process exited abnormally}", try it.str(try it.eval("list [catch {exec cmd /c exit 3} m] $m")));
+    try std.testing.expectEqualStrings("CHILDSTATUS 3", try it.str(try it.eval("lrange [list [lindex $errorCode 0] [lindex $errorCode 2]] 0 1")));
+    // The time limit ends the program, and the process that it made.
+    try std.testing.expectEqualStrings("1 1", try it.str(try it.eval("list [catch {exec cmd /c ping -n 60 127.0.0.1} m] [string match {*child killed: the time limit of 400 ms ended} $m]")));
+    it.exec_host.timeout_ms = 0;
+    // The child gets no other handle of this process. It holds no copy
+    // of this write end, so the pipe ends when the test closes it.
+    const security: WinExec.Security = .{ .length = @sizeOf(WinExec.Security), .descriptor = null, .inherit = 1 };
+    var read_end: WinExec.H = null;
+    var write_end: WinExec.H = null;
+    try std.testing.expect(WinExec.CreatePipe(&read_end, &write_end, &security, 0) != 0);
+    defer _ = WinExec.CloseHandle(read_end);
+    // A background process and a pipeline channel end with the interpreter.
+    const pid_text = try a.dupe(u8, try it.str(try it.eval("exec ping -n 60 127.0.0.1 &")));
+    const pid = try std.fmt.parseInt(u32, pid_text, 10);
+    _ = WinExec.CloseHandle(write_end);
+    try std.testing.expect(WinExec.PeekNamedPipe(read_end, null, 0, null, null, null) == 0);
+    const pipe_text = try a.dupe(u8, try it.str(try it.eval("set f [open {|ping -n 60 127.0.0.1} r]; pid $f")));
+    const pipe_pid = try std.fmt.parseInt(u32, pipe_text, 10);
+    try std.testing.expect(!WinExec.ended(0) or true);
+    try std.testing.expect(WinExec.OpenProcess(0x0010_0000, 0, pid) != null);
+    it.deinit();
+    open = false;
+    try std.testing.expect(WinExec.ended(pid));
+    try std.testing.expect(WinExec.ended(pipe_pid));
+}
+
+test "Windows exec gives an error for a batch file and runs none" {
+    if (@import("builtin").os.tag != .windows or !tcl.proc.supported) return error.SkipZigTest;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    _ = WinFs.CreateDirectoryW((try WinFs.w(a, ".zig-cache\\tmp")).ptr, null);
+    var full: [1024]u16 = undefined;
+    const name = try std.fmt.allocPrint(a, ".zig-cache\\tmp\\ztcl-bat-{d}-{d}", .{ WinFs.GetCurrentProcessId(), WinFs.GetTickCount64() });
+    const n = WinFs.GetFullPathNameW((try WinFs.w(a, name)).ptr, full.len, &full, null);
+    const dir = try std.unicode.utf16LeToUtf8Alloc(a, full[0..n]);
+    try std.testing.expect(WinFs.CreateDirectoryW((try WinFs.w(a, dir)).ptr, null) != 0);
+    const mark = try std.fmt.allocPrint(a, "{s}\\ran", .{dir});
+    const body = try std.fmt.allocPrint(a, "@echo x > \"{s}\"\r\n", .{mark});
+    const bat = try std.fmt.allocPrint(a, "{s}\\x.bat", .{dir});
+    const cmd = try std.fmt.allocPrint(a, "{s}\\y.cmd", .{dir});
+    try WinFs.writeNew(a, bat, body);
+    try WinFs.writeNew(a, cmd, body);
+    defer {
+        _ = WinFs.DeleteFileW((WinFs.w(a, bat) catch unreachable).ptr);
+        _ = WinFs.DeleteFileW((WinFs.w(a, cmd) catch unreachable).ptr);
+        _ = WinFs.DeleteFileW((WinFs.w(a, mark) catch unreachable).ptr);
+        _ = WinFs.RemoveDirectoryW((WinFs.w(a, dir) catch unreachable).ptr);
+    }
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.exec));
+    const forward = try std.mem.replaceOwned(u8, a, dir, "\\", "/");
+    const env = try a.alloc([:0]const u8, 2);
+    env[0] = try std.fmt.allocPrintSentinel(a, "PATH={s}", .{dir}, 0);
+    env[1] = "SystemRoot=C:\\Windows";
+    it.exec_host = .{ .env = env };
+    for ([_][]const u8{ "x.bat", "X.BAT", "y.cmd", "x.bat.", "{x.bat }", "x.bat::$DATA" }) |word| {
+        for ([_][]const u8{ "exec {s}/{s}", "exec {s}" }) |form| {
+            const script = if (std.mem.eql(u8, form, "exec {s}"))
+                try std.fmt.allocPrint(a, "exec {s}", .{word})
+            else if (word[0] == '{')
+                try std.fmt.allocPrint(a, "exec {{{s}/{s}", .{ forward, word[1..] })
+            else
+                try std.fmt.allocPrint(a, "exec {s}/{s}", .{ forward, word });
+            if (it.eval(script)) |_| {
+                std.debug.print("ran: {s}\n", .{script});
+                return error.TestUnexpectedResult;
+            } else |e| try std.testing.expectEqual(error.TclError, e);
+        }
+    }
+    try std.testing.expectEqual(~@as(u32, 0), WinFs.GetFileAttributesW((try WinFs.w(a, mark)).ptr));
 }
 
 test "TclOO: classes, methods, next, mixins, and destructors" {

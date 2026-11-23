@@ -141,6 +141,12 @@ fn handleOf(fd: Fd) HANDLE {
     return @ptrFromInt(@as(usize, @intCast(fd)));
 }
 
+/// The system handle of a descriptor, for a child process.
+pub fn rawHandle(fd: Fd) HANDLE {
+    if (isSocket(fd)) return @ptrFromInt(socketOf(fd));
+    return handleOf(fd);
+}
+
 /// The `Fd` of a file handle, or null for one outside the range.
 pub fn fdOfHandle(h: HANDLE) ?Fd {
     const v = @intFromPtr(h);
@@ -192,6 +198,8 @@ fn failCode(e: u32) Fail {
         10060 => .{ .name = "ETIMEDOUT", .text = "connection timed out" },
         10035 => .{ .name = "EAGAIN", .text = "resource temporarily unavailable" },
         87, 10022 => .{ .name = "EINVAL", .text = "invalid argument" },
+        193 => .{ .name = "ENOEXEC", .text = "exec format error" },
+        206 => .{ .name = "E2BIG", .text = "argument list too long" },
         6, 10009, 10038 => .{ .name = "EBADF", .text = "bad file number" },
         267 => .{ .name = "ENOTDIR", .text = "not a directory" },
         336 => .{ .name = "EISDIR", .text = "illegal operation on a directory" },

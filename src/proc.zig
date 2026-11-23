@@ -26,6 +26,9 @@
 //! The error output and the text of `<<` use an anonymous memory file,
 //! so the parent waits on one descriptor only.
 //!
+//! `proc_windows.zig` has the Windows form of the start, the wait, and the
+//! end of a pipeline, with a Job Object for each group.
+//!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
@@ -40,7 +43,11 @@ const Cmd = interp.Cmd;
 const Error = interp.Error;
 const linux = std.os.linux;
 
-pub const supported = @import("builtin").os.tag == .linux;
+const builtin = @import("builtin");
+const on_win = builtin.os.tag == .windows and builtin.cpu.arch == .x86_64;
+const win = @import("proc_windows.zig");
+/// ARM64 Windows stays off until its tests can run.
+pub const supported = builtin.os.tag == .linux or on_win;
 
 pub const Host = struct {
     /// The programs that a script can run, as the word of the script
@@ -64,24 +71,25 @@ fn eql(a: []const u8, b: []const u8) bool {
 }
 
 fn nowMs() i64 {
+    if (comptime on_win) return win.nowMs();
     var ts: linux.timespec = undefined;
     _ = linux.clock_gettime(.MONOTONIC, &ts);
     return @as(i64, ts.sec) * 1000 + @divFloor(@as(i64, ts.nsec), 1_000_000);
 }
 
-fn posix(it: *Interp, e: linux.E, what: []const u8) Error {
+pub fn posix(it: *Interp, e: sys.Errno, what: []const u8) Error {
     const f = sys.failOf(e);
     const code = try std.fmt.allocPrint(it.alloc(), "POSIX {s} {{{s}}}", .{ f.name, f.text });
     return it.failCode(code, "{s}{s}", .{ what, f.text });
 }
 
-const One = struct {
+pub const One = struct {
     words: std.ArrayList([]const u8) = .empty,
     /// True when the error output goes to the next program too.
     err_too: bool = false,
 };
 
-const Target = union(enum) {
+pub const Target = union(enum) {
     none,
     /// A descriptor that the parent keeps.
     fd: i32,
@@ -91,7 +99,7 @@ const Target = union(enum) {
     to_out,
 };
 
-const Plan = struct {
+pub const Plan = struct {
     cmds: std.ArrayList(One) = .empty,
     in: Target = .none,
     out: Target = .none,
@@ -105,7 +113,7 @@ fn closeTarget(t: Target) void {
     if (t == .owned) sys.close(t.owned);
 }
 
-fn closePlan(p: *Plan) void {
+pub fn closePlan(p: *Plan) void {
     closeTarget(p.in);
     closeTarget(p.out);
     closeTarget(p.err);
@@ -115,6 +123,7 @@ fn closePlan(p: *Plan) void {
 }
 
 fn memFile(it: *Interp, text: []const u8) Error!i32 {
+    if (comptime on_win) return win.memFile(it, text);
     const rc = linux.memfd_create("ztcl", linux.MFD.CLOEXEC);
     if (linux.errno(rc) != .SUCCESS) return posix(it, linux.errno(rc), "couldn't create a memory file: ");
     const fd: i32 = @intCast(rc);
@@ -130,7 +139,7 @@ fn memFile(it: *Interp, text: []const u8) Error!i32 {
 }
 
 /// A path of the form `~user` is an error: no user lookup exists.
-fn noTilde(it: *Interp, path: []const u8) Error!void {
+pub fn noTilde(it: *Interp, path: []const u8) Error!void {
     if (path.len < 2 or path[0] != '~' or path[1] == '/') return;
     const end = std.mem.indexOfScalar(u8, path, '/') orelse path.len;
     return it.fail("user \"{s}\" doesn't exist", .{path[1..end]});
@@ -146,6 +155,7 @@ fn openFile(it: *Interp, path: []const u8, flags: sys.OpenFlags, what: []const u
             .err => |e| posix(it, e, try std.fmt.allocPrint(a, "couldn't {s} file \"{s}\": ", .{ what, path })),
         };
     }
+    if (comptime on_win) return win.openHost(it, path, flags, what);
     const rc = linux.open(try a.dupeZ(u8, path), fsroot.hostFlags(flags), 0o666);
     if (linux.errno(rc) != .SUCCESS) return posix(it, linux.errno(rc), try std.fmt.allocPrint(a, "couldn't {s} file \"{s}\": ", .{ what, path }));
     return @intCast(rc);
@@ -245,6 +255,7 @@ fn parse(it: *Interp, words: []const []const u8, plan: *Plan) Error!void {
 
 /// The paths to try for a program word.
 fn candidates(it: *Interp, word: []const u8) Error![]const [:0]const u8 {
+    if (comptime on_win) return win.candidates(it, word);
     const a = it.alloc();
     var out: std.ArrayList([:0]const u8) = .empty;
     if (std.mem.indexOfScalar(u8, word, '/') != null) {
@@ -266,12 +277,13 @@ fn candidates(it: *Interp, word: []const u8) Error![]const [:0]const u8 {
 }
 
 fn runnable(p: [:0]const u8) bool {
+    if (comptime on_win) return win.runnable(p);
     return linux.errno(linux.access(p.ptr, 1)) == .SUCCESS;
 }
 
 /// True when the embedder allows the program. An entry of the list is
 /// the word of the script, or the full path that the word gives.
-fn allowed(it: *Interp, word: []const u8, paths: []const [:0]const u8) bool {
+pub fn allowed(it: *Interp, word: []const u8, paths: []const [:0]const u8) bool {
     const list = it.exec_host.allow orelse return true;
     var found: ?[]const u8 = null;
     for (paths) |p| {
@@ -289,7 +301,7 @@ fn allowed(it: *Interp, word: []const u8, paths: []const [:0]const u8) bool {
     return false;
 }
 
-const Started = struct {
+pub const Started = struct {
     pids: []i32,
     /// The read side of the output of the last program, or -1.
     out: i32 = -1,
@@ -312,6 +324,7 @@ fn pipe(it: *Interp) Error![2]i32 {
 /// Starts the programs of a plan. `want_out` and `want_in` ask for a
 /// pipe to the parent when the plan has no redirection.
 fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started {
+    if (comptime on_win) return win.start(it, plan, want_out, want_in);
     const a = it.alloc();
     const count = plan.cmds.items.len;
     // The checks and the paths come before the first process.
@@ -483,11 +496,13 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
 }
 
 fn killGroup(pgid: i32) void {
+    if (comptime on_win) return win.killGroup(pgid);
     if (pgid > 0) _ = linux.kill(-pgid, linux.SIG.KILL);
 }
 
 /// The wait status of a process, or null while it runs.
 fn waitPid(pid: i32, block: bool) ?u32 {
+    if (comptime on_win) return win.waitPid(pid, block);
     var status: u32 = 0;
     while (true) {
         const rc = linux.wait4(pid, &status, if (block) 0 else linux.W.NOHANG, null);
@@ -559,7 +574,7 @@ fn finish(it: *Interp, st: Started, text: *std.ArrayList(u8), ignore_err: bool) 
         }
     }
     if (st.err >= 0) {
-        _ = linux.lseek(st.err, 0, 0);
+        _ = sys.seek(st.err, 0, 0);
         var buf: [4096]u8 = undefined;
         const before = text.items.len;
         while (true) {
@@ -650,6 +665,7 @@ fn cmdExec(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         sys.close(st.out);
     }
     const failed = try finish(it, st, &text, plan.ignore_err);
+    if (comptime on_win) win.dropCarriageReturns(&text);
     const res = if (plan.keep_newline) text.items else stripNewline(text.items);
     if (failed) {
         it.result = .{ .str = res };
@@ -738,7 +754,7 @@ pub fn abandonAll(it: *Interp) void {
 
 fn cmdPid(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len > 2) return it.wrongArgs("pid ?channelId?");
-    if (argv.len == 1) return .{ .int = linux.getpid() };
+    if (argv.len == 1) return .{ .int = if (comptime on_win) win.getPid() else linux.getpid() };
     const name = try it.str(argv[1]);
     const c = chan.lookup(it, name) orelse return it.failCode(try std.fmt.allocPrint(it.alloc(), "TCL LOOKUP CHANNEL {s}", .{name}), "can not find channel named \"{s}\"", .{name});
     var out: std.ArrayList(Value) = .empty;

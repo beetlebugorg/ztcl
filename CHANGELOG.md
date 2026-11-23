@@ -36,3 +36,4 @@
 - Sets the error codes of Tcl for arithmetic, argument counts, list syntax, and lookups.
 - Adds channels, the event loop on sockets, and `socket` for x86-64 Windows.
 - Adds `file` and file channels for x86-64 Windows, with a root folder jail that walks each path and gives an error for each reparse point.
+- Adds `exec` for x86-64 Windows. It uses no shell, a Job Object for each pipeline, and gives an error for a `.bat` or `.cmd` file. `exec` is not sandboxed.
