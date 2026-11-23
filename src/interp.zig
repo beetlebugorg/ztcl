@@ -642,6 +642,8 @@ pub const Interp = struct {
     /// leading "::".
     ns_paths: std.StringHashMapUnmanaged([]const []const u8) = .empty,
 
+    /// The value of `tcl_precision`.
+    precision: u8 = 0,
     /// The count of variables with traces. Above zero, the inline
     /// forms of the bytecode and the direct forms are off.
     var_traces: u32 = 0,
@@ -713,6 +715,7 @@ pub const Interp = struct {
     /// values on all platforms, so a script gives the same result
     /// everywhere.
     pub fn startVars(it: *Interp) Allocator.Error!void {
+        trace.installPrecision(it) catch return error.OutOfMemory;
         _ = it.eval("array set tcl_platform {platform unix byteOrder littleEndian wordSize 8 pointerSize 8 engine ztcl}; set tcl_version 8.6; set tcl_patchLevel 8.6.0; set errorInfo {}; set errorCode NONE") catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
             else => unreachable,
@@ -816,6 +819,7 @@ pub const Interp = struct {
 
     /// Runs a script at the top level: a `return` ends it with a value.
     pub fn evalTop(it: *Interp, s: *Script) Error!Value {
+        value.precision = it.precision;
         return it.evalTopInner(s) catch |e| {
             if (e == error.TclError) try it.finishError();
             return e;
@@ -1028,7 +1032,7 @@ pub const Interp = struct {
                 const v = try it.evalWord(&c.words[2]);
                 const cell = try it.cellOf(c.words[1].kind.lit.str, &c.hint);
                 if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{c.words[1].kind.lit.str});
-                if (cell.v == .elem) {
+                if (cell.v == .elem or cell.v == .traced) {
                     try it.setVar(c.words[1].kind.lit.str, v);
                     return v;
                 }

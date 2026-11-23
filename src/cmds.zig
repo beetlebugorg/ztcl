@@ -813,9 +813,11 @@ pub fn index(it: *Interp, v: Value, len: usize) Error!i64 {
     const t = value.trimSpace(s);
     var base: i64 = undefined;
     var rest: []const u8 = undefined;
-    if (std.mem.startsWith(u8, t, "end")) {
+    var word: usize = 0;
+    while (word < t.len and word < 3 and t[word] == "end"[word]) word += 1;
+    if (word > 0 and (word == t.len or t[word] == '+' or t[word] == '-')) {
         base = @as(i64, @intCast(len)) - 1;
-        rest = t[3..];
+        rest = t[word..];
         if (rest.len == 0) return base;
         if (rest[0] != '+' and rest[0] != '-') return it.fail(bad, .{s});
     } else {
@@ -828,7 +830,6 @@ pub fn index(it: *Interp, v: Value, len: usize) Error!i64 {
         if (rest.len == 0) return base;
     }
     const off = indexInt(rest[1..]) orelse return badIndex(it, s, rest[1..]);
-    if (rest[1] == '+' or rest[1] == '-') return it.fail(bad, .{s});
     return if (rest[0] == '+') base +% off else base -% off;
 }
 

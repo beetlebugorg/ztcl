@@ -40,7 +40,29 @@ pub const Traced = struct {
     inner: union(enum) { undef, val: Value, arr: *interp.ArrayMap } = .undef,
     list: std.ArrayList(VarTrace) = .empty,
     busy: bool = false,
+    /// The cell of `tcl_precision`. A write sets the print precision,
+    /// and an unset keeps the value. It does not turn the inline forms
+    /// off, because a store to a `.traced` cell uses the general path.
+    precision: bool = false,
 };
+
+/// Makes the variable `tcl_precision`.
+pub fn installPrecision(it: *Interp) std.mem.Allocator.Error!void {
+    const cell = (try it.findVar(&it.global, "tcl_precision", true)).?;
+    const t = try it.alloc().create(Traced);
+    t.* = .{ .inner = .{ .val = .{ .int = 0 } }, .precision = true };
+    cell.v = .{ .traced = t };
+}
+
+fn setPrecision(it: *Interp, t: *Traced, old: @FieldType(Traced, "inner"), v: Value) Error!void {
+    const n: ?i64 = v.asInt();
+    if (n == null or n.? < 0 or n.? > 17) {
+        t.inner = old;
+        return it.fail("can't set \"tcl_precision\": improper value for precision", .{});
+    }
+    it.precision = @intCast(n.?);
+    value.precision = it.precision;
+}
 
 const ExecTrace = struct { ops: u8, cmd: Value };
 pub const CmdTraces = struct {
@@ -219,7 +241,9 @@ pub fn write(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8, v: Val
         gop.value_ptr.* = v;
     } else {
         if (t.inner == .arr) return it.fail("can't set \"{s}\": variable is array", .{name});
+        const old = t.inner;
         t.inner = .{ .val = v };
+        if (t.precision) try setPrecision(it, t, old, v);
     }
     if (try fire(it, t, name, idx, op_write)) |msg| {
         return it.fail("can't set \"{s}\": {s}", .{ try fullName(it, name, idx), msg });
@@ -233,6 +257,7 @@ pub fn after(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!
 
 pub fn unset(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!bool {
     const t = cell.v.traced;
+    if (t.precision) return true;
     if (idx) |i| {
         if (t.inner != .arr) return false;
         if (!t.inner.arr.orderedRemove(i)) return false;
@@ -268,6 +293,7 @@ pub fn unset(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!
 fn drop(it: *Interp, cell: *Var) void {
     if (cell.v != .traced) return;
     const t = cell.v.traced;
+    if (t.precision) return;
     switch (t.inner) {
         .undef => cell.v = .undef,
         .val => |v| cell.v = .{ .val = v },

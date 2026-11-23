@@ -118,7 +118,11 @@ pub const Copier = struct {
                 job.new.v = .{ .elem = link };
             },
             // A compact drops the traces and keeps the value.
-            .traced => |t| switch (t.inner) {
+            .traced => |t| if (t.precision) {
+                const copy = try c.a.create(@import("trace.zig").Traced);
+                copy.* = .{ .inner = t.inner, .precision = true };
+                job.new.v = .{ .traced = copy };
+            } else switch (t.inner) {
                 .undef => {},
                 .val => |v| {
                     job.new.v = .{ .val = v };
@@ -328,6 +332,10 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.ns_paths = ns_paths;
     it.searches = .empty;
     it.var_traces = 0;
+    if (opts.vars != .keep) {
+        it.precision = 0;
+        value.precision = 0;
+    }
     it.global.vars = globals;
     it.error_code = error_code;
     it.result = Value.empty;

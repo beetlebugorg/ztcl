@@ -307,25 +307,132 @@ pub fn parseDouble(text: []const u8) ?f64 {
     return std.fmt.parseFloat(f64, s) catch null;
 }
 
+/// The value of `tcl_precision` of the running interpreter. Zero is
+/// the shortest form. The interpreter sets it at each top-level eval.
+pub threadlocal var precision: u8 = 0;
+
+/// Writes the first `p` significant digits of the exact decimal value
+/// of a finite positive double, rounded half to even. Returns the
+/// decimal exponent of the first digit.
+///
+/// The double is m * 2^e. For e >= 0 the integer m * 2^e is exact. For
+/// e < 0 the integer m * 5^-e has the same digits as m * 2^e, with the
+/// decimal point -e places from the right.
+fn exactDigits(x: f64, p: usize, out: []u8) i32 {
+    const bits: u64 = @bitCast(x);
+    const raw_exp: i32 = @intCast((bits >> 52) & 0x7ff);
+    var m: u64 = bits & ((@as(u64, 1) << 52) - 1);
+    var e: i32 = raw_exp - 1075;
+    if (raw_exp == 0) e = -1074 else m |= @as(u64, 1) << 52;
+    // The limbs hold base 10^9, least significant first.
+    var limbs: [140]u32 = undefined;
+    var n: usize = 0;
+    var rest = m;
+    while (rest != 0) : (rest /= 1_000_000_000) {
+        limbs[n] = @intCast(rest % 1_000_000_000);
+        n += 1;
+    }
+    var times: u32 = @intCast(@abs(e));
+    const factor: u64 = if (e >= 0) 2 else 5;
+    const chunk: u32 = if (e >= 0) 29 else 13;
+    const chunk_mul: u64 = std.math.powi(u64, factor, chunk) catch unreachable;
+    while (times > 0) {
+        const k = @min(times, chunk);
+        const mul: u64 = if (k == chunk) chunk_mul else std.math.powi(u64, factor, k) catch unreachable;
+        var carry: u64 = 0;
+        for (limbs[0..n]) |*l| {
+            const v = @as(u64, l.*) * mul + carry;
+            l.* = @intCast(v % 1_000_000_000);
+            carry = v / 1_000_000_000;
+        }
+        while (carry != 0) : (carry /= 1_000_000_000) {
+            limbs[n] = @intCast(carry % 1_000_000_000);
+            n += 1;
+        }
+        times -= k;
+    }
+    // The decimal text, most significant digit first.
+    var text: [1300]u8 = undefined;
+    var len: usize = 0;
+    var i = n;
+    while (i > 0) {
+        i -= 1;
+        var chunk_buf: [9]u8 = undefined;
+        var v = limbs[i];
+        var d: usize = 9;
+        while (d > 0) {
+            d -= 1;
+            chunk_buf[d] = @intCast('0' + v % 10);
+            v /= 10;
+        }
+        var from: usize = 0;
+        if (len == 0) {
+            while (from < 8 and chunk_buf[from] == '0') from += 1;
+        }
+        @memcpy(text[len..][0 .. 9 - from], chunk_buf[from..]);
+        len += 9 - from;
+    }
+    var exp: i32 = @as(i32, @intCast(len)) - 1;
+    if (e < 0) exp += e;
+    // Copy `p` digits and round on the exact tail.
+    for (0..p) |k| out[k] = if (k < len) text[k] else '0';
+    if (p < len) {
+        const next = text[p];
+        var tail_zero = true;
+        for (text[p + 1 .. len]) |c| {
+            if (c != '0') {
+                tail_zero = false;
+                break;
+            }
+        }
+        const odd = (out[p - 1] - '0') % 2 == 1;
+        if (next > '5' or (next == '5' and (!tail_zero or odd))) {
+            var k = p;
+            while (k > 0) {
+                k -= 1;
+                if (out[k] == '9') {
+                    out[k] = '0';
+                } else {
+                    out[k] += 1;
+                    break;
+                }
+            } else {
+                out[0] = '1';
+                exp += 1;
+            }
+        }
+    }
+    return exp;
+}
+
 /// The string form of a double as Tcl prints it: the shortest digits
 /// that read back to the same double, with ".0" on a whole number.
 pub fn formatDouble(a: Allocator, x: f64) Allocator.Error![]const u8 {
     if (std.math.isNan(x)) return "NaN";
     if (std.math.isInf(x)) return if (x < 0) "-Inf" else "Inf";
     var buf: [64]u8 = undefined;
-    const sci = std.fmt.bufPrint(&buf, "{e}", .{x}) catch unreachable;
-    // sci is "[-]d[.ddd]e[-]x".
-    const epos = std.mem.indexOfScalar(u8, sci, 'e').?;
-    const exp = std.fmt.parseInt(i32, sci[epos + 1 ..], 10) catch unreachable;
-    var mant = sci[0..epos];
-    const neg = mant[0] == '-';
-    if (neg) mant = mant[1..];
     var digs: [32]u8 = undefined;
     var n: usize = 0;
-    for (mant) |c| if (c != '.') {
-        digs[n] = c;
-        n += 1;
-    };
+    var exp: i32 = 0;
+    var neg = false;
+    if (precision != 0 and x != 0) {
+        neg = x < 0;
+        exp = exactDigits(@abs(x), precision, &digs);
+        n = precision;
+        while (n > 1 and digs[n - 1] == '0') n -= 1;
+    } else {
+        const sci = std.fmt.bufPrint(&buf, "{e}", .{x}) catch unreachable;
+        // sci is "[-]d[.ddd]e[-]x".
+        const epos = std.mem.indexOfScalar(u8, sci, 'e').?;
+        exp = std.fmt.parseInt(i32, sci[epos + 1 ..], 10) catch unreachable;
+        var mant = sci[0..epos];
+        neg = mant[0] == '-';
+        if (neg) mant = mant[1..];
+        for (mant) |c| if (c != '.') {
+            digs[n] = c;
+            n += 1;
+        };
+    }
     var out: std.ArrayList(u8) = .empty;
     if (neg) try out.append(a, '-');
     if (exp < -4 or exp >= 17) {
@@ -335,7 +442,8 @@ pub fn formatDouble(a: Allocator, x: f64) Allocator.Error![]const u8 {
             try out.appendSlice(a, digs[1..n]);
         }
         const ae: u32 = @abs(exp);
-        try out.print(a, "e{c}{d}", .{ @as(u8, if (exp < 0) 0x2d else 0x2b), ae });
+        const pad: []const u8 = if (precision != 0 and ae < 10) "0" else "";
+        try out.print(a, "e{c}{s}{d}", .{ @as(u8, if (exp < 0) 0x2d else 0x2b), pad, ae });
     } else if (exp < 0) {
         try out.appendSlice(a, "0.");
         try out.appendNTimes(a, '0', @intCast(-exp - 1));
