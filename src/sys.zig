@@ -149,7 +149,14 @@ const darwin = struct {
 
     pub fn accept4(fd: i32, addr: *sockaddr, len: *socklen_t, _: u32) usize {
         const rc = c.accept(fd, addr, len);
-        if (rc >= 0) guard(rc);
+        if (rc >= 0) {
+            guard(rc);
+            // A BSD socket gets O_NONBLOCK from its listener, and a Linux
+            // socket does not. A new connection blocks on both.
+            const fl = c.fcntl(rc, c.F.GETFL, @as(c_int, 0));
+            const bit: u32 = @bitCast(O{ .NONBLOCK = true });
+            if (fl >= 0) _ = c.fcntl(rc, c.F.SETFL, @as(c_int, @bitCast(@as(u32, @bitCast(fl)) & ~bit)));
+        }
         return ret(rc);
     }
 
