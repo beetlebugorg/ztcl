@@ -1119,17 +1119,28 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
     const ins = code.ins.ptr;
     const f = it.frame;
     while (true) {
-        const i = ins[pc];
-        switch (i.op) {
+        var i = &ins[pc];
+        sw: switch (i.op) {
             .push => {
                 stack[sp] = code.lits[i.a];
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .push_empty => {
                 stack[sp] = Value.empty;
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
-            .pop => sp -= 1,
+            .pop => {
+                sp -= 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
+            },
             .load => {
                 const cell = readCell(named, it, f, code, i.a);
                 if (cell != null and cell.?.v == .val) {
@@ -1139,11 +1150,17 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     stack[sp] = try it.readRef(&r);
                 }
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .store => {
                 const cell = try writeCell(named, it, f, code, i.a);
                 if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[i.a]});
                 cell.v = .{ .val = stack[sp - 1] };
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .access => switch (@as(Access, @enumFromInt(i.x))) {
                 .llength => {
@@ -1181,6 +1198,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     continue;
                 }
                 try step(it);
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .step => try step(it),
             .jump => {
@@ -1195,6 +1215,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     pc = i.a;
                     continue;
                 }
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .jump_true => {
                 sp -= 1;
@@ -1204,11 +1227,17 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     pc = i.a;
                     continue;
                 }
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .to_bool => {
                 const v = stack[sp - 1];
                 const t = if (v == .int) v.int != 0 else try expr.truthy(it, v);
                 stack[sp - 1] = .{ .int = @intFromBool(t) };
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .invoke => {
                 try step(it);
@@ -1219,24 +1248,39 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 sp -= i.b;
                 stack[sp] = r;
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .eval_cmd => {
                 stack[sp] = try it.evalCmd(code.sites[i.a]);
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .word => {
                 stack[sp] = try it.evalWord(code.words[i.a]);
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .node => {
                 stack[sp] = try expr.eval(it, code.nodes[i.a]);
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .concat => {
                 const r = try concatValues(it, stack[sp - i.a .. sp]);
                 sp -= i.a;
                 stack[sp] = r;
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .binary => {
                 const op: expr.BinOp = @enumFromInt(i.x);
@@ -1250,11 +1294,17 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     x.* = try expr.binaryOp(it, op, x.*, y.*);
                 }
                 sp -= 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .unary => stack[sp - 1] = try expr.unaryOp(it, @enumFromInt(i.x), stack[sp - 1]),
             .number_form => {
                 const v = stack[sp - 1];
                 if (v == .str) stack[sp - 1] = try expr.numberForm(it, v);
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .incr => {
                 const found = readCell(named, it, f, code, i.a);
@@ -1268,6 +1318,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     stack[sp] = try slowIncr(it, code.names[i.a], .{ .int = by });
                 }
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .incr_value => {
                 const found = readCell(named, it, f, code, i.a);
@@ -1280,6 +1333,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 } else {
                     stack[sp - 1] = try slowIncr(it, code.names[i.a], by);
                 }
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .lappend => {
                 const found = readCell(named, it, f, code, i.a);
@@ -1291,12 +1347,18 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 } else {
                     stack[sp - 1] = try slowLappend(it, code.names[i.a], stack[sp - 1]);
                 }
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .store_pop => {
                 const cell = try writeCell(named, it, f, code, i.a);
                 if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{code.names[i.a]});
                 sp -= 1;
                 cell.v = .{ .val = stack[sp] };
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .incr_drop => {
                 const found = readCell(named, it, f, code, i.a);
@@ -1308,6 +1370,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 } else {
                     _ = try slowIncr(it, code.names[i.a], .{ .int = by });
                 }
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .bin_vv => {
                 const op: expr.BinOp = @enumFromInt(i.x);
@@ -1321,6 +1386,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     stack[sp] = try slowBinary(it, op, vx, vy);
                 }
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .bin_vi => {
                 const op: expr.BinOp = @enumFromInt(i.x);
@@ -1332,6 +1400,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     stack[sp] = try slowBinary(it, op, vx, .{ .int = y });
                 }
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .jf_vv => {
                 const op: expr.BinOp = @enumFromInt(i.x);
@@ -1349,6 +1420,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     pc = i.c;
                     continue;
                 }
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .jf_vi => {
                 const op: expr.BinOp = @enumFromInt(i.x);
@@ -1364,6 +1438,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     pc = i.c;
                     continue;
                 }
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .dict_update => {
                 const nv: u32 = 1 + @as(u32, i.x);
@@ -1371,6 +1448,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 sp -= nv;
                 stack[sp] = r;
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .dict_update_drop => {
                 const nv: u32 = 1 + @as(u32, i.x);
@@ -1398,12 +1478,18 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     }
                 }
                 sp -= nv;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .append => {
                 const r = try appendValues(named, it, f, code, i.a, stack[sp - i.b .. sp]);
                 sp -= i.b;
                 stack[sp] = r;
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .ret => return stack[sp - 1],
             .foreach_init => {
@@ -1411,6 +1497,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 if (stack[sp - 1] != .list) stack[sp - 1] = try value.newList(it.alloc(), items);
                 stack[sp] = .{ .int = 0 };
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
             .foreach_next => {
                 const table = code.tables[i.a];
@@ -1427,6 +1516,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     cell.v = .{ .val = if (at + k < items.len) items[at + k] else Value.empty };
                 }
                 stack[sp - 1] = .{ .int = @intCast(at + table.len) };
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
             },
         }
         pc += 1;
