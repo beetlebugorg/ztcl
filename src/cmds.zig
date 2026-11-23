@@ -42,6 +42,7 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
         .{ "dict", @import("dict.zig").cmdDict },
     };
     inline for (table) |t| try it.register(t[0], t[1]);
+    try @import("mathns.zig").register(it);
 }
 
 /// The direct form of a command site, or `.none`. The site must have a
@@ -1483,11 +1484,32 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         return .{ .int = @intFromBool(cell.v == .val or cell.v == .arr) };
     } else if (eql(sub, "commands") or eql(sub, "procs")) {
         var out: std.ArrayList(Value) = .empty;
+        const only_procs = eql(sub, "procs");
+        // A qualified pattern lists one namespace with full names. A
+        // plain pattern lists the current and the global namespace.
+        const qualified = if (pattern) |p| std.mem.indexOf(u8, p, "::") != null else false;
+        const space = if (qualified) std.mem.trim(u8, ns.qualifiers(pattern.?), ":") else it.ns;
+        const pat: ?[]const u8 = if (qualified) ns.tail(pattern.?) else pattern;
         var iter = it.commands.iterator();
         while (iter.next()) |e| {
-            if (eql(sub, "procs") and e.value_ptr.*.impl != .proc) continue;
-            if (pattern) |p| if (!globMatch(stripNs(p), e.key_ptr.*, false)) continue;
-            try out.append(a, .{ .str = e.key_ptr.* });
+            if (only_procs and e.value_ptr.*.impl != .proc) continue;
+            const key = e.key_ptr.*;
+            const local = eql(ns.qualifiers(key), space);
+            const global = !qualified and std.mem.indexOf(u8, key, "::") == null;
+            if (!local and !global) continue;
+            if (!local and only_procs) continue;
+            if (!local and it.ns.len > 0) {
+                const mine = try std.fmt.allocPrint(a, "{s}::{s}", .{ it.ns, key });
+                if (it.commands.contains(mine)) continue;
+            }
+            if (pat) |p| if (!globMatch(p, ns.tail(key), false)) continue;
+            var shown: []const u8 = key;
+            if (qualified) {
+                shown = try std.fmt.allocPrint(a, "::{s}", .{key});
+            } else if (local and it.ns.len > 0) {
+                shown = if (only_procs) ns.tail(key) else try std.fmt.allocPrint(a, "::{s}", .{key});
+            }
+            try out.append(a, .{ .str = shown });
         }
         // A fixed order, for determinism.
         const S = struct {

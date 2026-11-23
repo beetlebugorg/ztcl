@@ -624,6 +624,9 @@ pub const Interp = struct {
     namespaces: std.StringArrayHashMapUnmanaged(void) = .empty,
     /// The export patterns of each namespace.
     exports: std.StringHashMapUnmanaged(std.ArrayList([]const u8)) = .empty,
+    /// The `namespace path` of each namespace: full names with no
+    /// leading "::".
+    ns_paths: std.StringHashMapUnmanaged([]const []const u8) = .empty,
 
     /// The last compiled regular expressions.
     regex_cache: [@import("regex.zig").cache_size]@import("regex.zig").CacheEntry = @splat(.{}),
@@ -720,8 +723,15 @@ pub const Interp = struct {
         return error.TclError;
     }
 
+    /// An error with the given `errorCode` (a list in text form).
+    pub fn failCode(it: *Interp, code: []const u8, comptime fmt: []const u8, args: anytype) Error {
+        it.result = .{ .str = try std.fmt.allocPrint(it.alloc(), fmt, args) };
+        it.error_code = .{ .str = code };
+        return error.TclError;
+    }
+
     pub fn wrongArgs(it: *Interp, comptime usage: []const u8) Error {
-        return it.fail("wrong # args: should be \"" ++ usage ++ "\"", .{});
+        return it.failCode("TCL WRONGARGS", "wrong # args: should be \"" ++ usage ++ "\"", .{});
     }
 
     pub fn str(it: *Interp, v: Value) Allocator.Error![]const u8 {
@@ -1074,6 +1084,15 @@ pub const Interp = struct {
                 if (it.commands.getKey(full)) |k| return k;
             } else |_| {}
         }
+        if (it.ns_paths.count() != 0) {
+            if (it.ns_paths.get(it.ns)) |path| {
+                var buf: [256]u8 = undefined;
+                for (path) |space| {
+                    const full = if (space.len == 0) name else std.fmt.bufPrint(&buf, "{s}::{s}", .{ space, name }) catch continue;
+                    if (it.commands.getKey(full)) |k| return k;
+                }
+            }
+        }
         return if (it.commands.getKey(name)) |k| k else null;
     }
 
@@ -1257,6 +1276,7 @@ pub const Interp = struct {
         if (p.has_args) try out.appendSlice(a, " ?arg ...?");
         try out.append(a, '"');
         it.result = .{ .str = out.items };
+        it.error_code = .{ .str = "TCL WRONGARGS" };
         return error.TclError;
     }
 

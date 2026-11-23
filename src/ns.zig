@@ -210,6 +210,31 @@ fn evalIn(it: *Interp, space: []const u8, script: *interp.Script, argv: []const 
     return it.evalScript(script);
 }
 
+/// `namespace path ?list?`: reads or sets the search path of the
+/// current namespace. Each name of a new path must exist.
+fn nsPath(it: *Interp, args: []const Value) Error!Value {
+    const a = it.alloc();
+    if (args.len > 1) return it.wrongArgs("namespace path ?pathList?");
+    if (args.len == 0) {
+        var out: std.ArrayList(Value) = .empty;
+        if (it.ns_paths.get(it.ns)) |path| for (path) |space| try out.append(a, try display(it, space));
+        return value.wrapList(a, out.items);
+    }
+    const words = try it.list(args[0]);
+    const path = try a.alloc([]const u8, words.len);
+    for (words, path) |w, *out| {
+        const text = try it.str(w);
+        const space = try resolve(it, text);
+        if (space.len > 0 and !it.namespaces.contains(space)) {
+            return it.failCode(try std.fmt.allocPrint(a, "TCL LOOKUP NAMESPACE {s}", .{text}), "namespace \"{s}\" not found in \"::{s}\"", .{ text, it.ns });
+        }
+        out.* = try it.internNs(space);
+    }
+    try it.ns_paths.put(a, it.ns, path);
+    it.epoch += 1;
+    return Value.empty;
+}
+
 pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("namespace subcommand ?arg ...?");
     const a = it.alloc();
@@ -388,6 +413,7 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         return Value.empty;
     }
     if (eql(sub, "ensemble")) return ensemble(it, args);
-    if (eql(sub, "forget") or eql(sub, "path") or eql(sub, "unknown")) return Value.empty;
+    if (eql(sub, "path")) return nsPath(it, args);
+    if (eql(sub, "forget") or eql(sub, "unknown")) return Value.empty;
     return it.fail("unknown or ambiguous subcommand \"{s}\": must be children, code, current, delete, eval, exists, export, forget, import, inscope, origin, parent, path, qualifiers, tail, unknown, upvar, or which", .{sub});
 }

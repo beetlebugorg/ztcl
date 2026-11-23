@@ -239,7 +239,7 @@ test "expr: math functions" {
         .{ "expr {lerp(0, 10, 0.5)}", "5.0" },
         .{ "expr {noise3(1, 2, 3)}", "0.0" },
         .{ "expr {foo(1)}", "!invalid command name \"tcl::mathfunc::foo\"" },
-        .{ "expr {sqrt()}", "!too few arguments for math function \"sqrt\"" },
+        .{ "expr {sqrt()}", "!not enough arguments for math function \"sqrt\"" },
         .{ "expr {sqrt(1, 2)}", "!too many arguments for math function \"sqrt\"" },
         .{ "expr {srand(1) == srand(1)}", "1" },
     });
@@ -522,7 +522,7 @@ test "try, throw, and the error code" {
         .{ "catch {error msg info {E 1}} m o; dict get $o -errorcode", "E 1" },
         .{ "catch {return -code error -errorcode {Q 2} m} m o; set o", "-code 1 -level 1" },
         .{ "proc p {} {return -code error -errorcode {Q 2} m}; catch p; set errorCode", "Q 2" },
-        .{ "catch {expr {1/0}}; set errorCode", "NONE" },
+        .{ "catch {expr {1/0}}; set errorCode", "ARITH DIVZERO {divide by zero}" },
     });
 }
 

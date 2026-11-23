@@ -467,7 +467,7 @@ const Compiler = struct {
                 try c.compileNode(t[2]);
                 c.patch(end);
             },
-            .parts, .func => try c.fallbackNode(n),
+            .parts, .func, .call => try c.fallbackNode(n),
         }
     }
 

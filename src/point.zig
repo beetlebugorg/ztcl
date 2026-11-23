@@ -706,6 +706,7 @@ const Compiler = struct {
             .variable => |r| return c.variable(r),
             .script => |s| return c.subst(s),
             .parts => return c.fail("a text with substitutions is not allowed", .{}),
+            .call => |f| return c.fail("the function \"{s}\" is not allowed", .{f.name}),
             .unary => |u| {
                 const x = try c.lower(u.a);
                 const r = try c.num(x);

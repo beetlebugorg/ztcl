@@ -259,6 +259,17 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
         for (gop.value_ptr.items) |*s| try c.text(s);
     }
 
+    var ns_paths: @TypeOf(it.ns_paths) = .empty;
+    try ns_paths.ensureTotalCapacity(a, it.ns_paths.count());
+    var pit = it.ns_paths.iterator();
+    while (pit.next()) |e| {
+        const items = try a.dupe([]const u8, e.value_ptr.*);
+        for (items) |*s| try c.text(s);
+        const gop = ns_paths.getOrPutAssumeCapacity(e.key_ptr.*);
+        gop.value_ptr.* = items;
+        try c.text(@constCast(gop.key_ptr));
+    }
+
     var globals: @TypeOf(it.global.vars) = .empty;
     if (opts.vars == .keep) {
         try globals.ensureTotalCapacity(a, it.global.vars.items.len);
@@ -284,6 +295,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.commands = commands;
     it.namespaces = namespaces;
     it.exports = exports;
+    it.ns_paths = ns_paths;
     it.global.vars = globals;
     it.error_code = error_code;
     it.result = Value.empty;

@@ -18,6 +18,7 @@ const bigint = @import("bigint.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Error = interp.Error;
+const mathns = @import("mathns.zig");
 
 pub const UnOp = enum { neg, pos, not, bitnot };
 
@@ -152,6 +153,8 @@ pub const Node = union(enum) {
     binary: struct { op: BinOp, a: *Node, b: *Node },
     ternary: [3]*Node,
     func: struct { f: Func, args: []const *Node },
+    /// A call of a command in `tcl::mathfunc`.
+    call: struct { name: []const u8, args: []const *Node },
 };
 
 // ---- The parser ----
@@ -360,8 +363,6 @@ const ExprParser = struct {
             var j = i;
             while (j < s.len and (s[j] == ' ' or s[j] == '\t' or s[j] == '\n')) j += 1;
             if (j < s.len and s[j] == '(') {
-                const f = std.meta.stringToEnum(Func, name) orelse
-                    return e.it.fail("invalid command name \"tcl::mathfunc::{s}\"", .{name});
                 e.p.pos = j + 1;
                 var args: std.ArrayList(*Node) = .empty;
                 e.skip();
@@ -378,9 +379,17 @@ const ExprParser = struct {
                         break;
                     } else return e.fail("missing close paren", .{});
                 }
-                const ar = f.arity();
-                if (args.items.len < ar[0]) return e.it.fail("too few arguments for math function \"{s}\"", .{name});
-                if (args.items.len > ar[1]) return e.it.fail("too many arguments for math function \"{s}\"", .{name});
+                // A function that a script defined or replaced is a command.
+                const full = try std.fmt.allocPrint(e.it.alloc(), "tcl::mathfunc::{s}", .{name});
+                const f = std.meta.stringToEnum(Func, name) orelse
+                    return e.node(.{ .call = .{ .name = full, .args = args.items } });
+                if (f != .clamp and f != .lerp and f != .noise2 and f != .noise3) {
+                    const known = e.it.findCommand(full);
+                    if (known == null or !mathns.isBuiltinFunc(known.?, f)) {
+                        return e.node(.{ .call = .{ .name = full, .args = args.items } });
+                    }
+                }
+                try checkArity(e.it, f, args.items.len);
                 return e.node(.{ .func = .{ .f = f, .args = args.items } });
             }
             e.p.pos = i;
@@ -477,14 +486,61 @@ pub fn low64Arg(it: *Interp, v: Value) Error!i64 {
 
 fn num(it: *Interp, v: Value, op: []const u8) Error!Value {
     switch (v) {
-        .int, .double => return v,
+        .int => return v,
+        .double => |d| {
+            if (std.math.isNan(d)) return nanOperand(it, op);
+            return v;
+        },
         else => {
-            if (try numberOf(it, v)) |n| return n;
+            if (try numberOf(it, v)) |n| {
+                if (n == .double and std.math.isNan(n.double)) return nanOperand(it, op);
+                return n;
+            }
             const s = try it.str(v);
-            if (s.len == 0) return it.fail("can't use empty string as operand of \"{s}\"", .{op});
-            return it.fail("can't use non-numeric string as operand of \"{s}\"", .{op});
+            if (s.len == 0) return it.failCode("ARITH DOMAIN {empty string}", "can't use empty string as operand of \"{s}\"", .{op});
+            if (badOctal(s)) return it.failCode("ARITH DOMAIN {invalid octal number}", "can't use invalid octal number as operand of \"{s}\"", .{op});
+            return it.failCode("ARITH DOMAIN {non-numeric string}", "can't use non-numeric string as operand of \"{s}\"", .{op});
         },
     }
+}
+
+fn nanOperand(it: *Interp, op: []const u8) Error {
+    return it.failCode("ARITH DOMAIN {non-numeric floating-point value}", "can't use non-numeric floating-point value as operand of \"{s}\"", .{op});
+}
+
+/// True for text in the form of an octal integer with a digit 8 or 9.
+fn badOctal(text: []const u8) bool {
+    var s = value.trimSpace(text);
+    if (s.len > 0 and (s[0] == '+' or s[0] == '-')) s = s[1..];
+    if (s.len < 2 or s[0] != '0') return false;
+    s = s[1..];
+    if (s[0] == 'o' or s[0] == 'O') s = s[1..];
+    if (s.len == 0) return false;
+    var bad = false;
+    for (s) |c| {
+        if (c < '0' or c > '9') return false;
+        if (c >= '8') bad = true;
+    }
+    return bad;
+}
+
+/// A numeric operand of the operator `op`, or the error of `expr`.
+pub fn operand(it: *Interp, v: Value, op: []const u8) Error!Value {
+    return num(it, v, op);
+}
+
+/// Checks the count of arguments of a math function.
+pub fn checkArity(it: *Interp, f: Func, n: usize) Error!void {
+    const ar = f.arity();
+    if (n < ar[0]) {
+        if (f == .max or f == .min) return it.fail("not enough arguments to math function \"{s}\"", .{@tagName(f)});
+        return it.failCode("TCL WRONGARGS", "not enough arguments for math function \"{s}\"", .{@tagName(f)});
+    }
+    if (n > ar[1]) return it.failCode("TCL WRONGARGS", "too many arguments for math function \"{s}\"", .{@tagName(f)});
+}
+
+fn domainError(it: *Interp) Error {
+    return it.failCode("ARITH DOMAIN {domain error: argument not in valid range}", "domain error: argument not in valid range", .{});
 }
 
 fn toF(v: Value) f64 {
@@ -499,7 +555,7 @@ fn toF(v: Value) f64 {
 /// An operand of an integer operator: an `int` or big integer text.
 fn intOnly(it: *Interp, v: Value, op: []const u8) Error!Value {
     const n = try num(it, v, op);
-    if (n == .double) return it.fail("can't use floating-point value as operand of \"{s}\"", .{op});
+    if (n == .double) return it.failCode("ARITH DOMAIN {floating-point value}", "can't use floating-point value as operand of \"{s}\"", .{op});
     return n;
 }
 
@@ -559,6 +615,12 @@ pub fn eval(it: *Interp, n: *const Node) Error!Value {
             return binaryOp(it, b.op, x, y);
         },
         .func => |*f| return callFunc(it, f.f, f.args),
+        .call => |*f| {
+            const argv = try it.alloc().alloc(Value, f.args.len + 1);
+            argv[0] = .{ .str = f.name };
+            for (f.args, argv[1..]) |arg, *out| out.* = try eval(it, arg);
+            return it.callWords(argv);
+        },
     }
 }
 
@@ -566,9 +628,13 @@ pub fn eval(it: *Interp, n: *const Node) Error!Value {
 pub fn unaryOp(it: *Interp, op: UnOp, v: Value) Error!Value {
     switch (op) {
         .not => {
+            if (try numberOf(it, v)) |n| {
+                if (n == .double and std.math.isNan(n.double)) return nanOperand(it, "!");
+            }
             const t = truthy(it, v) catch |err| {
                 if (err != error.TclError) return err;
-                return it.fail("can't use non-numeric string as operand of \"!\"", .{});
+                _ = try num(it, v, "!");
+                return err;
             };
             return b2v(!t);
         },
@@ -612,19 +678,19 @@ pub fn intOp(it: *Interp, op: BinOp, x: i64, y: i64) Error!Value {
             return .{ .int = r[0] };
         },
         .div => {
-            if (y == 0) return it.fail("divide by zero", .{});
+            if (y == 0) return it.failCode("ARITH DIVZERO {divide by zero}", "divide by zero", .{});
             if (y == -1) return if (x == std.math.minInt(i64)) bigint.negate(it, .{ .int = x }) else .{ .int = -x };
             return .{ .int = @divFloor(x, y) };
         },
         .mod => {
-            if (y == 0) return it.fail("divide by zero", .{});
+            if (y == 0) return it.failCode("ARITH DIVZERO {divide by zero}", "divide by zero", .{});
             if (y == -1) return .{ .int = 0 };
             // The sign of the result is the sign of the divisor.
             return .{ .int = x - @divFloor(x, y) * y };
         },
         .pow => {
             if (y < 0) {
-                if (x == 0) return it.fail("exponentiation of zero by negative power", .{});
+                if (x == 0) return it.failCode("ARITH DOMAIN {exponentiation of zero by negative power}", "exponentiation of zero by negative power", .{});
                 if (x == 1) return .{ .int = 1 };
                 if (x == -1) return .{ .int = if (@mod(y, 2) == 0) 1 else -1 };
                 return .{ .int = 0 };
@@ -739,8 +805,10 @@ pub fn binaryOp(it: *Interp, op: BinOp, x: Value, y: Value) Error!Value {
                 .mul => fx * fy,
                 .div => fx / fy,
                 else => blk: {
-                    if (fx == 0 and fy < 0) return it.fail("exponentiation of zero by negative power", .{});
-                    break :blk std.math.pow(f64, fx, fy);
+                    if (fx == 0 and fy < 0) return it.failCode("ARITH DOMAIN {exponentiation of zero by negative power}", "exponentiation of zero by negative power", .{});
+                    const r = std.math.pow(f64, fx, fy);
+                    if (std.math.isNan(r)) return domainError(it);
+                    break :blk r;
                 },
             } };
         },
@@ -776,7 +844,7 @@ pub fn nextRand(it: *Interp) f64 {
     return @as(f64, @floatFromInt(s >> 11)) / 9007199254740992.0;
 }
 
-fn callFunc(it: *Interp, f: Func, args: []const *Node) Error!Value {
+pub fn callFunc(it: *Interp, f: Func, args: []const *Node) Error!Value {
     var buf: [3]Value = undefined;
     const name = @tagName(f);
     if (f == .max or f == .min) {
@@ -842,5 +910,6 @@ fn callFunc(it: *Interp, f: Func, args: []const *Node) Error!Value {
         .noise3 => noise.noise3Seed(it.noise_seed, fx, toF(buf[1]), toF(buf[2])),
         .max, .min, .bool => unreachable,
     };
+    if (std.math.isNan(d)) return domainError(it);
     return .{ .double = d };
 }
