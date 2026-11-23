@@ -44,3 +44,5 @@
 - Sets the error codes of Tcl for arithmetic, argument counts, list syntax, and lookups.
 - Fixes the eval after a memory error. A top-level eval that starts above the memory limit runs a collection first, and runs with only the hard cap while the live data stays above the limit.
 - Adds channels, the event loop on sockets, and `socket` for x86-64 Windows. A file open gives an error there until the root folder jail is ported.
+- Adds channels, the event loop on sockets, and `socket` for x86-64 Windows.
+- Adds `file` and file channels for x86-64 Windows, with a root folder jail that walks each path and gives an error for each reparse point.
