@@ -11,6 +11,10 @@
 //! gets a path of more than one name. macOS refuses O_NOFOLLOW together
 //! with O_NOFOLLOW_ANY (EINVAL), and for one name they are equal. A folder
 //! that another process swaps for a symlink gives ELOOP or ENOTDIR.
+//!
+//! One limit needs a process outside the sandbox with write access to the
+//! root. If that process moves a folder out of the root after the walk
+//! opens it, the next name of the walk resolves in the moved folder.
 //! Other operations run on a descriptor of the parent folder, on the
 //! last name, with no symlink followed.
 //!
@@ -132,8 +136,14 @@ fn lastFlags(flags: sys.OpenFlags) linux.O {
     return @bitCast(bits);
 }
 
+/// A name that is not one plain entry of a folder: empty, `.`, `..`, or
+/// with a NUL byte. The walk and `parentOf` check it without `normal`.
+fn badName(w: []const u8) bool {
+    return w.len == 0 or std.mem.eql(u8, w, ".") or std.mem.eql(u8, w, "..") or std.mem.indexOfScalar(u8, w, 0) != null;
+}
+
 /// Opens a normal path on macOS, one name at a time from the root. A name
-/// of `.`, `..`, or no bytes is an error here too, so this walk does not
+/// that `badName` refuses is an error here too, so this walk does not
 /// depend on `normal`.
 fn walk(root: i32, rel: []const u8, flags: sys.OpenFlags, mode: u32) union(enum) { fd: i32, err: sys.Errno } {
     const last = lastFlags(flags);
@@ -155,7 +165,7 @@ fn walk(root: i32, rel: []const u8, flags: sys.OpenFlags, mode: u32) union(enum)
     };
     var parts = std.mem.splitScalar(u8, rel, '/');
     while (parts.next()) |w| {
-        if (w.len == 0 or std.mem.eql(u8, w, ".") or std.mem.eql(u8, w, "..")) return .{ .err = .ACCES };
+        if (badName(w)) return .{ .err = .ACCES };
         if (w.len >= name.len) return .{ .err = .NAMETOOLONG };
         @memcpy(name[0..w.len], w);
         name[w.len] = 0;
@@ -218,7 +228,7 @@ pub fn parentOf(it: *Interp, rel: []const u8) Error!union(enum) { ok: Parent, er
     const cut = std.mem.lastIndexOfScalar(u8, rel, '/');
     const dir = if (cut) |c| rel[0..c] else "";
     const base = if (cut) |c| rel[c + 1 ..] else rel;
-    if (base.len == 0) return .{ .err = .ACCES };
+    if (badName(base)) return .{ .err = .ACCES };
     switch (try openRel(it, dir, .{ .directory = true, .path_only = true }, 0)) {
         .fd => |fd| return .{ .ok = .{ .fd = fd, .base = try it.alloc().dupeZ(u8, base) } },
         .err => |e| return .{ .err = e },
