@@ -55,6 +55,25 @@ caps=package,interp,clock,channels,file,event,socket,exec,thread
 gc="$gc --threads 16"
 # The script `ztclsh` runs in another folder, so the runner path is absolute.
 case $tcl in /*) ;; *) tcl=$PWD/$tcl ;; esac
+# A time limit for one run. Without timeout(1), perl sets it and stops the
+# process group of the run with exit status 124.
+limit() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$@"
+    else
+        perl -e '$s = shift; $p = fork(); if (!$p) { setpgrp(0, 0); exec { $ARGV[0] } @ARGV or exit 127 }
+            $SIG{ALRM} = sub { kill "KILL", -$p; waitpid($p, 0); exit 124 }; alarm $s; waitpid($p, 0);
+            exit($? >> 8)' "$@"
+    fi
+}
+# A system with no root folder jail runs the files with no `file` and no
+# `exec`, so the runner has no --root.
+jail=1
+probe=$(mktemp -d "${TMPDIR:-/tmp}/ztcl-suite.XXXXXX") || exit 1
+: > "$probe/probe.tcl"
+"$tcl" --root "$probe" "$probe/probe.tcl" >/dev/null 2>&1 || jail=
+rm -rf -- "$probe"
+[ -n "$jail" ] || caps=package,interp,clock,channels,event,socket
 tp=0; tf=0; ts=0
 for f in "$@"; do
     # A fresh root folder for each file, outside the repository.
@@ -66,12 +85,13 @@ for f in "$@"; do
     # the caller. `ztclsh` is the `tclsh` of the tests: this runner.
     progs=cat,echo,sh,/bin/sh,sleep,ls,grep,fgrep,wc,id,groups,whoami,ps,kill,mknod,true,false,/ztclsh
     set_exec="--exec-timeout 120000 --exec-env PATH=/usr/bin:/bin --exec-env HOME=$root --exec-env LANG=C --exec-allow $progs --exe-name /ztclsh"
+    [ -n "$jail" ] || set_exec=
     cat > "$root/ztclsh" <<EOF
 #!/bin/sh
 exec "$tcl" $gc --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --cwd "\$PWD" --tclsh "\$@"
 EOF
     chmod +x "$root/ztclsh"
-    raw=$(timeout 1200 "$tcl" $gc --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
+    raw=$(limit 1200 "$tcl" $gc --max-steps 200000000 --mem 2147483648 --allow $caps ${jail:+--root} ${jail:+"$root"} $set_exec --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
     rc=$?
     rm -rf -- "$root"
     out=$(printf '%s\n' "$raw" | grep -aE '^pass [0-9]+ fail' | tail -1)
