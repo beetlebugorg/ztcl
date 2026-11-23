@@ -11,6 +11,9 @@
 # expression of names, and a list of names. A test that cannot run
 # counts as skipped, with the reason in tt_why.
 
+# The platform constraints have the values of tcltest 2.5.9 on Linux.
+# Constraints for features that ztcl lacks (exec, files, memory) stay
+# false, and those tests count as blocked.
 set tt_pass 0
 set tt_fail 0
 set tt_skip 0
@@ -20,6 +23,9 @@ array set tt_cons {
     ieeeFloatingPoint 1 eformat 1 emptyTest 0 knownBug 0 nonPortable 0
     userInteraction 0 win 0 winOnly 0 mac 0 longIs32bit 0 wideIs32bit 0
     bug-1773040 0 testevalex 0 testobj 0 testexprlong 0 testexprstring 0
+    unixOrPc 1 macOrPc 0 macOrUnix 1 unixOrWin 1 macOrWin 0 pc 0 nt 0 root 0
+    tempNotPc 1 tempNotWin 1 tempNotMac 1 tempNotUnix 0
+    unixCrash 0 winCrash 1 pcCrash 1 macCrash 1
 }
 
 proc tcltest::testConstraint {name args} {

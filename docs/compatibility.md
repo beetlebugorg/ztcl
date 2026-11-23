@@ -19,10 +19,10 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 
 | Scope | Files | Total | Pass | Fail | Blocked | Pass rate |
 |---|---|---|---|---|---|---|
-| In scope | 77 | 29358 | 24929 | 1375 | 3054 | 84.9 % |
-| Needs a decision | 49 | 15027 | 31 | 9150 | 5846 | 0.2 % |
+| In scope | 77 | 29358 | 24931 | 1377 | 3050 | 84.9 % |
+| Needs a decision | 49 | 15027 | 31 | 9173 | 5823 | 0.2 % |
 | Cannot apply | 26 | 1178 | 4 | 283 | 891 | 0.3 % |
-| **All** | **152** | **45563** | **24964** | **10808** | **9791** | **54.8 %** |
+| **All** | **152** | **45563** | **24966** | **10833** | **9764** | **54.8 %** |
 
 ## In scope
 
@@ -35,7 +35,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `binary.test` | 717 | 602 | 36 | 79 | `bigEndian` 76, `testsetbytearraylength` 2, `win` 1 | language and core commands |
 | `case.test` | 15 | 15 | 0 | 0 |  | language and core commands |
 | `cmdIL.test` | 146 | 128 | 12 | 6 | `hasIsoLocale` 2, `memory` 2, `testWithLimit` 1 | language and core commands |
-| `cmdMZ.test` | 92 | 49 | 14 | 29 | `unixOrWin` 2, `Unix` 1, unreached 26 | language and core commands |
+| `cmdMZ.test` | 92 | 49 | 16 | 27 | `Unix` 1, unreached 26 | language and core commands |
 | `compExpr-old.test` | 190 | 183 | 0 | 7 | `testmathfunctions` 5, `expr:!ieeeFloatingPoint` 1, `longIs32bit` 1 | language and core commands |
 | `compExpr.test` | 80 | 76 | 0 | 4 | `memory` 2, `testmathfunctions` 2 | language and core commands |
 | `compile.test` | 171 | 71 | 66 | 34 | `testevalex` 22, `knownBug` 9, `memory` 2 | the compiler, through scripts |
@@ -83,8 +83,8 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `proc-old.test` | 74 | 64 | 10 | 0 |  | language and core commands |
 | `proc.test` | 38 | 25 | 12 | 1 | `memory` 1 | language and core commands |
 | `reg.test` | 1141 | 25 | 9 | 1107 | `testregexp` 1099, `knownBug` 7, `nonPortable` 1 | regular expressions; most tests use `testregexp` |
-| `regexp.test` | 244 | 208 | 31 | 5 | `knownBug` 3, `exec` 1, `macCrash` 1 | language and core commands |
-| `regexpComp.test` | 179 | 152 | 25 | 2 | `exec` 1, `macCrash` 1 | language and core commands |
+| `regexp.test` | 244 | 209 | 31 | 4 | `knownBug` 3, `exec` 1 | language and core commands |
+| `regexpComp.test` | 179 | 153 | 25 | 1 | `exec` 1 | language and core commands |
 | `rename.test` | 19 | 10 | 1 | 8 | `testdel` 8 | language and core commands |
 | `scan.test` | 181 | 145 | 35 | 1 | `nonPortable` 1 | language and core commands |
 | `set-old.test` | 153 | 142 | 11 | 0 |  | language and core commands |
@@ -115,14 +115,14 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `chan.test` | 41 | 0 | 41 | 0 |  | `chan` |
 | `chanio.test` | 471 | 0 | 0 | 471 | unreached 471 | channels |
 | `clock.test` | 8532 | 4 | 7704 | 824 | `detroit` 796, `win` 1, unreached 27 | `clock` |
-| `cmdAH.test` | 323 | 11 | 128 | 184 | `testsetplatform` 120, `win` 22, `nonPortable` 7, unreached 31 | mostly `file` and `encoding` |
+| `cmdAH.test` | 323 | 11 | 129 | 183 | `testsetplatform` 120, `win` 22, `nonPortable` 7, unreached 31 | mostly `file` and `encoding` |
 | `config.test` | 9 | 0 | 9 | 0 |  | `tcl::pkgconfig` |
 | `encoding.test` | 86 | 4 | 47 | 35 | `testencoding` 8, `ucs2` 2, `testbytestring` 1, unreached 23 | `encoding` |
 | `env.test` | 26 | 3 | 10 | 13 | `exec` 9, `win` 4 | `env`, the host environment |
 | `event.test` | 66 | 0 | 34 | 32 | `testfilehandler` 22, `stdio` 6, `testfilewait` 2 | `after`, `vwait`, `update` |
 | `exec.test` | 100 | 0 | 0 | 100 | `exec` 93, `win` 5, unreached 2 | `exec` |
 | `fCmd.test` | 256 | 0 | 0 | 256 | unreached 256 | `file` |
-| `fileName.test` | 300 | 1 | 78 | 221 | `testsetplatform` 133, `win` 26, `unixOrWin` 21, unreached 33 | `file`, `glob` |
+| `fileName.test` | 300 | 1 | 99 | 200 | `testsetplatform` 133, `win` 26, `nonPortable` 7, unreached 33 | `file`, `glob` |
 | `fileSystem.test` | 137 | 0 | 0 | 137 | unreached 137 | `file` |
 | `fileSystemEncoding.test` | 1 | 0 | 0 | 1 | unreached 1 | `file`, `encoding` |
 | `history.test` | 62 | 0 | 0 | 62 | `history` 62 | `history` |
@@ -131,7 +131,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `httpPipeline.test` | 1996 | 0 | 0 | 1996 | unreached 1996 | `http`, `socket` |
 | `httpold.test` | 32 | 0 | 0 | 32 | unreached 32 | `http`, `socket` |
 | `init.test` | 24 | 0 | 10 | 14 | unreached 14 | library loading, `auto_load` |
-| `interp.test` | 352 | 1 | 337 | 14 | `knownBug` 7, `testinterpdelete` 6, `unixOrWin` 1 | `interp` |
+| `interp.test` | 352 | 1 | 338 | 13 | `knownBug` 7, `testinterpdelete` 6 | `interp` |
 | `io.test` | 524 | 0 | 0 | 524 | unreached 524 | channels |
 | `ioCmd.test` | 348 | 4 | 223 | 121 | `testchannel` 99, `fcopy` 10, `nonPortable` 3, unreached 3 | channels |
 | `ioTrans.test` | 106 | 0 | 69 | 37 | `testchannel` 37 | channel transforms |
@@ -141,7 +141,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `msgcat.test` | 109 | 0 | 47 | 62 | unreached 62 | `msgcat` package |
 | `opt.test` | 31 | 0 | 30 | 1 | unreached 1 | `tcl::OptProc` package |
 | `package.test` | 180 | 0 | 0 | 180 | unreached 180 | `package` |
-| `pid.test` | 5 | 0 | 0 | 5 | `pidDefined` 4, `unixOrWin` 1 | `pid` |
+| `pid.test` | 5 | 0 | 0 | 5 | `pidDefined` 4, `unixExecs` 1 | `pid` |
 | `pkgMkIndex.test` | 27 | 0 | 17 | 10 | unreached 10 | package index, `file` |
 | `platform.test` | 6 | 1 | 3 | 2 | `notValgrind` 1, `testCPUID` 1 | `platform` package |
 | `pwd.test` | 3 | 0 | 3 | 0 |  | `pwd`, `cd` |
@@ -158,7 +158,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `unixFile.test` | 7 | 0 | 0 | 7 | `testfindexecutable` 2, unreached 5 | `file` |
 | `unixInit.test` | 8 | 0 | 1 | 7 | `stdio` 5, `emptyTest` 2 | `exec` of tclsh |
 | `unload.test` | 27 | 0 | 7 | 20 | unreached 20 | `unload` |
-| `zlib.test` | 73 | 0 | 1 | 72 | `zlib` 70, `knownBug` 1, `tempNotWin` 1 | `zlib` |
+| `zlib.test` | 73 | 0 | 1 | 72 | `zlib` 71, `knownBug` 1 | `zlib` |
 
 ## Cannot apply
 
