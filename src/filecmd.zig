@@ -20,7 +20,7 @@ const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
-const linux = std.os.linux;
+const linux = @import("sys.zig").os;
 
 fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);

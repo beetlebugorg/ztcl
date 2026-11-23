@@ -20,7 +20,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const os = if (builtin.os.tag == .macos) darwin else std.os.linux;
+pub const os = if (builtin.os.tag == .macos) darwin else std.os.linux;
 
 /// The calls of this file on macOS, in the shape of `std.os.linux`: a
 /// result is a `usize`, and `errno` reads an error from it. macOS has no
@@ -77,6 +77,50 @@ const darwin = struct {
 
     pub fn open(path: [*:0]const u8, flags: O, mode: c.mode_t) usize {
         return ret(c.open(path, flags, mode));
+    }
+
+    pub const AT = struct {
+        pub const FDCWD = -2;
+        pub const SYMLINK_NOFOLLOW: c_int = 0x20;
+        pub const REMOVEDIR: u32 = 0x80;
+    };
+
+    pub fn openat(dir: i32, path: [*:0]const u8, flags: O, mode: c.mode_t) usize {
+        return ret(c.openat(dir, path, flags, @as(c_uint, mode)));
+    }
+
+    pub fn unlinkat(dir: i32, path: [*:0]const u8, flags: anytype) usize {
+        return ret(c.unlinkat(dir, path, @intCast(flags)));
+    }
+
+    pub fn mkdirat(dir: i32, path: [*:0]const u8, mode: c.mode_t) usize {
+        return ret(c.mkdirat(dir, path, mode));
+    }
+
+    pub fn renameat(from: i32, old: [*:0]const u8, to: i32, new: [*:0]const u8) usize {
+        return ret(c.renameat(from, old, to, new));
+    }
+
+    pub fn symlinkat(target: [*:0]const u8, dir: i32, path: [*:0]const u8) usize {
+        return ret(c.symlinkat(target, dir, path));
+    }
+
+    extern "c" fn fstatat(dir: c_int, path: [*:0]const u8, st: *c.Stat, flags: c_int) c_int;
+    extern "c" fn fstat(fd: c_int, st: *c.Stat) c_int;
+    extern "c" fn readdir(dir: *c.DIR) ?*c.dirent;
+
+    /// The data of a name in a folder, with no symlink followed.
+    pub fn statAt(dir: i32, path: [*:0]const u8, st: *c.Stat) usize {
+        return ret(fstatat(dir, path, st, AT.SYMLINK_NOFOLLOW));
+    }
+
+    pub fn statFd(fd: i32, st: *c.Stat) usize {
+        return ret(fstat(fd, st));
+    }
+
+    pub fn nextName(dir: *c.DIR) ?[]const u8 {
+        const d = readdir(dir) orelse return null;
+        return d.name[0..d.namlen];
     }
 
     pub fn fcntl(fd: i32, cmd: anytype, arg: usize) usize {
