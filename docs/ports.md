@@ -30,20 +30,30 @@ Tests: `zig build test` (the test "coroutine..." must run, not skip), and `tools
 
 ## Piece 2: channels, the event loop, and sockets (`src/sys.zig`)
 
-`sys.zig` is the whole interface. Each function has a contract in its doc comment: `read`, `write`, `close`, `seek`, `setBlocking`, `ignorePipeSignal`, `poll(wants, timeout_ms)`, `listenLoop`, `connectLoop`, `connectError`, `accept`, `sockName`, `peerName`, `shutdown`, and `failOf`.
+`sys.zig` is the whole interface. Each function has a contract in its doc comment.
 
-Security rule: `listenLoop` and `connectLoop` take the address as the enum `Loop { v4, v6 }`. They build 127.0.0.1 or ::1 themselves. No function takes a host name or free address bytes, and no resolver call exists. Keep that shape. `accept` returns the peer address, and the caller closes a peer that is not loopback.
+- Unchanged: `read`, `write`, `close`, `seek`, `setBlocking`, `ignorePipeSignal`, `poll`, `connectError`, `accept`, `sockName`, `peerName`, `shutdown`, and `failOf`.
+- New: `Addr { v6: bool, bytes: [16]u8, port: u16 }`, `parseAddr(text) ?Addr` (portable, no system call), `resolve(allocator, host, *ArrayList(Addr))`, `listenAt(addr, reuse) SockResult`, and `connectTo(addr, mine: ?Addr, wait) SockResult`.
 
-Each descriptor closes on exec.
+The network policy is not platform code. It is in `src/sock.zig` and needs no port. `Interp.net` is `loopback` (the default), `allow` (rules: a host name or an address range, plus a port range), or `any`. The runner flag is `--net loopback|any|allow=LIST`. `sock.zig` resolves each host, drops each address that the policy refuses, connects or listens, then checks `sys.peerName` of the new connection again. A server checks each accepted peer, and closes one that fails. A child interp gets a copy of the policy of its parent, and no script command changes it.
 
-- **macOS:** SOCK_CLOEXEC does not exist, so use `fcntl` FD_CLOEXEC right after `socket` and `accept`. Use `std.c` and `std.posix`. MSG_NOSIGNAL does not exist: set SO_NOSIGPIPE on each socket, and ignore SIGPIPE in `ignorePipeSignal`.
-- **Windows:** `Fd` becomes a union of a file HANDLE and a SOCKET, or two integer ranges. Use Winsock2 (WSAStartup once), `WSAPoll` for sockets, `ioctlsocket(FIONBIO)` for `setBlocking`, and `WSAGetLastError` mapped in `failOf`. Handles are not inherited: pass bInheritHandle = FALSE. `WSAPoll` does not accept file handles, and a regular file is always ready. `ignorePipeSignal` does no work.
+Rules for a port:
 
-Keep these edge cases: a non-blocking connect that fails reports through `connectError` once; `poll` reports an error or a closed peer as ready; a `read` of 0 bytes is the end of data; EINTR runs the call again; `seek` on a socket gives an error.
+1. `resolve` is the only name lookup. It returns every address of the name, so the caller can check each one. It must not connect. macOS: `getaddrinfo` (AF_UNSPEC, SOCK_STREAM, no AI_ADDRCONFIG filter). Windows: `GetAddrInfoW`. Copy only AF_INET and AF_INET6 results. Drop the scope id of a link-local address, or refuse the address.
+2. `listenAt` and `connectTo` take address bytes only. They never take a name, and they never widen the address. Set IPV6_V6ONLY = 1 on each IPv6 socket, so an IPv4 peer cannot appear as `::ffff:a.b.c.d`.
+3. `accept` returns the real peer address. `peerName` after a connect returns the address of the connection.
+4. `connectTo(addr, mine, wait=false)` starts a non-blocking connect and returns at once. `connectError` gives the end result once. `chan.zig` then calls `sock.checkPeer`, and shuts the socket down if the policy refuses the peer.
+5. Each descriptor closes on exec. macOS: set FD_CLOEXEC with `fcntl` right after `socket` and `accept`. Windows: use `WSASocketW` with WSA_FLAG_NO_HANDLE_INHERIT.
+6. A write to a closed peer gives an error and no signal. macOS: SO_NOSIGPIPE on each socket, and ignore SIGPIPE in `ignorePipeSignal`. Windows needs no work.
+7. `poll` reports an error or a closed peer as ready for the direction that waits. macOS: `poll`. Windows: `WSAPoll` for sockets, and also check SO_ERROR after the wait for a failed connect. A file handle is always ready. A pipe of `exec` on Windows needs PeekNamedPipe for the read side.
+8. A `read` of 0 bytes is the end of data. EINTR runs the call again. `seek` on a socket gives an error.
+9. Windows: `Fd` holds a file HANDLE or a SOCKET, as a tagged integer or a small union. Call WSAStartup once. Map WSAGetLastError in `failOf` (WSAECONNREFUSED, WSAEADDRINUSE, WSAEADDRNOTAVAIL, WSAECONNRESET, WSAENOTCONN, WSAETIMEDOUT, and WSAEWOULDBLOCK as `.again`).
+10. `chan.zig` still uses `linux.O` in `parseMode`, and `lseek` in two places. Move them to a neutral struct and `sys.seek`.
 
-`src/chan.zig`, `src/sock.zig`, and `src/event.zig` need only their `linux.O` open flags (`parseMode` in chan.zig) moved to a neutral struct. The event loop has no platform code.
+Tests stay offline and never contact an outside host:
 
-Tests: `zig build test` ("the event loop runs timers and idle scripts in order", "socket accepts only loopback addresses"). Suite through `zig build suite-runner`, on Linux: event.test pass 33, timer.test pass 53, socket.test pass 82, fail 8, skip 85.
+- `zig build test`: "the network policy of socket: allowlist, ranges, ports, and peers", "socket accepts only loopback addresses by default", "socket refuses a blocked address and closes a blocked peer", and "the event loop runs timers and idle scripts in order". The blocked-address test listens on 127.0.0.2. On macOS that address needs an alias, so mark that case Linux-only, and add a case with `::1` against a list of 127.0.0.1 only. Do not change the network settings of the machine.
+- Suite on Linux: socket.test pass 148, fail 6, skip 21. event.test pass 35. timer.test pass 53. chan.test pass 14. io.test pass 238. chanio.test pass 228.
 
 ## Piece 3: the root folder jail (`src/fsroot.zig`, used by chan.zig and filecmd.zig)
 
@@ -71,6 +81,12 @@ Contract: programs run from an argument list with NO shell. `Interp.exec_host` g
 - **Windows:** CreateProcessW with an explicit command line built by the documented CommandLineToArgvW quoting rules (backslashes before a quote double). Set `lpApplicationName` to the resolved full path, so no search and no cmd.exe happens. Refuse `.bat` and `.cmd` files, because they run through cmd.exe. Use STARTUPINFOEX with PROC_THREAD_ATTRIBUTE_HANDLE_LIST, so only the three standard handles are inherited, an explicit environment block, CREATE_SUSPENDED + AssignProcessToJobObject + ResumeThread, and a Job Object with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, so the whole tree ends with TerminateJobObject or when the handle closes.
 
 Tests: the unit test "exec has an allowlist and a time limit, and leaves no process" (port its program names). Suite on Linux: exec.test pass 86, fail 5, skip 9. pid.test pass 5.
+
+## Suite tools on other systems
+
+`tools/suite.sh` may change so it runs on each system: pass `--root` only where the jail is supported, and use a portable time limit where `timeout` is absent. The Linux counts must not change. Where `systemd-run` does not exist, use the memory limit of that system.
+
+The root jail lets the file and channel suites run, so do the jail before `exec` on each platform.
 
 ## How to run
 
