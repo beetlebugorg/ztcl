@@ -123,6 +123,45 @@ const darwin = struct {
         return d.name[0..d.namlen];
     }
 
+    pub const W = c.W;
+    pub const timespec = c.timespec;
+
+    pub fn clock_gettime(id: c.clockid_t, ts: *timespec) usize {
+        return ret(c.clock_gettime(id, ts));
+    }
+
+    pub fn access(path: [*:0]const u8, mode: u32) usize {
+        return ret(c.access(path, mode));
+    }
+
+    pub fn setpgid(pid: i32, pgid: i32) usize {
+        return ret(c.setpgid(pid, pgid));
+    }
+
+    pub fn getpid() i32 {
+        return c.getpid();
+    }
+
+    pub fn kill(pid: i32, sig: SIG) usize {
+        return ret(c.kill(pid, sig));
+    }
+
+    pub fn wait4(pid: i32, status: *u32, options: anytype, _: ?*anyopaque) usize {
+        return ret(c.waitpid(pid, @ptrCast(status), @intCast(options)));
+    }
+
+    /// macOS has no pipe2. Each spawn closes all other descriptors
+    /// (POSIX_SPAWN_CLOEXEC_DEFAULT), so the gap before FD_CLOEXEC leaks
+    /// no descriptor to a program of `exec`.
+    pub fn pipe2(fds: *[2]i32, _: O) usize {
+        const rc = c.pipe(fds);
+        if (rc == 0) {
+            _ = c.fcntl(fds[0], c.F.SETFD, @as(c_int, c.FD_CLOEXEC));
+            _ = c.fcntl(fds[1], c.F.SETFD, @as(c_int, c.FD_CLOEXEC));
+        }
+        return ret(rc);
+    }
+
     pub fn fcntl(fd: i32, cmd: anytype, arg: usize) usize {
         return ret(c.fcntl(fd, @as(c_int, @intCast(cmd)), @as(c_int, @truncate(@as(isize, @bitCast(arg))))));
     }

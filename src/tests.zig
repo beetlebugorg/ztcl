@@ -1527,7 +1527,7 @@ test "socket accepts only loopback addresses by default" {
 
 test "exec has an allowlist and a time limit, and leaves no process" {
     if (!tcl.proc.supported) return error.SkipZigTest;
-    const linux = std.os.linux;
+    const linux = tcl.sys.os;
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
@@ -1538,7 +1538,7 @@ test "exec has an allowlist and a time limit, and leaves no process" {
     try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {open |echo}")));
     try std.testing.expectEqualStrings("{}", try it.str(try it.eval("interp create c; list [c eval {info commands exec}]")));
     try it.allow(@intFromEnum(cap.exec));
-    it.exec_host = .{ .allow = &.{ "echo", "/usr/bin/cat", "sleep", "sh" }, .timeout_ms = 300, .env = &.{"PATH=/usr/bin:/bin"} };
+    it.exec_host = .{ .allow = &.{ "echo", if (@import("builtin").os.tag == .macos) "/bin/cat" else "/usr/bin/cat", "sleep", "sh" }, .timeout_ms = 300, .env = &.{"PATH=/usr/bin:/bin"} };
     try std.testing.expectEqualStrings("a b", try it.str(try it.eval("exec echo a b")));
     try std.testing.expectEqualStrings("A", try it.str(try it.eval("exec echo A | cat")));
     try std.testing.expectEqualStrings("in", try it.str(try it.eval("exec cat << in")));
