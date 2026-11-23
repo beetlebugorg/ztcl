@@ -1130,7 +1130,7 @@ test "the event loop runs timers and idle scripts in order" {
     try std.testing.expectEqualStrings("{} {}", try it.str(try it.eval("interp create -safe s; list [s eval {info commands socket}] [s eval {info commands exec}]")));
 }
 
-test "socket accepts only loopback addresses" {
+test "socket accepts only loopback addresses by default" {
     if (@import("builtin").os.tag != .linux) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
@@ -1201,4 +1201,90 @@ test "exec has an allowlist and a time limit, and leaves no process" {
     try std.testing.expectEqual(linux.E.SRCH, linux.errno(linux.kill(pid, @enumFromInt(0))));
     try std.testing.expectEqual(linux.E.SRCH, linux.errno(linux.kill(pipe_pid, @enumFromInt(0))));
     try it.init(std.testing.allocator);
+}
+
+test "TclOO: classes, methods, next, mixins, and destructors" {
+    try check(&.{
+        .{ "oo::class create A {variable n; constructor {x} {set n $x}; method get {} {return $n}; method Hidden {} {return h}}; set o [A new 5]; list [$o get] [catch {$o Hidden}]", "5 1" },
+        .{ "oo::class create B {method m {} {return b}}; oo::class create C {superclass B; method m {} {return c[next]}}; [C new] m", "cb" },
+        .{ "oo::class create M {method m {} {return m[next]}}; oo::class create D {method m {} {return d}}; D create d; oo::objdefine d mixin M; d m", "md" },
+        .{ "oo::class create E {destructor {lappend ::log gone}}; E create e; e destroy; list $::log [info commands e]", "gone {}" },
+        .{ "oo::class create F {method who {} {self}}; F create f; list [f who] [info object class f] [info object isa object f]", "::f ::F 1" },
+        .{ "oo::object create o; oo::objdefine o forward len string length; o len abcd", "4" },
+        .{ "catch {self} m; set m", "invalid command name \"self\"" },
+    });
+}
+
+test "the network policy of socket: allowlist, ranges, ports, and peers" {
+    const sock = tcl.sock;
+    const sys = tcl.sys;
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const lo4 = sys.parseAddr("127.0.0.1").?;
+    const lo6 = sys.parseAddr("::1").?;
+    const out4 = sys.parseAddr("192.0.2.7").?;
+    const out6 = sys.parseAddr("2001:db8::7").?;
+    // The default allows only loopback addresses.
+    try std.testing.expect(sock.permits(.loopback, lo4, 80, null));
+    try std.testing.expect(sock.permits(.loopback, lo6, 80, null));
+    try std.testing.expect(sock.permits(.loopback, sys.parseAddr("127.9.9.9").?, 80, null));
+    try std.testing.expect(!sock.permits(.loopback, out4, 80, "localhost"));
+    try std.testing.expect(!sock.permits(.loopback, out6, 80, null));
+    try std.testing.expect(!sock.permits(.loopback, sys.parseAddr("0.0.0.0").?, 80, null));
+    try std.testing.expect(sock.permits(.any, out4, 1, null));
+    // A list: a range with ports, one address, an IPv6 range, a host.
+    const p = (try sock.parsePolicy(a, "allow=192.0.2.0/24:80-90,10.1.2.3,[2001:db8::]/32:443,example.test:8080")).?;
+    try std.testing.expect(sock.permits(p, out4, 80, null));
+    try std.testing.expect(sock.permits(p, out4, 90, null));
+    try std.testing.expect(!sock.permits(p, out4, 91, null));
+    try std.testing.expect(!sock.permits(p, sys.parseAddr("192.0.3.7").?, 80, null));
+    try std.testing.expect(sock.permits(p, sys.parseAddr("10.1.2.3").?, 5, null));
+    try std.testing.expect(!sock.permits(p, sys.parseAddr("10.1.2.4").?, 5, null));
+    try std.testing.expect(sock.permits(p, out6, 443, null));
+    try std.testing.expect(!sock.permits(p, out6, 80, null));
+    try std.testing.expect(!sock.permits(p, sys.parseAddr("2001:db9::7").?, 443, null));
+    // A host rule allows the addresses of that name only, and only
+    // for a connection that the script made with the name.
+    try std.testing.expect(sock.permits(p, sys.parseAddr("203.0.113.5").?, 8080, "Example.Test"));
+    try std.testing.expect(!sock.permits(p, sys.parseAddr("203.0.113.5").?, 8080, "other.test"));
+    try std.testing.expect(!sock.permits(p, sys.parseAddr("203.0.113.5").?, 8080, null));
+    try std.testing.expect(!sock.permits(p, lo4, 80, null));
+    try std.testing.expect((try sock.parsePolicy(a, "allow=1.2.3.4/40")) == null);
+    try std.testing.expect((try sock.parsePolicy(a, "everything")) == null);
+    try std.testing.expect(sys.parseAddr("1.2.3") == null);
+    try std.testing.expect(sys.parseAddr("1::2::3") == null);
+    try std.testing.expect(sys.parseAddr("256.1.1.1") == null);
+}
+
+test "socket refuses a blocked address and closes a blocked peer" {
+    if (@import("builtin").os.tag != .linux) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const cap = tcl.interp.Capability;
+    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.event) | @intFromEnum(cap.socket) | @intFromEnum(cap.interp));
+    fake_ticks = 0;
+    it.event_host = .{ .now = fakeNow, .sleep = fakeSleep };
+    // The list allows the address 127.0.0.2 and no other address. A
+    // name that gives another address is refused: `localhost` gives
+    // 127.0.0.1 and ::1.
+    it.net = (try tcl.sock.parsePolicy(it.alloc(), "allow=127.0.0.2")).?;
+    try std.testing.expectEqualStrings("1 1 1", try it.str(try it.eval("list [catch {socket localhost 9}] [catch {socket 127.0.0.1 9}] [catch {socket -server x -myaddr 127.0.0.1 0}]")));
+    try std.testing.expectEqualStrings("ZTCL NET DENIED", try it.str(try it.eval("catch {socket localhost 9}; set errorCode")));
+    // A child has the same policy.
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("interp create c; c eval {catch {socket 127.0.0.1 9}}")));
+    // The server listens on the allowed address. The peer of the
+    // connection is 127.0.0.1, so the server closes it and the accept
+    // command does not run.
+    const script =
+        \\set got none
+        \\set srv [socket -server {apply {{s a p} {set ::got $a; close $s}}} -myaddr 127.0.0.2 0]
+        \\set c [socket 127.0.0.2 [lindex [fconfigure $srv -sockname] 2]]
+        \\update
+        \\set end [read $c]
+        \\close $c; close $srv
+        \\list $got [string length $end]
+    ;
+    try std.testing.expectEqualStrings("none 0", try it.str(try it.eval(script)));
 }

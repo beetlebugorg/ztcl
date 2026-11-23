@@ -88,7 +88,17 @@ In the default interpreter, `open`, `socket`, `exec`, `file`, `clock`, `source`,
 
 `event` is the event loop: `after`, `vwait`, `update`, `fileevent`, `interp bgerror`, and the default handler `::tcl::Bgerror`. The time comes only from `Interp.event_host`, a callback of the embedder. One loop serves an interpreter and its children. `clock` also adds the command `time`.
 
-`socket` makes TCP channels on Linux. It needs the channel capability. It accepts only `127.0.0.1`, `::1`, and `localhost`, and it makes no name lookup. A server with no `-myaddr` listens on both loopback addresses. A connection from an address that is not loopback is closed.
+`socket` makes TCP channels on Linux. It needs the channel capability. The embedder sets a network policy in `Interp.net`, and the runner with `--net`:
+
+| Policy | What it allows |
+|---|---|
+| `loopback` | 127.0.0.0/8 and ::1. This is the default. |
+| `allow=LIST` | The rules of the list. A rule is a host name, an address, or an address range such as `10.0.0.0/8` or `[2001:db8::]/32`, with an optional `:port` or `:port-port`. |
+| `any` | Each address. |
+
+The command has the options of Tcl: `-server`, `-myaddr`, `-myport`, `-async`, and `fconfigure` with `-sockname`, `-peername`, and `-error`. The policy check runs on each address that a name gives, on the address of the connection after the connect, and on each peer that a server accepts. A server closes a peer that fails the check. With no `-myaddr`, a server with the `loopback` policy listens on both loopback addresses. A child interpreter has the policy of its parent.
+
+A host name resolves through one function. It reads an address literal, the name `localhost`, and the hosts file of the system. It sends no query to a name server yet, so another name is an error.
 
 `exec` adds `exec`, `pid`, and command pipelines (`open "|cmd"`) on Linux. **`exec` is not sandboxed.** A process is outside the root folder and outside the step, memory, and nesting limits, so a script with `exec` has the full power of the user that runs the embedder. `file` does not turn it on. Each program runs directly from its argument list, with no shell. The embedder sets `Interp.exec_host`: a list of allowed programs, a time limit after which the process group is killed, and the whole environment of each program. A background process ends when the interpreter ends. A program name with a `/` names a file below the root folder first.
 

@@ -20,6 +20,9 @@ ztcl follows Tcl 8.6.16 and makes no claim of Tcl 9 compatibility. The baseline 
 
 ## Other known gaps
 
+- Name lookup for `socket` through a name server. `sys.resolve` reads address literals, `localhost`, and the hosts file.
+- The `http` package, the table encodings (`koi8-r`, `shiftjis`, and others), `info frame`, and step traces.
+
 - The test files in [Compatibility](compatibility.md): TclOO, `info frame`, step traces, `coroutine`, `tailcall`, and the longest-match rules of regular expressions.
 - A decision on the commands that the sandbox omits.
 - A `compact` that keeps the compiled forms of procs.

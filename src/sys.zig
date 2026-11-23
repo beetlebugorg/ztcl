@@ -7,9 +7,10 @@
 //! with the same contracts and sets `supported`.
 //!
 //! The rules of a port:
-//! - `listenLoop` and `connectLoop` accept only a loopback address.
-//!   They get the address as bytes, so no name lookup goes to a
-//!   resolver.
+//! - `resolve` is the only name lookup. `listenAt` and `connectTo` get
+//!   an address as bytes. `sock.zig` checks each address against the
+//!   network policy of the embedder before the call, and it checks the
+//!   address of each connection again after the call.
 //! - Each descriptor closes on exec.
 //! - A call that the system interrupts runs again.
 //!
@@ -132,31 +133,32 @@ pub fn poll(a: std.mem.Allocator, wants: []Want, timeout_ms: i32) void {
     }
 }
 
-// ---- Loopback sockets ----
+// ---- Sockets ----
 
-/// A loopback address: 127.0.0.1 or ::1.
-pub const Loop = enum { v4, v6 };
+/// An IP address and a port. An IPv4 address uses the first 4 bytes.
+pub const Addr = struct {
+    v6: bool = false,
+    bytes: [16]u8 = @splat(0),
+    port: u16 = 0,
+};
 
-pub const Name = struct { v6: bool, bytes: [16]u8, port: u16 };
+/// The older name of `Addr`.
+pub const Name = Addr;
 
-const Addr = extern union { any: linux.sockaddr, in: linux.sockaddr.in, in6: linux.sockaddr.in6 };
+const Sock = extern union { any: linux.sockaddr, in: linux.sockaddr.in, in6: linux.sockaddr.in6 };
 
-fn loopAddr(kind: Loop, port: u16) struct { Addr, linux.socklen_t } {
-    var a: Addr = undefined;
-    switch (kind) {
-        .v4 => {
-            a.in = .{ .port = std.mem.nativeToBig(u16, port), .addr = std.mem.nativeToBig(u32, 0x7f000001) };
-            return .{ a, @sizeOf(linux.sockaddr.in) };
-        },
-        .v6 => {
-            a.in6 = .{ .port = std.mem.nativeToBig(u16, port), .flowinfo = 0, .addr = [_]u8{0} ** 15 ++ [_]u8{1}, .scope_id = 0 };
-            return .{ a, @sizeOf(linux.sockaddr.in6) };
-        },
+fn toSock(addr: Addr) struct { Sock, linux.socklen_t } {
+    var a: Sock = undefined;
+    if (addr.v6) {
+        a.in6 = .{ .port = std.mem.nativeToBig(u16, addr.port), .flowinfo = 0, .addr = addr.bytes, .scope_id = 0 };
+        return .{ a, @sizeOf(linux.sockaddr.in6) };
     }
+    a.in = .{ .port = std.mem.nativeToBig(u16, addr.port), .addr = @bitCast(addr.bytes[0..4].*) };
+    return .{ a, @sizeOf(linux.sockaddr.in) };
 }
 
-fn nameOf(a: *const Addr) Name {
-    var n: Name = .{ .v6 = false, .bytes = @splat(0), .port = 0 };
+fn nameOf(a: *const Sock) Addr {
+    var n: Addr = .{};
     if (a.any.family == linux.AF.INET6) {
         n.v6 = true;
         n.bytes = a.in6.addr;
@@ -170,16 +172,24 @@ fn nameOf(a: *const Addr) Name {
 
 pub const SockResult = union(enum) { fd: Fd, err: Fail };
 
-fn newSocket(kind: Loop) SockResult {
-    const family: u32 = if (kind == .v4) linux.AF.INET else linux.AF.INET6;
+fn newSocket(v6: bool) SockResult {
+    const family: u32 = if (v6) linux.AF.INET6 else linux.AF.INET;
     const rc = linux.socket(family, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0);
     if (linux.errno(rc) != .SUCCESS) return .{ .err = failOf(linux.errno(rc)) };
-    return .{ .fd = @intCast(rc) };
+    const fd: Fd = @intCast(rc);
+    if (v6) {
+        // An IPv6 socket has no IPv4 side, so each address family has
+        // its own socket and its own policy check.
+        const one: u32 = 1;
+        _ = linux.setsockopt(fd, linux.IPPROTO.IPV6, linux.IPV6.V6ONLY, std.mem.asBytes(&one), 4);
+    }
+    return .{ .fd = fd };
 }
 
-/// A listening socket on a loopback address. Port 0 selects a free port.
-pub fn listenLoop(kind: Loop, port: u16, reuse: bool) SockResult {
-    const fd = switch (newSocket(kind)) {
+/// A listening socket on an address. Port 0 selects a free port. The
+/// caller checks the address against the network policy first.
+pub fn listenAt(addr: Addr, reuse: bool) SockResult {
+    const fd = switch (newSocket(addr.v6)) {
         .fd => |x| x,
         .err => |e| return .{ .err = e },
     };
@@ -187,8 +197,8 @@ pub fn listenLoop(kind: Loop, port: u16, reuse: bool) SockResult {
         const one: u32 = 1;
         _ = linux.setsockopt(fd, linux.SOL.SOCKET, linux.SO.REUSEADDR, std.mem.asBytes(&one), 4);
     }
-    const addr, const len = loopAddr(kind, port);
-    var rc = linux.bind(fd, &addr.any, len);
+    const sa, const len = toSock(addr);
+    var rc = linux.bind(fd, &sa.any, len);
     if (linux.errno(rc) == .SUCCESS) rc = linux.listen(fd, 128);
     if (linux.errno(rc) != .SUCCESS) {
         close(fd);
@@ -197,28 +207,31 @@ pub fn listenLoop(kind: Loop, port: u16, reuse: bool) SockResult {
     return .{ .fd = fd };
 }
 
-/// A connection to a loopback address. `my_port` binds the local port
-/// when it is not 0. With `wait` false the connect continues in the
-/// background, and `connectError` gives its end.
-pub fn connectLoop(kind: Loop, port: u16, my_port: u16, wait: bool) SockResult {
-    const fd = switch (newSocket(kind)) {
+/// A connection to an address. `mine` binds the local address and
+/// port. With `wait` false the connect continues in the background,
+/// and `connectError` gives its end. The caller checks the address
+/// against the network policy first.
+pub fn connectTo(addr: Addr, mine: ?Addr, wait: bool) SockResult {
+    const fd = switch (newSocket(addr.v6)) {
         .fd => |x| x,
         .err => |e| return .{ .err = e },
     };
-    if (my_port != 0) {
+    if (mine) |m| {
         const one: u32 = 1;
         _ = linux.setsockopt(fd, linux.SOL.SOCKET, linux.SO.REUSEADDR, std.mem.asBytes(&one), 4);
-        const mine, const mlen = loopAddr(kind, my_port);
-        const rc = linux.bind(fd, &mine.any, mlen);
+        var local = m;
+        local.v6 = addr.v6;
+        const sa, const len = toSock(local);
+        const rc = linux.bind(fd, &sa.any, len);
         if (linux.errno(rc) != .SUCCESS) {
             close(fd);
             return .{ .err = failOf(linux.errno(rc)) };
         }
     }
     if (!wait) setBlocking(fd, false);
-    const addr, const len = loopAddr(kind, port);
+    const sa, const len = toSock(addr);
     while (true) {
-        const rc = linux.connect(fd, &addr.any, len);
+        const rc = linux.connect(fd, &sa.any, len);
         switch (linux.errno(rc)) {
             .SUCCESS, .INPROGRESS => return .{ .fd = fd },
             .INTR => continue,
@@ -226,6 +239,99 @@ pub fn connectLoop(kind: Loop, port: u16, my_port: u16, wait: bool) SockResult {
                 close(fd);
                 return .{ .err = failOf(e) };
             },
+        }
+    }
+}
+
+/// The address of an IPv4 or IPv6 literal, or null.
+pub fn parseAddr(text: []const u8) ?Addr {
+    var out: Addr = .{};
+    if (std.mem.indexOfScalar(u8, text, ':') == null) {
+        var parts = std.mem.splitScalar(u8, text, '.');
+        var i: usize = 0;
+        while (parts.next()) |p| : (i += 1) {
+            if (i >= 4 or p.len == 0 or p.len > 3) return null;
+            out.bytes[i] = std.fmt.parseInt(u8, p, 10) catch return null;
+        }
+        return if (i == 4) out else null;
+    }
+    out.v6 = true;
+    // The groups before and after `::`.
+    var groups: [8]u16 = @splat(0);
+    var count: usize = 0;
+    var gap: ?usize = null;
+    var rest = text;
+    if (std.mem.startsWith(u8, rest, "::")) {
+        gap = 0;
+        rest = rest[2..];
+    }
+    while (rest.len > 0) {
+        const end = std.mem.indexOfScalar(u8, rest, ':') orelse rest.len;
+        const g = rest[0..end];
+        if (g.len == 0 or g.len > 4 or count >= 8) return null;
+        groups[count] = std.fmt.parseInt(u16, g, 16) catch return null;
+        count += 1;
+        if (end == rest.len) break;
+        rest = rest[end + 1 ..];
+        if (rest.len == 0) return null;
+        if (rest[0] == ':') {
+            if (gap != null) return null;
+            gap = count;
+            rest = rest[1..];
+        }
+    }
+    if (gap == null and count != 8) return null;
+    if (gap != null and count >= 8) return null;
+    const shift = 8 - count;
+    for (0..count) |i| {
+        const at = if (gap != null and i >= gap.?) i + shift else i;
+        out.bytes[at * 2] = @intCast(groups[i] >> 8);
+        out.bytes[at * 2 + 1] = @intCast(groups[i] & 0xff);
+    }
+    return out;
+}
+
+/// The addresses of a host word, in the order to try. This is the one
+/// name lookup of the interpreter. It reads a literal address, the
+/// name `localhost`, and the hosts file of the system. It sends no
+/// query to a name server yet, so another name gives no address.
+pub fn resolve(a: std.mem.Allocator, host: []const u8, out: *std.ArrayList(Addr)) std.mem.Allocator.Error!void {
+    if (parseAddr(host)) |addr| {
+        try out.append(a, addr);
+        return;
+    }
+    if (host.len == 0 or host.len > 253) return;
+    if (std.ascii.eqlIgnoreCase(host, "localhost")) {
+        try out.append(a, .{ .bytes = .{ 127, 0, 0, 1 } ++ [_]u8{0} ** 12 });
+        try out.append(a, .{ .v6 = true, .bytes = [_]u8{0} ** 15 ++ [_]u8{1} });
+        return;
+    }
+    // The hosts file: an address, then names, on each line.
+    const rc = linux.open("/etc/hosts", .{ .CLOEXEC = true }, 0);
+    if (linux.errno(rc) != .SUCCESS) return;
+    const fd: Fd = @intCast(rc);
+    defer close(fd);
+    var text: std.ArrayList(u8) = .empty;
+    defer text.deinit(a);
+    var buf: [4096]u8 = undefined;
+    while (text.items.len < 1 << 20) {
+        switch (read(fd, &buf)) {
+            .n => |n| if (n > 0) {
+                try text.appendSlice(a, buf[0..n]);
+                continue;
+            },
+            else => {},
+        }
+        break;
+    }
+    var lines = std.mem.splitScalar(u8, text.items, '\n');
+    while (lines.next()) |line_in| {
+        const line = line_in[0 .. std.mem.indexOfScalar(u8, line_in, '#') orelse line_in.len];
+        var words = std.mem.tokenizeAny(u8, line, " \t\r");
+        const first = words.next() orelse continue;
+        const addr = parseAddr(first) orelse continue;
+        while (words.next()) |w| {
+            if (std.ascii.eqlIgnoreCase(w, host)) try out.append(a, addr);
         }
     }
 }
@@ -239,12 +345,12 @@ pub fn connectError(fd: Fd) ?Fail {
     return failOf(@enumFromInt(code));
 }
 
-pub const Accepted = struct { fd: Fd, peer: Name };
+pub const Accepted = struct { fd: Fd, peer: Addr };
 
 /// The next connection of a listening socket, or null when none waits.
 pub fn accept(fd: Fd) ?Accepted {
-    var a: Addr = undefined;
-    var len: linux.socklen_t = @sizeOf(Addr);
+    var a: Sock = undefined;
+    var len: linux.socklen_t = @sizeOf(Sock);
     while (true) {
         const rc = linux.accept4(fd, &a.any, &len, linux.SOCK.CLOEXEC);
         switch (linux.errno(rc)) {
@@ -255,16 +361,16 @@ pub fn accept(fd: Fd) ?Accepted {
     }
 }
 
-pub fn sockName(fd: Fd) ?Name {
-    var a: Addr = undefined;
-    var len: linux.socklen_t = @sizeOf(Addr);
+pub fn sockName(fd: Fd) ?Addr {
+    var a: Sock = undefined;
+    var len: linux.socklen_t = @sizeOf(Sock);
     if (linux.errno(linux.getsockname(fd, &a.any, &len)) != .SUCCESS) return null;
     return nameOf(&a);
 }
 
-pub fn peerName(fd: Fd) ?Name {
-    var a: Addr = undefined;
-    var len: linux.socklen_t = @sizeOf(Addr);
+pub fn peerName(fd: Fd) ?Addr {
+    var a: Sock = undefined;
+    var len: linux.socklen_t = @sizeOf(Sock);
     if (linux.errno(linux.getpeername(fd, &a.any, &len)) != .SUCCESS) return null;
     return nameOf(&a);
 }

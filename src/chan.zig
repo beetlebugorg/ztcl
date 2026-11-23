@@ -65,6 +65,8 @@ pub const Channel = struct {
     /// The second listening channel of a server on both loopback
     /// addresses. It has a name that no script can give.
     sibling: ?*Channel = null,
+    /// The host word of a client socket, for the network policy.
+    peer_host: []const u8 = "",
     read_closed: bool = false,
     write_closed: bool = false,
 };
@@ -371,10 +373,12 @@ fn closeChan(it: *Interp, c: *Channel) Error!void {
     closeFds(c);
     event.unwatch(it, c.name);
     _ = it.chans.table.orderedRemove(c.name);
-    if (c.sibling) |sib| {
+    var next_sib = c.sibling;
+    while (next_sib) |sib| {
         sys.close(sib.fd);
         event.unwatch(it, sib.name);
         _ = it.chans.table.orderedRemove(sib.name);
+        next_sib = sib.sibling;
     }
     if (c.draining) return;
     try r;
@@ -465,7 +469,7 @@ pub fn serve(cur: *Interp, it: *Interp, name: []const u8, can_read: bool, can_wr
     var ran = false;
     if (c.kind == .server) {
         while (sys.accept(c.fd)) |conn| {
-            if (c.accept.len == 0 or !@import("sock.zig").isLoop(conn.peer)) {
+            if (c.accept.len == 0 or !@import("sock.zig").acceptable(it, c, conn)) {
                 sys.close(conn.fd);
                 continue;
             }
@@ -483,7 +487,15 @@ pub fn serve(cur: *Interp, it: *Interp, name: []const u8, can_read: bool, can_wr
         }
         return ran;
     }
-    if (can_write and c.connecting) connected(c);
+    if (can_write and c.connecting) {
+        connected(c);
+        if (c.fail == null and !@import("sock.zig").checkPeer(it, c)) {
+            // The policy does not allow the address of the connection.
+            sys.shutdown(c.fd, 0);
+            sys.shutdown(c.fd, 1);
+            c.fail = .{ .name = "EACCES", .text = "permission denied" };
+        }
+    }
     if (can_write and c.wbuf.items.len > 0 and !c.blocking) {
         flushOut(it, c) catch {};
         if (c.draining and c.wbuf.items.len == 0) {
@@ -955,4 +967,5 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try it.register("fcopy", cmdFcopy);
     try it.register("chan", cmdChan);
     try it.register("source", cmdSource);
+    try it.register("encoding", @import("enc.zig").cmdEncoding);
 }

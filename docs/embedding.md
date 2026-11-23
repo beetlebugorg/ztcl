@@ -87,6 +87,28 @@ pub fn main(init: std.process.Init) !void {
 
 A program is read-only when it runs. Two threads can run one program if each thread has its own scratch memory.
 
+## Capabilities
+
+The default interpreter has no host access. `Interp.allow` turns on optional commands, and each one needs data from the embedder:
+
+```zig
+const cap = ztcl.interp.Capability;
+try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.event) | @intFromEnum(cap.socket));
+it.event_host = .{ .now = myTicks, .sleep = mySleep }; // the clock of the event loop
+it.net = (try ztcl.sock.parsePolicy(gpa, "allow=10.0.0.0/8:443,build.example:8080")).?;
+ztcl.sys.ignorePipeSignal(); // a write to a closed peer is an error, with no signal
+```
+
+| Capability | Data of the embedder |
+|---|---|
+| `clock` | `Interp.clock_host`: the time and the zone data. |
+| `channels`, `file` | `ztcl.fsroot.setRoot`: the one root folder. |
+| `event` | `Interp.event_host`: a clock that does not go back, and a sleep. |
+| `socket` | `Interp.net`: the network policy. The default is `loopback`. |
+| `exec` | `Interp.exec_host`: the program list, the time limit, and the environment. |
+
+`exec` is not sandboxed. A process that a script starts has the full power of the user. Give a program list and a time limit, and turn `exec` on only for scripts that you trust.
+
 ## WebAssembly
 
 `zig build wasm` makes `zig-out/lib/ztcl.wasm`. It exports a small C ABI:

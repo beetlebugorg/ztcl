@@ -24,7 +24,9 @@
 - Adds the optional capabilities `package` and `interp`, off by default.
 - Adds the optional capabilities `clock`, `channels`, and `file`. `clock` uses a host callback. `file` and channels stay inside one root folder.
 - Adds the optional event loop: `after`, `vwait`, `update`, `fileevent`, `interp bgerror`, and non-blocking channels. The time comes from a host callback.
-- Adds the optional capability `socket`, for loopback addresses only.
+- Adds the optional capability `socket` with a network policy from the embedder: `loopback` (the default), an allowlist of hosts, address ranges, and ports, or `any`.
+- Adds TclOO: `oo::class`, `oo::object`, `oo::define`, `oo::objdefine`, `oo::copy`, `my`, `self`, `next`, `nextto`, mixins, filters, forwards, and `info object` and `info class`.
+- Adds `encoding` to the channel capability, for the encodings with no table.
 - Adds the optional capability `exec`: `exec`, `pid`, and command pipelines, with a program list, a time limit, and a fixed environment from the embedder. `exec` is not sandboxed.
 - Adds `time` to the `clock` capability, and the runner option `--tclsh` for the child processes of the Tcl tests.
 - Adds a test-only suite runner with commands that call real ztcl code.

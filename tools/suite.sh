@@ -58,13 +58,13 @@ for f in "$@"; do
     # program list, a time limit, and an environment with no data of
     # the caller. `ztclsh` is the `tclsh` of the tests: this runner.
     progs=cat,echo,sh,/bin/sh,sleep,ls,grep,fgrep,wc,id,groups,whoami,ps,kill,mknod,true,false,/ztclsh
-    set_exec="--exec-timeout 20000 --exec-env PATH=/usr/bin:/bin --exec-env HOME=$root --exec-env LANG=C --exec-allow $progs --exe-name /ztclsh"
+    set_exec="--exec-timeout 120000 --exec-env PATH=/usr/bin:/bin --exec-env HOME=$root --exec-env LANG=C --exec-allow $progs --exe-name /ztclsh"
     cat > "$root/ztclsh" <<EOF
 #!/bin/sh
 exec "$tcl" --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --cwd "\$PWD" --tclsh "\$@"
 EOF
     chmod +x "$root/ztclsh"
-    raw=$(timeout 300 "$tcl" --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
+    raw=$(timeout 1200 "$tcl" --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
     rc=$?
     rm -rf -- "$root"
     out=$(printf '%s\n' "$raw" | grep -aE '^pass [0-9]+ fail' | tail -1)

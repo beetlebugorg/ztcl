@@ -29,7 +29,16 @@ tools/suite.sh set.test expr.test     # some files
 
 `tools/suite-count.tcl` counts the tests of a file with a real `tclsh`, in a safe interpreter. `tools/suite-scope.tsv` has the count and the scope of each file.
 
-`zig build suite-runner` builds `zig-out/bin/ztcl-suite`, the runner with the test commands of `tools/suite_cmds.zig`: `testregexp`, `testevalex`, and the `testexpr` commands. Each one calls real ztcl code. The library, the default runner, and the WebAssembly build do not have them. `tools/suite.sh` passes `--allow package,interp,clock,channels,file` and a fresh `--root` folder for each test file, with a copy of the support scripts of the Tcl tests. It deletes that folder after the file. To make the table, run the suite with both runners:
+`zig build suite-runner` builds `zig-out/bin/ztcl-suite`, the runner with the test commands of `tools/suite_cmds.zig`: `testregexp`, `testevalex`, and the `testexpr` commands. Each one calls real ztcl code. The library, the default runner, and the WebAssembly build do not have them.
+
+`tools/suite.sh` gives each test file a fresh root folder with a copy of the support scripts of the Tcl tests, and it deletes that folder after the file. It turns on each capability: `package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, and `exec`. The suite stays offline and inside the root folder:
+
+- `socket` has the `loopback` policy.
+- `exec` runs only the programs of a fixed list (`cat`, `echo`, `sh`, `sleep`, and others), with the root folder as the working folder, an environment of `PATH`, `HOME`, and `LANG` only, and a time limit of 120 seconds.
+- The `tclsh` of the tests is the script `ztclsh` in the root folder. It runs the same runner with `--tclsh`.
+- A test file has a time limit of 20 minutes. Some files wait on timers: `main.test` and `socket.test` use some minutes each.
+
+To make the table, run the suite with both runners:
 
 ```sh
 tools/suite.sh -a -o plain.tsv

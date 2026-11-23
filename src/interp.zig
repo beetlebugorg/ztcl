@@ -711,6 +711,11 @@ pub const Interp = struct {
     event_host: ?@import("event.zig").Host = null,
     /// The event loop that this interpreter shares with its parent.
     events: ?*@import("event.zig").State = null,
+    /// The network policy of `socket`. The embedder sets it.
+    net: @import("sock.zig").Policy = .loopback,
+    /// The value of `encoding system` and of `encoding dirs`.
+    sys_encoding: []const u8 = "utf-8",
+    enc_dirs: Value = Value.empty,
     /// The command prefix of `interp bgerror`, or null for the default.
     bg_handler: ?[]const u8 = null,
     /// The program list, the time limit, and the environment of `exec`.
@@ -744,6 +749,8 @@ pub const Interp = struct {
     last_during: ?Value = null,
     /// The value of `info script`. The runner does not set it.
     script_name: []const u8 = "",
+    /// The state of TclOO. The first use of an `oo::` command makes it.
+    oo: ?*anyopaque = null,
     /// The result of `info nameofexecutable`, from the embedder.
     exe_name: []const u8 = "",
     /// The value of `tcl_precision`.
@@ -804,6 +811,7 @@ pub const Interp = struct {
         it.clock_host = keep.clock_host;
         it.event_host = keep.event_host;
         it.exec_host = keep.exec_host;
+        it.net = keep.net;
         it.parent = keep.parent;
         it.is_safe = keep.is_safe;
         try it.start();
@@ -830,6 +838,7 @@ pub const Interp = struct {
     fn start(it: *Interp) Allocator.Error!void {
         it.frame = &it.global;
         try cmds.register(it);
+        try @import("oo.zig").register(it);
         try it.startVars();
     }
 
@@ -849,7 +858,10 @@ pub const Interp = struct {
     pub fn allow(it: *Interp, bits: u32) Allocator.Error!void {
         const new = bits & ~it.capabilities;
         it.capabilities |= bits;
-        if (new & @intFromEnum(Capability.package) != 0) try it.register("package", @import("pkg.zig").cmdPackage);
+        if (new & @intFromEnum(Capability.package) != 0) {
+            try it.register("package", @import("pkg.zig").cmdPackage);
+            _ = it.eval("package provide TclOO 1.1.0") catch {};
+        }
         if (new & @intFromEnum(Capability.interp) != 0) try it.register("interp", @import("child.zig").cmdInterp);
         if (new & @intFromEnum(Capability.clock) != 0) try @import("clock.zig").register(it);
         if (new & @intFromEnum(Capability.event) != 0) try @import("event.zig").register(it);
@@ -1446,6 +1458,14 @@ pub const Interp = struct {
                 return e;
             }
         }
+    }
+
+    /// Runs the body of a method. The arguments start at `argv[skip]`.
+    pub fn callMethod(it: *Interp, p: *Proc, argv: []const Value, skip: usize) Error!Value {
+        return it.runProc(p, argv, argv[skip..], null) catch |e| {
+            if (e == error.TclCustom and it.custom_code == coro.tail_code) return it.runTail();
+            return e;
+        };
     }
 
     /// Runs a lambda of `apply`. The frame has all the words of the call.

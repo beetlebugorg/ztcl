@@ -18,6 +18,10 @@
 //! root folder. With no file, the commands come from `stdin` with no
 //! prompt. The mode adds the command `exit`.
 //! `--cwd DIR` sets the current folder to a folder below the root.
+//! `--net loopback|any|allow=LIST` sets the network policy of `socket`.
+//! The default is `loopback`. A rule of the list is a host name, an
+//! address, or an address range such as `10.0.0.0/8`, with an optional
+//! `:port` or `:port-port`.
 //! `--mem N` sets the memory limit in bytes. The default is 2 GiB.
 //! `--repeat N` runs each file N times in one interpreter. With `--time`,
 //! it prints the best time: the warm time of the file.
@@ -200,6 +204,15 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
         if (std.mem.eql(u8, arg, "--cwd") and i + 1 < args.len) {
             i += 1;
             cwd = args[i];
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--net") and i + 1 < args.len) {
+            i += 1;
+            it.net = (try tcl.sock.parsePolicy(arena, args[i])) orelse {
+                try out.print("bad network policy \"{s}\"\n", .{args[i]});
+                out.flush() catch {};
+                std.process.exit(2);
+            };
             continue;
         }
         if (std.mem.eql(u8, arg, "--exe-name") and i + 1 < args.len) {

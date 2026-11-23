@@ -26,6 +26,7 @@ pub const fsroot = @import("fsroot.zig");
 pub const sys = @import("sys.zig");
 pub const chan = @import("chan.zig");
 pub const event = @import("event.zig");
+pub const sock = @import("sock.zig");
 
 pub const Value = value.Value;
 pub const Interp = interp.Interp;

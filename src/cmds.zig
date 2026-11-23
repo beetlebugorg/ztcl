@@ -458,7 +458,7 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
 
 // ---- Procedures, results, and errors ----
 
-fn makeProc(it: *Interp, params_v: Value, body: Value) Error!*interp.Proc {
+pub fn makeProc(it: *Interp, params_v: Value, body: Value) Error!*interp.Proc {
     const a = it.alloc();
     const plist = try it.list(params_v);
     var params: std.ArrayList(interp.Param) = .empty;
@@ -535,6 +535,7 @@ fn cmdRename(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (new.len == 0) {
         try trace.commandEvent(it, kv.value, old, "", 2);
         coro.commandGone(it, kv.value);
+        @import("oo.zig").commandGone(it, kv.value);
         // The imports of a deleted command go away.
         if (eql(kv.value.name, old)) {
             var gone: std.ArrayList([]const u8) = .empty;
@@ -1960,7 +1961,7 @@ fn namesList(it: *Interp, frame: *interp.Frame, pattern: ?[]const u8, links: boo
     return value.wrapList(it.alloc(), out.items);
 }
 
-const info_names = [_][]const u8{ "args", "body", "cmdcount", "commands", "complete", "coroutine", "default", "exists", "functions", "globals", "level", "library", "loaded", "locals", "nameofexecutable", "patchlevel", "procs", "script", "sharedlibextension", "tclversion", "vars" };
+const info_names = [_][]const u8{ "args", "body", "class", "cmdcount", "commands", "complete", "coroutine", "default", "exists", "functions", "globals", "level", "library", "loaded", "locals", "nameofexecutable", "object", "patchlevel", "procs", "script", "sharedlibextension", "tclversion", "vars" };
 
 fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("info subcommand ?arg ...?");
@@ -2087,6 +2088,10 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             return .{ .int = 0 };
         }
         return it.fail("procedure \"{s}\" doesn't have an argument \"{s}\"", .{ pattern.?, want });
+    } else if (eql(sub, "object")) {
+        return @import("oo.zig").infoObject(it, argv);
+    } else if (eql(sub, "class")) {
+        return @import("oo.zig").infoClass(it, argv);
     } else if (eql(sub, "args") or eql(sub, "body")) {
         if (argv.len != 3) return it.fail("wrong # args: should be \"info {s} procname\"", .{sub});
         const c = it.findCommand(pattern.?);
@@ -2115,6 +2120,14 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         return namesList(it, &it.global, pattern, true);
     } else if (eql(sub, "complete")) {
         if (argv.len != 3) return it.wrongArgs("info complete command");
+        // A backslash and a newline at the end continue the command.
+        const text = pattern.?;
+        if (text.len >= 2 and text[text.len - 1] == '\n') {
+            var k = text.len - 1;
+            var slashes: usize = 0;
+            while (k > 0 and text[k - 1] == '\\') : (k -= 1) slashes += 1;
+            if (slashes % 2 == 1) return .{ .int = 0 };
+        }
         var p: interp.Parser = .{ .a = a, .src = pattern.? };
         if (p.parseScript(false)) |_| return .{ .int = 1 } else |e| {
             if (e == error.OutOfMemory) return error.OutOfMemory;

@@ -118,6 +118,9 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
     child.clock_host = it.clock_host;
     child.event_host = it.event_host;
     child.exec_host = it.exec_host;
+    // A child has the network policy of its parent. No command of a
+    // script changes it.
+    child.net = it.net;
     if (!child.is_safe) {
         // A child shares the jail of its parent through its own descriptor.
         if (comptime @import("builtin").os.tag == .linux) {

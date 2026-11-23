@@ -502,6 +502,8 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             const space = try resolve(it, try it.str(v));
             if (space.len == 0 or !it.namespaces.contains(space)) return it.fail("unknown namespace \"{s}\" in namespace delete command", .{try it.str(v)});
             const prefix = try std.fmt.allocPrint(a, "{s}::", .{space});
+            // The objects of the namespace end first.
+            try @import("oo.zig").namespaceGone(it, space, prefix);
             // The namespace, its children, its commands, and its variables.
             var i: usize = 0;
             while (i < it.namespaces.count()) {
@@ -524,7 +526,7 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         var i: usize = 0;
         if (args.len == 2) {
             const o = try it.str(args[0]);
-            if (eql(o, "-variable")) kind_var = true else if (!eql(o, "-command")) return it.wrongArgs("namespace which ?-command? ?-variable? name");
+            if (o.len > 1 and std.mem.startsWith(u8, "-variable", o)) kind_var = true else if (!(o.len > 1 and std.mem.startsWith(u8, "-command", o))) return it.wrongArgs("namespace which ?-command? ?-variable? name");
             i = 1;
         } else if (args.len != 1) return it.wrongArgs("namespace which ?-command? ?-variable? name");
         const name = try it.str(args[i]);
