@@ -691,7 +691,10 @@ pub fn intOp(it: *Interp, op: BinOp, x: i64, y: i64) Error!Value {
             if (y == 0) return it.failCode("ARITH DIVZERO {divide by zero}", "divide by zero", .{});
             if (y == -1) return .{ .int = 0 };
             // The sign of the result is the sign of the divisor.
-            return .{ .int = x - @divFloor(x, y) * y };
+            // The product of a floored quotient can overflow, so this
+            // uses the remainder.
+            const rem = @rem(x, y);
+            return .{ .int = if (rem != 0 and (rem < 0) != (y < 0)) rem + y else rem };
         },
         .pow => {
             if (y < 0) {

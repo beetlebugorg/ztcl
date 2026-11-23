@@ -1417,6 +1417,15 @@ test "a compare keeps the text of each string that looks like a number" {
     }
 }
 
+test "the modulo of the smallest integer does not overflow" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const v = try it.eval("set m -9223372036854775808; list [expr {$m % 3}] [expr {$m % -3}] [expr {$m % 7}] [expr {$m % 9223372036854775807}] [expr {7 % -3}] [expr {-7 % 3}]");
+    // The values of tclsh 8.6.16.
+    try std.testing.expectEqualStrings("1 -2 6 9223372036854775806 -2 2", try it.str(v));
+}
+
 test "the collector keeps a value in a variable, a list, a dict, an array, and a namespace" {
     try gcSame(
         \\set x [string repeat a 50]
