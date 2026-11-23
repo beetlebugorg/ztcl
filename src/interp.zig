@@ -1290,9 +1290,17 @@ pub const Interp = struct {
     }
 
     fn callProc(it: *Interp, p: *Proc, argv: []const Value) Error!Value {
-        const args = argv[1..];
+        return it.runProc(p, argv, argv[1..], null);
+    }
+
+    /// Runs a lambda of `apply`. The frame has all the words of the call.
+    pub fn callLambda(it: *Interp, p: *Proc, argv: []const Value) Error!Value {
+        return it.runProc(p, argv, argv[2..], argv[1]);
+    }
+
+    inline fn runProc(it: *Interp, p: *Proc, argv: []const Value, args: []const Value, lambda: ?Value) Error!Value {
         const np = p.params.len;
-        if (args.len > np and !p.has_args) return it.procUsage(p, argv[0]);
+        if (args.len > np and !p.has_args) return it.usageOf(p, argv, lambda);
         _ = try it.pushFrame(argv);
         defer it.popFrame();
         const saved_ns = it.ns;
@@ -1305,7 +1313,7 @@ pub const Interp = struct {
             } else if (prm.default) |d| {
                 try it.newLocal(prm.name, d);
             } else {
-                const e = it.procUsage(p, argv[0]);
+                const e = it.usageOf(p, argv, lambda);
                 return e;
             }
         }
@@ -1344,11 +1352,30 @@ pub const Interp = struct {
             error.TclBreak => it.fail("invoked \"break\" outside of a loop", .{}),
             error.TclContinue => it.fail("invoked \"continue\" outside of a loop", .{}),
             error.TclError => {
-                if (it.in_error) it.error_info.print(it.alloc(), "\n    (procedure \"{s}\" line {d})", .{ try it.str(argv[0]), it.proc_line }) catch {};
+                if (it.in_error) {
+                    if (lambda) |l| {
+                        it.error_info.print(it.alloc(), "\n    (lambda term \"{s}\" line {d})", .{ try it.str(l), it.proc_line }) catch {};
+                    } else it.error_info.print(it.alloc(), "\n    (procedure \"{s}\" line {d})", .{ try it.str(argv[0]), it.proc_line }) catch {};
+                }
                 return e;
             },
             else => e,
         };
+    }
+
+    fn usageOf(it: *Interp, p: *Proc, argv: []const Value, lambda: ?Value) Error {
+        if (lambda == null) return it.procUsage(p, argv[0]);
+        const a = it.alloc();
+        var out: std.ArrayList(u8) = .empty;
+        try out.print(a, "wrong # args: should be \"{s} lambdaExpr", .{try it.str(argv[0])});
+        for (p.params) |prm| {
+            if (prm.default != null) try out.print(a, " ?{s}?", .{prm.name}) else try out.print(a, " {s}", .{prm.name});
+        }
+        if (p.has_args) try out.appendSlice(a, " ?arg ...?");
+        try out.append(a, '"');
+        it.result = .{ .str = out.items };
+        it.error_code = .{ .str = "TCL WRONGARGS" };
+        return error.TclError;
     }
 
     fn procUsage(it: *Interp, p: *Proc, name: Value) Error {

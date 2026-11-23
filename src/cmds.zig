@@ -500,10 +500,24 @@ fn cmdApply(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("apply lambdaExpr ?arg ...?");
     const lambda = try it.list(argv[1]);
     if (lambda.len < 2 or lambda.len > 3) return it.fail("can't interpret \"{s}\" as a lambda expression", .{try it.str(argv[1])});
-    const p = try makeProc(it, lambda[0], lambda[1]);
-    p.ns = if (lambda.len == 3) try it.internNs(std.mem.trimStart(u8, try it.str(lambda[2]), ":")) else "";
-    var c: interp.Command = .{ .name = "apply", .impl = .{ .proc = p } };
-    return it.call(&c, argv[1..], null);
+    const p = makeProc(it, lambda[0], lambda[1]) catch |e| {
+        if (e == error.TclError) {
+            it.in_error = true;
+            it.error_info = .empty;
+            try it.error_info.print(it.alloc(), "{s}\n    (parsing lambda expression \"{s}\")", .{ try it.str(it.result), try it.str(argv[1]) });
+        }
+        return e;
+    };
+    p.ns = "";
+    if (lambda.len == 3) {
+        const given = try it.str(lambda[2]);
+        const space = std.mem.trim(u8, given, ":");
+        if (space.len > 0 and !it.namespaces.contains(space)) {
+            return it.failCode(try std.fmt.allocPrint(it.alloc(), "TCL LOOKUP NAMESPACE {s}", .{given}), "namespace \"{s}\" not found", .{given});
+        }
+        p.ns = try it.internNs(space);
+    }
+    return it.callLambda(p, argv);
 }
 
 fn cmdRename(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
