@@ -1,0 +1,6 @@
+zig-out/
+.zig-cache/
+zig-cache/
+dist/
+# The Tcl source that tools/fetch-tcl.sh downloads.
+.tcl-src/

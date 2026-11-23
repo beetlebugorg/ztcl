@@ -1,0 +1,1457 @@
+//! The Tcl parser and interpreter.
+//!
+//! `Parser` reads a script by the 12 rules of the Tcl language (Tcl.n)
+//! and makes a `Script`: a list of commands, each a list of words, each
+//! a literal, a substitution, or a sequence of both. A script is parsed
+//! once. Each word of a command has a cache slot for the compiled script
+//! or the compiled expression of its literal text, so a loop body or a
+//! braced `expr` is not parsed again.
+//!
+//! `Interp` runs a script. All memory comes from one arena on the given
+//! allocator, and `deinit` frees it in one step. A fuel counter stops a
+//! script that runs too long. Commands that reach the outside world do
+//! not exist; `puts` writes to a callback.
+//!
+//! SPDX-License-Identifier: BSD-2-Clause
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const value = @import("value.zig");
+const expr = @import("expr.zig");
+const cmds = @import("cmds.zig");
+const vm = @import("vm.zig");
+pub const Value = value.Value;
+
+/// The return codes of Tcl other than "ok". The result of the
+/// interpreter holds the error message or the returned value.
+pub const Error = error{ OutOfMemory, TclError, TclReturn, TclBreak, TclContinue, TclCustom };
+
+// ---- The compiled form ----
+
+pub const VarRef = struct {
+    name: []const u8,
+    /// The index of an array element, or null for a scalar.
+    index: ?[]const Part = null,
+    /// The slot of the name in the frame at the last read. A guess: the
+    /// reader checks the name of the slot before it uses the slot.
+    hint: u32 = 0,
+};
+
+pub const Part = union(enum) {
+    lit: []const u8,
+    variable: VarRef,
+    script: *Script,
+};
+
+pub const Word = struct {
+    expand: bool = false,
+    /// The line of the script where the word starts.
+    line: u32 = 0,
+    kind: union(enum) {
+        lit: Value,
+        single: Part,
+        multi: []const Part,
+    },
+};
+
+/// The compiled forms of the literal text of one word.
+pub const Cache = struct {
+    script: ?*Script = null,
+    expr: ?*expr.Node = null,
+};
+
+pub const Cmd = struct {
+    words: []Word,
+    cache: []Cache,
+    line: u32,
+    has_expand: bool,
+    /// The source text of the command, for the error trace.
+    text: []const u8 = "",
+    resolved: ?*Command = null,
+    epoch: u32 = 0,
+    /// The namespace of the lookup: the address of its name.
+    ns: [*]const u8 = "",
+    /// The direct form of the command, valid for the same epoch.
+    fast: Fast = .none,
+    /// The slot of the variable of a direct `set` or `incr`.
+    hint: u32 = 0,
+    /// The step of a direct `incr`.
+    by: i64 = 1,
+};
+
+/// The commands that run with no word stack. `evalCmd` selects the
+/// form when it looks the name up, and reads the literal words directly.
+pub const Fast = enum { none, set, incr, expr, if_then, if_else };
+
+pub const Script = struct {
+    cmds: []Cmd,
+    /// The bytecode of a script that ran more than one time.
+    code: ?*vm.Code = null,
+    runs: u8 = 0,
+};
+
+// ---- The parser ----
+
+pub const Parser = struct {
+    a: Allocator,
+    src: []const u8,
+    pos: usize = 0,
+    line: u32 = 1,
+    /// What is wrong, after error.TclError.
+    message: []const u8 = "",
+    /// The nesting of command substitutions. A limit keeps the parser
+    /// off the end of the native stack.
+    depth: u32 = 0,
+
+    pub const max_depth = 200;
+
+    const PError = error{ OutOfMemory, TclError };
+
+    fn fail(p: *Parser, msg: []const u8) PError {
+        p.message = msg;
+        return error.TclError;
+    }
+
+    fn isWordSpace(c: u8) bool {
+        return c == ' ' or c == '\t' or c == '\r' or c == 11 or c == 12;
+    }
+
+    fn atBsNewline(p: *Parser) bool {
+        return p.pos + 1 < p.src.len and p.src[p.pos] == '\\' and p.src[p.pos + 1] == '\n';
+    }
+
+    fn skipSpace(p: *Parser) void {
+        while (p.pos < p.src.len) {
+            if (isWordSpace(p.src[p.pos])) {
+                p.pos += 1;
+            } else if (p.atBsNewline()) {
+                p.pos += 2;
+                p.line += 1;
+            } else break;
+        }
+    }
+
+    /// Parses commands to the end of the text, or to the `]` that closes
+    /// a command substitution when `bracket` is true.
+    pub fn parseScript(p: *Parser, bracket: bool) PError!*Script {
+        if (p.depth >= max_depth) return p.fail("too many nested command substitutions");
+        p.depth += 1;
+        defer p.depth -= 1;
+        var list: std.ArrayList(Cmd) = .empty;
+        while (true) {
+            // Rule 1: commands end at a newline or a semicolon.
+            while (p.pos < p.src.len) {
+                const c = p.src[p.pos];
+                if (c == '\n') {
+                    p.line += 1;
+                    p.pos += 1;
+                } else if (c == ';' or isWordSpace(c)) {
+                    p.pos += 1;
+                } else if (p.atBsNewline()) {
+                    p.pos += 2;
+                    p.line += 1;
+                } else break;
+            }
+            if (p.pos >= p.src.len) {
+                if (bracket) return p.fail("missing close-bracket");
+                break;
+            }
+            if (bracket and p.src[p.pos] == ']') {
+                p.pos += 1;
+                break;
+            }
+            // Rule 10: a comment starts where a command starts.
+            if (p.src[p.pos] == '#') {
+                while (p.pos < p.src.len and p.src[p.pos] != '\n') {
+                    if (p.src[p.pos] == '\\' and p.pos + 1 < p.src.len) {
+                        if (p.src[p.pos + 1] == '\n') p.line += 1;
+                        p.pos += 1;
+                    }
+                    p.pos += 1;
+                }
+                continue;
+            }
+            const line = p.line;
+            var words: std.ArrayList(Word) = .empty;
+            var has_expand = false;
+            const text_start = p.pos;
+            var text_end = p.pos;
+            while (true) {
+                p.skipSpace();
+                if (p.pos >= p.src.len) break;
+                const c = p.src[p.pos];
+                if (c == '\n' or c == ';') {
+                    p.pos += 1;
+                    if (c == '\n') p.line += 1;
+                    break;
+                }
+                if (bracket and c == ']') break;
+                const word_line = p.line;
+                var w = try p.parseWord(bracket);
+                w.line = word_line;
+                text_end = p.pos;
+                has_expand = has_expand or w.expand;
+                try words.append(p.a, w);
+            }
+            if (words.items.len == 0) continue;
+            const cache = try p.a.alloc(Cache, words.items.len);
+            @memset(cache, .{});
+            try list.append(p.a, .{ .words = words.items, .cache = cache, .line = line, .has_expand = has_expand, .text = p.src[text_start..text_end] });
+        }
+        const s = try p.a.create(Script);
+        s.* = .{ .cmds = list.items };
+        return s;
+    }
+
+    fn wordEnd(p: *Parser, bracket: bool) bool {
+        if (p.pos >= p.src.len) return true;
+        const c = p.src[p.pos];
+        return isWordSpace(c) or c == '\n' or c == ';' or (bracket and c == ']') or p.atBsNewline();
+    }
+
+    fn parseWord(p: *Parser, bracket: bool) PError!Word {
+        var expand = false;
+        // Rule 5: {*} in front of a word expands it as a list.
+        if (std.mem.startsWith(u8, p.src[p.pos..], "{*}") and p.pos + 3 < p.src.len) {
+            const c = p.src[p.pos + 3];
+            if (!isWordSpace(c) and c != '\n' and c != ';') {
+                expand = true;
+                p.pos += 3;
+            }
+        }
+        const c = p.src[p.pos];
+        if (c == '{') {
+            // Rule 6: braces quote with no substitution.
+            const text = try p.parseBraced();
+            if (!p.wordEnd(bracket)) return p.fail("extra characters after close-brace");
+            return .{ .expand = expand, .kind = .{ .lit = literal(text) } };
+        }
+        var parts: Parts = .{ .a = p.a };
+        if (c == '"') {
+            // Rule 4: double quotes group, with substitution.
+            p.pos += 1;
+            try p.parseParts(&parts, .quote);
+            if (p.pos >= p.src.len) return p.fail("missing \"");
+            p.pos += 1;
+            if (!p.wordEnd(bracket)) return p.fail("extra characters after close-quote");
+        } else {
+            try p.parseParts(&parts, if (bracket) .bare_bracket else .bare);
+        }
+        const list = try parts.finish();
+        if (list.len == 0) return .{ .expand = expand, .kind = .{ .lit = Value.empty } };
+        if (list.len == 1) {
+            if (list[0] == .lit) return .{ .expand = expand, .kind = .{ .lit = literal(list[0].lit) } };
+            return .{ .expand = expand, .kind = .{ .single = list[0] } };
+        }
+        return .{ .expand = expand, .kind = .{ .multi = list } };
+    }
+
+    /// A literal word. A canonical decimal integer becomes an int value;
+    /// its string form is the same text.
+    fn literal(text: []const u8) Value {
+        if (text.len == 0 or text.len > 18) return .{ .str = text };
+        var digits = text;
+        if (digits[0] == '-') digits = digits[1..];
+        if (digits.len == 0 or (digits[0] == '0' and text.len > 1)) return .{ .str = text };
+        for (digits) |d| if (d < '0' or d > '9') return .{ .str = text };
+        return .{ .int = std.fmt.parseInt(i64, text, 10) catch return .{ .str = text } };
+    }
+
+    /// Reads a braced word. `pos` is at the open brace.
+    pub fn parseBraced(p: *Parser) PError![]const u8 {
+        const start = p.pos + 1;
+        var depth: usize = 1;
+        var has_cont = false;
+        p.pos += 1;
+        while (p.pos < p.src.len) : (p.pos += 1) {
+            const c = p.src[p.pos];
+            if (c == '\\') {
+                if (p.pos + 1 < p.src.len and p.src[p.pos + 1] == '\n') {
+                    has_cont = true;
+                    p.line += 1;
+                }
+                p.pos += 1;
+            } else if (c == '\n') {
+                p.line += 1;
+            } else if (c == '{') {
+                depth += 1;
+            } else if (c == '}') {
+                depth -= 1;
+                if (depth == 0) break;
+            }
+        }
+        if (p.pos >= p.src.len) {
+            p.pos = p.src.len;
+            return p.fail("missing close-brace");
+        }
+        const text = p.src[start..p.pos];
+        p.pos += 1;
+        if (!has_cont) return text;
+        // A backslash-newline in braces becomes one space.
+        var out: std.ArrayList(u8) = .empty;
+        var i: usize = 0;
+        while (i < text.len) {
+            if (text[i] == '\\' and i + 1 < text.len and text[i + 1] == '\n') {
+                i += 2;
+                while (i < text.len and (text[i] == ' ' or text[i] == '\t')) i += 1;
+                try out.append(p.a, ' ');
+            } else if (text[i] == '\\' and i + 1 < text.len) {
+                try out.appendSlice(p.a, text[i .. i + 2]);
+                i += 2;
+            } else {
+                try out.append(p.a, text[i]);
+                i += 1;
+            }
+        }
+        return out.items;
+    }
+
+    pub const Mode = enum { bare, bare_bracket, quote, index, all };
+
+    /// Reads text with substitutions (rules 7, 8, and 9) until the end
+    /// for the mode. `all` reads to the end of the text (`subst`).
+    pub fn parseParts(p: *Parser, parts: *Parts, mode: Mode) PError!void {
+        while (p.pos < p.src.len) {
+            const c = p.src[p.pos];
+            switch (mode) {
+                .bare => if (isWordSpace(c) or c == '\n' or c == ';') return,
+                .bare_bracket => if (isWordSpace(c) or c == '\n' or c == ';' or c == ']') return,
+                .quote => if (c == '"') return,
+                .index => if (c == ')') return,
+                .all => {},
+            }
+            if (c == '\\') {
+                if (mode != .quote and mode != .all and mode != .index and p.atBsNewline()) return;
+                if (p.pos + 1 < p.src.len and p.src[p.pos + 1] == '\n') p.line += 1;
+                p.pos = try value.backslash(p.a, p.src, p.pos, &parts.buf);
+            } else if (c == '$') {
+                if (try p.parseVar()) |v| {
+                    try parts.add(.{ .variable = v });
+                } else {
+                    try parts.buf.append(p.a, '$');
+                    p.pos += 1;
+                }
+            } else if (c == '[') {
+                p.pos += 1;
+                const s = try p.parseScript(true);
+                try parts.add(.{ .script = s });
+            } else {
+                if (c == '\n') p.line += 1;
+                try parts.buf.append(p.a, c);
+                p.pos += 1;
+            }
+        }
+    }
+
+    /// Reads a variable substitution. `pos` is at the `$`. Returns null
+    /// when no name follows, so the `$` is a plain character.
+    pub fn parseVar(p: *Parser) PError!?VarRef {
+        var i = p.pos + 1;
+        if (i < p.src.len and p.src[i] == '{') {
+            const end = std.mem.indexOfScalarPos(u8, p.src, i, '}') orelse
+                return p.fail("missing close-brace for variable name");
+            const name = p.src[i + 1 .. end];
+            p.pos = end + 1;
+            // ${a(i)} names an element with a literal index.
+            if (name.len > 0 and name[name.len - 1] == ')') {
+                if (std.mem.indexOfScalar(u8, name, '(')) |open| {
+                    const idx = try p.a.alloc(Part, 1);
+                    idx[0] = .{ .lit = name[open + 1 .. name.len - 1] };
+                    return .{ .name = name[0..open], .index = idx };
+                }
+            }
+            return .{ .name = name };
+        }
+        const start = i;
+        while (i < p.src.len) {
+            const c = p.src[i];
+            if (std.ascii.isAlphanumeric(c) or c == '_') {
+                i += 1;
+            } else if (c == ':' and i + 1 < p.src.len and p.src[i + 1] == ':') {
+                while (i < p.src.len and p.src[i] == ':') i += 1;
+            } else break;
+        }
+        if (i < p.src.len and p.src[i] == '(') {
+            p.pos = i + 1;
+            var parts: Parts = .{ .a = p.a };
+            try p.parseParts(&parts, .index);
+            if (p.pos >= p.src.len) return p.fail("missing )");
+            p.pos += 1;
+            return .{ .name = p.src[start..i], .index = try parts.finish() };
+        }
+        if (i == start) return null;
+        p.pos = i;
+        return .{ .name = p.src[start..i] };
+    }
+};
+
+/// Collects the parts of a word. Literal bytes join into one part.
+pub const Parts = struct {
+    a: Allocator,
+    buf: std.ArrayList(u8) = .empty,
+    list: std.ArrayList(Part) = .empty,
+
+    fn flush(s: *Parts) !void {
+        if (s.buf.items.len > 0) {
+            try s.list.append(s.a, .{ .lit = s.buf.items });
+            s.buf = .empty;
+        }
+    }
+
+    pub fn add(s: *Parts, part: Part) !void {
+        try s.flush();
+        try s.list.append(s.a, part);
+    }
+
+    pub fn finish(s: *Parts) ![]const Part {
+        try s.flush();
+        return s.list.items;
+    }
+};
+
+// ---- Variables and frames ----
+
+pub const ArrayMap = std.StringArrayHashMapUnmanaged(Value);
+
+pub const Var = struct {
+    v: union(enum) {
+        undef,
+        val: Value,
+        arr: *ArrayMap,
+        link: *Var,
+        /// A dict that only this cell can see. The bytecode updates it
+        /// in place. Each general read makes it a plain value first.
+        owned: Value,
+    } = .undef,
+    next_free: ?*Var = null,
+
+    /// The cell at the end of the links, with a plain value.
+    pub inline fn settle(cell: *Var) *Var {
+        if (cell.v == .val) return cell;
+        return settleSlow(cell);
+    }
+
+    fn settleSlow(cell: *Var) *Var {
+        var c = cell;
+        while (c.v == .link) c = c.v.link;
+        if (c.v == .owned) {
+            // A copy first: the new union overlaps the old one.
+            const v = c.v.owned;
+            c.v = .{ .val = v };
+        }
+        return c;
+    }
+
+    /// The cell at the end of the links. An owned dict stays owned.
+    pub inline fn target(cell: *Var) *Var {
+        var c = cell;
+        while (c.v == .link) c = c.v.link;
+        return c;
+    }
+};
+
+const VarEntry = struct { name: []const u8, cell: *Var };
+
+pub const Frame = struct {
+    vars: std.ArrayList(VarEntry) = .empty,
+    /// The words of the call, for `info level`.
+    argv: []const Value = &.{},
+    parent: ?*Frame = null,
+    level: u32 = 0,
+    /// The namespace of a `namespace eval` frame, or null. A name that
+    /// is not in such a frame is a variable of the namespace.
+    ns: ?[]const u8 = null,
+    /// The namespace where the code of the frame runs.
+    space: []const u8 = "",
+};
+
+// ---- Commands ----
+
+pub const NativeFn = *const fn (it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value;
+
+pub const Param = struct { name: []const u8, default: ?Value = null };
+
+pub const Proc = struct {
+    params: []const Param,
+    has_args: bool,
+    body: Value,
+    /// The namespace where the proc runs.
+    ns: []const u8 = "",
+    script: ?*Script = null,
+    /// The bytecode of the body. The first call makes it.
+    code: ?*vm.Code = null,
+    params_text: Value,
+};
+
+pub const Command = struct {
+    name: []const u8,
+    impl: union(enum) { native: NativeFn, proc: *Proc },
+    /// Data of the embedder for a native command.
+    ctx: ?*anyopaque = null,
+};
+
+/// Where `puts` writes.
+pub const Output = struct {
+    ctx: ?*anyopaque = null,
+    write: *const fn (ctx: ?*anyopaque, bytes: []const u8) void,
+};
+
+/// Counts the bytes that the arena holds from the allocator of the
+/// embedder. The memory limit of the interpreter reads the count.
+pub const Counting = struct {
+    child: Allocator,
+    used: usize = 0,
+
+    const Alignment = std.mem.Alignment;
+
+    pub fn allocator(c: *Counting) Allocator {
+        return .{ .ptr = c, .vtable = &.{ .alloc = alloc, .resize = resize, .remap = remap, .free = free } };
+    }
+
+    fn alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ra: usize) ?[*]u8 {
+        const c: *Counting = @ptrCast(@alignCast(ctx));
+        const p = c.child.rawAlloc(len, alignment, ra) orelse return null;
+        c.used += len;
+        return p;
+    }
+
+    fn resize(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ra: usize) bool {
+        const c: *Counting = @ptrCast(@alignCast(ctx));
+        if (!c.child.rawResize(memory, alignment, new_len, ra)) return false;
+        c.used = c.used - memory.len + new_len;
+        return true;
+    }
+
+    fn remap(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ra: usize) ?[*]u8 {
+        const c: *Counting = @ptrCast(@alignCast(ctx));
+        const p = c.child.rawRemap(memory, alignment, new_len, ra) orelse return null;
+        c.used = c.used - memory.len + new_len;
+        return p;
+    }
+
+    fn free(ctx: *anyopaque, memory: []u8, alignment: Alignment, ra: usize) void {
+        const c: *Counting = @ptrCast(@alignCast(ctx));
+        c.child.rawFree(memory, alignment, ra);
+        c.used -= memory.len;
+    }
+};
+
+pub const ReturnCode = enum(u32) { ok = 0, @"error" = 1, @"return" = 2, @"break" = 3, @"continue" = 4, _ };
+
+pub const Interp = struct {
+    counter: Counting,
+    arena: std.heap.ArenaAllocator,
+    /// The most bytes that the arena can hold. Above the limit, the
+    /// next command or loop pass stops the script with an error, and
+    /// `catch` cannot catch this error. Call `reset` to free the memory.
+    mem_limit: usize = std.math.maxInt(usize),
+    commands: std.StringHashMapUnmanaged(*Command) = .empty,
+    /// Changes when a command is added, renamed, or deleted. A command
+    /// site keeps its looked-up command only for the same epoch.
+    epoch: u32 = 1,
+    /// The last epoch where the inlined core commands were original.
+    safe_epoch: u32 = 0,
+    /// The last epoch where a check found a changed core command.
+    unsafe_epoch: u32 = 0,
+    global: Frame = .{},
+    frame: *Frame = undefined,
+    free_vars: ?*Var = null,
+    free_frames: std.ArrayList(*Frame) = .empty,
+    /// The result of the last command, or the error message.
+    result: Value = Value.empty,
+    /// The code and the level of a pending `return`.
+    ret_code: ReturnCode = .ok,
+    ret_level: u32 = 1,
+    /// The code of error.TclCustom: a return code above 4.
+    custom_code: u32 = 5,
+    /// The line of the command that failed last.
+    error_line: u32 = 0,
+    /// The trace of the current error: the value of `errorInfo`.
+    error_info: std.ArrayList(u8) = .empty,
+    in_error: bool = false,
+    /// The code of the current error: the value of `errorCode`.
+    error_code: Value = .{ .str = "NONE" },
+    /// True after `error msg info`: the trace starts with the given
+    /// text, and the `error` command adds no line of its own.
+    skip_info: bool = false,
+    /// The line of the last failed command in its own script.
+    proc_line: u32 = 0,
+    /// Steps left. Each command and each loop pass uses one step.
+    fuel: u64 = std.math.maxInt(u64),
+    depth: u32 = 0,
+    max_depth: u32 = 600,
+    /// The nesting of scripts in scripts, and its limit.
+    nest: u32 = 0,
+    max_nest: u32 = 2000,
+    /// The native stack that nested scripts can use, in bytes. A frame
+    /// of the bytecode loop is large in a debug build, so the count of
+    /// `max_nest` alone does not keep the stack safe.
+    max_native: usize = 5 << 20,
+    /// The address of the stack at the outermost script.
+    native_base: usize = 0,
+    output: ?Output = null,
+    /// The scripts and expressions of strings that are not literal words.
+    script_cache: std.AutoHashMapUnmanaged(SliceKey, *Script) = .empty,
+    expr_cache: std.AutoHashMapUnmanaged(SliceKey, *expr.Node) = .empty,
+    /// The stack of command words.
+    chunks: std.ArrayList([]Value) = .empty,
+    chunk: usize = 0,
+    top: usize = 0,
+    rand_state: u64 = 0x9e3779b97f4a7c15,
+    /// The seed of `noise2` and `noise3`. The embedder sets it.
+    noise_seed: u32 = @import("noise.zig").default_seed,
+    /// Data of the embedder (for example the point of a point proc).
+    user: ?*anyopaque = null,
+    /// The current namespace: its full name with no leading "::". The
+    /// global namespace is "". Each name has one address (`internNs`).
+    ns: []const u8 = "",
+    namespaces: std.StringArrayHashMapUnmanaged(void) = .empty,
+    /// The export patterns of each namespace.
+    exports: std.StringHashMapUnmanaged(std.ArrayList([]const u8)) = .empty,
+
+    /// The last compiled regular expressions.
+    regex_cache: [@import("regex.zig").cache_size]@import("regex.zig").CacheEntry = @splat(.{}),
+    /// The strings that `append` can extend in place.
+    tails: [4]StrTail = @splat(.{}),
+    next_tail: u8 = 0,
+
+    const StrTail = struct { end: usize = 0, limit: usize = 0 };
+    const SliceKey = struct { ptr: usize, len: usize };
+    const chunk_size = 16 * 1024;
+
+    /// Makes an interpreter with the core commands. Call `deinit` to
+    /// free all its memory. The interpreter must not move after `init`.
+    pub fn init(it: *Interp, gpa: Allocator) Allocator.Error!void {
+        it.* = .{ .counter = .{ .child = gpa }, .arena = undefined };
+        it.arena = std.heap.ArenaAllocator.init(it.counter.allocator());
+        try it.start();
+    }
+
+    /// Makes the interpreter new again: all commands, variables, and
+    /// values of scripts go away, and the arena frees its memory. The
+    /// limits, the output, and the data of the embedder stay.
+    pub fn reset(it: *Interp) Allocator.Error!void {
+        _ = it.arena.reset(.free_all);
+        const counter = it.counter;
+        const arena = it.arena;
+        const keep = it.*;
+        it.* = .{ .counter = counter, .arena = arena };
+        it.mem_limit = keep.mem_limit;
+        it.fuel = keep.fuel;
+        it.max_depth = keep.max_depth;
+        it.max_nest = keep.max_nest;
+        it.max_native = keep.max_native;
+        it.output = keep.output;
+        it.user = keep.user;
+        it.noise_seed = keep.noise_seed;
+        try it.start();
+    }
+
+    /// The bytes that the arena holds now.
+    pub fn memUsed(it: *const Interp) usize {
+        return it.counter.used;
+    }
+
+    pub fn overLimit(it: *const Interp) bool {
+        return it.counter.used > it.mem_limit;
+    }
+
+    fn start(it: *Interp) Allocator.Error!void {
+        it.frame = &it.global;
+        try cmds.register(it);
+        // Fixed values on all platforms: a script gives the same result
+        // everywhere.
+        _ = it.eval("array set tcl_platform {platform unix byteOrder littleEndian wordSize 8 pointerSize 8 engine ztcl}; set tcl_version 8.6; set tcl_patchLevel 8.6.0; set errorInfo {}; set errorCode NONE") catch |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => unreachable,
+        };
+    }
+
+    pub fn deinit(it: *Interp) void {
+        it.arena.deinit();
+    }
+
+    pub fn alloc(it: *Interp) Allocator {
+        return it.arena.allocator();
+    }
+
+    pub fn register(it: *Interp, name: []const u8, f: NativeFn) Allocator.Error!void {
+        const c = try it.alloc().create(Command);
+        c.* = .{ .name = name, .impl = .{ .native = f } };
+        try it.commands.put(it.alloc(), name, c);
+        it.epoch += 1;
+    }
+
+    // ---- Errors ----
+
+    pub fn fail(it: *Interp, comptime fmt: []const u8, args: anytype) Error {
+        it.result = .{ .str = try std.fmt.allocPrint(it.alloc(), fmt, args) };
+        it.error_code = .{ .str = "NONE" };
+        return error.TclError;
+    }
+
+    pub fn wrongArgs(it: *Interp, comptime usage: []const u8) Error {
+        return it.fail("wrong # args: should be \"" ++ usage ++ "\"", .{});
+    }
+
+    pub fn str(it: *Interp, v: Value) Allocator.Error![]const u8 {
+        return v.toStr(it.alloc());
+    }
+
+    pub fn list(it: *Interp, v: Value) Error![]const Value {
+        return v.asList(it.alloc()) catch |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.BadList => return it.fail("unmatched open brace or quote in list", .{}),
+        };
+    }
+
+    pub fn int(it: *Interp, v: Value) Error!i64 {
+        return v.asInt() orelse it.fail("expected integer but got \"{s}\"", .{try it.str(v)});
+    }
+
+    // ---- Evaluation ----
+
+    /// Runs a script text. Returns the result of the last command.
+    /// After error.TclError, `result` is the message.
+    pub fn eval(it: *Interp, text: []const u8) Error!Value {
+        const s = try it.compile(try it.alloc().dupe(u8, text));
+        return it.evalTop(s);
+    }
+
+    /// Runs a script at the top level: a `return` ends it with a value.
+    pub fn evalTop(it: *Interp, s: *Script) Error!Value {
+        return it.evalTopInner(s) catch |e| {
+            if (e == error.TclError) try it.finishError();
+            return e;
+        };
+    }
+
+    fn evalTopInner(it: *Interp, s: *Script) Error!Value {
+        return it.evalScript(s) catch |e| switch (e) {
+            error.TclReturn => {
+                if (it.ret_code == .ok) return it.result;
+                if (it.ret_code == .@"error") return error.TclError;
+                if (it.ret_code == .@"break" or it.ret_code == .@"continue")
+                    return it.fail("invoked \"{s}\" outside of a loop", .{@tagName(it.ret_code)});
+                return it.fail("command returned bad code: {d}", .{@intFromEnum(it.ret_code)});
+            },
+            error.TclCustom => it.fail("command returned bad code: {d}", .{it.custom_code}),
+            error.TclBreak => it.fail("invoked \"break\" outside of a loop", .{}),
+            error.TclContinue => it.fail("invoked \"continue\" outside of a loop", .{}),
+            else => e,
+        };
+    }
+
+    pub fn compile(it: *Interp, text: []const u8) Error!*Script {
+        var p: Parser = .{ .a = it.alloc(), .src = text };
+        return p.parseScript(false) catch |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.TclError => {
+                it.error_line = p.line;
+                return it.fail("{s}", .{p.message});
+            },
+        };
+    }
+
+    /// The compiled script of argument `i` of a command. A literal word
+    /// keeps its script in the cache slot of the command.
+    pub fn scriptOf(it: *Interp, argv: []const Value, i: usize, cmd: ?*Cmd) Error!*Script {
+        return it.scriptOfValue(argv[i], if (cmd) |c| slotOf(c, i) else null);
+    }
+
+    fn slotOf(c: *Cmd, i: usize) ?*Cache {
+        if (c.has_expand or i >= c.words.len or c.words[i].kind != .lit) return null;
+        return &c.cache[i];
+    }
+
+    pub fn scriptOfValue(it: *Interp, v: Value, slot: ?*Cache) Error!*Script {
+        if (slot) |s| if (s.script) |sc| return sc;
+        const text = try it.str(v);
+        const key: SliceKey = .{ .ptr = @intFromPtr(text.ptr), .len = text.len };
+        if (slot == null and v == .str) {
+            if (it.script_cache.get(key)) |sc| return sc;
+        }
+        const sc = try it.compile(text);
+        if (slot) |s| {
+            s.script = sc;
+        } else if (v == .str) {
+            // Strings live in the arena and do not change, so the address
+            // and the length name the text.
+            try it.script_cache.put(it.alloc(), key, sc);
+        }
+        return sc;
+    }
+
+    /// The compiled expression of argument `i` of a command.
+    pub fn exprOf(it: *Interp, argv: []const Value, i: usize, cmd: ?*Cmd) Error!*expr.Node {
+        const slot = if (cmd) |c| slotOf(c, i) else null;
+        if (slot) |s| if (s.expr) |n| return n;
+        const v = argv[i];
+        const text = try it.str(v);
+        const key: SliceKey = .{ .ptr = @intFromPtr(text.ptr), .len = text.len };
+        if (slot == null and v == .str) {
+            if (it.expr_cache.get(key)) |n| return n;
+        }
+        const n = try expr.compile(it, text);
+        if (slot) |s| {
+            s.expr = n;
+        } else if (v == .str) {
+            try it.expr_cache.put(it.alloc(), key, n);
+        }
+        return n;
+    }
+
+    /// Fails when the nested scripts use too much native stack. The
+    /// stack grows down. The outermost script sets the base.
+    pub inline fn checkNative(it: *Interp) Error!void {
+        const here = @frameAddress();
+        if (it.nest == 0) it.native_base = here;
+        if (it.native_base -| here > it.max_native) {
+            return it.fail("too many nested evaluations (infinite loop?)", .{});
+        }
+    }
+
+    pub fn evalScript(it: *Interp, s: *Script) Error!Value {
+        try it.checkNative();
+        if (s.code) |bc| return vm.run(it, bc);
+        // A script that runs one time stays on the general path.
+        if (s.runs > 0) {
+            s.code = try vm.compileNamed(it, s);
+            return vm.run(it, s.code.?);
+        }
+        s.runs = 1;
+        // Each script in a script is one level: `eval`, a loop body, a
+        // command substitution. The limit keeps the native stack safe.
+        if (it.nest >= it.max_nest) return it.fail("too many nested evaluations (infinite loop?)", .{});
+        it.nest += 1;
+        defer it.nest -= 1;
+        var res: Value = Value.empty;
+        for (s.cmds) |*c| res = try it.evalCmd(c);
+        return res;
+    }
+
+    pub const StackMark = struct { chunk: usize, top: usize };
+
+    pub fn stackMark(it: *Interp) StackMark {
+        return .{ .chunk = it.chunk, .top = it.top };
+    }
+
+    pub fn stackRelease(it: *Interp, m: StackMark) void {
+        it.chunk = m.chunk;
+        it.top = m.top;
+    }
+
+    pub fn stackAllocPub(it: *Interp, n: usize) Allocator.Error![]Value {
+        return it.stackAlloc(n);
+    }
+
+    fn stackAlloc(it: *Interp, n: usize) Allocator.Error![]Value {
+        if (it.chunks.items.len == 0 or it.top + n > it.chunks.items[it.chunk].len) {
+            if (it.chunks.items.len != 0) it.chunk += 1;
+            if (it.chunk >= it.chunks.items.len) {
+                try it.chunks.append(it.alloc(), try it.alloc().alloc(Value, @max(chunk_size, n)));
+            } else if (it.chunks.items[it.chunk].len < n) {
+                it.chunks.items[it.chunk] = try it.alloc().alloc(Value, n);
+            }
+            it.top = 0;
+        }
+        const out = it.chunks.items[it.chunk][it.top .. it.top + n];
+        it.top += n;
+        return out;
+    }
+
+    pub fn evalCmd(it: *Interp, c: *Cmd) Error!Value {
+        if (it.fuel == 0) return it.fail("the script ran out of fuel", .{});
+        it.fuel -= 1;
+        if (it.counter.used > it.mem_limit) return it.fail("the script used too much memory", .{});
+        if (c.fast != .none and c.epoch == it.epoch and c.ns == it.ns.ptr) {
+            if (it.evalFast(c) catch |e| return it.noteLine(c, e)) |v| return v;
+        }
+        const mark_chunk = it.chunk;
+        const mark_top = it.top;
+        defer {
+            it.chunk = mark_chunk;
+            it.top = mark_top;
+        }
+        var argv: []Value = undefined;
+        if (!c.has_expand) {
+            argv = try it.stackAlloc(c.words.len);
+            for (c.words, 0..) |*w, i| {
+                argv[i] = it.evalWord(w) catch |e| return it.noteLine(c, e);
+            }
+        } else {
+            var tmp: std.ArrayList(Value) = .empty;
+            for (c.words) |*w| {
+                const v = it.evalWord(w) catch |e| return it.noteLine(c, e);
+                if (w.expand) {
+                    try tmp.appendSlice(it.alloc(), try it.list(v));
+                } else try tmp.append(it.alloc(), v);
+            }
+            if (tmp.items.len == 0) return Value.empty;
+            argv = tmp.items;
+        }
+        const command = it.resolve(c, argv) catch |e| return it.noteLine(c, e);
+        return it.call(command, argv, c) catch |e| it.noteLine(c, e);
+    }
+
+    /// The command of a site. A literal name stays in the site for the
+    /// same epoch and namespace.
+    pub fn resolve(it: *Interp, c: *Cmd, argv: []const Value) Error!*Command {
+        if (c.resolved != null and c.epoch == it.epoch and c.ns == it.ns.ptr) return c.resolved.?;
+        const name = try it.str(argv[0]);
+        const command = it.findCommand(name) orelse
+            return it.fail("invalid command name \"{s}\"", .{name});
+        if (c.words[0].kind == .lit and !c.has_expand) {
+            c.resolved = command;
+            c.epoch = it.epoch;
+            c.ns = it.ns.ptr;
+            c.fast = cmds.classify(command, c);
+        }
+        return command;
+    }
+
+    /// Runs a command in its direct form. Returns null when the case
+    /// needs the general path (an array, a link to an array, a cache
+    /// slot that is still empty).
+    fn evalFast(it: *Interp, c: *Cmd) Error!?Value {
+        switch (c.fast) {
+            .none => return null,
+            .set => {
+                const v = try it.evalWord(&c.words[2]);
+                const cell = try it.cellOf(c.words[1].kind.lit.str, &c.hint);
+                if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{c.words[1].kind.lit.str});
+                cell.v = .{ .val = v };
+                return v;
+            },
+            .incr => {
+                const cell = try it.cellOf(c.words[1].kind.lit.str, &c.hint);
+                switch (cell.v) {
+                    .val => |v| {
+                        if (v != .int) return null;
+                        const out: Value = .{ .int = v.int +% c.by };
+                        cell.v = .{ .val = out };
+                        return out;
+                    },
+                    else => return null,
+                }
+            },
+            .expr => {
+                const n = c.cache[1].expr orelse return null;
+                const v = try expr.eval(it, n);
+                if (v != .str) return v;
+                return v.asNumber() orelse v;
+            },
+            .if_then, .if_else => {
+                const n = c.cache[1].expr orelse return null;
+                if (try expr.truthy(it, try expr.eval(it, n))) {
+                    return try it.evalScript(try it.scriptOfValue(c.words[2].kind.lit, &c.cache[2]));
+                }
+                if (c.fast == .if_then) return Value.empty;
+                return try it.evalScript(try it.scriptOfValue(c.words[4].kind.lit, &c.cache[4]));
+            },
+        }
+    }
+
+    /// The cell of a plain local name, made when it is not there. The
+    /// hint is the slot of the name at the last call.
+    pub fn cellOf(it: *Interp, name: []const u8, hint: *u32) Allocator.Error!*Var {
+        if (it.slotCell(name, hint)) |c| return c;
+        hint.* = @intCast(it.frame.vars.items.len);
+        return (try it.findVar(it.frame, name, true)).?;
+    }
+
+    fn sameName(a: []const u8, b: []const u8) bool {
+        if (a.len != b.len) return false;
+        if (a.ptr == b.ptr) return true;
+        for (a, b) |x, y| if (x != y) return false;
+        return true;
+    }
+
+    /// The cell of a name in the current frame, or null. Tries the slot
+    /// of the hint first, then searches and updates the hint.
+    pub inline fn slotCell(it: *Interp, name: []const u8, hint: *u32) ?*Var {
+        const vars = it.frame.vars.items;
+        const h = hint.*;
+        var cell: *Var = undefined;
+        if (h < vars.len and sameName(vars[h].name, name)) {
+            cell = vars[h].cell;
+        } else {
+            cell = for (vars, 0..) |e, i| {
+                if (sameName(e.name, name)) {
+                    hint.* = @intCast(i);
+                    break e.cell;
+                }
+            } else return null;
+        }
+        return cell.settle();
+    }
+
+    /// The command of a name. A leading "::" is allowed.
+    pub fn findCommand(it: *Interp, name: []const u8) ?*Command {
+        const key = it.commandKey(name) orelse return null;
+        return it.commands.get(key);
+    }
+
+    /// The key of a command name in the table: the name in the current
+    /// namespace, or else the name in the global namespace.
+    pub fn commandKey(it: *Interp, name: []const u8) ?[]const u8 {
+        if (name.len >= 2 and name[0] == ':' and name[1] == ':') {
+            const full = std.mem.trimStart(u8, name, ":");
+            return if (it.commands.getKey(full)) |k| k else null;
+        }
+        if (it.ns.len > 0) {
+            var buf: [256]u8 = undefined;
+            if (std.fmt.bufPrint(&buf, "{s}::{s}", .{ it.ns, name })) |full| {
+                if (it.commands.getKey(full)) |k| return k;
+            } else |_| {}
+        }
+        return if (it.commands.getKey(name)) |k| k else null;
+    }
+
+    /// The one copy of a namespace name. Adds the namespace and its
+    /// parents when they are new.
+    pub fn internNs(it: *Interp, name: []const u8) Allocator.Error![]const u8 {
+        if (name.len == 0) return "";
+        if (it.namespaces.getKey(name)) |k| return k;
+        const copy = try it.alloc().dupe(u8, name);
+        try it.namespaces.put(it.alloc(), copy, {});
+        if (std.mem.lastIndexOf(u8, copy, "::")) |i| _ = try it.internNs(copy[0..i]);
+        return copy;
+    }
+
+    /// The full name of a new command or variable of the current
+    /// namespace, with no leading "::".
+    pub fn qualify(it: *Interp, name: []const u8) Allocator.Error![]const u8 {
+        if (name.len >= 2 and name[0] == ':' and name[1] == ':') return it.alloc().dupe(u8, std.mem.trimStart(u8, name, ":"));
+        if (it.ns.len == 0) return it.alloc().dupe(u8, name);
+        return std.fmt.allocPrint(it.alloc(), "{s}::{s}", .{ it.ns, name });
+    }
+
+    pub fn noteLine(it: *Interp, c: *Cmd, e: Error) Error {
+        if (e != error.TclError) return e;
+        if (it.error_line == 0) it.error_line = c.line;
+        it.proc_line = c.line;
+        // The end of the fuel leaves no trace: the unwind stays cheap.
+        if (it.fuel != 0 and !it.overLimit()) it.addErrorInfo(c) catch {};
+        return e;
+    }
+
+    /// Adds one command to the trace of the current error.
+    fn addErrorInfo(it: *Interp, c: *Cmd) Allocator.Error!void {
+        const a = it.alloc();
+        if (it.skip_info) {
+            it.skip_info = false;
+            return;
+        }
+        if (!it.in_error) {
+            it.in_error = true;
+            it.error_info = .empty;
+            try it.error_info.appendSlice(a, try it.str(it.result));
+            try it.error_info.appendSlice(a, "\n    while executing\n\"");
+        } else try it.error_info.appendSlice(a, "\n    invoked from within\n\"");
+        if (c.text.len > 150) {
+            try it.error_info.appendSlice(a, c.text[0..150]);
+            try it.error_info.appendSlice(a, "...");
+        } else try it.error_info.appendSlice(a, c.text);
+        try it.error_info.append(a, '"');
+    }
+
+    /// Ends the current error: stores the trace in the global variables
+    /// `errorInfo` and `errorCode`. `catch` and the top level call it.
+    pub fn finishError(it: *Interp) Allocator.Error!void {
+        const info: Value = .{ .str = if (it.in_error) it.error_info.items else try it.str(it.result) };
+        it.in_error = false;
+        it.error_info = .empty;
+        (try it.findVar(&it.global, "errorInfo", true)).?.v = .{ .val = info };
+        it.skip_info = false;
+        (try it.findVar(&it.global, "errorCode", true)).?.v = .{ .val = it.error_code };
+    }
+
+    /// Runs a command with its words. `argv[0]` is the name.
+    pub fn call(it: *Interp, command: *Command, argv: []const Value, c: ?*Cmd) Error!Value {
+        switch (command.impl) {
+            .native => |f| return f(it, argv, c),
+            .proc => |p| return it.callProc(p, argv),
+        }
+    }
+
+    /// Runs a command given as a list of words.
+    pub fn callWords(it: *Interp, argv: []const Value) Error!Value {
+        if (argv.len == 0) return Value.empty;
+        if (it.fuel == 0) return it.fail("the script ran out of fuel", .{});
+        it.fuel -= 1;
+        const name = try it.str(argv[0]);
+        const command = it.findCommand(name) orelse return it.fail("invalid command name \"{s}\"", .{name});
+        return it.call(command, argv, null);
+    }
+
+    pub fn pushFrame(it: *Interp, argv: []const Value) Error!*Frame {
+        if (it.depth >= it.max_depth) return it.fail("too many nested evaluations (infinite loop?)", .{});
+        it.depth += 1;
+        const f = it.free_frames.pop() orelse try it.newFrame();
+        f.vars.clearRetainingCapacity();
+        f.argv = argv;
+        f.parent = it.frame;
+        f.ns = null;
+        f.level = it.frame.level + 1;
+        it.frame = f;
+        return f;
+    }
+
+    fn newFrame(it: *Interp) Allocator.Error!*Frame {
+        const n = try it.alloc().create(Frame);
+        n.* = .{};
+        return n;
+    }
+
+    pub fn popFrame(it: *Interp) void {
+        const f = it.frame;
+        for (f.vars.items) |e| {
+            e.cell.next_free = it.free_vars;
+            it.free_vars = e.cell;
+        }
+        it.frame = f.parent.?;
+        it.depth -= 1;
+        it.free_frames.append(it.alloc(), f) catch {};
+    }
+
+    fn callProc(it: *Interp, p: *Proc, argv: []const Value) Error!Value {
+        const args = argv[1..];
+        const np = p.params.len;
+        if (args.len > np and !p.has_args) return it.procUsage(p, argv[0]);
+        _ = try it.pushFrame(argv);
+        defer it.popFrame();
+        const saved_ns = it.ns;
+        it.ns = p.ns;
+        it.frame.space = p.ns;
+        defer it.ns = saved_ns;
+        for (p.params, 0..) |prm, i| {
+            if (i < args.len) {
+                try it.newLocal(prm.name, args[i]);
+            } else if (prm.default) |d| {
+                try it.newLocal(prm.name, d);
+            } else {
+                const e = it.procUsage(p, argv[0]);
+                return e;
+            }
+        }
+        if (p.has_args) {
+            const rest = if (args.len > np) args[np..] else &[_]Value{};
+            try it.newLocal("args", try value.newList(it.alloc(), rest));
+        }
+        if (p.script == null) p.script = try it.compile(try it.str(p.body));
+        if (p.code == null) p.code = try vm.compileProc(it, p, p.script.?);
+        const bc = p.code.?;
+        // The other locals of the body start with no value.
+        for (bc.names[it.frame.vars.items.len..]) |name| {
+            const cell = try it.newCell();
+            try it.frame.vars.append(it.alloc(), .{ .name = name, .cell = cell });
+        }
+        return vm.run(it, bc) catch |e| switch (e) {
+            error.TclReturn => {
+                if (it.ret_level > 1) {
+                    it.ret_level -= 1;
+                    return error.TclReturn;
+                }
+                const code = it.ret_code;
+                it.ret_code = .ok;
+                return switch (code) {
+                    .ok => it.result,
+                    .@"error" => error.TclError,
+                    .@"return" => error.TclReturn,
+                    .@"break" => error.TclBreak,
+                    .@"continue" => error.TclContinue,
+                    _ => blk: {
+                        it.custom_code = @intFromEnum(code);
+                        break :blk error.TclCustom;
+                    },
+                };
+            },
+            error.TclBreak => it.fail("invoked \"break\" outside of a loop", .{}),
+            error.TclContinue => it.fail("invoked \"continue\" outside of a loop", .{}),
+            error.TclError => {
+                if (it.in_error) it.error_info.print(it.alloc(), "\n    (procedure \"{s}\" line {d})", .{ try it.str(argv[0]), it.proc_line }) catch {};
+                return e;
+            },
+            else => e,
+        };
+    }
+
+    fn procUsage(it: *Interp, p: *Proc, name: Value) Error {
+        var out: std.ArrayList(u8) = .empty;
+        const a = it.alloc();
+        try out.appendSlice(a, "wrong # args: should be \"");
+        try value.appendElement(a, &out, try it.str(name), false);
+        for (p.params) |prm| {
+            if (prm.default != null) try out.print(a, " ?{s}?", .{prm.name}) else try out.print(a, " {s}", .{prm.name});
+        }
+        if (p.has_args) try out.appendSlice(a, " ?arg ...?");
+        try out.append(a, '"');
+        it.result = .{ .str = out.items };
+        return error.TclError;
+    }
+
+    pub fn evalWord(it: *Interp, w: *const Word) Error!Value {
+        switch (w.kind) {
+            .lit => |v| return v,
+            .single => |*p| return it.evalPart(p),
+            .multi => |parts| return .{ .str = try it.concatParts(parts) },
+        }
+    }
+
+    pub fn evalPart(it: *Interp, p: *const Part) Error!Value {
+        switch (p.*) {
+            .lit => |s| return .{ .str = s },
+            .variable => |*v| return it.readRef(v),
+            .script => |s| return it.evalScript(s),
+        }
+    }
+
+    pub fn concatParts(it: *Interp, parts: []const Part) Error![]const u8 {
+        var out: std.ArrayList(u8) = .empty;
+        for (parts) |*p| {
+            const v = try it.evalPart(p);
+            try out.appendSlice(it.alloc(), try it.str(v));
+        }
+        return out.items;
+    }
+
+    /// The string `cur` with the parts after it. When `cur` ends at the
+    /// used part of a growth buffer, the parts go after it, so a loop of
+    /// `append` is linear. Other views of the buffer stay correct,
+    /// because the bytes that they see do not change.
+    pub fn appendStr(it: *Interp, cur: []const u8, parts: []const []const u8) Allocator.Error![]const u8 {
+        var extra: usize = 0;
+        for (parts) |s| extra += s.len;
+        const cur_end = @intFromPtr(cur.ptr) + cur.len;
+        var buf: [*]u8 = undefined;
+        var tail: *StrTail = undefined;
+        for (&it.tails) |*t| {
+            if (cur.len > 0 and t.end == cur_end and t.limit - t.end >= extra) {
+                buf = @constCast(cur.ptr);
+                tail = t;
+                break;
+            }
+        } else {
+            const cap = @max(64, (cur.len + extra) * 2);
+            const fresh = try it.alloc().alloc(u8, cap);
+            @memcpy(fresh[0..cur.len], cur);
+            buf = fresh.ptr;
+            tail = &it.tails[it.next_tail];
+            it.next_tail = @intCast((it.next_tail + 1) % it.tails.len);
+            tail.limit = @intFromPtr(fresh.ptr) + cap;
+        }
+        var at = cur.len;
+        for (parts) |s| {
+            @memcpy(buf[at .. at + s.len], s);
+            at += s.len;
+        }
+        tail.end = @intFromPtr(buf) + at;
+        return buf[0..at];
+    }
+
+    // ---- Variables ----
+
+    fn newCell(it: *Interp) Allocator.Error!*Var {
+        if (it.free_vars) |c| {
+            it.free_vars = c.next_free;
+            c.* = .{};
+            return c;
+        }
+        const c = try it.alloc().create(Var);
+        c.* = .{};
+        return c;
+    }
+
+    fn newLocal(it: *Interp, name: []const u8, v: Value) Allocator.Error!void {
+        const cell = try it.newCell();
+        cell.v = .{ .val = v };
+        try it.frame.vars.append(it.alloc(), .{ .name = name, .cell = cell });
+    }
+
+    /// Finds the cell of a name in a frame. Follows links.
+    pub fn findVar(it: *Interp, frame: *Frame, name_in: []const u8, create: bool) Allocator.Error!?*Var {
+        var f = frame;
+        var name = name_in;
+        if (std.mem.indexOfScalar(u8, name, ':')) |colon| {
+            if (std.mem.startsWith(u8, name, "::")) {
+                f = &it.global;
+                name = std.mem.trimStart(u8, name, ":");
+            } else if (colon + 1 < name.len and name[colon + 1] == ':' and colon < (std.mem.indexOfScalar(u8, name, '(') orelse name.len)) {
+                // A relative name with a namespace: first the current
+                // namespace, then the global namespace.
+                f = &it.global;
+                if (it.ns.len > 0) {
+                    const full = try it.qualify(name);
+                    if (lookup(f, full)) |c| return c;
+                    if (lookup(f, name)) |c| return c;
+                    name = full;
+                }
+            }
+        }
+        if (lookup(f, name)) |c| return c;
+        if (f.ns) |space| {
+            // A frame of `namespace eval`: the variable of the namespace,
+            // then the global variable.
+            const full = try std.fmt.allocPrint(it.alloc(), "{s}::{s}", .{ space, name });
+            var target = lookup(&it.global, full);
+            if (target == null) target = lookup(&it.global, name);
+            if (target == null and !create) return null;
+            if (target == null) {
+                target = try it.newCell();
+                try it.global.vars.append(it.alloc(), .{ .name = full, .cell = target.? });
+            }
+            const link = try it.newCell();
+            link.v = .{ .link = target.? };
+            try f.vars.append(it.alloc(), .{ .name = try it.alloc().dupe(u8, name), .cell = link });
+            return target;
+        }
+        if (!create) return null;
+        const cell = try it.newCell();
+        try f.vars.append(it.alloc(), .{ .name = try it.alloc().dupe(u8, name), .cell = cell });
+        return cell;
+    }
+
+    /// The global cell with exactly this full name, made when it is
+    /// not there.
+    pub fn globalVar(it: *Interp, full: []const u8) Allocator.Error!*Var {
+        if (lookup(&it.global, full)) |c| return c;
+        const cell = try it.newCell();
+        try it.global.vars.append(it.alloc(), .{ .name = try it.alloc().dupe(u8, full), .cell = cell });
+        return cell;
+    }
+
+    fn lookup(f: *Frame, name: []const u8) ?*Var {
+        for (f.vars.items) |e| {
+            if (sameName(e.name, name)) {
+                return e.cell.settle();
+            }
+        }
+        return null;
+    }
+
+    /// Makes `name` in the current frame a link to `target`.
+    pub fn linkVar(it: *Interp, name: []const u8, target: *Var) Error!void {
+        for (it.frame.vars.items) |e| {
+            if (std.mem.eql(u8, e.name, name)) {
+                if (e.cell == target) return;
+                if (e.cell.v == .link or e.cell.v == .undef) {
+                    e.cell.v = .{ .link = target };
+                    return;
+                }
+                return it.fail("variable \"{s}\" already exists", .{name});
+            }
+        }
+        const cell = try it.newCell();
+        cell.v = .{ .link = target };
+        try it.frame.vars.append(it.alloc(), .{ .name = try it.alloc().dupe(u8, name), .cell = cell });
+    }
+
+    /// Splits "a(i)" into the array name and the index.
+    pub fn splitName(name: []const u8) struct { []const u8, ?[]const u8 } {
+        if (name.len > 0 and name[name.len - 1] == ')') {
+            if (std.mem.indexOfScalar(u8, name, '(')) |open| {
+                return .{ name[0..open], name[open + 1 .. name.len - 1] };
+            }
+        }
+        return .{ name, null };
+    }
+
+    pub fn readRef(it: *Interp, r: *const VarRef) Error!Value {
+        if (r.index) |parts| {
+            const idx = if (parts.len == 1 and parts[0] == .lit) parts[0].lit else try it.concatParts(parts);
+            return it.getElem(r.name, idx);
+        }
+        if (it.slotCell(r.name, &@constCast(r).hint)) |c| {
+            if (c.v == .val) return c.v.val;
+        }
+        const cell = try it.findVar(it.frame, r.name, false);
+        if (cell) |c| switch (c.v) {
+            .val => |v| return v,
+            .arr => return it.fail("can't read \"{s}\": variable is array", .{r.name}),
+            else => {},
+        };
+        return it.fail("can't read \"{s}\": no such variable", .{r.name});
+    }
+
+    fn getElem(it: *Interp, name: []const u8, idx: []const u8) Error!Value {
+        const cell = try it.findVar(it.frame, name, false);
+        if (cell) |c| switch (c.v) {
+            .arr => |m| {
+                if (m.get(idx)) |v| return v;
+                return it.fail("can't read \"{s}({s})\": no such element in array", .{ name, idx });
+            },
+            .val => return it.fail("can't read \"{s}({s})\": variable isn't array", .{ name, idx }),
+            else => {},
+        };
+        return it.fail("can't read \"{s}({s})\": no such variable", .{ name, idx });
+    }
+
+    /// Reads a variable by its full name ("a" or "a(i)").
+    pub fn getVar(it: *Interp, full: []const u8) Error!Value {
+        const name, const idx = splitName(full);
+        if (idx) |i| return it.getElem(name, i);
+        const r: VarRef = .{ .name = name };
+        return it.readRef(&r);
+    }
+
+    pub fn getVarOpt(it: *Interp, full: []const u8) Error!?Value {
+        const name, const idx = splitName(full);
+        const cell = try it.findVar(it.frame, name, false) orelse return null;
+        if (idx) |i| return if (cell.v == .arr) cell.v.arr.get(i) else null;
+        return if (cell.v == .val) cell.v.val else null;
+    }
+
+    /// Writes a variable by its full name ("a" or "a(i)").
+    pub fn setVar(it: *Interp, full: []const u8, v: Value) Error!void {
+        const name, const idx = splitName(full);
+        const cell = (try it.findVar(it.frame, name, true)).?;
+        if (idx) |i| {
+            switch (cell.v) {
+                .undef => {
+                    const m = try it.alloc().create(ArrayMap);
+                    m.* = .empty;
+                    cell.v = .{ .arr = m };
+                },
+                .arr => {},
+                else => return it.fail("can't set \"{s}\": variable isn't array", .{full}),
+            }
+            const gop = try cell.v.arr.getOrPut(it.alloc(), i);
+            if (!gop.found_existing) gop.key_ptr.* = try it.alloc().dupe(u8, i);
+            gop.value_ptr.* = v;
+            return;
+        }
+        if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{full});
+        cell.v = .{ .val = v };
+    }
+
+    /// Removes a variable. Returns false when there is none.
+    pub fn unsetVar(it: *Interp, full: []const u8) Error!bool {
+        const name, const idx = splitName(full);
+        const cell = try it.findVar(it.frame, name, false) orelse return false;
+        if (idx) |i| {
+            if (cell.v != .arr) return false;
+            return cell.v.arr.orderedRemove(i);
+        }
+        if (cell.v == .undef) return false;
+        cell.v = .undef;
+        return true;
+    }
+
+    /// The frame at a level word of `uplevel` and `upvar` ("1", "#0").
+    /// Returns null when the word is not a level.
+    pub fn frameAt(it: *Interp, spec: []const u8) Error!?*Frame {
+        var target: u32 = undefined;
+        if (spec.len > 1 and spec[0] == '#') {
+            target = std.fmt.parseInt(u32, spec[1..], 10) catch return null;
+            if (target > it.frame.level) return it.fail("bad level \"{s}\"", .{spec});
+        } else {
+            const up = std.fmt.parseInt(u32, spec, 10) catch return null;
+            if (up > it.frame.level) return it.fail("bad level \"{s}\"", .{spec});
+            target = it.frame.level - up;
+        }
+        var f = it.frame;
+        while (f.level > target) f = f.parent.?;
+        return f;
+    }
+};
