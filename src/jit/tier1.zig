@@ -17,6 +17,7 @@ const verify = @import("verify.zig");
 const layout = @import("layout.zig");
 const mem = @import("mem.zig");
 const templates = @import("tier1_x64.zig");
+const helpers = @import("helpers.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -45,6 +46,14 @@ pub const Fn = struct {
     loops: []Loop = &.{},
     /// A checksum of the bytes, for the stress mode of `jit.zig`.
     sum: u64 = 0,
+    /// True when stress mode 4 or 8 was on at the compile: `jit.enter`
+    /// then runs the checks of those modes.
+    enter_stress: bool = false,
+    /// The helper table of the `Code`, and the least count of frame
+    /// entries for an entry: 0 for a named `Code`. `jit.enter` reads
+    /// them, so a proc call has no test of `named`.
+    helpers: [*]const *const anyopaque,
+    min_vars: u32 = 0,
 
     /// The bytes of the executable pages of the function.
     pub fn pages(f: *const Fn, page: usize) usize {
@@ -138,7 +147,17 @@ pub fn compile(a: Allocator, region: *mem.Region, l: layout.Layout, code: *const
         a.destroy(f);
         return if (region.stopped) .stopped else .full;
     };
-    f.* = .{ .base = placed.ptr, .len = @intCast(placed.len), .entries = entries, .depth = info.depth, .heads = heads, .counters = counters, .loops = loops };
+    f.* = .{
+        .base = placed.ptr,
+        .len = @intCast(placed.len),
+        .entries = entries,
+        .depth = info.depth,
+        .heads = heads,
+        .counters = counters,
+        .loops = loops,
+        .helpers = helpers.tableFor(code),
+        .min_vars = if (code.named) 0 else @intCast(code.names.len),
+    };
     keep_heads = true;
     keep_entries = true;
     keep_depth = true;

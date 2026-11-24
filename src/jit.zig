@@ -437,6 +437,7 @@ fn compileCode(s: *State, code: *vm.Code) ?*Fn {
     switch (tier1.compile(a, r, s.layout, code, bud, tier2_count)) {
         .ok => |f| {
             if (s.options.stress & stress_sum != 0) f.sum = sumOf(f);
+            f.enter_stress = s.options.stress & (stress_sum | stress_entry) != 0;
             if (s.options.on_code) |cb| cb(s.options.on_code_ctx, f.base[0..f.len]);
             s.fns.appendAssumeCapacity(f);
             const n = f.pages(r.page) + f.bytes();
@@ -473,10 +474,10 @@ pub const Status = enum { done, failed, fallback };
 /// `.fallback`: the entry is not valid, or the code exits, and `exec`
 /// runs at `pc.*` and `sp.*`.
 pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp: *u32) Status {
-    const stress = it.jit.?.options.stress;
-    if (stress & stress_sum != 0) checkSum(f);
-    if (stress & stress_entry != 0) {
-        if (stepOne(it, f, code, stack, pc, sp)) |st| return st;
+    // One byte of the record keeps the stress checks off the path of
+    // each proc call.
+    if (f.enter_stress) {
+        if (enterStress(it, f, code, stack, pc, sp)) |st| return st;
     }
     const p = pc.*;
     const frame = it.frame;
@@ -484,14 +485,15 @@ pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp:
     const off = f.entries[p];
     if (off == tier1.no_entry or off >= f.len) return fallback(it);
     if (sp.* != f.depth[p]) return fallback(it);
-    // A named Code runs in any frame: its variables go by name.
-    if (!code.named and frame.vars.items.len < code.names.len) return fallback(it);
+    // A named Code runs in any frame: its variables go by name, so its
+    // record has no least frame size.
+    if (frame.vars.items.len < f.min_vars) return fallback(it);
     var ctx: EnterCtx = .{
         .it = it,
         .code = code,
         .frame = frame,
         .stack = stack,
-        .helpers = helpers.tableFor(code),
+        .helpers = f.helpers,
         .target = @intFromPtr(f.base) + off,
         .pc = p,
         .sp = sp.*,
@@ -510,6 +512,14 @@ pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp:
         return .failed;
     }
     return fallback(it);
+}
+
+/// Stress modes 4 and 8 at an entry. A status ends the entry.
+noinline fn enterStress(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp: *u32) ?Status {
+    const stress = it.jit.?.options.stress;
+    if (stress & stress_sum != 0) checkSum(f);
+    if (stress & stress_entry != 0) return stepOne(it, f, code, stack, pc, sp);
+    return null;
 }
 
 /// Stress mode 8: runs instruction `pc.*` with its helper, as `exec`
