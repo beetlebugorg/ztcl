@@ -59,7 +59,29 @@ pub const State = struct {
     /// The generation of the compiled functions. Each flush and each new
     /// state takes a new number from `next_gen`.
     gen: u64,
+    /// The facts of the layout probe.
+    layout: layout_mod.Layout,
 };
+
+const layout_mod = @import("jit/layout.zig");
+const mem = @import("jit/mem.zig");
+
+/// The result of the checks of `usable`, for the whole process.
+var usable_state = std.atomic.Value(u8).init(0);
+
+/// True when the layout probe passes and a function in executable
+/// memory returns its constant. The result stays for the process.
+fn usable() ?layout_mod.Layout {
+    const l = layout_mod.probe() orelse return null;
+    switch (usable_state.load(.acquire)) {
+        1 => return l,
+        2 => return null,
+        else => {},
+    }
+    const ok = mem.selfTest();
+    usable_state.store(if (ok) 1 else 2, .release);
+    return if (ok) l else null;
+}
 
 /// The source of generation numbers. Zero is never used, so a `Code`
 /// with generation zero has no function.
@@ -70,16 +92,18 @@ fn newGen() u64 {
 }
 
 /// Turns the JIT on for `it`. Returns false and changes no state when
-/// the build has no JIT or the system has no executable memory.
+/// the build has no JIT, the layout probe fails, or the system has no
+/// executable memory.
 pub fn enable(it: *Interp, opts: Options) bool {
     if (!built) return false;
     if (it.jit) |s| {
         s.options = opts;
         return true;
     }
+    const l = usable() orelse return false;
     const a = it.counter.child;
     const s = a.create(State) catch return false;
-    s.* = .{ .options = opts, .backing = a, .gen = newGen() };
+    s.* = .{ .options = opts, .backing = a, .gen = newGen(), .layout = l };
     it.jit = s;
     return true;
 }

@@ -279,3 +279,53 @@ test "the selfTest function from the assembler returns 42" {
     try s.finish();
     try testing.expect(mem.runConst(s.bytes(), 42));
 }
+
+// ---- The layout probe ----
+
+const layout = @import("layout.zig");
+const Value = tcl.Value;
+
+/// A Value made byte by byte from the layout: the payload words and the
+/// full tag byte.
+fn makeValue(l: layout.Layout, tag: u8, w0: u64, w1: u64) Value {
+    var v: Value = undefined;
+    const b = std.mem.asBytes(&v);
+    @memset(b, 0);
+    std.mem.writeInt(u64, b[l.value_payload..][0..8], w0, .little);
+    std.mem.writeInt(u64, b[l.value_len..][0..8], w1, .little);
+    b[l.value_tag] = tag;
+    return v;
+}
+
+test "the layout probe finds each fact" {
+    if (!jit.built) return error.SkipZigTest;
+    const l = layout.probe() orelse return error.NoLayout;
+    // Each kind of Value reads back through Zig code.
+    const n = makeValue(l, l.tag_int, @bitCast(@as(i64, -77)), 0);
+    try testing.expectEqual(@as(i64, -77), n.int);
+    const d = makeValue(l, l.tag_double, @bitCast(@as(f64, 2.25)), 0);
+    try testing.expectEqual(@as(f64, 2.25), d.double);
+    const text = "hello";
+    const s = makeValue(l, l.tag_str, @intFromPtr(text), 4);
+    try testing.expectEqualStrings("hell", s.str);
+    var obj: tcl.value.ListObj = .{ .buf = &.{}, .used = 0 };
+    const li = makeValue(l, l.tag_list, @intFromPtr(&obj), 0);
+    try testing.expectEqual(&obj, li.list.obj);
+    try testing.expectEqual(@as(usize, 0), li.list.len);
+    // A cell with a value, and a cell with a link.
+    var cell: tcl.interp.Var = undefined;
+    const cb = std.mem.asBytes(&cell);
+    @memset(cb, 0);
+    @memcpy(cb[l.var_payload..][0..l.value_size], std.mem.asBytes(&n));
+    cb[l.var_tag] = l.var_val;
+    try testing.expect(cell.v == .val);
+    try testing.expectEqual(@as(i64, -77), cell.v.val.int);
+    var link: tcl.interp.Var = undefined;
+    const lb = std.mem.asBytes(&link);
+    @memset(lb, 0);
+    std.mem.writeInt(u64, lb[l.var_payload..][0..8], @intFromPtr(&cell), .little);
+    lb[l.var_tag] = l.var_link;
+    try testing.expect(link.v == .link);
+    try testing.expectEqual(&cell, link.v.link);
+    try testing.expect(link.target() == &cell);
+}
