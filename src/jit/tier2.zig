@@ -151,8 +151,8 @@ pub fn binKind(op: expr.BinOp, x: Kind, y: Kind) ?Kind {
     if (x == .any or y == .any) return null;
     if (isCompare(op)) return .int;
     return switch (op) {
-        .add, .sub, .mul => if (x == .int and y == .int) .int else .double,
-        .div => if (x == .int and y == .int) null else .double,
+        .add, .sub, .mul, .div => if (x == .int and y == .int) .int else .double,
+        .mod => if (x == .int and y == .int) .int else null,
         else => null,
     };
 }
@@ -276,12 +276,17 @@ const Builder = struct {
                 if (i.op == .incr) try stack.append(a, s.*);
             },
             .incr_value => {
+                // With an integer slot and a value of the kind `any`, the
+                // helper leaves an integer in the slot or a value that the
+                // check after the call finds. The sum stays `any`.
                 const s = &slots[b.slotIndex(i.a)];
-                if (s.* != .int or stack.items[top - 1] != .int) {
+                if (s.* != .int) {
                     s.* = .any;
                     b.calls = true;
-                }
-                stack.items[top - 1] = s.*;
+                    stack.items[top - 1] = .any;
+                } else if (stack.items[top - 1] != .int) {
+                    b.calls = true;
+                } else stack.items[top - 1] = .int;
             },
             .bin_vv, .bin_vi => {
                 const x = slots[b.slotIndex(i.a)];
@@ -434,14 +439,15 @@ pub fn plan(a: Allocator, code: *const vm.Code, info: *const verify.Info, head: 
 }
 
 /// True for an operator that tier 2 runs inline on two operands of
-/// the kinds `x` and `y`: `+`, `-`, `*`, and the compares on integers.
+/// the kinds `x` and `y`: `+`, `-`, `*`, and the compares on integers
+/// and doubles, `/` on both, and `%` on integers.
 pub fn inlineOp(op: expr.BinOp, x: Kind, y: Kind) bool {
-    const k = binKind(op, x, y) orelse return false;
-    _ = k;
-    if (x != .int or y != .int) return false;
+    if (x == .any or y == .any) return false;
+    if (isCompare(op)) return true;
     return switch (op) {
-        .add, .sub, .mul => true,
-        else => isCompare(op),
+        .add, .sub, .mul, .div => true,
+        .mod => x == .int and y == .int,
+        else => false,
     };
 }
 
@@ -452,8 +458,8 @@ pub fn noCall(i: vm.Ins, stack: []const Kind, slots: []const Kind, b: anytype) b
     const top = stack.len;
     return switch (i.op) {
         .guard, .step, .jump, .pop, .push, .push_empty => true,
-        .load => slots[b.slotIndex(i.a)] == .int,
-        .store, .store_pop => slots[b.slotIndex(i.a)] == .int and stack[top - 1] == .int,
+        .load => slots[b.slotIndex(i.a)] != .any,
+        .store, .store_pop => slots[b.slotIndex(i.a)] != .any and stack[top - 1] == slots[b.slotIndex(i.a)],
         .jump_false, .jump_true, .to_bool => stack[top - 1] == .int,
         .jf_vv => inlineOp(@enumFromInt(i.x), slots[b.slotIndex(i.a)], slots[b.slotIndex(i.b)]),
         .jf_vi => inlineOp(@enumFromInt(i.x), slots[b.slotIndex(i.a)], .int),
@@ -467,15 +473,13 @@ pub fn noCall(i: vm.Ins, stack: []const Kind, slots: []const Kind, b: anytype) b
 }
 
 /// True when an inline form of the instruction has a guard that can
-/// fail: an overflow of `+`, `-`, `*`, or `incr` on integers.
+/// fail: an overflow of `+`, `-`, `*`, or `incr` on integers, and a NaN
+/// result of an operation on doubles.
 fn exitsAt(i: vm.Ins, stack: []const Kind, slots: []const Kind, b: *const Builder) bool {
     if (!noCall(i, stack, slots, b)) return false;
     return switch (i.op) {
         .incr, .incr_drop, .incr_value => true,
-        .bin_vv, .bin_vi, .binary => switch (@as(expr.BinOp, @enumFromInt(i.x))) {
-            .add, .sub, .mul => true,
-            else => false,
-        },
+        .bin_vv, .bin_vi, .binary => !isCompare(@enumFromInt(i.x)),
         else => false,
     };
 }

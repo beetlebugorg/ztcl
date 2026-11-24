@@ -1000,6 +1000,11 @@ const TestPoints = struct {
 
 /// Runs a point proc on both paths and expects equal bits in all outputs.
 fn expectSame(script: []const u8, name: []const u8, n: usize) !void {
+    return expectSameJit(script, name, n, false);
+}
+
+/// `expectSame` with the slow path in the JIT with tier 2 when `jit`.
+fn expectSameJit(script: []const u8, name: []const u8, n: usize, jit: bool) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1008,6 +1013,7 @@ fn expectSame(script: []const u8, name: []const u8, n: usize) !void {
     try it.init(std.testing.allocator);
     defer it.deinit();
     try install(&it, &state);
+    if (jit and !it.enableJit(.{ .threshold = 0, .tier2 = true, .tier2_count = 2 })) return error.SkipZigTest;
     _ = it.eval(script) catch |e| {
         std.debug.print("{s}\n", .{try it.str(it.result)});
         return e;
@@ -1046,6 +1052,30 @@ fn expectSame(script: []const u8, name: []const u8, n: usize) !void {
 test "the fuzzy skin proc gives equal results on both paths" {
     try expectSame(fuzzy, "fuzzy", 5000);
 }
+
+test "both point procs give equal results with the slow path in the JIT" {
+    try expectSameJit(fuzzy, "fuzzy", 3000, true);
+    try expectSameJit(branches, "p", 3000, true);
+}
+
+const branches =
+    \\point proc p {x y z width feature} {
+    \\    set k 2
+    \\    if {$feature eq "infill"} {
+    \\        skip
+    \\        return
+    \\    } elseif {$feature == "skin" && $z > 0.5} {
+    \\        set k [expr {$k + 7 / 2}]
+    \\        flow [expr {1.0 + 0.1 * sin($x)}]
+    \\    } else {
+    \\        if {$x > 100} { set k [expr {$k * 3}] }
+    \\        width [expr {$width * ($y > 100 ? 1.1 : 0.9)}]
+    \\    }
+    \\    move [expr {0.01 * $k}] [expr {clamp(noise3($x, $y, $z), -0.5, 0.5)}]
+    \\    if {$k % 2 == 0} { return }
+    \\    speed [expr {max(10, min(60, hypot($x - 100, $y - 100)))}]
+    \\}
+;
 
 test "branches, locals, and outputs give equal results on both paths" {
     try expectSame(

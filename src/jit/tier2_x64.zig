@@ -1,5 +1,5 @@
-//! The code of tier 2 for x86-64: one loop with the integers of its
-//! slots and of its stack places in registers.
+//! The code of tier 2 for x86-64: one loop with the integers and the
+//! doubles of its slots and of its stack places in registers.
 //!
 //! Tier 1 jumps to the entry block of the loop with its own frame, so the
 //! code of tier 2 has no prologue. The entry block checks that each slot
@@ -25,6 +25,20 @@
 //! no value to write. The registers hold only integers, so the collector
 //! sees each live pointer in a cell or in the value stack at each call.
 //!
+//! A double is in an SSE register, and `+`, `-`, `*`, `/`, and the
+//! compares use `addsd`, `subsd`, `mulsd`, `divsd`, and `ucomisd`, with
+//! no fused multiply-add and the rounding mode of the process. An
+//! integer operand goes through `cvtsi2sd`, as `@floatFromInt` does. No
+//! register holds a NaN: the entry and each load after a call check each
+//! double, and a result that can be a NaN has a check after the
+//! operation. A NaN result is a valid result in Tcl, so that check exits
+//! after the instruction, with the result in its place. The interpreter
+//! then raises the error at the next use of the NaN as an operand. So an
+//! operand in a register is never a NaN, and `ucomisd` needs no check of
+//! the parity flag. A stack place of a double can be the register of a
+//! slot or of a constant until an instruction needs it in its own
+//! register.
+//!
 //! An exit writes each slot register to its cell and each stack place to
 //! the value stack, gives back the steps of the part that did not run,
 //! and calls `resume_at`. That helper gives the address of the tier 1
@@ -35,9 +49,10 @@
 //! offsets, literal offsets, bytecode addresses, stack depths, and step
 //! counts of a part, and the verifier bounds each one.
 //!
-//! On Windows, `rsi` and `rdi` are callee-saved. Tier 2 uses them for
-//! stack places, so a port to Windows must save them in the prologue of
-//! tier 1 or take them out of `extra_regs`.
+//! On Windows, `rsi`, `rdi`, and `xmm6` to `xmm15` are callee-saved.
+//! Tier 2 uses them for stack places and constants, so a port to Windows
+//! must save them in the prologue of tier 1 or take them out of
+//! `extra_regs` and `extra_xregs`.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -57,6 +72,7 @@ const Allocator = std.mem.Allocator;
 const Asm = x64.Asm;
 const Label = x64.Label;
 const Reg = x64.Reg;
+const Xmm = x64.Xmm;
 const Mem = x64.Mem;
 const Cond = x64.Cond;
 const Kind = tier2.Kind;
@@ -75,6 +91,14 @@ const slot_regs = [_]Reg{ .r8, .r9, .r10, .r11, .rdx };
 /// again from the context. On Windows, `rsi` and `rdi` are callee-saved.
 const extra_regs = [_]Reg{ .rsi, .rdi, abi.helpers };
 
+/// The registers of the slots of the kind `double`.
+const slot_xregs = [_]Xmm{ .xmm0, .xmm1, .xmm2, .xmm3 };
+
+/// The registers of stack places and constants of the kind `double`:
+/// the slot registers that no slot uses, then these. `xmm4` and `xmm5`
+/// are scratch. On Windows, `xmm6` to `xmm15` are callee-saved.
+const extra_xregs = [_]Xmm{ .xmm6, .xmm7, .xmm8, .xmm9, .xmm10, .xmm11, .xmm12, .xmm13, .xmm14, .xmm15 };
+
 /// True when tier 2 can compile the loop of the plan. Each slot is an
 /// integer at each instruction, or `any` at each instruction. At most
 /// five slots are integers. Each stack place below the depth of the head
@@ -82,14 +106,15 @@ const extra_regs = [_]Reg{ .rsi, .rdi, abi.helpers };
 /// paths to one instruction give a place or a slot two kinds.
 pub fn eligible(code: *const vm.Code, info: *const verify.Info, p: *const tier2.LoopPlan) bool {
     var nreg: usize = 0;
+    var nx: usize = 0;
     for (p.slots) |u| switch (u.entry) {
         .int => nreg += 1,
+        .double => nx += 1,
         .any => {},
-        .double => return false,
     };
-    if (nreg > slot_regs.len) return false;
+    if (nreg > slot_regs.len or nx > slot_xregs.len) return false;
     const base = info.depth[p.head];
-    const room = slot_regs.len - nreg + extra_regs.len;
+    const room = @min(slot_regs.len - nreg + extra_regs.len, slot_xregs.len - nx + extra_xregs.len);
     for (p.head..p.back + 1) |pc| {
         const k = pc - p.head;
         if (!p.seen[k]) continue;
@@ -102,19 +127,15 @@ pub fn eligible(code: *const vm.Code, info: *const verify.Info, p: *const tier2.
             if (i.op == .guard or t < p.head or t > p.back) continue;
             const into = p.kinds[t - p.head];
             if (into.len != outs.len) return false;
-            for (outs, into) |x, y| if (x != y and !(x == .int and y == .any)) return false;
+            for (outs, into) |x, y| if (x != y and y != .any) return false;
         }
         const e = verify.effectAt(code, @intCast(pc)) orelse return false;
         const d = info.depth[pc];
         if (d + e.push > base + room) return false;
         for (p.slot_kinds[k], p.slots) |kind, u| if (kind != u.entry) return false;
-        for (p.kinds[k], 0..) |kind, place| switch (kind) {
-            .int => if (place < base) return false,
-            .any => {},
-            .double => return false,
-        };
+        for (p.kinds[k], 0..) |kind, place| if (kind != .any and place < base) return false;
         switch (i.op) {
-            .push => if (code.lits[i.a] == .double) return false,
+            .push => if (code.lits[i.a] == .double and std.math.isNan(code.lits[i.a].double)) return false,
             // `foreach_next` reads its list and its index below the
             // places of the loop.
             .foreach_next => if (pc != p.head) return false,
@@ -154,11 +175,26 @@ const Exit = struct {
     from: u32,
     /// True when each value is in its cell and in the value stack.
     synced: bool = false,
+    /// With `synced`: the integer slot registers have the values, and
+    /// the exit writes them to their cells first.
+    kept: bool = false,
 };
 
 /// A constant in a register: the step of the `incr` at address `index`,
 /// or the integer literal `index`.
 const Const = struct { lit: bool, index: u32, reg: Reg };
+
+/// The double literal `index` in a register.
+const XConst = struct { index: u32, reg: Xmm };
+
+/// An operand of an operation on doubles. `finite` is true for an
+/// integer and for a finite literal, and `nonzero` for a literal that is
+/// finite and not zero.
+const Operand = struct {
+    loc: union(enum) { x: Xmm, g: Reg, lit: u32 },
+    finite: bool = false,
+    nonzero: bool = false,
+};
 
 /// The slow path of an instruction with a fast path: a call of its
 /// helper with the state of tier 1. `saved` is a register that the fast
@@ -182,9 +218,20 @@ const Emitter = struct {
     /// stays in its cell.
     regs: []?Reg,
     stack_regs: []Reg,
+    /// The SSE register of each slot of the kind `double`.
+    xregs: []?Xmm,
+    xstack: []Xmm,
+    xconsts: std.ArrayList(XConst) = .empty,
+    /// For each stack place of the loop: the register that holds its
+    /// double in place of its own register, and the value of a double
+    /// literal in it.
+    alias: []?Xmm,
+    known: []?f64,
     exits: std.ArrayList(Exit) = .empty,
     slows: std.ArrayList(Slow) = .empty,
     fixes: std.ArrayList(Fix) = .empty,
+    /// The error stubs of calls that kept the integer slot registers.
+    kept: std.ArrayList(Fix) = .empty,
     /// The error stub of each instruction of the loop.
     stubs: []?Label,
     /// The registers of the constants that the entry block loads: the
@@ -220,6 +267,57 @@ const Emitter = struct {
 
     fn slotReg(e: *const Emitter, slot: u32) ?Reg {
         return e.regs[e.p.index(slot).?];
+    }
+
+    fn slotX(e: *const Emitter, slot: u32) ?Xmm {
+        return e.xregs[e.p.index(slot).?];
+    }
+
+    /// The SSE register of stack place `k`.
+    fn xplace(e: *const Emitter, k: u32) Xmm {
+        return e.xstack[k - e.base];
+    }
+
+    /// The register that holds the double of place `k` now.
+    fn xloc(e: *const Emitter, k: u32) Xmm {
+        return e.alias[k - e.base] orelse e.xplace(k);
+    }
+
+    /// Moves each double of the places before `pc` below place `limit`
+    /// to its own register.
+    fn settleBelow(e: *Emitter, pc: u32, limit: u32) Error!void {
+        var k = e.base;
+        while (k < limit and k - e.base < e.alias.len) : (k += 1) {
+            const a = e.alias[k - e.base] orelse continue;
+            if (e.kindAt(pc, k) == .double) try e.s.movapd(e.xplace(k), a);
+            e.alias[k - e.base] = null;
+        }
+    }
+
+    /// `settleBelow` for each place before `pc`.
+    fn settle(e: *Emitter, pc: u32) Error!void {
+        try e.settleBelow(pc, e.depth(pc));
+    }
+
+    /// Moves each place below `limit` that holds the register `r` to its
+    /// own register, before a write of `r`.
+    fn settleReg(e: *Emitter, pc: u32, limit: u32, r: Xmm) Error!void {
+        var k = e.base;
+        while (k < limit) : (k += 1) {
+            if (e.alias[k - e.base] != r) continue;
+            if (e.kindAt(pc, k) == .double) try e.s.movapd(e.xplace(k), r);
+            e.alias[k - e.base] = null;
+        }
+    }
+
+    fn xconstReg(e: *const Emitter, index: u32) ?Xmm {
+        for (e.xconsts.items) |c| if (c.index == index) return c.reg;
+        return null;
+    }
+
+    fn litDouble(e: *Emitter, index: u32, dst: Xmm) Error!void {
+        try e.s.movRM(.rax, .{ .base = abi.code, .disp = @intCast(e.l.code_lits) });
+        try e.s.movsdXM(dst, try x64.at(.rax, @as(i64, index) * e.l.value_size + e.l.value_payload));
     }
 
     /// The register of stack place `k`.
@@ -267,6 +365,13 @@ const Emitter = struct {
         return l;
     }
 
+    /// `synced` after a call that kept the integer slot registers.
+    fn syncedKept(e: *Emitter, pc: u32, kind: u32, kept: bool) Error!Label {
+        const l = try e.synced(pc, kind);
+        e.exits.items[e.exits.items.len - 1].kept = kept;
+        return l;
+    }
+
     /// The stress check: the stress counter goes down, and at zero the
     /// code jumps to `forced`. It uses `rax`.
     fn stressCheck(e: *Emitter, forced: Label) Error!void {
@@ -299,7 +404,7 @@ const Emitter = struct {
     fn needsFix(e: *const Emitter, pc: u32, t: u32) bool {
         const outs = e.p.outs[pc - e.p.head];
         const into = e.kinds(t);
-        for (outs, into) |x, y| if (x == .int and y == .any) return true;
+        for (outs, into) |x, y| if (x != .any and y == .any) return true;
         return false;
     }
 
@@ -308,10 +413,75 @@ const Emitter = struct {
     fn fix(e: *Emitter, pc: u32, t: u32) Error!void {
         const outs = e.p.outs[pc - e.p.head];
         const into = e.kinds(t);
-        for (outs, into, 0..) |x, y, k| if (x == .int and y == .any) {
-            try e.s.movMR(try e.stackAt(@intCast(k), e.l.value_payload), e.place(@intCast(k)));
-            try e.s.movMI8(try e.stackAt(@intCast(k), e.l.value_tag), @intCast(e.l.tag_int));
-        };
+        for (outs, into, 0..) |x, y, k| if (x != .any and y == .any) try e.writePlace(@intCast(k), x, e.xloc(@intCast(k)));
+    }
+
+    /// Writes the value of place `k` of kind `kind` to the value stack.
+    /// `x` is the register of a double.
+    fn writePlace(e: *Emitter, k: u32, kind: Kind, x: Xmm) Error!void {
+        const l = e.l;
+        if (kind == .double) {
+            try e.s.movsdMX(try e.stackAt(k, l.value_payload), x);
+            try e.s.movMI8(try e.stackAt(k, l.value_tag), @intCast(l.tag_double));
+        } else {
+            try e.s.movMR(try e.stackAt(k, l.value_payload), e.place(k));
+            try e.s.movMI8(try e.stackAt(k, l.value_tag), @intCast(l.tag_int));
+        }
+    }
+
+    /// Writes each slot register that the loop changes to its cell. The
+    /// tag of the cell is the tag of the kind of the slot already.
+    fn writeSlots(e: *Emitter) Error!void {
+        return e.writeSlotsOf(true, true);
+    }
+
+    /// `writeSlots` for the integer slots, the double slots, or both.
+    fn writeSlotsOf(e: *Emitter, ints: bool, doubles_: bool) Error!void {
+        const l = e.l;
+        const pay: i32 = @intCast(l.var_payload + l.value_payload);
+        for (e.p.slots, e.regs, e.xregs) |u, r, x| {
+            if (!u.written) continue;
+            if (r != null and !ints) continue;
+            if (x != null and !doubles_) continue;
+            if (r == null and x == null) continue;
+            try e.cellPtr(u.slot, .rax);
+            if (r) |reg| try e.s.movMR(.{ .base = .rax, .disp = pay }, reg);
+            if (x) |xr| try e.s.movsdMX(.{ .base = .rax, .disp = pay }, xr);
+        }
+    }
+
+    /// Loads each slot register from its cell. With `check`, a cell that
+    /// is not plain, a value of another kind, and a NaN go to `fail`.
+    fn loadSlots(e: *Emitter, check: bool, fail: Label) Error!void {
+        return e.loadSlotsOf(check, fail, true, true);
+    }
+
+    /// `loadSlots` for the integer slots, the double slots, or both.
+    fn loadSlotsOf(e: *Emitter, check: bool, fail: Label, ints: bool, doubles_: bool) Error!void {
+        const s = e.s;
+        const l = e.l;
+        const pay: i32 = @intCast(l.var_payload + l.value_payload);
+        for (e.p.slots, e.regs, e.xregs) |u, r, x| {
+            if (r == null and x == null) continue;
+            if (r != null and !ints) continue;
+            if (x != null and !doubles_) continue;
+            try e.cellPtr(u.slot, .rax);
+            if (check) {
+                // The slot entry itself must be a plain cell: a link fails.
+                try s.cmpMI8(.{ .base = .rax, .disp = @intCast(l.var_tag) }, @intCast(l.var_val));
+                try s.jcc(.ne, fail);
+                try s.cmpMI8(.{ .base = .rax, .disp = @intCast(l.var_payload + l.value_tag) }, @intCast(if (r != null) l.tag_int else l.tag_double));
+                try s.jcc(.ne, fail);
+            }
+            if (r) |reg| try s.movRM(reg, .{ .base = .rax, .disp = pay });
+            if (x) |xr| {
+                try s.movsdXM(xr, .{ .base = .rax, .disp = pay });
+                if (check) {
+                    try s.ucomisd(xr, xr);
+                    try s.jcc(.p, fail);
+                }
+            }
+        }
     }
 
     /// Loads the cell of `slot` into `r`, from the frame.
@@ -342,6 +512,7 @@ const Emitter = struct {
         for (e.consts.items) |c| {
             if (c.lit) try e.litInt(c.index, c.reg) else try e.incrBy(c.index, c.reg);
         }
+        for (e.xconsts.items) |c| try e.litDouble(c.index, c.reg);
     }
 
     /// Copies a Value from `src + src_off` to `dst + dst_off` with `rcx`.
@@ -358,16 +529,7 @@ const Emitter = struct {
     fn entry(e: *Emitter) Error!void {
         const s = e.s;
         const l = e.l;
-        for (e.p.slots, e.regs) |u, r| {
-            const reg = r orelse continue;
-            try e.cellPtr(u.slot, .rax);
-            // The slot entry itself must be a plain cell: a link fails.
-            try s.cmpMI8(.{ .base = .rax, .disp = @intCast(l.var_tag) }, @intCast(l.var_val));
-            try s.jcc(.ne, e.head_exit);
-            try s.cmpMI8(.{ .base = .rax, .disp = @intCast(l.var_payload + l.value_tag) }, @intCast(l.tag_int));
-            try s.jcc(.ne, e.head_exit);
-            try s.movRM(reg, .{ .base = .rax, .disp = @intCast(l.var_payload + l.value_payload) });
-        }
+        try e.loadSlots(true, e.head_exit);
         try s.movRM32(.rax, itAt(l.it_epoch));
         try s.aluRM32(.cmp, .rax, itAt(l.it_safe_epoch));
         try s.jcc(.ne, e.head_exit);
@@ -417,14 +579,43 @@ const Emitter = struct {
     /// `rax`.
     fn overflowExit(e: *Emitter, op: expr.BinOp, pc: u32) Error!?Label {
         return switch (op) {
-            .add, .sub, .mul => try e.guardExit(pc, e.left[pc - e.p.head]),
+            .add, .sub, .mul, .div, .mod => try e.guardExit(pc, e.left[pc - e.p.head]),
             else => null,
         };
     }
 
     /// `rax = rax op y`, with the overflow check that jumps to `over`.
+    /// `/` and `%` send a divisor of 0 or -1 to `over` and round the
+    /// quotient down as Tcl does. They keep `rdx` and `rsi` on the stack,
+    /// because `idiv` writes `rdx`. No call is between the push and the
+    /// pop.
     fn arith(e: *Emitter, op: expr.BinOp, over: ?Label, y: Reg) Error!void {
         const s = e.s;
+        if (op == .div or op == .mod) {
+            try s.movRR(.rcx, y);
+            try s.aluRI(.cmp, .rcx, 0);
+            try s.jcc(.e, over.?);
+            try s.aluRI(.cmp, .rcx, -1);
+            try s.jcc(.e, over.?);
+            try s.push(.rdx);
+            try s.push(.rsi);
+            try s.cqo();
+            try s.idiv(.rcx);
+            // A remainder with the sign opposite to the divisor moves the
+            // quotient down by one and the remainder up by the divisor.
+            const done = try s.newLabel();
+            try s.aluRI(.cmp, .rdx, 0);
+            try s.jcc(.e, done);
+            try s.movRR(.rsi, .rdx);
+            try s.aluRR(.xor, .rsi, .rcx);
+            try s.jcc(.ns, done);
+            if (op == .div) try s.aluRI(.sub, .rax, 1) else try s.aluRR(.add, .rdx, .rcx);
+            s.bind(done);
+            if (op == .mod) try s.movRR(.rax, .rdx);
+            try s.pop(.rsi);
+            try s.pop(.rdx);
+            return;
+        }
         switch (op) {
             .add => try s.aluRR(.add, .rax, y),
             .sub => try s.aluRR(.sub, .rax, y),
@@ -458,16 +649,26 @@ const Emitter = struct {
         const i = e.code.ins[pc];
         const d = e.depth(pc);
         const l = e.l;
+        if (!e.noCall(pc)) {
+            try e.settle(pc);
+        }
         if (!e.noCall(pc)) switch (i.op) {
             .lappend => return e.lappend(pc),
             .foreach_next => return e.foreachNext(pc),
             .load => return e.loadCell(pc),
             .store, .store_pop => return e.storeCell(pc),
+            .incr_value, .jump_false, .jump_true, .to_bool => return e.stackIntOp(pc),
             else => {
                 try e.callOut(pc, tier1.Emitter.helperOf(i), tier2.runsNoScript(i));
                 return false;
             },
         };
+        if (try e.doubles(pc)) return true;
+        switch (i.op) {
+            // These have no exit and write no SSE register.
+            .guard, .step, .load, .push, .push_empty, .store, .store_pop => {},
+            else => try e.settle(pc),
+        }
         switch (i.op) {
             .guard, .step, .pop => {},
             .push_empty => {
@@ -535,24 +736,211 @@ const Emitter = struct {
         return true;
     }
 
+    // ---- Doubles ----
+
+    fn ucond(op: expr.BinOp) Cond {
+        return switch (op) {
+            .lt => .b,
+            .le => .be,
+            .gt => .a,
+            .ge => .ae,
+            .eq => .e,
+            .ne => .ne,
+            else => unreachable,
+        };
+    }
+
+    /// The operand of slot `slot`.
+    fn slotOperand(e: *const Emitter, slot: u32) Operand {
+        if (e.slotX(slot)) |x| return .{ .loc = .{ .x = x } };
+        return .{ .loc = .{ .g = e.slotReg(slot).? }, .finite = true };
+    }
+
+    /// The operand of stack place `k` before `pc`.
+    fn placeOperand(e: *const Emitter, pc: u32, k: u32) Operand {
+        if (e.kindAt(pc, k) == .int) return .{ .loc = .{ .g = e.place(k) }, .finite = true };
+        const v = e.known[k - e.base];
+        return .{
+            .loc = .{ .x = e.xloc(k) },
+            .finite = v != null and std.math.isFinite(v.?),
+            .nonzero = v != null and std.math.isFinite(v.?) and v.? != 0,
+        };
+    }
+
+    /// The operand in an SSE register: an integer goes to `scratch`.
+    fn inX(e: *Emitter, o: Operand, scratch: Xmm) Error!Xmm {
+        switch (o.loc) {
+            .x => |x| return x,
+            .g => |r| try e.s.cvtsi2sd(scratch, r),
+            .lit => |index| try e.s.cvtsi2sd(scratch, try e.lit(index, .rcx)),
+        }
+        return scratch;
+    }
+
+    fn isDouble(o: Operand) bool {
+        return o.loc == .x;
+    }
+
+    /// The code of `pc` when it works on doubles. False for each other
+    /// instruction. A double place that `load` and `push` make is the
+    /// register of its slot or constant until an instruction needs it in
+    /// its own register.
+    fn doubles(e: *Emitter, pc: u32) Error!bool {
+        const s = e.s;
+        const i = e.code.ins[pc];
+        const d = e.depth(pc);
+        switch (i.op) {
+            .pop => {
+                e.alias[d - 1 - e.base] = null;
+                e.known[d - 1 - e.base] = null;
+                return true;
+            },
+            .load => {
+                const x = e.slotX(i.a) orelse return false;
+                e.alias[d - e.base] = x;
+                e.known[d - e.base] = null;
+                return true;
+            },
+            .push => {
+                if (e.code.lits[i.a] != .double) return false;
+                if (e.xconstReg(i.a)) |x| {
+                    e.alias[d - e.base] = x;
+                } else {
+                    e.alias[d - e.base] = null;
+                    try e.litDouble(i.a, e.xplace(d));
+                }
+                e.known[d - e.base] = e.code.lits[i.a].double;
+                return true;
+            },
+            .store, .store_pop => {
+                const x = e.slotX(i.a) orelse return false;
+                try e.settleReg(pc, d - 1, x);
+                const v = e.xloc(d - 1);
+                if (v != x) try s.movapd(x, v);
+                if (i.op == .store_pop) {
+                    e.alias[d - 1 - e.base] = null;
+                    e.known[d - 1 - e.base] = null;
+                }
+                return true;
+            },
+            .bin_vv, .bin_vi, .binary => {
+                const a, const b, const k = switch (i.op) {
+                    .bin_vv => .{ e.slotOperand(i.a), e.slotOperand(i.b), d },
+                    .bin_vi => .{ e.slotOperand(i.a), Operand{ .loc = .{ .lit = i.b }, .finite = true, .nonzero = e.code.lits[i.b].int != 0 }, d },
+                    else => .{ e.placeOperand(pc, d - 2), e.placeOperand(pc, d - 1), d - 2 },
+                };
+                if (!isDouble(a) and !isDouble(b)) return false;
+                const op: expr.BinOp = @enumFromInt(i.x);
+                if (op == .lt or op == .le or op == .gt or op == .ge or op == .eq or op == .ne) {
+                    try e.settleBelow(pc, k);
+                    const ax = try e.inX(a, .xmm4);
+                    const bx = try e.inX(b, .xmm5);
+                    try s.ucomisd(ax, bx);
+                    try s.setcc(ucond(op), .rax);
+                    try s.movzxRR8(.rax, .rax);
+                    if (i.op == .binary) {
+                        e.alias[d - 1 - e.base] = null;
+                        e.known[d - 1 - e.base] = null;
+                    }
+                    e.alias[k - e.base] = null;
+                    e.known[k - e.base] = null;
+                    try e.result(pc, k);
+                    return true;
+                }
+                try e.arithDouble(pc, op, a, b, k);
+                return true;
+            },
+            .jf_vv, .jf_vi => {
+                const a = e.slotOperand(i.a);
+                const b = if (i.op == .jf_vv) e.slotOperand(i.b) else Operand{ .loc = .{ .lit = i.b }, .finite = true };
+                if (!isDouble(a) and !isDouble(b)) return false;
+                try e.settle(pc);
+                const ax = try e.inX(a, .xmm4);
+                const bx = try e.inX(b, .xmm5);
+                try s.ucomisd(ax, bx);
+                try s.jcc(@enumFromInt(@intFromEnum(ucond(@enumFromInt(i.x))) ^ 1), try e.target(pc, i.c));
+                return true;
+            },
+            else => return false,
+        }
+    }
+
+    /// `+`, `-`, `*`, or `/` of two operands at least one of which is a
+    /// double, with the result in place `k`. When the next instruction
+    /// stores the result to a slot and pops it, the result goes to the
+    /// register of the slot.
+    fn arithDouble(e: *Emitter, pc: u32, op: expr.BinOp, a: Operand, b: Operand, k: u32) Error!void {
+        const s = e.s;
+        const i = e.code.ins[pc];
+        // A result with a finite operand of `+` or `-`, or with a literal
+        // operand that is finite and not zero of `*` or `/`, is never a
+        // NaN: no operand in a register is a NaN.
+        const safe = switch (op) {
+            .add, .sub => a.finite or b.finite,
+            else => a.nonzero or b.nonzero,
+        };
+        var dest = e.xplace(k);
+        var resume_pc = pc + 1;
+        var fused = false;
+        if (e.nextIs(pc, .store_pop)) {
+            if (e.slotX(e.code.ins[pc + 1].a)) |x| {
+                dest = x;
+                resume_pc = pc + 2;
+                fused = true;
+            }
+        }
+        // The places below the operands keep their values. A NaN check
+        // exits after the instruction, so they go to their registers.
+        if (!safe) try e.settleBelow(pc, k) else try e.settleReg(pc, k, dest);
+        const ax = try e.inX(a, .xmm4);
+        const bx = try e.inX(b, .xmm5);
+        const o: Asm.Sse = switch (op) {
+            .add => .addsd,
+            .sub => .subsd,
+            .mul => .mulsd,
+            .div => .divsd,
+            else => unreachable,
+        };
+        if (ax == dest) {
+            try s.sse(o, dest, bx);
+        } else if (bx == dest) {
+            if (op == .add or op == .mul) {
+                try s.sse(o, dest, ax);
+            } else {
+                if (ax != .xmm4) try s.movapd(.xmm4, ax);
+                try s.sse(o, .xmm4, bx);
+                try s.movapd(dest, .xmm4);
+            }
+        } else {
+            try s.movapd(dest, ax);
+            try s.sse(o, dest, bx);
+        }
+        if (i.op == .binary) {
+            e.alias[k + 1 - e.base] = null;
+            e.known[k + 1 - e.base] = null;
+        }
+        e.alias[k - e.base] = null;
+        e.known[k - e.base] = null;
+        if (fused) e.skip = true;
+        if (!safe) {
+            const refund = e.left[resume_pc - e.p.head];
+            try s.ucomisd(dest, dest);
+            try s.jcc(.p, try e.exitFrom(resume_pc, resume_pc, refund, exit_guard));
+            if (e.stress) try e.stressCheck(try e.exitFrom(resume_pc, resume_pc, refund, exit_forced));
+        }
+    }
+
     // ---- Calls ----
 
     /// Writes each slot register that the loop changes to its cell, and
     /// each stack place in a register before `pc` to the value stack.
     fn sync(e: *Emitter, pc: u32) Error!void {
-        const s = e.s;
-        const l = e.l;
-        for (e.p.slots, e.regs) |u, r| {
-            const reg = r orelse continue;
-            if (!u.written) continue;
-            try e.cellPtr(u.slot, .rax);
-            try s.movMR(.{ .base = .rax, .disp = @intCast(l.var_payload + l.value_payload) }, reg);
-        }
+        try e.writeSlots();
         var k = e.base;
         while (k < e.depth(pc)) : (k += 1) {
-            if (e.kindAt(pc, k) != .int) continue;
-            try s.movMR(try e.stackAt(k, l.value_payload), e.place(k));
-            try s.movMI8(try e.stackAt(k, l.value_tag), @intCast(l.tag_int));
+            const kind = e.kindAt(pc, k);
+            if (kind == .any) continue;
+            try e.writePlace(k, kind, e.xloc(k));
         }
     }
 
@@ -572,17 +960,61 @@ const Emitter = struct {
     fn call(e: *Emitter, pc: u32, h: Helper, pure: bool, fall: bool) Error!void {
         const s = e.s;
         const i = e.code.ins[pc];
-        try e.sync(pc);
+        // A helper that runs no script changes no cell. The integer slot
+        // registers and the constant registers stay on the native stack
+        // across its call, and its error stub writes the slots.
+        var keep: [slot_regs.len + extra_regs.len]Reg = undefined;
+        var nkeep: usize = 0;
+        if (pure) {
+            for (e.regs) |r| if (r) |reg| {
+                keep[nkeep] = reg;
+                nkeep += 1;
+            };
+            for (e.consts.items) |c| {
+                keep[nkeep] = c.reg;
+                nkeep += 1;
+            }
+        }
+        const pad = nkeep % 2 == 1;
+        if (pure) try e.syncKept(pc) else try e.sync(pc);
+        for (keep[0..nkeep]) |r| try s.push(r);
+        // The stack pointer stays 16-byte aligned at the call.
+        if (pad) try s.aluRI(.sub, .rsp, 8);
         if (e.r12_used) {
             try s.movRM(abi.helpers, ctxSlot());
             try s.movRM(abi.helpers, .{ .base = abi.helpers, .disp = @offsetOf(jit.EnterCtx, "helpers") });
         }
-        try s.movRM(abi.arg0, ctxSlot());
-        try s.movRI32(abi.arg1, @intCast(pc));
-        try s.movRI32(abi.arg2, @intCast(e.depth(pc)));
-        try s.callM(try x64.at(abi.helpers, 8 * @as(i64, @intFromEnum(h))));
+        if (i.op == .invoke) {
+            // The checks of `Interp.resolve` on the site, as in tier 1. A
+            // valid site calls `call_cached`, and a miss calls `invoke`.
+            const l = e.l;
+            const miss = try s.newLabel();
+            const called = try s.newLabel();
+            try s.movRM(.rax, .{ .base = abi.code, .disp = @intCast(l.code_sites) });
+            try s.movRM(.rax, try x64.at(.rax, @as(i64, i.a) * 8));
+            try s.aluMI(.cmp, try x64.at(.rax, l.cmd_resolved), 0);
+            try s.jcc(.e, miss);
+            try s.movRM32(.rcx, try x64.at(.rax, l.cmd_epoch));
+            try s.aluRM32(.cmp, .rcx, itAt(l.it_epoch));
+            try s.jcc(.ne, miss);
+            try s.movRM(.rcx, try x64.at(.rax, l.cmd_ns));
+            try s.aluRM(.cmp, .rcx, itAt(l.it_ns));
+            try s.jcc(.ne, miss);
+            try e.helperCall(pc, .call_cached);
+            try s.jmp(called);
+            s.bind(miss);
+            try e.helperCall(pc, .invoke);
+            s.bind(called);
+        } else try e.helperCall(pc, h);
         try s.aluRI32(.cmp, abi.ret, helpers.yes);
-        try s.jcc(.a, try e.stub(pc));
+        // `add` changes the flags, so the pad goes with `lea`.
+        if (pad) try s.lea(.rsp, .{ .base = .rsp, .disp = 8 });
+        var k = nkeep;
+        while (k > 0) {
+            k -= 1;
+            try s.pop(keep[k]);
+        }
+        try s.jcc(.a, if (pure) try e.keptStub(pc) else try e.stub(pc));
         const t: ?u32 = switch (i.op) {
             .jump_false, .jump_true => i.a,
             .jf_vv, .jf_vi => i.c,
@@ -599,6 +1031,34 @@ const Emitter = struct {
         try e.after(pc, pc + 1, pure, fall);
     }
 
+    fn helperCall(e: *Emitter, pc: u32, h: Helper) Error!void {
+        const s = e.s;
+        try s.movRM(abi.arg0, ctxSlot());
+        try s.movRI32(abi.arg1, @intCast(pc));
+        try s.movRI32(abi.arg2, @intCast(e.depth(pc)));
+        try s.callM(try x64.at(abi.helpers, 8 * @as(i64, @intFromEnum(h))));
+    }
+
+    /// `sync` for a call that keeps the integer slot registers: the
+    /// double slots and the stack places.
+    fn syncKept(e: *Emitter, pc: u32) Error!void {
+        try e.writeSlotsOf(false, true);
+        var k = e.base;
+        while (k < e.depth(pc)) : (k += 1) {
+            const kind = e.kindAt(pc, k);
+            if (kind == .any) continue;
+            try e.writePlace(k, kind, e.xloc(k));
+        }
+    }
+
+    /// The error stub of a call that kept the integer slot registers: it
+    /// writes them, then goes to the error stub.
+    fn keptStub(e: *Emitter, pc: u32) Error!Label {
+        const lb = try e.s.newLabel();
+        try e.kept.append(e.a, .{ .at = lb, .pc = pc, .to = pc });
+        return lb;
+    }
+
     /// A call out of the loop at `pc` in the order of the code.
     fn callOut(e: *Emitter, pc: u32, h: Helper, pure: bool) Error!void {
         try e.call(pc, h, pure, true);
@@ -611,47 +1071,46 @@ const Emitter = struct {
         const s = e.s;
         const l = e.l;
         if (!e.inLoop(next)) {
-            try s.jmp(try e.synced(next, 0));
+            try s.jmp(try e.syncedKept(next, 0, pure));
             return;
         }
         if (!pure) {
-            const changed = try e.synced(next, exit_guard);
+            const changed = try e.syncedKept(next, exit_guard, pure);
             try s.movRM32(.rax, itAt(l.it_epoch));
             try s.aluRM32(.cmp, .rax, itAt(l.it_safe_epoch));
             try s.jcc(.ne, changed);
-            if (e.stress) try e.stressCheck(try e.synced(next, exit_forced));
         }
+        if (e.stress) try e.stressCheck(try e.syncedKept(next, exit_forced, pure));
         try s.movRM(.rax, itAt(l.it_mem_trip));
         try s.aluRM(.cmp, .rax, itAt(l.it_mem_limit));
-        try s.jcc(.ae, try e.synced(next, 0));
-        var fail: ?Label = null;
-        for (e.p.slots, e.regs) |u, r| {
-            const reg = r orelse continue;
-            try e.cellPtr(u.slot, .rax);
-            if (!pure) {
-                if (fail == null) fail = try e.synced(next, exit_guard);
-                try s.cmpMI8(.{ .base = .rax, .disp = @intCast(l.var_tag) }, @intCast(l.var_val));
-                try s.jcc(.ne, fail.?);
-                try s.cmpMI8(.{ .base = .rax, .disp = @intCast(l.var_payload + l.value_tag) }, @intCast(l.tag_int));
-                try s.jcc(.ne, fail.?);
-            }
-            try s.movRM(reg, .{ .base = .rax, .disp = @intCast(l.var_payload + l.value_payload) });
-        }
+        try s.jcc(.ae, try e.syncedKept(next, 0, pure));
+        const fail = try e.syncedKept(next, exit_guard, pure);
+        try e.loadSlotsOf(!pure, fail, !pure, true);
         // The places that the call wrote get a check of their tag. The
         // places below them have the values that `sync` wrote.
         const ef = verify.effectAt(e.code, pc).?;
         const first = e.depth(pc) - ef.need;
         var k = e.base;
         while (k < e.depth(next)) : (k += 1) {
-            if (e.kindAt(next, k) != .int) continue;
+            const kind = e.kindAt(next, k);
+            if (kind == .any) continue;
             if (k >= first) {
-                if (fail == null) fail = try e.synced(next, exit_guard);
-                try s.cmpMI8(try e.stackAt(k, l.value_tag), @intCast(l.tag_int));
-                try s.jcc(.ne, fail.?);
+                try s.cmpMI8(try e.stackAt(k, l.value_tag), @intCast(if (kind == .int) l.tag_int else l.tag_double));
+                try s.jcc(.ne, fail);
             }
-            try s.movRM(e.place(k), try e.stackAt(k, l.value_payload));
+            if (kind == .int) {
+                try s.movRM(e.place(k), try e.stackAt(k, l.value_payload));
+            } else {
+                try s.movsdXM(e.xplace(k), try e.stackAt(k, l.value_payload));
+                if (k >= first) {
+                    try s.ucomisd(e.xplace(k), e.xplace(k));
+                    try s.jcc(.p, fail);
+                }
+            }
         }
-        try e.loadConsts();
+        if (pure) {
+            for (e.xconsts.items) |c| try e.litDouble(c.index, c.reg);
+        } else try e.loadConsts();
         if (!fall or next != pc + 1) try s.jmp(e.labels[next - e.p.head]);
     }
 
@@ -744,6 +1203,10 @@ const Emitter = struct {
             try s.movMR(try x64.at(.rax, l.value_payload), e.place(d - 1));
             try s.movMI(try x64.at(.rax, l.value_len), 0);
             try s.movMI8(try x64.at(.rax, l.value_tag), @intCast(l.tag_int));
+        } else if (e.kindAt(pc, d - 1) == .double) {
+            try s.movsdMX(try x64.at(.rax, l.value_payload), e.xplace(d - 1));
+            try s.movMI(try x64.at(.rax, l.value_len), 0);
+            try s.movMI8(try x64.at(.rax, l.value_tag), @intCast(l.tag_double));
         } else {
             try e.copy(.rax, 0, abi.stack, @as(i64, d - 1) * l.value_size);
         }
@@ -821,6 +1284,46 @@ const Emitter = struct {
         return true;
     }
 
+    /// `incr_value`, `jump_false`, `jump_true`, and `to_bool` on a value
+    /// in the value stack: an integer has the inline path of tier 1, and
+    /// each other value goes to the helper.
+    fn stackIntOp(e: *Emitter, pc: u32) Error!bool {
+        const s = e.s;
+        const l = e.l;
+        const i = e.code.ins[pc];
+        const d = e.depth(pc);
+        const reg = if (i.op == .incr_value) e.slotReg(i.a) else null;
+        if (e.kindAt(pc, d - 1) != .any or (i.op == .incr_value and reg == null)) {
+            try e.callOut(pc, tier1.Emitter.helperOf(i), tier2.runsNoScript(i));
+            return false;
+        }
+        const slow_l = try e.slow(pc, null);
+        try s.cmpMI8(try e.stackAt(d - 1, l.value_tag), @intCast(l.tag_int));
+        try s.jcc(.ne, slow_l);
+        switch (i.op) {
+            .incr_value => {
+                try s.movRR(.rax, reg.?);
+                try s.aluRM(.add, .rax, try e.stackAt(d - 1, l.value_payload));
+                try s.jcc(.o, slow_l);
+                try s.movRR(reg.?, .rax);
+                try s.movMR(try e.stackAt(d - 1, l.value_payload), .rax);
+            },
+            .to_bool => {
+                // The result has the kind `int`, so it goes to the
+                // register of the place.
+                const r = e.place(d - 1);
+                try s.aluMI(.cmp, try e.stackAt(d - 1, l.value_payload), 0);
+                try s.setcc(.ne, .rax);
+                try s.movzxRR8(r, .rax);
+            },
+            else => {
+                try s.aluMI(.cmp, try e.stackAt(d - 1, l.value_payload), 0);
+                try s.jcc(if (i.op == .jump_false) .e else .ne, try e.target(pc, i.a));
+            },
+        }
+        return true;
+    }
+
     /// `load` of a slot that stays in its cell: a copy of a plain cell,
     /// or the helper.
     fn loadCell(e: *Emitter, pc: u32) Error!bool {
@@ -874,6 +1377,11 @@ const Emitter = struct {
 
     fn emitStubs(e: *Emitter) Error!void {
         const s = e.s;
+        for (e.kept.items) |x| {
+            s.bind(x.at);
+            try e.writeSlotsOf(true, false);
+            try s.jmp(try e.stub(x.pc));
+        }
         for (e.stubs, 0..) |maybe, k| {
             const lb = maybe orelse continue;
             const pc: u32 = @intCast(e.p.head + k);
@@ -891,20 +1399,16 @@ const Emitter = struct {
         const l = e.l;
         for (e.exits.items) |x| {
             s.bind(x.at);
+            if (x.kept) try e.writeSlotsOf(true, false);
             if (!x.synced) {
                 const d = e.depth(x.pc);
                 var k = e.base;
                 while (k < d) : (k += 1) {
-                    if (e.kindAt(x.from, k) != .int) continue;
-                    try s.movMR(try e.stackAt(k, l.value_payload), e.place(k));
-                    try s.movMI8(try e.stackAt(k, l.value_tag), @intCast(l.tag_int));
+                    const kind = e.kindAt(x.from, k);
+                    if (kind == .any) continue;
+                    try e.writePlace(k, kind, e.xplace(k));
                 }
-                for (e.p.slots, e.regs) |u, r| {
-                    const reg = r orelse continue;
-                    if (!u.written) continue;
-                    try e.cellPtr(u.slot, .rax);
-                    try s.movMR(.{ .base = .rax, .disp = @intCast(l.var_payload + l.value_payload) }, reg);
-                }
+                try e.writeSlots();
                 if (x.refund > 0) try s.aluMI(.add, itAt(l.it_step_limit), @intCast(x.refund));
             }
             try s.movRI32(abi.arg1, @intCast(x.pc));
@@ -975,6 +1479,26 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
         r.* = slot_regs[nslot];
         nslot += 1;
     }
+    // The registers of the slots of the kind `double`.
+    const slot_xreg = try a.alloc(?Xmm, p.slots.len);
+    defer a.free(slot_xreg);
+    var nxslot: usize = 0;
+    for (p.slots, slot_xreg) |u, *r| {
+        r.* = null;
+        if (u.entry != .double) continue;
+        r.* = slot_xregs[nxslot];
+        nxslot += 1;
+    }
+    var xregs: [slot_xregs.len + extra_xregs.len]Xmm = undefined;
+    var nxr: usize = 0;
+    for (slot_xregs[nxslot..]) |r| {
+        xregs[nxr] = r;
+        nxr += 1;
+    }
+    for (extra_xregs) |r| {
+        xregs[nxr] = r;
+        nxr += 1;
+    }
     var regs: [slot_regs.len + extra_regs.len]Reg = undefined;
     var nr: usize = 0;
     for (slot_regs[nslot..]) |r| {
@@ -1001,6 +1525,12 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
             targets[t - p.head] = true;
         };
     }
+    const alias = try a.alloc(?Xmm, need);
+    defer a.free(alias);
+    @memset(alias, null);
+    const known = try a.alloc(?f64, need);
+    defer a.free(known);
+    @memset(known, null);
     var e: Emitter = .{
         .s = s,
         .a = a,
@@ -1012,6 +1542,10 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
         .base = base,
         .regs = slot_reg,
         .stack_regs = regs[0..need],
+        .xregs = slot_xreg,
+        .xstack = xregs[0..need],
+        .alias = alias,
+        .known = known,
         .stubs = stubs,
         .left = left,
         .head_exit = try s.newLabel(),
@@ -1024,8 +1558,10 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
     };
     defer e.exits.deinit(a);
     defer e.consts.deinit(a);
+    defer e.xconsts.deinit(a);
     defer e.slows.deinit(a);
     defer e.fixes.deinit(a);
+    defer e.kept.deinit(a);
     var free_at = need;
     for (0..n) |k| {
         const pc: u32 = @intCast(p.head + k);
@@ -1041,6 +1577,17 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
         try e.consts.append(a, .{ .lit = w[0], .index = w[1], .reg = regs[free_at] });
         free_at += 1;
     }
+    // The double literals of the loop in the free SSE registers.
+    var xfree_at = need;
+    for (0..n) |k| {
+        const pc: u32 = @intCast(p.head + k);
+        if (!p.seen[k]) continue;
+        const i = code.ins[pc];
+        if (i.op != .push or code.lits[i.a] != .double) continue;
+        if (e.xconstReg(i.a) != null or xfree_at >= nxr) continue;
+        try e.xconsts.append(a, .{ .index = i.a, .reg = xregs[xfree_at] });
+        xfree_at += 1;
+    }
     for (regs[0..free_at]) |r| if (r == abi.helpers) {
         e.r12_used = true;
     };
@@ -1049,10 +1596,15 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
     var part: usize = 0;
     for (0..n) |k| {
         const pc: u32 = @intCast(p.head + k);
-        s.bind(labels[k]);
         while (part < p.parts.len and p.parts[part].last < pc) part += 1;
         const pt = p.parts[part];
-        if (checkAt(code, pt) == pc and pt.steps > 0) {
+        const check = checkAt(code, pt) == pc and pt.steps > 0;
+        // A jump target and the exit of a step check see each double in
+        // its own register.
+        if (p.seen[k] and (targets[k] or check)) try e.settle(pc);
+        if (targets[k]) @memset(e.known, null);
+        s.bind(labels[k]);
+        if (check) {
             try s.aluMI(.cmp, Emitter.itAt(l.it_step_limit), @intCast(pt.steps));
             try s.jcc(.b, try e.exit(pc, 0));
             try s.aluMI(.sub, Emitter.itAt(l.it_step_limit), @intCast(pt.steps));

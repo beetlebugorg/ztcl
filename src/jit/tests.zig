@@ -1557,3 +1557,92 @@ test "tier 2: the loops of nested.tcl and foreach.tcl compile" {
         try sameT2(text, 1);
     }
 }
+
+test "tier 2: loops of doubles give the bits of the interpreter" {
+    try sameT2(
+        \\proc dsum {n} { set s 0.0; set x [expr {1.5}]; for {set i 0} {$i < $n} {incr i} { set s [expr {$s + $x * 0.5}] }; return $s }
+        \\proc mix {} { set s [expr {0.1}]; set t [expr {-0.0}]; for {set i 0} {$i < 200} {incr i} { set s [expr {$s * 1.1 + $i / 3.0 - 0.1}]; set t [expr {$t * 1.0}] }; list $s $t [expr {1.0 / $t}] }
+        \\proc div {} { set z [expr {0.0}]; set r {}; for {set i -2} {$i < 3} {incr i} { set q [expr {$i / $z}]; lappend r $q }; return $r }
+        \\proc cmp {} { set a [expr {0.5}]; set n 0; for {set i 0} {$i < 100} {incr i} { if {$a < $i} { incr n }; if {$i == $a * 2} { incr n 100 }; set a [expr {$a + 0.25}] }; list $n $a }
+        \\proc big {} { set s [expr {1e300}]; for {set i 0} {$i < 50} {incr i} { set s [expr {$s * 10.0}] }; set s }
+        \\proc prec {} { set s [expr {0.1}]; for {set i 0} {$i < 30} {incr i} { set s [expr {$s + 0.1}] }; set ::tcl_precision 6; set r [list $s]; set ::tcl_precision 0; lappend r $s }
+        \\list [dsum 300] [mix] [div] [cmp] [big] [prec] [expr {5e-324 * 1.0}]
+    , 6);
+}
+
+test "tier 2: a NaN result exits, and its use as an operand is the error of the interpreter" {
+    try sameT2(
+        \\proc infs {} { set a [expr {1e290}]; set s [expr {0.0}]; for {set i 0} {$i < 100} {incr i} { set a [expr {$a * 10.0}]; set s [expr {$a - $a}] }; set s }
+        \\proc nan2 {} { set a [expr {1e290}]; set s [expr {0.0}]; set k 0; for {set i 0} {$i < 100} {incr i} { set a [expr {$a * 10.0}]; set s [expr {$a - $a}]; set s [expr {$s + 1.0}]; incr k }; list $s $k }
+        \\proc zz {} { set z [expr {0.0}]; set q 1; for {set i 0} {$i < 50} {incr i} { set q [expr {$z / $z}] }; set q }
+        \\list [catch infs m] $m [catch nan2 m] $m $::errorCode [catch zz m] $m
+    , 3);
+}
+
+test "tier 2: forced exits with doubles in registers and places" {
+    test_stress = jit.stress_guards;
+    defer test_stress = 0;
+    try sameT2(
+        \\proc f {} {
+        \\  set a [expr {1.0}]; set b [expr {2.5}]; set c [expr {-3.25}]; set n 0
+        \\  for {set i 0} {$i < 300} {incr i} {
+        \\    set a [expr {$a + ($b - $c) * ($a - $i)}]
+        \\    set b [expr {$b * 0.999 + $i}]
+        \\    if {$a > 1e6 || $a < -1e6} { set a [expr {$a / 1000.0}] }
+        \\    set c [expr {$c - $a / ($b + 1.5)}]
+        \\    incr n
+        \\  }
+        \\  list $a $b $c $n
+        \\}
+        \\f
+    , 1);
+}
+
+test "tier 2: a double slot that a callee changes to a string" {
+    try sameT2(
+        \\proc poke {} { upvar 1 s s; set s abc }
+        \\proc f {} { set s [expr {1.0}]; for {set i 0} {$i < 300} {incr i} { if {$i == 100} { poke; set s [expr {2.0}] }; set s [expr {$s * 1.5 - $i}] }; set s }
+        \\f
+    , 1);
+}
+
+test "tier 2: the entry checks that a double slot is not a NaN" {
+    // The loop compiles with a finite `s`. The second call enters the
+    // compiled loop with a NaN in `s`, and its use is an error.
+    try sameT2(
+        \\proc f {s} { set t [expr {0.0}]; for {set i 0} {$i < 20} {incr i} { set t [expr {$s * 2.0}] }; return $t }
+        \\set inf [expr {1e300 * 1e300}]
+        \\list [f [expr {1.5}]] [catch {f [expr {$inf - $inf}]} m] $m
+    , 1);
+}
+
+test "tier 2: incr and jumps on values from helpers check the tag" {
+    // Item 200 is the string "12", and item 150 makes the sum pass the
+    // largest integer. A flag "no" is a string that is false.
+    try sameT2(
+        \\proc f {} { set l {}; for {set i 0} {$i < 300} {incr i} { lappend l $i }; lset l 150 9223372036854775000; lset l 200 [string range x12 1 end]; set s 0; for {set i 0} {$i < 300} {incr i} { incr s [lindex $l $i] }; set s }
+        \\proc g {} { set f {}; for {set i 0} {$i < 300} {incr i} { lappend f [expr {$i % 3 == 0 ? "no" : ($i % 3 == 1 ? 0 : 1)}] }; set n 0; for {set i 0} {$i < 300} {incr i} { if {[lindex $f $i]} { incr n } }; set n }
+        \\list [f] [g]
+    , 2);
+}
+
+test "tier 2: an exit after a helper that runs no script writes the slots" {
+    // concat runs no script, so the slot registers stay on the native
+    // stack across it. Each forced exit after it must write `i` and `n`.
+    test_stress = jit.stress_guards;
+    defer test_stress = 0;
+    try sameT2(
+        \\proc f {} { set n 0; set r {}; for {set i 0} {$i < 200} {incr i} { set k key$i; incr n 3; if {$i % 50 == 0} { lappend r $k } }; list $n $i $r }
+        \\f
+    , 1);
+}
+
+test "tier 2: to_bool of a value from a helper goes to its register" {
+    // `||` of two string compares: the second compare is a helper call,
+    // and to_bool of its result feeds a jump.
+    try sameT2(
+        \\proc cut {line limit cutoff} { set r {}; while {[string length $line] > $limit} { for {set c [expr {$limit-1}]} {$c >= $cutoff} {incr c -1} { set char [string index $line $c]; if {$char == " " || $char == "\t"} { break } }; lappend r $c; incr c; set line [string range $line $c end] }; return $r }
+        \\set s "so we hope to have only a single beta release and to go final in early October, 1996. and more words here to cut again"
+        \\list [cut $s 56 50] [cut $s 56 50] [cut $s 56 50] [cut $s 30 20]
+    , 1);
+}
