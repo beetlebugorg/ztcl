@@ -2676,3 +2676,44 @@ test "the verifier fails a byte that is no opcode where no path reaches" {
     std.mem.asBytes(&m.ins[k + 2])[0] = 200;
     try testing.expect(!try verifies(&m.code));
 }
+
+test "tier 2: the plan reads no table of an instruction that no path reaches" {
+    if (!jit.built) return error.SkipZigTest;
+    // The verifier checks the operands of each instruction that a path
+    // reaches. The plan of tier 2 read the slots of each instruction of
+    // the loop, also of one that no path reaches, and a table index out
+    // of range stopped the compiler.
+    const it = try newInterp();
+    defer freeInterp(it);
+    it.gc_on = false;
+    if (!it.enableJit(.{ .threshold = 0, .tier2 = true, .tier2_count = 1 })) return error.SkipZigTest;
+    _ = try it.eval(dead_part_proc);
+    _ = try it.eval("f 3");
+    const code = try procCode(it, "f");
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var m = try Mutable.init(arena.allocator(), code);
+    // The guard of `continue` becomes a step, so the commands after
+    // `continue` have no path. One of them gets a table index out of
+    // range.
+    const k = for (m.ins, 0..) |i, k| {
+        if (k > 0 and i.op == .jump and i.a > k and m.ins[k - 1].op == .guard) break k;
+    } else return error.NoContinue;
+    m.ins[k - 1] = .{ .op = .step };
+    m.ins[k + 2] = .{ .op = .lassign_drop, .a = 60000 };
+    var info = (try verify.verify(testing.allocator, &m.code)).?;
+    defer info.deinit(testing.allocator);
+    try testing.expect(!info.reachable[k + 2]);
+    const held = try arena.allocator().create(vm.Code);
+    held.* = m.code;
+    _ = jit.prepare(it, held) orelse return error.NotCompiled;
+    const p = it.commands.get("f").?.impl.proc;
+    const saved = p.code;
+    p.code = held;
+    defer p.code = saved;
+    const before = it.jit.?.stats.tier2;
+    it.step_limit = 2000;
+    try testing.expectError(error.TclError, it.eval("f 100000"));
+    try testing.expectEqualStrings("step limit reached", try it.str(it.result));
+    try testing.expectEqual(before + 1, it.jit.?.stats.tier2);
+}

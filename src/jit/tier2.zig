@@ -357,7 +357,11 @@ pub fn plan(a: Allocator, code: *const vm.Code, info: *const verify.Info, head: 
     // The slots of the loop.
     var list: std.ArrayList(SlotUse) = .empty;
     var tmp: std.ArrayList(u32) = .empty;
-    for (code.ins[head .. back + 1]) |i| {
+    for (code.ins[head .. back + 1], head..) |i, pc| {
+        // The verifier checks the operands of an instruction that a path
+        // reaches. Another instruction can have a table index out of
+        // range, and no path runs it.
+        if (!info.reachable[pc]) continue;
         tmp.clearRetainingCapacity();
         try slotsOf(code, i, &tmp, ar);
         for (tmp.items, 0..) |s, k| {
