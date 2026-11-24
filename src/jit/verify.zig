@@ -106,7 +106,7 @@ fn effect(code: *const Code, pc: u32) ?Effect {
         },
         .push_empty => return .{ .need = 0, .push = 1 },
         .load => {
-            if (i.a >= slots) return null;
+            if (i.a >= slots or i.x > 1) return null;
             return .{ .need = 0, .push = 1 };
         },
         .eval_cmd => {

@@ -158,12 +158,12 @@ pub const List = struct {
             return .{ .obj = o, .len = l.len + 1 };
         }
         const cap = @max(8, l.len * 2);
-        const buf = try a.alloc(Value, cap);
+        const n = try allocList(a, cap);
+        const buf = n.obj.buf;
         @memcpy(buf[0..l.len], l.items());
         buf[l.len] = v;
-        const obj = try a.create(ListObj);
-        obj.* = .{ .buf = buf, .used = l.len + 1 };
-        return .{ .obj = obj, .len = l.len + 1 };
+        n.obj.used = l.len + 1;
+        return .{ .obj = n.obj, .len = l.len + 1 };
     }
 };
 
@@ -198,8 +198,22 @@ pub const DictIndex = struct {
 
 /// A new list value that owns a copy of `items`.
 pub fn newList(a: Allocator, items: []const Value) Allocator.Error!Value {
-    const buf = try a.dupe(Value, items);
-    return wrapList(a, buf);
+    const l = try allocList(a, items.len);
+    @memcpy(l.obj.buf, items);
+    return .{ .list = l };
+}
+
+/// The places of the list object at the start of one block. The buffer
+/// follows it, so a new list is one allocation.
+const head_places = (@sizeOf(ListObj) + @sizeOf(Value) - 1) / @sizeOf(Value);
+
+/// A list of `n` items in one block: the list object, then the buffer.
+/// The items have no value yet.
+pub fn allocList(a: Allocator, n: usize) Allocator.Error!List {
+    const block = try a.alloc(Value, head_places + n);
+    const obj: *ListObj = @ptrCast(block.ptr);
+    obj.* = .{ .buf = block[head_places..], .used = n };
+    return .{ .obj = obj, .len = n };
 }
 
 /// A new list value that owns `buf` (no copy).
