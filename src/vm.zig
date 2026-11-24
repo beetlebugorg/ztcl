@@ -1064,6 +1064,8 @@ pub fn compileProc(it: *Interp, p: *interp.Proc, s: *interp.Script) Error!*Code 
         .max_stack = c.max + 1,
         .params = params,
     };
+    // Test builds only: the JIT verifier checks each proc body.
+    if (@import("builtin").is_test) @import("jit/verify.zig").testHook(code);
     return code;
 }
 

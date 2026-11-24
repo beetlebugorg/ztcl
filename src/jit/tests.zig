@@ -13,6 +13,7 @@ const jit = @import("../jit.zig");
 
 const Interp = tcl.Interp;
 const testing = std.testing;
+const builtin = @import("builtin");
 
 fn newInterp() !*Interp {
     const it = try testing.allocator.create(Interp);
@@ -328,4 +329,321 @@ test "the layout probe finds each fact" {
     try testing.expect(link.v == .link);
     try testing.expectEqual(&cell, link.v.link);
     try testing.expect(link.target() == &cell);
+}
+
+// ---- The verifier ----
+
+const verify = @import("verify.zig");
+const vm = @import("../vm.zig");
+const Range = std.meta.Child(@FieldType(vm.Code, "ranges"));
+
+/// The Code of the body of proc `name`.
+fn procCode(it: *Interp, name: []const u8) !*vm.Code {
+    const cmd = it.commands.get(name) orelse return error.NoProc;
+    const p = cmd.impl.proc;
+    if (p.script == null) p.script = try it.compile(try it.str(p.body));
+    return vm.compileProc(it, p, p.script.?);
+}
+
+/// The text of a file of the repository, from the root folder.
+fn readRepoFile(a: std.mem.Allocator, path: [*:0]const u8) ![]u8 {
+    const rc = linux.open(path, .{ .ACCMODE = .RDONLY }, 0);
+    if (linux.errno(rc) != .SUCCESS) return error.NoFile;
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(a);
+    var buf: [4096]u8 = undefined;
+    while (true) {
+        const n = linux.read(fd, &buf, buf.len);
+        if (linux.errno(n) != .SUCCESS) return error.NoFile;
+        if (n == 0) break;
+        try out.appendSlice(a, buf[0..n]);
+    }
+    return out.toOwnedSlice(a);
+}
+
+/// Defines the procs of a script and runs no other command.
+fn defineProcs(it: *Interp, text: []const u8) !void {
+    const s = try it.compile(text);
+    for (s.cmds) |*c| {
+        if (c.words.len == 4 and c.words[0].kind == .lit and std.mem.eql(u8, try it.str(c.words[0].kind.lit), "proc")) {
+            _ = try it.evalCmd(c);
+        }
+    }
+}
+
+fn verifies(code: *const vm.Code) !bool {
+    var info = (try verify.verify(testing.allocator, code)) orelse return false;
+    info.deinit(testing.allocator);
+    return true;
+}
+
+test "the verifier passes each proc of the benchmarks" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    const names = [_][*:0]const u8{ "bench/sum.tcl", "bench/fib.tcl", "bench/nested.tcl", "bench/strbuild.tcl", "bench/foreach.tcl", "bench/dict.tcl", "bench/dictgrow.tcl", "bench/readloop.tcl" };
+    var foreach_seen: usize = 0;
+    for (names) |path| {
+        const it = try newInterp();
+        defer freeInterp(it);
+        const text = try readRepoFile(testing.allocator, path);
+        defer testing.allocator.free(text);
+        try defineProcs(it, text);
+        var iter = it.commands.iterator();
+        while (iter.next()) |e| {
+            if (e.value_ptr.*.impl != .proc) continue;
+            const code = try procCode(it, e.key_ptr.*);
+            var info = (try verify.verify(testing.allocator, code)) orelse {
+                std.debug.print("{s}: proc {s} fails\n", .{ path, e.key_ptr.* });
+                return error.VerifyFailed;
+            };
+            defer info.deinit(testing.allocator);
+            // The depth of each foreach_next equals the depth of its loop.
+            for (code.ins, 0..) |ins, pc| {
+                if (ins.op != .foreach_next) continue;
+                foreach_seen += 1;
+                const r = for (code.ranges) |r| {
+                    if (r.cont == pc) break r;
+                } else return error.NoRange;
+                try testing.expectEqual(r.depth, info.depth[pc]);
+            }
+        }
+    }
+    try testing.expect(foreach_seen > 0);
+}
+
+const base_proc =
+    \\proc f {n} {
+    \\    set s 0
+    \\    set l {1 2 3}
+    \\    for {set i 0} {$i < $n} {incr i} { set s [expr {$s + $i}]; if {$i > 2} break }
+    \\    foreach x $l { incr s $x }
+    \\    dict set d k [llength $l]
+    \\    lset l 0 5
+    \\    append t "a$s,b"
+    \\    while {$s > 100} { incr s -1 }
+    \\    set y [expr {$s * 2 + $n}]
+    \\    return [list $s $y $t]
+    \\}
+;
+
+/// A copy of a Code with its own instructions, literals, and tables.
+const Mutable = struct {
+    code: vm.Code,
+    ins: []vm.Ins,
+    lits: []tcl.Value,
+    tables: [][]const u32,
+    ranges: []Range,
+
+    fn init(a: std.mem.Allocator, c: *const vm.Code) !Mutable {
+        var m: Mutable = .{ .code = c.*, .ins = try a.dupe(vm.Ins, c.ins), .lits = try a.dupe(tcl.Value, c.lits), .tables = try a.dupe([]const u32, c.tables), .ranges = try a.dupe(Range, c.ranges) };
+        m.code.ins = m.ins;
+        m.code.lits = m.lits;
+        m.code.tables = m.tables;
+        m.code.ranges = m.ranges;
+        return m;
+    }
+
+    fn find(m: *const Mutable, op: vm.Op) usize {
+        for (m.ins, 0..) |i, k| if (i.op == op) return k;
+        std.debug.print("no {t} in the base proc\n", .{op});
+        unreachable;
+    }
+};
+
+test "the verifier fails a Code that breaks one check" {
+    const it = try newInterp();
+    defer freeInterp(it);
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try defineProcs(it, base_proc);
+    const code = try procCode(it, "f");
+    try testing.expect(try verifies(code));
+    const ops = [_]vm.Op{ .guard, .step, .jump, .push, .load, .store_pop, .bin_vv, .bin_vi, .jf_vv, .jf_vi, .incr_drop, .foreach_init, .foreach_next, .dict_update_drop, .lset_drop, .append, .invoke, .access, .binary, .ret, .eval_cmd };
+    for (ops) |op| {
+        var m = try Mutable.init(a, code);
+        _ = m.find(op);
+    }
+
+    const Case = struct { name: []const u8, f: *const fn (*Mutable, std.mem.Allocator) anyerror!void };
+    const cases = [_]Case{
+        // 1. Opcodes and operators.
+        .{ .name = "opcode", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                std.mem.asBytes(&m.ins[m.find(.load)])[0] = 250;
+            }
+        }.f },
+        .{ .name = "access form", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.ins[m.find(.access)].x = 4;
+            }
+        }.f },
+        .{ .name = "binary operator", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.ins[m.find(.binary)].x = 200;
+            }
+        }.f },
+        .{ .name = "jf compare", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.ins[m.find(.jf_vv)].x = @intFromEnum(tcl.expr.BinOp.add);
+            }
+        }.f },
+        .{ .name = "dict form", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.ins[m.find(.dict_update_drop)].x = 2;
+            }
+        }.f },
+        // 2. Indexes.
+        .{ .name = "slot", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.ins[m.find(.load)].a = @intCast(m.code.names.len);
+            }
+        }.f },
+        .{ .name = "literal", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.ins[m.find(.push)].a = @intCast(m.lits.len);
+            }
+        }.f },
+        .{ .name = "site", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.ins[m.find(.invoke)].a = @intCast(m.code.sites.len);
+            }
+        }.f },
+        .{ .name = "table slot", .f = struct {
+            fn f(m: *Mutable, al: std.mem.Allocator) !void {
+                const t = m.ins[m.find(.foreach_next)].a;
+                const bad = try al.dupe(u32, m.tables[t]);
+                bad[0] = @intCast(m.code.names.len);
+                m.tables[t] = bad;
+            }
+        }.f },
+        .{ .name = "empty table", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.tables[m.ins[m.find(.foreach_next)].a] = &.{};
+            }
+        }.f },
+        // 3. The literal of bin_vi and jf_vi.
+        .{ .name = "bin_vi literal", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.lits[m.ins[m.find(.bin_vi)].b] = .{ .str = "7" };
+            }
+        }.f },
+        .{ .name = "jf_vi literal", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.lits[m.ins[m.find(.jf_vi)].b] = .{ .double = 7 };
+            }
+        }.f },
+        // 4. Counts.
+        .{ .name = "invoke count", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.ins[m.find(.invoke)].b = 0;
+            }
+        }.f },
+        .{ .name = "append count", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.ins[m.find(.append)].b = 9;
+            }
+        }.f },
+        // 5. Guards and cold blocks.
+        .{ .name = "guard target", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                const g = m.find(.guard);
+                m.ins[g].a = @intCast(g + 1);
+            }
+        }.f },
+        .{ .name = "cold block guard", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                const g = m.find(.guard);
+                m.ins[m.ins[g].a].b = @intCast(g + 1);
+            }
+        }.f },
+        // 6. The site of dict_update.
+        .{ .name = "dict site", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                // The site of `llength $l` has two words.
+                m.ins[m.find(.dict_update_drop)].b = m.ins[m.find(.access) + 1].a;
+            }
+        }.f },
+        // 7. Depths.
+        .{ .name = "depth above max_stack", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.code.max_stack = 2;
+            }
+        }.f },
+        .{ .name = "depth below need", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.ins[m.find(.binary)].op = .concat;
+                m.ins[m.find(.concat)].a = 60;
+            }
+        }.f },
+        .{ .name = "two depths", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                // A jump to the instruction after a push.
+                const p = m.find(.push);
+                const j = m.find(.jump);
+                m.ins[j].a = @intCast(p + 1);
+            }
+        }.f },
+        // 8. The marks of foreach.
+        .{ .name = "foreach mark", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.ins[m.find(.foreach_init)] = .{ .op = .incr, .a = 0, .b = 1 };
+            }
+        }.f },
+        // 9. A path past the end.
+        .{ .name = "past the end", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.ins[m.ins.len - 1] = .{ .op = .step };
+            }
+        }.f },
+        // 10. break and continue targets.
+        .{ .name = "range depth", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                for (m.ranges) |*r| {
+                    if (r.brk != std.math.maxInt(u32)) {
+                        r.depth += 1;
+                        return;
+                    }
+                }
+                unreachable;
+            }
+        }.f },
+        .{ .name = "range target", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                for (m.ranges) |*r| {
+                    if (r.brk != std.math.maxInt(u32)) {
+                        r.brk = @intCast(m.ins.len);
+                        return;
+                    }
+                }
+                unreachable;
+            }
+        }.f },
+        // 11. Named code.
+        .{ .name = "named", .f = struct {
+            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                m.code.named = true;
+            }
+        }.f },
+    };
+    for (cases) |c| {
+        var m = try Mutable.init(a, code);
+        try testing.expect(try verifies(&m.code));
+        try c.f(&m, a);
+        if (try verifies(&m.code)) {
+            std.debug.print("check {s}: the verifier passes the bad Code\n", .{c.name});
+            return error.TestUnexpectedResult;
+        }
+    }
+}
+
+test "each proc of the unit tests passes the verifier" {
+    // The hook in vm.compileProc counts the runs of the other tests.
+    const it = try newInterp();
+    defer freeInterp(it);
+    try defineProcs(it, base_proc);
+    _ = try procCode(it, "f");
+    try testing.expect(verify.hook_runs > 0);
+    try testing.expectEqual(@as(usize, 0), verify.hook_failures);
 }
