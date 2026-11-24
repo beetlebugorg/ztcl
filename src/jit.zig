@@ -23,6 +23,25 @@ const interp = @import("interp.zig");
 
 const Allocator = std.mem.Allocator;
 const Interp = interp.Interp;
+const vm = @import("vm.zig");
+const Value = @import("value.zig").Value;
+
+/// The context of one entry into machine code. It lives on the native
+/// stack of `enter`. The machine code reads its inputs and writes `pc`,
+/// `sp`, and `err` on an error or an exit.
+pub const EnterCtx = extern struct {
+    it: *Interp,
+    code: *const vm.Code,
+    frame: *interp.Frame,
+    stack: [*]Value,
+    helpers: [*]const *const anyopaque,
+    /// The address to jump to.
+    target: usize,
+    pc: u32,
+    sp: u32,
+    /// `@intFromError` of the error of status 1.
+    err: u16,
+};
 
 /// True when this target has a backend.
 pub const backend = builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux;

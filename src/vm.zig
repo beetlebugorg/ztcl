@@ -1336,6 +1336,452 @@ pub fn run(it: *Interp, code: *Code) Error!Value {
     }
 }
 
+// ---- The instructions ----
+//
+// Each function runs one instruction. It reads and writes the value
+// stack at the offsets of `sp`, and it changes neither `sp` nor `pc`.
+// `exec` applies the stack effect and the jump. The helpers of the JIT
+// call the same functions, so each instruction has one implementation.
+// A function for an instruction with two successors returns true for the
+// jump. `ret` has no function: `exec` returns the top of the stack.
+
+pub inline fn opPush(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, it, f };
+    stack[sp] = code.lits[i.a];
+}
+
+pub inline fn opPushEmpty(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, it, f, code, i };
+    stack[sp] = Value.empty;
+}
+
+pub inline fn opPop(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, it, f, code, stack, sp, i };
+}
+
+pub inline fn opLoad(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    const cell = readCell(named, it, f, code, i.a);
+    if (cell != null and cell.?.v == .val) {
+        stack[sp] = cell.?.v.val;
+    } else {
+        const r: interp.VarRef = .{ .name = code.names[i.a] };
+        stack[sp] = try it.readRef(&r);
+    }
+}
+
+/// Writes `stack[sp - 1]` to slot `i.a`.
+inline fn storeTop(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    const cell = try writeCell(named, it, f, code, i.a);
+    if (cell.v == .val) {
+        cell.v.val = stack[sp - 1];
+    } else try storeOther(it, cell, code.names[i.a], &stack[sp - 1]);
+}
+
+/// A store to a cell with no value: a plain store gives the cell its
+/// value, and each other form goes to `setVar`.
+noinline fn storeOther(it: *Interp, cell: *Var, name: []const u8, v: *const Value) Error!void {
+    if (!cell.plainStore()) return slowStore(it, name, v);
+    cell.v = .{ .val = v.* };
+}
+
+pub inline fn opStore(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    return storeTop(named, it, f, code, stack, sp, i);
+}
+
+pub inline fn opStorePop(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    return storeTop(named, it, f, code, stack, sp, i);
+}
+
+pub inline fn opLlength(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code, i };
+    const v = stack[sp - 1];
+    const n = if (v == .list) v.list.len else (try it.readList(v)).len;
+    stack[sp - 1] = .{ .int = @intCast(n) };
+}
+
+pub inline fn opLindex(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code, i };
+    const l = stack[sp - 2];
+    const at = stack[sp - 1];
+    if (at == .int) {
+        const items = try it.readList(l);
+        stack[sp - 2] = if (at.int >= 0 and at.int < items.len) items[@intCast(at.int)] else Value.empty;
+    } else {
+        const argv = [_]Value{ .{ .str = "lindex" }, l, at };
+        stack[sp - 2] = try cmds.cmdLindex(it, &argv, null);
+    }
+}
+
+pub inline fn opStringLength(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code, i };
+    // A copy first: the new union overlaps the old one.
+    const v = stack[sp - 1];
+    const n = cmds.charCount(try it.str(v));
+    stack[sp - 1] = .{ .int = @intCast(n) };
+}
+
+pub inline fn opStringIndex(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code, i };
+    const argv = [_]Value{ .{ .str = "string" }, .{ .str = "index" }, stack[sp - 2], stack[sp - 1] };
+    stack[sp - 2] = try cmds.cmdString(it, &argv, null);
+}
+
+/// True when a core command changed: the guard then jumps to the
+/// general path, and uses no step.
+pub inline fn guardJumps(it: *Interp) bool {
+    return it.epoch != it.safe_epoch and !recheck(it);
+}
+
+/// True: a core command changed, so the general path runs. `exec` runs
+/// the two parts, `guardJumps` and `step`, as two calls, because the
+/// joined form made the loop of the interpreter longer.
+pub inline fn opGuard(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!bool {
+    _ = .{ named, f, code, stack, sp, i };
+    if (guardJumps(it)) return true;
+    try step(it);
+    return false;
+}
+
+pub inline fn opStep(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code, stack, sp, i };
+    try step(it);
+}
+
+pub inline fn opJump(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, it, f, code, stack, sp, i };
+}
+
+inline fn lassignOp(comptime named: bool, comptime drop: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    const table = code.tables[i.a];
+    const items = try it.list(stack[sp - 1]);
+    for (table, 0..) |slot, k| {
+        const v = if (k < items.len) items[k] else Value.empty;
+        const cell = try writeCell(named, it, f, code, slot);
+        if (cell.v == .val) {
+            cell.v.val = v;
+        } else if (cell.plainStore()) {
+            cell.v = .{ .val = v };
+        } else {
+            try slowStore(it, code.names[slot], &v);
+        }
+    }
+    if (!drop) stack[sp - 1] = try value.newList(it.alloc(), items[@min(items.len, table.len)..]);
+}
+
+pub inline fn opLassign(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    return lassignOp(named, false, it, f, code, stack, sp, i);
+}
+
+pub inline fn opLassignDrop(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    return lassignOp(named, true, it, f, code, stack, sp, i);
+}
+
+inline fn lsetOp(comptime drop: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    const cell = f.vars.items[i.a].cell.target();
+    if (try more.lsetOwned(it, cell, stack[sp - 2], stack[sp - 1])) {
+        if (!drop) {
+            const out = cell.v.owned;
+            cell.v = .{ .val = out };
+            stack[sp - 2] = out;
+        }
+    } else {
+        const site = code.sites[i.b];
+        const argv = [4]Value{ site.words[0].kind.lit, site.words[1].kind.lit, stack[sp - 2], stack[sp - 1] };
+        const r = try more.cmdLset(it, &argv, site);
+        if (!drop) stack[sp - 2] = r;
+    }
+}
+
+pub inline fn opLset(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = named;
+    return lsetOp(false, it, f, code, stack, sp, i);
+}
+
+pub inline fn opLsetDrop(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = named;
+    return lsetOp(true, it, f, code, stack, sp, i);
+}
+
+/// True: the string form of the top equals literal `i.a`.
+pub inline fn opStrEqJump(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!bool {
+    _ = .{ named, f };
+    const top = stack[sp - 1];
+    var buf: [24]u8 = undefined;
+    const s: []const u8 = if (top == .int) value.writeInt(&buf, top.int) else try it.str(top);
+    return std.mem.eql(u8, s, code.lits[i.a].str);
+}
+
+/// True: the top of the stack is false.
+pub inline fn opJumpFalse(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!bool {
+    _ = .{ named, f, code, i };
+    const v = stack[sp - 1];
+    const t = if (v == .int) v.int != 0 else try expr.truthy(it, v);
+    return !t;
+}
+
+/// True: the top of the stack is true.
+pub inline fn opJumpTrue(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!bool {
+    _ = .{ named, f, code, i };
+    const v = stack[sp - 1];
+    return if (v == .int) v.int != 0 else try expr.truthy(it, v);
+}
+
+pub inline fn opToBool(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code, i };
+    const v = stack[sp - 1];
+    const t = if (v == .int) v.int != 0 else try expr.truthy(it, v);
+    stack[sp - 1] = .{ .int = @intFromBool(t) };
+}
+
+pub inline fn opInvoke(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f };
+    try step(it);
+    const c = code.sites[i.a];
+    const argv = stack[sp - i.b .. sp];
+    const command = try it.resolve(c, argv);
+    // A proc call keeps its values in the frame and the word
+    // stack. A native command can hold values in locals.
+    if (gc.precise) it.markDirect(command, argv.ptr);
+    const called = it.call(command, argv, c);
+    if (gc.precise) it.clearDirect();
+    stack[sp - i.b] = try called;
+}
+
+pub inline fn opEvalCmd(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f };
+    if (gc.precise) it.gc_from_exec = gc.isClean(it);
+    stack[sp] = try it.evalCmd(code.sites[i.a]);
+}
+
+pub inline fn opWord(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f };
+    stack[sp] = try it.evalWord(code.words[i.a]);
+}
+
+pub inline fn opNode(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f };
+    stack[sp] = try expr.eval(it, code.nodes[i.a]);
+}
+
+pub inline fn opConcat(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code };
+    stack[sp - i.a] = try concatValues(it, stack[sp - i.a .. sp]);
+}
+
+pub inline fn opBinary(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code };
+    const op: expr.BinOp = @enumFromInt(i.x);
+    const x = &stack[sp - 2];
+    const y = &stack[sp - 1];
+    if (x.* == .int and y.* == .int) {
+        const a = x.int;
+        const b = y.int;
+        x.* = if (intFast(op, a, b)) |r| .{ .int = r } else try expr.intOp(it, op, a, b);
+    } else {
+        x.* = try expr.binaryOp(it, op, x.*, y.*);
+    }
+}
+
+pub inline fn opUnary(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code };
+    stack[sp - 1] = try expr.unaryOp(it, @enumFromInt(i.x), stack[sp - 1]);
+}
+
+pub inline fn opNumberForm(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code, i };
+    const v = stack[sp - 1];
+    if (v == .str) stack[sp - 1] = try expr.numberForm(it, v);
+}
+
+/// Adds `i.b` to slot `i.a` and gives the sum.
+inline fn incrBy(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, i: *const Ins) Error!Value {
+    const found = readCell(named, it, f, code, i.a);
+    const by: i32 = @bitCast(i.b);
+    if (found != null and found.?.v == .val and found.?.v.val == .int and addFits(found.?.v.val.int, by)) {
+        const cell = found.?;
+        const out: Value = .{ .int = cell.v.val.int + by };
+        cell.v = .{ .val = out };
+        return out;
+    }
+    return slowIncr(it, code.names[i.a], .{ .int = by });
+}
+
+pub inline fn opIncr(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    stack[sp] = try incrBy(named, it, f, code, i);
+}
+
+pub inline fn opIncrDrop(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ stack, sp };
+    _ = try incrBy(named, it, f, code, i);
+}
+
+pub inline fn opIncrValue(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    const found = readCell(named, it, f, code, i.a);
+    const by = stack[sp - 1];
+    if (by == .int and found != null and found.?.v == .val and found.?.v.val == .int and addFits(found.?.v.val.int, by.int)) {
+        const cell = found.?;
+        const out: Value = .{ .int = cell.v.val.int + by.int };
+        cell.v = .{ .val = out };
+        stack[sp - 1] = out;
+    } else {
+        stack[sp - 1] = try slowIncr(it, code.names[i.a], by);
+    }
+}
+
+pub inline fn opLappend(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    const found = readCell(named, it, f, code, i.a);
+    if (found != null and found.?.v == .val and found.?.v.val == .list) {
+        const cell = found.?;
+        const out: Value = .{ .list = try cell.v.val.list.append(it.alloc(), stack[sp - 1]) };
+        cell.v = .{ .val = out };
+        stack[sp - 1] = out;
+    } else {
+        stack[sp - 1] = try slowLappend(it, code.names[i.a], stack[sp - 1]);
+    }
+}
+
+pub inline fn opBinVv(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    const op: expr.BinOp = @enumFromInt(i.x);
+    const x = intSlot(named, it, f, code, i.a);
+    const y = intSlot(named, it, f, code, i.b);
+    if (x != null and y != null) {
+        stack[sp] = if (intFast(op, x.?, y.?)) |r| .{ .int = r } else try expr.intOp(it, op, x.?, y.?);
+    } else {
+        shimmer(named, it, f, code, i.a);
+        shimmer(named, it, f, code, i.b);
+        const vx = try readSlot(named, it, f, code, i.a);
+        const vy = try readSlot(named, it, f, code, i.b);
+        stack[sp] = try slowBinary(it, op, vx, vy);
+    }
+}
+
+pub inline fn opBinVi(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    const op: expr.BinOp = @enumFromInt(i.x);
+    const y = code.lits[i.b].int;
+    if (intSlot(named, it, f, code, i.a)) |x| {
+        stack[sp] = if (intFast(op, x, y)) |r| .{ .int = r } else try expr.intOp(it, op, x, y);
+    } else {
+        shimmer(named, it, f, code, i.a);
+        const vx = try readSlot(named, it, f, code, i.a);
+        stack[sp] = try slowBinary(it, op, vx, .{ .int = y });
+    }
+}
+
+/// True: compare `i.x` of slot `i.a` and slot `i.b` is false.
+pub inline fn opJfVv(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!bool {
+    _ = .{ stack, sp };
+    const op: expr.BinOp = @enumFromInt(i.x);
+    const x = intSlot(named, it, f, code, i.a);
+    const y = intSlot(named, it, f, code, i.b);
+    if (x != null and y != null) return !intCompare(op, x.?, y.?);
+    shimmer(named, it, f, code, i.a);
+    shimmer(named, it, f, code, i.b);
+    const vx = try readSlot(named, it, f, code, i.a);
+    const vy = try readSlot(named, it, f, code, i.b);
+    return !try expr.truthy(it, try slowBinary(it, op, vx, vy));
+}
+
+/// True: compare `i.x` of slot `i.a` and literal `i.b` is false.
+pub inline fn opJfVi(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!bool {
+    _ = .{ stack, sp };
+    const op: expr.BinOp = @enumFromInt(i.x);
+    const y = code.lits[i.b].int;
+    if (intSlot(named, it, f, code, i.a)) |x| return !intCompare(op, x, y);
+    shimmer(named, it, f, code, i.a);
+    const vx = try readSlot(named, it, f, code, i.a);
+    return !try expr.truthy(it, try slowBinary(it, op, vx, .{ .int = y }));
+}
+
+pub inline fn opDictUpdate(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f };
+    const nv: u32 = 1 + @as(u32, i.x);
+    stack[sp - nv] = try dictSlow(it, code.sites[i.b], stack[sp - nv .. sp]);
+}
+
+pub inline fn opDictUpdateDrop(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = named;
+    const nv: u32 = 1 + @as(u32, i.x);
+    const cell = f.vars.items[i.a].cell.target();
+    const new: ?Value = if (i.x == 1) stack[sp - 1] else null;
+    if (cell.v != .owned or !dict.isMarked(cell.v.owned) or !try dict.updateOwned(it, cell.v.owned, stack[sp - nv], 1, new)) {
+        const old: ?*value.ListObj = switch (cell.v) {
+            .owned => |v| v.list.obj,
+            .val => |v| if (v == .list) v.list.obj else null,
+            else => null,
+        };
+        const was_owned = cell.v == .owned;
+        if (was_owned) {
+            const v = cell.v.owned;
+            cell.v = .{ .val = v };
+        }
+        _ = try dictSlow(it, code.sites[i.b], stack[sp - nv .. sp]);
+        // A new buffer has only this cell as a holder. An
+        // owned buffer that got a new key also has only
+        // this cell.
+        const now = f.vars.items[i.a].cell.target();
+        if (now.v == .val and dict.isMarked(now.v.val) and (was_owned or now.v.val.list.obj != old)) {
+            const v = now.v.val;
+            now.v = .{ .owned = v };
+        }
+    }
+}
+
+pub inline fn opAppend(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    stack[sp - i.b] = try appendValues(named, it, f, code, i.a, stack[sp - i.b .. sp]);
+}
+
+pub inline fn opForeachInit(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code, i };
+    const items = try it.list(stack[sp - 1]);
+    if (stack[sp - 1] != .list) stack[sp - 1] = try value.newList(it.alloc(), items);
+    stack[sp] = .{ .int = 0 };
+}
+
+/// The error of a `foreach` state that is not a list and an index. The
+/// verifier makes this case unreachable.
+noinline fn badLoopState(it: *Interp) Error {
+    @branchHint(.cold);
+    return it.fail("internal error: bad loop state", .{});
+}
+
+/// True: the loop is done. The function checks the kinds of the list
+/// and the index first.
+pub inline fn opForeachNext(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!bool {
+    if (stack[sp - 2] != .list or stack[sp - 1] != .int) return badLoopState(it);
+    return foreachAdvance(named, it, f, code, stack, sp, i);
+}
+
+/// `opForeachNext` with no check of the kinds. `exec` calls it
+/// directly: the check costs 5 % of the instructions of
+/// bench/foreach.tcl, and the compiler of this file emits
+/// `foreach_next` only on the two places of `foreach_init`.
+pub inline fn foreachAdvance(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!bool {
+    const table = code.tables[i.a];
+    const items = stack[sp - 2].list.items();
+    const at: usize = @intCast(stack[sp - 1].int);
+    if (at >= items.len) return true;
+    try step(it);
+    for (table, 0..) |slot, k| {
+        const cell = try writeCell(named, it, f, code, slot);
+        const src: *const Value = if (at + k < items.len) &items[at + k] else &Value.empty;
+        // A cell with a value needs no new tag.
+        if (cell.v == .val) {
+            cell.v.val = src.*;
+            continue;
+        }
+        // An array, a traced cell, or an element link.
+        if (!cell.plainStore()) {
+            @branchHint(.cold);
+            try slowForeach(it, code, table, items, at, k);
+            stack[sp - 1] = .{ .int = @intCast(at + table.len) };
+            return false;
+        }
+        cell.v = .{ .val = src.* };
+    }
+    stack[sp - 1] = .{ .int = @intCast(at + table.len) };
+    return false;
+}
+
 fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, pc_out: *u32, sp_out: *u32) Error!Value {
     var pc = pc_out.*;
     var sp = sp_out.*;
@@ -1349,14 +1795,14 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
         var i = &ins[pc];
         sw: switch (i.op) {
             .push => {
-                stack[sp] = code.lits[i.a];
+                try opPush(named, it, f, code, stack, sp, i);
                 sp += 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .push_empty => {
-                stack[sp] = Value.empty;
+                try opPushEmpty(named, it, f, code, stack, sp, i);
                 sp += 1;
                 pc += 1;
                 i = &ins[pc];
@@ -1369,142 +1815,84 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 continue :sw i.op;
             },
             .load => {
-                const cell = readCell(named, it, f, code, i.a);
-                if (cell != null and cell.?.v == .val) {
-                    stack[sp] = cell.?.v.val;
-                } else {
-                    const r: interp.VarRef = .{ .name = code.names[i.a] };
-                    stack[sp] = try it.readRef(&r);
-                }
+                try opLoad(named, it, f, code, stack, sp, i);
                 sp += 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .store => {
-                const cell = try writeCell(named, it, f, code, i.a);
-                if (cell.v == .val) {
-                    cell.v.val = stack[sp - 1];
-                    pc += 1;
-                    i = &ins[pc];
-                    continue :sw i.op;
-                }
-                if (!cell.plainStore()) {
-                    @branchHint(.cold);
-                    try slowStore(it, code.names[i.a], &stack[sp - 1]);
-                    pc += 1;
-                    i = &ins[pc];
-                    continue :sw i.op;
-                }
-                cell.v = .{ .val = stack[sp - 1] };
+                try opStore(named, it, f, code, stack, sp, i);
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .access => switch (@as(Access, @enumFromInt(i.x))) {
-                .llength => {
-                    const v = stack[sp - 1];
-                    const n = if (v == .list) v.list.len else (try it.readList(v)).len;
-                    stack[sp - 1] = .{ .int = @intCast(n) };
-                },
+                .llength => try opLlength(named, it, f, code, stack, sp, i),
                 .lindex => {
-                    const l = stack[sp - 2];
-                    const at = stack[sp - 1];
-                    if (at == .int) {
-                        const items = try it.readList(l);
-                        stack[sp - 2] = if (at.int >= 0 and at.int < items.len) items[@intCast(at.int)] else Value.empty;
-                    } else {
-                        const argv = [_]Value{ .{ .str = "lindex" }, l, at };
-                        stack[sp - 2] = try cmds.cmdLindex(it, &argv, null);
-                    }
+                    try opLindex(named, it, f, code, stack, sp, i);
                     sp -= 1;
                 },
-                .string_length => {
-                    // A copy first: the new union overlaps the old one.
-                    const v = stack[sp - 1];
-                    const n = cmds.charCount(try it.str(v));
-                    stack[sp - 1] = .{ .int = @intCast(n) };
-                },
+                .string_length => try opStringLength(named, it, f, code, stack, sp, i),
                 .string_index => {
-                    const argv = [_]Value{ .{ .str = "string" }, .{ .str = "index" }, stack[sp - 2], stack[sp - 1] };
-                    stack[sp - 2] = try cmds.cmdString(it, &argv, null);
+                    try opStringIndex(named, it, f, code, stack, sp, i);
                     sp -= 1;
                 },
             },
             .guard => {
-                if (it.epoch != it.safe_epoch and !recheck(it)) {
+                // The two parts of `opGuard`.
+                if (guardJumps(it)) {
                     pc = i.a;
                     continue;
                 }
-                try step(it);
+                try opStep(named, it, f, code, stack, sp, i);
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
-            .step => try step(it),
+            .step => try opStep(named, it, f, code, stack, sp, i),
             .jump => {
                 pc = i.a;
                 continue;
             },
-            .lassign, .lassign_drop => {
-                const table = code.tables[i.a];
-                const items = try it.list(stack[sp - 1]);
-                for (table, 0..) |slot, k| {
-                    const v = if (k < items.len) items[k] else Value.empty;
-                    const cell = try writeCell(named, it, f, code, slot);
-                    if (cell.v == .val) {
-                        cell.v.val = v;
-                    } else if (cell.plainStore()) {
-                        cell.v = .{ .val = v };
-                    } else {
-                        try slowStore(it, code.names[slot], &v);
-                    }
-                }
-                if (i.op == .lassign) {
-                    stack[sp - 1] = try value.newList(it.alloc(), items[@min(items.len, table.len)..]);
-                } else sp -= 1;
+            .lassign => {
+                try opLassign(named, it, f, code, stack, sp, i);
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
-            .lset, .lset_drop => {
-                const cell = f.vars.items[i.a].cell.target();
-                if (try more.lsetOwned(it, cell, stack[sp - 2], stack[sp - 1])) {
-                    if (i.op == .lset) {
-                        const out = cell.v.owned;
-                        cell.v = .{ .val = out };
-                        stack[sp - 2] = out;
-                        sp -= 1;
-                    } else sp -= 2;
-                } else {
-                    const site = code.sites[i.b];
-                    const argv = [4]Value{ site.words[0].kind.lit, site.words[1].kind.lit, stack[sp - 2], stack[sp - 1] };
-                    const r = try more.cmdLset(it, &argv, site);
-                    sp -= 2;
-                    if (i.op == .lset) {
-                        stack[sp] = r;
-                        sp += 1;
-                    }
-                }
+            .lassign_drop => {
+                try opLassignDrop(named, it, f, code, stack, sp, i);
+                sp -= 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
+            },
+            .lset => {
+                try opLset(named, it, f, code, stack, sp, i);
+                sp -= 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
+            },
+            .lset_drop => {
+                try opLsetDrop(named, it, f, code, stack, sp, i);
+                sp -= 2;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .str_eq_jump => {
-                const top = stack[sp - 1];
-                var buf: [24]u8 = undefined;
-                const s: []const u8 = if (top == .int) value.writeInt(&buf, top.int) else try it.str(top);
-                if (std.mem.eql(u8, s, code.lits[i.a].str)) {
+                if (try opStrEqJump(named, it, f, code, stack, sp, i)) {
                     pc = i.b;
                 } else pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .jump_false => {
+                const jump = try opJumpFalse(named, it, f, code, stack, sp, i);
                 sp -= 1;
-                const v = stack[sp];
-                const t = if (v == .int) v.int != 0 else try expr.truthy(it, v);
-                if (!t) {
+                if (jump) {
                     pc = i.a;
                     continue;
                 }
@@ -1513,10 +1901,9 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 continue :sw i.op;
             },
             .jump_true => {
+                const jump = try opJumpTrue(named, it, f, code, stack, sp, i);
                 sp -= 1;
-                const v = stack[sp];
-                const t = if (v == .int) v.int != 0 else try expr.truthy(it, v);
-                if (t) {
+                if (jump) {
                     pc = i.a;
                     continue;
                 }
@@ -1525,214 +1912,108 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 continue :sw i.op;
             },
             .to_bool => {
-                const v = stack[sp - 1];
-                const t = if (v == .int) v.int != 0 else try expr.truthy(it, v);
-                stack[sp - 1] = .{ .int = @intFromBool(t) };
+                try opToBool(named, it, f, code, stack, sp, i);
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .invoke => {
-                try step(it);
-                const c = code.sites[i.a];
-                const argv = stack[sp - i.b .. sp];
-                const command = try it.resolve(c, argv);
-                // A proc call keeps its values in the frame and the word
-                // stack. A native command can hold values in locals.
-                if (gc.precise) it.markDirect(command, argv.ptr);
-                const called = it.call(command, argv, c);
-                if (gc.precise) it.clearDirect();
-                const r = try called;
-                sp -= i.b;
-                stack[sp] = r;
-                sp += 1;
+                try opInvoke(named, it, f, code, stack, sp, i);
+                sp = sp - i.b + 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .eval_cmd => {
-                if (gc.precise) it.gc_from_exec = gc.isClean(it);
-                stack[sp] = try it.evalCmd(code.sites[i.a]);
+                try opEvalCmd(named, it, f, code, stack, sp, i);
                 sp += 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .word => {
-                stack[sp] = try it.evalWord(code.words[i.a]);
+                try opWord(named, it, f, code, stack, sp, i);
                 sp += 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .node => {
-                stack[sp] = try expr.eval(it, code.nodes[i.a]);
+                try opNode(named, it, f, code, stack, sp, i);
                 sp += 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .concat => {
-                const r = try concatValues(it, stack[sp - i.a .. sp]);
-                sp -= i.a;
-                stack[sp] = r;
-                sp += 1;
+                try opConcat(named, it, f, code, stack, sp, i);
+                sp = sp - i.a + 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .binary => {
-                const op: expr.BinOp = @enumFromInt(i.x);
-                const x = &stack[sp - 2];
-                const y = &stack[sp - 1];
-                if (x.* == .int and y.* == .int) {
-                    const a = x.int;
-                    const b = y.int;
-                    x.* = if (intFast(op, a, b)) |r| .{ .int = r } else try expr.intOp(it, op, a, b);
-                } else {
-                    x.* = try expr.binaryOp(it, op, x.*, y.*);
-                }
+                try opBinary(named, it, f, code, stack, sp, i);
                 sp -= 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
-            .unary => stack[sp - 1] = try expr.unaryOp(it, @enumFromInt(i.x), stack[sp - 1]),
+            .unary => try opUnary(named, it, f, code, stack, sp, i),
             .number_form => {
-                const v = stack[sp - 1];
-                if (v == .str) stack[sp - 1] = try expr.numberForm(it, v);
+                try opNumberForm(named, it, f, code, stack, sp, i);
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .incr => {
-                const found = readCell(named, it, f, code, i.a);
-                const by: i32 = @bitCast(i.b);
-                if (found != null and found.?.v == .val and found.?.v.val == .int and addFits(found.?.v.val.int, by)) {
-                    const cell = found.?;
-                    const out: Value = .{ .int = cell.v.val.int + by };
-                    cell.v = .{ .val = out };
-                    stack[sp] = out;
-                } else {
-                    stack[sp] = try slowIncr(it, code.names[i.a], .{ .int = by });
-                }
+                try opIncr(named, it, f, code, stack, sp, i);
                 sp += 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .incr_value => {
-                const found = readCell(named, it, f, code, i.a);
-                const by = stack[sp - 1];
-                if (by == .int and found != null and found.?.v == .val and found.?.v.val == .int and addFits(found.?.v.val.int, by.int)) {
-                    const cell = found.?;
-                    const out: Value = .{ .int = cell.v.val.int + by.int };
-                    cell.v = .{ .val = out };
-                    stack[sp - 1] = out;
-                } else {
-                    stack[sp - 1] = try slowIncr(it, code.names[i.a], by);
-                }
+                try opIncrValue(named, it, f, code, stack, sp, i);
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .lappend => {
-                const found = readCell(named, it, f, code, i.a);
-                if (found != null and found.?.v == .val and found.?.v.val == .list) {
-                    const cell = found.?;
-                    const out: Value = .{ .list = try cell.v.val.list.append(it.alloc(), stack[sp - 1]) };
-                    cell.v = .{ .val = out };
-                    stack[sp - 1] = out;
-                } else {
-                    stack[sp - 1] = try slowLappend(it, code.names[i.a], stack[sp - 1]);
-                }
+                try opLappend(named, it, f, code, stack, sp, i);
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .store_pop => {
-                const cell = try writeCell(named, it, f, code, i.a);
+                try opStorePop(named, it, f, code, stack, sp, i);
                 sp -= 1;
-                if (cell.v == .val) {
-                    cell.v.val = stack[sp];
-                    pc += 1;
-                    i = &ins[pc];
-                    continue :sw i.op;
-                }
-                if (!cell.plainStore()) {
-                    @branchHint(.cold);
-                    try slowStore(it, code.names[i.a], &stack[sp]);
-                    pc += 1;
-                    i = &ins[pc];
-                    continue :sw i.op;
-                }
-                cell.v = .{ .val = stack[sp] };
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .incr_drop => {
-                const found = readCell(named, it, f, code, i.a);
-                const by: i32 = @bitCast(i.b);
-                if (found != null and found.?.v == .val and found.?.v.val == .int and addFits(found.?.v.val.int, by)) {
-                    const cell = found.?;
-                    const out: Value = .{ .int = cell.v.val.int + by };
-                    cell.v = .{ .val = out };
-                } else {
-                    _ = try slowIncr(it, code.names[i.a], .{ .int = by });
-                }
+                try opIncrDrop(named, it, f, code, stack, sp, i);
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .bin_vv => {
-                const op: expr.BinOp = @enumFromInt(i.x);
-                const x = intSlot(named, it, f, code, i.a);
-                const y = intSlot(named, it, f, code, i.b);
-                if (x != null and y != null) {
-                    stack[sp] = if (intFast(op, x.?, y.?)) |r| .{ .int = r } else try expr.intOp(it, op, x.?, y.?);
-                } else {
-                    shimmer(named, it, f, code, i.a);
-                    shimmer(named, it, f, code, i.b);
-                    const vx = try readSlot(named, it, f, code, i.a);
-                    const vy = try readSlot(named, it, f, code, i.b);
-                    stack[sp] = try slowBinary(it, op, vx, vy);
-                }
+                try opBinVv(named, it, f, code, stack, sp, i);
                 sp += 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .bin_vi => {
-                const op: expr.BinOp = @enumFromInt(i.x);
-                const y = code.lits[i.b].int;
-                if (intSlot(named, it, f, code, i.a)) |x| {
-                    stack[sp] = if (intFast(op, x, y)) |r| .{ .int = r } else try expr.intOp(it, op, x, y);
-                } else {
-                    shimmer(named, it, f, code, i.a);
-                    const vx = try readSlot(named, it, f, code, i.a);
-                    stack[sp] = try slowBinary(it, op, vx, .{ .int = y });
-                }
+                try opBinVi(named, it, f, code, stack, sp, i);
                 sp += 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .jf_vv => {
-                const op: expr.BinOp = @enumFromInt(i.x);
-                const x = intSlot(named, it, f, code, i.a);
-                const y = intSlot(named, it, f, code, i.b);
-                var t: bool = undefined;
-                if (x != null and y != null) {
-                    t = intCompare(op, x.?, y.?);
-                } else {
-                    shimmer(named, it, f, code, i.a);
-                    shimmer(named, it, f, code, i.b);
-                    const vx = try readSlot(named, it, f, code, i.a);
-                    const vy = try readSlot(named, it, f, code, i.b);
-                    t = try expr.truthy(it, try slowBinary(it, op, vx, vy));
-                }
-                if (!t) {
+                if (try opJfVv(named, it, f, code, stack, sp, i)) {
                     pc = i.c;
                     continue;
                 }
@@ -1741,17 +2022,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 continue :sw i.op;
             },
             .jf_vi => {
-                const op: expr.BinOp = @enumFromInt(i.x);
-                const y = code.lits[i.b].int;
-                var t: bool = undefined;
-                if (intSlot(named, it, f, code, i.a)) |x| {
-                    t = intCompare(op, x, y);
-                } else {
-                    shimmer(named, it, f, code, i.a);
-                    const vx = try readSlot(named, it, f, code, i.a);
-                    t = try expr.truthy(it, try slowBinary(it, op, vx, .{ .int = y }));
-                }
-                if (!t) {
+                if (try opJfVi(named, it, f, code, stack, sp, i)) {
                     pc = i.c;
                     continue;
                 }
@@ -1760,93 +2031,40 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 continue :sw i.op;
             },
             .dict_update => {
-                const nv: u32 = 1 + @as(u32, i.x);
-                const r = try dictSlow(it, code.sites[i.b], stack[sp - nv .. sp]);
-                sp -= nv;
-                stack[sp] = r;
-                sp += 1;
+                try opDictUpdate(named, it, f, code, stack, sp, i);
+                sp = sp - (1 + @as(u32, i.x)) + 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .dict_update_drop => {
-                const nv: u32 = 1 + @as(u32, i.x);
-                const cell = f.vars.items[i.a].cell.target();
-                const new: ?Value = if (i.x == 1) stack[sp - 1] else null;
-                if (cell.v != .owned or !dict.isMarked(cell.v.owned) or !try dict.updateOwned(it, cell.v.owned, stack[sp - nv], 1, new)) {
-                    const old: ?*value.ListObj = switch (cell.v) {
-                        .owned => |v| v.list.obj,
-                        .val => |v| if (v == .list) v.list.obj else null,
-                        else => null,
-                    };
-                    const was_owned = cell.v == .owned;
-                    if (was_owned) {
-                        const v = cell.v.owned;
-                        cell.v = .{ .val = v };
-                    }
-                    _ = try dictSlow(it, code.sites[i.b], stack[sp - nv .. sp]);
-                    // A new buffer has only this cell as a holder. An
-                    // owned buffer that got a new key also has only
-                    // this cell.
-                    const now = f.vars.items[i.a].cell.target();
-                    if (now.v == .val and dict.isMarked(now.v.val) and (was_owned or now.v.val.list.obj != old)) {
-                        const v = now.v.val;
-                        now.v = .{ .owned = v };
-                    }
-                }
-                sp -= nv;
+                try opDictUpdateDrop(named, it, f, code, stack, sp, i);
+                sp -= 1 + @as(u32, i.x);
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .append => {
-                const r = try appendValues(named, it, f, code, i.a, stack[sp - i.b .. sp]);
-                sp -= i.b;
-                stack[sp] = r;
-                sp += 1;
+                try opAppend(named, it, f, code, stack, sp, i);
+                sp = sp - i.b + 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .ret => return stack[sp - 1],
             .foreach_init => {
-                const items = try it.list(stack[sp - 1]);
-                if (stack[sp - 1] != .list) stack[sp - 1] = try value.newList(it.alloc(), items);
-                stack[sp] = .{ .int = 0 };
+                try opForeachInit(named, it, f, code, stack, sp, i);
                 sp += 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
             },
             .foreach_next => {
-                const table = code.tables[i.a];
-                const items = stack[sp - 2].list.items();
-                const at: usize = @intCast(stack[sp - 1].int);
-                if (at >= items.len) {
+                // `opForeachNext` with no check of the kinds.
+                if (try foreachAdvance(named, it, f, code, stack, sp, i)) {
                     pc = i.b;
                     continue;
                 }
-                try step(it);
-                for (table, 0..) |slot, k| {
-                    const cell = try writeCell(named, it, f, code, slot);
-                    const src: *const Value = if (at + k < items.len) &items[at + k] else &Value.empty;
-                    // A cell with a value needs no new tag.
-                    if (cell.v == .val) {
-                        cell.v.val = src.*;
-                        continue;
-                    }
-                    // An array, a traced cell, or an element link.
-                    if (!cell.plainStore()) {
-                        @branchHint(.cold);
-                        try slowForeach(it, code, table, items, at, k);
-                        stack[sp - 1] = .{ .int = @intCast(at + table.len) };
-                        pc += 1;
-                        i = &ins[pc];
-                        continue :sw i.op;
-                    }
-                    cell.v = .{ .val = src.* };
-                }
-                stack[sp - 1] = .{ .int = @intCast(at + table.len) };
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;

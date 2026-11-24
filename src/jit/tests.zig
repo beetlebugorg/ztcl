@@ -647,3 +647,44 @@ test "each proc of the unit tests passes the verifier" {
     try testing.expect(verify.hook_runs > 0);
     try testing.expectEqual(@as(usize, 0), verify.hook_failures);
 }
+
+// ---- The helpers ----
+
+const helpers = @import("helpers.zig");
+
+test "the helpers run the instruction functions" {
+    const it = try newInterp();
+    defer freeInterp(it);
+    try defineProcs(it, "proc g {a b} {set c [expr {$a + $b}]; return $c}");
+    const code = try procCode(it, "g");
+    // A frame with the slots of g.
+    var frame: tcl.interp.Frame = .{};
+    for (code.names, 0..) |name, k| {
+        const cell = try it.alloc().create(tcl.interp.Var);
+        cell.* = .{};
+        if (k < 2) cell.v = .{ .val = .{ .int = @intCast(k + 20) } };
+        try frame.vars.append(it.alloc(), .{ .name = name, .cell = cell });
+    }
+    var stack: [8]tcl.Value = undefined;
+    var ctx: jit.EnterCtx = .{ .it = it, .code = code, .frame = &frame, .stack = &stack, .helpers = &helpers.table, .target = 0, .pc = 0, .sp = 0, .err = 0 };
+    // bin_vv: 20 + 21 at depth 0.
+    const pc: u32 = for (code.ins, 0..) |ins, k| {
+        if (ins.op == .bin_vv) break @intCast(k);
+    } else return error.NoBinVv;
+    const h: helpers.Fn = @ptrCast(@alignCast(helpers.table[@intFromEnum(helpers.Helper.bin_vv)]));
+    try testing.expectEqual(helpers.done, h(&ctx, pc, 0));
+    try testing.expectEqual(@as(i64, 41), stack[0].int);
+    // load of a slot with no value: an error with the text of the interpreter.
+    const load: helpers.Fn = @ptrCast(@alignCast(helpers.table[@intFromEnum(helpers.Helper.load)]));
+    var bad = code.ins[pc];
+    bad = .{ .op = .load, .a = 2 };
+    var ins = try testing.allocator.dupe(vm.Ins, code.ins);
+    defer testing.allocator.free(ins);
+    ins[0] = bad;
+    var c2 = code.*;
+    c2.ins = ins;
+    ctx.code = &c2;
+    try testing.expectEqual(helpers.failed, load(&ctx, 0, 1));
+    try testing.expectEqual(error.TclError, helpers.errorOf(&ctx));
+    try testing.expectEqualStrings("can't read \"c\": no such variable", try it.str(it.result));
+}
