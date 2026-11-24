@@ -110,12 +110,27 @@ ztcl has a JIT compiler for x86-64 Linux. It is off by default.
 
 - Build: `zig build -Djit=true`. This is the default on x86-64 Linux. WebAssembly and other targets use the interpreter only.
 - Run: `ztcl --jit script.tcl`. `--jit-threshold N` sets the number of calls before a proc compiles, and `--jit-stats` prints what compiled.
-- Tier 1 compiles the bytecode of a proc body to machine code. Each instruction calls the same handler as the interpreter, and integer arithmetic, compares, and `incr` run inline.
+- Tier 1 compiles the bytecode of a proc body or of a script outside a proc to machine code. Each instruction calls the same handler as the interpreter. Integer arithmetic, compares, `incr`, and some list paths run inline.
+- Tier 2 compiles a hot loop of a proc a second time. Integer and double variables stay in registers for the whole loop, and other instructions call the helpers of tier 1. A failed check exits to tier 1 at the same instruction. `--jit-tier2` turns tier 2 on, and `--jit-tier2-count N` sets the passes of a loop before it compiles (1000 by default). Tier 2 is off by default. A script outside a proc stays in tier 1.
 - The step limit and the memory limit are exact, as in the interpreter. A JIT run gives the same results and the same step counts as the interpreter on the whole Tcl test suite.
 - The code memory is never writable and executable at once. A verifier checks each bytecode before it compiles, and no script value goes into the machine code.
 - An endless recursion can go deeper with the JIT before the nesting error, because a JIT call uses less native stack.
 
-CPU instructions with `--jit`, against the interpreter, on the scripts in `bench/`: `sum.tcl` −68 %, `nested.tcl` −49 %, `foreach.tcl` −29 %, `strbuild.tcl` −22 %, `dict.tcl` −17 %, `readloop.tcl` −16 %, `fib.tcl` −14 %, `dictgrow.tcl` −10 %. List, dict, and proc call paths still go through the interpreter handlers. The next milestone compiles them inline. [The JIT design](docs/jit.md) has the plan and the gates.
+User CPU instructions of the whole process, in millions, on the scripts in `bench/`. Measured on 2026-11-24 with `perf stat -e instructions:u`, `ReleaseFast`, x86-64 Linux.
+
+| Script | Interpreter | `--jit` | `--jit --jit-tier2` | tclsh 8.6.16 |
+|---|---|---|---|---|
+| `sum.tcl` | 283.8 | 90.9 | 15.0 | 684.2 |
+| `dsum.tcl` | 700.8 | 558.0 | 16.6 | 1212.5 |
+| `nested.tcl` | 337.6 | 123.7 | 55.5 | 933.9 |
+| `foreach.tcl` | 213.8 | 80.4 | 40.6 | 387.1 |
+| `dict.tcl` | 281.0 | 194.9 | 188.6 | 555.3 |
+| `dictgrow.tcl` | 645.6 | 572.4 | 570.4 | 825.5 |
+| `readloop.tcl` | 208.9 | 154.7 | 146.9 | 302.3 |
+| `strbuild.tcl` | 324.0 | 252.6 | 243.2 | 812.4 |
+| `fib.tcl` | 165.8 | 137.4 | 137.4 | 600.9 |
+
+The `bf.tcl bench.b` program of kostya/benchmarks used 114.7 s of wall time in the interpreter, 112.2 s with `--jit`, and 252.7 s in tclsh 8.6.16. Its instruction count with `--jit` is 0.38 of the count of tclsh, and tier 2 does not change it. Proc calls and method calls still go through the interpreter. [The JIT design](docs/jit.md) has the plan and the gates.
 
 ## Compatibility
 
