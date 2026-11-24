@@ -31,7 +31,7 @@ On `error.TclError`, `it.result` holds the message and `it.error_line` holds the
 | Field or function | Use |
 |---|---|
 | `step_limit` | The steps left. The default has no limit. |
-| `mem_limit` | The memory limit in bytes. |
+| `mem_limit` | The memory limit in bytes. A request fails when the heap then holds more than twice this count. |
 | `output` | The callback of `puts`. With no callback, the output is dropped. |
 | `noise_seed` | The seed of `noise2` and `noise3`. |
 | `user` | A pointer for the embedder. |

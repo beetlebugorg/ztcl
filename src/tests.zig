@@ -538,6 +538,22 @@ test "the memory limit stops a script, and reset frees the script data" {
     try std.testing.expectEqual(@as(?i64, 0), v.asInt());
 }
 
+test "a request above twice the memory limit stops the script, and catch cannot catch it" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.gc_on = false;
+    it.mem_limit = 8 << 20;
+    const r = it.eval("set n 0; catch {string length [string repeat x 64000000]}; incr n");
+    try std.testing.expectError(error.TclError, r);
+    try std.testing.expectEqualStrings("the script used too much memory", try it.str(it.result));
+    try std.testing.expectEqualStrings("the script used too much memory", try it.str(try it.getVarPlain("::errorInfo")));
+    try std.testing.expect(it.counter.mem_peak <= 2 * it.mem_limit);
+    try std.testing.expect(!it.overLimit());
+    const v = try it.eval("set n");
+    try std.testing.expectEqual(@as(?i64, 0), v.asInt());
+}
+
 test "lset, lsort options, and binary" {
     try check(&.{
         .{ "set l {a b c}; lset l 1 x", "a x c" },
