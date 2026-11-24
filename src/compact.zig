@@ -361,6 +361,8 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     // The address of each held value changes, and the embedder has only
     // the old one. A value that must stay goes in `roots`.
     it.held.clearRetainingCapacity();
+    // Pending tail call words point into the old heap.
+    it.tail_words = null;
     it.pending_during = null;
     it.last_during = null;
     it.last_info = Value.empty;

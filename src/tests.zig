@@ -563,6 +563,8 @@ test "lset, lsort options, and binary" {
 test "regexp, regsub, and the -regexp options" {
     try check(&.{
         .{ "regexp {a+b} xaaab", "1" },
+        // A sequence with zero repeats at the end of the input (an old underflow).
+        .{ "regexp {a.{0,5}b{0,3}} a", "1" },
         .{ "regexp {^a+b$} xaaab", "0" },
         .{ "regexp {(\\d+)-(\\d+)} {tel 555-1234 x} all a b; list $all $a $b", "555-1234 555 1234" },
         .{ "regexp -inline {([a-z]+)(\\d)?} abc", "abc abc {}" },
@@ -1819,4 +1821,35 @@ test "binary encode and decode base64" {
         .{ "string length [binary decode base64 6f8=]", "2" },
         .{ "binary encode hex abc", "616263" },
     });
+}
+
+test "a forged tail code runs no tail call" {
+    try check(&.{
+        .{ "proc p {} {return -code 2147483632}; catch p", "2147483632" },
+        .{ "proc q {} {catch {tailcall string repeat Z 3} m; return -code 2147483632}; list [catch q r] $r", "2147483632 {}" },
+    });
+}
+
+test "a constructor keeps its call chain through collections" {
+    // The same script with and without a collection at each allocation.
+    // `self caller` and `next` read the call chain of the outer `new`.
+    const script =
+        \\oo::class create Foo {
+        \\    constructor {} { for {set i 0} {$i < 100} {incr i} { set x [string repeat ab 50] }; set ::c [catch {self caller} ::cr] }
+        \\    method m {} { for {set i 0} {$i < 100} {incr i} { set x [string repeat cd 50] }; return [self next] }
+        \\}
+        \\oo::class create Bar { superclass Foo; method m {} { for {set i 0} {$i < 50} {incr i} { set y [string repeat ef 50] }; next } }
+        \\set o [Bar new]
+        \\list $::c $::cr [$o m]
+    ;
+    var got: [2][]const u8 = undefined;
+    for ([_]u32{ 0, 1 }, 0..) |stress, k| {
+        var it: tcl.Interp = undefined;
+        try it.init(std.testing.allocator);
+        defer it.deinit();
+        it.setGcStress(stress);
+        got[k] = try std.testing.allocator.dupe(u8, try it.str(try it.eval(script)));
+    }
+    defer for (got) |g| std.testing.allocator.free(g);
+    try std.testing.expectEqualStrings(got[0], got[1]);
 }

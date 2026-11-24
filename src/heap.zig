@@ -472,6 +472,9 @@ pub fn isMarked(h: *const Heap, addr: usize) bool {
 /// is safe. A test checks this number against `coro.zig`.
 pub const coro_stack_bytes: usize = if (builtin.mode == .Debug) 16 << 20 else 1 << 20;
 /// The bytes that a native pointer can be before the start of its block.
+/// A stack word also marks the block that holds the address 64 bytes
+/// higher: a pointer at most 64 bytes below the start of a block keeps it
+/// only if that address falls in the block. This is not a full range scan.
 const stack_margin: usize = 64;
 
 /// Reads each aligned word of a native stack as a possible pointer, with

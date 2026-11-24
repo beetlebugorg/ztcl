@@ -613,6 +613,9 @@ fn cmdReturn(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         it.error_code = ecode orelse .{ .str = "NONE" };
         if (einfo) |info| try startInfo(it, info);
     }
+    // A forged tail code must not run tail call words that a `catch`
+    // stopped earlier.
+    if (@intFromEnum(code) == @import("coro.zig").tail_code) it.tail_words = null;
     if (level == 0) {
         // The code applies to the `return` command itself.
         return switch (code) {

@@ -1093,6 +1093,7 @@ pub const Interp = struct {
         defer it.capabilities = caps;
         if (it.points) |s| s.programs = .empty;
         it.freeCaches();
+        it.tail_words = null;
         if (it.isRoot()) it.own_heap.reset();
         const counter = it.counter;
         const own = it.own_heap;
@@ -1858,7 +1859,7 @@ pub const Interp = struct {
 
     fn callProc(it: *Interp, p: *Proc, argv: []const Value) Error!Value {
         return it.runProc(p, argv, argv[1..], null) catch |e| {
-            if (e == error.TclCustom and it.custom_code == coro.tail_code) return it.runTail();
+            if (e == error.TclCustom and it.custom_code == coro.tail_code and it.tail_words != null) return it.runTail();
             return e;
         };
     }
@@ -1866,7 +1867,8 @@ pub const Interp = struct {
     /// Runs pending tail calls in a loop, in the frame of the caller.
     noinline fn runTail(it: *Interp) Error!Value {
         while (true) {
-            const words = it.tail_words.?;
+            // A script can forge the tail code with `return -code`.
+            const words = it.tail_words orelse return error.TclCustom;
             it.tail_words = null;
             if (it.step_limit == 0) return it.fail("step limit reached", .{});
             it.step_limit -= 1;
@@ -1879,7 +1881,7 @@ pub const Interp = struct {
             if (r) |v| {
                 return v;
             } else |e| {
-                if (e == error.TclCustom and it.custom_code == coro.tail_code) continue;
+                if (e == error.TclCustom and it.custom_code == coro.tail_code and it.tail_words != null) continue;
                 return e;
             }
         }
@@ -1888,7 +1890,7 @@ pub const Interp = struct {
     /// Runs the body of a method. The arguments start at `argv[skip]`.
     pub fn callMethod(it: *Interp, p: *Proc, argv: []const Value, skip: usize) Error!Value {
         return it.runProc(p, argv, argv[skip..], null) catch |e| {
-            if (e == error.TclCustom and it.custom_code == coro.tail_code) return it.runTail();
+            if (e == error.TclCustom and it.custom_code == coro.tail_code and it.tail_words != null) return it.runTail();
             return e;
         };
     }
@@ -1896,7 +1898,7 @@ pub const Interp = struct {
     /// Runs a lambda of `apply`. The frame has all the words of the call.
     pub fn callLambda(it: *Interp, p: *Proc, argv: []const Value) Error!Value {
         return it.runProc(p, argv, argv[2..], argv[1]) catch |e| {
-            if (e == error.TclCustom and it.custom_code == coro.tail_code) return it.runTail();
+            if (e == error.TclCustom and it.custom_code == coro.tail_code and it.tail_words != null) return it.runTail();
             return e;
         };
     }
