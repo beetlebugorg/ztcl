@@ -63,7 +63,8 @@ A value is a tagged union: an integer (64 bits), a double, a string, or a list.
 - A dict is a list of keys and values in insert order. A list object can have a mark that says its pairs are a valid dict, so a read does not check the keys again. A shorter view of even length of a marked buffer is also a valid dict.
 - A dict with 16 or more keys has a hash table with open addressing and linear probing. The table maps the hash of the string form of a key to its position. A new key goes after the view when the view ends at the used part of the buffer, so a new key is amortized O(1). An older view stays the same value, because a lookup ignores positions past its end. A write to an existing key of a shared dict copies the buffer.
 - A big integer is a string with canonical decimal text. An integer that fits in 64 bits is always an `int`. The integer operators check for overflow and call `bigint.zig` only on an overflow. The decimal text comes from repeated division of the limbs by 10^19, with a multiply by the reciprocal in place of a hardware divide. The parse of decimal text multiplies the limbs by 10^19 and adds 19 digits at each step.
-- `llength` and `lindex` keep the parse of a string in a table with 16 places. A string of at least 32 bytes goes in the table at its second read at the same address. An entry has a private copy of the text, and each hit compares the string with that copy.
+- `llength` and `lindex` keep the parse of a string in a table with 16 places. A string of at least 32 bytes goes in the table at its second read at the same address. An entry has a private copy of the text. The first hit after a collection compares the string with that copy. Between two collections no block is freed, so a hit with the same address and length needs no compare. A collection also clears the table.
+- A new list is one block: the list object, then its buffer.
 - `append` writes after the string when the string ends at the used part of its buffer. Other views of the buffer stay correct, because their bytes do not change.
 
 ## The parser and the compiled form
@@ -77,6 +78,12 @@ The parser follows the 12 rules of the Tcl language. It reads a script once and 
 Each word of a command has a cache slot. A command such as `while` asks the interpreter for the compiled script or the compiled expression of an argument. If the argument is a literal word, the result stays in the slot. A loop body, a proc body, and a braced `expr` are parsed one time.
 
 A command site also keeps the command that its name gave. The interpreter has an epoch number that changes when a command is added, renamed, or deleted. The site looks the name up again when the epoch differs.
+
+### The caches of a call
+
+- A command site keeps the command of a name word that is not a literal, such as `$obj`. The entry is valid for the same epoch, the same namespace, and a name string at the same address with the same length. The site holds the string, so its address cannot name another string. `objCmd` and `myCmd` read their own `Command` from the site.
+- A TclOO object keeps its last four call chains. A number in the OO state changes at each definition, object creation, object end, and copy, and an entry is valid only for that number. A call from a filter of the object does not use the cache. An entry also keeps the export state of the method, so a call of the object command does not reach a private method that `my` called before.
+- `::oo::Link`, at the start of a method with declared variables, keeps the global cell of each name in the object. The cache is used only when the current namespace is the namespace of the object. An entry of the global frame is never removed, so the cell of a name stays the same.
 
 ### The direct forms and the slot hints
 
@@ -117,6 +124,13 @@ A cell that holds the canonical text of an integer gets the integer when a compa
 
 `lassign` writes each item to a slot with the store rules of `foreach_next` and pushes the list of the items that are left. `lassign_drop` pushes nothing. `lset` and `lset_drop` call `more.lsetOwned`: the first call on a cell copies the list and the cell owns the copy, and each later call writes in place. An index outside the list, a cell that is not plain, or an error goes to the general command. A result that the script uses ends the ownership.
 
+The ownership rule: a list that a cell owns is never in another place. So each value that a script can see stays the same. Two forms keep the ownership:
+
+- `llength $v` and `lindex $v $i`, where the index is a literal or one plain variable, load `v` with the flag `x` 1. The load pushes the owned list and the cell keeps it. The `access` reads the list at once and replaces it on the stack with its result. Between the load and the access only loads of plain variables run, and the guard turns the inline forms off while a variable has a trace, so no script can see or change the list in that time.
+- An `lset` or `lassign` that is the last command of an arm of `if` or `switch` drops its result when no code reads the result of the `if` or the `switch`. It then pushes an empty string for the arm.
+
+Each other load of an owned cell ends the ownership first. `tests/jit/owned_lists.tcl` keeps copies of a list in other variables, `upvar`, `global`, an array, a dict, a list, a trace, a coroutine, and a return value.
+
 The semantics of Tcl stay:
 
 - A guard starts each inline form. It checks that each inlined name is the original core command and that no namespace has a command of that name. The check runs one time for each change of the command epoch. The command table counts its keys in a namespace with an inlined name, so the check is one lookup for each inlined name. Its cost does not grow with the count of commands.
@@ -131,6 +145,8 @@ The semantics of Tcl stay:
 - The words of a command go on a stack of values, in chunks. A command returns its stack space when it ends. A loop with integer math allocates no memory.
 - A proc call makes a frame. A frame is a small array of names and variable cells. Frames and cells go back to a free list when the call ends.
 - A frame with 32 or more variables also has a hash index from a name to its first entry. A search of the frame adds the new entries to the index first. So a search of the global frame with many variables does not read each variable.
+- A call with a compiled body, one word for each parameter, and no `args` goes through a fast path (`callProcFast`). A free frame keeps the entries and the cells of its last fast call, with the `Code` of that call. A new fast call of the same `Code` on that frame gives each cell its start value and writes no entry. The frame holds the `Code`, so its address cannot name another `Code`. Each other call, and each other use of the frame, gives the kept cells to the free list first. Each call drops the hash index of its frame, and the next search of a large frame makes it again.
+- `vm.run` has a short entry for machine code that is ready, when the call does not come from the host. It has the checks of the full entry: the native stack, the nesting, and the value stack.
 - `upvar` and `global` make a cell that links to another cell.
 - The return codes are Zig errors: `TclError`, `TclReturn`, `TclBreak`, and `TclContinue`. The result of the interpreter holds the message or the value. `return -code` and `return -level` set the code and the level of a pending return.
 - A return code above 4 (`return -code 5`) is the error `TclCustom`, with the number in `custom_code`.

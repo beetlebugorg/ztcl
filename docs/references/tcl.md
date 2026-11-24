@@ -78,6 +78,14 @@ Donald E. Knuth, The Art of Computer Programming, Volume 3, section 6.4.
 
 **How ztcl uses it:** `src/dict.zig` uses open addressing with linear probing. ztcl has its own code. The hash function is `std.hash.Wyhash` of the Zig standard library.
 
+### Copy on write with one holder
+
+The manual page `Object.3` of Tcl 8.6 (`Tcl_IsShared`, `Tcl_DuplicateObj`). https://www.tcl-lang.org/man/tcl8.6/TclLib/Object.htm
+
+**License:** Tcl/Tk License (BSD style)
+
+**How ztcl uses it:** Tcl counts the references of a value and changes a list in place when the count is one. ztcl has no counts. A cell owns its list after the first `lset`, and the compiler keeps the ownership when the bytecode proves that no other place gets the list: a load that an `access` reads at once, and a result that no code reads (`src/vm.zig`). The authors read the manual page and copied no code.
+
 ### Big integer arithmetic
 
 `std.math.big.int` of the Zig standard library.
