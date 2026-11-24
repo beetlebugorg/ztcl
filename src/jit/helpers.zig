@@ -71,6 +71,8 @@ pub const Helper = enum(u8) {
     foreach_next,
     /// 1 when the guard jumps to its cold block: `vm.guardJumps`.
     recheck,
+    /// `invoke` for a site whose cached command the code checked.
+    call_cached,
     /// 1 when the bytes of the string on the top of the stack equal the
     /// string literal of `str_eq_jump`. It has no error.
     str_bytes_eq,
@@ -151,6 +153,13 @@ fn wrap(comptime h: Helper) Fn {
         fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
             _ = .{ pc, sp };
             return @intFromBool(vm.guardJumps(ctx.it));
+        }
+    }.f;
+    if (h == .call_cached) return &struct {
+        fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
+            const code = ctx.code;
+            vm.opInvokeCached(ctx.it, code, ctx.stack, sp, &code.ins[pc]) catch |e| return fail(ctx, e);
+            return done;
         }
     }.f;
     if (h == .str_bytes_eq) return &struct {

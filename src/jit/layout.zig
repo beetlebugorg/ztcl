@@ -70,6 +70,13 @@ pub const Layout = struct {
     /// `counter.trip`: the count that the limit check of a step reads.
     it_mem_trip: u32,
     it_mem_limit: u32,
+    /// `Interp.ns.ptr`.
+    it_ns: u32,
+    /// The fields of a command site that `Interp.resolve` checks.
+    cmd_resolved: u32,
+    cmd_epoch: u32,
+    cmd_ns: u32,
+    code_sites: u32,
     // The offsets of the pointers of `Code.lits` and `Code.ins`.
     code_lits: u32,
     code_ins: u32,
@@ -208,6 +215,13 @@ pub fn probe() ?Layout {
     l.it_mem_used = counter + @offsetOf(interp.Counting, "used");
     l.it_mem_trip = counter + @offsetOf(interp.Counting, "trip");
     l.it_mem_limit = @offsetOf(Interp, "mem_limit");
+    l.it_ns = @offsetOf(Interp, "ns") + l.slice_ptr;
+    l.cmd_resolved = @offsetOf(interp.Cmd, "resolved");
+    l.cmd_epoch = @offsetOf(interp.Cmd, "epoch");
+    l.cmd_ns = @offsetOf(interp.Cmd, "ns");
+    if (@sizeOf(@FieldType(interp.Cmd, "epoch")) != 4 or @sizeOf(@FieldType(Interp, "epoch")) != 4) return null;
+    if (@sizeOf(@FieldType(interp.Cmd, "resolved")) != 8) return null;
+    l.code_sites = @offsetOf(vm.Code, "sites") + l.slice_ptr;
     l.code_lits = @offsetOf(vm.Code, "lits") + l.slice_ptr;
     l.code_ins = @offsetOf(vm.Code, "ins") + l.slice_ptr;
     l.ins_size = @sizeOf(vm.Ins);

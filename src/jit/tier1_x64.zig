@@ -199,6 +199,7 @@ pub const Emitter = struct {
             .str_eq_jump => try e.strEqJump(pc),
             .foreach_next => try e.foreachNext(pc),
             .lappend => try e.lappend(pc),
+            .invoke => try e.invoke(pc),
             .lset_drop => try e.lsetDrop(pc),
             .access => switch (i.x) {
                 0 => try e.llength(pc),
@@ -712,6 +713,27 @@ pub const Emitter = struct {
         try e.copy(.rax, 0, abi.stack, (d - 1) * l.value_size);
         try s.movMI(try x64.at(.r9, l.obj_dict_len), 0);
         try s.movMI(try x64.at(.r9, l.obj_index), 0);
+    }
+
+    /// `invoke`: the checks of `Interp.resolve` on the site inline. A
+    /// valid site calls `call_cached`, and a miss calls the helper of
+    /// `invoke`, which resolves the name.
+    fn invoke(e: *Emitter, pc: u32) Error!void {
+        const s = e.s;
+        const l = e.l;
+        const i = e.code.ins[pc];
+        const slow_l = try e.slow(pc);
+        try s.movRM(.rax, .{ .base = abi.code, .disp = @intCast(l.code_sites) });
+        try s.movRM(.rax, try x64.at(.rax, @as(i64, i.a) * 8));
+        try s.aluMI(.cmp, try x64.at(.rax, l.cmd_resolved), 0);
+        try s.jcc(.e, slow_l);
+        try s.movRM32(.rcx, try x64.at(.rax, l.cmd_epoch));
+        try s.aluRM32(.cmp, .rcx, itAt(l.it_epoch));
+        try s.jcc(.ne, slow_l);
+        try s.movRM(.rcx, try x64.at(.rax, l.cmd_ns));
+        try s.aluRM(.cmp, .rcx, itAt(l.it_ns));
+        try s.jcc(.ne, slow_l);
+        try e.plain(.call_cached, pc);
     }
 
     // ---- The cold code ----

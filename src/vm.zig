@@ -1561,6 +1561,18 @@ pub inline fn opInvoke(comptime named: bool, it: *Interp, f: *Frame, code: *cons
     stack[sp - i.b] = try called;
 }
 
+/// `opInvoke` for a site whose cached command is valid: the JIT checks
+/// `resolved`, `epoch`, and `ns` of the site inline, as `resolve` does.
+/// The JIT never runs with the precise roots, and that build takes the
+/// full path. A shared inline part made `exec` longer: 1.3 % more
+/// instructions for bench/foreach.tcl.
+pub fn opInvokeCached(it: *Interp, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    if (gc.precise) return opInvoke(false, it, it.frame, code, stack, sp, i);
+    try step(it);
+    const c = code.sites[i.a];
+    stack[sp - i.b] = try it.call(c.resolved.?, stack[sp - i.b .. sp], c);
+}
+
 pub inline fn opEvalCmd(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
     _ = .{ named, f };
     if (gc.precise) it.gc_from_exec = gc.isClean(it);

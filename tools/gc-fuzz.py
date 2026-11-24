@@ -163,8 +163,10 @@ def main():
             # on, so a run that ends there compares its common output.
             limit = b"too much memory"
             if limit in ref[1] + ref[3] or limit in got[1] + got[3]:
-                k = min(len(ref[1]), len(got[1]))
-                if ref[1][:k] == got[1][:k] and got[0] in (0, 1):
+                # The last line can be the error of the run.
+                a, b = [x[:x.rfind(b"\n", 0, len(x) - 1) + 1] for x in (ref[1], got[1])]
+                k = min(len(a), len(b))
+                if a[:k] == b[:k] and got[0] in (0, 1):
                     continue
             # With the JIT, one proc call level uses less native stack, so
             # a deep recursion can stop at another depth (docs/jit.md).

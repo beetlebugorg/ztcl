@@ -1225,3 +1225,48 @@ test "jit: lset on an owned list and switch on strings" {
         \\f
     , 1);
 }
+
+test "jit: direct calls of procs" {
+    try same(
+        \\proc two {a b} { list $a $b }
+        \\proc dflt {a {b 5} args} { list $a $b $args }
+        \\proc site {k} { set r {}; for {set i 0} {$i < 3} {incr i} { lappend r [catch {two $k} m] $m [catch {two 1 2 3} m] $m [dflt $k] [dflt $k 1 2 3] }; set r }
+        \\set out [site x]
+        \\proc callg {} { set r {}; for {set i 0} {$i < 4} {incr i} { lappend r [g] }; set r }
+        \\proc g {} { return first }
+        \\lappend out [callg]
+        \\proc callren {} { set r {}; for {set i 0} {$i < 4} {incr i} { lappend r [h]; if {$i == 1} { rename h h0; proc h {} { return second } } }; set r }
+        \\proc h {} { return first }
+        \\lappend out [callren]
+        \\namespace eval a { proc f {} { return a } }
+        \\namespace eval b { proc f {} { return b } }
+        \\proc f {} { return global }
+        \\proc inns {} { set r {}; foreach ns {a b :: a} { lappend r [namespace eval $ns {f}] [namespace eval $ns [list ::callf]] }; set r }
+        \\proc callf {} { f }
+        \\lappend out [inns]
+        \\proc traced {x} { expr {$x * 2} }
+        \\set log {}
+        \\trace add execution traced enter [list apply {{args} { lappend ::log [lindex $args 0] }}]
+        \\proc calltr {} { set r 0; for {set i 0} {$i < 3} {incr i} { incr r [traced $i] }; set r }
+        \\lappend out [calltr] $log
+        \\proc gone {} { rename gone {}; return bye }
+        \\proc callgone {} { list [gone] [catch {gone} m] $m }
+        \\lappend out [callgone]
+        \\proc tc {n} { if {$n <= 0} { return done }; tailcall tc [expr {$n - 1}] }
+        \\proc calltc {} { list [tc 5] [tc 0] }
+        \\lappend out [calltc]
+        \\set out
+    , 4);
+}
+
+test "jit: recursion to the depth limit" {
+    // A limit of 100 levels binds before the native stack limit of a
+    // debug build in both modes.
+    allow_interp = true;
+    defer allow_interp = false;
+    try same(
+        \\interp recursionlimit {} 100
+        \\proc r {n} { r [expr {$n + 1}] }
+        \\list [catch {r 0} m] $m
+    , 1);
+}
