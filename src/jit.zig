@@ -41,6 +41,8 @@ pub const EnterCtx = extern struct {
     sp: u32,
     /// `@intFromError` of the error of status 1.
     err: u16,
+    /// `Value.empty`, for the code of `push_empty`.
+    empty: *const Value,
 };
 
 /// True when this target has a backend.
@@ -93,6 +95,8 @@ pub const State = struct {
     family: usize = 0,
     /// True after a system call of the region failed.
     stopped: bool = false,
+    /// The error of the last entry that failed.
+    err: u16 = 0,
 
     fn root(s: *State) *State {
         var r = s;
@@ -197,16 +201,11 @@ pub fn destroy(it: *Interp) void {
     s.backing.destroy(s);
 }
 
-/// True when `code` has a loop: a jump to its own address or before.
+/// True when `code` has a loop. Each loop of the bytecode compiler has a
+/// `step` or a `foreach_next`. A jump back from a cold block is no loop.
 fn hasLoop(code: *const vm.Code) bool {
-    for (code.ins, 0..) |i, pc| {
-        const t = switch (i.op) {
-            .jump, .jump_false, .jump_true => i.a,
-            .jf_vv, .jf_vi => i.c,
-            .foreach_next, .str_eq_jump => i.b,
-            else => continue,
-        };
-        if (t <= pc) return true;
+    for (code.ins) |i| {
+        if (i.op == .step or i.op == .foreach_next) return true;
     }
     return false;
 }
@@ -231,7 +230,9 @@ pub fn prepare(it: *Interp, code: *vm.Code) ?*Fn {
         return null;
     }
     code.jit_calls +|= 1;
-    if (code.jit_calls < s.options.threshold and !hasLoop(code)) return null;
+    // A body with a loop compiles at its first call, so a later call
+    // needs no scan.
+    if (code.jit_calls < s.options.threshold and (code.jit_calls > 1 or !hasLoop(code))) return null;
     return compileCode(s, code);
 }
 
@@ -268,11 +269,15 @@ fn compileCode(s: *State, code: *vm.Code) ?*Fn {
 
 const Error = interp.Error;
 
-/// Runs the function `f` of `code` from `pc.*` with depth `sp.*`. Null
-/// runs `exec` at `pc.*` and `sp.*`: the entry is not valid, or the code
-/// exits to the interpreter. On an error, `pc.*` and `sp.*` are the
-/// place of the error, as with `exec`.
-pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp: *u32) ?(Error!Value) {
+/// The result of `enter`.
+pub const Status = enum { done, failed, fallback };
+
+/// Runs the function `f` of `code` from `pc.*` with depth `sp.*`.
+/// `.done`: the result is at `stack[sp.* - 1]`. `.failed`: `lastError`
+/// gives the error, and `pc.*` and `sp.*` are its place, as with `exec`.
+/// `.fallback`: the entry is not valid, or the code exits, and `exec`
+/// runs at `pc.*` and `sp.*`.
+pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp: *u32) Status {
     const p = pc.*;
     const frame = it.frame;
     if (p >= code.ins.len or p >= f.entries.len) return fallback(it);
@@ -290,19 +295,28 @@ pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp:
         .pc = p,
         .sp = sp.*,
         .err = 0,
+        .empty = &Value.empty,
     };
     const func: *const fn (*EnterCtx) callconv(.c) u32 = @ptrCast(@alignCast(f.base));
     const status = func(&ctx);
-    if (status == tier1.status_done) return stack[ctx.sp - 1];
     pc.* = ctx.pc;
     sp.* = ctx.sp;
-    if (status == tier1.status_error) return helpers.errorOf(&ctx);
+    if (status == tier1.status_done) return .done;
+    if (status == tier1.status_error) {
+        it.jit.?.err = ctx.err;
+        return .failed;
+    }
     return fallback(it);
 }
 
-fn fallback(it: *Interp) ?(Error!Value) {
+/// The error of the last `enter` with the result `.failed`.
+pub fn lastError(it: *const Interp) Error {
+    return @errorCast(@errorFromInt(it.jit.?.err));
+}
+
+fn fallback(it: *Interp) Status {
     it.jit.?.stats.fallbacks += 1;
-    return null;
+    return .fallback;
 }
 
 /// Writes the counts to stderr in the form of `--jit-stats`.

@@ -1140,7 +1140,7 @@ noinline fn slowForeach(it: *Interp, code: *const Code, table: []const u32, item
     }
 }
 
-fn step(it: *Interp) Error!void {
+inline fn step(it: *Interp) Error!void {
     if (it.step_limit == 0) return it.fail("step limit reached", .{});
     it.step_limit -= 1;
     // Each value of this run is on the value stack or in a cell here.
@@ -1311,8 +1311,12 @@ pub fn run(it: *Interp, code: *Code) Error!Value {
     // The machine code of the JIT, when it has a function for the code.
     const jf: ?*jit.Fn = if (jit.built and it.jit != null) jit.prepare(it, code) else null;
     while (true) {
-        const out = blk: {
-            if (jit.built) if (jf) |f| if (jit.enter(it, f, code, stack.ptr, &pc, &sp)) |r| break :blk r;
+        const out: Error!Value = blk: {
+            if (jit.built) if (jf) |f| switch (jit.enter(it, f, code, stack.ptr, &pc, &sp)) {
+                .done => break :blk stack[sp - 1],
+                .failed => break :blk jit.lastError(it),
+                .fallback => {},
+            };
             break :blk if (code.named)
                 exec(true, it, code, stack.ptr, &pc, &sp)
             else

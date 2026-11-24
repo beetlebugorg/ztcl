@@ -142,7 +142,7 @@ pub const Asm = struct {
     /// Appends a 32-bit branch field for `l`.
     fn rel32(s: *Asm, l: Label) Allocator.Error!void {
         const field = s.here();
-        try s.buf.appendNTimes(s.a, 0, 4);
+        s.buf.appendNTimesAssumeCapacity(0, 4);
         const st = &s.labels.items[l.id];
         st.used = true;
         if (st.pos != none) return s.patch(field, st.pos);
@@ -161,12 +161,28 @@ pub const Asm = struct {
 
     // ---- Encoding ----
 
+    /// The most bytes of one instruction with its immediate.
+    const max_len = 24;
+
+    /// Makes room for one instruction. Each public emit function calls
+    /// it first, so the parts of the encoding append with no check.
+    fn reserve(s: *Asm) Allocator.Error!void {
+        try s.buf.ensureUnusedCapacity(s.a, max_len);
+    }
+
+    /// Makes room for the code of `n` bytecode instructions at once.
+    pub fn reserveFor(s: *Asm, n: usize, labels: usize) Allocator.Error!void {
+        try s.buf.ensureTotalCapacity(s.a, n * 64);
+        try s.labels.ensureTotalCapacity(s.a, labels);
+        try s.fixups.ensureTotalCapacity(s.a, labels);
+    }
+
     fn byte(s: *Asm, b: u8) Allocator.Error!void {
-        try s.buf.append(s.a, b);
+        s.buf.appendAssumeCapacity(b);
     }
 
     fn put(s: *Asm, b: []const u8) Allocator.Error!void {
-        try s.buf.appendSlice(s.a, b);
+        s.buf.appendSliceAssumeCapacity(b);
     }
 
     fn i32le(s: *Asm, v: i32) Allocator.Error!void {
@@ -238,66 +254,84 @@ pub const Asm = struct {
     // ---- Moves ----
 
     pub fn movRR(s: *Asm, dst: Reg, src: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{0x89}, num(src), rmR(dst), .none);
     }
     pub fn movRR32(s: *Asm, dst: Reg, src: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0x89}, num(src), rmR(dst), .none);
     }
     pub fn movRM(s: *Asm, dst: Reg, src: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{0x8B}, num(dst), rmM(src), .none);
     }
     pub fn movMR(s: *Asm, dst: Mem, src: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{0x89}, num(src), rmM(dst), .none);
     }
     pub fn movRM32(s: *Asm, dst: Reg, src: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0x8B}, num(dst), rmM(src), .none);
     }
     pub fn movMR32(s: *Asm, dst: Mem, src: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0x89}, num(src), rmM(dst), .none);
     }
     pub fn movMR8(s: *Asm, dst: Mem, src: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0x88}, num(src), rmM(dst), .both);
     }
     pub fn movzxRM8(s: *Asm, dst: Reg, src: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{ 0x0F, 0xB6 }, num(dst), rmM(src), .none);
     }
     pub fn movzxRR8(s: *Asm, dst: Reg, src: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{ 0x0F, 0xB6 }, num(dst), rmR(src), .rm);
     }
     /// `movsxd r64, dword m`: a signed 32-bit load.
     pub fn movsxdRM(s: *Asm, dst: Reg, src: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{0x63}, num(dst), rmM(src), .none);
     }
     pub fn movRI32(s: *Asm, dst: Reg, v: i32) Allocator.Error!void {
+        try s.reserve();
         if (hi(dst)) try s.byte(0x41);
         try s.byte(0xB8 + lo(dst));
         try s.i32le(v);
     }
     pub fn movMI(s: *Asm, dst: Mem, v: i32) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{0xC7}, 0, rmM(dst), .none);
         try s.i32le(v);
     }
     pub fn movMI32(s: *Asm, dst: Mem, v: i32) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0xC7}, 0, rmM(dst), .none);
         try s.i32le(v);
     }
     pub fn movMI8(s: *Asm, dst: Mem, v: i8) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0xC6}, 0, rmM(dst), .none);
         try s.byte(@bitCast(v));
     }
     pub fn lea(s: *Asm, dst: Reg, src: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{0x8D}, num(dst), rmM(src), .none);
     }
 
     // ---- Arithmetic ----
 
     pub fn aluRR(s: *Asm, o: Alu, dst: Reg, src: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{@as(u8, @intFromEnum(o)) << 3 | 1}, num(src), rmR(dst), .none);
     }
     pub fn aluRM(s: *Asm, o: Alu, dst: Reg, src: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{@as(u8, @intFromEnum(o)) << 3 | 3}, num(dst), rmM(src), .none);
     }
     pub fn aluRM32(s: *Asm, o: Alu, dst: Reg, src: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{@as(u8, @intFromEnum(o)) << 3 | 3}, num(dst), rmM(src), .none);
     }
     fn aluImm(s: *Asm, o: Alu, w: bool, dst: Rm, v: i32) Allocator.Error!void {
@@ -315,93 +349,120 @@ pub const Asm = struct {
         }
     }
     pub fn aluRI(s: *Asm, o: Alu, dst: Reg, v: i32) Allocator.Error!void {
+        try s.reserve();
         try s.aluImm(o, true, rmR(dst), v);
     }
     pub fn aluMI(s: *Asm, o: Alu, dst: Mem, v: i32) Allocator.Error!void {
+        try s.reserve();
         try s.aluImm(o, true, rmM(dst), v);
     }
     pub fn aluMI32(s: *Asm, o: Alu, dst: Mem, v: i32) Allocator.Error!void {
+        try s.reserve();
         try s.aluImm(o, false, rmM(dst), v);
     }
     pub fn andRI32(s: *Asm, dst: Reg, v: i32) Allocator.Error!void {
+        try s.reserve();
         try s.aluImm(.@"and", false, rmR(dst), v);
     }
     pub fn cmpMI8(s: *Asm, dst: Mem, v: i8) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0x80}, 7, rmM(dst), .none);
         try s.byte(@bitCast(v));
     }
     pub fn testRR32(s: *Asm, a: Reg, b: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0x85}, num(b), rmR(a), .none);
     }
     pub fn testMI8(s: *Asm, dst: Mem, v: i8) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0xF6}, 0, rmM(dst), .none);
         try s.byte(@bitCast(v));
     }
     pub fn imulRR(s: *Asm, dst: Reg, src: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{ 0x0F, 0xAF }, num(dst), rmR(src), .none);
     }
     pub fn imulRM(s: *Asm, dst: Reg, src: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{ 0x0F, 0xAF }, num(dst), rmM(src), .none);
     }
     pub fn incM(s: *Asm, dst: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{0xFF}, 0, rmM(dst), .none);
     }
     pub fn decM(s: *Asm, dst: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{0xFF}, 1, rmM(dst), .none);
     }
     pub fn neg(s: *Asm, dst: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{0xF7}, 3, rmR(dst), .none);
     }
     pub fn cqo(s: *Asm) Allocator.Error!void {
+        try s.reserve();
         try s.put(&.{ 0x48, 0x99 });
     }
     pub fn idiv(s: *Asm, src: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, true, &.{0xF7}, 7, rmR(src), .none);
     }
 
     // ---- Flags and control ----
 
     pub fn setcc(s: *Asm, c: Cond, dst: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{ 0x0F, 0x90 + @as(u8, @intFromEnum(c)) }, 0, rmR(dst), .rm);
     }
     pub fn jcc(s: *Asm, c: Cond, l: Label) Allocator.Error!void {
+        try s.reserve();
         try s.put(&.{ 0x0F, 0x80 + @as(u8, @intFromEnum(c)) });
         try s.rel32(l);
     }
     pub fn jmp(s: *Asm, l: Label) Allocator.Error!void {
+        try s.reserve();
         try s.byte(0xE9);
         try s.rel32(l);
     }
     pub fn jmpR(s: *Asm, dst: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0xFF}, 4, rmR(dst), .none);
     }
     pub fn jmpM(s: *Asm, dst: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0xFF}, 4, rmM(dst), .none);
     }
     pub fn callM(s: *Asm, dst: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0xFF}, 2, rmM(dst), .none);
     }
     pub fn callR(s: *Asm, dst: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(null, false, &.{0xFF}, 2, rmR(dst), .none);
     }
     pub fn ret(s: *Asm) Allocator.Error!void {
+        try s.reserve();
         try s.byte(0xC3);
     }
     pub fn push(s: *Asm, v: Reg) Allocator.Error!void {
+        try s.reserve();
         if (hi(v)) try s.byte(0x41);
         try s.byte(0x50 + lo(v));
     }
     pub fn pop(s: *Asm, v: Reg) Allocator.Error!void {
+        try s.reserve();
         if (hi(v)) try s.byte(0x41);
         try s.byte(0x58 + lo(v));
     }
     pub fn int3(s: *Asm) Allocator.Error!void {
+        try s.reserve();
         try s.byte(0xCC);
     }
     pub fn ud2(s: *Asm) Allocator.Error!void {
+        try s.reserve();
         try s.put(&.{ 0x0F, 0x0B });
     }
     pub fn nop(s: *Asm) Allocator.Error!void {
+        try s.reserve();
         try s.byte(0x90);
     }
 
@@ -412,28 +473,36 @@ pub const Asm = struct {
     }
 
     pub fn movsdXM(s: *Asm, dst: Xmm, src: Mem) Allocator.Error!void {
+        try s.reserve();
         try s.op(0xF2, false, &.{ 0x0F, 0x10 }, num(dst), rmM(src), .none);
     }
     pub fn movsdMX(s: *Asm, dst: Mem, src: Xmm) Allocator.Error!void {
+        try s.reserve();
         try s.op(0xF2, false, &.{ 0x0F, 0x11 }, num(src), rmM(dst), .none);
     }
     pub fn movapd(s: *Asm, dst: Xmm, src: Xmm) Allocator.Error!void {
+        try s.reserve();
         try s.op(0x66, false, &.{ 0x0F, 0x28 }, num(dst), rmX(src), .none);
     }
     pub const Sse = enum(u8) { addsd = 0x58, mulsd = 0x59, subsd = 0x5C, divsd = 0x5E };
     pub fn sse(s: *Asm, o: Sse, dst: Xmm, src: Xmm) Allocator.Error!void {
+        try s.reserve();
         try s.op(0xF2, false, &.{ 0x0F, @intFromEnum(o) }, num(dst), rmX(src), .none);
     }
     pub fn ucomisd(s: *Asm, a: Xmm, b: Xmm) Allocator.Error!void {
+        try s.reserve();
         try s.op(0x66, false, &.{ 0x0F, 0x2E }, num(a), rmX(b), .none);
     }
     pub fn cvtsi2sd(s: *Asm, dst: Xmm, src: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(0xF2, true, &.{ 0x0F, 0x2A }, num(dst), rmR(src), .none);
     }
     pub fn movqXR(s: *Asm, dst: Xmm, src: Reg) Allocator.Error!void {
+        try s.reserve();
         try s.op(0x66, true, &.{ 0x0F, 0x6E }, num(dst), rmR(src), .none);
     }
     pub fn movqRX(s: *Asm, dst: Reg, src: Xmm) Allocator.Error!void {
+        try s.reserve();
         try s.op(0x66, true, &.{ 0x0F, 0x7E }, num(src), rmR(dst), .none);
     }
 };

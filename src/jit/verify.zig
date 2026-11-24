@@ -275,6 +275,10 @@ pub fn verify(a: Allocator, code: *const Code) Allocator.Error!?Info {
     var heads: std.ArrayList(u32) = .empty;
     defer if (!ok) heads.deinit(a);
 
+    // The end of the main code: the last `ret`.
+    var main_end: usize = n;
+    while (main_end > 0 and code.ins[main_end - 1].op != .ret) main_end -= 1;
+
     var work: std.ArrayList(u32) = .empty;
     try work.append(arena, 0);
     depth[0] = 0;
@@ -308,7 +312,9 @@ pub fn verify(a: Allocator, code: *const Code) Allocator.Error!?Info {
         for (succ) |s| {
             if (s == no_target) continue;
             if (s >= n) return null;
-            if (s <= pc and std.mem.indexOfScalar(u32, heads.items, s) == null) try heads.append(a, s);
+            // A cold block is after the last `ret`, and its jump back is
+            // no loop.
+            if (s <= pc and pc < main_end and std.mem.indexOfScalar(u32, heads.items, s) == null) try heads.append(a, s);
             if (depth[s] == unset) {
                 depth[s] = @intCast(after);
                 marks[s] = m;

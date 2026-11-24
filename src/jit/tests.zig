@@ -666,7 +666,7 @@ test "the helpers run the instruction functions" {
         try frame.vars.append(it.alloc(), .{ .name = name, .cell = cell });
     }
     var stack: [8]tcl.Value = undefined;
-    var ctx: jit.EnterCtx = .{ .it = it, .code = code, .frame = &frame, .stack = &stack, .helpers = &helpers.table, .target = 0, .pc = 0, .sp = 0, .err = 0 };
+    var ctx: jit.EnterCtx = .{ .it = it, .code = code, .frame = &frame, .stack = &stack, .helpers = &helpers.table, .target = 0, .pc = 0, .sp = 0, .err = 0, .empty = &tcl.Value.empty };
     // bin_vv: 20 + 21 at depth 0.
     const pc: u32 = for (code.ins, 0..) |ins, k| {
         if (ins.op == .bin_vv) break @intCast(k);
@@ -897,5 +897,109 @@ test "jit: a TclOO method" {
         \\}
         \\set a [Acc new]
         \\list [$a add 5] [$a add 3] [$a get]
+    , 1);
+}
+
+test "jit: the code bytes of the benchmarks" {
+    if (!jit.built) return error.SkipZigTest;
+    const names = [_][*:0]const u8{ "bench/sum.tcl", "bench/fib.tcl", "bench/nested.tcl", "bench/strbuild.tcl", "bench/foreach.tcl", "bench/dict.tcl", "bench/dictgrow.tcl", "bench/readloop.tcl" };
+    var bytes: usize = 0;
+    var ins: usize = 0;
+    for (names) |path| {
+        const it = try newInterp();
+        defer freeInterp(it);
+        const text = try readRepoFile(testing.allocator, path);
+        defer testing.allocator.free(text);
+        try defineProcs(it, text);
+        var iter = it.commands.iterator();
+        while (iter.next()) |e| {
+            if (e.value_ptr.*.impl != .proc) continue;
+            const code = try procCode(it, e.key_ptr.*);
+            var info = (try verify.verify(testing.allocator, code)).?;
+            defer info.deinit(testing.allocator);
+            var s = x64.Asm.init(testing.allocator);
+            defer s.deinit();
+            const entries = try testing.allocator.alloc(u32, code.ins.len);
+            defer testing.allocator.free(entries);
+            try @import("tier1_x64.zig").assemble(testing.allocator, &s, code, &info, layout.probe().?, entries);
+            bytes += s.bytes().len;
+            ins += code.ins.len;
+        }
+    }
+    try testing.expect(bytes <= 96 * ins);
+}
+
+test "jit: overflow at both ends gives a big integer" {
+    try same(
+        \\proc ops {a b} {
+        \\    set r {}
+        \\    lappend r [expr {$a + $b}] [expr {$a - $b}] [expr {$a * $b}]
+        \\    set c $a; incr c $b; lappend r $c
+        \\    set d $a; incr d; lappend r $d
+        \\    set e $a; incr e -1; lappend r $e
+        \\    lappend r [expr {$a + 1}] [expr {$a - 1}] [expr {$a * 2}]
+        \\    set x [expr {$a + 0}]; set y [expr {$b + 0}]
+        \\    lappend r [expr {$x + $y}] [expr {$x - $y}] [expr {$x * $y}]
+        \\    return $r
+        \\}
+        \\list [ops 9223372036854775807 1] [ops -9223372036854775808 1] [ops 9223372036854775807 -1] [ops -9223372036854775808 -1] [ops 4611686018427387904 2] [ops -9223372036854775808 9223372036854775807]
+    , 1);
+}
+
+test "jit: string, double, and unset operands" {
+    try same(
+        \\proc f {a b} {
+        \\    set r {}
+        \\    lappend r [expr {$a + $b}] [expr {$a < $b}] [expr {$a * 2}]
+        \\    if {$a < $b} { lappend r lt } else { lappend r ge }
+        \\    if {$a} { lappend r true }
+        \\    set c $a; incr c 5; lappend r $c
+        \\    return $r
+        \\}
+        \\list [f "10" "20"] [f 1.5 2] [f 7 2.25] [f " 12 " 3] [catch {f abc 1} m] $m [catch {f 1.5 x} m] $m
+    , 1);
+    try same("proc g {} { set x [expr {$u + 1}] }; list [catch g m] $m $::errorInfo", 1);
+    try same("proc g {} { incr nope; set q [expr {$nope * 2}] }; g", 1);
+    try same("proc g {} { set z $missing }; g", 1);
+}
+
+test "jit: a slot that links to a global, two links deep" {
+    try same(
+        \\set gx 5
+        \\proc inner {} { upvar 1 y yy; for {set i 0} {$i < 4} {incr i} { incr yy $i; set t [expr {$yy * 2}] }; return [list $yy $t] }
+        \\proc outer {} { upvar #0 gx y; set y [expr {$y + 1}]; set r [inner]; lappend r $y; return $r }
+        \\list [outer] $gx
+    , 2);
+}
+
+test "jit: a traced cell and an array name used as a scalar" {
+    try same(
+        \\proc f {} {
+        \\    set log {}
+        \\    set v 1
+        \\    trace add variable v {read write} [list apply {{args} { upvar log log; lappend log [lindex $args end] }}]
+        \\    for {set i 0} {$i < 3} {incr i} { set v [expr {$v + $i}]; incr v }
+        \\    return [list $v $log]
+        \\}
+        \\f
+    , 1);
+    try same(
+        \\proc g {} { array set a {x 1}; set r [catch {set q [expr {$a + 1}]} m]; lappend r $m [catch {incr a} m] $m [catch {set a 5} m] $m; return $r }
+        \\g
+    , 1);
+}
+
+test "jit: compares of the smallest and the largest integer" {
+    try same(
+        \\proc cmp {a b} {
+        \\    set r {}
+        \\    foreach op {< <= > >= == !=} { lappend r [expr "\$a $op \$b"] }
+        \\    lappend r [expr {$a < $b}] [expr {$a <= $b}] [expr {$a > $b}] [expr {$a >= $b}] [expr {$a == $b}] [expr {$a != $b}]
+        \\    if {$a < $b} { lappend r y } else { lappend r n }
+        \\    if {$a >= 9223372036854775807} { lappend r big }
+        \\    if {$a <= -9223372036854775808} { lappend r small }
+        \\    return $r
+        \\}
+        \\list [cmp -9223372036854775808 9223372036854775807] [cmp 9223372036854775807 -9223372036854775808] [cmp 5 5]
     , 1);
 }
