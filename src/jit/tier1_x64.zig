@@ -31,6 +31,7 @@ const helpers = @import("helpers.zig");
 const layout = @import("layout.zig");
 const jit = @import("../jit.zig");
 const expr = @import("../expr.zig");
+const options = @import("build_options");
 
 const Allocator = std.mem.Allocator;
 const Asm = x64.Asm;
@@ -469,8 +470,10 @@ pub const Emitter = struct {
     /// `rax = rax op rcx` with the overflow check, or 0 or 1 for a
     /// compare. The overflow goes to `slow_l`. `/` and `%` send a
     /// divisor of 0 or -1 to `slow_l`, and round the quotient down as
-    /// Tcl does. They use `rdx` and `r10`.
-    fn arith(e: *Emitter, op: expr.BinOp, slow_l: Label) Error!void {
+    /// Tcl does. They use `rdx` and `r10`. `planted` is true only for
+    /// `bin_vv` in a build with `-Djit_bug=true`: the overflow check is
+    /// then left out, so the test of the fuzzer has a bug to find.
+    fn arith(e: *Emitter, op: expr.BinOp, slow_l: Label, planted: bool) Error!void {
         const s = e.s;
         if (op == .div or op == .mod) {
             try s.aluRI(.cmp, .rcx, 0);
@@ -503,7 +506,7 @@ pub const Emitter = struct {
                 return;
             },
         }
-        try s.jcc(.o, slow_l);
+        if (!planted) try s.jcc(.o, slow_l);
     }
 
     /// The literal integer of `bin_vi` and `jf_vi` into `dst`. The
@@ -525,7 +528,7 @@ pub const Emitter = struct {
             try e.cell(i.b, .r9, slow_l);
             try e.cellInt(.r9, .rcx, slow_l);
         } else try e.litInt(i.b, .rcx);
-        try e.arith(op, slow_l);
+        try e.arith(op, slow_l, options.jit_bug and i.op == .bin_vv);
         try e.putInt(d, .rax);
     }
 
@@ -537,7 +540,7 @@ pub const Emitter = struct {
         const slow_l = try e.slow(pc);
         try e.stackInt(d - 2, .rax, slow_l);
         try e.stackInt(d - 1, .rcx, slow_l);
-        try e.arith(op, slow_l);
+        try e.arith(op, slow_l, false);
         try e.s.movMR(try e.stackAt(d - 2, e.l.value_payload), .rax);
     }
 

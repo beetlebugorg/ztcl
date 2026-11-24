@@ -148,6 +148,14 @@ Xuejun Yang and others, "Finding and Understanding Bugs in C Compilers", PLDI 20
 
 **How ztcl uses it:** The method of `tools/jit-fuzz.zig`: make random programs that always end and have defined results, run them in two implementations, and compare.
 
+### A small generator of random numbers
+
+Guy L. Steele Jr., Doug Lea, Christine H. Flood, "Fast Splittable Pseudorandom Number Generators", OOPSLA 2014. https://doi.org/10.1145/2660193.2660195
+
+**License:** Paper
+
+**How ztcl uses it:** `tools/jit-fuzz.zig` makes each choice of a program with the splitmix64 function of the paper. The function is a fixed formula, so a seed gives the same program with each version of the Zig standard library.
+
 ### The outside benchmark programs
 
 Kostya M. and contributors, "benchmarks". https://github.com/kostya/benchmarks, commit `5bc68b3705`: `brainfuck/bf.tcl`, `brainfuck/bf_oo.tcl`, `brainfuck/bench.b`, and `base64/test.tcl`.

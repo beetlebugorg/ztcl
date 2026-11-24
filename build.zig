@@ -15,6 +15,9 @@ pub fn build(b: *std.Build) void {
     const t = target.result;
     const jit_backend = t.cpu.arch == .x86_64 and t.os.tag == .linux;
     gc_options.addOption(bool, "jit", b.option(bool, "jit", "Build the JIT compiler") orelse jit_backend);
+    // `-Djit_bug=true` plants a known bug: the `bin_vv` template of tier 1
+    // skips its overflow check. The test of the fuzzer uses it.
+    gc_options.addOption(bool, "jit_bug", b.option(bool, "jit_bug", "Plant a known bug in tier 1 for the fuzzer test") orelse false);
     // `-Drunner-optimize` sets the mode of the runner and the suite runner.
     const runner_optimize = b.option(std.builtin.OptimizeMode, "runner-optimize", "The mode of the runners") orelse .ReleaseFast;
 
@@ -87,6 +90,17 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| census_run.addArgs(args);
     b.step("jit-census", "Count the loops that tier 2 can compile").dependOn(&census_run.step);
 
+    // The differential fuzzer of the JIT. It uses the mode of -Doptimize.
+    const fuzz_exe = b.addExecutable(.{ .name = "jit-fuzz", .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/jit-fuzz.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "ztcl", .module = ztcl }},
+    }) });
+    const fuzz_run = b.addRunArtifact(fuzz_exe);
+    if (b.args) |args| fuzz_run.addArgs(args);
+    b.step("jit-fuzz", "Run the differential fuzzer of the JIT").dependOn(&fuzz_run.step);
+
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
     const wasm = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
         .root_source_file = b.path("src/wasm.zig"),
@@ -97,6 +111,7 @@ pub fn build(b: *std.Build) void {
     const wasm_options = b.addOptions();
     wasm_options.addOption(bool, "gc_precise", gc_precise);
     wasm_options.addOption(bool, "jit", false);
+    wasm_options.addOption(bool, "jit_bug", false);
     wasm.root_module.addOptions("build_options", wasm_options);
     wasm.entry = .disabled;
     wasm.rdynamic = true;
