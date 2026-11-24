@@ -196,23 +196,35 @@ pub const Emitter = struct {
             .binary => try e.binary(pc),
             .jf_vv, .jf_vi => try e.jfSlots(pc),
             .incr, .incr_drop, .incr_value => try e.incr(pc),
-            .str_eq_jump => try e.branch(.str_eq_jump, pc, i.b),
-            .foreach_next => try e.branch(.foreach_next, pc, i.b),
-            .access => try e.plain(switch (i.x) {
-                0 => .llength,
-                1 => .lindex,
-                2 => .string_length,
-                else => .string_index,
-            }, pc),
+            .str_eq_jump => try e.strEqJump(pc),
+            .foreach_next => try e.foreachNext(pc),
+            .lappend => try e.lappend(pc),
+            .lset_drop => try e.lsetDrop(pc),
+            .access => switch (i.x) {
+                0 => try e.llength(pc),
+                1 => try e.lindex(pc),
+                else => try e.plain(accessHelper(i.x), pc),
+            },
             inline else => |op| try e.plain(@field(Helper, @tagName(op)), pc),
         }
     }
 
     // ---- The parts of the fast paths ----
 
-    fn helperOf(op: vm.Op) Helper {
-        return switch (op) {
-            .access, .ret => unreachable,
+    fn accessHelper(x: u8) Helper {
+        return switch (x) {
+            0 => .llength,
+            1 => .lindex,
+            2 => .string_length,
+            else => .string_index,
+        };
+    }
+
+    /// The helper of the whole instruction `i`.
+    fn helperOf(i: vm.Ins) Helper {
+        return switch (i.op) {
+            .ret => unreachable,
+            .access => accessHelper(i.x),
             inline else => |o| @field(Helper, @tagName(o)),
         };
     }
@@ -226,9 +238,10 @@ pub const Emitter = struct {
         const target: ?u32 = switch (i.op) {
             .jump_false, .jump_true => i.a,
             .jf_vv, .jf_vi => i.c,
+            .foreach_next, .str_eq_jump => i.b,
             else => null,
         };
-        try e.colds.append(e.a, .{ .slow = .{ .at = l, .pc = pc, .h = helperOf(i.op), .target = target } });
+        try e.colds.append(e.a, .{ .slow = .{ .at = l, .pc = pc, .h = helperOf(i), .target = target } });
         return l;
     }
 
@@ -245,13 +258,18 @@ pub const Emitter = struct {
     /// to `slow_l`. The tag compare reads the full byte: a byte with high
     /// bits that the mask drops also goes to the slow path.
     fn cell(e: *Emitter, slot: u32, r: Reg, slow_l: Label) Error!void {
+        return e.cellTag(slot, r, e.l.var_val, slow_l);
+    }
+
+    /// `cell` for a cell with the tag `want`.
+    fn cellTag(e: *Emitter, slot: u32, r: Reg, want: u8, slow_l: Label) Error!void {
         const s = e.s;
         const l = e.l;
         try s.movRM(r, .{ .base = abi.frame, .disp = @intCast(l.frame_items) });
         try s.movRM(r, try x64.at(r, @as(i64, slot) * l.entry_size + l.entry_cell));
         const check = try s.newLabel();
         s.bind(check);
-        try s.cmpMI8(.{ .base = r, .disp = @intCast(l.var_tag) }, @intCast(l.var_val));
+        try s.cmpMI8(.{ .base = r, .disp = @intCast(l.var_tag) }, @intCast(want));
         const link = try s.newLabel();
         try s.jcc(.ne, link);
         try e.colds.append(e.a, .{ .link = .{ .at = link, .cell = r, .check = check, .slow = slow_l } });
@@ -284,15 +302,52 @@ pub const Emitter = struct {
         try e.s.movMI8(try e.stackAt(k, e.l.value_tag), @intCast(e.l.tag_int));
     }
 
-    /// Copies a Value: the two payload words and the tag byte.
+    /// Copies a Value: the two payload words and the tag byte. It uses
+    /// `rcx`, `rdx`, and `r10`.
     fn copy(e: *Emitter, dst: Reg, dst_off: i64, src: Reg, src_off: i64) Error!void {
         const s = e.s;
         try s.movRM(.rcx, try x64.at(src, src_off));
         try s.movRM(.rdx, try x64.at(src, src_off + 8));
-        try s.movzxRM8(.r8, try x64.at(src, src_off + e.l.value_tag));
+        try s.movzxRM8(.r10, try x64.at(src, src_off + e.l.value_tag));
         try s.movMR(try x64.at(dst, dst_off), .rcx);
         try s.movMR(try x64.at(dst, dst_off + 8), .rdx);
-        try s.movMR8(try x64.at(dst, dst_off + e.l.value_tag), .r8);
+        try s.movMR8(try x64.at(dst, dst_off + e.l.value_tag), .r10);
+    }
+
+    /// `copy` with `rcx` as the one scratch register.
+    fn copyRcx(e: *Emitter, dst: Reg, dst_off: i64, src: Reg, src_off: i64) Error!void {
+        const s = e.s;
+        try s.movRM(.rcx, try x64.at(src, src_off));
+        try s.movMR(try x64.at(dst, dst_off), .rcx);
+        try s.movRM(.rcx, try x64.at(src, src_off + 8));
+        try s.movMR(try x64.at(dst, dst_off + 8), .rcx);
+        try s.movzxRM8(.rcx, try x64.at(src, src_off + e.l.value_tag));
+        try s.movMR8(try x64.at(dst, dst_off + e.l.value_tag), .rcx);
+    }
+
+    /// `dst = src * value_size` with additions. `dst` and `src` differ.
+    fn scale(e: *Emitter, dst: Reg, src: Reg) Error!void {
+        const s = e.s;
+        const n = e.l.value_size;
+        try s.movRR(dst, src);
+        var bit: u5 = 31 - @as(u5, @intCast(@clz(n)));
+        while (bit > 0) {
+            bit -= 1;
+            try s.aluRR(.add, dst, dst);
+            if ((n >> bit) & 1 != 0) try s.aluRR(.add, dst, src);
+        }
+    }
+
+    /// Jumps to `l` when the tag of stack place `k` is not `tag`.
+    fn stackTag(e: *Emitter, k: i64, tag: u8, l: Label) Error!void {
+        try e.s.cmpMI8(try e.stackAt(k, e.l.value_tag), @intCast(tag));
+        try e.s.jcc(.ne, l);
+    }
+
+    /// Loads the address of `Value.empty` into `r`.
+    fn emptyAddr(e: *Emitter, r: Reg) Error!void {
+        try e.s.movRM(r, ctxSlot());
+        try e.s.movRM(r, .{ .base = r, .disp = @offsetOf(jit.EnterCtx, "empty") });
     }
 
     // ---- The templates ----
@@ -301,10 +356,15 @@ pub const Emitter = struct {
     /// the whole check on the slow path: it sees the state before the
     /// check.
     fn step(e: *Emitter, pc: u32, comptime h: Helper) Error!void {
+        const slow_l = try e.s.newLabel();
+        try e.colds.append(e.a, .{ .slow = .{ .at = slow_l, .pc = pc, .h = h, .target = null } });
+        return e.stepTo(slow_l);
+    }
+
+    /// The step check with the slow path `slow_l`. It uses `rax`.
+    fn stepTo(e: *Emitter, slow_l: Label) Error!void {
         const s = e.s;
         const l = e.l;
-        const slow_l = try s.newLabel();
-        try e.colds.append(e.a, .{ .slow = .{ .at = slow_l, .pc = pc, .h = h, .target = null } });
         try s.aluMI(.cmp, itAt(l.it_step_limit), 0);
         try s.jcc(.e, slow_l);
         try s.decM(itAt(l.it_step_limit));
@@ -395,15 +455,37 @@ pub const Emitter = struct {
     /// six compares.
     fn fastOp(op: expr.BinOp) bool {
         return switch (op) {
-            .add, .sub, .mul => true,
+            .add, .sub, .mul, .div, .mod => true,
             else => compareCond(op) != null,
         };
     }
 
     /// `rax = rax op rcx` with the overflow check, or 0 or 1 for a
-    /// compare. The overflow goes to `slow_l`.
+    /// compare. The overflow goes to `slow_l`. `/` and `%` send a
+    /// divisor of 0 or -1 to `slow_l`, and round the quotient down as
+    /// Tcl does. They use `rdx` and `r10`.
     fn arith(e: *Emitter, op: expr.BinOp, slow_l: Label) Error!void {
         const s = e.s;
+        if (op == .div or op == .mod) {
+            try s.aluRI(.cmp, .rcx, 0);
+            try s.jcc(.e, slow_l);
+            try s.aluRI(.cmp, .rcx, -1);
+            try s.jcc(.e, slow_l);
+            try s.cqo();
+            try s.idiv(.rcx);
+            // A remainder with the sign opposite to the divisor moves the
+            // quotient down by one and the remainder up by the divisor.
+            const done = try s.newLabel();
+            try s.aluRI(.cmp, .rdx, 0);
+            try s.jcc(.e, done);
+            try s.movRR(.r10, .rdx);
+            try s.aluRR(.xor, .r10, .rcx);
+            try s.jcc(.ns, done);
+            if (op == .div) try s.aluRI(.sub, .rax, 1) else try s.aluRR(.add, .rdx, .rcx);
+            s.bind(done);
+            if (op == .mod) try s.movRR(.rax, .rdx);
+            return;
+        }
         switch (op) {
             .add => try s.aluRR(.add, .rax, .rcx),
             .sub => try s.aluRR(.sub, .rax, .rcx),
@@ -428,7 +510,7 @@ pub const Emitter = struct {
     fn binSlots(e: *Emitter, pc: u32) Error!void {
         const i = e.code.ins[pc];
         const op: expr.BinOp = @enumFromInt(i.x);
-        if (!fastOp(op)) return e.plain(helperOf(i.op), pc);
+        if (!fastOp(op)) return e.plain(helperOf(i), pc);
         const d: i64 = e.info.depth[pc];
         const slow_l = try e.slow(pc);
         try e.cell(i.a, .r8, slow_l);
@@ -489,6 +571,147 @@ pub const Emitter = struct {
             .incr_value => try s.movMR(try e.stackAt(d - 1, e.l.value_payload), .rax),
             else => {},
         }
+    }
+
+    /// `llength` of a list value: its length.
+    fn llength(e: *Emitter, pc: u32) Error!void {
+        const d: i64 = e.info.depth[pc];
+        const slow_l = try e.slow(pc);
+        try e.stackTag(d - 1, e.l.tag_list, slow_l);
+        try e.s.movRM(.rax, try e.stackAt(d - 1, e.l.value_len));
+        try e.putInt(d - 1, .rax);
+    }
+
+    /// `lindex` of a list value and an integer: the item, or the empty
+    /// string for an index out of range.
+    fn lindex(e: *Emitter, pc: u32) Error!void {
+        const s = e.s;
+        const l = e.l;
+        const d: i64 = e.info.depth[pc];
+        const slow_l = try e.slow(pc);
+        try e.stackTag(d - 2, l.tag_list, slow_l);
+        try e.stackTag(d - 1, l.tag_int, slow_l);
+        // An unsigned compare: a negative index is out of range.
+        try s.movRM(.r9, try e.stackAt(d - 1, l.value_payload));
+        try s.aluRM(.cmp, .r9, try e.stackAt(d - 2, l.value_len));
+        const empty = try s.newLabel();
+        const have = try s.newLabel();
+        try s.jcc(.ae, empty);
+        try e.scale(.rax, .r9);
+        try s.movRM(.rdx, try e.stackAt(d - 2, l.value_payload));
+        try s.aluRM(.add, .rax, try x64.at(.rdx, l.obj_buf));
+        try s.jmp(have);
+        s.bind(empty);
+        try e.emptyAddr(.rax);
+        s.bind(have);
+        try e.copy(abi.stack, (d - 2) * l.value_size, .rax, 0);
+    }
+
+    /// `lappend` of one value to a list with room at its end: the value
+    /// goes to the buffer first, then `used` and the length grow.
+    fn lappend(e: *Emitter, pc: u32) Error!void {
+        if (e.code.named) return e.plain(.lappend, pc);
+        const s = e.s;
+        const l = e.l;
+        const i = e.code.ins[pc];
+        const d: i64 = e.info.depth[pc];
+        const slow_l = try e.slow(pc);
+        try e.cell(i.a, .r8, slow_l);
+        try s.cmpMI8(e.cellValue(.r8, l.value_tag), @intCast(l.tag_list));
+        try s.jcc(.ne, slow_l);
+        try s.movRM(.r9, e.cellValue(.r8, l.value_payload));
+        try s.movRM(.r11, e.cellValue(.r8, l.value_len));
+        try s.aluRM(.cmp, .r11, try x64.at(.r9, l.obj_used));
+        try s.jcc(.ne, slow_l);
+        try s.aluRM(.cmp, .r11, try x64.at(.r9, l.obj_buf_len));
+        try s.jcc(.ae, slow_l);
+        try e.scale(.rax, .r11);
+        try s.aluRM(.add, .rax, try x64.at(.r9, l.obj_buf));
+        try e.copy(.rax, 0, abi.stack, (d - 1) * l.value_size);
+        try s.incM(try x64.at(.r9, l.obj_used));
+        try s.incM(e.cellValue(.r8, l.value_len));
+        try e.copy(abi.stack, (d - 1) * l.value_size, .r8, l.var_payload);
+    }
+
+    /// `foreach_next` with a list and an index on the stack and at most
+    /// four plain cells. The step comes after the bound check and before
+    /// the first store, as in the interpreter. Each check is before the
+    /// step, so the slow path sees the state before the instruction.
+    fn foreachNext(e: *Emitter, pc: u32) Error!void {
+        const i = e.code.ins[pc];
+        const table = e.code.tables[i.a];
+        if (e.code.named or table.len > 4) return e.branch(.foreach_next, pc, i.b);
+        const s = e.s;
+        const l = e.l;
+        const d: i64 = e.info.depth[pc];
+        const slow_l = try e.slow(pc);
+        try e.stackTag(d - 2, l.tag_list, slow_l);
+        try e.stackTag(d - 1, l.tag_int, slow_l);
+        try s.movRM(.rax, try e.stackAt(d - 1, l.value_payload));
+        try s.aluRM(.cmp, .rax, try e.stackAt(d - 2, l.value_len));
+        try s.jcc(.ae, e.labels[i.b]);
+        const regs = [_]Reg{ .r8, .r9, .r10, .r11 };
+        for (table, 0..) |slot, k| try e.cell(slot, regs[k], slow_l);
+        try e.stepTo(slow_l);
+        for (table, 0..) |_, k| {
+            const empty = try s.newLabel();
+            const have = try s.newLabel();
+            try s.movRM(.rdx, try e.stackAt(d - 1, l.value_payload));
+            if (k > 0) try s.aluRI(.add, .rdx, @intCast(k));
+            try s.aluRM(.cmp, .rdx, try e.stackAt(d - 2, l.value_len));
+            try s.jcc(.ae, empty);
+            try e.scale(.rax, .rdx);
+            try s.movRM(.rdx, try e.stackAt(d - 2, l.value_payload));
+            try s.aluRM(.add, .rax, try x64.at(.rdx, l.obj_buf));
+            try s.jmp(have);
+            s.bind(empty);
+            try e.emptyAddr(.rax);
+            s.bind(have);
+            try e.copyRcx(regs[k], l.var_payload, .rax, 0);
+        }
+        try s.aluMI(.add, try e.stackAt(d - 1, l.value_payload), @intCast(table.len));
+    }
+
+    /// `str_eq_jump` on a string: strings of other lengths differ, and a
+    /// compare helper with no error path checks strings of equal length.
+    fn strEqJump(e: *Emitter, pc: u32) Error!void {
+        const s = e.s;
+        const l = e.l;
+        const i = e.code.ins[pc];
+        const d: i64 = e.info.depth[pc];
+        const slow_l = try e.slow(pc);
+        try e.stackTag(d - 1, l.tag_str, slow_l);
+        try s.movRM(.rax, .{ .base = abi.code, .disp = @intCast(l.code_lits) });
+        try s.movRM(.rax, try x64.at(.rax, @as(i64, i.a) * l.value_size + l.value_len));
+        try s.aluRM(.cmp, .rax, try e.stackAt(d - 1, l.value_len));
+        try s.jcc(.ne, e.labels[pc + 1]);
+        try e.call(.str_bytes_eq, pc);
+        try s.aluRI32(.cmp, abi.ret, helpers.yes);
+        try s.jcc(.e, e.labels[i.b]);
+    }
+
+    /// `lset_drop` on a cell that owns its list, with an integer index in
+    /// range: the value goes to the buffer, and the marks of a dict go.
+    fn lsetDrop(e: *Emitter, pc: u32) Error!void {
+        if (e.code.named) return e.plain(.lset_drop, pc);
+        const s = e.s;
+        const l = e.l;
+        const i = e.code.ins[pc];
+        const d: i64 = e.info.depth[pc];
+        const slow_l = try e.slow(pc);
+        try e.cellTag(i.a, .r8, l.var_owned, slow_l);
+        try s.cmpMI8(e.cellValue(.r8, l.value_tag), @intCast(l.tag_list));
+        try s.jcc(.ne, slow_l);
+        try e.stackTag(d - 2, l.tag_int, slow_l);
+        try s.movRM(.r11, try e.stackAt(d - 2, l.value_payload));
+        try s.aluRM(.cmp, .r11, e.cellValue(.r8, l.value_len));
+        try s.jcc(.ae, slow_l);
+        try s.movRM(.r9, e.cellValue(.r8, l.value_payload));
+        try e.scale(.rax, .r11);
+        try s.aluRM(.add, .rax, try x64.at(.r9, l.obj_buf));
+        try e.copy(.rax, 0, abi.stack, (d - 1) * l.value_size);
+        try s.movMI(try x64.at(.r9, l.obj_dict_len), 0);
+        try s.movMI(try x64.at(.r9, l.obj_index), 0);
     }
 
     // ---- The cold code ----

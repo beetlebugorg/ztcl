@@ -71,6 +71,9 @@ pub const Helper = enum(u8) {
     foreach_next,
     /// 1 when the guard jumps to its cold block: `vm.guardJumps`.
     recheck,
+    /// 1 when the bytes of the string on the top of the stack equal the
+    /// string literal of `str_eq_jump`. It has no error.
+    str_bytes_eq,
 };
 
 pub const count = @typeInfo(Helper).@"enum".fields.len;
@@ -148,6 +151,12 @@ fn wrap(comptime h: Helper) Fn {
         fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
             _ = .{ pc, sp };
             return @intFromBool(vm.guardJumps(ctx.it));
+        }
+    }.f;
+    if (h == .str_bytes_eq) return &struct {
+        fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
+            const code = ctx.code;
+            return @intFromBool(std.mem.eql(u8, ctx.stack[sp - 1].str, code.lits[code.ins[pc].a].str));
         }
     }.f;
     if (comptime isBranch(h)) return &struct {

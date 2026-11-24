@@ -1147,3 +1147,81 @@ test "jit: a child interp deleted while its compiled code runs" {
     , 0);
 }
 
+
+test "jit: / and % for each sign pair, 0, and -1" {
+    try same(
+        \\proc d {a b} { list [expr {$a / $b}] [expr {$a % $b}] }
+        \\proc dv {a} { set b -1; set z 0; list [expr {$a / $b}] [expr {$a % $b}] [catch {expr {$a / $z}} m] $m [catch {expr {$a % $z}} m] $m $::errorCode }
+        \\proc lit {a} { list [expr {$a / 7}] [expr {$a % 7}] [expr {$a / -7}] [expr {$a % -7}] }
+        \\proc st {a b} { list [expr {($a + 0) / ($b + 0)}] [expr {($a + 0) % ($b + 0)}] }
+        \\set r {}
+        \\foreach {a b} {7 2 -7 2 7 -2 -7 -2 6 3 -6 3 6 -3 0 5 0 -5 9223372036854775807 2 -9223372036854775808 2 -9223372036854775808 7 1 9223372036854775807} {
+        \\  lappend r [d $a $b] [st $a $b] [lit $a]
+        \\}
+        \\lappend r [dv -9223372036854775808] [dv 5] [dv -5] [dv 0]
+        \\set r
+    , 4);
+}
+
+test "jit: lindex and llength on lists" {
+    try same(
+        \\proc f {l} { set r {}; foreach i {-1 0 1 2 3 4 9223372036854775807 -9223372036854775808 end 1.0} { lappend r [lindex $l $i] }; lappend r [llength $l] [llength {}] [llength "a b"]; set r }
+        \\list [f {a b c}] [f {}] [f [list x {y z}]] [f "p q"]
+    , 1);
+}
+
+test "jit: lappend to a shared list and to a list at its capacity" {
+    try same(
+        \\proc f {} {
+        \\  set a {}; for {set i 0} {$i < 20} {incr i} { lappend a $i }
+        \\  set b $a; lappend a x; lappend b y; lappend a z
+        \\  set c [lrange $a 0 2]; lappend c w
+        \\  set e {}; for {set i 0} {$i < 8} {incr i} { lappend e $i }; set g $e; lappend e 8; lappend g 9
+        \\  list $a $b $c $e $g [llength $a]
+        \\}
+        \\f
+    , 1);
+}
+
+test "jit: foreach over a list that the body changes" {
+    try same(
+        \\proc f {} {
+        \\  set l {1 2 3}; set r {}
+        \\  foreach x $l { lappend l [expr {$x * 10}]; lappend r $x }
+        \\  foreach {x y} $l { set l {}; lappend r $x $y }
+        \\  foreach {a b c d} {1 2 3 4 5 6} { lappend r $a $b $c $d }
+        \\  foreach {a b c d e} {1 2 3 4 5 6} { lappend r $a $b $c $d $e }
+        \\  list $l $r
+        \\}
+        \\f
+    , 1);
+}
+
+test "jit: foreach with a traced loop variable" {
+    try same(
+        \\proc f {} {
+        \\  set n 0
+        \\  trace add variable x write [list apply {{args} { incr ::cnt }}]
+        \\  foreach x {a b c d} { incr n }
+        \\  upvar #0 g y
+        \\  foreach y {1 2 3} {}
+        \\  list $n $x $y
+        \\}
+        \\set cnt 0; list [f] $cnt $g
+    , 1);
+}
+
+test "jit: lset on an owned list and switch on strings" {
+    try same(
+        \\proc f {} {
+        \\  set t [lrepeat 10 0]; set p 0
+        \\  for {set i 0} {$i < 40} {incr i} { lset t $p [expr {[lindex $t $p] + 1}]; set p [expr {($p + 3) % 10}] }
+        \\  set d [dict create a 1 b 2]; lset d 1 9; dict set d c 3
+        \\  set u $t; lset t 0 x; lset t 10 y
+        \\  set r {}
+        \\  foreach w {abc ab abd {} 12 x} { switch -exact -- $w { abc { lappend r 1 } ab { lappend r 2 } 12 { lappend r 3 } default { lappend r d } } }
+        \\  list $t $u $d $r [catch {lset t -1 z} m] $m
+        \\}
+        \\f
+    , 1);
+}

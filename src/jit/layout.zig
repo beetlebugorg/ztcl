@@ -58,7 +58,10 @@ pub const Layout = struct {
     list_obj: u32,
     list_len: u32,
     obj_buf: u32,
+    obj_buf_len: u32,
     obj_used: u32,
+    obj_dict_len: u32,
+    obj_index: u32,
     // Offsets in `Interp`.
     it_epoch: u32,
     it_safe_epoch: u32,
@@ -193,7 +196,11 @@ pub fn probe() ?Layout {
     l.frame_items = vars + l.slice_ptr;
     l.frame_len = vars + l.slice_len;
     l.obj_buf = @offsetOf(value.ListObj, "buf") + l.slice_ptr;
+    l.obj_buf_len = @offsetOf(value.ListObj, "buf") + l.slice_len;
     l.obj_used = @offsetOf(value.ListObj, "used");
+    l.obj_dict_len = @offsetOf(value.ListObj, "dict_len");
+    l.obj_index = @offsetOf(value.ListObj, "index");
+    if (@sizeOf(@FieldType(value.ListObj, "index")) != 8 or @sizeOf(@FieldType(value.ListObj, "dict_len")) != 8) return null;
     l.it_epoch = @offsetOf(Interp, "epoch");
     l.it_safe_epoch = @offsetOf(Interp, "safe_epoch");
     l.it_step_limit = @offsetOf(Interp, "step_limit");
