@@ -177,7 +177,7 @@ test "selfTest runs a function from the region" {
 }
 
 test "the region has no page that is writable and executable" {
-    if (!jit.built) return error.SkipZigTest;
+    if (!jit.built or builtin.os.tag != .linux) return error.SkipZigTest;
     const page = std.heap.pageSize();
     var r = mem.Region.init(8 * page) orelse return error.NoRegion;
     defer r.deinit();
@@ -202,7 +202,7 @@ test "the region has no page that is writable and executable" {
 }
 
 test "a full region returns null and keeps its functions" {
-    if (!jit.built) return error.SkipZigTest;
+    if (!jit.built or builtin.os.tag != .linux) return error.SkipZigTest;
     const page = std.heap.pageSize();
     var r = mem.Region.init(2 * page) orelse return error.NoRegion;
     defer r.deinit();
@@ -218,7 +218,7 @@ test "a full region returns null and keeps its functions" {
 }
 
 test "selfTest is false under PR_SET_MDWE" {
-    if (!jit.built) return error.SkipZigTest;
+    if (!jit.built or builtin.os.tag != .linux) return error.SkipZigTest;
     const pid = linux.fork();
     if (linux.errno(pid) != .SUCCESS) return error.SkipZigTest;
     if (pid == 0) {
@@ -256,7 +256,7 @@ fn readFaults(addr: usize) !bool {
 }
 
 test "a read of a guard page of the region faults" {
-    if (!jit.built) return error.SkipZigTest;
+    if (!jit.built or builtin.os.tag != .linux) return error.SkipZigTest;
     const page = std.heap.pageSize();
     var r = mem.Region.init(4 * page) orelse return error.NoRegion;
     defer r.deinit();
@@ -270,6 +270,104 @@ test "a read of a guard page of the region faults" {
     try testing.expect(try readFaults(base + r.limit));
     // The code and its fill bytes are readable.
     try testing.expect(!try readFaults(@intFromPtr(f.ptr) + page - 1));
+}
+
+// ---- Executable memory on arm64 macOS ----
+
+const darwin_arm = builtin.os.tag == .macos and builtin.cpu.arch == .aarch64;
+
+extern "c" var mach_task_self_: u32;
+extern "c" fn mach_vm_region(task: u32, address: *u64, size: *u64, flavor: i32, info: *[16]i32, count: *u32, object: *u32) c_int;
+
+/// The current and the most rights of the mapping at `addr`, from
+/// `mach_vm_region` (VM_REGION_BASIC_INFO_64), and its start.
+fn rightsAt(addr: usize) !struct { cur: i32, max: i32, start: u64 } {
+    var a: u64 = addr;
+    var size: u64 = 0;
+    var info: [16]i32 = undefined;
+    var count: u32 = 9;
+    var object: u32 = 0;
+    if (mach_vm_region(mach_task_self_, &a, &size, 9, &info, &count, &object) != 0) return error.NoRegion;
+    return .{ .cur = info[0], .max = info[1], .start = a };
+}
+
+const vm_read = 1;
+const vm_write = 2;
+const vm_exec = 4;
+
+test "arm64 macOS: functions pack, run, and the region has its rights" {
+    if (!jit.built or !darwin_arm) return error.SkipZigTest;
+    const page = std.heap.pageSize();
+    var r = mem.Region.init(4 * page) orelse return error.NoRegion;
+    defer r.deinit();
+    // mov w0, #42; ret and mov w0, #7; ret.
+    const f1 = r.append(&.{ 0x40, 0x05, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }).?;
+    const f2 = r.append(&.{ 0xE0, 0x00, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }).?;
+    try testing.expectEqual(@intFromPtr(f1.ptr) + 16, @intFromPtr(f2.ptr));
+    try testing.expectEqual(@as(usize, 32), r.usedBytes());
+    // The fill after each function is zero words (udf).
+    for (f1.ptr[f1.len..16]) |b| try testing.expectEqual(@as(u8, 0), b);
+    const c1: *const fn () callconv(.c) u32 = @ptrCast(@alignCast(f1.ptr));
+    const c2: *const fn () callconv(.c) u32 = @ptrCast(@alignCast(f2.ptr));
+    try testing.expectEqual(@as(u32, 42), c1());
+    try testing.expectEqual(@as(u32, 7), c2());
+    // The rights after two functions. The MAP_JIT pages have read,
+    // write, and execute as both rights: the write protection of each
+    // thread keeps them from being writable and executable at once. The
+    // guard pages have no current right.
+    const code = try rightsAt(@intFromPtr(f1.ptr));
+    const before = try rightsAt(@intFromPtr(r.base) - page);
+    const after = try rightsAt(@intFromPtr(r.base) + r.limit);
+    std.debug.print("arm64 region rights: code cur={d} max={d}, guard before cur={d} max={d}, guard after cur={d} max={d}\n", .{ code.cur, code.max, before.cur, before.max, after.cur, after.max });
+    try testing.expectEqual(@as(i32, vm_read | vm_write | vm_exec), code.cur);
+    try testing.expectEqual(@as(i32, 0), before.cur);
+    try testing.expectEqual(@as(i32, 0), after.cur);
+}
+
+/// Runs `body` in a child process and gives the signal that stopped it,
+/// or 0 when it exited.
+fn childSignal(body: *const fn (*mem.Region) void, r: *mem.Region) !u32 {
+    const pid = std.c.fork();
+    if (pid < 0) return error.SkipZigTest;
+    if (pid == 0) {
+        // The default action, so the signal stops the child.
+        const dfl: std.posix.Sigaction = .{ .handler = .{ .handler = std.posix.SIG.DFL }, .mask = std.posix.sigemptyset(), .flags = 0 };
+        for ([_]std.posix.SIG{ .ILL, .BUS, .SEGV, .TRAP }) |sg| std.posix.sigaction(sg, &dfl, null);
+        body(r);
+        std.c._exit(0);
+    }
+    var status: c_int = 0;
+    _ = std.c.waitpid(pid, &status, 0);
+    const st: u32 = @bitCast(status);
+    return if (st & 0x7F != 0) st & 0x7F else 0;
+}
+
+fn jumpFree(r: *mem.Region) void {
+    const f: *const fn () callconv(.c) u32 = @ptrCast(@alignCast(r.base + r.used));
+    _ = f();
+}
+
+fn writeFree(r: *mem.Region) void {
+    const p: *volatile u32 = @ptrCast(@alignCast(r.base + r.used + 64));
+    p.* = 0xD65F03C0;
+}
+
+test "arm64 macOS: a jump to a free part of the region traps" {
+    if (!jit.built or !darwin_arm) return error.SkipZigTest;
+    var r = mem.Region.init(std.heap.pageSize()) orelse return error.NoRegion;
+    defer r.deinit();
+    _ = r.append(&.{ 0x40, 0x05, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }).?;
+    const sig = try childSignal(jumpFree, &r);
+    try testing.expectEqual(@as(u32, @intFromEnum(std.c.SIG.ILL)), sig);
+}
+
+test "arm64 macOS: a write to a free part of the region faults" {
+    if (!jit.built or !darwin_arm) return error.SkipZigTest;
+    var r = mem.Region.init(std.heap.pageSize()) orelse return error.NoRegion;
+    defer r.deinit();
+    _ = r.append(&.{ 0x40, 0x05, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }).?;
+    const sig = try childSignal(writeFree, &r);
+    try testing.expect(sig == @intFromEnum(std.c.SIG.BUS) or sig == @intFromEnum(std.c.SIG.SEGV));
 }
 
 // ---- The assembler ----
@@ -333,7 +431,7 @@ test "a displacement out of range is an error" {
 }
 
 test "the selfTest function from the assembler returns 42" {
-    if (!jit.built) return error.SkipZigTest;
+    if (!jit.built or builtin.cpu.arch != .x86_64) return error.SkipZigTest;
     var s = x64.Asm.init(testing.allocator);
     defer s.deinit();
     try s.movRI32(.rax, 42);
@@ -343,7 +441,7 @@ test "the selfTest function from the assembler returns 42" {
 }
 
 test "checkError reads only eax after a helper call" {
-    if (!jit.built) return error.SkipZigTest;
+    if (!jit.built or builtin.cpu.arch != .x86_64) return error.SkipZigTest;
     const t1 = @import("tier1_x64.zig");
     var s = x64.Asm.init(testing.allocator);
     defer s.deinit();
@@ -1142,6 +1240,7 @@ test "jit: a step limit inside a compiled loop leaves the same steps" {
 }
 
 test "jit: a coroutine yields from a compiled proc and resumes" {
+    if (!@import("../coro.zig").supported) return error.SkipZigTest;
     try same(
         \\proc gen {n} { yield; for {set i 0} {$i < $n} {incr i} { yield [expr {$i * $i}] }; return done }
         \\coroutine c gen 4
@@ -1241,11 +1340,13 @@ test "jit: the code bytes of the benchmarks" {
             const code = try procCode(it, e.key_ptr.*);
             var info = (try verify.verify(testing.allocator, code)).?;
             defer info.deinit(testing.allocator);
-            var s = x64.Asm.init(testing.allocator);
+            // The templates of the build target.
+            const arm = builtin.cpu.arch == .aarch64;
+            var s = if (arm) a64.Asm.init(testing.allocator) else x64.Asm.init(testing.allocator);
             defer s.deinit();
             const entries = try testing.allocator.alloc(u32, code.ins.len);
             defer testing.allocator.free(entries);
-            try @import("tier1_x64.zig").assemble(testing.allocator, &s, code, &info, layout.probe().?, entries, false);
+            try (if (arm) @import("tier1_a64.zig") else @import("tier1_x64.zig")).assemble(testing.allocator, &s, code, &info, layout.probe().?, entries, false);
             bytes += s.bytes().len;
             ins += code.ins.len;
         }
@@ -1346,6 +1447,7 @@ test "jit: compiled code with a collection at each allocation" {
         \\set o [A new]; set r {}; for {set i 0} {$i < 25} {incr i} { lappend r [$o add $i] }; set r
     };
     for (scripts) |script| {
+        if (!@import("../coro.zig").supported and std.mem.indexOf(u8, script, "coroutine") != null) continue;
         const ref = try runModeGc(script, false, std.math.maxInt(u64), 0, 0);
         defer ref.deinit();
         const got = try runModeGc(script, true, std.math.maxInt(u64), 1, 1);
@@ -1583,6 +1685,7 @@ test "tier 2: plans with a string slot, a changed kind, and a call" {
 /// `same` with tier 2 on. Fails when fewer than `min_tier2` loops
 /// compiled to tier 2.
 fn sameT2(script: []const u8, min_tier2: u64) !void {
+    if (!jit.tier2_backend) return error.SkipZigTest;
     test_tier2 = true;
     defer test_tier2 = false;
     try same(script, 1);
@@ -2295,6 +2398,7 @@ test "hardening: one proc in two regions gives the same bytes" {
 
 test "hardening: the JIT frame is at most 64 bytes" {
     if (!jit.built) return error.SkipZigTest;
+    if (builtin.cpu.arch == .aarch64) return checkFrameA64();
     try testing.expect(abi.frame_bytes <= 64);
     // The prologue: push rbp, mov rbp rsp, five pushes of the pinned
     // registers, and the push of the context. With the return address
@@ -2312,6 +2416,24 @@ test "hardening: the JIT frame is at most 64 bytes" {
     try testing.expectEqual(abi.frame_bytes, 8 + 8 * pushes);
     try testing.expectEqual(@as(usize, 0), abi.frame_bytes % 16);
     try testing.expectEqual(@as(i32, -8 * (1 + @as(i32, abi.saved.len))), abi.ctx_slot);
+}
+
+/// The arm64 frame: `stp x29, x30` with pre-index, `mov x29, sp`, and
+/// the pairs of the pinned registers and the context, in 64 bytes.
+fn checkFrameA64() !void {
+    const fa = abi.a64;
+    try testing.expectEqual(@as(i64, 64), fa.frame_bytes);
+    try testing.expectEqual(@as(i64, 0), @rem(fa.frame_bytes, 16));
+    const it = try newInterp();
+    defer freeInterp(it);
+    if (!it.enableJit(.{ .threshold = 0 })) return error.SkipZigTest;
+    try defineProcs(it, base_proc);
+    const code = try procCode(it, "f");
+    const f = jit.prepare(it, code) orelse return error.NoCompile;
+    // stp x29, x30, [sp, #-64]!; mov x29, sp; stp x19, x20, [sp, #16];
+    // stp x21, x22, [sp, #32]; stp x23, x0, [sp, #48].
+    const want = [_]u32{ 0xA9BC7BFD, 0x910003FD, 0xA90153F3, 0xA9025BF5, 0xA90303F7 };
+    for (want, 0..) |w, k| try testing.expectEqual(w, std.mem.readInt(u32, f.base[4 * k ..][0..4], .little));
 }
 
 /// True when an address is inside a mapping of /proc/self/maps.
@@ -2526,6 +2648,7 @@ test "tier 2: a conditional jump back stays in tier 1" {
 }
 
 test "tier 2: an exit at the loop head lets tier 1 take a step" {
+    if (!jit.tier2_backend) return error.SkipZigTest;
     if (!jit.built) return error.SkipZigTest;
     // The jit-fuzz --verify mode found it: a changed Code with the loop
     // `guard; jump` at address 0. With the step limit below the steps
