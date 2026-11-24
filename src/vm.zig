@@ -1619,14 +1619,14 @@ inline fn lassignOp(comptime named: bool, comptime drop: bool, it: *Interp, f: *
     const table = code.tables[i.a];
     const items = try it.list(stack[sp - 1]);
     for (table, 0..) |slot, k| {
-        const v = if (k < items.len) items[k] else Value.empty;
+        const v = if (k < items.len) &items[k] else &Value.empty;
         const cell = try writeCell(named, it, f, code, slot);
         if (cell.v == .val) {
-            cell.v.val = v;
+            cell.v.val = v.*;
         } else if (cell.plainStore()) {
-            cell.v = .{ .val = v };
+            cell.v = .{ .val = v.* };
         } else {
-            try slowStore(it, code.names[slot], &v);
+            try slowStore(it, code.names[slot], v);
         }
     }
     if (!drop) stack[sp - 1] = try value.newList(it.alloc(), items[@min(items.len, table.len)..]);
@@ -1670,9 +1670,20 @@ pub inline fn opLsetDrop(comptime named: bool, it: *Interp, f: *Frame, code: *co
 pub inline fn opStrEqJump(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!bool {
     _ = .{ named, f };
     const top = stack[sp - 1];
+    const lit = code.lits[i.a].str;
+    if (top == .str) return sameText(top.str, lit);
     var buf: [24]u8 = undefined;
     const s: []const u8 = if (top == .int) value.writeInt(&buf, top.int) else try it.str(top);
-    return std.mem.eql(u8, s, code.lits[i.a].str);
+    return sameText(s, lit);
+}
+
+/// True when the two strings have the same bytes. A pattern of `switch`
+/// is short, so the bytes compare inline.
+inline fn sameText(a: []const u8, b: []const u8) bool {
+    if (a.len != b.len) return false;
+    if (a.ptr == b.ptr) return true;
+    for (a, b) |x, y| if (x != y) return false;
+    return true;
 }
 
 /// True: the top of the stack is false.

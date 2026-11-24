@@ -213,6 +213,7 @@ pub const Emitter = struct {
             .lappend => try e.lappend(pc),
             .invoke => try e.invoke(pc),
             .lset_drop => try e.lsetDrop(pc),
+            .lassign_drop => try e.lassignDrop(pc),
             .access => switch (i.x) {
                 0 => try e.llength(pc),
                 1 => try e.lindex(pc),
@@ -418,8 +419,22 @@ pub const Emitter = struct {
     fn load(e: *Emitter, pc: u32) Error!void {
         const i = e.code.ins[pc];
         const d: i64 = e.info.depth[pc];
-        try e.cell(i.a, .rax, try e.slow(pc));
+        if (i.x != 1) {
+            try e.cell(i.a, .rax, try e.slow(pc));
+            try e.copy(abi.stack, d * e.l.value_size, .rax, e.l.var_payload);
+            return;
+        }
+        // A load for an access: an owned list stays owned, as in
+        // `vm.loadSlow`. Both forms have the value at the same offset.
+        const owned = try e.s.newLabel();
+        const done = try e.s.newLabel();
+        try e.cell(i.a, .rax, owned);
         try e.copy(abi.stack, d * e.l.value_size, .rax, e.l.var_payload);
+        try e.s.jmp(done);
+        e.s.bind(owned);
+        try e.cellTag(i.a, .rax, e.l.var_owned, try e.slow(pc));
+        try e.copy(abi.stack, d * e.l.value_size, .rax, e.l.var_payload);
+        e.s.bind(done);
     }
 
     fn store(e: *Emitter, pc: u32) Error!void {
@@ -685,6 +700,38 @@ pub const Emitter = struct {
             try e.copyRcx(regs[k], l.var_payload, .rax, 0);
         }
         try s.aluMI(.add, try e.stackAt(d - 1, l.value_payload), @intCast(table.len));
+    }
+
+    /// `lassign_drop` of a list value to at most four slots with plain
+    /// cells: each cell gets its item, or the empty string after the end
+    /// of the list. The checks of all cells come before the first store,
+    /// so the helper runs from the start when one check fails.
+    fn lassignDrop(e: *Emitter, pc: u32) Error!void {
+        const i = e.code.ins[pc];
+        const table = e.code.tables[i.a];
+        if (e.code.named or table.len > 4) return e.plain(.lassign_drop, pc);
+        const s = e.s;
+        const l = e.l;
+        const d: i64 = e.info.depth[pc];
+        const slow_l = try e.slow(pc);
+        try e.stackTag(d - 1, l.tag_list, slow_l);
+        const regs = [_]Reg{ .r8, .r9, .r10, .r11 };
+        for (table, 0..) |slot, k| try e.cell(slot, regs[k], slow_l);
+        for (table, 0..) |_, k| {
+            const empty = try s.newLabel();
+            const have = try s.newLabel();
+            try s.movRI32(.rdx, @intCast(k));
+            try s.aluRM(.cmp, .rdx, try e.stackAt(d - 1, l.value_len));
+            try s.jcc(.ae, empty);
+            try e.scale(.rax, .rdx);
+            try s.movRM(.rdx, try e.stackAt(d - 1, l.value_payload));
+            try s.aluRM(.add, .rax, try x64.at(.rdx, l.obj_buf));
+            try s.jmp(have);
+            s.bind(empty);
+            try e.emptyAddr(.rax);
+            s.bind(have);
+            try e.copyRcx(regs[k], l.var_payload, .rax, 0);
+        }
     }
 
     /// `str_eq_jump` on a string: strings of other lengths differ, and a
