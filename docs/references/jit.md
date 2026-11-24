@@ -120,6 +120,16 @@ The Linux manual pages `mmap(2)`, `mprotect(2)`, and `prctl(2)` (`PR_SET_MDWE`).
 
 **How ztcl uses it:** The calls of the Linux ports and the case of a process that refuses new executable memory.
 
+## Caches of the interpreter
+
+### Method caches
+
+L. Peter Deutsch, Allan M. Schiffman, "Efficient Implementation of the Smalltalk-80 System", POPL 1984. https://doi.org/10.1145/800017.800542
+
+**License:** Paper
+
+**How ztcl uses it:** A method call of TclOO keeps the last call chains of each object, with a number that changes at each change of a class or an object (`oo.zig`). A command site keeps the command of a name word that is not a literal, with the epoch of the command table (`Interp.resolve`). The paper caches the method of a call site and checks the class of the receiver at each call. The idea dates from 1984, so no patent on it is active.
+
 ## Calling conventions and instruction sets
 
 "System V Application Binary Interface, AMD64 Architecture Processor Supplement". https://gitlab.com/x86-psABIs/x86-64-ABI

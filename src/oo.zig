@@ -42,6 +42,8 @@ const Method = struct {
     proc: ?*interp.Proc = null,
     /// The variable list of the definer when the proc was made.
     stamp: u32 = 0,
+    /// The epoch of the state at the last check of `stamp`.
+    proc_epoch: u64 = 0,
     forward: []const Value = &.{},
     native: ?Native = null,
     /// The export flag, or null for the rule of the name.
@@ -82,7 +84,31 @@ pub const Object = struct {
     /// to the object has no filters.
     filtering: bool = false,
     id: u32,
+    /// The last call chains of the object, valid for one epoch of the
+    /// state. A chain that `run` reads is never changed, so a call can
+    /// use a chain of the cache.
+    chains: [chain_ways]ChainEntry = @splat(.{}),
+    next_chain: u8 = 0,
+    /// The global cell of each variable name that `::oo::Link` linked
+    /// for the object. An entry of the global frame stays while the
+    /// interpreter lives, so the cell of a name does not change.
+    links: std.ArrayList(LinkCell) = .empty,
 };
+
+const chain_ways = 4;
+/// The most names that the link cache of one object holds.
+const max_links = 16;
+
+const ChainEntry = struct {
+    /// The method name. The slice keeps the string alive.
+    name: []const u8 = "",
+    epoch: u64 = 0,
+    chain: []const Link = &.{},
+    /// The method is exported: a call of the object command can see it.
+    public: bool = false,
+};
+
+const LinkCell = struct { name: []const u8, cell: *interp.Var };
 
 const Link = struct { m: *Method, filter: bool = false };
 
@@ -103,6 +129,10 @@ const Call = struct {
 
 pub const State = struct {
     next_id: u32 = 1,
+    /// Changes at each change of a method table, a mixin, a filter, a
+    /// superclass, the class of an object, or the set of objects. The
+    /// chains of the object caches are valid for one epoch.
+    epoch: u64 = 1,
     stack: std.ArrayList(*Call) = .empty,
     defs: std.ArrayList(Def) = .empty,
     object_class: *Object = undefined,
@@ -119,6 +149,10 @@ const Def = struct {
 
 fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
+}
+
+fn sameName(a: []const u8, b: []const u8) bool {
+    return a.len == b.len and (a.ptr == b.ptr or std.mem.eql(u8, a, b));
 }
 
 fn full(it: *Interp, o: *const Object) Error![]const u8 {
@@ -281,6 +315,7 @@ fn newObject(it: *Interp, st: *State, class: *Object, name_in: ?[]const u8, ns_i
     if (name_in != null and it.commands.contains(key)) return it.failCode("TCL OO OVERWRITE_OBJECT", "can't create object \"{s}\": command already exists with that name", .{name_in.?});
     const o = try a.create(Object);
     o.* = .{ .name = key, .ns = try it.internNs(space), .class = class, .id = id };
+    st.epoch += 1;
     if (inherits(class, st.class_class)) {
         o.cls = try a.create(Class);
         o.cls.?.* = .{};
@@ -302,6 +337,8 @@ fn destroy(it: *Interp, st: *State, o: *Object, run_dtor: bool) Error!void {
 
 fn destroyMode(it: *Interp, st: *State, o: *Object, run_dtor: bool, explicit: bool) Error!void {
     if (o.dead or o.in_dtor) return;
+    st.epoch += 1;
+    defer st.epoch += 1;
     o.in_dtor = true;
     const a = it.alloc();
     var failure: ?Error = null;
@@ -567,9 +604,15 @@ fn definerVars(m: *const Method) struct { []const []const u8, u32 } {
     return .{ o.vars.items, o.var_stamp };
 }
 
-fn procOf(it: *Interp, m: *Method) Error!*interp.Proc {
+fn procOf(it: *Interp, st: *State, m: *Method) Error!*interp.Proc {
+    // Each change of a variable list or a method table changes the
+    // epoch, so the proc of the same epoch is still valid.
+    if (m.proc) |p| if (m.proc_epoch == st.epoch) return p;
     const vars, const stamp = definerVars(m);
-    if (m.proc) |p| if (m.stamp == stamp) return p;
+    if (m.proc) |p| if (m.stamp == stamp) {
+        m.proc_epoch = st.epoch;
+        return p;
+    };
     const a = it.alloc();
     var body = m.body;
     if (vars.len > 0) {
@@ -588,6 +631,7 @@ fn procOf(it: *Interp, m: *Method) Error!*interp.Proc {
     const p = try cmds.makeProc(it, m.params, body);
     m.proc = p;
     m.stamp = stamp;
+    m.proc_epoch = st.epoch;
     return p;
 }
 
@@ -645,7 +689,7 @@ fn run(it: *Interp, st: *State, call: *Call) Error!Value {
             return it.callWords(words);
         },
         .proc => {
-            const p = try procOf(it, m);
+            const p = try procOf(it, st, m);
             var required: usize = 0;
             for (p.params) |prm| {
                 if (prm.default == null) required += 1;
@@ -699,12 +743,28 @@ fn rewriteTrace(it: *Interp, call: *const Call, m: *const Method) Error!void {
 fn invoke(it: *Interp, st: *State, o: *Object, argv: []const Value, skip: usize, public_only: bool) Error!Value {
     const a = it.alloc();
     const name = try it.str(argv[skip - 1]);
+    // The chain depends on `filtering`, so a call from a filter does
+    // not use the cache.
+    if (!o.filtering) {
+        for (&o.chains) |*e| {
+            if (e.epoch != st.epoch or !sameName(e.name, name)) continue;
+            if (public_only and !e.public) break;
+            var call: Call = .{ .obj = o, .chain = e.chain, .at = 0, .argv = argv, .skip = skip, .name = name };
+            return run(it, st, &call);
+        }
+    }
     var chain: std.ArrayList(Link) = .empty;
-    const visible = !public_only or isPublic(o, name);
+    const public = isPublic(o, name);
+    const visible = !public_only or public;
     if (visible) try chainOf(a, o, name, &chain);
     var real = false;
     for (chain.items) |l| {
         if (!l.filter) real = true;
+    }
+    if (real and !o.filtering) {
+        const e = &o.chains[o.next_chain];
+        o.next_chain = (o.next_chain + 1) % chain_ways;
+        e.* = .{ .name = name, .epoch = st.epoch, .chain = chain.items, .public = public };
     }
     if (!real) {
         // The `unknown` method gets the name and the arguments.
@@ -718,9 +778,9 @@ fn invoke(it: *Interp, st: *State, o: *Object, argv: []const Value, skip: usize,
     return run(it, st, &call);
 }
 
-pub fn objCmd(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+pub fn objCmd(it: *Interp, argv: []const Value, site: ?*Cmd) Error!Value {
     const st = try state(it);
-    const self = it.findCommand(try it.str(argv[0])) orelse return it.fail("invalid command name \"{s}\"", .{try it.str(argv[0])});
+    const self = it.siteCommand(site, argv) orelse it.findCommand(try it.str(argv[0])) orelse return it.fail("invalid command name \"{s}\"", .{try it.str(argv[0])});
     const o: *Object = @ptrCast(@alignCast(self.ctx.?));
     if (argv.len < 2) {
         // A call with no method name goes to a scripted `unknown`.
@@ -733,9 +793,9 @@ pub fn objCmd(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return invoke(it, st, o, argv, 2, true);
 }
 
-fn myCmd(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+fn myCmd(it: *Interp, argv: []const Value, site: ?*Cmd) Error!Value {
     const st = try state(it);
-    const self = it.findCommand(try it.str(argv[0])) orelse return it.fail("invalid command name \"{s}\"", .{try it.str(argv[0])});
+    const self = it.siteCommand(site, argv) orelse it.findCommand(try it.str(argv[0])) orelse return it.fail("invalid command name \"{s}\"", .{try it.str(argv[0])});
     const o: *Object = @ptrCast(@alignCast(self.ctx.?));
     if (argv.len < 2) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"{s} method ?arg ...?\"", .{try it.str(argv[0])});
     return invoke(it, st, o, argv, 2, false);
@@ -880,15 +940,38 @@ fn callList(it: *Interp, o: *Object, chain: []const Link, name: []const u8, unkn
 /// `::oo::Link name ...`: links the declared variables of a method to
 /// the variables of the object.
 fn cmdLink(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    const a = it.alloc();
+    // The object of the method that runs, when the namespace is its
+    // namespace. Its cache then maps a name to the global cell.
+    var owner: ?*Object = null;
+    if (it.oo) |p| {
+        const st: *State = @ptrCast(@alignCast(p));
+        if (st.stack.items.len > 0) {
+            const o = st.stack.items[st.stack.items.len - 1].obj;
+            if (o.ns.ptr == it.ns.ptr and o.ns.len == it.ns.len) owner = o;
+        }
+    }
     for (argv[1..]) |v| {
         const name = try it.str(v);
-        const target = try it.globalVar(try std.fmt.allocPrint(a, "{s}::{s}", .{ it.ns, name }));
-        it.linkVar(name, target) catch |e| {
+        const entry = try linkCell(it, owner, name);
+        it.linkVar(name, entry.settle()) catch |e| {
             if (e == error.OutOfMemory) return e;
         };
     }
     return Value.empty;
+}
+
+/// The cell of the global entry of `name` in the current namespace.
+/// The cache of `owner`, an object with that namespace, keeps the cell.
+fn linkCell(it: *Interp, owner: ?*Object, name: []const u8) Error!*interp.Var {
+    if (owner) |o| {
+        for (o.links.items) |l| if (sameName(l.name, name)) return l.cell;
+    }
+    const a = it.alloc();
+    const cell = try it.globalEntry(try std.fmt.allocPrint(a, "{s}::{s}", .{ it.ns, name }));
+    if (owner) |o| {
+        if (o.links.items.len < max_links) try o.links.append(a, .{ .name = try a.dupe(u8, name), .cell = cell });
+    }
+    return cell;
 }
 
 // ---- The methods of oo::object and oo::class ----
@@ -1149,6 +1232,9 @@ fn slotOp(word: []const u8) ?u8 {
 }
 
 fn defineOne(it: *Interp, st: *State, sub_in: []const u8, argv: []const Value) Error!Value {
+    // A definition can run scripts before and after its change.
+    st.epoch += 1;
+    defer st.epoch += 1;
     const a = it.alloc();
     const def = st.defs.items[st.defs.items.len - 1];
     const o = def.obj;
@@ -1365,6 +1451,8 @@ fn defineOne(it: *Interp, st: *State, sub_in: []const u8, argv: []const Value) E
 
 fn cmdCopy(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const st = try state(it);
+    st.epoch += 1;
+    defer st.epoch += 1;
     if (argv.len < 2 or argv.len > 4) return it.wrongArgs("oo::copy sourceName ?targetName? ?targetNamespace?");
     const a = it.alloc();
     const src = try need(it, argv[1]);

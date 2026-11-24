@@ -84,6 +84,14 @@ pub const Cmd = struct {
     hint: u32 = 0,
     /// The step of a direct `incr`.
     by: i64 = 1,
+    /// The command of a name word that is not a literal, such as
+    /// `$obj`. It is valid for the same epoch, the same namespace, and a
+    /// name at the same address with the same length. The slice keeps
+    /// the string alive, and a string does not change while it lives.
+    dyn: ?*Command = null,
+    dyn_name: []const u8 = "",
+    dyn_epoch: u32 = 0,
+    dyn_ns: [*]const u8 = "",
 };
 
 /// The commands that run with no word stack. `evalCmd` selects the
@@ -1819,6 +1827,11 @@ pub const Interp = struct {
     /// same epoch and namespace.
     pub fn resolve(it: *Interp, c: *Cmd, argv: []const Value) Error!*Command {
         if (c.resolved != null and c.epoch == it.epoch and c.ns == it.ns.ptr) return c.resolved.?;
+        if (argv[0] == .str and c.dyn_epoch == it.epoch and c.dyn_ns == it.ns.ptr and
+            argv[0].str.ptr == c.dyn_name.ptr and argv[0].str.len == c.dyn_name.len)
+        {
+            if (c.dyn) |d| return d;
+        }
         const name = try it.str(argv[0]);
         const command = it.findCommand(name) orelse return &it.missing;
         if (c.words[0].kind == .lit and !c.has_expand) {
@@ -1826,8 +1839,31 @@ pub const Interp = struct {
             c.epoch = it.epoch;
             c.ns = it.ns.ptr;
             c.fast = if (it.var_traces != 0) .none else cmds.classify(command, c);
+        } else if (argv[0] == .str and !c.has_expand) {
+            c.dyn = command;
+            c.dyn_name = argv[0].str;
+            c.dyn_epoch = it.epoch;
+            c.dyn_ns = it.ns.ptr;
         }
         return command;
+    }
+
+    /// The command that `resolve` gave for the name `argv[0]` at site
+    /// `c`, or null when the site has no valid entry for that exact name
+    /// word. A native command uses it to find its own `Command`.
+    pub fn siteCommand(it: *Interp, c: ?*Cmd, argv: []const Value) ?*Command {
+        const s = c orelse return null;
+        if (argv.len == 0 or argv[0] != .str) return null;
+        const name = argv[0].str;
+        if (s.resolved != null and s.epoch == it.epoch and s.ns == it.ns.ptr and s.words.len > 0 and
+            s.words[0].kind == .lit and s.words[0].kind.lit == .str and !s.has_expand)
+        {
+            const lit = s.words[0].kind.lit.str;
+            if (lit.ptr == name.ptr and lit.len == name.len) return s.resolved.?;
+        }
+        if (s.dyn != null and s.dyn_epoch == it.epoch and s.dyn_ns == it.ns.ptr and
+            s.dyn_name.ptr == name.ptr and s.dyn_name.len == name.len) return s.dyn.?;
+        return null;
     }
 
     /// Runs a command in its direct form. Returns null when the case
@@ -2446,7 +2482,16 @@ pub const Interp = struct {
     /// The global cell with exactly this full name, made when it is
     /// not there.
     pub fn globalVar(it: *Interp, full: []const u8) Allocator.Error!*Var {
-        if (it.lookup(&it.global, full)) |c| return c;
+        return (try it.globalEntry(full)).settle();
+    }
+
+    /// The cell of the entry of the global frame with exactly this full
+    /// name, made when it is not there. The cell can be a link: the
+    /// caller follows it. An entry of the global frame is never removed
+    /// while the interpreter lives (`compact` and `reset` make a new
+    /// frame), so the cell of a name stays the same.
+    pub fn globalEntry(it: *Interp, full: []const u8) Allocator.Error!*Var {
+        if (it.global.find(it.alloc(), full)) |i| return it.global.vars.items[i].cell;
         const cell = try it.newCell();
         try it.global.vars.append(it.alloc(), .{ .name = try it.alloc().dupe(u8, full), .cell = cell });
         return cell;
