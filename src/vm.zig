@@ -1352,6 +1352,37 @@ fn concatValues(it: *Interp, vals: []const Value) Error!Value {
 
 /// Runs the code of a proc in the current frame.
 pub fn run(it: *Interp, code: *Code) Error!Value {
+    return runInline(it, code);
+}
+
+/// `run` inline, for the fast proc call.
+pub inline fn runInline(it: *Interp, code: *Code) Error!Value {
+    // A call from a script with machine code that is ready takes the
+    // short entry. A host entry (nest 0) takes the full path.
+    if (jit.built and !gc.precise and it.jit != null and it.nest != 0 and code.jit_state == .ready) {
+        if (jit.readyFn(it, code)) |f| return runReady(it, code, f);
+    }
+    return runFull(it, code);
+}
+
+/// `run` for machine code that is ready, not at a host entry. The
+/// checks and the limits are those of `runFull`.
+inline fn runReady(it: *Interp, code: *Code, f: *jit.Fn) Error!Value {
+    try it.checkNative();
+    if (it.nest >= it.max_nest) return it.fail("too many nested evaluations (infinite loop?)", .{});
+    it.nest += 1;
+    defer it.nest -= 1;
+    const mark = it.stackMark();
+    defer it.stackRelease(mark);
+    const stack = try it.stackAllocPub(code.max_stack);
+    var pc: u32 = 0;
+    var sp: u32 = 0;
+    const st = @call(.always_inline, jit.enter, .{ it, f, code, stack.ptr, &pc, &sp });
+    if (st == .done) return stack[sp - 1];
+    return runRest(it, code, f, stack.ptr, pc, sp, st);
+}
+
+fn runFull(it: *Interp, code: *Code) Error!Value {
     const host = it.nest == 0 and it.heap.scopes == 0;
     if (host) it.heap.scopes = 1;
     defer if (host) {
@@ -1378,21 +1409,38 @@ pub fn run(it: *Interp, code: *Code) Error!Value {
     const mark = it.stackMark();
     defer it.stackRelease(mark);
     const stack = try it.stackAllocPub(code.max_stack);
-    var pc: u32 = 0;
-    var sp: u32 = 0;
     // The machine code of the JIT, when it has a function for the code.
     const jf: ?*jit.Fn = if (jit.built and it.jit != null) jit.prepare(it, code) else null;
+    return runLoop(it, code, jf, stack.ptr, 0, 0, null);
+}
+
+/// `runLoop` after a short entry that did not end with a result.
+noinline fn runRest(it: *Interp, code: *Code, f: *jit.Fn, stack: [*]Value, pc: u32, sp: u32, st: jit.Status) Error!Value {
+    return runLoop(it, code, f, stack, pc, sp, st);
+}
+
+/// The loop of `run`: the machine code or `exec`, then the error trace,
+/// `break`, and `continue` of the ranges. `first` is the status of an
+/// entry that already ran.
+inline fn runLoop(it: *Interp, code: *Code, jf: ?*jit.Fn, stack: [*]Value, pc_in: u32, sp_in: u32, first: ?jit.Status) Error!Value {
+    var pc = pc_in;
+    var sp = sp_in;
+    var status = first;
     while (true) {
         const out: Error!Value = blk: {
-            if (jit.built) if (jf) |f| switch (jit.enter(it, f, code, stack.ptr, &pc, &sp)) {
-                .done => break :blk stack[sp - 1],
-                .failed => break :blk jit.lastError(it),
-                .fallback => {},
+            if (jit.built) if (jf) |f| {
+                const st = status orelse jit.enter(it, f, code, stack, &pc, &sp);
+                status = null;
+                switch (st) {
+                    .done => break :blk stack[sp - 1],
+                    .failed => break :blk jit.lastError(it),
+                    .fallback => {},
+                }
             };
             break :blk if (code.named)
-                exec(true, it, code, stack.ptr, &pc, &sp)
+                exec(true, it, code, stack, &pc, &sp)
             else
-                exec(false, it, code, stack.ptr, &pc, &sp);
+                exec(false, it, code, stack, &pc, &sp);
         };
         return out catch |e| {
             // A cold block counts as the place of its guard.

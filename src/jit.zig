@@ -302,6 +302,13 @@ fn hasLoop(code: *const vm.Code) bool {
     return false;
 }
 
+/// The function of a Code whose state is `ready`, when it is of the
+/// current generation. `prepare` gives the same function for it.
+pub inline fn readyFn(it: *Interp, code: *vm.Code) ?*Fn {
+    if (code.jit_gen != it.jit.?.gen) return null;
+    return @ptrCast(@alignCast(code.jit.?));
+}
+
 /// The function of `code`, after a compile when the count of calls
 /// reaches the threshold. Null runs the interpreter. No failure is an
 /// error of a script.

@@ -509,6 +509,14 @@ pub const Frame = struct {
     ns: ?[]const u8 = null,
     /// The namespace where the code of the frame runs.
     space: []const u8 = "",
+    /// The next frame of the free list.
+    next_free: ?*Frame = null,
+    /// The first `own` entries of `vars` belong to the frame: their
+    /// cells are in no free list, and the entries stay in the buffer
+    /// after the frame ends. `own_code` is the Code that named them. A
+    /// fast call of the same Code uses the entries again.
+    own: u32 = 0,
+    own_code: ?*const vm.Code = null,
 
     /// The frames with at least this many variables use the index.
     const index_from = 32;
@@ -534,12 +542,6 @@ pub const Frame = struct {
             if (!gop.found_existing) gop.value_ptr.* = f.indexed;
         }
         return if (f.index.get(name)) |i| i else null;
-    }
-
-    /// Removes each entry, and keeps the capacity.
-    pub inline fn clear(f: *Frame) void {
-        f.vars.clearRetainingCapacity();
-        if (f.indexed != 0) f.dropIndex();
     }
 
     noinline fn dropIndex(f: *Frame) void {
@@ -922,7 +924,8 @@ pub const Interp = struct {
     global: Frame = .{},
     frame: *Frame = undefined,
     free_vars: ?*Var = null,
-    free_frames: std.ArrayList(*Frame) = .empty,
+    /// The frames that calls can use again, linked by `next_free`.
+    free_frames: ?*Frame = null,
     /// The result of the last command, or the error message.
     result: Value = Value.empty,
     /// The code and the level of a pending `return`.
@@ -2073,7 +2076,7 @@ pub const Interp = struct {
                 if (it.nest == 0) return it.hostNative(f, argv, c);
                 return f(it, argv, c);
             },
-            .proc => |p| return it.callProc(p, argv),
+            .proc => |p| return it.callProcFast(p, argv),
         }
     }
 
@@ -2168,10 +2171,22 @@ pub const Interp = struct {
     }
 
     pub fn pushFrame(it: *Interp, argv: []const Value) Error!*Frame {
+        const f = try it.takeFrame(argv);
+        it.releaseOwn(f);
+        return f;
+    }
+
+    /// A frame from the free list, with its own entries kept.
+    inline fn takeFrame(it: *Interp, argv: []const Value) Error!*Frame {
         if (it.depth >= it.max_depth) return it.fail("too many nested evaluations (infinite loop?)", .{});
         it.depth += 1;
-        const f = it.free_frames.pop() orelse try it.newFrame();
-        f.clear();
+        const f = it.free_frames orelse try it.newFrame();
+        it.free_frames = f.next_free;
+        // The own entries stay in the buffer: a safe build fills the
+        // items that `clearRetainingCapacity` drops. The index of the
+        // last call goes, and a search makes it again.
+        f.vars.items.len = 0;
+        if (f.indexed != 0) f.dropIndex();
         f.argv = argv;
         f.parent = it.frame;
         f.ns = null;
@@ -2180,25 +2195,79 @@ pub const Interp = struct {
         return f;
     }
 
+    /// Gives the cells of the own entries of a frame to the free list.
+    fn releaseOwn(it: *Interp, f: *Frame) void {
+        for (f.vars.items.ptr[0..f.own]) |e| {
+            e.cell.next_free = it.free_vars;
+            it.free_vars = e.cell;
+        }
+        f.own = 0;
+        f.own_code = null;
+    }
+
     fn newFrame(it: *Interp) Allocator.Error!*Frame {
         const n = try it.alloc().create(Frame);
         n.* = .{};
         return n;
     }
 
-    pub fn popFrame(it: *Interp) void {
+    pub inline fn popFrame(it: *Interp) void {
         const f = it.frame;
         if (it.var_traces != 0) {
             @branchHint(.cold);
             trace.frameGone(it, f);
         }
-        for (f.vars.items) |e| {
+        for (f.vars.items[f.own..]) |e| {
             e.cell.next_free = it.free_vars;
             it.free_vars = e.cell;
         }
         it.frame = f.parent.?;
         it.depth -= 1;
-        it.free_frames.append(it.alloc(), f) catch {};
+        f.next_free = it.free_frames;
+        it.free_frames = f;
+    }
+
+    /// A proc call with a compiled body and exactly one word for each
+    /// parameter, and no `args`. It makes the cells of the frame in one
+    /// pass. Each other call goes through `callProc`. The frame, the
+    /// cells, the namespace, and the result are the same on both paths.
+    fn callProcFast(it: *Interp, p: *Proc, argv: []const Value) Error!Value {
+        const bc = p.code orelse return it.callProc(p, argv);
+        if (gc.precise or p.has_args or argv.len - 1 != p.params.len) return it.callProc(p, argv);
+        return it.runProcFast(p, bc, argv) catch |e| {
+            if (e == error.TclCustom and it.custom_code == coro.tail_code and it.tail_words != null) return it.runTail();
+            return e;
+        };
+    }
+
+    inline fn runProcFast(it: *Interp, p: *Proc, bc: *vm.Code, argv: []const Value) Error!Value {
+        const f = try it.takeFrame(argv);
+        defer it.popFrame();
+        const saved_ns = it.ns;
+        it.ns = p.ns;
+        f.space = p.ns;
+        defer it.ns = saved_ns;
+        const names = bc.names;
+        const np = argv.len - 1;
+        if (f.own_code == bc and f.own == names.len) {
+            // The entries of the last call of this Code: the same names
+            // and cells. Each cell gets the start value of a call.
+            const entries = f.vars.items.ptr[0..names.len];
+            for (entries[0..np], argv[1..]) |e, v| e.cell.* = .{ .v = .{ .val = v } };
+            for (entries[np..]) |e| e.cell.* = .{};
+            f.vars.items.len = names.len;
+        } else {
+            it.releaseOwn(f);
+            if (f.vars.capacity < names.len) try f.vars.ensureTotalCapacity(it.alloc(), names.len);
+            for (names, 0..) |name, k| {
+                const cell = try it.newCell();
+                if (k < np) cell.v = .{ .val = argv[k + 1] };
+                f.vars.appendAssumeCapacity(.{ .name = name, .cell = cell });
+            }
+            f.own = @intCast(names.len);
+            f.own_code = bc;
+        }
+        return vm.runInline(it, bc) catch |e| it.procEnd(e, argv, null);
     }
 
     fn callProc(it: *Interp, p: *Proc, argv: []const Value) Error!Value {
@@ -2285,7 +2354,14 @@ pub const Interp = struct {
             const cell = try it.newCell();
             try it.addEntry(.{ .name = name, .cell = cell });
         }
-        return vm.run(it, bc) catch |e| switch (e) {
+        return vm.run(it, bc) catch |e| it.procEnd(e, argv, lambda);
+    }
+
+    /// The result of a proc body that ended with a return code: `return`
+    /// gives its value or its code, and an error gets the line of the
+    /// proc in the error trace.
+    noinline fn procEnd(it: *Interp, e: Error, argv: []const Value, lambda: ?Value) Error!Value {
+        switch (e) {
             error.TclReturn => {
                 if (it.ret_level > 1) {
                     it.ret_level -= 1;
@@ -2305,8 +2381,8 @@ pub const Interp = struct {
                     },
                 };
             },
-            error.TclBreak => it.fail("invoked \"break\" outside of a loop", .{}),
-            error.TclContinue => it.fail("invoked \"continue\" outside of a loop", .{}),
+            error.TclBreak => return it.fail("invoked \"break\" outside of a loop", .{}),
+            error.TclContinue => return it.fail("invoked \"continue\" outside of a loop", .{}),
             error.TclError => {
                 if (it.in_error) {
                     if (lambda) |l| {
@@ -2315,8 +2391,8 @@ pub const Interp = struct {
                 }
                 return e;
             },
-            else => e,
-        };
+            else => return e,
+        }
     }
 
     fn usageOf(it: *Interp, p: *Proc, argv: []const Value, lambda: ?Value) Error {
