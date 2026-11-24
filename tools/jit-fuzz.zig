@@ -1436,6 +1436,10 @@ const VerifyStats = struct {
     ran: u64 = 0,
     fallbacks: u64 = 0,
     programs: u64 = 0,
+    /// The loops that compiled to tier 2.
+    tier2: u64 = 0,
+    /// The runs that reached the nesting limit. They are not compared.
+    deep: u64 = 0,
 };
 
 /// A random operand: small numbers, neighbors of the old value, and
@@ -1652,6 +1656,7 @@ fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start:
             try call.appendSlice(ar, pname);
             for (0..p.params.len) |_| try call.appendSlice(ar, " 1");
             const before = jit_side.it.jit.?.stats.fallbacks;
+            const t2_before = jit_side.it.jit.?.stats.tier2;
             if (verbose) {
                 std.debug.print("run {s} steps {d}\n", .{ pname, steps });
                 printIns(held.ins);
@@ -1663,7 +1668,9 @@ fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start:
             const ms = @divFloor(t0.untilNow(io, .awake).toNanoseconds(), std.time.ns_per_ms);
             st.fallbacks += jit_side.it.jit.?.stats.fallbacks - before;
             st.ran += 1;
+            st.tier2 += jit_side.it.jit.?.stats.tier2 - t2_before;
             const deep = std.mem.indexOf(u8, want.items, "too many nested evaluations") != null;
+            if (deep) st.deep += 1;
             if (ms > 1000 or (!deep and !std.mem.eql(u8, want.items, got.items))) {
                 std.debug.print("DIFFERENCE: program {d}, code {d}, proc {s}, steps {d}, memory room {?d}, {d} ms\n", .{ ps, st.codes - 1, pname, steps, mem_room, ms });
                 printIns(held.ins);
@@ -1688,6 +1695,7 @@ fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start:
         pct(st.accepted_random, st.random), st.accepted - st.accepted_random, pct(st.accepted - st.accepted_random, st.codes - st.random),
     });
     std.debug.print("compiled: {d}, ran: {d}, entries that fell back to exec: {d}\n", .{ st.compiled, st.ran, st.fallbacks });
+    std.debug.print("loops in tier 2: {d}, runs at the nesting limit (not compared): {d}\n", .{ st.tier2, st.deep });
     const secs = @divFloor(start.untilNow(io, .awake).toNanoseconds(), std.time.ns_per_s);
     std.debug.print("seconds: {d}\n", .{secs});
 }
