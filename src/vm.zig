@@ -191,6 +191,9 @@ fn recheck(it: *Interp) bool {
         const key = e.key_ptr.*;
         const tail = if (std.mem.lastIndexOf(u8, key, "::")) |i| key[i + 2 ..] else key;
         if (!isInlineName(tail)) continue;
+        // `tsv::set` and the other commands of `tsv` keep the inline forms
+        // on. Compiled code in the namespace `tsv` runs the core command.
+        if (e.value_ptr.*.tsv_op and std.mem.startsWith(u8, key, "tsv::")) continue;
         const original = e.value_ptr.*.impl == .native and e.value_ptr.*.impl.native == cmds.coreFn(tail);
         if (tail.len != key.len or !original) {
             it.unsafe_epoch = it.epoch;

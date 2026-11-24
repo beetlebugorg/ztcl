@@ -523,6 +523,10 @@ pub const Command = struct {
     ctx: ?*anyopaque = null,
     /// The command and execution traces.
     traces: ?*trace.CmdTraces = null,
+    /// A command of `tsv.zig` such as `tsv::set`. While its key is in
+    /// the namespace `tsv`, the guard of the inline forms in `vm.zig`
+    /// does not count it.
+    tsv_op: bool = false,
 };
 
 /// Where `puts` writes.

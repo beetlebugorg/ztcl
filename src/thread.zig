@@ -882,6 +882,7 @@ fn finish(w: *Worker, x: *Interp) void {
     // No new message reaches the queue now. Each waiting sender gets
     // an error.
     failQueue(w);
+    if (g.tsv) |_| @import("tsv.zig").releaseOwned(g, w.id);
     const left = x.step_limit;
     g.lock.lock();
     w.it = null;
@@ -1283,6 +1284,7 @@ pub fn register(it: *Interp) Allocator.Error!void {
     if (it.parent != null) return;
     if (it.worker == null) try startGroup(it);
     try @import("threadcmd.zig").register(it);
+    try @import("tsv.zig").register(it);
     if (it.capabilities & @intFromEnum(interp.Capability.event) != 0) try @import("event.zig").setSource(it);
     if (it.findCommand("package") != null) _ = it.eval("package provide Thread 2.8.11") catch {};
 }
