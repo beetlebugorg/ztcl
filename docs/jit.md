@@ -449,6 +449,40 @@ Two costs of the interpreter showed in the tests. Each is outside the JIT:
 
 A global loop of one million passes of `incr i` used 441.8 M instructions without the JIT and 487.8 M with it. Each variable instruction of named code is a helper call. An event script parses its script again at each event, so the JIT compiled the bodies of its loops again at each event. After about 4000 events the JIT memory limit stopped the compiler for the interpreter. Named code now has a quarter of the JIT memory. See [What compiles, and when](#what-compiles-and-when).
 
+## Performance of calls and lists
+
+This work makes call-heavy and list-heavy scripts faster in the interpreter and in both tiers. Each change below has a cause in this profile.
+
+### The profile
+
+Measured on 2026-11-24 on commit `958d3dd`, `ReleaseFast`, x86-64 Linux, with `valgrind --tool=callgrind`. Callgrind counts each instruction, so a share is exact for that run. `perf record` here gives no call graphs, and its samples put too much time on `memset`. `tiny.b` is `bench.b` with two levels of the inner loops removed: `bf.tcl` makes about 290 000 calls of `run` with it, and `bf_oo.tcl` about 965 000 method calls. A share is of the whole process, and "incl." includes the callees.
+
+| Program | Instructions, interpreter / `--jit` | Cost | Share, interpreter | Share, `--jit` |
+|---|---|---|---|---|
+| `bf_oo.tcl tiny.b` | 7540 M / 7232 M | `::oo::Link` at the start of each method: `allocPrint` of each name (22.1 %), the linear search of the global frame (12.2 %) | 38.5 % incl. | |
+| | | The call chain of each method call (`chainOf`) | 12.7 % incl. | |
+| | | `findCommand` of the object name: once in `resolve`, once in `objCmd` | 10.2 % incl. | |
+| | | `isPublic` for each call | 6.8 % incl. | |
+| | | `lset` copies the tape | 3.1 % incl. | |
+| `bf.tcl tiny.b` | 1307 M / 1045 M | `lset` copies the tape: `lsetOwned` (about 395 instructions each, 2 for each call of `run`) | 17.7 % incl. | 22.1 % incl. |
+| | | The proc call: `callProc`, `vm.run`, the frame list, `resolve` | 12.8 % | 16.3 % |
+| | | `heap.alloc` (also inside the `lset` copy and `list`) | 9.1 % | 11.4 % |
+| | | `Value.asList` through a call for each list read | 5.9 % | 7.4 % |
+| | | `list $tape $pos` through `invoke` and `cmdList` | 4.8 % incl. | 6.0 % incl. |
+| | | `lassign` (the helper of tier 1) | | 15.6 % incl. |
+| `fib.tcl` | 165.8 M / 137.3 M | `callProc` with `runProc`, alone | 26.4 % | 31.8 % |
+| | | `vm.run` and `jit.enter`, alone | 13.9 % | 27.8 % |
+| | | The helper of `invoke` | | 11.3 % |
+| | | `resolve` and the list of free frames | 7.7 % | 4.4 % |
+| `readloop.tcl` | 208.9 M | `mem.eql` of the list cache: each hit compares 599 bytes with a private copy | 27.8 % | |
+| | | `readList` | 12.1 % | |
+
+Facts from the profile:
+
+- In `bf.tcl` the caller still holds the tape when `run` gets it, so the first `lset` in a call must copy, as in tclsh. The second copy comes from two places. A load of `$tape` for `lindex` ends the ownership of the cell. A `lset` that is the last command of a `switch` arm keeps its result, and a kept result also ends the ownership. tclsh counts references, so a value on its stack that goes away gives the ownership back.
+- `bf_oo.tcl` spends 70 % of its instructions in the machinery of a method call, outside the method bodies.
+- A call of `fib` with the JIT costs about 566 instructions: `callProc` 180, the machine code 118, `vm.run` and `jit.enter` 157, the helper of `invoke` 64, and the free frame list 42.
+
 ## The design of the JIT
 
 ### The tiers
