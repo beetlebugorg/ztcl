@@ -154,7 +154,7 @@ fn fail(ctx: *EnterCtx, e: Error) u32 {
     return failed;
 }
 
-fn wrap(comptime h: Helper) Fn {
+fn wrap(comptime h: Helper, comptime named: bool) Fn {
     if (h == .recheck) return &struct {
         fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
             _ = .{ pc, sp };
@@ -179,25 +179,35 @@ fn wrap(comptime h: Helper) Fn {
     if (comptime isBranch(h)) return &struct {
         fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
             const code = ctx.code;
-            const t = branchOf(h)(false, ctx.it, ctx.frame, code, ctx.stack, sp, &code.ins[pc]) catch |e| return fail(ctx, e);
+            const t = branchOf(h)(named, ctx.it, ctx.frame, code, ctx.stack, sp, &code.ins[pc]) catch |e| return fail(ctx, e);
             return @intFromBool(t);
         }
     }.f;
     return &struct {
         fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
             const code = ctx.code;
-            opOf(h)(false, ctx.it, ctx.frame, code, ctx.stack, sp, &code.ins[pc]) catch |e| return fail(ctx, e);
+            opOf(h)(named, ctx.it, ctx.frame, code, ctx.stack, sp, &code.ins[pc]) catch |e| return fail(ctx, e);
             return done;
         }
     }.f;
 }
 
-/// The helpers in the order of `Helper`.
-pub const table: [count]*const anyopaque = blk: {
+/// The helpers in the order of `Helper`, for the `Code` of a proc body.
+pub const table: [count]*const anyopaque = tableOf(false);
+
+/// The helpers for a named `Code`: each variable goes by its name.
+pub const table_named: [count]*const anyopaque = tableOf(true);
+
+fn tableOf(comptime named: bool) [count]*const anyopaque {
     var t: [count]*const anyopaque = undefined;
-    for (0..count) |k| t[k] = @ptrCast(wrap(@enumFromInt(k)));
-    break :blk t;
-};
+    for (0..count) |k| t[k] = @ptrCast(wrap(@enumFromInt(k), named));
+    return t;
+}
+
+/// The table of `code`.
+pub fn tableFor(code: *const vm.Code) [*]const *const anyopaque {
+    return if (code.named) &table_named else &table;
+}
 
 /// The helper that runs the whole instruction `i`. `ret` has no helper.
 pub fn forIns(i: *const vm.Ins) ?Helper {

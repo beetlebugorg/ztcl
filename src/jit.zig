@@ -288,10 +288,6 @@ pub fn prepare(it: *Interp, code: *vm.Code) ?*Fn {
         .failed => return null,
         .untried => {},
     }
-    if (code.named) {
-        code.jit_state = .failed;
-        return null;
-    }
     code.jit_calls +|= 1;
     // A body with a loop compiles at its first call, so a later call
     // needs no scan.
@@ -376,7 +372,10 @@ fn compileCode(s: *State, code: *vm.Code) ?*Fn {
         s.stats.failed += 1;
         return null;
     };
-    switch (tier1.compile(a, r, s.layout, code, s.budget(), if (s.options.tier2) @max(s.options.tier2_count, 1) else 0)) {
+    // A named Code stays in tier 1. Tier 2 reads each slot from its cell
+    // in the frame, and a named Code reads each variable by its name.
+    const tier2_count: u32 = if (s.options.tier2 and !code.named) @max(s.options.tier2_count, 1) else 0;
+    switch (tier1.compile(a, r, s.layout, code, s.budget(), tier2_count)) {
         .ok => |f| {
             if (s.options.stress & stress_sum != 0) f.sum = sumOf(f);
             if (s.options.on_code) |cb| cb(s.options.on_code_ctx, f.base[0..f.len]);
@@ -420,13 +419,14 @@ pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp:
     const off = f.entries[p];
     if (off == tier1.no_entry or off >= f.len) return fallback(it);
     if (sp.* != f.depth[p]) return fallback(it);
-    if (frame.vars.items.len < code.names.len) return fallback(it);
+    // A named Code runs in any frame: its variables go by name.
+    if (!code.named and frame.vars.items.len < code.names.len) return fallback(it);
     var ctx: EnterCtx = .{
         .it = it,
         .code = code,
         .frame = frame,
         .stack = stack,
-        .helpers = &helpers.table,
+        .helpers = helpers.tableFor(code),
         .target = @intFromPtr(f.base) + off,
         .pc = p,
         .sp = sp.*,
@@ -453,7 +453,7 @@ pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp:
 fn stepOne(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp: *u32) ?Status {
     const p = pc.*;
     if (p >= code.ins.len or p >= f.entries.len or f.entries[p] == tier1.no_entry) return null;
-    if (sp.* != f.depth[p] or it.frame.vars.items.len < code.names.len) return null;
+    if (sp.* != f.depth[p] or (!code.named and it.frame.vars.items.len < code.names.len)) return null;
     const i = &code.ins[p];
     const h = helpers.forIns(i) orelse return .done;
     var ctx: EnterCtx = .{
@@ -461,7 +461,7 @@ fn stepOne(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp: *
         .code = code,
         .frame = it.frame,
         .stack = stack,
-        .helpers = &helpers.table,
+        .helpers = helpers.tableFor(code),
         .target = 0,
         .pc = p,
         .sp = sp.*,
@@ -470,7 +470,7 @@ fn stepOne(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp: *
         .counters = f.counters.ptr,
         .func = f,
     };
-    const func: helpers.Fn = @ptrCast(@alignCast(helpers.table[@intFromEnum(h)]));
+    const func: helpers.Fn = @ptrCast(@alignCast(helpers.tableFor(code)[@intFromEnum(h)]));
     const r = func(&ctx, p, sp.*);
     if (r == helpers.failed) {
         it.jit.?.err = ctx.err;
@@ -578,7 +578,7 @@ pub fn resumeAt(ctx: *EnterCtx, pc: u32, sp: u32, kind: u32) callconv(.c) usize 
 /// Compiles the loop at `head` with the kinds of the cells of `frame`
 /// now. Null when the loop is not eligible or a step fails.
 fn compileLoop(s: *State, code: *const vm.Code, frame: *interp.Frame, head: u32, loop: u32, heads: u32, counts: *bool) ?[*]const u8 {
-    if (s.stopped) return null;
+    if (s.stopped or code.named) return null;
     const a = s.backing;
     var info = (verify.verify(a, code) catch return null) orelse return null;
     defer info.deinit(a);

@@ -186,6 +186,12 @@ pub const Emitter = struct {
 
     fn instruction(e: *Emitter, pc: u32) Error!void {
         const i = e.code.ins[pc];
+        // A named Code reads each variable by its name: a helper call.
+        if (e.code.named) switch (i.op) {
+            .load, .store, .store_pop, .incr, .incr_drop, .incr_value, .bin_vv, .bin_vi => return e.plain(helperOf(i), pc),
+            .jf_vv, .jf_vi => return e.branch(helperOf(i), pc, i.c),
+            else => {},
+        };
         switch (i.op) {
             .pop => {},
             .jump => try e.s.jmp(e.labels[i.a]),

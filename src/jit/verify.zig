@@ -268,7 +268,6 @@ pub fn verify(a: Allocator, code: *const Code) Allocator.Error!?Info {
     const arena = arena_state.allocator();
 
     const n = code.ins.len;
-    if (code.named) return null;
     if (n == 0 or n > max_ins) return null;
     if (code.names.len > max_slots or code.max_stack > max_stack or code.max_stack == 0) return null;
     if (code.lits.len > max_items or code.sites.len > max_items or code.words.len > max_items) return null;
@@ -289,6 +288,7 @@ pub fn verify(a: Allocator, code: *const Code) Allocator.Error!?Info {
     // The end of the main code: the last `ret`.
     var main_end: usize = n;
     while (main_end > 0 and code.ins[main_end - 1].op != .ret) main_end -= 1;
+    if (code.named and !namedOk(code, main_end)) return null;
 
     var work: std.ArrayList(u32) = .empty;
     try work.append(arena, 0);
@@ -356,6 +356,25 @@ pub fn verify(a: Allocator, code: *const Code) Allocator.Error!?Info {
     const loop_heads = try heads.toOwnedSlice(a);
     ok = true;
     return .{ .depth = depth, .reachable = reachable, .loop_heads = loop_heads, .has_loop = loop_heads.len > 0 };
+}
+
+/// The checks of a named `Code`, a script outside a proc. Its slots are
+/// names, and it runs in any frame. `dict_update`, `dict_update_drop`,
+/// `lset`, and `lset_drop` read the cell of a slot in the frame, so a
+/// named `Code` must not have them. The bytecode compiler makes them only
+/// for a proc body. Its one `ret` is the last instruction of the main
+/// code: `return` in named code is a general command.
+fn namedOk(code: *const Code, main_end: usize) bool {
+    if (code.hints.len != code.names.len) return false;
+    for (code.ins, 0..) |*i, pc| {
+        const op = opcode(i) orelse return false;
+        switch (op) {
+            .dict_update, .dict_update_drop, .lset, .lset_drop => return false,
+            .ret => if (pc + 1 != main_end) return false,
+            else => {},
+        }
+    }
+    return true;
 }
 
 /// True for an instruction that counts a step on each path through it.

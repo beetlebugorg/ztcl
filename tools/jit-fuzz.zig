@@ -44,6 +44,8 @@
 //! and the proc runs with that code and a step limit of 10 000. The
 //! process must not crash, and no safety check may fail. The collector
 //! is off in this mode, because a changed `Code` lives outside the heap.
+//! `--tier2` and `--stress N` set the same options of the JIT here: with
+//! `--tier2`, each loop enters tier 2 after its first pass.
 //!
 //! The values of a multiplication never flow back into an operand of a
 //! multiplication, so the size of each integer grows at most linearly
@@ -1223,7 +1225,10 @@ pub fn main(init: std.process.Init) !void {
     defer f.ref.deinit(a);
     defer f.got.deinit(a);
     const start = Io.Clock.awake.now(io);
-    if (verify_mode) return verifyFuzz(a, io, seed, count, seconds, start, verbose);
+    if (verify_mode) {
+        const opts: tcl.jit.Options = .{ .threshold = 0, .tier2 = tier2, .tier2_count = 1, .stress = stress };
+        return verifyFuzz(a, io, seed, count, seconds, start, verbose, opts);
+    }
     var ok = true;
     if (corpus.items.len > 0) {
         f.cfg.steps = 200_000;
@@ -1391,7 +1396,7 @@ fn defineProcs(it: *Interp, text: []const u8) !void {
     }
 }
 
-fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start: Io.Timestamp, verbose: bool) !void {
+fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start: Io.Timestamp, verbose: bool, opts: tcl.jit.Options) !void {
     var st: VerifyStats = .{};
     var n: u64 = 0;
     outer: while (n < count) {
@@ -1409,7 +1414,7 @@ fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start:
         it.output = .{ .ctx = null, .write = struct {
             fn f(_: ?*anyopaque, _: []const u8) void {}
         }.f };
-        if (!it.enableJit(.{ .threshold = 0 })) return error.NoJit;
+        if (!it.enableJit(opts)) return error.NoJit;
         defineProcs(&it, text) catch continue;
         var r = Rng.init(ps, 2);
         for (0..32) |_| {

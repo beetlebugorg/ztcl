@@ -701,10 +701,19 @@ test "the verifier fails a Code that breaks one check" {
                 unreachable;
             }
         }.f },
-        // 11. Named code.
+        // 11. Named code with `dict_update_drop` and `lset_drop`: they
+        // read a cell of the frame by its slot.
         .{ .name = "named", .f = struct {
-            fn f(m: *Mutable, _: std.mem.Allocator) !void {
+            fn f(m: *Mutable, al: std.mem.Allocator) !void {
                 m.code.named = true;
+                const hints = try al.alloc(u32, m.code.names.len);
+                @memset(hints, 0);
+                m.code.hints = hints;
+                // The `ret` of `return` goes to the last `ret`, so only
+                // the two instructions break a rule of named code.
+                for (m.ins[0 .. m.ins.len - 1], 0..) |*i, k| {
+                    if (i.op == .ret and m.ins[k + 1].op == .ret) i.* = .{ .op = .jump, .a = @intCast(k + 1) };
+                }
             }
         }.f },
     };
@@ -2001,3 +2010,69 @@ test "hardening: reset, compact, and deinit free the region" {
     }
 }
 
+test "the verifier checks the rules of a named Code" {
+    const it = try newInterp();
+    defer freeInterp(it);
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sc = try it.compile("set s 0; for {set i 0} {$i < 3} {incr i} { incr s $i }; set s");
+    const code = try vm.compileNamed(it, sc);
+    try testing.expect(code.named);
+    try testing.expect(try verifies(code));
+    // One more `ret` at the end: the `ret` of the compiler is then not
+    // the last one. The same change passes in a proc body.
+    var m = try Mutable.init(a, code);
+    const ins = try a.alloc(vm.Ins, m.ins.len + 1);
+    @memcpy(ins[0..m.ins.len], m.ins);
+    ins[m.ins.len] = .{ .op = .ret };
+    m.code.ins = ins;
+    try testing.expect(!try verifies(&m.code));
+    m.code.named = false;
+    try testing.expect(try verifies(&m.code));
+    m.code.named = true;
+    m.code.ins = m.ins;
+    try testing.expect(try verifies(&m.code));
+    // Hints of another length.
+    m = try Mutable.init(a, code);
+    m.code.hints = &.{};
+    try testing.expect(!try verifies(&m.code));
+}
+
+test "jit: named code compiles and gives the output of the interpreter" {
+    try same(
+        \\set s 0
+        \\for {set i 0} {$i < 20} {incr i} { incr s $i; if {$i == 7} continue; append t $i, }
+        \\foreach {a b} {1 2 3 4 5} { lappend l [expr {$a * 2}] $b }
+        \\proc up {} { uplevel 1 { for {set k 0} {$k < 4} {incr k} { incr s 100 } } }
+        \\up
+        \\namespace eval ns { variable v 0; for {set j 0} {$j < 5} {incr j} { incr v $j } }
+        \\apply {{} { set w 0; while {$w < 6} { incr w } ; return $w }}
+        \\set e {}; for {set r 0} {$r < 50} {incr r} { eval {incr e2; lappend e $r} }
+        \\list $s $t $l $ns::v $e2 [llength $e] [catch {for {set x 0} {$x < 3} {incr x} { error boom$x }} m] $m
+    , 2);
+}
+
+test "jit: named code stays in tier 1 with tier 2 on" {
+    // Tier 2 reads each slot from its cell in the frame. A named Code
+    // reads each variable by its name, and runs in any frame. Its slot
+    // numbers name other cells in the frame of `p`. The loop of `p`
+    // itself can compile to tier 2.
+    test_tier2 = true;
+    defer test_tier2 = false;
+    const script =
+        \\proc p {} {
+        \\    set a 5; set b 7; set c 9
+        \\    set body { set s 0; for {set i 0} {$i < 400} {incr i} { incr s $i } }
+        \\    for {set r 0} {$r < 20} {incr r} { uplevel 0 $body }
+        \\    list $a $b $c $s $i
+        \\}
+        \\set body2 { set t 0; for {set j 0} {$j < 400} {incr j} { incr t 2 } }
+        \\for {set r 0} {$r < 20} {incr r} { eval $body2 }
+        \\list [p] $t $j
+    ;
+    try same(script, 2);
+    test_stress = jit.stress_guards | jit.stress_entry;
+    defer test_stress = 0;
+    try same(script, 2);
+}

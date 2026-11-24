@@ -419,6 +419,35 @@ The model of a script is the startup count (`puts hi`, 0.72 M) plus the passes o
 | `tests/jit/*.tcl` | 2 | 8 | 13 | `ret` 12, `foreach_next` 6, `push` 2, `jf_vi` 1 |
 
 The census found no loop in the outside programs: their loops are in method bodies and in procs of namespaces, and the census reads only the procs of the global namespace. The census did not run on the suite files, because they need the test environment of `tools/suite.sh`. The census counts loops and not loop passes: the share of passes in eligible loops was not measured.
+## Results of tasks 19 to 23
+
+Measured on x86-64 Linux on 2026-11-24 on the branch of these tasks.
+
+| Check | Result |
+|---|---|
+| `zig build jit-fuzz -- --count 200000` (Debug), before task 23 | 200 000 programs, 1 000 000 runs, no difference. The mean is 476 bytecode instructions in 4.5 compiled functions for each program. |
+| The same after task 23, in two parts of 100 000 | No difference. 5.7 and 7.0 compiled functions for each program, because named code compiles. |
+| `zig build jit-fuzz -Doptimize=ReleaseSafe -- --seconds 3600` | 442 101 programs, 2 210 505 runs, no difference. This run had the code of task 23. |
+| The planted bug (`-Djit_bug=true`, `--expect-diff`) | A difference at the program of seed 3655. |
+| `zig build jit-fuzz -Doptimize=Debug -- --count 20000 --stress 31` | No difference. |
+| `tools/jit-asm-golden.sh --random 1000000` | No difference. |
+| `zig build jit-fuzz -Doptimize=ReleaseSafe -- --verify --count 1000000` | No crash. The verifier accepted 26.1 %: 0.44 % of the random Code values and 37.1 % of the changed ones. 260 979 compiled and ran. |
+| `tools/jit-scan.sh` | Each check passes. A planted immediate operand in `litInt` makes check 1 fail. |
+
+The share of sampled programs that ran each item of the grammar is above 5 % for each item except `coroutine` (1.2 %) and `namespace` (1.2 %). Those two run only at the top level.
+
+The fuzzers found three faults:
+
+- The verifier accepted a loop that counts no step, for example `jump 0`. The machine code then looped with no check of the step limit. The verifier now rejects such a cycle.
+- The verifier lost two slices when its last allocation failed. Stress mode 1 found it.
+- A named `Code` with `lset` or a dict update reads a cell of the frame by its slot. The verifier now rejects it.
+
+Two costs of the interpreter showed in the tests. Each is outside the JIT:
+
+- The memory limit is checked at the safe points of the step. One `string length` of a list nested 40 levels in itself allocated 1.1 GB with `--mem 67108864`, before the check stopped it.
+- `recheck` reads each command at each change of the epoch. A loop that defines n procs then uses time in the order of n squared: 40 000 procs took 31 s for 120 000 steps.
+
+A global loop of one million passes of `incr i` used 441.8 M instructions without the JIT and 487.8 M with it. Each variable instruction of named code is a helper call. An event script is a new `Code` at each event, so the JIT compiles it again at each event, and after about 4000 events the JIT memory limit stops the compiler for the interpreter.
 
 ## The design of the JIT
 
@@ -439,7 +468,7 @@ The census found no loop in the outside programs: their loops are in method bodi
 ### What compiles, and when
 
 - A proc body compiles to tier 1 at its second call. A body with a loop compiles at its first call. The compile is linear in the count of bytecode instructions, so a low threshold is safe.
-- A script outside a proc (`Code.named`) compiles to tier 1 from task 23 on. Its variables use names, so each variable access calls a helper.
+- A script outside a proc (`Code.named`) compiles to tier 1 from task 23 on. Its variables use names, so each variable access calls a helper. It runs in any frame, so `jit.enter` does not check the size of the frame. The verifier rejects a named `Code` with `dict_update`, `dict_update_drop`, `lset`, or `lset_drop`, because their helpers read a cell of the frame by its slot, and a named `Code` whose one `ret` is not its last instruction of the main code.
 - With `--jit-threshold 0`, each `Code` compiles before its first run. The tests use this mode.
 - A `Code` that the verifier refuses, or that fails to compile, stays in the interpreter. The compiler tries each `Code` one time.
 - A loop compiles to tier 2 when its tier 1 code counts 1000 passes. The count is a field of the JIT data of the loop.

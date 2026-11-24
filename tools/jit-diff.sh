@@ -29,7 +29,8 @@
 # `-t` adds `--jit-tier2 --jit-tier2-count 2` to each JIT mode.
 #
 # `--stress` runs modes 2 and 3 again with each stress mode of the JIT
-# alone (`--jit-stress` 1, 2, 4, 8, 16) and all together (31). Mode 1
+# alone (`--jit-stress` 1, 2, 4, 8, 16) and all together (31). The
+# environment variable JIT_STRESS_BITS adds more values. Mode 1
 # also runs with the first failed allocation at 2, 3, and 5. The step
 # limit sweep then also runs mode 2 with all stress modes.
 #
@@ -65,7 +66,9 @@ modes = [[], ["--jit", "--jit-threshold", "0"] + t2, ["--jit"] + t2]
 sweep_mode = modes[1]
 if stress:
     jit_modes = []
-    for n in (1, 2, 4, 8, 16, 31):
+    # JIT_STRESS_BITS adds stress values, for example "32 63" for the
+    # guard schedule of tier 2 when the runner has it.
+    for n in [1, 2, 4, 8, 16, 31] + [int(x) for x in os.environ.get("JIT_STRESS_BITS", "").split()]:
         for m in modes[1:]:
             jit_modes.append(m + ["--jit-stress", str(n)])
     for k in (2, 3, 5):
