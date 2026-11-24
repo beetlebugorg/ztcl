@@ -1,6 +1,6 @@
 # A JIT compiler for ztcl
 
-This page is the design of a compiler from the ztcl bytecode to machine code, and of the work that must come before it. It is a plan. No part of it is in the source yet. [The tasks](jit-tasks/README.md) give the order of the work, and [the review checklist](jit-review.md) is for the reviewer. [References](references/jit.md) lists the sources.
+This page is the design of a compiler from the ztcl bytecode to machine code, and of the work that must come before it. Milestones 0 and B are in the source, and [the results](#results-of-milestones-0-and-b) are below. No part of the JIT is in the source yet. [The tasks](jit-tasks/README.md) give the order of the work, and [the review checklist](jit-review.md) is for the reviewer. [References](references/jit.md) lists the sources.
 
 ## Summary
 
@@ -149,8 +149,8 @@ ztcl replaces the arena with a heap that has a mark-and-sweep collector. The col
 ### The parts
 
 - **The heap** (`src/heap.zig`). Size classes in pages, a mark bit for each block, large blocks of whole pages, and a table from an address to its block. A pointer into the middle of a block keeps the block, because a string is often a part of a buffer. The heap has the `Allocator` interface, so `it.alloc()` stays as it is.
-- **The roots.** The bytes of the `Interp` struct, the native stack from the current stack pointer to `native_base`, the callee-saved registers, the used part of each coroutine stack, and each range that the embedder registers. A child interpreter is a root of its parent.
-- **The trigger.** A collection starts inside an allocation, when the heap holds two times the bytes that were live after the last collection, and at least 16 MiB. The numbers are a function of the allocation history alone.
+- **The roots.** See [the limits section of the design](design.md). A native build scans the `Interp` structs, the native stacks, the registers, and the embedder ranges. WebAssembly uses precise roots at bytecode safe points.
+- **The trigger.** A collection starts at a safe point, when the heap holds two times the bytes that were live after the last collection, and at least 16 MiB. After a collection that freed under half of the heap, the factor is four. The numbers are a function of the allocation history alone.
 - **The sweep.** A dead block goes to the free list of its size class. A page with no live block goes back to the allocator of the embedder.
 - **`compact`, `reset`, `deinit`.** They stay. `reset` and `deinit` free the heap in one step. `compact` copies the live data to a new heap as today.
 - **A stress mode.** `--gc-stress N` collects at each Nth allocation. The unit tests and the suite run in this mode, in a build with safety checks, and a freed block is filled with a pattern. This mode finds a missed root.
@@ -161,7 +161,7 @@ ztcl replaces the arena with a heap that has a mark-and-sweep collector. The col
 - **A value from `eval`.** Today a `Value` that `eval` returns is valid until `compact` or `reset`. With the collector, it is valid until the next call into the interpreter. A new call `Interp.hold(v)` keeps a value longer, and `Interp.release` ends that. This is an API change for zslice.
 - **The memory limit.** `mem_limit` bounds the bytes of the heap. A script that stays below the limit gives the same output on each run. The exact place of the memory error can differ between two runs, because a word on the native stack can look like an address. Today that place is exact. `--gc off` turns the collector off, and the limit is then exact as today. The differential tests of the JIT use `--gc off` for the memory count.
 - **Speed.** An allocation from a size class costs more than a bump of the arena. The gate is at most 3 % more instructions for each of the eight benchmarks.
-- **The JIT.** The collector scans the value stack and the cells, where tier 1 keeps each value. Tier 2 keeps only integers and doubles in registers. The rule for each later change is: no pointer to a heap block is only in a register of machine code across a helper call. The data of the JIT is outside the heap and holds no pointer that keeps a block.
+- **The JIT.** A collection starts only at a safe point. The collector scans the value stack and the cells, where tier 1 keeps each value. Tier 2 keeps only integers and doubles in registers. The rule for each later change is: no pointer to a heap block is only in a register of machine code across a helper call. The data of the JIT is outside the heap and holds no pointer that keeps a block.
 
 ### The gates of milestone 0
 
@@ -171,6 +171,18 @@ ztcl replaces the arena with a heap that has a mark-and-sweep collector. The col
 | `bf.tcl bench.b`, `bf_oo.tcl bench.b`, `base64/test.tcl` at the default limit of 2 GiB | Each one ends. The output equals the output of `tclsh` 8.6.16, with the two time fields of `base64` removed. The peak of `memUsed` is at most 64 MiB. |
 | The eight benchmarks | At most 3 % more instructions than today. |
 | The unit tests and the suite with `--gc-stress 1` on a small set and `--gc-stress 64` on all files | The counts of today, and no safety check fails. |
+
+### Results of milestones 0 and B
+
+Measured on commit `bbdc5bf`, `ReleaseFast`, x86-64 Linux, against `tclsh` 8.6.16 in the same session. Each program ran one time at the default limit of 2 GiB, and each output equals the output of `tclsh`.
+
+| Program | ztcl instructions | `tclsh` instructions | Ratio | Gate after milestone B | Peak RSS of ztcl |
+|---|---|---|---|---|---|
+| `base64/test.tcl` | 50.7 G | 72.4 G | 0.70 | at most 1.0: pass | 19.0 MB |
+| `bf.tcl bench.b` | 1311 G | 2774 G | 0.47 | at most 0.5: pass | 20.1 MB |
+| `bf_oo.tcl bench.b` | 7429 G | 5372 G | 1.38 | at most 0.5: **fail** | 22.4 MB |
+
+The cause of the `bf_oo.tcl` result was not profiled. The two `bf` gates stay provisional until the user sets them.
 
 ## Milestone B: the builtins of the outside benchmarks
 
@@ -350,7 +362,7 @@ The order is x86-64 Linux, arm64 macOS, x86-64 macOS, x86-64 Windows, arm64 Linu
 | x86-64 macOS | System V | `mmap` read-write with `MAP_JIT`, then `mprotect` read-execute | no call needed | Frame pointers. No table. | Not tested. |
 | x86-64 Windows | Microsoft x64 | `VirtualAlloc` read-write, then `VirtualProtect` to `PAGE_EXECUTE_READ` | `FlushInstructionCache` | `RtlAddFunctionTable` with one unwind record for each function | Not tested. |
 | arm64 Linux | AAPCS64 | `mmap` read-write, then `mprotect` read-execute | `__clear_cache` of the Zig runtime | Frame pointers. No table. | Not tested. |
-| WebAssembly | | none | | | The interpreter only. |
+| WebAssembly | | none | | | The interpreter only, with the collector at bytecode safe points. |
 
 ### Rules for each ABI
 

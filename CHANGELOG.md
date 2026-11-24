@@ -16,6 +16,11 @@
 - Writes and parses the decimal text of big integers in steps of 19 digits. The Tcl 8.6.16 suite goes from 26 s to 4 s.
 - Fixes the arena growth of `lindex` with an integer index.
 - Replaces the arena with a heap and a conservative mark-and-sweep collector. A long loop holds a flat memory size. A value from `eval` is valid until the next call into the interpreter. Adds `Interp.hold`, `release`, `addRoot`, `removeRoot`, `collect`, the field `gc_on`, and the runner flags `--gc`, `--gc-stress`, and `--report`.
+- Starts a collection only at a safe point, and makes a host call with no `enterHost` run with no collection.
+- Reclaims memory in the WebAssembly build with precise roots at bytecode safe points. Adds `ztcl_set_gc_stress`, `tools/wasm-mem.mjs`, and `tools/gc-fuzz.py`.
+- Fixes a use after free in `compact` for a string in `tcl_precision`. `compact` now returns `error.InterpBusy` for an interpreter with TclOO objects and ends each `hold`.
+- Fixes variable traces and `vwait` on an `upvar` link to an array element.
+- Fixes an overflow of `%` on the smallest integer and an underflow in the regexp match of a sequence.
 - Adds `tools/suite.sh -a`, a scope for each of the 152 test files of Tcl 8.6.16, and `docs/compatibility.md`. A test that did not run counts as blocked.
 - Adds `tcl::mathop`, `tcl::mathfunc`, `tcl::prefix`, `trace`, `case`, `unknown`, `namespace path`, `namespace unknown`, `namespace forget`, ensemble options, array searches, `upvar` to an array element, `tcl_precision`, `binary` uuencode, the `subst` options, and the `-during` option of `try`.
 - Makes the `string` commands and glob patterns work on characters.

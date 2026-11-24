@@ -111,7 +111,7 @@ ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: list
 
 - A big integer has at most 2^20 bits. Tcl has no fixed limit.
 - A write to an existing key of a dict that another value shares copies the dict.
-- The collector is conservative and does not move a block. A value from `eval` is valid until the next call into the interpreter, and `hold` keeps it longer. A number that looks like an address keeps a dead block. With the collector on, the place where the memory limit stops a script can differ between two runs. `--gc off` makes it exact. The WebAssembly build has no collector.
+- The collector is conservative and does not move a block. A value from `eval` is valid until the next call into the interpreter, and `hold` keeps it longer. A number that looks like an address keeps a dead block. With the collector on, the place where the memory limit stops a script can differ between two runs. `--gc off` makes it exact. The WebAssembly build collects only at bytecode safe points, so a long loop inside `lmap` or another general command holds its garbage until the command ends.
 - Regular expressions use the first alternative that matches. Tcl prefers the longest match.
 
 ## Documentation

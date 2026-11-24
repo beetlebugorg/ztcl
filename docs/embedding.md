@@ -37,11 +37,12 @@ On `error.TclError`, `it.result` holds the message and `it.error_line` holds the
 | `user` | A pointer for the embedder. |
 | `register(name, fn)` | Adds a native command. |
 | `reset()` | Frees the heap and makes the interpreter new. The limits, output, seed, and `user` stay. |
-| `hold(v)`, `release(v)` | `hold` keeps a value and each block that it reaches until `release`. A value from `eval` is valid until the next call into the interpreter. Hold it for longer. |
+| `hold(v)`, `release(v)` | `hold` keeps a value and each block that it reaches until `release`. A value from `eval` is valid until the next call into the interpreter. Hold it for longer. `compact` ends each hold. |
 | `addRoot(bytes)`, `removeRoot(bytes)` | Registers a range of memory of the embedder that holds values. The collector reads each aligned word of the range as a possible pointer. |
-| `collect()` | Runs a collection now. |
+| `collect()` | Runs a collection now. Between evaluations, only the roots keep a value. |
+| `enterHost()`, `leaveHost()` | Let the collector run during host calls of `evalCmd`, `call`, or `callWords`, and scan the frame of the calling function. With no `enterHost`, these calls run with no collection, and the memory limit stops a long script. `eval` needs neither call. |
 | `gc_on` | False turns the collector off. The memory limit is then exact. |
-| `compact(roots, opts)` | Frees the memory of past evaluations and keeps the commands, procs, namespaces, and point programs. `.vars = .clear` also drops the variables. Each value in `roots` gets a new address. All other values from before the call are invalid. Call it between evaluations. |
+| `compact(roots, opts)` | Frees the memory of past evaluations and keeps the commands, procs, namespaces, and point programs. `.vars = .clear` also drops the variables. Each value in `roots` gets a new address. All other values from before the call are invalid. Call it between evaluations. It returns `error.InterpBusy` for an interpreter with a capability, a child, a coroutine, or a TclOO object. |
 
 ## Point procs
 
@@ -125,5 +126,8 @@ ztcl.sys.ignorePipeSignal(); // a write to a closed peer is an error, with no si
 | `ztcl_result_ptr`, `ztcl_result_len` | The result or the error message. |
 | `ztcl_output_ptr`, `ztcl_output_len`, `ztcl_output_clear` | The text of `puts`. |
 | `ztcl_set_step_limit`, `ztcl_set_mem_limit` | The limits. |
+| `ztcl_set_gc_stress(h, n)` | A test mode: a collection at each Nth safe point. |
 
-`tools/wasm-smoke.mjs` is a working example for Node.js.
+The result pointer is valid until the next `ztcl_eval`. The build reclaims memory while a script runs. A long loop in a native command other than `catch`, `try`, `eval`, `uplevel`, `apply`, `namespace eval`, or a method, for example the body of `lmap`, holds its garbage until that command ends. The memory limit still stops it.
+
+`tools/wasm-smoke.mjs` is a working example for Node.js. `tools/wasm-mem.mjs` checks the memory in Node.js or in a browser.

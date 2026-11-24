@@ -95,6 +95,19 @@ With the same stand-in, the commit before this work has 19 291 pass, 1 013 fail,
 
 The largest groups of tests that still fail in scope: `info frame`, step traces, the bytecode tools (`tcl::unsupported::disassemble`), the slots and the rest of TclOO, and the details of `namespace`.
 
+## Memory tests
+
+| Command | What it checks |
+|---|---|
+| `tools/mem-flat.sh` | Each script of `tests/mem` holds a flat peak from N to 10 N passes. |
+| `node tools/wasm-mem.mjs zig-out/lib/ztcl.wasm` | The same check on WebAssembly. `--browser <path>` runs it in Chromium or Firefox. `--stress` compares a run with a collection at each safe point. |
+| `tools/suite.sh -g N` | The suite with a collection at each Nth safe point and allocation. A freed block is poisoned. |
+| `tools/gc-fuzz.py -r <runner>` | Random programs with a collection at each safe point and allocation, compared with `--gc off`. |
+| `zig build suite-runner -Dgc-precise=true -Drunner-optimize=ReleaseSafe` | A runner with the root rules of WebAssembly and safety checks, for the two commands above. |
+| `tools/kostya.sh` | The outside programs against `tclsh`. The table is in [the JIT plan](jit.md#results-of-milestones-0-and-b). |
+
+`cmdMZ-6.6` compares wall-clock times of `timerate`. It fails with `-g 64` on a native runner, because the stress mode slows each allocation. It passes without stress and with the precise runner at `-g 64`.
+
 ## Benchmarks
 
 ```sh
