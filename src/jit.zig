@@ -43,6 +43,10 @@ pub const EnterCtx = extern struct {
     err: u16,
     /// `Value.empty`, for the code of `push_empty`.
     empty: *const Value,
+    /// The pass counters of the loop heads of the function.
+    counters: [*]u32,
+    /// The function (`Fn`).
+    func: *anyopaque,
 };
 
 /// True when this target has a backend.
@@ -57,6 +61,8 @@ pub const Options = struct {
     /// The most bytes for the executable region and all JIT data.
     mem_limit: usize = 16 << 20,
     tier2: bool = false,
+    /// The passes of a loop in tier 1 before tier 2 compiles it.
+    tier2_count: u32 = 1000,
     stress: u32 = 0,
 };
 
@@ -255,7 +261,7 @@ fn compileCode(s: *State, code: *vm.Code) ?*Fn {
     }
     const r = &s.region.?;
     s.fns.ensureUnusedCapacity(s.backing, 1) catch return null;
-    switch (tier1.compile(s.backing, r, s.layout, code, s.budget())) {
+    switch (tier1.compile(s.backing, r, s.layout, code, s.budget(), if (s.options.tier2) @max(s.options.tier2_count, 1) else 0)) {
         .ok => |f| {
             s.fns.appendAssumeCapacity(f);
             s.charge(f.pages(r.page) + f.bytes());
@@ -304,6 +310,8 @@ pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp:
         .sp = sp.*,
         .err = 0,
         .empty = &Value.empty,
+        .counters = f.counters.ptr,
+        .func = f,
     };
     const func: *const fn (*EnterCtx) callconv(.c) u32 = @ptrCast(@alignCast(f.base));
     const status = func(&ctx);
@@ -315,6 +323,114 @@ pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp:
         return .failed;
     }
     return fallback(it);
+}
+
+// ---- Tier 2 ----
+
+const tier2 = @import("jit/tier2.zig");
+const tier2_x64 = @import("jit/tier2_x64.zig");
+const verify = @import("jit/verify.zig");
+
+/// The helper `tier_up`: the counter of the loop head `pc` reached zero.
+/// The first call compiles the loop. The result is the address of its
+/// tier 2 code, or 0. The address comes from the record of the loop in
+/// the function of the context, so it is the entry of a tier 2 function
+/// of this loop.
+pub fn tierUp(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) usize {
+    _ = sp;
+    const s = ctx.it.jit orelse return 0;
+    const f: *Fn = @ptrCast(@alignCast(ctx.func));
+    const k = std.mem.indexOfScalar(u32, f.heads, pc) orelse return 0;
+    const rec = &f.loops[k];
+    if (rec.exits >= max_exits) {
+        f.counters[k] = std.math.maxInt(u32);
+        return 0;
+    }
+    f.counters[k] = @max(s.options.tier2_count, 1);
+    if (!rec.tried) {
+        rec.tried = true;
+        rec.code = compileLoop(s, ctx.code, ctx.frame, pc, @intCast(k), @intCast(f.heads.len));
+    }
+    return if (rec.code) |c| @intFromPtr(c) else 0;
+}
+
+/// The stress mode of tier 2: each guard fails on a schedule.
+pub const stress_guards: u32 = 32;
+
+/// The failed guards of one loop before the loop runs in tier 1 only.
+pub const max_exits = 8;
+
+/// The helper `resume_at`: the address of the tier 1 code of `pc` when
+/// the entry checks of `enter` pass. Else it writes `pc` and `sp` to the
+/// context and gives 0, and the code returns status 2. `kind` has the
+/// number of the loop in its low bits and the kind of the exit in its
+/// high bits. After `max_exits` failed guards that the stress mode did
+/// not force, the loop is dropped: tier 1 no longer counts its passes.
+pub fn resumeAt(ctx: *EnterCtx, pc: u32, sp: u32, kind: u32) callconv(.c) usize {
+    const f: *Fn = @ptrCast(@alignCast(ctx.func));
+    const k = kind & 0xFFFF;
+    if (kind & (tier2_x64.exit_guard | tier2_x64.exit_forced) != 0) {
+        if (ctx.it.jit) |s| s.stats.exits += 1;
+    }
+    if (k < f.loops.len and f.counters.len == f.loops.len + 1) {
+        if (kind & tier2_x64.exit_forced != 0) {
+            f.stress_at = @intCast((f.stress_at + 1) % tier1.stress_counts.len);
+            f.counters[f.loops.len] = tier1.stress_counts[f.stress_at];
+        } else if (kind & tier2_x64.exit_guard != 0) {
+            const rec = &f.loops[k];
+            rec.exits +|= 1;
+            if (rec.exits >= max_exits) {
+                rec.code = null;
+                f.counters[k] = std.math.maxInt(u32);
+            }
+        }
+    }
+    if (pc < f.entries.len and pc < f.depth.len and f.depth[pc] == sp) {
+        const off = f.entries[pc];
+        if (off != tier1.no_entry and off < f.len) return @intFromPtr(f.base) + off;
+    }
+    ctx.pc = pc;
+    ctx.sp = sp;
+    return 0;
+}
+
+/// Compiles the loop at `head` with the kinds of the cells of `frame`
+/// now. Null when the loop is not eligible or a step fails.
+fn compileLoop(s: *State, code: *const vm.Code, frame: *interp.Frame, head: u32, loop: u32, heads: u32) ?[*]const u8 {
+    if (s.stopped) return null;
+    const a = s.backing;
+    var info = (verify.verify(a, code) catch return null) orelse return null;
+    defer info.deinit(a);
+    const kinds = a.alloc(tier2.Kind, code.names.len) catch return null;
+    defer a.free(kinds);
+    for (kinds, 0..) |*kd, slot| {
+        kd.* = .any;
+        if (slot >= frame.vars.items.len) continue;
+        const cell = frame.vars.items[slot].cell;
+        if (cell.v != .val) continue;
+        kd.* = switch (cell.v.val) {
+            .int => .int,
+            .double => .double,
+            else => .any,
+        };
+    }
+    var p = (tier2.plan(a, code, &info, head, kinds) catch return null) orelse return null;
+    defer p.deinit();
+    if (!tier2_x64.eligible(code, &info, &p)) return null;
+    var buf = @import("jit/x64.zig").Asm.init(a);
+    defer buf.deinit();
+    tier2_x64.assemble(a, &buf, code, &info, &p, s.layout, loop, heads, s.options.stress & stress_guards != 0) catch return null;
+    const r = &(s.region orelse return null);
+    const pages = std.mem.alignForward(usize, buf.bytes().len, r.page);
+    if (pages > s.budget()) return null;
+    const placed = r.append(buf.bytes()) orelse {
+        if (r.stopped) s.stopped = true;
+        return null;
+    };
+    s.charge(pages);
+    s.stats.tier2 += 1;
+    s.stats.code_bytes += placed.len;
+    return placed.ptr;
 }
 
 /// The error of the last `enter` with the result `.failed`.

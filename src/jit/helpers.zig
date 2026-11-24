@@ -73,6 +73,12 @@ pub const Helper = enum(u8) {
     recheck,
     /// `invoke` for a site whose cached command the code checked.
     call_cached,
+    /// The counter of a loop head reached zero. The result is the address
+    /// of the tier 2 code of the loop, or zero.
+    tier_up,
+    /// The address of the tier 1 code of `pc`, or zero after it sets the
+    /// place of the context for `exec`.
+    resume_at,
     /// 1 when the bytes of the string on the top of the stack equal the
     /// string literal of `str_eq_jump`. It has no error.
     str_bytes_eq,
@@ -155,6 +161,8 @@ fn wrap(comptime h: Helper) Fn {
             return @intFromBool(vm.guardJumps(ctx.it));
         }
     }.f;
+    if (h == .tier_up) return @ptrCast(&jit.tierUp);
+    if (h == .resume_at) return @ptrCast(&jit.resumeAt);
     if (h == .call_cached) return &struct {
         fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
             const code = ctx.code;

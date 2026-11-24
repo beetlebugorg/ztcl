@@ -26,6 +26,8 @@
 # most 3000), modes 1 and 2 give the same output, exit code, steps, and
 # memory count.
 #
+# `-t` adds `--jit-tier2 --jit-tier2-count 2` to modes 2 and 3.
+#
 # `-x` adds flags to each mode, for example `-x "--gc-stress 1"`: the
 # memory count then differs, so the tool does not compare it.
 # Run the tool under the memory cap of AGENTS.md. The exit code is 1
@@ -34,19 +36,22 @@
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 runner="$here/../zig-out/bin/ztcl"
 extra=
-while getopts r:x: o; do
+tier2=0
+while getopts r:x:t o; do
     case $o in
     r) runner=$OPTARG ;;
     x) extra=$OPTARG ;;
+    t) tier2=1 ;;
     *) exit 2 ;;
     esac
 done
 shift $((OPTIND - 1))
-exec python3 -I - "$here/.." "$runner" "$extra" "$@" <<'PY'
+exec python3 -I - "$here/.." "$runner" "$extra" "$tier2" "$@" <<'PY'
 import os, re, subprocess, sys
 root, runner, extra = sys.argv[1], sys.argv[2], sys.argv[3].split()
-only = sys.argv[4:]
-modes = [[], ["--jit", "--jit-threshold", "0"], ["--jit"]]
+only = sys.argv[5:]
+t2 = ["--jit-tier2", "--jit-tier2-count", "2"] if sys.argv[4] == "1" else []
+modes = [[], ["--jit", "--jit-threshold", "0"] + t2, ["--jit"] + t2]
 base = ["--report", "--gc", "off", "--max-steps", "1000000000"] + extra
 compare_mem = not extra
 

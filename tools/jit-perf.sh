@@ -7,6 +7,9 @@
 #                                       above the baseline
 #   tools/jit-perf.sh --check jit       `--jit`: each count at most its
 #                                       gate in bench/jit-gates.tsv
+#   tools/jit-perf.sh --check jit2      `--jit --jit-tier2`: each count at
+#                                       most its gate in
+#                                       bench/jit-gates2.tsv
 #   tools/jit-perf.sh --show [flags]    prints the counts with the flags
 #
 # `-r runner` sets the runner. The default is zig-out/bin/ztcl. `-l N`
@@ -63,7 +66,8 @@ check)
     case $what in
     off) flags= ; table=$base ;;
     jit) flags=--jit; table=$gates ;;
-    *) echo "--check needs off or jit" >&2; exit 2 ;;
+    jit2) flags="--jit --jit-tier2"; table="$root/bench/jit-gates2.tsv" ;;
+    *) echo "--check needs off, jit, or jit2" >&2; exit 2 ;;
     esac
     [ -f "$table" ] || { echo "no table $table"; exit 0; }
     for f in $scripts; do

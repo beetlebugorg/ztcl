@@ -29,6 +29,10 @@
 //! bytes held now, and the highest number of bytes held.
 //! `--jit` turns the JIT on, when the build and the system have it.
 //! `--jit-threshold N` sets the calls of a proc before it compiles.
+//! `--jit-stress N` turns on the stress modes of the bit set N. Bit 32
+//! fails each guard of tier 2 on a schedule. Only the tests use it.
+//! `--jit-tier2` turns on tier 2, and `--jit-tier2-count N` sets the
+//! passes of a loop before tier 2 compiles it (1000 by default).
 //! `--jit-stats` writes the counts of the JIT to stderr at the end.
 //! `--repeat N` runs each file N times in one interpreter. With `--time`,
 //! it prints the best time: the warm time of the file.
@@ -248,6 +252,23 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
         if (std.mem.eql(u8, arg, "--jit-threshold") and i + 1 < args.len) {
             i += 1;
             jit_opts.threshold = try std.fmt.parseInt(u32, args[i], 10);
+            if (it.jit) |s| s.options = jit_opts;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--jit-stress") and i + 1 < args.len) {
+            i += 1;
+            jit_opts.stress = try std.fmt.parseInt(u32, args[i], 10);
+            if (it.jit) |s| s.options = jit_opts;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--jit-tier2")) {
+            jit_opts.tier2 = true;
+            if (it.jit) |s| s.options = jit_opts;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--jit-tier2-count") and i + 1 < args.len) {
+            i += 1;
+            jit_opts.tier2_count = try std.fmt.parseInt(u32, args[i], 10);
             if (it.jit) |s| s.options = jit_opts;
             continue;
         }

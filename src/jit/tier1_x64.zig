@@ -56,6 +56,9 @@ const Cold = union(enum) {
     restore: struct { at: Label, slow: Label },
     /// The epoch changed: `vm.guardJumps` decides, then the step.
     recheck: struct { at: Label, pc: u32, cold: u32, back: Label },
+    /// The counter of a loop head reached zero: `tier_up` gives the
+    /// address of the tier 2 code of the loop, or zero.
+    tier_up: struct { at: Label, pc: u32, back: Label },
 };
 
 /// The status values of a function.
@@ -87,6 +90,8 @@ pub const Emitter = struct {
     colds: std.ArrayList(Cold) = .empty,
     /// The slow path of each instruction, made on first use.
     slows: []?Label,
+    /// True when each loop head counts its passes for tier 2.
+    tier2: bool = false,
 
     fn ctxSlot() Mem {
         return .{ .base = abi.fp, .disp = abi.ctx_slot };
@@ -764,6 +769,13 @@ pub const Emitter = struct {
                     try s.incM(itAt(e.l.it_step_limit));
                     try s.jmp(c.slow);
                 },
+                .tier_up => |c| {
+                    s.bind(c.at);
+                    try e.call(.tier_up, c.pc);
+                    try s.aluRI(.cmp, .rax, 0);
+                    try s.jcc(.e, c.back);
+                    try s.jmpR(.rax);
+                },
                 .recheck => |c| {
                     s.bind(c.at);
                     try e.call(.recheck, c.pc);
@@ -778,7 +790,22 @@ pub const Emitter = struct {
 
 /// Assembles the function of `code`. `entries` gets the offset of the
 /// code of each instruction, or `no_entry`.
-pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify.Info, l: layout.Layout, entries: []u32) Error!void {
+/// The code at loop head number `k`: the counter of the loop goes down
+/// by one, and at zero a cold block calls `tier_up`. The counters are an
+/// array of the function, reached through the context.
+fn loopCounter(e: *Emitter, pc: u32, k: usize) Error!void {
+    const s = e.s;
+    try s.movRM(.rax, Emitter.ctxSlot());
+    try s.movRM(.rax, .{ .base = .rax, .disp = @offsetOf(jit.EnterCtx, "counters") });
+    try s.aluMI32(.sub, try x64.at(.rax, @as(i64, @intCast(k)) * 4), 1);
+    const cold = try s.newLabel();
+    const back = try s.newLabel();
+    try s.jcc(.e, cold);
+    s.bind(back);
+    try e.colds.append(e.a, .{ .tier_up = .{ .at = cold, .pc = pc, .back = back } });
+}
+
+pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify.Info, l: layout.Layout, entries: []u32, tier2: bool) Error!void {
     const n = code.ins.len;
     const labels = try a.alloc(Label, n);
     defer a.free(labels);
@@ -793,7 +820,7 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
     // A copy of a Value moves the words at 0 and 8 and the tag byte.
     const words_ok = (l.value_payload == 0 and l.value_len == 8) or (l.value_payload == 8 and l.value_len == 0);
     if (!words_ok or l.value_tag < 16 or l.value_tag >= l.value_size) return error.Layout;
-    var e: Emitter = .{ .s = s, .code = code, .info = info, .l = l, .labels = labels, .stubs = stubs, .epilogue = try s.newLabel(), .a = a, .slows = slows };
+    var e: Emitter = .{ .s = s, .code = code, .info = info, .l = l, .labels = labels, .stubs = stubs, .epilogue = try s.newLabel(), .a = a, .slows = slows, .tier2 = tier2 };
     defer e.colds.deinit(a);
     try e.prologue();
     for (0..n) |pc| {
@@ -803,6 +830,7 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
         }
         s.bind(labels[pc]);
         entries[pc] = s.here();
+        if (tier2) if (std.mem.indexOfScalar(u32, info.loop_heads, @intCast(pc))) |k| try loopCounter(&e, @intCast(pc), k);
         try e.instruction(@intCast(pc));
     }
     // An unreachable instruction has no code, and no reachable code

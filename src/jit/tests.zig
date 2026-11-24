@@ -747,7 +747,7 @@ test "the helpers run the instruction functions" {
         try frame.vars.append(it.alloc(), .{ .name = name, .cell = cell });
     }
     var stack: [8]tcl.Value = undefined;
-    var ctx: jit.EnterCtx = .{ .it = it, .code = code, .frame = &frame, .stack = &stack, .helpers = &helpers.table, .target = 0, .pc = 0, .sp = 0, .err = 0, .empty = &tcl.Value.empty };
+    var ctx: jit.EnterCtx = .{ .it = it, .code = code, .frame = &frame, .stack = &stack, .helpers = &helpers.table, .target = 0, .pc = 0, .sp = 0, .err = 0, .empty = &tcl.Value.empty, .counters = undefined, .func = undefined };
     // bin_vv: 20 + 21 at depth 0.
     const pc: u32 = for (code.ins, 0..) |ins, k| {
         if (ins.op == .bin_vv) break @intCast(k);
@@ -803,7 +803,8 @@ fn runModeGc(script: []const u8, on: bool, limit: u64, min_compiled: u64, stress
     if (stress == 0) it.gc_on = false else it.setGcStress(stress);
     it.step_limit = limit;
     if (allow_interp) try it.allow(@intFromEnum(tcl.interp.Capability.interp));
-    if (on and !it.enableJit(.{ .threshold = 0 })) return error.SkipZigTest;
+    if (test_mem_limit) |m| it.mem_limit = m;
+    if (on and !it.enableJit(.{ .threshold = 0, .tier2 = test_tier2, .tier2_count = 2, .stress = test_stress })) return error.SkipZigTest;
     var w: std.ArrayList(u8) = .empty;
     errdefer w.deinit(testing.allocator);
     const a = testing.allocator;
@@ -819,6 +820,8 @@ fn runModeGc(script: []const u8, on: bool, limit: u64, min_compiled: u64, stress
     if (stress == 0) try w.print(a, "mem: {d}\n", .{it.memUsed()});
     if (on) {
         const st = it.jit.?.stats;
+        last_tier2 = st.tier2;
+        last_exits = st.exits;
         if (st.compiled < min_compiled) {
             std.debug.print("compiled {d} < {d} for:\n{s}\n", .{ st.compiled, min_compiled, script });
             return error.TooFewCompiled;
@@ -829,6 +832,15 @@ fn runModeGc(script: []const u8, on: bool, limit: u64, min_compiled: u64, stress
 
 /// True while a test runs scripts with the capability `interp`.
 var allow_interp = false;
+/// True while a test runs the JIT with tier 2, at a loop count of 2.
+var test_tier2 = false;
+/// The memory limit of the scripts of a test, when not null.
+var test_mem_limit: ?usize = null;
+/// The tier 2 loops and the exits of the last run with the JIT.
+var last_tier2: u64 = 0;
+var last_exits: u64 = 0;
+/// The stress modes of the JIT in a test.
+var test_stress: u32 = 0;
 
 /// Runs `script` in the interpreter and with the JIT and compares each
 /// field. `min_compiled` is the least count of compiled functions.
@@ -1014,7 +1026,7 @@ test "jit: the code bytes of the benchmarks" {
             defer s.deinit();
             const entries = try testing.allocator.alloc(u32, code.ins.len);
             defer testing.allocator.free(entries);
-            try @import("tier1_x64.zig").assemble(testing.allocator, &s, code, &info, layout.probe().?, entries);
+            try @import("tier1_x64.zig").assemble(testing.allocator, &s, code, &info, layout.probe().?, entries, false);
             bytes += s.bytes().len;
             ins += code.ins.len;
         }
@@ -1348,4 +1360,100 @@ test "tier 2: plans with a string slot, a changed kind, and a call" {
     var p3 = (try planOf(it, "up", &.{ .{ "i", .int }, .{ "n", .int }, .{ "x", .int } })).?;
     defer p3.deinit();
     try testing.expect(p3.calls);
+}
+
+/// `same` with tier 2 on. Fails when fewer than `min_tier2` loops
+/// compiled to tier 2.
+fn sameT2(script: []const u8, min_tier2: u64) !void {
+    test_tier2 = true;
+    defer test_tier2 = false;
+    try same(script, 1);
+    if (last_tier2 < min_tier2) {
+        std.debug.print("tier2 {d} < {d} for:\n{s}\n", .{ last_tier2, min_tier2, script });
+        return error.TooFewTier2;
+    }
+}
+
+const sum_script =
+    \\proc sum {n} { set s 0; for {set i 0} {$i < $n} {incr i} { set s [expr {$s + $i}] }; return $s }
+    \\sum 30
+;
+
+test "tier 2: sum, and the step limit at each step of the loop" {
+    if (!jit.built) return error.SkipZigTest;
+    try sameT2(sum_script, 1);
+    const ref = try runMode(sum_script, false, std.math.maxInt(u64), 0);
+    defer ref.deinit();
+    const at = std.mem.indexOf(u8, ref.text, "steps: ").?;
+    const full = try std.fmt.parseInt(u64, std.mem.sliceTo(ref.text[at + 7 ..], '\n'), 10);
+    test_tier2 = true;
+    defer test_tier2 = false;
+    var limit: u64 = 0;
+    while (limit <= full) : (limit += 1) try sameLimit(sum_script, limit, 0);
+}
+
+test "tier 2: an overflow in pass 1000 gives a big integer" {
+    try sameT2(
+        \\proc f {} { set s 9223372036854774807; for {set i 0} {$i < 1500} {incr i} { set s [expr {$s + 1}] }; list $s $i }
+        \\proc g {} { set s 3; for {set i 0} {$i < 70} {incr i} { set s [expr {$s * 3}] }; set s }
+        \\proc h {} { set i 9223372036854775800; for {set k 0} {$k < 20} {incr k} { incr i 1 }; set i }
+        \\list [f] [g] [h]
+    , 3);
+}
+
+test "tier 2: a memory limit that a script passes before the loop" {
+    test_mem_limit = 4 << 20;
+    defer test_mem_limit = null;
+    try sameT2(
+        \\proc f {} { set l {}; set s x; for {set i 0} {$i < 30} {incr i} { append s $s }; set k 0; for {set i 0} {$i < 100} {incr i} { incr k }; list [string length $s] $k }
+        \\f
+    , 0);
+}
+
+test "tier 2: links, a string bound, break, and continue" {
+    try sameT2(
+        \\proc up {} { upvar 1 g y; for {set i 0} {$i < 50} {incr i} { incr y } }
+        \\proc two {} { set a 0; upvar 0 a b; for {set i 0} {$i < 50} {incr i} { incr a; incr b 2 }; list $a $b }
+        \\proc str {} { set n "10"; set s 0; for {set i 0} {$i < $n} {incr i} { incr s $i }; list $s $n }
+        \\proc bc {} { set s 0; for {set i 0} {$i < 100} {incr i} { if {$i > 90} { break }; if {$i % 2 == 0} { continue }; incr s $i }; list $s $i }
+        \\proc wh {} { set i 0; set s 0; while {$i < 60} { incr i; if {$i == 50} { break }; set s [expr {$s + $i * 2 - 1}] }; list $i $s }
+        \\proc lk {mode} { if {$mode} { upvar 1 g x } else { set x 0 }; for {set i 0} {$i < 50} {incr i} { incr x }; return $x }
+        \\set g 5; list [up] $g [two] [str] [bc] [wh] [lk 0] [lk 1] [lk 0] [lk 1] $g
+    , 1);
+}
+
+test "tier 2: a loop that exits in each pass is dropped after 8 exits" {
+    try sameT2(
+        \\proc f {} { set m 9223372036854775806; incr m; set s $m; set k 0; for {set i 0} {$i < 100} {incr i} { set s [expr {$s + 1}]; incr k; set s $m }; list $s $k }
+        \\f
+    , 1);
+    try testing.expectEqual(@as(u64, jit.max_exits), last_exits);
+}
+
+test "tier 2: forced exits at each guard write each register and stack place" {
+    test_stress = jit.stress_guards;
+    defer test_stress = 0;
+    try sameT2(
+        \\proc regs {} {
+        \\  set a 1; set b 2; set c 3; set d 4
+        \\  for {set i 0} {$i < 200} {incr i} {
+        \\    set a [expr {$a + $b * $c}]
+        \\    set c [expr {$c - $d}]
+        \\    incr b; incr c 2; incr d -1
+        \\    if {$a > 1000000} { set a [expr {$a - 999999}] }
+        \\  }
+        \\  list $a $b $c $d $i
+        \\}
+        \\proc places {} {
+        \\  set a 1; set b 2; set c 3
+        \\  for {set i 0} {$i < 200} {incr i} {
+        \\    set a [expr {$a + ($b * ($c - $i))}]
+        \\    incr b; incr c 2
+        \\    if {$a > 1000000} { set a [expr {$a - 999999}] }
+        \\  }
+        \\  list $a $b $c $i
+        \\}
+        \\list [regs] [places]
+    , 2);
+    try sameT2(sum_script, 1);
 }

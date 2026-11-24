@@ -58,6 +58,9 @@ pub const LoopPlan = struct {
     exits: []const u32,
     /// True when the loop calls a helper that tier 2 has no inline form for.
     calls: bool,
+    /// True for each instruction of the loop that a path from the head
+    /// reaches.
+    seen: []const bool,
     /// The memory of the plan.
     arena: std.heap.ArenaAllocator,
 
@@ -398,6 +401,7 @@ pub fn plan(a: Allocator, code: *const vm.Code, info: *const verify.Info, head: 
         .parts = parts.items,
         .exits = exits.items,
         .calls = b.calls,
+        .seen = b.seen,
         .arena = arena,
     };
 }

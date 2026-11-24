@@ -21,7 +21,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 tcl="$here/../zig-out/bin/ztcl"; tag=core-8-6-16; tests=; all=; log=; gc=
-while getopts ajr:t:s:o:g: o; do
+while getopts ajJr:t:s:o:g: o; do
     case $o in
     r) tcl=$OPTARG ;;
     t) tag=$OPTARG ;;
@@ -29,6 +29,7 @@ while getopts ajr:t:s:o:g: o; do
     a) all=1 ;;
     g) gc="$gc --gc-stress $OPTARG" ;;
     j) gc="$gc --jit --jit-threshold 0" ;;
+    J) gc="$gc --jit --jit-threshold 0 --jit-tier2 --jit-tier2-count 2" ;;
     o) log=$OPTARG; : > "$log" ;;
     *) exit 2 ;;
     esac
