@@ -428,20 +428,8 @@ fn procCode(it: *Interp, name: []const u8) !*vm.Code {
 
 /// The text of a file of the repository, from the root folder.
 fn readRepoFile(a: std.mem.Allocator, path: [*:0]const u8) ![]u8 {
-    const rc = linux.open(path, .{ .ACCMODE = .RDONLY }, 0);
-    if (linux.errno(rc) != .SUCCESS) return error.NoFile;
-    const fd: i32 = @intCast(rc);
-    defer _ = linux.close(fd);
-    var out: std.ArrayList(u8) = .empty;
-    errdefer out.deinit(a);
-    var buf: [4096]u8 = undefined;
-    while (true) {
-        const n = linux.read(fd, &buf, buf.len);
-        if (linux.errno(n) != .SUCCESS) return error.NoFile;
-        if (n == 0) break;
-        try out.appendSlice(a, buf[0..n]);
-    }
-    return out.toOwnedSlice(a);
+    // The portable file API, so the test also runs on Windows.
+    return std.Io.Dir.cwd().readFileAlloc(testing.io, std.mem.span(path), a, .limited(64 << 20)) catch error.NoFile;
 }
 
 /// Defines the procs of a script and runs no other command.
