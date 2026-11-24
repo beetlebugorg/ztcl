@@ -1,8 +1,8 @@
-//! The executable region of the JIT on Linux.
+//! The executable region of the JIT on Linux and on arm64 macOS.
 //!
-//! The region is one reservation of address space with no access, with
-//! one more page with no access before it and after it. `append` copies
-//! one function to the next free pages in three steps:
+//! On Linux, the region is one reservation of address space with no
+//! access, with one more page with no access before it and after it.
+//! `append` copies one function to the next free pages in three steps:
 //!
 //! 1. `mprotect` the pages to read and write.
 //! 2. Copy the code, and fill the rest of the last page with `int3`.
@@ -14,15 +14,50 @@
 //! that exists. After a failed system call, the region stops, and each
 //! later `append` returns null. No failure is an error of a script.
 //!
+//! On arm64 macOS, the region is one `mmap` with `MAP_JIT` and the
+//! rights read, write, and execute. The system keeps each `MAP_JIT` page
+//! writable or executable for one thread, never both, and
+//! `pthread_jit_write_protect_np` switches the state of the thread.
+//! macOS refuses `mprotect` on a `MAP_JIT` page and a `MAP_JIT` mapping
+//! at a fixed address. So the guard pages are a mapping with no access
+//! at a fixed address over the first and the last page of the `MAP_JIT`
+//! mapping. The pages that hold no function yet keep the rights of the
+//! mapping: they hold zero words, which are `udf` instructions, and the
+//! write protection of each thread keeps them read-only. `append` turns
+//! the write protection off, copies the function, turns it on again, and
+//! flushes the instruction cache for the range of the function.
+//! Functions pack with 16-byte alignment, and the fill is zero words. No
+//! other code runs between the two switch calls.
+//!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
 const builtin = @import("builtin");
 const linux = std.os.linux;
+const c = std.c;
 
-/// The fill byte of unused code bytes.
-/// On x86-64 it is `int3`. On arm64 a word of zero bytes is `udf #0`.
-pub const trap_byte: u8 = if (@import("builtin").cpu.arch == .aarch64) 0x00 else 0xCC;
+const darwin = builtin.os.tag == .macos and builtin.cpu.arch == .aarch64;
+
+/// The fill byte: `int3` on x86-64, and the zero word of `udf` on arm64.
+pub const trap_byte: u8 = if (builtin.cpu.arch == .aarch64) 0x00 else 0xCC;
+
+/// The alignment of a function in the region on arm64 macOS.
+const pack = 16;
+
+extern "c" fn pthread_jit_write_protect_supported_np() c_int;
+extern "c" fn pthread_jit_write_protect_np(enabled: c_int) void;
+extern "c" fn sys_icache_invalidate(start: *anyopaque, len: usize) void;
+
+/// True while this thread has its write window open on arm64 macOS.
+threadlocal var write_open: bool = false;
+
+/// Stops the process when this thread has its write window open. Each
+/// jump into JIT code calls it first on arm64 macOS.
+pub fn checkClosed() void {
+    if (comptime darwin) {
+        if (write_open) @panic("the JIT write window is open before a jump into JIT code");
+    }
+}
 
 pub const Region = struct {
     /// The first usable page. The guard page is before it.
@@ -42,6 +77,7 @@ pub const Region = struct {
     /// Reserves `limit` bytes of address space with no access, plus one
     /// page with no access before and after. Null when the system refuses.
     pub fn init(limit: usize) ?Region {
+        if (comptime darwin) return initDarwin(limit);
         if (comptime builtin.os.tag != .linux) return null;
         const page = std.heap.pageSize();
         const usable = std.mem.alignForward(usize, @max(limit, page), page);
@@ -52,8 +88,28 @@ pub const Region = struct {
         return .{ .base = start + page, .limit = usable, .page = page };
     }
 
+    fn initDarwin(limit: usize) ?Region {
+        if (pthread_jit_write_protect_supported_np() == 0) return null;
+        const page = std.heap.pageSize();
+        const usable = std.mem.alignForward(usize, @max(limit, page), page);
+        const total = std.math.add(usize, usable, 2 * page) catch return null;
+        const p = c.mmap(null, total, .{ .READ = true, .WRITE = true, .EXEC = true }, .{ .TYPE = .PRIVATE, .ANONYMOUS = true, .JIT = true }, -1, 0);
+        if (p == c.MAP_FAILED) return null;
+        const start: [*]align(std.heap.page_size_min) u8 = @ptrCast(@alignCast(p));
+        // The guard pages replace the first and the last page.
+        for ([_]usize{ 0, page + usable }) |off| {
+            const g = c.mmap(@ptrCast(@alignCast(start + off)), page, .{}, .{ .TYPE = .PRIVATE, .ANONYMOUS = true, .FIXED = true }, -1, 0);
+            if (g == c.MAP_FAILED) {
+                _ = c.munmap(start, total);
+                return null;
+            }
+        }
+        return .{ .base = start + page, .limit = usable, .page = page };
+    }
+
     pub fn deinit(r: *Region) void {
-        _ = linux.munmap(r.base - r.page, r.limit + 2 * r.page);
+        const start: [*]align(std.heap.page_size_min) u8 = @alignCast(r.base - r.page);
+        if (comptime darwin) _ = c.munmap(start, r.limit + 2 * r.page) else _ = linux.munmap(start, r.limit + 2 * r.page);
         r.* = undefined;
     }
 
@@ -64,6 +120,7 @@ pub const Region = struct {
         if (r.stopped or code.len == 0) return null;
         r.appends += 1;
         if (r.fail_second and r.appends % 2 == 0) return null;
+        if (comptime darwin) return r.appendDarwin(code);
         const len = std.mem.alignForward(usize, code.len, r.page);
         const end = std.math.add(usize, r.used, len) catch return null;
         if (end > r.limit) return null;
@@ -85,7 +142,24 @@ pub const Region = struct {
         return at[0..code.len];
     }
 
-    /// The bytes of the pages that hold functions.
+    fn appendDarwin(r: *Region, code: []const u8) ?[]const u8 {
+        const len = std.mem.alignForward(usize, code.len, pack);
+        const end = std.math.add(usize, r.used, len) catch return null;
+        if (end > r.limit) return null;
+        const at = r.base + r.used;
+        write_open = true;
+        pthread_jit_write_protect_np(0);
+        @memcpy(at[0..code.len], code);
+        @memset(at[code.len..len], trap_byte);
+        pthread_jit_write_protect_np(1);
+        write_open = false;
+        sys_icache_invalidate(at, len);
+        r.used = end;
+        return at[0..code.len];
+    }
+
+    /// The bytes of the pages that hold functions. On arm64 macOS, the
+    /// bytes of the packed functions.
     pub fn usedBytes(r: *const Region) usize {
         return r.used;
     }
@@ -113,6 +187,7 @@ pub fn runConst(code: []const u8, want: u32) bool {
     defer r.deinit();
     const f = r.append(code) orelse return false;
     const func: *const fn () callconv(.c) u32 = @ptrCast(@alignCast(f.ptr));
+    checkClosed();
     return func() == want;
 }
 

@@ -67,8 +67,11 @@ pub const EnterCtx = extern struct {
     func: *anyopaque,
 };
 
-/// True when this target has a backend.
-pub const backend = builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux;
+/// True when this target has a backend: x86-64 Linux and arm64 macOS.
+/// Tier 2 has a backend only on x86-64.
+pub const backend = (builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux) or
+    (builtin.cpu.arch == .aarch64 and builtin.os.tag == .macos);
+pub const tier2_backend = builtin.cpu.arch == .x86_64;
 
 /// True when the build has the JIT and the target has a backend.
 pub const built = options.jit and backend;
@@ -439,7 +442,7 @@ fn compileCode(s: *State, code: *vm.Code) ?*Fn {
     };
     // A named Code stays in tier 1. Tier 2 reads each slot from its cell
     // in the frame, and a named Code reads each variable by its name.
-    const tier2_count: u32 = if (s.options.tier2 and !code.named) @max(s.options.tier2_count, 1) else 0;
+    const tier2_count: u32 = if (tier2_backend and s.options.tier2 and !code.named) @max(s.options.tier2_count, 1) else 0;
     const bud = if (code.named) s.namedBudget() else s.budget();
     switch (tier1.compile(a, r, s.layout, code, bud, tier2_count)) {
         .ok => |f| {
@@ -510,6 +513,7 @@ pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp:
         .func = f,
     };
     const func: *const fn (*EnterCtx) callconv(.c) u32 = @ptrCast(@alignCast(f.base));
+    mem.checkClosed();
     const status = func(&ctx);
     pc.* = ctx.pc;
     sp.* = ctx.sp;
@@ -613,6 +617,7 @@ pub fn tierUp(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) usize {
         f.counters[k] = std.math.maxInt(u32);
         return 0;
     };
+    mem.checkClosed();
     f.counters[k] = 1;
     return @intFromPtr(c);
 }
@@ -675,6 +680,7 @@ pub fn resumeAt(ctx: *EnterCtx, pc: u32, sp: u32, kind: u32) callconv(.c) usize 
 /// Compiles the loop at `head` with the kinds of the cells of `frame`
 /// now. Null when the loop is not eligible or a step fails.
 fn compileLoop(s: *State, code: *const vm.Code, frame: *interp.Frame, head: u32, loop: u32, heads: u32, counts: *bool) ?[]const u8 {
+    if (comptime !tier2_backend) return null;
     if (s.stopped or code.named) return null;
     var fa: FailAlloc = .{ .child = s.backing, .at = 0 };
     const a = compileAlloc(s, &fa);
