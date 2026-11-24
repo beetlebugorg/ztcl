@@ -137,7 +137,10 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
             child.fs.cwd = try child.alloc().dupe(u8, it.fs.cwd);
             child.fs.path = try child.alloc().dupe(u8, it.fs.path);
         }
-        try child.allow(if (child.fs_ok()) it.capabilities else it.capabilities & ~@as(u32, 8 | 16));
+        // A child has no `thread` capability: a thread has one
+        // interpreter that gets its messages.
+        const no_thread = ~@as(u32, @intFromEnum(interp.Capability.thread));
+        try child.allow((if (child.fs_ok()) it.capabilities else it.capabilities & ~@as(u32, 8 | 16)) & no_thread);
     }
     // A safe child has the event loop of its parent. A timer reaches
     // no host data.
