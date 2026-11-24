@@ -209,3 +209,73 @@ test "selfTest is false under PR_SET_MDWE" {
     if (code == 77) return error.SkipZigTest;
     try testing.expectEqual(@as(u32, 0), code);
 }
+
+// ---- The assembler ----
+
+const x64 = @import("x64.zig");
+
+test "the assembler gives the bytes of zig cc for each golden row" {
+    const rows = @import("x64_golden.zig").rows;
+    var bad: usize = 0;
+    for (rows) |row| {
+        var s = x64.Asm.init(testing.allocator);
+        defer s.deinit();
+        try x64.encodeRow(&s, row);
+        try s.finish();
+        if (!std.mem.eql(u8, row.bytes, s.bytes())) {
+            if (bad < 20) std.debug.print("{t} a={d} b={d} d={d} i={d} k={d}: want {x} got {x}\n", .{ row.f, row.a, row.b, row.d, row.i, row.k, row.bytes, s.bytes() });
+            bad += 1;
+        }
+    }
+    try testing.expectEqual(@as(usize, 0), bad);
+    try testing.expect(rows.len > 8000);
+}
+
+test "a forward and a backward branch get the correct rel32" {
+    var s = x64.Asm.init(testing.allocator);
+    defer s.deinit();
+    const back = try s.newLabel();
+    const fwd = try s.newLabel();
+    s.bind(back);
+    try s.nop();
+    try s.jcc(.ne, fwd); // at 1: 0f 85 rel32, ends at 7
+    try s.jmp(back); // at 7: e9 rel32, ends at 12
+    try s.nop();
+    s.bind(fwd); // at 13
+    try s.jmp(fwd); // at 13: ends at 18
+    try s.finish();
+    const b = s.bytes();
+    try testing.expectEqual(@as(i32, 13 - 7), std.mem.readInt(i32, b[3..7], .little));
+    try testing.expectEqual(@as(i32, 0 - 12), std.mem.readInt(i32, b[8..12], .little));
+    try testing.expectEqual(@as(i32, 13 - 18), std.mem.readInt(i32, b[14..18], .little));
+}
+
+test "an unbound label is an error" {
+    var s = x64.Asm.init(testing.allocator);
+    defer s.deinit();
+    const l = try s.newLabel();
+    try s.jmp(l);
+    try testing.expectError(error.UnboundLabel, s.finish());
+    // A label that no branch uses is not an error.
+    var t = x64.Asm.init(testing.allocator);
+    defer t.deinit();
+    _ = try t.newLabel();
+    try t.finish();
+}
+
+test "a displacement out of range is an error" {
+    try testing.expectError(error.Range, x64.at(.rax, 1 << 31));
+    try testing.expectError(error.Range, x64.at(.rax, -(1 << 31) - 1));
+    try testing.expectError(error.Range, x64.imm32(1 << 40));
+    _ = try x64.at(.rax, -(1 << 31));
+}
+
+test "the selfTest function from the assembler returns 42" {
+    if (!jit.built) return error.SkipZigTest;
+    var s = x64.Asm.init(testing.allocator);
+    defer s.deinit();
+    try s.movRI32(.rax, 42);
+    try s.ret();
+    try s.finish();
+    try testing.expect(mem.runConst(s.bytes(), 42));
+}
