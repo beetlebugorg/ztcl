@@ -139,7 +139,7 @@ pub fn stepsLeft(a: Allocator, code: *const vm.Code, p: *const tier2.LoopPlan) A
         while (pc > part.first) {
             pc -= 1;
             const op = code.ins[pc].op;
-            if (op == .guard or op == .step) steps += 1;
+            if (p.seen[pc - p.head] and (op == .guard or op == .step)) steps += 1;
             left[pc - p.head] = steps;
         }
     }
