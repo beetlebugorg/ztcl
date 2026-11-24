@@ -37,6 +37,8 @@
 //! fails each guard of tier 2 on a schedule. Only the tests use them.
 //! `--jit-stress-alloc K` is the allocation that the first compile
 //! fails in stress mode 1.
+//! `--jit-dump DIR` writes the bytes of each compiled function to a file
+//! of DIR, for `tools/jit-scan.sh`.
 //! `--repeat N` runs each file N times in one interpreter. With `--time`,
 //! it prints the best time: the warm time of the file.
 //!
@@ -97,6 +99,17 @@ fn cmdExit(it: *tcl.Interp, argv: []const tcl.Value, _: ?*tcl.interp.Cmd) tcl.Er
 var report_on = false;
 /// The value of `--max-steps`, to find the steps used.
 var max_steps: u64 = std.math.maxInt(u64);
+
+/// The folder of `--jit-dump` and the count of the files in it.
+var dump_dir: []const u8 = "";
+var dump_count: usize = 0;
+
+fn dumpCode(_: ?*anyopaque, bytes: []const u8) void {
+    var buf: [4096]u8 = undefined;
+    const path = std.fmt.bufPrint(&buf, "{s}/fn-{d}.bin", .{ dump_dir, dump_count }) catch return;
+    dump_count += 1;
+    Io.Dir.cwd().writeFile(host_io, .{ .sub_path = path, .data = bytes }) catch {};
+}
 
 /// True for `--jit-stats`.
 var jit_stats = false;
@@ -255,6 +268,13 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
         if (std.mem.eql(u8, arg, "--jit-threshold") and i + 1 < args.len) {
             i += 1;
             jit_opts.threshold = try std.fmt.parseInt(u32, args[i], 10);
+            if (it.jit) |s| s.options = jit_opts;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--jit-dump") and i + 1 < args.len) {
+            i += 1;
+            dump_dir = args[i];
+            jit_opts.on_code = dumpCode;
             if (it.jit) |s| s.options = jit_opts;
             continue;
         }

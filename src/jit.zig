@@ -83,6 +83,10 @@ pub const Options = struct {
     stress: u32 = 0,
     /// Stress mode 1: the allocation that the first compile fails.
     fail_from: u32 = 1,
+    /// Gets the bytes of each new function, for a test of the code. The
+    /// library does no file I/O: the runner writes the files.
+    on_code: ?*const fn (ctx: ?*anyopaque, bytes: []const u8) void = null,
+    on_code_ctx: ?*anyopaque = null,
 };
 
 pub const stress_alloc: u32 = 1;
@@ -375,6 +379,7 @@ fn compileCode(s: *State, code: *vm.Code) ?*Fn {
     switch (tier1.compile(a, r, s.layout, code, s.budget(), if (s.options.tier2) @max(s.options.tier2_count, 1) else 0)) {
         .ok => |f| {
             if (s.options.stress & stress_sum != 0) f.sum = sumOf(f);
+            if (s.options.on_code) |cb| cb(s.options.on_code_ctx, f.base[0..f.len]);
             s.fns.appendAssumeCapacity(f);
             s.charge(f.pages(r.page) + f.bytes());
             s.stats.compiled += 1;

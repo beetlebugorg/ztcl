@@ -1863,3 +1863,141 @@ fn sameStress(script: []const u8, stress: u32) !void {
     try testing.expectEqualStrings(ref.text, got.text);
 }
 
+// ---- The hardening tests ----
+
+const abi = @import("abi.zig");
+const tier1 = @import("tier1.zig");
+
+test "hardening: enter runs exec for each entry that fails a check" {
+    if (!jit.built) return error.SkipZigTest;
+    const it = try newInterp();
+    defer freeInterp(it);
+    it.gc_on = false;
+    if (!it.enableJit(.{ .threshold = 0 })) return error.SkipZigTest;
+    try defineProcs(it, base_proc);
+    // A copy with one more instruction after the last `ret`. No path
+    // reaches it, so it has no code.
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const orig = try procCode(it, "f");
+    var m = try Mutable.init(arena.allocator(), orig);
+    const ins = try arena.allocator().alloc(vm.Ins, m.ins.len + 1);
+    @memcpy(ins[0..m.ins.len], m.ins);
+    ins[m.ins.len] = .{ .op = .push_empty };
+    m.code.ins = ins;
+    const code = &m.code;
+    try testing.expect(code.names.len > 0);
+    const f = jit.prepare(it, code) orelse return error.NoCompile;
+    const stack = try testing.allocator.alloc(Value, code.max_stack);
+    defer testing.allocator.free(stack);
+    // An instruction with no code.
+    const dead: u32 = for (f.entries, 0..) |e, k| {
+        if (e == tier1.no_entry) break @intCast(k);
+    } else return error.NoDeadInstruction;
+    const Case = struct { pc: u32, sp: u32 };
+    const cases = [_]Case{
+        .{ .pc = @intCast(code.ins.len), .sp = 0 },
+        .{ .pc = std.math.maxInt(u32), .sp = 0 },
+        .{ .pc = dead, .sp = f.depth[dead] },
+        .{ .pc = 0, .sp = 1 },
+        // The global frame has fewer cells than the names of `f`.
+        .{ .pc = 0, .sp = 0 },
+    };
+    try testing.expect(it.frame.vars.items.len < code.names.len);
+    for (cases) |c| {
+        var pc = c.pc;
+        var sp = c.sp;
+        const before = it.jit.?.stats.fallbacks;
+        try testing.expectEqual(jit.Status.fallback, jit.enter(it, f, code, stack.ptr, &pc, &sp));
+        try testing.expectEqual(before + 1, it.jit.?.stats.fallbacks);
+        try testing.expectEqual(c.pc, pc);
+        try testing.expectEqual(c.sp, sp);
+    }
+}
+
+test "hardening: one proc in two regions gives the same bytes" {
+    if (!jit.built) return error.SkipZigTest;
+    const it = try newInterp();
+    defer freeInterp(it);
+    try defineProcs(it, base_proc);
+    const code = try procCode(it, "f");
+    const l = layout.probe() orelse return error.SkipZigTest;
+    var r1 = mem.Region.init(1 << 20) orelse return error.SkipZigTest;
+    defer r1.deinit();
+    var r2 = mem.Region.init(1 << 20) orelse return error.SkipZigTest;
+    defer r2.deinit();
+    // The second region has a function before this one.
+    _ = r2.append(&[_]u8{0xC3}) orelse return error.NoAppend;
+    const f1 = switch (tier1.compile(testing.allocator, &r1, l, code, 1 << 20, 0)) {
+        .ok => |f| f,
+        else => return error.NoCompile,
+    };
+    defer f1.free(testing.allocator);
+    const f2 = switch (tier1.compile(testing.allocator, &r2, l, code, 1 << 20, 0)) {
+        .ok => |f| f,
+        else => return error.NoCompile,
+    };
+    defer f2.free(testing.allocator);
+    try testing.expect(f1.base != f2.base);
+    try testing.expectEqualSlices(u8, f1.base[0..f1.len], f2.base[0..f2.len]);
+}
+
+test "hardening: the JIT frame is at most 64 bytes" {
+    if (!jit.built) return error.SkipZigTest;
+    try testing.expect(abi.frame_bytes <= 64);
+    // The prologue: push rbp, mov rbp rsp, five pushes of the pinned
+    // registers, and the push of the context. With the return address
+    // that is `frame_bytes`, and the stack pointer is 16-byte aligned
+    // at each call.
+    const it = try newInterp();
+    defer freeInterp(it);
+    if (!it.enableJit(.{ .threshold = 0 })) return error.SkipZigTest;
+    try defineProcs(it, base_proc);
+    const code = try procCode(it, "f");
+    const f = jit.prepare(it, code) orelse return error.NoCompile;
+    const want = [_]u8{ 0x55, 0x48, 0x89, 0xE5, 0x53, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57, 0x57 };
+    try testing.expectEqualSlices(u8, &want, f.base[0..want.len]);
+    const pushes = 1 + abi.saved.len + 1;
+    try testing.expectEqual(abi.frame_bytes, 8 + 8 * pushes);
+    try testing.expectEqual(@as(usize, 0), abi.frame_bytes % 16);
+    try testing.expectEqual(@as(i32, -8 * (1 + @as(i32, abi.saved.len))), abi.ctx_slot);
+}
+
+/// True when an address is inside a mapping of /proc/self/maps.
+fn mapped(addr: usize) !bool {
+    const text = try readMaps(testing.allocator);
+    defer testing.allocator.free(text);
+    var lines = std.mem.tokenizeScalar(u8, text, '\n');
+    while (lines.next()) |line| {
+        const sp = std.mem.indexOfScalar(u8, line, ' ') orelse continue;
+        const range = line[0..sp];
+        const dash = std.mem.indexOfScalar(u8, range, '-') orelse continue;
+        const start = try std.fmt.parseInt(usize, range[0..dash], 16);
+        const end = try std.fmt.parseInt(usize, range[dash + 1 ..], 16);
+        if (addr >= start and addr < end) return true;
+    }
+    return false;
+}
+
+test "hardening: reset, compact, and deinit free the region" {
+    if (!jit.built or builtin.os.tag != .linux) return error.SkipZigTest;
+    for (0..3) |k| {
+        const it = try newInterp();
+        var freed = false;
+        defer if (!freed) freeInterp(it);
+        if (!it.enableJit(.{ .threshold = 0 })) return error.SkipZigTest;
+        _ = try it.eval("proc f {n} {set s 0; for {set i 0} {$i < $n} {incr i} {incr s $i}; return $s}; f 10");
+        const base = @intFromPtr(it.jit.?.region.?.base);
+        try testing.expect(try mapped(base));
+        switch (k) {
+            0 => try it.reset(),
+            1 => try it.compact(&.{}, .{}),
+            else => {
+                freeInterp(it);
+                freed = true;
+            },
+        }
+        try testing.expect(!try mapped(base));
+    }
+}
+

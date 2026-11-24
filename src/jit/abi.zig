@@ -42,3 +42,7 @@ pub const ctx_slot: i32 = -48;
 
 /// The registers that the prologue saves, in the order of the pushes.
 pub const saved = [_]Reg{ .rbx, .r12, .r13, .r14, .r15 };
+
+/// The native stack of one JIT frame: the return address, `rbp`, the
+/// saved registers, and the context pointer.
+pub const frame_bytes = 8 + 8 + 8 * saved.len + 8;

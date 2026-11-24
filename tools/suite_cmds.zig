@@ -26,6 +26,7 @@ fn setup(it: *Interp) anyerror!void {
     try it.register("testevalex", cmdTestEvalEx);
     try it.register("testlsetdrop", cmdTestLsetDrop);
     try it.register("testnativedepth", cmdTestNativeDepth);
+    try it.register("testjitmaps", cmdTestJitMaps);
     try it.register("testexprlong", exprCmd(.long));
     try it.register("testexprdouble", exprCmd(.double));
     try it.register("testexprstring", exprCmd(.string));
@@ -39,6 +40,45 @@ fn setup(it: *Interp) anyerror!void {
 fn cmdTestNativeDepth(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 1) return it.wrongArgs("testnativedepth");
     return .{ .int = @intCast(it.native_base -| @frameAddress()) };
+}
+
+/// `testjitmaps`: the count of the lines of /proc/self/maps with a
+/// mapping that is writable and executable. `tools/jit-scan.sh` runs it
+/// after a test file with the JIT. It is -1 when the file cannot be read.
+fn cmdTestJitMaps(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len != 1) return it.wrongArgs("testjitmaps");
+    if (comptime @import("builtin").os.tag != .linux) return .{ .int = -1 };
+    const linux = std.os.linux;
+    const rc = linux.open("/proc/self/maps", .{ .ACCMODE = .RDONLY }, 0);
+    if (linux.errno(rc) != .SUCCESS) return .{ .int = -1 };
+    const fd: i32 = @intCast(rc);
+    defer _ = linux.close(fd);
+    var count: i64 = 0;
+    var buf: [8192]u8 = undefined;
+    var line: [512]u8 = undefined;
+    var len: usize = 0;
+    while (true) {
+        const n = linux.read(fd, &buf, buf.len);
+        if (linux.errno(n) != .SUCCESS) return .{ .int = -1 };
+        if (n == 0) break;
+        for (buf[0..n]) |c| {
+            if (c != '\n') {
+                if (len < line.len) line[len] = c;
+                len += 1;
+                continue;
+            }
+            count += @intFromBool(wx(line[0..@min(len, line.len)]));
+            len = 0;
+        }
+    }
+    return .{ .int = count };
+}
+
+/// True when the rights field of a maps line has `w` and `x`.
+fn wx(line: []const u8) bool {
+    const sp = std.mem.indexOfScalar(u8, line, ' ') orelse return false;
+    const perms = line[sp + 1 ..];
+    return perms.len >= 3 and perms[1] == 'w' and perms[2] == 'x';
 }
 
 /// `testlsetdrop name index value`: the dropped form of `lset`. It writes
