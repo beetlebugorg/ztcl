@@ -106,6 +106,11 @@ pub const Stats = struct {
     exits: u64 = 0,
     /// The bytecode instructions of the compiled functions.
     ins: u64 = 0,
+    /// The bytes of the functions of named code: pages and records.
+    named_bytes: u64 = 0,
+    /// The named Code values that stayed in the interpreter because the
+    /// part of named code was full.
+    named_stops: u64 = 0,
 };
 
 pub const State = struct {
@@ -129,6 +134,13 @@ pub const State = struct {
     used: usize = 0,
     /// The bytes of this state and of each child state.
     family: usize = 0,
+    /// The bytes of the named code of this state, and of this state and
+    /// each child state. Named code has a quarter of the JIT memory
+    /// limit, so the procs always have the rest.
+    named_used: usize = 0,
+    named_family: usize = 0,
+    /// True after a named Code did not fit in the part of named code.
+    named_full: bool = false,
     /// True after a system call of the region failed.
     stopped: bool = false,
     /// The error of the last entry that failed.
@@ -147,14 +159,25 @@ pub const State = struct {
         return r;
     }
 
-    fn charge(s: *State, n: usize) void {
+    fn charge(s: *State, n: usize, named: bool) void {
         s.used += n;
         s.root().family += n;
+        if (!named) return;
+        s.named_used += n;
+        s.root().named_family += n;
     }
 
     fn uncharge(s: *State) void {
         s.root().family -= s.used;
         s.used = 0;
+        s.root().named_family -= s.named_used;
+        s.named_used = 0;
+        s.named_full = false;
+    }
+
+    /// The bytes left in the part of named code.
+    fn namedBudget(s: *State) usize {
+        return @min(s.budget(), (s.limit() / 4) -| s.root().named_family);
     }
 
     fn budget(s: *State) usize {
@@ -351,6 +374,13 @@ fn checkSum(f: *const Fn) void {
 fn compileCode(s: *State, code: *vm.Code) ?*Fn {
     code.jit_state = .failed;
     if (s.stopped) return null;
+    // An event script parses its script again at each event, so the
+    // bodies of its loops are new named Code values at each event. They
+    // have their own part of the JIT memory.
+    if (code.named and s.named_full) {
+        s.stats.named_stops += 1;
+        return null;
+    }
     if (s.region == null) {
         s.region = mem.Region.init(s.limit()) orelse {
             s.stopped = true;
@@ -375,12 +405,15 @@ fn compileCode(s: *State, code: *vm.Code) ?*Fn {
     // A named Code stays in tier 1. Tier 2 reads each slot from its cell
     // in the frame, and a named Code reads each variable by its name.
     const tier2_count: u32 = if (s.options.tier2 and !code.named) @max(s.options.tier2_count, 1) else 0;
-    switch (tier1.compile(a, r, s.layout, code, s.budget(), tier2_count)) {
+    const bud = if (code.named) s.namedBudget() else s.budget();
+    switch (tier1.compile(a, r, s.layout, code, bud, tier2_count)) {
         .ok => |f| {
             if (s.options.stress & stress_sum != 0) f.sum = sumOf(f);
             if (s.options.on_code) |cb| cb(s.options.on_code_ctx, f.base[0..f.len]);
             s.fns.appendAssumeCapacity(f);
-            s.charge(f.pages(r.page) + f.bytes());
+            const n = f.pages(r.page) + f.bytes();
+            s.charge(n, code.named);
+            if (code.named) s.stats.named_bytes += n;
             s.stats.compiled += 1;
             s.stats.code_bytes += f.len;
             s.stats.data_bytes += f.bytes();
@@ -391,7 +424,11 @@ fn compileCode(s: *State, code: *vm.Code) ?*Fn {
             return f;
         },
         .stopped => s.stopped = true,
-        .failed, .full => {},
+        .full => if (code.named) {
+            s.named_full = true;
+            s.stats.named_stops += 1;
+        },
+        .failed => {},
     }
     s.stats.failed += 1;
     return null;
@@ -604,12 +641,16 @@ fn compileLoop(s: *State, code: *const vm.Code, frame: *interp.Frame, head: u32,
     tier2_x64.assemble(a, &buf, code, &info, &p, s.layout, loop, heads, s.options.stress & stress_guards != 0) catch return null;
     const r = &(s.region orelse return null);
     const pages = std.mem.alignForward(usize, buf.bytes().len, r.page);
-    if (pages > s.budget()) return null;
+    // Tier 2 code counts in the part of named code as tier 1 code does.
+    // A named Code does not get here now, but the count stays right.
+    if (pages > (if (code.named) s.namedBudget() else s.budget())) return null;
     const placed = r.append(buf.bytes()) orelse {
         if (r.stopped) s.stopped = true;
         return null;
     };
-    s.charge(pages);
+    if (s.options.on_code) |cb| cb(s.options.on_code_ctx, placed);
+    s.charge(pages, code.named);
+    if (code.named) s.stats.named_bytes += pages;
     s.stats.tier2 += 1;
     s.stats.code_bytes += placed.len;
     return placed.ptr;
@@ -628,7 +669,7 @@ fn fallback(it: *Interp) Status {
 /// Writes the counts to stderr in the form of `--jit-stats`.
 pub fn printStats(it: *const Interp) void {
     const st: Stats = if (it.jit) |s| s.stats else .{};
-    std.debug.print("jit compiled={d} failed={d} code_bytes={d} data_bytes={d} fallbacks={d} tier2={d} exits={d}\n", .{
-        st.compiled, st.failed, st.code_bytes, st.data_bytes, st.fallbacks, st.tier2, st.exits,
+    std.debug.print("jit compiled={d} failed={d} code_bytes={d} data_bytes={d} fallbacks={d} tier2={d} exits={d} named_bytes={d} named_stops={d}\n", .{
+        st.compiled, st.failed, st.code_bytes, st.data_bytes, st.fallbacks, st.tier2, st.exits, st.named_bytes, st.named_stops,
     });
 }

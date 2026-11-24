@@ -447,7 +447,7 @@ Two costs of the interpreter showed in the tests. Each is outside the JIT:
 - The memory limit is checked at the safe points of the step. One `string length` of a list nested 40 levels in itself allocated 1.1 GB with `--mem 67108864`, before the check stopped it.
 - `recheck` reads each command at each change of the epoch. A loop that defines n procs then uses time in the order of n squared: 40 000 procs took 31 s for 120 000 steps.
 
-A global loop of one million passes of `incr i` used 441.8 M instructions without the JIT and 487.8 M with it. Each variable instruction of named code is a helper call. An event script is a new `Code` at each event, so the JIT compiles it again at each event, and after about 4000 events the JIT memory limit stops the compiler for the interpreter.
+A global loop of one million passes of `incr i` used 441.8 M instructions without the JIT and 487.8 M with it. Each variable instruction of named code is a helper call. An event script parses its script again at each event, so the JIT compiled the bodies of its loops again at each event. After about 4000 events the JIT memory limit stopped the compiler for the interpreter. Named code now has a quarter of the JIT memory. See [What compiles, and when](#what-compiles-and-when).
 
 ## The design of the JIT
 
@@ -469,6 +469,7 @@ A global loop of one million passes of `incr i` used 441.8 M instructions withou
 
 - A proc body compiles to tier 1 at its second call. A body with a loop compiles at its first call. The compile is linear in the count of bytecode instructions, so a low threshold is safe.
 - A script outside a proc (`Code.named`) compiles to tier 1 from task 23 on. Its variables use names, so each variable access calls a helper. It runs in any frame, so `jit.enter` does not check the size of the frame. The verifier rejects a named `Code` with `dict_update`, `dict_update_drop`, `lset`, or `lset_drop`, because their helpers read a cell of the frame by its slot, and a named `Code` whose one `ret` is not its last instruction of the main code.
+- Named code has its own part of the JIT memory: a quarter of `jit_mem_limit`, for an interpreter and its children together. An event script parses its script again at each event, so the body and the step of each of its loops are new named `Code` values at each event, and each one compiles at its own threshold. Each compile uses at least one page. With no part, about 4000 events filled the JIT memory limit and stopped the compiler for the whole interpreter. When the part is full, named code stays in the interpreter, and procs keep the other three quarters. `--jit-stats` prints `named_bytes` and `named_stops`. A cache of the parsed script of an event or an `eval` string is later work in the interpreter: it fixes the cause.
 - With `--jit-threshold 0`, each `Code` compiles before its first run. The tests use this mode.
 - A `Code` that the verifier refuses, or that fails to compile, stays in the interpreter. The compiler tries each `Code` one time.
 - A loop compiles to tier 2 when its tier 1 code counts 1000 passes. The count is a field of the JIT data of the loop.

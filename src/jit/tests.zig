@@ -2076,3 +2076,42 @@ test "jit: named code stays in tier 1 with tier 2 on" {
     defer test_stress = 0;
     try same(script, 2);
 }
+
+var event_ticks: i64 = 0;
+
+fn eventNow(_: ?*anyopaque) i64 {
+    return event_ticks;
+}
+
+fn eventSleep(_: ?*anyopaque, micros: i64) void {
+    event_ticks += micros;
+}
+
+test "jit: named code of events stays in its part of the JIT memory" {
+    if (!jit.built) return error.SkipZigTest;
+    const it = try newInterp();
+    defer freeInterp(it);
+    it.gc_on = false;
+    try it.allow(@intFromEnum(tcl.interp.Capability.event));
+    event_ticks = 0;
+    it.event_host = .{ .now = eventNow, .sleep = eventSleep };
+    if (!it.enableJit(.{})) return error.SkipZigTest;
+    // Each event parses its script again, so the body and the step of
+    // the loop are new named Code values that each run three times.
+    _ = try it.eval(
+        \\set n 0
+        \\set script {incr n; for {set i 0} {$i < 3} {incr i} {incr t}; if {$n < 10000} { after 0 $script } else { set done 1 }}
+        \\after 0 $script
+        \\vwait done
+    );
+    const s = it.jit.?;
+    try testing.expect(s.stats.named_bytes > 0);
+    try testing.expect(s.stats.named_stops > 0);
+    try testing.expect(s.named_used <= s.options.mem_limit / 4);
+    try testing.expect(s.used < s.options.mem_limit / 2);
+    // A proc defined after the events still compiles.
+    const before = s.stats.compiled;
+    const v = try it.eval("proc f {n} {set t 0; for {set i 0} {$i < $n} {incr i} {incr t $i}; return $t}; f 10");
+    try testing.expectEqual(@as(i64, 45), v.asInt().?);
+    try testing.expectEqual(before + 1, s.stats.compiled);
+}
