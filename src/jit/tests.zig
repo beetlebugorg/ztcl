@@ -845,6 +845,7 @@ fn runModeOpts(script: []const u8, opts: ?jit.Options, limit: u64, min_compiled:
     const code = it.getVarPlain("::errorCode") catch Value.empty;
     try w.print(a, "output: {s}\nerrorInfo: {s}\nerrorCode: {s}\nsteps: {d}\n", .{ out.items, try it.str(info), try it.str(code), limit - it.step_limit });
     if (stress == 0) try w.print(a, "mem: {d}\n", .{it.memUsed()});
+    last_peak = it.counter.mem_peak;
     if (on) {
         const st = it.jit.?.stats;
         last_tier2 = st.tier2;
@@ -863,6 +864,8 @@ var allow_interp = false;
 var test_tier2 = false;
 /// The memory limit of the scripts of a test, when not null.
 var test_mem_limit: ?usize = null;
+/// The highest byte count of the last run.
+var last_peak: usize = 0;
 /// The tier 2 loops and the exits of the last run with the JIT.
 var last_tier2: u64 = 0;
 var last_exits: u64 = 0;
@@ -1437,6 +1440,52 @@ test "tier 2: a memory limit that a script passes before the loop" {
         \\proc f {} { set l {}; set s x; for {set i 0} {$i < 30} {incr i} { append s $s }; set k 0; for {set i 0} {$i < 100} {incr i} { incr k }; list [string length $s] $k }
         \\f
     , 0);
+}
+
+/// Scripts in which one command builds a result far above a memory
+/// limit of 8 MiB: 64 MiB or more without the hard cap of the counter.
+const builder_scripts = [_][]const u8{
+    // The string form of a list that holds itself twice at each level.
+    "proc f {} {set l {a b}; for {set i 0} {$i < 18} {incr i} {set l [list $l $l]}; string length $l}; f",
+    // The issue case: 40 levels.
+    "proc f {} {set l {a b}; for {set i 0} {$i < 40} {incr i} {set l [list $l $l]}; string length $l}; f",
+    "proc f {} {set d {a b}; for {set i 0} {$i < 18} {incr i} {set d [dict create x $d y $d]}; string length $d}; f",
+    "proc f {} {set l {a b}; for {set i 0} {$i < 18} {incr i} {set l [list $l $l]}; llength [lsort [list $l x]]}; f",
+    "proc f {} {string length [string repeat x 64000000]}; f",
+    "proc f {} {llength [lrepeat 8000000 x]}; f",
+    "proc f {} {set s [string repeat x 65536]; string length [join [lrepeat 1000 $s] {}]}; f",
+    "proc f {} {string length [format [string repeat %1000000s 64] {*}[lrepeat 64 x]]}; f",
+    "proc f {} {set s [string repeat x 65536]; set t {}; append t {*}[lrepeat 1000 $s]; string length $t}; f",
+    "proc f {} {string length [binary format a16000000a16000000a16000000a16000000 x x x x]}; f",
+    "proc f {} {set s [string repeat x 2000000]; llength [split $s {}]}; f",
+    "proc f {} {set s [string repeat x 2000000]; llength [regexp -all -inline x $s]}; f",
+    "proc f {} {set s [string repeat x 2000000]; string length [regsub -all x $s [string repeat & 32]]}; f",
+    "proc f {} {set s [string repeat x 2000000]; string length [subst [string repeat {$s} 64]]}; f",
+    "proc f {} {set s [string repeat x 2000000]; string length [string map [list x [string repeat x 32]] $s]}; f",
+    "proc f {} {set s [string repeat x 2000000]; string length [concat {*}[lrepeat 64 $s]]}; f",
+};
+
+test "one command that builds a large result stops below twice the memory limit" {
+    const limit: usize = 8 << 20;
+    test_mem_limit = limit;
+    defer test_mem_limit = null;
+    const want = "error TclError: the script used too much memory\noutput: \nerrorInfo: the script used too much memory\nerrorCode: NONE\n";
+    for (builder_scripts) |script| {
+        const ref = try runMode(script, false, std.math.maxInt(u64), 0);
+        defer ref.deinit();
+        errdefer std.debug.print("script:\n{s}\npeak: {d}\n{s}\n", .{ script, last_peak, ref.text });
+        try testing.expect(std.mem.startsWith(u8, ref.text, want));
+        try testing.expect(last_peak <= 2 * limit);
+        if (!jit.built) continue;
+        for ([_]bool{ false, true }) |t2| {
+            test_tier2 = t2;
+            defer test_tier2 = false;
+            const got = try runMode(script, true, std.math.maxInt(u64), 1);
+            defer got.deinit();
+            try testing.expectEqualStrings(ref.text, got.text);
+            try testing.expect(last_peak <= 2 * limit);
+        }
+    }
 }
 
 test "tier 2: links, a string bound, break, and continue" {

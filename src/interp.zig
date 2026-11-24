@@ -547,15 +547,40 @@ pub const Counting = struct {
     /// keeps the check of the memory limit one load in each interpreter.
     followers: ?*Counting = null,
     next_follower: ?*Counting = null,
+    /// True after the counter refused a request above the hard cap. The
+    /// next limit check then stops the script, and `catch` cannot catch
+    /// the error. `evalTop` clears the flag.
+    refused: bool = false,
 
     fn sync(c: *Counting) void {
         c.mem_peak = @max(c.mem_peak, c.used);
-        c.trip = if (c.used >= c.gc_at) std.math.maxInt(usize) else c.used;
+        c.trip = if (c.used >= c.gc_at or c.refused) std.math.maxInt(usize) else c.used;
         var f = c.followers;
         while (f) |x| : (f = x.next_follower) {
             x.used = c.used;
             x.trip = c.trip;
+            x.refused = c.refused;
         }
+    }
+
+    /// True when `more` bytes fit below the hard cap: twice the memory
+    /// limit of the root interpreter. Each growth step of a builder,
+    /// such as the string form of a large list, gets its memory through
+    /// this check. So the cap holds inside one command, before the next
+    /// limit check. A request above the cap sets `refused` and fails.
+    fn fits(c: *Counting, more: usize) bool {
+        const root: *const Interp = @alignCast(@fieldParentPtr("counter", c));
+        if (c.used +| more <= root.mem_limit +| root.mem_limit) return true;
+        c.refused = true;
+        c.sync();
+        return false;
+    }
+
+    /// Clears `refused` after the error reached the top level.
+    pub fn clearRefused(c: *Counting) void {
+        if (!c.refused) return;
+        c.refused = false;
+        c.sync();
     }
 
     /// Sets the value of `used` at which the next collection is due.
@@ -589,6 +614,7 @@ pub const Counting = struct {
 
     fn alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ra: usize) ?[*]u8 {
         const c: *Counting = @ptrCast(@alignCast(ctx));
+        if (!c.fits(len)) return null;
         const p = c.child.rawAlloc(len, alignment, ra) orelse return null;
         c.used += len;
         c.sync();
@@ -597,6 +623,7 @@ pub const Counting = struct {
 
     fn resize(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ra: usize) bool {
         const c: *Counting = @ptrCast(@alignCast(ctx));
+        if (new_len > memory.len and !c.fits(new_len - memory.len)) return false;
         if (!c.child.rawResize(memory, alignment, new_len, ra)) return false;
         c.used = c.used - memory.len + new_len;
         c.sync();
@@ -605,6 +632,7 @@ pub const Counting = struct {
 
     fn remap(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ra: usize) ?[*]u8 {
         const c: *Counting = @ptrCast(@alignCast(ctx));
+        if (new_len > memory.len and !c.fits(new_len - memory.len)) return null;
         const p = c.child.rawRemap(memory, alignment, new_len, ra) orelse return null;
         c.used = c.used - memory.len + new_len;
         c.sync();
@@ -956,7 +984,16 @@ pub const Interp = struct {
         // high, so the next clean point of `vm.exec` collects.
         const waiting = gc.precise and !collected and root.gc_on and it.gc_scope != 0;
         if (stress) c.rearm(0) else if (!waiting) c.rearm(next);
-        if (it.counter.used > it.mem_limit) return it.fail("the script used too much memory", .{});
+        if (it.overLimit()) return it.memError();
+    }
+
+    /// The error at the memory limit. Its message is static, so the
+    /// error needs no allocation. The trace has only the message.
+    pub fn memError(it: *Interp) Error {
+        it.result = .{ .str = "the script used too much memory" };
+        it.error_code = .{ .str = "NONE" };
+        it.in_error = false;
+        return error.TclError;
     }
 
     /// Precise builds: records a call from `vm.exec`. A proc continues
@@ -1107,6 +1144,7 @@ pub const Interp = struct {
         it.* = .{ .counter = counter, .own_heap = own, .heap = heap, .kids = keep.kids, .gc_on = keep.gc_on, .gc_roots = keep.gc_roots, .held = keep.held, .pins = keep.pins, .jit = keep.jit };
         it.held.clearRetainingCapacity();
         it.pins.clearRetainingCapacity();
+        it.counter.refused = false;
         if (it.isRoot()) it.counter.rearm(if (it.heap.stress != 0) 0 else @import("heap.zig").min_threshold);
         it.mem_limit = keep.mem_limit;
         it.step_limit = keep.step_limit;
@@ -1139,8 +1177,10 @@ pub const Interp = struct {
         return it.counter.used;
     }
 
+    /// True above the memory limit, or after the counter refused a
+    /// request above the hard cap.
     pub fn overLimit(it: *const Interp) bool {
-        return it.counter.used > it.mem_limit;
+        return it.counter.used > it.mem_limit or it.counter.refused;
     }
 
     fn start(it: *Interp) Allocator.Error!void {
@@ -1329,10 +1369,25 @@ pub const Interp = struct {
             it.gc_scope = 0;
             if (gc.precise) it.gc_token = false;
         };
-        return it.evalTopInner(s) catch |e| {
+        if (outer) it.rootCounter().clearRefused();
+        var r = it.evalTopInner(s);
+        // A refused request becomes the error of the memory limit, also
+        // when a command did not pass the allocation error on.
+        if (it.counter.refused) {
+            r = it.memError();
+            if (outer) it.rootCounter().clearRefused();
+        }
+        return r catch |e| {
             if (e == error.TclError) try it.finishError();
             return e;
         };
+    }
+
+    /// The counter of the root interpreter. Only it counts allocations.
+    fn rootCounter(it: *Interp) *Counting {
+        var root = it;
+        while (root.parent) |p| root = p;
+        return &root.counter;
     }
 
     fn evalTopInner(it: *Interp, s: *Script) Error!Value {
@@ -1675,7 +1730,15 @@ pub const Interp = struct {
         return std.fmt.allocPrint(it.alloc(), "{s}::{s}", .{ it.ns, name });
     }
 
-    pub fn noteLine(it: *Interp, c: *Cmd, e: Error) Error {
+    /// The error of the memory limit in place of an allocation error
+    /// after a refused request. Each other error stays.
+    pub inline fn limitError(it: *Interp, e: Error) Error {
+        if (e == error.OutOfMemory and it.counter.refused) return it.memError();
+        return e;
+    }
+
+    pub fn noteLine(it: *Interp, c: *Cmd, raw: Error) Error {
+        const e = it.limitError(raw);
         if (e != error.TclError) return e;
         if (it.error_line == 0) it.error_line = c.line;
         it.proc_line = c.line;

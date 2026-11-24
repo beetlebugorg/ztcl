@@ -1326,12 +1326,14 @@ pub fn run(it: *Interp, code: *Code) Error!Value {
             // A cold block counts as the place of its guard.
             if (code.ins[pc].op == .eval_cmd and code.ins[pc].x == 1) pc = code.ins[pc].b;
             switch (e) {
-                error.TclError => {
+                error.TclError, error.OutOfMemory => {
+                    const err = it.limitError(e);
+                    if (err != error.TclError) return err;
                     for (code.ranges) |r| {
                         if (pc < r.start or pc >= r.end) continue;
-                        if (r.cmd) |cmd| _ = it.noteLine(cmd, e) catch {};
+                        if (r.cmd) |cmd| _ = it.noteLine(cmd, err) catch {};
                     }
-                    return e;
+                    return err;
                 },
                 error.TclBreak, error.TclContinue => {
                     const target = for (code.ranges) |r| {
