@@ -444,6 +444,22 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return Value.empty;
 }
 
+fn cmdEval(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    var i: usize = 1;
+    var name: ?[]const u8 = null;
+    if (argv.len > 2 and eql(try it.str(argv[1]), "-lock")) {
+        name = try it.str(argv[2]);
+        i = 3;
+    }
+    if (i >= argv.len) return it.wrongArgs("thread::eval ?-lock <mutexHandle>? arg ?arg...?");
+    const tsync = @import("tsync.zig");
+    const key = try tsync.lockFor(it, name);
+    defer tsync.unlockFor(it, key);
+    const text = if (argv.len - i == 1) try it.str(argv[i]) else try @import("cmds.zig").concat(it, argv[i..]);
+    const s = try it.compile(try it.alloc().dupe(u8, text));
+    return it.evalScript(s);
+}
+
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     const list = .{
         .{ "thread::create", cmdCreate },
@@ -461,6 +477,7 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
         .{ "thread::wait", cmdWait },
         .{ "thread::join", cmdJoin },
         .{ "thread::configure", cmdConfigure },
+        .{ "thread::eval", cmdEval },
     };
     inline for (list) |e| try it.register(e[0], e[1]);
     _ = try it.internNs("thread");

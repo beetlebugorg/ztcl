@@ -17,7 +17,7 @@
 //! its queue, so two threads that send to each other make progress.
 //!
 //! Locks: a group lock guards the registry and the counts, and a worker
-//! lock guards one queue. Code takes the group lock first. Each wait is
+//! lock guards one queue. Code locks the group lock first. Each wait is
 //! a slice of at most 50 ms on a futex. After each slice the waiter
 //! checks its flags, so a stop reaches a thread that waits.
 //!
@@ -25,7 +25,7 @@
 //! writes zero to `mem_limit` of the target interpreter, both under the
 //! worker lock. The next safe point of the target sees the memory count
 //! above the limit and calls `Interp.memPoint`, which calls `safePoint`.
-//! The target takes the flags and restores the limit under the same
+//! The target reads the flags and restores the limit under the same
 //! lock. So no flag is lost, and no zero store comes after the restore.
 //! `Interp.overLimit` compares with the limit of the worker, so a memory
 //! check between the two steps gives no false error.
@@ -614,7 +614,7 @@ pub fn overLimit(it: *const Interp) bool {
 pub fn safePoint(it: *Interp, w: *Worker) Error!void {
     if (w.is_main) return;
     // A zero in `mem_limit` comes only with a flag, and `checkFlags`
-    // restores the limit when it takes the flag.
+    // restores the limit when it reads the flag.
     try checkFlags(it, w);
 }
 
@@ -890,6 +890,7 @@ fn finish(w: *Worker, x: *Interp) void {
     // No new message reaches the queue now. Each waiting sender gets
     // an error.
     failQueue(w);
+    if (g.sync) |_| @import("tsync.zig").releaseOwned(g, w.id);
     if (g.tsv) |_| @import("tsv.zig").releaseOwned(g, w.id);
     const left = x.step_limit;
     g.lock.lock();
@@ -1293,6 +1294,7 @@ pub fn register(it: *Interp) Allocator.Error!void {
     if (it.worker == null) try startGroup(it);
     try @import("threadcmd.zig").register(it);
     try @import("tsv.zig").register(it);
+    try @import("tsync.zig").register(it);
     if (it.capabilities & @intFromEnum(interp.Capability.event) != 0) try @import("event.zig").setSource(it);
     if (it.findCommand("package") != null) _ = it.eval("package provide Thread 2.8.11") catch {};
 }
