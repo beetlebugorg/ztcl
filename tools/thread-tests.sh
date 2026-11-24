@@ -8,7 +8,7 @@
 #   -n  Runs each file this many times in a row. The default is 1.
 #
 # Each file runs after tests/thread/lib.tcl in one interpreter with the
-# capabilities thread, event, and package. A file passes when its last
+# capabilities thread, event, package, and clock. A file passes when its last
 # line is "pass N fail 0" and the runner exits with 0. Each run has a
 # time limit of 120 seconds.
 # SPDX-License-Identifier: BSD-2-Clause
@@ -36,7 +36,7 @@ for f in "$@"; do
     while [ $n -lt "$runs" ]; do
         n=$((n + 1))
         # shellcheck disable=SC2086
-        out=$(timeout 120 "$tcl" --allow thread,event,package $extra "$dir/lib.tcl" "$f" 2>&1)
+        out=$(timeout 120 "$tcl" --allow thread,event,package,clock $extra "$dir/lib.tcl" "$f" 2>&1)
         rc=$?
         last=$(printf '%s\n' "$out" | tail -n 1)
         case $last in
