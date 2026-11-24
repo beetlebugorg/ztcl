@@ -348,7 +348,19 @@ pub fn tierUp(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) usize {
     }
     if (!rec.tried) {
         rec.tried = true;
-        rec.code = compileLoop(s, ctx.code, ctx.frame, pc, @intCast(k), @intCast(f.heads.len));
+        rec.code = compileLoop(s, ctx.code, ctx.frame, pc, @intCast(k), @intCast(f.heads.len), &rec.counts);
+    }
+    // A loop with calls that runs few passes for each entry uses more
+    // instructions in tier 2 than in tier 1: the entry block, the exit,
+    // and the calls of `tier_up` and `resume_at`. After `probe_entries`
+    // entries, such a loop runs in tier 1 only.
+    if (rec.code != null and rec.counts) {
+        rec.entries +|= 1;
+        if (rec.entries == probe_entries and f.counters.len == 2 * f.loops.len + 1 and
+            f.counters[f.loops.len + 1 + k] < probe_entries * min_passes)
+        {
+            rec.code = null;
+        }
     }
     // A compiled loop runs in tier 2 again at the next pass of its head
     // in tier 1. A loop that does not compile runs in tier 1 only.
@@ -366,6 +378,11 @@ pub const stress_guards: u32 = 32;
 /// The failed guards of one loop before the loop runs in tier 1 only.
 pub const max_exits = 8;
 
+/// The entries of a loop with calls before the check of its passes, and
+/// the least mean count of passes for each entry that keeps it in tier 2.
+pub const probe_entries = 64;
+pub const min_passes = 16;
+
 /// The helper `resume_at`: the address of the tier 1 code of `pc` when
 /// the entry checks of `enter` pass. Else it writes `pc` and `sp` to the
 /// context and gives 0, and the code returns status 2. `kind` has the
@@ -378,7 +395,7 @@ pub fn resumeAt(ctx: *EnterCtx, pc: u32, sp: u32, kind: u32) callconv(.c) usize 
     if (kind & (tier2_x64.exit_guard | tier2_x64.exit_forced) != 0) {
         if (ctx.it.jit) |s| s.stats.exits += 1;
     }
-    if (k < f.loops.len and f.counters.len == f.loops.len + 1) {
+    if (k < f.loops.len and f.counters.len == 2 * f.loops.len + 1) {
         if (kind & tier2_x64.exit_forced != 0) {
             f.stress_at = @intCast((f.stress_at + 1) % tier1.stress_counts.len);
             f.counters[f.loops.len] = tier1.stress_counts[f.stress_at];
@@ -402,7 +419,7 @@ pub fn resumeAt(ctx: *EnterCtx, pc: u32, sp: u32, kind: u32) callconv(.c) usize 
 
 /// Compiles the loop at `head` with the kinds of the cells of `frame`
 /// now. Null when the loop is not eligible or a step fails.
-fn compileLoop(s: *State, code: *const vm.Code, frame: *interp.Frame, head: u32, loop: u32, heads: u32) ?[*]const u8 {
+fn compileLoop(s: *State, code: *const vm.Code, frame: *interp.Frame, head: u32, loop: u32, heads: u32, counts: *bool) ?[*]const u8 {
     if (s.stopped) return null;
     const a = s.backing;
     var info = (verify.verify(a, code) catch return null) orelse return null;
@@ -423,6 +440,7 @@ fn compileLoop(s: *State, code: *const vm.Code, frame: *interp.Frame, head: u32,
     var p = (tier2.plan(a, code, &info, head, kinds) catch return null) orelse return null;
     defer p.deinit();
     if (!tier2_x64.eligible(code, &info, &p)) return null;
+    counts.* = p.calls;
     var buf = @import("jit/x64.zig").Asm.init(a);
     defer buf.deinit();
     tier2_x64.assemble(a, &buf, code, &info, &p, s.layout, loop, heads, s.options.stress & stress_guards != 0) catch return null;

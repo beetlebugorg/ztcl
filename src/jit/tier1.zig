@@ -36,7 +36,8 @@ pub const Fn = struct {
     depth: []const u16,
     /// The loop heads of the verifier, and a pass counter and a record
     /// of tier 2 for each one. Empty when tier 2 is off. One more counter
-    /// after the pass counters serves the stress mode of tier 2.
+    /// after the pass counters serves the stress mode of tier 2. Then one
+    /// count of the passes in tier 2 for each loop head.
     heads: []const u32 = &.{},
     /// The place in `stress_counts` of the stress counter.
     stress_at: u8 = 0,
@@ -70,6 +71,10 @@ pub const Loop = struct {
     tried: bool = false,
     /// The exits of failed guards that the stress mode did not force.
     exits: u8 = 0,
+    /// True when the code counts its passes: a loop with calls.
+    counts: bool = false,
+    /// The entries into the tier 2 code.
+    entries: u32 = 0,
 };
 
 /// The counts of the stress schedule of tier 2: the Nth check of a guard
@@ -110,10 +115,13 @@ pub fn compile(a: Allocator, region: *mem.Region, l: layout.Layout, code: *const
     const heads = a.dupe(u32, info.loop_heads[0..nh]) catch return .failed;
     var keep_heads = false;
     defer if (!keep_heads) a.free(heads);
-    const counters = a.alloc(u32, if (tier2) nh + 1 else 0) catch return .failed;
+    const counters = a.alloc(u32, if (tier2) 2 * nh + 1 else 0) catch return .failed;
     defer if (!keep_heads) a.free(counters);
     @memset(counters, tier2_count);
-    if (tier2) counters[nh] = stress_counts[0];
+    if (tier2) {
+        counters[nh] = stress_counts[0];
+        @memset(counters[nh + 1 ..], 0);
+    }
     const loops = a.alloc(Loop, nh) catch return .failed;
     defer if (!keep_heads) a.free(loops);
     @memset(loops, .{});

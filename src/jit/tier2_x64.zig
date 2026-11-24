@@ -604,6 +604,10 @@ const Emitter = struct {
             .load => return e.loadCell(pc),
             .store, .store_pop => return e.storeCell(pc),
             .incr_value, .jump_false, .jump_true, .to_bool => return e.stackIntOp(pc),
+            .access => if (i.x <= 1) return e.listAccess(pc) else {
+                try e.callOut(pc, tier1.Emitter.helperOf(i), true);
+                return false;
+            },
             else => {
                 try e.callOut(pc, tier1.Emitter.helperOf(i), tier2.runsNoScript(i));
                 return false;
@@ -622,7 +626,15 @@ const Emitter = struct {
                 try s.movRM(.rax, .{ .base = .rax, .disp = @offsetOf(jit.EnterCtx, "empty") });
                 try e.copy(abi.stack, @as(i64, d) * l.value_size, .rax, 0);
             },
-            .jump => try s.jmp(try e.target(pc, i.a)),
+            .jump => {
+                if (pc == e.p.back and e.p.calls) {
+                    // A loop with calls counts its passes for `tier_up`.
+                    try s.movRM(.rax, ctxSlot());
+                    try s.movRM(.rax, .{ .base = .rax, .disp = @offsetOf(jit.EnterCtx, "counters") });
+                    try s.aluMI32(.add, try x64.at(.rax, (@as(i64, e.heads) + 1 + e.loop) * 4), 1);
+                }
+                try s.jmp(try e.target(pc, i.a));
+            },
             .push => if (e.code.lits[i.a] == .int) {
                 try e.litInt(i.a, e.place(d));
             } else {
@@ -1261,6 +1273,56 @@ const Emitter = struct {
         return true;
     }
 
+    /// `llength` and `lindex` of a list value in the value stack, as in
+    /// tier 1: the length, or the item, or the empty string for an index
+    /// out of range. Each other value goes to the helper.
+    fn listAccess(e: *Emitter, pc: u32) Error!bool {
+        const s = e.s;
+        const l = e.l;
+        const i = e.code.ins[pc];
+        const d = e.depth(pc);
+        const list = if (i.x == 0) d - 1 else d - 2;
+        if (e.kindAt(pc, list) != .any or (i.x == 0 and e.kindAt(pc + 1, d - 1) != .int)) {
+            try e.callOut(pc, tier1.Emitter.helperOf(i), true);
+            return false;
+        }
+        const slow_l = try e.slow(pc, null);
+        try s.cmpMI8(try e.stackAt(list, l.value_tag), @intCast(l.tag_list));
+        try s.jcc(.ne, slow_l);
+        if (i.x == 0) {
+            // The plan gives the length the kind `int`.
+            try s.movRM(e.place(d - 1), try e.stackAt(list, l.value_len));
+            return true;
+        }
+        switch (e.kindAt(pc, d - 1)) {
+            .int => try s.movRR(.rcx, e.place(d - 1)),
+            .any => {
+                try s.cmpMI8(try e.stackAt(d - 1, l.value_tag), @intCast(l.tag_int));
+                try s.jcc(.ne, slow_l);
+                try s.movRM(.rcx, try e.stackAt(d - 1, l.value_payload));
+            },
+            .double => {
+                try e.callOut(pc, .lindex, true);
+                return false;
+            },
+        }
+        // An unsigned compare: a negative index is out of range.
+        const empty = try s.newLabel();
+        const have = try s.newLabel();
+        try s.aluRM(.cmp, .rcx, try e.stackAt(list, l.value_len));
+        try s.jcc(.ae, empty);
+        try e.scale(.rax, .rcx);
+        try s.movRM(.rcx, try e.stackAt(list, l.value_payload));
+        try s.aluRM(.add, .rax, try x64.at(.rcx, l.obj_buf));
+        try s.jmp(have);
+        s.bind(empty);
+        try s.movRM(.rax, ctxSlot());
+        try s.movRM(.rax, .{ .base = .rax, .disp = @offsetOf(jit.EnterCtx, "empty") });
+        s.bind(have);
+        try e.copy(abi.stack, @as(i64, list) * l.value_size, .rax, 0);
+        return true;
+    }
+
     /// `load` of a slot that stays in its cell: a copy of a plain cell,
     /// or the helper.
     fn loadCell(e: *Emitter, pc: u32) Error!bool {
@@ -1300,7 +1362,8 @@ const Emitter = struct {
             const x = e.slows.items[k];
             e.s.bind(x.at);
             if (x.saved) |r| try e.s.pop(r);
-            try e.call(x.pc, tier1.Emitter.helperOf(e.code.ins[x.pc]), false, false);
+            const i = e.code.ins[x.pc];
+            try e.call(x.pc, tier1.Emitter.helperOf(i), tier2.runsNoScript(i), false);
         }
     }
 
