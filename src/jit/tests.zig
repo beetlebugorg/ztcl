@@ -2650,3 +2650,29 @@ test "tier 2: a loop condition with a guard stops at each small step limit" {
     }
     try testing.expect(tier2_runs > 0);
 }
+
+test "the verifier fails a byte that is no opcode where no path reaches" {
+    // The jit-fuzz --verify --tier2 mode found it with the random Code
+    // `step; jump 0; ...; jf_vi` with a target of 0, and a byte that is
+    // no member of Op after the loop. The verifier accepted the Code,
+    // because no path reached the byte. The plan of tier 2 then switched
+    // on that opcode: a panic in a build with safety checks.
+    const it = try newInterp();
+    defer freeInterp(it);
+    _ = try it.eval(dead_part_proc);
+    const code = try procCode(it, "f");
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var m = try Mutable.init(arena.allocator(), code);
+    // The guard of `continue` becomes a step, so the commands after
+    // `continue` have no path.
+    const k = for (m.ins, 0..) |i, k| {
+        if (k > 0 and i.op == .jump and i.a > k and m.ins[k - 1].op == .guard) break k;
+    } else return error.NoContinue;
+    m.ins[k - 1] = .{ .op = .step };
+    var info = (try verify.verify(testing.allocator, &m.code)).?;
+    defer info.deinit(testing.allocator);
+    try testing.expect(!info.reachable[k + 2]);
+    std.mem.asBytes(&m.ins[k + 2])[0] = 200;
+    try testing.expect(!try verifies(&m.code));
+}
