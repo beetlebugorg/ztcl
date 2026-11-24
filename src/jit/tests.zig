@@ -2626,3 +2626,27 @@ test "tier 2: a loop that pops a place below the depth of its head stays in tier
     try testing.expectEqualStrings("step limit reached", try it.str(it.result));
     try testing.expectEqual(before, it.jit.?.stats.tier2);
 }
+
+test "tier 2: a loop condition with a guard stops at each small step limit" {
+    if (!jit.built) return error.SkipZigTest;
+    // The condition `[incr i] <= $n` puts a guard in the part of the
+    // loop head, so tier 2 checks steps at the head. With a step limit
+    // below the steps of that part, tier 2 exited at the head with no
+    // step, and before the counter rule of resume_at tier 1 called
+    // tier_up at once. The script then looped with no step. This test
+    // shows that a script of real Tcl reaches the case.
+    const script = "proc f {n} { set s 0; set i 0; while {[incr i] <= $n} { incr s $i }; return $s }; f 1200";
+    var tier2_runs: usize = 0;
+    for (0..64) |limit| {
+        const ref = try runModeOpts(script, null, limit, 0, 0);
+        defer ref.deinit();
+        const got = try runModeOpts(script, .{ .threshold = 0, .tier2 = true, .tier2_count = 1 }, limit, 0, 0);
+        defer got.deinit();
+        testing.expectEqualStrings(ref.text, got.text) catch |e| {
+            std.debug.print("step limit {d}\n", .{limit});
+            return e;
+        };
+        if (last_tier2 > 0) tier2_runs += 1;
+    }
+    try testing.expect(tier2_runs > 0);
+}
