@@ -80,10 +80,48 @@ pub const State = struct {
     gen: u64,
     /// The facts of the layout probe.
     layout: layout_mod.Layout,
+    /// The executable region. The first compile reserves it.
+    region: ?mem.Region = null,
+    /// Each compiled function, for `flush`.
+    fns: std.ArrayList(*tier1.Fn) = .empty,
+    /// The state of the parent interpreter. The JIT memory limit holds
+    /// for an interpreter and its children together.
+    parent: ?*State = null,
+    /// The bytes of the pages and the records of this state.
+    used: usize = 0,
+    /// The bytes of this state and of each child state.
+    family: usize = 0,
+    /// True after a system call of the region failed.
+    stopped: bool = false,
+
+    fn root(s: *State) *State {
+        var r = s;
+        while (r.parent) |p| r = p;
+        return r;
+    }
+
+    fn charge(s: *State, n: usize) void {
+        s.used += n;
+        s.root().family += n;
+    }
+
+    fn uncharge(s: *State) void {
+        s.root().family -= s.used;
+        s.used = 0;
+    }
+
+    fn budget(s: *State) usize {
+        return s.options.mem_limit -| s.root().family;
+    }
 };
 
 const layout_mod = @import("jit/layout.zig");
 const mem = @import("jit/mem.zig");
+const tier1 = @import("jit/tier1.zig");
+const helpers = @import("jit/helpers.zig");
+const gc = @import("gc.zig");
+
+pub const Fn = tier1.Fn;
 
 /// The result of the checks of `usable`, for the whole process.
 var usable_state = std.atomic.Value(u8).init(0);
@@ -112,9 +150,10 @@ fn newGen() u64 {
 
 /// Turns the JIT on for `it`. Returns false and changes no state when
 /// the build has no JIT, the layout probe fails, or the system has no
-/// executable memory.
+/// executable memory. A build with the precise roots of WebAssembly
+/// (`-Dgc-precise`) has no JIT.
 pub fn enable(it: *Interp, opts: Options) bool {
-    if (!built) return false;
+    if (!built or gc.precise) return false;
     if (it.jit) |s| {
         s.options = opts;
         return true;
@@ -131,14 +170,21 @@ pub fn enable(it: *Interp, opts: Options) bool {
 pub fn inherit(child: *Interp, parent: *const Interp) void {
     if (!built) return;
     const p = parent.jit orelse return;
-    _ = enable(child, p.options);
+    if (!enable(child, p.options)) return;
+    child.jit.?.parent = p;
 }
 
-/// Frees each compiled function of `it`. The state and its options
-/// stay. Call it only when no script of `it` runs.
+/// Frees each compiled function of `it` and its executable region. The
+/// state and its options stay. Call it only when no script of `it`
+/// runs, and when no `Code` of the old generation can run again.
 pub fn flush(it: *Interp) void {
     if (!built) return;
     const s = it.jit orelse return;
+    for (s.fns.items) |f| f.free(s.backing);
+    s.fns.clearAndFree(s.backing);
+    if (s.region) |*r| r.deinit();
+    s.region = null;
+    s.uncharge();
     s.gen = newGen();
 }
 
@@ -149,6 +195,114 @@ pub fn destroy(it: *Interp) void {
     flush(it);
     it.jit = null;
     s.backing.destroy(s);
+}
+
+/// True when `code` has a loop: a jump to its own address or before.
+fn hasLoop(code: *const vm.Code) bool {
+    for (code.ins, 0..) |i, pc| {
+        const t = switch (i.op) {
+            .jump, .jump_false, .jump_true => i.a,
+            .jf_vv, .jf_vi => i.c,
+            .foreach_next, .str_eq_jump => i.b,
+            else => continue,
+        };
+        if (t <= pc) return true;
+    }
+    return false;
+}
+
+/// The function of `code`, after a compile when the count of calls
+/// reaches the threshold. Null runs the interpreter. No failure is an
+/// error of a script.
+pub fn prepare(it: *Interp, code: *vm.Code) ?*Fn {
+    const s = it.jit.?;
+    switch (code.jit_state) {
+        .ready => {
+            // A function of another generation or another state is never
+            // read. The code then stays in the interpreter.
+            if (code.jit_gen != s.gen) return null;
+            return @ptrCast(@alignCast(code.jit.?));
+        },
+        .failed => return null,
+        .untried => {},
+    }
+    if (code.named) {
+        code.jit_state = .failed;
+        return null;
+    }
+    code.jit_calls +|= 1;
+    if (code.jit_calls < s.options.threshold and !hasLoop(code)) return null;
+    return compileCode(s, code);
+}
+
+fn compileCode(s: *State, code: *vm.Code) ?*Fn {
+    code.jit_state = .failed;
+    if (s.stopped) return null;
+    if (s.region == null) {
+        s.region = mem.Region.init(s.options.mem_limit) orelse {
+            s.stopped = true;
+            return null;
+        };
+    }
+    const r = &s.region.?;
+    s.fns.ensureUnusedCapacity(s.backing, 1) catch return null;
+    switch (tier1.compile(s.backing, r, s.layout, code, s.budget())) {
+        .ok => |f| {
+            s.fns.appendAssumeCapacity(f);
+            s.charge(f.pages(r.page) + f.bytes());
+            s.stats.compiled += 1;
+            s.stats.code_bytes += f.len;
+            s.stats.data_bytes += f.bytes();
+            s.stats.ins += code.ins.len;
+            code.jit = f;
+            code.jit_gen = s.gen;
+            code.jit_state = .ready;
+            return f;
+        },
+        .stopped => s.stopped = true,
+        .failed, .full => {},
+    }
+    s.stats.failed += 1;
+    return null;
+}
+
+const Error = interp.Error;
+
+/// Runs the function `f` of `code` from `pc.*` with depth `sp.*`. Null
+/// runs `exec` at `pc.*` and `sp.*`: the entry is not valid, or the code
+/// exits to the interpreter. On an error, `pc.*` and `sp.*` are the
+/// place of the error, as with `exec`.
+pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp: *u32) ?(Error!Value) {
+    const p = pc.*;
+    const frame = it.frame;
+    if (p >= code.ins.len or p >= f.entries.len) return fallback(it);
+    const off = f.entries[p];
+    if (off == tier1.no_entry or off >= f.len) return fallback(it);
+    if (sp.* != f.depth[p]) return fallback(it);
+    if (frame.vars.items.len < code.names.len) return fallback(it);
+    var ctx: EnterCtx = .{
+        .it = it,
+        .code = code,
+        .frame = frame,
+        .stack = stack,
+        .helpers = &helpers.table,
+        .target = @intFromPtr(f.base) + off,
+        .pc = p,
+        .sp = sp.*,
+        .err = 0,
+    };
+    const func: *const fn (*EnterCtx) callconv(.c) u32 = @ptrCast(@alignCast(f.base));
+    const status = func(&ctx);
+    if (status == tier1.status_done) return stack[ctx.sp - 1];
+    pc.* = ctx.pc;
+    sp.* = ctx.sp;
+    if (status == tier1.status_error) return helpers.errorOf(&ctx);
+    return fallback(it);
+}
+
+fn fallback(it: *Interp) ?(Error!Value) {
+    it.jit.?.stats.fallbacks += 1;
+    return null;
 }
 
 /// Writes the counts to stderr in the form of `--jit-stats`.

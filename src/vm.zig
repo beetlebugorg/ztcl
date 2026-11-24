@@ -19,6 +19,7 @@ const value = @import("value.zig");
 const cmds = @import("cmds.zig");
 const dict = @import("dict.zig");
 const more = @import("more.zig");
+const jit = @import("jit.zig");
 
 const Allocator = std.mem.Allocator;
 const Value = value.Value;
@@ -1103,7 +1104,9 @@ inline fn cellAt(f: *Frame, slot: u32) *Var {
 }
 
 /// Runs `dict incr` or `dict set` with the general command.
-fn dictSlow(it: *Interp, cmd: *Cmd, args: []const Value) Error!Value {
+/// Inline: the JIT helpers also call it, and a call from `exec` made
+/// bench/dictgrow.tcl 2 % longer.
+inline fn dictSlow(it: *Interp, cmd: *Cmd, args: []const Value) Error!Value {
     var argv: [5]Value = undefined;
     for (cmd.words[0..3], 0..) |w, k| argv[k] = w.kind.lit;
     @memcpy(argv[3..][0..args.len], args);
@@ -1235,7 +1238,9 @@ fn slowLappend(it: *Interp, name: []const u8, v: Value) Error!Value {
 
 /// Appends values to a slot. A string in the cell grows in place, and
 /// an integer part makes no string of its own.
-fn appendValues(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, slot: u32, vals: []const Value) Error!Value {
+/// Inline: the JIT helpers also call it, and a call from `exec` made
+/// bench/strbuild.tcl 3.5 % longer.
+inline fn appendValues(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, slot: u32, vals: []const Value) Error!Value {
     const found = readCell(named, it, f, code, slot);
     if (found == null or found.?.v != .val or found.?.v.val != .str) {
         const argv = [_]Value{ .{ .str = "append" }, .{ .str = code.names[slot] }, try concatValues(it, vals) };
@@ -1303,11 +1308,16 @@ pub fn run(it: *Interp, code: *Code) Error!Value {
     const stack = try it.stackAllocPub(code.max_stack);
     var pc: u32 = 0;
     var sp: u32 = 0;
+    // The machine code of the JIT, when it has a function for the code.
+    const jf: ?*jit.Fn = if (jit.built and it.jit != null) jit.prepare(it, code) else null;
     while (true) {
-        const out = if (code.named)
-            exec(true, it, code, stack.ptr, &pc, &sp)
-        else
-            exec(false, it, code, stack.ptr, &pc, &sp);
+        const out = blk: {
+            if (jit.built) if (jf) |f| if (jit.enter(it, f, code, stack.ptr, &pc, &sp)) |r| break :blk r;
+            break :blk if (code.named)
+                exec(true, it, code, stack.ptr, &pc, &sp)
+            else
+                exec(false, it, code, stack.ptr, &pc, &sp);
+        };
         return out catch |e| {
             // A cold block counts as the place of its guard.
             if (code.ins[pc].op == .eval_cmd and code.ins[pc].x == 1) pc = code.ins[pc].b;

@@ -688,3 +688,214 @@ test "the helpers run the instruction functions" {
     try testing.expectEqual(error.TclError, helpers.errorOf(&ctx));
     try testing.expectEqualStrings("can't read \"c\": no such variable", try it.str(it.result));
 }
+
+// ---- Compiled code against the interpreter ----
+
+const Outcome = struct {
+    text: []u8,
+    fn deinit(o: Outcome) void {
+        testing.allocator.free(o.text);
+    }
+};
+
+fn collect(ctx: ?*anyopaque, bytes: []const u8) void {
+    const out: *std.ArrayList(u8) = @ptrCast(@alignCast(ctx.?));
+    out.appendSlice(testing.allocator, bytes) catch {};
+}
+
+/// Runs `script` in a new interpreter, with the JIT at threshold 0 when
+/// `on`, and gives the output, the result, errorInfo, errorCode, and
+/// the steps used as one text.
+fn runMode(script: []const u8, on: bool, limit: u64, min_compiled: u64) !Outcome {
+    const it = try newInterp();
+    defer freeInterp(it);
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(testing.allocator);
+    it.output = .{ .ctx = &out, .write = collect };
+    it.gc_on = false;
+    it.step_limit = limit;
+    if (on and !it.enableJit(.{ .threshold = 0 })) return error.SkipZigTest;
+    var w: std.ArrayList(u8) = .empty;
+    errdefer w.deinit(testing.allocator);
+    const a = testing.allocator;
+    if (it.eval(script)) |v| {
+        try w.print(a, "result: {s}\n", .{try it.str(v)});
+    } else |e| {
+        try w.print(a, "error {t}: {s}\n", .{ e, it.str(it.result) catch "" });
+        if (e == error.TclError) try it.finishError();
+    }
+    const info = it.getVarPlain("::errorInfo") catch Value.empty;
+    const code = it.getVarPlain("::errorCode") catch Value.empty;
+    try w.print(a, "output: {s}\nerrorInfo: {s}\nerrorCode: {s}\nsteps: {d}\nmem: {d}\n", .{ out.items, try it.str(info), try it.str(code), limit - it.step_limit, it.memUsed() });
+    if (on) {
+        const st = it.jit.?.stats;
+        if (st.compiled < min_compiled) {
+            std.debug.print("compiled {d} < {d} for:\n{s}\n", .{ st.compiled, min_compiled, script });
+            return error.TooFewCompiled;
+        }
+    }
+    return .{ .text = try w.toOwnedSlice(a) };
+}
+
+/// Runs `script` in the interpreter and with the JIT and compares each
+/// field. `min_compiled` is the least count of compiled functions.
+fn same(script: []const u8, min_compiled: u64) !void {
+    return sameLimit(script, std.math.maxInt(u64), min_compiled);
+}
+
+fn sameLimit(script: []const u8, limit: u64, min_compiled: u64) !void {
+    if (!jit.built) return error.SkipZigTest;
+    const ref = try runMode(script, false, limit, 0);
+    defer ref.deinit();
+    const got = try runMode(script, true, limit, min_compiled);
+    defer got.deinit();
+    testing.expectEqualStrings(ref.text, got.text) catch |e| {
+        std.debug.print("script:\n{s}\n", .{script});
+        return e;
+    };
+}
+
+test "jit: an error in a proc gives the full errorInfo" {
+    try same(
+        \\proc inner {x} { set y [expr {$x * 2}]; error "bad $y" }
+        \\proc outer {} { set a 1; incr a; inner $a }
+        \\outer
+    , 2);
+    try same(
+        \\proc f {} { set l {1 2}; for {set i 0} {$i < 3} {incr i} { set x [lindex $l $i]; expr {$x + 1} } }
+        \\f
+    , 1);
+    try same("proc f {} {set u}; f", 1);
+}
+
+test "jit: break and continue from eval in a compiled loop" {
+    try same(
+        \\proc f {} {
+        \\    set s {}
+        \\    for {set i 0} {$i < 10} {incr i} {
+        \\        if {$i == 2} { eval continue }
+        \\        if {$i == 6} { eval break }
+        \\        lappend s $i
+        \\    }
+        \\    foreach x {a b c d} { if {$x eq "b"} {eval continue}; if {$x eq "d"} {eval {break}}; lappend s $x }
+        \\    set k 0
+        \\    while {1} { incr k; if {$k > 3} {eval break}; lappend s w$k }
+        \\    return $s
+        \\}
+        \\f
+    , 1);
+}
+
+test "jit: return -code of each code" {
+    try same(
+        \\proc r {c} { return -code $c "v$c" }
+        \\set out {}
+        \\foreach c {ok error return break continue 5 7} { lappend out [catch {r $c} m] $m }
+        \\proc loop {} { set s {}; foreach c {1 2 3} { lappend s [catch {return -code break} m] } ; return $s }
+        \\lappend out [loop]
+        \\proc lev {} { return -level 2 -code ok deep }
+        \\proc call {} { lev; return shallow }
+        \\lappend out [call]
+    , 3);
+}
+
+test "jit: catch around a compiled proc" {
+    try same(
+        \\proc boom {n} { if {$n > 2} { error "n is $n" "my info" {MY CODE} }; return $n }
+        \\set r {}
+        \\for {set i 0} {$i < 5} {incr i} { lappend r [catch {boom $i} m opts] $m [dict get $opts -code] }
+        \\lappend r $::errorCode
+    , 1);
+}
+
+test "jit: a step limit inside a compiled loop leaves the same steps" {
+    const script =
+        \\proc spin {} { set s 0; for {set i 0} {$i < 1000} {incr i} { incr s $i; set t [expr {$s % 7}] }; return $s }
+        \\spin
+    ;
+    for ([_]u64{ 1, 2, 5, 17, 100, 333, 1000, 2500 }) |limit| try sameLimit(script, limit, 0);
+    try sameLimit(script, std.math.maxInt(u64), 1);
+}
+
+test "jit: a coroutine yields from a compiled proc and resumes" {
+    try same(
+        \\proc gen {n} { yield; for {set i 0} {$i < $n} {incr i} { yield [expr {$i * $i}] }; return done }
+        \\coroutine c gen 4
+        \\set r {}
+        \\for {set k 0} {$k < 5} {incr k} { lappend r [c] }
+        \\set r
+    , 1);
+}
+
+test "jit: rename set inside a running compiled proc" {
+    try same(
+        \\proc f {} {
+        \\    set a 1
+        \\    rename set foo
+        \\    proc set {args} { return "custom $args" }
+        \\    set r [set a]
+        \\    rename set {}
+        \\    rename foo set
+        \\    set b [expr {$a + 1}]
+        \\    return [list $r $b]
+        \\}
+        \\f
+    , 1);
+}
+
+test "jit: a variable trace added while a compiled loop runs" {
+    try same(
+        \\proc f {} {
+        \\    set log {}
+        \\    for {set i 0} {$i < 6} {incr i} {
+        \\        if {$i == 2} { trace add variable i write [list apply {{args} { upvar log log; lappend log t }}] }
+        \\        set x [expr {$i * 2}]
+        \\    }
+        \\    return [list $x $log]
+        \\}
+        \\f
+    , 1);
+}
+
+test "jit: upvar and uplevel change a local of a compiled proc" {
+    try same(
+        \\proc bump {name} { upvar 1 $name v; incr v 10 }
+        \\proc setit {} { uplevel 1 {set y 99} }
+        \\proc f {} {
+        \\    set x 1
+        \\    for {set i 0} {$i < 3} {incr i} { bump x; set z [expr {$x + $i}] }
+        \\    setit
+        \\    return [list $x $y $z]
+        \\}
+        \\f
+    , 1);
+}
+
+test "jit: a proc that redefines itself" {
+    try same(
+        \\proc f {} { proc f {} { return second }; return first }
+        \\list [f] [f] [f]
+    , 1);
+}
+
+test "jit: tailcall" {
+    try same(
+        \\proc g {x} { return [expr {$x * 3}] }
+        \\proc f {x} { set y [expr {$x + 1}]; tailcall g $y }
+        \\proc count {n acc} { if {$n == 0} { return $acc }; tailcall count [expr {$n - 1}] [expr {$acc + $n}] }
+        \\list [f 4] [count 100 0]
+    , 2);
+}
+
+test "jit: a TclOO method" {
+    try same(
+        \\oo::class create Acc {
+        \\    variable total
+        \\    constructor {} { set total 0 }
+        \\    method add {n} { for {set i 0} {$i < $n} {incr i} { incr total $i }; return $total }
+        \\    method get {} { my add 0 }
+        \\}
+        \\set a [Acc new]
+        \\list [$a add 5] [$a add 3] [$a get]
+    , 1);
+}
