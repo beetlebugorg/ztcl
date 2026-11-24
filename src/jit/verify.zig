@@ -273,6 +273,10 @@ pub fn verify(a: Allocator, code: *const Code) Allocator.Error!?Info {
     if (code.lits.len > max_items or code.sites.len > max_items or code.words.len > max_items) return null;
     if (code.nodes.len > max_items or code.tables.len > max_items) return null;
     for (code.tables) |t| if (t.len > max_slots) return null;
+    // Each byte of an opcode is a member of `Op`, also where no path
+    // reaches. The plan of tier 2 and other readers switch on the opcode
+    // of each instruction in a range.
+    for (code.ins) |*i| if (opcode(i) == null) return null;
 
     const depth = try a.alloc(u16, n);
     var ok = false;
