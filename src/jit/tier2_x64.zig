@@ -64,6 +64,7 @@ const verify = @import("verify.zig");
 const layout = @import("layout.zig");
 const helpers = @import("helpers.zig");
 const tier2 = @import("tier2.zig");
+const lower = @import("tier2_lower.zig");
 const tier1 = @import("tier1_x64.zig");
 const expr = @import("../expr.zig");
 const jit = @import("../jit.zig");
@@ -99,71 +100,19 @@ const slot_xregs = [_]Xmm{ .xmm0, .xmm1, .xmm2, .xmm3 };
 /// are scratch. On Windows, `xmm6` to `xmm15` are callee-saved.
 const extra_xregs = [_]Xmm{ .xmm6, .xmm7, .xmm8, .xmm9, .xmm10, .xmm11, .xmm12, .xmm13, .xmm14, .xmm15 };
 
-/// True when tier 2 can compile the loop of the plan. Each slot is an
-/// integer at each instruction, or `any` at each instruction. At most
-/// five slots are integers. Each stack place below the depth of the head
-/// is `any`, and each stack place above it fits in a register. No two
-/// paths to one instruction give a place or a slot two kinds.
+/// True when tier 2 can compile the loop of the plan with the registers
+/// of x86-64.
 pub fn eligible(code: *const vm.Code, info: *const verify.Info, p: *const tier2.LoopPlan) bool {
-    var nreg: usize = 0;
-    var nx: usize = 0;
-    for (p.slots) |u| switch (u.entry) {
-        .int => nreg += 1,
-        .double => nx += 1,
-        .any => {},
-    };
-    if (nreg > slot_regs.len or nx > slot_xregs.len) return false;
-    const base = info.depth[p.head];
-    const room = @min(slot_regs.len - nreg + extra_regs.len, slot_xregs.len - nx + extra_xregs.len);
-    for (p.head..p.back + 1) |pc| {
-        const k = pc - p.head;
-        if (!p.seen[k]) continue;
-        const i = code.ins[pc];
-        // A place on an edge keeps its kind, or goes from a register to
-        // the value stack.
-        const outs = p.outs[k];
-        for ([2]?u32{ if (falls(i.op)) @as(u32, @intCast(pc + 1)) else null, tier2.targetOf(i) }) |succ| {
-            const t = succ orelse continue;
-            if (i.op == .guard or t < p.head or t > p.back) continue;
-            const into = p.kinds[t - p.head];
-            if (into.len != outs.len) return false;
-            for (outs, into) |x, y| if (x != y and y != .any) return false;
-        }
-        const e = verify.effectAt(code, @intCast(pc)) orelse return false;
-        const d = info.depth[pc];
-        if (d + e.push > base + room) return false;
-        for (p.slot_kinds[k], p.slots) |kind, u| if (kind != u.entry) return false;
-        for (p.kinds[k], 0..) |kind, place| if (kind != .any and place < base) return false;
-        switch (i.op) {
-            .push => if (code.lits[i.a] == .double and std.math.isNan(code.lits[i.a].double)) return false,
-            // `foreach_next` reads its list and its index below the
-            // places of the loop.
-            .foreach_next => if (pc != p.head) return false,
-            .ret, .foreach_init => return false,
-            else => {},
-        }
-    }
-    return true;
+    return lower.eligible(code, info, p, lower.x64_budget);
 }
 
-fn falls(op: vm.Op) bool {
-    return op != .jump and op != .ret;
-}
-
-/// The address of the step check of a part: its first instruction that
-/// is not a `pop`. A `pop` has no code, so the check there is the check
-/// at the start of the part, and the place that the `pop` drops needs no
-/// value at the exit of the check.
-fn checkAt(code: *const vm.Code, part: tier2.Part) u32 {
-    var pc = part.first;
-    while (pc < part.last and code.ins[pc].op == .pop) pc += 1;
-    return pc;
-}
+const falls = lower.falls;
+const checkAt = lower.checkAt;
 
 /// The kind of an exit, in the high bits of the fourth argument of
 /// `resume_at`. The low bits are the number of the loop head.
-pub const exit_guard: u32 = 1 << 30;
-pub const exit_forced: u32 = 1 << 31;
+pub const exit_guard = lower.exit_guard;
+pub const exit_forced = lower.exit_forced;
 
 const Exit = struct {
     at: Label,
@@ -402,10 +351,7 @@ const Emitter = struct {
     /// True when a place in a register after `pc` is in the value stack
     /// at `t`: two paths reach `t` with two kinds.
     fn needsFix(e: *const Emitter, pc: u32, t: u32) bool {
-        const outs = e.p.outs[pc - e.p.head];
-        const into = e.kinds(t);
-        for (outs, into) |x, y| if (x != .any and y == .any) return true;
-        return false;
+        return lower.needsFix(e.p, pc, t);
     }
 
     /// Writes each place in a register after `pc` that is in the value
@@ -875,10 +821,7 @@ const Emitter = struct {
         // A result with a finite operand of `+` or `-`, or with a literal
         // operand that is finite and not zero of `*` or `/`, is never a
         // NaN: no operand in a register is a NaN.
-        const safe = switch (op) {
-            .add, .sub => a.finite or b.finite,
-            else => a.nonzero or b.nonzero,
-        };
+        const safe = lower.nanFree(op, .{ .finite = a.finite, .nonzero = a.nonzero }, .{ .finite = b.finite, .nonzero = b.nonzero });
         var dest = e.xplace(k);
         var resume_pc = pc + 1;
         var fused = false;
@@ -1015,13 +958,7 @@ const Emitter = struct {
             try s.pop(keep[k]);
         }
         try s.jcc(.a, if (pure) try e.keptStub(pc) else try e.stub(pc));
-        const t: ?u32 = switch (i.op) {
-            .jump_false, .jump_true => i.a,
-            .jf_vv, .jf_vi => i.c,
-            .foreach_next, .str_eq_jump => i.b,
-            else => null,
-        };
-        if (t) |tt| {
+        if (lower.branchTarget(i)) |tt| {
             // Result 1 goes to the target.
             const not_taken = try s.newLabel();
             try s.jcc(.ne, not_taken);
@@ -1457,25 +1394,15 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
     const stubs = try a.alloc(?Label, n);
     defer a.free(stubs);
     @memset(stubs, null);
-    const left = try a.alloc(u32, n);
+    const left = try lower.stepsLeft(a, code, p);
     defer a.free(left);
-    for (p.parts) |part| {
-        var steps: u32 = 0;
-        var pc = part.last + 1;
-        while (pc > part.first) {
-            pc -= 1;
-            const op = code.ins[pc].op;
-            if (op == .guard or op == .step) steps += 1;
-            left[pc - p.head] = steps;
-        }
-    }
     // The registers of the slots of the kind `int`.
     const slot_reg = try a.alloc(?Reg, p.slots.len);
     defer a.free(slot_reg);
     var nslot: usize = 0;
     for (p.slots, slot_reg) |u, *r| {
         r.* = null;
-        if (u.entry != .int) continue;
+        if (lower.slotClass(u) != .int) continue;
         r.* = slot_regs[nslot];
         nslot += 1;
     }
@@ -1485,7 +1412,7 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
     var nxslot: usize = 0;
     for (p.slots, slot_xreg) |u, *r| {
         r.* = null;
-        if (u.entry != .double) continue;
+        if (lower.slotClass(u) != .double) continue;
         r.* = slot_xregs[nxslot];
         nxslot += 1;
     }

@@ -1637,6 +1637,133 @@ test "tier 2: an exit after a helper that runs no script writes the slots" {
     , 1);
 }
 
+// ---- The shared layer of tier 2: no machine code ----
+
+const lower = @import("tier2_lower.zig");
+
+/// The plan of loop `nth` of proc `name`, with the kinds of `entry` by
+/// slot name and `.any` for each other slot. Checks `eligible` with the
+/// budgets of x86-64 and arm64 against `want`.
+fn lowerCheck(it: *Interp, name: []const u8, nth: usize, entry: []const struct { []const u8, tier2.Kind }, want: bool) !void {
+    const code = try procCode(it, name);
+    var info = (try verify.verify(testing.allocator, code)) orelse return error.NotVerified;
+    defer info.deinit(testing.allocator);
+    const kinds = try testing.allocator.alloc(tier2.Kind, code.names.len);
+    defer testing.allocator.free(kinds);
+    @memset(kinds, .any);
+    for (entry) |e| for (code.names, 0..) |n, k| if (std.mem.eql(u8, n, e[0])) {
+        kinds[k] = e[1];
+    };
+    if (nth >= info.loop_heads.len) {
+        std.debug.print("{s}: {d} instructions, loop heads {any}\n", .{ name, code.ins.len, info.loop_heads });
+        return error.NoLoop;
+    }
+    var p = (try tier2.plan(testing.allocator, code, &info, info.loop_heads[nth], kinds)) orelse return error.NoPlan;
+    defer p.deinit();
+    try testing.expectEqual(want, lower.eligible(code, &info, &p, lower.x64_budget));
+    try testing.expectEqual(want, lower.eligible(code, &info, &p, lower.a64_budget));
+}
+
+test "tier 2 layer: the loops of the benchmarks fit both budgets" {
+    const it = try newInterp();
+    defer freeInterp(it);
+    // A proc body points into its text, so each text lives to the end.
+    var texts: [4][]u8 = undefined;
+    for ([_][*:0]const u8{ "bench/sum.tcl", "bench/nested.tcl", "bench/foreach.tcl", "bench/dsum.tcl" }, &texts) |path, *t| {
+        t.* = try readRepoFile(testing.allocator, path);
+        try defineProcs(it, t.*);
+    }
+    defer for (texts) |t| testing.allocator.free(t);
+    try lowerCheck(it, "sum", 0, &.{ .{ "i", .int }, .{ "s", .int }, .{ "n", .int } }, true);
+    try lowerCheck(it, "nested", 1, &.{ .{ "i", .int }, .{ "j", .int }, .{ "m", .int }, .{ "n", .int } }, true);
+    try lowerCheck(it, "go", 2, &.{ .{ "x", .int }, .{ "s", .int } }, true);
+    try lowerCheck(it, "dsum", 0, &.{ .{ "i", .int }, .{ "n", .int }, .{ "s", .double }, .{ "x", .double } }, true);
+    // Six integer slots do not fit five registers.
+    try defineProcs(it,
+        \\proc six {} { set a 0; set b 0; set c 0; set d 0; set e 0; for {set i 0} {$i < 9} {incr i} { incr a; incr b; incr c; incr d; incr e } }
+        \\proc five {} { set a 0; set b 0; set c 0; set d 0; set e 0; for {set i 0} {$i < 9} {incr i} { incr a; incr b; incr c; incr d } }
+        \\proc dbl {} { for {set i 0} {$i < 9} {incr i} { set a [expr {$a + $b * $c - $d / $e}] } }
+    );
+    try lowerCheck(it, "six", 0, &.{ .{ "a", .int }, .{ "b", .int }, .{ "c", .int }, .{ "d", .int }, .{ "e", .int }, .{ "i", .int } }, false);
+    try lowerCheck(it, "five", 0, &.{ .{ "a", .int }, .{ "b", .int }, .{ "c", .int }, .{ "d", .int }, .{ "e", .int }, .{ "i", .int } }, true);
+    // Five double slots do not fit four registers.
+    try lowerCheck(it, "dbl", 0, &.{ .{ "a", .double }, .{ "b", .double }, .{ "c", .double }, .{ "d", .double }, .{ "e", .double }, .{ "i", .int } }, false);
+}
+
+test "tier 2 layer: the step checks and the steps that an exit gives back" {
+    const it = try newInterp();
+    defer freeInterp(it);
+    const text = try readRepoFile(testing.allocator, "bench/sum.tcl");
+    defer testing.allocator.free(text);
+    try defineProcs(it, text);
+    var p = (try planOf(it, "sum", &.{ .{ "i", .int }, .{ "s", .int }, .{ "n", .int } })).?;
+    defer p.deinit();
+    const code = try procCode(it, "sum");
+    const left = try lower.stepsLeft(testing.allocator, code, &p);
+    defer testing.allocator.free(left);
+    // The loop: jf_vv | step guard guard bin_vv store_pop guard incr_drop jump.
+    try testing.expectEqualSlices(u32, &.{ 0, 4, 3, 2, 1, 1, 1, 0, 0 }, left);
+    try testing.expectEqual(p.head + 1, lower.checkAt(code, p.parts[1]));
+    try testing.expectEqual(lower.SlotClass.int, lower.slotClass(p.slots[0]));
+}
+
+test "tier 2 layer: an if with no else writes its place to the value stack" {
+    const it = try newInterp();
+    defer freeInterp(it);
+    try defineProcs(it,
+        \\proc f {} { set a 0; for {set i 0} {$i < 9} {incr i} { if {$i > 4} { set a $i } } }
+    );
+    var p = (try planOf(it, "f", &.{ .{ "a", .int }, .{ "i", .int } })).?;
+    defer p.deinit();
+    const code = try procCode(it, "f");
+    var fixes: usize = 0;
+    for (p.head..p.back + 1) |pc| {
+        const k = pc - p.head;
+        if (!p.seen[k]) continue;
+        const i = code.ins[pc];
+        if (lower.falls(i.op) and pc < p.back and lower.needsFix(&p, @intCast(pc), @intCast(pc + 1))) fixes += 1;
+        if (tier2.targetOf(i)) |t| if (i.op != .guard and t > pc and t <= p.back and lower.needsFix(&p, @intCast(pc), t)) {
+            fixes += 1;
+        };
+    }
+    try testing.expectEqual(@as(usize, 1), fixes);
+}
+
+test "tier 2 layer: the results of doubles that need no NaN check" {
+    const lit = lower.knownOf(0.5);
+    const zero = lower.knownOf(0.0);
+    const inf = lower.knownOf(std.math.inf(f64));
+    const int: lower.Known = .{ .finite = true };
+    const reg: lower.Known = .{};
+    try testing.expect(lower.nanFree(.add, reg, int));
+    try testing.expect(lower.nanFree(.sub, lit, reg));
+    try testing.expect(!lower.nanFree(.add, reg, reg));
+    try testing.expect(!lower.nanFree(.add, reg, inf));
+    try testing.expect(lower.nanFree(.mul, reg, lit));
+    try testing.expect(lower.nanFree(.div, lit, reg));
+    try testing.expect(!lower.nanFree(.mul, reg, int));
+    try testing.expect(!lower.nanFree(.mul, reg, zero));
+    try testing.expect(!lower.nanFree(.div, reg, zero));
+    try testing.expect(!lower.nanFree(.div, reg, reg));
+    // Each case that the rule calls free gives no NaN for any operand
+    // that is not a NaN.
+    const xs = [_]f64{ 0.0, -0.0, 1.5, -2.0, 1e308, -1e308, std.math.inf(f64), -std.math.inf(f64), 5e-324 };
+    for ([_]expr_mod.BinOp{ .add, .sub, .mul, .div }) |op| for (xs) |x| for (xs) |y| {
+        const kx: lower.Known = .{};
+        const ky = lower.knownOf(y);
+        if (!lower.nanFree(op, kx, ky)) continue;
+        const r = switch (op) {
+            .add => x + y,
+            .sub => x - y,
+            .mul => x * y,
+            else => x / y,
+        };
+        try testing.expect(!std.math.isNan(r));
+    };
+}
+
+const expr_mod = @import("../expr.zig");
+
 test "tier 2: to_bool of a value from a helper goes to its register" {
     // `||` of two string compares: the second compare is a helper call,
     // and to_bool of its result feeds a jump.

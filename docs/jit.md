@@ -304,6 +304,33 @@ Tier 2 differs from the design above in these points:
 - `r12`, the register of the helper table, holds a stack place inside a loop. Each exit loads it again from the context.
 - `--jit-stress 32` fails each guard of tier 2 on the schedule 3, 7, 13. `tools/suite.sh -J` runs the suite with tier 2 at a loop count of 2, and `tools/jit-diff.sh -t` adds tier 2 to the JIT modes.
 
+### Tier 2 on arm64: the hand-off (task 38)
+
+The arm64 code of tier 2 is not written. This branch has the parts that do not depend on the instruction set, and the session on the Mac builds the rest.
+
+What is in place:
+
+- `src/jit/tier2.zig` makes the plan of a loop: the kinds of each slot and each stack place, the parts, and the kinds after each instruction.
+- `src/jit/tier2_lower.zig` reads the plan with no machine code. `eligible` reads the register counts of a backend from a `Budget`, and `a64_budget` has the counts of the registers below. `slotClass`, `checkAt`, `stepsLeft`, `needsFix`, `nanFree`, and `branchTarget` give the class of each slot, the place of each step check, the steps that an exit gives back, the edges that write a place to the value stack, the double results that need no NaN check, and the second successor of a helper call.
+- The tests named `tier 2 layer: ...` in `src/jit/tests.zig` check these facts with no machine code. Each test named `tier 2: ...` compares a script with the interpreter, so it is the acceptance test of each backend.
+- `src/jit/tier2_x64.zig` is the reference for each rule below.
+
+What the Mac session builds:
+
+1. `src/jit/tier2_a64.zig` with the `assemble` and `eligible` of `tier2_x64.zig`, and a choice of the backend in `jit.compileLoop`. `jit.backend` and `build.zig` then turn tier 2 on for arm64.
+2. The registers of `a64_budget`: `x9` to `x13` for integer slots, `x3` to `x8` for integer places and constants, `d16` to `d19` for double slots, `d22` to `d31` for double places and constants. `x14`, `x15`, `d20`, and `d21` are scratch. Each one is caller-saved, so a call writes and loads them as on x86-64. The code never uses `x18` or `d8` to `d15`.
+3. The entry block: for each slot in a register, the cell tag `.val`, the value tag, the load, and for a double a NaN check (`fcmp d, d` and `b.vs`). Then the epoch and the memory count.
+4. One joined step check at `checkAt` of each part. An exit writes each place in a register and each slot that the loop writes, adds `stepsLeft` back, and goes to one shared block that calls `resume_at`.
+5. Integers: `adds`, `subs`, and `b.vs` for the overflow check, the multiply check of task 27, and `sdiv` with `msub` for `/` and `%`, with an exit for a divisor of 0 or -1 and the rounding down of Tcl. The operation writes a scratch register, and the slot register changes after the check.
+6. Doubles: `fadd`, `fsub`, `fmul`, `fdiv`, `scvtf` for an integer operand, and `fcmp` with the conditions `mi`, `ls`, `gt`, `ge`, `eq`, `ne` for the six compares. No `fmadd`. A result that `nanFree` does not clear gets `fcmp` with itself and `b.vs` to an exit after the instruction, with the result in its place.
+7. Calls: write the slots and the places, call the helper of tier 1 (for `invoke`, the inline check of the command site and `call_cached`), the error stub, then for each successor the epoch check, the memory check, and the loads of the slots with their checks. After a helper that `tier2.runsNoScript` lists, the integer slot registers can stay on the stack, and each exit after the call writes them first.
+8. The inline paths of `lappend`, `foreach_next`, `load` and `store` of a slot in its cell, and `incr_value` and the jumps on a value in the value stack, each with the helper as the slow path.
+9. The instruction cache flush of the tier 2 code before its first run.
+
+Then run the acceptance list of task 38 on each arm64 target, and check that no script of `bench/` uses more time with tier 2 than with tier 1.
+
+On x86-64 Windows, `rsi`, `rdi`, and `xmm6` to `xmm15` are callee-saved. `tier2_x64.zig` uses them for places and constants, so that port must save them or leave them out of `extra_regs` and `extra_xregs`.
+
 ## The tier 2 model and census (task 32)
 
 `tools/jit-model/run.sh` assembles hand-written tier 2 forms of four loops (`tools/jit-model/model.s`) and counts one pass of each with `perf stat -e instructions:u`. Each form has the joined step check of its part, the guards, and the overflow checks of the rules of tier 2. Measured on 2026-11-24 on the commit of task 32, x86-64 Linux:
