@@ -37,6 +37,8 @@
 //! `--asm FILE` reads rows of `tools/jit-asm-golden.sh --random N`. Each
 //! row has an instruction form, its operands, and the bytes of `zig cc`.
 //! The tool encodes each row with `src/jit/x64.zig` and compares.
+//! `--asm-a64 FILE` does the same for the rows of `--arch aarch64` and
+//! `src/jit/a64.zig`.
 //!
 //! `--verify` makes `Code` values in two ways: random instructions with
 //! the side tables of a real proc, and the `Code` of a proc of a random
@@ -1159,7 +1161,7 @@ fn comment(a: Allocator, file: *std.ArrayList(u8), text: []const u8) !void {
 const usage =
     \\usage: jit-fuzz [--seed N] [--count N] [--seconds N] [--tier2] [--stress N]
     \\                [--expect-diff] [--out DIR] [--print N] [--verbose]
-    \\                [--asm FILE] [--verify]
+    \\                [--asm FILE] [--asm-a64 FILE] [--verify]
     \\                [--corpus DIR ...]
     \\
 ;
@@ -1180,6 +1182,7 @@ pub fn main(init: std.process.Init) !void {
     var print_seed: ?u64 = null;
     var verbose = false;
     var asm_file: ?[]const u8 = null;
+    var asm_a64_file: ?[]const u8 = null;
     var verify_mode = false;
     var k: usize = 1;
     while (k < args.len) : (k += 1) {
@@ -1212,6 +1215,9 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, arg, "--asm") and has_value) {
             k += 1;
             asm_file = args[k];
+        } else if (std.mem.eql(u8, arg, "--asm-a64") and has_value) {
+            k += 1;
+            asm_a64_file = args[k];
         } else if (std.mem.eql(u8, arg, "--verify")) {
             verify_mode = true;
         } else if (std.mem.eql(u8, arg, "--verbose")) {
@@ -1230,6 +1236,7 @@ pub fn main(init: std.process.Init) !void {
         return;
     }
     if (asm_file) |path| return asmCheck(a, io, path);
+    if (asm_a64_file) |path| return asmCheckA64(a, io, path);
     if (!tcl.jit.built) {
         std.debug.print("this build has no JIT\n", .{});
         std.process.exit(2);
@@ -1361,6 +1368,46 @@ fn asmCheck(a: Allocator, io: Io, path: []const u8) !void {
         rows += 1;
         if (!std.mem.eql(u8, want.items, s.bytes())) {
             if (bad < 20) std.debug.print("{t} a={d} b={d} d={d} i={d} k={d}: want {x} got {x}\n", .{ form, ra, rb, d, i, kk, want.items, s.bytes() });
+            bad += 1;
+        }
+    }
+    std.debug.print("rows: {d}, differences: {d}\n", .{ rows, bad });
+    if (bad > 0 or rows == 0) std.process.exit(1);
+}
+
+const a64 = tcl.jit.parts.a64;
+
+/// `asmCheck` for the rows of `--arch aarch64`: `form a b c i j k hex`.
+fn asmCheckA64(a: Allocator, io: Io, path: []const u8) !void {
+    const text = try Io.Dir.cwd().readFileAlloc(io, path, a, .limited(1 << 30));
+    defer a.free(text);
+    var rows: u64 = 0;
+    var bad: u64 = 0;
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    var want: std.ArrayList(u8) = .empty;
+    defer want.deinit(a);
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        var f = std.mem.tokenizeScalar(u8, line, ' ');
+        const form = std.meta.stringToEnum(a64.Form, f.next() orelse return error.BadRow) orelse return error.BadRow;
+        var row: a64.Row = .{ .f = form, .bytes = &.{} };
+        row.a = try std.fmt.parseInt(u8, f.next() orelse return error.BadRow, 10);
+        row.b = try std.fmt.parseInt(u8, f.next() orelse return error.BadRow, 10);
+        row.c = try std.fmt.parseInt(u8, f.next() orelse return error.BadRow, 10);
+        row.i = try std.fmt.parseInt(i64, f.next() orelse return error.BadRow, 10);
+        row.j = try std.fmt.parseInt(u8, f.next() orelse return error.BadRow, 10);
+        row.k = try std.fmt.parseInt(u8, f.next() orelse return error.BadRow, 10);
+        const hex = f.next() orelse return error.BadRow;
+        want.clearRetainingCapacity();
+        var h: usize = 0;
+        while (h + 1 < hex.len) : (h += 2) try want.append(a, try std.fmt.parseInt(u8, hex[h .. h + 2], 16));
+        var s = a64.Asm.init(a);
+        defer s.deinit();
+        try a64.encodeRow(&s, row);
+        try s.finish();
+        rows += 1;
+        if (!std.mem.eql(u8, want.items, s.bytes())) {
+            if (bad < 20) std.debug.print("{t} a={d} b={d} c={d} i={d} j={d} k={d}: want {x} got {x}\n", .{ form, row.a, row.b, row.c, row.i, row.j, row.k, want.items, s.bytes() });
             bad += 1;
         }
     }
