@@ -27,6 +27,9 @@
 //! turns the collector off.
 //! `--report` writes one line to stderr at the end: the steps used, the
 //! bytes held now, and the highest number of bytes held.
+//! `--jit` turns the JIT on, when the build and the system have it.
+//! `--jit-threshold N` sets the calls of a proc before it compiles.
+//! `--jit-stats` writes the counts of the JIT to stderr at the end.
 //! `--repeat N` runs each file N times in one interpreter. With `--time`,
 //! it prints the best time: the warm time of the file.
 //!
@@ -88,7 +91,11 @@ var report_on = false;
 /// The value of `--max-steps`, to find the steps used.
 var max_steps: u64 = std.math.maxInt(u64);
 
+/// True for `--jit-stats`.
+var jit_stats = false;
+
 fn report(it: *const tcl.Interp) void {
+    if (jit_stats) tcl.jit.printStats(it);
     if (!report_on) return;
     std.debug.print("report steps={d} mem={d} peak={d}\n", .{ max_steps - it.step_limit, it.counter.used, it.counter.mem_peak });
     if (std.debug.runtime_safety) std.debug.print("gc collections={d}\n", .{it.gcCount()});
@@ -190,6 +197,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     var verbose = false;
     var ran = false;
     var repeat: usize = 1;
+    var jit_opts: tcl.jit.Options = .{};
     var i: usize = 1;
     while (i < args.len) : (i += 1) {
         const arg: []const u8 = args[i];
@@ -231,6 +239,20 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
                 out.flush() catch {};
                 std.process.exit(2);
             }
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--jit")) {
+            _ = it.enableJit(jit_opts);
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--jit-threshold") and i + 1 < args.len) {
+            i += 1;
+            jit_opts.threshold = try std.fmt.parseInt(u32, args[i], 10);
+            if (it.jit) |s| s.options = jit_opts;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--jit-stats")) {
+            jit_stats = true;
             continue;
         }
         if (std.mem.eql(u8, arg, "--report")) {

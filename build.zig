@@ -8,7 +8,13 @@ pub fn build(b: *std.Build) void {
     // `-Dgc-precise=true` builds the root rules of WebAssembly on a
     // native target, so the stress tests run them with safety checks.
     const gc_options = b.addOptions();
-    gc_options.addOption(bool, "gc_precise", b.option(bool, "gc-precise", "Use the precise roots of WebAssembly") orelse false);
+    const gc_precise = b.option(bool, "gc-precise", "Use the precise roots of WebAssembly") orelse false;
+    gc_options.addOption(bool, "gc_precise", gc_precise);
+    // `-Djit=false` builds no JIT code. The default is true on a target
+    // with a backend: x86-64 Linux.
+    const t = target.result;
+    const jit_backend = t.cpu.arch == .x86_64 and t.os.tag == .linux;
+    gc_options.addOption(bool, "jit", b.option(bool, "jit", "Build the JIT compiler") orelse jit_backend);
     // `-Drunner-optimize` sets the mode of the runner and the suite runner.
     const runner_optimize = b.option(std.builtin.OptimizeMode, "runner-optimize", "The mode of the runners") orelse .ReleaseFast;
 
@@ -75,7 +81,11 @@ pub fn build(b: *std.Build) void {
         .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
         .optimize = .ReleaseSmall,
     }) });
-    wasm.root_module.addOptions("build_options", gc_options);
+    // The WebAssembly build has no JIT.
+    const wasm_options = b.addOptions();
+    wasm_options.addOption(bool, "gc_precise", gc_precise);
+    wasm_options.addOption(bool, "jit", false);
+    wasm.root_module.addOptions("build_options", wasm_options);
     wasm.entry = .disabled;
     wasm.rdynamic = true;
     // The interpreter can use 5 MiB of native stack (`max_native`).

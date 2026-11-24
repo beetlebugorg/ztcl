@@ -154,6 +154,13 @@ pub const Code = struct {
     /// each name has a hint for the search in the current frame.
     named: bool = false,
     hints: []u32 = &.{},
+    /// The compiled function (`jit.Fn`), valid only when `jit_gen` equals
+    /// the generation of the JIT state of the interpreter.
+    jit: ?*anyopaque = null,
+    jit_gen: u64 = 0,
+    /// The calls of the code before the JIT compiles it.
+    jit_calls: u32 = 0,
+    jit_state: enum(u8) { untried, failed, ready } = .untried,
 };
 
 // ---- The guard ----
@@ -1265,7 +1272,7 @@ fn concatValues(it: *Interp, vals: []const Value) Error!Value {
 }
 
 /// Runs the code of a proc in the current frame.
-pub fn run(it: *Interp, code: *const Code) Error!Value {
+pub fn run(it: *Interp, code: *Code) Error!Value {
     const host = it.nest == 0 and it.heap.scopes == 0;
     if (host) it.heap.scopes = 1;
     defer if (host) {

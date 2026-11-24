@@ -125,6 +125,8 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
     // A child has the network policy of its parent. No command of a
     // script changes it.
     child.net = it.net;
+    // A child has the JIT only when its parent has it.
+    @import("jit.zig").inherit(child, it);
     if (!child.is_safe) {
         // A child shares the jail of its parent through its own descriptor.
         if (comptime @import("builtin").os.tag == .linux) {

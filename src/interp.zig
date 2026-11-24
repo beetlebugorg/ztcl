@@ -20,6 +20,7 @@ const value = @import("value.zig");
 const expr = @import("expr.zig");
 const cmds = @import("cmds.zig");
 const vm = @import("vm.zig");
+const jit_mod = @import("jit.zig");
 const trace = @import("trace.zig");
 const ns_mod = @import("ns.zig");
 const coro = @import("coro.zig");
@@ -864,6 +865,8 @@ pub const Interp = struct {
     /// The strings that `append` can extend in place.
     tails: [4]StrTail = @splat(.{}),
     next_tail: u8 = 0,
+    /// The state of the JIT, or null when it is off (`enableJit`).
+    jit: ?*jit_mod.State = null,
 
     const StrTail = struct { end: usize = 0, limit: usize = 0 };
     const SliceKey = struct { ptr: usize, len: usize };
@@ -1099,7 +1102,9 @@ pub const Interp = struct {
         const own = it.own_heap;
         const heap = it.heap;
         const keep = it.*;
-        it.* = .{ .counter = counter, .own_heap = own, .heap = heap, .kids = keep.kids, .gc_on = keep.gc_on, .gc_roots = keep.gc_roots, .held = keep.held, .pins = keep.pins };
+        // No code of the old heap stays, so the machine code goes too.
+        jit_mod.flush(it);
+        it.* = .{ .counter = counter, .own_heap = own, .heap = heap, .kids = keep.kids, .gc_on = keep.gc_on, .gc_roots = keep.gc_roots, .held = keep.held, .pins = keep.pins, .jit = keep.jit };
         it.held.clearRetainingCapacity();
         it.pins.clearRetainingCapacity();
         if (it.isRoot()) it.counter.rearm(if (it.heap.stress != 0) 0 else @import("heap.zig").min_threshold);
@@ -1202,6 +1207,13 @@ pub const Interp = struct {
             it.kids.deinit(it.heap.backing);
             it.own_heap.deinit();
         }
+        jit_mod.destroy(it);
+    }
+
+    /// Turns the JIT on. Returns false when the build or the system has
+    /// no JIT. Only the embedder calls it: a script cannot turn it on.
+    pub fn enableJit(it: *Interp, options: jit_mod.Options) bool {
+        return jit_mod.enable(it, options);
     }
 
     pub fn alloc(it: *Interp) Allocator {

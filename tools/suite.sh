@@ -1,7 +1,7 @@
 #!/bin/sh
 # Runs test files of the Tcl source on ztcl and prints the counts.
 #
-#   tools/suite.sh [-a] [-g N] [-o file] [-r runner] [-t tag | -s tests-dir]
+#   tools/suite.sh [-a] [-j] [-g N] [-o file] [-r runner] [-t tag | -s tests-dir]
 #                  [file.test ...]
 #
 #   -r  The ztcl binary. The default is zig-out/bin/ztcl.
@@ -10,6 +10,7 @@
 #   -s  A folder of Tcl test files. It replaces -t.
 #   -a  Runs each .test file of the folder.
 #   -g  A count N: the runner starts a collection at each Nth allocation.
+#   -j  Runs with the JIT, and compiles each proc before its first run.
 #   -o  Writes one line for each file and skip reason to this file:
 #       `file<TAB>pass<TAB>fail<TAB>skip<TAB>status`, then
 #       `file<TAB>skipped<TAB>reason<TAB>count`.
@@ -20,13 +21,14 @@
 # SPDX-License-Identifier: BSD-2-Clause
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 tcl="$here/../zig-out/bin/ztcl"; tag=core-8-6-16; tests=; all=; log=; gc=
-while getopts ar:t:s:o:g: o; do
+while getopts ajr:t:s:o:g: o; do
     case $o in
     r) tcl=$OPTARG ;;
     t) tag=$OPTARG ;;
     s) tests=$OPTARG ;;
     a) all=1 ;;
-    g) gc="--gc-stress $OPTARG" ;;
+    g) gc="$gc --gc-stress $OPTARG" ;;
+    j) gc="$gc --jit --jit-threshold 0" ;;
     o) log=$OPTARG; : > "$log" ;;
     *) exit 2 ;;
     esac

@@ -275,6 +275,8 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     // TclOO has no copy routine, so an interpreter with objects stays.
     if (it.frame != &it.global or it.nest != 0 or it.depth != 0 or it.coro_count != 0 or it.children.count() != 0 or it.capabilities != 0 or it.oo != null) return error.InterpBusy;
 
+    // The copy makes each Code again, so the machine code goes.
+    @import("jit.zig").flush(it);
     var next = Heap.init(it.heap.backing);
     errdefer next.deinit();
     var temp_arena = std.heap.ArenaAllocator.init(it.counter.child);

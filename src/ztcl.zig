@@ -31,6 +31,7 @@ pub const sys = @import("sys.zig");
 pub const chan = @import("chan.zig");
 pub const event = @import("event.zig");
 pub const sock = @import("sock.zig");
+pub const jit = @import("jit.zig");
 
 pub const Value = value.Value;
 pub const Interp = interp.Interp;
@@ -46,4 +47,5 @@ test {
     _ = compact;
     _ = heap;
     _ = @import("tests.zig");
+    _ = @import("jit/tests.zig");
 }
