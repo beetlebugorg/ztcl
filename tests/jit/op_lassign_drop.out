@@ -1,2 +1,8 @@
 x y {}
 1 2 3
+{1 2} {1 {}} {{} {}} {1 2} {p q} {5 {}}
+y
+8 7
+{1 2} {3 }
+can't set "a": variable is array
+a 1 b 2 c {}

@@ -1516,7 +1516,13 @@ pub const Interp = struct {
         return v.toStr(it.alloc());
     }
 
-    pub fn list(it: *Interp, v: Value) Error![]const Value {
+    /// The items of `v`. A list value needs no call.
+    pub inline fn list(it: *Interp, v: Value) Error![]const Value {
+        if (v == .list) return v.list.items();
+        return it.listSlow(v);
+    }
+
+    fn listSlow(it: *Interp, v: Value) Error![]const Value {
         return v.asList(it.alloc()) catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
             error.BadList => return it.listError(v),
