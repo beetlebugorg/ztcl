@@ -243,6 +243,9 @@ The outside programs with `tools/kostya.sh --jit`, against `tclsh` 8.6.16 in the
 |---|---|---|---|---|
 | `base64/test.tcl` | 50.7 G | 72.4 G | 0.70 | 0.70 |
 | `bf.tcl bench.b` | 1168 G | 2771 G | 0.42 | 0.47 |
+| `bf_oo.tcl bench.b` | 7313 G | 5363 G | 1.36 | 1.38 |
+
+The hot work of `bf_oo.tcl` is method calls, which go through helpers and the frame of a proc call.
 
 The tests of milestone 1:
 
