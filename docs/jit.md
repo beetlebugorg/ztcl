@@ -256,6 +256,54 @@ The tests of milestone 1:
 
 Task 15 moved each handler of `vm.exec` to a function. The guard and `foreach_next` stay in two parts in `exec`: `guardJumps` and `step`, and `foreachAdvance` with no check of the kinds. The joined forms made `sum.tcl` 6 % and `foreach.tcl` 5 % longer. The remaining 1.9 % of `foreach.tcl` comes from the code layout of `exec`: a copy of the old handler made `sum.tcl` and `nested.tcl` 2 % longer.
 
+## Results of milestone 2
+
+Measured on 2026-11-24 on the commit of task 35, `ReleaseFast`, x86-64 Linux, with `perf stat -e instructions:u` of the whole process. Tasks 19 to 23 (the fuzzers, the stress modes of tier 1, the hardening tests, and named code) are on another branch and are not in these numbers.
+
+| Script | Interpreter (baseline) | `--jit`, milestone 1 | `--jit`, milestone 2 | Gate | Result |
+|---|---|---|---|---|---|
+| `sum.tcl` | 284.8 M | 90.9 M | 90.9 M | 105.6 M | pass |
+| `fib.tcl` | 164.8 M | 142.0 M | 136.1 M | 112 M | fail |
+| `nested.tcl` | 337.6 M | 173.3 M | 123.8 M | 135 M | pass |
+| `strbuild.tcl` | 324.5 M | 252.6 M | 252.6 M | 270 M | pass |
+| `foreach.tcl` | 209.9 M | 148.4 M | 80.4 M | 88 M | pass |
+| `dict.tcl` | 281.4 M | 233.9 M | 194.9 M | 215 M | pass |
+| `dictgrow.tcl` | 644.2 M | 578.2 M | 572.4 M | 580 M | pass |
+| `readloop.tcl` | 209.9 M | 175.3 M | 154.7 M | 150 M | fail |
+
+The causes of the two failures, from `perf record`:
+
+- `fib.tcl`: the proc frame. `callProc` with `runProc` (the frame, the cells of the parameters, and the list of free frames) and the helper of `invoke` are about half of the instructions, and `vm.run` is about 14 %. The direct call of task 25 removed the second resolve of the site. A cheaper frame is work on the interpreter. The count was 133.5 M after task 25. The two fields of the context that tier 2 added (`counters`, `func`) raised it to 136.1 M.
+- `readloop.tcl`: the script reads a string as a list. `mem.eql` in the list cache is 44 % of the instructions, and the inline paths of `llength` and `lindex` serve only a list value.
+
+Other costs:
+
+| Cost | Limit | Measured |
+|---|---|---|
+| Compile time of tier 1 | 400 instructions for one bytecode instruction | about 2 570: 102 700 instructions for each of 300 procs like the loop of `sum.tcl`. `Asm.op` is 23 % of them, `jit.compileCode` 13 %, `memcpy` 10 %. **fail** |
+| Interpreter counts with the JIT in the build and off | at most 1 % above the baseline | at most 0.9 % above, except `foreach.tcl` at 1.9 % above. A build with `-Djit=false` gives the same count for `foreach.tcl`: 213.8 M. The cost comes from the handler refactor of task 15, and the JIT in the build adds none. |
+
+`dictgrow.tcl` with the JIT off moved between 645.6 M and 658.0 M between builds. With `--gc off` the counts of the builds are equal within 0.01 %, so the change is the work of the collector, which depends on the words that the native stack holds.
+
+The outside programs with `tools/kostya.sh --jit` on the commit of task 25, against `tclsh` 8.6.16 in the same session. Each output equals the output of `tclsh`.
+
+| Program | Ratio, milestone 1 | Ratio, milestone 2 | Gate |
+|---|---|---|---|
+| `bf.tcl bench.b` | 0.42 | 0.38 | 0.35 (provisional): fail |
+| `bf_oo.tcl bench.b` | 1.36 | 1.33 | 0.35 (provisional): fail |
+| `base64/test.tcl` | 0.70 | 0.70 | 1.0: pass |
+
+`bf.tcl` gained from the inline `lindex`, `str_eq_jump` (the cases of `switch`), and `lset_drop` of task 24. `bf_oo.tcl` spends its time in method calls, which go through `callMethod` and `runProc`.
+
+Tier 2 (tasks 33 to 35) compiles a loop of integers with no call. `sum.tcl` with `--jit --jit-tier2` uses 15.0 M instructions (gate 16 M). `nested.tcl` (127.9 M) and `foreach.tcl` (85.0 M) have loops with calls, and task 36 compiles them.
+
+Tier 2 differs from the design above in these points:
+
+- The exits are code. Each exit writes the slot registers to their cells and the stack places to the value stack, gives back the steps of its part, and calls `resume_at`, which gives the address of the tier 1 code of the exit address after the checks of `jit.enter`. No exit record is in JIT data, and no `jit.deopt` reads one.
+- A loop has at most five slots, each in a register, and its stack places are in registers. A loop that needs more stays in tier 1.
+- `r12`, the register of the helper table, holds a stack place inside a loop. Each exit loads it again from the context.
+- `--jit-stress 32` fails each guard of tier 2 on the schedule 3, 7, 13. `tools/suite.sh -J` runs the suite with tier 2 at a loop count of 2, and `tools/jit-diff.sh -t` adds tier 2 to the JIT modes.
+
 ## The tier 2 model and census (task 32)
 
 `tools/jit-model/run.sh` assembles hand-written tier 2 forms of four loops (`tools/jit-model/model.s`) and counts one pass of each with `perf stat -e instructions:u`. Each form has the joined step check of its part, the guards, and the overflow checks of the rules of tier 2. Measured on 2026-11-24 on the commit of task 32, x86-64 Linux:
