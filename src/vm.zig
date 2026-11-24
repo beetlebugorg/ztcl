@@ -37,7 +37,9 @@ pub const Op = enum(u8) {
     push,
     push_empty,
     pop,
-    /// Pushes the value of slot `a`.
+    /// Pushes the value of slot `a`. With `x` 1, a list that the cell
+    /// owns stays owned: an `access` reads the value at once, and no
+    /// instruction between can run a script or write a cell.
     load,
     /// Writes the top of the stack to slot `a`. The value stays.
     store,
@@ -264,6 +266,12 @@ const Compiler = struct {
     colds: std.ArrayList(Cold) = .empty,
     /// The last address that a jump goes to.
     label: u32 = no_target,
+    /// The command that compiles now is the last command of an arm of
+    /// an `if` or a `switch` whose result no code reads. An inline
+    /// `lset` or `lassign` then drops its result itself.
+    arm_drop: bool = false,
+    /// The result of the command that compiles now is dropped.
+    dropped: bool = false,
 
     fn here(c: *Compiler) u32 {
         return @intCast(c.ins.items.len);
@@ -444,6 +452,15 @@ const Compiler = struct {
     }
 
     fn compileScript(c: *Compiler, s: *interp.Script) Error!void {
+        return c.compileScriptAs(s, .used);
+    }
+
+    /// `used`: the code reads the result of the script. `pop`: a `pop`
+    /// follows the script. `arm`: the script is an arm of a command
+    /// whose result is dropped.
+    const ScriptUse = enum { used, pop, arm };
+
+    fn compileScriptAs(c: *Compiler, s: *interp.Script, use: ScriptUse) Error!void {
         c.nest += 1;
         defer c.nest -= 1;
         if (s.cmds.len == 0) {
@@ -453,8 +470,24 @@ const Compiler = struct {
         }
         for (s.cmds, 0..) |*cmd, i| {
             if (i > 0) try c.emitPop();
+            const last = i + 1 == s.cmds.len;
+            c.dropped = !last or use != .used;
+            c.arm_drop = last and use == .arm;
             try c.compileCmd(cmd);
         }
+    }
+
+    /// The use of the arms of the command that compiles now.
+    fn armUse(c: *Compiler) ScriptUse {
+        return if (c.dropped) .arm else .used;
+    }
+
+    /// Ends an inline `lset` or `lassign` that dropped its result: the
+    /// cold block drops the result of the general command too, and an
+    /// empty string stands for the result.
+    fn armDropped(c: *Compiler) Allocator.Error!void {
+        c.colds.items[c.colds.items.len - 1].drop = true;
+        _ = try c.emit(.{ .op = .push_empty });
     }
 
     fn compileNode(c: *Compiler, n: *const Node) Error!void {
@@ -596,10 +629,35 @@ const Compiler = struct {
         const base = c.depth;
         const g = try c.emit(.{ .op = .guard });
         const start = c.here();
-        for (cmd.words[first..]) |*w| try c.compileWord(w);
+        if (!c.named and (kind == .llength or kind == .lindex) and peekable(cmd)) {
+            // The list in an owned cell stays owned: the guard turns
+            // the inline forms off while a variable has a trace, so the
+            // load of a plain index runs no script.
+            const v = cmd.words[1].kind.single.variable;
+            _ = try c.emit(.{ .op = .load, .x = 1, .a = try c.slot(v.name) });
+            c.push(1);
+            for (cmd.words[2..]) |*w| try c.compileWord(w);
+        } else {
+            for (cmd.words[first..]) |*w| try c.compileWord(w);
+        }
         _ = try c.emit(.{ .op = .access, .x = @intFromEnum(kind) });
         try c.closeGuard(cmd, base, g, start);
         return true;
+    }
+
+    /// The list word of `llength` or `lindex` is one plain variable, and
+    /// the index of `lindex` is a literal or one plain variable.
+    fn peekable(cmd: *Cmd) bool {
+        const w = cmd.words[1];
+        if (w.kind != .single or w.kind.single != .variable) return false;
+        const v = w.kind.single.variable;
+        if (v.index != null or !plain(v.name)) return false;
+        if (cmd.words.len == 2) return true;
+        return switch (cmd.words[2].kind) {
+            .lit => true,
+            .single => |p| p == .variable and p.variable.index == null and plain(p.variable.name),
+            .multi => false,
+        };
     }
 
     fn compileInline(c: *Compiler, cmd: *Cmd, name: []const u8) Error!bool {
@@ -646,14 +704,16 @@ const Compiler = struct {
         } else if (eql(u8, name, "lset")) {
             // Slots of a proc only: a named cell has no owned form.
             if (c.named or n != 4 or nameWord(cmd, 1) == null) return false;
+            const drop = c.arm_drop;
             const base = c.depth;
             const g = try c.emit(.{ .op = .guard });
             const start = c.here();
             const s = try c.slot(nameWord(cmd, 1).?);
             try c.compileWord(&cmd.words[2]);
             try c.compileWord(&cmd.words[3]);
-            _ = try c.emit(.{ .op = .lset, .a = s, .b = try c.site(cmd) });
+            _ = try c.emit(.{ .op = if (drop) .lset_drop else .lset, .a = s, .b = try c.site(cmd) });
             try c.closeGuard(cmd, base, g, start);
+            if (drop) try c.armDropped();
             return true;
         } else return false;
 
@@ -802,6 +862,7 @@ const Compiler = struct {
         if (arms.items[last].body == null) return false;
         const has_default = std.mem.eql(u8, arms.items[last].pat, "default");
 
+        const use = c.armUse();
         const base = c.depth;
         const g = try c.emit(.{ .op = .guard });
         const start = c.here();
@@ -836,7 +897,7 @@ const Compiler = struct {
             c.label = c.here();
             _ = try c.emit(.{ .op = .pop });
             c.depth = base;
-            try c.compileScript(body);
+            try c.compileScriptAs(body, use);
             if (k != last) try ends.append(c.a, try c.emit(.{ .op = .jump }));
         }
         var next: u32 = no_target;
@@ -866,12 +927,14 @@ const Compiler = struct {
         const table = try c.a.alloc(u32, n - 2);
         for (table, 2..) |*t, k| t.* = try c.slot(nameWord(cmd, k).?);
         try c.tables.append(c.a, table);
+        const drop = c.arm_drop;
         const base = c.depth;
         const g = try c.emit(.{ .op = .guard });
         const start = c.here();
         try c.compileWord(&cmd.words[1]);
-        _ = try c.emit(.{ .op = .lassign, .a = @intCast(c.tables.items.len - 1) });
+        _ = try c.emit(.{ .op = if (drop) .lassign_drop else .lassign, .a = @intCast(c.tables.items.len - 1) });
         try c.closeGuard(cmd, base, g, start);
+        if (drop) try c.armDropped();
         return true;
     }
 
@@ -904,6 +967,7 @@ const Compiler = struct {
             other = try c.bodyScript(cmd, i) orelse return false;
             break;
         }
+        const use = c.armUse();
         const base = c.depth;
         const g = try c.emit(.{ .op = .guard });
         const start = c.here();
@@ -911,13 +975,13 @@ const Compiler = struct {
         for (clauses.items) |cl| {
             const next = try c.jumpFalse(cl.cond);
             c.depth = base;
-            try c.compileScript(cl.body);
+            try c.compileScriptAs(cl.body, use);
             try ends.append(c.a, try c.emit(.{ .op = .jump }));
             c.patch(next);
             c.depth = base;
         }
         if (other) |s| {
-            try c.compileScript(s);
+            try c.compileScriptAs(s, use);
         } else {
             _ = try c.emit(.{ .op = .push_empty });
             c.push(1);
@@ -935,7 +999,7 @@ const Compiler = struct {
     fn loopBody(c: *Compiler, loop: *Loop, s: *interp.Script) Error!void {
         try c.loops.append(c.a, loop);
         defer _ = c.loops.pop();
-        try c.compileScript(s);
+        try c.compileScriptAs(s, .pop);
         try c.emitPop();
     }
 
@@ -1384,9 +1448,37 @@ pub inline fn opPop(comptime named: bool, it: *Interp, f: *Frame, code: *const C
 }
 
 pub inline fn opLoad(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    if (!named) {
+        const raw = f.vars.items[i.a].cell;
+        if (raw.v == .val) {
+            stack[sp] = raw.v.val;
+            return;
+        }
+        return loadSlow(it, f, code, stack, sp, i);
+    }
     const cell = readCell(named, it, f, code, i.a);
     if (cell != null and cell.?.v == .val) {
         stack[sp] = cell.?.v.val;
+    } else {
+        const r: interp.VarRef = .{ .name = code.names[i.a] };
+        stack[sp] = try it.readRef(&r);
+    }
+}
+
+/// `load` of a slot of a proc with no plain value in the cell: a link,
+/// an owned list, or another form.
+noinline fn loadSlow(it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    const raw = f.vars.items[i.a].cell;
+    if (i.x == 1) {
+        const t = raw.target();
+        if (t.v == .owned) {
+            stack[sp] = t.v.owned;
+            return;
+        }
+    }
+    const cell = raw.settle();
+    if (cell.v == .val) {
+        stack[sp] = cell.v.val;
     } else {
         const r: interp.VarRef = .{ .name = code.names[i.a] };
         stack[sp] = try it.readRef(&r);

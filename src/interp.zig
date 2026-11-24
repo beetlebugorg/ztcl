@@ -2151,9 +2151,10 @@ pub const Interp = struct {
             else => return null,
         };
         const items = try it.list(cur);
-        const copy = try it.alloc().dupe(Value, items);
-        cell.v = .{ .owned = try value.wrapList(it.alloc(), copy) };
-        return copy;
+        const l = try value.allocList(it.alloc(), items.len);
+        @memcpy(l.obj.buf, items);
+        cell.v = .{ .owned = .{ .list = l } };
+        return l.obj.buf;
     }
 
     /// Runs a command given as a list of words.
