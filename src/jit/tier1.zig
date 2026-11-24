@@ -1,7 +1,8 @@
 //! The driver of tier 1: verify, assemble, and copy one function.
 //!
 //! The verifier gives the static depth of each instruction, the
-//! templates of `tier1_x64.zig` make the bytes, and the executable
+//! templates of `tier1_x64.zig` or `tier1_a64.zig` make the bytes, and
+//! the executable
 //! region gets a copy. The record of the function (`Fn`) lives outside
 //! the heap and outside the executable pages. It has the offset of the
 //! code of each instruction and the depth of each instruction, so
@@ -11,12 +12,16 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const builtin = @import("builtin");
 const vm = @import("../vm.zig");
-const x64 = @import("x64.zig");
 const verify = @import("verify.zig");
 const layout = @import("layout.zig");
 const mem = @import("mem.zig");
-const templates = @import("tier1_x64.zig");
+
+/// True on arm64: the templates and the assembler of arm64.
+pub const arm = builtin.cpu.arch == .aarch64;
+const templates = if (arm) @import("tier1_a64.zig") else @import("tier1_x64.zig");
+const Asm = if (arm) @import("a64.zig").Asm else @import("x64.zig").Asm;
 const helpers = @import("helpers.zig");
 
 const Allocator = std.mem.Allocator;
@@ -122,7 +127,7 @@ pub fn compile(a: Allocator, region: *mem.Region, l: layout.Layout, code: *const
     const entries = a.alloc(u32, code.ins.len) catch return .failed;
     var keep_entries = false;
     defer if (!keep_entries) a.free(entries);
-    var s = x64.Asm.init(a);
+    var s = Asm.init(a);
     defer s.deinit();
     templates.assemble(a, &s, code, &info, l, entries, tier2) catch return .failed;
     const nh = if (tier2) info.loop_heads.len else 0;

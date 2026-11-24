@@ -605,7 +605,7 @@ The order is x86-64 Linux, arm64 macOS, x86-64 macOS, x86-64 Windows, arm64 Linu
 | Target | ABI | Executable memory | Instruction cache | Unwinding | State of this plan |
 |---|---|---|---|---|---|
 | x86-64 Linux | System V | `mmap` read-write, then `mprotect` read-execute | no call needed | Frame pointers. No table. | Measured on this machine. |
-| arm64 macOS | AAPCS64 with the Apple rules | `mmap` with `MAP_JIT`, `pthread_jit_write_protect_np` | `sys_icache_invalidate` | Frame pointers (`x29`). No table. | Not tested. No machine was available. |
+| arm64 macOS | AAPCS64 with the Apple rules | `mmap` with `MAP_JIT`, `pthread_jit_write_protect_np` | `sys_icache_invalidate` | Frame pointers (`x29`). No table. | Tier 1 measured on an Apple silicon Mac. Tier 2 is not built yet (task 38). |
 | x86-64 macOS | System V | `mmap` read-write with `MAP_JIT`, then `mprotect` read-execute | no call needed | Frame pointers. No table. | Not tested. |
 | x86-64 Windows | Microsoft x64 | `VirtualAlloc` read-write, then `VirtualProtect` to `PAGE_EXECUTE_READ` | `FlushInstructionCache` | `RtlAddFunctionTable` with one unwind record for each function | Not tested. |
 | arm64 Linux | AAPCS64 | `mmap` read-write, then `mprotect` read-execute | `__clear_cache` of the Zig runtime | Frame pointers. No table. | Not tested. |
@@ -650,7 +650,7 @@ The attacker controls the script. The attacker does not control the embedder, th
 - The region is one reservation with no access. The compiler assembles each function in a normal buffer first. It then makes new pages of the region writable, copies the function, fills the rest of the last page with trap instructions, makes the pages executable, and flushes the instruction cache. A page is writable or executable at each instant, never both.
 - The code is write-once. On Linux, Windows, and an Intel Mac, each function starts on a new page, and a page that is executable never becomes writable again. So a failed protection change cannot harm a function that exists. On Apple silicon the write switch is a state of the thread for all `MAP_JIT` pages, so the functions pack with 16-byte alignment.
 - No byte of a function changes after the copy: the code has no inline cache and no patch. A stress mode keeps a checksum of each function and checks it.
-- The page before the region and the pages after the used part have no access.
+- The page before the region and the pages after the used part have no access. Apple silicon differs; see the notes on macOS below.
 - The trap instructions are `int3` on x86-64 and zero words (`udf`) on arm64.
 - ztcl never maps one page two times with different rights.
 
@@ -664,6 +664,12 @@ The attacker controls the script. The attacker does not control the embedder, th
 Notes on macOS:
 
 - On Apple silicon, the write protection of `MAP_JIT` memory is a state of the thread. The compiler turns it off only around the one copy, on the thread of the interpreter. One thread uses one interpreter at a time.
+- Each write window is one pair of `pthread_jit_write_protect_np(0)` and `pthread_jit_write_protect_np(1)` around the copy and the fill of one function. No other code and no allocation runs inside it. A thread-local flag marks the window, and `jit.enter`, `jit.tierUp`, and the self test stop the process when the flag is set before a jump into JIT code.
+- The toggle is a state of the thread, so a thread that compiles never opens a write window for the view of another thread. The compile and its write window stay on the thread of the interpreter.
+- macOS refuses `mprotect` on a `MAP_JIT` page (`EACCES`, also to `PROT_NONE`) and refuses `MAP_JIT` at a fixed address (`EINVAL`). Measured on an Apple silicon Mac, ad hoc signed, and with the hardened runtime and the entitlement. So the pages of the region that hold no function yet keep read, write, and execute as their current and most rights. They hold zero words, which are `udf` instructions, and no thread can write them while its write protection is on. A unit test jumps to the first free byte in a child process and gets `SIGILL`, and another writes to a free page and gets a fault.
+- The guard pages are a normal mapping with no access at a fixed address over the first and the last page of the `MAP_JIT` mapping. `mach_vm_region` reports no current right for them, and read, write, and execute for the code pages.
+- With the hardened runtime and no entitlement, the `mmap` with `MAP_JIT` fails with `EINVAL`, `selfTest` returns false, and the interpreter runs each script. This state was checked by hand with a signed test program. The unit tests do not run it, because they need a signing step.
+- An unsigned binary does not start on Apple silicon, so that state cannot reach the JIT.
 - On an Intel Mac, `pthread_jit_write_protect_np` does no work, and a `MAP_JIT` region with write and execute rights is writable and executable at once. So the Intel port never asks for both rights. The author did not test that `mprotect` works on a `MAP_JIT` region under the hardened runtime. The task has this test.
 - ztcl never needs `com.apple.security.cs.allow-unsigned-executable-memory` or `com.apple.security.cs.disable-executable-page-protection`. An embedder must not add them for ztcl.
 - The entitlement belongs to the app that embeds ztcl. zslice decides if it ships with `allow-jit`. With no entitlement, the `mmap` fails, and ztcl runs the interpreter.

@@ -11,9 +11,9 @@ pub fn build(b: *std.Build) void {
     const gc_precise = b.option(bool, "gc-precise", "Use the precise roots of WebAssembly") orelse false;
     gc_options.addOption(bool, "gc_precise", gc_precise);
     // `-Djit=false` builds no JIT code. The default is true on a target
-    // with a backend: x86-64 Linux.
+    // with a backend: x86-64 Linux and arm64 macOS.
     const t = target.result;
-    const jit_backend = t.cpu.arch == .x86_64 and t.os.tag == .linux;
+    const jit_backend = (t.cpu.arch == .x86_64 and t.os.tag == .linux) or (t.cpu.arch == .aarch64 and t.os.tag == .macos);
     gc_options.addOption(bool, "jit", b.option(bool, "jit", "Build the JIT compiler") orelse jit_backend);
     // `-Djit_bug=true` plants a known bug: the `bin_vv` template of tier 1
     // skips its overflow check. The test of the fuzzer uses it.
