@@ -19,10 +19,12 @@
 //!
 //! - 1: the allocations of the compiler fail in turn. Compile k fails
 //!   its allocation `fail_from + k - 1`. After a compile with no failure,
-//!   the count starts again.
+//!   the count starts again. A compile of tier 2 counts as a compile.
 //! - 2: each second copy to the executable region fails.
 //! - 4: a checksum of each function is taken after the copy and checked
-//!   at each `enter` and at `flush`. A difference ends the process.
+//!   at each `enter` and at `flush`. A difference ends the process. The
+//!   code of a tier 2 loop has its own checksum, and `tier_up` and
+//!   `flush` check it.
 //! - 8: each `enter` runs one instruction with its helper first, then
 //!   enters the machine code at the next address. So each reachable
 //!   address is an entry. An entry check that fails there ends the
@@ -269,7 +271,10 @@ pub fn flush(it: *Interp) void {
     if (!built) return;
     const s = it.jit orelse return;
     for (s.fns.items) |f| {
-        if (s.options.stress & stress_sum != 0) checkSum(f);
+        if (s.options.stress & stress_sum != 0) {
+            checkSum(f);
+            for (f.loops) |*rec| checkLoopSum(rec);
+        }
         f.free(s.backing);
     }
     s.fns.clearAndFree(s.backing);
@@ -372,6 +377,34 @@ fn checkSum(f: *const Fn) void {
     if (sumOf(f) != f.sum) @panic("the bytes of a JIT function changed");
 }
 
+/// The bytes of the tier 2 code of a loop.
+fn loopBytes(rec: *const tier1.Loop) []const u8 {
+    const c = rec.code orelse return &.{};
+    return c[0..rec.len];
+}
+
+/// Ends the process when the bytes of the tier 2 code of a loop changed
+/// after the copy.
+fn checkLoopSum(rec: *const tier1.Loop) void {
+    if (rec.code == null) return;
+    if (std.hash.Wyhash.hash(0, loopBytes(rec)) != rec.sum) @panic("the bytes of a tier 2 loop changed");
+}
+
+/// The allocator of one compile. In stress mode 1 it fails one
+/// allocation of the schedule.
+fn compileAlloc(s: *State, fa: *FailAlloc) Allocator {
+    if (s.options.stress & stress_alloc == 0) return s.backing;
+    if (s.fail_next == 0) s.fail_next = s.options.fail_from;
+    fa.* = .{ .child = s.backing, .at = s.fail_next };
+    return fa.allocator();
+}
+
+/// Moves the schedule of stress mode 1 after one compile.
+fn compileDone(s: *State, fa: *const FailAlloc) void {
+    if (s.options.stress & stress_alloc == 0) return;
+    s.fail_next = if (fa.failed) s.fail_next + 1 else s.options.fail_from;
+}
+
 fn compileCode(s: *State, code: *vm.Code) ?*Fn {
     code.jit_state = .failed;
     if (s.stopped) return null;
@@ -391,14 +424,8 @@ fn compileCode(s: *State, code: *vm.Code) ?*Fn {
     const r = &s.region.?;
     r.fail_second = s.options.stress & stress_region != 0;
     var fa: FailAlloc = .{ .child = s.backing, .at = 0 };
-    const a = if (s.options.stress & stress_alloc != 0) blk: {
-        if (s.fail_next == 0) s.fail_next = s.options.fail_from;
-        fa.at = s.fail_next;
-        break :blk fa.allocator();
-    } else s.backing;
-    defer if (s.options.stress & stress_alloc != 0) {
-        s.fail_next = if (fa.failed) s.fail_next + 1 else s.options.fail_from;
-    };
+    const a = compileAlloc(s, &fa);
+    defer compileDone(s, &fa);
     s.fns.ensureUnusedCapacity(a, 1) catch {
         s.stats.failed += 1;
         return null;
@@ -544,8 +571,13 @@ pub fn tierUp(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) usize {
     }
     if (!rec.tried) {
         rec.tried = true;
-        rec.code = compileLoop(s, ctx.code, ctx.frame, pc, @intCast(k), @intCast(f.heads.len), &rec.counts);
+        if (compileLoop(s, ctx.code, ctx.frame, pc, @intCast(k), @intCast(f.heads.len), &rec.counts)) |placed| {
+            rec.code = placed.ptr;
+            rec.len = @intCast(placed.len);
+            if (s.options.stress & stress_sum != 0) rec.sum = std.hash.Wyhash.hash(0, placed);
+        }
     }
+    if (s.options.stress & stress_sum != 0) checkLoopSum(rec);
     // A loop with calls that runs few passes for each entry uses more
     // instructions in tier 2 than in tier 1: the entry block, the exit,
     // and the calls of `tier_up` and `resume_at`. After `probe_entries`
@@ -625,9 +657,11 @@ pub fn resumeAt(ctx: *EnterCtx, pc: u32, sp: u32, kind: u32) callconv(.c) usize 
 
 /// Compiles the loop at `head` with the kinds of the cells of `frame`
 /// now. Null when the loop is not eligible or a step fails.
-fn compileLoop(s: *State, code: *const vm.Code, frame: *interp.Frame, head: u32, loop: u32, heads: u32, counts: *bool) ?[*]const u8 {
+fn compileLoop(s: *State, code: *const vm.Code, frame: *interp.Frame, head: u32, loop: u32, heads: u32, counts: *bool) ?[]const u8 {
     if (s.stopped or code.named) return null;
-    const a = s.backing;
+    var fa: FailAlloc = .{ .child = s.backing, .at = 0 };
+    const a = compileAlloc(s, &fa);
+    defer compileDone(s, &fa);
     var info = (verify.verify(a, code) catch return null) orelse return null;
     defer info.deinit(a);
     const kinds = a.alloc(tier2.Kind, code.names.len) catch return null;
@@ -664,7 +698,7 @@ fn compileLoop(s: *State, code: *const vm.Code, frame: *interp.Frame, head: u32,
     if (code.named) s.stats.named_bytes += pages;
     s.stats.tier2 += 1;
     s.stats.code_bytes += placed.len;
-    return placed.ptr;
+    return placed;
 }
 
 /// The error of the last `enter` with the result `.failed`.

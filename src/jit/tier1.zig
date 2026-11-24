@@ -77,6 +77,9 @@ pub const Loop = struct {
     counts: bool = false,
     /// The entries into the tier 2 code.
     entries: u32 = 0,
+    /// The bytes of the tier 2 code, and their checksum for stress mode 4.
+    len: u32 = 0,
+    sum: u64 = 0,
 };
 
 /// The counts of the stress schedule of tier 2: the Nth check of a guard
