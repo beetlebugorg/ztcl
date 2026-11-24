@@ -163,3 +163,15 @@ test "the total memory of the group fails the allocation of a thread" {
     const v = try thread.sendWait(&it, id2, "string length [string repeat x 1000]", false);
     try testing.expectEqualStrings("1000", try it.str(v));
 }
+
+test "the tsv commands keep the inline forms of the core commands" {
+    if (!thread.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try host(&it);
+    defer it.deinit();
+    _ = try it.eval("proc f {} {set x 1; incr x; lappend l a; llength $l}; f");
+    try testing.expect(it.unsafe_epoch != it.epoch);
+    // A proc of the same name in another namespace turns them off.
+    _ = try it.eval("namespace eval other {proc set {args} {}}; f");
+    try testing.expect(it.unsafe_epoch == it.epoch);
+}

@@ -566,6 +566,10 @@ pub const Command = struct {
     ctx: ?*anyopaque = null,
     /// The command and execution traces.
     traces: ?*trace.CmdTraces = null,
+    /// A command of `tsv.zig` such as `tsv::set`. While its key is in
+    /// the namespace `tsv`, the count of shadows of `Commands` does not
+    /// count it.
+    tsv_op: bool = false,
 };
 
 /// The command table: a hash map from the full name to the command. It
@@ -600,13 +604,22 @@ pub const Commands = struct {
         return false;
     }
 
+    /// `shadow` for a key and its command. A command of `tsv.zig` such
+    /// as `tsv::set` is no shadow while its key is in the namespace
+    /// `tsv`, so the inline forms stay on. Compiled code in the
+    /// namespace `tsv` runs the core command.
+    fn shadowOf(key: []const u8, c: *const Command) bool {
+        if (!shadow(key)) return false;
+        return !(c.tsv_op and std.mem.startsWith(u8, key, "tsv::"));
+    }
+
     /// The count of shadows. The first call reads each key.
     pub fn shadowCount(t: *Commands) u32 {
         if (!t.counted) {
             var n: u32 = 0;
-            var iter = t.map.keyIterator();
-            while (iter.next()) |k| {
-                if (shadow(k.*)) n += 1;
+            var iter = t.map.iterator();
+            while (iter.next()) |e| {
+                if (shadowOf(e.key_ptr.*, e.value_ptr.*)) n += 1;
             }
             t.shadows = n;
             t.counted = true;
@@ -640,7 +653,12 @@ pub const Commands = struct {
 
     pub fn put(t: *Commands, a: Allocator, key: []const u8, c: *Command) Allocator.Error!void {
         const gop = try t.map.getOrPut(a, key);
-        if (t.counted and !gop.found_existing and shadow(key)) t.shadows += 1;
+        if (t.counted) {
+            const was = gop.found_existing and shadowOf(key, gop.value_ptr.*);
+            const now = shadowOf(key, c);
+            if (now and !was) t.shadows += 1;
+            if (was and !now) t.shadows -= 1;
+        }
         gop.value_ptr.* = c;
     }
 
@@ -650,7 +668,7 @@ pub const Commands = struct {
 
     pub fn fetchRemove(t: *Commands, key: []const u8) ?Map.KV {
         const kv = t.map.fetchRemove(key) orelse return null;
-        if (t.counted and shadow(kv.key)) t.shadows -= 1;
+        if (t.counted and shadowOf(kv.key, kv.value)) t.shadows -= 1;
         return kv;
     }
 
