@@ -652,6 +652,23 @@ fn mustWake(w: *Worker) bool {
 
 /// Starts a thread. Gives its id.
 pub fn create(it: *Interp, script: []const u8, joinable: bool, preserved: bool) Error!u64 {
+    return createOpts(it, script, .{ .joinable = joinable, .preserved = preserved });
+}
+
+/// The options of a new thread.
+pub const Opts = struct {
+    joinable: bool = false,
+    preserved: bool = false,
+    /// A pool worker: the pool and the loop that the thread runs in
+    /// place of a script (`tpool.zig`).
+    pool: ?*anyopaque = null,
+    pool_main: ?*const fn (w: *Worker, it: *Interp) void = null,
+};
+
+/// Starts a thread with options. Gives its id.
+pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
+    const joinable = o.joinable;
+    const preserved = o.preserved;
     const me = workerOf(it) orelse return it.fail("threads are off", .{});
     const g = me.group;
     reapZombies(g);
@@ -686,7 +703,7 @@ pub fn create(it: *Interp, script: []const u8, joinable: bool, preserved: bool) 
     const steps = @min(want, g.steps_left);
     if (g.limits.total_steps != std.math.maxInt(u64)) g.steps_left -= steps;
     st.step_limit = steps;
-    w.* = .{ .group = g, .id = g.next_id, .joinable = joinable, .refs = if (preserved) 1 else 0, .script = text, .steps = steps, .mem_limit = st.mem_limit };
+    w.* = .{ .group = g, .id = g.next_id, .joinable = joinable, .refs = if (preserved) 1 else 0, .script = text, .steps = steps, .mem_limit = st.mem_limit, .pool = o.pool, .pool_main = o.pool_main };
     g.next_id += 1;
     g.running += 1;
     g.workers.append(g.gpa, w) catch {
@@ -1295,6 +1312,7 @@ pub fn register(it: *Interp) Allocator.Error!void {
     try @import("threadcmd.zig").register(it);
     try @import("tsv.zig").register(it);
     try @import("tsync.zig").register(it);
+    try @import("tpool.zig").register(it);
     if (it.capabilities & @intFromEnum(interp.Capability.event) != 0) try @import("event.zig").setSource(it);
     if (it.findCommand("package") != null) _ = it.eval("package provide Thread 2.8.11") catch {};
 }

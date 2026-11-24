@@ -175,3 +175,12 @@ test "the tsv commands keep the inline forms of the core commands" {
     _ = try it.eval("namespace eval other {proc set {args} {}}; f");
     try testing.expect(it.unsafe_epoch == it.epoch);
 }
+
+test "deinit of the host ends the pools and their jobs" {
+    if (!thread.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try host(&it);
+    _ = try it.eval("set p [tpool::create -minworkers 2 -maxworkers 4]; tpool::post $p {while 1 {}}; tpool::post $p {expr 1}; tpool::post -detached $p {while 1 {}}");
+    _ = try it.eval("set q [tpool::create -minworkers 1]; tpool::release $q");
+    it.deinit();
+}
