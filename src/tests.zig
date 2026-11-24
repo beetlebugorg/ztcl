@@ -1316,6 +1316,23 @@ test "TclOO: classes, methods, next, mixins, and destructors" {
     });
 }
 
+test "TclOO: the caches of a call see each change" {
+    try check(&.{
+        // The cache of the declared variables belongs to one object.
+        .{ "oo::class create A {variable v; constructor {x} {set v $x}; method get {} {return $v}}; set a [A new 1]; set b [A new 2]; list [$a get] [$b get] [$a get]", "1 2 1" },
+        // `::oo::Link` outside a method links in the current namespace,
+        // also while a method runs.
+        .{ "oo::object create z; namespace eval s {variable q 11}; proc s::r {} {::oo::Link q; return $q}; s::r", "11" },
+        .{ "namespace eval s {variable q 11}; proc s::r {} {::oo::Link q; return $q}; oo::class create A {variable q; constructor {} {set q mine}; method m {} {list $q [s::r] $q}}; [A new] m", "mine 11 mine" },
+        // A method name word that changes between calls of one site.
+        .{ "oo::class create A {method x {} {return x}; method y {} {return y}}; set o [A new]; set r {}; foreach m {x y x y} {lappend r [$o $m]}; set r", "x y x y" },
+        // A new method of the same name after a call.
+        .{ "oo::class create A {method m {} {return 1}}; set o [A new]; set r [$o m]; oo::define A method m {} {return 2}; lappend r [$o m]", "1 2" },
+        // A name string that names another object after a rename.
+        .{ "oo::class create A {method m {} {return a}}; oo::class create B {method m {} {return b}}; A create x; set n x; set r [$n m]; x destroy; B create x; lappend r [$n m]", "a b" },
+    });
+}
+
 test "the network policy of socket: allowlist, ranges, ports, and peers" {
     const sock = tcl.sock;
     const sys = tcl.sys;
