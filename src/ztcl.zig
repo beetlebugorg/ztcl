@@ -32,6 +32,9 @@ pub const chan = @import("chan.zig");
 pub const event = @import("event.zig");
 pub const sock = @import("sock.zig");
 pub const jit = @import("jit.zig");
+/// The bytecode and the verifier of the JIT, for the tools of the JIT.
+pub const vm = @import("vm.zig");
+pub const jit_verify = @import("jit/verify.zig");
 
 pub const Value = value.Value;
 pub const Interp = interp.Interp;

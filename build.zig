@@ -75,6 +75,18 @@ pub fn build(b: *std.Build) void {
     }) });
     b.step("suite-runner", "Build the runner with the test commands").dependOn(&b.addInstallArtifact(suite_exe, .{}).step);
 
+    // The census of loops for tier 2.
+    const census_exe = b.addExecutable(.{ .name = "jit-census", .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/jit-census.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "ztcl", .module = ztcl }},
+    }) });
+    const census_run = b.addRunArtifact(census_exe);
+    census_run.setCwd(b.path("."));
+    if (b.args) |args| census_run.addArgs(args);
+    b.step("jit-census", "Count the loops that tier 2 can compile").dependOn(&census_run.step);
+
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
     const wasm = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
         .root_source_file = b.path("src/wasm.zig"),

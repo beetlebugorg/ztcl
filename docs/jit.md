@@ -256,6 +256,28 @@ The tests of milestone 1:
 
 Task 15 moved each handler of `vm.exec` to a function. The guard and `foreach_next` stay in two parts in `exec`: `guardJumps` and `step`, and `foreachAdvance` with no check of the kinds. The joined forms made `sum.tcl` 6 % and `foreach.tcl` 5 % longer. The remaining 1.9 % of `foreach.tcl` comes from the code layout of `exec`: a copy of the old handler made `sum.tcl` and `nested.tcl` 2 % longer.
 
+## The tier 2 model and census (task 32)
+
+`tools/jit-model/run.sh` assembles hand-written tier 2 forms of four loops (`tools/jit-model/model.s`) and counts one pass of each with `perf stat -e instructions:u`. Each form has the joined step check of its part, the guards, and the overflow checks of the rules of tier 2. Measured on 2026-11-24 on the commit of task 32, x86-64 Linux:
+
+| Loop | Instructions for one pass | Model of the script | Tier 1 (`--jit`) | Gate |
+|---|---|---|---|---|
+| `sum.tcl` | 14 | 14.7 M | 90.9 M | 16 M |
+| `nested.tcl`, the inner loop with the inline `lappend` | 24 | 24.7 M | 123.7 M | 100 M |
+| `foreach.tcl`, `foreach` with a guard of the item tag | 20 | 23.1 M | 80.4 M | 45 M |
+| `dsum.tcl`, `set s [expr {$s + $x * 0.5}]` | 14 | 14.7 M | not measured | 16.9 M (the model plus 15 %) |
+
+The model of a script is the startup count (`puts hi`, 0.72 M) plus the passes of its hot loops times the count of one pass. The model of `sum.tcl` is 14.7 M. The earlier model gave 10.2 M. This form writes each result to a scratch register first and moves it to the slot register after the overflow check, as task 34 asks. The models of `nested.tcl` and `foreach.tcl` have the inline paths of tier 1 in the loop and no call out, and `nested.tcl` uses an indexed address that the assembler of the JIT does not have. So they are a lower bound, and the gates of those two stay at the provisional numbers.
+
+`zig build jit-census -- FILE...` runs each script, compiles the body of each proc, and puts each loop in a class: only the integer set of tier 2 (int), the integer set with helper calls (calls), or not eligible (no: an inner loop or a `ret`). Results:
+
+| Scripts | int | calls | no | First instruction outside the integer set |
+|---|---|---|---|---|
+| `bench/*.tcl` | 1 | 9 | 2 | `push` 4, `foreach_next` 2, `lappend` 2, `dict_update_drop` 1, `jf_vv` 1, `access` 1 |
+| `tests/jit/*.tcl` | 2 | 8 | 13 | `ret` 12, `foreach_next` 6, `push` 2, `jf_vi` 1 |
+
+The census found no loop in the outside programs: their loops are in method bodies and in procs of namespaces, and the census reads only the procs of the global namespace. The census did not run on the suite files, because they need the test environment of `tools/suite.sh`. The census counts loops and not loop passes: the share of passes in eligible loops was not measured.
+
 ## The design of the JIT
 
 ### The tiers
