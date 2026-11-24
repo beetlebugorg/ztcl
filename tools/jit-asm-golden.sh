@@ -127,6 +127,7 @@ for a, i in regimm(imms):
     add("and_ri32", "and %s, %d" % (r32[a], i), a, 0, 0, i)
     for name, k in alus:
         add("alu_ri64", "%s %s, %d" % (name, r64[a], i), a, 0, 0, i, k)
+        add("alu_ri32", "%s %s, %d" % (name, r32[a], i), a, 0, 0, i, k)
 for a in range(16):
     add("neg_r64", "neg %s" % r64[a], a)
     add("idiv_r64", "idiv %s" % r64[a], a)

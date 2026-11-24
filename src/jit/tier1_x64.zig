@@ -149,9 +149,11 @@ pub const Emitter = struct {
         try s.callM(try x64.at(abi.helpers, 8 * @as(i64, @intFromEnum(h))));
     }
 
-    /// Jumps to the error stub of `pc` when `eax` is above 1.
+    /// Jumps to the error stub of `pc` when `eax` is above 1. A helper
+    /// returns `u32`, and the ABI leaves the high half of `rax`
+    /// undefined, so the compare reads only `eax`.
     pub fn checkError(e: *Emitter, pc: u32) Error!void {
-        try e.s.aluRI(.cmp, abi.ret, helpers.yes);
+        try e.s.aluRI32(.cmp, abi.ret, helpers.yes);
         try e.s.jcc(.a, try e.stub(pc));
     }
 
@@ -520,7 +522,7 @@ pub const Emitter = struct {
                 .recheck => |c| {
                     s.bind(c.at);
                     try e.call(.recheck, c.pc);
-                    try s.aluRI(.cmp, abi.ret, helpers.yes);
+                    try s.aluRI32(.cmp, abi.ret, helpers.yes);
                     try s.jcc(.e, e.labels[c.cold]);
                     try s.jmp(c.back);
                 },

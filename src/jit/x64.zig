@@ -352,6 +352,11 @@ pub const Asm = struct {
         try s.reserve();
         try s.aluImm(o, true, rmR(dst), v);
     }
+    /// The 32-bit form. It reads only the low half of `dst`.
+    pub fn aluRI32(s: *Asm, o: Alu, dst: Reg, v: i32) Allocator.Error!void {
+        try s.reserve();
+        try s.aluImm(o, false, rmR(dst), v);
+    }
     pub fn aluMI(s: *Asm, o: Alu, dst: Mem, v: i32) Allocator.Error!void {
         try s.reserve();
         try s.aluImm(o, true, rmM(dst), v);
@@ -531,6 +536,7 @@ pub const Form = enum {
     alu_rr64,
     alu_rm64,
     alu_ri64,
+    alu_ri32,
     alu_mi64,
     alu_mi32,
     alu_rm32,
@@ -607,6 +613,7 @@ pub fn encodeRow(s: *Asm, row: Row) Allocator.Error!void {
         .alu_rr64 => try s.aluRR(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ra, rb),
         .alu_rm64 => try s.aluRM(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ra, mb),
         .alu_ri64 => try s.aluRI(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ra, row.i),
+        .alu_ri32 => try s.aluRI32(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ra, row.i),
         .alu_mi64 => try s.aluMI(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ma, row.i),
         .alu_mi32 => try s.aluMI32(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ma, row.i),
         .alu_rm32 => try s.aluRM32(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ra, mb),

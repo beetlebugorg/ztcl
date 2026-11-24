@@ -157,13 +157,21 @@ fn newGen() u64 {
 /// executable memory. A build with the precise roots of WebAssembly
 /// (`-Dgc-precise`) has no JIT.
 pub fn enable(it: *Interp, opts: Options) bool {
+    // The counter of a child wraps the counted allocator of its root. So
+    // the JIT data of each interpreter comes from the allocator of the
+    // embedder under the root, outside the memory count of the scripts.
+    var root: *Interp = it;
+    while (root.parent) |p| root = p;
+    return enableWith(it, opts, root.counter.child);
+}
+
+fn enableWith(it: *Interp, opts: Options, a: Allocator) bool {
     if (!built or gc.precise) return false;
     if (it.jit) |s| {
         s.options = opts;
         return true;
     }
     const l = usable() orelse return false;
-    const a = it.counter.child;
     const s = a.create(State) catch return false;
     s.* = .{ .options = opts, .backing = a, .gen = newGen(), .layout = l };
     it.jit = s;

@@ -92,6 +92,30 @@ test "memUsed is equal with the JIT on and off" {
     try testing.expectEqual(used[0], used[1]);
 }
 
+test "the JIT data of a child is outside the memory count" {
+    if (!jit.built) return error.SkipZigTest;
+    const script =
+        \\interp create c
+        \\c eval {proc f {n} {set s 0; for {set i 0} {$i < $n} {incr i} {incr s $i}; return $s}; f 10}
+        \\for {set k 0} {$k < 40} {incr k} { c eval [list proc g$k {} [list return $k]]; c eval g$k }
+        \\interp delete c
+    ;
+    var peak: [2]usize = undefined;
+    var used: [2]usize = undefined;
+    for (0..2) |k| {
+        const it = try newInterp();
+        defer freeInterp(it);
+        it.gc_on = false;
+        try it.allow(@intFromEnum(tcl.interp.Capability.interp));
+        if (k == 1 and !it.enableJit(.{ .threshold = 0 })) return error.SkipZigTest;
+        _ = try it.eval(script);
+        used[k] = it.memUsed();
+        peak[k] = it.counter.mem_peak;
+    }
+    try testing.expectEqual(used[0], used[1]);
+    try testing.expectEqual(peak[0], peak[1]);
+}
+
 // ---- Executable memory ----
 
 const mem = @import("mem.zig");
@@ -211,6 +235,42 @@ test "selfTest is false under PR_SET_MDWE" {
     try testing.expectEqual(@as(u32, 0), code);
 }
 
+/// Reads one byte at `addr` in a child process. True when the read
+/// ends the child with SIGSEGV.
+fn readFaults(addr: usize) !bool {
+    const pid = linux.fork();
+    if (linux.errno(pid) != .SUCCESS) return error.SkipZigTest;
+    if (pid == 0) {
+        // The test runner has a handler for SIGSEGV. The child needs the
+        // default action, so the status shows the signal.
+        const dfl: linux.Sigaction = .{ .handler = .{ .handler = linux.SIG.DFL }, .mask = linux.sigemptyset(), .flags = 0 };
+        _ = linux.sigaction(.SEGV, &dfl, null);
+        const p: *volatile u8 = @ptrFromInt(addr);
+        const b = p.*;
+        linux.exit_group(@as(i32, b) & 1);
+    }
+    var status: u32 = 0;
+    _ = linux.waitpid(@intCast(pid), &status, 0);
+    return linux.W.IFSIGNALED(status) and linux.W.TERMSIG(status) == .SEGV;
+}
+
+test "a read of a guard page of the region faults" {
+    if (!jit.built) return error.SkipZigTest;
+    const page = std.heap.pageSize();
+    var r = mem.Region.init(4 * page) orelse return error.NoRegion;
+    defer r.deinit();
+    const ret42 = [_]u8{ 0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3 };
+    const f = r.append(&ret42).?;
+    const base = @intFromPtr(r.base);
+    // The page before the region, a page after the used part, and the
+    // page after the region.
+    try testing.expect(try readFaults(base - page));
+    try testing.expect(try readFaults(base + page));
+    try testing.expect(try readFaults(base + r.limit));
+    // The code and its fill bytes are readable.
+    try testing.expect(!try readFaults(@intFromPtr(f.ptr) + page - 1));
+}
+
 // ---- The assembler ----
 
 const x64 = @import("x64.zig");
@@ -276,6 +336,27 @@ test "the selfTest function from the assembler returns 42" {
     var s = x64.Asm.init(testing.allocator);
     defer s.deinit();
     try s.movRI32(.rax, 42);
+    try s.ret();
+    try s.finish();
+    try testing.expect(mem.runConst(s.bytes(), 42));
+}
+
+test "checkError reads only eax after a helper call" {
+    if (!jit.built) return error.SkipZigTest;
+    const t1 = @import("tier1_x64.zig");
+    var s = x64.Asm.init(testing.allocator);
+    defer s.deinit();
+    var stubs = [_]?x64.Label{null};
+    var e: t1.Emitter = .{ .s = &s, .code = undefined, .info = undefined, .l = undefined, .labels = &.{}, .stubs = &stubs, .epilogue = try s.newLabel(), .a = testing.allocator, .slows = &.{} };
+    // rax = 0xFFFFFFFF_00000001: result 1 with a high half that a u32
+    // return value leaves undefined.
+    try s.movRI32(.rax, -1);
+    try s.neg(.rax);
+    try e.checkError(0);
+    try s.movRI32(.rax, 42);
+    try s.ret();
+    s.bind(stubs[0].?);
+    try s.movRI32(.rax, 7);
     try s.ret();
     try s.finish();
     try testing.expect(mem.runConst(s.bytes(), 42));
@@ -721,6 +802,7 @@ fn runModeGc(script: []const u8, on: bool, limit: u64, min_compiled: u64, stress
     it.output = .{ .ctx = &out, .write = collect };
     if (stress == 0) it.gc_on = false else it.setGcStress(stress);
     it.step_limit = limit;
+    if (allow_interp) try it.allow(@intFromEnum(tcl.interp.Capability.interp));
     if (on and !it.enableJit(.{ .threshold = 0 })) return error.SkipZigTest;
     var w: std.ArrayList(u8) = .empty;
     errdefer w.deinit(testing.allocator);
@@ -744,6 +826,9 @@ fn runModeGc(script: []const u8, on: bool, limit: u64, min_compiled: u64, stress
     }
     return .{ .text = try w.toOwnedSlice(a) };
 }
+
+/// True while a test runs scripts with the capability `interp`.
+var allow_interp = false;
 
 /// Runs `script` in the interpreter and with the JIT and compares each
 /// field. `min_compiled` is the least count of compiled functions.
@@ -1042,3 +1127,23 @@ test "jit: compiled code with a collection at each allocation" {
         };
     }
 }
+
+test "jit: a child interp deleted while its compiled code runs" {
+    allow_interp = true;
+    defer allow_interp = false;
+    try same(
+        \\interp create c
+        \\interp alias c kill {} apply {{} { interp delete c; return killed }}
+        \\c eval {
+        \\  proc p {} { set s 0; for {set i 0} {$i < 50} {incr i} { incr s $i; if {$i == 25} { lappend s [kill] }; set t [list $i $s] }; return $s }
+        \\  proc q {} { p }
+        \\}
+        \\catch {c eval q} m; puts "1: $m [interp exists c]"
+        \\interp create d
+        \\interp alias d kill {} interp delete d
+        \\catch {d eval { proc z {} { for {set i 0} {$i < 3} {incr i} {}; kill; set x 0; for {set i 0} {$i < 50} {incr i} {incr x}; return $x }; z }} m
+        \\puts "2: $m [interp exists d]"
+        \\for {set k 0} {$k < 20} {incr k} { interp create e$k; e$k eval { proc p {} { set s 0; for {set i 0} {$i < 10} {incr i} {incr s}; return $s }; p; p }; interp delete e$k }
+    , 0);
+}
+
