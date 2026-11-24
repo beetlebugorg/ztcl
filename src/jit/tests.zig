@@ -2539,3 +2539,48 @@ test "tier 2: a part that the verifier does not reach compiles and stops at the 
     try testing.expectEqualStrings("step limit reached", try it.str(it.result));
     try testing.expectEqual(before + 1, it.jit.?.stats.tier2);
 }
+
+test "tier 2: a loop that pops a place below the depth of its head stays in tier 1" {
+    if (!jit.built) return error.SkipZigTest;
+    // The jit-fuzz --verify --tier2 mode found it: a changed jump made a
+    // loop whose head is a `pop` at depth 1. The `pop` drops a place
+    // below the depth of the head, and the code generation of tier 2
+    // computed a negative place index.
+    const it = try newInterp();
+    defer freeInterp(it);
+    it.gc_on = false;
+    if (!it.enableJit(.{ .threshold = 0, .tier2 = true, .tier2_count = 1 })) return error.SkipZigTest;
+    _ = try it.eval("proc q {} { list x; set b 1; list y; return $b }");
+    _ = try it.eval("q");
+    const code = try procCode(it, "q");
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var m = try Mutable.init(arena.allocator(), code);
+    // The `pop` of `list x`, and the `push` of `y`.
+    const k = m.find(.pop);
+    var j: usize = k + 1;
+    while (m.ins[j].op != .invoke) j += 1;
+    j -= 1;
+    try testing.expectEqual(vm.Op.push, m.ins[j].op);
+    m.ins[j] = .{ .op = .jump, .a = @intCast(k) };
+    var info = (try verify.verify(testing.allocator, &m.code)).?;
+    defer info.deinit(testing.allocator);
+    try testing.expectEqual(@as(usize, 1), info.loop_heads.len);
+    try testing.expectEqual(@as(u16, 1), info.depth[k]);
+    const kinds = try testing.allocator.alloc(tier2.Kind, m.code.names.len);
+    defer testing.allocator.free(kinds);
+    @memset(kinds, .int);
+    try testing.expect((try tier2.plan(testing.allocator, &m.code, &info, info.loop_heads[0], kinds)) == null);
+    const held = try arena.allocator().create(vm.Code);
+    held.* = m.code;
+    _ = jit.prepare(it, held) orelse return error.NotCompiled;
+    const p = it.commands.get("q").?.impl.proc;
+    const saved = p.code;
+    p.code = held;
+    defer p.code = saved;
+    const before = it.jit.?.stats.tier2;
+    it.step_limit = 2000;
+    try testing.expectError(error.TclError, it.eval("q"));
+    try testing.expectEqualStrings("step limit reached", try it.str(it.result));
+    try testing.expectEqual(before, it.jit.?.stats.tier2);
+}

@@ -216,6 +216,13 @@ const Builder = struct {
             const pc: u32 = @intCast(b.head + k);
             if (!b.seen[k]) continue;
             const i = code.ins[pc];
+            // An instruction that pops or replaces a place below the
+            // depth of the head reads a value of the frame that entered
+            // the loop. The backends keep no such place. The bytecode
+            // compiler makes no such loop, so only a changed Code has
+            // one. `foreach_next` keeps its list and index.
+            const ef = verify.effectAt(code, pc) orelse return null;
+            if (!ef.keeps and b.info.depth[pc] < base + ef.need) return null;
             var stack: std.ArrayList(Kind) = .empty;
             try stack.appendSlice(b.a, b.kinds[k]);
             const slots = try b.a.dupe(Kind, b.slot_kinds[k]);
