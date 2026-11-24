@@ -895,6 +895,8 @@ const ListCacheEntry = struct {
     len: usize = 0,
     text: []const u8 = &.{},
     items: ?[]const Value = null,
+    /// The count of collections at the last compare of the text.
+    gc: u64 = 0,
 };
 
 /// The bytes above the frame address that the stack scan also reads. A
@@ -1543,7 +1545,10 @@ pub const Interp = struct {
     /// The elements of `v` for a command that only reads them. A string
     /// that comes again at the same address has a cached parse. The
     /// entry has its own copy of the text, and a compare with that copy
-    /// guards each hit. The first use of a string makes no copy.
+    /// guards the first hit after each collection. Between two
+    /// collections no block is freed, so the same address and length
+    /// name the same text, as for `script_cache`. The first use of a
+    /// string makes no copy.
     pub fn readList(it: *Interp, v: Value) Error![]const Value {
         if (v == .list) return v.list.items();
         if (v != .str or v.str.len < list_cache_min) return it.list(v);
@@ -1555,7 +1560,11 @@ pub const Interp = struct {
             return it.list(v);
         }
         if (e.items) |items| {
-            if (std.mem.eql(u8, e.text, s)) return items;
+            if (e.gc == it.heap.collections) return items;
+            if (std.mem.eql(u8, e.text, s)) {
+                e.gc = it.heap.collections;
+                return items;
+            }
             e.items = null;
             return it.list(v);
         }
@@ -1563,6 +1572,7 @@ pub const Interp = struct {
         const items = try it.list(.{ .str = text });
         e.text = text;
         e.items = items;
+        e.gc = it.heap.collections;
         return items;
     }
 
