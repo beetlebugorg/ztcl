@@ -104,7 +104,7 @@ The queue of a thread is a source of the event loop. `vwait`, `update`, and `thr
 
 A thread checks a stop flag at its safe points. Another thread sets the flag and then writes zero to `mem_limit` of the target interpreter. Each safe point of the interpreter and of the JIT code already compares the memory count with `mem_limit`, so the next safe point calls `Interp.memPoint`. There the target restores its limit and reads the flag. The fast path of the interpreter and of the JIT has no new check.
 
-- The flag is atomic. The write of `mem_limit` is an aligned word that only the target restores. When the target restores it first and reads the flag second, a cancel is never lost.
+- The flag is atomic. The write of `mem_limit` is an aligned word that only the target restores. The other thread sets the flag and stores the zero under the lock of the worker. The target takes the flag and restores the limit under the same lock. So a cancel is never lost, and no zero store comes after a restore. `Interp.overLimit` compares a thread interpreter with the limit of its worker, so a memory check between the two steps gives no false error.
 - A thread that runs in a child interpreter sees the cancel when the call into the child returns. The step limit of the thread bounds that call.
 - A thread deletes its own interpreter, the JIT code included, on its own thread after its script ends. So no JIT code of a thread runs when its interpreter goes.
 - When the host ends (`deinit` or `reset`), the group sets the stop flag of each thread, wakes each wait, and joins each thread. A thread with no step limit in a loop with no safe point can delay that. Set a step limit for untrusted scripts.
@@ -127,11 +127,13 @@ The commands use `std.Thread`, so they build for Linux, macOS, and Windows. The 
 
 `socket.test` has 10 tests with the constraint `thread`, and `unixNotfy.test` has 2. The suite turns on the capability for each file, so these tests run. The prototype passed both tests of `unixNotfy.test`. The tests of `socket.test` ran and failed, and the pass count of the file did not drop.
 
-## Decisions for the user
+## Decisions
 
-1. The stop flag. The plan uses the memory check (see above), so the fast paths of `vm.zig` and of the JIT do not change. The other choice is an atomic load in the step check of each safe point, which changes `vm.zig` and the templates of both tiers. The cost of the plan is one store from another thread to `mem_limit`. ThreadSanitizer reports it as a race, so its run needs one suppression for that field.
-2. The default limits in the table above.
-3. The suite turns on `thread` for each file. A file that tests `info commands` or the namespaces can change. Task 02 checks each file of `tools/suite.sh -a`.
+The user approved these three choices of the plan.
+
+1. The stop flag uses the memory check (see above). Decided. The fast paths of `vm.zig` and of the JIT do not change. The other choice was an atomic load in the step check of each safe point, which changes `vm.zig` and the templates of both tiers. The cost of the plan is one store from another thread to `mem_limit`. ThreadSanitizer reports it as a race, so its run needs one suppression for that field.
+2. The default limits are the values of the table above. Decided.
+3. The suite turns on `thread` for each file. Decided. A file that tests `info commands` or the namespaces can change. Task 02 checks each file of `tools/suite.sh -a`.
 
 ## Future work
 

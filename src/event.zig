@@ -26,6 +26,7 @@ const cmds = @import("cmds.zig");
 const child = @import("child.zig");
 const trace = @import("trace.zig");
 const sys = @import("sys.zig");
+const thread = @import("thread.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
@@ -60,7 +61,23 @@ pub const State = struct {
     watches: std.ArrayList(Watch) = .empty,
     next_id: u64 = 0,
     a: std.mem.Allocator,
+    /// The interpreter of a thread whose message queue is a source of
+    /// the loop (capability `thread`).
+    thread_it: ?*Interp = null,
 };
+
+/// Makes the message queue of the thread of `it` a source of the loop.
+pub fn setSource(it: *Interp) std.mem.Allocator.Error!void {
+    const s = state(it) catch return error.OutOfMemory;
+    s.thread_it = it;
+}
+
+/// The thread interpreter whose queue a pass of `it` serves, or null.
+fn source(s: *State, it: *Interp) ?*Interp {
+    if (comptime !thread.supported) return null;
+    const x = s.thread_it orelse return null;
+    return if (x == it) x else null;
+}
 
 fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
@@ -285,11 +302,15 @@ const chan_ok = sys.supported;
 pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
     const s = try state(it);
     const a = it.alloc();
+    const src = source(s, it);
     while (true) {
         var ran = false;
+        if (src) |x| {
+            if (!idle_only and try thread.serve(x, 64)) ran = true;
+        }
         if (!idle_only) {
             var t_now = try now(it);
-            var timeout: i64 = if (wait and s.idles.items.len == 0) -1 else 0;
+            var timeout: i64 = if (wait and s.idles.items.len == 0 and !ran) -1 else 0;
             for (s.timers.items) |t| {
                 const left = @max(t.at - t_now, 0);
                 if (timeout < 0 or left < timeout) timeout = left;
@@ -314,16 +335,30 @@ pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
                     try owners.append(a, w);
                 }
             }
-            if (wait and timeout < 0 and wants.items.len == 0) return false;
+            if (wait and timeout < 0 and wants.items.len == 0) {
+                // A thread waits for a message while another thread can
+                // send one.
+                if (src) |x| if (thread.canWake(x)) {
+                    try thread.block(x, thread.slice_ns);
+                    continue;
+                };
+                return false;
+            }
             if (wants.items.len > 0) {
                 const ready_now = try a.alloc(bool, wants.items.len);
                 for (wants.items, ready_now) |w, *r| r.* = w.can_read;
-                const ms: i32 = if (timeout < 0) -1 else @intCast(@min(@divFloor(timeout + 999, 1000), 3_600_000));
+                var ms: i32 = if (timeout < 0) -1 else @intCast(@min(@divFloor(timeout + 999, 1000), 3_600_000));
+                // The queue of a thread needs a check between polls.
+                if (src != null and (ms < 0 or ms > 10)) ms = 10;
                 sys.poll(a, wants.items, ms);
                 for (wants.items, ready_now) |*w, r| w.can_read = w.can_read or r;
             } else if (timeout > 0) {
-                const h = it.event_host.?;
-                h.sleep(h.ctx, timeout);
+                if (src) |x| {
+                    try thread.block(x, @intCast(@min(timeout, 1 << 40) * 1000));
+                } else {
+                    const h = it.event_host.?;
+                    h.sleep(h.ctx, timeout);
+                }
             }
             t_now = try now(it);
             // The timers that are due, oldest due time first.
@@ -418,7 +453,9 @@ fn cmdAfter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             var left: i64 = @as(i64, @min(ms, 1 << 40)) * 1000;
             while (left > 0) {
                 const part = @min(left, 1_000_000);
-                h.sleep(h.ctx, part);
+                if (thread.supported and it.worker != null and !it.worker.?.is_main) {
+                    try thread.nap(it, @intCast(part * 1000));
+                } else h.sleep(h.ctx, part);
                 left -= part;
                 if (it.step_limit == 0) return it.fail("step limit reached", .{});
                 it.step_limit -= 1;

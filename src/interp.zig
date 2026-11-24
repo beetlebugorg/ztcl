@@ -21,6 +21,7 @@ const expr = @import("expr.zig");
 const cmds = @import("cmds.zig");
 const vm = @import("vm.zig");
 const jit_mod = @import("jit.zig");
+const thread_mod = @import("thread.zig");
 const trace = @import("trace.zig");
 const ns_mod = @import("ns.zig");
 const coro = @import("coro.zig");
@@ -635,6 +636,9 @@ pub const Capability = enum(u32) {
     /// root folder and outside each limit: this capability gives a
     /// script the full power of the user. It is not sandboxed.
     exec = 128,
+    /// The commands of the Thread package: `thread::*`, `tsv::*`, and
+    /// `tpool::*`. Each thread has its own interpreter (`thread.zig`).
+    thread = 256,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -867,6 +871,12 @@ pub const Interp = struct {
     next_tail: u8 = 0,
     /// The state of the JIT, or null when it is off (`enableJit`).
     jit: ?*jit_mod.State = null,
+    /// The thread of this interpreter when the capability `thread` is
+    /// on. Only the top interpreter of a thread has it.
+    worker: ?*thread_mod.Worker = null,
+    /// The limits of the threads. The embedder sets them before it turns
+    /// the capability `thread` on.
+    thread_limits: thread_mod.Limits = .{},
 
     const StrTail = struct { end: usize = 0, limit: usize = 0 };
     const SliceKey = struct { ptr: usize, len: usize };
@@ -936,6 +946,9 @@ pub const Interp = struct {
         const h = it.heap;
         var root = it;
         while (root.parent) |p| root = p;
+        if (comptime thread_mod.supported) {
+            if (root.worker) |w| try thread_mod.safePoint(it, w);
+        }
         const c = &root.counter;
         var want = c.used >= c.gc_at or it.counter.used > it.mem_limit;
         const stress = h.stress != 0;
@@ -956,7 +969,7 @@ pub const Interp = struct {
         // high, so the next clean point of `vm.exec` collects.
         const waiting = gc.precise and !collected and root.gc_on and it.gc_scope != 0;
         if (stress) c.rearm(0) else if (!waiting) c.rearm(next);
-        if (it.counter.used > it.mem_limit) return it.fail("the script used too much memory", .{});
+        if (it.overLimit()) return it.fail("the script used too much memory", .{});
     }
 
     /// Precise builds: records a call from `vm.exec`. A proc continues
@@ -1084,6 +1097,7 @@ pub const Interp = struct {
     /// values of scripts go away, and the arena frees its memory. The
     /// limits, the output, and the data of the embedder stay.
     pub fn reset(it: *Interp) Allocator.Error!void {
+        if (comptime thread_mod.supported) thread_mod.endGroup(it);
         @import("child.zig").destroyAll(it);
         @import("event.zig").forget(it);
         if (comptime fs_supported) {
@@ -1120,6 +1134,7 @@ pub const Interp = struct {
         it.event_host = keep.event_host;
         it.exec_host = keep.exec_host;
         it.net = keep.net;
+        it.thread_limits = keep.thread_limits;
         it.parent = keep.parent;
         it.is_safe = keep.is_safe;
         try it.start();
@@ -1140,7 +1155,10 @@ pub const Interp = struct {
     }
 
     pub fn overLimit(it: *const Interp) bool {
-        return it.counter.used > it.mem_limit;
+        if (it.counter.used <= it.mem_limit) return false;
+        // A stop of a thread stores zero in `mem_limit` for a moment.
+        if (comptime thread_mod.supported) return thread_mod.overLimit(it);
+        return true;
     }
 
     fn start(it: *Interp) Allocator.Error!void {
@@ -1180,6 +1198,9 @@ pub const Interp = struct {
             if (new & @intFromEnum(Capability.exec) != 0) try @import("proc.zig").register(it);
             if (new & @intFromEnum(Capability.socket) != 0) try it.register("socket", @import("sock.zig").cmdSocket);
         }
+        if (comptime thread_mod.supported) {
+            if (new & @intFromEnum(Capability.thread) != 0) try thread_mod.register(it);
+        }
     }
 
     /// True when the file capabilities have a root folder.
@@ -1188,6 +1209,7 @@ pub const Interp = struct {
     }
 
     pub fn deinit(it: *Interp) void {
+        if (comptime thread_mod.supported) thread_mod.endGroup(it);
         if (!it.isRoot()) {
             var root = it.parent.?;
             while (root.parent) |p| root = p;

@@ -1,0 +1,1251 @@
+//! The core of the capability `thread`: groups, threads, messages, and
+//! the stop flag.
+//!
+//! A group belongs to one host interpreter. It has the registry of the
+//! threads, the limits, and the shared tables of `tsv`, `tpool`, and the
+//! mutexes. Each thread has one interpreter with its own heap. Only the
+//! thread that owns a heap allocates from it, so no heap needs a lock.
+//!
+//! A value crosses threads as a `Shared` tree: an integer, a double, a
+//! string, or a list of trees, in the memory of the group. `share` makes
+//! the tree from a value, and `unshare` makes a value in the heap of the
+//! receiver. The tree keeps the kind of each value.
+//!
+//! A message goes to the queue of the target. The target runs it at the
+//! global level and sends a reply message to the queue of the sender
+//! when the sender waits. A waiting sender runs the other messages of
+//! its queue, so two threads that send to each other make progress.
+//!
+//! Locks: a group lock guards the registry and the counts, and a worker
+//! lock guards one queue. Code takes the group lock first. Each wait is
+//! a slice of at most 50 ms on a futex. After each slice the waiter
+//! checks its flags, so a stop reaches a thread that waits.
+//!
+//! The stop flag: another thread sets a bit in `Worker.flags` and then
+//! writes zero to `mem_limit` of the target interpreter, both under the
+//! worker lock. The next safe point of the target sees the memory count
+//! above the limit and calls `Interp.memPoint`, which calls `safePoint`.
+//! The target takes the flags and restores the limit under the same
+//! lock. So no flag is lost, and no zero store comes after the restore.
+//! `Interp.overLimit` compares with the limit of the worker, so a memory
+//! check between the two steps gives no false error.
+//!
+//! SPDX-License-Identifier: BSD-2-Clause
+
+const std = @import("std");
+const builtin = @import("builtin");
+const interp = @import("interp.zig");
+const value = @import("value.zig");
+const cmds = @import("cmds.zig");
+const Value = value.Value;
+const Interp = interp.Interp;
+const Error = interp.Error;
+const Allocator = std.mem.Allocator;
+
+/// True when the target has threads. The WebAssembly build has none.
+pub const supported = !builtin.single_threaded and !builtin.cpu.arch.isWasm() and builtin.os.tag != .freestanding;
+
+/// The limits of the threads of one host. The embedder sets them in
+/// `Interp.thread_limits` before it turns the capability on.
+pub const Limits = struct {
+    /// The threads that run at one time, with the pool workers.
+    max_threads: u32 = 8,
+    /// The steps of one thread. Null gives the steps that the creator
+    /// has left.
+    step_limit: ?u64 = null,
+    /// The heap bytes of one thread.
+    mem_limit: usize = 256 << 20,
+    /// The steps of all threads together.
+    total_steps: u64 = std.math.maxInt(u64),
+    /// The bytes of all threads together, with the shared variables and
+    /// the queues.
+    total_mem: usize = 1 << 30,
+    /// The messages that wait in the queue of one thread.
+    max_queue: usize = 10_000,
+};
+
+// ---- Locks and waits ----
+
+fn io() std.Io {
+    return std.Io.Threaded.global_single_threaded.io();
+}
+
+pub const Lock = struct {
+    m: std.Io.Mutex = .init,
+
+    pub fn lock(l: *Lock) void {
+        l.m.lockUncancelable(io());
+    }
+
+    pub fn unlock(l: *Lock) void {
+        l.m.unlock(io());
+    }
+};
+
+/// A wake-up counter on a futex. A waiter holds `l`, reads the count,
+/// releases `l`, and sleeps until the count changes or the time ends.
+pub const Event = struct {
+    seq: std.atomic.Value(u32) = .init(0),
+
+    /// Waits at most `ns` nanoseconds. The caller holds `l`, and holds it
+    /// again at the return.
+    pub fn wait(e: *Event, l: *Lock, ns: u64) void {
+        const s = e.seq.load(.acquire);
+        l.unlock();
+        io().futexWaitTimeout(u32, &e.seq.raw, s, .{ .duration = .{ .raw = .fromNanoseconds(@intCast(ns)), .clock = .awake } }) catch {};
+        l.lock();
+    }
+
+    pub fn signal(e: *Event) void {
+        _ = e.seq.fetchAdd(1, .release);
+        io().futexWake(u32, &e.seq.raw, std.math.maxInt(u32));
+    }
+};
+
+/// The length of one wait slice.
+pub const slice_ns: u64 = 50 * std.time.ns_per_ms;
+
+/// Nanoseconds on a clock that does not go back.
+pub fn nowNs() i96 {
+    return std.Io.Clock.awake.now(io()).nanoseconds;
+}
+
+// ---- The memory of a group ----
+
+/// Counts the bytes of all threads of a group in one atomic counter, and
+/// fails an allocation above `limit`.
+const Budget = struct {
+    gpa: Allocator,
+    used: std.atomic.Value(usize) = .init(0),
+    limit: usize,
+
+    fn allocator(b: *Budget) Allocator {
+        return .{ .ptr = b, .vtable = &.{ .alloc = alloc, .resize = resize, .remap = remap, .free = free } };
+    }
+
+    fn take(b: *Budget, n: usize) bool {
+        const old = b.used.fetchAdd(n, .monotonic);
+        if (old +| n > b.limit) {
+            _ = b.used.fetchSub(n, .monotonic);
+            return false;
+        }
+        return true;
+    }
+
+    fn alloc(ctx: *anyopaque, len: usize, al: std.mem.Alignment, ra: usize) ?[*]u8 {
+        const b: *Budget = @ptrCast(@alignCast(ctx));
+        if (!b.take(len)) return null;
+        return b.gpa.rawAlloc(len, al, ra) orelse {
+            _ = b.used.fetchSub(len, .monotonic);
+            return null;
+        };
+    }
+
+    fn resize(ctx: *anyopaque, m: []u8, al: std.mem.Alignment, n: usize, ra: usize) bool {
+        const b: *Budget = @ptrCast(@alignCast(ctx));
+        if (n > m.len and !b.take(n - m.len)) return false;
+        if (!b.gpa.rawResize(m, al, n, ra)) {
+            if (n > m.len) _ = b.used.fetchSub(n - m.len, .monotonic);
+            return false;
+        }
+        if (n < m.len) _ = b.used.fetchSub(m.len - n, .monotonic);
+        return true;
+    }
+
+    fn remap(ctx: *anyopaque, m: []u8, al: std.mem.Alignment, n: usize, ra: usize) ?[*]u8 {
+        const b: *Budget = @ptrCast(@alignCast(ctx));
+        if (n > m.len and !b.take(n - m.len)) return null;
+        const p = b.gpa.rawRemap(m, al, n, ra) orelse {
+            if (n > m.len) _ = b.used.fetchSub(n - m.len, .monotonic);
+            return null;
+        };
+        if (n < m.len) _ = b.used.fetchSub(m.len - n, .monotonic);
+        return p;
+    }
+
+    fn free(ctx: *anyopaque, m: []u8, al: std.mem.Alignment, ra: usize) void {
+        const b: *Budget = @ptrCast(@alignCast(ctx));
+        b.gpa.rawFree(m, al, ra);
+        _ = b.used.fetchSub(m.len, .monotonic);
+    }
+};
+
+// ---- Values across threads ----
+
+/// A value in the memory of a group. It has no pointer into a heap.
+pub const Shared = union(enum) {
+    int: i64,
+    double: f64,
+    str: []u8,
+    list: std.ArrayList(Shared),
+
+    pub const empty: Shared = .{ .str = &.{} };
+
+    pub fn deinit(s: *Shared, a: Allocator) void {
+        switch (s.*) {
+            .str => |t| a.free(t),
+            .list => |*l| {
+                for (l.items) |*x| x.deinit(a);
+                l.deinit(a);
+            },
+            else => {},
+        }
+        s.* = empty;
+    }
+
+    pub fn clone(s: Shared, a: Allocator) Allocator.Error!Shared {
+        return switch (s) {
+            .int, .double => s,
+            .str => |t| .{ .str = try a.dupe(u8, t) },
+            .list => |l| blk: {
+                var out: std.ArrayList(Shared) = try .initCapacity(a, l.items.len);
+                errdefer {
+                    var o: Shared = .{ .list = out };
+                    o.deinit(a);
+                }
+                for (l.items) |x| out.appendAssumeCapacity(try x.clone(a));
+                break :blk .{ .list = out };
+            },
+        };
+    }
+};
+
+/// A list deeper than this crosses as its string form.
+const max_share_depth = 200;
+
+/// The error of a group allocation that passed the total limit.
+pub const ShareError = error{ OutOfMemory, GroupFull };
+
+/// Copies `v` to memory of the group allocator `a`. `it` makes the
+/// string form of a deep list.
+pub fn share(a: Allocator, it: *Interp, v: Value) ShareError!Shared {
+    return shareDepth(a, it, v, 0);
+}
+
+fn shareDepth(a: Allocator, it: *Interp, v: Value, depth: u32) ShareError!Shared {
+    switch (v) {
+        .int => |i| return .{ .int = i },
+        .double => |d| return .{ .double = d },
+        .str => |s| return .{ .str = a.dupe(u8, s) catch return error.GroupFull },
+        .list => |l| {
+            if (depth >= max_share_depth) {
+                const s = try it.str(v);
+                return .{ .str = a.dupe(u8, s) catch return error.GroupFull };
+            }
+            const items = l.items();
+            var out: std.ArrayList(Shared) = std.ArrayList(Shared).initCapacity(a, items.len) catch return error.GroupFull;
+            errdefer {
+                var o: Shared = .{ .list = out };
+                o.deinit(a);
+            }
+            for (items) |x| out.appendAssumeCapacity(try shareDepth(a, it, x, depth + 1));
+            return .{ .list = out };
+        },
+    }
+}
+
+/// Makes a value in the heap of `it` from a shared tree.
+pub fn unshare(it: *Interp, s: Shared) Allocator.Error!Value {
+    return switch (s) {
+        .int => |i| .{ .int = i },
+        .double => |d| .{ .double = d },
+        .str => |t| .{ .str = try it.alloc().dupe(u8, t) },
+        .list => |l| blk: {
+            const buf = try it.alloc().alloc(Value, l.items.len);
+            for (l.items, buf) |x, *b| b.* = try unshare(it, x);
+            break :blk try value.wrapList(it.alloc(), buf);
+        },
+    };
+}
+
+/// The error of a command whose group allocation failed.
+pub fn groupFull(it: *Interp, e: ShareError) Error {
+    return switch (e) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.GroupFull => it.failCode("THREAD MEMORY", "the threads used too much memory", .{}),
+    };
+}
+
+// ---- Messages ----
+
+pub const Msg = struct {
+    kind: Kind,
+    /// The id of the sender.
+    from: u64 = 0,
+    /// The number that matches a reply with its send.
+    seq: u64 = 0,
+    /// A script, or the name of the variable of an async result.
+    text: []u8 = &.{},
+    /// The result: the code, the value, the trace, and the error code.
+    code: i64 = 0,
+    res: Shared = Shared.empty,
+    info: []u8 = &.{},
+    ecode: Shared = Shared.empty,
+    /// The variable of the sender that gets the result.
+    var_name: []u8 = &.{},
+
+    pub const Kind = enum {
+        /// A script. `seq` is zero for an async send.
+        script,
+        /// The reply to a send that waits.
+        reply,
+        /// The result of an async send with a variable.
+        var_result,
+    };
+
+    pub fn destroy(m: *Msg, a: Allocator) void {
+        a.free(m.text);
+        m.res.deinit(a);
+        a.free(m.info);
+        m.ecode.deinit(a);
+        a.free(m.var_name);
+        a.destroy(m);
+    }
+};
+
+// ---- Threads ----
+
+pub const Flag = struct {
+    pub const cancel: u32 = 1;
+    pub const unwind: u32 = 2;
+    /// The group ends or the thread must end. It stays set.
+    pub const stop: u32 = 4;
+};
+
+pub const Worker = struct {
+    group: *Group,
+    id: u64,
+    /// The interpreter of the thread. It is null before the start and
+    /// after the end. Another thread reads it only under the group lock.
+    it: ?*Interp = null,
+    os: ?std.Thread = null,
+    is_main: bool = false,
+    state: State = .starting,
+    /// The queue and its lock. `ev` wakes a waiter of the queue.
+    lock: Lock = .{},
+    ev: Event = .{},
+    queue: std.ArrayList(*Msg) = .empty,
+    /// The bits of `Flag`.
+    flags: std.atomic.Value(u32) = .init(0),
+    /// The result text of a cancel, under the worker lock.
+    cancel_text: ?[]u8 = null,
+    /// The reference count of `thread::preserve` and `thread::release`.
+    refs: i32 = 0,
+    /// True when a release took the count to zero or below.
+    released: std.atomic.Value(bool) = .init(false),
+    joinable: bool = false,
+    /// The exit status for `thread::join`.
+    status: i64 = 0,
+    /// True after `thread::exit`.
+    exiting: bool = false,
+    /// `thread::configure` options.
+    eventmark: usize = 0,
+    unwind_on_error: bool = false,
+    /// The next number of a send that waits. Only the owner uses it.
+    next_seq: u64 = 1,
+    /// The memory limit of the interpreter, for `safePoint`.
+    mem_limit: usize = std.math.maxInt(usize),
+    /// The steps that the thread got from `total_steps`.
+    steps: u64 = 0,
+    /// The text of the start script, in group memory.
+    script: []u8 = &.{},
+    /// A pool worker: the pool and its loop.
+    pool: ?*anyopaque = null,
+    pool_main: ?*const fn (w: *Worker, it: *Interp) void = null,
+
+    pub const State = enum { starting, running, failed, done };
+
+    pub fn name(w: *const Worker, buf: []u8) []const u8 {
+        return std.fmt.bufPrint(buf, "tid0x{x}", .{w.id}) catch unreachable;
+    }
+
+    pub fn isReleased(w: *const Worker) bool {
+        return w.released.load(.acquire);
+    }
+
+    pub fn hasFlag(w: *const Worker, f: u32) bool {
+        return w.flags.load(.acquire) & f != 0;
+    }
+
+    /// Wakes each wait of the worker.
+    pub fn wake(w: *Worker) void {
+        w.lock.lock();
+        w.lock.unlock();
+        w.ev.signal();
+    }
+};
+
+/// What a new thread gets from its creator.
+const Start = struct {
+    caps: u32,
+    step_limit: u64,
+    mem_limit: usize,
+    output: ?interp.Output,
+    clock_host: ?@import("clock.zig").Host,
+    event_host: ?@import("event.zig").Host,
+    net: @import("sock.zig").Policy,
+    exe_name: []const u8,
+    noise_seed: u32,
+    gc_on: bool,
+    gc_stress: u32,
+    jit: ?@import("jit.zig").Options,
+    fs_fd: i32,
+    fs_cwd: []const u8,
+    fs_path: []const u8,
+};
+
+pub const Group = struct {
+    gpa: Allocator,
+    budget: Budget,
+    lock: Lock = .{},
+    /// Wakes a wait for a change of the registry.
+    ev: Event = .{},
+    /// The running threads, the main thread first.
+    workers: std.ArrayList(*Worker) = .empty,
+    /// Ended joinable threads that no join took yet.
+    ended: std.ArrayList(*Worker) = .empty,
+    /// Ended threads that wait for their OS join.
+    zombies: std.ArrayList(*Worker) = .empty,
+    next_id: u64 = 1,
+    limits: Limits,
+    /// The threads that run, the main thread not counted.
+    running: u32 = 0,
+    steps_left: u64,
+    stopping: bool = false,
+    main: *Worker,
+    /// The thread and the procedure of `thread::errorproc`.
+    errorproc_id: u64 = 0,
+    errorproc: []u8 = &.{},
+    /// The output of the host and its lock.
+    out_lock: Lock = .{},
+    output: ?interp.Output = null,
+    /// The tables of `tsv`, `tpool`, and the mutexes.
+    tsv: ?*anyopaque = null,
+    pools: ?*anyopaque = null,
+    sync: ?*anyopaque = null,
+    /// The lock of `thread::eval` with no `-lock`.
+    eval_lock: ?[]const u8 = null,
+    /// Frees a table at the end of the group.
+    finalizers: std.ArrayList(*const fn (g: *Group) void) = .empty,
+
+    pub fn alloc(g: *Group) Allocator {
+        return g.budget.allocator();
+    }
+
+    /// The worker of an id, or null. The caller holds the group lock.
+    pub fn find(g: *Group, id: u64) ?*Worker {
+        for (g.workers.items) |w| if (w.id == id and w.state == .running) return w;
+        return null;
+    }
+
+    pub fn memUsed(g: *const Group) usize {
+        return g.budget.used.load(.monotonic);
+    }
+};
+
+/// Parses a thread id. Gives 0 for a bad one.
+pub fn parseId(text: []const u8) u64 {
+    if (!std.mem.startsWith(u8, text, "tid0x")) return 0;
+    return std.fmt.parseInt(u64, text[5..], 16) catch 0;
+}
+
+pub fn idValue(it: *Interp, id: u64) Allocator.Error!Value {
+    return .{ .str = try std.fmt.allocPrint(it.alloc(), "tid0x{x}", .{id}) };
+}
+
+/// The worker of the interpreter tree of `it`.
+pub fn workerOf(it: *Interp) ?*Worker {
+    var root = it;
+    while (root.parent) |p| root = p;
+    return root.worker;
+}
+
+fn lockedWrite(ctx: ?*anyopaque, bytes: []const u8) void {
+    const g: *Group = @ptrCast(@alignCast(ctx.?));
+    g.out_lock.lock();
+    defer g.out_lock.unlock();
+    if (g.output) |o| o.write(o.ctx, bytes);
+}
+
+/// Makes the group of a host. `allow` calls it for the capability.
+pub fn startGroup(host: *Interp) Allocator.Error!void {
+    if (host.worker != null) return;
+    const gpa = host.counter.child;
+    const lim = host.thread_limits;
+    const g = try gpa.create(Group);
+    errdefer gpa.destroy(g);
+    const w = try gpa.create(Worker);
+    errdefer gpa.destroy(w);
+    g.* = .{ .gpa = gpa, .budget = .{ .gpa = gpa, .limit = lim.total_mem }, .limits = lim, .steps_left = lim.total_steps, .main = w };
+    w.* = .{ .group = g, .id = g.next_id, .it = host, .is_main = true, .state = .running, .refs = 1 };
+    g.next_id += 1;
+    try g.workers.append(gpa, w);
+    g.output = host.output;
+    host.output = .{ .ctx = g, .write = lockedWrite };
+    host.worker = w;
+}
+
+/// Sets the limits of the threads of a host, also after the start of
+/// its group. The totals apply to the threads that start later.
+pub fn setLimits(host: *Interp, lim: Limits) void {
+    host.thread_limits = lim;
+    if (comptime !supported) return;
+    const w = host.worker orelse return;
+    const g = w.group;
+    g.lock.lock();
+    defer g.lock.unlock();
+    const used = g.limits.total_steps -| g.steps_left;
+    g.limits = lim;
+    g.steps_left = lim.total_steps -| used;
+    g.budget.limit = lim.total_mem;
+}
+
+/// Stops each thread of the group of the host and frees the group.
+pub fn endGroup(host: *Interp) void {
+    const w = host.worker orelse return;
+    if (!w.is_main) return;
+    const g = w.group;
+    g.lock.lock();
+    g.stopping = true;
+    g.lock.unlock();
+    // The pools stop their workers through the finalizers below. Each
+    // other thread gets the stop flag.
+    while (true) {
+        g.lock.lock();
+        for (g.workers.items) |x| if (!x.is_main) stopWorker(x, Flag.stop);
+        const left = g.running;
+        if (left == 0) {
+            g.lock.unlock();
+            break;
+        }
+        g.ev.wait(&g.lock, slice_ns);
+        g.lock.unlock();
+    }
+    reapAll(g);
+    for (g.finalizers.items) |f| f(g);
+    g.finalizers.deinit(g.gpa);
+    g.workers.deinit(g.gpa);
+    g.ended.deinit(g.gpa);
+    g.zombies.deinit(g.gpa);
+    drainQueue(g, w);
+    w.queue.deinit(g.alloc());
+    g.alloc().free(g.errorproc);
+    host.output = g.output;
+    host.worker = null;
+    g.gpa.destroy(w);
+    g.gpa.destroy(g);
+}
+
+/// Joins each ended thread and frees its record.
+fn reapAll(g: *Group) void {
+    g.lock.lock();
+    const zs = g.zombies.toOwnedSlice(g.gpa) catch &.{};
+    const es = g.ended.toOwnedSlice(g.gpa) catch &.{};
+    g.lock.unlock();
+    for (zs) |z| freeWorker(g, z);
+    for (es) |e| freeWorker(g, e);
+    g.gpa.free(zs);
+    g.gpa.free(es);
+}
+
+/// Joins the threads that ended with no join. The caller holds no lock.
+pub fn reapZombies(g: *Group) void {
+    g.lock.lock();
+    if (g.zombies.items.len == 0) {
+        g.lock.unlock();
+        return;
+    }
+    const zs = g.zombies.toOwnedSlice(g.gpa) catch {
+        g.lock.unlock();
+        return;
+    };
+    g.lock.unlock();
+    for (zs) |z| freeWorker(g, z);
+    g.gpa.free(zs);
+}
+
+fn freeWorker(g: *Group, w: *Worker) void {
+    if (w.os) |t| t.join();
+    g.alloc().free(w.script);
+    if (w.cancel_text) |t| g.alloc().free(t);
+    g.gpa.destroy(w);
+}
+
+/// Sets flag bits of `w` and makes its next safe point call
+/// `safePoint`. The caller holds the group lock. The worker lock makes
+/// the two stores one step for `checkFlags`: the target restores the
+/// limit only under the same lock, so no zero store comes after it.
+pub fn stopWorker(w: *Worker, bits: u32) void {
+    w.lock.lock();
+    _ = w.flags.fetchOr(bits, .acq_rel);
+    if (w.it) |x| @atomicStore(usize, &x.mem_limit, 0, .release);
+    w.lock.unlock();
+    w.ev.signal();
+}
+
+/// The memory check of `Interp.overLimit` for an interpreter whose
+/// count is above its `mem_limit`. A thread interpreter compares with
+/// the limit of its worker while a stop holds zero in `mem_limit`.
+pub fn overLimit(it: *const Interp) bool {
+    const w = it.worker orelse return true;
+    if (w.is_main) return true;
+    return it.counter.used > w.mem_limit;
+}
+
+/// The check of the flags at a safe point of `it`. `Interp.memPoint`
+/// calls it for an interpreter of a thread.
+pub fn safePoint(it: *Interp, w: *Worker) Error!void {
+    if (w.is_main) return;
+    // A zero in `mem_limit` comes only with a flag, and `checkFlags`
+    // restores the limit when it takes the flag.
+    try checkFlags(it, w);
+}
+
+/// Gives the error of a pending cancel or stop of `w`.
+pub fn checkFlags(it: *Interp, w: *Worker) Error!void {
+    if (w.flags.load(.acquire) == 0) return;
+    // `stopWorker` sets the flags and stores zero in `mem_limit` under
+    // the worker lock. So after this lock no zero store is pending.
+    w.lock.lock();
+    if (!w.is_main) {
+        if (w.it) |x| @atomicStore(usize, &x.mem_limit, w.mem_limit, .release);
+    }
+    const f = w.flags.fetchAnd(Flag.stop, .acq_rel);
+    const text = if (f & Flag.stop != 0) null else w.cancel_text;
+    if (f & Flag.stop == 0) w.cancel_text = null;
+    w.lock.unlock();
+    if (f & Flag.stop != 0) {
+        it.step_limit = 0;
+        return it.failCode("TCL CANCEL UNWIND", "the thread was stopped", .{});
+    }
+    defer if (text) |t| w.group.alloc().free(t);
+    const msg: []const u8 = text orelse if (f & Flag.unwind != 0) "eval unwound" else "eval canceled";
+    if (f & Flag.unwind != 0) {
+        it.step_limit = 0;
+        return it.failCode("TCL CANCEL IUNWIND", "{s}", .{msg});
+    }
+    return it.failCode("TCL CANCEL EVAL", "{s}", .{msg});
+}
+
+/// True when the waits of `it` must end: a stop, a cancel, or an end
+/// of the step limit.
+fn mustWake(w: *Worker) bool {
+    return w.flags.load(.acquire) != 0;
+}
+
+/// Starts a thread. Gives its id.
+pub fn create(it: *Interp, script: []const u8, joinable: bool, preserved: bool) Error!u64 {
+    const me = workerOf(it) orelse return it.fail("threads are off", .{});
+    const g = me.group;
+    reapZombies(g);
+    const text = g.alloc().dupe(u8, script) catch return groupFull(it, error.GroupFull);
+    var st = try startOf(it);
+    const w = g.gpa.create(Worker) catch {
+        g.alloc().free(text);
+        return error.OutOfMemory;
+    };
+    g.lock.lock();
+    if (g.stopping) {
+        g.lock.unlock();
+        g.alloc().free(text);
+        g.gpa.destroy(w);
+        return it.fail("the thread group ends", .{});
+    }
+    if (g.running >= g.limits.max_threads) {
+        g.lock.unlock();
+        g.alloc().free(text);
+        g.gpa.destroy(w);
+        return it.failCode("THREAD LIMIT", "too many threads: the limit is {d}", .{g.limits.max_threads});
+    }
+    const want = g.limits.step_limit orelse it.step_limit;
+    const steps = @min(want, g.steps_left);
+    if (g.limits.total_steps != std.math.maxInt(u64)) g.steps_left -= steps;
+    st.step_limit = steps;
+    w.* = .{ .group = g, .id = g.next_id, .joinable = joinable, .refs = if (preserved) 1 else 0, .script = text, .steps = steps, .mem_limit = st.mem_limit };
+    g.next_id += 1;
+    g.running += 1;
+    g.workers.append(g.gpa, w) catch {
+        g.running -= 1;
+        g.lock.unlock();
+        g.alloc().free(text);
+        g.gpa.destroy(w);
+        return error.OutOfMemory;
+    };
+    // The lock stays held across the spawn, so the new thread finds its
+    // handle in `w.os` when it ends.
+    w.os = std.Thread.spawn(.{ .stack_size = 32 << 20, .allocator = g.gpa }, threadMain, .{ w, st }) catch {
+        _ = g.workers.pop();
+        g.running -= 1;
+        if (g.limits.total_steps != std.math.maxInt(u64)) g.steps_left += steps;
+        g.lock.unlock();
+        g.alloc().free(text);
+        g.gpa.destroy(w);
+        return it.failCode("THREAD CREATE", "the system refused a new thread", .{});
+    };
+    while (w.state == .starting) g.ev.wait(&g.lock, slice_ns);
+    const ok = w.state != .failed;
+    const id = w.id;
+    g.lock.unlock();
+    if (!ok) return it.failCode("THREAD CREATE", "the new thread could not start its interpreter", .{});
+    return id;
+}
+
+fn startOf(it: *Interp) Error!Start {
+    var root = it;
+    while (root.parent) |p| root = p;
+    const me = root.worker.?;
+    const g = me.group;
+    var st: Start = .{
+        .caps = root.capabilities,
+        .step_limit = 0,
+        .mem_limit = g.limits.mem_limit,
+        .output = .{ .ctx = g, .write = lockedWrite },
+        .clock_host = root.clock_host,
+        .event_host = root.event_host,
+        .net = root.net,
+        .exe_name = root.exe_name,
+        .noise_seed = root.noise_seed,
+        .gc_on = root.gc_on,
+        .gc_stress = root.heap.stress,
+        .jit = if (root.jit) |s| s.options else null,
+        .fs_fd = -1,
+        .fs_cwd = "",
+        .fs_path = "",
+    };
+    if (comptime builtin.os.tag == .linux) {
+        if (root.fs.fd >= 0) {
+            st.fs_cwd = root.fs.cwd;
+            st.fs_path = root.fs.path;
+            const rc = std.os.linux.fcntl(root.fs.fd, std.os.linux.F.DUPFD_CLOEXEC, 3);
+            if (std.os.linux.errno(rc) == .SUCCESS) st.fs_fd = @intCast(rc);
+        }
+    }
+    return st;
+}
+
+fn setup(w: *Worker, x: *Interp, st: Start) Allocator.Error!void {
+    x.output = st.output;
+    x.step_limit = st.step_limit;
+    x.mem_limit = st.mem_limit;
+    x.clock_host = st.clock_host;
+    x.event_host = st.event_host;
+    x.net = st.net;
+    x.exe_name = st.exe_name;
+    x.noise_seed = st.noise_seed;
+    x.gc_on = st.gc_on;
+    if (st.gc_stress != 0) x.setGcStress(st.gc_stress);
+    if (st.jit) |o| _ = x.enableJit(o);
+    if (comptime builtin.os.tag == .linux) {
+        if (st.fs_fd >= 0) {
+            x.fs.fd = st.fs_fd;
+            x.fs.cwd = try x.alloc().dupe(u8, st.fs_cwd);
+            x.fs.path = try x.alloc().dupe(u8, st.fs_path);
+        }
+    }
+    x.worker = w;
+    try x.allow(st.caps);
+}
+
+fn threadMain(w: *Worker, st: Start) void {
+    const g = w.group;
+    const x = g.gpa.create(Interp) catch return failStart(w, st);
+    x.init(g.alloc()) catch {
+        g.gpa.destroy(x);
+        return failStart(w, st);
+    };
+    setup(w, x, st) catch {
+        x.worker = null;
+        x.deinit();
+        g.gpa.destroy(x);
+        return failStart(w, st);
+    };
+    g.lock.lock();
+    w.it = x;
+    w.state = .running;
+    g.lock.unlock();
+    g.ev.signal();
+
+    if (w.pool_main) |f| {
+        f(w, x);
+    } else {
+        const r = if (w.script.len > 0) x.eval(w.script) else waitLoop(x);
+        if (r) |_| {} else |e| endError(w, x, e);
+    }
+    finish(w, x);
+}
+
+fn failStart(w: *Worker, st: Start) void {
+    if (comptime builtin.os.tag == .linux) {
+        if (st.fs_fd >= 0) _ = std.os.linux.close(st.fs_fd);
+    }
+    const g = w.group;
+    g.lock.lock();
+    w.state = .failed;
+    if (std.mem.indexOfScalar(*Worker, g.workers.items, w)) |i| _ = g.workers.orderedRemove(i);
+    g.running -= 1;
+    if (g.limits.total_steps != std.math.maxInt(u64)) g.steps_left += w.steps;
+    // The creator frees nothing: the record goes to the zombies, and a
+    // later reap joins the thread.
+    g.zombies.append(g.gpa, w) catch {};
+    g.lock.unlock();
+    g.ev.signal();
+}
+
+/// Reports the error that ended the script of a thread.
+fn endError(w: *Worker, x: *Interp, e: Error) void {
+    if (w.exiting) return;
+    if (w.hasFlag(Flag.stop)) return;
+    w.status = 1;
+    const text: []const u8 = switch (e) {
+        error.OutOfMemory => "out of memory",
+        error.TclError => blk: {
+            x.finishError() catch {};
+            const info = x.getVarPlain("::errorInfo") catch x.result;
+            break :blk x.str(info) catch "error";
+        },
+        else => x.str(x.result) catch "error",
+    };
+    reportError(w, x, text);
+}
+
+/// Sends an error text to the procedure of `thread::errorproc`, or
+/// writes it to the output.
+pub fn reportError(w: *Worker, x: *Interp, info: []const u8) void {
+    const g = w.group;
+    var buf: [32]u8 = undefined;
+    const id = w.name(&buf);
+    g.lock.lock();
+    const target = if (g.errorproc.len > 0) g.find(g.errorproc_id) else null;
+    if (target) |t| {
+        const a = g.alloc();
+        const script = buildScript(a, &.{ g.errorproc, id, info }) catch null;
+        if (script) |s| {
+            const m = a.create(Msg) catch null;
+            if (m) |msg| {
+                msg.* = .{ .kind = .script, .from = w.id, .text = s };
+                pushMsg(t, msg, false);
+                g.lock.unlock();
+                return;
+            }
+            a.free(s);
+        }
+    }
+    g.lock.unlock();
+    const text = std.fmt.allocPrint(x.alloc(), "Error from thread {s}\n{s}\n", .{ id, info }) catch return;
+    if (x.output) |o| o.write(o.ctx, text);
+}
+
+/// A script of words, each one a list element.
+pub fn buildScript(a: Allocator, words: []const []const u8) Allocator.Error![]u8 {
+    var text: std.ArrayList(u8) = .empty;
+    errdefer text.deinit(a);
+    for (words, 0..) |word, i| {
+        if (i > 0) try text.append(a, ' ');
+        try value.appendElement(a, &text, word, i == 0);
+    }
+    return text.toOwnedSlice(a);
+}
+
+/// Ends a thread: the queue gets its replies, the interpreter goes, and
+/// the record waits for a join.
+fn finish(w: *Worker, x: *Interp) void {
+    const g = w.group;
+    // The record stays in the registry until the end, so a join waits
+    // for it. A thread in the state `done` gets no message.
+    g.lock.lock();
+    w.state = .done;
+    g.lock.unlock();
+    // No new message reaches the queue now. Each waiting sender gets
+    // an error.
+    failQueue(w);
+    const left = x.step_limit;
+    g.lock.lock();
+    w.it = null;
+    g.lock.unlock();
+    x.worker = null;
+    x.deinit();
+    g.gpa.destroy(x);
+    g.lock.lock();
+    if (std.mem.indexOfScalar(*Worker, g.workers.items, w)) |i| _ = g.workers.orderedRemove(i);
+    if (g.limits.total_steps != std.math.maxInt(u64)) g.steps_left += @min(left, w.steps);
+    g.running -= 1;
+    if (w.joinable and !g.stopping) {
+        g.ended.append(g.gpa, w) catch g.zombies.append(g.gpa, w) catch {};
+    } else {
+        g.zombies.append(g.gpa, w) catch {};
+    }
+    g.lock.unlock();
+    g.ev.signal();
+}
+
+/// Answers each send that waits in the queue of an ended thread, and
+/// frees the queue.
+fn failQueue(w: *Worker) void {
+    const g = w.group;
+    w.lock.lock();
+    const items = w.queue.toOwnedSlice(g.alloc()) catch &.{};
+    w.lock.unlock();
+    defer g.alloc().free(items);
+    for (items) |m| {
+        if (m.kind == .script and m.seq != 0) {
+            replyText(g, m.from, m.seq, 1, "target thread died", "THREAD DIED");
+        }
+        m.destroy(g.alloc());
+    }
+}
+
+fn drainQueue(g: *Group, w: *Worker) void {
+    for (w.queue.items) |m| m.destroy(g.alloc());
+    w.queue.clearRetainingCapacity();
+}
+
+/// Adds a message to a queue. The caller holds the group lock, so `w`
+/// stays alive.
+pub fn pushMsg(w: *Worker, m: *Msg, head: bool) void {
+    w.lock.lock();
+    const ok = if (head) w.queue.insert(w.group.alloc(), 0, m) else w.queue.append(w.group.alloc(), m);
+    w.lock.unlock();
+    if (ok) |_| w.ev.signal() else |_| m.destroy(w.group.alloc());
+}
+
+/// Sends an error reply to a sender, when it still runs.
+fn replyText(g: *Group, to: u64, seq: u64, code: i64, text: []const u8, ecode: []const u8) void {
+    const a = g.alloc();
+    const m = a.create(Msg) catch return;
+    m.* = .{ .kind = .reply, .seq = seq, .code = code };
+    m.res = .{ .str = a.dupe(u8, text) catch {
+        a.destroy(m);
+        return;
+    } };
+    m.ecode = .{ .str = a.dupe(u8, ecode) catch &.{} };
+    m.info = a.dupe(u8, text) catch &.{};
+    g.lock.lock();
+    defer g.lock.unlock();
+    if (g.find(to)) |t| pushMsg(t, m, false) else m.destroy(a);
+}
+
+pub const SendError = error{ NoThread, QueueFull, GroupFull, OutOfMemory };
+
+/// Queues a script at the thread `to`. `seq` is nonzero for a send that
+/// waits for its reply.
+pub fn sendScript(me: *Worker, to: u64, script: []const u8, seq: u64, var_name: []const u8, head: bool) SendError!void {
+    const g = me.group;
+    const a = g.alloc();
+    const m = a.create(Msg) catch return error.GroupFull;
+    m.* = .{ .kind = .script, .from = me.id, .seq = seq };
+    m.text = a.dupe(u8, script) catch {
+        m.destroy(a);
+        return error.GroupFull;
+    };
+    m.var_name = a.dupe(u8, var_name) catch {
+        m.destroy(a);
+        return error.GroupFull;
+    };
+    g.lock.lock();
+    defer g.lock.unlock();
+    const t = g.find(to) orelse {
+        m.destroy(a);
+        return error.NoThread;
+    };
+    t.lock.lock();
+    const full = t.queue.items.len >= g.limits.max_queue;
+    t.lock.unlock();
+    if (full) {
+        m.destroy(a);
+        return error.QueueFull;
+    }
+    pushMsg(t, m, head);
+}
+
+/// The length of the queue of a thread, or null for no thread.
+pub fn queueLen(g: *Group, id: u64) ?usize {
+    g.lock.lock();
+    defer g.lock.unlock();
+    const t = g.find(id) orelse return null;
+    t.lock.lock();
+    defer t.lock.unlock();
+    return t.queue.items.len;
+}
+
+/// Takes the first message of the queue that is not a reply.
+fn takeEvent(w: *Worker) ?*Msg {
+    w.lock.lock();
+    defer w.lock.unlock();
+    for (w.queue.items, 0..) |m, i| {
+        if (m.kind != .reply) return w.queue.orderedRemove(i);
+    }
+    return null;
+}
+
+/// Takes the reply with the number `seq`.
+fn takeReply(w: *Worker, seq: u64) ?*Msg {
+    for (w.queue.items, 0..) |m, i| {
+        if (m.kind == .reply and m.seq == seq) return w.queue.orderedRemove(i);
+    }
+    return null;
+}
+
+/// Runs the scripts of the queue of `it`, at most `max` of them. Gives
+/// true when one ran. A script runs only in the interpreter of the
+/// thread, and only when the thread is at its own level.
+pub fn serve(it: *Interp, max: usize) Error!bool {
+    const w = it.worker orelse return false;
+    var ran = false;
+    var n: usize = 0;
+    while (n < max) : (n += 1) {
+        try checkFlags(it, w);
+        const m = takeEvent(w) orelse break;
+        ran = true;
+        try runMsg(w, it, m);
+    }
+    return ran;
+}
+
+/// Blocks until a message comes, a flag is set, or `ns` ends.
+pub fn block(it: *Interp, ns: u64) Error!void {
+    const w = it.worker orelse return;
+    var left = ns;
+    w.lock.lock();
+    while (true) {
+        var has_event = false;
+        for (w.queue.items) |m| if (m.kind != .reply) {
+            has_event = true;
+        };
+        if (has_event or mustWake(w)) break;
+        if (!w.is_main and w.isReleased()) break;
+        if (left == 0) break;
+        const part = @min(left, slice_ns);
+        w.ev.wait(&w.lock, part);
+        left -= part;
+    }
+    w.lock.unlock();
+    try checkFlags(it, w);
+}
+
+/// Sleeps `ns` nanoseconds. A flag of the thread ends the sleep with
+/// its error. Messages wait in the queue.
+pub fn nap(it: *Interp, ns: u64) Error!void {
+    const w = it.worker orelse return;
+    const end = nowNs() + ns;
+    w.lock.lock();
+    while (!mustWake(w)) {
+        const now = nowNs();
+        if (now >= end) break;
+        w.ev.wait(&w.lock, @intCast(@min(end - now, slice_ns)));
+    }
+    w.lock.unlock();
+    try checkFlags(it, w);
+}
+
+/// True when another thread can still send to `it`: a wait of its event
+/// loop with no timer and no channel can end.
+pub fn canWake(it: *Interp) bool {
+    const w = it.worker orelse return false;
+    if (!w.is_main) return !w.isReleased();
+    const g = w.group;
+    g.lock.lock();
+    defer g.lock.unlock();
+    return g.running > 0;
+}
+
+/// Runs one message in the interpreter of its thread and frees it.
+fn runMsg(w: *Worker, it: *Interp, m: *Msg) Error!void {
+    const g = w.group;
+    const a = g.alloc();
+    defer m.destroy(a);
+    switch (m.kind) {
+        .reply => {},
+        .var_result => {
+            const v = try unshare(it, m.res);
+            const name = try it.alloc().dupe(u8, m.text);
+            try atGlobal(it, setGlobal, .{ it, name, v });
+        },
+        .script => {
+            const text = try it.alloc().dupe(u8, m.text);
+            const c = atGlobal(it, runText, .{ it, text }) catch |e| {
+                // A stop, the step limit, or the memory limit ended the
+                // script. The sender gets the error, and the thread ends.
+                if (m.seq != 0) {
+                    const msg = if (e == error.OutOfMemory) "out of memory" else it.str(it.result) catch "error";
+                    replyText(g, m.from, m.seq, 1, msg, "THREAD STOPPED");
+                }
+                return e;
+            };
+            if (m.seq != 0 or m.var_name.len > 0) {
+                try sendResult(w, it, m, c);
+            } else if (c.code == 1) {
+                reportError(w, it, it.str(c.error_info) catch "error");
+            }
+            if (c.code != 0 and w.unwind_on_error and !w.is_main) {
+                w.released.store(true, .release);
+            }
+        },
+    }
+}
+
+fn runText(it: *Interp, text: []const u8) Error!cmds.Caught {
+    return cmds.runCaught(it, it.compile(text));
+}
+
+fn setGlobal(it: *Interp, name: []const u8, v: Value) Error!void {
+    try it.setVar(name, v);
+}
+
+/// Runs `f` at the global level of `it`.
+pub fn atGlobal(it: *Interp, comptime f: anytype, args: anytype) @typeInfo(@TypeOf(f)).@"fn".return_type.? {
+    const frame = it.frame;
+    const ns = it.ns;
+    it.frame = &it.global;
+    it.ns = "";
+    defer {
+        it.frame = frame;
+        it.ns = ns;
+    }
+    return @call(.auto, f, args);
+}
+
+fn sendResult(w: *Worker, it: *Interp, m: *Msg, c: cmds.Caught) Error!void {
+    const g = w.group;
+    const a = g.alloc();
+    const r = a.create(Msg) catch return groupFull(it, error.GroupFull);
+    r.* = .{ .kind = if (m.seq != 0) .reply else .var_result, .seq = m.seq, .code = c.code };
+    var ok = false;
+    defer if (!ok) r.destroy(a);
+    r.res = share(a, it, c.res) catch |e| return groupFull(it, e);
+    if (c.code == 1) {
+        r.info = a.dupe(u8, try it.str(c.error_info)) catch return groupFull(it, error.GroupFull);
+        r.ecode = share(a, it, c.error_code) catch |e| return groupFull(it, e);
+    }
+    if (m.var_name.len > 0 and m.seq == 0) r.text = a.dupe(u8, m.var_name) catch return groupFull(it, error.GroupFull);
+    g.lock.lock();
+    defer g.lock.unlock();
+    ok = true;
+    if (g.find(m.from)) |t| pushMsg(t, r, false) else r.destroy(a);
+}
+
+/// Waits for the reply `seq` of the thread `to` and runs the other
+/// messages of the queue meanwhile. Gives the reply. The caller frees it.
+/// When `to` ends with no reply, the wait gives an error.
+pub fn awaitReply(it: *Interp, to: u64, seq: u64) Error!*Msg {
+    const w = it.worker.?;
+    const g = w.group;
+    while (true) {
+        w.lock.lock();
+        if (takeReply(w, seq)) |r| {
+            w.lock.unlock();
+            return r;
+        }
+        w.lock.unlock();
+        // A thread pushes its reply before it leaves the registry. So a
+        // check of the queue after the end of `to` finds each reply.
+        g.lock.lock();
+        var live = false;
+        for (g.workers.items) |x| if (x.id == to) {
+            live = true;
+        };
+        g.lock.unlock();
+        if (!live) {
+            w.lock.lock();
+            const r = takeReply(w, seq);
+            w.lock.unlock();
+            return r orelse it.failCode("THREAD DIED", "target thread died", .{});
+        }
+        if (!try serve(it, 1)) {
+            w.lock.lock();
+            var wait = true;
+            for (w.queue.items) |m| {
+                if (m.kind != .reply or m.seq == seq) wait = false;
+            }
+            if (wait and !mustWake(w)) w.ev.wait(&w.lock, slice_ns);
+            w.lock.unlock();
+            try checkFlags(it, w);
+        }
+    }
+}
+
+/// Runs the event loop of the thread of `it` until a release ends it.
+/// The main thread returns when no other thread runs. A thread without
+/// the capability `event` runs only its queue.
+pub fn waitLoop(it: *Interp) Error!Value {
+    const me = it.worker orelse return it.fail("threads are off", .{});
+    const events = it.capabilities & @intFromEnum(interp.Capability.event) != 0 and it.event_host != null;
+    while (true) {
+        try checkFlags(it, me);
+        if (me.is_main) {
+            if (!canWake(it)) return Value.empty;
+        } else if (me.isReleased()) return Value.empty;
+        if (events) {
+            _ = try @import("event.zig").doOne(it, true, false);
+        } else if (!try serve(it, 64)) {
+            try block(it, slice_ns);
+        }
+    }
+}
+
+/// Sends `script` to the thread `id`, waits for the reply, and gives
+/// its result or its error.
+pub fn sendWait(it: *Interp, id: u64, script: []const u8, head: bool) Error!Value {
+    const me = it.worker orelse return it.fail("threads are off", .{});
+    const seq = me.next_seq;
+    me.next_seq += 1;
+    sendScript(me, id, script, seq, "", head) catch |e| return sendError(it, e, id);
+    const r = try awaitReply(it, id, seq);
+    defer r.destroy(me.group.alloc());
+    return applyReply(it, r);
+}
+
+/// The error of a failed send.
+pub fn sendError(it: *Interp, e: SendError, id: u64) Error {
+    return switch (e) {
+        error.NoThread => it.fail("thread \"tid0x{x}\" does not exist", .{id}),
+        error.QueueFull => it.failCode("THREAD QUEUE", "the queue of thread \"tid0x{x}\" is full", .{id}),
+        error.GroupFull => groupFull(it, error.GroupFull),
+        error.OutOfMemory => error.OutOfMemory,
+    };
+}
+
+/// Turns a reply into the result of the command that waited for it.
+pub fn applyReply(it: *Interp, r: *Msg) Error!Value {
+    const v = try unshare(it, r.res);
+    switch (r.code) {
+        0 => return v,
+        1 => {
+            it.result = v;
+            it.error_code = try unshare(it, r.ecode);
+            if (r.info.len > 0) {
+                // The local trace adds the send command after the trace
+                // of the target.
+                it.in_error = true;
+                it.error_info = .empty;
+                try it.error_info.appendSlice(it.alloc(), r.info);
+            }
+            return error.TclError;
+        },
+        2 => {
+            it.result = v;
+            it.ret_code = .ok;
+            it.ret_level = 1;
+            return error.TclReturn;
+        },
+        3 => return error.TclBreak,
+        4 => return error.TclContinue,
+        else => {
+            it.result = v;
+            it.custom_code = @intCast(@min(r.code, std.math.maxInt(u32)));
+            return error.TclCustom;
+        },
+    }
+}
+
+/// The capability: the commands, and the group of a host.
+pub fn register(it: *Interp) Allocator.Error!void {
+    if (comptime !supported) return;
+    if (it.parent != null) return;
+    if (it.worker == null) try startGroup(it);
+    if (it.capabilities & @intFromEnum(interp.Capability.event) != 0) try @import("event.zig").setSource(it);
+}
+
+/// The source of the event loop: runs the queue and blocks on it.
+pub fn eventServe(it: *Interp) Error!bool {
+    return serve(it, 64);
+}
