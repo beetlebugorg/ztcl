@@ -1,6 +1,6 @@
 # A JIT compiler for ztcl
 
-This page is the design of a compiler from the ztcl bytecode to machine code, and of the work that must come before it. Milestones 0 and B are in the source, and [the results](#results-of-milestones-0-and-b) are below. No part of the JIT is in the source yet. [The tasks](jit-tasks/README.md) give the order of the work, and [the review checklist](jit-review.md) is for the reviewer. [References](references/jit.md) lists the sources.
+This page is the design of a compiler from the ztcl bytecode to machine code, and of the work that must come before it. Milestones 0, B, and 1 are in the source. [The results of milestones 0 and B](#results-of-milestones-0-and-b) and [the results of milestone 1](#results-of-milestone-1) are below. [The tasks](jit-tasks/README.md) give the order of the work, and [the review checklist](jit-review.md) is for the reviewer. [References](references/jit.md) lists the sources.
 
 ## Summary
 
@@ -202,6 +202,56 @@ The gate of the whole programs is a ratio of instruction counts against `tclsh` 
 | `bf_oo.tcl bench.b` | ends | at most 0.5 | at most 0.35 |
 
 The two `bf` ratios are provisional. Task 06 measures the first full run, and the user sets the final numbers then. A full run of `bench.b` needs minutes, so this gate runs one time at the end of each milestone.
+
+## Results of milestone 1
+
+Tier 1 runs on x86-64 Linux behind `-Djit` and `--jit`. Measured on the commit of task 18, `ReleaseFast`, with `perf stat -e instructions:u` of the whole process. The baseline is the commit before task 10.
+
+| Script | Interpreter (baseline) | `--jit` | Gate | Result |
+|---|---|---|---|---|
+| `sum.tcl` | 284.8 M | 90.9 M | 105.6 M (110 M scaled by 0.960) | pass |
+| `fib.tcl` | 164.8 M | 142.0 M | 125 M | fail |
+| `nested.tcl` | 337.6 M | 173.3 M | 165 M | fail |
+| `strbuild.tcl` | 324.5 M | 252.6 M | 270 M | pass |
+| `foreach.tcl` | 209.9 M | 148.4 M | 110 M | fail |
+| `dict.tcl` | 281.4 M | 233.9 M | 230 M | fail |
+| `dictgrow.tcl` | 644.2 M | 578.2 M | 580 M | pass |
+| `readloop.tcl` | 209.9 M | 175.3 M | 165 M | fail |
+
+The baseline of `sum.tcl` was 4.0 % below the table "Instruction counts", so its gate is scaled. Each other baseline is within 3 % of that table.
+
+The causes of the five failures, from `perf record`:
+
+- `foreach.tcl`: `foreach_next` is a helper call. The helper uses about 90 instructions for each item. An inline `foreach_next` is in milestone 2.
+- `nested.tcl`: `lappend` is a helper call of about 85 instructions for each pass. An inline `lappend` is in milestone 2.
+- `readloop.tcl` and `dict.tcl`: `%` goes to the helper of `bin_vi` or `bin_vv`, and `llength`, `lindex`, and `dict` are helper calls. An inline `%` is in milestone 2.
+- `fib.tcl`: the proc frame. `vm.run`, `jit.prepare`, `jit.enter`, the prologue, and the epilogue use about 70 instructions for each call more than `exec`.
+
+Other measured costs:
+
+| Cost | Limit | Measured |
+|---|---|---|
+| Code size of tier 1, mean over the procs of the eight benchmarks | 96 bytes for one instruction | 69 bytes (34 884 bytes for 503 instructions) |
+| Compile time of tier 1 | 400 instructions for one bytecode instruction | about 2 600: 104 000 instructions for each proc of a test with 300 procs of 40 bytecode instructions each (the loop of `sum.tcl`). The encoder of `x64.zig` and the allocations of the labels cost the most. **fail** |
+| Native stack of 500 proc call levels | at most the interpreter | 1 598 208 bytes with the JIT, 3 449 904 without |
+| Interpreter counts with the JIT in the build and off | at most 1 % above the baseline | at most 0.3 % above, except `foreach.tcl` at 1.9 % above |
+| Startup (`puts hi`), JIT off | 5000 instructions above the baseline | 141 above |
+
+The outside programs with `tools/kostya.sh --jit`, against `tclsh` 8.6.16 in the same session. Each output equals the output of `tclsh`.
+
+| Program | ztcl `--jit` instructions | `tclsh` instructions | Ratio | Ratio without the JIT (milestone B) |
+|---|---|---|---|---|
+| `base64/test.tcl` | 50.7 G | 72.4 G | 0.70 | 0.70 |
+| `bf.tcl bench.b` | 1168 G | 2771 G | 0.42 | 0.47 |
+
+The tests of milestone 1:
+
+- `tools/jit-diff.sh`: 148 runs of 54 scripts of `tests/jit/`, 12 of `tests/mem/`, and 8 of `bench/` in modes 2 and 3 equal mode 1, also with `-x "--gc-stress 1"`. The step limit sweep compared 682 step limits. The interpreter output of 53 scripts equals the output of tclsh 8.6.16. `tests/jit/errors.tcl` has no `.out` file, because the `errorInfo` of ztcl has more lines than the one of tclsh.
+- `tools/suite.sh -j`: 19 877 on the 37 core files and 37 383 on all 152 files with the suite runner, each file equal to the run without `-j`. A `ReleaseSafe` suite runner with `-g 64` gives 20 644 with and without `-j`, each file equal.
+- `tools/gc-fuzz.py -j -g 1` with a `ReleaseSafe` runner: 300 programs, no crash. One program differed because the JIT uses less native stack for one proc call level, so a recursion with no end stopped at a deeper level. The semantics table above names this case. One program differed with and without the collector at the memory limit, also without the JIT. The tool now counts the first case and does not compare it.
+- Three fixes were reversed one at a time, and a unit test failed each time: the overflow check of `+`, `-`, and `*`, the check of the integer tag of a cell, and the restore of the step count before the slow path of the memory check.
+
+Task 15 moved each handler of `vm.exec` to a function. The guard and `foreach_next` stay in two parts in `exec`: `guardJumps` and `step`, and `foreachAdvance` with no check of the kinds. The joined forms made `sum.tcl` 6 % and `foreach.tcl` 5 % longer. The remaining 1.9 % of `foreach.tcl` comes from the code layout of `exec`: a copy of the old handler made `sum.tcl` and `nested.tcl` 2 % longer.
 
 ## The design of the JIT
 

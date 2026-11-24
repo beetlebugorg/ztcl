@@ -1,0 +1,2 @@
+f t t f t
+1 {expected boolean value but got "maybe"}

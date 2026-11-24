@@ -1,7 +1,7 @@
 #!/bin/sh
 # Runs programs of kostya/benchmarks on ztcl and on a tclsh.
 #
-#   tools/kostya.sh [--only bf|bf_oo|base64] [--mem BYTES] [-r ztcl] [-t tclsh]
+#   tools/kostya.sh [--only bf|bf_oo|base64] [--mem BYTES] [--jit] [-r ztcl] [-t tclsh]
 #
 # Programs: `bf.tcl bench.b`, `bf_oo.tcl bench.b`, and `base64/test.tcl`.
 # For each one and each runner, the tool prints the output, the user
@@ -9,6 +9,8 @@
 # memory. Then it prints the ratio of the counts (ztcl over tclsh) and
 # whether the outputs are equal. The `base64` output has two time fields.
 # The tool removes them before it compares.
+#
+# `--jit` runs ztcl with the JIT on.
 #
 # The files come from tools/fetch-kostya.sh. Each run happens in a
 # temporary folder that holds a copy of the files and a wrapper script.
@@ -26,13 +28,15 @@ ztcl="$here/../zig-out/bin/ztcl"
 tclsh=tclsh
 only="bf bf_oo base64"
 mem=
+jit=
 while [ $# -gt 0 ]; do
     case $1 in
     --only) only=$2; shift 2 ;;
     --mem) mem=$2; shift 2 ;;
+    --jit) jit=--jit; shift ;;
     -r) ztcl=$2; shift 2 ;;
     -t) tclsh=$2; shift 2 ;;
-    *) echo "usage: kostya.sh [--only name] [--mem bytes] [-r ztcl] [-t tclsh]" >&2; exit 2 ;;
+    *) echo "usage: kostya.sh [--only name] [--mem bytes] [--jit] [-r ztcl] [-t tclsh]" >&2; exit 2 ;;
     esac
 done
 src=$("$here/fetch-kostya.sh")
@@ -76,7 +80,7 @@ for name in $only; do
     *) echo "unknown program $name" >&2; exit 2 ;;
     esac
     echo "== $name"
-    run "$name" ztcl "$ztcl" --max-steps 100000000000 --mem "$mem" \
+    run "$name" ztcl "$ztcl" $jit --max-steps 100000000000 --mem "$mem" \
         --allow package,interp,clock,channels,file,event,socket,exec \
         --root "$work" --tclsh wrap.tcl $args
     run "$name" tclsh "$tclsh" wrap.tcl $args

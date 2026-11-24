@@ -38,6 +38,14 @@ ztcl uses only the Zig standard library. [References](references/tcl.md) lists t
 | `ucd.zig` | A small model of Unicode classes and case maps. |
 | `noise.zig` | The gradient noise of `noise3`. |
 | `point.zig` | The point procs: the check, the vector program, and both paths. |
+| `jit.zig` | The JIT: the state, the options, the compile at a call count, and the entry of machine code. |
+| `jit/mem.zig` | The executable region: no page is writable and executable at once. |
+| `jit/x64.zig` | The x86-64 assembler. `jit/x64_golden.zig` has the bytes of `zig cc` for each form. |
+| `jit/layout.zig` | The layout probe: the offsets and tag numbers that machine code reads. |
+| `jit/verify.zig` | The bytecode verifier and the static stack depths. |
+| `jit/helpers.zig` | The helper table: one C-callable wrapper for each instruction function of `vm.zig`. |
+| `jit/abi.zig`, `jit/tier1.zig`, `jit/tier1_x64.zig` | The registers, the driver, and the templates of tier 1. |
+| `jit/tests.zig` | The tests of the JIT. |
 | `main.zig` | The runner. |
 | `tests.zig` | The tests of the language and the commands. |
 | `wasm.zig` | The WebAssembly interface. |
@@ -220,6 +228,19 @@ A channel that does not block keeps output that the peer has no room for. The lo
 - Not bounded yet: the size of one string or list below the fixed limits of `string repeat` and `lrepeat`, and the time of `lsort`.
 - `tcl_platform` has the same fixed values on all platforms.
 - `info commands` and `array names` have a fixed order.
+
+## The JIT compiler
+
+The JIT is off by default. On x86-64 Linux, `-Djit` builds it, and an embedder turns it on with `Interp.enableJit`. [The JIT plan](jit.md) has the reasons and the later tiers. Milestone 1 is tier 1:
+
+- `vm.run` calls `jit.prepare` one time for each call of a `Code`. A proc body compiles at its second call, and a body with a loop at its first call. `--jit-threshold N` sets the count. A `Code` that fails to compile, and each script outside a proc, stays in the interpreter.
+- Before a compile, the verifier checks each instruction and gives the static stack depth of each address. The machine code has no stack pointer: a stack value has a fixed offset.
+- Each instruction becomes one template. The state at each instruction boundary equals the state of the interpreter: the values are on the value stack and in the cells. The fast paths of `step`, `guard`, `push`, `load`, `store`, the jumps, `+`, `-`, `*`, the compares, and `incr` check each tag and run with no call. Each other case calls the helper of the instruction. The helper runs the function of `vm.exec` for that instruction. So each slow path has one implementation.
+- An error stub writes the address and the depth of its instruction, and `run` handles the error as for `exec`: the error trace, `break`, `continue`, and the return codes.
+- The step limit and the memory check run at the same instructions as in the interpreter. A test compares the steps of each script in both modes, and a sweep compares the stop at each step limit.
+- No value is in a register across a helper call, so the collector finds each value in the value stack and the cells. The memory of the JIT comes from the allocator of the embedder and is outside `mem_limit`. `Options.mem_limit` (16 MiB) bounds the region and the records of an interpreter and its children.
+- No value of a script is an immediate operand, and the code has no absolute address. A page is writable or executable, never both, and an executable page never becomes writable again.
+- `reset`, `compact`, and `deinit` free the machine code. A flush gets a new generation number, and a `Code` runs its function only when its number equals the number of the state.
 
 ## Point procs: the fast path
 

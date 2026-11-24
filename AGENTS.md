@@ -21,6 +21,9 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 | `python3 -I tools/bench.py --tclsh tclsh` | Compares the scripts in `bench/` with a tclsh. |
 | `zig build wasm` | Builds the WebAssembly library. |
 | `tools/suite.sh -t core-8-6-16` | Runs the Tcl test suite. |
+| `tools/suite.sh -j` | Runs the suite with the JIT at threshold 0. |
+| `tools/jit-diff.sh` | Compares the JIT with the interpreter on the test scripts. |
+| `tools/jit-perf.sh --check off` | Checks that the interpreter did not slow down. |
 
 ## Rules
 
@@ -33,6 +36,7 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 7. Add no dependency. Copy no code from Tcl or from a project with a copyleft license. Credit each source in `docs/references/`.
 8. Start each source file with a `//!` comment that explains its algorithm, and an SPDX line for BSD-2-Clause.
 9. Stop only your own processes, by PID.
+10. The JIT and the interpreter must agree: the same output, errors, steps, and memory count for each script. Run `tools/jit-diff.sh` and `tools/suite.sh -j` after a change to `src/vm.zig` or `src/jit/`.
 
 ## Commits and merges
 

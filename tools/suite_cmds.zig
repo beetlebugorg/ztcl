@@ -25,11 +25,20 @@ fn setup(it: *Interp) anyerror!void {
     try it.register("testregexp", cmdTestRegexp);
     try it.register("testevalex", cmdTestEvalEx);
     try it.register("testlsetdrop", cmdTestLsetDrop);
+    try it.register("testnativedepth", cmdTestNativeDepth);
     try it.register("testexprlong", exprCmd(.long));
     try it.register("testexprdouble", exprCmd(.double));
     try it.register("testexprstring", exprCmd(.string));
     try it.register("testexprlongobj", exprCmd(.long_obj));
     try it.register("testexprdoubleobj", exprCmd(.double_obj));
+}
+
+/// `testnativedepth`: the bytes of native stack between the outermost
+/// script and this command. The JIT tests compare it with and without
+/// the JIT.
+fn cmdTestNativeDepth(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len != 1) return it.wrongArgs("testnativedepth");
+    return .{ .int = @intCast(it.native_base -| @frameAddress()) };
 }
 
 /// `testlsetdrop name index value`: the dropped form of `lset`. It writes

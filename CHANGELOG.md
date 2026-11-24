@@ -18,6 +18,8 @@
 - Replaces the arena with a heap and a conservative mark-and-sweep collector. A long loop holds a flat memory size. A value from `eval` is valid until the next call into the interpreter. Adds `Interp.hold`, `release`, `addRoot`, `removeRoot`, `collect`, the field `gc_on`, and the runner flags `--gc`, `--gc-stress`, and `--report`.
 - Starts a collection only at a safe point, and makes a host call with no `enterHost` run with no collection.
 - Reclaims memory in the WebAssembly build with precise roots at bytecode safe points. Adds `ztcl_set_gc_stress`, `tools/wasm-mem.mjs`, and `tools/gc-fuzz.py`.
+- Adds tier 1 of a JIT compiler on x86-64 Linux, off by default: the build option `-Djit`, `Interp.enableJit`, and the runner flags `--jit`, `--jit-threshold`, and `--jit-stats`. Adds `tools/jit-diff.sh`, `tools/jit-perf.sh`, `tools/jit-asm-golden.sh`, the scripts of `tests/jit/`, and `suite.sh -j`.
+- Moves each bytecode handler to a function that the interpreter and the JIT share.
 - Fixes a use after free in `compact` for a string in `tcl_precision`. `compact` now returns `error.InterpBusy` for an interpreter with TclOO objects and ends each `hold`.
 - Fixes variable traces and `vwait` on an `upvar` link to an array element.
 - Fixes an overflow of `%` on the smallest integer and an underflow in the regexp match of a sequence.

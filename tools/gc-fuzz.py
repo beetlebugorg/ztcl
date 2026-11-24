@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 # Runs random Tcl programs with a collection at each allocation.
 #
-#   tools/gc-fuzz.py -r runner [-b reference] [-n count] [-s seed] [-g N]
+#   tools/gc-fuzz.py -r runner [-b reference] [-n count] [-s seed] [-g N] [-j]
 #
 # A grammar makes each program from a seed. The program uses procs,
 # loops, lists, dicts, arrays, strings, regexp, upvar, uplevel, catch,
-# rename, traces, namespaces, TclOO, coroutines, child interpreters, and
-# errors. Each statement prints its result, so a damaged value changes
+# rename, traces, namespaces, TclOO with constructors, `next`, and
+# `self caller`, coroutines, `tailcall` with `catch`, child interpreters,
+# and errors. Each statement prints its result, so a damaged value changes
 # the output.
 #
 # The reference run uses `--gc off`. The test run uses `--gc-stress N`.
+# With -j, the test run also has the JIT at threshold 0, so the machine
+# code runs with a collection at each allocation. A program that reaches
+# the nesting limit can then stop at another depth: the tool counts it
+# and does not compare it.
 # The exit code, stdout, and steps must be equal. A run that stops at the
 # memory limit compares only the output that both runs have. A difference
 # or a crash prints the seed and keeps the program in the folder of -k.
@@ -87,6 +92,10 @@ class Gen:
             lambda: f"namespace eval n{r.randrange(2)} {{variable w {v}; set w}}",
             lambda: f"trace add variable {x} write tr; set {x} {v}; trace remove variable {x} write tr",
             lambda: f"set o [C new]; set {x} [$o add {v}]; $o destroy",
+            lambda: f"set o [D new {v}]; set {x} [$o add {v}]; catch {{$o who}} {y}; $o destroy",
+            lambda: f"set {x} [tc {v}]",
+            lambda: f"set {x} [tcc {v}]",
+            lambda: f"catch {{tailcall list {v}}} {x}",
             lambda: f"catch {{coroutine co{r.randrange(3)} gen {v}}} {x}; catch {{co0}} {y}",
             lambda: f"catch {{interp create k; k eval {{set z [string repeat m 30]; list $z $z}}}} {x}; catch {{interp delete k}}",
         ]
@@ -102,6 +111,9 @@ proc cmp {a b} { string compare $a $b }
 proc tr {args} { set ::t [string repeat t 12] }
 proc gen {x} { set l [list $x $x]; yield [llength $l]; yield $x; return $l }
 oo::class create C { variable t; constructor {} { set t {} }; method add {k} { lappend t $k; return $t } }
+oo::class create D { superclass C; constructor {x} { next; my add [string repeat $x 2] }; method add {k} { set r [next $k]; return [list [llength $r] $r] }; method who {} { return [self caller] } }
+proc tc {x} { set y [list $x $x]; tailcall concat $y [string repeat z 3] }
+proc tcc {x} { set r [catch {tailcall list $x} m]; return [list after $r $m] }
 """
         procs = []
         for i in range(4):
@@ -131,9 +143,10 @@ def main():
     ap.add_argument("-g", type=int, default=1)
     ap.add_argument("-k", default=tempfile.gettempdir())
     ap.add_argument("-t", type=int, default=60, help="the timeout of one run in seconds")
+    ap.add_argument("-j", action="store_true", help="run the test run with the JIT at threshold 0")
     o = ap.parse_args()
     base = ["--max-steps", "400000", "--mem", str(256 << 20), "--allow", "interp"]
-    bad = slow = 0
+    bad = slow = deep = 0
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "p.tcl")
         for seed in range(o.s, o.s + o.n):
@@ -141,7 +154,8 @@ def main():
             with open(path, "w") as f:
                 f.write(text)
             ref = run([o.b or o.r, "--gc", "off"] + base, path, o.t)
-            got = run([o.r, "--gc-stress", str(o.g)] + base, path, o.t * 5)
+            jit = ["--jit", "--jit-threshold", "0"] if o.j else []
+            got = run([o.r, "--gc-stress", str(o.g)] + jit + base, path, o.t * 5)
             if ref is None or got is None:
                 slow += 1
                 continue
@@ -152,6 +166,12 @@ def main():
                 k = min(len(ref[1]), len(got[1]))
                 if ref[1][:k] == got[1][:k] and got[0] in (0, 1):
                     continue
+            # With the JIT, one proc call level uses less native stack, so
+            # a deep recursion can stop at another depth (docs/jit.md).
+            nest = b"too many nested evaluations"
+            if o.j and (nest in ref[1] + ref[3] or nest in got[1] + got[3]) and ref[:3] != got[:3]:
+                deep += 1
+                continue
             if ref[:3] != got[:3]:
                 bad += 1
                 keep = os.path.join(o.k, f"gc-fuzz-{seed}.tcl")
@@ -159,7 +179,7 @@ def main():
                     f.write(text)
                 print(f"seed {seed}: differs (rc {ref[0]} and {got[0]}, steps {ref[2]!r} and {got[2]!r}): {keep}")
                 print(got[3][-400:].decode(errors="replace"))
-    print(f"programs {o.n} differ {bad} timed out {slow}")
+    print(f"programs {o.n} differ {bad} timed out {slow} other depth at the nesting limit {deep}")
     return 1 if bad else 0
 
 

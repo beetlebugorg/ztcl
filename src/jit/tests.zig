@@ -707,12 +707,19 @@ fn collect(ctx: ?*anyopaque, bytes: []const u8) void {
 /// `on`, and gives the output, the result, errorInfo, errorCode, and
 /// the steps used as one text.
 fn runMode(script: []const u8, on: bool, limit: u64, min_compiled: u64) !Outcome {
+    return runModeGc(script, on, limit, min_compiled, 0);
+}
+
+/// `runMode` with the collector off, or with a collection at each
+/// `stress`th allocation. With the stress mode, the text has no memory
+/// count.
+fn runModeGc(script: []const u8, on: bool, limit: u64, min_compiled: u64, stress: u32) !Outcome {
     const it = try newInterp();
     defer freeInterp(it);
     var out: std.ArrayList(u8) = .empty;
     defer out.deinit(testing.allocator);
     it.output = .{ .ctx = &out, .write = collect };
-    it.gc_on = false;
+    if (stress == 0) it.gc_on = false else it.setGcStress(stress);
     it.step_limit = limit;
     if (on and !it.enableJit(.{ .threshold = 0 })) return error.SkipZigTest;
     var w: std.ArrayList(u8) = .empty;
@@ -726,7 +733,8 @@ fn runMode(script: []const u8, on: bool, limit: u64, min_compiled: u64) !Outcome
     }
     const info = it.getVarPlain("::errorInfo") catch Value.empty;
     const code = it.getVarPlain("::errorCode") catch Value.empty;
-    try w.print(a, "output: {s}\nerrorInfo: {s}\nerrorCode: {s}\nsteps: {d}\nmem: {d}\n", .{ out.items, try it.str(info), try it.str(code), limit - it.step_limit, it.memUsed() });
+    try w.print(a, "output: {s}\nerrorInfo: {s}\nerrorCode: {s}\nsteps: {d}\n", .{ out.items, try it.str(info), try it.str(code), limit - it.step_limit });
+    if (stress == 0) try w.print(a, "mem: {d}\n", .{it.memUsed()});
     if (on) {
         const st = it.jit.?.stats;
         if (st.compiled < min_compiled) {
@@ -1002,4 +1010,35 @@ test "jit: compares of the smallest and the largest integer" {
         \\}
         \\list [cmp -9223372036854775808 9223372036854775807] [cmp 9223372036854775807 -9223372036854775808] [cmp 5 5]
     , 1);
+}
+
+test "jit: compiled code with a collection at each allocation" {
+    if (!jit.built) return error.SkipZigTest;
+    const scripts = [_][]const u8{
+        \\proc f {n} { set l {}; for {set i 0} {$i < $n} {incr i} { lappend l [string repeat x $i] [expr {$i * $i}] }; set s 0; foreach x $l { incr s [string length $x] }; return [list $s [llength $l]] }
+        \\list [f 40] [f 40]
+        ,
+        \\proc g {d} { dict set d k[expr {[dict size $d] % 5}] [list a b]; return $d }
+        \\proc f {} { set d {}; for {set i 0} {$i < 30} {incr i} { set d [g $d]; append s "$i," }; return [list $d $s] }
+        \\f
+        ,
+        \\proc gen {n} { yield; for {set i 0} {$i < $n} {incr i} { yield [string repeat y $i] } }
+        \\coroutine c gen 20
+        \\set r {}; for {set k 0} {$k < 20} {incr k} { lappend r [string length [c]] }; set r
+        ,
+        \\oo::class create A { variable t; constructor {} { set t {} }; method add {x} { lappend t [string repeat $x 3]; return [llength $t] } }
+        \\set o [A new]; set r {}; for {set i 0} {$i < 25} {incr i} { lappend r [$o add $i] }; set r
+    };
+    for (scripts) |script| {
+        const ref = try runModeGc(script, false, std.math.maxInt(u64), 0, 0);
+        defer ref.deinit();
+        const got = try runModeGc(script, true, std.math.maxInt(u64), 1, 1);
+        defer got.deinit();
+        // The reference has the memory count: compare the lines before it.
+        const want = ref.text[0 .. std.mem.lastIndexOf(u8, ref.text, "mem: ").?];
+        testing.expectEqualStrings(want, got.text) catch |e| {
+            std.debug.print("script:\n{s}\n", .{script});
+            return e;
+        };
+    }
 }

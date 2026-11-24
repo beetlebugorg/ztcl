@@ -11,7 +11,7 @@
 //! the memory limit of a script do not change when the JIT is on.
 //!
 //! A `Code` points to its compiled function only through a generation
-//! number. `flush` takes a new number, so a `Code` that outlives a flush
+//! number. `flush` gets a new number, so a `Code` that outlives a flush
 //! runs in the interpreter and is never compiled with stale data.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
@@ -78,7 +78,7 @@ pub const State = struct {
     /// The allocator of the embedder.
     backing: Allocator,
     /// The generation of the compiled functions. Each flush and each new
-    /// state takes a new number from `next_gen`.
+    /// state gets a new number from `next_gen`.
     gen: u64,
     /// The facts of the layout probe.
     layout: layout_mod.Layout,

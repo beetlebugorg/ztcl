@@ -53,6 +53,9 @@ ztcl needs Zig 0.16.0.
 | `zig build run -- script.tcl` | Runs a script. With no file, it reads commands from stdin. |
 | `zig build bench` | Runs the point proc benchmark. |
 | `zig build wasm` | Builds `zig-out/lib/ztcl.wasm`. |
+| `zig-out/bin/ztcl --jit script.tcl` | Runs a script with the JIT on (x86-64 Linux). |
+
+On x86-64 Linux, ztcl has an optional compiler from bytecode to machine code. It is off by default. `--jit` turns it on in the runner, and `Interp.enableJit` turns it on in the library. A script gives the same output with the JIT on and off. See [the JIT plan](docs/jit.md).
 
 Homebrew (available after the first release):
 

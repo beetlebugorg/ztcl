@@ -44,6 +44,27 @@ On `error.TclError`, `it.result` holds the message and `it.error_line` holds the
 | `gc_on` | False turns the collector off. The memory limit is then exact. |
 | `compact(roots, opts)` | Frees the memory of past evaluations and keeps the commands, procs, namespaces, and point programs. `.vars = .clear` also drops the variables. Each value in `roots` gets a new address. All other values from before the call are invalid. Call it between evaluations. It returns `error.InterpBusy` for an interpreter with a capability, a child, a coroutine, or a TclOO object. |
 
+## The JIT
+
+On x86-64 Linux, the default build has a compiler from bytecode to machine code. It is off until the embedder turns it on:
+
+```zig
+if (!it.enableJit(.{})) {
+    // The build or the system has no JIT. The interpreter runs each script.
+}
+```
+
+| Option | Use |
+|---|---|
+| `threshold` | The calls of a proc before it compiles (default 2). 0 compiles before the first run. A body with a loop compiles at its first call. |
+| `mem_limit` | The most bytes of executable memory and JIT data of the interpreter and its children (default 16 MiB). It is outside the `mem_limit` of the interpreter. |
+
+- A script cannot turn the JIT on or see it. With the JIT on, a script gives the same output, the same steps, and the same memory count.
+- `enableJit` returns false when the build has `-Djit=false`, the target has no backend, the layout probe fails, or the system refuses executable memory (for example SELinux `execmem` rules, a seccomp filter, or `PR_SET_MDWE`). A build with `-Dgc-precise=true` has no JIT.
+- A child interpreter gets the JIT only when its parent has it.
+- `reset`, `compact`, and `deinit` free the machine code.
+- The JIT is not a capability, so `compact` accepts an interpreter with the JIT on.
+
 ## Point procs
 
 `point.install` adds the `point` command. This complete program runs a point proc over two points:
