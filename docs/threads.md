@@ -51,14 +51,14 @@ A shared form needs a buffer kind that each of these paths copies first, and a m
 | Command | ztcl behavior |
 |---|---|
 | `thread::create ?-joinable? ?-preserved? ?script?` | Starts a thread and waits until its interpreter exists. With no script, the thread runs `thread::wait`. Without `thread::wait`, the thread ends at the end of its script. |
-| `thread::send ?-async? ?-head? id script ?varname?` | Queues the script at the target, or at the head with `-head`. Without `-async`, the sender waits for the result. While it waits, it runs the scripts that other threads send to it, so two threads that send to each other do not deadlock. With `varname`, the result goes to the variable, and the command gives the return code. With `-async` and `varname`, the variable gets the result later, in the event loop of the sender. A send to the own thread runs the script at once. |
+| `thread::send ?-async? ?-head? id script ?varname?` | Queues the script at the target, or at the head with `-head`. Without `-async`, the sender waits for the result. While it waits, it runs the scripts that other threads send to it, so two threads that send to each other do not deadlock. With `varname`, the result goes to the variable, and the command gives the return code. With `-async` and `varname`, the variable gets the result later, in the event loop of the sender. A send to the own thread runs the script at once. | A send to an id with no thread gives `thread "tid0x9" does not exist`. A send that waits gives `target thread died` when its target ends first.
 | `thread::broadcast script` | Sends the script with `-async` to each other thread. |
 | `thread::wait` | Runs the event loop of the thread until a release ends it. |
 | `thread::preserve ?id?`, `thread::release ?-wait? ?id?` | Change the reference count. At zero or below, `thread::wait` returns and the thread ends. `-wait` waits for the end. |
 | `thread::join id` | Waits for the end of a joinable thread and gives its exit status. |
 | `thread::id`, `thread::names`, `thread::exists id` | The own id, the ids of the running threads, and a test for one id. |
 | `thread::exit ?status?` | Ends the thread. `catch` cannot catch it. The main thread gives an error. |
-| `thread::cancel ?-unwind? id ?result?` | Stops the script of a thread at its next safe point. `-unwind` gives an error that `catch` cannot catch. The main thread cannot be the target. |
+| `thread::cancel ?-unwind? id ?result?` | Stops the script of a thread at its next safe point. A cancel of a thread that runs no script has no effect, as in the Thread package. `-unwind` gives an error that `catch` cannot catch. The main thread cannot be the target. |
 | `thread::unwind` | The same as `thread::release` for the own thread. |
 | `thread::errorproc ?proc?` | Sets the procedure that gets the errors of all threads: `proc id errorInfo`. It runs in the thread that set it. |
 | `thread::configure id ?option? ?value?` | `-eventmark N` makes `thread::send -async` wait while the queue of the target has N messages. `-unwindonerror bool` ends the thread after a send with an error. |
@@ -153,6 +153,5 @@ The user approved these three choices of the plan.
 
 - No value is shared by pointer, and `tsv` values keep their list and number forms.
 - Each thread has limits, and a group has totals.
-- `thread::send` to a thread that ended gives `target thread died`, and a send to an unknown id gives `invalid thread id`.
 - The `ttrace` package, `tsv::array bind`, and the `-eventmark` wait of `thread::broadcast` are absent.
 - `thread::cancel` reaches a thread in a child interpreter only when the child returns.
