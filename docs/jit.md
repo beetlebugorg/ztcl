@@ -725,7 +725,7 @@ Other limits on the attacker:
 
 - **Differential fuzzing.** `tools/jit-fuzz.zig` makes random Tcl programs from a grammar: procs, loops, `expr`, lists, dicts, strings, `upvar`, `uplevel`, `catch`, `rename`, traces, and errors. It runs each program in the interpreter and in each JIT mode, with a random step limit, a random memory limit, and the collector off (`--gc off`). The output, the result, `errorInfo`, `errorCode`, the steps used, and the memory count must be equal.
 - **Assembler fuzzing.** Each instruction form of each assembler is checked against the assembler of `zig cc` for each register and for the edge values of each operand.
-- **Verifier fuzzing.** Random and mutated bytecode goes to the verifier. Each `Code` that passes then compiles and runs under a step limit in a build with safety checks. The process must not crash.
+- **Verifier fuzzing.** Random and mutated bytecode goes to the verifier. Each `Code` that passes then compiles and runs under a step limit in a build with safety checks, in one interpreter with the JIT and in one without it, with the same history. The process must not crash, and the result, `errorInfo`, the steps used, the memory count, and the output must be equal. Some runs have a step limit below 64 or a small memory limit.
 - **Stress modes.** One mode compiles each `Code` at once. One mode forces each tier 2 guard to fail on a schedule. One mode makes each allocation of the compiler fail in turn.
 
 ### On by default, or a capability
