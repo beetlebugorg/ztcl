@@ -295,14 +295,81 @@ The outside programs with `tools/kostya.sh --jit` on the commit of task 25, agai
 
 `bf.tcl` gained from the inline `lindex`, `str_eq_jump` (the cases of `switch`), and `lset_drop` of task 24. `bf_oo.tcl` spends its time in method calls, which go through `callMethod` and `runProc`.
 
-Tier 2 (tasks 33 to 35) compiles a loop of integers with no call. `sum.tcl` with `--jit --jit-tier2` uses 15.0 M instructions (gate 16 M). `nested.tcl` (127.9 M) and `foreach.tcl` (85.0 M) have loops with calls, and task 36 compiles them.
+## Results of tier 2
+
+Tier 2 (tasks 33 to 37) compiles a loop with integers and doubles in registers, and with calls of the helpers of tier 1. Measured on 2026-11-24 after task 38, `ReleaseFast`, x86-64 Linux, with `perf stat -e instructions:u` of the whole process. Each count of tier 2 is at or below the count of tier 1.
+
+| Script | Interpreter | `--jit` | `--jit --jit-tier2` | Gate of tier 2 | Result |
+|---|---|---|---|---|---|
+| `sum.tcl` | 283.8 M | 90.9 M | 15.0 M | 16 M | pass |
+| `nested.tcl` | 337.6 M | 123.7 M | 55.4 M | 100 M | pass |
+| `foreach.tcl` | 213.8 M | 80.4 M | 40.6 M | 45 M | pass |
+| `dsum.tcl` | 700.8 M | 557.9 M | 16.6 M | 16.9 M | pass |
+| `dict.tcl` | 281.0 M | 194.9 M | 188.5 M | 194.9 M (tier 1) | pass |
+| `readloop.tcl` | 208.9 M | 154.7 M | 146.9 M | 154.7 M (tier 1) | pass |
+| `dictgrow.tcl` | 645.6 M | 572.4 M | 570.3 M | 572.4 M (tier 1) | pass |
+| `strbuild.tcl` | 324.0 M | 252.6 M | 243.1 M | | |
+| `fib.tcl` | 165.1 M | 134.2 M | 134.2 M | | |
+
+The gates of tier 1 in `bench/jit-gates.tsv` did not change: `fib.tcl` (134.2 M, gate 112 M) and `readloop.tcl` (154.7 M, gate 150 M) fail for the causes above.
+
+`dsum.tcl` sets `x` with `expr`, because a literal word is a string, and a string operand goes to a helper in each pass. The model of task 32 for its loop is 14 instructions for one pass. Tier 2 uses about 16: the joined step check, the compare of the loop, `mulsd` with a constant register, `addsd` into the register of `s` with a NaN check, and the `incr`.
+
+The first build of tasks 36 and 37 used more instructions with tier 2 than with tier 1 on `dict.tcl` (251.0 M), `readloop.tcl` (192.6 M), and `dictgrow.tcl` (589.1 M). The causes, from `perf record`:
+
+- Integer `/` and `%` were helper calls in tier 2 and inline in tier 1.
+- `invoke` called the helper that resolves the name. Tier 1 checks the cached command site inline.
+- The plan gives the kind `any` to the result of a helper, so `incr s [dict get ...]` and the jumps on such a value were helper calls in tier 2. Tier 1 checks the tag at run time.
+- Each call wrote the slot registers to their cells and loaded them again. A helper that runs no script now keeps the integer slot registers on the native stack.
+- `lindex` and `llength` of a list value were helper calls in tier 2.
+- A loop that runs a few passes for each entry pays the entry block, the exit, and the calls of `tier_up` and `resume_at` at each entry. A loop with calls now counts its passes at its back jump, and after 64 entries a loop with fewer than 16 passes for each entry runs in tier 1 only. The count costs one instruction for each pass, so `nested.tcl` and `foreach.tcl` went from 52.4 M and 37.3 M to 55.4 M and 40.6 M.
+
+`bench/jit-gates2.tsv` has gates for the three scripts at the count of tier 1.
+
+Wall time, best of 5 runs, on a machine that another job shared, so each number is noisy by a few milliseconds:
+
+| Script | Interpreter | `--jit` | `--jit --jit-tier2` |
+|---|---|---|---|
+| `sum.tcl` | 20 ms | 9 ms | 3 ms |
+| `dsum.tcl` | 49 ms | 43 ms | 3 ms |
+| `nested.tcl` | 36 ms | 25 ms | 19 ms |
+| `foreach.tcl` | 17 ms | 10 ms | 7 ms |
+| `dict.tcl` | 23 ms | 21 ms | 19 ms |
+| `readloop.tcl` | 17 ms | 16 ms | 15 ms |
+| `dictgrow.tcl` | 73 ms | 69 ms | 68 ms |
+| `strbuild.tcl` | 27 ms | 22 ms | 22 ms |
+| `fib.tcl` | 16 ms | 14 ms | 14 ms |
+
+The outside programs with `tools/kostya.sh --jit` and `--jit-tier2`, against `tclsh` 8.6.16 in the same session, on the build before the count of passes. Each output equals the output of `tclsh`.
+
+| Program | `--jit` | `--jit --jit-tier2` | Ratio with tier 2 |
+|---|---|---|---|
+| `base64/test.tcl` | 50.7 G | 50.7 G | 0.70 |
+| `bf.tcl bench.b` | 1044.1 G | 1059.2 G | 0.38 |
+| `bf_oo.tcl bench.b` | 7137.7 G | 7161.9 G | 1.34 |
+
+Tier 2 used 1.4 % more on `bf.tcl` and 0.3 % more on `bf_oo.tcl`. The count of passes is the fix: on a smaller program of `bf.tcl` (`bfm2`, 214.0 M with tier 1), tier 2 went from 228.4 M to 215.7 M. The outside programs did not run again after it, so the table has the counts before it.
+
+The tests of tier 2:
+
+- `zig build test` passes in Debug, in `ReleaseSafe`, and with `-Djit=false`. `zig build bench` gives `same sum: true` for each row.
+- `tools/jit-diff.sh -t`: 154 runs of the scripts of `tests/jit/`, `tests/mem/`, and `bench/`, and 682 step limits of the sweep, equal to the interpreter. The same with `-x "--jit-stress 32"` and with `-x "--gc-stress 1"`, and without `-t`.
+- `tools/suite.sh -a -J` and `tools/suite.sh -a -j`: 37 383 on all 152 files, each file equal.
+- `tools/gc-fuzz.py -j -T -g 1` with a `ReleaseSafe` runner: 300 programs, none differ. One run reached the time limit, and one stopped at another depth at the nesting limit, as in milestone 1.
+- One fix of each task was reversed, and a test failed each time. Task 36: the check of the cell tag in the entry block (the new test with a link whose bytes look like an integer), the checks after a call (two tests), and the write of the slots before a call (a test then loops until it is stopped). Task 37: the NaN check of a result, the NaN check of the entry block, the tag check of `incr_value` on a value from a helper, the write of the kept slots at an exit after a helper that runs no script, and the register of the result of `to_bool` (`tests/jit/tier2_calls.tcl` with `tools/jit-diff.sh`: the unit test does not find it in a Debug build). Task 38: the count of the steps of a part.
+- The fuzzer of task 19 (`zig build jit-fuzz`) is on the branch of tasks 19 to 23, so it did not run here, and its double constants of task 37 are not in it.
+- The suite runs, the fuzzer, and the tests in `ReleaseSafe` and with `-Djit=false` ran on the build before the count of passes. After it, `zig build test` in Debug and `tools/jit-diff.sh -t` with and without `-x "--jit-stress 32"` ran again and passed.
 
 Tier 2 differs from the design above in these points:
 
 - The exits are code. Each exit writes the slot registers to their cells and the stack places to the value stack, gives back the steps of its part, and calls `resume_at`, which gives the address of the tier 1 code of the exit address after the checks of `jit.enter`. No exit record is in JIT data, and no `jit.deopt` reads one.
-- A loop has at most five slots, each in a register, and its stack places are in registers. A loop that needs more stays in tier 1.
-- `r12`, the register of the helper table, holds a stack place inside a loop. Each exit loads it again from the context.
-- `--jit-stress 32` fails each guard of tier 2 on the schedule 3, 7, 13. `tools/suite.sh -J` runs the suite with tier 2 at a loop count of 2, and `tools/jit-diff.sh -t` adds tier 2 to the JIT modes.
+- A slot of the kind `int` or `double` is in a register for the whole loop: at most five integers and four doubles. A slot of the kind `any` stays in its cell. A stack place is in a register when its kind is `int` or `double`, and in the value stack when its kind is `any`. A loop that needs more registers stays in tier 1.
+- `r12`, the register of the helper table, holds a stack place or a constant inside a loop. Each call and each exit loads it again from the context.
+- A `guard` is no branch in tier 2. The entry block and each call that can run a script check the epoch, so each `guard` of the loop passes.
+- A NaN result of an operation on doubles is valid in Tcl. Its check exits after the instruction with the result in its place, so no register holds a NaN and the interpreter raises the error at the next use.
+- A compiled loop enters tier 2 again at the next pass of its head in tier 1. A loop that does not compile runs in tier 1 with no more calls of `tier_up`.
+- `--jit-stress 32` fails each guard of tier 2 on the schedule 3, 7, 13, and the same schedule forces exits after calls. `tools/suite.sh -J` runs the suite with tier 2 at a loop count of 2, `tools/jit-diff.sh -t` adds tier 2 to the JIT modes, `tools/gc-fuzz.py -j -T` adds tier 2 to the fuzzer, and `tools/kostya.sh --jit-tier2` runs the outside programs with tier 2.
+- On x86-64, tier 2 uses `rsi`, `rdi`, and `xmm6` to `xmm15` for places and constants. They are callee-saved on Windows.
 
 ### Tier 2 on arm64: the hand-off (task 38)
 
@@ -340,7 +407,7 @@ On x86-64 Windows, `rsi`, `rdi`, and `xmm6` to `xmm15` are callee-saved. `tier2_
 | `sum.tcl` | 14 | 14.7 M | 90.9 M | 16 M |
 | `nested.tcl`, the inner loop with the inline `lappend` | 24 | 24.7 M | 123.7 M | 100 M |
 | `foreach.tcl`, `foreach` with a guard of the item tag | 20 | 23.1 M | 80.4 M | 45 M |
-| `dsum.tcl`, `set s [expr {$s + $x * 0.5}]` | 14 | 14.7 M | not measured | 16.9 M (the model plus 15 %) |
+| `dsum.tcl`, `set s [expr {$s + $x * 0.5}]` | 14 | 14.7 M | 557.9 M (task 37) | 16.9 M (the model plus 15 %) |
 
 The model of a script is the startup count (`puts hi`, 0.72 M) plus the passes of its hot loops times the count of one pass. The model of `sum.tcl` is 14.7 M. The earlier model gave 10.2 M. This form writes each result to a scratch register first and moves it to the slot register after the overflow check, as task 34 asks. The models of `nested.tcl` and `foreach.tcl` have the inline paths of tier 1 in the loop and no call out, and `nested.tcl` uses an indexed address that the assembler of the JIT does not have. So they are a lower bound, and the gates of those two stay at the provisional numbers.
 
@@ -493,7 +560,7 @@ All new code is in new files. The JIT changes no line of `src/coro.zig`, `src/sy
 | `src/jit/abi.zig` | The registers and the calling convention of each target. |
 | `src/jit/x64.zig`, `src/jit/a64.zig` | The assemblers. |
 | `src/jit/tier1.zig`, `src/jit/tier1_x64.zig`, `src/jit/tier1_a64.zig` | The template compiler and the templates. |
-| `src/jit/tier2.zig` and its parts | The loop compiler. |
+| `src/jit/tier2.zig`, `src/jit/tier2_lower.zig`, `src/jit/tier2_x64.zig` | The plan of a loop, the facts of the plan that each backend reads, and the code of tier 2 for x86-64. |
 | `src/jit/unwind_win.zig` | The unwind tables for Windows. |
 | `src/jit/tests.zig` | The unit tests. |
 | `tests/jit/` | The scripts of the differential tests. |
@@ -517,7 +584,7 @@ The order is x86-64 Linux, arm64 macOS, x86-64 macOS, x86-64 Windows, arm64 Linu
 ### Rules for each ABI
 
 - **System V x86-64.** Arguments are in `rdi`, `rsi`, `rdx`, `rcx`. The stack pointer is 16-byte aligned at each call. The code does not use the red zone.
-- **Microsoft x64.** Arguments are in `rcx`, `rdx`, `r8`, `r9`. Each call has 32 bytes of shadow space. `rsi`, `rdi`, and `xmm6` to `xmm15` are callee-saved. Tier 2 uses only `xmm0` to `xmm5`.
+- **Microsoft x64.** Arguments are in `rcx`, `rdx`, `r8`, `r9`. Each call has 32 bytes of shadow space. `rsi`, `rdi`, and `xmm6` to `xmm15` are callee-saved. Tier 2 on Linux uses them, so the Windows port saves them or uses other registers.
 - **AAPCS64.** Arguments are in `x0` to `x3`. The stack pointer is 16-byte aligned at all times. `x29` and `x30` make the frame record. The code never uses `x18`. Tier 2 uses only `d0` to `d7` and `d16` to `d31`. Plain arm64 builds have no pointer authentication.
 
 ### Stack probes

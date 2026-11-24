@@ -56,6 +56,14 @@ Brian T. Lewis, "An On-the-fly Bytecode Compiler for Tcl", USENIX Tcl/Tk Worksho
 
 **How ztcl uses it:** Background for the inline forms of the bytecode and their guards against a redefined command. `docs/design.md` describes the forms of ztcl.
 
+### Floating-point arithmetic
+
+IEEE, "IEEE Standard for Floating-Point Arithmetic", IEEE 754-2019. https://doi.org/10.1109/IEEESTD.2019.8766229
+
+**License:** Standard
+
+**How ztcl uses it:** The cases where `+`, `-`, `*`, and `/` give a NaN from operands that are not a NaN: two infinities of opposite signs for a sum, zero and an infinity for a product, and two zeros or two infinities for a quotient. `nanFree` in `src/jit/tier2_lower.zig` leaves out the NaN check of tier 2 only where none of these cases can happen.
+
 ## Memory
 
 ### Conservative collection
