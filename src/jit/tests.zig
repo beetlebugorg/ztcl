@@ -362,6 +362,183 @@ test "checkError reads only eax after a helper call" {
     try testing.expect(mem.runConst(s.bytes(), 42));
 }
 
+// ---- The AArch64 assembler ----
+
+const a64 = @import("a64.zig");
+
+test "a64: the assembler gives the words of zig cc for each golden row" {
+    const rows = @import("a64_golden.zig").rows;
+    var bad: usize = 0;
+    for (rows) |row| {
+        var s = a64.Asm.init(testing.allocator);
+        defer s.deinit();
+        try a64.encodeRow(&s, row);
+        try s.finish();
+        if (!std.mem.eql(u8, row.bytes, s.bytes())) {
+            if (bad < 20) std.debug.print("{t} a={d} b={d} c={d} i={d} j={d} k={d}: want {x} got {x}\n", .{ row.f, row.a, row.b, row.c, row.i, row.j, row.k, row.bytes, s.bytes() });
+            bad += 1;
+        }
+    }
+    try testing.expectEqual(@as(usize, 0), bad);
+    try testing.expect(rows.len > 3000);
+}
+
+test "a64: x18 is an error in each register place" {
+    var s = a64.Asm.init(testing.allocator);
+    defer s.deinit();
+    try testing.expectError(error.Reg, s.movRR(.x18, .x1));
+    try testing.expectError(error.Reg, s.movRR(.x1, .x18));
+    try testing.expectError(error.Reg, s.load(.x, .{ .r = .x18 }, .x1, 8));
+    try testing.expectError(error.Reg, s.load(.x, .{ .r = .x1 }, .x18, 8));
+    try testing.expectError(error.Reg, s.ldrR(.x, .{ .r = .x1 }, .x2, .x18));
+    try testing.expectError(error.Reg, s.stpPre(.x18, .x1, .sp, -16));
+    try testing.expectError(error.Reg, s.opR(.add, .x1, .x2, .x18, .lsl, 0));
+    try testing.expectError(error.Reg, s.addI(.x1, .x18, 1, false));
+    try testing.expectError(error.Reg, s.blr(.x18));
+    try testing.expectError(error.Reg, s.fmovDX(.d0, .x18));
+    // sp and the zero register only where the form can encode them.
+    try testing.expectError(error.Reg, s.opR(.add, .sp, .x1, .x2, .lsl, 0));
+    try testing.expectError(error.Reg, s.load(.x, .{ .r = .x1 }, .zr, 0));
+    try testing.expectError(error.Reg, s.mul(.x1, .sp, .x2));
+    try testing.expectEqual(@as(usize, 0), s.bytes().len);
+}
+
+test "a64: a value that does not fit its field is an error" {
+    var s = a64.Asm.init(testing.allocator);
+    defer s.deinit();
+    try testing.expectError(error.Range, s.ldrU(.x, .{ .r = .x0 }, .x1, 4));
+    try testing.expectError(error.Range, s.ldrU(.x, .{ .r = .x0 }, .x1, 8 * 4096));
+    try testing.expectError(error.Range, s.ldrU(.w, .{ .r = .x0 }, .x1, -4));
+    try testing.expectError(error.Range, s.ldur(.x, .{ .r = .x0 }, .x1, 256));
+    try testing.expectError(error.Range, s.ldur(.x, .{ .r = .x0 }, .x1, -257));
+    try testing.expectError(error.Range, s.movz(.x0, 65536, 0));
+    try testing.expectError(error.Range, s.movz(.x0, -1, 0));
+    try testing.expectError(error.Range, s.movk(.x0, 1, 8));
+    try testing.expectError(error.Range, s.addI(.x0, .x1, 4096, false));
+    try testing.expectError(error.Range, s.cmpI(.x0, -1));
+    try testing.expectError(error.Range, s.stpPre(.x29, .x30, .sp, -520));
+    try testing.expectError(error.Range, s.stpPre(.x29, .x30, .sp, -12));
+    try testing.expectError(error.Range, s.lslI(.x0, .x1, 0));
+    try testing.expectError(error.Range, s.asrI(.x0, .x1, 64));
+    try testing.expectError(error.Range, s.opR(.add, .x0, .x1, .x2, .lsl, 64));
+    try testing.expectError(error.Range, s.andI(.x0, .x1, 0x5));
+    try testing.expectError(error.Range, s.tstI(.x0, 0));
+    try testing.expectError(error.Range, s.brk(65536));
+    try testing.expectEqual(@as(usize, 0), s.bytes().len);
+}
+
+test "a64: branches get their offsets, and a b.cond reaches 1 MiB" {
+    var s = a64.Asm.init(testing.allocator);
+    defer s.deinit();
+    const back = try s.newLabel();
+    const fwd = try s.newLabel();
+    s.bind(back);
+    try s.nop(); // 0
+    try s.bcond(.ne, fwd); // 4
+    try s.b(back); // 8
+    try s.cbz(.x3, back); // 12
+    try s.nop(); // 16
+    s.bind(fwd); // 20
+    try s.cbnzW(.x0, fwd); // 20
+    try s.finish();
+    const w = s.bytes();
+    const word = struct {
+        fn at(bs: []const u8, k: usize) u32 {
+            return std.mem.readInt(u32, bs[k..][0..4], .little);
+        }
+    }.at;
+    try testing.expectEqual(@as(u32, 0x54000000 | 4 << 5 | 1), word(w, 4));
+    try testing.expectEqual(@as(u32, 0x14000000 | (0x4000000 - 2)), word(w, 8));
+    try testing.expectEqual(@as(u32, 0xB4000000 | (0x80000 - 3) << 5 | 3), word(w, 12));
+    try testing.expectEqual(@as(u32, 0x35000000), word(w, 20));
+
+    // The last reach of a b.cond is 1 MiB minus one word ahead.
+    var t = a64.Asm.init(testing.allocator);
+    defer t.deinit();
+    const far = try t.newLabel();
+    try t.bcond(.eq, far);
+    for (0..(1 << 18) - 2) |_| try t.nop();
+    t.bind(far);
+    try t.finish();
+    var u = a64.Asm.init(testing.allocator);
+    defer u.deinit();
+    const too_far = try u.newLabel();
+    try u.bcond(.eq, too_far);
+    for (0..(1 << 18) - 1) |_| try u.nop();
+    u.bind(too_far);
+    try testing.expectError(error.Range, u.finish());
+    // A b reaches further.
+    var v = a64.Asm.init(testing.allocator);
+    defer v.deinit();
+    const l = try v.newLabel();
+    try v.b(l);
+    for (0..1 << 18) |_| try v.nop();
+    v.bind(l);
+    try v.finish();
+}
+
+test "a64: an unbound label is an error" {
+    var s = a64.Asm.init(testing.allocator);
+    defer s.deinit();
+    const l = try s.newLabel();
+    try s.cbz(.x0, l);
+    try testing.expectError(error.UnboundLabel, s.finish());
+}
+
+test "a64: a large offset uses x16, or x17 with the base x16" {
+    var s = a64.Asm.init(testing.allocator);
+    defer s.deinit();
+    try s.load(.x, .{ .r = .x0 }, .x1, 8 * 4096);
+    try s.load(.b, .{ .r = .x0 }, .x16, -300);
+    try s.store(.d, .{ .d = .d3 }, .x2, 1 << 20);
+    var t = a64.Asm.init(testing.allocator);
+    defer t.deinit();
+    try t.movz(.x16, 8 * 4096, 0);
+    try t.ldrR(.x, .{ .r = .x0 }, .x1, .x16);
+    try t.movn(.x17, 299, 0);
+    try t.ldrR(.b, .{ .r = .x0 }, .x16, .x17);
+    try t.movz(.x16, 16, 16);
+    try t.strR(.d, .{ .d = .d3 }, .x2, .x16);
+    try testing.expectEqualSlices(u8, t.bytes(), s.bytes());
+    // The short forms when they fit.
+    var u = a64.Asm.init(testing.allocator);
+    defer u.deinit();
+    try u.load(.x, .{ .r = .x0 }, .x1, 8 * 4095);
+    try u.load(.x, .{ .r = .x0 }, .x1, -8);
+    try u.load(.w, .{ .r = .x0 }, .x1, 6);
+    try testing.expectEqual(@as(usize, 12), u.bytes().len);
+    // A store from the temporary register is an error.
+    try testing.expectError(error.Reg, u.store(.x, .{ .r = .x16 }, .x1, 1 << 20));
+}
+
+/// Runs code that returns a 64-bit value, on arm64 with executable memory.
+fn runA64(code: []const u8) ?u64 {
+    if (builtin.cpu.arch != .aarch64) return null;
+    var r = mem.Region.init(std.heap.pageSize()) orelse return null;
+    defer r.deinit();
+    const f = r.append(code) orelse return null;
+    const func: *const fn () callconv(.c) u64 = @ptrCast(@alignCast(f.ptr));
+    return func();
+}
+
+test "a64: movImm and addImm give each value" {
+    if (builtin.cpu.arch != .aarch64 or !mem.selfTest()) return error.SkipZigTest;
+    const vals = [_]i64{ 0, 1, -1, 42, 0xFFFF, 0x10000, -0x10000, 0x12345678, -0x12345678, std.math.maxInt(i64), std.math.minInt(i64), 0x0000FFFF00000000, -4096, 4095, 4096, 0x123000, -0x123000, 0x1001 };
+    for (vals) |v| {
+        var s = a64.Asm.init(testing.allocator);
+        defer s.deinit();
+        try s.movImm(.x0, v);
+        try s.ret();
+        try testing.expectEqual(@as(u64, @bitCast(v)), runA64(s.bytes()).?);
+        var t = a64.Asm.init(testing.allocator);
+        defer t.deinit();
+        try t.movz(.x1, 1000, 0);
+        try t.addImm(.x0, .x1, v);
+        try t.ret();
+        try testing.expectEqual(@as(u64, @bitCast(v +% 1000)), runA64(t.bytes()).?);
+    }
+}
+
 // ---- The layout probe ----
 
 const layout = @import("layout.zig");

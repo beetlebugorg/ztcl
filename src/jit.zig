@@ -199,6 +199,7 @@ pub const parts = struct {
     pub const vm = @import("vm.zig");
     pub const verify = @import("jit/verify.zig");
     pub const x64 = @import("jit/x64.zig");
+    pub const a64 = @import("jit/a64.zig");
     pub const tier1 = @import("jit/tier1.zig");
 };
 

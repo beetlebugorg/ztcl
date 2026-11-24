@@ -1,9 +1,12 @@
 #!/bin/sh
-# Makes the golden table of the x86-64 assembler of the JIT.
+# Makes the golden table of the x86-64 or the AArch64 assembler of the JIT.
 #
 #   tools/jit-asm-golden.sh            writes src/jit/x64_golden.zig
 #   tools/jit-asm-golden.sh --check    fails when the file differs
 #   tools/jit-asm-golden.sh --random N checks N random instructions
+#   tools/jit-asm-golden.sh --arch aarch64 [--check | --random N]
+#                                      the same for src/jit/a64.zig and
+#                                      src/jit/a64_golden.zig
 #
 # The tool writes each instruction form of src/jit/x64.zig, with each
 # register in each operand place and each displacement and immediate of
@@ -17,14 +20,52 @@
 # range of each field. `zig cc -c` assembles them, and
 # `zig build jit-fuzz -- --asm FILE` encodes each one with x64.zig and
 # compares the bytes. The exit code is 1 when a row differs.
+#
+# With --arch aarch64, `zig cc -target aarch64-linux-gnu` assembles the
+# forms of a64.zig, so the check runs on any host. Each AArch64 row has
+# the fields `a b c i j k`: three register numbers (0 to 30, 31 for
+# `sp`, 32 for the zero register), an offset or an immediate, a shift,
+# and an operation, a size, or a condition. No row uses `x18`.
 # SPDX-License-Identifier: BSD-2-Clause
 set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+arch=x86_64
+if [ "${1:-}" = --arch ]; then
+    arch=${2:?--arch needs x86_64 or aarch64}
+    shift 2
+fi
 out="$here/../src/jit/x64_golden.zig"
 check=
 [ "${1:-}" = --check ] && check=1
 work=$(mktemp -d "${TMPDIR:-/tmp}/ztcl-golden.XXXXXX")
 trap 'rm -rf "$work"' EXIT
+
+if [ "$arch" = aarch64 ]; then
+    out="$here/../src/jit/a64_golden.zig"
+    mode=table
+    n=0
+    if [ "${1:-}" = --random ]; then
+        mode=random
+        n=${2:?--random needs a count}
+    fi
+    python3 -I "$here/jit-asm-a64.py" "$work" "$mode" "$n" || exit 1
+    if [ "$mode" = random ]; then
+        cd "$here/.." && zig build jit-fuzz -- --asm-a64 "$work/rows.txt"
+        exit $?
+    fi
+    if [ -n "$check" ]; then
+        if cmp -s "$work/a64_golden.zig" "$out"; then
+            echo "golden table: same"
+        else
+            echo "golden table: DIFFERS"
+            exit 1
+        fi
+    else
+        cp "$work/a64_golden.zig" "$out"
+        echo "wrote $out"
+    fi
+    exit 0
+fi
 
 if [ "${1:-}" = --random ]; then
     n=${2:?--random needs a count}
@@ -142,7 +183,7 @@ with open(work + "/r.s", "w") as s:
     for n, row in enumerate(rows):
         s.write("g%d: %s\n" % (n, row[6].replace("NEXT", "g%d" % (n + 1))))
     s.write("g%d: nop\n" % len(rows))
-subprocess.run(["zig", "cc", "-c", "-x", "assembler", work + "/r.s", "-o", work + "/r.o"], check=True)
+subprocess.run(["zig", "cc", "-target", "x86_64-linux-gnu", "-c", "-x", "assembler", work + "/r.s", "-o", work + "/r.o"], check=True)
 data = open(work + "/r.o", "rb").read()
 shoff, = struct.unpack_from("<Q", data, 0x28)
 shentsize, shnum, shstrndx = struct.unpack_from("<HHH", data, 0x3A)
@@ -300,7 +341,7 @@ with open(work + "/g.s", "w") as s:
     for n, (_, text) in enumerate(rows):
         s.write("g%d: %s\n" % (n, text.replace("NEXT", "g%d" % (n + 1))))
     s.write("g%d: nop\n" % len(rows))
-subprocess.run(["zig", "cc", "-c", "-x", "assembler", work + "/g.s", "-o", work + "/g.o"], check=True)
+subprocess.run(["zig", "cc", "-target", "x86_64-linux-gnu", "-c", "-x", "assembler", work + "/g.s", "-o", work + "/g.o"], check=True)
 
 data = open(work + "/g.o", "rb").read()
 shoff, = struct.unpack_from("<Q", data, 0x28)
