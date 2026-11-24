@@ -44,9 +44,14 @@
 //! the side tables of a real proc, and the `Code` of a proc of a random
 //! program with 1 to 4 random changes of an opcode or an operand. The
 //! verifier checks each one. When it accepts one, the JIT compiles it,
-//! and the proc runs with that code and a step limit of 10 000. The
-//! process must not crash, and no safety check may fail. The collector
-//! is off in this mode, because a changed `Code` lives outside the heap.
+//! and the proc runs with that code in two interpreters with the same
+//! history: one with the JIT and one without it. The step limit is
+//! 10 000, or below 64 in one run of four. One run of four has a memory
+//! limit a little above the count before the run. The result,
+//! `errorInfo`, the steps used, the memory count, and the output must be
+//! equal, and the run of the JIT must end in one second. The process
+//! must not crash, and no safety check may fail. The collector is off
+//! in this mode, because a changed `Code` lives outside the heap.
 //! `--tier2` and `--stress N` set the same options of the JIT here: with
 //! `--tier2`, each loop calls `tier_up` at its first pass.
 //!
@@ -1463,9 +1468,85 @@ fn defineProcs(it: *Interp, text: []const u8) !void {
     }
 }
 
+/// Prints each instruction with its opcode byte.
+fn printIns(ins: []const vm.Ins) void {
+    for (ins, 0..) |*i, pc| {
+        // An instruction that no path reaches can have a byte that is no
+        // member of `Op`.
+        const b = std.mem.asBytes(i)[0];
+        const name = if (std.enums.fromInt(vm.Op, b)) |op| @tagName(op) else "(no opcode)";
+        std.debug.print("  {d}: {s} ({d}) x={d} a={d} b={d} c={d}\n", .{ pc, name, b, i.x, i.a, i.b, i.c });
+    }
+}
+
+/// One interpreter of the verifier fuzzer and its output.
+const VSide = struct {
+    it: Interp,
+    sink: Sink,
+
+    fn init(vs: *VSide, a: Allocator) !void {
+        vs.sink = .{ .buf = .empty, .a = a };
+        try vs.it.init(a);
+        vs.it.gc_on = false;
+        vs.it.output = .{ .ctx = &vs.sink, .write = collect };
+    }
+
+    fn deinit(vs: *VSide) void {
+        vs.it.deinit();
+        vs.sink.buf.deinit(vs.sink.a);
+    }
+
+    /// The proc `name` and the Code of its body, or null.
+    fn body(vs: *VSide, name: []const u8) ?struct { *tcl.interp.Proc, *vm.Code } {
+        const it = &vs.it;
+        const cmd = it.commands.get(name) orelse return null;
+        // A changed code can rename a native command to this name.
+        if (cmd.impl != .proc) return null;
+        const p = cmd.impl.proc;
+        if (p.script == null) p.script = it.compile(it.str(p.body) catch return null) catch return null;
+        const base = vm.compileProc(it, p, p.script.?) catch return null;
+        return .{ p, base };
+    }
+
+    /// Runs `call` with `code` as the body of `p`, and writes each
+    /// compared field to `out`.
+    fn run(vs: *VSide, a: Allocator, p: *tcl.interp.Proc, code: *vm.Code, call: []const u8, steps: u64, mem: usize, out: *std.ArrayList(u8)) !void {
+        const it = &vs.it;
+        const saved = p.code;
+        defer p.code = saved;
+        p.code = code;
+        out.clearRetainingCapacity();
+        vs.sink.buf.clearRetainingCapacity();
+        it.step_limit = steps;
+        it.mem_limit = mem;
+        if (it.eval(call)) |v| {
+            try out.print(a, "result: {s}\n", .{it.str(v) catch "?"});
+        } else |e| {
+            try out.print(a, "error {t}: {s}\n", .{ e, it.str(it.result) catch "" });
+            if (e == error.TclError) it.finishError() catch {};
+        }
+        const used = steps -% it.step_limit;
+        it.step_limit = std.math.maxInt(u64);
+        it.mem_limit = std.math.maxInt(usize);
+        const info = it.getVarPlain("::errorInfo") catch Value.empty;
+        try out.print(a, "errorInfo: {s}\nsteps: {d}\nmem: {d}\noutput:\n{s}", .{ it.str(info) catch "?", used, it.memUsed(), vs.sink.buf.items });
+    }
+};
+
+/// Each `Code` that the verifier accepts runs in two interpreters with
+/// the same history: one with the JIT and one without it. The result,
+/// `errorInfo`, the steps used, the memory count, and the output must be
+/// equal. So the tool finds a wrong result and a pass of the step limit
+/// or the memory limit, and a crash or a failed safety check stops the
+/// process. A run of the JIT that runs longer than one second is a hang:
+/// the step limit of each run is at most 10 000.
 fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start: Io.Timestamp, verbose: bool, opts: tcl.jit.Options) !void {
     var st: VerifyStats = .{};
     var n: u64 = 0;
+    var got: std.ArrayList(u8) = .empty;
+    defer got.deinit(a);
+    var want: std.ArrayList(u8) = .empty;
+    defer want.deinit(a);
     outer: while (n < count) {
         const ps = seed +% st.programs;
         st.programs += 1;
@@ -1474,15 +1555,17 @@ fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start:
         var arena_state = std.heap.ArenaAllocator.init(a);
         defer arena_state.deinit();
         const ar = arena_state.allocator();
-        var it: Interp = undefined;
-        try it.init(a);
-        defer it.deinit();
-        it.gc_on = false;
-        it.output = .{ .ctx = null, .write = struct {
-            fn f(_: ?*anyopaque, _: []const u8) void {}
-        }.f };
-        if (!it.enableJit(opts)) return error.NoJit;
-        defineProcs(&it, text) catch continue;
+        const jit_side = try a.create(VSide);
+        defer a.destroy(jit_side);
+        try jit_side.init(a);
+        defer jit_side.deinit();
+        const ref = try a.create(VSide);
+        defer a.destroy(ref);
+        try ref.init(a);
+        defer ref.deinit();
+        if (!jit_side.it.enableJit(opts)) return error.NoJit;
+        defineProcs(&jit_side.it, text) catch continue;
+        defineProcs(&ref.it, text) catch continue;
         var r = Rng.init(ps, 2);
         for (0..32) |_| {
             if (n >= count) break :outer;
@@ -1490,12 +1573,13 @@ fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start:
             if (verbose) std.debug.print("program {d} code {d}\n", .{ ps, st.codes });
             var name_buf: [8]u8 = undefined;
             const pname = try std.fmt.bufPrint(&name_buf, "p{d}", .{k});
-            const cmd = it.commands.get(pname) orelse continue;
-            // A changed code can rename a native command to this name.
-            if (cmd.impl != .proc) continue;
-            const p = cmd.impl.proc;
-            if (p.script == null) p.script = it.compile(try it.str(p.body)) catch continue;
-            const base = vm.compileProc(&it, p, p.script.?) catch continue;
+            const jb = jit_side.body(pname) orelse continue;
+            const rb = ref.body(pname) orelse continue;
+            const p = jb[0];
+            const base = jb[1];
+            // The changes go to both Code values, so their tables must
+            // have the same sizes.
+            if (base.ins.len != rb[1].ins.len or base.ranges.len != rb[1].ranges.len) continue;
             n += 1;
             st.codes += 1;
             var code = base.*;
@@ -1545,36 +1629,47 @@ fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start:
             code.jit_gen = 0;
             code.jit_calls = 0;
             code.jit_state = .untried;
+            // Most runs have the step limit of 10 000. One in four has a
+            // step limit below the steps of a few passes of a loop, and
+            // one in four has a memory limit a little above the count now.
+            const steps: u64 = if (r.chance(25)) r.below(64) else 10_000;
+            const mem_room: ?usize = if (r.chance(25)) @intCast(r.below(256 << 10)) else null;
             var info = (try verifier.verify(a, &code)) orelse continue;
             info.deinit(a);
             st.accepted += 1;
             if (random) st.accepted_random += 1;
             const held = try ar.create(vm.Code);
             held.* = code;
-            if (tcl.jit.prepare(&it, held) == null) continue;
+            if (tcl.jit.prepare(&jit_side.it, held) == null) continue;
             st.compiled += 1;
-            p.code = held;
+            // The same instructions and ranges with the tables of the
+            // reference interpreter. It has no JIT.
+            const held_ref = try ar.create(vm.Code);
+            held_ref.* = rb[1].*;
+            held_ref.ins = code.ins;
+            held_ref.ranges = code.ranges;
             var call: std.ArrayList(u8) = .empty;
             try call.appendSlice(ar, pname);
             for (0..p.params.len) |_| try call.appendSlice(ar, " 1");
-            const before = it.jit.?.stats.fallbacks;
+            const before = jit_side.it.jit.?.stats.fallbacks;
             if (verbose) {
-                std.debug.print("run {s}\n", .{pname});
-                for (held.ins, 0..) |*i, pc| {
-                    // An instruction that no path reaches can have a byte
-                    // that is no member of `Op`.
-                    const b = std.mem.asBytes(i)[0];
-                    const name = if (std.enums.fromInt(vm.Op, b)) |op| @tagName(op) else "(no opcode)";
-                    std.debug.print("  {d}: {s} ({d}) x={d} a={d} b={d} c={d}\n", .{ pc, name, b, i.x, i.a, i.b, i.c });
-                }
+                std.debug.print("run {s} steps {d}\n", .{ pname, steps });
+                printIns(held.ins);
             }
-            it.step_limit = 10_000;
-            _ = it.eval(call.items) catch {};
-            it.step_limit = std.math.maxInt(u64);
-            st.fallbacks += it.jit.?.stats.fallbacks - before;
+            const mem = if (mem_room) |m| ref.it.memUsed() +| m else std.math.maxInt(usize);
+            try ref.run(a, rb[0], held_ref, call.items, steps, mem, &want);
+            const t0 = Io.Clock.awake.now(io);
+            try jit_side.run(a, p, held, call.items, steps, mem, &got);
+            const ms = @divFloor(t0.untilNow(io, .awake).toNanoseconds(), std.time.ns_per_ms);
+            st.fallbacks += jit_side.it.jit.?.stats.fallbacks - before;
             st.ran += 1;
-            // A later change starts again from the code of the body.
-            p.code = base;
+            const deep = std.mem.indexOf(u8, want.items, "too many nested evaluations") != null;
+            if (ms > 1000 or (!deep and !std.mem.eql(u8, want.items, got.items))) {
+                std.debug.print("DIFFERENCE: program {d}, code {d}, proc {s}, steps {d}, memory room {?d}, {d} ms\n", .{ ps, st.codes - 1, pname, steps, mem_room, ms });
+                printIns(held.ins);
+                std.debug.print("ranges: {any}\n--- interpreter\n{s}\n--- jit\n{s}\n", .{ held.ranges, want.items, got.items });
+                std.process.exit(1);
+            }
         }
         if (st.programs % 2000 == 0) {
             const secs = @divFloor(start.untilNow(io, .awake).toNanoseconds(), std.time.ns_per_s);
