@@ -20,8 +20,9 @@ const std = @import("std");
 const builtin = @import("builtin");
 const linux = std.os.linux;
 
-/// The fill byte: `int3` on x86-64.
-pub const trap_byte: u8 = 0xCC;
+/// The fill byte of unused code bytes.
+/// On x86-64 it is `int3`. On arm64 a word of zero bytes is `udf #0`.
+pub const trap_byte: u8 = if (@import("builtin").cpu.arch == .aarch64) 0x00 else 0xCC;
 
 pub const Region = struct {
     /// The first usable page. The guard page is before it.
@@ -73,6 +74,8 @@ pub const Region = struct {
         }
         @memcpy(at[0..code.len], code);
         @memset(at[code.len..len], trap_byte);
+        // arm64 has no coherent instruction cache: flush the new code.
+        if (@import("builtin").cpu.arch == .aarch64) clearCache(at, at + code.len);
         if (linux.errno(linux.mprotect(at, len, .{ .READ = true, .EXEC = true })) != .SUCCESS) {
             _ = linux.mprotect(at, len, .{});
             r.stopped = true;
@@ -88,13 +91,20 @@ pub const Region = struct {
     }
 };
 
-/// The bytes of a function that returns 42: `mov eax, 42` and `ret`.
-const answer = [_]u8{ 0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3 };
+/// The bytes of a function that returns 42 on this CPU. On x86-64 they
+/// are `mov eax, 42` and `ret`. On arm64 they are `movz w0, #42` and
+/// `ret`. Other CPUs have no bytes, so the self test fails there.
+const answer: []const u8 = switch (@import("builtin").cpu.arch) {
+    .x86_64 => &.{ 0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3 },
+    .aarch64 => &.{ 0x40, 0x05, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 },
+    else => &.{},
+};
 
 /// Makes a function that returns 42 and calls it. False when the system
 /// has no executable memory.
 pub fn selfTest() bool {
-    return runConst(&answer, 42);
+    if (answer.len == 0) return false;
+    return runConst(answer, 42);
 }
 
 /// Copies `code` to a new region, calls it, and compares the result.
@@ -102,6 +112,13 @@ pub fn runConst(code: []const u8, want: u32) bool {
     var r = Region.init(std.heap.pageSize()) orelse return false;
     defer r.deinit();
     const f = r.append(code) orelse return false;
-    const func: *const fn () callconv(.c) u32 = @ptrCast(f.ptr);
+    const func: *const fn () callconv(.c) u32 = @ptrCast(@alignCast(f.ptr));
     return func() == want;
+}
+
+/// The instruction cache flush of compiler-rt, for arm64.
+extern fn __clear_cache(start: [*]u8, end: [*]u8) callconv(.c) void;
+
+fn clearCache(start: [*]u8, end: [*]u8) void {
+    __clear_cache(start, end);
 }
