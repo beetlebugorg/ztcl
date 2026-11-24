@@ -275,3 +275,7 @@ img, svg { max-width: 100%; }
 }
 figure.chart { margin: 0; }
 .bars dt code { font-size: 13px; color: var(--text-2); }
+.bars .track.budget { position: relative; }
+.bars .track.budget::after { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; border-left: 2px dashed var(--text-3); }
+.bars .fill.over { background: var(--warn); }
+.prose :not(pre) > code { overflow-wrap: anywhere; }
