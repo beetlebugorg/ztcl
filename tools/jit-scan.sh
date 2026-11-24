@@ -6,7 +6,8 @@
 # 1. No script constant in code. A script uses the integers 0x13371337
 #    and 0x0BADC0DE in `expr`, `incr`, `set`, and compares. The runner
 #    compiles each proc with `--jit-dump`. No dump file has the four
-#    bytes of either number, in either byte order.
+#    bytes of either number, in either byte order. A second run adds
+#    tier 2, and at least one loop must compile to tier 2.
 # 2. Bounds. A proc with 2049 local variables, a proc with more than
 #    32 768 bytecode instructions, and a proc with a word of 2049 parts
 #    stay in the interpreter: each one counts in `failed`, and the
@@ -70,19 +71,23 @@ proc c {x} { set k [expr {$x * 0x0BADC0DE}]; set m [expr {$k - 0x13371337}]; if 
 proc d {x} { while {$x < 0x0BADC0DE} { set x [expr {$x + 0x13371337}] }; return $x }
 puts [a 1]; puts [b 2]; puts [c 3]; puts [d 4]
 """
-dump = os.path.join(work, "dump")
-os.mkdir(dump)
-out, rc, st = run(["--jit", "--jit-threshold", "0", "--jit-stats", "--jit-dump", dump], script)
-files = sorted(os.listdir(dump))
-hits = []
-for f in files:
-    data = open(os.path.join(dump, f), "rb").read()
-    for c in consts:
-        for pat in (struct.pack("<I", c), struct.pack(">I", c)):
-            if pat in data:
-                hits.append("%s has %s" % (f, pat.hex()))
-check("no script constant in code", rc == 0 and len(files) >= 4 and not hits,
-      "%d functions, %s" % (len(files), "; ".join(hits) or "no hit"))
+# The second run adds tier 2 at a loop count of 1, so the loops of `b`
+# and `d` also compile to tier 2. The dump then has the tier 2 code.
+for tier, flags in (("tier 1", []), ("tier 2", ["--jit-tier2", "--jit-tier2-count", "1"])):
+    dump = os.path.join(work, "dump" + str(len(flags)))
+    os.mkdir(dump)
+    out, rc, st = run(["--jit", "--jit-threshold", "0", "--jit-stats", "--jit-dump", dump] + flags, script)
+    files = sorted(os.listdir(dump))
+    hits = []
+    for f in files:
+        data = open(os.path.join(dump, f), "rb").read()
+        for c in consts:
+            for pat in (struct.pack("<I", c), struct.pack(">I", c)):
+                if pat in data:
+                    hits.append("%s has %s" % (f, pat.hex()))
+    ok = rc == 0 and len(files) >= 4 and not hits and (not flags or st.get("tier2", 0) >= 1)
+    check("no script constant in code, " + tier, ok,
+          "%d functions, tier2=%d, %s" % (len(files), st.get("tier2", 0), "; ".join(hits) or "no hit"))
 
 # 2. Bounds.
 many = "proc many {} {\n" + "".join("set v%d %d\n" % (k, k) for k in range(2049)) + "return [expr {$v0 + $v2048}]\n}\n"
