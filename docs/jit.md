@@ -677,7 +677,7 @@ Other limits on the attacker:
 
 ### Bounds and type guards
 
-- **The verifier.** Before a `Code` compiles, `jit/verify.zig` checks each instruction: the opcode, each jump target, each index (slot, literal, site, word, node, table), the stack depth at each instruction (at least the inputs of the instruction, at most `max_stack`, and equal on each path to one address), the depth at each `break` and `continue` target, and that `ret` ends each path. A `Code` that fails stays in the interpreter. The machine code reads memory only at offsets that the verifier proved.
+- **The verifier.** Before a `Code` compiles, `jit/verify.zig` checks each instruction: the opcode, each jump target, each index (slot, literal, site, word, node, table), the stack depth at each instruction (at least the inputs of the instruction, at most `max_stack`, and equal on each path to one address), the depth at each `break` and `continue` target, that `ret` ends each path, and that each loop passes through an instruction that counts a step (`step`, `guard`, `invoke`, `eval_cmd`, or `foreach_next`). A `Code` that fails stays in the interpreter. The machine code reads memory only at offsets that the verifier proved.
 - **The frame.** The function checks at its entry that the frame has at least `code.names.len` entries. A smaller frame runs `exec`.
 - **Tags.** Each inline path checks the tag of the cell and the tag of the value before it reads a payload. An unknown tag goes to the helper. No inline path trusts a tag from an earlier instruction in tier 1.
 - **Lists.** An inline index into a list buffer checks the index against the length of the view with an unsigned compare.

@@ -19,6 +19,11 @@
 //! that pops or replaces a place clears its mark, and two paths to one
 //! address must give the same marks.
 //!
+//! Each cycle of the reachable instructions must pass through an
+//! instruction that counts a step: `step`, `guard`, `invoke`,
+//! `eval_cmd`, or `foreach_next`. So the step limit stops each loop. A
+//! depth-first search over the other instructions finds a cycle.
+//!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
@@ -344,9 +349,63 @@ pub fn verify(a: Allocator, code: *const Code) Allocator.Error!?Info {
         }
     }
 
+    if (try stepFreeCycle(arena, code, reachable)) return null;
+
     ok = true;
     const loop_heads = try heads.toOwnedSlice(a);
     return .{ .depth = depth, .reachable = reachable, .loop_heads = loop_heads, .has_loop = loop_heads.len > 0 };
+}
+
+/// True for an instruction that counts a step on each path through it.
+/// The cold path of `guard` goes to an `eval_cmd`, which counts one.
+fn counts(op: Op) bool {
+    return switch (op) {
+        .step, .guard, .invoke, .eval_cmd, .foreach_next => true,
+        else => false,
+    };
+}
+
+/// True when the reachable instructions that count no step have a cycle.
+/// Each successor of each instruction has a valid address: the work
+/// list of `verify` checked it.
+fn stepFreeCycle(arena: Allocator, code: *const Code, reachable: []const bool) Allocator.Error!bool {
+    const n = code.ins.len;
+    // 0: not seen, 1: on the path, 2: done.
+    const color = try arena.alloc(u8, n);
+    @memset(color, 0);
+    const Frame = struct { pc: u32, next: u8 };
+    var path: std.ArrayList(Frame) = .empty;
+    for (0..n) |root| {
+        if (!reachable[root] or color[root] != 0 or counts(code.ins[root].op)) continue;
+        color[root] = 1;
+        try path.append(arena, .{ .pc = @intCast(root), .next = 0 });
+        while (path.items.len > 0) {
+            const top = &path.items[path.items.len - 1];
+            const e = effect(code, top.pc).?;
+            var succ: ?u32 = null;
+            while (top.next < 2 and succ == null) {
+                const k = top.next;
+                top.next += 1;
+                if (k == 0 and e.falls) succ = top.pc + 1;
+                if (k == 1 and e.target != no_target) succ = e.target;
+            }
+            const s = succ orelse {
+                color[top.pc] = 2;
+                path.items.len -= 1;
+                continue;
+            };
+            if (counts(code.ins[s].op)) continue;
+            switch (color[s]) {
+                1 => return true,
+                2 => {},
+                else => {
+                    color[s] = 1;
+                    try path.append(arena, .{ .pc = s, .next = 0 });
+                },
+            }
+        }
+    }
+    return false;
 }
 
 // ---- The test hook ----

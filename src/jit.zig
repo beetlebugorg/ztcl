@@ -133,6 +133,15 @@ const gc = @import("gc.zig");
 
 pub const Fn = tier1.Fn;
 
+/// The parts of the JIT for the tests and the fuzzers of
+/// `tools/jit-fuzz.zig`. An embedder does not use them.
+pub const parts = struct {
+    pub const vm = @import("vm.zig");
+    pub const verify = @import("jit/verify.zig");
+    pub const x64 = @import("jit/x64.zig");
+    pub const tier1 = @import("jit/tier1.zig");
+};
+
 /// The result of the checks of `usable`, for the whole process.
 var usable_state = std.atomic.Value(u8).init(0);
 

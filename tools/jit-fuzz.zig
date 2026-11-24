@@ -33,6 +33,18 @@
 //! scripts of the review of milestone 1, and `tests/jit/found/` has each
 //! program that found a bug.
 //!
+//! `--asm FILE` reads rows of `tools/jit-asm-golden.sh --random N`. Each
+//! row has an instruction form, its operands, and the bytes of `zig cc`.
+//! The tool encodes each row with `src/jit/x64.zig` and compares.
+//!
+//! `--verify` makes `Code` values in two ways: random instructions with
+//! the side tables of a real proc, and the `Code` of a proc of a random
+//! program with 1 to 4 random changes of an opcode or an operand. The
+//! verifier checks each one. When it accepts one, the JIT compiles it,
+//! and the proc runs with that code and a step limit of 10 000. The
+//! process must not crash, and no safety check may fail. The collector
+//! is off in this mode, because a changed `Code` lives outside the heap.
+//!
 //! The values of a multiplication never flow back into an operand of a
 //! multiplication, so the size of each integer grows at most linearly
 //! with the steps.
@@ -1119,6 +1131,7 @@ fn comment(a: Allocator, file: *std.ArrayList(u8), text: []const u8) !void {
 const usage =
     \\usage: jit-fuzz [--seed N] [--count N] [--seconds N] [--tier2] [--stress N]
     \\                [--expect-diff] [--out DIR] [--print N] [--verbose]
+    \\                [--asm FILE] [--verify]
     \\                [--corpus DIR ...]
     \\
 ;
@@ -1138,6 +1151,8 @@ pub fn main(init: std.process.Init) !void {
     defer corpus.deinit(a);
     var print_seed: ?u64 = null;
     var verbose = false;
+    var asm_file: ?[]const u8 = null;
+    var verify_mode = false;
     var k: usize = 1;
     while (k < args.len) : (k += 1) {
         const arg: []const u8 = args[k];
@@ -1166,6 +1181,11 @@ pub fn main(init: std.process.Init) !void {
             print_seed = try std.fmt.parseInt(u64, args[k], 10);
         } else if (std.mem.eql(u8, arg, "--tier2")) {
             tier2 = true;
+        } else if (std.mem.eql(u8, arg, "--asm") and has_value) {
+            k += 1;
+            asm_file = args[k];
+        } else if (std.mem.eql(u8, arg, "--verify")) {
+            verify_mode = true;
         } else if (std.mem.eql(u8, arg, "--verbose")) {
             verbose = true;
         } else if (std.mem.eql(u8, arg, "--expect-diff")) {
@@ -1181,6 +1201,7 @@ pub fn main(init: std.process.Init) !void {
         std.debug.print("{s}", .{text});
         return;
     }
+    if (asm_file) |path| return asmCheck(a, io, path);
     if (!tcl.jit.built) {
         std.debug.print("this build has no JIT\n", .{});
         std.process.exit(2);
@@ -1196,6 +1217,7 @@ pub fn main(init: std.process.Init) !void {
     defer f.ref.deinit(a);
     defer f.got.deinit(a);
     const start = Io.Clock.awake.now(io);
+    if (verify_mode) return verifyFuzz(a, io, seed, count, seconds, start, verbose);
     var ok = true;
     if (corpus.items.len > 0) {
         f.cfg.steps = 200_000;
@@ -1273,3 +1295,220 @@ fn runCorpus(f: *Fuzz, dirs: []const []const u8) !bool {
     return ok;
 }
 
+// ---- The assembler check ----
+
+const x64 = tcl.jit.parts.x64;
+
+/// Encodes each row of `path` and compares the bytes. A row is
+/// `form a b d i k hex`.
+fn asmCheck(a: Allocator, io: Io, path: []const u8) !void {
+    const text = try Io.Dir.cwd().readFileAlloc(io, path, a, .limited(1 << 30));
+    defer a.free(text);
+    var rows: u64 = 0;
+    var bad: u64 = 0;
+    var lines = std.mem.splitScalar(u8, text, '\n');
+    var want: std.ArrayList(u8) = .empty;
+    defer want.deinit(a);
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        var f = std.mem.tokenizeScalar(u8, line, ' ');
+        const form = std.meta.stringToEnum(x64.Form, f.next() orelse return error.BadRow) orelse return error.BadRow;
+        const ra = try std.fmt.parseInt(u8, f.next() orelse return error.BadRow, 10);
+        const rb = try std.fmt.parseInt(u8, f.next() orelse return error.BadRow, 10);
+        const d = try std.fmt.parseInt(i32, f.next() orelse return error.BadRow, 10);
+        const i = try std.fmt.parseInt(i32, f.next() orelse return error.BadRow, 10);
+        const kk = try std.fmt.parseInt(u8, f.next() orelse return error.BadRow, 10);
+        const hex = f.next() orelse return error.BadRow;
+        want.clearRetainingCapacity();
+        var h: usize = 0;
+        while (h + 1 < hex.len) : (h += 2) try want.append(a, try std.fmt.parseInt(u8, hex[h .. h + 2], 16));
+        const row: x64.Row = .{ .f = form, .a = ra, .b = rb, .d = d, .i = i, .k = kk, .bytes = want.items };
+        var s = x64.Asm.init(a);
+        defer s.deinit();
+        try x64.encodeRow(&s, row);
+        try s.finish();
+        rows += 1;
+        if (!std.mem.eql(u8, want.items, s.bytes())) {
+            if (bad < 20) std.debug.print("{t} a={d} b={d} d={d} i={d} k={d}: want {x} got {x}\n", .{ form, ra, rb, d, i, kk, want.items, s.bytes() });
+            bad += 1;
+        }
+    }
+    std.debug.print("rows: {d}, differences: {d}\n", .{ rows, bad });
+    if (bad > 0 or rows == 0) std.process.exit(1);
+}
+
+// ---- The verifier fuzzer ----
+
+const vm = tcl.jit.parts.vm;
+const verifier = tcl.jit.parts.verify;
+const Range = std.meta.Child(@FieldType(vm.Code, "ranges"));
+const n_ops = @typeInfo(vm.Op).@"enum".fields.len;
+
+const VerifyStats = struct {
+    codes: u64 = 0,
+    random: u64 = 0,
+    accepted: u64 = 0,
+    accepted_random: u64 = 0,
+    compiled: u64 = 0,
+    ran: u64 = 0,
+    fallbacks: u64 = 0,
+    programs: u64 = 0,
+};
+
+/// A random operand: small numbers, neighbors of the old value, and
+/// numbers at the bounds.
+fn operandValue(r: *Rng, old: u32, len: usize) u32 {
+    return switch (r.below(8)) {
+        0 => 0,
+        1 => @intCast(r.below(4)),
+        2 => old +% 1,
+        3 => old -% 1,
+        4, 5 => @intCast(r.below(len + 4)),
+        6 => @intCast(r.below(70000)),
+        else => r.pick(u32, &.{ std.math.maxInt(u32), std.math.maxInt(u16), 65536, 2048, 2049, 32768 }),
+    };
+}
+
+/// Writes an opcode byte. 3 % of the bytes are no member of `Op`.
+fn setOp(r: *Rng, ins: *vm.Ins) void {
+    const b: u8 = if (r.chance(3)) @intCast(n_ops + r.below(256 - n_ops)) else @intCast(r.below(n_ops));
+    std.mem.asBytes(ins)[0] = b;
+}
+
+/// The procs of `text`, defined with no other command run.
+fn defineProcs(it: *Interp, text: []const u8) !void {
+    const sc = try it.compile(text);
+    for (sc.cmds) |*c| {
+        if (c.words.len != 4 or c.words[0].kind != .lit) continue;
+        if (!std.mem.eql(u8, try it.str(c.words[0].kind.lit), "proc")) continue;
+        _ = it.evalCmd(c) catch {};
+    }
+}
+
+fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start: Io.Timestamp, verbose: bool) !void {
+    var st: VerifyStats = .{};
+    var n: u64 = 0;
+    outer: while (n < count) {
+        const ps = seed +% st.programs;
+        st.programs += 1;
+        const text = try makeProgram(a, ps, false);
+        defer a.free(text);
+        var arena_state = std.heap.ArenaAllocator.init(a);
+        defer arena_state.deinit();
+        const ar = arena_state.allocator();
+        var it: Interp = undefined;
+        try it.init(a);
+        defer it.deinit();
+        it.gc_on = false;
+        it.output = .{ .ctx = null, .write = struct {
+            fn f(_: ?*anyopaque, _: []const u8) void {}
+        }.f };
+        if (!it.enableJit(.{ .threshold = 0 })) return error.NoJit;
+        defineProcs(&it, text) catch continue;
+        var r = Rng.init(ps, 2);
+        for (0..32) |_| {
+            if (n >= count) break :outer;
+            const k = r.below(6);
+            if (verbose) std.debug.print("program {d} code {d}\n", .{ ps, st.codes });
+            var name_buf: [8]u8 = undefined;
+            const pname = try std.fmt.bufPrint(&name_buf, "p{d}", .{k});
+            const cmd = it.commands.get(pname) orelse continue;
+            // A changed code can rename a native command to this name.
+            if (cmd.impl != .proc) continue;
+            const p = cmd.impl.proc;
+            if (p.script == null) p.script = it.compile(try it.str(p.body)) catch continue;
+            const base = vm.compileProc(&it, p, p.script.?) catch continue;
+            n += 1;
+            st.codes += 1;
+            var code = base.*;
+            const random = r.chance(30);
+            var ins: []vm.Ins = undefined;
+            if (random) {
+                st.random += 1;
+                ins = try ar.alloc(vm.Ins, 1 + r.below(48));
+                for (ins) |*i| {
+                    i.* = .{ .op = .pop };
+                    setOp(&r, i);
+                    i.x = @intCast(r.below(4));
+                    i.a = operandValue(&r, 0, ins.len);
+                    i.b = operandValue(&r, 0, ins.len);
+                    i.c = operandValue(&r, 0, ins.len);
+                }
+                if (r.chance(70)) ins[ins.len - 1] = .{ .op = .ret };
+                code.ranges = &.{};
+            } else {
+                ins = try ar.dupe(vm.Ins, base.ins);
+                for (0..1 + r.below(4)) |_| {
+                    const i = &ins[@intCast(r.below(ins.len))];
+                    switch (r.below(6)) {
+                        0 => setOp(&r, i),
+                        1 => i.x = @intCast(r.below(8)),
+                        2 => i.a = operandValue(&r, i.a, ins.len),
+                        3 => i.b = operandValue(&r, i.b, ins.len),
+                        4 => i.c = operandValue(&r, i.c, ins.len),
+                        else => {
+                            const ranges = try ar.dupe(Range, code.ranges);
+                            if (ranges.len > 0) {
+                                const rg = &ranges[@intCast(r.below(ranges.len))];
+                                switch (r.below(4)) {
+                                    0 => rg.brk = operandValue(&r, rg.brk, ins.len),
+                                    1 => rg.cont = operandValue(&r, rg.cont, ins.len),
+                                    2 => rg.depth = operandValue(&r, rg.depth, 4),
+                                    else => rg.end = operandValue(&r, rg.end, ins.len),
+                                }
+                            }
+                            code.ranges = ranges;
+                        },
+                    }
+                }
+            }
+            code.ins = ins;
+            code.jit = null;
+            code.jit_gen = 0;
+            code.jit_calls = 0;
+            code.jit_state = .untried;
+            var info = (try verifier.verify(a, &code)) orelse continue;
+            info.deinit(a);
+            st.accepted += 1;
+            if (random) st.accepted_random += 1;
+            const held = try ar.create(vm.Code);
+            held.* = code;
+            if (tcl.jit.prepare(&it, held) == null) continue;
+            st.compiled += 1;
+            p.code = held;
+            var call: std.ArrayList(u8) = .empty;
+            try call.appendSlice(ar, pname);
+            for (0..p.params.len) |_| try call.appendSlice(ar, " 1");
+            const before = it.jit.?.stats.fallbacks;
+            if (verbose) {
+                std.debug.print("run {s}\n", .{pname});
+                for (held.ins, 0..) |i, pc| std.debug.print("  {d}: {d} x={d} a={d} b={d} c={d}\n", .{ pc, std.mem.asBytes(&i)[0], i.x, i.a, i.b, i.c });
+            }
+            it.step_limit = 10_000;
+            _ = it.eval(call.items) catch {};
+            it.step_limit = std.math.maxInt(u64);
+            st.fallbacks += it.jit.?.stats.fallbacks - before;
+            st.ran += 1;
+            // A later change starts again from the code of the body.
+            p.code = base;
+        }
+        if (st.programs % 2000 == 0) {
+            const secs = @divFloor(start.untilNow(io, .awake).toNanoseconds(), std.time.ns_per_s);
+            std.debug.print("{d} codes, {d} accepted, {d} s\n", .{ st.codes, st.accepted, secs });
+            if (seconds) |limit| if (secs >= limit) break;
+        }
+    }
+    const pct = struct {
+        fn f(x: u64, y: u64) f64 {
+            return if (y == 0) 0 else 100.0 * @as(f64, @floatFromInt(x)) / @as(f64, @floatFromInt(y));
+        }
+    }.f;
+    std.debug.print("codes: {d} ({d} random, {d} changed), programs: {d}\n", .{ st.codes, st.random, st.codes - st.random, st.programs });
+    std.debug.print("accepted: {d} ({d:.2} %): random {d} ({d:.2} %), changed {d} ({d:.2} %)\n", .{
+        st.accepted,                       pct(st.accepted, st.codes),                                 st.accepted_random,
+        pct(st.accepted_random, st.random), st.accepted - st.accepted_random, pct(st.accepted - st.accepted_random, st.codes - st.random),
+    });
+    std.debug.print("compiled: {d}, ran: {d}, entries that fell back to exec: {d}\n", .{ st.compiled, st.ran, st.fallbacks });
+    const secs = @divFloor(start.untilNow(io, .awake).toNanoseconds(), std.time.ns_per_s);
+    std.debug.print("seconds: {d}\n", .{secs});
+}

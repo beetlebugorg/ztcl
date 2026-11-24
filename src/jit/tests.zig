@@ -719,6 +719,29 @@ test "the verifier fails a Code that breaks one check" {
     }
 }
 
+test "the verifier fails a loop that counts no step" {
+    const it = try newInterp();
+    defer freeInterp(it);
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try defineProcs(it, base_proc);
+    const code = try procCode(it, "f");
+    // A jump to itself.
+    var m = try Mutable.init(a, code);
+    const j = m.find(.jump);
+    m.ins[j].a = @intCast(j);
+    try testing.expect(!try verifies(&m.code));
+    // The back jump of the `for` loop goes to the `incr_drop` before it.
+    // The two instructions are then a loop that counts no step.
+    m = try Mutable.init(a, code);
+    const inc = m.find(.incr_drop);
+    try testing.expect(m.ins[inc + 1].op == .jump and m.ins[inc + 1].a < inc);
+    m.ins[inc + 1].a = @intCast(inc);
+    try testing.expect(!try verifies(&m.code));
+    try testing.expect(try verifies(code));
+}
+
 test "each proc of the unit tests passes the verifier" {
     // The hook in vm.compileProc counts the runs of the other tests.
     const it = try newInterp();
