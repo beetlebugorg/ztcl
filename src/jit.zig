@@ -584,6 +584,8 @@ pub const min_passes = 16;
 /// number of the loop in its low bits and the kind of the exit in its
 /// high bits. After `max_exits` failed guards that the stress mode did
 /// not force, the loop is dropped: tier 1 no longer counts its passes.
+/// After an exit at a loop head, tier 1 runs one pass of that loop
+/// before it calls `tier_up` again.
 pub fn resumeAt(ctx: *EnterCtx, pc: u32, sp: u32, kind: u32) callconv(.c) usize {
     const f: *Fn = @ptrCast(@alignCast(ctx.func));
     const k = kind & 0xFFFF;
@@ -601,6 +603,14 @@ pub fn resumeAt(ctx: *EnterCtx, pc: u32, sp: u32, kind: u32) callconv(.c) usize 
                 rec.code = null;
                 f.counters[k] = std.math.maxInt(u32);
             }
+        }
+        // An exit at a loop head resumes at the pass counter of tier 1,
+        // which comes before the step check of the head. With a counter
+        // of 1, tier 1 calls `tier_up` at once, and a step check that
+        // failed in tier 2 fails again with no step taken. A counter of
+        // 2 makes tier 1 run one pass with its own step checks first.
+        if (std.mem.indexOfScalar(u32, f.heads, pc)) |j| {
+            if (f.counters[j] < 2) f.counters[j] = 2;
         }
     }
     if (pc < f.entries.len and pc < f.depth.len and f.depth[pc] == sp) {

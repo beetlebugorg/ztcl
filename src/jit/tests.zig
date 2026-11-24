@@ -2160,3 +2160,37 @@ test "tier 2: a conditional jump back stays in tier 1" {
     try testing.expectError(error.TclError, it.eval("q"));
     try testing.expectEqual(@as(u64, 0), it.jit.?.stats.tier2);
 }
+
+test "tier 2: an exit at the loop head lets tier 1 take a step" {
+    if (!jit.built) return error.SkipZigTest;
+    // The jit-fuzz --verify mode found it: a changed Code with the loop
+    // `guard; jump` at address 0. With the step limit below the steps
+    // of a pass, tier 2 exits to the loop head. The pass counter of
+    // tier 1 then called `tier_up` before the step check of the head,
+    // and the two tiers went back and forth with no step.
+    const it = try newInterp();
+    defer freeInterp(it);
+    it.gc_on = false;
+    if (!it.enableJit(.{ .threshold = 0, .tier2 = true, .tier2_count = 1 })) return error.SkipZigTest;
+    _ = try it.eval("proc q {} { set a 1; set b 2; return $a }");
+    // A first call runs the guard, so the epoch of the guard is current.
+    _ = try it.eval("q");
+    const code = try procCode(it, "q");
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var m = try Mutable.init(arena.allocator(), code);
+    try testing.expectEqual(vm.Op.guard, m.ins[0].op);
+    m.ins[1] = .{ .op = .jump, .a = 0 };
+    try testing.expect(try verifies(&m.code));
+    const held = try arena.allocator().create(vm.Code);
+    held.* = m.code;
+    _ = jit.prepare(it, held) orelse return error.NotCompiled;
+    const p = it.commands.get("q").?.impl.proc;
+    const saved = p.code;
+    p.code = held;
+    defer p.code = saved;
+    it.step_limit = 2000;
+    try testing.expectError(error.TclError, it.eval("q"));
+    try testing.expectEqualStrings("step limit reached", try it.str(it.result));
+    try testing.expectEqual(@as(u64, 1), it.jit.?.stats.tier2);
+}

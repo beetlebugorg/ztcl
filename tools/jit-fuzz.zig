@@ -1513,7 +1513,7 @@ fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start:
             const before = it.jit.?.stats.fallbacks;
             if (verbose) {
                 std.debug.print("run {s}\n", .{pname});
-                for (held.ins, 0..) |i, pc| std.debug.print("  {d}: {d} x={d} a={d} b={d} c={d}\n", .{ pc, std.mem.asBytes(&i)[0], i.x, i.a, i.b, i.c });
+                for (held.ins, 0..) |i, pc| std.debug.print("  {d}: {t} x={d} a={d} b={d} c={d}\n", .{ pc, i.op, i.x, i.a, i.b, i.c });
             }
             it.step_limit = 10_000;
             _ = it.eval(call.items) catch {};
