@@ -1,0 +1,54 @@
+#!/bin/sh
+# Runs the thread tests of tests/thread/ and prints the counts.
+#
+#   tools/thread-tests.sh [-r runner] [-x flags] [-n runs] [file.tcl ...]
+#
+#   -r  The ztcl binary. The default is zig-out/bin/ztcl.
+#   -x  Extra flags for the runner, for example "--jit --jit-threshold 0".
+#   -n  Runs each file this many times in a row. The default is 1.
+#
+# Each file runs after tests/thread/lib.tcl in one interpreter with the
+# capabilities thread, event, and package. A file passes when its last
+# line is "pass N fail 0" and the runner exits with 0. Each run has a
+# time limit of 120 seconds.
+# SPDX-License-Identifier: BSD-2-Clause
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+dir="$here/../tests/thread"
+tcl="$here/../zig-out/bin/ztcl"; extra=; runs=1
+while getopts r:x:n: o; do
+    case $o in
+    r) tcl=$OPTARG ;;
+    x) extra=$OPTARG ;;
+    n) runs=$OPTARG ;;
+    *) exit 2 ;;
+    esac
+done
+shift $((OPTIND - 1))
+if [ $# -eq 0 ]; then
+    for f in "$dir"/*.tcl; do
+        [ "${f##*/}" = lib.tcl ] || set -- "$@" "$f"
+    done
+fi
+bad=0
+for f in "$@"; do
+    case $f in */*) ;; *) f=$dir/$f ;; esac
+    n=0; ok=0
+    while [ $n -lt "$runs" ]; do
+        n=$((n + 1))
+        # shellcheck disable=SC2086
+        out=$(timeout 120 "$tcl" --allow thread,event,package $extra "$dir/lib.tcl" "$f" 2>&1)
+        rc=$?
+        last=$(printf '%s\n' "$out" | tail -n 1)
+        case $last in
+        "pass "*" fail 0") [ $rc -eq 0 ] && ok=$((ok + 1)) ;;
+        esac
+        if [ $ok -ne $n ]; then
+            printf '%s\n' "$out" | tail -n 20
+            echo "status $rc"
+            break
+        fi
+    done
+    printf '%-20s %s, %d of %d runs\n' "${f##*/}" "$last" "$ok" "$runs"
+    [ $ok -eq "$runs" ] || bad=1
+done
+exit $bad

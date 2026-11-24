@@ -432,8 +432,17 @@ pub const Group = struct {
         return g.budget.allocator();
     }
 
-    /// The worker of an id, or null. The caller holds the group lock.
+    /// The worker of an id that a script can name, or null. A released
+    /// thread is gone for scripts, as in the Thread package. The caller
+    /// holds the group lock.
     pub fn find(g: *Group, id: u64) ?*Worker {
+        const w = g.findLive(id) orelse return null;
+        return if (w.is_main or !w.isReleased()) w else null;
+    }
+
+    /// The running worker of an id, released or not, or null. Replies
+    /// and error reports use it. The caller holds the group lock.
+    pub fn findLive(g: *Group, id: u64) ?*Worker {
         for (g.workers.items) |w| if (w.id == id and w.state == .running) return w;
         return null;
     }
@@ -659,6 +668,14 @@ pub fn create(it: *Interp, script: []const u8, joinable: bool, preserved: bool) 
         g.gpa.destroy(w);
         return it.fail("the thread group ends", .{});
     }
+    // A released thread holds its place until it ends. The create waits
+    // for it for at most one second.
+    var waited: u64 = 0;
+    while (g.running >= g.limits.max_threads and waited < std.time.ns_per_s and releasedRunning(g)) {
+        g.ev.wait(&g.lock, slice_ns);
+        waited += slice_ns;
+        if (me.flags.load(.acquire) != 0) break;
+    }
     if (g.running >= g.limits.max_threads) {
         g.lock.unlock();
         g.alloc().free(text);
@@ -696,6 +713,13 @@ pub fn create(it: *Interp, script: []const u8, joinable: bool, preserved: bool) 
     g.lock.unlock();
     if (!ok) return it.failCode("THREAD CREATE", "the new thread could not start its interpreter", .{});
     return id;
+}
+
+/// True when a released thread still runs. The caller holds the group
+/// lock.
+fn releasedRunning(g: *Group) bool {
+    for (g.workers.items) |w| if (!w.is_main and w.isReleased()) return true;
+    return false;
 }
 
 fn startOf(it: *Interp) Error!Start {
@@ -823,7 +847,7 @@ pub fn reportError(w: *Worker, x: *Interp, info: []const u8) void {
     var buf: [32]u8 = undefined;
     const id = w.name(&buf);
     g.lock.lock();
-    const target = if (g.errorproc.len > 0) g.find(g.errorproc_id) else null;
+    const target = if (g.errorproc.len > 0) g.findLive(g.errorproc_id) else null;
     if (target) |t| {
         const a = g.alloc();
         const script = buildScript(a, &.{ g.errorproc, id, info }) catch null;
@@ -929,7 +953,7 @@ fn replyText(g: *Group, to: u64, seq: u64, code: i64, text: []const u8, ecode: [
     m.info = a.dupe(u8, text) catch &.{};
     g.lock.lock();
     defer g.lock.unlock();
-    if (g.find(to)) |t| pushMsg(t, m, false) else m.destroy(a);
+    if (g.findLive(to)) |t| pushMsg(t, m, false) else m.destroy(a);
 }
 
 pub const SendError = error{ NoThread, QueueFull, GroupFull, OutOfMemory };
@@ -1128,7 +1152,7 @@ fn sendResult(w: *Worker, it: *Interp, m: *Msg, c: cmds.Caught) Error!void {
     g.lock.lock();
     defer g.lock.unlock();
     ok = true;
-    if (g.find(m.from)) |t| pushMsg(t, r, false) else r.destroy(a);
+    if (g.findLive(m.from)) |t| pushMsg(t, r, false) else r.destroy(a);
 }
 
 /// Waits for the reply `seq` of the thread `to` and runs the other
@@ -1178,16 +1202,32 @@ pub fn waitLoop(it: *Interp) Error!Value {
     const me = it.worker orelse return it.fail("threads are off", .{});
     const events = it.capabilities & @intFromEnum(interp.Capability.event) != 0 and it.event_host != null;
     while (true) {
-        try checkFlags(it, me);
+        loopPass(it, me, events) catch |e| {
+            if (e == error.TclError and idleCancel(it, me)) continue;
+            return e;
+        };
         if (me.is_main) {
             if (!canWake(it)) return Value.empty;
         } else if (me.isReleased()) return Value.empty;
-        if (events) {
-            _ = try @import("event.zig").doOne(it, true, false);
-        } else if (!try serve(it, 64)) {
-            try block(it, slice_ns);
-        }
     }
+}
+
+fn loopPass(it: *Interp, me: *Worker, events: bool) Error!void {
+    try checkFlags(it, me);
+    if (events) {
+        _ = try @import("event.zig").doOne(it, true, false);
+    } else if (!try serve(it, 64)) {
+        try block(it, slice_ns);
+    }
+}
+
+/// True when the error of a pass of the wait loop is a plain cancel
+/// that reached the loop between two scripts. The loop drops it, so the
+/// thread keeps its loop. A stop and `-unwind` end the loop.
+fn idleCancel(it: *Interp, me: *Worker) bool {
+    if (it.step_limit == 0 or me.hasFlag(Flag.stop)) return false;
+    const code = it.error_code;
+    return code == .str and std.mem.eql(u8, code.str, "TCL CANCEL EVAL");
 }
 
 /// Sends `script` to the thread `id`, waits for the reply, and gives
@@ -1250,7 +1290,9 @@ pub fn register(it: *Interp) Allocator.Error!void {
     if (comptime !supported) return;
     if (it.parent != null) return;
     if (it.worker == null) try startGroup(it);
+    try @import("threadcmd.zig").register(it);
     if (it.capabilities & @intFromEnum(interp.Capability.event) != 0) try @import("event.zig").setSource(it);
+    if (it.findCommand("package") != null) _ = it.eval("package provide Thread 2.8.11") catch {};
 }
 
 /// The source of the event loop: runs the queue and blocks on it.

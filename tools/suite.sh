@@ -50,7 +50,9 @@ fi
     string.test format.test switch.test eval.test parse.test \
     lmap.test apply.test rename.test error.test \
     lset.test namespace.test regexp.test binary.test info.test dict.test scan.test
-caps=package,interp,clock,channels,file,event,socket,exec
+caps=package,interp,clock,channels,file,event,socket,exec,thread
+# thread-8.1 starts 10 threads at one time. The default limit is 8.
+gc="$gc --threads 16"
 # The script `ztclsh` runs in another folder, so the runner path is absolute.
 case $tcl in /*) ;; *) tcl=$PWD/$tcl ;; esac
 tp=0; tf=0; ts=0
