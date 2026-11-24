@@ -1560,7 +1560,13 @@ fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start:
             const before = it.jit.?.stats.fallbacks;
             if (verbose) {
                 std.debug.print("run {s}\n", .{pname});
-                for (held.ins, 0..) |i, pc| std.debug.print("  {d}: {t} x={d} a={d} b={d} c={d}\n", .{ pc, i.op, i.x, i.a, i.b, i.c });
+                for (held.ins, 0..) |*i, pc| {
+                    // An instruction that no path reaches can have a byte
+                    // that is no member of `Op`.
+                    const b = std.mem.asBytes(i)[0];
+                    const name = if (std.enums.fromInt(vm.Op, b)) |op| @tagName(op) else "(no opcode)";
+                    std.debug.print("  {d}: {s} ({d}) x={d} a={d} b={d} c={d}\n", .{ pc, name, b, i.x, i.a, i.b, i.c });
+                }
             }
             it.step_limit = 10_000;
             _ = it.eval(call.items) catch {};
