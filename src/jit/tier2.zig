@@ -198,6 +198,11 @@ const Builder = struct {
         const code = b.code;
         const n = b.back - b.head + 1;
         @memset(b.seen, false);
+        // An instruction that no path from the head reaches keeps empty
+        // kinds, so no backend reads undefined memory.
+        @memset(b.kinds, &.{});
+        @memset(b.slot_kinds, &.{});
+        @memset(b.outs, &.{});
         const entry = try b.a.alloc(Kind, b.slots.len);
         for (b.slots, entry) |u, *e| e.* = u.entry;
         try b.merge(b.head, &.{}, entry);
@@ -422,7 +427,10 @@ pub fn plan(a: Allocator, code: *const vm.Code, info: *const verify.Info, head: 
             steps = 0;
         }
         const i = code.ins[pc];
-        if (i.op == .guard or i.op == .step) steps += 1;
+        // A part that no path from the head reaches has no step check.
+        // Its instructions have no kinds, and the verifier gives no
+        // depth to an instruction that no path from address 0 reaches.
+        if (b.seen[k] and (i.op == .guard or i.op == .step)) steps += 1;
         if (b.seen[k] and exitsAt(i, b.kinds[k], b.slot_kinds[k], &b)) try exits.append(ar, pc);
     }
     try parts.append(ar, .{ .first = first, .last = back, .steps = steps });

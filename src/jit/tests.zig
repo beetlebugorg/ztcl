@@ -2473,3 +2473,69 @@ test "tier 2: an exit at the loop head lets tier 1 take a step" {
     try testing.expectEqualStrings("step limit reached", try it.str(it.result));
     try testing.expectEqual(@as(u64, 1), it.jit.?.stats.tier2);
 }
+
+const dead_part_proc = "proc f {n} { set s 0; for {set i 0} {$i < $n} {incr i} { incr s; continue; incr s 5 }; return $s }";
+
+test "tier 2 layer: a part that no path from the head reaches has no step check" {
+    // The commands after `continue` run only on the cold path of the
+    // guard of `continue`, and tier 2 has no such path. Their part has
+    // no kinds, so it must not count steps or have a step check.
+    const it = try newInterp();
+    defer freeInterp(it);
+    try defineProcs(it, dead_part_proc);
+    var p = (try planOf(it, "f", &.{ .{ "i", .int }, .{ "s", .int }, .{ "n", .int } })).?;
+    defer p.deinit();
+    const code = try procCode(it, "f");
+    const left = try lower.stepsLeft(testing.allocator, code, &p);
+    defer testing.allocator.free(left);
+    var dead: usize = 0;
+    for (p.parts) |pt| {
+        if (p.seen[pt.first - p.head]) continue;
+        dead += 1;
+        try testing.expectEqual(@as(u32, 0), pt.steps);
+        for (pt.first..pt.last + 1) |pc| {
+            try testing.expectEqual(@as(u32, 0), left[pc - p.head]);
+            try testing.expectEqual(@as(usize, 0), p.kinds[pc - p.head].len);
+        }
+    }
+    try testing.expect(dead > 0);
+}
+
+test "tier 2: a part that the verifier does not reach compiles and stops at the step limit" {
+    if (!jit.built) return error.SkipZigTest;
+    // The jit-fuzz --verify --tier2 mode found it. A change made the
+    // commands after `continue` unreachable, so the verifier gave them
+    // no depth. Tier 2 put a step check on their part, and the exit of
+    // that check read the kinds of 65 535 stack places from undefined
+    // memory. The compiler then stopped with a general protection fault.
+    const it = try newInterp();
+    defer freeInterp(it);
+    it.gc_on = false;
+    if (!it.enableJit(.{ .threshold = 0, .tier2 = true, .tier2_count = 1 })) return error.SkipZigTest;
+    _ = try it.eval(dead_part_proc);
+    _ = try it.eval("f 3");
+    const code = try procCode(it, "f");
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var m = try Mutable.init(arena.allocator(), code);
+    // The guard of `continue`, before its jump forward.
+    const k = for (m.ins, 0..) |i, k| {
+        if (k > 0 and i.op == .jump and i.a > k and m.ins[k - 1].op == .guard) break k;
+    } else return error.NoContinue;
+    m.ins[k - 1] = .{ .op = .step };
+    var info = (try verify.verify(testing.allocator, &m.code)).?;
+    defer info.deinit(testing.allocator);
+    try testing.expect(!info.reachable[k + 2]);
+    const held = try arena.allocator().create(vm.Code);
+    held.* = m.code;
+    _ = jit.prepare(it, held) orelse return error.NotCompiled;
+    const p = it.commands.get("f").?.impl.proc;
+    const saved = p.code;
+    p.code = held;
+    defer p.code = saved;
+    const before = it.jit.?.stats.tier2;
+    it.step_limit = 2000;
+    try testing.expectError(error.TclError, it.eval("f 100000"));
+    try testing.expectEqualStrings("step limit reached", try it.str(it.result));
+    try testing.expectEqual(before + 1, it.jit.?.stats.tier2);
+}
