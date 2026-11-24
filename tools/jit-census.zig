@@ -13,6 +13,9 @@
 //! For the classes calls and no, the tool counts the first instruction
 //! that puts the loop in its class.
 //!
+//! With `--plan`, the tool prints the tier 2 plan of each loop, with the
+//! kind `int` for each slot at the head.
+//!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
@@ -94,7 +97,12 @@ pub fn main(init: std.process.Init) !void {
     const args = try init.minimal.args.toSlice(arena);
     var total: [3]u64 = @splat(0);
     var firsts: std.AutoArrayHashMapUnmanaged(vm.Op, u64) = .empty;
+    var show_plan = false;
     for (args[1..]) |path| {
+        if (std.mem.eql(u8, path, "--plan")) {
+            show_plan = true;
+            continue;
+        }
         const text = std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(64 << 20)) catch |e| {
             std.debug.print("{s}: {t}\n", .{ path, e });
             continue;
@@ -116,6 +124,7 @@ pub fn main(init: std.process.Init) !void {
             for (info.loop_heads) |head| {
                 const back = backOf(code, head) orelse continue;
                 const loop = classify(code, info.loop_heads, head, back);
+                if (show_plan) try printPlan(a, e.key_ptr.*, code, &info, head);
                 counts[@intFromEnum(loop.class)] += 1;
                 if (loop.first) |op| {
                     const g = try firsts.getOrPut(a, op);
@@ -130,5 +139,24 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("total: int {d} calls {d} no {d}\n", .{ total[0], total[1], total[2] });
     std.debug.print("first instruction outside the integer set:", .{});
     for (firsts.keys(), firsts.values()) |op, n| std.debug.print(" {t}={d}", .{ op, n });
+    std.debug.print("\n", .{});
+}
+
+fn printPlan(a: Allocator, name: []const u8, code: *const vm.Code, info: *const verify.Info, head: u32) !void {
+    const tier2 = tcl.jit_tier2;
+    const entry = try a.alloc(tier2.Kind, code.names.len);
+    defer a.free(entry);
+    @memset(entry, .int);
+    var p = (try tier2.plan(a, code, info, head, entry)) orelse {
+        std.debug.print("  {s} loop {d}: not eligible\n", .{ name, head });
+        return;
+    };
+    defer p.deinit();
+    std.debug.print("  {s} loop {d}..{d}{s}: slots", .{ name, p.head, p.back, if (p.calls) " with calls" else "" });
+    for (p.slots) |u| std.debug.print(" {s}={t}", .{ code.names[u.slot], u.entry });
+    std.debug.print("; parts", .{});
+    for (p.parts) |part| std.debug.print(" {d}-{d}:{d}", .{ part.first, part.last, part.steps });
+    std.debug.print("; exits", .{});
+    for (p.exits) |x| std.debug.print(" {d}:{t}", .{ x, code.ins[x].op });
     std.debug.print("\n", .{});
 }

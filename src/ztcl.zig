@@ -35,6 +35,7 @@ pub const jit = @import("jit.zig");
 /// The bytecode and the verifier of the JIT, for the tools of the JIT.
 pub const vm = @import("vm.zig");
 pub const jit_verify = @import("jit/verify.zig");
+pub const jit_tier2 = @import("jit/tier2.zig");
 
 pub const Value = value.Value;
 pub const Interp = interp.Interp;

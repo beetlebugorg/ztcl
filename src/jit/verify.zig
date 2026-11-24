@@ -55,7 +55,7 @@ const no_target = std.math.maxInt(u32);
 const unset = std.math.maxInt(u16);
 
 /// The stack effect of one instruction.
-const Effect = struct {
+pub const Effect = struct {
     /// The values that the instruction reads.
     need: u32,
     /// The depth after the instruction is `depth - need + push`.
@@ -233,6 +233,12 @@ fn effect(code: *const Code, pc: u32) ?Effect {
             return .{ .need = 2, .push = @intFromBool(op == .lset) };
         },
     }
+}
+
+/// The effect of instruction `pc`, or null when its operands fail a
+/// check. Tier 2 reads the stack effect of each helper call.
+pub fn effectAt(code: *const Code, pc: u32) ?Effect {
+    return effect(code, pc);
 }
 
 /// The marks of one address: the stack places of `foreach` lists, in

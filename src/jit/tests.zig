@@ -1270,3 +1270,82 @@ test "jit: recursion to the depth limit" {
         \\list [catch {r 0} m] $m
     , 1);
 }
+
+// ---- Tier 2 ----
+
+const tier2 = @import("tier2.zig");
+
+/// The plan of the first loop of proc `name` with the kinds of `entry`
+/// for each slot by name, and `.any` for each other slot.
+fn planOf(it: *Interp, name: []const u8, entry: []const struct { []const u8, tier2.Kind }) !?tier2.LoopPlan {
+    const code = try procCode(it, name);
+    var info = (try verify.verify(testing.allocator, code)) orelse return error.NotVerified;
+    defer info.deinit(testing.allocator);
+    const kinds = try testing.allocator.alloc(tier2.Kind, code.names.len);
+    defer testing.allocator.free(kinds);
+    @memset(kinds, .any);
+    for (entry) |e| for (code.names, 0..) |n, k| if (std.mem.eql(u8, n, e[0])) {
+        kinds[k] = e[1];
+    };
+    if (info.loop_heads.len == 0) return error.NoLoop;
+    return tier2.plan(testing.allocator, code, &info, info.loop_heads[0], kinds);
+}
+
+fn slotKind(p: *const tier2.LoopPlan, code_names: []const []const u8, name: []const u8) ?tier2.Kind {
+    for (p.slots) |u| if (std.mem.eql(u8, code_names[u.slot], name)) return u.entry;
+    return null;
+}
+
+test "tier 2: the plan of the loop of sum.tcl" {
+    const it = try newInterp();
+    defer freeInterp(it);
+    const text = try readRepoFile(testing.allocator, "bench/sum.tcl");
+    defer testing.allocator.free(text);
+    try defineProcs(it, text);
+    var p = (try planOf(it, "sum", &.{ .{ "i", .int }, .{ "s", .int }, .{ "n", .int } })).?;
+    defer p.deinit();
+    const names = (try procCode(it, "sum")).names;
+    for ([_][]const u8{ "i", "s", "n" }) |n| try testing.expectEqual(tier2.Kind.int, slotKind(&p, names, n).?);
+    try testing.expect(!p.calls);
+    var with_steps: usize = 0;
+    var steps: u32 = 0;
+    for (p.parts) |part| if (part.steps > 0) {
+        with_steps += 1;
+        steps = part.steps;
+    };
+    try testing.expectEqual(@as(usize, 1), with_steps);
+    try testing.expectEqual(@as(u32, 4), steps);
+    const code = try procCode(it, "sum");
+    var ops: [2]vm.Op = undefined;
+    try testing.expectEqual(@as(usize, 2), p.exits.len);
+    for (p.exits, 0..) |x, k| ops[k] = code.ins[x].op;
+    try testing.expectEqual(vm.Op.bin_vv, ops[0]);
+    try testing.expectEqual(vm.Op.incr_drop, ops[1]);
+}
+
+test "tier 2: plans with a string slot, a changed kind, and a call" {
+    const it = try newInterp();
+    defer freeInterp(it);
+    const text = try readRepoFile(testing.allocator, "bench/strbuild.tcl");
+    defer testing.allocator.free(text);
+    try defineProcs(it, text);
+    try defineProcs(it,
+        \\proc chg {n} { set x 0; for {set i 0} {$i < $n} {incr i} { set x [expr {$x + 1}]; set x abc } }
+        \\proc up {n} { set x 0; for {set i 0} {$i < $n} {incr i} { upvar 0 x y; incr x } }
+    );
+    var iter = it.commands.iterator();
+    var sb: ?[]const u8 = null;
+    while (iter.next()) |e| if (e.value_ptr.*.impl == .proc and !std.mem.eql(u8, e.key_ptr.*, "chg") and !std.mem.eql(u8, e.key_ptr.*, "up")) {
+        sb = e.key_ptr.*;
+    };
+    var p1 = (try planOf(it, sb.?, &.{ .{ "i", .int }, .{ "n", .int } })).?;
+    defer p1.deinit();
+    try testing.expectEqual(tier2.Kind.any, slotKind(&p1, (try procCode(it, sb.?)).names, "s").?);
+    var p2 = (try planOf(it, "chg", &.{ .{ "i", .int }, .{ "n", .int }, .{ "x", .int } })).?;
+    defer p2.deinit();
+    try testing.expectEqual(tier2.Kind.any, slotKind(&p2, (try procCode(it, "chg")).names, "x").?);
+    try testing.expectEqual(tier2.Kind.int, slotKind(&p2, (try procCode(it, "chg")).names, "i").?);
+    var p3 = (try planOf(it, "up", &.{ .{ "i", .int }, .{ "n", .int }, .{ "x", .int } })).?;
+    defer p3.deinit();
+    try testing.expect(p3.calls);
+}
