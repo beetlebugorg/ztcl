@@ -1204,7 +1204,7 @@ test "exec has an allowlist and a time limit, and leaves no process" {
     // The words go to the program as they are. No shell reads them.
     try std.testing.expectEqualStrings("$HOME; ls `id`", try it.str(try it.eval("exec echo {$HOME; ls `id`}")));
     // The program gets only the environment of the embedder.
-    try std.testing.expectEqualStrings("PATH=/usr/bin:/bin", try it.str(try it.eval("exec sh -c {export -p | cut -d' ' -f2- | tr -d \\\" | grep -v -e PWD -e OLDPWD -e SHLVL -e '^_=' ; true}")));
+    try std.testing.expectEqualStrings("PATH=/usr/bin:/bin", try it.str(try it.eval("exec sh -c {export -p | cut -d' ' -f2- | tr -d \\\"\\' | grep -v -e PWD -e OLDPWD -e SHLVL -e '^_=' ; true}")));
     // The time limit ends the program and each process that it made.
     const before = linux.getpid();
     _ = before;
