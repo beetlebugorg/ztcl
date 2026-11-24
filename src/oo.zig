@@ -623,8 +623,14 @@ fn run(it: *Interp, st: *State, call: *Call) Error!Value {
     defer call.obj.filtering = was_filtering;
     switch (m.kind) {
         .none => return Value.empty,
-        .native => return m.native.?(it, st, call, args),
+        // A native method or a forward keeps values in native frames, so
+        // a proc body that it runs is not clean (see beginProcBody).
+        .native => {
+            it.gc_direct = 0;
+            return m.native.?(it, st, call, args);
+        },
         .forward => {
+            it.gc_direct = 0;
             const words = try a.alloc(Value, m.forward.len + args.len);
             @memcpy(words[0..m.forward.len], m.forward);
             @memcpy(words[m.forward.len..], args);
