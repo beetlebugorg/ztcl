@@ -804,6 +804,7 @@ fn runModeGc(script: []const u8, on: bool, limit: u64, min_compiled: u64, stress
     it.step_limit = limit;
     if (allow_interp) try it.allow(@intFromEnum(tcl.interp.Capability.interp));
     if (test_mem_limit) |m| it.mem_limit = m;
+    if (test_native) |n| try it.register(n[0], n[1]);
     if (on and !it.enableJit(.{ .threshold = 0, .tier2 = test_tier2, .tier2_count = 2, .stress = test_stress })) return error.SkipZigTest;
     var w: std.ArrayList(u8) = .empty;
     errdefer w.deinit(testing.allocator);
@@ -841,6 +842,8 @@ var last_tier2: u64 = 0;
 var last_exits: u64 = 0;
 /// The stress modes of the JIT in a test.
 var test_stress: u32 = 0;
+/// A native command for the scripts of a test.
+var test_native: ?struct { []const u8, tcl.interp.NativeFn } = null;
 
 /// Runs `script` in the interpreter and with the JIT and compares each
 /// field. `min_compiled` is the least count of compiled functions.
@@ -1456,4 +1459,101 @@ test "tier 2: forced exits at each guard write each register and stack place" {
         \\list [regs] [places]
     , 2);
     try sameT2(sum_script, 1);
+}
+
+test "tier 2: a callee changes a local of the loop through upvar in pass 500" {
+    try sameT2(
+        \\proc poke {} { upvar 1 s s n n; incr s 1000; set n 700 }
+        \\proc f {} { set s 0; set n 900; for {set i 0} {$i < $n} {incr i} { incr s $i; if {$i == 500} { poke } }; list $s $n $i }
+        \\f
+    , 1);
+}
+
+test "tier 2: a callee adds a trace to a loop variable" {
+    try sameT2(
+        \\proc tr {args} { global hits; incr hits }
+        \\proc add {} { uplevel 1 { trace add variable s write tr } }
+        \\proc f {} { set s 0; for {set i 0} {$i < 300} {incr i} { incr s $i; if {$i == 100} { add } }; list $s $i }
+        \\set hits 0; list [f] $hits
+    , 1);
+}
+
+test "tier 2: a callee renames incr" {
+    try sameT2(
+        \\proc ren {} { rename incr real_incr; proc incr {v {by 1}} { upvar 1 $v x; set x [expr {$x + $by + 1}] } }
+        \\proc f {} { set s 0; for {set i 0} {$i < 300} {incr i} { incr s; if {$i == 100} { ren } }; list $s $i }
+        \\f
+    , 1);
+}
+
+test "tier 2: a callee makes a loop variable an array" {
+    try sameT2(
+        \\proc arr {} { uplevel 1 { unset s; array set s {a 1} } }
+        \\proc f {} { set s 0; set r {}; for {set i 0} {$i < 300} {incr i} { if {$i == 150} { arr; break }; incr s $i }; list [array get s] $i }
+        \\proc g {} { set s 0; for {set i 0} {$i < 300} {incr i} { if {$i == 150} { arr }; incr s $i } }
+        \\list [f] [catch g msg] $msg
+    , 1);
+}
+
+test "tier 2: a callee links two loop variables with upvar 0" {
+    try sameT2(
+        \\proc link {} { uplevel 1 { unset b; upvar 0 a b } }
+        \\proc f {} { set a 0; set b 0; for {set i 0} {$i < 300} {incr i} { incr a; incr b 2; if {$i == 120} { link } }; list $a $b $i }
+        \\f
+    , 1);
+}
+
+test "tier 2: a callee raises an error and errorInfo is equal" {
+    try sameT2(
+        \\proc bad {i} { if {$i == 250} { error "bad pass $i" } }
+        \\proc f {} { set s 0; for {set i 0} {$i < 300} {incr i} { incr s $i; bad $i }; set s }
+        \\proc g {} { set s 0; for {set i 0} {$i < 300} {incr i} { incr s $i; if {[catch {bad $i} m]} { lappend r $m } }; list $s $r }
+        \\list [catch f msg] $msg [g]
+    , 1);
+}
+
+test "tier 2: foreach over integers with one string in the middle" {
+    try sameT2(
+        \\proc f {} { set l {}; for {set i 0} {$i < 400} {incr i} { lappend l $i }; lset l 200 abc; set s 0; set t {}; foreach x $l { if {[string is integer $x]} { incr s $x } else { lappend t $x } }; list $s $t }
+        \\proc g {} { set l {}; for {set i 0} {$i < 400} {incr i} { lappend l $i }; lset l 200 abc; set s 0; foreach x $l { incr s [string length $x] }; set s }
+        \\proc h {} { set l {}; for {set i 0} {$i < 400} {incr i} { lappend l $i }; lset l 200 7.5; set s 0; foreach {x y} $l { set s [expr {$s + $x - $y}] }; set s }
+        \\list [f] [g] [h]
+    , 3);
+}
+
+/// `stalelink name`: makes the variable `name` of the caller a link to
+/// the global `g`, and writes the tag and the payload of the integer 7
+/// to the bytes of the cell after the link. Only a check of the tag of
+/// the cell finds the link.
+fn staleLink(it: *Interp, argv: []const Value, _: ?*tcl.interp.Cmd) tcl.interp.Error!Value {
+    const l = layout.probe().?;
+    const name = try it.str(argv[1]);
+    const target = try it.globalVar("g");
+    for (it.frame.vars.items) |e| if (std.mem.eql(u8, e.name, name)) {
+        e.cell.v = .{ .link = target };
+        const bytes: [*]u8 = @ptrCast(e.cell);
+        bytes[l.var_payload + l.value_tag] = l.tag_int;
+        if (l.value_payload != 0) std.mem.writeInt(i64, bytes[l.var_payload + l.value_payload ..][0..8], 7, .little);
+        return Value.empty;
+    };
+    return it.fail("no variable", .{});
+}
+
+test "tier 2: the entry checks that a slot is not a link" {
+    // The loop compiles with `x` as a plain cell. In the later calls,
+    // `x` is a link whose bytes after the pointer look like an integer.
+    test_native = .{ "stalelink", staleLink };
+    defer test_native = null;
+    try sameT2(
+        \\proc lk {mode} { set x 5; if {$mode} { unset x; stalelink x }; for {set i 0} {$i < 50} {incr i} { incr x }; return $x }
+        \\set g 1000; list [lk 0] [lk 1] [lk 1] [lk 0] [lk 1] $g
+    , 1);
+}
+
+test "tier 2: the loops of nested.tcl and foreach.tcl compile" {
+    for ([_][*:0]const u8{ "bench/nested.tcl", "bench/foreach.tcl" }) |path| {
+        const text = try readRepoFile(testing.allocator, path);
+        defer testing.allocator.free(text);
+        try sameT2(text, 1);
+    }
 }

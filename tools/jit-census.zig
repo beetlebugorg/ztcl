@@ -159,4 +159,8 @@ fn printPlan(a: Allocator, name: []const u8, code: *const vm.Code, info: *const 
     std.debug.print("; exits", .{});
     for (p.exits) |x| std.debug.print(" {d}:{t}", .{ x, code.ins[x].op });
     std.debug.print("\n", .{});
+    for (p.head..p.back + 1) |pc| {
+        const i = code.ins[pc];
+        std.debug.print("    {d:>4} depth {d} {t} x={d} a={d} b={d} c={d}\n", .{ pc, info.depth[pc], i.op, i.x, i.a, i.b, i.c });
+    }
 }

@@ -346,12 +346,18 @@ pub fn tierUp(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) usize {
         f.counters[k] = std.math.maxInt(u32);
         return 0;
     }
-    f.counters[k] = @max(s.options.tier2_count, 1);
     if (!rec.tried) {
         rec.tried = true;
         rec.code = compileLoop(s, ctx.code, ctx.frame, pc, @intCast(k), @intCast(f.heads.len));
     }
-    return if (rec.code) |c| @intFromPtr(c) else 0;
+    // A compiled loop runs in tier 2 again at the next pass of its head
+    // in tier 1. A loop that does not compile runs in tier 1 only.
+    const c = rec.code orelse {
+        f.counters[k] = std.math.maxInt(u32);
+        return 0;
+    };
+    f.counters[k] = 1;
+    return @intFromPtr(c);
 }
 
 /// The stress mode of tier 2: each guard fails on a schedule.

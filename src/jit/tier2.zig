@@ -17,7 +17,14 @@
 //!
 //! A part is a run of instructions with no branch target after its
 //! first instruction, no branch before its last instruction, and no
-//! call. Tier 2 checks the steps of a part one time at its start.
+//! call. Tier 2 checks the steps of a part one time at its start. A
+//! `guard` is no branch in tier 2: the entry and each call that can run
+//! a script check the epoch, so each `guard` of the loop passes.
+//!
+//! A helper call can change each cell, so the plan gives no kind to a
+//! slot that a helper writes: it gets `any`. `foreach_next` is the one
+//! exception. Its slots keep their kind, and tier 2 checks the tag of
+//! each item before the store.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -53,6 +60,9 @@ pub const LoopPlan = struct {
     /// For each instruction of the loop: the kind of each slot of `slots`
     /// before the instruction.
     slot_kinds: []const []const Kind,
+    /// For each instruction of the loop: the kind of each stack place
+    /// after the instruction, for both successors.
+    outs: []const []const Kind,
     parts: []const Part,
     /// Each address where a guard can fail.
     exits: []const u32,
@@ -73,6 +83,11 @@ pub const LoopPlan = struct {
     pub fn index(p: *const LoopPlan, slot: u32) ?usize {
         for (p.slots, 0..) |u, k| if (u.slot == slot) return k;
         return null;
+    }
+
+    /// The index of a slot of the loop in `slots`.
+    pub fn slotIndex(p: *const LoopPlan, slot: u32) usize {
+        return p.index(slot).?;
     }
 };
 
@@ -151,6 +166,7 @@ const Builder = struct {
     slots: []SlotUse,
     kinds: [][]Kind,
     slot_kinds: [][]Kind,
+    outs: [][]Kind,
     /// True for each instruction that a path reaches.
     seen: []bool,
     calls: bool = false,
@@ -199,6 +215,7 @@ const Builder = struct {
             try stack.appendSlice(b.a, b.kinds[k]);
             const slots = try b.a.dupe(Kind, b.slot_kinds[k]);
             if (!try b.step(pc, i, &stack, slots)) return null;
+            b.outs[k] = try b.a.dupe(Kind, stack.items);
             if (pc == b.back) {
                 at_back = slots;
                 continue;
@@ -285,8 +302,16 @@ const Builder = struct {
             },
             else => {
                 // A helper call. Its result has the kind `any`, and a
-                // script that it runs can change each slot.
+                // script that it runs can change each slot. The slots
+                // that the helper writes get `any`.
                 b.calls = true;
+                switch (i.op) {
+                    .lappend, .append, .lset, .lset_drop, .dict_update, .dict_update_drop => slots[b.slotIndex(i.a)] = .any,
+                    .lassign, .lassign_drop => for (code.tables[i.a]) |s| {
+                        slots[b.slotIndex(s)] = .any;
+                    },
+                    else => {},
+                }
                 const e = verify.effectAt(code, pc) orelse return false;
                 pop(stack, e.need);
                 if (e.keeps) {
@@ -341,6 +366,7 @@ pub fn plan(a: Allocator, code: *const vm.Code, info: *const verify.Info, head: 
         .slots = list.items,
         .kinds = try ar.alloc([]Kind, n),
         .slot_kinds = try ar.alloc([]Kind, n),
+        .outs = try ar.alloc([]Kind, n),
         .seen = try ar.alloc(bool, n),
     };
     var tries: u32 = 0;
@@ -370,13 +396,13 @@ pub fn plan(a: Allocator, code: *const vm.Code, info: *const verify.Info, head: 
     for (0..n) |k| {
         const pc: u32 = @intCast(head + k);
         const i = code.ins[pc];
-        // A guard in a loop with no call never jumps: the epoch changes
-        // only in a call, and the entry checks it.
-        if (targetOf(i)) |t| if (i.op != .guard or b.calls) {
+        // A guard never jumps in tier 2: the epoch changes only in a
+        // call, and the entry and each call check it.
+        if (targetOf(i)) |t| if (i.op != .guard) {
             if (t > head and t <= back) starts[t - head] = true;
             if (k + 1 < n) starts[k + 1] = true;
         };
-        if (!isInline(code, i, b.kinds[k], b.slot_kinds[k], &b) and k + 1 < n) starts[k + 1] = true;
+        if (b.seen[k] and !noCall(i, b.kinds[k], b.slot_kinds[k], &b) and k + 1 < n) starts[k + 1] = true;
     }
     var first: u32 = head;
     var steps: u32 = 0;
@@ -389,7 +415,7 @@ pub fn plan(a: Allocator, code: *const vm.Code, info: *const verify.Info, head: 
         }
         const i = code.ins[pc];
         if (i.op == .guard or i.op == .step) steps += 1;
-        if (b.seen[k] and exitsAt(code, i, b.kinds[k], b.slot_kinds[k], &b)) try exits.append(ar, pc);
+        if (b.seen[k] and exitsAt(i, b.kinds[k], b.slot_kinds[k], &b)) try exits.append(ar, pc);
     }
     try parts.append(ar, .{ .first = first, .last = back, .steps = steps });
     return .{
@@ -398,6 +424,7 @@ pub fn plan(a: Allocator, code: *const vm.Code, info: *const verify.Info, head: 
         .slots = b.slots,
         .kinds = b.kinds,
         .slot_kinds = b.slot_kinds,
+        .outs = b.outs,
         .parts = parts.items,
         .exits = exits.items,
         .calls = b.calls,
@@ -406,35 +433,72 @@ pub fn plan(a: Allocator, code: *const vm.Code, info: *const verify.Info, head: 
     };
 }
 
-/// True when tier 2 runs the instruction with no helper call.
-fn isInline(code: *const vm.Code, i: vm.Ins, stack: []const Kind, slots: []const Kind, b: *const Builder) bool {
-    _ = code;
+/// True for an operator that tier 2 runs inline on two operands of
+/// the kinds `x` and `y`: `+`, `-`, `*`, and the compares on integers.
+pub fn inlineOp(op: expr.BinOp, x: Kind, y: Kind) bool {
+    const k = binKind(op, x, y) orelse return false;
+    _ = k;
+    if (x != .int or y != .int) return false;
+    return switch (op) {
+        .add, .sub, .mul => true,
+        else => isCompare(op),
+    };
+}
+
+/// True when tier 2 runs the instruction with no helper call on any
+/// path. Each other instruction ends its part, because a helper counts
+/// its own steps and a script that it runs can use the step limit.
+pub fn noCall(i: vm.Ins, stack: []const Kind, slots: []const Kind, b: anytype) bool {
     const top = stack.len;
     return switch (i.op) {
-        .guard, .step, .jump, .jump_false, .jump_true, .to_bool, .pop, .load, .store, .store_pop, .push, .push_empty => true,
-        .jf_vv => slots[b.slotIndex(i.a)] == .int and slots[b.slotIndex(i.b)] == .int,
-        .jf_vi => slots[b.slotIndex(i.a)] == .int,
+        .guard, .step, .jump, .pop, .push, .push_empty => true,
+        .load => slots[b.slotIndex(i.a)] == .int,
+        .store, .store_pop => slots[b.slotIndex(i.a)] == .int and stack[top - 1] == .int,
+        .jump_false, .jump_true, .to_bool => stack[top - 1] == .int,
+        .jf_vv => inlineOp(@enumFromInt(i.x), slots[b.slotIndex(i.a)], slots[b.slotIndex(i.b)]),
+        .jf_vi => inlineOp(@enumFromInt(i.x), slots[b.slotIndex(i.a)], .int),
         .incr, .incr_drop => slots[b.slotIndex(i.a)] == .int,
         .incr_value => slots[b.slotIndex(i.a)] == .int and stack[top - 1] == .int,
-        .bin_vv => binKind(@enumFromInt(i.x), slots[b.slotIndex(i.a)], slots[b.slotIndex(i.b)]) != null,
-        .bin_vi => binKind(@enumFromInt(i.x), slots[b.slotIndex(i.a)], .int) != null,
-        .binary => binKind(@enumFromInt(i.x), stack[top - 2], stack[top - 1]) != null,
+        .bin_vv => inlineOp(@enumFromInt(i.x), slots[b.slotIndex(i.a)], slots[b.slotIndex(i.b)]),
+        .bin_vi => inlineOp(@enumFromInt(i.x), slots[b.slotIndex(i.a)], .int),
+        .binary => inlineOp(@enumFromInt(i.x), stack[top - 2], stack[top - 1]),
         else => false,
     };
 }
 
 /// True when an inline form of the instruction has a guard that can
-/// fail: an overflow of `+`, `-`, `*`, or `incr` on integers, and a
-/// compare of slots that are not both integers.
-fn exitsAt(code: *const vm.Code, i: vm.Ins, stack: []const Kind, slots: []const Kind, b: *const Builder) bool {
-    if (!isInline(code, i, stack, slots, b)) return false;
+/// fail: an overflow of `+`, `-`, `*`, or `incr` on integers.
+fn exitsAt(i: vm.Ins, stack: []const Kind, slots: []const Kind, b: *const Builder) bool {
+    if (!noCall(i, stack, slots, b)) return false;
     return switch (i.op) {
         .incr, .incr_drop, .incr_value => true,
         .bin_vv, .bin_vi, .binary => switch (@as(expr.BinOp, @enumFromInt(i.x))) {
             .add, .sub, .mul => true,
             else => false,
         },
-        .jump_false, .jump_true, .to_bool => stack[stack.len - 1] != .int,
+        else => false,
+    };
+}
+
+/// The helpers that run no script and read or write no cell. After a
+/// call of one of them, tier 2 loads its registers again with no check
+/// of the epoch and of the tags of the cells. Each entry reads only
+/// values of the stack. A value can change its form in place, and a
+/// helper can allocate, so the memory check after the call stays.
+pub fn runsNoScript(i: vm.Ins) bool {
+    return switch (i.op) {
+        // `llength`, `lindex`, `string length`, and `string index` of a
+        // value: a parse of the value, with no command and no variable.
+        .access => true,
+        // The string of the joined values.
+        .concat => true,
+        // An operator of `expr` on two values or one value. `expr`
+        // functions are nodes, so no operator calls a command.
+        .binary, .unary => true,
+        // The number form of a string.
+        .number_form => true,
+        // The truth value of a string, and a jump on it.
+        .to_bool, .jump_false, .jump_true => true,
         else => false,
     };
 }

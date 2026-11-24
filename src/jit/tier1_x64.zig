@@ -227,7 +227,7 @@ pub const Emitter = struct {
     }
 
     /// The helper of the whole instruction `i`.
-    fn helperOf(i: vm.Ins) Helper {
+    pub fn helperOf(i: vm.Ins) Helper {
         return switch (i.op) {
             .ret => unreachable,
             .access => accessHelper(i.x),

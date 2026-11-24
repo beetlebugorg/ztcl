@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Runs random Tcl programs with a collection at each allocation.
 #
-#   tools/gc-fuzz.py -r runner [-b reference] [-n count] [-s seed] [-g N] [-j]
+#   tools/gc-fuzz.py -r runner [-b reference] [-n count] [-s seed] [-g N] [-j] [-T]
 #
 # A grammar makes each program from a seed. The program uses procs,
 # loops, lists, dicts, arrays, strings, regexp, upvar, uplevel, catch,
@@ -12,7 +12,8 @@
 #
 # The reference run uses `--gc off`. The test run uses `--gc-stress N`.
 # With -j, the test run also has the JIT at threshold 0, so the machine
-# code runs with a collection at each allocation. A program that reaches
+# code runs with a collection at each allocation. -T adds tier 2 with a
+# loop count of 2 to -j. A program that reaches
 # the nesting limit can then stop at another depth: the tool counts it
 # and does not compare it.
 # The exit code, stdout, and steps must be equal. A run that stops at the
@@ -144,6 +145,7 @@ def main():
     ap.add_argument("-k", default=tempfile.gettempdir())
     ap.add_argument("-t", type=int, default=60, help="the timeout of one run in seconds")
     ap.add_argument("-j", action="store_true", help="run the test run with the JIT at threshold 0")
+    ap.add_argument("-T", action="store_true", help="add tier 2 to -j")
     o = ap.parse_args()
     base = ["--max-steps", "400000", "--mem", str(256 << 20), "--allow", "interp"]
     bad = slow = deep = 0
@@ -155,6 +157,8 @@ def main():
                 f.write(text)
             ref = run([o.b or o.r, "--gc", "off"] + base, path, o.t)
             jit = ["--jit", "--jit-threshold", "0"] if o.j else []
+            if o.j and o.T:
+                jit += ["--jit-tier2", "--jit-tier2-count", "2"]
             got = run([o.r, "--gc-stress", str(o.g)] + jit + base, path, o.t * 5)
             if ref is None or got is None:
                 slow += 1
