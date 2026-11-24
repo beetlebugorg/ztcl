@@ -16,7 +16,8 @@
 //! Each program runs in a new interpreter for each mode of `modes`: the
 //! interpreter (the reference), the JIT at threshold 0, and the JIT at
 //! the default threshold. `--tier2` adds the tier 2 modes: one of them
-//! enters tier 2 at the first pass of each loop. Then the program runs
+//! calls `tier_up` at the first pass of each loop. The summary gives
+//! the count of loops that compiled to tier 2. Then the program runs
 //! again in the interpreter and in one JIT mode with a step limit of a
 //! random part of the full count, and with a random memory limit. Each
 //! run has the collector off, so the memory count is exact. The tool
@@ -45,7 +46,7 @@
 //! process must not crash, and no safety check may fail. The collector
 //! is off in this mode, because a changed `Code` lives outside the heap.
 //! `--tier2` and `--stress N` set the same options of the JIT here: with
-//! `--tier2`, each loop enters tier 2 after its first pass.
+//! `--tier2`, each loop calls `tier_up` at its first pass.
 //!
 //! The values of a multiplication never flow back into an operand of a
 //! multiplication, so the size of each integer grows at most linearly
@@ -874,6 +875,9 @@ const Extra = struct {
     steps: u64 = 0,
     ins: u64 = 0,
     compiled: u64 = 0,
+    /// The loops that compiled to tier 2, and the exits of tier 2 code.
+    tier2: u64 = 0,
+    exits: u64 = 0,
     /// True when the run reached the cap of `Cap`.
     capped: bool = false,
 };
@@ -982,6 +986,8 @@ fn runOnce(a: Allocator, text: []const u8, mode: Mode, cfg: Config, out: *std.Ar
     if (it.jit) |s| {
         extra.ins = s.stats.ins;
         extra.compiled = s.stats.compiled;
+        extra.tier2 = s.stats.tier2;
+        extra.exits = s.stats.exits;
     }
 }
 
@@ -1007,6 +1013,13 @@ const Fuzz = struct {
     deep: u64 = 0,
     /// Runs that reached the cap of the allocator. They are not compared.
     capped: u64 = 0,
+    /// The runs of the tier 2 modes with the full limits, the runs of
+    /// them with at least one loop in tier 2, the loops that compiled to
+    /// tier 2, and the exits of tier 2 code.
+    t2_runs: u64 = 0,
+    t2_hit: u64 = 0,
+    t2_loops: u64 = 0,
+    t2_exits: u64 = 0,
 
     /// Runs `text` in `mode` and in the reference with the same config,
     /// and compares. True when both are equal.
@@ -1032,6 +1045,12 @@ const Fuzz = struct {
         if (mode.jit and mode.threshold == 0 and cfg.steps == f.cfg.steps and cfg.mem == f.cfg.mem) {
             f.ins += x.ins;
             f.compiled += x.compiled;
+        }
+        if (mode.tier2 and cfg.steps == f.cfg.steps and cfg.mem == f.cfg.mem) {
+            f.t2_runs += 1;
+            f.t2_loops += x.tier2;
+            f.t2_exits += x.exits;
+            if (x.tier2 > 0) f.t2_hit += 1;
         }
         return std.mem.eql(u8, f.ref.items, f.got.items);
     }
@@ -1118,6 +1137,7 @@ const Fuzz = struct {
         std.debug.print("mean bytecode instructions compiled at threshold 0: {d:.1} in {d:.2} functions\n", .{ @as(f64, @floatFromInt(f.ins)) / pf, @as(f64, @floatFromInt(f.compiled)) / pf });
         std.debug.print("programs that reached the step limit: {d}, the memory limit: {d}, the nesting limit (depth not compared): {d}\n", .{ f.stopped_steps, f.stopped_mem, f.deep });
         std.debug.print("runs that reached the cap of 256 MiB (not compared): {d}\n", .{f.capped});
+        if (f.t2_runs > 0) std.debug.print("tier 2: {d} loops compiled in {d} of {d} runs of the tier 2 modes, {d} exits\n", .{ f.t2_loops, f.t2_hit, f.t2_runs, f.t2_exits });
         if (f.marked == 0) return;
         std.debug.print("share of {d} sampled programs that ran each item:\n", .{f.marked});
         const mf: f64 = @floatFromInt(f.marked);
