@@ -1175,10 +1175,10 @@ test "file and channels cannot leave the root folder" {
     it.fs.fd = @intCast(rc);
     try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.file));
     for ([_][]const u8{
-        "open ../secret", "open /../secret", "open sub/../../secret", "open out", "open sub/up/../secret",
-        "open etc/passwd", "open out w", "source ../secret", "source out", "cd ..", "cd etc",
-        "file size ../secret", "file delete ../secret", "file mkdir ../made", "file rename sub ../moved",
-        "file copy ../secret here", "file copy out here", "file link -symbolic x /etc", "file readlink out",
+        "open ../secret",           "open /../secret",     "open sub/../../secret",      "open out",           "open sub/up/../secret",
+        "open etc/passwd",          "open out w",          "source ../secret",           "source out",         "cd ..",
+        "cd etc",                   "file size ../secret", "file delete ../secret",      "file mkdir ../made", "file rename sub ../moved",
+        "file copy ../secret here", "file copy out here",  "file link -symbolic x /etc", "file readlink out",
     }) |script| {
         if (it.eval(script)) |_| {
             std.debug.print("escaped: {s}\n", .{script});
@@ -1241,8 +1241,8 @@ test "socket accepts only loopback addresses by default" {
     fake_ticks = 0;
     it.event_host = .{ .now = fakeNow, .sleep = fakeSleep };
     for ([_][]const u8{
-        "socket example.com 80",     "socket 192.0.2.1 80",                "socket 10.0.0.1 80",
-        "socket 0.0.0.0 80",         "socket ::ffff:192.0.2.1 80",         "socket -server x -myaddr 0.0.0.0 0",
+        "socket example.com 80",         "socket 192.0.2.1 80",                   "socket 10.0.0.1 80",
+        "socket 0.0.0.0 80",             "socket ::ffff:192.0.2.1 80",            "socket -server x -myaddr 0.0.0.0 0",
         "socket -server x -myaddr :: 0", "socket -myaddr 192.0.2.1 localhost 80", "socket 127.0.0.1.example.com 80",
     }) |script| {
         if (it.eval(script)) |_| {
@@ -1936,4 +1936,8 @@ test "a constructor keeps its call chain through collections" {
     }
     defer for (got) |g| std.testing.allocator.free(g);
     try std.testing.expectEqualStrings(got[0], got[1]);
+}
+
+comptime {
+    _ = @import("thread_tests.zig");
 }
