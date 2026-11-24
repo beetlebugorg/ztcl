@@ -104,6 +104,19 @@ Measured on an Intel Core i7-6700K (4.0 GHz, AVX2), one thread, `ReleaseFast`, 2
 
 The fuzzy skin `point proc` over 10 million points uses about 15 ns for each point on the vector path and about 230 ns on the normal path. [Testing](docs/testing.md) has all results.
 
+## JIT compiler (experimental)
+
+ztcl has a JIT compiler for x86-64 Linux. It is off by default.
+
+- Build: `zig build -Djit=true`. This is the default on x86-64 Linux. WebAssembly and other targets use the interpreter only.
+- Run: `ztcl --jit script.tcl`. `--jit-threshold N` sets the number of calls before a proc compiles, and `--jit-stats` prints what compiled.
+- Tier 1 compiles the bytecode of a proc body to machine code. Each instruction calls the same handler as the interpreter, and integer arithmetic, compares, and `incr` run inline.
+- The step limit and the memory limit are exact, as in the interpreter. A JIT run gives the same results and the same step counts as the interpreter on the whole Tcl test suite.
+- The code memory is never writable and executable at once. A verifier checks each bytecode before it compiles, and no script value goes into the machine code.
+- An endless recursion can go deeper with the JIT before the nesting error, because a JIT call uses less native stack.
+
+CPU instructions with `--jit`, against the interpreter, on the scripts in `bench/`: `sum.tcl` −68 %, `nested.tcl` −49 %, `foreach.tcl` −29 %, `strbuild.tcl` −22 %, `dict.tcl` −17 %, `readloop.tcl` −16 %, `fib.tcl` −14 %, `dictgrow.tcl` −10 %. List, dict, and proc call paths still go through the interpreter handlers. The next milestone compiles them inline. [The JIT design](docs/jit.md) has the plan and the gates.
+
 ## Compatibility
 
 ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: lists, strings, dicts, arrays, `expr`, `format`, `scan`, `binary`, `regexp`, namespaces, `try`, `apply`, `lmap`, `upvar`, and `uplevel`. The [language reference](docs/language.md) gives the status of each command.
@@ -120,6 +133,7 @@ ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: list
 ## Documentation
 
 - [Design](docs/design.md): values, bytecode, and point procs
+- [JIT compiler](docs/jit.md)
 - [Language reference](docs/language.md)
 - [Embedding in Zig](docs/embedding.md)
 - [Testing and benchmarks](docs/testing.md)
