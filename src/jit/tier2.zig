@@ -334,6 +334,9 @@ const Builder = struct {
 /// eligible. `entry` gives the kind of each slot of the code now.
 pub fn plan(a: Allocator, code: *const vm.Code, info: *const verify.Info, head: u32, entry: []const Kind) Allocator.Error!?LoopPlan {
     const back = backOf(code, head) orelse return null;
+    // The code of a loop ends at its jump back, with no fall through. A
+    // conditional jump back, as in a changed Code, stays in tier 1.
+    if (code.ins[back].op != .jump) return null;
     // An inner loop.
     for (info.loop_heads) |h| if (h > head and h <= back) return null;
     var arena = std.heap.ArenaAllocator.init(a);

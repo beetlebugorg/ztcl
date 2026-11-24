@@ -2115,3 +2115,48 @@ test "jit: named code of events stays in its part of the JIT memory" {
     try testing.expectEqual(@as(i64, 45), v.asInt().?);
     try testing.expectEqual(before + 1, s.stats.compiled);
 }
+
+test "tier 2: a conditional jump back stays in tier 1" {
+    if (!jit.built) return error.SkipZigTest;
+    // The jit-fuzz --verify mode found it: `store_pop` changed to
+    // `jump_false` makes a loop with no `jump` back. Tier 2 then ran
+    // into the trap after the last instruction of the loop.
+    const it = try newInterp();
+    defer freeInterp(it);
+    it.gc_on = false;
+    if (!it.enableJit(.{ .threshold = 0, .tier2 = true, .tier2_count = 1 })) return error.SkipZigTest;
+    _ = try it.eval("proc q {} { set a 1; set b 2; set c 0; return $c }");
+    const code = try procCode(it, "q");
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var m = try Mutable.init(arena.allocator(), code);
+    // The `push` of `set b 2`, and the `store_pop` of `set c 0`.
+    var stores: [3]usize = undefined;
+    var n: usize = 0;
+    for (m.ins, 0..) |i, k| if (i.op == .store_pop and n < 3) {
+        stores[n] = k;
+        n += 1;
+    };
+    try testing.expectEqual(@as(usize, 3), n);
+    try testing.expectEqual(vm.Op.push, m.ins[stores[0] + 2].op);
+    m.ins[stores[2]] = .{ .op = .jump_false, .a = @intCast(stores[0] + 2) };
+    try testing.expect(try verifies(&m.code));
+    var info = (try verify.verify(testing.allocator, &m.code)).?;
+    defer info.deinit(testing.allocator);
+    const kinds = try testing.allocator.alloc(tier2.Kind, m.code.names.len);
+    defer testing.allocator.free(kinds);
+    @memset(kinds, .int);
+    try testing.expectEqual(@as(usize, 1), info.loop_heads.len);
+    try testing.expect((try tier2.plan(testing.allocator, &m.code, &info, info.loop_heads[0], kinds)) == null);
+    // The changed Code runs in tier 1 until the step limit.
+    const held = try arena.allocator().create(vm.Code);
+    held.* = m.code;
+    _ = jit.prepare(it, held) orelse return error.NotCompiled;
+    const p = it.commands.get("q").?.impl.proc;
+    const saved = p.code;
+    p.code = held;
+    defer p.code = saved;
+    it.step_limit = 2000;
+    try testing.expectError(error.TclError, it.eval("q"));
+    try testing.expectEqual(@as(u64, 0), it.jit.?.stats.tier2);
+}
