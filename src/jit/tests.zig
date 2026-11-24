@@ -2107,14 +2107,14 @@ test "jit: each stress mode gives the output of the interpreter" {
         const ref = try runModeOpts(script, null, std.math.maxInt(u64), 0, 0);
         defer ref.deinit();
         for (modes) |m| {
-            for ([_]u32{ 0, 2 }) |threshold| {
-                const got = try runModeOpts(script, .{ .threshold = threshold, .stress = m }, std.math.maxInt(u64), 0, 0);
+            for ([_]u32{ 0, 2 }) |threshold| for ([_]bool{ false, true }) |t2| {
+                const got = try runModeOpts(script, .{ .threshold = threshold, .stress = m, .tier2 = t2, .tier2_count = 2 }, std.math.maxInt(u64), 0, 0);
                 defer got.deinit();
                 testing.expectEqualStrings(ref.text, got.text) catch |e| {
-                    std.debug.print("stress {d}, threshold {d}, script:\n{s}\n", .{ m, threshold, script });
+                    std.debug.print("stress {d}, threshold {d}, tier 2 {}, script:\n{s}\n", .{ m, threshold, t2, script });
                     return e;
                 };
-            }
+            };
         }
     }
 }
@@ -2133,6 +2133,48 @@ test "jit: stress mode 1 fails each allocation of the compiler in turn" {
     try testing.expect(st.failed > 0);
     try testing.expect(st.compiled > 0);
     try testing.expectEqual(@as(u64, 40), st.failed + st.compiled);
+}
+
+test "jit: stress mode 1 fails the allocations of tier 2 compiles in turn" {
+    if (!jit.built) return error.SkipZigTest;
+    var text: std.ArrayList(u8) = .empty;
+    defer text.deinit(testing.allocator);
+    for (0..40) |k| try text.print(testing.allocator, "proc p{d} {{x}} {{ set s 0; for {{set i 0}} {{$i < $x}} {{incr i}} {{ incr s $i }}; return $s }}; lappend r [p{d} 5]\n", .{ k, k });
+    try text.appendSlice(testing.allocator, "set r");
+    var want: std.ArrayList(u8) = .empty;
+    defer want.deinit(testing.allocator);
+    for (0..40) |k| try want.appendSlice(testing.allocator, if (k == 0) "10" else " 10");
+    // Each loop of a function that compiled can compile to tier 2, so
+    // a loop that stays in tier 1 had a failed allocation.
+    var compiled: u64 = 0;
+    var tier2_loops: u64 = 0;
+    for (1..64) |from| {
+        const it = try newInterp();
+        defer freeInterp(it);
+        if (!it.enableJit(.{ .threshold = 0, .tier2 = true, .tier2_count = 1, .stress = jit.stress_alloc, .fail_from = @intCast(from) })) return error.SkipZigTest;
+        const v = try it.eval(text.items);
+        try testing.expectEqualStrings(want.items, try it.str(v));
+        compiled += it.jit.?.stats.compiled;
+        tier2_loops += it.jit.?.stats.tier2;
+    }
+    try testing.expect(tier2_loops > 0);
+    try testing.expect(tier2_loops < compiled);
+}
+
+test "jit: stress mode 4 keeps a checksum of the code of tier 2" {
+    if (!jit.built) return error.SkipZigTest;
+    const it = try newInterp();
+    defer freeInterp(it);
+    if (!it.enableJit(.{ .threshold = 0, .tier2 = true, .tier2_count = 1, .stress = jit.stress_sum })) return error.SkipZigTest;
+    const v = try it.eval("proc f {n} { set s 0; for {set i 0} {$i < $n} {incr i} { incr s $i }; return $s }; f 10; f 20");
+    try testing.expectEqual(@as(i64, 190), v.asInt().?);
+    const code = it.commands.get("f").?.impl.proc.code orelse return error.NoCode;
+    const f: *tier1.Fn = @ptrCast(@alignCast(code.jit orelse return error.NotCompiled));
+    try testing.expectEqual(@as(usize, 1), f.loops.len);
+    const rec = f.loops[0];
+    const c = rec.code orelse return error.NoTier2;
+    try testing.expect(rec.len > 0);
+    try testing.expectEqual(std.hash.Wyhash.hash(0, c[0..rec.len]), rec.sum);
 }
 
 test "jit: stress mode 8 enters at each address of a loop" {
