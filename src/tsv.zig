@@ -120,7 +120,7 @@ const Held = struct {
     }
 };
 
-/// Finds the array `name` and takes its lock. With `make`, a missing
+/// Finds the array `name` and locks it. With `make`, a missing
 /// array comes into being. Without it, a missing array gives null.
 fn acquire(it: *Interp, name: []const u8, make: bool) Error!?Held {
     const w = try self(it);
@@ -269,7 +269,7 @@ const Args = struct {
     rest: []const Value,
     /// The words before `rest`, for the message of a wrong count.
     head: []const Value,
-    /// The words that the op takes after `head`.
+    /// The usage of the words after `head`.
     usage: []const u8,
 };
 
