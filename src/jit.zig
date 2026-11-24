@@ -14,6 +14,22 @@
 //! number. `flush` gets a new number, so a `Code` that outlives a flush
 //! runs in the interpreter and is never compiled with stale data.
 //!
+//! The stress modes (`Options.stress`) force the rare paths. Each one
+//! keeps the output of a script:
+//!
+//! - 1: the allocations of the compiler fail in turn. Compile k fails
+//!   its allocation `fail_from + k - 1`. After a compile with no failure,
+//!   the count starts again.
+//! - 2: each second copy to the executable region fails.
+//! - 4: a checksum of each function is taken after the copy and checked
+//!   at each `enter` and at `flush`. A difference ends the process.
+//! - 8: each `enter` runs one instruction with its helper first, then
+//!   enters the machine code at the next address. So each reachable
+//!   address is an entry. An entry check that fails there ends the
+//!   process, because the depth of the verifier and of the compiler
+//!   then differ.
+//! - 16: the JIT memory limit is 64 KiB.
+//!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
@@ -63,8 +79,18 @@ pub const Options = struct {
     tier2: bool = false,
     /// The passes of a loop in tier 1 before tier 2 compiles it.
     tier2_count: u32 = 1000,
+    /// A set of the `stress_` bits.
     stress: u32 = 0,
+    /// Stress mode 1: the allocation that the first compile fails.
+    fail_from: u32 = 1,
 };
+
+pub const stress_alloc: u32 = 1;
+pub const stress_region: u32 = 2;
+pub const stress_sum: u32 = 4;
+pub const stress_entry: u32 = 8;
+pub const stress_small: u32 = 16;
+pub const stress_all: u32 = 31;
 
 pub const Stats = struct {
     compiled: u64 = 0,
@@ -103,6 +129,13 @@ pub const State = struct {
     stopped: bool = false,
     /// The error of the last entry that failed.
     err: u16 = 0,
+    /// Stress mode 1: the allocation of the next compile that fails.
+    fail_next: u32 = 0,
+
+    /// The JIT memory limit of this state.
+    fn limit(s: *const State) usize {
+        return if (s.options.stress & stress_small != 0) 64 << 10 else s.options.mem_limit;
+    }
 
     fn root(s: *State) *State {
         var r = s;
@@ -121,7 +154,7 @@ pub const State = struct {
     }
 
     fn budget(s: *State) usize {
-        return s.options.mem_limit -| s.root().family;
+        return s.limit() -| s.root().family;
     }
 };
 
@@ -207,7 +240,10 @@ pub fn inherit(child: *Interp, parent: *const Interp) void {
 pub fn flush(it: *Interp) void {
     if (!built) return;
     const s = it.jit orelse return;
-    for (s.fns.items) |f| f.free(s.backing);
+    for (s.fns.items) |f| {
+        if (s.options.stress & stress_sum != 0) checkSum(f);
+        f.free(s.backing);
+    }
     s.fns.clearAndFree(s.backing);
     if (s.region) |*r| r.deinit();
     s.region = null;
@@ -259,19 +295,86 @@ pub fn prepare(it: *Interp, code: *vm.Code) ?*Fn {
     return compileCode(s, code);
 }
 
+/// An allocator that fails allocation number `at` of the compiler, for
+/// stress mode 1. A larger resize counts as an allocation.
+const FailAlloc = struct {
+    child: Allocator,
+    n: u32 = 0,
+    at: u32,
+    failed: bool = false,
+
+    fn allocator(fa: *FailAlloc) Allocator {
+        return .{ .ptr = fa, .vtable = &.{ .alloc = alloc, .resize = resize, .remap = remap, .free = free } };
+    }
+
+    fn fails(fa: *FailAlloc) bool {
+        fa.n += 1;
+        if (fa.n != fa.at) return false;
+        fa.failed = true;
+        return true;
+    }
+
+    fn alloc(ctx: *anyopaque, len: usize, al: std.mem.Alignment, ra: usize) ?[*]u8 {
+        const fa: *FailAlloc = @ptrCast(@alignCast(ctx));
+        if (fa.fails()) return null;
+        return fa.child.rawAlloc(len, al, ra);
+    }
+
+    fn resize(ctx: *anyopaque, m: []u8, al: std.mem.Alignment, n: usize, ra: usize) bool {
+        const fa: *FailAlloc = @ptrCast(@alignCast(ctx));
+        if (n > m.len and fa.fails()) return false;
+        return fa.child.rawResize(m, al, n, ra);
+    }
+
+    fn remap(ctx: *anyopaque, m: []u8, al: std.mem.Alignment, n: usize, ra: usize) ?[*]u8 {
+        const fa: *FailAlloc = @ptrCast(@alignCast(ctx));
+        if (n > m.len and fa.fails()) return null;
+        return fa.child.rawRemap(m, al, n, ra);
+    }
+
+    fn free(ctx: *anyopaque, m: []u8, al: std.mem.Alignment, ra: usize) void {
+        const fa: *FailAlloc = @ptrCast(@alignCast(ctx));
+        fa.child.rawFree(m, al, ra);
+    }
+};
+
+/// The checksum of the bytes of a function.
+fn sumOf(f: *const Fn) u64 {
+    return std.hash.Wyhash.hash(0, f.base[0..f.len]);
+}
+
+/// Ends the process when the bytes of `f` changed after the copy.
+fn checkSum(f: *const Fn) void {
+    if (sumOf(f) != f.sum) @panic("the bytes of a JIT function changed");
+}
+
 fn compileCode(s: *State, code: *vm.Code) ?*Fn {
     code.jit_state = .failed;
     if (s.stopped) return null;
     if (s.region == null) {
-        s.region = mem.Region.init(s.options.mem_limit) orelse {
+        s.region = mem.Region.init(s.limit()) orelse {
             s.stopped = true;
             return null;
         };
     }
     const r = &s.region.?;
-    s.fns.ensureUnusedCapacity(s.backing, 1) catch return null;
-    switch (tier1.compile(s.backing, r, s.layout, code, s.budget(), if (s.options.tier2) @max(s.options.tier2_count, 1) else 0)) {
+    r.fail_second = s.options.stress & stress_region != 0;
+    var fa: FailAlloc = .{ .child = s.backing, .at = 0 };
+    const a = if (s.options.stress & stress_alloc != 0) blk: {
+        if (s.fail_next == 0) s.fail_next = s.options.fail_from;
+        fa.at = s.fail_next;
+        break :blk fa.allocator();
+    } else s.backing;
+    defer if (s.options.stress & stress_alloc != 0) {
+        s.fail_next = if (fa.failed) s.fail_next + 1 else s.options.fail_from;
+    };
+    s.fns.ensureUnusedCapacity(a, 1) catch {
+        s.stats.failed += 1;
+        return null;
+    };
+    switch (tier1.compile(a, r, s.layout, code, s.budget(), if (s.options.tier2) @max(s.options.tier2_count, 1) else 0)) {
         .ok => |f| {
+            if (s.options.stress & stress_sum != 0) f.sum = sumOf(f);
             s.fns.appendAssumeCapacity(f);
             s.charge(f.pages(r.page) + f.bytes());
             s.stats.compiled += 1;
@@ -301,6 +404,11 @@ pub const Status = enum { done, failed, fallback };
 /// `.fallback`: the entry is not valid, or the code exits, and `exec`
 /// runs at `pc.*` and `sp.*`.
 pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp: *u32) Status {
+    const stress = it.jit.?.options.stress;
+    if (stress & stress_sum != 0) checkSum(f);
+    if (stress & stress_entry != 0) {
+        if (stepOne(it, f, code, stack, pc, sp)) |st| return st;
+    }
     const p = pc.*;
     const frame = it.frame;
     if (p >= code.ins.len or p >= f.entries.len) return fallback(it);
@@ -332,6 +440,42 @@ pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp:
         return .failed;
     }
     return fallback(it);
+}
+
+/// Stress mode 8: runs instruction `pc.*` with its helper, as `exec`
+/// does, and moves `pc.*` and `sp.*` to the next instruction. A status
+/// ends the entry: `ret`, an error, or an entry check that fails.
+fn stepOne(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp: *u32) ?Status {
+    const p = pc.*;
+    if (p >= code.ins.len or p >= f.entries.len or f.entries[p] == tier1.no_entry) return null;
+    if (sp.* != f.depth[p] or it.frame.vars.items.len < code.names.len) return null;
+    const i = &code.ins[p];
+    const h = helpers.forIns(i) orelse return .done;
+    var ctx: EnterCtx = .{
+        .it = it,
+        .code = code,
+        .frame = it.frame,
+        .stack = stack,
+        .helpers = &helpers.table,
+        .target = 0,
+        .pc = p,
+        .sp = sp.*,
+        .err = 0,
+        .empty = &Value.empty,
+        .counters = f.counters.ptr,
+        .func = f,
+    };
+    const func: helpers.Fn = @ptrCast(@alignCast(helpers.table[@intFromEnum(h)]));
+    const r = func(&ctx, p, sp.*);
+    if (r == helpers.failed) {
+        it.jit.?.err = ctx.err;
+        return .failed;
+    }
+    const n = helpers.next(i, p, r);
+    if (n >= f.entries.len or f.entries[n] == tier1.no_entry) @panic("stress mode 8: the next address has no entry");
+    pc.* = n;
+    sp.* = f.depth[n];
+    return null;
 }
 
 // ---- Tier 2 ----

@@ -142,7 +142,7 @@ fn branchOf(comptime h: Helper) @TypeOf(vm.opGuard) {
     };
 }
 
-fn isBranch(h: Helper) bool {
+pub fn isBranch(h: Helper) bool {
     return switch (h) {
         .guard, .str_eq_jump, .jump_false, .jump_true, .jf_vv, .jf_vi, .foreach_next => true,
         else => false,
@@ -198,6 +198,34 @@ pub const table: [count]*const anyopaque = blk: {
     for (0..count) |k| t[k] = @ptrCast(wrap(@enumFromInt(k)));
     break :blk t;
 };
+
+/// The helper that runs the whole instruction `i`. `ret` has no helper.
+pub fn forIns(i: *const vm.Ins) ?Helper {
+    return switch (i.op) {
+        .ret => null,
+        .access => switch (i.x) {
+            0 => .llength,
+            1 => .lindex,
+            2 => .string_length,
+            else => .string_index,
+        },
+        inline else => |op| @field(Helper, @tagName(op)),
+    };
+}
+
+/// The address of instruction `i` after its helper returned `r`: the
+/// target on result 1 of a branch, the target of a `jump`, or the next
+/// address.
+pub fn next(i: *const vm.Ins, pc: u32, r: u32) u32 {
+    if (i.op == .jump) return i.a;
+    if (r != yes) return pc + 1;
+    return switch (i.op) {
+        .guard, .jump_false, .jump_true => i.a,
+        .str_eq_jump, .foreach_next => i.b,
+        .jf_vv, .jf_vi => i.c,
+        else => pc + 1,
+    };
+}
 
 /// The Zig error of `ctx.err`.
 pub fn errorOf(ctx: *const EnterCtx) Error {

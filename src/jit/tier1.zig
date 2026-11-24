@@ -43,6 +43,8 @@ pub const Fn = struct {
     stress_at: u8 = 0,
     counters: []u32 = &.{},
     loops: []Loop = &.{},
+    /// A checksum of the bytes, for the stress mode of `jit.zig`.
+    sum: u64 = 0,
 
     /// The bytes of the executable pages of the function.
     pub fn pages(f: *const Fn, page: usize) usize {

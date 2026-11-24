@@ -818,6 +818,12 @@ fn runMode(script: []const u8, on: bool, limit: u64, min_compiled: u64) !Outcome
 /// `stress`th allocation. With the stress mode, the text has no memory
 /// count.
 fn runModeGc(script: []const u8, on: bool, limit: u64, min_compiled: u64, stress: u32) !Outcome {
+    return runModeOpts(script, if (on) .{ .threshold = 0, .tier2 = test_tier2, .tier2_count = 2, .stress = test_stress } else null, limit, min_compiled, stress);
+}
+
+/// `runModeGc` with the options of the JIT, or null for no JIT.
+fn runModeOpts(script: []const u8, opts: ?jit.Options, limit: u64, min_compiled: u64, stress: u32) !Outcome {
+    const on = opts != null;
     const it = try newInterp();
     defer freeInterp(it);
     var out: std.ArrayList(u8) = .empty;
@@ -828,7 +834,7 @@ fn runModeGc(script: []const u8, on: bool, limit: u64, min_compiled: u64, stress
     if (allow_interp) try it.allow(@intFromEnum(tcl.interp.Capability.interp));
     if (test_mem_limit) |m| it.mem_limit = m;
     if (test_native) |n| try it.register(n[0], n[1]);
-    if (on and !it.enableJit(.{ .threshold = 0, .tier2 = test_tier2, .tier2_count = 2, .stress = test_stress })) return error.SkipZigTest;
+    if (on and !it.enableJit(opts.?)) return error.SkipZigTest;
     var w: std.ArrayList(u8) = .empty;
     errdefer w.deinit(testing.allocator);
     const a = testing.allocator;
@@ -1796,3 +1802,64 @@ test "tier 2: to_bool of a value from a helper goes to its register" {
         \\list [cut $s 56 50] [cut $s 56 50] [cut $s 56 50] [cut $s 30 20]
     , 1);
 }
+test "jit: each stress mode gives the output of the interpreter" {
+    if (!jit.built) return error.SkipZigTest;
+    const scripts = [_][]const u8{
+        \\proc f {n} { set s 0; for {set i 0} {$i < $n} {incr i} { if {$i % 3 == 0} continue; incr s $i; if {$s > 400} break }; return $s }
+        \\proc g {l} { set r {}; foreach {a b} $l { lappend r [expr {$a * $b}] }; return $r }
+        \\proc h {} { catch {error boom} m; set d {}; dict set d k [f 30]; return [list $m $d [g {1 2 3 4 5}]] }
+        \\list [f 50] [g {1 2 3 4}] [h] [f 10]
+        ,
+        \\proc e {x} { if {$x > 2} { error "big $x" }; return [expr {$x + 1}] }
+        \\proc c {} { set r {}; for {set i 0} {$i < 5} {incr i} { lappend r [catch {e $i} m] $m }; return $r }
+        \\c; c
+    };
+    const modes = [_]u32{ jit.stress_alloc, jit.stress_region, jit.stress_sum, jit.stress_entry, jit.stress_small, jit.stress_all };
+    for (scripts) |script| {
+        const ref = try runModeOpts(script, null, std.math.maxInt(u64), 0, 0);
+        defer ref.deinit();
+        for (modes) |m| {
+            for ([_]u32{ 0, 2 }) |threshold| {
+                const got = try runModeOpts(script, .{ .threshold = threshold, .stress = m }, std.math.maxInt(u64), 0, 0);
+                defer got.deinit();
+                testing.expectEqualStrings(ref.text, got.text) catch |e| {
+                    std.debug.print("stress {d}, threshold {d}, script:\n{s}\n", .{ m, threshold, script });
+                    return e;
+                };
+            }
+        }
+    }
+}
+
+test "jit: stress mode 1 fails each allocation of the compiler in turn" {
+    if (!jit.built) return error.SkipZigTest;
+    const it = try newInterp();
+    defer freeInterp(it);
+    if (!it.enableJit(.{ .threshold = 0, .stress = jit.stress_alloc })) return error.SkipZigTest;
+    var text: std.ArrayList(u8) = .empty;
+    defer text.deinit(testing.allocator);
+    for (0..40) |k| try text.print(testing.allocator, "proc p{d} {{x}} {{ set s 0; for {{set i 0}} {{$i < $x}} {{incr i}} {{ incr s $i }}; return $s }}; p{d} 5\n", .{ k, k });
+    _ = try it.eval(text.items);
+    const st = it.jit.?.stats;
+    // The first compiles fail, then one passes, and the count starts again.
+    try testing.expect(st.failed > 0);
+    try testing.expect(st.compiled > 0);
+    try testing.expectEqual(@as(u64, 40), st.failed + st.compiled);
+}
+
+test "jit: stress mode 8 enters at each address of a loop" {
+    if (!jit.built) return error.SkipZigTest;
+    try sameStress(
+        \\proc f {n} { set s {}; for {set i 0} {$i < $n} {incr i} { lappend s [expr {$i * 2}]; if {$i == 3} continue }; foreach x $s { incr t $x }; return [list $s $t] }
+        \\f 8
+    , jit.stress_entry);
+}
+
+fn sameStress(script: []const u8, stress: u32) !void {
+    const ref = try runModeOpts(script, null, std.math.maxInt(u64), 0, 0);
+    defer ref.deinit();
+    const got = try runModeOpts(script, .{ .threshold = 0, .stress = stress }, std.math.maxInt(u64), 1, 0);
+    defer got.deinit();
+    try testing.expectEqualStrings(ref.text, got.text);
+}
+

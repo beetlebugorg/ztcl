@@ -351,8 +351,10 @@ pub fn verify(a: Allocator, code: *const Code) Allocator.Error!?Info {
 
     if (try stepFreeCycle(arena, code, reachable)) return null;
 
-    ok = true;
+    // The last allocation comes before `ok`: when it fails, the defers
+    // free the other slices.
     const loop_heads = try heads.toOwnedSlice(a);
+    ok = true;
     return .{ .depth = depth, .reachable = reachable, .loop_heads = loop_heads, .has_loop = loop_heads.len > 0 };
 }
 

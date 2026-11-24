@@ -862,6 +862,8 @@ const Config = struct {
     steps: u64 = 2_000_000,
     mem: usize = 64 << 20,
     stress: u32 = 0,
+    /// Stress mode 1: the allocation that the first compile fails.
+    fail_from: u32 = 1,
 };
 
 /// The counts of one run that are not compared.
@@ -960,7 +962,7 @@ fn runOnce(a: Allocator, text: []const u8, mode: Mode, cfg: Config, out: *std.Ar
     it.step_limit = cfg.steps;
     if (coverage) try it.register("_hit", cmdHit);
     if (mode.jit) {
-        const opts: tcl.jit.Options = .{ .threshold = mode.threshold, .tier2 = mode.tier2, .tier2_count = mode.tier2_count, .stress = cfg.stress };
+        const opts: tcl.jit.Options = .{ .threshold = mode.threshold, .tier2 = mode.tier2, .tier2_count = mode.tier2_count, .stress = cfg.stress, .fail_from = cfg.fail_from };
         if (!it.enableJit(opts)) return error.NoJit;
     }
     if (it.eval(text)) |v| {
@@ -1035,6 +1037,10 @@ const Fuzz = struct {
     /// Runs one program in each mode and with random limits. Returns
     /// false after a difference.
     fn one(f: *Fuzz, text: []const u8, seed: u64, label: []const u8) !bool {
+        // Stress mode 1: a random first allocation to fail, so most
+        // compiles of a small program pass and the other modes also run.
+        var fr = Rng.init(seed, 3);
+        f.cfg.fail_from = @intCast(1 + fr.below(40));
         var x: Extra = .{};
         try runOnce(f.a, text, f.modes[0], f.cfg, &f.ref, &x, false);
         f.programs += 1;
@@ -1080,7 +1086,7 @@ const Fuzz = struct {
         defer f.a.free(path);
         var file: std.ArrayList(u8) = .empty;
         defer file.deinit(f.a);
-        try file.print(f.a, "# jit-fuzz: seed {d}, mode {s}, step limit {d}, memory limit {d}, stress {d}\n", .{ seed, m.name, c.steps, c.mem, c.stress });
+        try file.print(f.a, "# jit-fuzz: seed {d}, mode {s}, step limit {d}, memory limit {d}, stress {d}, first failed allocation {d}\n", .{ seed, m.name, c.steps, c.mem, c.stress, c.fail_from });
         try file.appendSlice(f.a, text);
         try file.appendSlice(f.a, "\n# The reference:\n");
         try comment(f.a, &file, f.ref.items);

@@ -33,6 +33,10 @@ pub const Region = struct {
     page: usize,
     /// True after a failed system call.
     stopped: bool = false,
+    /// The stress mode: each second `append` returns null, as for a full
+    /// region.
+    fail_second: bool = false,
+    appends: u64 = 0,
 
     /// Reserves `limit` bytes of address space with no access, plus one
     /// page with no access before and after. Null when the system refuses.
@@ -57,6 +61,8 @@ pub const Region = struct {
     /// system call, each later call returns null.
     pub fn append(r: *Region, code: []const u8) ?[]const u8 {
         if (r.stopped or code.len == 0) return null;
+        r.appends += 1;
+        if (r.fail_second and r.appends % 2 == 0) return null;
         const len = std.mem.alignForward(usize, code.len, r.page);
         const end = std.math.add(usize, r.used, len) catch return null;
         if (end > r.limit) return null;
