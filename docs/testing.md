@@ -183,3 +183,27 @@ The fuzzy skin proc (`zig build bench`), measured again on 2026-11-23 with other
 | 10 million, all on the outer wall | 15.1 ns for each point (0.15 s) | about 231 ns for each point (2.3 s) |
 
 The slow path uses the bytecode. The points of this benchmark are 0.04 mm apart. At a spacing of 0.5 mm the fast path uses about 15.9 ns for each point.
+
+### Threads
+
+```sh
+zig-out/bin/ztcl --allow thread,event,package,clock bench/thread_pipe.tcl
+tclsh bench/thread_pipe.tcl
+```
+
+Measured on an Intel Core i7-6700K (4 cores, 8 hardware threads, 4.0 GHz), `ReleaseFast`, 2026-11-24, against `tclsh` 8.6.16 with Thread 2.8.11. Each time is the best of 5 runs, in wall-clock milliseconds. Each script prints its own time. The runs of ztcl and `tclsh` alternated. The machine is shared: the runs started when the load average of one minute was 2.76, and it rose to 6.03 by the fifth round. The times of a shared machine vary from run to run, most for `thread_tsv.tcl`: in an earlier round at a load of 12 to 15, its times were 412 to 1357 ms. "Before" is ztcl before the two fixes below.
+
+| Benchmark (`bench/`) | ztcl | ztcl before | tclsh 8.6.16 |
+|---|---|---|---|
+| `thread_map.tcl` (1 000 000 integers in 8 parts, a proc on each element) | 99 | 98 | 305 |
+| `thread_pipe.tcl` (4 stages, 100 000 messages, `-eventmark 1000`) | 605 | 952 | 706 |
+| `thread_tsv.tcl`, one element (8 threads, 100 000 `tsv::incr` each) | 1249 | 2285 | 2458 |
+| `thread_tsv.tcl`, 8 elements | 1214 | 2284 | 3276 |
+| `thread_tpool.tcl` (8 workers, 100 000 jobs in batches of 1000) | 466 | 807 | 639 |
+
+The two results that were slower than `tclsh`, and their causes:
+
+- `thread_pipe.tcl`: each `thread::send` made a `futexWake` system call, also when the target thread ran a script and was not in a wait. ztcl used less user time than `tclsh` (about 4.0 against 6.8 billion user cycles) and more system time. The event of a queue now counts its waiters, and a signal with no waiter makes no system call.
+- `thread_tpool.tcl`: 70 % of the cycles were in the probe of the job table of the pool. `tpool::get` removes each job, and the remove of `AutoHashMap` leaves a tombstone, so each `tpool::post` probed past more tombstones. The table is now an `AutoArrayHashMap`, whose remove leaves no tombstone.
+
+The times of `thread_tsv.tcl` also went down between the two builds. That change was not profiled.
