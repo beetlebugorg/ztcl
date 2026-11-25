@@ -118,6 +118,7 @@ regsub -all {\d+} $s X
 - Change, step 2: a lazy DFA for patterns with no back reference and no capture need.
 - Expected gain: step 1 makes the no-match case a `memchr` scan. `tclsh` shows 1.00 ms for it. The step counter of the matcher must give the same count as today, or the limits of a script change.
 - Done: step 1. When the closure of instruction 0 has no assert, no lookahead, and no match, `compile` keeps a table of the characters that a first thread accepts (`Start` in `src/regex.zig`). With no live thread, `simulate` goes to the next such character with a scan and adds the ticks of the skipped positions, so the step count does not change. The proc with the pattern `zzz` runs in 0.5 ms against 2.0 ms for `tclsh`. The proc with `regsub -all` runs in 2.5 ms against 6.4 ms. Both procs include the `string repeat`. Before the change they ran in 5.6 ms and 8.2 ms on the same machine. Step 2 is open.
+- Resume, step 2: the DFA must give the tick count of `simulate`. At each position the simulation adds one tick for each instruction that `addThread` visits and one for each thread that it steps. A DFA state is a sorted set of thread pcs with their start order. So the ticks of one transition depend only on the state and the character, and each cache entry can keep them with the next state. Keep the `Start` scan of step 1 in front of the DFA. Run the 16-pattern script of PR #103 and compare the output with `tclsh` and the `steps` of `--report` with main.
 
 ## 7. Array elements go through the name of the variable
 
@@ -139,6 +140,7 @@ proc arr {} {for {set i 0} {$i<200000} {incr i} {set a($i) $i}; set s 0; for {se
 - Cause: each call from JIT code goes to a helper and then to `callProcFast` (`src/interp.zig:2329`), and this function builds the frame, checks the limits, and binds the arguments in the general way.
 - Change: a direct call from JIT code to the JIT code of a proc with a fixed argument count, no default, and no `args`. Check the epoch, push a frame from a pool, and jump. Keep the depth, nest, native stack, and step checks.
 - Expected gain: the upper limit is the 57.5%. This is the largest change of the list, and rule 10 of `AGENTS.md` (same steps and same memory count) applies to each part.
+- Resume: start in `src/jit/tier1_x64.zig` (`invoke`, and the helper `call_cached` of `src/jit/helpers.zig`) and in `callProcFast` (`src/interp.zig`). Measure `bench/fib.tcl` with `perf stat -e instructions:u` before each step. Keep the order of the checks in `callProcFast`: the depth, the nest, the native stack, and the step. `tools/jit-diff.sh` compares the steps and the memory count, so a frame from a pool must count the same bytes as the frame of `callProcFast`. Do the x64 backend first, then `tier1_a64.zig`.
 
 ## 9. `append` in JIT code goes through two helpers
 
