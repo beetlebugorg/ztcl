@@ -28,7 +28,7 @@ The rank is the expected gain divided by the effort. A ratio above 1 means that 
 | 1 | `string index` and `string length` read the whole string | 1,027.4 ms | 28.1 ms | 36.6 | Small to medium | Done: 17.7 ms |
 | 2 | `eval` of a list parses text on each call | 89.0 ms | 29.3 ms | 3.0 | Small | Open |
 | 3 | `lmap` has no bytecode | 67.5 ms | 39.1 ms | 1.7 | Small | Open |
-| 4 | `lsearch -exact` orders each item | 14.7 ms | 9.0 ms | 1.6 | Small | Open |
+| 4 | `lsearch -exact` orders each item | 14.7 ms | 9.0 ms | 1.6 | Small | Done: 6.6 ms |
 | 5 | `string map` tries each key at each byte | 26.6 ms | 16.9 ms | 1.6 | Small | Open |
 | 6 | The regex search has no literal scan | 6.05 ms | 1.00 ms | 6.0 | Medium | Open |
 | 7 | Array elements go through the name of the variable | 104.8 ms | 70.9 ms | 1.5 | Medium | Open |
@@ -85,6 +85,7 @@ proc lsrch {} {set l {}; for {set i 0} {$i<2000} {incr i} {lappend l k$i}; set n
 - Cause: the exact match uses `std.mem.order` (`src/cmds.zig:1253`). It finds the order of the two strings byte by byte, and the search needs only "equal".
 - Change: for `-exact` with no `-sorted` and no `-bisect`, compare the lengths first and then call `std.mem.eql`. Keep `order` for the sorted modes.
 - Expected gain: most items differ in length or in the first bytes, so the loop becomes one length compare for each item. I did not measure a prototype.
+- Done: the first exact match of a string, with no `-index`, `-all`, `-not`, or `-nocase`, goes through its own loop that compares the lengths and then the bytes. A swap of `order` for `eql` in the general loop gave no gain, because the loop itself used most of the instructions. `lsrch` runs in 6.6 ms against 8.4 ms for `tclsh`. Before the change it ran in 12.6 ms on the same machine.
 
 ## 5. `string map` tries each key at each byte
 
