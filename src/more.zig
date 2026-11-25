@@ -742,7 +742,22 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
     // Each four characters give three bytes at most.
     const buf = try a.alloc(u8, data.len / 4 * 3 + 3);
     var made: usize = 0;
-    for (data, 0..) |ch, pos| {
+    // Groups of four valid characters give three bytes each. The first
+    // other character ends this loop, and the loop below goes on from it.
+    var start: usize = 0;
+    while (start + 4 <= data.len) : (start += 4) {
+        const d0 = b64_value[data[start]];
+        const d1 = b64_value[data[start + 1]];
+        const d2 = b64_value[data[start + 2]];
+        const d3 = b64_value[data[start + 3]];
+        if ((d0 | d1 | d2 | d3) >= 64) break;
+        const v = @as(u32, d0) << 18 | @as(u32, d1) << 12 | @as(u32, d2) << 6 | d3;
+        buf[made] = @truncate(v >> 16);
+        buf[made + 1] = @truncate(v >> 8);
+        buf[made + 2] = @truncate(v);
+        made += 3;
+    }
+    for (data[start..], start..) |ch, pos| {
         const d = b64_value[ch];
         if (d < 64 and pad == 0) {
             acc = acc << 6 | d;
@@ -772,17 +787,24 @@ const b64_value: [256]u8 = blk: {
     break :blk t;
 };
 
+/// The two base64 characters of each 12-bit value.
+const b64_pairs: [4096][2]u8 = blk: {
+    @setEvalBranchQuota(20000);
+    var t: [4096][2]u8 = undefined;
+    for (0..4096) |v| t[v] = .{ b64[v >> 6], b64[v & 63] };
+    break :blk t;
+};
+
 /// The base64 text of `bytes` with no line breaks. One allocation.
 fn encode64(a: std.mem.Allocator, bytes: []const u8) Error![]const u8 {
     const out = try a.alloc(u8, (bytes.len + 2) / 3 * 4);
     var o: usize = 0;
     var k: usize = 0;
+    // Two characters for each 12 bits, from one table.
     while (k + 3 <= bytes.len) : (k += 3) {
         const v = @as(u32, bytes[k]) << 16 | @as(u32, bytes[k + 1]) << 8 | bytes[k + 2];
-        out[o] = b64[v >> 18];
-        out[o + 1] = b64[(v >> 12) & 63];
-        out[o + 2] = b64[(v >> 6) & 63];
-        out[o + 3] = b64[v & 63];
+        out[o..][0..2].* = b64_pairs[v >> 12];
+        out[o + 2 ..][0..2].* = b64_pairs[v & 0xfff];
         o += 4;
     }
     const rest = bytes.len - k;
