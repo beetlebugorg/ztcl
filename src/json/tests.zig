@@ -6,6 +6,10 @@
 const std = @import("std");
 const index = @import("index.zig");
 const build = @import("build.zig");
+
+test {
+    _ = @import("number.zig");
+}
 const Interp = @import("../interp.zig").Interp;
 const Value = @import("../value.zig").Value;
 
