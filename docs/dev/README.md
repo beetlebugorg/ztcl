@@ -14,6 +14,7 @@ These files are the plans, the task lists, the reviews, and the test results of 
 | [values.md](values.md), [values-tasks/](values-tasks/README.md) | The plan of faster values, and the tasks. |
 | [wasi.md](wasi.md), [wasi-tasks/](wasi-tasks/README.md) | The plan of the WASI target, and the tasks. |
 | [wasm-compile.md](wasm-compile.md), [wasm-compile-tasks/](wasm-compile-tasks/README.md) | The plan of point procs compiled to WebAssembly, and the tasks. |
+| [wasm-aot.md](wasm-aot.md) | The design and the state of procs compiled to WebAssembly functions (`ztcl compile --wasm`). |
 | [ports.md](ports.md) | The plan of the macOS and Windows ports. |
 | [roadmap.md](roadmap.md) | The old roadmap. The issues and the milestones on GitHub replace it. |
 | [release.md](release.md), [npm.md](npm.md) | The release process and the npm package. |
