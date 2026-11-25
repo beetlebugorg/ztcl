@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ztcl · Fast, sandboxed Tcl in Zig</title>
-<meta name="description" content="A sandboxed Tcl interpreter in Zig, with a bytecode VM, a garbage collector, and an optional JIT. It follows Tcl 8.6 and passes 37 383 tests of the Tcl test suite.">
+<title>ztcl · Tcl, compiled</title>
+<meta name="description" content="A Tcl 8.6 interpreter in Zig with an optional JIT, exact step and memory limits, one static binary, and a WebAssembly build. Up to 28 times as fast as tclsh on an integer loop.">
 <link rel="canonical" href="https://beetlebug.org/ztcl/">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
@@ -21,6 +21,7 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
   <a class="logo" href="./"><span class="glyph" aria-hidden="true">tc</span>ztcl</a>
   <nav class="toplinks" aria-label="Site">
     <a href="overview/">Docs</a>
+    <a href="playground/">Playground</a>
     <a class="sib" href="https://beetlebug.org/ztk/">ztk</a>
     <a href="https://github.com/beetlebugorg/ztcl">GitHub</a>
   </nav>
@@ -31,13 +32,13 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
   <div class="wrap">
     <div>
       <span class="pill"><b>Experimental</b> BSD-2-Clause · Zig 0.16</span>
-      <h1>Fast, sandboxed <em>Tcl</em> in Zig.</h1>
-      <p class="sub">ztcl runs Tcl 8.6 scripts on a bytecode VM, with exact step and memory limits. A script reaches the host only through the capabilities that your program gives it.</p>
+      <h1>Tcl, compiled. <em>Up to 28 times faster than tclsh.</em></h1>
+      <p class="sub">On a 10-million-pass integer loop, ztcl with JIT tier 2 runs in 15 ms. tclsh 8.6.16 uses 413 ms. With the JIT off, the bytecode interpreter is 1.6 to 3.5 times as fast as tclsh on the benchmark scripts.</p>
       <div class="actions">
-        <a class="btn primary" href="overview/#build-and-install">Get started</a>
-        <a class="btn ghost" href="https://github.com/beetlebugorg/ztcl">GitHub</a>
+        <a class="btn primary" href="playground/">Try it in your browser</a>
+        <a class="btn ghost" href="overview/#build-and-install">Get started</a>
       </div>
-      <p class="meta">An optional JIT for x86-64 Linux. A WebAssembly build. No dependency outside the Zig standard library.</p>
+      <p class="meta">Exact step and memory limits. One static binary of 2.5 MB. A WebAssembly build. No dependency outside the Zig standard library.</p>
     </div>
     <div class="codecard" aria-label="A code sample">
       <div class="bar"><i></i><i></i><i></i><span>sum.tcl</span></div>
@@ -57,18 +58,18 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
 
 <section class="stats" aria-label="Key numbers">
   <div class="wrap">
-    <div class="stat"><b>37 383</b><span>tests of the Tcl 8.6.16 suite pass, in 152 test files</span></div>
-    <div class="stat"><b>28×</b><span>as fast as tclsh 8.6.16 on a hot integer loop, with JIT tier 2</span></div>
+    <div class="stat"><b>28×</b><span>as fast as tclsh 8.6.16 on an integer loop, with JIT tier 2</span></div>
     <div class="stat"><b>2.6×</b><span>as fast as tclsh 8.6.16 on the same loop, with the interpreter only</span></div>
-    <div class="stat"><b>0</b><span>host commands in a script until the embedder grants one</span></div>
+    <div class="stat"><b>2.5 MB</b><span>one static binary, stripped, with the JIT</span></div>
+    <div class="stat"><b>37 383</b><span>tests of the Tcl 8.6.16 suite pass, in 152 test files</span></div>
   </div>
 </section>
 
 <section class="section" id="performance">
   <div class="wrap">
-    <p class="eyebrow">Performance</p>
-    <h2>Measured against tclsh, with the JIT off and on.</h2>
-    <p class="lede">The interpreter compiles each script to bytecode. The optional JIT compiles hot procs to x86-64 machine code. Tier 2 keeps integer and double loop variables in registers.</p>
+    <p class="eyebrow">Speed and the JIT</p>
+    <h2>A bytecode VM, and a JIT compiler for hot loops.</h2>
+    <p class="lede">The interpreter compiles each script to bytecode. On x86-64 Linux, the optional JIT compiles hot procs to machine code, and tier 2 keeps integer and double loop variables in registers. tclsh 8.6 and 9 have no JIT. The JIT is experimental and off by default.</p>
 
     <div class="split">
       <figure class="chart">
@@ -80,7 +81,7 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
           <dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:15.5%" title="--jit: 64 ms"></span></span><span class="val">64 <small>ms</small></span></dd>
           <dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:3.6%" title="--jit --jit-tier2: 15 ms"></span></span><span class="val">15 <small>ms</small></span></dd>
         </dl>
-        <p class="note">With tier 2, the loop is about 28 times as fast as in tclsh 8.6.16.</p>
+        <p class="note">With tier 2, the loop is about 28 times as fast as in tclsh 8.6.16. With the interpreter only, it is 2.6 times as fast.</p>
       </figure>
       <div>
         <h3>A larger program</h3>
@@ -129,6 +130,30 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
 <dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:10.5%" title="--jit --jit-tier2: 40.6 million instructions"></span></span><span class="val">40.6</span></dd>
 <dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 387.1 million instructions"></span></span><span class="val">387.1</span></dd>
 </dl></figure>
+<figure class="chart"><h4>dict.tcl</h4><dl class="bars">
+<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:50.6%" title="Interpreter: 281.0 million instructions"></span></span><span class="val">281.0</span></dd>
+<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:35.1%" title="--jit: 194.9 million instructions"></span></span><span class="val">194.9</span></dd>
+<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:34.0%" title="--jit --jit-tier2: 188.6 million instructions"></span></span><span class="val">188.6</span></dd>
+<dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 555.3 million instructions"></span></span><span class="val">555.3</span></dd>
+</dl></figure>
+<figure class="chart"><h4>dictgrow.tcl</h4><dl class="bars">
+<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:78.2%" title="Interpreter: 645.6 million instructions"></span></span><span class="val">645.6</span></dd>
+<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:69.3%" title="--jit: 572.4 million instructions"></span></span><span class="val">572.4</span></dd>
+<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:69.1%" title="--jit --jit-tier2: 570.4 million instructions"></span></span><span class="val">570.4</span></dd>
+<dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 825.5 million instructions"></span></span><span class="val">825.5</span></dd>
+</dl></figure>
+<figure class="chart"><h4>readloop.tcl</h4><dl class="bars">
+<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:69.1%" title="Interpreter: 208.9 million instructions"></span></span><span class="val">208.9</span></dd>
+<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:51.2%" title="--jit: 154.7 million instructions"></span></span><span class="val">154.7</span></dd>
+<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:48.6%" title="--jit --jit-tier2: 146.9 million instructions"></span></span><span class="val">146.9</span></dd>
+<dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 302.3 million instructions"></span></span><span class="val">302.3</span></dd>
+</dl></figure>
+<figure class="chart"><h4>strbuild.tcl</h4><dl class="bars">
+<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:39.9%" title="Interpreter: 324.0 million instructions"></span></span><span class="val">324.0</span></dd>
+<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:31.1%" title="--jit: 252.6 million instructions"></span></span><span class="val">252.6</span></dd>
+<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:29.9%" title="--jit --jit-tier2: 243.2 million instructions"></span></span><span class="val">243.2</span></dd>
+<dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 812.4 million instructions"></span></span><span class="val">812.4</span></dd>
+</dl></figure>
 <figure class="chart"><h4>fib.tcl</h4><dl class="bars">
 <dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:27.6%" title="Interpreter: 165.8 million instructions"></span></span><span class="val">165.8</span></dd>
 <dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:22.9%" title="--jit: 137.4 million instructions"></span></span><span class="val">137.4</span></dd>
@@ -136,87 +161,65 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
 <dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 600.9 million instructions"></span></span><span class="val">600.9</span></dd>
 </dl></figure>
     </div>
-    <p class="muted small" style="margin-top:20px"><a href="overview/#benchmarks">The benchmark tables</a> and <a href="testing/#benchmarks">the test page</a> have all results and the commands.</p>
+    <p class="muted small" style="margin-top:20px"><a href="overview/#benchmarks">The benchmark tables</a> and <a href="testing/#benchmarks">the test page</a> have all results and the commands. <a href="overview/#jit-compiler-experimental">The JIT section</a> has the flags.</p>
   </div>
 </section>
 
-<section class="section alt" id="sandbox">
+<section class="section alt" id="limits">
   <div class="wrap">
-    <p class="eyebrow">The sandbox</p>
-    <h2>A script gets only what you grant.</h2>
-    <p class="lede">The default interpreter has no command that reaches the host. <code>puts</code> writes to a callback of your program. Run untrusted scripts with a hard limit on steps and memory.</p>
+    <p class="eyebrow">Exact, deterministic limits</p>
+    <h2>Limits that Tcl does not have.</h2>
+    <p class="lede">The <code>interp limit</code> command of Tcl counts commands and time, and it has no memory limit. ztcl counts steps exactly and puts a hard cap on memory. Your program sets both before it runs a script that it did not write.</p>
     <div class="grid g3">
       <div class="card">
-        <h3>Capabilities, off by default</h3>
-        <p class="muted">Files, sockets, <code>exec</code>, <code>clock</code>, and the event loop are absent until the embedder turns each one on.</p>
+        <h3>An exact step limit</h3>
+        <p class="muted">Each command and each loop pass uses steps. At the limit, the script stops with an error that <code>catch</code> and <code>try</code> cannot catch.</p>
         <ul>
-          <li><code>file</code> and channels stay inside one root folder.</li>
-          <li><code>socket</code> follows a network policy: loopback, an allowlist, or any.</li>
-          <li>A child interp never has more capabilities than its parent.</li>
+          <li>The limit holds in JIT machine code too.</li>
+          <li>No clock is involved, so a slow machine gets the same count.</li>
         </ul>
       </div>
       <div class="card">
-        <h3>Exact limits</h3>
-        <p class="muted">Each interpreter has a step limit and a memory limit. The limits are exact, also with the JIT on.</p>
+        <h3>A hard memory cap</h3>
+        <p class="muted">The heap of an interpreter and its children never goes above twice the memory limit. One command can go over the limit by at most the limit itself.</p>
         <ul>
-          <li>Step limit, memory limit, nesting depth, and native stack.</li>
-          <li>At a limit, the script stops with an error that <code>catch</code> and <code>try</code> cannot catch.</li>
-          <li>A script must not crash the host.</li>
+          <li>A large request stops before the allocation.</li>
+          <li>Nesting limits protect the native stack.</li>
         </ul>
       </div>
       <div class="card">
-        <h3>Deterministic</h3>
-        <p class="muted">With no capability on, the output of a script depends only on the script, the seed, and the inputs of the embedder.</p>
+        <h3>The same stop on each run</h3>
+        <p class="muted">A script stops at the same step on each machine and in each JIT tier. A JIT run gives the same step counts as the interpreter on the whole Tcl test suite.</p>
         <ul>
-          <li>No clock and no timers by default.</li>
-          <li>The same script gives the same result on each run.</li>
+          <li>With no capability on, output depends only on the script, the seed, and the inputs.</li>
+          <li>The collector can move the point of the memory error. <code>--gc off</code> makes it exact.</li>
         </ul>
       </div>
     </div>
-    <div class="callout">
-      <p><b><code>exec</code> is not sandboxed.</b> It is a separate capability. A process from <code>exec</code> runs outside the root folder and outside each limit, with the full power of the user.</p>
-    </div>
-  </div>
-</section>
-
-<section class="section" id="features">
-  <div class="wrap">
-    <p class="eyebrow">Modern features</p>
-    <h2>The Tcl you know, on a new engine.</h2>
-    <p class="lede">ztcl follows the 12 rules of Tcl and the core commands of Tcl 8.6: lists, strings, dicts, arrays, <code>expr</code>, <code>regexp</code>, namespaces, <code>try</code>, <code>apply</code>, <code>lmap</code>, and TclOO. Coroutines work on x86-64 Linux.</p>
-    <div class="grid g3">
-      <div class="card"><span class="tag">Interpreter</span><h3>Bytecode VM</h3><p class="muted">Scripts and proc bodies compile to bytecode. Each command and each loop pass uses one step of the step limit.</p></div>
-      <div class="card"><span class="tag">Memory</span><h3>Garbage collector</h3><p class="muted">A conservative collector frees the values that a script no longer reaches. With <code>--gc off</code>, the point where the memory limit stops a script is exact.</p></div>
-      <div class="card"><span class="tag">Numeric scripts</span><h3>SIMD point procs</h3><p class="muted">A <code>point proc</code> compiles one body to a vector program over blocks of 1024 points. On the fuzzy skin benchmark, it uses about 15 ns for each point against about 230 ns on the normal path.</p></div>
-      <div class="card"><span class="tag">Experimental</span><h3>JIT, tier 1</h3><p class="muted">On x86-64 Linux, <code>--jit</code> compiles proc bodies to machine code. Integer arithmetic, compares, <code>incr</code>, and some list paths run inline. It is off by default.</p></div>
-      <div class="card"><span class="tag">Experimental</span><h3>JIT, tier 2</h3><p class="muted"><code>--jit-tier2</code> compiles a hot loop a second time, with integer and double variables in registers. A failed check exits to tier 1 at the same instruction.</p></div>
-      <div class="card"><span class="tag">Portable</span><h3>WebAssembly</h3><p class="muted"><code>zig build wasm</code> builds <code>ztcl.wasm</code>. The WebAssembly build has the same sandbox and runs on the interpreter.</p></div>
-    </div>
-
-    <div class="split" style="margin-top:56px">
+    <div class="split" style="margin-top:48px">
       <div>
-        <h3>A JIT with safety rules</h3>
-        <p class="muted">The JIT has the same sandbox and the same limits as the interpreter.</p>
+        <h3>Host access is a capability</h3>
+        <p class="muted">The safe interps of Tcl also remove files, sockets, and <code>exec</code>. In ztcl, the default interpreter starts with no host command, and your program turns on each capability with its own policy.</p>
       </div>
       <ul class="checks">
-        <li><b>W^X code memory.</b> Code memory is never writable and executable at once.</li>
-        <li><b>A verifier.</b> It checks each bytecode before the JIT compiles it.</li>
-        <li><b>No script values in code.</b> No value from a script goes into the machine code.</li>
-        <li><b>Differential fuzzing.</b> Fuzzers compare the output of the JIT with the interpreter.</li>
-        <li><b>The same results.</b> A JIT run gives the same results and step counts as the interpreter on the whole Tcl test suite.</li>
+        <li><b><code>file</code> and channels</b> stay inside one root folder.</li>
+        <li><b><code>socket</code></b> follows a network policy: loopback, an allowlist, or any.</li>
+        <li><b>A child interp</b> never has more capabilities than its parent.</li>
+        <li><b><code>exec</code> is not sandboxed.</b> A process from <code>exec</code> runs outside the root folder and outside each limit, with the full power of the user.</li>
       </ul>
     </div>
   </div>
 </section>
 
-<section class="section alt" id="embedding">
+<section class="section" id="embedding">
   <div class="wrap">
     <div class="split">
       <div>
         <p class="eyebrow">Embedding in Zig</p>
-        <h2>Add a scripting language in a few lines.</h2>
-        <p class="lede" style="margin-bottom:24px">ztcl is a Zig package with no other dependency. Set the limits, register your own commands, and evaluate scripts.</p>
+        <h2>One static binary of 2.5 MB, with the JIT.</h2>
+        <p class="lede" style="margin-bottom:24px">ztcl is a Zig package with no dependency outside the Zig standard library. <code>zig fetch</code> adds it, and no C toolchain is necessary. On the benchmark machine, the stripped <code>ztcl</code> binary is 2.5 MB. The <code>libtcl8.6.so</code> of the Linux distribution is 9.2 MB, before its script library.</p>
         <ul class="checks">
+          <li><b>Cross-compiles</b> with <code>zig build -Dtarget=…</code>. From x86-64 Linux, it builds for arm64 Linux, arm64 macOS, x86-64 Windows, and 64-bit RISC-V Linux. CI tests on Linux, macOS, and Windows.</li>
           <li><b><code>register(name, fn)</code></b> adds a native command.</li>
           <li><b><code>output</code></b> is the callback of <code>puts</code>.</li>
           <li><b><code>enableJit(.{})</code></b> turns on the JIT where the build has one.</li>
@@ -246,6 +249,86 @@ it.mem_limit = <span class="n">64</span> &lt;&lt; <span class="n">20</span>;
   </div>
 </section>
 
+<section class="section alt" id="webassembly">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <p class="eyebrow">WebAssembly</p>
+        <h2>The same interpreter in the browser.</h2>
+        <p class="lede" style="margin-bottom:24px"><code>zig build wasm</code> builds a module of 825 KB, or 287 KB with gzip. It has no imports. A page runs scripts that its users write, with the same step limit and memory cap.</p>
+        <ul class="checks">
+          <li><b>A small ES module</b> for the page, a Web Worker, and Node.js.</li>
+          <li><b>Stop in a worker.</b> A long script runs off the main thread, and the page can end it.</li>
+          <li><b>Examples:</b> a REPL, a rule engine with limits, a worker with Cancel, and a Node.js runner.</li>
+        </ul>
+        <div class="actions" style="margin-top:24px">
+          <a class="btn primary" href="playground/">Try it in your browser</a>
+          <a class="btn ghost" href="webassembly/">Read the WebAssembly guide</a>
+        </div>
+      </div>
+      <div class="codecard">
+        <div class="bar"><i></i><i></i><i></i><span>app.js</span></div>
+<pre><code><span class="k">import</span> { Interp } <span class="k">from</span> <span class="s">"./ztcl.mjs"</span>;
+
+<span class="k">const</span> tcl = <span class="k">await</span> Interp.create(<span class="s">"./ztcl.wasm"</span>, {
+  stepLimit: <span class="n">10_000</span>,
+  memLimit: <span class="n">8</span> &lt;&lt; <span class="n">20</span>,
+});
+tcl.eval(<span class="s">"proc price {q u} {expr {$q * $u}}"</span>);
+tcl.eval(<span class="s">"price 3 4.5"</span>);
+<span class="c">// { ok: true, result: "13.5", output: "" }</span>
+tcl.eval(<span class="s">"while 1 {}"</span>);
+<span class="c">// { ok: false, result: "step limit reached", output: "" }</span></code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="point-procs">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <p class="eyebrow">Numeric scripts</p>
+        <h2>SIMD point procs, about 15 ns for each point.</h2>
+        <p class="lede" style="margin-bottom:24px">A <code>point proc</code> compiles one body to a vector program that runs over blocks of 1024 points. Your program gives it arrays of coordinates and gets arrays of results.</p>
+        <p class="muted">On the fuzzy skin benchmark over 10 million points, the vector path uses about 15 ns for each point. The normal path uses about 230 ns. The two paths give the same results, bit for bit.</p>
+        <p style="margin-top:24px"><a class="btn ghost" href="embedding/#point-procs">Read about point procs</a></p>
+      </div>
+      <div class="codecard">
+        <div class="bar"><i></i><i></i><i></i><span>fuzzy.tcl</span></div>
+<pre><code><span class="k">point proc</span> fuzzy {x y z feature} {
+    <span class="k">if</span> {<span class="v">$feature</span> ne <span class="s">"outer_wall"</span>} { <span class="k">return</span> }
+    <span class="k">set</span> n [noise3 <span class="v">$x</span> <span class="v">$y</span> [<span class="k">expr</span> {<span class="v">$z</span> * <span class="n">4</span>}]]
+    offset [<span class="k">expr</span> {<span class="v">$n</span> * <span class="n">0.3</span>}]
+}</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="testing">
+  <div class="wrap">
+    <p class="eyebrow">Tested hard</p>
+    <h2>37 383 passing tests of the Tcl suite.</h2>
+    <p class="lede">The test suite of Tcl 8.6.16 is the measure of compatibility. ztcl follows the 12 rules of Tcl and the core commands of Tcl 8.6: lists, strings, dicts, arrays, <code>expr</code>, <code>regexp</code>, namespaces, <code>try</code>, <code>apply</code>, <code>lmap</code>, and TclOO.</p>
+    <div class="split">
+      <ul class="checks">
+        <li><b>The Tcl suite.</b> 37 383 of 46 494 tests pass in all 152 files (80.4 %). The suite also runs with the JIT on for each proc.</li>
+        <li><b>Differential fuzzing.</b> <code>zig build jit-fuzz</code> compares random programs in the interpreter and in the JIT, and fuzzes the assembler and the verifier.</li>
+        <li><b>A comparison tool.</b> <code>tools/jit-diff.sh</code> compares the output, errors, and steps of the JIT and the interpreter on the test scripts.</li>
+        <li><b>Stress modes.</b> <code>--jit-stress</code> forces the rare paths of the compiler, and <code>--gc-stress N</code> starts a collection at each Nth allocation.</li>
+      </ul>
+      <ul class="checks">
+        <li><b>W^X code memory.</b> Code memory is never writable and executable at once.</li>
+        <li><b>A verifier.</b> It checks each bytecode before the JIT compiles it.</li>
+        <li><b>No script values in code.</b> No value from a script goes into the machine code.</li>
+        <li><b>A code scan.</b> <code>tools/jit-scan.sh</code> searches the machine code for the constants of a script.</li>
+      </ul>
+    </div>
+    <p class="muted small" style="margin-top:20px"><a href="compatibility/">Compatibility</a> has the result for each test file, and <a href="testing/">Tests and benchmarks</a> has the commands.</p>
+  </div>
+</section>
+
 <section class="section" id="status">
   <div class="wrap">
     <p class="eyebrow">Status</p>
@@ -253,11 +336,11 @@ it.mem_limit = <span class="n">64</span> &lt;&lt; <span class="n">20</span>;
     <p class="lede">ztcl aims to become a complete drop-in replacement for Tcl. It is not one yet. APIs and behavior can change in any release.</p>
     <ul class="status">
       <li><span class="st ok">Works</span><span>Tcl 8.6.16 test suite: 37 383 of 46 494 tests pass in all 152 files (80.4 %). <a href="compatibility/">Compatibility</a> has the result for each file.</span></li>
-      <li><span class="st ok">Works</span><span>The interpreter, the garbage collector, point procs, and the WebAssembly build.</span></li>
+      <li><span class="st ok">Works</span><span>The interpreter, point procs, and the WebAssembly build.</span></li>
       <li><span class="st wip">Experimental</span><span>The JIT on x86-64 Linux. It is off by default. Turn it on with <code>--jit</code> and <code>--jit-tier2</code>.</span></li>
       <li><span class="st wip">In progress</span><span>The JIT on arm64 macOS.</span></li>
       <li><span class="st wip">In progress</span><span>The speed of TclOO method calls. <code>bf_oo</code> uses 1.33 times the instructions of tclsh 8.6.16.</span></li>
-      <li><span class="st no">Open bugs</span><span>Two bugs of the limits: <a href="https://github.com/beetlebugorg/ztcl/issues/5">a memory limit bug (#5)</a> and <a href="https://github.com/beetlebugorg/ztcl/issues/6">a step limit cost bug (#6)</a>.</span></li>
+      <li><span class="st no">Open bug</span><span><a href="https://github.com/beetlebugorg/ztcl/issues/6">A step limit cost bug (#6)</a>: a recheck after an epoch change costs O(n²) CPU time.</span></li>
       <li><span class="st plan">Note</span><span>The code and the docs were written largely with AI coding agents, under human direction. Review the code before you depend on it.</span></li>
     </ul>
 
@@ -292,6 +375,8 @@ it.mem_limit = <span class="n">64</span> &lt;&lt; <span class="n">20</span>;
   <span>ztcl · BSD-2-Clause</span>
   <span class="right">
     <a href="overview/">Docs</a>
+    <a href="playground/">Playground</a>
+    <a href="webassembly/">WebAssembly</a>
     <a href="language/">Language</a>
     <a href="changelog/">Changelog</a>
     <a href="https://beetlebug.org/ztk/">ztk</a>
