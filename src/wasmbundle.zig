@@ -191,7 +191,9 @@ pub fn patch(a: Allocator, base: []const u8, payload: []const u8) PatchError![]u
             have_mem = true;
         } else if (s.id == 11) {
             data_count = try r.uleb();
-            for (0..data_count) |_| {
+            // A u64 count, so the loop also builds on wasm32.
+            var seen: u64 = 0;
+            while (seen < data_count) : (seen += 1) {
                 switch (try r.uleb()) {
                     0 => try r.constExpr(),
                     1 => {},
