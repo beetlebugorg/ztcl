@@ -44,6 +44,15 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = Linux ]; then ulimit -v 6000000; fi
           test "$(zig build run -- bench/sum.tcl | tr -d '\r')" = 499999500000
+      - name: Check the format
+        if: runner.os == 'Linux'
+        run: zig fmt --check build.zig src
+      # A gc-precise build uses the root rules of WebAssembly and has no JIT.
+      - name: Test the gc-precise build
+        if: runner.os == 'Linux'
+        run: |
+          ulimit -v 6000000
+          zig build test -Dgc-precise=true
 
   suite:
     name: Tcl 8.6.16 suite
