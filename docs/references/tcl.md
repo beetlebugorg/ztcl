@@ -86,6 +86,14 @@ Donald E. Knuth, The Art of Computer Programming, Volume 3, section 6.4.
 
 **How ztcl uses it:** `src/bigint.zig` calls it for the arithmetic. The results and the error messages follow `tclsh` 8.6.16.
 
+### Substring search
+
+R. Nigel Horspool, "Practical fast searching in strings", Software: Practice and Experience 10(6), 1980.
+
+**License:** Paper
+
+**How ztcl uses it:** `string first` and `string last` in `src/cmds.zig` use the skip table of the paper, forward and in reverse. ztcl has its own code. Each compare of the needle uses units of the step limit.
+
 ## Not used
 
 Jim Tcl (https://jim.tcl-lang.org/, BSD 2-Clause) is a small Tcl in C. The authors did not read its source for this interpreter, and ztcl has no code of it.

@@ -486,6 +486,11 @@ pub const VarEntry = struct { name: []const u8, cell: *Var };
 
 pub const Frame = struct {
     vars: std.ArrayList(VarEntry) = .empty,
+    /// A hash index of `vars` for a frame with many variables: the
+    /// position of the first entry of each name. It covers the first
+    /// `indexed` entries. A frame with few variables has no index.
+    index: std.StringHashMapUnmanaged(u32) = .empty,
+    indexed: u32 = 0,
     /// The words of the call, for `info level`.
     argv: []const Value = &.{},
     parent: ?*Frame = null,
@@ -495,6 +500,44 @@ pub const Frame = struct {
     ns: ?[]const u8 = null,
     /// The namespace where the code of the frame runs.
     space: []const u8 = "",
+
+    /// The frames with at least this many variables use the index.
+    const index_from = 32;
+
+    /// The position of the first entry of a name, or null. A frame with
+    /// many variables first adds its new entries to the index, so the
+    /// cost of a search does not grow with the count of variables. If
+    /// the index cannot grow, the search reads each entry.
+    pub inline fn find(f: *Frame, a: Allocator, name: []const u8) ?usize {
+        if (f.vars.items.len >= index_from) return f.findIndexed(a, name);
+        return linear(f.vars.items, name);
+    }
+
+    fn linear(items: []const VarEntry, name: []const u8) ?usize {
+        for (items, 0..) |e, i| if (Interp.sameName(e.name, name)) return i;
+        return null;
+    }
+
+    noinline fn findIndexed(f: *Frame, a: Allocator, name: []const u8) ?usize {
+        const items = f.vars.items;
+        while (f.indexed < items.len) : (f.indexed += 1) {
+            const gop = f.index.getOrPut(a, items[f.indexed].name) catch return linear(items, name);
+            if (!gop.found_existing) gop.value_ptr.* = f.indexed;
+        }
+        return if (f.index.get(name)) |i| i else null;
+    }
+
+    /// Removes each entry, and keeps the capacity.
+    pub inline fn clear(f: *Frame) void {
+        f.vars.clearRetainingCapacity();
+        if (f.indexed != 0) f.dropIndex();
+    }
+
+    noinline fn dropIndex(f: *Frame) void {
+        @branchHint(.cold);
+        f.index.clearRetainingCapacity();
+        f.indexed = 0;
+    }
 };
 
 // ---- Commands ----
@@ -522,6 +565,103 @@ pub const Command = struct {
     ctx: ?*anyopaque = null,
     /// The command and execution traces.
     traces: ?*trace.CmdTraces = null,
+};
+
+/// The command table: a hash map from the full name to the command. It
+/// also counts the keys in a namespace whose last part is an inlined
+/// name of the bytecode. With the count, the guard of the bytecode
+/// checks the table with a fixed number of lookups (`vm.recheck`).
+/// The first check counts the keys one time. Each later change of the
+/// table then updates the count, so the start of an interpreter does
+/// not test each new key.
+pub const Commands = struct {
+    pub const Map = std.StringHashMapUnmanaged(*Command);
+    map: Map = .empty,
+    /// The keys with "::" whose last part is an inlined name. It is
+    /// valid only when `counted` is true.
+    shadows: u32 = 0,
+    counted: bool = false,
+
+    pub const empty: Commands = .{};
+
+    /// True for a key with "::" whose last part is an inlined name. The
+    /// test reads only the end of the key: for each length of an
+    /// inlined name that ends with the last byte, it checks for "::"
+    /// before that many bytes.
+    fn shadow(key: []const u8) bool {
+        var lens = vm.inline_lens[if (key.len > 0) key[key.len - 1] else 0];
+        while (lens != 0) : (lens &= lens - 1) {
+            const k = @ctz(lens);
+            if (key.len < k + 2) break;
+            const at = key.len - k;
+            if (key[at - 1] == ':' and key[at - 2] == ':') return vm.isInlineName(key[at..]);
+        }
+        return false;
+    }
+
+    /// The count of shadows. The first call reads each key.
+    pub fn shadowCount(t: *Commands) u32 {
+        if (!t.counted) {
+            var n: u32 = 0;
+            var iter = t.map.keyIterator();
+            while (iter.next()) |k| {
+                if (shadow(k.*)) n += 1;
+            }
+            t.shadows = n;
+            t.counted = true;
+        }
+        return t.shadows;
+    }
+
+    pub fn count(t: *const Commands) u32 {
+        return t.map.count();
+    }
+
+    pub fn get(t: *const Commands, key: []const u8) ?*Command {
+        return t.map.get(key);
+    }
+
+    pub fn getKey(t: *const Commands, key: []const u8) ?[]const u8 {
+        return t.map.getKey(key);
+    }
+
+    pub fn contains(t: *const Commands, key: []const u8) bool {
+        return t.map.contains(key);
+    }
+
+    pub fn iterator(t: *const Commands) Map.Iterator {
+        return t.map.iterator();
+    }
+
+    pub fn keyIterator(t: *const Commands) Map.KeyIterator {
+        return t.map.keyIterator();
+    }
+
+    pub fn put(t: *Commands, a: Allocator, key: []const u8, c: *Command) Allocator.Error!void {
+        const gop = try t.map.getOrPut(a, key);
+        if (t.counted and !gop.found_existing and shadow(key)) t.shadows += 1;
+        gop.value_ptr.* = c;
+    }
+
+    pub fn remove(t: *Commands, key: []const u8) bool {
+        return t.fetchRemove(key) != null;
+    }
+
+    pub fn fetchRemove(t: *Commands, key: []const u8) ?Map.KV {
+        const kv = t.map.fetchRemove(key) orelse return null;
+        if (t.counted and shadow(kv.key)) t.shadows -= 1;
+        return kv;
+    }
+
+    pub fn ensureTotalCapacity(t: *Commands, a: Allocator, n: u32) Allocator.Error!void {
+        return t.map.ensureTotalCapacity(a, n);
+    }
+
+    pub fn getOrPutAssumeCapacity(t: *Commands, key: []const u8) Map.GetOrPutResult {
+        const gop = t.map.getOrPutAssumeCapacity(key);
+        if (t.counted and !gop.found_existing and shadow(key)) t.shadows += 1;
+        return gop;
+    }
 };
 
 /// Where `puts` writes.
@@ -712,7 +852,7 @@ pub const Interp = struct {
     /// next command or loop pass stops the script with an error, and
     /// `catch` cannot catch this error. Call `reset` to free the memory.
     mem_limit: usize = std.math.maxInt(usize),
-    commands: std.StringHashMapUnmanaged(*Command) = .empty,
+    commands: Commands = .empty,
     /// Changes when a command is added, renamed, or deleted. A command
     /// site keeps its looked-up command only for the same epoch.
     epoch: u32 = 1,
@@ -1670,12 +1810,9 @@ pub const Interp = struct {
         if (h < vars.len and sameName(vars[h].name, name)) {
             cell = vars[h].cell;
         } else {
-            cell = for (vars, 0..) |e, i| {
-                if (sameName(e.name, name)) {
-                    hint.* = @intCast(i);
-                    break e.cell;
-                }
-            } else return null;
+            const i = it.frame.find(it.alloc(), name) orelse return null;
+            hint.* = @intCast(i);
+            cell = vars[i].cell;
         }
         return cell.settle();
     }
@@ -1902,7 +2039,7 @@ pub const Interp = struct {
         if (it.depth >= it.max_depth) return it.fail("too many nested evaluations (infinite loop?)", .{});
         it.depth += 1;
         const f = it.free_frames.pop() orelse try it.newFrame();
-        f.vars.clearRetainingCapacity();
+        f.clear();
         f.argv = argv;
         f.parent = it.frame;
         f.ns = null;
@@ -2182,19 +2319,19 @@ pub const Interp = struct {
                 f = &it.global;
                 if (it.ns.len > 0) {
                     const full = try it.qualify(name);
-                    if (lookup(f, full)) |c| return c;
-                    if (lookup(f, name)) |c| return c;
+                    if (it.lookup(f, full)) |c| return c;
+                    if (it.lookup(f, name)) |c| return c;
                     name = full;
                 }
             }
         }
-        if (lookup(f, name)) |c| return c;
+        if (it.lookup(f, name)) |c| return c;
         if (f.ns) |space| {
             // A frame of `namespace eval`: the variable of the namespace,
             // then the global variable.
             const full = try std.fmt.allocPrint(it.alloc(), "{s}::{s}", .{ space, name });
-            var target = lookup(&it.global, full);
-            if (target == null) target = lookup(&it.global, name);
+            var target = it.lookup(&it.global, full);
+            if (target == null) target = it.lookup(&it.global, name);
             if (target == null and !create) return null;
             if (target == null) {
                 target = try it.newCell();
@@ -2214,32 +2351,27 @@ pub const Interp = struct {
     /// The global cell with exactly this full name, made when it is
     /// not there.
     pub fn globalVar(it: *Interp, full: []const u8) Allocator.Error!*Var {
-        if (lookup(&it.global, full)) |c| return c;
+        if (it.lookup(&it.global, full)) |c| return c;
         const cell = try it.newCell();
         try it.global.vars.append(it.alloc(), .{ .name = try it.alloc().dupe(u8, full), .cell = cell });
         return cell;
     }
 
-    fn lookup(f: *Frame, name: []const u8) ?*Var {
-        for (f.vars.items) |e| {
-            if (sameName(e.name, name)) {
-                return e.cell.settle();
-            }
-        }
-        return null;
+    inline fn lookup(it: *Interp, f: *Frame, name: []const u8) ?*Var {
+        const i = f.find(it.alloc(), name) orelse return null;
+        return f.vars.items[i].cell.settle();
     }
 
     /// Makes `name` in the current frame a link to `target`.
     pub fn linkVar(it: *Interp, name: []const u8, target: *Var) Error!void {
-        for (it.frame.vars.items) |e| {
-            if (std.mem.eql(u8, e.name, name)) {
-                if (e.cell == target) return;
-                if (e.cell.v == .link or e.cell.v == .undef) {
-                    e.cell.v = .{ .link = target };
-                    return;
-                }
-                return it.fail("variable \"{s}\" already exists", .{name});
+        if (it.frame.find(it.alloc(), name)) |i| {
+            const e = it.frame.vars.items[i];
+            if (e.cell == target) return;
+            if (e.cell.v == .link or e.cell.v == .undef) {
+                e.cell.v = .{ .link = target };
+                return;
             }
+            return it.fail("variable \"{s}\" already exists", .{name});
         }
         const cell = try it.newCell();
         cell.v = .{ .link = target };

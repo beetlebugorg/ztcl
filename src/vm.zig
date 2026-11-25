@@ -178,38 +178,46 @@ const Access = enum(u8) { llength, lindex, string_length, string_index };
 
 /// True when each inlined name is the original core command, in the
 /// global namespace, and no namespace has a command of the same name.
-/// Runs one time for each change of the epoch.
+/// Runs one time for each change of the epoch. The command table counts
+/// the keys in a namespace with an inlined name, so the check does one
+/// lookup for each inlined name. Its cost does not grow with the count
+/// of commands, except at the first check, which counts the keys.
 fn recheck(it: *Interp) bool {
     if (it.unsafe_epoch == it.epoch) return false;
-    if (it.var_traces != 0) {
+    if (it.var_traces != 0 or it.commands.shadowCount() != 0) {
         it.unsafe_epoch = it.epoch;
         return false;
     }
-    var found: usize = 0;
-    var iter = it.commands.iterator();
-    while (iter.next()) |e| {
-        const key = e.key_ptr.*;
-        const tail = if (std.mem.lastIndexOf(u8, key, "::")) |i| key[i + 2 ..] else key;
-        if (!isInlineName(tail)) continue;
-        const original = e.value_ptr.*.impl == .native and e.value_ptr.*.impl.native == cmds.coreFn(tail);
-        if (tail.len != key.len or !original) {
+    inline for (inline_names) |name| {
+        const c = it.commands.get(name);
+        const original = c != null and c.?.impl == .native and c.?.impl.native == comptime cmds.coreFn(name).?;
+        if (!original) {
             it.unsafe_epoch = it.epoch;
             return false;
         }
-        found += 1;
-    }
-    if (found != inline_names.len) {
-        it.unsafe_epoch = it.epoch;
-        return false;
     }
     it.safe_epoch = it.epoch;
     return true;
 }
 
-fn isInlineName(s: []const u8) bool {
-    if (s.len < 2 or s.len > 8) return false;
-    for (inline_names) |n| if (std.mem.eql(u8, n, s)) return true;
-    return false;
+/// The inlined names as a table that compares only the names of the
+/// same length.
+const inline_table = blk: {
+    var pairs: [inline_names.len]struct { []const u8 } = undefined;
+    for (inline_names, 0..) |n, k| pairs[k] = .{n};
+    break :blk std.StaticStringMap(void).initComptime(pairs);
+};
+
+/// For each byte, a bit for each length of an inlined name that ends
+/// with the byte.
+pub const inline_lens: [256]u16 = blk: {
+    var t: [256]u16 = @splat(0);
+    for (inline_names) |n| t[n[n.len - 1]] |= 1 << n.len;
+    break :blk t;
+};
+
+pub fn isInlineName(s: []const u8) bool {
+    return inline_table.has(s);
 }
 
 // ---- The compiler ----
