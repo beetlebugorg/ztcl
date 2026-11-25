@@ -230,21 +230,6 @@ fn cmdErrorproc(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return Value.empty;
 }
 
-/// Waits while the queue of `id` has at least `mark` messages.
-fn waitMark(it: *Interp, me: *Worker, id: u64) Error!void {
-    const g = me.group;
-    g.lock.lock();
-    const w = g.find(id);
-    const mark = if (w) |x| x.eventmark else 0;
-    g.lock.unlock();
-    if (mark == 0) return;
-    while (true) {
-        const n = thread.queueLen(g, id) orelse return;
-        if (n < mark) return;
-        if (!try thread.serve(it, 1)) try thread.nap(it, std.time.ns_per_ms);
-    }
-}
-
 fn cmdSend(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var i: usize = 1;
     var async_send = false;
@@ -277,7 +262,7 @@ fn cmdSend(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         return finishOwn(it, c);
     }
     if (async_send) {
-        try waitMark(it, me, id);
+        try thread.waitRoom(it, id);
         thread.sendScript(me, id, script, 0, var_name, head) catch |e| return thread.sendError(it, e, id);
         return Value.empty;
     }
