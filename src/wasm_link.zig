@@ -153,11 +153,15 @@ pub fn read(a: Allocator, bytes: []const u8) Error!Runtime {
 
 pub const Func = struct { t: w.FuncType, code: []const u8 };
 
+pub const Data = struct { offset: u32, bytes: []const u8 };
+
 pub const Extra = struct {
     funcs: []const Func = &.{},
     globals: []const w.Global = &.{},
     exports: []const w.Export = &.{},
     memory: w.Limits,
+    /// Active data segments of memory 0.
+    datas: []const Data = &.{},
     customs: []const w.Custom = &.{},
 };
 
@@ -220,6 +224,23 @@ pub fn link(a: Allocator, rt: *const Runtime, x: Extra) Error![]u8 {
             7 => {
                 try w.uleb(&body, a, x.exports.len);
                 for (x.exports) |e| try e.encode(&body, a);
+            },
+            11 => {
+                for (x.datas) |d| {
+                    try items.append(a, 0);
+                    try items.append(a, 0x41);
+                    try w.sleb(&items, a, @as(i32, @bitCast(d.offset)));
+                    try items.append(a, 0x0b);
+                    try w.uleb(&items, a, d.bytes.len);
+                    try items.appendSlice(a, d.bytes);
+                }
+                if (find(rt, 11) == null and x.datas.len == 0) continue;
+                try extend(&body, a, find(rt, 11), x.datas.len, items.items);
+            },
+            12 => {
+                const s = find(rt, 12) orelse continue;
+                var r: w.Reader = .{ .bytes = s };
+                try w.uleb(&body, a, (try r.uleb32()) + x.datas.len);
             },
             10 => {
                 for (x.funcs) |f| try items.appendSlice(a, f.code);

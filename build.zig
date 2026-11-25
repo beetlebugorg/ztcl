@@ -218,6 +218,14 @@ fn addPointRuntime(b: *std.Build, mods: []const *std.Build.Module, fast: *std.Bu
         .imports = &.{.{ .name = "ztcl", .module = fast }},
     }) });
     step.dependOn(&b.addInstallArtifact(ref, .{}).step);
+    // The native side of tools/point-wasm-diff.mjs.
+    const wasm_ref = b.addExecutable(.{ .name = "point-wasm-ref", .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/point-wasm-ref.zig"),
+        .target = fast.resolved_target.?,
+        .optimize = .ReleaseFast,
+        .imports = &.{.{ .name = "ztcl", .module = fast }},
+    }) });
+    step.dependOn(&b.addInstallArtifact(wasm_ref, .{}).step);
 }
 
 /// The thread model of a WebAssembly build. `none` has no thread

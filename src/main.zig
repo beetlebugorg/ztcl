@@ -242,6 +242,13 @@ fn tclshError(it: *tcl.Interp, e: tcl.Error) noreturn {
     leave(it, 0);
 }
 
+/// True for `ztcl compile FILE -proc NAME ...`, the compile of a point
+/// proc (`src/compilecmd.zig`). Other forms go to `src/compile.zig`.
+fn isPointCompile(args: []const [:0]const u8) bool {
+    for (args) |a| if (std.mem.eql(u8, a, "-proc")) return true;
+    return false;
+}
+
 /// Runs the runner. `setup` adds commands to the interpreter: the
 /// suite runner passes its test commands here.
 pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!void) !void {
@@ -250,6 +257,13 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     host_io = io;
     const args = try init.minimal.args.toSlice(arena);
     host_preopens = init.preopens;
+    if (args.len > 1 and std.mem.eql(u8, args[1], "compile") and isPointCompile(args[2..])) {
+        var out_buf: [4096]u8 = undefined;
+        var out_w: Io.File.Writer = .init(.stdout(), io, &out_buf);
+        const code = try @import("compilecmd.zig").run(io, init.gpa, arena, args[2..], &out_w.interface);
+        out_w.interface.flush() catch {};
+        std.process.exit(code);
+    }
     if (args.len > 1 and std.mem.eql(u8, args[1], "compile")) std.process.exit(try @import("compile.zig").run(init, args[2..]));
 
     var out_buf: [1 << 16]u8 = undefined;
