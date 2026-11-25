@@ -389,9 +389,12 @@ pub const Worker = struct {
     mem_limit: usize = std.math.maxInt(usize),
     /// The steps that the thread got from `total_steps`.
     steps: u64 = 0,
-    /// An eventfd that a new message makes readable, for the poll of
-    /// the event loop. It is -1 until the loop of the thread polls.
+    /// A descriptor that a new message makes readable, for the poll of
+    /// the event loop: an eventfd on Linux, and the read end of a pipe
+    /// on macOS. It is -1 until the loop of the thread polls.
     wake_fd: std.atomic.Value(i32) = .init(-1),
+    /// The write end of the pipe on macOS. It is set before `wake_fd`.
+    wake_wr: std.atomic.Value(i32) = .init(-1),
     /// The text of the start script, in group memory.
     script: []u8 = &.{},
     /// A pool worker: the pool and its loop.
@@ -834,12 +837,11 @@ fn startOf(it: *Interp) Error!Start {
         .fs_cwd = "",
         .fs_path = "",
     };
-    if (comptime builtin.os.tag == .linux) {
+    if (comptime fd_os) {
         if (root.fs.fd >= 0) {
             st.fs_cwd = root.fs.cwd;
             st.fs_path = root.fs.path;
-            const rc = std.os.linux.fcntl(root.fs.fd, std.os.linux.F.DUPFD_CLOEXEC, 3);
-            if (std.os.linux.errno(rc) == .SUCCESS) st.fs_fd = @intCast(rc);
+            st.fs_fd = dupFd(root.fs.fd);
         }
     }
     return st;
@@ -857,7 +859,7 @@ fn setup(w: *Worker, x: *Interp, st: Start) Allocator.Error!void {
     x.gc_on = st.gc_on;
     if (st.gc_stress != 0) x.setGcStress(st.gc_stress);
     if (st.jit) |o| _ = x.enableJit(o);
-    if (comptime builtin.os.tag == .linux) {
+    if (comptime fd_os) {
         if (st.fs_fd >= 0) {
             x.fs.fd = st.fs_fd;
             x.fs.cwd = try x.alloc().dupe(u8, st.fs_cwd);
@@ -923,8 +925,8 @@ fn topScope(x: *Interp, comptime f: anytype, args: anytype) @typeInfo(@TypeOf(f)
 }
 
 fn failStart(w: *Worker, st: Start) void {
-    if (comptime builtin.os.tag == .linux) {
-        if (st.fs_fd >= 0) _ = std.os.linux.close(st.fs_fd);
+    if (comptime fd_os) {
+        if (st.fs_fd >= 0) closeFd(st.fs_fd);
     }
     const g = w.group;
     g.lock.lock();
@@ -1061,47 +1063,93 @@ pub fn pushMsg(w: *Worker, m: *Msg, head: bool) void {
     } else |_| m.destroy(w.group.alloc());
 }
 
+/// Linux and macOS give a thread the root folder and a wake descriptor.
+const fd_os = builtin.os.tag == .linux or builtin.os.tag.isDarwin();
+
+/// A copy of `fd` at 3 or above that closes on exec, or -1.
+fn dupFd(fd: i32) i32 {
+    if (comptime builtin.os.tag == .linux) {
+        const rc = std.os.linux.fcntl(fd, std.os.linux.F.DUPFD_CLOEXEC, 3);
+        return if (std.os.linux.errno(rc) == .SUCCESS) @intCast(rc) else -1;
+    }
+    const rc = std.c.fcntl(fd, std.c.F.DUPFD_CLOEXEC, @as(c_int, 3));
+    return if (rc >= 0) rc else -1;
+}
+
+fn closeFd(fd: i32) void {
+    if (comptime builtin.os.tag == .linux) {
+        _ = std.os.linux.close(fd);
+    } else _ = std.c.close(fd);
+}
+
 /// Makes the wake descriptor of `w` readable. The caller holds the
 /// group lock, so the descriptor stays open.
 fn poke(w: *Worker) void {
-    if (comptime builtin.os.tag != .linux) return;
+    if (comptime !fd_os) return;
     const fd = w.wake_fd.load(.acquire);
     if (fd < 0) return;
-    const one: u64 = 1;
-    _ = std.os.linux.write(fd, std.mem.asBytes(&one), 8);
+    if (comptime builtin.os.tag == .linux) {
+        const one: u64 = 1;
+        _ = std.os.linux.write(fd, std.mem.asBytes(&one), 8);
+    } else {
+        // A full pipe is readable already, so a failed write is fine.
+        const one: u8 = 1;
+        _ = std.c.write(w.wake_wr.load(.acquire), @ptrCast(&one), 1);
+    }
 }
 
 /// The wake descriptor of the thread of `it`, or -1. The event loop
 /// polls it with the channels, so a message ends the poll at once.
 pub fn wakeFd(it: *Interp) i32 {
-    if (comptime builtin.os.tag != .linux) return -1;
+    if (comptime !fd_os) return -1;
     const w = it.worker orelse return -1;
     const fd = w.wake_fd.load(.acquire);
     if (fd >= 0) return fd;
-    const linux = std.os.linux;
-    const rc = linux.eventfd(0, linux.EFD.CLOEXEC | linux.EFD.NONBLOCK);
-    if (linux.errno(rc) != .SUCCESS) return -1;
-    const new: i32 = @intCast(rc);
-    w.wake_fd.store(new, .release);
-    return new;
+    if (comptime builtin.os.tag == .linux) {
+        const linux = std.os.linux;
+        const rc = linux.eventfd(0, linux.EFD.CLOEXEC | linux.EFD.NONBLOCK);
+        if (linux.errno(rc) != .SUCCESS) return -1;
+        const new: i32 = @intCast(rc);
+        w.wake_fd.store(new, .release);
+        return new;
+    }
+    // macOS has no eventfd: a pipe with both ends nonblocking.
+    var fds: [2]std.c.fd_t = undefined;
+    if (std.c.pipe(&fds) != 0) return -1;
+    const nonblock: c_int = @bitCast(@as(u32, @bitCast(std.c.O{ .NONBLOCK = true })));
+    for (fds) |f| {
+        _ = std.c.fcntl(f, std.c.F.SETFL, nonblock);
+        _ = std.c.fcntl(f, std.c.F.SETFD, @as(c_int, std.c.FD_CLOEXEC));
+    }
+    w.wake_wr.store(fds[1], .release);
+    w.wake_fd.store(fds[0], .release);
+    return fds[0];
 }
 
 /// Reads the count of the wake descriptor of the thread of `it`.
 pub fn drainWake(it: *Interp) void {
-    if (comptime builtin.os.tag != .linux) return;
+    if (comptime !fd_os) return;
     const w = it.worker orelse return;
     const fd = w.wake_fd.load(.acquire);
     if (fd < 0) return;
-    var n: u64 = 0;
-    _ = std.os.linux.read(fd, std.mem.asBytes(&n), 8);
+    if (comptime builtin.os.tag == .linux) {
+        var n: u64 = 0;
+        _ = std.os.linux.read(fd, std.mem.asBytes(&n), 8);
+        return;
+    }
+    var buf: [64]u8 = undefined;
+    while (std.c.read(fd, &buf, buf.len) == buf.len) {}
 }
 
 /// Closes the wake descriptor of `w`. No other thread holds `w`.
 fn closeWake(w: *Worker) void {
-    if (comptime builtin.os.tag != .linux) return;
+    if (comptime !fd_os) return;
     const fd = w.wake_fd.load(.acquire);
-    if (fd >= 0) _ = std.os.linux.close(fd);
+    if (fd >= 0) closeFd(fd);
     w.wake_fd.store(-1, .release);
+    const wr = w.wake_wr.load(.acquire);
+    if (wr >= 0) closeFd(wr);
+    w.wake_wr.store(-1, .release);
 }
 
 /// Sends an error reply to a sender, when it still runs.
