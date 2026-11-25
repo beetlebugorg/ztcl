@@ -1590,7 +1590,7 @@ pub inline fn opStringLength(comptime named: bool, it: *Interp, f: *Frame, code:
     _ = .{ named, f, code, i };
     // A copy first: the new union overlaps the old one.
     const v = stack[sp - 1];
-    const n = cmds.charCount(try it.str(v));
+    const n = cmds.charCountOf(it, try it.str(v));
     stack[sp - 1] = .{ .int = @intCast(n) };
 }
 

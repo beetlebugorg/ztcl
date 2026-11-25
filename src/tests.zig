@@ -704,6 +704,17 @@ test "string commands count characters" {
     });
 }
 
+test "the count cache of long strings stays true" {
+    try check(&.{
+        // A long string with one non-ASCII character, read two times.
+        .{ "set s [string repeat abcd 100]\\u00e9; list [string length $s] [string index $s end] [string length $s] [string index $s 399]", "401 \u{e9} 401 d" },
+        // An append that grows the buffer in place gives a new length.
+        .{ "set s [string repeat x 300]; set n [string length $s]; append s \\u00e9\\u00e9; list $n [string length $s] [string index $s 301]", "300 302 \u{e9}" },
+        // A prefix of a counted string has its own count.
+        .{ "set a [string repeat ab 200]; string length $a; set a [string range $a 0 397]\\u00e9; list [string length $a] [string bytelength $a]", "399 400" },
+    });
+}
+
 test "more dict subcommands and binary encode" {
     try check(&.{
         .{ "dict remove {a 1 b 2 c 3} b z", "a 1 c 3" },

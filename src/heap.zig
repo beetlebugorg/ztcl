@@ -155,6 +155,13 @@ pub const Heap = struct {
     /// The span of the last address that the mark found.
     last: ?*Span = null,
     stress_left: u32 = 0,
+    /// The character counts of the last long strings in heap blocks.
+    /// The bytes of a block do not change while the block is live, so
+    /// an entry stays true until a sweep or a reset frees blocks.
+    counts: [4]Count = @splat(.{}),
+    next_count: u8 = 0,
+
+    pub const Count = struct { ptr: usize = 0, len: usize = 0, n: usize = 0 };
 
     pub const Range = struct { ptr: usize, len: usize, stack: bool = false };
 
@@ -186,6 +193,23 @@ pub const Heap = struct {
         h.bytes = 0;
         h.live_bytes = 0;
         h.threshold = min_threshold;
+        h.counts = @splat(.{});
+    }
+
+    /// The stored character count of `s`, or null.
+    pub inline fn cachedCount(h: *const Heap, s: []const u8) ?usize {
+        for (&h.counts) |*c| {
+            if (c.ptr == @intFromPtr(s.ptr) and c.len == s.len) return c.n;
+        }
+        return null;
+    }
+
+    /// Stores the character count of `s` when its bytes are in a block
+    /// of this heap. Other memory can change, so it gets no entry.
+    pub fn putCount(h: *Heap, s: []const u8, n: usize) void {
+        if (h.find(@intFromPtr(s.ptr)) == null) return;
+        h.counts[h.next_count] = .{ .ptr = @intFromPtr(s.ptr), .len = s.len, .n = n };
+        h.next_count = @intCast((h.next_count + 1) % h.counts.len);
     }
 
     pub fn allocator(h: *Heap) Allocator {
@@ -554,6 +578,7 @@ fn sweep(h: *Heap) void {
     h.cur = @splat(null);
     h.partial = @splat(null);
     h.last = null;
+    h.counts = @splat(.{});
     // The stress mode poisons in each build, so a suite run in
     // ReleaseFast also shows a use of a freed block.
     const poison = fill_dead or h.stress != 0;

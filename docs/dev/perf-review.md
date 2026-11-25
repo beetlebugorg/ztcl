@@ -23,18 +23,18 @@ proc t {name body} {
 
 The rank is the expected gain divided by the effort. A ratio above 1 means that ztcl is slower than `tclsh`.
 
-| Rank | Finding | ztcl | tclsh 8.6.16 | Ratio | Effort |
-|---|---|---|---|---|---|
-| 1 | `string index` and `string length` read the whole string | 1,027.4 ms | 28.1 ms | 36.6 | Small to medium |
-| 2 | `eval` of a list parses text on each call | 89.0 ms | 29.3 ms | 3.0 | Small |
-| 3 | `lmap` has no bytecode | 67.5 ms | 39.1 ms | 1.7 | Small |
-| 4 | `lsearch -exact` orders each item | 14.7 ms | 9.0 ms | 1.6 | Small |
-| 5 | `string map` tries each key at each byte | 26.6 ms | 16.9 ms | 1.6 | Small |
-| 6 | The regex search has no literal scan | 6.05 ms | 1.00 ms | 6.0 | Medium |
-| 7 | Array elements go through the name of the variable | 104.8 ms | 70.9 ms | 1.5 | Medium |
-| 8 | A proc call uses about 250 instructions in `callProcFast` | 14.8 ms | 70.5 ms | 0.2 | Large |
-| 9 | `append` in JIT code goes through two helpers | 243.1 M instructions | 812.4 M | 0.3 | Medium |
-| 10 | `read` of a whole file | 73.5 ms | 49.9 ms | 1.5 | Not known |
+| Rank | Finding | ztcl | tclsh 8.6.16 | Ratio | Effort | Status |
+|---|---|---|---|---|---|---|
+| 1 | `string index` and `string length` read the whole string | 1,027.4 ms | 28.1 ms | 36.6 | Small to medium | Done: 17.7 ms |
+| 2 | `eval` of a list parses text on each call | 89.0 ms | 29.3 ms | 3.0 | Small | Open |
+| 3 | `lmap` has no bytecode | 67.5 ms | 39.1 ms | 1.7 | Small | Open |
+| 4 | `lsearch -exact` orders each item | 14.7 ms | 9.0 ms | 1.6 | Small | Open |
+| 5 | `string map` tries each key at each byte | 26.6 ms | 16.9 ms | 1.6 | Small | Open |
+| 6 | The regex search has no literal scan | 6.05 ms | 1.00 ms | 6.0 | Medium | Open |
+| 7 | Array elements go through the name of the variable | 104.8 ms | 70.9 ms | 1.5 | Medium | Open |
+| 8 | A proc call uses about 250 instructions in `callProcFast` | 14.8 ms | 70.5 ms | 0.2 | Large | Open |
+| 9 | `append` in JIT code goes through two helpers | 243.1 M instructions | 812.4 M | 0.3 | Medium | Open |
+| 10 | `read` of a whole file | 73.5 ms | 49.9 ms | 1.5 | Not known | Open |
 
 ## 1. `string index` and `string length` read the whole string
 
@@ -48,6 +48,7 @@ proc strindex {} {set s [string repeat abcdefghij 1000]; set n 0; for {set k 0} 
 - Change, step 1: count with 32-byte vectors in `charCount`. This keeps the cost linear and makes the constant smaller.
 - Change, step 2: keep the character count with the string, or keep an "all ASCII" bit. With the bit set, `string index` is one bounds check and one slice. `docs/dev/values.md` is the place to decide where the count goes.
 - Expected gain: step 2 makes `strindex` independent of the length of the string. I did not measure a prototype.
+- Done: `charCountOf` (`src/cmds.zig`) keeps the count of a string of 256 bytes or more in a cache of four entries in the heap. An entry has the address and the length of the string. The bytes of a live heap block do not change, so a sweep or a reset of the heap clears the cache. A string outside the heap gets no entry. After the change, `strindex` runs in 17.7 ms (13.2 ms with the JIT) against 27.5 ms for `tclsh`. Before the change it ran in 78.0 ms on the same machine. The 1,000 calls of `string length` on 360,000 bytes run in 0.2 ms against 0.4 ms for `tclsh`.
 
 ## 2. `eval` of a list parses text on each call
 
