@@ -236,13 +236,16 @@ fn poolMain(w: *Worker, x: *Interp) void {
 }
 
 /// Counts the end of a worker. The caller holds the pool lock when
-/// `lock` is false. The last worker of an ended pool frees it.
+/// `lock` is false. The last worker of an ended pool frees it. The
+/// signal goes out under the lock: after the unlock, another thread can
+/// end the pool and free it.
 fn leave(p: *Pool, lock: bool) void {
     if (lock) p.lock.lock();
     p.workers -= 1;
     const last = p.ending and p.workers == 0 and p.users == 0;
+    if (!last) p.ev.signal();
     p.lock.unlock();
-    if (last) p.free() else p.ev.signal();
+    if (last) p.free();
 }
 
 /// Ends the use of a pool by a command.
@@ -423,8 +426,10 @@ fn endPool(p: *Pool) void {
     p.lock.lock();
     p.ending = true;
     const none = p.workers == 0 and p.users == 0;
+    // Under the lock, as in `leave`: the last worker frees the pool.
+    if (!none) p.ev.signal();
     p.lock.unlock();
-    if (none) p.free() else p.ev.signal();
+    if (none) p.free();
 }
 
 fn cmdPost(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
