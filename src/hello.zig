@@ -38,7 +38,11 @@ pub const modules_list = [_]mods.Module{
 
 pub const modules: []const mods.Module = &modules_list;
 
+/// The data of `-Dsize-plant`, for the test of the size check.
+const plant: [@import("build_options").size_plant]u8 = @splat(0xa5);
+
 fn install(it: *Interp) interp.Error!void {
+    if (plant.len > 0) std.mem.doNotOptimizeAway(&plant);
     try it.register("zt::hello::greet", greet);
 }
 
