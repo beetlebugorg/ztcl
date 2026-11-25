@@ -460,6 +460,22 @@ fn cmdEval(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return it.evalScript(s);
 }
 
+fn cmdTransfer(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len != 3) return it.wrongArgs("thread::transfer id channel");
+    const id = try handle(it, argv[1]);
+    return @import("tchan.zig").transfer(it, id, try it.str(argv[2]));
+}
+
+fn cmdDetach(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len != 2) return it.wrongArgs("thread::detach channel");
+    return @import("tchan.zig").detach(it, try it.str(argv[1]));
+}
+
+fn cmdAttach(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len != 2) return it.wrongArgs("thread::attach channel");
+    return @import("tchan.zig").attach(it, try it.str(argv[1]));
+}
+
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     const list = .{
         .{ "thread::create", cmdCreate },
@@ -480,5 +496,12 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
         .{ "thread::eval", cmdEval },
     };
     inline for (list) |e| try it.register(e[0], e[1]);
+    if (comptime @import("tchan.zig").supported) {
+        if (it.capabilities & @intFromEnum(interp.Capability.channels) != 0) {
+            try it.register("thread::transfer", cmdTransfer);
+            try it.register("thread::detach", cmdDetach);
+            try it.register("thread::attach", cmdAttach);
+        }
+    }
     _ = try it.internNs("thread");
 }

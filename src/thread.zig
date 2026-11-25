@@ -422,6 +422,8 @@ pub const Group = struct {
     /// The tables of `tsv`, `tpool`, and the mutexes.
     tsv: ?*anyopaque = null,
     pools: ?*anyopaque = null,
+    /// The detached channels (`tchan.zig`).
+    chans: ?*anyopaque = null,
     sync: ?*anyopaque = null,
     /// The lock of `thread::eval` with no `-lock`.
     eval_lock: ?[]const u8 = null,

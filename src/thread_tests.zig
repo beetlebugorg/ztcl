@@ -184,3 +184,13 @@ test "deinit of the host ends the pools and their jobs" {
     _ = try it.eval("set q [tpool::create -minworkers 1]; tpool::release $q");
     it.deinit();
 }
+
+test "a later capability adds the thread commands that need it" {
+    if (!@import("tchan.zig").supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try host(&it);
+    defer it.deinit();
+    try testing.expect(it.findCommand("thread::transfer") == null);
+    try it.allow(@intFromEnum(tcl.interp.Capability.channels));
+    try testing.expect(it.findCommand("thread::transfer") != null);
+}
