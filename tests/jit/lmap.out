@@ -1,0 +1,19 @@
+a <2 6>
+b <1 2>
+c <{1 2} {3 {}}>
+d <>
+e <{} {}>
+g <early>
+h <b>
+i <2 3 4>
+j <>
+k <1a 2b c>
+m <1 {2 3}>
+n <{{1 a} {1 b}} {{2 a} {2 b}}>
+o <0 {3 4} {6 8}>
+p <300>
+f <1> boom1
+2 3
+unmatched open brace in list
+redef
+1 2

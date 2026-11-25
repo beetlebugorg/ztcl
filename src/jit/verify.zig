@@ -213,6 +213,11 @@ fn effect(code: *const Code, pc: u32) ?Effect {
             return .{ .need = 1 + @as(u32, i.x), .push = @intFromBool(op == .dict_update) };
         },
         .foreach_init => return .{ .need = 1, .push = 2 },
+        // Writes the place below a loop state and pops the top. The
+        // check of the marks is in `verify`. Tier 2 keeps no place below
+        // the head of a loop, so a loop with this instruction stays in
+        // tier 1.
+        .lmap_add => return .{ .need = 4, .push = 3 },
         .foreach_next => {
             if (i.a >= code.tables.len or i.b >= n) return null;
             const t = code.tables[i.a];
@@ -312,6 +317,11 @@ pub fn verify(a: Allocator, code: *const Code) Allocator.Error!?Info {
         const op = opcode(i).?;
         if (op == .foreach_next) {
             if (m.len == 0 or m[m.len - 1] != d - 2) return null;
+        } else if (op == .lmap_add) {
+            // The loop state is under the top, and the written place is
+            // no part of an outer loop state.
+            if (m.len == 0 or m[m.len - 1] != d - 3) return null;
+            if (m.len >= 2 and m[m.len - 2] + 1 >= d - 4) return null;
         } else if (op == .foreach_init) {
             const kept = below(m, d - 1);
             const nm = try arena.alloc(u16, kept.len + 1);

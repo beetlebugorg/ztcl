@@ -27,7 +27,7 @@ The rank is the expected gain divided by the effort. A ratio above 1 means that 
 |---|---|---|---|---|---|---|
 | 1 | `string index` and `string length` read the whole string | 1,027.4 ms | 28.1 ms | 36.6 | Small to medium | Done: 17.7 ms |
 | 2 | `eval` of a list parses text on each call | 89.0 ms | 29.3 ms | 3.0 | Small | Done: 17.9 ms |
-| 3 | `lmap` has no bytecode | 67.5 ms | 39.1 ms | 1.7 | Small | Open |
+| 3 | `lmap` has no bytecode | 67.5 ms | 39.1 ms | 1.7 | Small | Done: 22.4 ms |
 | 4 | `lsearch -exact` orders each item | 14.7 ms | 9.0 ms | 1.6 | Small | Done: 6.6 ms |
 | 5 | `string map` tries each key at each byte | 26.6 ms | 16.9 ms | 1.6 | Small | Open |
 | 6 | The regex search has no literal scan | 6.05 ms | 1.00 ms | 6.0 | Medium | Done, step 1: 0.5 ms |
@@ -74,6 +74,7 @@ proc lmapl {} {set l {}; for {set i 0} {$i<100000} {incr i} {lappend l $i}; set 
 - Cause: `foreach` is in `inline_names` (`src/vm.zig:172`) and compiles at `src/vm.zig:699`. `lmap` is not in the list, so it runs `cmdForeach` (`src/cmds.zig:330`), and that function sets the loop variable by name and calls the body as a script on each pass.
 - Change: compile `lmap` with the `foreach` code and one result list.
 - Expected gain: `foreach.tcl` runs in 16.2 ms against 33.2 ms for `tclsh` (`docs/performance.md`). `lmap` can reach a similar ratio. Tier 2 of the JIT can then compile the loop.
+- Done: `compileForeach` compiles `lmap` with the `foreach` loop. The result list is on the stack below the loop state, and the new instruction `lmap_add` appends the result of each pass that ends with no `continue`. The JIT verifier checks that the loop state is under the top of the stack. Tier 2 keeps no stack place below the head of a loop, so a loop with `lmap_add` stays in tier 1. `lmapl` runs in 22.4 ms (23.4 ms with the JIT) against 38.0 ms for `tclsh`. Before the change it ran in 47.5 ms on the same machine.
 
 ## 4. `lsearch -exact` orders each item
 

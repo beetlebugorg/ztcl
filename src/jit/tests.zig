@@ -841,6 +841,17 @@ const Mutable = struct {
     }
 };
 
+test "the verifier passes the loop of lmap" {
+    const it = try newInterp();
+    defer freeInterp(it);
+    try defineProcs(it, "proc g {l} {set r [lmap x $l {if {$x} continue; set x}]; lmap y $l {lmap z $l {list $y $z}}}");
+    const code = try procCode(it, "g");
+    var adds: usize = 0;
+    for (code.ins) |i| adds += @intFromBool(i.op == .lmap_add);
+    try testing.expectEqual(@as(usize, 3), adds);
+    try testing.expect(try verifies(code));
+}
+
 test "the verifier fails a Code that breaks one check" {
     const it = try newInterp();
     defer freeInterp(it);

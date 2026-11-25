@@ -117,6 +117,9 @@ pub const Op = enum(u8) {
     lset,
     /// `lset` with no result. The cell then owns the list.
     lset_drop,
+    /// Pops a value and appends it to the list of `lmap` below the
+    /// `foreach` state.
+    lmap_add,
 };
 
 pub const Ins = extern struct {
@@ -173,7 +176,7 @@ const inline_names = [_][]const u8{
     "set",     "incr",   "expr",    "if",       "while",   "for",
     "foreach", "return", "break",   "continue", "lappend", "dict",
     "append",  "lindex", "llength", "string",   "switch",  "lassign",
-    "lset",
+    "lset",    "lmap",
 };
 
 /// The read forms of the `access` instruction.
@@ -697,7 +700,9 @@ const Compiler = struct {
         } else if (eql(u8, name, "for")) {
             return c.compileFor(cmd);
         } else if (eql(u8, name, "foreach")) {
-            return c.compileForeach(cmd);
+            return c.compileForeach(cmd, false);
+        } else if (eql(u8, name, "lmap")) {
+            return c.compileForeach(cmd, true);
         } else if (eql(u8, name, "switch")) {
             return c.compileSwitch(cmd);
         } else if (eql(u8, name, "lassign")) {
@@ -1071,7 +1076,10 @@ const Compiler = struct {
         return true;
     }
 
-    fn compileForeach(c: *Compiler, cmd: *Cmd) Error!bool {
+    /// `foreach`, or `lmap` with `collect`. The list of `lmap` is on the
+    /// stack below the state of the loop, and `lmap_add` appends the
+    /// result of each pass that ends with no `continue`.
+    fn compileForeach(c: *Compiler, cmd: *Cmd, collect: bool) Error!bool {
         if (cmd.words.len != 4 or cmd.words[1].kind != .lit or cmd.words[3].kind != .lit) return false;
         const it = c.it;
         const r, const code = .{ it.result, it.error_code };
@@ -1089,14 +1097,25 @@ const Compiler = struct {
         const base = c.depth;
         const g = try c.emit(.{ .op = .guard });
         const start = c.here();
+        const state: u32 = if (collect) base + 3 else base + 2;
+        if (collect) {
+            _ = try c.emit(.{ .op = .push_empty });
+            c.push(1);
+        }
         try c.compileWord(&cmd.words[2]);
         _ = try c.emit(.{ .op = .foreach_init });
         c.push(1);
         c.label = c.here();
         const top = try c.emit(.{ .op = .foreach_next, .a = @intCast(c.tables.items.len - 1) });
-        var loop: Loop = .{ .body_depth = base + 2 };
+        var loop: Loop = .{ .body_depth = state };
         const body_start = c.here();
-        try c.loopBody(&loop, body);
+        if (collect) {
+            try c.loops.append(c.a, &loop);
+            defer _ = c.loops.pop();
+            try c.compileScriptAs(body, .used);
+            _ = try c.emit(.{ .op = .lmap_add });
+            c.depth -= 1;
+        } else try c.loopBody(&loop, body);
         const body_end = c.here();
         _ = try c.emit(.{ .op = .jump, .a = top });
         const end = c.here();
@@ -1104,11 +1123,11 @@ const Compiler = struct {
         c.ins.items[top].b = end;
         for (loop.breaks.items) |j| c.ins.items[j].a = end;
         for (loop.conts.items) |j| c.ins.items[j].a = top;
-        try c.ranges.append(c.a, .{ .start = body_start, .end = body_end, .brk = end, .cont = top, .depth = base + 2 });
+        try c.ranges.append(c.a, .{ .start = body_start, .end = body_end, .brk = end, .cont = top, .depth = state });
         _ = try c.emit(.{ .op = .pop });
         _ = try c.emit(.{ .op = .pop });
         c.depth = base;
-        _ = try c.emit(.{ .op = .push_empty });
+        if (!collect) _ = try c.emit(.{ .op = .push_empty });
         c.push(1);
         try c.closeGuard(cmd, base, g, start);
         return true;
@@ -1837,6 +1856,21 @@ pub inline fn opLappend(comptime named: bool, it: *Interp, f: *Frame, code: *con
     }
 }
 
+/// The stack has the list of `lmap`, the list and the index of the loop,
+/// and the result of the pass. The list starts as the empty string, and
+/// only this instruction sees it, so it grows in place.
+pub inline fn opLmapAdd(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code, i };
+    const acc = &stack[sp - 4];
+    if (acc.* != .list) {
+        var l = try value.allocList(it.alloc(), 8);
+        l.obj.used = 0;
+        l.len = 0;
+        acc.* = .{ .list = l };
+    }
+    acc.* = .{ .list = try acc.list.append(it.alloc(), stack[sp - 1]) };
+}
+
 pub inline fn opBinVv(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
     const op: expr.BinOp = @enumFromInt(i.x);
     const x = intSlot(named, it, f, code, i.a);
@@ -2178,6 +2212,13 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             },
             .lappend => {
                 try opLappend(named, it, f, code, stack, sp, i);
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
+            },
+            .lmap_add => {
+                try opLmapAdd(named, it, f, code, stack, sp, i);
+                sp -= 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
