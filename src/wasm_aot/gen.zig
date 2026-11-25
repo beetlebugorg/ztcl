@@ -37,7 +37,7 @@ const std = @import("std");
 const vm = @import("../vm.zig");
 const verify = @import("../jit/verify.zig");
 const helpers = @import("../jit/helpers.zig");
-const wasm = @import("wasm.zig");
+const w = @import("../wasm_out.zig");
 const expr = @import("../expr.zig");
 const Layout = @import("../jit/layout.zig").Layout;
 
@@ -61,7 +61,98 @@ pub fn layoutUsable(l: *const Layout) bool {
 
 const Allocator = std.mem.Allocator;
 const Helper = helpers.Helper;
-const Body = wasm.Body;
+
+/// The writer of `wasm_out.zig`, which checks the type of each
+/// instruction, with the names of the generator and a count of the open
+/// blocks, so a branch can compute its depth.
+const Body = struct {
+    w: w.Body,
+    open: u32 = 0,
+
+    pub const I32 = enum { eqz, eq, ne, @"and", ge_u };
+    pub const I64 = enum { eqz, eq, ne, lt_s, gt_s, le_s, ge_s, le_u, ge_u, add, sub, mul, div_s, rem_s, @"and", xor, extend_i32_u };
+
+    fn block(b: *Body) w.Error!void {
+        try b.w.block(null);
+        b.open += 1;
+    }
+    fn loop(b: *Body) w.Error!void {
+        try b.w.loop(null);
+        b.open += 1;
+    }
+    fn if_(b: *Body) w.Error!void {
+        try b.w.@"if"(null);
+        b.open += 1;
+    }
+    fn end(b: *Body) w.Error!void {
+        try b.w.end();
+        b.open -= 1;
+    }
+    fn br(b: *Body, d: u32) w.Error!void {
+        return b.w.br(d);
+    }
+    fn brIf(b: *Body, d: u32) w.Error!void {
+        return b.w.brIf(d);
+    }
+    fn brTable(b: *Body, ds: []const u32, default: u32) w.Error!void {
+        return b.w.brTable(ds, default);
+    }
+    fn ret(b: *Body) w.Error!void {
+        return b.w.ret();
+    }
+    fn unreachable_(b: *Body) w.Error!void {
+        return b.w.@"unreachable"();
+    }
+    fn call(b: *Body, f: u32) w.Error!void {
+        return b.w.call(f);
+    }
+    fn drop(b: *Body) w.Error!void {
+        return b.w.drop(.i32);
+    }
+    fn localGet(b: *Body, i: u32) w.Error!void {
+        return b.w.localGet(i);
+    }
+    fn localSet(b: *Body, i: u32) w.Error!void {
+        return b.w.localSet(i);
+    }
+    fn localTee(b: *Body, i: u32) w.Error!void {
+        return b.w.localTee(i);
+    }
+    fn i32Const(b: *Body, v: i32) w.Error!void {
+        return b.w.i32Const(v);
+    }
+    fn i64Const(b: *Body, v: i64) w.Error!void {
+        return b.w.i64Const(v);
+    }
+    fn i32Load(b: *Body, off: u32) w.Error!void {
+        return b.w.load(.i32, .{ .align_log2 = 2, .offset = off });
+    }
+    fn i64Load(b: *Body, off: u32) w.Error!void {
+        return b.w.load(.i64, .{ .align_log2 = 3, .offset = off });
+    }
+    fn i32Load8u(b: *Body, off: u32) w.Error!void {
+        return b.w.load(.i32_8u, .{ .align_log2 = 0, .offset = off });
+    }
+    fn i32Store(b: *Body, off: u32) w.Error!void {
+        return b.w.store(.i32, .{ .align_log2 = 2, .offset = off });
+    }
+    fn i64Store(b: *Body, off: u32) w.Error!void {
+        return b.w.store(.i64, .{ .align_log2 = 3, .offset = off });
+    }
+    fn i32Store8(b: *Body, off: u32) w.Error!void {
+        return b.w.store(.i32_8, .{ .align_log2 = 0, .offset = off });
+    }
+    fn i32Op(b: *Body, o: I32) w.Error!void {
+        return switch (o) {
+            inline else => |t| b.w.num(@field(w.Body.Num, "i32_" ++ @tagName(t))),
+        };
+    }
+    fn i64Op(b: *Body, o: I64) w.Error!void {
+        return switch (o) {
+            inline else => |t| b.w.num(@field(w.Body.Num, "i64_" ++ @tagName(t))),
+        };
+    }
+};
 
 /// The layout of `jit.EnterCtx` on wasm32. `rt.zig` checks it against
 /// the real struct at compile time.
@@ -162,7 +253,7 @@ pub fn entries(a: Allocator, code: *const vm.Code, info: *const verify.Info) All
     return list.toOwnedSlice(a);
 }
 
-pub const Error = Allocator.Error || error{MissingHelper};
+pub const Error = w.Error || error{MissingHelper};
 
 const local_ctx = 0;
 const local_blk = 1;
@@ -312,12 +403,12 @@ const Gen = struct {
 
     /// Copies one `Value` from `src + so` to `dst + do`.
     fn copy(g: *Gen, dst: u32, do: u32, src: u32, so: u32) Error!void {
-        var w: u32 = 0;
-        while (w < g.vs()) : (w += 8) {
+        var word: u32 = 0;
+        while (word < g.vs()) : (word += 8) {
             try g.b.localGet(dst);
             try g.b.localGet(src);
-            try g.b.i64Load(so + w);
-            try g.b.i64Store(do + w);
+            try g.b.i64Load(so + word);
+            try g.b.i64Store(do + word);
         }
     }
 
@@ -676,7 +767,19 @@ const Gen = struct {
 
 /// The code entry of the function of `code`. `h` is the helper index
 /// table for the kind of `code`.
-pub fn function(a: Allocator, code: *const vm.Code, info: *const verify.Info, h: *const [helpers.count]u32, l: *const Layout, inline_paths: bool) Error![]u8 {
+/// The type of each function of the module: `funcs[k]` is the type of
+/// function k. A call of a helper checks its type against it.
+pub const fn_type: w.FuncType = .{ .params = &.{.i32}, .results = &.{.i32} };
+
+pub fn function(a: Allocator, code: *const vm.Code, info: *const verify.Info, h: *const [helpers.count]u32, l: *const Layout, inline_paths: bool, funcs: []const w.FuncType) Error![]u8 {
+    // The writer of wasm_out.zig frees nothing, so it uses an arena.
+    var arena_state = std.heap.ArenaAllocator.init(a);
+    defer arena_state.deinit();
+    const out = try functionIn(arena_state.allocator(), code, info, h, l, inline_paths, funcs);
+    return a.dupe(u8, out);
+}
+
+fn functionIn(a: Allocator, code: *const vm.Code, info: *const verify.Info, h: *const [helpers.count]u32, l: *const Layout, inline_paths: bool, funcs: []const w.FuncType) Error![]u8 {
     const n = code.ins.len;
     const ents = try entries(a, code, info);
     defer a.free(ents);
@@ -705,9 +808,10 @@ pub fn function(a: Allocator, code: *const vm.Code, info: *const verify.Info, h:
     const level = try a.alloc(u32, m);
     defer a.free(level);
 
-    var g: Gen = .{ .a = a, .b = .{ .a = a }, .code = code, .info = info, .h = h, .l = l, .inline_paths = inline_paths and layoutUsable(l), .block_of = block_of, .level = level, .top_level = 0 };
-    defer g.b.deinit();
+    var g: Gen = .{ .a = a, .b = .{ .w = try w.Body.init(a, fn_type, funcs, &.{}) }, .code = code, .info = info, .h = h, .l = l, .inline_paths = inline_paths and layoutUsable(l), .block_of = block_of, .level = level, .top_level = 0 };
     const b = &g.b;
+    for (0..i32_locals) |_| _ = try b.w.local(.i32);
+    for (0..i64_locals) |_| _ = try b.w.local(.i64);
     // The fields of the context that each inline path reads.
     for ([_][2]u32{ .{ local_it, @offsetOf(Ctx32, "it") }, .{ local_stack, @offsetOf(Ctx32, "stack") }, .{ local_frame, @offsetOf(Ctx32, "frame") }, .{ local_code, @offsetOf(Ctx32, "code") } }) |p| {
         try b.localGet(local_ctx);
@@ -766,5 +870,5 @@ pub fn function(a: Allocator, code: *const vm.Code, info: *const verify.Info, h:
     try b.end(); // $fallback
     try b.i32Const(status_exit);
     std.debug.assert(b.open == 0);
-    return b.entry(a, i32_locals, i64_locals);
+    return b.w.finish();
 }

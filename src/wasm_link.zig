@@ -320,3 +320,250 @@ fn writeTestModule(base: []const u8, bytes: []const u8) !void {
     const path = try std.fmt.bufPrint(&buf, "zig-out/wasm-out/{s}.wasm", .{base});
     try dir.writeFile(io, .{ .sub_path = path, .data = bytes });
 }
+
+// ---- The append form ----
+//
+// `ztcl compile --wasm` (src/wasm_aot/aot.zig) keeps each section of
+// the runtime and its exports, and appends to them: new types, new
+// functions in the table after its entries, pages at the end of the
+// memory, and data segments after the segments of the runtime. A later
+// data segment writes over an earlier one, so a new segment can set an
+// exported variable of the runtime.
+
+/// The facts that `append` changes.
+pub const Shape = struct {
+    /// The count of functions, with the imports: the index of the next one.
+    funcs: u32,
+    types: u32,
+    table: w.Limits,
+    memory: w.Limits,
+
+    /// The address of the first page that `append` adds.
+    pub fn freeAddress(s: Shape) u32 {
+        return s.memory.min * page;
+    }
+};
+
+pub const page: u32 = 65536;
+
+fn findIn(secs: []const w.Section, id: u8) ?[]const u8 {
+    for (secs) |s| if (s.id == id) return s.body;
+    return null;
+}
+
+fn limits(r: *w.Reader) Error!w.Limits {
+    const flag = try r.byte();
+    if (flag > 1) return error.Unsupported;
+    const min = try r.uleb32();
+    return .{ .min = min, .max = if (flag == 1) try r.uleb32() else null };
+}
+
+pub fn shape(rt: *const Runtime) Error!Shape {
+    const tb = findIn(rt.sections, 4) orelse return error.Unsupported;
+    var tr: w.Reader = .{ .bytes = tb };
+    if (try tr.uleb32() != 1 or try tr.byte() != 0x70) return error.Unsupported;
+    const mb = findIn(rt.sections, 5) orelse return error.Unsupported;
+    var mr: w.Reader = .{ .bytes = mb };
+    if (try mr.uleb32() != 1) return error.Unsupported;
+    return .{ .funcs = nextFunc(rt), .types = rt.type_count, .table = try limits(&tr), .memory = try limits(&mr) };
+}
+
+/// The address that the exported data variable `name` names: the value
+/// of its immutable global.
+pub fn dataAddress(rt: *const Runtime, name: []const u8) Error!?u32 {
+    const g = for (rt.exports) |e| {
+        if (e.kind == .global and std.mem.eql(u8, e.name, name)) break e.index;
+    } else return null;
+    const body = findIn(rt.sections, 6) orelse return error.BadModule;
+    var r: w.Reader = .{ .bytes = body };
+    const n = try r.uleb32();
+    var k: u32 = 0;
+    while (k < n) : (k += 1) {
+        _ = try r.byte();
+        const mutable = try r.byte();
+        const v = try constExpr(&r);
+        if (k != g) continue;
+        if (mutable != 0) return error.Unsupported;
+        const x = v orelse return error.Unsupported;
+        return std.math.cast(u32, x) orelse error.BadModule;
+    }
+    return error.BadModule;
+}
+
+/// The bytes of the active data segments at `addr`. A later segment
+/// writes over an earlier one, as at instantiation.
+pub fn readData(rt: *const Runtime, addr: u32, out: []u8) Error!void {
+    @memset(out, 0);
+    const body = findIn(rt.sections, 11) orelse return error.BadModule;
+    var r: w.Reader = .{ .bytes = body };
+    var k = try r.uleb32();
+    var found: usize = 0;
+    while (k > 0) : (k -= 1) {
+        const flag = try r.uleb32();
+        const base: ?i64 = switch (flag) {
+            0 => (try constExpr(&r)) orelse return error.Unsupported,
+            1 => null,
+            2 => blk: {
+                if (try r.uleb32() != 0) return error.Unsupported;
+                break :blk (try constExpr(&r)) orelse return error.Unsupported;
+            },
+            else => return error.BadModule,
+        };
+        const data = try r.str();
+        const b: u64 = @intCast(base orelse continue);
+        const lo = @max(b, addr);
+        const hi = @min(b + data.len, @as(u64, addr) + out.len);
+        if (hi <= lo) continue;
+        @memcpy(out[@intCast(lo - addr)..@intCast(hi - addr)], data[@intCast(lo - b)..@intCast(hi - b)]);
+        found += @intCast(hi - lo);
+    }
+    if (found < out.len) return error.BadModule;
+}
+
+/// What `append` adds to a module.
+pub const Addition = struct {
+    types: []const w.FuncType = &.{},
+    /// The type index of each new function.
+    funcs: []const u32 = &.{},
+    /// The code entry of each new function, from `Body.finish`.
+    code: []const []const u8 = &.{},
+    /// The new functions that go in the table, after its entries.
+    table_funcs: []const u32 = &.{},
+    /// Active data segments, after the segments of the module.
+    data: []const Data = &.{},
+    /// Pages added to the least size of the memory.
+    pages: u32 = 0,
+};
+
+/// Writes the runtime with `add`. The sections keep their order.
+pub fn append(a: Allocator, rt: *const Runtime, add: Addition) Error![]u8 {
+    const sh = try shape(rt);
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(a);
+    try out.appendSlice(a, w.magic);
+    var body: std.ArrayList(u8) = .empty;
+    defer body.deinit(a);
+    var new: std.ArrayList(u8) = .empty;
+    defer new.deinit(a);
+    var have_elem = false;
+    var have_data = false;
+    for (rt.sections) |s| {
+        body.clearRetainingCapacity();
+        new.clearRetainingCapacity();
+        switch (s.id) {
+            1 => {
+                for (add.types) |t| try t.encode(&new, a);
+                try extend(&body, a, s.body, add.types.len, new.items);
+            },
+            3 => {
+                for (add.funcs) |t| try w.uleb(&new, a, t);
+                try extend(&body, a, s.body, add.funcs.len, new.items);
+            },
+            4 => {
+                const grow: u32 = @intCast(add.table_funcs.len);
+                try body.appendSlice(a, &.{ 1, 0x70 });
+                try (w.Limits{ .min = sh.table.min + grow, .max = if (sh.table.max) |x| x + grow else null }).encode(&body, a);
+            },
+            5 => {
+                try w.uleb(&body, a, 1);
+                const min = sh.memory.min + add.pages;
+                if (sh.memory.max) |x| if (x < min) return error.Unsupported;
+                try (w.Limits{ .min = min, .max = sh.memory.max }).encode(&body, a);
+            },
+            9 => {
+                have_elem = true;
+                if (add.table_funcs.len == 0) {
+                    try body.appendSlice(a, s.body);
+                } else {
+                    // Flag 0: an active segment of table 0.
+                    try new.appendSlice(a, &.{ 0, 0x41 });
+                    try w.sleb(&new, a, @as(i32, @bitCast(sh.table.min)));
+                    try new.append(a, 0x0b);
+                    try w.uleb(&new, a, add.table_funcs.len);
+                    for (add.table_funcs) |f| try w.uleb(&new, a, f);
+                    try extend(&body, a, s.body, 1, new.items);
+                }
+            },
+            10 => {
+                if (!have_elem and add.table_funcs.len > 0) return error.Unsupported;
+                for (add.code) |c| try new.appendSlice(a, c);
+                try extend(&body, a, s.body, add.code.len, new.items);
+            },
+            11 => {
+                have_data = true;
+                for (add.data) |d| {
+                    try new.appendSlice(a, &.{ 0, 0x41 });
+                    try w.sleb(&new, a, @as(i32, @bitCast(d.offset)));
+                    try new.append(a, 0x0b);
+                    try w.uleb(&new, a, d.bytes.len);
+                    try new.appendSlice(a, d.bytes);
+                }
+                try extend(&body, a, s.body, add.data.len, new.items);
+            },
+            12 => {
+                var r: w.Reader = .{ .bytes = s.body };
+                try w.uleb(&body, a, try r.uleb32() + add.data.len);
+            },
+            else => try body.appendSlice(a, s.body),
+        }
+        try w.section(&out, a, s.id, body.items);
+    }
+    if (!have_data and add.data.len > 0) return error.Unsupported;
+    return out.toOwnedSlice(a);
+}
+
+/// A module with one table of 2 entries, a memory of 1 page, one data
+/// segment, an exported data global, and one function `f` that returns
+/// the i32 at address 16.
+fn appendTestModule(a: Allocator) ![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(a);
+    try out.appendSlice(a, w.magic);
+    try w.section(&out, a, 1, &.{ 1, 0x60, 0, 1, 0x7f });
+    try w.section(&out, a, 3, &.{ 1, 0 });
+    try w.section(&out, a, 4, &.{ 1, 0x70, 1, 2, 2 });
+    try w.section(&out, a, 5, &.{ 1, 0, 1 });
+    try w.section(&out, a, 6, &.{ 1, 0x7f, 0, 0x41, 16, 0x0b });
+    try w.section(&out, a, 7, &.{ 2, 1, 'f', 0, 0, 1, 'v', 3, 0 });
+    try w.section(&out, a, 9, &.{ 1, 0, 0x41, 1, 0x0b, 1, 0 });
+    try w.section(&out, a, 10, &.{ 1, 7, 0, 0x41, 16, 0x28, 2, 0, 0x0b });
+    try w.section(&out, a, 11, &.{ 1, 0, 0x41, 16, 0x0b, 4, 7, 0, 0, 0 });
+    return out.toOwnedSlice(a);
+}
+
+test "append: functions, a table segment, pages, and data" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const rt = try read(a, try appendTestModule(a));
+    const sh = try shape(&rt);
+    try std.testing.expectEqual(@as(u32, 1), sh.funcs);
+    try std.testing.expectEqual(@as(u32, 2), sh.table.min);
+    try std.testing.expectEqual(@as(?u32, 16), try dataAddress(&rt, "v"));
+    var word: [4]u8 = undefined;
+    try readData(&rt, 16, &word);
+    try std.testing.expectEqual(@as(u32, 7), std.mem.readInt(u32, &word, .little));
+    // A function that returns 42, in the table, a new value at address
+    // 16, and a word in the new page.
+    var b = try w.Body.init(a, .{ .params = &.{}, .results = &.{.i32} }, &.{}, &.{});
+    try b.i32Const(42);
+    const out = try append(a, &rt, .{
+        .types = &.{.{ .params = &.{}, .results = &.{.i32} }},
+        .funcs = &.{1},
+        .code = &.{try b.finish()},
+        .table_funcs = &.{sh.funcs},
+        .data = &.{ .{ .offset = 16, .bytes = &.{ 9, 0, 0, 0 } }, .{ .offset = sh.freeAddress(), .bytes = "dir" } },
+        .pages = 1,
+    });
+    const rt2 = try read(a, out);
+    const sh2 = try shape(&rt2);
+    try std.testing.expectEqual(@as(u32, 2), sh2.funcs);
+    try std.testing.expectEqual(@as(u32, 2), sh2.types);
+    try std.testing.expectEqual(w.Limits{ .min = 3, .max = 3 }, sh2.table);
+    try std.testing.expectEqual(@as(u32, 2), sh2.memory.min);
+    try readData(&rt2, 16, &word);
+    try std.testing.expectEqual(@as(u32, 9), std.mem.readInt(u32, &word, .little));
+    var dir: [3]u8 = undefined;
+    try readData(&rt2, page, &dir);
+    try std.testing.expectEqualStrings("dir", &dir);
+}
