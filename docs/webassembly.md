@@ -196,11 +196,11 @@ Speed in Node.js 26 on an x86-64 Linux machine with other load, the best of 5 ru
 | `bench/dict.tcl` | 51.7 ms | 36.4 ms | 0.70 | 50.5 ms |
 | `bench/dsum.tcl` | 92.3 ms | 65.1 ms | 0.71 | 98.4 ms |
 | `bench/strbuild.tcl` | 52.6 ms | 38.7 ms | 0.74 | 65.8 ms |
-| `bench/dictgrow.tcl` | 155.1 ms | 136.6 ms | 0.88 | 106.1 ms |
+| `bench/dictgrow.tcl` | 145.5 ms | 128.7 ms | 0.88 | 107.4 ms |
 | kostya `bf.tcl bench.b`, one run | 207.58 s | 148.38 s | 0.71 | 257.33 s |
-| kostya `base64/test.tcl`, one run | 4.54 s | 4.56 s | 1.00 | 4.24 s |
+| kostya `base64/test.tcl`, one run | 1.77 s | 1.80 s | 1.01 | 4.35 s |
 
-The gain is in the bytecode of the procs. Work in the builtins, such as `binary encode base64`, runs at the same speed. `node tools/wasm-aot-bench.mjs --kostya bench/*.tcl` makes this table. `tools/wasm-aot.mjs`, `tools/wasm-aot-suite.mjs`, and `tools/wasm-aot-fuzz.sh` compare the compiled modules with the interpreter. [The design](dev/wasm-aot.md) has the details.
+The gain is in the bytecode of the procs. Work in the builtins, such as `binary encode base64`, runs at the same speed in both modules. The rows of `dictgrow.tcl` and `base64/test.tcl` are after the faster base64 code and the XxHash32 hash of dict keys on wasm32. Before them, `base64/test.tcl` ran in 4.54 s and `dictgrow.tcl` in 136.6 ms compiled. On wasm, `dictgrow.tcl` is still slower than `tclsh`: its time is in the hash table, the text of each key, and the `dict` command, and the native build of ztcl runs it in 73 ms against 108 ms for `tclsh`. `node tools/wasm-aot-bench.mjs --kostya bench/*.tcl` makes this table. `tools/wasm-aot.mjs`, `tools/wasm-aot-suite.mjs`, and `tools/wasm-aot-fuzz.sh` compare the compiled modules with the interpreter. [The design](dev/wasm-aot.md) has the details.
 
 ## Examples
 
