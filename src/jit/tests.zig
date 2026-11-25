@@ -172,7 +172,10 @@ fn checkMaps(text: []const u8, r: *const mem.Region) !void {
 
 test "selfTest runs a function from the region" {
     if (!jit.built) return error.SkipZigTest;
-    try testing.expect(mem.selfTest());
+    if (!mem.selfTest()) {
+        std.debug.print("selfTest failed: {t}, errno {d}\n", .{ mem.last_failure, mem.last_errno });
+        return error.SelfTest;
+    }
 }
 
 test "the region has no page that is writable and executable" {
@@ -294,33 +297,64 @@ const vm_read = 1;
 const vm_write = 2;
 const vm_exec = 4;
 
-test "arm64 macOS: functions pack, run, and the region has its rights" {
-    if (!jit.built or !darwin_arm) return error.SkipZigTest;
+/// A region on arm64 macOS, or a failed test with the reason and the
+/// errno: a build with the JIT must have one.
+fn darwinRegion(limit: usize) !mem.Region {
+    return mem.Region.init(limit) orelse {
+        std.debug.print("no region: {t}, errno {d}\n", .{ mem.last_failure, mem.last_errno });
+        return error.NoRegion;
+    };
+}
+
+/// Checks two small functions in a region of either form, and the rights
+/// of its parts.
+fn checkDarwinRegion(pages: bool) !void {
+    mem.force_pages = pages;
+    defer mem.force_pages = false;
     const page = std.heap.pageSize();
-    var r = mem.Region.init(4 * page) orelse return error.NoRegion;
+    var r = try darwinRegion(4 * page);
     defer r.deinit();
     // mov w0, #42; ret and mov w0, #7; ret.
     const f1 = r.append(&.{ 0x40, 0x05, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }).?;
     const f2 = r.append(&.{ 0xE0, 0x00, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }).?;
-    try testing.expectEqual(@intFromPtr(f1.ptr) + 16, @intFromPtr(f2.ptr));
-    try testing.expectEqual(@as(usize, 32), r.usedBytes());
+    const step: usize = if (r.pages) page else 16;
+    try testing.expectEqual(@intFromPtr(f1.ptr) + step, @intFromPtr(f2.ptr));
+    try testing.expectEqual(2 * step, r.usedBytes());
     // The fill after each function is zero words (udf).
-    for (f1.ptr[f1.len..16]) |b| try testing.expectEqual(@as(u8, 0), b);
+    for (f1.ptr[f1.len..step]) |b| try testing.expectEqual(@as(u8, 0), b);
     const c1: *const fn () callconv(.c) u32 = @ptrCast(@alignCast(f1.ptr));
     const c2: *const fn () callconv(.c) u32 = @ptrCast(@alignCast(f2.ptr));
+    mem.checkClosed();
     try testing.expectEqual(@as(u32, 42), c1());
     try testing.expectEqual(@as(u32, 7), c2());
-    // The rights after two functions. The MAP_JIT pages have read,
-    // write, and execute as both rights: the write protection of each
-    // thread keeps them from being writable and executable at once. The
-    // guard pages have no current right.
     const code = try rightsAt(@intFromPtr(f1.ptr));
+    const free = try rightsAt(@intFromPtr(r.base) + 2 * step);
     const before = try rightsAt(@intFromPtr(r.base) - page);
     const after = try rightsAt(@intFromPtr(r.base) + r.limit);
-    std.debug.print("arm64 region rights: code cur={d} max={d}, guard before cur={d} max={d}, guard after cur={d} max={d}\n", .{ code.cur, code.max, before.cur, before.max, after.cur, after.max });
-    try testing.expectEqual(@as(i32, vm_read | vm_write | vm_exec), code.cur);
+    std.debug.print("arm64 region rights ({s}): code cur={d} max={d}, free cur={d}, guard before cur={d}, guard after cur={d}\n", .{ if (r.pages) "pages" else "write protection", code.cur, code.max, free.cur, before.cur, after.cur });
     try testing.expectEqual(@as(i32, 0), before.cur);
     try testing.expectEqual(@as(i32, 0), after.cur);
+    if (r.pages) {
+        // Each function is on read and execute pages, and a free page has
+        // no access.
+        try testing.expectEqual(@as(i32, vm_read | vm_exec), code.cur);
+        try testing.expectEqual(@as(i32, 0), free.cur);
+    } else {
+        // The MAP_JIT pages have read, write, and execute: the write
+        // protection of each thread keeps them from being writable and
+        // executable at once.
+        try testing.expectEqual(@as(i32, vm_read | vm_write | vm_exec), code.cur);
+    }
+}
+
+test "arm64 macOS: functions pack, run, and the region has its rights" {
+    if (!jit.built or !darwin_arm) return error.SkipZigTest;
+    try checkDarwinRegion(false);
+}
+
+test "arm64 macOS: the page form runs functions on their own pages" {
+    if (!jit.built or !darwin_arm) return error.SkipZigTest;
+    try checkDarwinRegion(true);
 }
 
 /// Runs `body` in a child process and gives the signal that stopped it,
@@ -353,20 +387,31 @@ fn writeFree(r: *mem.Region) void {
 
 test "arm64 macOS: a jump to a free part of the region traps" {
     if (!jit.built or !darwin_arm) return error.SkipZigTest;
-    var r = mem.Region.init(std.heap.pageSize()) orelse return error.NoRegion;
-    defer r.deinit();
-    _ = r.append(&.{ 0x40, 0x05, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }).?;
-    const sig = try childSignal(jumpFree, &r);
-    try testing.expectEqual(@as(u32, @intFromEnum(std.c.SIG.ILL)), sig);
+    for ([_]bool{ false, true }) |pages| {
+        mem.force_pages = pages;
+        defer mem.force_pages = false;
+        var r = try darwinRegion(4 * std.heap.pageSize());
+        defer r.deinit();
+        _ = r.append(&.{ 0x40, 0x05, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }).?;
+        const sig = try childSignal(jumpFree, &r);
+        // A udf word, or a page with no access.
+        if (r.pages) {
+            try testing.expect(sig == @intFromEnum(std.c.SIG.BUS) or sig == @intFromEnum(std.c.SIG.SEGV));
+        } else try testing.expectEqual(@as(u32, @intFromEnum(std.c.SIG.ILL)), sig);
+    }
 }
 
 test "arm64 macOS: a write to a free part of the region faults" {
     if (!jit.built or !darwin_arm) return error.SkipZigTest;
-    var r = mem.Region.init(std.heap.pageSize()) orelse return error.NoRegion;
-    defer r.deinit();
-    _ = r.append(&.{ 0x40, 0x05, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }).?;
-    const sig = try childSignal(writeFree, &r);
-    try testing.expect(sig == @intFromEnum(std.c.SIG.BUS) or sig == @intFromEnum(std.c.SIG.SEGV));
+    for ([_]bool{ false, true }) |pages| {
+        mem.force_pages = pages;
+        defer mem.force_pages = false;
+        var r = try darwinRegion(4 * std.heap.pageSize());
+        defer r.deinit();
+        _ = r.append(&.{ 0x40, 0x05, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }).?;
+        const sig = try childSignal(writeFree, &r);
+        try testing.expect(sig == @intFromEnum(std.c.SIG.BUS) or sig == @intFromEnum(std.c.SIG.SEGV));
+    }
 }
 
 // ---- The assembler ----

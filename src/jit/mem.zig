@@ -29,6 +29,13 @@
 //! Functions pack with 16-byte alignment, and the fill is zero words. No
 //! other code runs between the two switch calls.
 //!
+//! A macOS with no write protection for each thread, such as a virtual
+//! machine, gets the page form: a `MAP_JIT` mapping with read and write
+//! rights and then no access, and the three steps of Linux for each
+//! function, with `sys_icache_invalidate` before the pages become
+//! executable. macOS accepts `mprotect` on a `MAP_JIT` mapping that
+//! started without the execute right.
+//!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
@@ -50,7 +57,11 @@ extern "c" fn sys_icache_invalidate(start: *anyopaque, len: usize) void;
 
 /// Why the last `Region.init` on arm64 macOS returned null, for the
 /// messages of the tests and of `zig build jit-probe`.
-pub const Failure = enum { none, no_write_protect, map_jit, guard };
+pub const Failure = enum { none, map_jit, guard, protect };
+
+/// The tests set it to run the page form on a Mac that has the write
+/// protection for each thread.
+pub var force_pages = false;
 pub var last_failure: Failure = .none;
 /// The errno of the failed call of `last_failure`.
 pub var last_errno: c_int = 0;
@@ -85,6 +96,9 @@ pub const Region = struct {
     /// region.
     fail_second: bool = false,
     appends: u64 = 0,
+    /// True for the page form on arm64 macOS: one function on its own
+    /// pages, with `mprotect` for each one.
+    pages: bool = false,
 
     /// Reserves `limit` bytes of address space with no access, plus one
     /// page with no access before and after. Null when the system refuses.
@@ -101,11 +115,7 @@ pub const Region = struct {
     }
 
     fn initDarwin(limit: usize) ?Region {
-        if (pthread_jit_write_protect_supported_np() == 0) {
-            last_failure = .no_write_protect;
-            last_errno = 0;
-            return null;
-        }
+        if (force_pages or pthread_jit_write_protect_supported_np() == 0) return initPages(limit);
         const page = std.heap.pageSize();
         const usable = std.mem.alignForward(usize, @max(limit, page), page);
         const total = std.math.add(usize, usable, 2 * page) catch return null;
@@ -127,6 +137,26 @@ pub const Region = struct {
         return .{ .base = start + page, .limit = usable, .page = page };
     }
 
+    /// The page form: the whole region, its guard pages, and its free
+    /// pages have no access after the map.
+    fn initPages(limit: usize) ?Region {
+        const page = std.heap.pageSize();
+        const usable = std.mem.alignForward(usize, @max(limit, page), page);
+        const total = std.math.add(usize, usable, 2 * page) catch return null;
+        const p = c.mmap(null, total, .{ .READ = true, .WRITE = true }, .{ .TYPE = .PRIVATE, .ANONYMOUS = true, .JIT = true }, -1, 0);
+        if (p == c.MAP_FAILED) {
+            failed(.map_jit);
+            return null;
+        }
+        const start: [*]align(std.heap.page_size_min) u8 = @ptrCast(@alignCast(p));
+        if (c.mprotect(start, total, .{}) != 0) {
+            failed(.protect);
+            _ = c.munmap(start, total);
+            return null;
+        }
+        return .{ .base = start + page, .limit = usable, .page = page, .pages = true };
+    }
+
     pub fn deinit(r: *Region) void {
         const start: [*]align(std.heap.page_size_min) u8 = @alignCast(r.base - r.page);
         if (comptime darwin) _ = c.munmap(start, r.limit + 2 * r.page) else _ = linux.munmap(start, r.limit + 2 * r.page);
@@ -140,7 +170,7 @@ pub const Region = struct {
         if (r.stopped or code.len == 0) return null;
         r.appends += 1;
         if (r.fail_second and r.appends % 2 == 0) return null;
-        if (comptime darwin) return r.appendDarwin(code);
+        if (comptime darwin) return if (r.pages) r.appendPages(code) else r.appendDarwin(code);
         const len = std.mem.alignForward(usize, code.len, r.page);
         const end = std.math.add(usize, r.used, len) catch return null;
         if (end > r.limit) return null;
@@ -155,6 +185,29 @@ pub const Region = struct {
         if (@import("builtin").cpu.arch == .aarch64) clearCache(at, at + code.len);
         if (linux.errno(linux.mprotect(at, len, .{ .READ = true, .EXEC = true })) != .SUCCESS) {
             _ = linux.mprotect(at, len, .{});
+            r.stopped = true;
+            return null;
+        }
+        r.used = end;
+        return at[0..code.len];
+    }
+
+    /// The three steps of Linux on `MAP_JIT` pages, with the flush of the
+    /// instruction cache before the pages become executable.
+    fn appendPages(r: *Region, code: []const u8) ?[]const u8 {
+        const len = std.mem.alignForward(usize, code.len, r.page);
+        const end = std.math.add(usize, r.used, len) catch return null;
+        if (end > r.limit) return null;
+        const at: [*]align(std.heap.page_size_min) u8 = @alignCast(r.base + r.used);
+        if (c.mprotect(at, len, .{ .READ = true, .WRITE = true }) != 0) {
+            r.stopped = true;
+            return null;
+        }
+        @memcpy(at[0..code.len], code);
+        @memset(at[code.len..len], trap_byte);
+        sys_icache_invalidate(at, len);
+        if (c.mprotect(at, len, .{ .READ = true, .EXEC = true }) != 0) {
+            _ = c.mprotect(at, len, .{});
             r.stopped = true;
             return null;
         }

@@ -35,16 +35,13 @@ jobs:
           version: ${{ env.ZIG_VERSION }}
       # ulimit -v is enforced on Linux only. On macOS and Windows, the
       # memory limit of the interpreter is the only cap.
+      # The JIT memory of the runner, for the log: a virtual Mac has no
+      # write protection for each thread, so the region takes the page
+      # form there.
       - name: Probe the executable memory of the JIT
         if: runner.os == 'macOS'
         run: |
-          zig build
-          sw_vers; uname -m; sysctl -n machdep.cpu.brand_string || true
-          codesign -dv --entitlements - zig-out/bin/jit-probe 2>&1 || true
-          zig-out/bin/jit-probe || true
-          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>com.apple.security.cs.allow-jit</key><true/></dict></plist>\n' > jit.plist
-          cp zig-out/bin/jit-probe probe-signed
-          codesign -s - -f --entitlements jit.plist probe-signed && ./probe-signed || true
+          zig build jit-probe
       - name: Build and test
         run: |
           if [ "$RUNNER_OS" = Linux ]; then ulimit -v 6000000; fi
@@ -54,6 +51,35 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = Linux ]; then ulimit -v 6000000; fi
           test "$(zig build run -- bench/sum.tcl | tr -d '\r')" = 499999500000
+
+  # The JIT on arm64 macOS: the suite with the JIT at threshold 0 and with
+  # tier 2 must give the counts of each file without the JIT, and
+  # tools/jit-diff.sh -t must find no difference. socket.test is left out
+  # of the compare: its counts move between runs of one mode, from the
+  # timing of its sockets.
+  jit-macos:
+    name: JIT (macos-latest)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Suite with and without the JIT
+        run: |
+          zig build
+          zig build suite-runner
+          zig build jit-probe
+          for m in none j J; do
+            if [ $m = none ]; then f=; else f=-$m; fi
+            tools/suite.sh -a $f -o suite-$m.tsv | tail -1
+          done
+          for m in j J; do
+            diff <(grep -v -e skipped -e '^socket.test' suite-none.tsv | cut -f1-4 | sort) \
+                 <(grep -v -e skipped -e '^socket.test' suite-$m.tsv | cut -f1-4 | sort)
+          done
+      - name: Differential test of the JIT
+        run: tools/jit-diff.sh -t
 
   suite:
     name: Tcl 8.6.16 suite
