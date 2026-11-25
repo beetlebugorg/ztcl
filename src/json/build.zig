@@ -20,8 +20,9 @@
 //!   bits is an int, a larger integer is its decimal text (a big
 //!   integer), and other numbers are doubles. A double with at most 19
 //!   digits and a small exponent is exact with one multiply or divide of
-//!   a power of ten. Other doubles use `std.fmt.parseFloat`, which has
-//!   the Eisel-Lemire method and an exact fallback.
+//!   a power of ten. Other doubles with at most 19 digits use the
+//!   Eisel-Lemire step of `number.zig` on the parsed mantissa. The rest
+//!   use `std.fmt.parseFloat`, which has an exact fallback.
 //! - `true` and `false` are strings. `null` is an error unless the
 //!   caller gives a value for it.
 //!
@@ -39,6 +40,7 @@
 
 const std = @import("std");
 const index = @import("index.zig");
+const number_mod = @import("number.zig");
 const interp = @import("../interp.zig");
 const value = @import("../value.zig");
 const Interp = interp.Interp;
@@ -598,6 +600,11 @@ pub fn Parser(comptime kind: Kind) type {
                 var d: f64 = @floatFromInt(mant);
                 if (e10 < 0) d /= pow10[@intCast(-e10)] else d *= pow10[@intCast(e10)];
                 return .{ .double = if (neg) -d else d };
+            }
+            // The mantissa has each digit, so the Eisel-Lemire step needs no
+            // second read of the text.
+            if (digits <= 19 and mant != 0) {
+                if (number_mod.eiselLemire(mant, e10, neg)) |d| return .{ .double = d };
             }
             const d = std.fmt.parseFloat(f64, text) catch return p.err(at, "bad number");
             return .{ .double = d };
