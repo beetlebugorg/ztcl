@@ -18,6 +18,11 @@ pub fn build(b: *std.Build) void {
     // `-Djit_bug=true` plants a known bug: the `bin_vv` template of tier 1
     // skips its overflow check. The test of the fuzzer uses it.
     gc_options.addOption(bool, "jit_bug", b.option(bool, "jit_bug", "Plant a known bug in tier 1 for the fuzzer test") orelse false);
+    // The built-in modules: `-Dbatteries` gives the preset, and
+    // `-Dmod-NAME` puts one module in or leaves it out after the preset.
+    const batteries = b.option(Batteries, "batteries", "The modules: core (none), std (the default), or full") orelse .std;
+    const on = moduleFlags(b, batteries);
+    addModuleOptions(b, gc_options, on);
     // `-Drunner-optimize` sets the mode of the runner and the suite runner.
     const runner_optimize = b.option(std.builtin.OptimizeMode, "runner-optimize", "The mode of the runners") orelse .ReleaseFast;
 
@@ -112,6 +117,7 @@ pub fn build(b: *std.Build) void {
     wasm_options.addOption(bool, "gc_precise", gc_precise);
     wasm_options.addOption(bool, "jit", false);
     wasm_options.addOption(bool, "jit_bug", false);
+    addModuleOptions(b, wasm_options, on);
     wasm.root_module.addOptions("build_options", wasm_options);
     wasm.entry = .disabled;
     wasm.rdynamic = true;
@@ -119,4 +125,64 @@ pub fn build(b: *std.Build) void {
     wasm.stack_size = 8 << 20;
     const wasm_install = b.addInstallArtifact(wasm, .{ .dest_dir = .{ .override = .lib } });
     b.step("wasm", "Build the WebAssembly library").dependOn(&wasm_install.step);
+}
+
+const Batteries = enum { core, std, full };
+
+/// A row of the module table. `std` is true when `-Dbatteries=std` puts
+/// the module in. `needs` lists the modules that it needs.
+const Mod = struct {
+    name: []const u8,
+    std: bool,
+    needs: []const []const u8 = &.{},
+};
+
+/// The modules. src/modules.zig reads the flag `mod_NAME` of each one.
+const all_modules = [_]Mod{
+    .{ .name = "hello", .std = true },
+};
+
+/// The flag of each module after the preset, the flags, and the rule
+/// that a module that another module needs is in the build too.
+fn moduleFlags(b: *std.Build, batteries: Batteries) [all_modules.len]bool {
+    var on: [all_modules.len]bool = undefined;
+    for (all_modules, 0..) |m, i| {
+        on[i] = switch (batteries) {
+            .core => false,
+            .std => m.std,
+            .full => true,
+        };
+        const flag = b.fmt("mod-{s}", .{m.name});
+        if (b.option(bool, flag, b.fmt("Put the module {s} in the build or leave it out", .{m.name}))) |v| on[i] = v;
+    }
+    var changed = true;
+    while (changed) {
+        changed = false;
+        for (all_modules, 0..) |m, i| {
+            if (!on[i]) continue;
+            for (m.needs) |need| {
+                const j = for (all_modules, 0..) |n, k| {
+                    if (std.mem.eql(u8, n.name, need)) break k;
+                } else @panic("a module needs an unknown module");
+                if (!on[j]) {
+                    on[j] = true;
+                    changed = true;
+                    std.debug.print("the module {s} is in the build because {s} needs it\n", .{ need, m.name });
+                }
+            }
+        }
+    }
+    return on;
+}
+
+/// Adds `mod_NAME` for each module and `modules`, the names in the build.
+fn addModuleOptions(b: *std.Build, opts: *std.Build.Step.Options, on: [all_modules.len]bool) void {
+    var names: std.ArrayList(u8) = .empty;
+    for (all_modules, on) |m, v| {
+        opts.addOption(bool, b.fmt("mod_{s}", .{m.name}), v);
+        if (!v) continue;
+        if (names.items.len > 0) names.append(b.allocator, ' ') catch @panic("OOM");
+        names.appendSlice(b.allocator, m.name) catch @panic("OOM");
+    }
+    opts.addOption([]const u8, "modules", names.items);
 }

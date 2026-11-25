@@ -33,7 +33,9 @@ ztcl uses only the Zig standard library. [References](references/tcl.md) lists t
 | `oo.zig` | TclOO: classes, objects, methods, `next`, mixins, and filters. |
 | `proc.zig` | The optional `exec`, `pid`, and command pipelines. |
 | `filecmd.zig` | The optional `file`, `glob`, `cd`, and `pwd`. |
-| `pkg.zig` | The optional `package` command. |
+| `pkg.zig` | The `package` command: the full form of the capability `package`, and the small form of the built-in modules. |
+| `modules.zig` | The table of built-in modules and their install. |
+| `hello.zig` | The test modules `zt::hello` and `zt::hellonet`. |
 | `child.zig` | The optional `interp` command. |
 | `ucd.zig` | A small model of Unicode classes and case maps. |
 | `noise.zig` | The gradient noise of `noise3`. |
@@ -187,7 +189,7 @@ A coroutine has its own native stack, word stack, and frame chain. An exported a
 
 ## Capabilities
 
-`Interp.allow` turns on optional commands. The default interpreter has none. A child interpreter allocates through the counter of its parent, so the parent limit counts it. A call into a child passes the step limit, the nesting counts, and the native stack base. A child that is deleted while it runs is freed when the last call leaves it. `compact` gives `InterpBusy` for an interpreter with capabilities.
+`Interp.allow` turns on optional commands. The default interpreter has none. A build with modules has a small `package` command by default (`names`, `present`, `provide`, `require`, and `versions`). It loads a built-in module from memory and reads no file. A module that needs a capability gives an error without it, and a child interpreter installs each module itself. A child interpreter allocates through the counter of its parent, so the parent limit counts it. A call into a child passes the step limit, the nesting counts, and the native stack base. A child that is deleted while it runs is freed when the last call leaves it. `compact` gives `InterpBusy` for an interpreter with capabilities.
 
 ### The event loop
 

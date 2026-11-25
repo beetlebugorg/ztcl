@@ -48,6 +48,8 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try @import("mathns.zig").register(it);
     try @import("extra.zig").register(it);
     try coro.register(it);
+    // The small `package` of the built-in modules.
+    try @import("pkg.zig").registerBuiltin(it);
 }
 
 /// The direct form of a command site, or `.none`. The site must have a
