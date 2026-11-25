@@ -21,6 +21,7 @@ const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
 const Var = interp.Var;
+const cmds = @import("cmds.zig");
 
 pub const op_read: u8 = 1;
 pub const op_write: u8 = 2;
@@ -42,6 +43,9 @@ pub const VarTrace = struct {
 pub const Traced = struct {
     inner: union(enum) { undef, val: Value, arr: *interp.ArrayMap } = .undef,
     list: std.ArrayList(VarTrace) = .empty,
+    /// Goes up at each change of `list`. A run of the traces checks that
+    /// a trace is still in the list only after a change.
+    changes: u32 = 0,
     busy: bool = false,
     /// The cell of `tcl_precision`. A write sets the print precision,
     /// and an unset keeps the value. It does not turn the inline forms
@@ -148,15 +152,22 @@ fn fire(it: *Interp, t: *Traced, name: []const u8, idx: ?[]const u8, op: u8) Err
     if (t.busy) return null;
     t.busy = true;
     defer t.busy = false;
+    try cmds.chargeEntries(it, t.list.items.len);
     const snapshot = try it.alloc().dupe(VarTrace, t.list.items);
+    const changes = t.changes;
+    var meter: cmds.Meter = .{};
     for (snapshot) |tr| {
         if (tr.ops & op == 0) continue;
         if (tr.elem) |e| {
             const i = idx orelse continue;
             if (!eql(e, i)) continue;
         }
-        // A trace can remove a later trace of the same variable.
-        if (!still(t, tr)) continue;
+        // A trace can remove a later trace of the same variable. With no
+        // change of the list, each trace of the snapshot is still there.
+        if (t.changes != changes) {
+            try meter.add(it, t.list.items.len *| cmds.entry_units);
+            if (!still(t, tr)) continue;
+        }
         if (tr.flag) |f| {
             f.* = true;
             continue;
@@ -272,19 +283,22 @@ pub fn unset(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!
     if (idx) |i| {
         if (t.inner != .arr) return false;
         if (!t.inner.arr.orderedRemove(i)) return false;
-        // The traces of the element go away before they run.
+        // The traces of the element go away before they run. The first
+        // pass can fail, and it changes no state. The second pass keeps the
+        // other traces in one pass.
+        try cmds.chargeEntries(it, t.list.items.len);
         var gone: Traced = .{ .inner = .undef };
-        var k: usize = 0;
-        while (k < t.list.items.len) {
-            const tr = t.list.items[k];
-            if (tr.elem != null and eql(tr.elem.?, i)) {
-                try gone.list.append(it.alloc(), tr);
-                _ = t.list.orderedRemove(k);
-            } else {
-                if (tr.elem == null) try gone.list.append(it.alloc(), tr);
-                k += 1;
-            }
+        for (t.list.items) |tr| {
+            if (tr.elem == null or eql(tr.elem.?, i)) try gone.list.append(it.alloc(), tr);
         }
+        var keep: usize = 0;
+        for (t.list.items) |tr| {
+            if (tr.elem != null and eql(tr.elem.?, i)) continue;
+            t.list.items[keep] = tr;
+            keep += 1;
+        }
+        if (keep != t.list.items.len) t.changes +%= 1;
+        t.list.shrinkRetainingCapacity(keep);
         _ = try fire(it, &gone, name, i, op_unset);
         return true;
     }
@@ -293,6 +307,7 @@ pub fn unset(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!
     var gone: Traced = .{ .inner = t.inner };
     gone.list = t.list;
     t.list = .empty;
+    t.changes +%= 1;
     t.inner = .undef;
     drop(it, cell);
     gone.inner = .undef;
@@ -436,12 +451,14 @@ fn varRemove(it: *Interp, name: []const u8, ops: u8, cmd: Value, old: bool) Erro
     if (cell.v != .traced) return;
     const t = cell.v.traced;
     const text = try it.str(cmd);
+    try cmds.chargeEntries(it, t.list.items.len);
     for (t.list.items, 0..) |tr, k| {
         if (tr.ops != ops or (tr.old != null) != old) continue;
         if ((tr.elem == null) != (idx == null)) continue;
         if (idx) |i| if (!eql(tr.elem.?, i)) continue;
         if (!eql(try it.str(tr.cmd), text)) continue;
         _ = t.list.orderedRemove(k);
+        t.changes +%= 1;
         break;
     }
     if (t.list.items.len == 0) drop(it, cell);
@@ -451,7 +468,10 @@ fn varAdd(it: *Interp, name: []const u8, ops: u8, cmd: Value, old: ?[]const u8) 
     const target = (try targetOf(it, name, true)).?;
     const t = try tracedOf(it, target.cell);
     const copy: ?[]const u8 = if (target.idx) |i| try it.alloc().dupe(u8, i) else null;
+    // The insert moves each trace of the list.
+    try cmds.chargeEntries(it, t.list.items.len);
     try t.list.insert(it.alloc(), 0, .{ .ops = ops, .cmd = cmd, .elem = copy, .old = old });
+    t.changes +%= 1;
 }
 
 /// Adds the trace of `vwait` to a variable of the current frame.
@@ -471,6 +491,7 @@ pub fn addFlag(it: *Interp, name: []const u8, flag: *bool) Error!void {
     const t = try tracedOf(it, target.cell);
     const copy: ?[]const u8 = if (target.idx) |i| try it.alloc().dupe(u8, i) else null;
     try t.list.insert(it.alloc(), 0, .{ .ops = op_write | op_unset, .cmd = Value.empty, .elem = copy, .flag = flag });
+    t.changes +%= 1;
 }
 
 pub fn removeFlag(it: *Interp, name: []const u8, flag: *bool) void {
@@ -481,6 +502,7 @@ pub fn removeFlag(it: *Interp, name: []const u8, flag: *bool) void {
     for (t.list.items, 0..) |tr, k| {
         if (tr.flag == flag) {
             _ = t.list.orderedRemove(k);
+            t.changes +%= 1;
             break;
         }
     }
@@ -557,6 +579,7 @@ fn execCall(it: *Interp, argv: []const Value, c: ?*Cmd) Error!Value {
     if (t.busy) return it.call(&inner, argv, c);
     const a = it.alloc();
     const text = try value.listToString(a, argv);
+    try cmds.chargeEntries(it, t.execs.items.len);
     const snapshot = try a.dupe(ExecTrace, t.execs.items);
     t.busy = true;
     for (snapshot) |tr| {
@@ -608,6 +631,7 @@ pub fn commandEvent(it: *Interp, c: *interp.Command, old: []const u8, new: []con
     const a = it.alloc();
     const old_full = try std.fmt.allocPrint(a, "::{s}", .{std.mem.trimStart(u8, old, ":")});
     const new_full = if (new.len == 0) "" else try std.fmt.allocPrint(a, "::{s}", .{std.mem.trimStart(u8, new, ":")});
+    try cmds.chargeEntries(it, t.cmds.items.len);
     const snapshot = try a.dupe(ExecTrace, t.cmds.items);
     for (snapshot) |tr| {
         if (tr.ops & bit == 0) continue;
@@ -710,6 +734,8 @@ pub fn cmdTrace(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const c = try needCommand(it, name);
     const t = try traceData(it, c);
     const list = if (k == .command) &t.cmds else &t.execs;
+    // An insert or a remove moves each trace of the list.
+    try cmds.chargeEntries(it, list.items.len);
     if (op == .add) {
         try list.insert(a, 0, .{ .ops = ops, .cmd = argv[5] });
         if (k == .execution and t.orig == null) {

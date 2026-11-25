@@ -52,9 +52,10 @@ fn display(it: *Interp, name: []const u8) Error!Value {
 }
 
 /// True when the namespace exports the command name.
-fn exported(it: *Interp, space: []const u8, name: []const u8) bool {
+fn exported(it: *Interp, space: []const u8, name: []const u8) Error!bool {
     const pats = it.exports.get(space) orelse return false;
-    for (pats.items) |p| if (cmds.globMatch(p, name, false)) return true;
+    try cmds.chargeEntries(it, pats.items.len);
+    for (pats.items) |p| if (try cmds.globSteps(it, p, name, false)) return true;
     return false;
 }
 
@@ -204,11 +205,12 @@ fn ensembleNames(it: *Interp, e: *Ensemble) Error![]const []const u8 {
         while (k < e.map.len) : (k += 2) try names.append(a, try it.str(e.map[k]));
     } else {
         const prefix = if (e.ns.len == 0) "" else try std.fmt.allocPrint(a, "{s}::", .{e.ns});
+        try cmds.chargeEntries(it, it.commands.count());
         var iter = it.commands.keyIterator();
         while (iter.next()) |k| {
             if (!std.mem.startsWith(u8, k.*, prefix)) continue;
             const rest = k.*[prefix.len..];
-            if (std.mem.indexOf(u8, rest, "::") == null and exported(it, e.ns, rest)) try names.append(a, rest);
+            if (std.mem.indexOf(u8, rest, "::") == null and try exported(it, e.ns, rest)) try names.append(a, rest);
         }
     }
     std.mem.sort([]const u8, names.items, {}, struct {
@@ -484,6 +486,7 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         if (args.len > 2) return it.wrongArgs("namespace children ?name? ?pattern?");
         const space = if (args.len >= 1) try resolve(it, try it.str(args[0])) else it.ns;
         var out: std.ArrayList(Value) = .empty;
+        try cmds.chargeEntries(it, it.namespaces.count());
         for (it.namespaces.keys()) |k| {
             if (!eql(qualifiers(k), space)) continue;
             if (space.len == 0 and std.mem.indexOf(u8, k, "::") != null) continue;
@@ -491,7 +494,7 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             if (args.len == 2) {
                 var pat = try it.str(args[1]);
                 if (!std.mem.startsWith(u8, pat, "::")) pat = try std.fmt.allocPrint(a, "::{s}{s}{s}", .{ space, if (space.len > 0) "::" else "", pat });
-                if (!cmds.globMatch(pat, shown.str, false)) continue;
+                if (!try cmds.globSteps(it, pat, shown.str, false)) continue;
             }
             try out.append(a, shown);
         }
@@ -502,14 +505,16 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             const space = try resolve(it, try it.str(v));
             if (space.len == 0 or !it.namespaces.contains(space)) return it.fail("unknown namespace \"{s}\" in namespace delete command", .{try it.str(v)});
             const prefix = try std.fmt.allocPrint(a, "{s}::", .{space});
+            // Each part below is a scan of a whole table.
+            try cmds.chargeEntries(it, it.namespaces.count() +| it.commands.count() +| it.global.vars.items.len);
             // The objects of the namespace end first.
             try @import("oo.zig").namespaceGone(it, space, prefix);
             // The namespace, its children, its commands, and its variables.
-            var i: usize = 0;
-            while (i < it.namespaces.count()) {
-                const k = it.namespaces.keys()[i];
-                if (eql(k, space) or std.mem.startsWith(u8, k, prefix)) it.namespaces.orderedRemoveAt(i) else i += 1;
+            var drop: std.ArrayList(usize) = .empty;
+            for (it.namespaces.keys(), 0..) |k, i| {
+                if (eql(k, space) or std.mem.startsWith(u8, k, prefix)) try drop.append(a, i);
             }
+            try it.namespaces.orderedRemoveAtMany(a, drop.items);
             var gone: std.ArrayList([]const u8) = .empty;
             var iter = it.commands.keyIterator();
             while (iter.next()) |k| if (std.mem.startsWith(u8, k.*, prefix)) try gone.append(a, k.*);
@@ -532,9 +537,9 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         const name = try it.str(args[i]);
         if (kind_var) {
             const full = try it.qualify(name);
-            for (it.global.vars.items) |e| if (eql(e.name, full)) return display(it, full);
+            if (it.global.find(it.alloc(), full) != null) return display(it, full);
             if (it.ns.len > 0 and !std.mem.startsWith(u8, name, "::")) {
-                for (it.global.vars.items) |e| if (eql(e.name, name)) return display(it, name);
+                if (it.global.find(it.alloc(), name) != null) return display(it, name);
             }
             return Value.empty;
         }
@@ -549,6 +554,7 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (eql(sub, "import")) {
         if (args.len == 0) {
             var out: std.ArrayList(Value) = .empty;
+            try cmds.chargeEntries(it, it.commands.count());
             var iter = it.commands.iterator();
             while (iter.next()) |e| {
                 if (!eql(qualifiers(e.key_ptr.*), it.ns) or eql(e.key_ptr.*, e.value_ptr.*.name)) continue;
@@ -573,13 +579,14 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             if (eql(from, it.ns)) return it.fail("import pattern \"{s}\" tries to import from namespace \"{s}\" into itself", .{ text, tail(from) });
             const prefix = if (from.len == 0) "" else try std.fmt.allocPrint(a, "{s}::", .{from});
             var found: std.ArrayList([]const u8) = .empty;
+            try cmds.chargeEntries(it, it.commands.count());
             var iter = it.commands.keyIterator();
             while (iter.next()) |k| {
                 if (!std.mem.startsWith(u8, k.*, prefix)) continue;
                 const rest = k.*[prefix.len..];
                 if (std.mem.indexOf(u8, rest, "::") != null) continue;
-                if (!exported(it, from, rest)) continue;
-                if (cmds.globMatch(tail_pat, rest, false)) try found.append(a, k.*);
+                if (!try exported(it, from, rest)) continue;
+                if (try cmds.globSteps(it, tail_pat, rest, false)) try found.append(a, k.*);
             }
             for (found.items) |k| {
                 const target = it.commands.get(k).?;
@@ -612,12 +619,13 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             }
             const pat = tail(text);
             var gone: std.ArrayList([]const u8) = .empty;
+            try cmds.chargeEntries(it, it.commands.count());
             var iter = it.commands.iterator();
             while (iter.next()) |e| {
                 const key = e.key_ptr.*;
                 if (!eql(qualifiers(key), it.ns) or eql(key, e.value_ptr.*.name)) continue;
                 if (has_ns and !eql(qualifiers(e.value_ptr.*.name), from)) continue;
-                if (cmds.globMatch(pat, tail(key), false)) try gone.append(a, key);
+                if (try cmds.globSteps(it, pat, tail(key), false)) try gone.append(a, key);
             }
             for (gone.items) |k| _ = it.commands.remove(k);
             it.epoch += 1;

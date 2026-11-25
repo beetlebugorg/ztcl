@@ -376,6 +376,8 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
         value.precision = 0;
     }
     it.global.vars = globals;
+    it.global.index = .empty;
+    it.global.indexed = 0;
     it.error_code = error_code;
     it.result = Value.empty;
     it.error_info = .empty;

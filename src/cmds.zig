@@ -553,6 +553,7 @@ fn cmdRename(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         // The imports of a deleted command go away.
         if (eql(kv.value.name, old)) {
             var gone: std.ArrayList([]const u8) = .empty;
+            try chargeEntries(it, it.commands.count());
             var iter = it.commands.iterator();
             while (iter.next()) |e| if (e.value_ptr.* == kv.value) try gone.append(it.alloc(), e.key_ptr.*);
             for (gone.items) |k| _ = it.commands.remove(k);
@@ -1146,6 +1147,7 @@ fn cmdLrepeat(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const per = argv.len - 2;
     const total = std.math.mul(usize, @intCast(n), per) catch return it.fail("max length of a Tcl list exceeded", .{});
     if (total > 1 << 24) return it.fail("max length of a Tcl list exceeded", .{});
+    try chargeEntries(it, total);
     const out = try it.alloc().alloc(Value, total);
     for (out, 0..) |*o, i| o.* = argv[2 + i % per];
     return value.wrapList(it.alloc(), out);
@@ -1404,15 +1406,86 @@ fn globOne(pat: []const u8, p_in: usize, c_in: u21, nocase: bool) ?usize {
     return if (want == ch) p + lit.len else null;
 }
 
-/// A glob match that uses the step limit: one step for each 4096 units of
-/// the pattern length times the string length.
-pub fn globSteps(it: *Interp, pat: []const u8, s: []const u8, nocase: bool) Error!bool {
-    const cost = (pat.len *| s.len) / 4096;
+/// The units of work of one step. A command whose work grows with the
+/// size of its input or of its result uses one step for each
+/// `work_per_step` units. One byte is one unit.
+pub const work_per_step = 4096;
+/// The units of one entry of a table, one element of a list, or one
+/// compare of a sort.
+pub const entry_units = 64;
+
+/// Uses one step for each `work_per_step` units of work. The caller
+/// charges the work before it does the work, when it knows the size.
+pub fn chargeWork(it: *Interp, units: usize) Error!void {
+    const cost = units / work_per_step;
     if (cost > it.step_limit) {
         it.step_limit = 0;
         return it.fail("step limit reached", .{});
     }
     it.step_limit -= cost;
+}
+
+/// Uses the steps of a scan or a build of `n` entries.
+pub fn chargeEntries(it: *Interp, n: usize) Error!void {
+    return chargeWork(it, n *| entry_units);
+}
+
+/// Counts the units of work of a loop, and uses one step for each
+/// `work_per_step` units. The rest stays for the next call of `add`.
+pub const Meter = struct {
+    units: usize = 0,
+
+    pub inline fn add(m: *Meter, it: *Interp, n: usize) Error!void {
+        m.units +|= n;
+        if (m.units >= work_per_step) {
+            try chargeWork(it, m.units);
+            m.units %= work_per_step;
+        }
+    }
+};
+
+/// The first position of `needle` in `hay` at or after `start`, or null.
+/// The search is Boyer-Moore-Horspool. Each compare of the needle uses
+/// `needle.len` units of the step limit, so a text that makes each
+/// position compare the full needle uses steps for that work.
+fn findFirst(it: *Interp, hay: []const u8, start: usize, needle: []const u8) Error!?usize {
+    if (needle.len <= 4 or hay.len < 52) return std.mem.indexOfPos(u8, hay, start, needle);
+    if (needle.len > hay.len) return null;
+    var skip: [256]usize = @splat(needle.len);
+    for (needle[0 .. needle.len - 1], 0..) |c, k| skip[c] = needle.len - 1 - k;
+    var meter: Meter = .{};
+    var i = start;
+    while (i <= hay.len - needle.len) {
+        try meter.add(it, needle.len);
+        if (eql(hay[i..][0..needle.len], needle)) return i;
+        i += skip[hay[i + needle.len - 1]];
+    }
+    return null;
+}
+
+/// The last position of `needle` in `hay`, or null. It is the reverse
+/// form of `findFirst`, with the same use of steps.
+fn findLast(it: *Interp, hay: []const u8, needle: []const u8) Error!?usize {
+    if (needle.len <= 4 or hay.len < 52) return std.mem.lastIndexOf(u8, hay, needle);
+    if (needle.len > hay.len) return null;
+    var skip: [256]usize = @splat(needle.len);
+    var k = needle.len - 1;
+    while (k > 0) : (k -= 1) skip[needle[k]] = k;
+    var meter: Meter = .{};
+    var i = hay.len - needle.len;
+    while (true) {
+        try meter.add(it, needle.len);
+        if (eql(hay[i..][0..needle.len], needle)) return i;
+        const back = skip[hay[i]];
+        if (back > i) return null;
+        i -= back;
+    }
+}
+
+/// A glob match that uses the step limit: one step for each 4096 units of
+/// the pattern length times the string length.
+pub fn globSteps(it: *Interp, pat: []const u8, s: []const u8, nocase: bool) Error!bool {
+    try chargeWork(it, pat.len *| s.len);
     return globMatch(pat, s, nocase);
 }
 
@@ -1545,7 +1618,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                     if (at >= count) return .{ .int = -1 };
                     start = byteOf(hay, n, @intCast(@max(at, 0)));
                 }
-                const pos = std.mem.indexOfPos(u8, hay, start, needle) orelse return .{ .int = -1 };
+                const pos = try findFirst(it, hay, start, needle) orelse return .{ .int = -1 };
                 return .{ .int = @intCast(charCount(hay[0..pos])) };
             }
             var end: usize = hay.len;
@@ -1554,7 +1627,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 if (at < 0) return .{ .int = -1 };
                 end = byteOf(hay, n, @intCast(@min(at + 1, count)));
             }
-            const pos = std.mem.lastIndexOf(u8, hay[0..end], needle) orelse return .{ .int = -1 };
+            const pos = try findLast(it, hay[0..end], needle) orelse return .{ .int = -1 };
             return .{ .int = @intCast(charCount(hay[0..pos])) };
         },
         .map => {
@@ -1571,12 +1644,15 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             const keys = try a.alloc([]const u8, pairs.len);
             for (pairs, keys) |p, *k| k.* = try it.str(p);
             var out: std.ArrayList(u8) = .empty;
+            // Each compare of a key uses its length in units of work.
+            var meter: Meter = .{};
             var i: usize = 0;
             outer: while (i < s.len) {
                 var k: usize = 0;
                 while (k < keys.len) : (k += 2) {
                     const key = keys[k];
                     if (key.len == 0 or i + key.len > s.len) continue;
+                    try meter.add(it, key.len);
                     const same = if (nocase) std.ascii.eqlIgnoreCase(s[i .. i + key.len], key) else eql(s[i .. i + key.len], key);
                     if (same) {
                         try out.appendSlice(a, keys[k + 1]);
@@ -1634,8 +1710,17 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (n <= 0 or s.len == 0) return Value.empty;
             const total = std.math.mul(usize, s.len, @intCast(n)) catch return it.fail("result exceeds max size for a Tcl value", .{});
             if (total > 1 << 28) return it.fail("result exceeds max size for a Tcl value", .{});
+            try chargeWork(it, total);
             const out = try a.alloc(u8, total);
-            for (0..@intCast(n)) |k| @memcpy(out[k * s.len ..][0..s.len], s);
+            // Each copy doubles the filled part, so the time is linear in
+            // the result also for a short string.
+            @memcpy(out[0..s.len], s);
+            var done = s.len;
+            while (done < total) {
+                const k = @min(done, total - done);
+                @memcpy(out[done..][0..k], out[0..k]);
+                done += k;
+            }
             return .{ .str = out };
         },
         .reverse => {
@@ -1972,12 +2057,13 @@ fn trimChars(s: []const u8, chars: ?[]const u8, left: bool, right: bool) []const
 
 fn namesList(it: *Interp, frame: *interp.Frame, pattern: ?[]const u8, links: bool) Error!Value {
     var out: std.ArrayList(Value) = .empty;
+    try chargeEntries(it, frame.vars.items.len);
     for (frame.vars.items) |e| {
         var c = e.cell;
         if (c.v == .link and !links) continue;
         while (c.v == .link) c = c.v.link;
         if (c.v == .undef or (c.v == .traced and c.v.traced.inner == .undef)) continue;
-        if (pattern) |p| if (!globMatch(p, e.name, false)) continue;
+        if (pattern) |p| if (!try globSteps(it, p, e.name, false)) continue;
         try out.append(it.alloc(), .{ .str = e.name });
     }
     return value.wrapList(it.alloc(), out.items);
@@ -2027,11 +2113,12 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (eql(sub, "functions")) {
         if (argv.len > 3) return it.wrongArgs("info functions ?pattern?");
         var out: std.ArrayList(Value) = .empty;
+        try chargeEntries(it, it.commands.count());
         var iter = it.commands.keyIterator();
         while (iter.next()) |k| {
             if (!std.mem.startsWith(u8, k.*, "tcl::mathfunc::")) continue;
             const name = k.*["tcl::mathfunc::".len..];
-            if (pattern) |p| if (!globMatch(p, name, false)) continue;
+            if (pattern) |p| if (!try globSteps(it, p, name, false)) continue;
             try out.append(a, .{ .str = name });
         }
         std.mem.sort(Value, out.items, {}, struct {
@@ -2066,6 +2153,7 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const qualified = if (pattern) |p| std.mem.indexOf(u8, p, "::") != null else false;
         const space = if (qualified) std.mem.trim(u8, ns.qualifiers(pattern.?), ":") else it.ns;
         const pat: ?[]const u8 = if (qualified) ns.tail(pattern.?) else pattern;
+        try chargeEntries(it, it.commands.count());
         var iter = it.commands.iterator();
         while (iter.next()) |e| {
             if (only_procs and e.value_ptr.*.impl != .proc) continue;
@@ -2078,7 +2166,7 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 const mine = try std.fmt.allocPrint(a, "{s}::{s}", .{ it.ns, key });
                 if (it.commands.contains(mine)) continue;
             }
-            if (pat) |p| if (!globMatch(p, ns.tail(key), false)) continue;
+            if (pat) |p| if (!try globSteps(it, p, ns.tail(key), false)) continue;
             var shown: []const u8 = key;
             if (qualified) {
                 shown = try std.fmt.allocPrint(a, "::{s}", .{key});

@@ -1665,6 +1665,71 @@ test "one command that builds a large result stops below twice the memory limit"
     }
 }
 
+/// Scripts in which one step did work that grew without a bound: with
+/// a count of procs, of global variables, of table entries, or with the
+/// size of a value. Each one has a step limit. With the work charged to
+/// the step limit, each one stops at the limit in well under a second.
+/// Before the charges, each one used many seconds of CPU time.
+const step_cost_scripts = [_]struct { limit: u64, script: []const u8 }{
+    // The issue case: the guard scanned each command after each new proc.
+    .{ .limit = 60_000, .script = "proc f {} {for {set i 0} {1} {incr i} {proc p$i {} {}}}; f" },
+    // The search of a frame read each variable.
+    .{ .limit = 300_000, .script = "proc f {} {for {set i 0} {1} {incr i} {set ::v$i 1}}; f" },
+    // A scan of the command table, a namespace delete, a delete of a
+    // command, and the destroy of an object, each with 5000 procs.
+    .{ .limit = 40_000, .script = "proc f {} {for {set i 0} {$i < 5000} {incr i} {proc p$i {} {}}; while 1 {info commands q*}}; f" },
+    .{ .limit = 40_000, .script = "proc f {} {for {set i 0} {$i < 5000} {incr i} {proc p$i {} {}}; for {set i 0} {1} {incr i} {namespace eval n$i {}; namespace delete n$i}}; f" },
+    .{ .limit = 40_000, .script = "proc f {} {for {set i 0} {$i < 5000} {incr i} {proc p$i {} {}}; for {set i 0} {1} {incr i} {proc q$i {} {}; rename q$i {}}}; f" },
+    .{ .limit = 40_000, .script = "proc f {} {for {set i 0} {$i < 5000} {incr i} {proc p$i {} {}}; oo::class create C; while 1 {[C new] destroy}}; f" },
+    // The scans of an array.
+    .{ .limit = 40_000, .script = "proc f {} {for {set i 0} {$i < 5000} {incr i} {set a($i) 1}; while 1 {array names a q*}}; f" },
+    .{ .limit = 150_100, .script = "proc f {} {for {set i 0} {$i < 50000} {incr i} {set a($i) 1}; array unset a {*[13579]}}; f" },
+    // A sort, and builders with a result far larger than their words.
+    .{ .limit = 50_000, .script = "proc f {} {set l [lrepeat 3000000 x]; lsort $l}; f" },
+    .{ .limit = 20_000, .script = "proc f {} {while 1 {string repeat x 4000000}}; f" },
+    .{ .limit = 20_000, .script = "proc f {} {while 1 {lrepeat 250000 x}}; f" },
+    // A search where each position compares the full needle.
+    .{ .limit = 20_000, .script = "proc f {} {set h [string repeat a 4000000]; set n [string repeat a 40000]b; while 1 {string first $n $h}}; f" },
+    .{ .limit = 20_000, .script = "proc f {} {set h [string repeat a 4000000]; set n b[string repeat a 40000]; while 1 {string last $n $h}}; f" },
+    .{ .limit = 20_000, .script = "proc f {} {set h [string repeat a 200000]; set m {}; for {set i 0} {$i < 400} {incr i} {lappend m [string repeat a 2000]$i x}; while 1 {string map $m $h}}; f" },
+    // A long list of traces: each add moved the list, and each run
+    // of a trace searched the list.
+    .{ .limit = 200_000, .script = "proc f {} {for {set i 0} {$i < 20000} {incr i} {trace add variable ::x write [list list $i]}; while 1 {set ::x 1}}; f" },
+};
+
+/// The CPU time of the thread, in nanoseconds.
+fn cpuNow() i96 {
+    return std.Io.Clock.cpu_thread.now(testing.io).toNanoseconds();
+}
+
+test "the step limit bounds the CPU time of each step" {
+    // A generous bound: each script stops in under 0.5 s in a Debug
+    // build. Before the charges, each script used far more.
+    const bound: i96 = 4 * std.time.ns_per_s;
+    const want = "error TclError: step limit reached\n";
+    for (step_cost_scripts) |s| {
+        errdefer std.debug.print("script:\n{s}\n", .{s.script});
+        const t0 = cpuNow();
+        const ref = try runMode(s.script, false, s.limit, 0);
+        defer ref.deinit();
+        const used = cpuNow() - t0;
+        errdefer std.debug.print("{s}\ncpu: {d} ms\n", .{ ref.text, @divTrunc(used, std.time.ns_per_ms) });
+        try testing.expect(std.mem.startsWith(u8, ref.text, want));
+        try testing.expect(used <= bound);
+        if (!jit.built) continue;
+        for ([_]bool{ false, true }) |t2| {
+            test_tier2 = t2;
+            defer test_tier2 = false;
+            const t1 = cpuNow();
+            const got = try runMode(s.script, true, s.limit, 1);
+            defer got.deinit();
+            const used_jit = cpuNow() - t1;
+            try testing.expectEqualStrings(ref.text, got.text);
+            try testing.expect(used_jit <= bound);
+        }
+    }
+}
+
 test "tier 2: links, a string bound, break, and continue" {
     try sameT2(
         \\proc up {} { upvar 1 g y; for {set i 0} {$i < 50} {incr i} { incr y } }

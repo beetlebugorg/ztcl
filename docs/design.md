@@ -117,7 +117,7 @@ A cell that holds the canonical text of an integer gets the integer when a compa
 
 The semantics of Tcl stay:
 
-- A guard starts each inline form. It checks that each inlined name is the original core command and that no namespace has a command of that name. The check runs one time for each change of the command epoch.
+- A guard starts each inline form. It checks that each inlined name is the original core command and that no namespace has a command of that name. The check runs one time for each change of the command epoch. The command table counts its keys in a namespace with an inlined name, so the check is one lookup for each inlined name. Its cost does not grow with the count of commands.
 - When the guard fails, it jumps to a cold block after the end of the code. The cold block runs the command on the general path, so `rename set foo` and a proc named `incr` work.
 - `upvar`, `global`, `variable`, `uplevel`, and `info locals` use the same cells in `Frame.vars`. A slot can hold a link to a cell of another frame.
 - A table of ranges maps an address to its commands and loops. An error adds each enclosing command to `errorInfo`. A `break` or a `continue` from a general command goes to the innermost loop.
@@ -128,6 +128,7 @@ The semantics of Tcl stay:
 
 - The words of a command go on a stack of values, in chunks. A command returns its stack space when it ends. A loop with integer math allocates no memory.
 - A proc call makes a frame. A frame is a small array of names and variable cells. Frames and cells go back to a free list when the call ends.
+- A frame with 32 or more variables also has a hash index from a name to its first entry. A search of the frame adds the new entries to the index first. So a search of the global frame with many variables does not read each variable.
 - `upvar` and `global` make a cell that links to another cell.
 - The return codes are Zig errors: `TclError`, `TclReturn`, `TclBreak`, and `TclContinue`. The result of the interpreter holds the message or the value. `return -code` and `return -level` set the code and the level of a pending return.
 - A return code above 4 (`return -code 5`) is the error `TclCustom`, with the number in `custom_code`.
@@ -214,6 +215,7 @@ A channel that does not block keeps output that the peer has no room for. The lo
 - The nesting of calls has a limit (600 levels). The nesting of command substitutions and of an expression has a limit (200 levels), and an expression has at most 2000 nodes. A deep script gives an error and does not use up the native stack.
 - A glob match goes back only to the last `*`. Its time is at most the pattern length times the string length. `string match`, `switch -glob`, `lsearch -glob`, and `dict filter` pay one step of the step limit for each 4096 units of that product.
 - A regular expression uses the step limit (see above).
+- A command whose work grows with a table, with a list, or with the size of its result uses the step limit for that work. The rule and the commands are in [SECURITY.md](../SECURITY.md#the-cpu-time-of-a-step).
 - All memory comes from one heap (`src/heap.zig`) on the allocator that the embedder gives. The heap has pages of blocks in 32 size classes and large blocks for a request above 8 KiB. A heap below 2 MiB uses pages of 4 KiB, so a short script holds little memory. A child interpreter shares the heap of its parent.
 - A collector frees the blocks that a script no longer reaches. It is a mark-and-sweep collector that does not move a block, and it finds pointers conservatively: each aligned word of a root or of a live block that has the address of a block (also an address inside the block) keeps the block. A number that looks like an address keeps a dead block. This costs memory and never safety.
 - The roots on each target are the bytes of each `Interp` struct of the tree, the state of the point procs, each range from `addRoot`, each value from `hold`, and the pin list of a precise build. A native build also scans the native stack up to `native_base`, the callee-saved registers, the stack of the resumer of each running coroutine, and the stack block of each coroutine. A word on a native stack also keeps the block before it and the block after it, because an optimizing compiler can hold a pointer just outside a block. A block of a type with an alignment below the size of a pointer holds no pointer, and the mark does not read it.

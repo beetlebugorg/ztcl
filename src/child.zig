@@ -161,6 +161,14 @@ fn inTree(top: *const Interp, x: *const Interp) bool {
 }
 
 /// Removes each alias in the tree under `at` that goes into `gone`.
+/// The count of commands of each interpreter in the tree under `at`.
+fn treeCommands(at: *const Interp) usize {
+    var n: usize = at.commands.count();
+    var kids = at.children.valueIterator();
+    while (kids.next()) |c| n +|= treeCommands(c.*.it);
+    return n;
+}
+
 fn dropAliases(at: *Interp, gone: *const Interp) void {
     var keys: std.ArrayList([]const u8) = .empty;
     var iter = at.commands.iterator();
@@ -314,6 +322,7 @@ fn aliasInfo(it: *Interp, src: *Interp, name: []const u8) Error!Value {
 
 fn aliasNames(it: *Interp, src: *Interp) Error!Value {
     var out: std.ArrayList(Value) = .empty;
+    try cmds.chargeEntries(it, src.commands.count());
     var iter = src.commands.iterator();
     while (iter.next()) |e| {
         if (e.value_ptr.*.impl == .native and e.value_ptr.*.impl.native == &aliasCall) {
@@ -506,6 +515,11 @@ pub fn cmdInterp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             }
             const name = try it.str(parts[parts.len - 1]);
             if (!parent.children.contains(name)) return it.fail("could not find interpreter \"{s}\"", .{try it.str(v)});
+            // The delete scans the command table of each interpreter of
+            // the tree for aliases.
+            var root = it;
+            while (root.parent) |p| root = p;
+            try cmds.chargeEntries(it, treeCommands(root));
             destroy(parent, name);
         }
         return Value.empty;

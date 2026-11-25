@@ -359,8 +359,9 @@ fn cmdArray(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (argv.len > 4) return it.wrongArgs("array get arrayName ?pattern?");
             const pattern: ?[]const u8 = if (argv.len == 4) try it.str(argv[3]) else null;
             var out: std.ArrayList(Value) = .empty;
+            if (map) |m| try cmds.chargeEntries(it, m.count());
             if (map) |m| for (m.keys(), m.values()) |k, v| {
-                if (pattern) |p| if (!cmds.globMatch(p, k, false)) continue;
+                if (pattern) |p| if (!try cmds.globSteps(it, p, k, false)) continue;
                 try out.append(a, .{ .str = k });
                 try out.append(a, v);
             };
@@ -378,10 +379,11 @@ fn cmdArray(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 }
             } else if (argv.len == 4) pattern = argv[3];
             var out: std.ArrayList(Value) = .empty;
+            if (map) |m| try cmds.chargeEntries(it, m.count());
             if (map) |m| for (m.keys()) |k| {
                 if (pattern) |pv| {
                     const p = try it.str(pv);
-                    const hit = if (eql(mode, "-exact")) eql(p, k) else if (eql(mode, "-regexp")) try regex.matches(it, p, k, false) else cmds.globMatch(p, k, false);
+                    const hit = if (eql(mode, "-exact")) eql(p, k) else if (eql(mode, "-regexp")) try regex.matches(it, p, k, false) else try cmds.globSteps(it, p, k, false);
                     if (!hit) continue;
                 }
                 try out.append(a, .{ .str = k });
@@ -393,10 +395,14 @@ fn cmdArray(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (map) |m| {
                 if (argv.len == 4) {
                     const p = try it.str(argv[3]);
-                    var i: usize = m.count();
-                    while (i > 0) : (i -= 1) {
-                        if (cmds.globMatch(p, m.keys()[i - 1], false)) m.orderedRemoveAt(i - 1);
+                    try cmds.chargeEntries(it, m.count());
+                    // One pass removes each match, so the cost is linear
+                    // in the count of elements.
+                    var gone: std.ArrayList(usize) = .empty;
+                    for (m.keys(), 0..) |k, i| {
+                        if (try cmds.globSteps(it, p, k, false)) try gone.append(a, i);
                     }
+                    try m.orderedRemoveAtMany(a, gone.items);
                 } else if (cell.?.v == .traced) {
                     _ = try it.unsetVar(name);
                 } else cell.?.v = .undef;

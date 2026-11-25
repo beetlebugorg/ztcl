@@ -366,10 +366,14 @@ fn destroyMode(it: *Interp, st: *State, o: *Object, run_dtor: bool, explicit: bo
             k += 1;
         }
     }
+    // The drops below and the restarts of the callers each scan the
+    // list of all objects.
+    try cmds.chargeEntries(it, st.all.items.len);
     if (o.class.cls) |cc| drop(&cc.instances, o);
     drop(&st.all, o);
     // The commands can have new names after a `rename`.
     while (true) {
+        try cmds.chargeEntries(it, it.commands.count());
         var hit: ?[]const u8 = null;
         var iter = it.commands.iterator();
         while (iter.next()) |e| {
@@ -976,6 +980,7 @@ fn nsVars(it: *Interp, space: []const u8) Error![]const Value {
     const a = it.alloc();
     const prefix = try std.fmt.allocPrint(a, "{s}::", .{space});
     var out: std.ArrayList(Value) = .empty;
+    try cmds.chargeEntries(it, it.global.vars.items.len);
     for (it.global.vars.items) |e| {
         if (!std.mem.startsWith(u8, e.name, prefix)) continue;
         const t = e.name[prefix.len..];

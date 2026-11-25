@@ -244,6 +244,8 @@ pub fn cmdLsort(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }
     }
     const count = items.len / stride;
+    // A merge sort of n keys does at most n * ceil(log2(n)) compares.
+    try cmds.chargeEntries(it, count *| std.math.log2_int_ceil(usize, @max(count, 1)));
     const keys = try it.alloc().alloc(Key, count);
     for (keys, 0..) |*k, g| {
         var kv = items[g * stride];
