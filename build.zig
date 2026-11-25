@@ -31,12 +31,23 @@ pub fn build(b: *std.Build) void {
     const strip = b.option(bool, "strip", "Strip the runner") orelse false;
     // `-Drunner-optimize` sets the mode of the runner and the suite runner.
     const runner_optimize = b.option(std.builtin.OptimizeMode, "runner-optimize", "The mode of the runners") orelse .ReleaseFast;
+    // `-Dtsan=true` builds each module with ThreadSanitizer and libc, so
+    // `std.Thread` uses pthreads, which ThreadSanitizer sees. It needs a
+    // target with a libc, for example `-Dtarget=x86_64-linux-gnu`. Run
+    // with `TSAN_OPTIONS=suppressions=tools/tsan/tsan.supp`, or run
+    // `tools/tsan.sh`.
+    const tsan = b.option(bool, "tsan", "Build with ThreadSanitizer") orelse false;
+    // `-Dtsan-plant=true` plants a race for the check of `tools/tsan.sh`:
+    // each `tsv::incr` adds 1 to one global word with no lock.
+    gc_options.addOption(bool, "tsan_plant", b.option(bool, "tsan-plant", "Plant a race for the ThreadSanitizer check") orelse false);
 
     // The module that other packages import.
     const ztcl = b.addModule("ztcl", .{
         .root_source_file = b.path("src/ztcl.zig"),
         .target = target,
         .optimize = optimize,
+        .sanitize_thread = tsan,
+        .link_libc = if (tsan) true else null,
     });
     ztcl.addOptions("build_options", gc_options);
 
@@ -48,6 +59,8 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/ztcl.zig"),
         .target = target,
         .optimize = runner_optimize,
+        .sanitize_thread = tsan,
+        .link_libc = if (tsan) true else null,
     });
     fast.addOptions("build_options", gc_options);
 
@@ -56,6 +69,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = runner_optimize,
         .strip = if (strip) true else null,
+        .sanitize_thread = tsan,
+        .link_libc = if (tsan) true else null,
         .imports = &.{.{ .name = "ztcl", .module = fast }},
     }) });
     b.installArtifact(exe);
@@ -138,6 +153,7 @@ pub fn build(b: *std.Build) void {
     wasm_options.addOption(bool, "gc_precise", gc_precise);
     wasm_options.addOption(bool, "jit", false);
     wasm_options.addOption(bool, "jit_bug", false);
+    wasm_options.addOption(bool, "tsan_plant", false);
     wasm_options.addOption(usize, "size_plant", size_plant);
     addModuleOptions(b, wasm_options, on);
     wasm.root_module.addOptions("build_options", wasm_options);

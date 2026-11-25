@@ -22,6 +22,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const build_options = @import("build_options");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
 const thread = @import("thread.zig");
@@ -356,7 +357,12 @@ fn opMove(it: *Interp, x: Args) Error!Value {
     return Value.empty;
 }
 
+/// The word of the planted race of `-Dtsan-plant=true`. `tools/tsan.sh`
+/// checks that ThreadSanitizer reports it.
+var plant_word: usize = 0;
+
 fn opIncr(it: *Interp, x: Args) Error!Value {
+    if (build_options.tsan_plant) plant_word += 1;
     if (x.rest.len > 1) return wrongArgs(it, x);
     const by: i64 = if (x.rest.len == 1) try it.int(x.rest[0]) else 1;
     const h = (try acquire(it, x.arr, true)).?;
