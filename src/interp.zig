@@ -2621,7 +2621,11 @@ pub const Interp = struct {
         }
         var at = cur.len;
         for (parts) |s| {
-            @memcpy(buf[at .. at + s.len], s);
+            // A short part copies in a loop: a call of `memcpy` costs
+            // more than the bytes of a number or a separator.
+            if (s.len <= 8) {
+                for (s, 0..) |c, k| buf[at + k] = c;
+            } else @memcpy(buf[at .. at + s.len], s);
             at += s.len;
         }
         tail.end = @intFromPtr(buf) + at;

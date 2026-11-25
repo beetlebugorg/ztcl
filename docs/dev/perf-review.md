@@ -33,7 +33,7 @@ The rank is the expected gain divided by the effort. A ratio above 1 means that 
 | 6 | The regex search has no literal scan | 6.05 ms | 1.00 ms | 6.0 | Medium | Done, step 1: 0.5 ms |
 | 7 | Array elements go through the name of the variable | 104.8 ms | 70.9 ms | 1.5 | Medium | Open |
 | 8 | A proc call uses about 250 instructions in `callProcFast` | 14.8 ms | 70.5 ms | 0.2 | Large | Open |
-| 9 | `append` in JIT code goes through two helpers | 243.1 M instructions | 812.4 M | 0.3 | Medium | Open |
+| 9 | `append` in JIT code goes through two helpers | 243.1 M instructions | 812.4 M | 0.3 | Medium | Done: 200.4 M |
 | 10 | `read` of a whole file | 73.5 ms | 49.9 ms | 1.5 | Not known | Done: 11.0 ms |
 
 ## 1. `string index` and `string length` read the whole string
@@ -147,6 +147,7 @@ proc arr {} {for {set i 0} {$i<200000} {incr i} {set a($i) $i}; set s 0; for {se
 - Cause: the profile shows two helper wrappers in the loop, and `appendStr` copies the new part. I did not read which instruction each wrapper serves. The probable sequence is one helper that makes the string for `"x$i,"` and one helper that appends it.
 - Change: one helper for "append these parts to this variable" that writes the digits of the integer and the literal parts into the free capacity of the target. A later step is an inline fast path in JIT code for a target with free capacity.
 - Expected gain: the temporary string and one of the two copies go away. I did not measure a prototype.
+- Done: a callgrind profile with `--jit --jit-tier2` shows one helper in the loop, the `append` instruction. It writes the digits of the integer to a buffer on the native stack and makes no temporary string, so the two helpers of the cause above do not exist. The cost was in `appendStr`, with one call of `memcpy` for each part of one to six bytes. A part of 8 bytes or less now copies in a loop. `bench/strbuild.tcl` uses 200.4 M instructions with the JIT, against 227.3 M before. The interpreter uses 286.7 M against 313.6 M. The wall time with the JIT went from 20 ms to 19 ms, against 67 ms for `tclsh`. An inline fast path in JIT code is not done, because the helper is already one call for each append.
 
 ## 10. `read` of a whole file
 
