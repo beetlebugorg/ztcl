@@ -1685,7 +1685,6 @@ test "tier 2: plans with a string slot, a changed kind, and a call" {
 /// `same` with tier 2 on. Fails when fewer than `min_tier2` loops
 /// compiled to tier 2.
 fn sameT2(script: []const u8, min_tier2: u64) !void {
-    if (!jit.tier2_backend) return error.SkipZigTest;
     test_tier2 = true;
     defer test_tier2 = false;
     try same(script, 1);
@@ -2648,7 +2647,6 @@ test "tier 2: a conditional jump back stays in tier 1" {
 }
 
 test "tier 2: an exit at the loop head lets tier 1 take a step" {
-    if (!jit.tier2_backend) return error.SkipZigTest;
     if (!jit.built) return error.SkipZigTest;
     // The jit-fuzz --verify mode found it: a changed Code with the loop
     // `guard; jump` at address 0. With the step limit below the steps
