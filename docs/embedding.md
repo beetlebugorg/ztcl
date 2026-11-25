@@ -160,6 +160,27 @@ try it.allow(@intFromEnum(cap.thread) | @intFromEnum(cap.event));
 
 [Threads](threads.md) has the model and the differences from the Thread package.
 
+### Threads on the web
+
+[WebAssembly](webassembly.md#threads) has the two modes of the capability `thread` in a browser. The `shared` mode needs a cross-origin isolated page. The server of the page must send these headers with the page and with each worker script:
+
+```text
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+GitHub Pages cannot set headers. A service worker can add them, because the browser gives each response of the site to the service worker first:
+
+1. Put a service worker script next to the page. Its `fetch` handler calls `fetch(event.request)` and returns a new `Response` with the same body and status, and with the two headers added.
+2. The page registers the script. A service worker controls only the pages that load after its registration, so the page loads one more time after the first registration.
+3. After the second load, `crossOriginIsolated` is true, and `ThreadInterp` picks the `shared` mode.
+
+`docs/site/playground/coi.js` is such a service worker. It has limits:
+
+- The first visit loads the page two times.
+- A browser with no service worker, or with service workers off (for example some private windows), gets no isolation. `ThreadInterp` then uses the `async` mode.
+- With `require-corp`, the page can load a resource of another origin only when that origin sends `Cross-Origin-Resource-Policy` or CORS headers.
+
 ## WebAssembly
 
 `zig build wasm` makes `zig-out/lib/ztcl.wasm`. It exports a small C ABI:

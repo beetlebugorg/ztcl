@@ -83,3 +83,11 @@ jobs:
       - run: zig build wasm
       - run: node tools/wasm-smoke.mjs zig-out/lib/ztcl.wasm
       - run: node tools/wasm-web.mjs zig-out/lib/ztcl.wasm
+      # The threads in Node.js and in Chromium, with and without
+      # cross-origin isolation. The browser test uses the Chrome of the
+      # runner.
+      - run: zig build wasm-threads
+      - run: node tools/wasm-threads.mjs node
+      - run: node tools/wasm-threads.mjs browser
+        env:
+          CHROME: /usr/bin/google-chrome

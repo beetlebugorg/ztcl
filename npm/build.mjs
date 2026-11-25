@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Puts the files of the npm package in zig-out/npm. Run `zig build wasm`
-// first. The name of the package is in npm/package.json only.
+// and `zig build wasm-threads` first. The name of the package is in
+// npm/package.json only.
 //
 //   node npm/build.mjs [--version 0.2.0] [--out dir]
 //
@@ -42,6 +43,11 @@ const copies = [
   ["ztcl.mjs", "web/ztcl.mjs"],
   ["ztcl-worker.mjs", "web/ztcl-worker.mjs"],
   ["ztcl.wasm", "zig-out/lib/ztcl.wasm"],
+  ["ztcl-threads.mjs", "web/ztcl-threads.mjs"],
+  ["ztcl-thread-worker.mjs", "web/ztcl-thread-worker.mjs"],
+  ["ztcl-threads.wasm", "zig-out/lib/ztcl-threads.wasm"],
+  ["ztcl-async.wasm", "zig-out/lib/ztcl-async.wasm"],
+  ["ztcl-threads.d.ts", "npm/ztcl-threads.d.ts"],
   ["ztcl.d.ts", "npm/ztcl.d.ts"],
   ["ztcl-worker.d.ts", "npm/ztcl-worker.d.ts"],
   ["NOTICE", "npm/NOTICE"],
@@ -53,7 +59,7 @@ fs.mkdirSync(path.join(out, "licenses"), { recursive: true });
 for (const [to, from] of copies) {
   const src = path.join(root, from);
   if (!fs.existsSync(src)) {
-    console.error(`error: ${from} is missing${from.endsWith(".wasm") ? ". Run zig build wasm." : ""}`);
+    console.error(`error: ${from} is missing${from.endsWith(".wasm") ? ". Run zig build wasm and zig build wasm-threads." : ""}`);
     process.exit(1);
   }
   fs.copyFileSync(src, path.join(out, to));

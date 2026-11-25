@@ -94,6 +94,18 @@ A source is a URL, a file path in Node.js, a `Response`, bytes, or a `WebAssembl
 
 One interpreter keeps its procs and variables from one `eval` to the next. Each `Interp` has its own instance and its own memory, so `close` and a new `Interp` give the memory back.
 
+## Threads
+
+The entry `{{name}}/threads` runs the capability `thread` with one worker for each ztcl thread. In Node.js and on a cross-origin isolated page, each command of the Thread package works. On a page without cross-origin isolation, only the commands that do not wait work. The option `allow` turns on capabilities: `thread` is the default, and `clock`, `package`, `interp`, and in the shared mode `event` can also be on. `clock` and the event loop read the clock of the host. See [WebAssembly](https://beetlebug.org/ztcl/webassembly/#threads).
+
+```js
+import { ThreadInterp } from "{{name}}/threads";
+
+const t = await ThreadInterp.create({ allow: ["thread"] });
+const r = await t.eval("thread::send [thread::create] {expr {6 * 7}}");
+t.close();
+```
+
 ## Limits and capabilities
 
 - **Steps.** Each command and each loop pass uses one step. At the limit, the script stops with the error `step limit reached`. `catch` and `try` cannot catch it. The same script stops at the same step in each browser and in Node.js.

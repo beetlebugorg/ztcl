@@ -116,6 +116,7 @@ pub const Want = struct {
 /// has no end. An error or a closed peer counts as ready, so the
 /// next read or write reports it.
 pub fn poll(a: std.mem.Allocator, wants: []Want, timeout_ms: i32) void {
+    if (comptime !supported) return;
     const fds = a.alloc(linux.pollfd, wants.len) catch return;
     defer a.free(fds);
     for (wants, fds) |w, *p| {

@@ -1,7 +1,26 @@
 // The playground page: an editor, Run and Stop, and the limits.
 // SPDX-License-Identifier: BSD-2-Clause
 import { WorkerInterp } from "./ztcl.mjs";
+import { ThreadInterp, isolated } from "./ztcl-threads.mjs";
 import { presets } from "./presets.mjs";
+
+// The threads need a cross-origin isolated page. GitHub Pages cannot
+// send the headers, so the service worker coi.js adds them. The page
+// loads one more time after the first registration. Without a service
+// worker, the threads use the async mode.
+async function isolate() {
+  if (crossOriginIsolated || !("serviceWorker" in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.register(new URL("coi.js", import.meta.url));
+    if (navigator.serviceWorker.controller || sessionStorage.getItem("ztcl-coi")) return;
+    sessionStorage.setItem("ztcl-coi", "1");
+    await Promise.race([navigator.serviceWorker.ready, new Promise((r) => setTimeout(r, 3000))]);
+    if (reg.active) location.reload();
+  } catch {
+    // The browser does not allow the service worker.
+  }
+}
+isolate();
 
 const $ = (id) => document.getElementById(id);
 const code = $("code");
@@ -12,6 +31,8 @@ const stop = $("stop");
 const preset = $("preset");
 
 const tcl = new WorkerInterp(new URL("ztcl.wasm", import.meta.url));
+// The interpreter of a preset with threads. Each run makes a new one.
+let threads = null;
 let busy = false;
 
 for (const [i, p] of presets.entries()) preset.add(new Option(p.name, String(i)));
@@ -49,7 +70,18 @@ async function go() {
   const t0 = performance.now();
   let r;
   try {
-    r = await tcl.eval(code.value);
+    if (/\b(thread|tsv|tpool)::/.test(code.value)) {
+      threads?.close();
+      // The async mode has no event loop of ztcl.
+      const allow = isolated() ? ["thread", "event"] : ["thread"];
+      threads = await ThreadInterp.create({ allow, stepLimit: steps, memLimit: mib * 1024 * 1024, onOutput: (t) => out.append(t) });
+      r = await threads.eval(code.value);
+      r = { ...r, output: "", mode: threads.mode };
+      threads.close();
+      threads = null;
+    } else {
+      r = await tcl.eval(code.value);
+    }
   } catch (e) {
     r = { ok: false, result: `the worker failed: ${e.message}`, output: "" };
   }
@@ -66,12 +98,16 @@ async function go() {
   } else {
     line(`error: ${r.result}\n`, "err");
   }
-  const mem = r.memorySize ? `, ${(r.memorySize / 1048576).toFixed(0)} MiB linear memory` : "";
+  const mem = r.memorySize ? `, ${(r.memorySize / 1048576).toFixed(0)} MiB linear memory` : r.mode ? `, threads in the ${r.mode} mode` : "";
   status.textContent = `${r.ok ? "OK" : "Error"} in ${ms.toFixed(0)} ms${mem}`;
 }
 
 run.addEventListener("click", go);
-stop.addEventListener("click", () => tcl.stop());
+stop.addEventListener("click", () => {
+  tcl.stop();
+  threads?.close();
+  threads = null;
+});
 
 code.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -95,5 +131,6 @@ code.addEventListener("keydown", (e) => {
 
 // Load the module now, so the first Run has no wait.
 tcl.eval("info patchlevel").then((r) => {
-  status.textContent = r.ok ? `Ready · Tcl ${r.result}` : "Error";
+  const mode = isolated() ? "threads: shared memory" : "threads: async mode";
+  status.textContent = r.ok ? `Ready · Tcl ${r.result} · ${mode}` : "Error";
 });

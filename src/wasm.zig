@@ -7,12 +7,22 @@
 
 const std = @import("std");
 const ztcl = @import("ztcl.zig");
+const build_options = @import("build_options");
+const thread = @import("thread.zig");
 
-const gpa = std.heap.wasm_allocator;
+/// The thread model of this build: `none`, `shared`, or `async`. See
+/// docs/webassembly.md.
+const web_threads = if (@hasDecl(build_options, "web_threads")) build_options.web_threads else .none;
+const shared = web_threads == .shared;
+
+const gpa = if (shared) @import("webthread.zig").heap_allocator else std.heap.wasm_allocator;
 
 const Handle = struct {
     it: ztcl.Interp,
     out: std.ArrayList(u8) = .empty,
+    /// With threads, the output that `ztcl_output_take` moved out of
+    /// `out`. Other threads add to `out` under the lock of the group.
+    taken: std.ArrayList(u8) = .empty,
     result: []const u8 = "",
 };
 
@@ -45,6 +55,7 @@ export fn ztcl_new() ?*Handle {
 
 export fn ztcl_delete(h: *Handle) void {
     h.out.deinit(gpa);
+    h.taken.deinit(gpa);
     h.it.deinit();
     gpa.destroy(h);
 }
@@ -85,13 +96,130 @@ export fn ztcl_result_len(h: *Handle) usize {
 }
 
 export fn ztcl_output_ptr(h: *Handle) [*]const u8 {
-    return h.out.items.ptr;
+    return if (web_threads == .none) h.out.items.ptr else h.taken.items.ptr;
 }
 
 export fn ztcl_output_len(h: *Handle) usize {
-    return h.out.items.len;
+    return if (web_threads == .none) h.out.items.len else h.taken.items.len;
 }
 
 export fn ztcl_output_clear(h: *Handle) void {
-    h.out.clearRetainingCapacity();
+    if (web_threads == .none) h.out.clearRetainingCapacity() else h.taken.clearRetainingCapacity();
+}
+
+// The exports of the builds with threads. See web/ztcl-threads.mjs.
+comptime {
+    if (web_threads != .none) {
+        @export(&ztcl_output_take, .{ .name = "ztcl_output_take" });
+        @export(&ztcl_set_thread_limits, .{ .name = "ztcl_set_thread_limits" });
+        @export(&ztcl_allow, .{ .name = "ztcl_allow" });
+    }
+    if (web_threads == .async) {
+        @export(&ztcl_web_init, .{ .name = "ztcl_web_init" });
+        @export(&ztcl_web_waiting, .{ .name = "ztcl_web_waiting" });
+        @export(&ztcl_web_recv, .{ .name = "ztcl_web_recv" });
+        @export(&ztcl_web_msg_ptr, .{ .name = "ztcl_web_msg_ptr" });
+        @export(&ztcl_web_msg_len, .{ .name = "ztcl_web_msg_len" });
+        @export(&ztcl_web_reply, .{ .name = "ztcl_web_reply" });
+        @export(&ztcl_web_gone, .{ .name = "ztcl_web_gone" });
+    }
+}
+
+// The exports of ztcl-async.wasm for web/ztcl-thread-worker.mjs. See
+// src/webasync.zig.
+const webasync = if (web_threads == .async) @import("webasync.zig") else struct {};
+
+/// Sets the thread id of the interpreter. `main` is 1 for the main
+/// interpreter.
+fn ztcl_web_init(_: *Handle, id: u32, main: u32) callconv(.c) void {
+    webasync.init(id, main != 0);
+}
+
+/// 1 when the script of the thread ran `thread::wait`.
+fn ztcl_web_waiting(_: *Handle) callconv(.c) i32 {
+    return @intFromBool(webasync.waiting());
+}
+
+/// Runs a script of another thread. Gives the return code. The result
+/// is at `ztcl_web_msg_ptr` in the byte form.
+fn ztcl_web_recv(h: *Handle, from: u32, token: u32, ptr: [*]const u8, len: usize) callconv(.c) i32 {
+    _ = from;
+    return webasync.recv(&h.it, token, ptr[0..len]);
+}
+
+fn ztcl_web_msg_ptr(_: *Handle) callconv(.c) [*]const u8 {
+    return webasync.msgBytes().ptr;
+}
+
+fn ztcl_web_msg_len(_: *Handle) callconv(.c) usize {
+    return webasync.msgBytes().len;
+}
+
+/// A reply in the byte form to a token of this interpreter.
+fn ztcl_web_reply(h: *Handle, token: u32, code: i32, ptr: [*]const u8, len: usize) callconv(.c) void {
+    webasync.reply(&h.it, token, code, ptr[0..len]);
+}
+
+/// Thread `id` ended.
+fn ztcl_web_gone(_: *Handle, id: u32) callconv(.c) void {
+    webasync.gone(id);
+}
+
+/// Moves the output of all threads to the buffer of
+/// `ztcl_output_ptr`. Call it before the read of the output.
+fn ztcl_output_take(h: *Handle) callconv(.c) void {
+    if (shared) if (thread.outLock(&h.it)) |l| {
+        l.lock();
+        defer l.unlock();
+        return take(h);
+    };
+    take(h);
+}
+
+fn take(h: *Handle) void {
+    h.taken.clearRetainingCapacity();
+    std.mem.swap(std.ArrayList(u8), &h.out, &h.taken);
+}
+
+/// Sets the limits of the threads. Zero in a field keeps its default.
+/// Call it before `ztcl_allow`.
+fn ztcl_set_thread_limits(h: *Handle, max_threads: u32, step_limit: u64, mem_limit: usize, total_steps: u64, total_mem: usize, max_queue: usize) callconv(.c) void {
+    var lim: thread.Limits = .{};
+    if (max_threads != 0) lim.max_threads = max_threads;
+    if (step_limit != 0) lim.step_limit = step_limit;
+    if (mem_limit != 0) lim.mem_limit = mem_limit;
+    if (total_steps != 0) lim.total_steps = total_steps;
+    if (total_mem != 0) lim.total_mem = total_mem;
+    if (max_queue != 0) lim.max_queue = max_queue;
+    thread.setLimits(&h.it, lim);
+}
+
+const Capability = @import("interp.zig").Capability;
+
+/// The capabilities that a build with threads can turn on.
+const web_caps = if (shared)
+    [_]Capability{ .thread, .event, .clock, .package, .interp }
+else
+    [_]Capability{ .thread, .clock, .package, .interp };
+
+/// Turns on capabilities: a mask of the bits of `Capability`. The mask
+/// can have only `thread`, `clock`, `package`, `interp`, and in the
+/// build with one shared memory, `event`. Gives 0 on success, 1 when
+/// the memory ends, and 2 for another bit.
+fn ztcl_allow(h: *Handle, bits: u32) callconv(.c) i32 {
+    var ok: u32 = 0;
+    for (web_caps) |c| ok |= @intFromEnum(c);
+    if (bits & ~ok != 0) return 2;
+    if (shared) {
+        const wt = @import("webthread.zig");
+        h.it.clock_host = .{ .now = wt.nowMicros };
+        h.it.event_host = .{ .now = wt.nowMicros, .sleep = wt.sleepMicros };
+        h.it.allow(bits) catch return 1;
+    } else {
+        const t = @intFromEnum(Capability.thread);
+        h.it.clock_host = .{ .now = webasync.nowMicros };
+        h.it.allow(bits & ~t) catch return 1;
+        if (bits & t != 0) webasync.register(&h.it) catch return 1;
+    }
+    return 0;
 }

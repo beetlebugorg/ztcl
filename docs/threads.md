@@ -121,7 +121,7 @@ Zig 0.16 has no `std.Thread.Mutex` or `std.Thread.Condition`. The locks are `std
 
 ## Platforms
 
-The commands use `std.Thread`, so they build for Linux, macOS, and Windows. The channel commands of `thread::transfer`, `thread::detach`, and `thread::attach` need the channel capability, which exists only on Linux. The WebAssembly build has no threads yet, and the capability adds no command there. Task 14 adds them. ThreadSanitizer runs on Linux: `tools/tsan.sh`.
+The commands use `std.Thread`, so they build for Linux, macOS, and Windows. The channel commands of `thread::transfer`, `thread::detach`, and `thread::attach` need the channel capability, which exists only on Linux. The default WebAssembly build (`ztcl.wasm`) has no threads. `zig build wasm-threads` makes two WebAssembly builds with threads. See "WebAssembly" below. ThreadSanitizer runs on Linux: `tools/tsan.sh`.
 
 ## The tests of Tcl
 
@@ -146,7 +146,7 @@ The commands use `std.Thread`, so they build for Linux, macOS, and Windows. The 
 | macOS | 11 | Not done. The CI job `Test (macos-latest)` builds the code and passes. The files of `tests/thread/` did not run on macOS yet. |
 | Windows | 12 | Not done. The CI job `Test (windows-latest)` builds the code and passes. The files of `tests/thread/` did not run on Windows yet. |
 | The counts and the docs | 13 | Done. |
-| WebAssembly with Web Workers | 14 | Not done. The plan is in [task 14](threads-tasks/14-wasm-workers.md). |
+| WebAssembly with Web Workers | 14 | Done: `tools/wasm-threads.mjs` runs 9 files of `tests/thread/` in Node.js and in Chromium with cross-origin isolation, and the tests of the async mode in Chromium without it. |
 
 ## Decisions
 
@@ -163,11 +163,13 @@ The user made two more decisions during the work:
 
 ## WebAssembly
 
-[Task 14](threads-tasks/14-wasm-workers.md) adds threads to the WebAssembly build. Each thread is a Web Worker, or a `worker_threads` worker in Node.js, with its own instance of the module. A message is the `Shared` form as bytes in `postMessage`.
+Each thread is a Web Worker, or a `worker_threads` worker in Node.js, with its own instance of the module. `web/ztcl-threads.mjs` is the host. [WebAssembly](webassembly.md#threads) has the API.
 
-- On a cross-origin isolated page and in Node.js, the main interpreter also runs in a worker, and each command works. The shared tables, the queues, the stop flags, and the group totals are in a `SharedArrayBuffer` under `Atomics`.
-- Without cross-origin isolation, only the commands that do not wait work. Each command that waits gives an error that names the missing isolation. Only the limits of one thread apply.
-- GitHub Pages cannot set the headers COOP and COEP. A service worker can add them on a static site.
+- On a cross-origin isolated page and in Node.js, the host uses `ztcl-threads.wasm`. All instances use one shared memory, so the group, the queues, `tsv`, the mutexes, the conditions, the stop flags, and the totals are in a `SharedArrayBuffer`. The code of the native platforms runs there. `src/webthread.zig` gives it the parts of `std.Thread` and `std.Io`: a thread start through the host, a futex on `memory.atomic.wait32`, a lock, and an allocator with a lock. The main interpreter also runs in a worker, because a browser does not allow `Atomics.wait` on its main thread. The output of the threads goes to the main worker, which sends it to the host every 50 ms.
+- Without cross-origin isolation, the host uses `ztcl-async.wasm` (`src/webasync.zig`). Each instance has its own memory. A message is a script, and the reply is the result in a byte form that keeps the kind of each value. Only the commands that do not wait work. Each command that waits gives an error that names the missing isolation. Only the limits of one thread apply, and a stop is `Worker.terminate()`.
+- GitHub Pages cannot set the headers COOP and COEP. A service worker can add them on a static site. [Embedding](embedding.md#threads-on-the-web) has the steps.
+
+The plan of task 14 has each instance with its own memory in the shared mode too, with the shared tables in a separate `SharedArrayBuffer`. Zig 0.16 code in an instance can reach only its own memory, so that plan needs a new form of each table outside the memory of the instance. The shared memory keeps the native code, and a value still crosses threads only as a copy.
 
 ## Future work
 
