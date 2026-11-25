@@ -2,7 +2,7 @@
 
 ## Is ztcl a drop-in replacement for Tcl?
 
-Not yet. ztcl passes 37 413 of the 46 494 tests of the Tcl 8.6.16 suite. Most scripts that use the core commands run unchanged. [The language](language.md) lists the differences. C extensions and Tk are out of scope. For a Tk replacement on ztcl, see [ztk](https://beetlebug.org/ztk/).
+Not yet. ztcl passes 37,413 of the 46,494 tests of the Tcl 8.6.16 suite. Most scripts that use the core commands run unchanged. [The language](language.md) lists the differences. C extensions and Tk are out of scope. For a Tk replacement on ztcl, see [ztk](https://beetlebug.org/ztk/).
 
 ## Does it support Tcl 9?
 

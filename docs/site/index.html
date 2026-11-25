@@ -62,7 +62,7 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
     <div class="stat"><b>28×</b><span>as fast as tclsh 8.6.16 on an integer loop, with JIT tier 2</span></div>
     <div class="stat"><b>3×</b><span>as fast as tclsh with Thread 2.8 on a parallel map over 8 threads</span></div>
     <div class="stat"><b>2.2×</b><span>the JSON parse speed of Node.js on twitter.json</span></div>
-    <div class="stat"><b>37 413</b><span>tests of the Tcl 8.6.16 suite pass, in 152 test files</span></div>
+    <div class="stat"><b>37,413</b><span>tests of the Tcl 8.6.16 suite pass, in 152 test files</span></div>
   </div>
 </section>
 
@@ -244,7 +244,7 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
           <tr><th scope="row">Parallel map, 8 threads</th><td>99</td><td>305</td></tr>
           <tr><th scope="row">4-stage pipeline</th><td>605</td><td>706</td></tr>
           <tr><th scope="row"><code>tsv::incr</code>, 8 threads</th><td>1214</td><td>3276</td></tr>
-          <tr><th scope="row">Thread pool, 100 000 jobs</th><td>466</td><td>639</td></tr>
+          <tr><th scope="row">Thread pool, 100,000 jobs</th><td>466</td><td>639</td></tr>
           </tbody>
         </table></div>
       </figure>
@@ -382,11 +382,11 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
 <section class="section alt" id="testing">
   <div class="wrap">
     <p class="eyebrow">Tested hard</p>
-    <h2>37 413 passing tests of the Tcl suite.</h2>
+    <h2>37,413 passing tests of the Tcl suite.</h2>
     <p class="lede">The test suite of Tcl 8.6.16 is the measure of compatibility. ztcl follows the 12 rules of Tcl and the core commands of Tcl 8.6: lists, strings, dicts, arrays, <code>expr</code>, <code>regexp</code>, namespaces, <code>try</code>, <code>apply</code>, <code>lmap</code>, and TclOO.</p>
     <div class="split">
       <ul class="checks">
-        <li><b>The Tcl suite.</b> 37 413 of 46 494 tests pass in all 152 files (80.5 %). The suite also runs with the JIT on for each proc.</li>
+        <li><b>The Tcl suite.</b> 37,413 of 46,494 tests pass in all 152 files (80.5 %). The suite also runs with the JIT on for each proc.</li>
         <li><b>Differential fuzzing.</b> <code>zig build jit-fuzz</code> compares random programs in the interpreter and in the JIT, and fuzzes the assembler and the verifier.</li>
         <li><b>A comparison tool.</b> <code>tools/jit-diff.sh</code> compares the output, errors, and steps of the JIT and the interpreter on the test scripts.</li>
         <li><b>Stress modes.</b> <code>--jit-stress</code> forces the rare paths of the compiler, and <code>--gc-stress N</code> starts a collection at each Nth allocation.</li>

@@ -1,6 +1,6 @@
 # Language
 
-ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: lists, strings, dicts, arrays, `expr`, `format`, `scan`, `binary`, `regexp`, namespaces, `try`, `apply`, `lmap`, `upvar`, `uplevel`, coroutines, and TclOO. It passes 37 413 of the 46 494 tests of the Tcl 8.6.16 suite. The status of each command below comes from its test file. [The full results](dev/compatibility.md) have all 152 files.
+ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: lists, strings, dicts, arrays, `expr`, `format`, `scan`, `binary`, `regexp`, namespaces, `try`, `apply`, `lmap`, `upvar`, `uplevel`, coroutines, and TclOO. It passes 37,413 of the 46,494 tests of the Tcl 8.6.16 suite. The status of each command below comes from its test file. [The full results](dev/compatibility.md) have all 152 files.
 
 ## Commands
 
@@ -118,4 +118,4 @@ A host name resolves through one function. It reads an address literal, the name
 
 ## Tcl 9
 
-ztcl follows Tcl 8.6 and makes no claim of Tcl 9 compatibility. On the 37 core test files of Tcl 9.1.0, ztcl passes 9 298 tests, fails 2 799, and skips 529. [The Tcl 9 notes](dev/tcl9.md) list the differences.
+ztcl follows Tcl 8.6 and makes no claim of Tcl 9 compatibility. On the 37 core test files of Tcl 9.1.0, ztcl passes 9,298 tests, fails 2,799, and skips 529. [The Tcl 9 notes](dev/tcl9.md) list the differences.
