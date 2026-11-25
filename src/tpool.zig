@@ -266,9 +266,10 @@ fn serveJobs(w: *Worker, x: *Interp, p: *Pool) void {
         if (job) |j| {
             j.state = .running;
             p.lock.unlock();
-            runJob(x, p, j);
+            const ok = runJob(x, p, j);
             idle_since = thread.nowNs();
             p.lock.lock();
+            if (!ok) break;
             continue;
         }
         if (p.idle_s > 0 and p.workers > p.min) {
@@ -296,12 +297,15 @@ fn runScript(x: *Interp, script: []const u8) Error!cmds.Caught {
     return thread.atGlobal(x, runText, .{ x, text });
 }
 
-fn runJob(x: *Interp, p: *Pool, j: *Job) void {
+/// Runs one job. Gives false when a limit or a stop ended it: the
+/// worker then ends, as a thread does.
+fn runJob(x: *Interp, p: *Pool, j: *Job) bool {
     const a = p.alloc();
     var code: i64 = 1;
     var res: Shared = Shared.empty;
     var info: []u8 = &.{};
     var ecode: Shared = Shared.empty;
+    var ok = true;
     if (runScript(x, j.script)) |c| {
         code = c.code;
         res = thread.share(a, x, c.res) catch .{ .str = a.dupe(u8, "the threads used too much memory") catch &.{} };
@@ -310,6 +314,7 @@ fn runJob(x: *Interp, p: *Pool, j: *Job) void {
             ecode = thread.share(a, x, c.error_code) catch Shared.empty;
         }
     } else |e| {
+        ok = false;
         // The step limit, the memory limit, or a stop ended the job.
         const msg: []const u8 = if (e == error.OutOfMemory) "out of memory" else x.str(x.result) catch "error";
         res = .{ .str = a.dupe(u8, msg) catch &.{} };
@@ -322,7 +327,7 @@ fn runJob(x: *Interp, p: *Pool, j: *Job) void {
         a.free(info);
         ecode.deinit(a);
         j.destroy(a);
-        return;
+        return ok;
     }
     j.state = .done;
     j.code = code;
@@ -331,6 +336,7 @@ fn runJob(x: *Interp, p: *Pool, j: *Job) void {
     j.ecode = ecode;
     p.lock.unlock();
     p.ev.signal();
+    return ok;
 }
 
 // ---- The commands ----
