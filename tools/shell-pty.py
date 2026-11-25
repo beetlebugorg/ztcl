@@ -9,7 +9,7 @@
 # that runs two sessions checks that the history file is shared. The exit
 # code is 1 when a case fails. Unix only: Windows has no pty module.
 # SPDX-License-Identifier: BSD-2-Clause
-import os, pty, re, select, shutil, sys, tempfile, time
+import fcntl, os, pty, re, select, shutil, signal, struct, sys, tempfile, termios, time
 
 here = os.path.dirname(os.path.abspath(__file__))
 runner = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "..", "zig-out", "bin", "ztcl"))
@@ -17,12 +17,15 @@ escape = re.compile(rb"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[()][0-9A-Za-z]|\r")
 
 
 class Session:
-    def __init__(self, home, env=None):
+    def __init__(self, home, env=None, cwd=None, args=()):
         self.pid, self.fd = pty.fork()
         if self.pid == 0:
             e = {"TERM": "xterm", "HOME": home, "PATH": "/usr/bin:/bin"}
             e.update(env or {})
-            os.execve(runner, [runner], e)
+            if cwd:
+                os.chdir(cwd)
+            os.execve(runner, [runner, *args], e)
+        self.resize(24, 80)
         self.raw = b""
         self.read(0.5)
 
@@ -41,6 +44,14 @@ class Session:
                 got += chunk
         self.raw += got
         return got
+
+    def resize(self, rows, cols):
+        fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+        if self.pid:
+            try:
+                os.kill(self.pid, signal.SIGWINCH)
+            except ProcessLookupError:
+                pass
 
     def send(self, keys, t=0.4):
         os.write(self.fd, keys)
@@ -159,6 +170,40 @@ try:
     v.send(b"\r")
     check("Ctrl-X Ctrl-E edits the command in VISUAL", "\nedited" in v.text(), v.text())
     v.close()
+
+    # With `file`, Tab completes a file name, and a folder ends with a slash.
+    work = os.path.join(home, "work")
+    os.makedirs(os.path.join(work, "subdir"))
+    open(os.path.join(work, "notes_one.txt"), "w").close()
+    f = Session(home, cwd=work, args=("--allow", "file", "--root", "."))
+    f.send(b"source note\t")
+    check("Tab completes a file name", "notes_one.txt" in f.text(), f.text())
+    f.send(b"\x15")
+    f.raw = b""
+    f.send(b"cd subd\t")
+    check("Tab completes a folder with a slash", "subdir/" in f.text(), f.text())
+    f.close()
+
+    # Tab lists the methods of a TclOO object.
+    o = Session(home)
+    o.send(b"oo::class create Pt {method moveX {} {}; method moveY {} {}}\r")
+    o.send(b"Pt create p1\r")
+    o.raw = b""
+    o.send(b"p1 mov\t")
+    check("Tab lists the methods of an object", "moveX" in o.text() and "moveY" in o.text(), o.text())
+    o.send(b"\x15")
+
+    # A resize redraws a long command at the new width, and the shell goes on.
+    o.send(b"set w " + b"x" * 70)
+    o.raw = b""
+    o.resize(24, 40)
+    o.read(0.5)
+    o.send(b"\r")
+    check("a resize keeps the command", "x" * 70 in o.text().replace("\n", ""), o.text())
+    o.raw = b""
+    o.send(b"expr {6 * 7}\r")
+    check("the shell runs commands after a resize", "\n42" in o.text(), o.text())
+    o.close()
 
     # An rc file sets the prompt.
     with open(os.path.join(home, ".ztclrc"), "w") as f:
