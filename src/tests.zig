@@ -7,6 +7,7 @@
 
 const std = @import("std");
 const tcl = @import("ztcl.zig");
+const modules = @import("modules.zig");
 
 const Case = struct { []const u8, []const u8 };
 
@@ -1030,9 +1031,48 @@ test "the optional commands are absent by default" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    for ([_][]const u8{ "package", "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror" }) |name| {
+    // A build with modules has the small `package` by default.
+    try std.testing.expect((it.findCommand("package") == null) == (modules.table.len == 0));
+    for ([_][]const u8{ "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror" }) |name| {
         try std.testing.expect(it.findCommand(name) == null);
     }
+}
+
+test "a built-in module installs once and runs with the limits" {
+    if (modules.find("zt::hello") == null) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try std.testing.expectEqualStrings("1.0 0.9 1 {hello, a}", try it.str(try it.eval(
+        \\list [package require zt::hello] [package require hello] $::zt::hello::installs [hello a]
+    )));
+    // The full command sees the modules too.
+    try it.allow(@intFromEnum(tcl.interp.Capability.package));
+    try std.testing.expectEqualStrings("1.0 1", try it.str(try it.eval("list [package require zt::hello] $::zt::hello::installs")));
+    // `package forget` hides a built-in name, as it does a script package.
+    try std.testing.expectEqualStrings("0 1 1", try it.str(try it.eval("package forget zt::hello; list [expr {\"zt::hello\" in [package names]}] [expr {\"hello\" in [package names]}] [catch {package require zt::hello}]")));
+
+    // The script of a module stops at the step limit.
+    var it2: tcl.Interp = undefined;
+    try it2.init(std.testing.allocator);
+    defer it2.deinit();
+    it2.step_limit = 3;
+    try std.testing.expectError(error.TclError, it2.eval("package require zt::hello"));
+    try std.testing.expect(it2.findCommand("zt::hello") == null);
+}
+
+test "a module that needs a capability gives an error" {
+    if (modules.find("zt::hellonet") == null) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try std.testing.expectEqualStrings("1 {module \"zt::hellonet\" needs the capability socket} {ZT PACKAGE CAPABILITY socket}", try it.str(try it.eval(
+        \\list [catch {package require zt::hellonet} m o] $m [dict get $o -errorcode]
+    )));
+    try it.allow(@intFromEnum(tcl.interp.Capability.interp));
+    try std.testing.expectEqualStrings("{} 1.0", try it.str(try it.eval(
+        \\package require zt::hello; interp create c; list [c eval {info commands zt::hello}] [c eval {package require zt::hello}]
+    )));
 }
 
 test "package provides Tcl at the patch level" {
@@ -1050,7 +1090,8 @@ test "a child has no more capabilities than its parent" {
     try it.init(std.testing.allocator);
     defer it.deinit();
     try it.allow(@intFromEnum(tcl.interp.Capability.interp));
-    try std.testing.expectEqualStrings("{} 0", try it.str(try it.eval("interp create c; list [c eval {info commands package}] [interp issafe c]")));
+    // The child has no full `package`: `ifneeded` needs the capability.
+    try std.testing.expectEqualStrings("1 0", try it.str(try it.eval("interp create c; list [c eval {catch {package ifneeded a 1 {}}}] [interp issafe c]")));
     try std.testing.expectEqualStrings("interp", try it.str(try it.eval("c eval {info commands interp}")));
     try std.testing.expectEqualStrings("{}", try it.str(try it.eval("interp create -safe s; list [s eval {info commands interp}]")));
     try std.testing.expectEqualStrings("7", try it.str(try it.eval("interp alias c dbl {} expr 3+; c eval {dbl 4}")));

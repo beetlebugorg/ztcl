@@ -1,0 +1,48 @@
+//! The test modules of the module table: `zt::hello` and `zt::hellonet`.
+//!
+//! `zt::hello` has one native command and a script that counts its
+//! installs in `::zt::hello::installs`. The alias `hello` adds the
+//! command `hello` in its own script. `zt::hellonet` needs the
+//! capability `socket` and has no commands. The tests of the module
+//! system use them, and the flag `-Dmod-hello` leaves them out.
+//!
+//! SPDX-License-Identifier: BSD-2-Clause
+
+const std = @import("std");
+const interp = @import("interp.zig");
+const mods = @import("modules.zig");
+const Interp = interp.Interp;
+const Value = @import("value.zig").Value;
+
+pub const modules_list = [_]mods.Module{
+    .{
+        .name = "zt::hello",
+        .version = "1.0",
+        .aliases = &.{.{ .name = "hello", .version = "0.9", .script = "proc ::hello {name} {::zt::hello greet $name}" }},
+        .install = install,
+        .script =
+        \\namespace eval ::zt::hello {
+        \\    variable installs
+        \\    incr installs
+        \\    namespace export greet
+        \\    namespace ensemble create
+        \\}
+        ,
+    },
+    .{
+        .name = "zt::hellonet",
+        .version = "1.0",
+        .needs = @intFromEnum(interp.Capability.socket),
+    },
+};
+
+pub const modules: []const mods.Module = &modules_list;
+
+fn install(it: *Interp) interp.Error!void {
+    try it.register("zt::hello::greet", greet);
+}
+
+fn greet(it: *Interp, argv: []const Value, _: ?*interp.Cmd) interp.Error!Value {
+    if (argv.len != 2) return it.wrongArgs("zt::hello greet name");
+    return .{ .str = try std.fmt.allocPrint(it.alloc(), "hello, {s}", .{try it.str(argv[1])}) };
+}

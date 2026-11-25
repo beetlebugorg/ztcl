@@ -1,7 +1,13 @@
-//! The optional `package` command (capability `package`).
+//! The `package` command.
 //!
 //! It keeps the provided versions and the `ifneeded` scripts in memory.
-//! It reads no files. A script loads a package with `ifneeded`.
+//! It reads no files. A script loads a package with `ifneeded`, or a
+//! built-in module of `modules.zig` by its name.
+//!
+//! The full command needs the capability `package`. A build with
+//! modules also has a small `package` by default: `names`, `present`,
+//! `provide`, `require`, and `versions`. It sees the built-in modules and
+//! the names that a script provides, and it runs no `ifneeded` script.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -12,6 +18,7 @@ const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
+const modules = @import("modules.zig");
 
 pub const Pkg = struct {
     version: ?[]const u8 = null,
@@ -25,7 +32,18 @@ pub const State = struct {
     table: std.StringArrayHashMapUnmanaged(*Pkg) = .empty,
     unknown: ?Value = null,
     prefer_latest: bool = false,
+    /// One bit for each module of `modules.table` that is installed.
+    installed: u64 = 0,
+    /// One bit for each name of `modules.find` that `package forget` hid.
+    forgotten: u64 = 0,
 };
+
+/// The built-in module of a name, unless `package forget` hid the name.
+fn builtin(it: *Interp, name: []const u8) ?modules.Found {
+    const f = modules.find(name) orelse return null;
+    if (it.pkg.forgotten & (@as(u64, 1) << @intCast(f.ordinal)) != 0) return null;
+    return f;
+}
 
 fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
@@ -176,6 +194,14 @@ fn require(it: *Interp, name: []const u8, reqs: []const Value, exact: bool) Erro
             }
             return .{ .str = now };
         }
+        if (builtin(it, name)) |f| {
+            const have = f.version();
+            if (try meetsAny(it, try version(it, .{ .str = have }), words)) {
+                try modules.load(it, f, &it.pkg.installed);
+                (try entry(it, name)).version = have;
+                return .{ .str = have };
+            }
+        }
         if (it.pkg.unknown != null and !tried_unknown) {
             tried_unknown = true;
             var cmd: std.ArrayList(Value) = .empty;
@@ -222,7 +248,11 @@ pub fn cmdPackage(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const args = argv[2..];
     const st = &it.pkg;
     if (eql(sub, "forget")) {
-        for (args) |v| _ = st.table.orderedRemove(try it.str(v));
+        for (args) |v| {
+            const name = try it.str(v);
+            _ = st.table.orderedRemove(name);
+            if (modules.find(name)) |f| st.forgotten |= @as(u64, 1) << @intCast(f.ordinal);
+        }
         return Value.empty;
     }
     if (eql(sub, "ifneeded")) {
@@ -253,6 +283,7 @@ pub fn cmdPackage(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         for (st.table.keys(), st.table.values()) |k, p| {
             if (p.version != null or p.needed.items.len > 0) try out.append(a, .{ .str = k });
         }
+        try modules.eachName(NameList{ .it = it, .out = &out }, NameList.add);
         return value.wrapList(a, out.items);
     }
     if (eql(sub, "prefer")) {
@@ -327,7 +358,14 @@ pub fn cmdPackage(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (eql(sub, "versions")) {
         if (args.len != 1) return it.wrongArgs("package versions package");
         var out: std.ArrayList(Value) = .empty;
-        if (st.table.get(try it.str(args[0]))) |p| for (p.needed.items) |pair| try out.append(a, pair[0]);
+        const name = try it.str(args[0]);
+        if (st.table.get(name)) |p| for (p.needed.items) |pair| try out.append(a, pair[0]);
+        if (builtin(it, name)) |f| {
+            const have = try version(it, .{ .str = f.version() });
+            for (out.items) |v| {
+                if (compare(try version(it, v), have) == 0) break;
+            } else try out.append(a, .{ .str = f.version() });
+        }
         return value.wrapList(a, out.items);
     }
     // vsatisfies
@@ -335,4 +373,49 @@ pub fn cmdPackage(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const ver = try version(it, args[0]);
     try checkReqs(it, args[1..]);
     return .{ .int = @intFromBool(try meetsAny(it, ver, args[1..])) };
+}
+
+/// Adds each name of a built-in module that the table does not list.
+const NameList = struct {
+    it: *Interp,
+    out: *std.ArrayList(Value),
+
+    fn add(self: NameList, name: []const u8) Error!void {
+        if (self.it.pkg.table.get(name)) |p| {
+            if (p.version != null or p.needed.items.len > 0) return;
+        }
+        if (builtin(self.it, name) == null) return;
+        try self.out.append(self.it.alloc(), .{ .str = name });
+    }
+};
+
+/// Registers the small `package` when the build has modules.
+pub fn registerBuiltin(it: *Interp) std.mem.Allocator.Error!void {
+    if (comptime modules.table.len == 0) return;
+    try it.register("package", cmdPackageSmall);
+}
+
+/// The small `package`: the subcommands of the full command that see
+/// only the built-in modules and the provided names.
+fn cmdPackageSmall(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
+    if (argv.len < 2) return it.wrongArgs("package option ?arg ...?");
+    const word = try it.str(argv[1]);
+    const names = [_][]const u8{ "names", "present", "provide", "require", "versions" };
+    var sub: ?[]const u8 = null;
+    var hits: usize = 0;
+    for (names) |n| {
+        if (eql(n, word)) {
+            sub = n;
+            hits = 1;
+            break;
+        }
+        if (word.len > 0 and std.mem.startsWith(u8, n, word)) {
+            sub = n;
+            hits += 1;
+        }
+    }
+    if (hits != 1) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be names, present, provide, require, or versions", .{word});
+    const words = try it.alloc().dupe(Value, argv);
+    words[1] = .{ .str = sub.? };
+    return cmdPackage(it, words, cmd);
 }

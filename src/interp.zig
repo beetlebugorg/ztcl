@@ -803,6 +803,12 @@ pub const Capability = enum(u32) {
     /// root folder and outside each limit: this capability gives a
     /// script the full power of the user. It is not sandboxed.
     exec = 128,
+    /// Entropy from the system: `zt::crypto random`, `uuid`, and keys.
+    random = 256,
+    /// `zt::sys env`: a read of the environment.
+    env = 512,
+    /// The `sqlite3` command. A file also needs `file`.
+    sqlite = 1024,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {

@@ -5,7 +5,7 @@
 //! line at a time. The runner reads the files itself; a script has no
 //! command that reads a file.
 //!
-//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, `exec`). `--root DIR` is
+//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, `exec`, `random`, `env`, `sqlite`). `--root DIR` is
 //! the one folder of `file` and channels. Only the
 //! suite passes it.
 //! `--exec-timeout MS`, `--exec-env NAME=value`, and `--exec-allow a,b`
