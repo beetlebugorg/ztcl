@@ -26,7 +26,7 @@ The rank is the expected gain divided by the effort. A ratio above 1 means that 
 | Rank | Finding | ztcl | tclsh 8.6.16 | Ratio | Effort | Status |
 |---|---|---|---|---|---|---|
 | 1 | `string index` and `string length` read the whole string | 1,027.4 ms | 28.1 ms | 36.6 | Small to medium | Done: 17.7 ms |
-| 2 | `eval` of a list parses text on each call | 89.0 ms | 29.3 ms | 3.0 | Small | Open |
+| 2 | `eval` of a list parses text on each call | 89.0 ms | 29.3 ms | 3.0 | Small | Done: 17.9 ms |
 | 3 | `lmap` has no bytecode | 67.5 ms | 39.1 ms | 1.7 | Small | Open |
 | 4 | `lsearch -exact` orders each item | 14.7 ms | 9.0 ms | 1.6 | Small | Open |
 | 5 | `string map` tries each key at each byte | 26.6 ms | 16.9 ms | 1.6 | Small | Open |
@@ -61,6 +61,7 @@ proc evals {} {set n 0; for {set i 0} {$i<100000} {incr i} {eval [list incr n $i
 - Cause: `cmdEval` (`src/cmds.zig:881`) makes the text of the list and compiles it. The text changes on each pass, so the cache of `scriptOfText` (`src/interp.zig:1755`) has no hit, and each pass adds one entry.
 - Change: when the one argument is a list value, call the command with the items of the list as its words. Do not make the text, and do not compile.
 - Expected gain: the parse and compile part goes away. `tclsh` has this path, and its time is 29.3 ms. The same change helps `uplevel`, `after`, and each callback that an embedder builds with `list`, when they use the same function. I did not check those paths.
+- Done: `cmdEval` gives a list value to `evalWords` (`src/interp.zig`). It copies the items to the value stack and calls the command, with no text and no compile. The error trace has the text of the list, as before. `evals` runs in 17.9 ms (17.2 ms with the JIT) against 28.7 ms for `tclsh`. Before the change it ran in 62.9 ms on the same machine.
 
 ## 3. `lmap` has no bytecode
 

@@ -715,6 +715,17 @@ test "the count cache of long strings stays true" {
     });
 }
 
+test "eval of a list value runs its words" {
+    try check(&.{
+        .{ "eval [list]", "" },
+        .{ "set x [list set y {$z}]; eval $x; set y", "$z" },
+        .{ "set l [list lset l 0 X]; eval $l; set l", "X l 0 X" },
+        .{ "proc f {} {eval [list error boom]}; catch f; set errorInfo", "boom\n    while executing\n\"error boom\"\n    invoked from within\n\"eval [list error boom]\"\n    (procedure \"f\" line 1)\n    invoked from within\n\"f\"" },
+        .{ "proc d n {if {$n > 0} {eval [list d [expr {$n - 1}]]} else {info level}}; d 4", "5" },
+        .{ "catch {eval [list nosuch a]} m; set m", "invalid command name \"nosuch\"" },
+    });
+}
+
 test "more dict subcommands and binary encode" {
     try check(&.{
         .{ "dict remove {a 1 b 2 c 3} b z", "a 1 c 3" },
