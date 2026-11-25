@@ -54,6 +54,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Io = std.Io;
 const tcl = @import("ztcl");
 const shell = struct {
@@ -78,6 +79,8 @@ pub fn main(init: std.process.Init) !void {
 var host_io: Io = undefined;
 const chan_ok = tcl.sys.supported;
 const exec_ok = tcl.proc.supported;
+/// WASI has no terminal interface, so the WASI build has no shell.
+const shell_ok = builtin.os.tag != .wasi;
 
 fn hostNow(_: ?*anyopaque) i64 {
     const t = Io.Clock.real.now(host_io);
@@ -97,6 +100,15 @@ fn hostSleep(_: ?*anyopaque, micros: i64) void {
 fn hostZone(_: ?*anyopaque, name: []const u8, a: std.mem.Allocator) ?[]const u8 {
     const path = std.fmt.allocPrint(a, "/usr/share/zoneinfo/{s}", .{name}) catch return null;
     return Io.Dir.cwd().readFileAlloc(host_io, path, a, .limited(1 << 20)) catch null;
+}
+
+/// The path of a script file for `Io.Dir.cwd()`. On WASI, `cwd` is the
+/// first preopen, and the host maps it to `/`. A WASI open refuses an
+/// absolute path, so the leading slashes go.
+fn hostPath(path: []const u8) []const u8 {
+    if (builtin.os.tag != .wasi) return path;
+    const rel = std.mem.trimStart(u8, path, "/");
+    return if (rel.len == 0) "." else rel;
 }
 
 var exit_out: *Io.Writer = undefined;
@@ -185,7 +197,7 @@ fn runTclsh(it: *tcl.Interp, out: *Io.Writer, words: []const [:0]const u8, root:
         \\}}
     ;
     if (words.len > 0 and !channels) {
-        const text = try Io.Dir.cwd().readFileAlloc(host_io, words[0], a, .limited(64 << 20));
+        const text = try Io.Dir.cwd().readFileAlloc(host_io, hostPath(words[0]), a, .limited(64 << 20));
         it.script_name = words[0];
         _ = it.eval(text) catch |e| return tclshError(it, e);
         leave(it, 0);
@@ -425,9 +437,9 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             var lim = it.thread_limits;
             if (std.mem.eql(u8, arg, "--threads")) lim.max_threads = @intCast(@min(n, 1 << 16));
             if (std.mem.eql(u8, arg, "--thread-steps")) lim.step_limit = n;
-            if (std.mem.eql(u8, arg, "--thread-mem")) lim.mem_limit = n;
+            if (std.mem.eql(u8, arg, "--thread-mem")) lim.mem_limit = std.math.cast(usize, n) orelse return error.Overflow;
             if (std.mem.eql(u8, arg, "--threads-steps")) lim.total_steps = n;
-            if (std.mem.eql(u8, arg, "--threads-mem")) lim.total_mem = n;
+            if (std.mem.eql(u8, arg, "--threads-mem")) lim.total_mem = std.math.cast(usize, n) orelse return error.Overflow;
             tcl.thread.setLimits(&it, lim);
             continue;
         }
@@ -442,7 +454,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             continue;
         }
         ran = true;
-        const text = Io.Dir.cwd().readFileAlloc(io, arg, arena, .limited(64 << 20)) catch |e| {
+        const text = Io.Dir.cwd().readFileAlloc(io, hostPath(arg), arena, .limited(64 << 20)) catch |e| {
             try out.print("{s}: {s}\n", .{ arg, @errorName(e) });
             out.flush() catch {};
             std.process.exit(2);
@@ -491,7 +503,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
 
     // The interactive shell, when stdin and stdout are a terminal.
     const env = init.environ_map;
-    if (shell.term.interactive(io, env.get("TERM"))) {
+    if (shell_ok and shell.term.interactive(io, env.get("TERM"))) {
         try out.flush();
         // The output of `puts` shows at once, before the next prompt.
         flush_each = true;

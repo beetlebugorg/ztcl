@@ -82,6 +82,9 @@ pub fn build(b: *std.Build) void {
         .link_libc = if (tsan) true else null,
         .imports = &.{.{ .name = "ztcl", .module = fast }},
     }) });
+    // The interpreter can use 5 MiB of native stack (`max_native`), as
+    // in the WebAssembly library.
+    if (t.os.tag == .wasi) exe.stack_size = 8 << 20;
     b.installArtifact(exe);
 
     const run = b.addRunArtifact(exe);
@@ -158,7 +161,8 @@ pub fn build(b: *std.Build) void {
         .imports = &.{.{ .name = "ztcl", .module = ztcl }},
     }) });
     b.step("jit-probe", "Print the state of the executable memory of the JIT").dependOn(&b.addRunArtifact(probe_exe).step);
-    b.installArtifact(probe_exe);
+    // The probe has no meaning on WASI, which has no executable memory.
+    if (t.os.tag != .wasi) b.installArtifact(probe_exe);
 
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
     const wasm = addWasm(b, "ztcl", .none, gc_precise, size_plant, on);
