@@ -133,6 +133,21 @@ CAP tools/size-report.sh --check    # fails above the budget
 
 The workflow `size.yml` runs the report on x86-64 Linux, arm64 macOS, and x86-64 Windows and puts the table in the summary of the job. The gate of the full size applies to x86-64 Linux only.
 
+## The outside numbers
+
+`tools/bench-stdlib.py` compares ztcl with other runtimes on the benchmarks of [the plan](stdlib.md#performance-targets): JSON, HTTP, TLS, and SQLite. `bench/stdlib/` has the programs of each runtime and `fetch.sh`, which fetches the data files and the C parsers and checks a SHA-256 of each file. The repository has no copy of them.
+
+```sh
+CAP python3 -I tools/bench-stdlib.py --only json,http,tls,sqlite --others-only
+CAP python3 -I tools/bench-stdlib.py --only json --check bench/stdlib/gates.tsv
+```
+
+- Each measure runs 5 times, and the table keeps the best run. A JSON number is MB/s of the input text. A program times its own work, so the start of a process and the read of the file are not in the number.
+- The script builds simdjson and yyjson with the C++ compiler of the system, the Go programs, the `sqlite3` package of `tclsh` from SQLite 3.54.0, and a Python environment with `orjson`, `pysimdjson`, and `uvicorn`. A runtime that is absent gives a row with the value `absent`.
+- The HTTP tests run the server on one half of the cores and `wrk` or `h2load` on the other half, with `taskset`.
+- `--check FILE` compares the ratio of ztcl to each other runtime with the minimum of each row of `bench/stdlib/gates.tsv`. `--dry-run` reads the last table and runs no program.
+- The workflow `bench.yml` runs the harness each week and by hand, and keeps the TSV file as an artifact.
+
 ## Benchmarks
 
 ```sh
