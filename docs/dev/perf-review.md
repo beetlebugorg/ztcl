@@ -30,7 +30,7 @@ The rank is the expected gain divided by the effort. A ratio above 1 means that 
 | 3 | `lmap` has no bytecode | 67.5 ms | 39.1 ms | 1.7 | Small | Open |
 | 4 | `lsearch -exact` orders each item | 14.7 ms | 9.0 ms | 1.6 | Small | Done: 6.6 ms |
 | 5 | `string map` tries each key at each byte | 26.6 ms | 16.9 ms | 1.6 | Small | Open |
-| 6 | The regex search has no literal scan | 6.05 ms | 1.00 ms | 6.0 | Medium | Open |
+| 6 | The regex search has no literal scan | 6.05 ms | 1.00 ms | 6.0 | Medium | Done, step 1: 0.5 ms |
 | 7 | Array elements go through the name of the variable | 104.8 ms | 70.9 ms | 1.5 | Medium | Open |
 | 8 | A proc call uses about 250 instructions in `callProcFast` | 14.8 ms | 70.5 ms | 0.2 | Large | Open |
 | 9 | `append` in JIT code goes through two helpers | 243.1 M instructions | 812.4 M | 0.3 | Medium | Open |
@@ -115,6 +115,7 @@ regsub -all {\d+} $s X
 - Change, step 1: at compile time, find the set of bytes that can start a match, and the literal prefix when the pattern has one. In `simulate`, when the thread list is empty, go to the next candidate with `std.mem.indexOfScalar`, `indexOfAny`, or `indexOf`.
 - Change, step 2: a lazy DFA for patterns with no back reference and no capture need.
 - Expected gain: step 1 makes the no-match case a `memchr` scan. `tclsh` shows 1.00 ms for it. The step counter of the matcher must give the same count as today, or the limits of a script change.
+- Done: step 1. When the closure of instruction 0 has no assert, no lookahead, and no match, `compile` keeps a table of the characters that a first thread accepts (`Start` in `src/regex.zig`). With no live thread, `simulate` goes to the next such character with a scan and adds the ticks of the skipped positions, so the step count does not change. The proc with the pattern `zzz` runs in 0.5 ms against 2.0 ms for `tclsh`. The proc with `regsub -all` runs in 2.5 ms against 6.4 ms. Both procs include the `string repeat`. Before the change they ran in 5.6 ms and 8.2 ms on the same machine. Step 2 is open.
 
 ## 7. Array elements go through the name of the variable
 

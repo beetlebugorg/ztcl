@@ -618,6 +618,11 @@ test "regexp, regsub, and the -regexp options" {
         .{ "regexp -inline {([a-z]+)(\\d)?} abc", "abc abc {}" },
         .{ "regexp -all -inline {\\w+} {one two  three}", "one two three" },
         .{ "regexp -all {a} banana", "3" },
+        // The scan to the first candidate of a match.
+        .{ "regexp -all -indices -inline {(fox|dog) \\d} {a fox 1 b dog 2 fox}", "{2 6} {2 4} {10 14} {10 12}" },
+        .{ "regexp -inline -indices -nocase {B+} \\u00e9\\u00e9abbb", "{3 5}" },
+        .{ "regexp -inline -indices {\\u65e5} xx\\u00e9\\u65e5", "{3 3}" },
+        .{ "regexp -inline -start 3 -indices {a*b} aabxab", "{4 5}" },
         .{ "regexp -indices {an+} banana m; set m", "1 2" },
         .{ "regexp -nocase {HELLO} {say hello}", "1" },
         .{ "regexp {a|ab} ab m; set m", "ab" },

@@ -240,7 +240,61 @@ pub const Regex = struct {
     shortest: bool,
     has_backref: bool,
     info: u16,
+    /// The characters that can start a match, or null.
+    start: ?*const Start = null,
 };
+
+/// The first step of a match. The threads from instruction 0 do not
+/// depend on the position: no assert, no lookahead, and no empty match.
+/// So a position whose character no first thread accepts adds the same
+/// work at each place, and the simulation skips it.
+const Start = struct {
+    /// The characters below 256 that a first thread accepts.
+    bytes: [256]bool,
+    /// True when a first thread can accept a character above 255.
+    high: bool,
+    /// The ticks of one skipped position: one for each instruction of
+    /// the closure of instruction 0, and one for the step of each
+    /// thread.
+    cost: u32,
+};
+
+/// The `Start` of a program, or null when the first threads depend on
+/// the position or can match the empty string.
+fn startOf(a: std.mem.Allocator, prog: []const Inst) std.mem.Allocator.Error!?*const Start {
+    const seen = try a.alloc(bool, prog.len);
+    @memset(seen, false);
+    var work: std.ArrayList(u32) = .empty;
+    try work.append(a, 0);
+    var st: Start = .{ .bytes = @splat(false), .high = false, .cost = 0 };
+    while (work.pop()) |pc| {
+        if (seen[pc]) continue;
+        seen[pc] = true;
+        st.cost += 1;
+        switch (prog[pc]) {
+            .jmp => |t| try work.append(a, t),
+            .split => |sp| {
+                try work.append(a, sp.second);
+                try work.append(a, sp.first);
+            },
+            .assert, .look, .match => return null,
+            .char => |c| {
+                st.cost += 1;
+                if (c < 256) st.bytes[c] = true else st.high = true;
+            },
+            .set => |set| {
+                st.cost += 1;
+                st.high = true;
+                for (&st.bytes, 0..) |*b, c| {
+                    if (set.has(@intCast(c))) b.* = true;
+                }
+            },
+        }
+    }
+    const out = try a.create(Start);
+    out.* = st;
+    return out;
+}
 
 const Fault = struct {
     const paren = "REG_EPAREN";
@@ -1088,7 +1142,7 @@ fn compileNew(it: *Interp, pat: []const u8, opts: Options) Error!*Regex {
     if (root.pref == .lazy) info |= Info.shortest;
     if (canBeEmpty(root)) info |= Info.emptymatch;
     const re = try it.alloc().create(Regex);
-    re.* = .{ .prog = e.prog.items, .root = root, .ncap = p.ncap, .nodes = p.nodes, .opts = p.opts, .shortest = root.pref == .lazy, .has_backref = p.has_backref, .info = info };
+    re.* = .{ .prog = e.prog.items, .root = root, .ncap = p.ncap, .nodes = p.nodes, .opts = p.opts, .shortest = root.pref == .lazy, .has_backref = p.has_backref, .info = info, .start = try startOf(it.alloc(), e.prog.items) };
     return re;
 }
 
@@ -1197,6 +1251,33 @@ pub const Matcher = struct {
         }
     }
 
+    /// `n` calls of `tick`.
+    fn ticks(m: *Matcher, n: u64) Error!void {
+        const total = m.steps + n;
+        const cost = total / 32;
+        m.steps = @intCast(total % 32);
+        if (cost > m.it.step_limit) {
+            m.it.step_limit = 0;
+            return m.it.fail("step limit reached", .{});
+        }
+        m.it.step_limit -= @intCast(cost);
+    }
+
+    /// The first position at or after `i` whose character a first thread
+    /// accepts, or `m.n`.
+    fn nextStart(m: *const Matcher, st: *const Start, i: usize) usize {
+        var k = i;
+        if (m.text) |t| {
+            while (k < m.n) : (k += 1) {
+                const c = t[k];
+                if (if (c < 256) st.bytes[c] else st.high) break;
+            }
+        } else {
+            while (k < m.n and !st.bytes[m.s[k]]) k += 1;
+        }
+        return k;
+    }
+
     fn wordAt(m: *const Matcher, i: usize) bool {
         return i < m.n and ucd.isWordChar(m.ch(i));
     }
@@ -1301,6 +1382,16 @@ pub const Matcher = struct {
             // a new start until a match exists.
             if (best == null) {
                 if (i == from) m.nextGen();
+                if (ncur == 0) if (m.re.start) |st| {
+                    // No thread is live, so each position up to the next
+                    // start candidate adds `st.cost` ticks and no thread.
+                    const k = m.nextStart(st, i);
+                    if (k > i) {
+                        try m.ticks(@as(u64, k - i) * st.cost);
+                        i = k;
+                        m.nextGen();
+                    }
+                };
                 if (try m.addThread(cur, &ncur, 0, @intCast(i), i)) {
                     best = .{ i, i };
                 }
