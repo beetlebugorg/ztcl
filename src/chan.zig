@@ -19,7 +19,7 @@ const linux = std.os.linux;
 const sys = @import("sys.zig");
 const event = @import("event.zig");
 
-const Translation = enum { auto, lf, cr, crlf, binary };
+pub const Translation = enum { auto, lf, cr, crlf, binary };
 
 pub const Channel = struct {
     name: []const u8,
@@ -445,6 +445,22 @@ pub fn progress(it: *Interp, c: *Channel) void {
     var w = [_]sys.Want{.{ .fd = c.fd, .write = true }};
     sys.poll(it.alloc(), &w, 0);
     if (w[0].can_write) connected(c);
+}
+
+/// Removes the channel `name` from the table of `it` and from the event
+/// loop with no close. Gives the record, or null. `thread::detach` uses
+/// it.
+pub fn release(it: *Interp, name: []const u8) ?*Channel {
+    const c = it.chans.table.get(name) orelse return null;
+    event.unwatch(it, name);
+    _ = it.chans.table.orderedRemove(name);
+    return c;
+}
+
+/// Adds a channel record to the table of `it` under its name.
+/// `thread::attach` uses it.
+pub fn install(it: *Interp, c: *Channel) Error!void {
+    try it.chans.table.put(it.alloc(), c.name, c);
 }
 
 pub fn lookup(it: *Interp, name: []const u8) ?*Channel {
