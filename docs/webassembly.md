@@ -4,6 +4,23 @@
 
 The WebAssembly build has the interpreter only, with no JIT. It has no command that reaches the host, and it has no capability that an embedder can turn on: no files, sockets, `exec`, `clock`, `interp`, or event loop. `coroutine` is present and returns an error. The `point` command is not installed.
 
+## Install from npm
+
+The package [`@beetlebug/ztcl`](https://www.npmjs.com/package/@beetlebug/ztcl) has `ztcl.wasm`, the JS module, the worker, and the TypeScript types. It works with a bundler, in Node.js, and from a CDN with no build step. See [the npm package](npm.md).
+
+```sh
+npm install @beetlebug/ztcl
+```
+
+```js
+import { Interp } from "@beetlebug/ztcl";
+
+const tcl = await Interp.create({ stepLimit: 1_000_000, memLimit: 64 << 20 });
+console.log(tcl.eval("expr {6 * 7}").result); // 42
+```
+
+With no source, `Interp.create` and `WorkerInterp` load the `ztcl.wasm` file next to `ztcl.mjs`.
+
 ## Build
 
 ```sh
@@ -48,8 +65,8 @@ tcl.close();
 
 | Function or field | Use |
 |---|---|
-| `compile(source)` | Compiles `ztcl.wasm`. `source` is a URL, a file path in Node.js, a `Response`, bytes, or a `WebAssembly.Module`. |
-| `Interp.create(source, options)` | Makes an interpreter in a new WebAssembly instance. `source` is as for `compile`. Compile once and pass the module to make many interpreters. |
+| `compile(source)` | Compiles `ztcl.wasm`. `source` is a URL, a file path in Node.js, a `Response`, bytes, or a `WebAssembly.Module`. With no source, it is the `ztcl.wasm` file next to `ztcl.mjs`. |
+| `Interp.create(source, options)` | Makes an interpreter in a new WebAssembly instance. `source` is as for `compile`, and it can be left out: `Interp.create(options)`. Compile once and pass the module to make many interpreters. |
 | `options.stepLimit` | The steps of each `eval`. `null` is no limit, and it is the default. |
 | `options.memLimit` | The memory limit in bytes. The default is 2 GiB. |
 | `options.onOutput(text)` | Gets the text of `puts` when each `eval` ends. |
@@ -57,7 +74,8 @@ tcl.close();
 | `interp.stepLimit`, `interp.memLimit` | Change the limits for the next `eval`. |
 | `interp.memorySize` | The size of the linear memory in bytes. The memory never shrinks, so this is the peak. |
 | `interp.close()` | Frees the interpreter. |
-| `new WorkerInterp(wasmUrl, options)` | Runs scripts in a Web Worker (`ztcl-worker.mjs`). The options are as for `Interp.create`. |
+| `new WorkerInterp(wasmUrl, options)` | Runs scripts in a Web Worker (`ztcl-worker.mjs`). The options are as for `Interp.create`. `wasmUrl` can be left out. When `ztcl.mjs` comes from another origin, such as a CDN, the worker starts from a blob script that imports `ztcl-worker.mjs`. |
+| `wasmURL()` | The URL of the `ztcl.wasm` file next to `ztcl.mjs`. |
 | `worker.eval(script)` | Returns a promise of `{ ok, result, output, memorySize }`. |
 | `worker.reset()` | Makes a new interpreter in the worker for the next `eval`. |
 | `worker.stop()` | Ends the worker and the script in it. A pending `eval` gives `{ ok: false, result: "stopped" }`. The next `eval` starts a new worker. |

@@ -33,6 +33,7 @@ PAGES = [
     ("docs/language.md", "language/", "Use", "Language and commands"),
     ("docs/embedding.md", "embedding/", "Use", "Embed in Zig"),
     ("docs/webassembly.md", "webassembly/", "Use", "WebAssembly"),
+    ("docs/npm.md", "npm/", "Use", "npm package"),
     ("docs/design.md", "design/", "Internals", "Design"),
     ("docs/testing.md", "testing/", "Internals", "Tests and benchmarks"),
     ("docs/compatibility.md", "compatibility/", "Internals", "Compatibility"),

@@ -1,0 +1,42 @@
+{
+  "name": "@beetlebug/ztcl",
+  "version": "0.0.0",
+  "description": "A Tcl interpreter in WebAssembly, with a step limit and a memory limit for untrusted scripts",
+  "license": "BSD-2-Clause",
+  "author": "The ztcl authors",
+  "homepage": "https://beetlebug.org/ztcl/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/beetlebugorg/ztcl.git"
+  },
+  "bugs": "https://github.com/beetlebugorg/ztcl/issues",
+  "keywords": ["tcl", "interpreter", "webassembly", "wasm", "sandbox", "scripting"],
+  "type": "module",
+  "main": "./ztcl.mjs",
+  "types": "./ztcl.d.ts",
+  "exports": {
+    ".": {
+      "types": "./ztcl.d.ts",
+      "default": "./ztcl.mjs"
+    },
+    "./worker": {
+      "types": "./ztcl-worker.d.ts",
+      "default": "./ztcl-worker.mjs"
+    },
+    "./ztcl.wasm": "./ztcl.wasm",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "ztcl.mjs",
+    "ztcl-worker.mjs",
+    "ztcl.wasm",
+    "ztcl.d.ts",
+    "ztcl-worker.d.ts",
+    "NOTICE",
+    "licenses/"
+  ],
+  "sideEffects": ["./ztcl-worker.mjs"],
+  "engines": {
+    "node": ">=22.3"
+  }
+}
