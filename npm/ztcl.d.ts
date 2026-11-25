@@ -26,6 +26,12 @@ export interface InterpOptions {
   memLimit?: number | null;
   /** Gets the text of `puts` when each `eval` ends. */
   onOutput?: ((text: string) => void) | null;
+  /**
+   * Capabilities to turn on. `ztcl.wasm` has only `"file"`: `source`,
+   * `open` for reading, `read`, `gets`, `eof`, and `close` on the files
+   * of a bundle, under `//zipfs:/app/`. The default is none.
+   */
+  allow?: "file"[];
 }
 
 /** The result of one `eval`. */
@@ -94,9 +100,34 @@ export class Interp {
    */
   eval(script: string): EvalResult;
 
+  /**
+   * The size in bytes of the scripts and files of a bundle from
+   * `ztcl build --wasm`. Zero for a module with no bundle.
+   */
+  readonly bundleSize: number;
+
+  /**
+   * Runs the scripts of a bundle in order, as `ztcl a.tcl b.tcl` does.
+   * The step limit applies to all the scripts of the call together. On
+   * an error, the next scripts do not run, and `result` is
+   * `"name:line: message"`. Throws for a module with no bundle.
+   */
+  run(): EvalResult;
+
   /** Frees the interpreter. Drop the object after this call. */
   close(): void;
 }
+
+/**
+ * Runs the scripts of a bundle in a new interpreter, then frees it.
+ *
+ * @example
+ * const r = await run(new URL("./app.wasm", import.meta.url), { stepLimit: 1_000_000 });
+ * console.log(r.output);
+ * @param source The bundle, as for {@link compile}.
+ * @param options The limits, the output function, and the capabilities.
+ */
+export function run(source: WasmSource, options?: InterpOptions): Promise<EvalResult>;
 
 /**
  * Runs scripts in a Web Worker, so a long script does not block the

@@ -1,5 +1,8 @@
 //! A runner for Tcl scripts: `ztcl [--time] [--max-steps N] [--mem N] [--repeat N] file.tcl ...`.
 //!
+//! `ztcl build --wasm ... -o OUT.wasm file.tcl ...` writes a copy of
+//! ztcl.wasm with the scripts in it. See `src/buildcmd.zig`.
+//!
 //! It runs the files in order in one interpreter and writes the output
 //! of `puts` to stdout. With no file, it reads commands from stdin, one
 //! line at a time. The runner reads the files itself; a script has no
@@ -217,6 +220,13 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     var out_w: Io.File.Writer = .init(.stdout(), io, &out_buf);
     const out = &out_w.interface;
     defer out.flush() catch {};
+
+    if (setup == null and args.len > 1 and std.mem.eql(u8, args[1], "build")) {
+        const code = try @import("buildcmd.zig").run(io, arena, init.environ_map, args[2..], out);
+        out.flush() catch {};
+        if (code != 0) std.process.exit(code);
+        return;
+    }
 
     var it: tcl.Interp = undefined;
     try it.init(init.gpa);

@@ -65,20 +65,43 @@ export class Interp {
   /// Makes an interpreter in a new instance of `module`. `module` is a
   /// source as for compile(), and it can be left out.
   /// Options: stepLimit (steps for each eval, null for no limit),
-  /// memLimit (bytes), onOutput (a function that gets the `puts` text).
+  /// memLimit (bytes), onOutput (a function that gets the `puts` text),
+  /// allow (a list of capabilities: only "file", for the files of a
+  /// bundle).
   static async create(module, options = {}) {
     if (isOptions(module)) [module, options] = [undefined, module];
     const instance = await WebAssembly.instantiate(await compile(module), {});
     return new Interp(instance, options);
   }
 
-  constructor(instance, { stepLimit = null, memLimit = null, onOutput = null } = {}) {
+  constructor(instance, { stepLimit = null, memLimit = null, onOutput = null, allow = [] } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
     this.stepLimit = stepLimit;
     this.onOutput = onOutput;
     if (memLimit != null) this.memLimit = memLimit;
+    if (allow.length) {
+      const bad = allow.filter((c) => c !== "file");
+      if (bad.length || !this.x.ztcl_allow) throw new Error(`ztcl_allow: this module has no capability ${bad.join(", ") || "file"}`);
+      const rc = this.x.ztcl_allow(this.h, 16);
+      if (rc !== 0) throw new Error("ztcl_allow: out of memory");
+    }
+  }
+
+  /// The size in bytes of the scripts and files of a bundle. Zero for a
+  /// module with no bundle.
+  get bundleSize() {
+    return this.x.ztcl_bundle_size?.() ?? 0;
+  }
+
+  /// Runs the scripts of a bundle (`ztcl build --wasm`) in order.
+  /// Returns { ok, result, output } as eval() does. On an error,
+  /// `result` is "name:line: message". The step limit applies to all
+  /// the scripts of the call together.
+  run() {
+    if (!this.bundleSize) throw new Error("the module has no bundle");
+    return this._call(() => this.x.ztcl_bundle_run(this.h));
   }
 
   /// The memory limit in bytes. ztcl_new sets 2 GiB.
@@ -102,15 +125,23 @@ export class Interp {
   /// to each call.
   eval(script) {
     const x = this.x;
+    return this._call(() => {
+      const bytes = encoder.encode(script);
+      const ptr = x.ztcl_alloc(bytes.length || 1);
+      if (!ptr) throw new Error("ztcl_alloc: out of memory");
+      new Uint8Array(x.memory.buffer, ptr, bytes.length).set(bytes);
+      const rc = x.ztcl_eval(this.h, ptr, bytes.length);
+      x.ztcl_free(ptr, bytes.length || 1);
+      return rc;
+    });
+  }
+
+  _call(f) {
+    const x = this.x;
     if (!this.h) throw new Error("the interpreter is closed");
     const steps = this.stepLimit == null ? NO_LIMIT : BigInt(this.stepLimit);
     x.ztcl_set_step_limit(this.h, steps);
-    const bytes = encoder.encode(script);
-    const ptr = x.ztcl_alloc(bytes.length || 1);
-    if (!ptr) throw new Error("ztcl_alloc: out of memory");
-    new Uint8Array(x.memory.buffer, ptr, bytes.length).set(bytes);
-    const rc = x.ztcl_eval(this.h, ptr, bytes.length);
-    x.ztcl_free(ptr, bytes.length || 1);
+    const rc = f();
     const result = this._text(x.ztcl_result_ptr(this.h), x.ztcl_result_len(this.h));
     const output = this._text(x.ztcl_output_ptr(this.h), x.ztcl_output_len(this.h));
     x.ztcl_output_clear(this.h);
@@ -126,6 +157,18 @@ export class Interp {
 
   _text(ptr, len) {
     return decoder.decode(new Uint8Array(this.x.memory.buffer, ptr, len));
+  }
+}
+
+/// Runs the scripts of a bundle in a new interpreter and closes it.
+/// `module` is a source as for compile(). Options are as for
+/// Interp.create. Returns { ok, result, output }.
+export async function run(module, options = {}) {
+  const tcl = await Interp.create(module, options);
+  try {
+    return tcl.run();
+  } finally {
+    tcl.close();
   }
 }
 

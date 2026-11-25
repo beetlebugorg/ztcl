@@ -24,7 +24,25 @@ const Handle = struct {
     /// `out`. Other threads add to `out` under the lock of the group.
     taken: std.ArrayList(u8) = .empty,
     result: []const u8 = "",
+    /// The files of the bundle, for `ztcl_allow` with `file`.
+    files: wasmfiles.State = .{},
 };
+
+const wasmbundle = @import("wasmbundle.zig");
+const wasmfiles = @import("wasmfiles.zig");
+
+/// The slot of a bundle. `ztcl build --wasm` writes the address and the
+/// length of the payload into the last two words. See
+/// src/wasmbundle.zig.
+export var ztcl_bundle_slot: [4]u32 = wasmbundle.slot_words;
+
+/// The payload of the bundle, or an empty slice.
+fn payload() []const u8 {
+    const slot: *volatile [4]u32 = &ztcl_bundle_slot;
+    const ptr = slot[2];
+    if (ptr == 0xffffffff) return &.{};
+    return @as([*]const u8, @ptrFromInt(ptr))[0..slot[3]];
+}
 
 fn write(ctx: ?*anyopaque, bytes: []const u8) void {
     const h: *Handle = @ptrCast(@alignCast(ctx.?));
@@ -54,6 +72,7 @@ export fn ztcl_new() ?*Handle {
 }
 
 export fn ztcl_delete(h: *Handle) void {
+    h.files.deinit(gpa);
     h.out.deinit(gpa);
     h.taken.deinit(gpa);
     h.it.deinit();
@@ -105,6 +124,60 @@ export fn ztcl_output_len(h: *Handle) usize {
 
 export fn ztcl_output_clear(h: *Handle) void {
     if (web_threads == .none) h.out.clearRetainingCapacity() else h.taken.clearRetainingCapacity();
+}
+
+// The exports of the build with no threads for a bundle. See
+// web/ztcl.mjs.
+comptime {
+    if (web_threads == .none) {
+        @export(&ztcl_bundle_size, .{ .name = "ztcl_bundle_size" });
+        @export(&ztcl_bundle_run, .{ .name = "ztcl_bundle_run" });
+        @export(&ztcl_allow_plain, .{ .name = "ztcl_allow" });
+    }
+}
+
+/// The size of the payload of the bundle. Zero for a module with no
+/// bundle.
+fn ztcl_bundle_size() callconv(.c) usize {
+    return payload().len;
+}
+
+/// Runs the scripts of the bundle in order, as `ztcl a.tcl b.tcl` runs
+/// them. Returns 0 on success and 1 on an error. On an error, the
+/// result is "name:line: message" and the next scripts do not run.
+fn ztcl_bundle_run(h: *Handle) callconv(.c) i32 {
+    var r: wasmbundle.Reader = .init(payload());
+    h.result = "";
+    while (r.next()) |e| {
+        if (e.kind != .script) continue;
+        h.it.error_line = 0;
+        if (h.it.eval(e.data)) |v| {
+            h.result = h.it.str(v) catch "out of memory";
+        } else |err| {
+            const msg = if (err == error.TclError) h.it.str(h.it.result) catch "out of memory" else @errorName(err);
+            h.result = std.fmt.allocPrint(h.it.alloc(), "{s}:{d}: {s}", .{ e.name, h.it.error_line, msg }) catch msg;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+fn filesOf(it: *ztcl.Interp) *wasmfiles.State {
+    const h: *Handle = @fieldParentPtr("it", it);
+    return &h.files;
+}
+
+/// Turns on capabilities. This build has only `file`: the commands
+/// `source`, `open`, `read`, `gets`, `eof`, and `close` on the files of
+/// the bundle. Gives 0 on success, 1 when the memory ends, and 2 for
+/// another bit.
+fn ztcl_allow_plain(h: *Handle, bits: u32) callconv(.c) i32 {
+    const file = @intFromEnum(Capability.file);
+    if (bits & ~file != 0) return 2;
+    if (bits == 0 or h.files.on) return 0;
+    h.files = .{ .payload = payload(), .on = true };
+    wasmfiles.Commands(filesOf, gpa).register(&h.it) catch return 1;
+    return 0;
 }
 
 // The exports of the builds with threads. See web/ztcl-threads.mjs.
