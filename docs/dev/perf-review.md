@@ -34,7 +34,7 @@ The rank is the expected gain divided by the effort. A ratio above 1 means that 
 | 7 | Array elements go through the name of the variable | 104.8 ms | 70.9 ms | 1.5 | Medium | Open |
 | 8 | A proc call uses about 250 instructions in `callProcFast` | 14.8 ms | 70.5 ms | 0.2 | Large | Open |
 | 9 | `append` in JIT code goes through two helpers | 243.1 M instructions | 812.4 M | 0.3 | Medium | Open |
-| 10 | `read` of a whole file | 73.5 ms | 49.9 ms | 1.5 | Not known | Open |
+| 10 | `read` of a whole file | 73.5 ms | 49.9 ms | 1.5 | Not known | Done: 11.0 ms |
 
 ## 1. `string index` and `string length` read the whole string
 
@@ -153,6 +153,7 @@ proc ra {f} {set c [open $f r]; set d [read $c]; close $c; llength [split $d \n]
 - In the same script, 300,000 `puts` to the file ran in 73.5 ms against 97.2 ms, and 300,000 `gets` ran in 82.9 ms against 136.1 ms. So the line paths are faster than `tclsh`.
 - Cause: not checked. `split` and `join` on a string of 2,000 items are faster than `tclsh` (40.6 ms against 46.4 ms), so the first place to look is `read` in `src/chan.zig`: the growth of the buffer and the encoding pass.
 - Change: profile `read` alone first.
+- Done: a profile showed 97% of the instructions of `read` in `decode` (`src/chan.zig`), and it appended each byte with a call. It now reserves the length of the input and copies each run of bytes up to the next CR, or in binary mode up to the next CR or high byte. A `read` of the 11.6 MB file runs in 11.0 ms against 21.7 ms for `tclsh`, and `read` with `split` in 25.2 ms against 49.5 ms. Before the change `read` ran in 47.0 ms on the same machine.
 
 ## Measures with no finding
 

@@ -225,8 +225,18 @@ fn fill(it: *Interp, c: *Channel) Error!bool {
 fn decode(it: *Interp, c: *const Channel, raw: []const u8) Error![]const u8 {
     const a = it.alloc();
     var out: std.ArrayList(u8) = .empty;
+    try out.ensureTotalCapacity(a, raw.len);
     var i: usize = 0;
     while (i < raw.len) : (i += 1) {
+        // A run of bytes with no CR, and no high byte in binary mode,
+        // goes to the output as it is.
+        var j = i;
+        if (c.binary) {
+            while (j < raw.len and raw[j] != '\r' and raw[j] < 0x80) j += 1;
+        } else j = std.mem.indexOfScalarPos(u8, raw, i, '\r') orelse raw.len;
+        try out.appendSlice(a, raw[i..j]);
+        i = j;
+        if (i == raw.len) break;
         var ch = raw[i];
         switch (c.input) {
             .auto, .crlf => if (ch == '\r' and i + 1 < raw.len and raw[i + 1] == '\n') {
