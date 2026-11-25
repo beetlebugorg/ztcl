@@ -29,7 +29,7 @@ The rank is the expected gain divided by the effort. A ratio above 1 means that 
 | 2 | `eval` of a list parses text on each call | 89.0 ms | 29.3 ms | 3.0 | Small | Done: 17.9 ms |
 | 3 | `lmap` has no bytecode | 67.5 ms | 39.1 ms | 1.7 | Small | Done: 22.4 ms |
 | 4 | `lsearch -exact` orders each item | 14.7 ms | 9.0 ms | 1.6 | Small | Done: 6.6 ms |
-| 5 | `string map` tries each key at each byte | 26.6 ms | 16.9 ms | 1.6 | Small | Open |
+| 5 | `string map` tries each key at each byte | 26.6 ms | 16.9 ms | 1.6 | Small | Done: 15.6 ms |
 | 6 | The regex search has no literal scan | 6.05 ms | 1.00 ms | 6.0 | Medium | Done, step 1: 0.5 ms |
 | 7 | Array elements go through the name of the variable | 104.8 ms | 70.9 ms | 1.5 | Medium | Open |
 | 8 | A proc call uses about 250 instructions in `callProcFast` | 14.8 ms | 70.5 ms | 0.2 | Large | Open |
@@ -100,6 +100,7 @@ proc strmap {} {set s [string repeat "hello world foo bar " 5000]; set n 0; for 
 - Cause: the loop at `src/cmds.zig:1654` calls the meter and `eql` for each key at each byte of the string, and appends one byte at a time when no key matches.
 - Change: build a table of 256 bits from the first byte of each key. Skip a byte that is in no key with one table read. Copy each run of such bytes with one `appendSlice`. With `-nocase`, put both cases in the table.
 - Expected gain: the 38.3% in `eqlBytes` drops to the bytes that start a key. The meter must charge the same units of work as today.
+- Done: a table of the first bytes of the keys finds each run of bytes that starts no key, and the run goes to the output with one `appendSlice`. The meter gets the units of the compares that the run skips, so the step count does not change. `strmap` runs in 15.6 ms against 16.9 ms for `tclsh`. Before the change it ran in 32.4 ms on the same machine.
 
 ## 6. The regex search has no literal scan
 

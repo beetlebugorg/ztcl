@@ -1694,11 +1694,39 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             const s = try it.str(args[args.len - 1]);
             const keys = try a.alloc([]const u8, pairs.len);
             for (pairs, keys) |p, *k| k.* = try it.str(p);
+            // The first bytes of the keys. A byte that starts no key
+            // goes to the output in a run with no compare.
+            var starts: [256]bool = @splat(false);
+            for (0..keys.len / 2) |k| {
+                const key = keys[2 * k];
+                if (key.len == 0) continue;
+                starts[key[0]] = true;
+                if (nocase) {
+                    starts[std.ascii.toLower(key[0])] = true;
+                    starts[std.ascii.toUpper(key[0])] = true;
+                }
+            }
             var out: std.ArrayList(u8) = .empty;
             // Each compare of a key uses its length in units of work.
             var meter: Meter = .{};
             var i: usize = 0;
             outer: while (i < s.len) {
+                if (!starts[s[i]]) {
+                    var j = i + 1;
+                    while (j < s.len and !starts[s[j]]) j += 1;
+                    // The units of the compares that the run skips: each
+                    // key that fits at a position of the run.
+                    var k: usize = 0;
+                    while (k < keys.len) : (k += 2) {
+                        const len = keys[k].len;
+                        if (len == 0 or len > s.len) continue;
+                        const fits = @min(j, s.len - len + 1) -| i;
+                        try meter.add(it, len *| fits);
+                    }
+                    try out.appendSlice(a, s[i..j]);
+                    i = j;
+                    continue;
+                }
                 var k: usize = 0;
                 while (k < keys.len) : (k += 2) {
                     const key = keys[k];
