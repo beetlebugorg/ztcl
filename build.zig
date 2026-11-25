@@ -106,6 +106,16 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| fuzz_run.addArgs(args);
     b.step("jit-fuzz", "Run the differential fuzzer of the JIT").dependOn(&fuzz_run.step);
 
+    // The probe of executable memory: `zig build jit-probe`.
+    const probe_exe = b.addExecutable(.{ .name = "jit-probe", .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/jit-probe.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "ztcl", .module = ztcl }},
+    }) });
+    b.step("jit-probe", "Print the state of the executable memory of the JIT").dependOn(&b.addRunArtifact(probe_exe).step);
+    b.installArtifact(probe_exe);
+
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
     const wasm = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
         .root_source_file = b.path("src/wasm.zig"),

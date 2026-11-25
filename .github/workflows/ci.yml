@@ -35,6 +35,16 @@ jobs:
           version: ${{ env.ZIG_VERSION }}
       # ulimit -v is enforced on Linux only. On macOS and Windows, the
       # memory limit of the interpreter is the only cap.
+      - name: Probe the executable memory of the JIT
+        if: runner.os == 'macOS'
+        run: |
+          zig build
+          sw_vers; uname -m; sysctl -n machdep.cpu.brand_string || true
+          codesign -dv --entitlements - zig-out/bin/jit-probe 2>&1 || true
+          zig-out/bin/jit-probe || true
+          printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>com.apple.security.cs.allow-jit</key><true/></dict></plist>\n' > jit.plist
+          cp zig-out/bin/jit-probe probe-signed
+          codesign -s - -f --entitlements jit.plist probe-signed && ./probe-signed || true
       - name: Build and test
         run: |
           if [ "$RUNNER_OS" = Linux ]; then ulimit -v 6000000; fi

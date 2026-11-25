@@ -48,6 +48,18 @@ extern "c" fn pthread_jit_write_protect_supported_np() c_int;
 extern "c" fn pthread_jit_write_protect_np(enabled: c_int) void;
 extern "c" fn sys_icache_invalidate(start: *anyopaque, len: usize) void;
 
+/// Why the last `Region.init` on arm64 macOS returned null, for the
+/// messages of the tests and of `zig build jit-probe`.
+pub const Failure = enum { none, no_write_protect, map_jit, guard };
+pub var last_failure: Failure = .none;
+/// The errno of the failed call of `last_failure`.
+pub var last_errno: c_int = 0;
+
+fn failed(f: Failure) void {
+    last_failure = f;
+    last_errno = @intFromEnum(c.errno(-1));
+}
+
 /// True while this thread has its write window open on arm64 macOS.
 threadlocal var write_open: bool = false;
 
@@ -89,17 +101,25 @@ pub const Region = struct {
     }
 
     fn initDarwin(limit: usize) ?Region {
-        if (pthread_jit_write_protect_supported_np() == 0) return null;
+        if (pthread_jit_write_protect_supported_np() == 0) {
+            last_failure = .no_write_protect;
+            last_errno = 0;
+            return null;
+        }
         const page = std.heap.pageSize();
         const usable = std.mem.alignForward(usize, @max(limit, page), page);
         const total = std.math.add(usize, usable, 2 * page) catch return null;
         const p = c.mmap(null, total, .{ .READ = true, .WRITE = true, .EXEC = true }, .{ .TYPE = .PRIVATE, .ANONYMOUS = true, .JIT = true }, -1, 0);
-        if (p == c.MAP_FAILED) return null;
+        if (p == c.MAP_FAILED) {
+            failed(.map_jit);
+            return null;
+        }
         const start: [*]align(std.heap.page_size_min) u8 = @ptrCast(@alignCast(p));
         // The guard pages replace the first and the last page.
         for ([_]usize{ 0, page + usable }) |off| {
             const g = c.mmap(@ptrCast(@alignCast(start + off)), page, .{}, .{ .TYPE = .PRIVATE, .ANONYMOUS = true, .FIXED = true }, -1, 0);
             if (g == c.MAP_FAILED) {
+                failed(.guard);
                 _ = c.munmap(start, total);
                 return null;
             }
