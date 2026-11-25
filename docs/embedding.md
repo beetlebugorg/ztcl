@@ -135,6 +135,31 @@ ztcl.sys.ignorePipeSignal(); // a write to a closed peer is an error, with no si
 
 `exec` is not sandboxed. A process that a script starts has the full power of the user. Give a program list and a time limit, and turn `exec` on only for scripts that you trust. An entry of `allow` is a bare name or a full host path. The `PATH` of `env` must have only full paths. A file below the root folder runs only when `allow_root` lists it. See [the rules of `exec`](../SECURITY.md#the-rules-of-exec).
 
+### Threads
+
+The capability `thread` adds `thread::*`, `tsv::*`, `tpool::*`, and the mutexes and conditions. Set `Interp.thread_limits` before the call of `allow`:
+
+```zig
+it.thread_limits = .{ .max_threads = 4, .step_limit = 10_000_000, .mem_limit = 64 << 20, .total_mem = 256 << 20 };
+try it.allow(@intFromEnum(cap.thread) | @intFromEnum(cap.event));
+```
+
+| Field of `thread.Limits` | Default | What it limits |
+|---|---|---|
+| `max_threads` | 8 | The threads that run at one time, the workers of the pools included. |
+| `step_limit` | the step limit of the host | The steps of one thread. |
+| `mem_limit` | 256 MiB | The heap of one thread. |
+| `total_steps` | no limit | The steps of all threads together. |
+| `total_mem` | 1 GiB | The memory of all threads together, with the shared variables and the queues. |
+| `max_queue` | 10 000 | The messages that wait in the queue of one thread. |
+
+- The allocator that you give to `Interp.init` must be safe for threads. Each thread allocates its heap and the memory of the group from it.
+- The output callback runs under a lock of the group, so it needs no lock of its own.
+- `deinit` and `reset` of the host stop each thread, wake each wait, and join each thread before they return.
+- A thread that passes a limit stops alone, and the host keeps running.
+
+[Threads](threads.md) has the model and the differences from the Thread package.
+
 ## WebAssembly
 
 `zig build wasm` makes `zig-out/lib/ztcl.wasm`. It exports a small C ABI:

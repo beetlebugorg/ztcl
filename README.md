@@ -13,7 +13,7 @@ A sandboxed Tcl interpreter in Zig, with a bytecode VM and a vector path for num
 ## Status
 
 - ztcl aims to become a complete drop-in replacement for Tcl. It is not one yet. The sandbox stays the default, and host access stays an explicit capability of the embedder.
-- The test suite of Tcl 8.6.16 is the measure of compatibility. Of the 46 494 tests in all 152 files, ztcl passes 37 383 on the suite runner (80.4 %), fails 3 044, and 6 067 are blocked. Of the 29 990 tests in the 77 files in scope, it passes 27 182, fails 1 031, and 1 777 are blocked. Of those passes, 1 735 need a test-only command. With the default runner, the pass rate in scope is 84.9 %. [Compatibility](docs/compatibility.md) has the result for each test file.
+- The test suite of Tcl 8.6.16 is the measure of compatibility. Of the 46 494 tests in all 152 files, ztcl passes 37 413 on the suite runner (80.5 %), fails 3 044, and 6 037 are blocked. Of the 29 990 tests in the 77 files in scope, it passes 27 182, fails 1 031, and 1 777 are blocked. Of those passes, 1 735 need a test-only command. With the default runner, the pass rate in scope is 84.9 %. [Compatibility](docs/compatibility.md) has the result for each test file.
 - On the 37 core test files of Tcl 9.1.0, ztcl passes 9 298 tests, fails 2 799, and skips 529. ztcl follows Tcl 8.6 and makes no claim of Tcl 9 compatibility. [Tcl 8.6 and Tcl 9](docs/tcl9.md) lists the differences and the proposed choices.
 
 ## Example

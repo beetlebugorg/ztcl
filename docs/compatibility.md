@@ -13,17 +13,17 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 ## Scopes
 
 - **In scope:** the language and the core commands.
-- **Optional or host:** tests of commands that the default interpreter omits. `clock`, `package`, `interp`, channels, `file`, `socket`, `exec`, and the event loop are optional capabilities that the suite turns on. The suite stays offline: `socket` has the `loopback` policy, and `exec` runs only programs of a fixed list in the root folder of the test file. The `tclsh` of the tests is the ztcl runner. ztcl has no `http` package yet.
-- **Cannot apply:** tests of the C API through the `test*` commands of the Tcl test binary, tests for Windows or macOS only, and tests of threads.
+- **Optional or host:** tests of commands that the default interpreter omits. `clock`, `package`, `interp`, channels, `file`, `socket`, `exec`, `thread`, and the event loop are optional capabilities that the suite turns on. The suite stays offline: `socket` has the `loopback` policy, and `exec` runs only programs of a fixed list in the root folder of the test file. The `tclsh` of the tests is the ztcl runner. ztcl has no `http` package yet.
+- **Cannot apply:** tests of the C API through the `test*` commands of the Tcl test binary, and tests for Windows or macOS only.
 
 ## Totals
 
 | Scope | Files | Total | Pass | Stand-in | Fail | Blocked | Pass rate | Rate with no stand-in |
 |---|---|---|---|---|---|---|---|---|
 | In scope | 77 | 29990 | 27182 | 1735 | 1031 | 1777 | 90.6 % | 84.9 % |
-| Optional or host | 49 | 15326 | 10197 | 0 | 1730 | 3399 | 66.5 % | 66.5 % |
-| Cannot apply | 26 | 1178 | 4 | 0 | 283 | 891 | 0.3 % | 0.3 % |
-| **All** | **152** | **46494** | **37383** | **1735** | **3044** | **6067** | **80.4 %** | **76.7 %** |
+| Optional or host | 51 | 15382 | 10227 | 0 | 1730 | 3425 | 66.5 % | 66.5 % |
+| Cannot apply | 24 | 1122 | 4 | 0 | 283 | 835 | 0.4 % | 0.4 % |
+| **All** | **152** | **46494** | **37413** | **1735** | **3044** | **6037** | **80.5 %** | **76.7 %** |
 
 ## In scope
 
@@ -149,15 +149,17 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `safe-stock.test` | 4 | 0 | 0 | 4 | 0 |  | `interp -safe` |
 | `safe.test` | 102 | 1 | 0 | 92 | 9 | `TcltestPackage` 6, `emptyTest` 2, unreached 1 | `interp -safe` |
 | `security.test` | 1 | 1 | 0 | 0 | 0 |  | `interp`, host access |
-| `socket.test` | 175 | 147 | 0 | 7 | 21 | `thread` 10, `localhost_v6` 9, `nonPortable` 1 | `socket` |
+| `socket.test` | 175 | 157 | 0 | 7 | 11 | `localhost_v6` 9, `nonPortable` 1, `win` 1 | `socket` |
 | `source.test` | 23 | 13 | 0 | 10 | 0 |  | `source` |
 | `stack.test` | 3 | 1 | 0 | 2 | 0 |  | host stack limits, `exec` |
 | `tcltest.test` | 159 | 2 | 0 | 40 | 117 | `expr:!singleTestInterp notWsl` 1, unreached 116 | the real `tcltest` package |
+| `thread.test` | 52 | 18 | 0 | 0 | 34 | `drainEventQueue` 34 | `thread` |
 | `timer.test` | 54 | 53 | 0 | 1 | 0 |  | `after` |
 | `tm.test` | 21 | 0 | 0 | 21 | 0 |  | Tcl modules, `file` |
 | `unixFCmd.test` | 49 | 2 | 0 | 28 | 19 | `emptyTest` 11, `readonlyAttr` 4, `nonPortable` 3 | `file` |
 | `unixFile.test` | 7 | 0 | 0 | 0 | 7 | `testfindexecutable` 7 | `file` |
 | `unixInit.test` | 8 | 2 | 0 | 4 | 2 | `emptyTest` 2 | `exec` of tclsh |
+| `unixNotfy.test` | 4 | 2 | 0 | 0 | 2 | `unthreaded` 2 | `thread` and the event loop |
 | `unload.test` | 27 | 0 | 0 | 7 | 20 | `pkgua.soRequired` 20 | `unload` |
 | `zlib.test` | 73 | 0 | 0 | 1 | 72 | `zlib` 71, `knownBug` 1 | `zlib` |
 
@@ -181,9 +183,7 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 | `resolver.test` | 10 | 0 | 0 | 0 | 10 | `testinterpresolver` 10 | C API |
 | `result.test` | 26 | 1 | 0 | 3 | 22 | `testsaveresult` 11, `testsetobjerrorcode` 5, `testseterrorcode` 4 | C API |
 | `stringObj.test` | 75 | 0 | 0 | 0 | 75 | `testobj` 75 | C API |
-| `thread.test` | 52 | 0 | 0 | 0 | 52 | `thread` 52 | threads |
 | `unixForkEvent.test` | 1 | 0 | 0 | 0 | 1 | `testfork` 1 | needs fork |
-| `unixNotfy.test` | 4 | 0 | 0 | 0 | 4 | `thread` 2, `unthreaded` 2 | threads and the notifier |
 | `winConsole.test` | 1 | 0 | 0 | 0 | 1 | `win` 1 | Windows only |
 | `winDde.test` | 50 | 0 | 0 | 0 | 50 | `dde` 49, `win` 1 | Windows only |
 | `winFCmd.test` | 178 | 0 | 0 | 0 | 178 | `win` 170, `nt` 4, `winVista` 3 | Windows only |
