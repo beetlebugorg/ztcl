@@ -340,8 +340,17 @@ pub fn Parser(comptime kind: Kind) type {
         }
 
         inline fn push(p: *Self, v: Value) Error!void {
-            if (kind == .build) try p.vals.append(p.it.alloc(), v);
+            if (kind == .build) {
+                if (p.vals.items.len == p.vals.capacity) try p.grow();
+                p.vals.appendAssumeCapacity(v);
+            }
             p.s.made += 1;
+        }
+
+        /// The value stack grows as an ArrayList grows.
+        noinline fn grow(p: *Self) Error!void {
+            @branchHint(.cold);
+            try p.vals.ensureUnusedCapacity(p.it.alloc(), 1);
         }
 
         /// A key and its colon.
@@ -372,7 +381,8 @@ pub fn Parser(comptime kind: Kind) type {
                 v = try value.wrapList(a, buf);
             }
             p.vals.items.len = f.start;
-            try p.vals.append(a, v);
+            if (p.vals.items.len == p.vals.capacity) try p.grow();
+            p.vals.appendAssumeCapacity(v);
             p.s.made += 1;
         }
 
