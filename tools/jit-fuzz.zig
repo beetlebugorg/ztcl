@@ -28,6 +28,9 @@
 //! the planted bug: a difference ends with code 0, and no difference
 //! ends with code 1.
 //!
+//! `--write DIR` writes the programs of the seeds to files and runs
+//! nothing.
+//!
 //! `--corpus DIR` runs each `.tcl` file of DIR in the same way, with
 //! eight random limits for each file, in place of the random programs.
 //! The step limit of this mode is 200 000. `tests/jit/corpus/` has
@@ -1168,7 +1171,7 @@ const usage =
     \\usage: jit-fuzz [--seed N] [--count N] [--seconds N] [--tier2] [--stress N]
     \\                [--expect-diff] [--out DIR] [--print N] [--verbose]
     \\                [--asm FILE] [--asm-a64 FILE] [--verify]
-    \\                [--corpus DIR ...]
+    \\                [--corpus DIR ...] [--write DIR]
     \\
 ;
 
@@ -1190,6 +1193,7 @@ pub fn main(init: std.process.Init) !void {
     var asm_file: ?[]const u8 = null;
     var asm_a64_file: ?[]const u8 = null;
     var verify_mode = false;
+    var write_dir: ?[]const u8 = null;
     var k: usize = 1;
     while (k < args.len) : (k += 1) {
         const arg: []const u8 = args[k];
@@ -1224,6 +1228,9 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, arg, "--asm-a64") and has_value) {
             k += 1;
             asm_a64_file = args[k];
+        } else if (std.mem.eql(u8, arg, "--write") and has_value) {
+            k += 1;
+            write_dir = args[k];
         } else if (std.mem.eql(u8, arg, "--verify")) {
             verify_mode = true;
         } else if (std.mem.eql(u8, arg, "--verbose")) {
@@ -1241,6 +1248,7 @@ pub fn main(init: std.process.Init) !void {
         std.debug.print("{s}", .{text});
         return;
     }
+    if (write_dir) |dir| return writePrograms(a, io, dir, seed, count);
     if (asm_file) |path| return asmCheck(a, io, path);
     if (asm_a64_file) |path| return asmCheckA64(a, io, path);
     if (!tcl.jit.built) {
@@ -1300,6 +1308,20 @@ pub fn main(init: std.process.Init) !void {
 }
 
 /// Runs each `.tcl` file of each folder with eight random limits.
+/// `--write DIR`: writes the programs of the seeds `seed` to
+/// `seed + count - 1` to `DIR/prog-SEED.tcl`, for a test of another
+/// runtime: `tools/wasm-aot-fuzz.sh` runs them on procs compiled to wasm.
+fn writePrograms(a: Allocator, io: Io, dir: []const u8, seed: u64, count: u64) !void {
+    var s = seed;
+    while (s < seed +| count) : (s += 1) {
+        const text = try makeProgram(a, s, false);
+        defer a.free(text);
+        var buf: [4096]u8 = undefined;
+        const path = try std.fmt.bufPrint(&buf, "{s}/prog-{d}.tcl", .{ dir, s });
+        try Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = text });
+    }
+}
+
 fn runCorpus(f: *Fuzz, dirs: []const []const u8) !bool {
     var ok = true;
     for (dirs) |path| {
