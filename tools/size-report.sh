@@ -19,6 +19,10 @@
 #     with no module is above 1 000 000 bytes.
 # --plant BYTES adds that many bytes of data to the test module hello,
 # to show the failure of the check.
+#
+# On macOS, the size of a runner is the sum of the sizes of its sections
+# (`size -m`). The file of a Mach-O binary grows in pages of 16 KiB on
+# arm64, so the difference of two file sizes is 0 or a whole page.
 # SPDX-License-Identifier: BSD-2-Clause
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 top=$here/..
@@ -38,7 +42,16 @@ cd "$top" || exit 1
 # The modules of build.zig: the rows of `all_modules`.
 mods=$(sed -n '/^const all_modules = /,/^};/p' build.zig | sed -n 's/.*\.name = "\([^"]*\)".*/\1/p')
 exe=ztcl; case $(uname -s) in MINGW*|MSYS*|CYGWIN*|Windows*) exe=ztcl.exe ;; esac
-size_of() { wc -c < "$1" | tr -d ' '; }
+size_of() {
+    case $1 in
+    *.wasm) wc -c < "$1" | tr -d ' ' ;;
+    *) if [ "$(uname -s)" = Darwin ]; then
+           size -m "$1" | awk '/^[[:space:]]*Section / { s += $3 } END { print s }'
+       else
+           wc -c < "$1" | tr -d ' '
+       fi ;;
+    esac
+}
 build() { # name, flags...
     n=$1; shift
     zig build -Dstrip=true -Dsize-plant="$plant" --prefix "$out/$n" "$@" >"$out/$n.log" 2>&1 || {
