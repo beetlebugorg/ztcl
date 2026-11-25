@@ -140,6 +140,7 @@ jobs:
           zig build wasm-aot
           node tools/wasm-aot.mjs --quiet --sweep 4 tests/jit/*.tcl tests/mem/*.tcl bench/*.tcl
           node tools/wasm-aot.mjs --quiet --gc-stress 7 tests/jit/*.tcl tests/mem/*.tcl
+          node tools/wasm-aot-suite.mjs
       # Point procs compiled to wasm (docs/dev/wasm-compile.md) against
       # Program.run and point.runSlow, and the random proc fuzzer.
       - name: Point procs compiled to wasm
