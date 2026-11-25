@@ -1499,9 +1499,34 @@ pub fn globSteps(it: *Interp, pat: []const u8, s: []const u8, nocase: bool) Erro
 /// The count of characters of a UTF-8 string: the bytes that do not
 /// continue a character.
 pub fn charCount(s: []const u8) usize {
-    var n: usize = 0;
-    for (s) |c| n += @intFromBool(c & 0xC0 != 0x80);
-    return n;
+    // Eight bytes at a time: a continuation byte has bit 7 set and bit 6
+    // clear, so `w & ~(w << 1)` keeps bit 7 of each one.
+    var cont: usize = 0;
+    var i: usize = 0;
+    // A target with SIMD counts the bytes of one vector at a time. A
+    // block of at most 255 vectors keeps each lane count in a byte.
+    if (comptime std.simd.suggestVectorLength(u8)) |n| {
+        const V = @Vector(n, u8);
+        while (i + n <= s.len) {
+            var acc: V = @splat(0);
+            var k: usize = 0;
+            while (k < 255 and i + n <= s.len) : ({
+                k += 1;
+                i += n;
+            }) {
+                const v: V = s[i..][0..n].*;
+                acc += @intFromBool(v & @as(V, @splat(0xC0)) == @as(V, @splat(0x80)));
+            }
+            cont += @reduce(.Add, @as(@Vector(n, u16), acc));
+        }
+    }
+    const high: u64 = 0x8080808080808080;
+    while (i + 8 <= s.len) : (i += 8) {
+        const w = std.mem.readInt(u64, s[i..][0..8], .little);
+        cont += @popCount(w & ~(w << 1) & high);
+    }
+    while (i < s.len) : (i += 1) cont += @intFromBool(s[i] & 0xC0 == 0x80);
+    return s.len - cont;
 }
 
 /// The byte offset of character `k` of a string with `n` characters.
