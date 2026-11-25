@@ -31,7 +31,7 @@ The rank is the expected gain divided by the effort. A ratio above 1 means that 
 | 4 | `lsearch -exact` orders each item | 14.7 ms | 9.0 ms | 1.6 | Small | Done: 6.6 ms |
 | 5 | `string map` tries each key at each byte | 26.6 ms | 16.9 ms | 1.6 | Small | Done: 15.6 ms |
 | 6 | The regex search has no literal scan | 6.05 ms | 1.00 ms | 6.0 | Medium | Done, step 1: 0.5 ms |
-| 7 | Array elements go through the name of the variable | 104.8 ms | 70.9 ms | 1.5 | Medium | Open |
+| 7 | Array elements go through the name of the variable | 104.8 ms | 70.9 ms | 1.5 | Medium | Done, step 1: 75 ms |
 | 8 | A proc call uses about 250 instructions in `callProcFast` | 14.8 ms | 70.5 ms | 0.2 | Large | Open |
 | 9 | `append` in JIT code goes through two helpers | 243.1 M instructions | 812.4 M | 0.3 | Medium | Open |
 | 10 | `read` of a whole file | 73.5 ms | 49.9 ms | 1.5 | Not known | Done: 11.0 ms |
@@ -130,6 +130,7 @@ proc arr {} {for {set i 0} {$i<200000} {incr i} {set a($i) $i}; set s 0; for {se
 - Cause: `getElem` (`src/interp.zig:2725`) calls `findVar` with the name of the array on each read, and the map of the array has string keys. A local scalar uses a slot, and an array does not. I did not find which allocation makes the 8.5%.
 - Change: add bytecode for the read and the write of `name(index)` that finds the array through the slot of the local variable. Hash an integer index without a string copy when the key is already in the map.
 - Expected gain: `findVar` goes away from the loop (6.6%). The gain from the allocations is not known before the source of them is found.
+- Done: step 1, the read. `readRef` finds a local array through the slot hint of the reference, as a scalar read does, and an index of one part uses the string of that part with no copy. `arr` runs in about 75 ms (64.8 ms with the JIT) against 75.9 ms for `tclsh`. Before the change it ran in about 90 ms (86.5 ms with the JIT) on the same machine. The write of `set a($i)` still makes the full name and calls `findVar`. Bytecode for the write is open.
 
 ## 8. A proc call uses about 250 instructions in `callProcFast`
 
