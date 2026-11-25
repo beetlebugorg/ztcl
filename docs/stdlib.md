@@ -110,7 +110,7 @@ The estimates are guesses from the measured std sizes above and from the size of
 |---|---|---|
 | Core of today | 2 344 | measured |
 | Module table and `package require` | 10 | estimate |
-| `json` | 80 | estimate |
+| `json` | 80 | estimate. Task 04 measured 42.6 for the parser and four commands (x86-64 Linux, `ReleaseFast`). |
 | `formats` (csv, toml, msgpack, cbor), `url`, `encode` | 90 | estimate |
 | `compress` (flate, zstd both ways) | 270 | std flate and zstd measured as upper bounds, a new zstd compressor estimated at 60 |
 | `crypto` (the hashes, HMAC, argon2, AEAD, signatures, random) | 200 | estimate |
@@ -269,7 +269,7 @@ The coroutine switch is x86-64 Linux only today. Task 08 adds the switch for arm
 
 ### The parser
 
-`src/json/` has two stages, after the method of simdjson (see References):
+`src/json/` is a Zig implementation of the simdjson algorithm (see References). It has two stages:
 
 1. A structural index. A pass over 64 bytes at a time with `@Vector` finds the quotes, the backslashes, and the structural characters, and checks UTF-8. The result is a list of positions. The pass has a scalar form for targets with no vectors and for the tail of the input.
 2. A builder. It walks the index and makes Tcl values in the heap of the interpreter: a dict for an object, a list for an array, an int or a double for a number, and a string for a string. It allocates each list and dict at its final size, because the index gives the count of elements.
@@ -805,12 +805,15 @@ The data: `twitter.json`, `canada.json`, and `citm_catalog.json` from the native
 
 | Measure | ztcl | Compared with | Target |
 |---|---|---|---|
-| Validate (`zt::json valid`) | the index stage only | simdjson `ondemand` and yyjson, read only | at least 0.33 of the faster C parser on each file |
+| Validate (`zt::json valid`) | stage 1 and the grammar walk | simdjson DOM | at least 0.67 of simdjson DOM on each file (the goal of the user) |
+| Stage 1 | the structural index alone | the stage 1 of simdjson | at least 0.8 (the goal of the user) |
 | Parse to a Tcl value | `zt::json parse` | Node `JSON.parse`, Go `encoding/json` to `any`, Python `json.loads`, `tclsh` 8.6 with tcllib `json::json2dict` | at least the speed of Python on each file, at least 0.8 of Node, and at least 10 times `tclsh` with tcllib |
 | Path query | `zt::json get` for one value | Node `JSON.parse` then a property read | at least 2 times Node |
 | Encode | `zt::json encode -schema` of the parsed value | Node `JSON.stringify`, Go `json.Marshal`, Python `json.dumps` | at least the speed of Python, at least 0.7 of Node |
 
 The unit is MB/s of the input text.
+
+The goal of the user (2026-11-24): beat each scripting runtime outright, and beat simdjson DOM when a script reads a few fields of a document. `zt::json get` walks the structural index and makes only the value at its path, so it makes no value for the rest of the document. The JIT task 05b adds parsers for a repeated shape. The measured numbers are in the PRs of tasks 04 and 05.
 
 ### HTTP
 

@@ -37,6 +37,11 @@ pub const jit = @import("jit.zig");
 pub const vm = @import("vm.zig");
 pub const jit_verify = @import("jit/verify.zig");
 pub const jit_tier2 = @import("jit/tier2.zig");
+/// The JSON parser, for the tools of the JSON module.
+pub const json = struct {
+    pub const index = @import("json/index.zig");
+    pub const build = @import("json/build.zig");
+};
 
 pub const Value = value.Value;
 pub const Interp = interp.Interp;
