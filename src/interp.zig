@@ -2751,7 +2751,12 @@ pub const Interp = struct {
 
     pub fn readRef(it: *Interp, r: *const VarRef) Error!Value {
         if (r.index) |parts| {
-            const idx = if (parts.len == 1 and parts[0] == .lit) parts[0].lit else try it.concatParts(parts);
+            // An index of one part needs no copy of its string.
+            const idx = if (parts.len == 1 and parts[0] == .lit) parts[0].lit else if (parts.len == 1) try it.str(try it.evalPart(&parts[0])) else try it.concatParts(parts);
+            // A local array goes through the slot hint, as a scalar does.
+            if (it.slotCell(r.name, &@constCast(r).hint)) |c| {
+                if (c.v == .arr) if (c.v.arr.get(idx)) |v| return v;
+            }
             return it.getElem(r.name, idx);
         }
         if (it.slotCell(r.name, &@constCast(r).hint)) |c| {
