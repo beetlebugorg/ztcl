@@ -366,7 +366,15 @@ pub const Shell = struct {
                 \\}}}} {s} {s}
             , .{ qc, pat });
             n += 1;
-            scripts[n] = try std.fmt.allocPrint(a, "lsort [glob -nocomplain -- {s}]", .{pat});
+            // The file names. A folder ends with a slash, so the path goes on.
+            scripts[n] = try std.fmt.allocPrint(a,
+                \\apply {{{{p}} {{
+                \\  set d [glob -nocomplain -types d -- $p]
+                \\  set l {{}}
+                \\  foreach f [glob -nocomplain -- $p] {{ lappend l [expr {{$f in $d ? "$f/" : $f}}] }}
+                \\  lsort $l
+                \\}}}} {s}
+            , .{pat});
             n += 1;
         }
         for (scripts[0..n]) |sc| {
