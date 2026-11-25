@@ -1,12 +1,14 @@
 //! `ztcl compile --wasm`: the file side of the compiler of procs to
 //! WebAssembly (`src/wasm_aot/aot.zig`).
 //!
-//!     ztcl compile --wasm [--runtime FILE] [--record FILE]... -o OUT [SCRIPT]...
+//!     ztcl compile --wasm [--no-inline] [--runtime FILE] [--record FILE]... -o OUT [SCRIPT]...
 //!
 //! The runtime is `ztcl-aot.wasm` from `zig build wasm-aot`. The default
 //! is `../lib/ztcl-aot.wasm` next to the folder of the runner. Each
 //! script adds the procs that `scan` finds in it. Each `--record` file
 //! adds the procs of a run in the record mode of the runtime.
+//! `--no-inline` gives each instruction a helper call, with no inline
+//! path.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -14,7 +16,7 @@ const std = @import("std");
 const tcl = @import("ztcl");
 const Io = std.Io;
 
-const usage = "usage: ztcl compile --wasm [--runtime FILE] [--record FILE]... -o OUT [SCRIPT]...\n";
+const usage = "usage: ztcl compile --wasm [--no-inline] [--runtime FILE] [--record FILE]... -o OUT [SCRIPT]...\n";
 
 pub fn run(init: std.process.Init, args: []const []const u8) !u8 {
     const arena = init.arena.allocator();
@@ -25,6 +27,7 @@ pub fn run(init: std.process.Init, args: []const []const u8) !u8 {
     defer err.flush() catch {};
 
     var wasm_on = false;
+    var inline_paths = true;
     var runtime: ?[]const u8 = null;
     var out_path: ?[]const u8 = null;
     var scripts: std.ArrayList([]const u8) = .empty;
@@ -35,6 +38,8 @@ pub fn run(init: std.process.Init, args: []const []const u8) !u8 {
         const has_value = i + 1 < args.len;
         if (std.mem.eql(u8, arg, "--wasm")) {
             wasm_on = true;
+        } else if (std.mem.eql(u8, arg, "--no-inline")) {
+            inline_paths = false;
         } else if (std.mem.eql(u8, arg, "--runtime") and has_value) {
             i += 1;
             runtime = args[i];
@@ -86,7 +91,7 @@ pub fn run(init: std.process.Init, args: []const []const u8) !u8 {
             return 2;
         };
     }
-    const res = tcl.wasm_aot.compile(init.gpa, &it, rt_bytes, sources.items) catch |e| {
+    const res = tcl.wasm_aot.compile(init.gpa, &it, rt_bytes, sources.items, .{ .inline_paths = inline_paths }) catch |e| {
         try err.print("compile: {s}\n", .{@errorName(e)});
         return 1;
     };

@@ -29,6 +29,7 @@ const jit = @import("../jit.zig");
 const helpers = @import("../jit/helpers.zig");
 const verify = @import("../jit/verify.zig");
 const gen = @import("gen.zig");
+const layout = @import("../jit/layout.zig");
 const Value = @import("../value.zig").Value;
 
 const Interp = interp.Interp;
@@ -71,6 +72,8 @@ comptime {
         @export(&aotRecordPtr, .{ .name = "ztcl_aot_record_ptr" });
         @export(&aotRecordLen, .{ .name = "ztcl_aot_record_len" });
         @export(&aotStat, .{ .name = "ztcl_aot_stat" });
+        @export(&aotLayout, .{ .name = "ztcl_aot_layout" });
+        @export(&layout_data, .{ .name = "ztcl_aot_layout_data" });
     }
 }
 
@@ -93,15 +96,115 @@ fn aotRecordLen() callconv(.c) usize {
 
 /// 0: the count of functions found. 1: the count of proc bodies with no
 /// function. 2: 1 when the module has a directory. 3: the count of named
-/// `Code` values with no function.
+/// `Code` values with no function. 4: 1 when the layout of the build
+/// equals the layout in the module.
 fn aotStat(which: u32) callconv(.c) u32 {
     return switch (which) {
         0 => found,
         1 => missed,
         2 => @intFromBool(dir_addr != 0),
         3 => missed_named,
+        4 => @intFromBool(layoutOk()),
         else => 0,
     };
+}
+
+/// Writes the fields of `layout.probe()` in their order to `out` and
+/// returns their count, or 0 when the probe fails.
+fn aotLayout(out: [*]u32) callconv(.c) u32 {
+    const l = layout.probe() orelse return 0;
+    const fields = std.meta.fields(layout.Layout);
+    inline for (fields, 0..) |f, k| out[k] = @field(l, f.name);
+    return fields.len;
+}
+
+/// The layout that the compiler reads from the module: each field of
+/// `layout.Layout` as a word, in order. The offsets of the fields of
+/// structs come from `@offsetOf`. The places in the two tagged unions
+/// come from `gen.union32`: Zig gives no way to read them at compile
+/// time, so the first lookup compares the whole layout with the probe.
+const layout_words = std.meta.fields(layout.Layout).len;
+const layout_data: [layout_words]u32 = blk: {
+    @setEvalBranchQuota(10000);
+    const l = staticLayout();
+    var out: [layout_words]u32 = undefined;
+    for (std.meta.fields(layout.Layout), 0..) |f, k| out[k] = @field(l, f.name);
+    break :blk out;
+};
+
+fn staticLayout() layout.Layout {
+    const interp_ = interp;
+    const value = @import("../value.zig");
+    const VTag = std.meta.Tag(Value);
+    const CTag = std.meta.Tag(@FieldType(interp_.Var, "v"));
+    const u = gen.union32;
+    const List = @FieldType(Value, "list");
+    var l: layout.Layout = undefined;
+    l.slice_ptr = u.slice_ptr;
+    l.slice_len = u.slice_len;
+    l.value_size = @sizeOf(Value);
+    l.value_tag = u.value_tag;
+    l.value_mask = (1 << @bitSizeOf(VTag)) - 1;
+    l.tag_int = @intFromEnum(VTag.int);
+    l.tag_double = @intFromEnum(VTag.double);
+    l.tag_str = @intFromEnum(VTag.str);
+    l.tag_list = @intFromEnum(VTag.list);
+    l.value_payload = u.value_payload;
+    l.value_len = u.value_len;
+    l.list_obj = @offsetOf(List, "obj");
+    l.list_len = @offsetOf(List, "len");
+    l.var_tag = u.var_tag;
+    l.var_mask = (1 << @bitSizeOf(CTag)) - 1;
+    l.var_payload = u.var_payload;
+    l.var_undef = @intFromEnum(CTag.undef);
+    l.var_val = @intFromEnum(CTag.val);
+    l.var_owned = @intFromEnum(CTag.owned);
+    l.var_link = @intFromEnum(CTag.link);
+    l.entry_size = @sizeOf(interp_.VarEntry);
+    l.entry_cell = @offsetOf(interp_.VarEntry, "cell");
+    const vars = @offsetOf(interp_.Frame, "vars") + @offsetOf(std.ArrayList(interp_.VarEntry), "items");
+    l.frame_items = vars + l.slice_ptr;
+    l.frame_len = vars + l.slice_len;
+    l.obj_buf = @offsetOf(value.ListObj, "buf") + l.slice_ptr;
+    l.obj_buf_len = @offsetOf(value.ListObj, "buf") + l.slice_len;
+    l.obj_used = @offsetOf(value.ListObj, "used");
+    l.obj_dict_len = @offsetOf(value.ListObj, "dict_len");
+    l.obj_index = @offsetOf(value.ListObj, "index");
+    l.it_epoch = @offsetOf(Interp, "epoch");
+    l.it_safe_epoch = @offsetOf(Interp, "safe_epoch");
+    l.it_step_limit = @offsetOf(Interp, "step_limit");
+    const counter = @offsetOf(Interp, "counter");
+    l.it_mem_used = counter + @offsetOf(interp_.Counting, "used");
+    l.it_mem_trip = counter + @offsetOf(interp_.Counting, "trip");
+    l.it_mem_limit = @offsetOf(Interp, "mem_limit");
+    l.it_ns = @offsetOf(Interp, "ns") + l.slice_ptr;
+    l.cmd_resolved = @offsetOf(interp_.Cmd, "resolved");
+    l.cmd_epoch = @offsetOf(interp_.Cmd, "epoch");
+    l.cmd_ns = @offsetOf(interp_.Cmd, "ns");
+    l.code_sites = @offsetOf(vm.Code, "sites") + l.slice_ptr;
+    l.code_lits = @offsetOf(vm.Code, "lits") + l.slice_ptr;
+    l.code_ins = @offsetOf(vm.Code, "ins") + l.slice_ptr;
+    l.ins_size = @sizeOf(vm.Ins);
+    return l;
+}
+
+/// 0: not checked, 1: the probe equals `layout_data`, 2: it differs.
+var layout_state: u8 = 0;
+
+/// True when the layout of this build equals `layout_data`. When it
+/// differs, the directory is off, and each `Code` runs in `exec`.
+fn layoutOk() bool {
+    if (layout_state == 0) {
+        layout_state = 2;
+        if (layout.probe()) |l| {
+            var same = true;
+            inline for (std.meta.fields(layout.Layout), 0..) |f, k| {
+                if (@as(u32, @field(l, f.name)) != layout_data[k]) same = false;
+            }
+            if (same) layout_state = 1;
+        }
+    }
+    return layout_state == 1;
 }
 
 fn word(addr: u32) u32 {
@@ -118,7 +221,7 @@ pub fn prepare(it: *Interp, code: *vm.Code) ?u32 {
         .untried => {},
     }
     code.jit_state = .failed;
-    if (dir_addr == 0) return null;
+    if (dir_addr == 0 or !layoutOk()) return null;
     const idx = find(it, code) orelse {
         if (code.named) missed_named += 1 else missed += 1;
         return null;
