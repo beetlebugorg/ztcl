@@ -125,7 +125,7 @@ subst.test	in	63	language and core commands
 switch.test	in	113	language and core commands
 tailcall.test	in	37	`tailcall`
 tcltest.test	decide	159	the real `tcltest` package
-thread.test	na	52	threads
+thread.test	decide	52	`thread`
 timer.test	decide	54	`after`
 tm.test	decide	21	Tcl modules, `file`
 trace.test	in	295	`trace`
@@ -133,7 +133,7 @@ unixFCmd.test	decide	49	`file`
 unixFile.test	decide	7	`file`
 unixForkEvent.test	na	1	needs fork
 unixInit.test	decide	8	`exec` of tclsh
-unixNotfy.test	na	4	threads and the notifier
+unixNotfy.test	decide	4	`thread` and the event loop
 unknown.test	in	7	language and core commands
 unload.test	decide	27	`unload`
 uplevel.test	in	57	language and core commands

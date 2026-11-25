@@ -37,6 +37,13 @@ ztcl uses only the Zig standard library. [References](references/tcl.md) lists t
 | `modules.zig` | The table of built-in modules and their install. |
 | `hello.zig` | The test modules `zt::hello` and `zt::hellonet`. |
 | `child.zig` | The optional `interp` command. |
+| `thread.zig` | The core of threads: the group, the workers, the messages and their neutral form, the group allocator and its totals, the waits, and the stop flag. |
+| `threadcmd.zig` | The `thread::*` commands of the capability `thread`. |
+| `tsv.zig` | The shared variables of `tsv::*`. |
+| `tsync.zig` | `thread::mutex`, `thread::rwmutex`, `thread::cond`, and `thread::eval`. |
+| `tpool.zig` | The thread pools of `tpool::*`. |
+| `tchan.zig` | `thread::transfer`, `thread::detach`, and `thread::attach`. |
+| `thread_tests.zig` | The unit tests of threads, the teardown of a host with threads included. |
 | `ucd.zig` | A small model of Unicode classes and case maps. |
 | `noise.zig` | The gradient noise of `noise3`. |
 | `point.zig` | The point procs: the check, the vector program, and both paths. |

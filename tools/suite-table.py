@@ -76,8 +76,8 @@ This page lists each of the 152 test files of Tcl 8.6.16. `tools/suite-table.py`
 ## Scopes
 
 - **In scope:** the language and the core commands.
-- **Optional or host:** tests of commands that the default interpreter omits. `clock`, `package`, `interp`, channels, `file`, `socket`, `exec`, and the event loop are optional capabilities that the suite turns on. The suite stays offline: `socket` has the `loopback` policy, and `exec` runs only programs of a fixed list in the root folder of the test file. The `tclsh` of the tests is the ztcl runner. ztcl has no `http` package yet.
-- **Cannot apply:** tests of the C API through the `test*` commands of the Tcl test binary, tests for Windows or macOS only, and tests of threads.
+- **Optional or host:** tests of commands that the default interpreter omits. `clock`, `package`, `interp`, channels, `file`, `socket`, `exec`, `thread`, and the event loop are optional capabilities that the suite turns on. The suite stays offline: `socket` has the `loopback` policy, and `exec` runs only programs of a fixed list in the root folder of the test file. The `tclsh` of the tests is the ztcl runner. ztcl has no `http` package yet.
+- **Cannot apply:** tests of the C API through the `test*` commands of the Tcl test binary, and tests for Windows or macOS only.
 
 ## Totals
 
