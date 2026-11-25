@@ -398,6 +398,44 @@ Then run the acceptance list of task 38 on each arm64 target, and check that no 
 
 On x86-64 Windows, `rsi`, `rdi`, and `xmm6` to `xmm15` are callee-saved. `tier2_x64.zig` uses them for places and constants, so that port must save them or leave them out of `extra_regs` and `extra_xregs`.
 
+## Results on arm64 macOS (tasks 26, 27, and 38)
+
+Measured on 2026-11-24 on an Apple silicon Mac, with the runner in `ReleaseFast`. macOS has no `perf`, so each number is a wall time, the best of 11 runs of the whole process. The suite needs the macOS port of `ports3`, so the suite and `jit-diff.sh` ran on a local merge of these commits with `ports3`.
+
+| Script | Interpreter | `--jit` | `--jit --jit-tier2` | tclsh 8.5.9 |
+|---|---|---|---|---|
+| `sum.tcl` | 16.1 ms | 9.0 ms | 3.6 ms | 56.2 ms |
+| `dsum.tcl` | 35.5 ms | 31.3 ms | 3.9 ms | 75.2 ms |
+| `nested.tcl` | 22.3 ms | 14.2 ms | 9.1 ms | 75.9 ms |
+| `foreach.tcl` | 14.0 ms | 9.2 ms | 6.0 ms | 71.4 ms |
+| `dict.tcl` | 19.3 ms | 15.9 ms | 15.3 ms | 63.2 ms |
+| `readloop.tcl` | 16.9 ms | 15.0 ms | 14.2 ms | 29.6 ms |
+| `dictgrow.tcl` | 45.3 ms | 45.0 ms | 43.6 ms | 97.0 ms |
+| `strbuild.tcl` | 17.6 ms | 16.2 ms | 15.6 ms | 91.4 ms |
+| `fib.tcl` | 12.1 ms | 11.4 ms | 11.5 ms | 43.7 ms |
+
+The output of each mode is equal. No script uses more time with `--jit` than with the interpreter. `fib.tcl` compiles no loop to tier 2, and the best of 31 runs of it is 11.33 to 11.40 ms in both JIT modes. The tclsh of the system is 8.5.9.
+
+The outside programs of `tools/kostya.sh`, one wall time each, against a tclsh 8.6.16 built from source on the same Mac. They need `exec` and the macOS port, so they ran on a local merge with `ports3` and its `exec` commits. Each output equals the output of tclsh.
+
+| Program | `--jit` | `--jit --jit-tier2` | tclsh 8.6.16 |
+|---|---|---|---|
+| `base64/test.tcl` | 2.8 s | 2.5 s | 3.6 s |
+| `bf.tcl bench.b` | 78.8 s | 79.4 s | 192.4 s |
+| `bf_oo.tcl bench.b` | 455.6 s | 448.5 s | 308.9 s |
+
+| Check | Result |
+|---|---|
+| `zig build test` | Pass in Debug, `ReleaseSafe`, and `-Djit=false`. |
+| `tools/jit-asm-golden.sh --arch aarch64 --check` and `--random 1000000` | Same, and no difference in 1 000 000 rows. |
+| `tools/suite.sh -a`, `-a -j`, `-a -J` | 35 387 passes in each mode, and each of the 152 files is equal. The Mac has fewer passes than Linux (37 383), also with no JIT. |
+| `tools/jit-diff.sh` with no flag, `-t`, `--stress -t`, `-t -x "--jit-stress 32"`, and `-t -x "--gc-stress 1"` | No difference. |
+| `zig build jit-fuzz -Doptimize=ReleaseSafe -- --tier2 --stress 32 --seconds 1800` | 442 000 programs, 3 093 982 runs, no difference. 301 206 loops compiled to tier 2. |
+| `zig build jit-fuzz -- --count 200000` (Debug) | Stopped after 33 000 programs with no difference: about 4 programs a second. |
+| `zig build jit-fuzz -Doptimize=ReleaseSafe -- --verify --seconds 600` | 6 090 242 codes, 1 612 791 accepted, no crash, until the memory cap of 4 GB stopped the run at 288 s. |
+| `tools/jit-scan.sh` | Checks 1 to 3 pass. Check 4 reads `testjitmaps`, which reads `/proc/self/maps`, so it does not run on macOS. A unit test reads the rights of the region with `mach_vm_region`. |
+| Reversed fixes | Without the `b.vs` check of `+` in tier 1, three tests fail. Without the NaN check of the entry of tier 2, its test fails. |
+
 ## The tier 2 model and census (task 32)
 
 `tools/jit-model/run.sh` assembles hand-written tier 2 forms of four loops (`tools/jit-model/model.s`) and counts one pass of each with `perf stat -e instructions:u`. Each form has the joined step check of its part, the guards, and the overflow checks of the rules of tier 2. Measured on 2026-11-24 on the commit of task 32, x86-64 Linux:
@@ -741,7 +779,7 @@ The order is x86-64 Linux, arm64 macOS, x86-64 macOS, x86-64 Windows, arm64 Linu
 | Target | ABI | Executable memory | Instruction cache | Unwinding | State of this plan |
 |---|---|---|---|---|---|
 | x86-64 Linux | System V | `mmap` read-write, then `mprotect` read-execute | no call needed | Frame pointers. No table. | Measured on this machine. |
-| arm64 macOS | AAPCS64 with the Apple rules | `mmap` with `MAP_JIT`, `pthread_jit_write_protect_np` | `sys_icache_invalidate` | Frame pointers (`x29`). No table. | Tier 1 measured on an Apple silicon Mac. Tier 2 is not built yet (task 38). |
+| arm64 macOS | AAPCS64 with the Apple rules | `mmap` with `MAP_JIT`, `pthread_jit_write_protect_np` | `sys_icache_invalidate` | Frame pointers (`x29`). No table. | Tier 1 and tier 2 measured on an Apple silicon Mac. |
 | x86-64 macOS | System V | `mmap` read-write with `MAP_JIT`, then `mprotect` read-execute | no call needed | Frame pointers. No table. | Not tested. |
 | x86-64 Windows | Microsoft x64 | `VirtualAlloc` read-write, then `VirtualProtect` to `PAGE_EXECUTE_READ` | `FlushInstructionCache` | `RtlAddFunctionTable` with one unwind record for each function | Not tested. |
 | arm64 Linux | AAPCS64 | `mmap` read-write, then `mprotect` read-execute | `__clear_cache` of the Zig runtime | Frame pointers. No table. | Not tested. |
