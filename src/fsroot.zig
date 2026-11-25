@@ -296,6 +296,7 @@ pub fn stat(it: *Interp, rel: []const u8) Error!StatResult {
             .nlink = st.nlink,
             .uid = st.uid,
             .gid = st.gid,
+            .dev = @bitCast(@as(i64, st.dev)),
         } };
     }
     var st: linux.Statx = undefined;
