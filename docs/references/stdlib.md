@@ -1,6 +1,6 @@
 # References for the standard library
 
-The plan in [the design](../stdlib.md) uses these sources. ztcl copies no code from them, except the SQLite amalgamation after decision 9 of the design. Each task checks the license of each source that it uses and adds the facts that it checked here.
+The plan in [the design](../dev/stdlib.md) uses these sources. ztcl copies no code from them, except the SQLite amalgamation after decision 9 of the design. Each task checks the license of each source that it uses and adds the facts that it checked here.
 
 ## Zig standard library
 

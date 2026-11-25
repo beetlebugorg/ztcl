@@ -1,5 +1,5 @@
 # The size budget of each built-in module, in bytes, from the size table
-# of docs/stdlib.md (1 KB is 1000 bytes). tools/size-report.sh --check
+# of docs/dev/stdlib.md (1 KB is 1000 bytes). tools/size-report.sh --check
 # fails when a module is more than 10 % above its row. The row "table" is
 # the module table and the small `package`. The row "hello" is the test
 # module of task 01.

@@ -1,5 +1,5 @@
 # The scope of each Tcl 8.6.16 test file: file, scope (in, decide, na),
-# the test count, and the reason. See docs/compatibility.md.
+# the test count, and the reason. See docs/dev/compatibility.md.
 aaa_exit.test	decide	2	`exit`
 append.test	in	45	language and core commands
 appendComp.test	in	48	language and core commands

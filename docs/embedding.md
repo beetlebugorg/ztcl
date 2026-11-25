@@ -46,7 +46,7 @@ On `error.TclError`, `it.result` holds the message and `it.error_line` holds the
 
 ## The JIT
 
-On x86-64 Linux, the default build has a compiler from bytecode to machine code. It is off until the embedder turns it on:
+On x86-64 Linux and arm64 macOS, the default build has a compiler from bytecode to machine code. It is off until the embedder turns it on:
 
 ```zig
 if (!it.enableJit(.{})) {

@@ -45,7 +45,7 @@ pub const Budget = struct {
 /// holds a place.
 pub const x64_budget: Budget = .{ .int_slots = 5, .int_places = 3, .double_slots = 4, .double_places = 10 };
 
-/// arm64, the plan of the hand-off in `docs/jit.md`: `x9` to `x13` for
+/// arm64, the plan of the hand-off in `docs/dev/jit.md`: `x9` to `x13` for
 /// integer slots and `x3` to `x8` for places, `d16` to `d19` for double
 /// slots and `d22` to `d31` for places. `x14`, `x15`, `d20`, and `d21`
 /// are scratch.

@@ -1,10 +1,21 @@
-# zt::json
+# Module zt::json
 
-`zt::json` reads and writes JSON (RFC 8259). The parser is a Zig implementation of the simdjson algorithm: stage 1 finds the structural bytes 64 bytes at a time with vectors, and stage 2 makes Tcl values from their positions. [References](../references/stdlib.md#json) lists the sources.
+ztcl has built-in modules under the namespace `zt`. A module loads with `package require` and needs no capability unless its page says so. `zt::json` is the first module. More modules come with the [Batteries milestone](https://github.com/beetlebugorg/ztcl/milestone/2).
+
+> [!NOTE]
+> `zt::json` is on `main` and comes in the next release. [Build from source](../install.md#build-from-source) to use it now.
+
+`zt::json` reads and writes JSON (RFC 8259). The parser is a Zig implementation of the simdjson algorithm: a first pass finds the structural bytes 64 bytes at a time with vectors, and a second pass makes Tcl values from their positions. [References](../references/stdlib.md#json) lists the sources.
 
 ```tcl
 package require zt::json
+set text {{"name": "ztcl", "tags": ["tcl", "zig"]}}
+set d [zt::json parse $text]
+puts [dict get $d name]            ;# ztcl
+puts [zt::json get $text tags 1]   ;# zig, with no full parse
 ```
+
+`zt::json parse` is faster than `JSON.parse` of Node.js and each Python parser on two of the three standard test files, and `zt::json get` is faster on all three. [Performance](../performance.md#json) has the numbers.
 
 The module needs no capability. `package require json` and `package require json::write` give the tcllib names over the same code.
 
@@ -108,7 +119,7 @@ Gives the text with one member on each line and N spaces (2 by default) for each
 
 ## Limits
 
-Stage 1 runs in chunks of 64 KiB. After each chunk, a command pays one step of the step limit for each 4096 bytes and one step for each value that it made, and it checks the memory limit. So a limit stops a parse of a large text within one chunk. A string with no escape is a slice of the text, so the text stays in memory while a part of it lives.
+The first pass runs in chunks of 64 KiB. After each chunk, a command pays one step of the step limit for each 4096 bytes and one step for each value that it made, and it checks the memory limit. So a limit stops a parse of a large text within one chunk. A string with no escape is a slice of the text, so the text stays in memory while a part of it lives.
 
 ## The tcllib names
 

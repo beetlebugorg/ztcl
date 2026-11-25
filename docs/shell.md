@@ -1,5 +1,8 @@
 # The interactive shell
 
+> [!NOTE]
+> The shell is on `main` and comes in the next release. [Build from source](install.md#build-from-source) to use it now.
+
 `ztcl` with no file starts an interactive shell when standard input and standard output are a terminal. With a pipe, a file, or `TERM=dumb`, the runner reads one command for each line, with no editor. The line editor is code of ztcl. It uses no readline, libedit, or ncurses, and it talks to the terminal with termios and ANSI escape sequences.
 
 ## Keys

@@ -1,5 +1,5 @@
 # Hand-written models of tier 2 loops, in the form that the rules of
-# "Tier 2" in docs/jit.md give. Each function runs `n` passes of one loop.
+# "Tier 2" in docs/dev/jit.md give. Each function runs `n` passes of one loop.
 # rdi: a state block (see model.c), rsi: n.
 #
 # Registers: r12 the state block (in place of the interpreter and the

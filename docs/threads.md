@@ -1,6 +1,37 @@
 # Threads
 
-The capability `thread` adds the commands of the Tcl Thread package: `thread::*`, `tsv::*`, `tpool::*`, and the mutexes and conditions of `thread::mutex`, `thread::rwmutex`, and `thread::cond`. The embedder turns it on and sets its limits. This page has the model, the choices, and the differences from the Thread package. [The task list](threads-tasks/README.md) has the order of the work. [References](references/thread.md) lists the manual pages that the commands follow.
+The capability `thread` adds the commands of the Tcl Thread package: `thread::*`, `tsv::*`, `tpool::*`, and the mutexes and conditions of `thread::mutex`, `thread::rwmutex`, and `thread::cond`. The embedder turns it on and sets its limits. This page has the model, the limits, and the differences from the Thread package. [References](references/thread.md) lists the manual pages that the commands follow.
+
+## Example
+
+```tcl
+set ids {}
+for {set i 0} {$i < 4} {incr i} {
+    lappend ids [thread::create -joinable [format {
+        set sum 0
+        for {set k 0} {$k < 1000000} {incr k} { incr sum %d }
+        tsv::incr totals all $sum
+    } $i]]
+}
+foreach id $ids { thread::join $id }
+puts [tsv::get totals all]
+```
+
+```sh
+$ ztcl --allow thread threads.tcl
+6000000
+```
+
+## Speed
+
+Each benchmark of `bench/` is as fast as `tclsh` 8.6.16 with Thread 2.8.11, or faster. Wall time in milliseconds, best of 5 runs, on a 4-core Intel Core i7-6700K. [Performance](performance.md#threads) has the method.
+
+| Benchmark | ztcl | tclsh 8.6.16 |
+|---|---|---|
+| `thread_map.tcl`: 1 000 000 integers in 8 parts | 99 | 305 |
+| `thread_pipe.tcl`: 4 stages, 100 000 messages | 605 | 706 |
+| `thread_tsv.tcl`: 8 threads, 100 000 `tsv::incr` each, 8 elements | 1214 | 3276 |
+| `thread_tpool.tcl`: 8 workers, 100 000 jobs | 466 | 639 |
 
 ## The model
 
@@ -36,15 +67,7 @@ A message is a script, a result, or a job. The sender copies each value into a n
 
 A list deeper than 200 levels crosses as its string form. The copy then needs no deep recursion.
 
-### No frozen shared form
-
-ztcl has no frozen, read-only form of a value that two threads share. A value of ztcl is not immutable in memory:
-
-- `List.append` writes after the view, into the spare room of the buffer, and changes `ListObj.used`.
-- A dict lookup makes the hash table of a large dict at its first use, in `ListObj.index`.
-- `append` writes after a string that ends at the used part of its buffer.
-
-A shared form needs a buffer kind that each of these paths copies first, and a mark of each heap that tells the owner of the shared buffer when no thread holds it. This is future work. A large message costs one copy at each end.
+ztcl has no frozen, read-only form of a value that two threads share, so a large message costs one copy at each end.
 
 ## The thread commands
 
@@ -113,53 +136,11 @@ A thread checks a stop flag at its safe points. Another thread sets the flag and
 
 A proc goes to a thread as its text in a script. Each thread compiles its own bytecode and its own JIT code.
 
-The bytecode compiler inlines core commands such as `set` and `incr`. A command of the same name in another namespace stops the inline forms in the whole interpreter, because a call in that namespace finds that command first. The commands of `tsv` (`tsv::set`, `tsv::incr`, and the others) do not stop them. The cost of that rule: compiled code in the namespace `tsv`, for example a proc `tsv::helper` that calls `set`, runs the core `set` and not `tsv::set`. Tcl runs `tsv::set` there. Code outside the namespace `tsv` gets the same command as in Tcl. Without this rule, the commands of `tsv` stop the inline forms in each interpreter with the capability. A shared, read-only bytecode needs a `Code` with no cache of the interpreter in it: today a `Code` holds the slot hints, the command sites, and the epoch of its interpreter. Shared JIT code needs the same, and the W^X region of one thread then holds code for many. Both are future work.
-
-## Locks and waits
-
-Zig 0.16 has no `std.Thread.Mutex` or `std.Thread.Condition`. The locks are `std.Io.Mutex` on the instance `std.Io.Threaded.global_single_threaded`, so the library needs no `Io` from the embedder. A wait is a wake-up counter on a futex (`Io.futexWaitTimeout`) with a time limit of one slice. This form also gives the time limit of `thread::cond wait`, which `std.Io.Condition` does not have.
+The bytecode compiler inlines core commands such as `set` and `incr`. A command of the same name in another namespace stops the inline forms in the whole interpreter, because a call in that namespace finds that command first. The commands of `tsv` (`tsv::set`, `tsv::incr`, and the others) do not stop them. The cost of that rule: compiled code in the namespace `tsv`, for example a proc `tsv::helper` that calls `set`, runs the core `set` and not `tsv::set`. Tcl runs `tsv::set` there. Code outside the namespace `tsv` gets the same command as in Tcl. Without this rule, the commands of `tsv` stop the inline forms in each interpreter with the capability.
 
 ## Platforms
 
 The commands use `std.Thread`, so they build for Linux, macOS, and Windows. The channel commands of `thread::transfer`, `thread::detach`, and `thread::attach` need the channel capability, which exists on Linux and macOS. The default WebAssembly build (`ztcl.wasm`) has no threads. `zig build wasm-threads` makes two WebAssembly builds with threads. See "WebAssembly" below. ThreadSanitizer runs on Linux: `tools/tsan.sh`.
-
-## The tests of Tcl
-
-`thread.test` has 52 tests. 18 of them need only the constraint `thread`. It is true when `package require Thread` works. The other 34 also need `drainEventQueue`, a procedure on the `testthread` command of the Tcl test binary, so they cannot apply. `tools/suite.sh -a` passes the 18 tests, with and without the JIT.
-
-`socket.test` has 10 tests with the constraint `thread`, and `unixNotfy.test` has 2. The suite turns on the capability for each file. Each of the 12 tests passes: `socket.test` went from 147 to 157 passes, and `unixNotfy.test` from 0 to 2. [Compatibility](compatibility.md) has the counts of each file.
-
-## The state of each part
-
-| Part | Task | State |
-|---|---|---|
-| The core: the group, the messages, and the stop flag | 01 | Done. |
-| `thread::*` | 02 | Done. |
-| `tsv::*` | 03 | Done. |
-| The mutexes, the conditions, and `thread::eval` | 04 | Done. |
-| `tpool::*` | 05 | Done. |
-| `thread::transfer`, `thread::detach`, and `thread::attach` | 06 | Done on Linux and macOS. The move removes the `fileevent` handlers of the channel, as in `tclsh`. |
-| The thread tests of `socket.test` and `unixNotfy.test` | 07 | Done: 12 of 12 pass. |
-| The tests of the limits, the teardown, and the races | 08 | Done: 11 files in `tests/thread/`, each with 20 runs in a row in the normal, JIT, and gc-stress modes. |
-| ThreadSanitizer | 09 | Done: `tools/tsan.sh`. The build reports a planted race and the stop flag, and the thread tests give no report with one suppression. |
-| The benchmarks | 10 | Done: [the table](testing.md#threads). Each benchmark is as fast as `tclsh` or faster. |
-| macOS | 11 | Done on arm64. Each file of `tests/thread/` passes 3 runs in a row with the JIT off, with tier 1, with tier 2, and with `--gc-stress 1`. A thread gets the root folder of the main thread, and a pipe ends the poll of a thread at a new message, as the eventfd does on Linux. A thread recurses to the same depth as the main thread. x86-64 macOS builds and did not run. |
-| Windows | 12 | Not done. The CI job `Test (windows-latest)` builds the code and passes. The files of `tests/thread/` did not run on Windows yet. |
-| The counts and the docs | 13 | Done. |
-| WebAssembly with Web Workers | 14 | Done: `tools/wasm-threads.mjs` runs 9 files of `tests/thread/` in Node.js and in Chromium with cross-origin isolation, and the tests of the async mode in Chromium without it. |
-
-## Decisions
-
-The user approved these three choices of the plan.
-
-1. The stop flag uses the memory check (see above). Decided. The fast paths of `vm.zig` and of the JIT do not change. The other choice was an atomic load in the step check of each safe point, which changes `vm.zig` and the templates of both tiers. The cost of the plan is one store from another thread to `mem_limit`. ThreadSanitizer reports it as a race, so its run needs one suppression for that field.
-2. The default limits are the values of the table above. Decided.
-3. The suite turns on `thread` for each file. Decided. A file that tests `info commands` or the namespaces can change. Task 02 checks each file of `tools/suite.sh -a`.
-
-The user made two more decisions during the work:
-
-4. `thread::detach` removes the `fileevent` handlers of the channel, as `tclsh` does. This changed rule 2 of task 06, and the tests `socket-13.2.tr2` and `socket-13.2.cl2` pass.
-5. The commands of `tsv` stay out of the shadow count of the inline forms. See "Compiled code" for the cost.
 
 ## WebAssembly
 
@@ -168,14 +149,6 @@ Each thread is a Web Worker, or a `worker_threads` worker in Node.js, with its o
 - On a cross-origin isolated page and in Node.js, the host uses `ztcl-threads.wasm`. All instances use one shared memory, so the group, the queues, `tsv`, the mutexes, the conditions, the stop flags, and the totals are in a `SharedArrayBuffer`. The code of the native platforms runs there. `src/webthread.zig` gives it the parts of `std.Thread` and `std.Io`: a thread start through the host, a futex on `memory.atomic.wait32`, a lock, and an allocator with a lock. The main interpreter also runs in a worker, because a browser does not allow `Atomics.wait` on its main thread. The output of the threads goes to the main worker, which sends it to the host every 50 ms.
 - Without cross-origin isolation, the host uses `ztcl-async.wasm` (`src/webasync.zig`). Each instance has its own memory. A message is a script, and the reply is the result in a byte form that keeps the kind of each value. Only the commands that do not wait work. Each command that waits gives an error that names the missing isolation. Only the limits of one thread apply, and a stop is `Worker.terminate()`.
 - GitHub Pages cannot set the headers COOP and COEP. A service worker can add them on a static site. [Embedding](embedding.md#threads-on-the-web) has the steps.
-
-The plan of task 14 has each instance with its own memory in the shared mode too, with the shared tables in a separate `SharedArrayBuffer`. Zig 0.16 code in an instance can reach only its own memory, so that plan needs a new form of each table outside the memory of the instance. The shared memory keeps the native code, and a value still crosses threads only as a copy.
-
-## Future work
-
-- A frozen shared form of large values (see above).
-- Bytecode and JIT code that threads share (see "Compiled code").
-- `ttrace`, `tsv::array bind`, and the storage handlers of `tsv`.
 
 ## Differences from the Thread package
 

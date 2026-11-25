@@ -173,7 +173,7 @@ def main():
                 if a[:k] == b[:k] and got[0] in (0, 1):
                     continue
             # With the JIT, one proc call level uses less native stack, so
-            # a deep recursion can stop at another depth (docs/jit.md).
+            # a deep recursion can stop at another depth (docs/dev/jit.md).
             nest = b"too many nested evaluations"
             if o.j and (nest in ref[1] + ref[3] or nest in got[1] + got[3]) and ref[:3] != got[:3]:
                 deep += 1

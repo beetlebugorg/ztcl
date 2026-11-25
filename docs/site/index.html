@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ztcl · Tcl, compiled</title>
-<meta name="description" content="A Tcl 8.6 interpreter in Zig with an optional JIT, exact step and memory limits, one static binary, and a WebAssembly build. Up to 28 times as fast as tclsh on an integer loop.">
+<meta name="description" content="A Tcl 8.6 interpreter in Zig with an optional JIT, exact step and memory limits, real threads, fast JSON, one static binary, and a WebAssembly build. Up to 28 times as fast as tclsh on an integer loop.">
 <link rel="canonical" href="https://beetlebug.org/ztcl/">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
@@ -36,9 +36,10 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
       <p class="sub">On a 10-million-pass integer loop, ztcl with JIT tier 2 runs in 15 ms. tclsh 8.6.16 uses 413 ms. With the JIT off, the bytecode interpreter is 1.6 to 3.5 times as fast as tclsh on the benchmark scripts.</p>
       <div class="actions">
         <a class="btn primary" href="playground/">Try it in your browser</a>
-        <a class="btn ghost" href="overview/#build-and-install">Get started</a>
+        <a class="btn ghost" href="quickstart/">Get started</a>
       </div>
-      <p class="meta">Exact step and memory limits. One static binary of 2.5 MB. A WebAssembly build. No dependency outside the Zig standard library.</p>
+      <p class="meta">Exact step and memory limits. Real threads. Fast JSON. One static binary with no dependency outside the Zig standard library. A WebAssembly build.</p>
+      <pre class="term" style="margin-top:16px"><code><span class="p">$ </span>brew install beetlebugorg/tap/ztcl</code></pre>
     </div>
     <div class="codecard" aria-label="A code sample">
       <div class="bar"><i></i><i></i><i></i><span>sum.tcl</span></div>
@@ -59,8 +60,8 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
 <section class="stats" aria-label="Key numbers">
   <div class="wrap">
     <div class="stat"><b>28×</b><span>as fast as tclsh 8.6.16 on an integer loop, with JIT tier 2</span></div>
-    <div class="stat"><b>2.6×</b><span>as fast as tclsh 8.6.16 on the same loop, with the interpreter only</span></div>
-    <div class="stat"><b>2.5 MB</b><span>one static binary, stripped, with the JIT</span></div>
+    <div class="stat"><b>3×</b><span>as fast as tclsh with Thread 2.8 on a parallel map over 8 threads</span></div>
+    <div class="stat"><b>2.2×</b><span>the JSON parse speed of Node.js on twitter.json</span></div>
     <div class="stat"><b>37 413</b><span>tests of the Tcl 8.6.16 suite pass, in 152 test files</span></div>
   </div>
 </section>
@@ -69,7 +70,7 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
   <div class="wrap">
     <p class="eyebrow">Speed and the JIT</p>
     <h2>A bytecode VM, and a JIT compiler for hot loops.</h2>
-    <p class="lede">The interpreter compiles each script to bytecode. On x86-64 Linux, the optional JIT compiles hot procs to machine code, and tier 2 keeps integer and double loop variables in registers. tclsh 8.6 and 9 have no JIT. The JIT is experimental and off by default.</p>
+    <p class="lede">The interpreter compiles each script to bytecode. On x86-64 Linux and arm64 macOS, the optional JIT compiles hot procs to machine code, and tier 2 keeps integer and double loop variables in registers. tclsh 8.6 and 9 have no JIT. The JIT is experimental and off by default.</p>
 
     <div class="split">
       <figure class="chart">
@@ -170,7 +171,7 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
 <dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 600.9 million instructions"></span></span><span class="val">600.9</span></dd>
 </dl></figure>
     </div>
-    <p class="muted small" style="margin-top:20px"><a href="overview/#benchmarks">The benchmark tables</a> and <a href="testing/#benchmarks">the test page</a> have all results and the commands. <a href="overview/#jit-compiler-experimental">The JIT section</a> has the flags.</p>
+    <p class="muted small" style="margin-top:20px"><a href="performance/">Performance</a> has all results and how each was measured. <a href="jit/">The JIT</a> has the flags and the safety rules.</p>
   </div>
 </section>
 
@@ -220,13 +221,75 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
   </div>
 </section>
 
+<section class="section" id="threads">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <p class="eyebrow">Threads</p>
+        <h2>Real threads, faster than tclsh.</h2>
+        <p class="lede" style="margin-bottom:24px">The commands of the Tcl Thread package: <code>thread::*</code>, <code>tsv::*</code>, <code>tpool::*</code>, mutexes, and conditions. Each thread has its own interpreter, heap, and JIT code, and no value crosses threads by pointer.</p>
+        <ul class="checks">
+          <li><b>Limits for each thread</b> and totals for the group: threads, steps, memory, and queue length.</li>
+          <li><b>A thread that passes a limit stops alone.</b> The other threads keep running.</li>
+          <li><b>In the browser too,</b> with one Web Worker for each thread.</li>
+        </ul>
+        <p style="margin-top:24px"><a class="btn ghost" href="threads/">Read the threads guide</a></p>
+      </div>
+      <figure class="chart">
+        <h3>Thread benchmarks</h3>
+        <p class="how">Wall time in milliseconds, best of 5 runs, on a 4-core Intel Core i7-6700K, against tclsh 8.6.16 with Thread 2.8.11. Lower is faster.</p>
+        <div class="ktable"><table>
+          <thead><tr><th></th><th>ztcl</th><th>tclsh</th></tr></thead>
+          <tbody>
+          <tr><th scope="row">Parallel map, 8 threads</th><td>99</td><td>305</td></tr>
+          <tr><th scope="row">4-stage pipeline</th><td>605</td><td>706</td></tr>
+          <tr><th scope="row"><code>tsv::incr</code>, 8 threads</th><td>1214</td><td>3276</td></tr>
+          <tr><th scope="row">Thread pool, 100 000 jobs</th><td>466</td><td>639</td></tr>
+          </tbody>
+        </table></div>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="json">
+  <div class="wrap">
+    <div class="split">
+      <figure class="chart">
+        <h3>Parse twitter.json to native values</h3>
+        <p class="how">MB/s of the input, best of 5 runs, on an Intel Core i7-6700K. Each runtime makes its own native value. A longer bar is faster.</p>
+        <dl class="bars">
+          <dt>ztcl <code>zt::json</code></dt><dd><span class="track"><span class="fill" style="width:100%" title="ztcl: 794 MB/s"></span></span><span class="val">794</span></dd>
+          <dt>orjson</dt><dd><span class="track"><span class="fill base" style="width:62.8%" title="Python orjson: 499 MB/s"></span></span><span class="val">499</span></dd>
+          <dt>Node.js</dt><dd><span class="track"><span class="fill base" style="width:44.6%" title="Node.js: 354 MB/s"></span></span><span class="val">354</span></dd>
+          <dt>pysimdjson</dt><dd><span class="track"><span class="fill base" style="width:33.1%" title="Python pysimdjson: 263 MB/s"></span></span><span class="val">263</span></dd>
+          <dt>Python json</dt><dd><span class="track"><span class="fill base" style="width:22.2%" title="Python json: 176 MB/s"></span></span><span class="val">176</span></dd>
+          <dt>Go</dt><dd><span class="track"><span class="fill base" style="width:14.5%" title="Go encoding/json: 115 MB/s"></span></span><span class="val">115</span></dd>
+          <dt>tclsh tcllib</dt><dd><span class="track"><span class="fill base" style="width:0.4%" title="tclsh with tcllib json: 2.9 MB/s"></span></span><span class="val">2.9</span></dd>
+        </dl>
+      </figure>
+      <div>
+        <p class="eyebrow">Built-in JSON</p>
+        <h2>JSON faster than Node.js and Python.</h2>
+        <p class="lede" style="margin-bottom:24px"><code>zt::json</code> is a Zig form of the simdjson algorithm. It finds the structure of 64 bytes at a time with vector instructions, and it makes Tcl dicts and lists.</p>
+        <ul class="checks">
+          <li><b>Faster than each scripting runtime</b> on twitter.json and citm_catalog.json. On the number-heavy canada.json, Node.js is faster.</li>
+          <li><b><code>zt::json get</code></b> reads one value at a path with no full parse, at 615 to 1664 MB/s.</li>
+          <li><b>The tcllib names</b> <code>json</code> and <code>json::write</code> work over the same code.</li>
+        </ul>
+        <p style="margin-top:24px"><a class="btn ghost" href="modules/json/">Read the JSON guide</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="section" id="embedding">
   <div class="wrap">
     <div class="split">
       <div>
         <p class="eyebrow">Embedding in Zig</p>
-        <h2>One static binary of 2.5 MB, with the JIT.</h2>
-        <p class="lede" style="margin-bottom:24px">ztcl is a Zig package with no dependency outside the Zig standard library. <code>zig fetch</code> adds it, and no C toolchain is necessary. On the benchmark machine, the stripped <code>ztcl</code> binary is 2.5 MB. The <code>libtcl8.6.so</code> of the Linux distribution is 9.2 MB, before its script library.</p>
+        <h2>One static binary. No C toolchain.</h2>
+        <p class="lede" style="margin-bottom:24px">ztcl is a Zig package with no dependency outside the Zig standard library. <code>zig fetch</code> adds it, and no C toolchain is necessary.</p>
         <ul class="checks">
           <li><b>Cross-compiles</b> with <code>zig build -Dtarget=…</code>. From x86-64 Linux, it builds for arm64 Linux, arm64 macOS, x86-64 Windows, and 64-bit RISC-V Linux. CI tests on Linux, macOS, and Windows.</li>
           <li><b><code>register(name, fn)</code></b> adds a native command.</li>
@@ -264,10 +327,11 @@ it.mem_limit = <span class="n">64</span> &lt;&lt; <span class="n">20</span>;
       <div>
         <p class="eyebrow">WebAssembly</p>
         <h2>The same interpreter in the browser.</h2>
-        <p class="lede" style="margin-bottom:24px"><code>zig build wasm</code> builds a module of 825 KB, or 287 KB with gzip. It has no imports. A page runs scripts that its users write, with the same step limit and memory cap.</p>
+        <p class="lede" style="margin-bottom:24px"><code>npm install @beetlebug/ztcl</code> gives the WebAssembly build with types. The module has no imports. A page runs scripts that its users write, with the same step limit and memory cap.</p>
         <ul class="checks">
           <li><b>A small ES module</b> for the page, a Web Worker, and Node.js.</li>
           <li><b>Stop in a worker.</b> A long script runs off the main thread, and the page can end it.</li>
+          <li><b>Threads</b> in Web Workers, on a cross-origin isolated page.</li>
           <li><b>Examples:</b> a REPL, a rule engine with limits, a worker with Cancel, and a Node.js runner.</li>
         </ul>
         <div class="actions" style="margin-top:24px">
@@ -322,7 +386,7 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
     <p class="lede">The test suite of Tcl 8.6.16 is the measure of compatibility. ztcl follows the 12 rules of Tcl and the core commands of Tcl 8.6: lists, strings, dicts, arrays, <code>expr</code>, <code>regexp</code>, namespaces, <code>try</code>, <code>apply</code>, <code>lmap</code>, and TclOO.</p>
     <div class="split">
       <ul class="checks">
-        <li><b>The Tcl suite.</b> 37 383 of 46 494 tests pass in all 152 files (80.4 %). The suite also runs with the JIT on for each proc.</li>
+        <li><b>The Tcl suite.</b> 37 413 of 46 494 tests pass in all 152 files (80.5 %). The suite also runs with the JIT on for each proc.</li>
         <li><b>Differential fuzzing.</b> <code>zig build jit-fuzz</code> compares random programs in the interpreter and in the JIT, and fuzzes the assembler and the verifier.</li>
         <li><b>A comparison tool.</b> <code>tools/jit-diff.sh</code> compares the output, errors, and steps of the JIT and the interpreter on the test scripts.</li>
         <li><b>Stress modes.</b> <code>--jit-stress</code> forces the rare paths of the compiler, and <code>--gc-stress N</code> starts a collection at each Nth allocation.</li>
@@ -334,35 +398,16 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
         <li><b>A code scan.</b> <code>tools/jit-scan.sh</code> searches the machine code for the constants of a script.</li>
       </ul>
     </div>
-    <p class="muted small" style="margin-top:20px"><a href="compatibility/">Compatibility</a> has the result for each test file, and <a href="testing/">Tests and benchmarks</a> has the commands.</p>
+    <p class="muted small" style="margin-top:20px"><a href="language/">The language</a> has the result for each command and the differences from Tcl.</p>
   </div>
 </section>
 
 <section class="section" id="status">
   <div class="wrap">
-    <p class="eyebrow">Status</p>
-    <h2>Experimental, and measured in the open.</h2>
-    <p class="lede">ztcl aims to become a complete drop-in replacement for Tcl. It is not one yet. APIs and behavior can change in any release.</p>
-    <ul class="status">
-      <li><span class="st ok">Works</span><span>Tcl 8.6.16 test suite: 37 383 of 46 494 tests pass in all 152 files (80.4 %). <a href="compatibility/">Compatibility</a> has the result for each file.</span></li>
-      <li><span class="st ok">Works</span><span>The interpreter, point procs, and the WebAssembly build.</span></li>
-      <li><span class="st wip">Experimental</span><span>The JIT on x86-64 Linux. It is off by default. Turn it on with <code>--jit</code> and <code>--jit-tier2</code>.</span></li>
-      <li><span class="st wip">In progress</span><span>The JIT on arm64 macOS.</span></li>
-      <li><span class="st ok">Works</span><span>TclOO method calls have call caches. With <code>--jit</code>, <code>bf_oo</code> uses 0.37 of the instructions of tclsh 8.6.16, and 0.46 with the interpreter only.</span></li>
-      <li><span class="st no">Open bug</span><span><a href="https://github.com/beetlebugorg/ztcl/issues/6">A step limit cost bug (#6)</a>: a recheck after an epoch change costs O(n²) CPU time.</span></li>
-      <li><span class="st plan">Note</span><span>The code and the docs were written largely with AI coding agents, under human direction. Review the code before you depend on it.</span></li>
-    </ul>
-
-    <h3 style="margin-top:56px">Planned</h3>
-    <div class="grid g3" style="margin-top:16px">
-      <a class="card" style="text-decoration:none;color:inherit" href="https://github.com/beetlebugorg/ztcl/issues/10"><span class="tag">In progress · #10</span><h3>Threads</h3><p class="muted">One interp for each thread, messages, <code>tsv</code>, and thread pools.</p></a>
-      <a class="card" style="text-decoration:none;color:inherit" href="https://github.com/beetlebugorg/ztcl/issues/2"><span class="tag plan">Planned · #2</span><h3>WASI</h3><p class="muted">A WASI preview 2 and component model target.</p></a>
-      <a class="card" style="text-decoration:none;color:inherit" href="https://github.com/beetlebugorg/ztcl/issues/3"><span class="tag plan">Planned · #3</span><h3>Tcl to WebAssembly</h3><p class="muted">Compile Tcl scripts to WebAssembly modules.</p></a>
-      <a class="card" style="text-decoration:none;color:inherit" href="https://github.com/beetlebugorg/ztcl/issues/4"><span class="tag plan">Planned · #4</span><h3>A modern shell</h3><p class="muted">An interactive shell with its own line editor, vim mode, history, and completion.</p></a>
-      <a class="card" style="text-decoration:none;color:inherit" href="https://github.com/beetlebugorg/ztcl/issues/8"><span class="tag plan">Planned · #8</span><h3>RISC-V</h3><p class="muted">A JIT port to 64-bit RISC-V (RV64GC) on Linux.</p></a>
-      <a class="card" style="text-decoration:none;color:inherit" href="https://github.com/beetlebugorg/ztcl/issues/9"><span class="tag plan">Planned · #9</span><h3>AOT for microcontrollers</h3><p class="muted">An ahead-of-time compiler for Cortex-M and RV32.</p></a>
+    <div class="callout">
+      <p class="eyebrow">Status</p>
+      <p><b>Experimental.</b> APIs can change in any release, and ztcl is not yet a drop-in replacement for Tcl. The JIT is off by default. The code and the docs were written largely with AI coding agents, under human direction, so review the code before you depend on it. The <a href="https://github.com/beetlebugorg/ztcl/issues">issues</a> and the <a href="https://github.com/beetlebugorg/ztcl/milestones">milestones</a> have the roadmap.</p>
     </div>
-    <p class="muted small" style="margin-top:20px">The <a href="roadmap/">roadmap</a> has the full plan.</p>
   </div>
 </section>
 
@@ -372,7 +417,7 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
       <div>
         <p class="eyebrow" style="color:var(--sib)">Also from this project</p>
         <h3>ztk: a Tk replacement in Zig, on ztcl</h3>
-        <p>GPU rendering and stylesheets in a subset of CSS, for Tk scripts. Stage 1 is a working demo.</p>
+        <p>Tk scripts with a modern look from CSS, smooth animation, and live demos in the browser with WebGPU.</p>
       </div>
       <a class="btn sib-btn" href="https://beetlebug.org/ztk/">Visit ztk</a>
     </div>
@@ -384,9 +429,9 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
   <span>ztcl · BSD-2-Clause</span>
   <span class="right">
     <a href="overview/">Docs</a>
+    <a href="install/">Install</a>
     <a href="playground/">Playground</a>
-    <a href="webassembly/">WebAssembly</a>
-    <a href="language/">Language</a>
+    <a href="performance/">Performance</a>
     <a href="changelog/">Changelog</a>
     <a href="https://beetlebug.org/ztk/">ztk</a>
     <a href="https://github.com/beetlebugorg/ztcl">GitHub</a>

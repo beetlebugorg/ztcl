@@ -4,16 +4,28 @@
 
 - Adds an interactive shell to the runner, with a line editor of its own: Emacs and vim keys, multi-line input, history in `~/.ztcl_history` with prefix and fuzzy search, completion, colors as you type, hints, bracketed paste, results in color, and `~/.ztclrc`. See `docs/shell.md`.
 - Fixes the `exec` allowlist. A script could write a file at the path of an allowed program, and `exec` ran that file. `exec` now resolves each program to one full host path, checks the allowlist on that path, and runs only that path. A file below the root folder runs only from the new list `Interp.exec_host.allow_root` (runner flag `--exec-allow-root`). A relative `PATH` entry is an error.
-- Kills the whole process tree of a pipeline at the time limit: a cgroup on Linux, or a scan of /proc when the embedder cannot make a cgroup. A process that calls `setsid` no longer stays.
 - Fixes a crash of `file delete -force` and `file copy` on a deep tree in a coroutine. Both commands now walk the tree with a list on the heap, pay steps for each entry, and stop at 2048 levels. `file copy` of a folder into itself is now an error before the copy.
+- Adds the module `zt::json`: a parser on the simdjson algorithm, `get` and `exists` on a path, `encode` with a schema, the builders, `pretty`, and the tcllib names `json` and `json::write`. See `docs/modules/json.md`.
+- Adds tier 1 and tier 2 of the JIT on arm64 macOS.
+- Runs threads in WebAssembly with Web Workers: `web/ztcl-threads.mjs` and the modules `ztcl-threads.wasm` and `ztcl-async.wasm`.
+- Adds channels, sockets, the event loop, `exec`, and the root folder jail on arm64 macOS, and the jail on x86-64 Windows.
+- Makes `thread::send` and `tpool::post` faster: an event wakes its futex only when a thread waits, and the job table of a pool has no tombstones.
+
+## v0.2.0-beta (2026-11-25) and earlier
+
+- Adds the capability `thread`: `thread::*`, `tsv::*`, `tpool::*`, and the mutexes and conditions of the Thread package, with limits for each thread. See `docs/threads.md`.
+- Adds tier 2 of the JIT on x86-64 Linux, off by default: `--jit-tier2` and `--jit-tier2-count`.
+- Adds the WebAssembly guide, the JS module, and the playground.
+- Adds the module table and `package require` of built-in modules.
+- Kills the whole process tree of a pipeline at the time limit: a cgroup on Linux, or a scan of /proc when the embedder cannot make a cgroup. A process that calls `setsid` no longer stays.
 - Adds the `ztcl` package, the runner, the WebAssembly library, and the release workflows.
 - Licensed under BSD-2-Clause.
-- Adds the npm package `@beetlebug/ztcl`, with types, and a workflow that publishes it on a version tag. `Interp.create` and `WorkerInterp` load the `ztcl.wasm` file next to `ztcl.mjs` when no source is given. See `docs/npm.md`.
+- Adds the npm package `@beetlebug/ztcl`, with types, and a workflow that publishes it on a version tag. `Interp.create` and `WorkerInterp` load the `ztcl.wasm` file next to `ztcl.mjs` when no source is given. See `docs/dev/npm.md`.
 - Names the instruction budget the step limit: the runner flag `--max-steps`, the `Interp` field `step_limit`, and the WebAssembly export `ztcl_set_step_limit`. This replaces the flag of v0.1.0-alpha. The error text is now `step limit reached`.
 - Adds a hash table for dicts with 16 or more keys. A new key is amortized O(1).
 - Adds `Interp.compact`, a reset that keeps the commands, procs, namespaces, and point programs.
 - Adds big integers up to 2^20 bits. An integer that overflows 64 bits no longer wraps.
-- Adds `bench/dictgrow.tcl` and the Tcl 9.1.0 baseline in `docs/tcl9.md`.
+- Adds `bench/dictgrow.tcl` and the Tcl 9.1.0 baseline in `docs/dev/tcl9.md`.
 - Adds inline bytecode for `llength`, `lindex`, `string length`, and `string index`.
 - Dispatches bytecode from the end of each handler. The script benchmarks use 4% to 27% less CPU time from this change.
 - Caches the list parse of a string for `llength` and `lindex`, and adds `bench/readloop.tcl`. That benchmark goes from 571 ms to 17.7 ms.
@@ -28,7 +40,7 @@
 - Fixes a use after free in `compact` for a string in `tcl_precision`. `compact` now returns `error.InterpBusy` for an interpreter with TclOO objects and ends each `hold`.
 - Fixes variable traces and `vwait` on an `upvar` link to an array element.
 - Fixes an overflow of `%` on the smallest integer and an underflow in the regexp match of a sequence.
-- Adds `tools/suite.sh -a`, a scope for each of the 152 test files of Tcl 8.6.16, and `docs/compatibility.md`. A test that did not run counts as blocked.
+- Adds `tools/suite.sh -a`, a scope for each of the 152 test files of Tcl 8.6.16, and `docs/dev/compatibility.md`. A test that did not run counts as blocked.
 - Adds `tcl::mathop`, `tcl::mathfunc`, `tcl::prefix`, `trace`, `case`, `unknown`, `namespace path`, `namespace unknown`, `namespace forget`, ensemble options, array searches, `upvar` to an array element, `tcl_precision`, `binary` uuencode, the `subst` options, and the `-during` option of `try`.
 - Makes the `string` commands and glob patterns work on characters.
 - Adds `coroutine`, `yield`, `yieldto`, and `tailcall`. The stack switch exists for x86-64 Linux, arm64 macOS, and x86-64 Windows.

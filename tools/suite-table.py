@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-2-Clause
-"""Writes docs/compatibility.md from a log of tools/suite.sh -a -o.
+"""Writes docs/dev/compatibility.md from a log of tools/suite.sh -a -o.
 
-    python3 -I tools/suite-table.py <full log> <plain log> > docs/compatibility.md
+    python3 -I tools/suite-table.py <full log> <plain log> > docs/dev/compatibility.md
 
 The full log is a run with zig-out/bin/ztcl-suite, which has the test
 commands of tools/suite_cmds.zig. The plain log is a run with the
