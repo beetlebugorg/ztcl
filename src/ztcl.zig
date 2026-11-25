@@ -27,6 +27,7 @@ pub const coro = @import("coro.zig");
 pub const more = @import("more.zig");
 pub const regex = @import("regex.zig");
 pub const fsroot = @import("fsroot.zig");
+pub const proc = @import("proc.zig");
 pub const sys = @import("sys.zig");
 pub const thread = @import("thread.zig");
 pub const chan = @import("chan.zig");

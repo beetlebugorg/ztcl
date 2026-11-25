@@ -1308,6 +1308,151 @@ test "exec has an allowlist and a time limit, and leaves no process" {
     try it.init(std.testing.allocator);
 }
 
+/// Makes a fresh folder in /tmp for a test. The caller removes it.
+fn tmpFolder(buf: *[64:0]u8, what: []const u8) ![:0]const u8 {
+    const linux = std.os.linux;
+    const z = try std.fmt.bufPrintZ(buf, "/tmp/ztcl-{s}-{d}", .{ what, linux.getpid() });
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.mkdirat(linux.AT.FDCWD, z, 0o700)));
+    return z;
+}
+
+/// Removes a test folder with `rm -rf`, from the host.
+fn removeFolder(path: []const u8) void {
+    var it: tcl.Interp = undefined;
+    it.init(std.testing.allocator) catch return;
+    defer it.deinit();
+    it.allow(@intFromEnum(tcl.interp.Capability.exec)) catch return;
+    it.exec_host = .{ .allow = &.{"rm"}, .timeout_ms = 5000, .env = &.{"PATH=/usr/bin:/bin"} };
+    const script = std.fmt.allocPrint(it.alloc(), "exec rm -rf -- {{{s}}}", .{path}) catch return;
+    _ = it.eval(script) catch {};
+}
+
+fn execJail(it: *tcl.Interp, root: []const u8) !void {
+    try it.init(std.testing.allocator);
+    errdefer it.deinit();
+    try tcl.fsroot.setRoot(it, root);
+    const cap = tcl.interp.Capability;
+    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.file) | @intFromEnum(cap.exec));
+}
+
+test "the exec allowlist checks the file that runs" {
+    if (!tcl.proc.supported or !tcl.fsroot.supported) return error.SkipZigTest;
+    var name: [64:0]u8 = undefined;
+    const root = try tmpFolder(&name, "allow");
+    defer removeFolder(root);
+    var it: tcl.Interp = undefined;
+    try execJail(&it, root);
+    defer it.deinit();
+    it.exec_host = .{ .allow = &.{"/bin/echo"}, .timeout_ms = 2000, .env = &.{"PATH=/usr/bin:/bin"} };
+    // The script writes a program at the path of the allowed program.
+    _ = try it.eval("file mkdir /bin; set f [open /bin/echo {WRONLY CREAT} 0755]; puts $f {#!/bin/sh}; puts $f {printf planted}; close $f");
+    // The word is a host path, so the host program runs.
+    try std.testing.expectEqualStrings("real", try it.str(try it.eval("exec /bin/echo real")));
+    // A relative word names no host file.
+    try std.testing.expectEqualStrings("1 {couldn't execute \"bin/echo\": a program path must be a full path or a bare name}", try it.str(try it.eval("list [catch {exec bin/echo} m] $m")));
+    // A bare name that the PATH of the embedder finds in the root folder
+    // does not run, also with an allowlist that names it.
+    const pa = try std.fmt.allocPrintSentinel(it.alloc(), "PATH={s}/bin:/usr/bin", .{root}, 0);
+    it.exec_host = .{ .allow = &.{ "echo", "/bin/echo" }, .timeout_ms = 2000, .env = &.{pa} };
+    try std.testing.expectEqualStrings("1 {couldn't execute \"echo\": the program is in the root folder} {ZTCL EXEC DENIED}", try it.str(try it.eval("list [catch {exec echo x} m] $m $::errorCode")));
+    it.exec_host.allow = null;
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {exec echo x}")));
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval(try std.fmt.allocPrint(it.alloc(), "catch {{exec {s}/bin/echo x}}", .{root}))));
+    // `allow_root` lists a file below the root, and the script runs it.
+    it.exec_host = .{ .allow = &.{}, .allow_root = &.{"/bin/echo"}, .timeout_ms = 2000, .env = &.{"PATH=/usr/bin:/bin"} };
+    try std.testing.expectEqualStrings("planted", try it.str(try it.eval("exec /bin/echo")));
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {exec /bin/sh -c {printf x}}")));
+}
+
+test "exec refuses a relative PATH entry" {
+    if (!tcl.proc.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@intFromEnum(tcl.interp.Capability.exec));
+    for ([_][:0]const u8{ "PATH=bin:/usr/bin:/bin", "PATH=/usr/bin::/bin", "PATH=/usr/bin:/bin:", "PATH=./bin:/usr/bin" }) |pa| {
+        it.exec_host = .{ .allow = &.{"true"}, .timeout_ms = 2000, .env = &.{pa} };
+        try std.testing.expectEqualStrings("1 {ZTCL EXEC PATH}", try it.str(try it.eval("list [catch {exec true}] $::errorCode")));
+    }
+    it.exec_host = .{ .allow = &.{"true"}, .timeout_ms = 2000, .env = &.{"PATH=/usr/bin:/bin"} };
+    try std.testing.expectEqualStrings("0", try it.str(try it.eval("catch {exec true}")));
+}
+
+test "exec follows symlinks in the root folder to the host file" {
+    if (!tcl.proc.supported or !tcl.fsroot.supported) return error.SkipZigTest;
+    const linux = std.os.linux;
+    var name: [64:0]u8 = undefined;
+    const root = try tmpFolder(&name, "links");
+    defer removeFolder(root);
+    var it: tcl.Interp = undefined;
+    try execJail(&it, root);
+    defer it.deinit();
+    const a = it.alloc();
+    // The embedder makes the links. A script cannot make a link.
+    _ = try it.eval("file mkdir /bin; set f [open /planted {WRONLY CREAT} 0755]; puts $f {#!/bin/sh}; puts $f {printf planted}; close $f");
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.symlinkat("/bin/echo", linux.AT.FDCWD, try std.fmt.allocPrintSentinel(a, "{s}/bin/echo", .{root}, 0))));
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.symlinkat("../planted", linux.AT.FDCWD, try std.fmt.allocPrintSentinel(a, "{s}/bin/inside", .{root}, 0))));
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.symlinkat(try std.fmt.allocPrintSentinel(a, "{s}/planted", .{root}, 0), linux.AT.FDCWD, try std.fmt.allocPrintSentinel(a, "{s}/bin/full", .{root}, 0))));
+    const pa = try std.fmt.allocPrintSentinel(a, "PATH={s}/bin:/usr/bin:/bin", .{root}, 0);
+    it.exec_host = .{ .allow = &.{ "echo", "inside", "full", "/bin/echo" }, .timeout_ms = 2000, .env = &.{pa} };
+    // A link to an allowed host program runs that host program.
+    try std.testing.expectEqualStrings("hi", try it.str(try it.eval("exec echo hi")));
+    // A link to a file below the root does not run.
+    try std.testing.expectEqualStrings("1 {couldn't execute \"inside\": the program is in the root folder}", try it.str(try it.eval("list [catch {exec inside} m] $m")));
+    try std.testing.expectEqualStrings("1 {couldn't execute \"full\": the program is in the root folder}", try it.str(try it.eval("list [catch {exec full} m] $m")));
+    try std.testing.expectEqualStrings("x", try it.str(try it.eval(try std.fmt.allocPrint(a, "exec {s}/bin/echo x", .{root}))));
+    // A script word is a host path: the link /bin/echo of the root is
+    // not read.
+    try std.testing.expectEqualStrings("x", try it.str(try it.eval("exec /bin/echo x")));
+    // The script replaces the link with its own file. It does not run.
+    _ = try it.eval("file delete /bin/echo; set f [open /bin/echo {WRONLY CREAT} 0755]; puts $f {#!/bin/sh}; close $f");
+    try std.testing.expectEqualStrings("1 {couldn't execute \"echo\": the program is in the root folder}", try it.str(try it.eval("list [catch {exec echo} m] $m")));
+}
+
+/// Gives true when a process with this pid ended within one second.
+fn processEnds(pid: i32) bool {
+    const linux = std.os.linux;
+    var n: usize = 0;
+    while (n < 100) : (n += 1) {
+        if (linux.errno(linux.kill(pid, @enumFromInt(0))) == .SRCH) return true;
+        const ts: linux.timespec = .{ .sec = 0, .nsec = 10_000_000 };
+        _ = linux.nanosleep(&ts, null);
+    }
+    _ = linux.kill(pid, linux.SIG.KILL);
+    return false;
+}
+
+/// Runs a script that starts a process that leaves the process group,
+/// and checks that the time limit kills it. The process writes its pid
+/// to a file of the root folder.
+fn escapeKilled(script: []const u8) !void {
+    var name: [64:0]u8 = undefined;
+    const root = try tmpFolder(&name, "tree");
+    defer removeFolder(root);
+    var it: tcl.Interp = undefined;
+    try execJail(&it, root);
+    defer it.deinit();
+    it.exec_host = .{ .allow = &.{ "sh", "setsid", "sleep" }, .timeout_ms = 300, .env = &.{"PATH=/usr/bin:/bin"} };
+    try std.testing.expectEqualStrings("1 {child killed: the time limit of 300 ms ended}", try it.str(try it.eval(script)));
+    const text = try it.str(try it.eval("set f [open /pid]; set p [string trim [read $f]]; close $f; set p"));
+    try std.testing.expect(processEnds(try std.fmt.parseInt(i32, text, 10)));
+}
+
+test "the time limit of exec kills a process that calls setsid" {
+    if (!tcl.proc.supported or !tcl.fsroot.supported) return error.SkipZigTest;
+    const setsid = "list [catch {exec sh -c {setsid sh -c 'echo $$ > pid; exec sleep 47' > /dev/null 2>&1 < /dev/null & sleep 5}} m] $m";
+    // With no cgroup, the scan finds the process below the shell.
+    tcl.proc.test_no_cgroup = true;
+    defer tcl.proc.test_no_cgroup = false;
+    try escapeKilled(setsid);
+    tcl.proc.test_no_cgroup = false;
+    if (!tcl.proc.treeAvailable()) return error.SkipZigTest;
+    try escapeKilled(setsid);
+    // A double fork: the parent of the process ends at once. Only the
+    // cgroup finds the process.
+    try escapeKilled("list [catch {exec sh -c {(setsid sh -c 'echo $$ > pid; exec sleep 48' > /dev/null 2>&1 < /dev/null &); sleep 5}} m] $m");
+}
+
 test "TclOO: classes, methods, next, mixins, and destructors" {
     try check(&.{
         .{ "oo::class create A {variable n; constructor {x} {set n $x}; method get {} {return $n}; method Hidden {} {return h}}; set o [A new 5]; list [$o get] [catch {$o Hidden}]", "5 1" },

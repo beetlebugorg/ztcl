@@ -17,6 +17,7 @@ const Cmd = interp.Cmd;
 const Error = interp.Error;
 const linux = std.os.linux;
 const sys = @import("sys.zig");
+const ProcTree = if (fsroot.supported) @import("proc.zig").Tree else struct {};
 const event = @import("event.zig");
 
 pub const Translation = enum { auto, lf, cr, crlf, binary };
@@ -59,6 +60,8 @@ pub const Channel = struct {
     err_fd: i32 = -1,
     /// The start time of the pipeline, for the time limit.
     started: i64 = 0,
+    /// The process tree of the pipeline.
+    tree: ProcTree = .{},
     /// True for a closed channel that still has output to write. The
     /// event loop writes the rest and then closes the descriptor.
     draining: bool = false,

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixes the `exec` allowlist. A script could write a file at the path of an allowed program, and `exec` ran that file. `exec` now resolves each program to one full host path, checks the allowlist on that path, and runs only that path. A file below the root folder runs only from the new list `Interp.exec_host.allow_root` (runner flag `--exec-allow-root`). A relative `PATH` entry is an error.
+- Kills the whole process tree of a pipeline at the time limit: a cgroup on Linux, or a scan of /proc when the embedder cannot make a cgroup. A process that calls `setsid` no longer stays.
 - Adds the `ztcl` package, the runner, the WebAssembly library, and the release workflows.
 - Licensed under BSD-2-Clause.
 - Adds the npm package `@beetlebug/ztcl`, with types, and a workflow that publishes it on a version tag. `Interp.create` and `WorkerInterp` load the `ztcl.wasm` file next to `ztcl.mjs` when no source is given. See `docs/npm.md`.
