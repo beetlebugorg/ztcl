@@ -26,6 +26,8 @@ while getopts r:x:n: o; do
     esac
 done
 shift $((OPTIND - 1))
+# A file with flags runs in another folder, so the runner path is absolute.
+case $tcl in /*) ;; *) tcl=$PWD/$tcl ;; esac
 if [ $# -eq 0 ]; then
     for f in "$dir"/*.tcl; do
         [ "${f##*/}" = lib.tcl ] || set -- "$@" "$f"

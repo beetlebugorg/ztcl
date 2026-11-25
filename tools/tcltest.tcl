@@ -230,6 +230,8 @@ proc tcltest::cleanupTests {args} {
 proc tcltest::loadTestedCommands {args} {}
 proc tcltest::configure {args} {}
 proc tcltest::verbose {args} {}
+# The debug output of a test file goes nowhere.
+proc tcltest::DebugPuts {level string} {}
 # The variables of tcltest that test files read.
 set tcltest::verbose {body error}
 

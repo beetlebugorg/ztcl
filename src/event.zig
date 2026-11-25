@@ -345,6 +345,9 @@ pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
                 return false;
             }
             if (wants.items.len > 0) {
+                // A message of another thread ends the poll at once.
+                const wake: i32 = if (src) |x| thread.wakeFd(x) else -1;
+                if (wake >= 0) try wants.append(a, .{ .fd = wake, .read = true });
                 const ready_now = try a.alloc(bool, wants.items.len);
                 for (wants.items, ready_now) |w, *r| r.* = w.can_read;
                 var ms: i32 = if (timeout < 0) -1 else @intCast(@min(@divFloor(timeout + 999, 1000), 3_600_000));
@@ -352,6 +355,10 @@ pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
                 if (src != null and (ms < 0 or ms > 10)) ms = 10;
                 sys.poll(a, wants.items, ms);
                 for (wants.items, ready_now) |*w, r| w.can_read = w.can_read or r;
+                if (wake >= 0) {
+                    _ = wants.pop();
+                    thread.drainWake(src.?);
+                }
             } else if (timeout > 0) {
                 if (src) |x| {
                     try thread.block(x, @intCast(@min(timeout, 1 << 40) * 1000));
