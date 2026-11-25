@@ -20,6 +20,7 @@ const cmds = @import("cmds.zig");
 const dict = @import("dict.zig");
 const more = @import("more.zig");
 const jit = @import("jit.zig");
+const aot = @import("wasm_aot/rt.zig");
 
 const Allocator = std.mem.Allocator;
 const Value = value.Value;
@@ -1411,18 +1412,20 @@ fn runFull(it: *Interp, code: *Code) Error!Value {
     const stack = try it.stackAllocPub(code.max_stack);
     // The machine code of the JIT, when it has a function for the code.
     const jf: ?*jit.Fn = if (jit.built and it.jit != null) jit.prepare(it, code) else null;
-    return runLoop(it, code, jf, stack.ptr, 0, 0, null);
+    // The function of a module from `ztcl compile --wasm`.
+    const af: ?u32 = if (aot.built) aot.prepare(it, code) else null;
+    return runLoop(it, code, jf, af, stack.ptr, 0, 0, null);
 }
 
 /// `runLoop` after a short entry that did not end with a result.
 noinline fn runRest(it: *Interp, code: *Code, f: *jit.Fn, stack: [*]Value, pc: u32, sp: u32, st: jit.Status) Error!Value {
-    return runLoop(it, code, f, stack, pc, sp, st);
+    return runLoop(it, code, f, null, stack, pc, sp, st);
 }
 
 /// The loop of `run`: the machine code or `exec`, then the error trace,
 /// `break`, and `continue` of the ranges. `first` is the status of an
 /// entry that already ran.
-inline fn runLoop(it: *Interp, code: *Code, jf: ?*jit.Fn, stack: [*]Value, pc_in: u32, sp_in: u32, first: ?jit.Status) Error!Value {
+inline fn runLoop(it: *Interp, code: *Code, jf: ?*jit.Fn, af: ?u32, stack: [*]Value, pc_in: u32, sp_in: u32, first: ?jit.Status) Error!Value {
     var pc = pc_in;
     var sp = sp_in;
     var status = first;
@@ -1434,6 +1437,13 @@ inline fn runLoop(it: *Interp, code: *Code, jf: ?*jit.Fn, stack: [*]Value, pc_in
                 switch (st) {
                     .done => break :blk stack[sp - 1],
                     .failed => break :blk jit.lastError(it),
+                    .fallback => {},
+                }
+            };
+            if (aot.built) if (af) |f| {
+                switch (aot.enter(it, f, code, stack, &pc, &sp)) {
+                    .done => break :blk stack[sp - 1],
+                    .failed => break :blk aot.lastError(),
                     .fallback => {},
                 }
             };

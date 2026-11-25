@@ -154,7 +154,7 @@ fn fail(ctx: *EnterCtx, e: Error) u32 {
     return failed;
 }
 
-fn wrap(comptime h: Helper, comptime named: bool) Fn {
+pub fn wrap(comptime h: Helper, comptime named: bool) Fn {
     if (h == .recheck) return &struct {
         fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
             _ = .{ pc, sp };

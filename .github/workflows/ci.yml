@@ -133,6 +133,13 @@ jobs:
       # A bundle of `ztcl build --wasm`. The native ztcl makes it.
       - run: zig build
       - run: node tools/wasm-bundle.mjs zig-out/bin/ztcl zig-out/lib/ztcl.wasm
+      # Procs compiled to wasm (docs/wasm-aot.md) against the interpreter
+      # of the same runtime, with a step limit sweep and with collections.
+      - name: Procs compiled to wasm
+        run: |
+          zig build wasm-aot
+          node tools/wasm-aot.mjs --quiet --sweep 4 tests/jit/*.tcl tests/mem/*.tcl bench/*.tcl
+          node tools/wasm-aot.mjs --quiet --gc-stress 7 tests/jit/*.tcl tests/mem/*.tcl
       # The threads in Node.js and in Chromium, with and without
       # cross-origin isolation. The browser test uses the Chrome of the
       # runner.

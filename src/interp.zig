@@ -20,6 +20,7 @@ const value = @import("value.zig");
 const expr = @import("expr.zig");
 const cmds = @import("cmds.zig");
 const vm = @import("vm.zig");
+const aot = @import("wasm_aot/rt.zig");
 const jit_mod = @import("jit.zig");
 const thread_mod = @import("thread.zig");
 const trace = @import("trace.zig");
@@ -2440,7 +2441,10 @@ pub const Interp = struct {
             try it.newLocal("args", try value.newList(it.alloc(), rest));
         }
         if (p.script == null) p.script = try it.compile(try it.str(p.body));
-        if (p.code == null) p.code = try vm.compileProc(it, p, p.script.?);
+        if (p.code == null) {
+            p.code = try vm.compileProc(it, p, p.script.?);
+            if (aot.built) aot.noteProc(it, p);
+        }
         const bc = p.code.?;
         // The other locals of the body start with no value.
         for (bc.names[it.frame.vars.items.len..]) |name| {

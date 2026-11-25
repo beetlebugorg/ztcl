@@ -227,6 +227,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     const io = init.io;
     host_io = io;
     const args = try init.minimal.args.toSlice(arena);
+    if (args.len > 1 and std.mem.eql(u8, args[1], "compile")) std.process.exit(try @import("compile.zig").run(init, args[2..]));
 
     var out_buf: [1 << 16]u8 = undefined;
     var out_w: Io.File.Writer = .init(.stdout(), io, &out_buf);
