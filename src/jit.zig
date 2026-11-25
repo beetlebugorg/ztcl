@@ -68,10 +68,11 @@ pub const EnterCtx = extern struct {
 };
 
 /// True when this target has a backend: x86-64 Linux and arm64 macOS.
-/// Tier 2 has a backend only on x86-64.
+/// Each backend has tier 1 and tier 2.
 pub const backend = (builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux) or
     (builtin.cpu.arch == .aarch64 and builtin.os.tag == .macos);
-pub const tier2_backend = builtin.cpu.arch == .x86_64;
+const t2_arm = builtin.cpu.arch == .aarch64;
+const tier2_be = if (t2_arm) @import("jit/tier2_a64.zig") else tier2_x64;
 
 /// True when the build has the JIT and the target has a backend.
 pub const built = options.jit and backend;
@@ -435,7 +436,7 @@ fn compileCode(s: *State, code: *vm.Code) ?*Fn {
     };
     // A named Code stays in tier 1. Tier 2 reads each slot from its cell
     // in the frame, and a named Code reads each variable by its name.
-    const tier2_count: u32 = if (tier2_backend and s.options.tier2 and !code.named) @max(s.options.tier2_count, 1) else 0;
+    const tier2_count: u32 = if (s.options.tier2 and !code.named) @max(s.options.tier2_count, 1) else 0;
     const bud = if (code.named) s.namedBudget() else s.budget();
     switch (tier1.compile(a, r, s.layout, code, bud, tier2_count)) {
         .ok => |f| {
@@ -673,7 +674,6 @@ pub fn resumeAt(ctx: *EnterCtx, pc: u32, sp: u32, kind: u32) callconv(.c) usize 
 /// Compiles the loop at `head` with the kinds of the cells of `frame`
 /// now. Null when the loop is not eligible or a step fails.
 fn compileLoop(s: *State, code: *const vm.Code, frame: *interp.Frame, head: u32, loop: u32, heads: u32, counts: *bool) ?[]const u8 {
-    if (comptime !tier2_backend) return null;
     if (s.stopped or code.named) return null;
     var fa: FailAlloc = .{ .child = s.backing, .at = 0 };
     const a = compileAlloc(s, &fa);
@@ -695,11 +695,12 @@ fn compileLoop(s: *State, code: *const vm.Code, frame: *interp.Frame, head: u32,
     }
     var p = (tier2.plan(a, code, &info, head, kinds) catch return null) orelse return null;
     defer p.deinit();
-    if (!tier2_x64.eligible(code, &info, &p)) return null;
+    if (!tier2_be.eligible(code, &info, &p)) return null;
     counts.* = p.calls;
-    var buf = @import("jit/x64.zig").Asm.init(a);
+    // The region flushes the instruction cache of the new code on arm64.
+    var buf = if (t2_arm) @import("jit/a64.zig").Asm.init(a) else @import("jit/x64.zig").Asm.init(a);
     defer buf.deinit();
-    tier2_x64.assemble(a, &buf, code, &info, &p, s.layout, loop, heads, s.options.stress & stress_guards != 0) catch return null;
+    tier2_be.assemble(a, &buf, code, &info, &p, s.layout, loop, heads, s.options.stress & stress_guards != 0) catch return null;
     const r = &(s.region orelse return null);
     const pages = std.mem.alignForward(usize, buf.bytes().len, r.page);
     // Tier 2 code counts in the part of named code as tier 1 code does.
