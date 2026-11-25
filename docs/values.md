@@ -68,6 +68,37 @@ Tasks 01 and 02 went in as planned. One block for each container and the arena w
 
 So task 03 starts with a change of the heap: keep a small set of empty spans for reuse, with a cap that the memory limit counts. The arena is measured again after that change.
 
+### Results of tasks 01 and 02
+
+Instructions of one parse (callgrind, the command only), on a61b78f and on the branch before its rebase onto 5e4404c:
+
+| File | main | Tasks 01 and 02 | Change |
+|---|---|---|---|
+| twitter.json | 8.19 M | 7.40 M | -9.6 % |
+| canada.json | 114.1 M | 79.2 M | -30.6 % |
+| citm_catalog.json | 20.66 M | 18.80 M | -9.0 % |
+
+`bench_ztcl.tcl` in MB/s, the best of 3 runs, two rounds with main (5e4404c) and the branch in turn:
+
+| Mode | File | main | Branch |
+|---|---|---|---|
+| parse | twitter | 787, 788 | 853, 855 |
+| parse | canada | 222, 222 | 300, 300 |
+| parse | citm_catalog | 953, 949 | 1021, 1019 |
+| validate | twitter | 1711, 1711 | 1764, 1754 |
+| validate | canada | 876, 878 | 765, 766 |
+| validate | citm_catalog | 2119, 2132 | 2140, 2109 |
+| query | twitter | 1243, 1002 | 1281, 1294 |
+| query | canada | 596, 598 | 599, 608 |
+| query | citm_catalog | 1602, 1617 | 1648, 1642 |
+| read3 | twitter | 520, 519 | 538, 544 |
+| read3 | canada | 427, 427 | 438, 433 |
+| read3 | citm_catalog | 931, 931 | 958, 971 |
+
+The heap bytes per JSON byte do not change.
+
+`validate` on canada is 13 % slower with the same instruction count. The tasks do not change the code of the validate walk: `Parser(.validate).valueAt` has the same size (0x5b8 bytes) on main and on the branch. Its start moved from 32 to 16 modulo 64, and the least of 5 runs used 2.56 G cycles against 2.25 G on main. A build with `align(32)` on `valueAt`, `key`, `string`, and `number` used 2.25 G again and kept each other mode within 2 % of main. WebAssembly has no function alignment, so `zig build wasm` fails with it. A wrapper with `align(32)` that inlines the body changed the code of the body and did not help. A fix needs a function alignment for native builds only. Code layout is a source of noise of this size in each measure of this plan, so a gate compares cycles or times of two builds in turn, and a slower mode with an equal instruction count gets a check of the layout first.
+
 ### 1. Document arenas
 
 All containers of one parse come from large blocks of the heap: chunks of 64 KiB, and a block of its own for a buffer above 8 KiB. A pointer into a chunk keeps the whole chunk. A string of the input already keeps the whole input text, so the retention rule is the same as today. Rules:
