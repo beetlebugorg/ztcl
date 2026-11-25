@@ -166,6 +166,8 @@ pub fn build(b: *std.Build) void {
     // The probe has no meaning on WASI, which has no executable memory.
     if (t.os.tag != .wasi) b.installArtifact(probe_exe);
 
+    addPointRuntime(b, &.{ ztcl, fast }, fast);
+
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
     const wasm = addWasm(b, "ztcl", .none, gc_precise, size_plant, on, false);
     const wasm_install = b.addInstallArtifact(wasm, .{ .dest_dir = .{ .override = .lib } });
@@ -184,6 +186,38 @@ pub fn build(b: *std.Build) void {
         const w = addWasm(b, wt[0], wt[1], gc_precise, size_plant, on, false);
         threads_step.dependOn(&b.addInstallArtifact(w, .{ .dest_dir = .{ .override = .lib } }).step);
     }
+}
+
+/// The runtime of compiled point procs: `src/point_rt.zig` for wasm32
+/// with no imports, in a SIMD form and a scalar form. The modules embed
+/// the bytes for `ztcl compile`. `zig build point-rt` installs both and
+/// the native reference tool of `tools/point-rt-diff.mjs`.
+fn addPointRuntime(b: *std.Build, mods: []const *std.Build.Module, fast: *std.Build.Module) void {
+    const step = b.step("point-rt", "Build the runtime of compiled point procs");
+    for ([_]struct { []const u8, bool }{ .{ "point_rt", true }, .{ "point_rt_scalar", false } }) |form| {
+        var query: std.Target.Query = .{ .cpu_arch = .wasm32, .os_tag = .freestanding };
+        if (form[1]) query.cpu_features_add = std.Target.wasm.featureSet(&.{.simd128});
+        if (!form[1]) query.cpu_features_sub = std.Target.wasm.featureSet(&.{.simd128});
+        const rt = b.addExecutable(.{ .name = form[0], .root_module = b.createModule(.{
+            .root_source_file = b.path("src/point_rt.zig"),
+            .target = b.resolveTargetQuery(query),
+            .optimize = .ReleaseFast,
+            .single_threaded = true,
+            .strip = true,
+        }) });
+        rt.entry = .disabled;
+        rt.rdynamic = true;
+        rt.stack_size = 64 << 10;
+        for (mods) |m| m.addAnonymousImport(b.fmt("{s}.wasm", .{form[0]}), .{ .root_source_file = rt.getEmittedBin() });
+        step.dependOn(&b.addInstallArtifact(rt, .{ .dest_dir = .{ .override = .lib } }).step);
+    }
+    const ref = b.addExecutable(.{ .name = "point-rt-ref", .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/point-rt-ref.zig"),
+        .target = fast.resolved_target.?,
+        .optimize = .ReleaseFast,
+        .imports = &.{.{ .name = "ztcl", .module = fast }},
+    }) });
+    step.dependOn(&b.addInstallArtifact(ref, .{}).step);
 }
 
 /// The thread model of a WebAssembly build. `none` has no thread

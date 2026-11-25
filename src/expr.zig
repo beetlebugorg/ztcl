@@ -94,6 +94,26 @@ pub const BinOp = enum {
     }
 };
 
+/// The smaller of two doubles with a fixed result on each target. A NaN
+/// operand gives the other operand. For equal operands, as for -0 and
+/// +0, the result is `a`. `@min` leaves the sign of a zero result to
+/// the target, so `clamp` and the limits of point procs use this.
+pub fn minF(a: f64, b: f64) f64 {
+    if (std.math.isNan(a)) return b;
+    return if (b < a) b else a;
+}
+
+/// The larger of two doubles with the rules of `minF`.
+pub fn maxF(a: f64, b: f64) f64 {
+    if (std.math.isNan(a)) return b;
+    return if (b > a) b else a;
+}
+
+/// `clamp(x, lo, hi)` of `expr` and of point procs.
+pub fn clamp(x: f64, lo: f64, hi: f64) f64 {
+    return minF(maxF(x, lo), hi);
+}
+
 pub const Func = enum {
     abs,
     acos,
@@ -912,7 +932,7 @@ pub fn callFunc(it: *Interp, f: Func, args: []const *Node) Error!Value {
         .sqrt => @sqrt(fx),
         .tan => @tan(fx),
         .tanh => std.math.tanh(fx),
-        .clamp => @min(@max(fx, toF(buf[1])), toF(buf[2])),
+        .clamp => clamp(fx, toF(buf[1]), toF(buf[2])),
         .lerp => fx + (toF(buf[1]) - fx) * toF(buf[2]),
         .noise2 => noise.noise3Seed(it.noise_seed, fx, toF(buf[1]), 0),
         .noise3 => noise.noise3Seed(it.noise_seed, fx, toF(buf[1]), toF(buf[2])),
@@ -920,4 +940,20 @@ pub fn callFunc(it: *Interp, f: Func, args: []const *Node) Error!Value {
     };
     if (std.math.isNan(d)) return domainError(it);
     return .{ .double = d };
+}
+
+test "minF, maxF, and clamp give a fixed result for zeros and NaN" {
+    const bits = struct {
+        fn of(x: f64) u64 {
+            return @bitCast(x);
+        }
+    }.of;
+    const nan = std.math.nan(f64);
+    try std.testing.expectEqual(bits(-0.0), bits(maxF(-0.0, 0.0)));
+    try std.testing.expectEqual(bits(0.0), bits(minF(0.0, -0.0)));
+    try std.testing.expectEqual(bits(-0.0), bits(clamp(-0.0, 0.0, 1.0)));
+    try std.testing.expectEqual(bits(0.0), bits(clamp(0.0, -2e9, -0.0)));
+    try std.testing.expectEqual(bits(2.0), bits(maxF(nan, 2.0)));
+    try std.testing.expectEqual(bits(2.0), bits(maxF(2.0, nan)));
+    try std.testing.expectEqual(bits(0.5), bits(clamp(nan, 0.5, 1.0)));
 }
