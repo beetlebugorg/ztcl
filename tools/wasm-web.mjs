@@ -34,6 +34,14 @@ const big = await Interp.create(module, { stepLimit: 10_000_000, memLimit: 16 <<
 r = big.eval("set s x; catch {while 1 {append s $s}}");
 check(!r.ok && r.result === "the script used too much memory", "memory limit");
 check(big.memorySize <= 3 * (16 << 20) + (16 << 20), "linear memory near the cap");
+// The bomb leaves live data above the limit. The next eval runs, and a
+// second bomb stops.
+r = big.eval("set x 1; expr {$x+1}");
+check(r.ok && r.result === "2", "eval after the memory error");
+r = big.eval("set s x; catch {while 1 {append s $s}}");
+check(!r.ok && r.result === "the script used too much memory", "memory limit after the memory error");
+check(big.memorySize <= 3 * (16 << 20) + (16 << 20), "linear memory near the cap after two errors");
+big.close();
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const run = (...args) =>

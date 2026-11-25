@@ -42,3 +42,4 @@
 - Adds `time` to the `clock` capability, and the runner option `--tclsh` for the child processes of the Tcl tests.
 - Adds a test-only suite runner with commands that call real ztcl code.
 - Sets the error codes of Tcl for arithmetic, argument counts, list syntax, and lookups.
+- Fixes the eval after a memory error. A top-level eval that starts above the memory limit runs a collection first, and runs with only the hard cap while the live data stays above the limit.
