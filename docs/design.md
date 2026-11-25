@@ -129,7 +129,7 @@ The ownership rule: a list that a cell owns is never in another place. So each v
 - `llength $v` and `lindex $v $i`, where the index is a literal or one plain variable, load `v` with the flag `x` 1. The load pushes the owned list and the cell keeps it. The `access` reads the list at once and replaces it on the stack with its result. Between the load and the access only loads of plain variables run, and the guard turns the inline forms off while a variable has a trace, so no script can see or change the list in that time.
 - An `lset` or `lassign` that is the last command of an arm of `if` or `switch` drops its result when no code reads the result of the `if` or the `switch`. It then pushes an empty string for the arm.
 
-Each other load of an owned cell ends the ownership first. `tests/jit/owned_lists.tcl` keeps copies of a list in other variables, `upvar`, `global`, an array, a dict, a list, a trace, a coroutine, and a return value.
+Each other load of an owned cell ends the ownership first. A cell, a frame, and a compiled `Code` belong to one interpreter, and each thread has its own interpreter. A value goes to another thread only as a copy: `thread.share` copies it to the memory of the group, and `thread.unshare` makes a new value in the heap of the receiver. So an owned list never reaches another thread. The kept frames, the command sites, and the caches of TclOO belong to one interpreter too. `tests/jit/owned_lists.tcl` keeps copies of a list in other variables, `upvar`, `global`, an array, a dict, a list, a trace, a coroutine, and a return value.
 
 The semantics of Tcl stay:
 
