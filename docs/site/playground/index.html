@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Playground · ztcl</title>
+<meta name="description" content="Run Tcl scripts in your browser with the WebAssembly build of ztcl, with a step limit and a memory limit.">
+<link rel="canonical" href="https://beetlebug.org/ztcl/playground/">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/site.css">
+<style>
+.play { padding: 32px 0 56px; }
+.play h1 { font-size: clamp(26px, 3.2vw, 34px); letter-spacing: -.02em; margin: 0 0 6px; }
+.play .intro { color: var(--text-2); margin: 0 0 20px; max-width: 46em; }
+.tools { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; margin-bottom: 12px; }
+.tools label { display: grid; gap: 4px; font-size: 13px; color: var(--text-3); }
+.tools select, .tools input { font: 15px var(--sans); color: var(--text); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 10px; }
+.tools input { width: 9.5em; font-family: var(--mono); }
+.tools .btns { display: flex; gap: 8px; margin-left: auto; }
+.tools button { font: 600 15px var(--sans); border-radius: 10px; padding: 9px 20px; border: 1px solid transparent; cursor: pointer; }
+#run { background: var(--accent); color: var(--accent-ink); }
+#run:hover { background: var(--accent-strong); }
+#stop { background: var(--surface); color: var(--text); border-color: var(--line-strong); }
+#stop:disabled { opacity: .45; cursor: default; }
+.panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.pane { display: grid; grid-template-rows: auto minmax(0, 1fr); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); min-height: 420px; }
+.pane .bar { padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--bg-soft); font: 13px var(--mono); color: var(--text-3); display: flex; gap: 12px; }
+.pane .bar span:last-child { margin-left: auto; }
+#code, #out { margin: 0; border: 0; padding: 14px 16px; font: 14px/1.55 var(--mono); background: var(--surface); color: var(--text); tab-size: 4; }
+#code { resize: none; outline: none; width: 100%; height: 100%; white-space: pre; overflow: auto; }
+#code:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+#out { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+#out .res { color: var(--accent-strong); }
+#out .err { color: var(--tok-num); font-weight: 600; }
+#out .info { color: var(--text-3); }
+.play .note { font-size: 14px; color: var(--text-3); margin-top: 14px; }
+@media (max-width: 860px) {
+  .panes { grid-template-columns: minmax(0, 1fr); }
+  .pane { min-height: 300px; }
+  .tools .btns { margin-left: 0; width: 100%; }
+  .tools .btns button { flex: 1; }
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="top"><div class="wrap">
+  <a class="logo" href="../"><span class="glyph" aria-hidden="true">tc</span>ztcl</a>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../overview/">Docs</a>
+    <a href="./" aria-current="page">Playground</a>
+    <a href="https://github.com/beetlebugorg/ztcl">GitHub</a>
+  </nav>
+</div></header>
+
+<main id="content" class="play"><div class="wrap">
+  <h1>Playground</h1>
+  <p class="intro">This page runs the WebAssembly build of ztcl in a Web Worker. The script has no access to the network or to files. The step limit and the memory limit stop it. <a href="../webassembly/">The WebAssembly guide</a> shows how to do this in your own page.</p>
+
+  <div class="tools">
+    <label>Example<select id="preset"></select></label>
+    <label>Step limit<input id="steps" type="number" min="1" step="1" value="10000000" inputmode="numeric"></label>
+    <label>Memory limit (MiB)<input id="mem" type="number" min="1" max="1024" step="1" value="64" inputmode="numeric"></label>
+    <div class="btns">
+      <button id="run" type="button" title="Ctrl+Enter">Run</button>
+      <button id="stop" type="button" disabled>Stop</button>
+    </div>
+  </div>
+
+  <div class="panes">
+    <div class="pane">
+      <div class="bar"><span>script.tcl</span><span>Tab indents · Ctrl+Enter runs</span></div>
+      <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="The Tcl script"></textarea>
+    </div>
+    <div class="pane">
+      <div class="bar"><span>Output</span><span id="status">Loading</span></div>
+      <pre id="out" aria-live="polite"></pre>
+    </div>
+  </div>
+  <p class="note">Each run starts a new interpreter. The output of <code>puts</code> shows when the script ends. The memory limit is a cap of the heap. The linear memory of the worker can grow to twice the limit, and it goes back to the browser at the next run.</p>
+</div></main>
+
+<footer class="foot docs-foot"><div class="wrap">
+  <span>ztcl · BSD-2-Clause</span>
+  <span class="right"><a href="../">Home</a><a href="../webassembly/">WebAssembly guide</a><a href="https://github.com/beetlebugorg/ztcl">GitHub</a></span>
+</div></footer>
+<script type="module" src="playground.mjs"></script>
+</body>
+</html>

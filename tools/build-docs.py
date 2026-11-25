@@ -7,7 +7,11 @@ Usage: python3 tools/build-docs.py [output folder]
 The landing page is docs/site/index.html. The docs pages come from the
 Markdown files, and all pages use docs/site/site.css. The build needs
 markdown-it-py (tools/docs-requirements.txt). It stops with an error for a
-link to a missing page or a missing anchor, also on the landing page.
+link to a missing page or a missing anchor, also on the HTML pages.
+
+The playground is docs/site/playground/ with web/ztcl.mjs,
+web/ztcl-worker.mjs, and zig-out/lib/ztcl.wasm. Run `zig build wasm`
+before the build.
 """
 
 import html
@@ -28,6 +32,7 @@ PAGES = [
     ("README.md", "overview/", "Start", "Overview"),
     ("docs/language.md", "language/", "Use", "Language and commands"),
     ("docs/embedding.md", "embedding/", "Use", "Embed in Zig"),
+    ("docs/webassembly.md", "webassembly/", "Use", "WebAssembly"),
     ("docs/design.md", "design/", "Internals", "Design"),
     ("docs/testing.md", "testing/", "Internals", "Tests and benchmarks"),
     ("docs/compatibility.md", "compatibility/", "Internals", "Compatibility"),
@@ -42,6 +47,10 @@ PAGES = [
 PAGE_OF = {src: page for src, page, _, _ in PAGES}
 
 SITE_DIR = ROOT / "docs" / "site"
+PLAYGROUND = SITE_DIR / "playground"
+WASM = ROOT / "zig-out" / "lib" / "ztcl.wasm"
+# The HTML pages of docs/site and the page folder of each.
+HTML_PAGES = [(SITE_DIR / "index.html", ""), (PLAYGROUND / "index.html", "playground/")]
 
 
 def slug(text):
@@ -151,7 +160,7 @@ class Build:
 <link rel="stylesheet" href="{root}assets/site.css"></head>
 <body><a class="skip" href="#content">Skip to the content</a>
 <header class="top"><div class="wrap"><a class="logo" href="{root}"><span class="glyph" aria-hidden="true">tc</span>ztcl</a>
-<nav class="toplinks" aria-label="Site"><a href="{root}overview/" aria-current="page">Docs</a><a class="sib" href="https://beetlebug.org/ztk/">ztk</a><a href="{REPO}">GitHub</a></nav></div></header>
+<nav class="toplinks" aria-label="Site"><a href="{root}overview/" aria-current="page">Docs</a><a href="{root}playground/">Playground</a><a class="sib" href="https://beetlebug.org/ztk/">ztk</a><a href="{REPO}">GitHub</a></nav></div></header>
 <div class="docs"><input class="toc-toggle" type="checkbox" id="toc"><label class="toc-button" for="toc">Contents</label>
 <aside class="sidebar"><nav aria-label="Documentation">{self.nav(page)}</nav></aside>
 <main class="prose" id="content">{body}{self.pager(page)}</main></div>
@@ -159,42 +168,69 @@ class Build:
 </body></html>
 """
 
-    def check_landing(self, text):
-        for href in re.findall(r'href="([^"]+)"', text):
+    def check_html(self, path, at):
+        """Checks each relative link of the HTML page `path` in the folder `at`."""
+        text = path.read_text(encoding="utf-8")
+        name = path.relative_to(ROOT)
+        for href in re.findall(r'(?:href|src)="([^"]+)"', text):
             if re.match(r"^[a-z][a-z0-9+.-]*:", href) or href.startswith("//"):
                 continue
-            path, _, frag = href.partition("#")
-            if path.startswith("assets/"):
-                if not (SITE_DIR / path[len("assets/"):]).exists():
-                    raise SystemExit(f"docs/site/index.html: link to a missing file: {href}")
+            target, _, frag = href.partition("#")
+            target = target.partition("?")[0]
+            full = posixpath.normpath(posixpath.join(at, target or "."))
+            full = "" if full == "." else full
+            if full.startswith("assets/"):
+                if not (SITE_DIR / full[len("assets/"):]).exists():
+                    raise SystemExit(f"{name}: link to a missing file: {href}")
                 continue
-            page = posixpath.normpath(path or ".").lstrip("./")
-            page = "" if page in ("", ".") else page.rstrip("/") + "/"
-            if page != "" and page not in self.anchors:
-                raise SystemExit(f"docs/site/index.html: link to a missing page: {href}")
-            ids = set(re.findall(r'id="([^"]+)"', text)) if page == "" else self.anchors[page]
+            if full.startswith("playground/") and not href.endswith("/") and target:
+                if not (self.playground_file(full[len("playground/"):])).exists():
+                    raise SystemExit(f"{name}: link to a missing file: {href}")
+                continue
+            page = "" if full == "" else full.rstrip("/") + "/"
+            if page == at:
+                ids = set(re.findall(r'id="([^"]+)"', text))
+            elif page in self.anchors:
+                ids = self.anchors[page]
+            elif page in {p for _, p in HTML_PAGES}:
+                ids = set(re.findall(r'id="([^"]+)"', (SITE_DIR / page / "index.html").read_text(encoding="utf-8")))
+            else:
+                raise SystemExit(f"{name}: link to a missing page: {href}")
             if frag and frag not in ids:
-                raise SystemExit(f"docs/site/index.html: link to a missing anchor: {href}")
+                raise SystemExit(f"{name}: link to a missing anchor: {href}")
+
+    @staticmethod
+    def playground_file(name):
+        if name in ("ztcl.mjs", "ztcl-worker.mjs"):
+            return ROOT / "web" / name
+        if name == "ztcl.wasm":
+            return WASM
+        return PLAYGROUND / name
 
     def run(self, out):
         rendered = [(page, *self.render(src, page)) for src, page, _, _ in PAGES]
         for src, page, anchor in self.links:
             if anchor not in self.anchors.get(page, set()):
                 raise SystemExit(f"{src}: link to a missing anchor: {page}#{anchor}")
-        landing = (SITE_DIR / "index.html").read_text(encoding="utf-8")
-        self.check_landing(landing)
+        if not WASM.exists():
+            raise SystemExit(f"{WASM.relative_to(ROOT)} is missing: run `zig build wasm` first")
+        for path, at in HTML_PAGES:
+            self.check_html(path, at)
         if out.exists():
             shutil.rmtree(out)
         for page, title, body in rendered:
             folder = out / page
             folder.mkdir(parents=True, exist_ok=True)
             (folder / "index.html").write_text(self.document(page, title, body), encoding="utf-8")
-        (out / "index.html").write_text(landing, encoding="utf-8")
+        shutil.copy(SITE_DIR / "index.html", out / "index.html")
         (out / "assets").mkdir()
         for name in ("site.css", "favicon.svg"):
             shutil.copy(SITE_DIR / name, out / "assets" / name)
+        (out / "playground").mkdir()
+        for name in [p.name for p in PLAYGROUND.iterdir()] + ["ztcl.mjs", "ztcl-worker.mjs", "ztcl.wasm"]:
+            shutil.copy(self.playground_file(name), out / "playground" / name)
         (out / ".nojekyll").write_text("", encoding="utf-8")
-        print(f"wrote {len(rendered) + 1} pages to {out}")
+        print(f"wrote {len(rendered) + len(HTML_PAGES)} pages to {out}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,71 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ztcl price rules</title>
+<link rel="stylesheet" href="example.css">
+<!-- A rule engine: a user writes the `price` proc in Tcl, and the page
+     calls it for each order line. Each line has a step limit and a memory
+     limit, so a bad rule stops with an error and the page keeps working. -->
+<h1>Price rules</h1>
+<p>Write a <code>price</code> proc. The page calls it for each order line, with 10 000 steps and 8 MiB of memory for each call.</p>
+<div class="row">
+  <select id="preset" aria-label="Example rule">
+    <option value="bulk">Bulk discount</option>
+    <option value="forever">A rule that never ends</option>
+    <option value="memory">A rule that fills the memory</option>
+  </select>
+  <button id="apply">Apply the rule</button>
+</div>
+<textarea id="rule" rows="8" spellcheck="false" aria-label="The rule"></textarea>
+<table>
+  <thead><tr><th>Item</th><th>Quantity</th><th>Unit price</th><th>Price</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<p id="time"></p>
+<script type="module">
+import { compile, Interp } from "../../web/ztcl.mjs";
+
+const rules = {
+  bulk: `proc price {qty unit} {
+    set total [expr {$qty * $unit}]
+    if {$qty >= 10} { set total [expr {$total * 0.9}] }
+    format %.2f $total
+}`,
+  forever: `proc price {qty unit} {
+    while 1 {}
+}`,
+  memory: `proc price {qty unit} {
+    set s x
+    while 1 { append s $s }
+}`,
+};
+const order = [["Nozzle", 2, 7.5], ["PEI sheet", 1, 39], ["Filament", 12, 21.99]];
+
+const module = await compile("../../zig-out/lib/ztcl.wasm");
+const $ = (id) => document.getElementById(id);
+$("rule").value = rules.bulk;
+$("preset").onchange = () => ($("rule").value = rules[$("preset").value]);
+
+async function apply() {
+  const t0 = performance.now();
+  // A new interpreter for each apply. A rule that hit the memory limit
+  // does not affect the next one.
+  const tcl = await Interp.create(module, { stepLimit: 100_000, memLimit: 8 << 20 });
+  const def = tcl.eval($("rule").value);
+  tcl.stepLimit = 10_000;
+  $("rows").replaceChildren();
+  for (const [item, qty, unit] of order) {
+    // The values are numbers, so the command needs no quoting.
+    const r = def.ok ? tcl.eval(`price ${Number(qty)} ${Number(unit)}`) : def;
+    const tr = $("rows").insertRow();
+    for (const v of [item, qty, unit]) tr.insertCell().textContent = v;
+    const cell = tr.insertCell();
+    cell.textContent = r.ok ? r.result : `stopped: ${r.result}`;
+    if (!r.ok) cell.className = "bad";
+  }
+  tcl.close();
+  $("time").textContent = `${(performance.now() - t0).toFixed(1)} ms`;
+}
+$("apply").onclick = apply;
+apply();
+</script>

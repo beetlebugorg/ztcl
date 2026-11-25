@@ -151,4 +151,4 @@ ztcl.sys.ignorePipeSignal(); // a write to a closed peer is an error, with no si
 
 The result pointer is valid until the next `ztcl_eval`. The build reclaims memory while a script runs. A long loop in a native command other than `catch`, `try`, `eval`, `uplevel`, `apply`, `namespace eval`, or a method, for example the body of `lmap`, holds its garbage until that command ends. The memory limit still stops it.
 
-`tools/wasm-smoke.mjs` is a working example for Node.js. `tools/wasm-mem.mjs` checks the memory in Node.js or in a browser.
+[WebAssembly](webassembly.md) has the JS module `web/ztcl.mjs` and examples for the browser and Node.js. `tools/wasm-smoke.mjs` is a minimal example for Node.js. `tools/wasm-mem.mjs` checks the memory in Node.js or in a browser.
