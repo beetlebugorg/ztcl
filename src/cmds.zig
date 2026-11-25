@@ -1305,9 +1305,13 @@ fn cmdSplit(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (seps.len == 0) {
         for (0..s.len) |i| try out.append(a, .{ .str = s[i .. i + 1] });
     } else {
+        // A bitmap of the split bytes makes the test of each byte one
+        // lookup, so the work is linear in both lengths.
+        var set = std.StaticBitSet(256).initEmpty();
+        for (seps) |c| set.set(c);
         var start: usize = 0;
         for (s, 0..) |c, i| {
-            if (std.mem.indexOfScalar(u8, seps, c) != null) {
+            if (set.isSet(c)) {
                 try out.append(a, .{ .str = s[start..i] });
                 start = i + 1;
             }
@@ -1701,7 +1705,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (args.len != 1 and args.len != 2) return it.fail("wrong # args: should be \"string {s} string ?chars?\"", .{@tagName(which)});
             const s = try it.str(args[0]);
             const chars: ?[]const u8 = if (args.len == 2) try it.str(args[1]) else null;
-            return .{ .str = trimChars(s, chars, which != .trimright, which != .trimleft) };
+            return .{ .str = try trimChars(it, s, chars, which != .trimright, which != .trimleft) };
         },
         .repeat => {
             if (args.len != 2) return it.wrongArgs("string repeat string count");
@@ -2022,32 +2026,83 @@ fn compareStrings(x: []const u8, y: []const u8, nocase: bool, limit: ?usize) std
     return .eq;
 }
 
-/// The default set of `string trim`: the Unicode spaces and NUL.
-fn trimChars(s: []const u8, chars: ?[]const u8, left: bool, right: bool) []const u8 {
-    const inSet = struct {
-        fn f(set: ?[]const u8, c: u21) bool {
-            const t = set orelse return c == 0 or ucd.isSpace(c);
-            var i: usize = 0;
-            while (i < t.len) {
-                const d = ucd.next(t, i);
-                if (d.cp == c) return true;
-                i += d.len;
-            }
-            return false;
+/// The set of code points of `string trim`. The default set is the
+/// Unicode spaces and NUL. A given set has a bitmap for the code points
+/// below 256 and a hash table with linear probing for the others. So
+/// the test of each code point of the string reads no list, and the
+/// work is linear in the length of the string and of the set.
+const TrimSet = struct {
+    default: bool,
+    low: std.StaticBitSet(256) = .initEmpty(),
+    /// Each used slot holds a code point plus 1. An empty slot is 0.
+    slots: []u32 = &.{},
+
+    fn slotOf(slots: []const u32, cp: u21) usize {
+        // The Fibonacci hash of the code point.
+        const h: u32 = @as(u32, cp) *% 0x9E3779B1;
+        return h & (slots.len - 1);
+    }
+
+    fn init(it: *Interp, chars: ?[]const u8) Error!TrimSet {
+        const t = chars orelse return .{ .default = true };
+        var set: TrimSet = .{ .default = false };
+        var high: usize = 0;
+        var i: usize = 0;
+        while (i < t.len) {
+            const d = ucd.next(t, i);
+            if (d.cp < 256) set.low.set(d.cp) else high += 1;
+            i += d.len;
         }
-    }.f;
+        if (high == 0) return set;
+        const cap = std.math.ceilPowerOfTwo(usize, @max(16, 2 * high)) catch return error.OutOfMemory;
+        set.slots = try it.alloc().alloc(u32, cap);
+        @memset(set.slots, 0);
+        i = 0;
+        while (i < t.len) {
+            const d = ucd.next(t, i);
+            i += d.len;
+            if (d.cp < 256) continue;
+            var at = slotOf(set.slots, d.cp);
+            var n: u32 = 0;
+            while (set.slots[at] != 0 and set.slots[at] != @as(u32, d.cp) + 1) : (at = (at + 1) & (set.slots.len - 1)) {
+                n +%= 1;
+                if (n & 63 == 0) try step(it);
+            }
+            set.slots[at] = @as(u32, d.cp) + 1;
+        }
+        return set;
+    }
+
+    fn has(set: *const TrimSet, it: *Interp, cp: u21) Error!bool {
+        if (set.default) return cp == 0 or ucd.isSpace(cp);
+        if (cp < 256) return set.low.isSet(cp);
+        if (set.slots.len == 0) return false;
+        var at = slotOf(set.slots, cp);
+        var n: u32 = 0;
+        while (set.slots[at] != 0) : (at = (at + 1) & (set.slots.len - 1)) {
+            if (set.slots[at] == @as(u32, cp) + 1) return true;
+            // A long probe uses steps, as in the table of a dict.
+            n +%= 1;
+            if (n & 63 == 0) try step(it);
+        }
+        return false;
+    }
+};
+
+fn trimChars(it: *Interp, s: []const u8, chars: ?[]const u8, left: bool, right: bool) Error![]const u8 {
+    const set = try TrimSet.init(it, chars);
     var start: usize = 0;
     var end: usize = s.len;
     if (left) while (start < end) {
         const d = ucd.next(s, start);
-        if (!inSet(chars, d.cp)) break;
+        if (!try set.has(it, d.cp)) break;
         start += d.len;
     };
     if (right) while (end > start) {
         var k = end - 1;
         while (k > start and s[k] & 0xC0 == 0x80) k -= 1;
         const d = ucd.next(s, k);
-        if (!inSet(chars, d.cp)) break;
+        if (!try set.has(it, d.cp)) break;
         end = k;
     };
     return s[start..end];

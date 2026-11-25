@@ -11,6 +11,8 @@
 //! the same value, and a lookup for it ignores positions past its end.
 //! The buffer doubles when it is full, so a new key is amortized O(1).
 //! A write to an existing key of a shared dict copies the buffer.
+//! `remove`, `replace`, `update`, and `with` edit many keys with one
+//! copy of the pairs and one table, so their work is linear.
 //!
 //! Subcommands: create, get, exists, set, unset, keys, values, size,
 //! for, merge, incr, lappend, and append.
@@ -304,6 +306,61 @@ fn setIn(it: *Interp, d: Value, keys: []const Value, v: Value) Error!Value {
     return appendPair(it, d, items, keys[0], inner);
 }
 
+/// A set or an unset of one key, for `applyEdits`. A null value is an
+/// unset.
+const Edit = struct { key: Value, v: ?Value };
+
+/// The dict of the pairs `items` after the edits, in order. A set
+/// writes the value of a key in place, or adds the key at the end. An
+/// unset marks the key as gone. One table of the keys serves each edit,
+/// and the gone keys leave the buffer in one pass at the end. So the
+/// work is linear in the count of pairs and edits. `items` must have
+/// each key one time.
+fn applyEdits(it: *Interp, items: []const Value, edits: []const Edit) Error!Value {
+    const a = it.alloc();
+    var sets: usize = 0;
+    for (edits) |e| sets += @intFromBool(e.v != null);
+    const total = items.len + 2 * sets;
+    try checkPos(it, total);
+    const buf = try a.alloc(Value, total);
+    @memcpy(buf[0..items.len], items);
+    const gone = try a.alloc(bool, total / 2);
+    @memset(gone, false);
+    const slots = try newSlots(it, total);
+    var n: usize = 0;
+    while (n < items.len) : (n += 2) {
+        const h = try hashKey(it, buf[n]);
+        slots[try probe(it, slots, buf[0..n], buf[n], h)] = .{ .hash = h, .pos = @intCast(n) };
+    }
+    for (edits) |e| {
+        const h = try hashKey(it, e.key);
+        const at = try probe(it, slots, buf[0..n], e.key, h);
+        const pos = slots[at].pos;
+        const live = pos != value.DictSlot.empty_pos and !gone[pos / 2];
+        if (e.v) |v| {
+            if (live) {
+                buf[pos + 1] = v;
+                continue;
+            }
+            // A new key, or a key that an earlier edit removed, goes at
+            // the end, as in a set after an unset.
+            buf[n] = e.key;
+            buf[n + 1] = v;
+            slots[at] = .{ .hash = h, .pos = @intCast(n) };
+            n += 2;
+        } else if (live) gone[pos / 2] = true;
+    }
+    var w: usize = 0;
+    var r: usize = 0;
+    while (r < n) : (r += 2) {
+        if (gone[r / 2]) continue;
+        buf[w] = buf[r];
+        buf[w + 1] = buf[r + 1];
+        w += 2;
+    }
+    return wrapDict(it, buf[0..w]);
+}
+
 /// The dict with no value at a path of keys.
 fn unsetIn(it: *Interp, d: Value, keys: []const Value) Error!Value {
     const items = try pairs(it, d);
@@ -346,16 +403,19 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
     const args = argv[2..];
     if (eql(name, "remove")) {
         if (args.len < 1) return it.wrongArgs("dict remove dictionary ?key ...?");
-        var d = try value.wrapList(a, try pairs(it, args[0]));
-        for (args[1..]) |k| d = try unsetIn(it, d, &.{k});
-        return d;
+        const items = try pairs(it, args[0]);
+        if (args.len == 1) return try value.wrapList(a, items);
+        const edits = try a.alloc(Edit, args.len - 1);
+        for (args[1..], edits) |k, *e| e.* = .{ .key = k, .v = null };
+        return try applyEdits(it, items, edits);
     }
     if (eql(name, "replace")) {
         if (args.len < 1 or args.len % 2 != 1) return it.wrongArgs("dict replace dictionary ?key value ...?");
-        var d = try value.wrapList(a, try pairs(it, args[0]));
-        var i: usize = 1;
-        while (i < args.len) : (i += 2) d = try setIn(it, d, args[i .. i + 1], args[i + 1]);
-        return d;
+        const items = try pairs(it, args[0]);
+        if (args.len == 1) return try value.wrapList(a, items);
+        const edits = try a.alloc(Edit, args.len / 2);
+        for (edits, 0..) |*e, j| e.* = .{ .key = args[1 + 2 * j], .v = args[2 + 2 * j] };
+        return try applyEdits(it, items, edits);
     }
     if (eql(name, "map")) {
         if (args.len != 3) return it.wrongArgs("dict map {{keyVarName valueVarName}} dictionary script");
@@ -420,22 +480,20 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
         if (args.len < 4 or args.len % 2 != 0) return it.wrongArgs("dict update dictVarName key varName ?key varName ...? script");
         const var_name = try it.str(args[0]);
         const items = try pairs(it, try it.getVar(var_name));
+        // A marked dict has a table for a lookup of each key.
+        const dv = try wrapDict(it, items);
         var i: usize = 1;
         while (i + 1 < args.len) : (i += 2) {
-            if (try find(it, items, args[i])) |at| try it.setVar(try it.str(args[i + 1]), items[at + 1]);
+            if (try lookup(it, dv, items, args[i])) |at| try it.setVar(try it.str(args[i + 1]), items[at + 1]);
         }
         const res = it.evalScript(try it.scriptOf(argv, argv.len - 1, cmd));
         // Write the variables back, also after an error of the script.
         const saved = it.result;
         if (try it.getVarOpt(var_name)) |now| {
-            var d = try value.wrapList(a, try pairs(it, now));
-            i = 1;
-            while (i + 1 < args.len) : (i += 2) {
-                if (try it.getVarOpt(try it.str(args[i + 1]))) |v| {
-                    d = try setIn(it, d, args[i .. i + 1], v);
-                } else d = try unsetIn(it, d, args[i .. i + 1]);
-            }
-            try it.setVar(var_name, d);
+            const base = try pairs(it, now);
+            const edits = try a.alloc(Edit, (args.len - 2) / 2);
+            for (edits, 0..) |*e, j| e.* = .{ .key = args[1 + 2 * j], .v = try it.getVarOpt(try it.str(args[2 + 2 * j])) };
+            try it.setVar(var_name, try applyEdits(it, base, edits));
         }
         it.result = saved;
         return try res;
@@ -450,13 +508,10 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
         const res = it.evalScript(try it.scriptOf(argv, argv.len - 1, cmd));
         const saved = it.result;
         if (try it.getVarOpt(var_name)) |now| {
-            var d = try value.wrapList(a, try pairs(it, try getIn(it, now, path)));
-            i = 0;
-            while (i < inner.len) : (i += 2) {
-                if (try it.getVarOpt(try it.str(inner[i]))) |v| {
-                    d = try setIn(it, d, inner[i .. i + 1], v);
-                } else d = try unsetIn(it, d, inner[i .. i + 1]);
-            }
+            const base = try pairs(it, try getIn(it, now, path));
+            const edits = try a.alloc(Edit, inner.len / 2);
+            for (edits, 0..) |*e, j| e.* = .{ .key = inner[2 * j], .v = try it.getVarOpt(try it.str(inner[2 * j])) };
+            const d = try applyEdits(it, base, edits);
             try it.setVar(var_name, if (path.len == 0) d else try setIn(it, now, path, d));
         }
         it.result = saved;
