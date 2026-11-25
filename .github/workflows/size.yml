@@ -1,0 +1,45 @@
+name: Size
+
+# Reports the size of each built-in module and fails above the budget
+# (tools/size-report.sh and tools/size-budget.tsv).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: size-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ZIG_VERSION: "0.16.0"
+
+jobs:
+  size:
+    name: Size (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Size report and check
+        run: tools/size-report.sh --check
+      - name: The check fails with a planted module of 7 MB
+        if: runner.os == 'Linux'
+        run: |
+          if tools/size-report.sh --check --no-wasm --plant 7000000 --out zig-out/size-plant; then
+            echo "the check passed with a planted module of 7 MB" >&2
+            exit 1
+          fi

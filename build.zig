@@ -23,6 +23,12 @@ pub fn build(b: *std.Build) void {
     const batteries = b.option(Batteries, "batteries", "The modules: core (none), std (the default), or full") orelse .std;
     const on = moduleFlags(b, batteries);
     addModuleOptions(b, gc_options, on);
+    // `-Dsize-plant=N` adds N bytes of data to the test module hello. The
+    // size report uses it to show that its check fails.
+    const size_plant = b.option(usize, "size-plant", "Add bytes to the test module hello") orelse 0;
+    gc_options.addOption(usize, "size_plant", size_plant);
+    // `-Dstrip=true` strips the runner, for the size report.
+    const strip = b.option(bool, "strip", "Strip the runner") orelse false;
     // `-Drunner-optimize` sets the mode of the runner and the suite runner.
     const runner_optimize = b.option(std.builtin.OptimizeMode, "runner-optimize", "The mode of the runners") orelse .ReleaseFast;
 
@@ -49,6 +55,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = runner_optimize,
+        .strip = if (strip) true else null,
         .imports = &.{.{ .name = "ztcl", .module = fast }},
     }) });
     b.installArtifact(exe);
@@ -117,6 +124,7 @@ pub fn build(b: *std.Build) void {
     wasm_options.addOption(bool, "gc_precise", gc_precise);
     wasm_options.addOption(bool, "jit", false);
     wasm_options.addOption(bool, "jit_bug", false);
+    wasm_options.addOption(usize, "size_plant", size_plant);
     addModuleOptions(b, wasm_options, on);
     wasm.root_module.addOptions("build_options", wasm_options);
     wasm.entry = .disabled;
