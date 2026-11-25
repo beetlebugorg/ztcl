@@ -545,6 +545,46 @@ The tests: `zig build test` in Debug, in `ReleaseSafe`, and with `-Djit=false`; 
 
 These checks were reversed one at a time, and a test failed each time: the change of the OO epoch in a definition, the filter check and the export check of the chain cache, the namespace check of the link cache, the epoch check of the command site, the flag of the peek load, the use of an arm, the reset of the kept cells, the `Code` check of the kept cells, the length reset of a free frame, the list tag check and the end check of the inline `lassign_drop`, and the length check of the inline compare of `switch`. Two checks have no test that fails. The check of the name in `Interp.siteCommand` is not reachable from a script: each caller of a native command passes the name word of its own site. The count of collections in the list cache repeats a rule that holds already, because each collection clears the cache. The changes of the OO epoch at an object creation, an object end, and a copy were not reversed one at a time.
 
+### Results after the rebase onto main
+
+The work was rebased onto main at `a3264ca`, after threads, the hard memory cap, and the step charges. Measured on 2026-11-24, `ReleaseFast`, x86-64 Linux, with `perf stat -e instructions:u` of the whole process, against main at `ec48644` (the three later commits of main change no code of these paths). Other jobs shared the machine.
+
+| Script | Interpreter, main | branch | `--jit`, main | branch | `--jit --jit-tier2`, main | branch |
+|---|---|---|---|---|---|---|
+| `puts hi` | 0.73 M | 0.73 M | 0.74 M | 0.74 M | 0.74 M | 0.74 M |
+| `sum.tcl` | 283.8 M | 283.8 M | 90.9 M | 90.9 M | 15.0 M | 15.0 M |
+| `fib.tcl` | 166.5 M | 151.0 M | 136.4 M | 106.0 M | 136.4 M | 106.0 M |
+| `nested.tcl` | 337.7 M | 333.5 M | 123.9 M | 123.6 M | 55.6 M | 55.4 M |
+| `strbuild.tcl` | 323.9 M | 322.9 M | 252.5 M | 252.5 M | 243.1 M | 243.1 M |
+| `foreach.tcl` | 213.8 M | 206.9 M | 80.4 M | 80.4 M | 40.6 M | 40.6 M |
+| `dict.tcl` | 280.9 M | 280.7 M | 194.9 M | 194.9 M | 188.6 M | 188.6 M |
+| `dictgrow.tcl` | 665.5 M | 647.7 M | 589.9 M | 590.3 M | 587.8 M | 595.7 M |
+| `dsum.tcl` | 700.8 M | 688.8 M | 557.9 M | 555.9 M | 16.6 M | 16.6 M |
+| `readloop.tcl` | 208.9 M | 145.3 M | 154.7 M | 93.3 M | 146.9 M | 85.3 M |
+
+`dictgrow.tcl` changes by about 1 % between two runs of one build: the branch gave 588.3 M and 595.7 M with tier 2.
+
+`tools/jit-perf.sh --check off`, `--check jit`, and `--check jit2` fail on main and on the branch at the same rows: `puts hi` is 8768 instructions above the baseline on main and 10 252 on the branch (limit 5000), and `dictgrow.tcl` is about 2 % above its gates of `jit` and `jit2`. Each other row passes on the branch. On main, `fib.tcl`, `foreach.tcl`, and `readloop.tcl` also fail.
+
+`tools/kostya.sh --jit` with `bench.b`. The ratio is the instructions of ztcl over the instructions of `tclsh` 8.6.16 (2774.0 G for `bf.tcl`, 5371.9 G for `bf_oo.tcl`, and 72.4 G for `base64/test.tcl`). Each output of the branch equals the output of `tclsh`.
+
+| Program | main | branch | Ratio, main | Ratio, branch |
+|---|---|---|---|---|
+| `bf.tcl` | 1047.2 G | 680.2 G | 0.378 | 0.245 |
+| `bf_oo.tcl` | 7116.1 G | 2002.7 G | 1.325 | 0.373 |
+| `base64/test.tcl` | | 50.7 G | | 0.701 |
+
+Wall time, best of 5, each run on one processor with `taskset`, with `small.b` (`bench.b` with one level of the inner loops removed). Other jobs shared the machine (load average about 12 on 8 processors), so each time is noisy. The outputs of all runs of a row are equal.
+
+| Program | Mode | main | branch |
+|---|---|---|---|
+| `bf.tcl small.b` | interpreter | 2.39 s | 1.69 s |
+| `bf.tcl small.b` | `--jit` | 1.81 s | 1.33 s |
+| `bf_oo.tcl small.b` | interpreter | 19.30 s | 5.31 s |
+| `bf_oo.tcl small.b` | `--jit` | 15.85 s | 4.37 s |
+| `fib.tcl` | `--jit` | 23 ms | 22 ms |
+| `readloop.tcl` | `--jit` | 27 ms | 17 ms |
+
 ## The design of the JIT
 
 ### The tiers
