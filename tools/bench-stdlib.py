@@ -174,7 +174,9 @@ def setup(data, out):
 
 def bench_json(data, tools, ztcl, others_only):
     sizes = {f: os.path.getsize(os.path.join(data, f)) for f in JSON_FILES}
-    shutil.copy(os.path.join(BENCH, "json", "paths.json"), os.path.join(data, "paths.json"))
+    # The ztcl script reads its files in the root folder DATA.
+    for name in ["paths.json", "bench_ztcl.tcl"]:
+        shutil.copy(os.path.join(BENCH, "json", name), os.path.join(data, name))
     py = tools["python"]
     pyver = version_of([py, "--version"], r"Python (\S+)")
     progs = [
@@ -193,9 +195,9 @@ def bench_json(data, tools, ztcl, others_only):
         ("yyjson", "0.12.0", lambda m, f: [tools["bench_c"], "yyjson", m, f], "bench_c" in tools),
     ]
     if not others_only:
-        zver = version_of([ztcl, "--version"]) if ztcl else None
-        progs.insert(0, ("ztcl", zver, lambda m, f: [ztcl, "--allow", "channels,clock", "--root", data,
-                                                     os.path.join(BENCH, "json", "bench_ztcl.tcl"), m, f], ztcl and os.path.exists(ztcl)))
+        zver = version_of(["git", "-C", TOP, "rev-parse", "--short", "HEAD"])
+        progs.insert(0, ("ztcl", zver, lambda m, f: [ztcl, "--allow", "channels,clock", "--root", data, "--tclsh",
+                                                     "bench_ztcl.tcl", m, f], ztcl and os.path.exists(ztcl)))
     env = dict(os.environ, TCLLIB=tools.get("tcllib", ""), BENCH_JSON_DIR=os.path.join(BENCH, "json"))
     for name, ver, cmd, ok in progs:
         for mode in JSON_MODES:
@@ -459,7 +461,7 @@ def read_tsv(path):
     return out
 
 
-def check(gates_path, table, dry_run):
+def check(gates_path, table, dry_run, groups=None):
     """Each gate row: group, measure, case (or *), other runtime, the
     minimum ratio, and higher or lower (which side is better)."""
     gates = []
@@ -483,6 +485,8 @@ def check(gates_path, table, dry_run):
             pass
     bad = 0
     for group, measure, case, other, ratio, better in gates:
+        if groups is not None and group not in groups:
+            continue
         cases = sorted({k[2] for k in values if k[0] == group and k[1] == measure}) if case == "*" else [case]
         if not cases:
             cases = [case]
@@ -533,7 +537,7 @@ def main():
         bench_sqlite(tools, a.quick)
     write(out)
     if a.check:
-        return 1 if check(a.check, rows, False) else 0
+        return 1 if check(a.check, rows, False, groups) else 0
     return 0
 
 

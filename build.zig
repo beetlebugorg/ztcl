@@ -113,6 +113,20 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| fuzz_run.addArgs(args);
     b.step("jit-fuzz", "Run the differential fuzzer of the JIT").dependOn(&fuzz_run.step);
 
+    // The JSON tools: JSONTestSuite and the fuzzer. They use the mode of
+    // -Doptimize.
+    inline for (.{ .{ "json-test", "tools/json-test.zig", "Run the files of JSONTestSuite: zig build json-test -- DIR" }, .{ "json-fuzz", "tools/json-fuzz.zig", "Run the fuzzer of the JSON parser" } }) |jt| {
+        const e = b.addExecutable(.{ .name = jt[0], .root_module = b.createModule(.{
+            .root_source_file = b.path(jt[1]),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{.{ .name = "ztcl", .module = ztcl }},
+        }) });
+        const r = b.addRunArtifact(e);
+        if (b.args) |args| r.addArgs(args);
+        b.step(jt[0], jt[2]).dependOn(&r.step);
+    }
+
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
     const wasm = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
         .root_source_file = b.path("src/wasm.zig"),
@@ -148,6 +162,7 @@ const Mod = struct {
 /// The modules. src/modules.zig reads the flag `mod_NAME` of each one.
 const all_modules = [_]Mod{
     .{ .name = "hello", .std = true },
+    .{ .name = "json", .std = true },
 };
 
 /// The flag of each module after the preset, the flags, and the rule

@@ -1,5 +1,5 @@
 # The JSON benchmark of ztcl:
-#   ztcl --allow channels,clock --root DATA bench_ztcl.tcl MODE FILE.json
+#   ztcl --allow channels,clock --root DATA --tclsh bench_ztcl.tcl MODE FILE.json
 # DATA has FILE.json and paths.json. Prints the best time of one run, in
 # seconds, or "skip" when the build has no zt::json.
 # SPDX-License-Identifier: BSD-2-Clause
@@ -19,7 +19,7 @@ set reads [dict get $paths read]
 proc walk {v} { return 1 }
 switch -- $mode {
     validate { set op {zt::json valid $::text} }
-    parse { set op {zt::json parse $::text} }
+    parse { set op {zt::json parse -null {} $::text} }
     query { set op {zt::json get $::text {*}$::q} }
     read3 { set op {foreach p $::reads { zt::json get $::text {*}$p }} }
     encode {

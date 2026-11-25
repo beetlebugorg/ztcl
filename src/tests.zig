@@ -9,6 +9,10 @@ const std = @import("std");
 const tcl = @import("ztcl.zig");
 const modules = @import("modules.zig");
 
+test {
+    _ = @import("json/tests.zig");
+}
+
 const Case = struct { []const u8, []const u8 };
 
 /// Runs each script in a new interpreter and compares the result. An
