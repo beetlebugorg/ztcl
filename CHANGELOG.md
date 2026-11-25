@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Adds an interactive shell to the runner, with a line editor of its own: Emacs and vim keys, multi-line input, history in `~/.ztcl_history` with prefix and fuzzy search, completion, colors as you type, hints, bracketed paste, results in color, and `~/.ztclrc`. See `docs/shell.md`.
 - Fixes the `exec` allowlist. A script could write a file at the path of an allowed program, and `exec` ran that file. `exec` now resolves each program to one full host path, checks the allowlist on that path, and runs only that path. A file below the root folder runs only from the new list `Interp.exec_host.allow_root` (runner flag `--exec-allow-root`). A relative `PATH` entry is an error.
 - Kills the whole process tree of a pipeline at the time limit: a cgroup on Linux, or a scan of /proc when the embedder cannot make a cgroup. A process that calls `setsid` no longer stays.
 - Fixes a crash of `file delete -force` and `file copy` on a deep tree in a coroutine. Both commands now walk the tree with a list on the heap, pay steps for each entry, and stop at 2048 levels. `file copy` of a folder into itself is now an error before the copy.

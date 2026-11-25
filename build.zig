@@ -52,7 +52,16 @@ pub fn build(b: *std.Build) void {
     ztcl.addOptions("build_options", gc_options);
 
     const tests = b.addTest(.{ .root_module = ztcl });
-    b.step("test", "Run the tests of the interpreter").dependOn(&b.addRunArtifact(tests).step);
+    const test_step = b.step("test", "Run the tests of the interpreter and the shell");
+    test_step.dependOn(&b.addRunArtifact(tests).step);
+    // The interactive shell of the runner.
+    const shell_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/shell/all.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    test_step.dependOn(&b.addRunArtifact(shell_tests).step);
+    b.step("test-shell", "Run the tests of the shell").dependOn(&b.addRunArtifact(shell_tests).step);
 
     // The runner and the benchmark always build in ReleaseFast.
     const fast = b.createModule(.{

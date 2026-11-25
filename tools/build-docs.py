@@ -31,6 +31,7 @@ SITE = "https://beetlebug.org/ztcl/"
 PAGES = [
     ("README.md", "overview/", "Start", "Overview"),
     ("docs/language.md", "language/", "Use", "Language and commands"),
+    ("docs/shell.md", "shell/", "Use", "Interactive shell"),
     ("docs/embedding.md", "embedding/", "Use", "Embed in Zig"),
     ("docs/webassembly.md", "webassembly/", "Use", "WebAssembly"),
     ("docs/npm.md", "npm/", "Use", "npm package"),

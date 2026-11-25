@@ -50,7 +50,7 @@ ztcl needs Zig 0.16.0.
 |---|---|
 | `zig build` | Installs `zig-out/bin/ztcl`. |
 | `zig build test` | Runs the unit tests. |
-| `zig build run -- script.tcl` | Runs a script. With no file, it reads commands from stdin. |
+| `zig build run -- script.tcl` | Runs a script. With no file and a terminal, it starts the [interactive shell](docs/shell.md); else it reads commands from stdin. |
 | `zig build bench` | Runs the point proc benchmark. |
 | `zig build wasm` | Builds `zig-out/lib/ztcl.wasm`. |
 | `zig-out/bin/ztcl --jit script.tcl` | Runs a script with the JIT on (x86-64 Linux). |
@@ -166,6 +166,7 @@ ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: list
 - [Design](docs/design.md): values, bytecode, and point procs
 - [JIT compiler](docs/jit.md)
 - [Language reference](docs/language.md)
+- [Interactive shell](docs/shell.md)
 - [Embedding in Zig](docs/embedding.md)
 - [WebAssembly](docs/webassembly.md): the JS module, the examples, and the [playground](https://beetlebug.org/ztcl/playground/)
 - [Testing and benchmarks](docs/testing.md)
