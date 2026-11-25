@@ -216,7 +216,7 @@ fn verified(h: HANDLE, name: []const u16) ?E {
         var buf: [final_cap]u16 = undefined;
         const got = finalPath(h, &buf) orelse return .ACCES;
         const cut = std.mem.lastIndexOfScalar(u16, got, '\\') orelse return .ACCES;
-        if (!std.mem.eql(u16, got[cut + 1..], name)) return .ACCES;
+        if (!std.mem.eql(u16, got[cut + 1 ..], name)) return .ACCES;
     }
     return null;
 }
@@ -426,20 +426,22 @@ pub fn stat(it: *Interp, rel: []const u8) Error!fsroot.StatResult {
     var kind: u32 = if (basic.attributes & attr_readonly != 0) 0o100444 else 0o100666;
     if (basic.attributes & attr_directory != 0) kind = 0o040777;
     if (basic.attributes & attr_reparse != 0) kind = 0o120777;
-    return .{ .ok = .{
-        .mode = kind,
-        .size = @intCast(@max(standard.size, 0)),
-        .mtime = unixTime(basic.write),
-        .atime = unixTime(basic.access),
-        .ctime = unixTime(basic.change),
-        // The file index names the file on its volume. Each file of the
-        // jail is on the volume of the root: a reparse point (also a
-        // mount point) does not open, so `dev` stays 0.
-        .ino = @bitCast(index),
-        .nlink = standard.links,
-        .uid = 0,
-        .gid = 0,
-    } };
+    return .{
+        .ok = .{
+            .mode = kind,
+            .size = @intCast(@max(standard.size, 0)),
+            .mtime = unixTime(basic.write),
+            .atime = unixTime(basic.access),
+            .ctime = unixTime(basic.change),
+            // The file index names the file on its volume. Each file of the
+            // jail is on the volume of the root: a reparse point (also a
+            // mount point) does not open, so `dev` stays 0.
+            .ino = @bitCast(index),
+            .nlink = standard.links,
+            .uid = 0,
+            .gid = 0,
+        },
+    };
 }
 
 pub fn listDir(it: *Interp, rel: []const u8) Error!fsroot.ListResult {
