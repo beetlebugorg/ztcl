@@ -1182,13 +1182,14 @@ test "file and channels cannot leave the root folder" {
     it.fs.fd = @intCast(rc);
     try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.file));
     for ([_][]const u8{
-        "open ../secret",           "open /../secret",     "open sub/../../secret",      "open out",           "open sub/up/../secret",
-        "open etc/passwd",          "open out w",          "source ../secret",           "source out",         "cd ..",
-        "cd etc",                   "file size ../secret", "file delete ../secret",      "file mkdir ../made", "file rename sub ../moved",
+        "open ../secret",           "open /../secret",     "open sub/../../secret",      "open out",                 "open sub/up/../secret",
+        "open etc/passwd",          "open out w",          "source ../secret",           "source out",               "cd ..",
+        "cd etc",                   "file size ../secret", "file delete ../secret",      "file mkdir ../made",       "file rename sub ../moved",
         "file copy ../secret here", "file copy out here",  "file link -symbolic x /etc", "file readlink out",
         // Case variants of a symlink name: on a file system that ignores
         // case (APFS), they name the same symlink.
-        "open OUT",                 "open Sub/UP/../secret", "source OUT",                "cd ETC",             "file copy -force sub out",
+               "open OUT",
+        "open Sub/UP/../secret",    "source OUT",          "cd ETC",                     "file copy -force sub out",
     }) |script| {
         if (it.eval(script)) |_| {
             std.debug.print("escaped: {s}\n", .{script});
@@ -1372,22 +1373,22 @@ test "the Windows jail gives an error for each escape" {
     try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.file) | @intFromEnum(tcl.interp.Capability.interp));
     var scripts: std.ArrayList([]const u8) = .empty;
     try scripts.appendSlice(a, &.{
-        "open ../secret",          "open /../secret",           "open sub/../../secret",   "open out",
-        "open out/secret",         "open sub/up/secret",        "open out/secret w",       "open out/new w",
-        "open win/win.ini",        "open win/system.ini",       "source ../secret",        "source out/secret",
-        "source win/win.ini",      "cd ..",                     "cd out",                  "cd win",
-        "file size ../secret",     "file size out/secret",      "file size win/win.ini",   "file delete ../secret",
-        "file delete out/secret",  "file delete -force out",    "file mkdir ../made",      "file mkdir out/made",
-        "file rename sub ../moved", "file rename sub out/moved", "file copy ../secret here", "file copy out/secret here",
-        "file link -symbolic x C:/Windows",                     "file readlink out",       "glob -directory out *",
-        "open {plain.txt::$DATA} w", "open {plain.txt:hid} w",   "open {..\\..\\x}",         "open {..\\secret}",
-        "open C:x",                "open {C:\\Windows\\win.ini}", "open {\\\\?\\C:\\x}",       "open {\\\\.\\C:}",
-        "open {\\\\localhost\\c$\\x}", "open PROGRA~1",            "open nul",                "open NUL.txt",
-        "open con w",              "open {COM1.log} w",         "open {LPT9} w",           "open {AUX .txt} w",
-        "open {trailing.} w",      "open {trailing } w",        "open {a*b} w",            "open {a?b} w",
-        "open OUT/secret",         "open Sub/UP/secret",        "open WIN/win.ini",        "cd OUT",
-        "glob -directory Win *",   "file delete -force OUT",    "file copy -force sub out", "file mkdir OUT/made",
-        "open {COM\u{b9}} w",     "open {conin$}",             "open {CONOUT$.txt} w",    "open {out::$INDEX_ALLOCATION}",
+        "open ../secret",                   "open /../secret",           "open sub/../../secret",         "open out",
+        "open out/secret",                  "open sub/up/secret",        "open out/secret w",             "open out/new w",
+        "open win/win.ini",                 "open win/system.ini",       "source ../secret",              "source out/secret",
+        "source win/win.ini",               "cd ..",                     "cd out",                        "cd win",
+        "file size ../secret",              "file size out/secret",      "file size win/win.ini",         "file delete ../secret",
+        "file delete out/secret",           "file delete -force out",    "file mkdir ../made",            "file mkdir out/made",
+        "file rename sub ../moved",         "file rename sub out/moved", "file copy ../secret here",      "file copy out/secret here",
+        "file link -symbolic x C:/Windows", "file readlink out",         "glob -directory out *",         "open {plain.txt::$DATA} w",
+        "open {plain.txt:hid} w",           "open {..\\..\\x}",          "open {..\\secret}",             "open C:x",
+        "open {C:\\Windows\\win.ini}",      "open {\\\\?\\C:\\x}",       "open {\\\\.\\C:}",              "open {\\\\localhost\\c$\\x}",
+        "open PROGRA~1",                    "open nul",                  "open NUL.txt",                  "open con w",
+        "open {COM1.log} w",                "open {LPT9} w",             "open {AUX .txt} w",             "open {trailing.} w",
+        "open {trailing } w",               "open {a*b} w",              "open {a?b} w",                  "open OUT/secret",
+        "open Sub/UP/secret",               "open WIN/win.ini",          "cd OUT",                        "glob -directory Win *",
+        "file delete -force OUT",           "file copy -force sub out",  "file mkdir OUT/made",           "open {COM\u{b9}} w",
+        "open {conin$}",                    "open {CONOUT$.txt} w",      "open {out::$INDEX_ALLOCATION}",
     });
     for ([_][]const u8{ "$MFT", "$MFTMirr", "$LogFile", "$Volume", "$AttrDef", "$Bitmap", "$Boot", "$BadClus", "$Secure", "$UpCase", "$Extend" }) |meta| {
         const low = try std.ascii.allocLowerString(a, meta);
@@ -1402,7 +1403,7 @@ test "the Windows jail gives an error for each escape" {
     const sn = WinFs.GetShortPathNameW((try WinFs.w(a, long_name)).ptr, &short, short.len);
     if (sn > 0 and sn < short.len) {
         const text = try std.unicode.utf16LeToUtf8Alloc(a, short[0..sn]);
-        const leaf = text[(std.mem.lastIndexOfScalar(u8, text, '\\') orelse 0) + 1..];
+        const leaf = text[(std.mem.lastIndexOfScalar(u8, text, '\\') orelse 0) + 1 ..];
         if (std.mem.indexOfScalar(u8, leaf, '~') != null) try scripts.append(a, try std.fmt.allocPrint(a, "open {s}", .{leaf}));
     }
     for (scripts.items) |script| {

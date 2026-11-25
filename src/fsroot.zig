@@ -357,7 +357,7 @@ pub fn listDir(it: *Interp, rel: []const u8) Error!ListResult {
         if (n == 0) break;
         var off: usize = 0;
         while (off < n) {
-            const reclen = std.mem.readInt(u16, buf[off + 16..][0..2], .little);
+            const reclen = std.mem.readInt(u16, buf[off + 16 ..][0..2], .little);
             const name = std.mem.sliceTo(@as([*:0]const u8, @ptrCast(&buf[off + 19])), 0);
             if (!std.mem.eql(u8, name, ".") and !std.mem.eql(u8, name, "..")) try out.append(a, try a.dupe(u8, name));
             off += reclen;
