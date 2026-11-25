@@ -42,6 +42,9 @@ const Interp = interp.Interp;
 const Error = interp.Error;
 const Allocator = std.mem.Allocator;
 
+/// True when the channels of a group share their name counters.
+const chan_names_ok = @import("sys.zig").supported;
+
 /// True when the target has threads. The WebAssembly build has none.
 pub const supported = !builtin.single_threaded and !builtin.cpu.arch.isWasm() and builtin.os.tag != .freestanding;
 
@@ -347,6 +350,9 @@ pub const Worker = struct {
     mem_limit: usize = std.math.maxInt(usize),
     /// The steps that the thread got from `total_steps`.
     steps: u64 = 0,
+    /// An eventfd that a new message makes readable, for the poll of
+    /// the event loop. It is -1 until the loop of the thread polls.
+    wake_fd: std.atomic.Value(i32) = .init(-1),
     /// The text of the start script, in group memory.
     script: []u8 = &.{},
     /// A pool worker: the pool and its loop.
@@ -424,6 +430,8 @@ pub const Group = struct {
     pools: ?*anyopaque = null,
     /// The detached channels (`tchan.zig`).
     chans: ?*anyopaque = null,
+    /// The name counters of the channels of each thread of the group.
+    chan_names: if (chan_names_ok) @import("chan.zig").Counters else void = if (chan_names_ok) .{} else {},
     sync: ?*anyopaque = null,
     /// The lock of `thread::eval` with no `-lock`.
     eval_lock: ?[]const u8 = null,
@@ -491,6 +499,12 @@ pub fn startGroup(host: *Interp) Allocator.Error!void {
     w.* = .{ .group = g, .id = g.next_id, .it = host, .is_main = true, .state = .running, .refs = 1 };
     g.next_id += 1;
     try g.workers.append(gpa, w);
+    if (comptime chan_names_ok) {
+        // The group goes on from the counters of the host.
+        g.chan_names.next.store(host.chans.next, .monotonic);
+        g.chan_names.next_sock.store(host.chans.next_sock, .monotonic);
+        host.chans.shared = &g.chan_names;
+    }
     g.output = host.output;
     host.output = .{ .ctx = g, .write = lockedWrite };
     host.worker = w;
@@ -540,8 +554,14 @@ pub fn endGroup(host: *Interp) void {
     g.zombies.deinit(g.gpa);
     drainQueue(g, w);
     w.queue.deinit(g.alloc());
+    closeWake(w);
     g.alloc().free(g.errorproc);
     host.output = g.output;
+    if (comptime chan_names_ok) {
+        host.chans.next = g.chan_names.next.load(.monotonic);
+        host.chans.next_sock = g.chan_names.next_sock.load(.monotonic);
+        host.chans.shared = null;
+    }
     host.worker = null;
     g.gpa.destroy(w);
     g.gpa.destroy(g);
@@ -577,6 +597,7 @@ pub fn reapZombies(g: *Group) void {
 
 fn freeWorker(g: *Group, w: *Worker) void {
     if (w.os) |t| t.join();
+    closeWake(w);
     g.alloc().free(w.script);
     if (w.cancel_text) |t| g.alloc().free(t);
     g.gpa.destroy(w);
@@ -592,6 +613,7 @@ pub fn stopWorker(w: *Worker, bits: u32) void {
     if (w.it) |x| @atomicStore(usize, &x.mem_limit, 0, .release);
     w.lock.unlock();
     w.ev.signal();
+    poke(w);
 }
 
 /// The memory check of `Interp.overLimit` for an interpreter whose
@@ -794,6 +816,7 @@ fn setup(w: *Worker, x: *Interp, st: Start) Allocator.Error!void {
         }
     }
     x.worker = w;
+    if (comptime chan_names_ok) x.chans.shared = &w.group.chan_names;
     try x.allow(st.caps);
 }
 
@@ -816,13 +839,38 @@ fn threadMain(w: *Worker, st: Start) void {
     g.lock.unlock();
     g.ev.signal();
 
-    if (w.pool_main) |f| {
-        f(w, x);
+    if (w.pool_main != null) {
+        topScope(x, runPool, .{ w, x });
     } else {
-        const r = if (w.script.len > 0) x.eval(w.script) else waitLoop(x);
+        const r = if (w.script.len > 0) x.eval(w.script) else topScope(x, waitLoop, .{x});
         if (r) |_| {} else |e| endError(w, x, e);
     }
     finish(w, x);
+}
+
+fn runPool(w: *Worker, x: *Interp) void {
+    w.pool_main.?(w, x);
+}
+
+/// The margin above the frame of an entry, as in `Interp.evalTop`.
+const host_margin: usize = 128;
+
+/// Runs `f` as the top entry of the interpreter `x`, as `Interp.evalTop`
+/// does for a script. The collector then scans the native stack from
+/// here, so the wait loop and the loop of a pool worker collect between
+/// their scripts.
+fn topScope(x: *Interp, comptime f: anytype, args: anytype) @typeInfo(@TypeOf(f)).@"fn".return_type.? {
+    const outer = x.heap.scopes == 0;
+    x.heap.scopes += 1;
+    defer x.heap.scopes -= 1;
+    if (outer) {
+        x.native_base = @frameAddress() + host_margin;
+        x.gc_scope = 1;
+    }
+    defer if (outer) {
+        x.gc_scope = 0;
+    };
+    return @call(.never_inline, f, args);
 }
 
 fn failStart(w: *Worker, st: Start) void {
@@ -958,7 +1006,53 @@ pub fn pushMsg(w: *Worker, m: *Msg, head: bool) void {
     w.lock.lock();
     const ok = if (head) w.queue.insert(w.group.alloc(), 0, m) else w.queue.append(w.group.alloc(), m);
     w.lock.unlock();
-    if (ok) |_| w.ev.signal() else |_| m.destroy(w.group.alloc());
+    if (ok) |_| {
+        w.ev.signal();
+        poke(w);
+    } else |_| m.destroy(w.group.alloc());
+}
+
+/// Makes the wake descriptor of `w` readable. The caller holds the
+/// group lock, so the descriptor stays open.
+fn poke(w: *Worker) void {
+    if (comptime builtin.os.tag != .linux) return;
+    const fd = w.wake_fd.load(.acquire);
+    if (fd < 0) return;
+    const one: u64 = 1;
+    _ = std.os.linux.write(fd, std.mem.asBytes(&one), 8);
+}
+
+/// The wake descriptor of the thread of `it`, or -1. The event loop
+/// polls it with the channels, so a message ends the poll at once.
+pub fn wakeFd(it: *Interp) i32 {
+    if (comptime builtin.os.tag != .linux) return -1;
+    const w = it.worker orelse return -1;
+    const fd = w.wake_fd.load(.acquire);
+    if (fd >= 0) return fd;
+    const linux = std.os.linux;
+    const rc = linux.eventfd(0, linux.EFD.CLOEXEC | linux.EFD.NONBLOCK);
+    if (linux.errno(rc) != .SUCCESS) return -1;
+    const new: i32 = @intCast(rc);
+    w.wake_fd.store(new, .release);
+    return new;
+}
+
+/// Reads the count of the wake descriptor of the thread of `it`.
+pub fn drainWake(it: *Interp) void {
+    if (comptime builtin.os.tag != .linux) return;
+    const w = it.worker orelse return;
+    const fd = w.wake_fd.load(.acquire);
+    if (fd < 0) return;
+    var n: u64 = 0;
+    _ = std.os.linux.read(fd, std.mem.asBytes(&n), 8);
+}
+
+/// Closes the wake descriptor of `w`. No other thread holds `w`.
+fn closeWake(w: *Worker) void {
+    if (comptime builtin.os.tag != .linux) return;
+    const fd = w.wake_fd.load(.acquire);
+    if (fd >= 0) _ = std.os.linux.close(fd);
+    w.wake_fd.store(-1, .release);
 }
 
 /// Sends an error reply to a sender, when it still runs.
