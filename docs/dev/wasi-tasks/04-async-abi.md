@@ -14,7 +14,7 @@ ztcl has a small Zig layer for the async canonical ABI of the component model, a
 
 ## Rules
 
-- First measure the form of the lift of the export `wasi:cli/run@0.3.2#run` and of the lowerings of the async imports that the pinned `wasm-tools` and wasmtime accept: a synchronous lift and lowering, or the async form with a callback. Record the result in `docs/wasi.md`. If neither form runs, stop and report.
+- First measure the form of the lift of the export `wasi:cli/run@0.3.2#run` and of the lowerings of the async imports that the pinned `wasm-tools` and wasmtime accept: a synchronous lift and lowering, or the async form with a callback. Record the result in `docs/dev/wasi.md`. If neither form runs, stop and report.
 - Pin the versions of `wasm-tools` and wasmtime, and check each download with SHA-256. Wasmtime 46 is the first release with the final WASI 0.3.0. Check that the pinned release accepts imports at `@0.3.2`. If it does not, report the newest 0.3.N that it accepts, and stop.
 - Write the layer from the text of the canonical ABI of the component model (`CanonicalABI.md` and `Async.md`). Credit them in `docs/references/wasi.md`.
 

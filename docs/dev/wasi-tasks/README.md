@@ -21,7 +21,7 @@ The user answers the questions below before task 01 merges.
 
 ## Rules for each task
 
-1. Read AGENTS.md, WRITING.md, `docs/design.md`, `docs/embedding.md`, `docs/webassembly.md`, and `docs/wasi.md` first.
+1. Read AGENTS.md, WRITING.md, `docs/design.md`, `docs/embedding.md`, `docs/webassembly.md`, and `docs/dev/wasi.md` first.
 2. Run each build, test, and suite under the memory cap. `CAP` in each task means this prefix:
 
    ```sh
