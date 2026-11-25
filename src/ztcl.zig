@@ -37,6 +37,8 @@ pub const chan = @import("chan.zig");
 pub const event = @import("event.zig");
 pub const sock = @import("sock.zig");
 pub const jit = @import("jit.zig");
+/// The compiler of procs to WebAssembly: `ztcl compile --wasm`.
+pub const wasm_aot = @import("wasm_aot/aot.zig");
 /// The bytecode and the verifier of the JIT, for the tools of the JIT.
 pub const vm = @import("vm.zig");
 pub const jit_verify = @import("jit/verify.zig");

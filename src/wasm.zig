@@ -84,6 +84,11 @@ export fn ztcl_set_step_limit(h: *Handle, step_limit: u64) void {
     h.it.step_limit = step_limit;
 }
 
+/// The steps that are left of the count of `ztcl_set_step_limit`.
+export fn ztcl_steps_left(h: *Handle) u64 {
+    return h.it.step_limit;
+}
+
 export fn ztcl_set_mem_limit(h: *Handle, bytes: usize) void {
     h.it.mem_limit = bytes;
 }
