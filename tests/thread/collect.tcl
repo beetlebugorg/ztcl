@@ -20,4 +20,14 @@ set p [tpool::create -maxworkers 1]
 test jobs-1 {for {set i 0} {$i < 150} {incr i} {set j [tpool::post $p {string length [string repeat x 100000]}]; tpool::wait $p $j; tpool::get $p $j}} {}
 tpool::release $p
 thread::release -wait $t
+
+# A job that passes the memory limit ends its worker. A new worker runs
+# the next job.
+set p [tpool::create -maxworkers 1]
+set j [tpool::post $p {set s x; while 1 {append s $s}}]
+tpool::wait $p $j
+test limit-1 {catch {tpool::get $p $j} m; set m} {the script used too much memory}
+set j [tpool::post $p {expr 5}]
+test limit-2 {tpool::wait $p $j; tpool::get $p $j} 5
+tpool::release $p
 done
