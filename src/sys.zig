@@ -240,12 +240,15 @@ const is_win = builtin.os.tag == .windows;
 const on_mac = builtin.os.tag == .macos;
 /// The Windows form. ARM64 Windows stays off until its tests can run.
 pub const win = @import("sys_windows.zig");
-pub const supported = builtin.os.tag == .linux or (is_win and builtin.cpu.arch == .x86_64) or (on_mac and builtin.cpu.arch == .aarch64);
+/// The WASI preview 1 form. It has no sockets.
+const is_wasi = builtin.os.tag == .wasi;
+const wasi = @import("sys_wasi.zig");
+pub const supported = builtin.os.tag == .linux or (is_win and builtin.cpu.arch == .x86_64) or (on_mac and builtin.cpu.arch == .aarch64) or is_wasi;
 
 pub const Fd = i32;
 
 /// A host error number. Each port sets its own type.
-pub const Errno = if (builtin.os.tag == .linux or on_mac) os.E else if (is_win) win.E else u32;
+pub const Errno = if (builtin.os.tag == .linux or on_mac) os.E else if (is_win) win.E else if (is_wasi) wasi.E else u32;
 
 /// How to open a file. `fsroot.zig` maps these flags to the system.
 pub const OpenFlags = struct {
@@ -296,6 +299,7 @@ pub const IoResult = union(enum) {
 
 pub fn read(fd: Fd, buf: []u8) IoResult {
     if (comptime is_win) return win.read(fd, buf);
+    if (comptime is_wasi) return wasi.read(fd, buf);
     while (true) {
         const rc = os.read(fd, buf.ptr, buf.len);
         switch (os.errno(rc)) {
@@ -315,6 +319,7 @@ pub const FileRead = union(enum) { n: usize, err: Errno };
 /// read of 0 bytes is the end of the file.
 pub fn readFile(fd: Fd, buf: []u8) FileRead {
     if (comptime is_win) return win.readFile(fd, buf);
+    if (comptime is_wasi) return wasi.readFile(fd, buf);
     while (true) {
         const rc = os.read(fd, buf.ptr, buf.len);
         switch (os.errno(rc)) {
@@ -328,6 +333,7 @@ pub fn readFile(fd: Fd, buf: []u8) FileRead {
 /// Writes a file for a caller that reports the host error itself.
 pub fn writeFile(fd: Fd, buf: []const u8) FileRead {
     if (comptime is_win) return win.writeFile(fd, buf);
+    if (comptime is_wasi) return wasi.writeFile(fd, buf);
     while (true) {
         const rc = os.write(fd, buf.ptr, buf.len);
         switch (os.errno(rc)) {
@@ -340,6 +346,7 @@ pub fn writeFile(fd: Fd, buf: []const u8) FileRead {
 
 pub fn write(fd: Fd, buf: []const u8) IoResult {
     if (comptime is_win) return win.write(fd, buf);
+    if (comptime is_wasi) return wasi.write(fd, buf);
     while (true) {
         // MSG_NOSIGNAL is not possible on a pipe, so SIGPIPE is ignored
         // by `ignorePipeSignal` at the start of a runner.
@@ -355,11 +362,13 @@ pub fn write(fd: Fd, buf: []const u8) IoResult {
 
 pub fn close(fd: Fd) void {
     if (comptime is_win) return win.close(fd);
+    if (comptime is_wasi) return wasi.close(fd);
     _ = os.close(fd);
 }
 
 pub fn setBlocking(fd: Fd, on: bool) void {
     if (comptime is_win) return win.setBlocking(fd, on);
+    if (comptime is_wasi) return wasi.setBlocking(fd, on);
     const fl = os.fcntl(fd, os.F.GETFL, 0);
     if (os.errno(fl) != .SUCCESS) return;
     const bit: usize = @as(u32, @bitCast(os.O{ .NONBLOCK = true }));
@@ -368,8 +377,8 @@ pub fn setBlocking(fd: Fd, on: bool) void {
 
 /// A write to a closed pipe or socket gives an error and no signal.
 pub fn ignorePipeSignal() void {
-    // Windows has no SIGPIPE.
-    if (comptime is_win) return;
+    // Windows and WASI have no SIGPIPE.
+    if (comptime is_win or is_wasi) return;
     var act: os.Sigaction = .{ .handler = .{ .handler = os.SIG.IGN }, .mask = std.mem.zeroes(os.sigset_t), .flags = 0 };
     _ = os.sigaction(os.SIG.PIPE, &act, null);
 }
@@ -388,6 +397,7 @@ pub const Want = struct {
 /// next read or write reports it.
 pub fn poll(a: std.mem.Allocator, wants: []Want, timeout_ms: i32) void {
     if (comptime is_win) return win.poll(a, wants, timeout_ms);
+    if (comptime is_wasi) return wasi.poll(a, wants, timeout_ms);
     if (comptime !supported) return;
     const fds = a.alloc(os.pollfd, wants.len) catch return;
     defer a.free(fds);
@@ -463,6 +473,7 @@ fn newSocket(v6: bool) SockResult {
 /// caller checks the address against the network policy first.
 pub fn listenAt(addr: Addr, reuse: bool) SockResult {
     if (comptime is_win) return win.listenAt(addr, reuse);
+    if (comptime is_wasi) return wasi.listenAt(addr, reuse);
     const fd = switch (newSocket(addr.v6)) {
         .fd => |x| x,
         .err => |e| return .{ .err = e },
@@ -487,6 +498,7 @@ pub fn listenAt(addr: Addr, reuse: bool) SockResult {
 /// against the network policy first.
 pub fn connectTo(addr: Addr, mine: ?Addr, wait: bool) SockResult {
     if (comptime is_win) return win.connectTo(addr, mine, wait);
+    if (comptime is_wasi) return wasi.connectTo(addr, mine, wait);
     const fd = switch (newSocket(addr.v6)) {
         .fd => |x| x,
         .err => |e| return .{ .err = e },
@@ -572,6 +584,7 @@ pub fn parseAddr(text: []const u8) ?Addr {
 /// query to a name server yet, so another name gives no address.
 pub fn resolve(a: std.mem.Allocator, host: []const u8, out: *std.ArrayList(Addr)) std.mem.Allocator.Error!void {
     if (comptime is_win) return win.resolve(a, host, out);
+    if (comptime is_wasi) return wasi.resolve(a, host, out);
     if (parseAddr(host)) |addr| {
         try out.append(a, addr);
         return;
@@ -620,6 +633,7 @@ pub fn hostsMatch(a: std.mem.Allocator, text: []const u8, host: []const u8, out:
 /// The pending error of a socket, or null. The call clears the error.
 pub fn connectError(fd: Fd) ?Fail {
     if (comptime is_win) return win.connectError(fd);
+    if (comptime is_wasi) return wasi.connectError(fd);
     var code: u32 = 0;
     var len: os.socklen_t = 4;
     const rc = os.getsockopt(fd, os.SOL.SOCKET, os.SO.ERROR, std.mem.asBytes(&code), &len);
@@ -632,6 +646,7 @@ pub const Accepted = struct { fd: Fd, peer: Addr };
 /// The next connection of a listening socket, or null when none waits.
 pub fn accept(fd: Fd) ?Accepted {
     if (comptime is_win) return win.acceptOn(fd);
+    if (comptime is_wasi) return wasi.accept(fd);
     var a: Sock = undefined;
     var len: os.socklen_t = @sizeOf(Sock);
     while (true) {
@@ -646,6 +661,7 @@ pub fn accept(fd: Fd) ?Accepted {
 
 pub fn sockName(fd: Fd) ?Addr {
     if (comptime is_win) return win.sockName(fd);
+    if (comptime is_wasi) return wasi.sockName(fd);
     var a: Sock = undefined;
     var len: os.socklen_t = @sizeOf(Sock);
     if (os.errno(os.getsockname(fd, &a.any, &len)) != .SUCCESS) return null;
@@ -654,6 +670,7 @@ pub fn sockName(fd: Fd) ?Addr {
 
 pub fn peerName(fd: Fd) ?Addr {
     if (comptime is_win) return win.peerName(fd);
+    if (comptime is_wasi) return wasi.peerName(fd);
     var a: Sock = undefined;
     var len: os.socklen_t = @sizeOf(Sock);
     if (os.errno(os.getpeername(fd, &a.any, &len)) != .SUCCESS) return null;
@@ -663,6 +680,7 @@ pub fn peerName(fd: Fd) ?Addr {
 /// Ends one direction of a socket: 0 for reads, 1 for writes.
 pub fn shutdown(fd: Fd, how: i32) void {
     if (comptime is_win) return win.shutdownOn(fd, how);
+    if (comptime is_wasi) return wasi.shutdown(fd, how);
     _ = os.shutdown(fd, how);
 }
 
@@ -672,6 +690,7 @@ pub const SeekResult = union(enum) { at: i64, err: Errno };
 /// the current position, and 2 for the end. Gives the new position.
 pub fn seek(fd: Fd, off: i64, whence: u8) SeekResult {
     if (comptime is_win) return win.seek(fd, off, whence);
+    if (comptime is_wasi) return wasi.seek(fd, off, whence);
     const rc = os.lseek(fd, off, whence);
     const e = os.errno(rc);
     if (e != .SUCCESS) return .{ .err = e };

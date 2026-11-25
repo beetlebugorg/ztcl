@@ -6,7 +6,9 @@
 # The tests: a script from stdin and from a file, the step limit, the
 # memory limit, the nesting limit, the commands of each capability that
 # are absent by default, and `exec`, `thread`, and `socket`, which are
-# absent also when `--allow` names them.
+# absent also when `--allow` names them. With `--allow`, the tests use
+# files and channels in a root folder, the checks of the jail, `clock`,
+# and the event loop.
 # SPDX-License-Identifier: BSD-2-Clause
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 run="$here/wasi-run.sh"
@@ -46,6 +48,25 @@ puts "present: $out"
 TCL
 check caps-default 'present: ' "$(t /caps.tcl)"
 check caps-absent 'present: ' "$(t --allow exec,thread,socket /caps.tcl)"
+mkdir -p root/sub
+ln -s /etc root/out
+ln -s /etc/passwd root/sub/pw
+cat > root/files.tcl <<'TCL'
+set f [open /a.txt w]; puts $f hello; close $f
+set f [open a.txt]; puts -nonewline [gets $f]; close $f
+puts " [lsort [glob *]] [file isdirectory sub] [file size a.txt]"
+file mkdir d1/d2; file rename a.txt d1/b.txt
+puts "[file exists d1/b.txt] [file delete -force d1][file exists d1]"
+TCL
+check files 'hello a.txt files.tcl out sub 1 6 1 0' "$(t --allow file,channels --root "$dir/root" "$dir/root/files.tcl" | tr '\n' ' ' | sed 's/ $//')"
+cat > root/jail.tcl <<'TCL'
+foreach p {../x /../x out/passwd sub/pw} { catch {open $p} m; puts $m }
+catch {file rename files.tcl ../x} m; puts $m
+TCL
+check jail 'couldn'"'"'t open "../x": permission denied|couldn'"'"'t open "/../x": permission denied|couldn'"'"'t open "out/passwd": permission denied|couldn'"'"'t open "sub/pw": permission denied|couldn'"'"'t access "../x": permission denied' \
+    "$(t --allow file,channels --root "$dir/root" "$dir/root/jail.tcl" | tr '\n' '|' | sed 's/|$//')"
+printf 'puts [clock format 0 -gmt 1]\nafter 5 {set ::x 1}; vwait ::x; puts $::x\n' > ev.tcl
+check clock-event 'Thu Jan 01 00:00:00 GMT 1970 1' "$(t --allow clock,event /ev.tcl | tr '\n' ' ' | sed 's/ $//')"
 [ "$fails" -eq 0 ] && echo "wasi smoke ok" && exit 0
 echo "wasi smoke: $fails failed"
 exit 1
