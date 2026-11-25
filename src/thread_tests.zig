@@ -194,3 +194,42 @@ test "a later capability adds the thread commands that need it" {
     try it.allow(@intFromEnum(tcl.interp.Capability.channels));
     try testing.expect(it.findCommand("thread::transfer") != null);
 }
+
+/// Starts a host, runs `setup`, and ends the host. The threads of the
+/// script are in a wait or a loop at the end.
+fn teardown(setup: []const u8) !void {
+    var it: tcl.Interp = undefined;
+    try host(&it);
+    try it.allow(@intFromEnum(tcl.interp.Capability.event));
+    _ = try it.eval(setup);
+    it.deinit();
+}
+
+test "teardown of the host with threads in each kind of wait" {
+    if (!thread.supported) return error.SkipZigTest;
+    // A bytecode loop, a native loop, and vwait.
+    try teardown("thread::create {while 1 {}}; thread::create {time {set x 1} 1000000000}; thread::create {vwait ::never}");
+    // A mutex wait and a condition wait. The host holds the mutex.
+    try teardown(
+        \\set m [thread::mutex create]; thread::mutex lock $m
+        \\thread::create [list thread::mutex lock $m]
+        \\set c [thread::cond create]; set cm [thread::mutex create]
+        \\thread::create [list apply {{c cm} {thread::mutex lock $cm; thread::cond wait $c $cm}} $c $cm]
+        \\for {set i 0} {$i < 200000} {incr i} {}
+    );
+    // A tsv lock wait while the host holds the lock.
+    try teardown("tsv::lock a {thread::create {tsv::set a x 1}; for {set i 0} {$i < 200000} {incr i} {}}");
+    // Sends in the queues of busy threads, a join that waits, and a pool.
+    try teardown(
+        \\set t [thread::create {while 1 {}}]
+        \\for {set i 0} {$i < 100} {incr i} {thread::send -async $t {set x 1}}
+        \\set j [thread::create -joinable {after 100000}]
+        \\set p [tpool::create -minworkers 2]; tpool::post $p {while 1 {}}
+    );
+}
+
+test "teardown while a thread sends to the host" {
+    if (!thread.supported) return error.SkipZigTest;
+    try teardown("thread::create [list thread::send [thread::id] {while 1 {}}]; for {set i 0} {$i < 200000} {incr i} {}");
+    try teardown("for {set i 0} {$i < 8} {incr i} {thread::create [list while 1 [list thread::send -async [thread::id] {set y 1}]]}; for {set i 0} {$i < 200000} {incr i} {}");
+}

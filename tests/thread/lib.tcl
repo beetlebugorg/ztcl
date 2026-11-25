@@ -23,10 +23,12 @@ proc testglob {name script pattern} {
     incr ::fail
     puts "FAIL $name\n  got:  $got\n  want: $pattern"
 }
-# Waits until the script gives true, at most `ms` milliseconds.
+# Waits until the script gives true, at most `ms` milliseconds. It runs
+# the events and the messages of the thread between the checks.
 proc waitfor {script {ms 5000}} {
     set end [expr {$ms / 10}]
     for {set i 0} {$i < $end} {incr i} {
+        update
         if {[uplevel #0 $script]} {return 1}
         after 10
     }
