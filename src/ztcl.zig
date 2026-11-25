@@ -60,4 +60,5 @@ test {
     _ = heap;
     _ = @import("tests.zig");
     _ = @import("jit/tests.zig");
+    _ = @import("wasm_aot/wasm.zig");
 }
