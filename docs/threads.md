@@ -63,7 +63,7 @@ A shared form needs a buffer kind that each of these paths copies first, and a m
 | `thread::errorproc ?proc?` | Sets the procedure that gets the errors of all threads: `proc id errorInfo`. It runs in the thread that set it. |
 | `thread::configure id ?option? ?value?` | `-eventmark N` makes `thread::send -async` wait while the queue of the target has N messages. `-unwindonerror bool` ends the thread after a send with an error. |
 | `thread::eval ?-lock mutex? arg ?arg ...?` | Runs the script while it holds the mutex, or a mutex of the group. |
-| `thread::transfer id channel`, `thread::detach channel`, `thread::attach channel` | Move a file or socket channel between threads. A server socket and a command pipeline stay with their thread. The move removes the `fileevent` handlers of the channel. The channel commands exist only on Linux. |
+| `thread::transfer id channel`, `thread::detach channel`, `thread::attach channel` | Move a file or socket channel between threads. A server socket and a command pipeline stay with their thread. The move removes the `fileevent` handlers of the channel. The channel commands exist on Linux and macOS. |
 
 ## The shared variables
 
@@ -121,7 +121,7 @@ Zig 0.16 has no `std.Thread.Mutex` or `std.Thread.Condition`. The locks are `std
 
 ## Platforms
 
-The commands use `std.Thread`, so they build for Linux, macOS, and Windows. The channel commands of `thread::transfer`, `thread::detach`, and `thread::attach` need the channel capability, which exists only on Linux. The default WebAssembly build (`ztcl.wasm`) has no threads. `zig build wasm-threads` makes two WebAssembly builds with threads. See "WebAssembly" below. ThreadSanitizer runs on Linux: `tools/tsan.sh`.
+The commands use `std.Thread`, so they build for Linux, macOS, and Windows. The channel commands of `thread::transfer`, `thread::detach`, and `thread::attach` need the channel capability, which exists on Linux and macOS. The default WebAssembly build (`ztcl.wasm`) has no threads. `zig build wasm-threads` makes two WebAssembly builds with threads. See "WebAssembly" below. ThreadSanitizer runs on Linux: `tools/tsan.sh`.
 
 ## The tests of Tcl
 
@@ -138,12 +138,12 @@ The commands use `std.Thread`, so they build for Linux, macOS, and Windows. The 
 | `tsv::*` | 03 | Done. |
 | The mutexes, the conditions, and `thread::eval` | 04 | Done. |
 | `tpool::*` | 05 | Done. |
-| `thread::transfer`, `thread::detach`, and `thread::attach` | 06 | Done on Linux. The move removes the `fileevent` handlers of the channel, as in `tclsh`. |
+| `thread::transfer`, `thread::detach`, and `thread::attach` | 06 | Done on Linux and macOS. The move removes the `fileevent` handlers of the channel, as in `tclsh`. |
 | The thread tests of `socket.test` and `unixNotfy.test` | 07 | Done: 12 of 12 pass. |
 | The tests of the limits, the teardown, and the races | 08 | Done: 11 files in `tests/thread/`, each with 20 runs in a row in the normal, JIT, and gc-stress modes. |
 | ThreadSanitizer | 09 | Done: `tools/tsan.sh`. The build reports a planted race and the stop flag, and the thread tests give no report with one suppression. |
 | The benchmarks | 10 | Done: [the table](testing.md#threads). Each benchmark is as fast as `tclsh` or faster. |
-| macOS | 11 | Not done. The CI job `Test (macos-latest)` builds the code and passes. The files of `tests/thread/` did not run on macOS yet. |
+| macOS | 11 | Done on arm64. Each file of `tests/thread/` passes 3 runs in a row with the JIT off, with tier 1, with tier 2, and with `--gc-stress 1`. A thread gets the root folder of the main thread, and a pipe ends the poll of a thread at a new message, as the eventfd does on Linux. A thread recurses to the same depth as the main thread. x86-64 macOS builds and did not run. |
 | Windows | 12 | Not done. The CI job `Test (windows-latest)` builds the code and passes. The files of `tests/thread/` did not run on Windows yet. |
 | The counts and the docs | 13 | Done. |
 | WebAssembly with Web Workers | 14 | Done: `tools/wasm-threads.mjs` runs 9 files of `tests/thread/` in Node.js and in Chromium with cross-origin isolation, and the tests of the async mode in Chromium without it. |

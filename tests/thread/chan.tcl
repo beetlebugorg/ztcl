@@ -14,6 +14,10 @@ test file-2 {thread::send $t [list puts $f line2]; thread::send $t [list close $
 test file-3 {set r [open data.txt]; set x [read $r]; close $r; set x} "line1\nline2\n"
 test file-4 {lsearch [file channels] $f} -1
 
+# A thread has the root folder of the main thread, and no file outside it.
+test root-1 {thread::send $t {set g [open data.txt]; set x [gets $g]; close $g; set x}} line1
+test root-2 {thread::send $t {catch {open /etc/hosts}}} 1
+
 # Buffered input moves with the channel, and the channel comes back.
 set r [open data.txt]
 test in-1 {gets $r} line1
