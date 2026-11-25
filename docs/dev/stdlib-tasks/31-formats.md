@@ -4,7 +4,7 @@ Platform: shared.
 
 ## Goal
 
-`zt::csv`, `zt::url`, `zt::encode`, and the tcllib names of `csv`, `uri`, `base64`, `base32`, and `uuencode`.
+`ztcl::csv`, `ztcl::url`, `ztcl::encode`, and the tcllib names of `csv`, `uri`, `base64`, `base32`, and `uuencode`.
 
 ## Files
 

@@ -1,10 +1,10 @@
 # The JSON benchmark of ztcl:
 #   ztcl --allow channels,clock --root DATA --tclsh bench_ztcl.tcl MODE FILE.json
 # DATA has FILE.json and paths.json. Prints the best time of one run, in
-# seconds, or "skip" when the build has no zt::json.
+# seconds, or "skip" when the build has no ztcl::json.
 # SPDX-License-Identifier: BSD-2-Clause
 lassign $argv mode file
-if {[catch {package require zt::json}]} { puts skip; return }
+if {[catch {package require ztcl::json}]} { puts skip; return }
 proc slurp {name} {
     set f [open $name]
     fconfigure $f -encoding utf-8
@@ -13,18 +13,18 @@ proc slurp {name} {
     return $t
 }
 set text [slurp $file]
-set paths [dict get [zt::json parse [slurp paths.json]] [string range $file 0 end-5]]
+set paths [dict get [ztcl::json parse [slurp paths.json]] [string range $file 0 end-5]]
 set q [dict get $paths query]
 set reads [dict get $paths read]
 proc walk {v} { return 1 }
 switch -- $mode {
-    validate { set op {zt::json valid $::text} }
-    parse { set op {zt::json parse -null {} $::text} }
-    query { set op {zt::json get $::text {*}$::q} }
-    read3 { set op {foreach p $::reads { zt::json get $::text {*}$p }} }
+    validate { set op {ztcl::json valid $::text} }
+    parse { set op {ztcl::json parse -null {} $::text} }
+    query { set op {ztcl::json get $::text {*}$::q} }
+    read3 { set op {foreach p $::reads { ztcl::json get $::text {*}$p }} }
     encode {
-        set parsed [zt::json parse -typed $::text]
-        set op {zt::json encode -typed $::parsed}
+        set parsed [ztcl::json parse -typed $::text]
+        set op {ztcl::json encode -typed $::parsed}
     }
     default { puts skip; return }
 }

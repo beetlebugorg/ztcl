@@ -38,7 +38,7 @@ The default interpreter has no command that reaches the host. `puts` writes to a
 > [!WARNING]
 > `exec` is not sandboxed. A process from `exec` runs outside the root folder and outside each limit, with the full power of the user. Turn it on only for scripts that you trust.
 
-Built-in modules such as [`zt::json`](modules/json.md) need no capability.
+Built-in modules such as [`ztcl::json`](modules/json.md) need no capability.
 
 ## Determinism
 

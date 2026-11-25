@@ -259,7 +259,7 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
         <h3>Parse twitter.json to native values</h3>
         <p class="how">MB/s of the input, best of 5 runs, on an Intel Core i7-6700K. Each runtime makes its own native value. A longer bar is faster.</p>
         <dl class="bars">
-          <dt>ztcl <code>zt::json</code></dt><dd><span class="track"><span class="fill" style="width:100%" title="ztcl: 794 MB/s"></span></span><span class="val">794</span></dd>
+          <dt>ztcl <code>ztcl::json</code></dt><dd><span class="track"><span class="fill" style="width:100%" title="ztcl: 794 MB/s"></span></span><span class="val">794</span></dd>
           <dt>orjson</dt><dd><span class="track"><span class="fill base" style="width:62.8%" title="Python orjson: 499 MB/s"></span></span><span class="val">499</span></dd>
           <dt>Node.js</dt><dd><span class="track"><span class="fill base" style="width:44.6%" title="Node.js: 354 MB/s"></span></span><span class="val">354</span></dd>
           <dt>pysimdjson</dt><dd><span class="track"><span class="fill base" style="width:33.1%" title="Python pysimdjson: 263 MB/s"></span></span><span class="val">263</span></dd>
@@ -271,10 +271,10 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
       <div>
         <p class="eyebrow">Built-in JSON</p>
         <h2>JSON faster than Node.js and Python.</h2>
-        <p class="lede" style="margin-bottom:24px"><code>zt::json</code> is a Zig form of the simdjson algorithm. It finds the structure of 64 bytes at a time with vector instructions, and it makes Tcl dicts and lists.</p>
+        <p class="lede" style="margin-bottom:24px"><code>ztcl::json</code> is a Zig form of the simdjson algorithm. It finds the structure of 64 bytes at a time with vector instructions, and it makes Tcl dicts and lists.</p>
         <ul class="checks">
           <li><b>Faster than each scripting runtime</b> on twitter.json and citm_catalog.json. On the number-heavy canada.json, Node.js is faster.</li>
-          <li><b><code>zt::json get</code></b> reads one value at a path with no full parse, at 615 to 1664 MB/s.</li>
+          <li><b><code>ztcl::json get</code></b> reads one value at a path with no full parse, at 615 to 1664 MB/s.</li>
           <li><b>The tcllib names</b> <code>json</code> and <code>json::write</code> work over the same code.</li>
         </ul>
         <p style="margin-top:24px"><a class="btn ghost" href="modules/json/">Read the JSON guide</a></p>

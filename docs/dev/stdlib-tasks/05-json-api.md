@@ -1,4 +1,4 @@
-# Task 05: `zt::json`, the tcllib names, and the JSON gates
+# Task 05: `ztcl::json`, the tcllib names, and the JSON gates
 
 Platform: shared.
 
@@ -8,7 +8,7 @@ The full JSON module of the design: `parse` with its options, `get`, `exists`, `
 
 ## Files
 
-- `src/json/cmd.zig` (new): the `zt::json` ensemble.
+- `src/json/cmd.zig` (new): the `ztcl::json` ensemble.
 - `src/json/encode.zig` (new): the encoder, the schema check, and the builders.
 - `src/json/compat.tcl` (new, embedded): `json::json2dict`, `json::many-json2dict`, `json::validate`, and the `json::write` commands, when the native form is not needed.
 - `tests/stdlib/json.test` (new).
@@ -30,5 +30,5 @@ CAP python3 -I tools/bench-stdlib.py --only json --check bench/stdlib/gates.tsv
 Gates:
 
 - The JSON gates of the design: validate, parse, path query, and encode on the three files.
-- `zt::json get` of one value in `citm_catalog.json` reads no more than the index and the path: its memory peak is below 2 times the input size.
+- `ztcl::json get` of one value in `citm_catalog.json` reads no more than the index and the path: its memory peak is below 2 times the input size.
 - Size: the `json` row of the design.

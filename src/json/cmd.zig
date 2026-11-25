@@ -1,14 +1,14 @@
-//! The module `zt::json` and the tcllib names `json` and `json::write`.
+//! The module `ztcl::json` and the tcllib names `json` and `json::write`.
 //!
-//!   zt::json parse ?-null VALUE? ?-typed? ?--? TEXT
-//!   zt::json valid TEXT
-//!   zt::json get ?-null VALUE? TEXT ?STEP ...?
-//!   zt::json exists TEXT ?STEP ...?
-//!   zt::json encode -schema SCHEMA VALUE | -typed TREE | -auto VALUE
-//!   zt::json object ?KEY JSON ...?    zt::json array ?JSON ...?
-//!   zt::json string S   zt::json number N   zt::json bool B
-//!   zt::json null       zt::json raw JSON
-//!   zt::json pretty ?-indent N? TEXT
+//!   ztcl::json parse ?-null VALUE? ?-typed? ?--? TEXT
+//!   ztcl::json valid TEXT
+//!   ztcl::json get ?-null VALUE? TEXT ?STEP ...?
+//!   ztcl::json exists TEXT ?STEP ...?
+//!   ztcl::json encode -schema SCHEMA VALUE | -typed TREE | -auto VALUE
+//!   ztcl::json object ?KEY JSON ...?    ztcl::json array ?JSON ...?
+//!   ztcl::json string S   ztcl::json number N   ztcl::json bool B
+//!   ztcl::json null       ztcl::json raw JSON
+//!   ztcl::json pretty ?-indent N? TEXT
 //!
 //! The parser is in `build.zig` (a Zig implementation of the simdjson
 //! algorithm) and the writer in `encode.zig`. `get` and `exists` walk the
@@ -33,15 +33,17 @@ const Cmd = interp.Cmd;
 const compat = @embedFile("compat.tcl");
 
 const modules_list = [_]mods.Module{.{
-    .name = "zt::json",
+    .name = "ztcl::json",
     .version = "1.0",
     .aliases = &.{
         .{ .name = "json", .version = "1.3.6", .script = compat },
         .{ .name = "json::write", .version = "1.0.5", .script = compat },
+        // The old name, until v0.4.0-beta.
+        .{ .name = "zt::json", .version = "1.0", .script = mods.oldNamespace("json") },
     },
     .install = install,
     .script =
-    \\namespace eval ::zt::json {
+    \\namespace eval ::ztcl::json {
     \\    namespace export parse valid get exists encode object array string number bool null raw pretty
     \\    namespace ensemble create
     \\}
@@ -52,14 +54,14 @@ pub const modules: []const mods.Module = &modules_list;
 
 fn install(it: *Interp) Error!void {
     const table = .{
-        .{ "zt::json::parse", cmdParse },   .{ "zt::json::valid", cmdValid },
-        .{ "zt::json::get", cmdGet },       .{ "zt::json::exists", cmdExists },
-        .{ "zt::json::encode", cmdEncode }, .{ "zt::json::object", cmdObject },
-        .{ "zt::json::array", cmdArray },   .{ "zt::json::string", cmdString },
-        .{ "zt::json::number", cmdNumber }, .{ "zt::json::bool", cmdBool },
-        .{ "zt::json::null", cmdNull },     .{ "zt::json::raw", cmdRaw },
-        .{ "zt::json::pretty", cmdPretty }, .{ "zt::json::_compat", cmdCompat },
-        .{ "zt::json::_many", cmdMany },    .{ "zt::json::_wobject", cmdWobject },
+        .{ "ztcl::json::parse", cmdParse },   .{ "ztcl::json::valid", cmdValid },
+        .{ "ztcl::json::get", cmdGet },       .{ "ztcl::json::exists", cmdExists },
+        .{ "ztcl::json::encode", cmdEncode }, .{ "ztcl::json::object", cmdObject },
+        .{ "ztcl::json::array", cmdArray },   .{ "ztcl::json::string", cmdString },
+        .{ "ztcl::json::number", cmdNumber }, .{ "ztcl::json::bool", cmdBool },
+        .{ "ztcl::json::null", cmdNull },     .{ "ztcl::json::raw", cmdRaw },
+        .{ "ztcl::json::pretty", cmdPretty }, .{ "ztcl::json::_compat", cmdCompat },
+        .{ "ztcl::json::_many", cmdMany },    .{ "ztcl::json::_wobject", cmdWobject },
     };
     inline for (table) |t| try it.register(t[0], t[1]);
 }
@@ -109,7 +111,7 @@ fn join(comptime names: []const []const u8) []const u8 {
 }
 
 fn cmdParse(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    const usage = "zt::json parse ?-null value? ?-typed? ?--? text";
+    const usage = "ztcl::json parse ?-null value? ?-typed? ?--? text";
     var opts: build.Options = .{};
     const i = try options(it, argv, &opts, &.{ "-null", "-typed" }, usage);
     if (i + 1 != argv.len) return it.wrongArgs(usage);
@@ -122,7 +124,7 @@ fn limitOrFalse(it: *Interp, e: Error) Error!void {
 }
 
 fn cmdValid(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len != 2) return it.wrongArgs("zt::json valid text");
+    if (argv.len != 2) return it.wrongArgs("ztcl::json valid text");
     build.validate(it, try it.str(argv[1]), .{}) catch |e| {
         try limitOrFalse(it, e);
         return .{ .int = 0 };
@@ -137,7 +139,7 @@ fn steps(it: *Interp, argv: []const Value) Error![]const []const u8 {
 }
 
 fn cmdGet(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    const usage = "zt::json get ?-null value? ?--? text ?step ...?";
+    const usage = "ztcl::json get ?-null value? ?--? text ?step ...?";
     var opts: build.Options = .{};
     const i = try options(it, argv, &opts, &.{"-null"}, usage);
     if (i >= argv.len) return it.wrongArgs(usage);
@@ -147,7 +149,7 @@ fn cmdGet(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 }
 
 fn cmdExists(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len < 2) return it.wrongArgs("zt::json exists text ?step ...?");
+    if (argv.len < 2) return it.wrongArgs("ztcl::json exists text ?step ...?");
     const path = try steps(it, argv[2..]);
     const v = build.get(it, try it.str(argv[1]), path, .{ .null_value = Value.empty }) catch |e| {
         try limitOrFalse(it, e);
@@ -157,7 +159,7 @@ fn cmdExists(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 }
 
 fn cmdEncode(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    const usage = "zt::json encode -schema schema value | -typed tree | -auto value";
+    const usage = "ztcl::json encode -schema schema value | -typed tree | -auto value";
     var w: encode.Writer = .{ .it = it };
     if (argv.len == 4 and eql(try it.str(argv[1]), "-schema")) {
         try w.schema(argv[3], argv[2]);
@@ -170,7 +172,7 @@ fn cmdEncode(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 }
 
 fn cmdObject(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len % 2 != 1) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"zt::json object ?key json ...?\"", .{});
+    if (argv.len % 2 != 1) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"ztcl::json object ?key json ...?\"", .{});
     var w: encode.Writer = .{ .it = it };
     try w.byte('{');
     var i: usize = 1;
@@ -198,40 +200,40 @@ fn cmdArray(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 }
 
 fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len != 2) return it.wrongArgs("zt::json string s");
+    if (argv.len != 2) return it.wrongArgs("ztcl::json string s");
     var w: encode.Writer = .{ .it = it };
     try w.string(try it.str(argv[1]));
     return w.result();
 }
 
 fn cmdNumber(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len != 2) return it.wrongArgs("zt::json number n");
+    if (argv.len != 2) return it.wrongArgs("ztcl::json number n");
     var w: encode.Writer = .{ .it = it };
     try w.number(argv[1]);
     return w.result();
 }
 
 fn cmdBool(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len != 2) return it.wrongArgs("zt::json bool b");
+    if (argv.len != 2) return it.wrongArgs("ztcl::json bool b");
     var w: encode.Writer = .{ .it = it };
     try w.boolean(argv[1]);
     return w.result();
 }
 
 fn cmdNull(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len != 1) return it.wrongArgs("zt::json null");
+    if (argv.len != 1) return it.wrongArgs("ztcl::json null");
     return .{ .str = "null" };
 }
 
 fn cmdRaw(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len != 2) return it.wrongArgs("zt::json raw json");
+    if (argv.len != 2) return it.wrongArgs("ztcl::json raw json");
     const text = try it.str(argv[1]);
     try build.validate(it, text, .{});
     return argv[1];
 }
 
 fn cmdPretty(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    const usage = "zt::json pretty ?-indent n? text";
+    const usage = "ztcl::json pretty ?-indent n? text";
     var indent: usize = 2;
     var i: usize = 1;
     if (argv.len == 4 and eql(try it.str(argv[1]), "-indent")) {
@@ -268,7 +270,7 @@ fn cmdMany(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 /// key on each line with four spaces, and the lines of a value one level
 /// in. With `aligned`, the keys have the width of the longest key.
 fn cmdWobject(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len != 4) return it.wrongArgs("zt::json::_wobject indented aligned pairs");
+    if (argv.len != 4) return it.wrongArgs("ztcl::json::_wobject indented aligned pairs");
     const indented = (argv[1].asInt() orelse 0) != 0 or eql(try it.str(argv[1]), "true");
     const aligned = (argv[2].asInt() orelse 0) != 0 or eql(try it.str(argv[2]), "true");
     const pairs = try it.list(argv[3]);

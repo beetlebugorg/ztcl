@@ -75,7 +75,7 @@ MB/s of the input text, best of 5 runs, from `tools/bench-stdlib.py --only json`
 
 | Runtime | twitter | canada | citm_catalog |
 |---|---:|---:|---:|
-| **ztcl `zt::json parse`** | **794** | 228 | **952** |
+| **ztcl `ztcl::json parse`** | **794** | 228 | **952** |
 | Node.js `JSON.parse` | 354 | 259 | 494 |
 | Python `orjson` | 499 | 206 | 385 |
 | Python `pysimdjson` | 263 | 224 | 302 |
@@ -83,11 +83,11 @@ MB/s of the input text, best of 5 runs, from `tools/bench-stdlib.py --only json`
 | Go `encoding/json` | 115 | 72 | 129 |
 | tclsh with tcllib `json` | 2.9 | 1.5 | 3.5 |
 
-`query` reads one value at a path. `zt::json get` walks the structural index and makes only the value at the end.
+`query` reads one value at a path. `ztcl::json get` walks the structural index and makes only the value at the end.
 
 | Runtime | twitter | canada | citm_catalog |
 |---|---:|---:|---:|
-| **ztcl `zt::json get`** | **1308** | **615** | **1664** |
+| **ztcl `ztcl::json get`** | **1308** | **615** | **1664** |
 | Python `orjson` | 491 | 245 | 376 |
 | Node.js | 355 | 259 | 493 |
 | Python `pysimdjson` | 295 | 216 | 274 |

@@ -4,7 +4,7 @@ Platform: shared.
 
 ## Goal
 
-`zt::toml`, `zt::msgpack`, and `zt::cbor`, with the schema and the typed tree of `zt::json`.
+`ztcl::toml`, `ztcl::msgpack`, and `ztcl::cbor`, with the schema and the typed tree of `ztcl::json`.
 
 ## Files
 

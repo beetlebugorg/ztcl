@@ -22,38 +22,43 @@ proc test {name script want} {
 
 test names-1 {
     set n [package names]
-    list [expr {"zt::hello" in $n}] [expr {"hello" in $n}] [expr {"zt::hellonet" in $n}]
+    list [expr {"ztcl::hello" in $n}] [expr {"hello" in $n}] [expr {"ztcl::hellonet" in $n}]
 } {0 {1 1 1}}
 
-test present-1 {package present zt::hello} {1 {package zt::hello is not present}}
+test present-1 {package present ztcl::hello} {1 {package ztcl::hello is not present}}
 
-test versions-1 {package versions zt::hello} {0 1.0}
+test versions-1 {package versions ztcl::hello} {0 1.0}
 test versions-2 {package versions hello} {0 0.9}
 
-test require-1 {package require zt::hello} {0 1.0}
-test require-2 {set ::zt::hello::installs} {0 1}
-test require-3 {zt::hello greet ana} {0 {hello, ana}}
+# The old name zt:: works until v0.4.0-beta.
+test oldname-1 {
+    list [package require zt::hello] [zt::hello greet a] [ztcl::hello greet b] [zt::hello::greet c] [package versions zt::hellonet]
+} {0 {1.0 {hello, a} {hello, b} {hello, c} 1.0}}
+
+test require-1 {package require ztcl::hello} {0 1.0}
+test require-2 {set ::ztcl::hello::installs} {0 1}
+test require-3 {ztcl::hello greet ana} {0 {hello, ana}}
 
 test require-4 {
-    list [package require zt::hello] [package require zt::hello 1] $::zt::hello::installs
+    list [package require ztcl::hello] [package require ztcl::hello 1] $::ztcl::hello::installs
 } {0 {1.0 1.0 1}}
 
 test alias-1 {
-    list [package require hello] $::zt::hello::installs [hello bob]
+    list [package require hello] $::ztcl::hello::installs [hello bob]
 } {0 {0.9 1 {hello, bob}}}
 
 test alias-2 {
-    list [package require hello] [package present hello] $::zt::hello::installs
+    list [package require hello] [package present hello] $::ztcl::hello::installs
 } {0 {0.9 0.9 1}}
 
-test require-5 {package require zt::hello 2} {1 {version conflict for package "zt::hello": have 1.0, need 2}}
+test require-5 {package require ztcl::hello 2} {1 {version conflict for package "ztcl::hello": have 1.0, need 2}}
 
-test caps-1 {package require zt::hellonet} {1 {module "zt::hellonet" needs the capability socket}}
+test caps-1 {package require ztcl::hellonet} {1 {module "ztcl::hellonet" needs the capability socket}}
 test caps-2 {
-    catch {package require zt::hellonet} m o
+    catch {package require ztcl::hellonet} m o
     dict get $o -errorcode
 } {0 {ZT PACKAGE CAPABILITY socket}}
-test caps-3 {expr {"zt::hellonet" in [package names]}} {0 1}
+test caps-3 {expr {"ztcl::hellonet" in [package names]}} {0 1}
 
 test provide-1 {
     package provide mine 2.1
@@ -61,23 +66,23 @@ test provide-1 {
 } {0 {2.1 2.1}}
 
 test small-1 {package ifneeded a 1 {set x 1}} {1 {bad option "ifneeded": must be names, present, provide, require, or versions}}
-test small-2 {package req zt::hello} {0 1.0}
+test small-2 {package req ztcl::hello} {0 1.0}
 
 if {[llength [info commands interp]]} {
     test child-1 {
         interp create c
-        set r [list [c eval {info commands zt::hello*}] [c eval {package require zt::hello}]]
-        lappend r [c eval {set ::zt::hello::installs}]
+        set r [list [c eval {info commands ztcl::hello*}] [c eval {package require ztcl::hello}]]
+        lappend r [c eval {set ::ztcl::hello::installs}]
         interp delete c
         set r
     } {0 {{} 1.0 1}}
     test child-2 {
         interp create -safe s
-        set r [list [s eval {package require zt::hello}] [s eval {zt::hello greet x}]]
-        lappend r [catch {s eval {package require zt::hellonet}} m] $m
+        set r [list [s eval {package require ztcl::hello}] [s eval {ztcl::hello greet x}]]
+        lappend r [catch {s eval {package require ztcl::hellonet}} m] $m
         interp delete s
         set r
-    } {0 {1.0 {hello, x} 1 {module "zt::hellonet" needs the capability socket}}}
+    } {0 {1.0 {hello, x} 1 {module "ztcl::hellonet" needs the capability socket}}}
 }
 
 puts "modules.test: pass $passed fail $failed"

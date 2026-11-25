@@ -1129,39 +1129,39 @@ test "the optional commands are absent by default" {
 }
 
 test "a built-in module installs once and runs with the limits" {
-    if (modules.find("zt::hello") == null) return error.SkipZigTest;
+    if (modules.find("ztcl::hello") == null) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
     try std.testing.expectEqualStrings("1.0 0.9 1 {hello, a}", try it.str(try it.eval(
-        \\list [package require zt::hello] [package require hello] $::zt::hello::installs [hello a]
+        \\list [package require ztcl::hello] [package require hello] $::ztcl::hello::installs [hello a]
     )));
     // The full command sees the modules too.
     try it.allow(@intFromEnum(tcl.interp.Capability.package));
-    try std.testing.expectEqualStrings("1.0 1", try it.str(try it.eval("list [package require zt::hello] $::zt::hello::installs")));
+    try std.testing.expectEqualStrings("1.0 1", try it.str(try it.eval("list [package require ztcl::hello] $::ztcl::hello::installs")));
     // `package forget` hides a built-in name, as it does a script package.
-    try std.testing.expectEqualStrings("0 1 1", try it.str(try it.eval("package forget zt::hello; list [expr {\"zt::hello\" in [package names]}] [expr {\"hello\" in [package names]}] [catch {package require zt::hello}]")));
+    try std.testing.expectEqualStrings("0 1 1", try it.str(try it.eval("package forget ztcl::hello; list [expr {\"ztcl::hello\" in [package names]}] [expr {\"hello\" in [package names]}] [catch {package require ztcl::hello}]")));
 
     // The script of a module stops at the step limit.
     var it2: tcl.Interp = undefined;
     try it2.init(std.testing.allocator);
     defer it2.deinit();
     it2.step_limit = 3;
-    try std.testing.expectError(error.TclError, it2.eval("package require zt::hello"));
-    try std.testing.expect(it2.findCommand("zt::hello") == null);
+    try std.testing.expectError(error.TclError, it2.eval("package require ztcl::hello"));
+    try std.testing.expect(it2.findCommand("ztcl::hello") == null);
 }
 
 test "a module that needs a capability gives an error" {
-    if (modules.find("zt::hellonet") == null) return error.SkipZigTest;
+    if (modules.find("ztcl::hellonet") == null) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    try std.testing.expectEqualStrings("1 {module \"zt::hellonet\" needs the capability socket} {ZT PACKAGE CAPABILITY socket}", try it.str(try it.eval(
-        \\list [catch {package require zt::hellonet} m o] $m [dict get $o -errorcode]
+    try std.testing.expectEqualStrings("1 {module \"ztcl::hellonet\" needs the capability socket} {ZT PACKAGE CAPABILITY socket}", try it.str(try it.eval(
+        \\list [catch {package require ztcl::hellonet} m o] $m [dict get $o -errorcode]
     )));
     try it.allow(@intFromEnum(tcl.interp.Capability.interp));
     try std.testing.expectEqualStrings("{} 1.0", try it.str(try it.eval(
-        \\package require zt::hello; interp create c; list [c eval {info commands zt::hello}] [c eval {package require zt::hello}]
+        \\package require ztcl::hello; interp create c; list [c eval {info commands ztcl::hello}] [c eval {package require ztcl::hello}]
     )));
 }
 

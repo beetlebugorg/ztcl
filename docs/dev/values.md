@@ -1,10 +1,10 @@
 # Faster values: arenas, shapes, and lazy JSON
 
-`zt::json parse` makes Tcl values at about one fifth of the speed of simdjson DOM. Stage 1 (the structural index) is close to simdjson. This plan measures where stage 2 spends its time and selects the changes to the value representation and to the build of the values. [The tasks](values-tasks/README.md) have the order of the work.
+`ztcl::json parse` makes Tcl values at about one fifth of the speed of simdjson DOM. Stage 1 (the structural index) is close to simdjson. This plan measures where stage 2 spends its time and selects the changes to the value representation and to the build of the values. [The tasks](values-tasks/README.md) have the order of the work.
 
 ## The profile
 
-The measures ran on main at a61b78f, with a ReleaseFast runner, on the three files of `tools/bench-stdlib.py`. The instruction counts are exact counts of callgrind for one `zt::json parse -null {} $text`, with the collection of the command only (`--toggle-collect=json.cmd.cmdParse`). The collector counts come from a loop of 20 parses. The memory is the count of `--report --gc off` after one parse, less the count with no parse. Other load on the machine made the times noisy, so the decisions use the instruction counts.
+The measures ran on main at a61b78f, with a ReleaseFast runner, on the three files of `tools/bench-stdlib.py`. The instruction counts are exact counts of callgrind for one `ztcl::json parse -null {} $text`, with the collection of the command only (`--toggle-collect=json.cmd.cmdParse`). The collector counts come from a loop of 20 parses. The memory is the count of `--report --gc off` after one parse, less the count with no parse. Other load on the machine made the times noisy, so the decisions use the instruction counts.
 
 | | twitter.json | canada.json | citm_catalog.json |
 |---|---|---|---|
@@ -50,7 +50,7 @@ In a flat `perf` profile of the canada reader, `vm.exec` has 57 %, `expr.binaryO
 | Interned keys | The key compare of the duplicate check | Below 3 % | Low | Part of task 05 |
 | Dict shapes | The key slots of each record, the duplicate check | Memory: 24 bytes for each key of each record. Speed: small for the parse | High: each dict path, the list view, the JIT | Tasks 05 and 06, after a measure |
 | Lazy numbers | The conversion of a number that no script reads | canada: up to the rest of the conversion | High: a new tag in each switch of the code and the JIT | Rejected for now |
-| Lazy document | Each value that no script reads | Large for a script that reads a few fields | High: each value path | Rejected: `zt::json get` has this gain today |
+| Lazy document | Each value that no script reads | Large for a script that reads a few fields | High: each value path | Rejected: `ztcl::json get` has this gain today |
 | Zero-copy strings | Copies of plain strings | 0: done today | None | Done |
 
 ### What the first measures showed
@@ -143,12 +143,12 @@ A lazy number keeps the text and makes the double at the first use. Its string f
 
 ### 6. A lazy document
 
-A value that makes its list and dict views at the first touch. `zt::json get` and `exists` already walk the index and make only the value at the path, and `bench/stdlib/json` measures them. A lazy value must also keep the input and the index alive and must count them in the memory limit. Rejected: the gain is in `get` today.
+A value that makes its list and dict views at the first touch. `ztcl::json get` and `exists` already walk the index and make only the value at the path, and `bench/stdlib/json` measures them. A lazy value must also keep the input and the index alive and must count them in the memory limit. Rejected: the gain is in `get` today.
 
 ## Where else shapes help
 
 - TclOO object variables: each object of a class has the same variable names.
-- CSV rows of `zt::csv` with a header, and SQLite rows as dicts: each row has the keys of the header or the columns.
+- CSV rows of `ztcl::csv` with a header, and SQLite rows as dicts: each row has the keys of the header or the columns.
 - `dict create` of records in a loop.
 
 These cases need task 05 first. Each one measures its gain before it uses shapes.

@@ -16,11 +16,11 @@ The JIT of ztcl specializes JSON work to the shapes and paths that a script uses
 ## Items
 
 1. **Shape-specialized parse.** After N parses of documents with one shape (the same keys in the same order and the same kinds of values), the JIT compiles a parser for the shape. It checks each key in order against the key table, writes each value into the dict of the shape, and goes to the general parser at the first mismatch.
-2. **Compiled path queries.** `zt::json get $doc a b 3`, and a set of paths that a script reads again and again, compile to one scan over the stage 1 index for the path.
-3. **Shape-specialized encode.** `zt::json encode` of dicts with one repeated shape compiles a writer that copies the key bytes from a table and formats only the values.
+2. **Compiled path queries.** `ztcl::json get $doc a b 3`, and a set of paths that a script reads again and again, compile to one scan over the stage 1 index for the path.
+3. **Shape-specialized encode.** `ztcl::json encode` of dicts with one repeated shape compiles a writer that copies the key bytes from a table and formats only the values.
 4. **Tier 2 reads.** In a tier 2 loop, a read of a field of a JSON value of a known shape becomes a load with a shape guard and a side exit.
 5. **Parse for the reads of the consumer.** The profiles of tier 1 and tier 2 give the fields that the code reads. The parser of a shape skips the other subtrees at the speed of stage 1: no number, no unescape, and no value for a field that no code reads. A guard makes the rest when a later read needs it.
-6. **A fused parse and loop.** A tier 2 loop over a JSON array that reads a few number fields, for example `foreach row [zt::json get $doc rows] { incr total [dict get $row amount] }`, compiles to one pass over the stage 1 index that parses only those numbers into registers and makes no Tcl value. A mismatch exits to the general path.
+6. **A fused parse and loop.** A tier 2 loop over a JSON array that reads a few number fields, for example `foreach row [ztcl::json get $doc rows] { incr total [dict get $row amount] }`, compiles to one pass over the stage 1 index that parses only those numbers into registers and makes no Tcl value. A mismatch exits to the general path.
 
 ## Acceptance
 

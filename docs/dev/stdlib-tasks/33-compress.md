@@ -1,4 +1,4 @@
-# Task 33: `zlib`, `zt::zstd`, and HTTP content encodings
+# Task 33: `zlib`, `ztcl::zstd`, and HTTP content encodings
 
 Platform: shared.
 
@@ -8,7 +8,7 @@ Task 12 for the HTTP part. The rest has no dependency.
 
 ## Goal
 
-The core `zlib` command on `std.compress.flate`, `zt::zstd` with a new encoder for levels 1 to 3, and `Content-Encoding` in the HTTP client and server.
+The core `zlib` command on `std.compress.flate`, `ztcl::zstd` with a new encoder for levels 1 to 3, and `Content-Encoding` in the HTTP client and server.
 
 ## Files
 

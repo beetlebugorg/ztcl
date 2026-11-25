@@ -1,15 +1,15 @@
-# Task 19: The client on the shared code, `zt::tls`, and `tls::socket`
+# Task 19: The client on the shared code, `ztcl::tls`, and `tls::socket`
 
 Platform: shared.
 
 ## Goal
 
-The client state machine on the shared record layer and messages, the `zt::tls` API, the TclTLS subset, and https in the HTTP client.
+The client state machine on the shared record layer and messages, the `ztcl::tls` API, the TclTLS subset, and https in the HTTP client.
 
 ## Files
 
 - `src/tls/client.zig` (new).
-- `src/tls/cmd.zig` (new): `zt::tls socket`, `server`, and `status`.
+- `src/tls/cmd.zig` (new): `ztcl::tls socket`, `server`, and `status`.
 - `src/tls/compat.tcl` (new, embedded): `tls::socket`, `tls::import`, `tls::handshake`, and `tls::status`.
 - `src/http/client.zig`: https and ALPN.
 
