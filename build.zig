@@ -141,6 +141,15 @@ pub fn build(b: *std.Build) void {
         if (b.args) |args| r.addArgs(args);
         b.step(jt[0], jt[2]).dependOn(&r.step);
     }
+    // The probe of executable memory: `zig build jit-probe`.
+    const probe_exe = b.addExecutable(.{ .name = "jit-probe", .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/jit-probe.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "ztcl", .module = ztcl }},
+    }) });
+    b.step("jit-probe", "Print the state of the executable memory of the JIT").dependOn(&b.addRunArtifact(probe_exe).step);
+    b.installArtifact(probe_exe);
 
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
     const wasm = addWasm(b, "ztcl", .none, gc_precise, size_plant, on);
