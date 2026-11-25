@@ -4,7 +4,7 @@ Platform: shared.
 
 ## Goal
 
-Built-in modules that `package require` loads from memory, with a build flag for each module. The table has no real module yet: a test module `zt::hello` shows the path.
+Built-in modules that `package require` loads from memory, with a build flag for each module. The table has no real module yet: a test module `ztcl::hello` shows the path.
 
 ## Files
 

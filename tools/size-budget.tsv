@@ -5,8 +5,8 @@
 # module of task 01.
 row	bytes	note
 table	10000	module table and package require
-hello	12000	test modules zt::hello and zt::hellonet; while hello is the only module, its row also has the module table
-json	115000	zt::json and the tcllib json names; task 05 measured 104 480 (two forms of the walk, the writer, and the tcllib names)
+hello	12000	test modules ztcl::hello and ztcl::hellonet; while hello is the only module, its row also has the module table
+json	115000	ztcl::json and the tcllib json names; task 05 measured 104 480 (two forms of the walk, the writer, and the tcllib names)
 formats	90000	csv, toml, msgpack, cbor, url, encode
 compress	270000	flate and zstd
 crypto	200000	hashes, HMAC, argon2, AEAD, signatures, random
@@ -15,9 +15,9 @@ http	220000	HTTP/1.1 client and server, WebSockets, SSE
 h2	90000	HTTP/2 and HPACK
 tls	650000	TLS 1.3, X.509, PEM, roots
 time	65000	zones and the zone data
-log	20000	zt::log
+log	20000	ztcl::log
 sys	100000	paths, watch, processes, env, args, dns
-tmpl	30000	zt::tmpl
+tmpl	30000	ztcl::tmpl
 tooling	60000	test runner, bench, profiler
 build	30000	the bundle reader
 sqlite	800000	SQLite and the binding

@@ -1,4 +1,4 @@
-# The tests of zt::json and of the tcllib names json and json::write.
+# The tests of ztcl::json and of the tcllib names json and json::write.
 #
 #   zig-out/bin/ztcl tests/stdlib/json.test
 #
@@ -17,59 +17,64 @@ proc test {name script want} {
     }
 }
 
-package require zt::json
+package require ztcl::json
 
 # parse
-test parse-1 {zt::json parse {{"a":1,"b":[true,false,"x"],"c":{"d":2.5}}}} {0 {a 1 b {true false x} c {d 2.5}}}
-test parse-2 {zt::json parse {[1,null]}} {1 {json syntax error at line 1, column 4: null needs the option -null}}
-test parse-3 {catch {zt::json parse {[null]}} m o; dict get $o -errorcode} {0 {ZT JSON NULL}}
-test parse-4 {zt::json parse -null NULL {[1,null]}} {0 {1 NULL}}
-test parse-5 {zt::json parse -null {} -- {[null]}} {0 {{}}}
-test parse-6 {zt::json parse {[1.0, 1e2, 12345678901234567890123]}} {0 {1.0 100.0 12345678901234567890123}}
-test parse-7 {expr {[zt::json parse {[2]}] + 1}} {0 3}
-test parse-8 {zt::json parse {"a\u00e9\n"}} [list 0 "a\u00e9\n"]
-test parse-9 {zt::json parse {{"k":1,"k":2}}} {0 {k 2}}
-test parse-10 {zt::json parse -typed {{"a":[1,"x",true,null]}}} {0 {object {a {array {{number 1} {string x} {bool true} null}}}}}
-test parse-11 {catch {zt::json parse {[1,]}} m o; list $m [dict get $o -errorcode]} {0 {{json syntax error at line 1, column 4: unexpected character} {ZT JSON SYNTAX 1 4}}}
-test parse-12 {zt::json parse -bad x} {1 {bad option "-bad": must be -null, -typed, or --}}
-test parse-13 {zt::json parse -5} {0 -5}
-test parse-14 {catch {zt::json parse [string repeat {[} 600]} m o; dict get $o -errorcode} {0 {ZT JSON DEPTH}}
+test parse-1 {ztcl::json parse {{"a":1,"b":[true,false,"x"],"c":{"d":2.5}}}} {0 {a 1 b {true false x} c {d 2.5}}}
+# The old name zt::json works until v0.4.0-beta.
+test oldname-1 {
+    package require zt::json
+    list [zt::json get {{"a":[1,2]}} a 1] [zt::json::valid {[1]}] [ztcl::json valid x]
+} {0 {2 1 0}}
+test parse-2 {ztcl::json parse {[1,null]}} {1 {json syntax error at line 1, column 4: null needs the option -null}}
+test parse-3 {catch {ztcl::json parse {[null]}} m o; dict get $o -errorcode} {0 {ZT JSON NULL}}
+test parse-4 {ztcl::json parse -null NULL {[1,null]}} {0 {1 NULL}}
+test parse-5 {ztcl::json parse -null {} -- {[null]}} {0 {{}}}
+test parse-6 {ztcl::json parse {[1.0, 1e2, 12345678901234567890123]}} {0 {1.0 100.0 12345678901234567890123}}
+test parse-7 {expr {[ztcl::json parse {[2]}] + 1}} {0 3}
+test parse-8 {ztcl::json parse {"a\u00e9\n"}} [list 0 "a\u00e9\n"]
+test parse-9 {ztcl::json parse {{"k":1,"k":2}}} {0 {k 2}}
+test parse-10 {ztcl::json parse -typed {{"a":[1,"x",true,null]}}} {0 {object {a {array {{number 1} {string x} {bool true} null}}}}}
+test parse-11 {catch {ztcl::json parse {[1,]}} m o; list $m [dict get $o -errorcode]} {0 {{json syntax error at line 1, column 4: unexpected character} {ZT JSON SYNTAX 1 4}}}
+test parse-12 {ztcl::json parse -bad x} {1 {bad option "-bad": must be -null, -typed, or --}}
+test parse-13 {ztcl::json parse -5} {0 -5}
+test parse-14 {catch {ztcl::json parse [string repeat {[} 600]} m o; dict get $o -errorcode} {0 {ZT JSON DEPTH}}
 
 # valid
-test valid-1 {list [zt::json valid {{"a":[1,2]}}] [zt::json valid {{"a":}}] [zt::json valid {[null]}]} {0 {1 0 1}}
-test valid-2 {zt::json valid "\"\\x\""} {0 0}
+test valid-1 {list [ztcl::json valid {{"a":[1,2]}}] [ztcl::json valid {{"a":}}] [ztcl::json valid {[null]}]} {0 {1 0 1}}
+test valid-2 {ztcl::json valid "\"\\x\""} {0 0}
 
 # get and exists
 set doc {{"users":[{"name":"ana","age":30},{"name":"bo","tags":["x","y"]}],"n":null}}
-test get-1 {zt::json get $doc users 1 name} {0 bo}
-test get-2 {zt::json get $doc users 0} {0 {name ana age 30}}
-test get-3 {zt::json get $doc users 1 tags 1} {0 y}
-test get-4 {zt::json get $doc users 2} {1 {json path "users 2" has no value}}
-test get-5 {zt::json get $doc n} {1 {json syntax error at line 1, column 71: null needs the option -null}}
-test get-6 {zt::json get -null none $doc n} {0 none}
-test exists-1 {list [zt::json exists $doc users 0 age] [zt::json exists $doc users 0 email] [zt::json exists $doc n]} {0 {1 0 1}}
+test get-1 {ztcl::json get $doc users 1 name} {0 bo}
+test get-2 {ztcl::json get $doc users 0} {0 {name ana age 30}}
+test get-3 {ztcl::json get $doc users 1 tags 1} {0 y}
+test get-4 {ztcl::json get $doc users 2} {1 {json path "users 2" has no value}}
+test get-5 {ztcl::json get $doc n} {1 {json syntax error at line 1, column 71: null needs the option -null}}
+test get-6 {ztcl::json get -null none $doc n} {0 none}
+test exists-1 {list [ztcl::json exists $doc users 0 age] [ztcl::json exists $doc users 0 email] [ztcl::json exists $doc n]} {0 {1 0 1}}
 
 # encode
-test encode-1 {zt::json encode -schema {object {id int name string tags {list string} ok bool}} {id 7 name ana tags {a b} ok yes}} {0 {{"id":7,"name":"ana","tags":["a","b"],"ok":true}}}
-test encode-2 {zt::json encode -schema {object {id int note {optional string}}} {id 7}} {0 {{"id":7}}}
-test encode-3 {zt::json encode -schema {object {id int}} {id 7 x 1}} {1 {key "x" is not in the schema}}
-test encode-4 {zt::json encode -schema {object {id int}} {}} {1 {missing key "id"}}
-test encode-5 {zt::json encode -schema object {a 1 b 2.5 c true d hello e 007}} {0 {{"a":1,"b":2.5,"c":true,"d":"hello","e":"007"}}}
-test encode-6 {zt::json encode -typed [zt::json parse -typed {{"a":[1,"x",true,null,{}]}}]} {0 {{"a":[1,"x",true,null,{}]}}}
-test encode-7 {zt::json encode -schema number abc} {1 {expected a number but got "abc"}}
-test encode-8 {zt::json encode -schema {list int} {1 2 3}} {0 {[1,2,3]}}
-test encode-9 {zt::json encode -schema raw {{"x":1}}} {0 {{"x":1}}}
-test encode-10 {zt::json encode -auto {a 1}} {0 {{"a":1}}}
+test encode-1 {ztcl::json encode -schema {object {id int name string tags {list string} ok bool}} {id 7 name ana tags {a b} ok yes}} {0 {{"id":7,"name":"ana","tags":["a","b"],"ok":true}}}
+test encode-2 {ztcl::json encode -schema {object {id int note {optional string}}} {id 7}} {0 {{"id":7}}}
+test encode-3 {ztcl::json encode -schema {object {id int}} {id 7 x 1}} {1 {key "x" is not in the schema}}
+test encode-4 {ztcl::json encode -schema {object {id int}} {}} {1 {missing key "id"}}
+test encode-5 {ztcl::json encode -schema object {a 1 b 2.5 c true d hello e 007}} {0 {{"a":1,"b":2.5,"c":true,"d":"hello","e":"007"}}}
+test encode-6 {ztcl::json encode -typed [ztcl::json parse -typed {{"a":[1,"x",true,null,{}]}}]} {0 {{"a":[1,"x",true,null,{}]}}}
+test encode-7 {ztcl::json encode -schema number abc} {1 {expected a number but got "abc"}}
+test encode-8 {ztcl::json encode -schema {list int} {1 2 3}} {0 {[1,2,3]}}
+test encode-9 {ztcl::json encode -schema raw {{"x":1}}} {0 {{"x":1}}}
+test encode-10 {ztcl::json encode -auto {a 1}} {0 {{"a":1}}}
 
 # builders
-test build-1 {zt::json object id 7 name [zt::json string ana] tags [zt::json array 1 2]} {0 {{"id":7,"name":"ana","tags":[1,2]}}}
-test build-2 {zt::json string "a\"b\\c\n\x01\x7f\u00e9/"} [list 0 "\"a\\\"b\\\\c\\n\\u0001\\u007f\u00e9/\""]
-test build-3 {list [zt::json number 1e3] [zt::json bool on] [zt::json null] [zt::json raw {[1]}]} {0 {1e3 true null {[1]}}}
-test build-4 {zt::json raw {[1,}} {1 {json syntax error at line 1, column 4: value expected}}
-test build-5 {zt::json array} {0 {[]}}
+test build-1 {ztcl::json object id 7 name [ztcl::json string ana] tags [ztcl::json array 1 2]} {0 {{"id":7,"name":"ana","tags":[1,2]}}}
+test build-2 {ztcl::json string "a\"b\\c\n\x01\x7f\u00e9/"} [list 0 "\"a\\\"b\\\\c\\n\\u0001\\u007f\u00e9/\""]
+test build-3 {list [ztcl::json number 1e3] [ztcl::json bool on] [ztcl::json null] [ztcl::json raw {[1]}]} {0 {1e3 true null {[1]}}}
+test build-4 {ztcl::json raw {[1,}} {1 {json syntax error at line 1, column 4: value expected}}
+test build-5 {ztcl::json array} {0 {[]}}
 
 # pretty
-test pretty-1 {zt::json pretty {{"a":[1,2],"b":{}}}} [list 0 "{\n  \"a\": \[\n    1,\n    2\n  \],\n  \"b\": {}\n}"]
+test pretty-1 {ztcl::json pretty {{"a":[1,2],"b":{}}}} [list 0 "{\n  \"a\": \[\n    1,\n    2\n  \],\n  \"b\": {}\n}"]
 
 # round trips of JSONTestSuite cases: parse -typed and encode -typed
 foreach {name text} {
@@ -77,13 +82,13 @@ foreach {name text} {
     t2 {{"a":{"b":["c",{"d":[]}]}}}
     t3 {["\u0000","\"","\\","é"]}
 } {
-    test round-$name {zt::json valid [zt::json encode -typed [zt::json parse -typed $text]]} {0 1}
+    test round-$name {ztcl::json valid [ztcl::json encode -typed [ztcl::json parse -typed $text]]} {0 1}
 }
 
 # the step limit stops a parse: the error cannot be caught
 test limit-1 {
     set big "\[[string repeat 1, 100000]1\]"
-    list [llength [zt::json parse $big]] [zt::json valid $big]
+    list [llength [ztcl::json parse $big]] [ztcl::json valid $big]
 } {0 {100001 1}}
 
 # the tcllib names

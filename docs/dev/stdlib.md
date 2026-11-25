@@ -7,7 +7,7 @@ The plan adds no code. The user approves it before task 01 starts.
 ## Summary
 
 - Each module is Zig code in the binary. `package require` loads it from memory. A build flag leaves it out.
-- The new API is in the namespace `zt`. The names of tcllib, of the core `http` package, and of TclTLS stay where they exist, as thin commands over the same native code.
+- The new API is in the namespace `ztcl`. The names of tcllib, of the core `http` package, and of TclTLS stay where they exist, as thin commands over the same native code.
 - The HTTP server has a pool of workers. Each worker is a thread with its own interpreter, as in [the threads plan](../threads.md). A request runs with its own step limit, memory limit, and deadline, so a runaway handler fails alone.
 - Async I/O runs on io_uring (Linux), kqueue (macOS), and IOCP (Windows) behind the `std.Io` interface. A handler runs in a coroutine and looks synchronous.
 - TLS 1.3 is new code on `std.crypto` for both the server and the client. It stays behind a flag until an external review is done.
@@ -64,7 +64,7 @@ A module is a Zig file with a table entry:
 
 ```zig
 pub const module = ztcl.Module{
-    .name = "zt::json",
+    .name = "ztcl::json",
     .version = "1.0",
     .aliases = &.{ .{ "json", "1.3.4" }, .{ "json::write", "1.0.4" } },
     .needs = 0, // capability bits
@@ -74,10 +74,10 @@ pub const module = ztcl.Module{
 ```
 
 - `src/modules.zig` has the table. The build adds each module that its flag allows.
-- `package require zt::json` calls `install` once for each interpreter. `install` registers the native commands and runs the embedded script. The script is text in the binary. No file is read.
-- An alias name loads the same module and installs the compatible commands (see below). `package require json` gives the tcllib commands. `package require zt::json` gives the new API. Both use one copy of the native code.
+- `package require ztcl::json` calls `install` once for each interpreter. `install` registers the native commands and runs the embedded script. The script is text in the binary. No file is read.
+- An alias name loads the same module and installs the compatible commands (see below). `package require json` gives the tcllib commands. `package require ztcl::json` gives the new API. Both use one copy of the native code.
 - The registry works without the capability `package`. Today a script with no `package` capability has no `package` command. The plan adds a small `package require` (and `package present`, `package provide`, `package versions`) that sees only the built-in modules and that is present by default. The full `package` command stays a capability. **Decision for the user (1).**
-- A module that needs a capability is visible in `package names` but `package require` gives the error `module "zt::http" needs the capability socket`.
+- A module that needs a capability is visible in `package names` but `package require` gives the error `module "ztcl::http" needs the capability socket`.
 - A child interpreter gets only the modules that it requires itself, and only with the capabilities of the child.
 
 ### Build flags
@@ -135,22 +135,22 @@ The margin is about 600 KB. A module can build with `ReleaseSmall` in a `Release
 
 ## The API rules
 
-### The namespace `zt`
+### The namespace `ztcl`
 
-The new API is in `::zt`. Each module is an ensemble command in it: `zt::json`, `zt::http`, `zt::hash`, and so on.
+The new API is in `::ztcl`. Each module is an ensemble command in it: `ztcl::json`, `ztcl::http`, `ztcl::hash`, and so on.
 
 The reasons:
 
-- It is short. A handler of a service names it often, and `namespace import` or `namespace path ::zt` makes it shorter.
+- It is short. A handler of a service names it often, and `namespace import` or `namespace path ::ztcl` makes it shorter.
 - It is the first two letters of the binary name, so a reader of a script can see where it comes from.
 - tcllib, the Tcl core (`tcl::` and `::oo`), and the packages that issue 27 names do not use it. The task of the module system checks the names of tcllib 2.0 and of Tcl 9.1 again.
 - The other choices: `ztcl::` is longer in each call. `std::` is generic, a user namespace can have that name, and it says that the API is a standard. `tcl::` belongs to the Tcl core.
 
-**Decision for the user (2):** the name `zt`.
+**Decision for the user (2):** the name `ztcl`. The first name was `zt`. The modules moved to `ztcl` before v0.3.0-beta, and the old names stay as deprecated aliases until v0.4.0-beta.
 
 ### Rules for the new API
 
-1. One ensemble for each module. Subcommands are verbs: `zt::json parse`, `zt::json encode`, `zt::hash sha256`.
+1. One ensemble for each module. Subcommands are verbs: `ztcl::json parse`, `ztcl::json encode`, `ztcl::hash sha256`.
 2. Options come before the positional arguments, start with `-`, and accept `--` to end the options.
 3. A result is a plain Tcl value: a string, a list, or a dict. A resource with a life (a connection, a server, a stream, a database) is a command, as `open` gives a channel and TclOO gives an object. `$obj close` or `rename $obj {}` frees it.
 4. Bytes are byte strings (each character below 256), as in `binary`. A text result is UTF-8. A command that reads bytes says so in its manual.
@@ -164,30 +164,30 @@ The reasons:
 
 | Package or command | Source | Choice | The new API |
 |---|---|---|---|
-| `json` (`json::json2dict`, `json::many-json2dict`, `json::validate`) | tcllib | Wrap | `zt::json`: SIMD parse, typed encode, path queries, and streams. The tcllib API has no typed encode and no path query. |
-| `json::write` | tcllib | Wrap | `zt::json` builders |
-| `http` (`http::geturl`, `http::config`, `http::data`, `http::status`, `http::ncode`, `http::meta`, `http::cleanup`, `http::register`) | Tcl core package 2.9 | Wrap | `zt::http`: client and server. The `http` package is a client only, and its state array per token does not fit a coroutine handler. |
-| `tls` (`tls::socket`, `tls::import`, `tls::handshake`, `tls::status`) | TclTLS | Wrap a subset | `zt::tls` |
-| `zlib` | Tcl core command | Keep | `zt::zstd` has the same shape as `zlib` for zstd. The `zlib` API is good, and the core test file `zlib.test` measures it. |
-| `binary encode` and `binary decode` (base64, hex) | Tcl core | Keep | None. The API is good. `zt::encode` adds base32, base58, and base64url with the same shape. |
-| `base64` (`base64::encode`, `base64::decode`), `base32`, `uuencode` | tcllib | Wrap | `binary encode` and `zt::encode` |
-| `uri` (`uri::split`, `uri::join`, `uri::resolve`, `uri::isrelative`, `uri::canonicalize`) | tcllib | Wrap | `zt::url`: parse, build, query strings, and percent codes. |
-| `csv` (`csv::split`, `csv::join`, `csv::joinlist`, `csv::iscomplete`) | tcllib | Wrap | `zt::csv`: RFC 4180 read and write, rows from a channel. |
-| `sha256` (`sha2::sha256`, `sha2::hmac`), `sha1`, `md5`, `crc32` (`crc::crc32`) | tcllib | Wrap | `zt::hash` |
-| `aes`, `pki`, `rc4`, `blowfish`, `des` | tcllib | Replace | `zt::crypto`: AEAD and signatures only. The old ciphers are not provided. |
-| `uuid` (`uuid::uuid generate`) | tcllib | Wrap | `zt::crypto uuid` |
-| `logger`, `log` | tcllib | Wrap a subset of `logger` | `zt::log`: structured records. |
-| `cmdline` (`cmdline::getoptions`, `cmdline::getKnownOptions`, `cmdline::usage`) | tcllib | Wrap | `zt::args` |
-| `fileutil` | tcllib | Wrap `cat`, `writeFile`, `appendToFile`, `find`, `tempfile` | `zt::fs`: walk, watch, atomic write. `file` and `glob` stay as the core commands. |
-| `websocket` | tcllib | Wrap the client (`websocket::open`, `websocket::send`, `websocket::close`) | `zt::http websocket` and the server API |
-| `httpd` | tcllib | Replace | `zt::http server` |
-| `dns` | tcllib | Replace | `zt::dns` |
-| `textutil::expander` | tcllib | Replace | `zt::tmpl` with escapes by default |
-| `clock_iso8601`, `clock_rfc2822` | tcllib | Replace | `clock` (core, kept) and `zt::time` |
+| `json` (`json::json2dict`, `json::many-json2dict`, `json::validate`) | tcllib | Wrap | `ztcl::json`: SIMD parse, typed encode, path queries, and streams. The tcllib API has no typed encode and no path query. |
+| `json::write` | tcllib | Wrap | `ztcl::json` builders |
+| `http` (`http::geturl`, `http::config`, `http::data`, `http::status`, `http::ncode`, `http::meta`, `http::cleanup`, `http::register`) | Tcl core package 2.9 | Wrap | `ztcl::http`: client and server. The `http` package is a client only, and its state array per token does not fit a coroutine handler. |
+| `tls` (`tls::socket`, `tls::import`, `tls::handshake`, `tls::status`) | TclTLS | Wrap a subset | `ztcl::tls` |
+| `zlib` | Tcl core command | Keep | `ztcl::zstd` has the same shape as `zlib` for zstd. The `zlib` API is good, and the core test file `zlib.test` measures it. |
+| `binary encode` and `binary decode` (base64, hex) | Tcl core | Keep | None. The API is good. `ztcl::encode` adds base32, base58, and base64url with the same shape. |
+| `base64` (`base64::encode`, `base64::decode`), `base32`, `uuencode` | tcllib | Wrap | `binary encode` and `ztcl::encode` |
+| `uri` (`uri::split`, `uri::join`, `uri::resolve`, `uri::isrelative`, `uri::canonicalize`) | tcllib | Wrap | `ztcl::url`: parse, build, query strings, and percent codes. |
+| `csv` (`csv::split`, `csv::join`, `csv::joinlist`, `csv::iscomplete`) | tcllib | Wrap | `ztcl::csv`: RFC 4180 read and write, rows from a channel. |
+| `sha256` (`sha2::sha256`, `sha2::hmac`), `sha1`, `md5`, `crc32` (`crc::crc32`) | tcllib | Wrap | `ztcl::hash` |
+| `aes`, `pki`, `rc4`, `blowfish`, `des` | tcllib | Replace | `ztcl::crypto`: AEAD and signatures only. The old ciphers are not provided. |
+| `uuid` (`uuid::uuid generate`) | tcllib | Wrap | `ztcl::crypto uuid` |
+| `logger`, `log` | tcllib | Wrap a subset of `logger` | `ztcl::log`: structured records. |
+| `cmdline` (`cmdline::getoptions`, `cmdline::getKnownOptions`, `cmdline::usage`) | tcllib | Wrap | `ztcl::args` |
+| `fileutil` | tcllib | Wrap `cat`, `writeFile`, `appendToFile`, `find`, `tempfile` | `ztcl::fs`: walk, watch, atomic write. `file` and `glob` stay as the core commands. |
+| `websocket` | tcllib | Wrap the client (`websocket::open`, `websocket::send`, `websocket::close`) | `ztcl::http websocket` and the server API |
+| `httpd` | tcllib | Replace | `ztcl::http server` |
+| `dns` | tcllib | Replace | `ztcl::dns` |
+| `textutil::expander` | tcllib | Replace | `ztcl::tmpl` with escapes by default |
+| `clock_iso8601`, `clock_rfc2822` | tcllib | Replace | `clock` (core, kept) and `ztcl::time` |
 | `tcltest` | Tcl | Keep | `ztcl test` runs `.test` files. The API is good. |
-| `bench`, `profiler` | tcllib | Replace | `zt::bench`, `ztcl prof` |
+| `bench`, `profiler` | tcllib | Replace | `ztcl::bench`, `ztcl prof` |
 | `sqlite3` | SQLite | Keep | None. The binding of SQLite is the API (decision 2). |
-| TOML, MessagePack, CBOR | none in tcllib | New | `zt::toml`, `zt::msgpack`, `zt::cbor` |
+| TOML, MessagePack, CBOR | none in tcllib | New | `ztcl::toml`, `ztcl::msgpack`, `ztcl::cbor` |
 
 A wrapped command keeps the result and the error message of the old package for each input of its test file. Where the old package is wrong by RFC (for example a JSON text that tcllib accepts and RFC 8259 rejects), the wrapper keeps the old behavior, and the new API follows the RFC. The manual of the wrapper lists each such case.
 
@@ -207,8 +207,8 @@ A wrapped command keeps the result and the error message of the old package for 
 
 | Capability | What it turns on |
 |---|---|
-| `random` | Entropy from the system: `zt::crypto random`, `uuid`, and the key generation of TLS. Without it, the default stays deterministic. TLS needs it. |
-| `env` | `zt::sys env`: read the environment. |
+| `random` | Entropy from the system: `ztcl::crypto random`, `uuid`, and the key generation of TLS. Without it, the default stays deterministic. TLS needs it. |
+| `env` | `ztcl::sys env`: read the environment. |
 | `thread` | From the threads plan. The worker pool of the server needs it. |
 | `sqlite` | The `sqlite3` command. Files need `file` too. `:memory:` needs only `sqlite`. |
 | `fetch` | WebAssembly only: the HTTP client through a host import. |
@@ -256,7 +256,7 @@ One module, `src/aio/`, gives the event loop, the sockets, the files of channels
 
 ### Handlers that look synchronous
 
-A blocking call of a module (`zt::http get`, a read of a socket, `zt::dns resolve`, `$db eval` when SQLite waits on a lock, `zt::sys sleep`) checks if it runs in a coroutine.
+A blocking call of a module (`ztcl::http get`, a read of a socket, `ztcl::dns resolve`, `$db eval` when SQLite waits on a lock, `ztcl::sys sleep`) checks if it runs in a coroutine.
 
 - In a coroutine, the command starts the operation, registers the coroutine as its waiter, and yields to the event loop. The loop resumes the coroutine with the result.
 - Outside a coroutine, the command runs the event loop until its operation is done, as `vwait` does.
@@ -281,26 +281,26 @@ The builder is the expensive part, because each value is a heap object. The gate
 ### The new API
 
 ```tcl
-package require zt::json
+package require ztcl::json
 
-set doc [zt::json parse $text]                 ;# dicts and lists, null as the empty string
-set doc [zt::json parse -null null $text]      ;# null as the string "null"
-set doc [zt::json parse -typed $text]          ;# a tagged tree: {object {name {string ana}}}
-zt::json get $text users 0 name                ;# a path query on the text, with no full parse
-zt::json exists $text users 0 email
-zt::json valid $text
+set doc [ztcl::json parse $text]                 ;# dicts and lists, null as the empty string
+set doc [ztcl::json parse -null null $text]      ;# null as the string "null"
+set doc [ztcl::json parse -typed $text]          ;# a tagged tree: {object {name {string ana}}}
+ztcl::json get $text users 0 name                ;# a path query on the text, with no full parse
+ztcl::json exists $text users 0 email
+ztcl::json valid $text
 
-zt::json encode -schema {id int name string tags {list string} meta object} $user
-zt::json encode -typed $tree                   ;# the tagged tree back to text
-zt::json object id 7 name [zt::json string ana] tags [zt::json array 1 2]
-zt::json pretty $text
+ztcl::json encode -schema {id int name string tags {list string} meta object} $user
+ztcl::json encode -typed $tree                   ;# the tagged tree back to text
+ztcl::json object id 7 name [ztcl::json string ana] tags [ztcl::json array 1 2]
+ztcl::json pretty $text
 
-set s [zt::json stream $chan {apply {{event value} { ... }}}]
+set s [ztcl::json stream $chan {apply {{event value} { ... }}}]
 ```
 
 - A Tcl value has no visible type. So `encode` needs a schema or the typed tree. Without one, `encode` writes a dict as an object only with `-schema`, and the builders (`object`, `array`, `string`, `number`, `bool`, `null`, `raw`) write JSON text directly. The builders are the fast path for a handler that writes a response.
 - The schema words: `string`, `int`, `number`, `bool`, `null`, `object` (any dict, values guessed), `{object SCHEMA}`, `{list WORD}`, `{optional WORD}`, and `raw` (already JSON text).
-- "Guessed" means: a canonical integer or double is a number, `true` and `false` are booleans, and anything else is a string. The guess is the rule of `-schema object` and of `zt::json encode -auto`.
+- "Guessed" means: a canonical integer or double is a number, `true` and `false` are booleans, and anything else is a string. The guess is the rule of `-schema object` and of `ztcl::json encode -auto`.
 - `get` and `exists` run the index stage and walk only the path. A path step is a key or an index.
 - `stream` gives events (`begin_object`, `key`, `value`, `end_object`, and so on) for input from a channel, in parts. It uses `std.json.Scanner`.
 
@@ -312,38 +312,38 @@ set s [zt::json stream $chan {apply {{event value} { ... }}}]
 
 ## Formats and encodings
 
-- `zt::csv read ?-sep ,? ?-quote \"? ?-header? $text`, `zt::csv write $rows`, and `zt::csv foreach row $chan {body}`. RFC 4180, with an option for the dialects of Excel. The tcllib `csv` commands wrap it.
-- `zt::toml parse` and `zt::toml encode -schema`: TOML 1.0, with the `toml-test` suite.
-- `zt::msgpack pack -schema` and `unpack`, `zt::cbor encode -schema` and `decode` (RFC 8949, with its appendix A vectors). Both use the typed tree form of `zt::json` for round trips.
-- `zt::url parse $url` gives a dict (`scheme`, `user`, `host`, `port`, `path`, `query`, `fragment`). `zt::url build`, `zt::url query decode` and `encode`, `zt::url escape` and `unescape`, and `zt::url resolve`. It follows the WHATWG URL standard for the parse, with the test data `urltestdata.json`. `std.Uri` is the reference for RFC 3986 cases.
-- `zt::encode base32`, `base32hex`, `base58`, and `base64url`, with the shape of `binary encode` and `binary decode`. The test vectors of RFC 4648.
+- `ztcl::csv read ?-sep ,? ?-quote \"? ?-header? $text`, `ztcl::csv write $rows`, and `ztcl::csv foreach row $chan {body}`. RFC 4180, with an option for the dialects of Excel. The tcllib `csv` commands wrap it.
+- `ztcl::toml parse` and `ztcl::toml encode -schema`: TOML 1.0, with the `toml-test` suite.
+- `ztcl::msgpack pack -schema` and `unpack`, `ztcl::cbor encode -schema` and `decode` (RFC 8949, with its appendix A vectors). Both use the typed tree form of `ztcl::json` for round trips.
+- `ztcl::url parse $url` gives a dict (`scheme`, `user`, `host`, `port`, `path`, `query`, `fragment`). `ztcl::url build`, `ztcl::url query decode` and `encode`, `ztcl::url escape` and `unescape`, and `ztcl::url resolve`. It follows the WHATWG URL standard for the parse, with the test data `urltestdata.json`. `std.Uri` is the reference for RFC 3986 cases.
+- `ztcl::encode base32`, `base32hex`, `base58`, and `base64url`, with the shape of `binary encode` and `binary decode`. The test vectors of RFC 4648.
 
 ## Compression
 
 - The core command `zlib` (`compress`, `decompress`, `deflate`, `inflate`, `gzip`, `gunzip`, `stream`, `push`, `adler32`, `crc32`) on `std.compress.flate`. The core test file `zlib.test` is the gate.
-- `zt::zstd compress ?-level N? $data`, `zt::zstd decompress ?-maxsize N? $data`, `zt::zstd stream`, and `zt::zstd push` for channels. The decoder is `std.compress.zstd.Decompress`. The encoder is new: levels 1 to 3 with a hash chain match finder and the entropy coders of RFC 8878. A level above 3 maps to level 3 in the first version.
+- `ztcl::zstd compress ?-level N? $data`, `ztcl::zstd decompress ?-maxsize N? $data`, `ztcl::zstd stream`, and `ztcl::zstd push` for channels. The decoder is `std.compress.zstd.Decompress`. The encoder is new: levels 1 to 3 with a hash chain match finder and the entropy coders of RFC 8878. A level above 3 maps to level 3 in the first version.
 - The HTTP module uses both for `Content-Encoding` (`gzip`, `deflate`, `zstd`), with the zip bomb bound.
 
 ## Hashes and crypto
 
 ```tcl
-zt::hash sha256 $data                 ;# hex
-zt::hash sha256 -bin $data            ;# bytes
-zt::hash blake3 -length 64 $data
-zt::hash hmac sha256 $key $data
-set h [zt::hash new sha512]; $h update $part; $h digest; $h close
-zt::hash equal $a $b                  ;# constant time compare
+ztcl::hash sha256 $data                 ;# hex
+ztcl::hash sha256 -bin $data            ;# bytes
+ztcl::hash blake3 -length 64 $data
+ztcl::hash hmac sha256 $key $data
+set h [ztcl::hash new sha512]; $h update $part; $h digest; $h close
+ztcl::hash equal $a $b                  ;# constant time compare
 
-zt::crypto random 32                  ;# needs the capability random
-zt::crypto uuid                       ;# version 4, needs random; uuid7 needs clock too
-zt::crypto password hash $pw          ;# argon2id, a PHC string
-zt::crypto password verify $pw $phc
-zt::crypto seal chacha20-poly1305 $key $nonce $plain ?$ad?
-zt::crypto open chacha20-poly1305 $key $nonce $sealed ?$ad?
-zt::crypto keypair ed25519            ;# needs random
-zt::crypto sign ed25519 $secret $msg
-zt::crypto verify ed25519 $public $msg $sig
-zt::crypto derive hkdf-sha256 $ikm -salt $s -info $i -length 32
+ztcl::crypto random 32                  ;# needs the capability random
+ztcl::crypto uuid                       ;# version 4, needs random; uuid7 needs clock too
+ztcl::crypto password hash $pw          ;# argon2id, a PHC string
+ztcl::crypto password verify $pw $phc
+ztcl::crypto seal chacha20-poly1305 $key $nonce $plain ?$ad?
+ztcl::crypto open chacha20-poly1305 $key $nonce $sealed ?$ad?
+ztcl::crypto keypair ed25519            ;# needs random
+ztcl::crypto sign ed25519 $secret $msg
+ztcl::crypto verify ed25519 $public $msg $sig
+ztcl::crypto derive hkdf-sha256 $ikm -salt $s -info $i -length 32
 ```
 
 All primitives are `std.crypto`. The hashes are SHA-1, SHA-2, SHA-3, BLAKE2b, BLAKE3, MD5, and CRC-32. The tcllib names (`sha2::sha256`, `sha2::hmac`, `sha1::sha1`, `md5::md5`, `crc::crc32`, `uuid::uuid generate`) wrap them. The test vectors are the NIST CAVP files, the BLAKE3 test vectors, RFC 4231 (HMAC), RFC 8032 (Ed25519), RFC 9106 (argon2), and RFC 8439 (ChaCha20-Poly1305).
@@ -352,26 +352,26 @@ All primitives are `std.crypto`. The hashes are SHA-1, SHA-2, SHA-3, BLAKE2b, BL
 
 - `clock` stays the core command. Its zones come from the embedded data when the embedder gives no `zone` callback.
 - The zone data. The plan embeds the IANA `tzdata.zi` file (the compact text of the zone rules, 104 917 bytes, 24 532 bytes with `gzip -9`, version 2026e), compressed with deflate. `src/tz.zig` compiles one zone to the TZif form of `clock.zig` at its first use. The other choice is the compiled TZif files of the 599 zones: 819 200 bytes in a tar, 142 766 bytes with `gzip -9`, and 74 613 bytes with `zstd -19`. The text form is smaller and needs a rule compiler of about 600 lines. **Decision for the user (4).** `-Dtzdata=host` reads `/usr/share/zoneinfo` through the embedder, and `none` has UTC and fixed offsets only.
-- `zt::time now` (needs `clock`), `zt::time mono` (a clock that does not go back, needs `clock`), `zt::time parse iso8601|rfc3339|rfc2822|http $text`, `zt::time format`, `zt::time add $t 1h30m`, `zt::time zone $t America/New_York`, and durations as integers of nanoseconds with `zt::time duration 1h30m`.
-- `zt::log`: `zt::log info "user login" user $id ip $addr`. A record is a dict: the time (with `clock`), the level, the message, and the fields. A sink is the output callback (the default), a channel, or a command. The formats are `text` and `json` (one object on each line). `zt::log level`, `zt::log with fields script` for a context, and a limit of records for each second. The tcllib `logger` subset (`logger::init`, `${log}::debug` and the other levels, `${log}::setlevel`) wraps it.
+- `ztcl::time now` (needs `clock`), `ztcl::time mono` (a clock that does not go back, needs `clock`), `ztcl::time parse iso8601|rfc3339|rfc2822|http $text`, `ztcl::time format`, `ztcl::time add $t 1h30m`, `ztcl::time zone $t America/New_York`, and durations as integers of nanoseconds with `ztcl::time duration 1h30m`.
+- `ztcl::log`: `ztcl::log info "user login" user $id ip $addr`. A record is a dict: the time (with `clock`), the level, the message, and the fields. A sink is the output callback (the default), a channel, or a command. The formats are `text` and `json` (one object on each line). `ztcl::log level`, `ztcl::log with fields script` for a context, and a limit of records for each second. The tcllib `logger` subset (`logger::init`, `${log}::debug` and the other levels, `${log}::setlevel`) wraps it.
 
 ## System
 
-- `zt::fs walk`, `zt::fs read`, `zt::fs write -atomic`, `zt::fs tempfile`, and `zt::fs watch $path $cmd` (inotify on Linux, kqueue on macOS, `ReadDirectoryChangesW` on Windows). All under the root folder and the capability `file`.
-- `zt::path join`, `split`, `normalize`, `rel`, `ext`, and `stem`. Pure string functions, with no capability.
-- `zt::proc run ?-timeout ms? ?-memory bytes? ?-env dict? ?-stdin data? cmd args`: one process with no shell, and a result dict (`code`, `stdout`, `stderr`, `time`). It uses the program list of `exec` and the capability `exec`. The memory limit uses `setrlimit` on Linux and macOS and a job object on Windows. `exec` stays unsandboxed, and the manual says so.
-- `zt::sys env ?name?` (capability `env`), `zt::sys platform`, `zt::sys cpus`, and `zt::sys signal $name $cmd` (the runner only).
-- `zt::args parse $spec $argv`: a spec of options, types, defaults, and help text. It gives a dict and prints the usage for `--help`. The tcllib `cmdline` commands wrap it.
-- `zt::dns resolve ?-type A|AAAA|TXT|MX|SRV? $name`: a stub resolver over UDP and TCP to the name servers of the embedder, with the policy on the name server address and on each result. `sys.resolve` stays the only path from a name to a socket address, and it calls this resolver when the module is present. The roadmap lists this gap.
+- `ztcl::fs walk`, `ztcl::fs read`, `ztcl::fs write -atomic`, `ztcl::fs tempfile`, and `ztcl::fs watch $path $cmd` (inotify on Linux, kqueue on macOS, `ReadDirectoryChangesW` on Windows). All under the root folder and the capability `file`.
+- `ztcl::path join`, `split`, `normalize`, `rel`, `ext`, and `stem`. Pure string functions, with no capability.
+- `ztcl::proc run ?-timeout ms? ?-memory bytes? ?-env dict? ?-stdin data? cmd args`: one process with no shell, and a result dict (`code`, `stdout`, `stderr`, `time`). It uses the program list of `exec` and the capability `exec`. The memory limit uses `setrlimit` on Linux and macOS and a job object on Windows. `exec` stays unsandboxed, and the manual says so.
+- `ztcl::sys env ?name?` (capability `env`), `ztcl::sys platform`, `ztcl::sys cpus`, and `ztcl::sys signal $name $cmd` (the runner only).
+- `ztcl::args parse $spec $argv`: a spec of options, types, defaults, and help text. It gives a dict and prints the usage for `--help`. The tcllib `cmdline` commands wrap it.
+- `ztcl::dns resolve ?-type A|AAAA|TXT|MX|SRV? $name`: a stub resolver over UDP and TCP to the name servers of the embedder, with the policy on the name server address and on each result. `sys.resolve` stays the only path from a name to a socket address, and it calls this resolver when the module is present. The roadmap lists this gap.
 
 ## Templates
 
-`zt::tmpl compile $text` gives a command. A template has `{{ $var }}`, `{{ [cmd] }}`, `{% if %}`, `{% foreach %}`, and `{% include name %}`. Each output is HTML-escaped by default. `{{= raw }}` writes raw text, and the context (an attribute, a URL, a script) chooses the escape for `href` and `src` values. A template compiles to Tcl bytecode once. The server finds templates under a folder of the bundle.
+`ztcl::tmpl compile $text` gives a command. A template has `{{ $var }}`, `{{ [cmd] }}`, `{% if %}`, `{% foreach %}`, and `{% include name %}`. Each output is HTML-escaped by default. `{{= raw }}` writes raw text, and the context (an attribute, a URL, a script) chooses the escape for `href` and `src` values. A template compiles to Tcl bytecode once. The server finds templates under a folder of the bundle.
 
 ## Tooling
 
 - `ztcl test ?files?`: runs `.test` files with the `tcltest` package of Tcl. It uses the stand-in of `tools/tcltest.tcl` until a full `tcltest` passes its own test file. It has `-j N` with one worker thread for each file, a filter, and a JUnit XML report.
-- `zt::bench`: `zt::bench run -iterations N -warmup M {script}` gives the time and the steps of each pass, the mean, and the spread. `ztcl bench file.tcl` runs the `bench` blocks of a file and compares with a saved result.
+- `ztcl::bench`: `ztcl::bench run -iterations N -warmup M {script}` gives the time and the steps of each pass, the mean, and the spread. `ztcl bench file.tcl` runs the `bench` blocks of a file and compares with a saved result.
 - `ztcl prof script.tcl`: samples the stack of procs at each N steps (a step count, so the result is deterministic) and writes the folded format of flame graphs. A JIT frame reports its proc name.
 
 ## The HTTP module
@@ -379,15 +379,15 @@ All primitives are `std.crypto`. The hashes are SHA-1, SHA-2, SHA-3, BLAKE2b, BL
 ### The client
 
 ```tcl
-package require zt::http
-set r [zt::http get https://example.org/api -headers {Accept application/json} -timeout 5s]
+package require ztcl::http
+set r [ztcl::http get https://example.org/api -headers {Accept application/json} -timeout 5s]
 dict get $r status                ;# 200
 dict get $r headers content-type
-set data [zt::json parse [dict get $r body]]
+set data [ztcl::json parse [dict get $r body]]
 
-zt::http post $url -json [zt::json object name [zt::json string ana]]
-zt::http request PUT $url -body $bytes -headers $h
-set c [zt::http client -max-conns 8 -http2 auto -roots system]
+ztcl::http post $url -json [ztcl::json object name [ztcl::json string ana]]
+ztcl::http request PUT $url -body $bytes -headers $h
+set c [ztcl::http client -max-conns 8 -http2 auto -roots system]
 $c get $url
 $c close
 ```
@@ -437,8 +437,8 @@ The step count of a request is exact: the coroutine switch saves and restores th
 ### The server: the API
 
 ```tcl
-package require zt::http
-namespace import zt::http::*
+package require ztcl::http
+namespace import ztcl::http::*
 
 # Routes. The path params are in [req param NAME]. A type checks the param.
 route GET /users/{id:int} {
@@ -456,10 +456,10 @@ route GET /files/{path:*} { reply file -root public [req param path] }
 
 # Middleware: runs around each handler of its path. [next] runs the rest.
 use / {
-    set t [zt::time mono]
+    set t [ztcl::time mono]
     next
-    zt::log info request method [req method] path [req path] \
-        status [res status] ms [expr {([zt::time mono] - $t) / 1000000}]
+    ztcl::log info request method [req method] path [req path] \
+        status [res status] ms [expr {([ztcl::time mono] - $t) / 1000000}]
 }
 
 use /admin {
@@ -469,14 +469,14 @@ use /admin {
 
 # Errors of a handler.
 on error {
-    zt::log error [req path] error $::errorInfo
-    reply json -status 500 [zt::json object error [zt::json string "internal error"]]
+    ztcl::log error [req path] error $::errorInfo
+    reply json -status 500 [ztcl::json object error [ztcl::json string "internal error"]]
 }
 
 serve -port 8080 -workers 4
 ```
 
-The commands of `zt::http` for the server:
+The commands of `ztcl::http` for the server:
 
 | Command | What it does |
 |---|---|
@@ -486,7 +486,7 @@ The commands of `zt::http` for the server:
 | `on error BODY`, `on notfound BODY` | Handlers for an error and for no route. |
 | `req method`, `req path`, `req param n`, `req query n ?default?`, `req queries`, `req header n ?default?`, `req headers`, `req cookie n`, `req body`, `req json ?-schema s?`, `req form`, `req multipart`, `req remote`, `req id`, `req stream $cmd` | The request of the current coroutine. A header name is case-insensitive. |
 | `res status ?code?`, `res header n v`, `res cookie n v ?opts?` | The response. `res status` with no code gives the status, for a middleware after `next`. |
-| `reply text\|html\|json\|bytes ?-status c? ?-headers h? VALUE` | Sends the response and returns from the handler, as `return` does. `reply json` accepts a value with `-schema`, the builders of `zt::json`, or `-raw` text. |
+| `reply text\|html\|json\|bytes ?-status c? ?-headers h? VALUE` | Sends the response and returns from the handler, as `return` does. `reply json` accepts a value with `-schema`, the builders of `ztcl::json`, or `-raw` text. |
 | `reply status CODE ?MESSAGE?` | A body with the reason text. |
 | `reply redirect URL ?-status 302?` | |
 | `reply file ?-root DIR? PATH` | A static file under the root folder: `ETag`, `Last-Modified`, `Range`, `If-None-Match`, a content type from the extension, a precompressed `.gz` or `.zst` file when the client accepts it, and `sendfile` on Linux. A path that leaves `DIR` gives 404. |
@@ -509,16 +509,16 @@ The options of `serve`, also in a file of `-config app.toml`:
 -log {format json level info}
 ```
 
-How a worker loads the app: `serve` in the main interpreter records the path of the script (`info script`) or the `-init` script. Each worker runs it with `zt::http::worker` set to 1, so `route`, `use`, and `on` build the tables of the worker, and `serve` returns. A `if {![zt::http worker]} {...}` block runs only in the main interpreter, for example to open a database file before the workers start. Shared state goes in `tsv`, in SQLite, or in an outside store. No Tcl value is shared between workers.
+How a worker loads the app: `serve` in the main interpreter records the path of the script (`info script`) or the `-init` script. Each worker runs it with `ztcl::http::worker` set to 1, so `route`, `use`, and `on` build the tables of the worker, and `serve` returns. A `if {![ztcl::http worker]} {...}` block runs only in the main interpreter, for example to open a database file before the workers start. Shared state goes in `tsv`, in SQLite, or in an outside store. No Tcl value is shared between workers.
 
 ### Example services
 
 A JSON API on SQLite:
 
 ```tcl
-package require zt::http
+package require ztcl::http
 package require sqlite3
-namespace import zt::http::*
+namespace import ztcl::http::*
 
 sqlite3 db data/todo.db
 db eval {CREATE TABLE IF NOT EXISTS todo(id INTEGER PRIMARY KEY, title TEXT NOT NULL, done INT DEFAULT 0)}
@@ -554,11 +554,11 @@ serve -port 8080 -workers 4 -steps 2000000
 A static site with templates and a contact form:
 
 ```tcl
-package require zt::http
-package require zt::tmpl
-namespace import zt::http::*
+package require ztcl::http
+package require ztcl::tmpl
+namespace import ztcl::http::*
 
-set page [zt::tmpl load templates/page.html]
+set page [ztcl::tmpl load templates/page.html]
 
 static /assets public/assets -cache 7d
 
@@ -571,7 +571,7 @@ route POST /contact {
     if {![regexp {^[^@\s]+@[^@\s]+$} [dict get $f email]]} {
         reply html -status 400 [$::page render title Contact error "Check the address."]
     }
-    zt::log info contact email [dict get $f email]
+    ztcl::log info contact email [dict get $f email]
     reply redirect /thanks -status 303
 }
 
@@ -581,11 +581,11 @@ serve -port 8443 -tls {cert certs/site.pem key certs/site.key} -http2 on
 A chat server with WebSockets and SSE:
 
 ```tcl
-package require zt::http
-namespace import zt::http::*
+package require ztcl::http
+namespace import ztcl::http::*
 
 # Messages go between workers through a tsv list and a condition.
-if {![zt::http worker]} { tsv::set chat seq 0 }
+if {![ztcl::http worker]} { tsv::set chat seq 0 }
 
 websocket /ws {
     while 1 {
@@ -613,10 +613,10 @@ serve -port 8080 -workers 2 -concurrency 1000 -timeout 0
 A proxy with streaming and a client pool:
 
 ```tcl
-package require zt::http
-namespace import zt::http::*
+package require ztcl::http
+namespace import ztcl::http::*
 
-set upstream [zt::http client -max-conns 64 -http2 auto]
+set upstream [ztcl::http client -max-conns 64 -http2 auto]
 
 use / {
     if {[req header x-api-key] ni $::keys} { reply status 403 }
@@ -663,9 +663,9 @@ The names `chat::post`, `chat::since`, `news::latest`, `users::find`, and `users
 The API:
 
 ```tcl
-zt::tls socket ?-alpn {h2 http/1.1}? ?-servername n? ?-roots system|FILE? host port
-zt::tls server -cert c.pem -key k.pem ?-sni {host {cert key} ...}? ?-alpn ...? $cmd port
-zt::tls status $chan          ;# version, cipher, alpn, peer chain, resumed
+ztcl::tls socket ?-alpn {h2 http/1.1}? ?-servername n? ?-roots system|FILE? host port
+ztcl::tls server -cert c.pem -key k.pem ?-sni {host {cert key} ...}? ?-alpn ...? $cmd port
+ztcl::tls status $chan          ;# version, cipher, alpn, peer chain, resumed
 tls::socket ...               ;# the TclTLS subset: -cafile, -certfile, -keyfile, -servername, -alpn, -require, -server
 ```
 
@@ -773,7 +773,7 @@ db status; db errorcode; db version; db close
 | `http` server, `aio`, `tls`, `h2`, `http3`, `dns`, `sys`, `proc`, `thread` | no | no sockets, processes, or threads in the module |
 
 - The no-import build of issue 26 stays. It has the modules with no host access only.
-- A blocking call through `fetch` needs the host to resume the script. The wasm build has no coroutine switch, so `zt::http get` in wasm uses a callback form (`-command`). A sync form needs JSPI (the JavaScript Promise Integration of WebAssembly) and is later work.
+- A blocking call through `fetch` needs the host to resume the script. The wasm build has no coroutine switch, so `ztcl::http get` in wasm uses a callback form (`-command`). A sync form needs JSPI (the JavaScript Promise Integration of WebAssembly) and is later work.
 - The wasm size gate: `ztcl.wasm` with the wasm modules, in `ReleaseSmall`, at most 1.5 MB, and the no-import build at most 1.0 MB. Today it is 825 KB.
 
 ## `ztcl build`
@@ -784,7 +784,7 @@ ztcl build app.tcl -o app.exe --target x86_64-windows
 ztcl build app.tcl --include templates/ --include public/ --allow socket,event,thread
 ```
 
-- A bundle is the runner plus a zip archive of the scripts and files at the end of the file, with an index. The runner reads the index at its start, mounts the archive as a read-only folder for `source`, `zt::tmpl load`, and `reply file`, and runs the main script.
+- A bundle is the runner plus a zip archive of the scripts and files at the end of the file, with an index. The runner reads the index at its start, mounts the archive as a read-only folder for `source`, `ztcl::tmpl load`, and `reply file`, and runs the main script.
 - The bundle records the capabilities, the limits, and the network policy of the app. The runner applies them at the start. A flag at the command line of the bundle cannot add a capability that the bundle does not list.
 - Cross builds need no compiler. `ztcl build --target T` reads the runner of target T from a cache, or downloads the release asset of the same version and checks its checksum (with the capability `socket` of the build tool, and only with `--fetch`). `ztcl build --runner PATH` uses a local runner.
 - The targets: x86-64 and arm64 Linux, arm64 and x86-64 macOS, x86-64 Windows. A macOS bundle needs a new ad hoc signature after the archive is added. The plan uses `codesign` when it is present and prints a step when it is not. **Decision for the user (10):** a Zig code signer for ad hoc signatures, or `codesign` only.
@@ -805,15 +805,15 @@ The data: `twitter.json`, `canada.json`, and `citm_catalog.json` from the native
 
 | Measure | ztcl | Compared with | Target |
 |---|---|---|---|
-| Validate (`zt::json valid`) | stage 1 and the grammar walk | simdjson DOM | at least 0.67 of simdjson DOM on each file (the goal of the user) |
+| Validate (`ztcl::json valid`) | stage 1 and the grammar walk | simdjson DOM | at least 0.67 of simdjson DOM on each file (the goal of the user) |
 | Stage 1 | the structural index alone | the stage 1 of simdjson | at least 0.8 (the goal of the user) |
-| Parse to a Tcl value | `zt::json parse` | Node `JSON.parse`, Go `encoding/json` to `any`, Python `json.loads`, `tclsh` 8.6 with tcllib `json::json2dict` | at least the speed of Python on each file, at least 0.8 of Node, and at least 10 times `tclsh` with tcllib |
-| Path query | `zt::json get` for one value | Node `JSON.parse` then a property read | at least 2 times Node |
-| Encode | `zt::json encode -schema` of the parsed value | Node `JSON.stringify`, Go `json.Marshal`, Python `json.dumps` | at least the speed of Python, at least 0.7 of Node |
+| Parse to a Tcl value | `ztcl::json parse` | Node `JSON.parse`, Go `encoding/json` to `any`, Python `json.loads`, `tclsh` 8.6 with tcllib `json::json2dict` | at least the speed of Python on each file, at least 0.8 of Node, and at least 10 times `tclsh` with tcllib |
+| Path query | `ztcl::json get` for one value | Node `JSON.parse` then a property read | at least 2 times Node |
+| Encode | `ztcl::json encode -schema` of the parsed value | Node `JSON.stringify`, Go `json.Marshal`, Python `json.dumps` | at least the speed of Python, at least 0.7 of Node |
 
 The unit is MB/s of the input text.
 
-The goal of the user (2026-11-24): beat each scripting runtime outright, and beat simdjson DOM when a script reads a few fields of a document. `zt::json get` walks the structural index and makes only the value at its path, so it makes no value for the rest of the document. The JIT task 05b adds parsers for a repeated shape. The measured numbers are in the PRs of tasks 04 and 05.
+The goal of the user (2026-11-24): beat each scripting runtime outright, and beat simdjson DOM when a script reads a few fields of a document. `ztcl::json get` walks the structural index and makes only the value at its path, so it makes no value for the rest of the document. The JIT task 05b adds parsers for a repeated shape. The measured numbers are in the PRs of tasks 04 and 05.
 
 ### HTTP
 
@@ -851,7 +851,7 @@ A worker runs a Tcl handler for each request. Go and Node run their own code. Th
 | `aio`, `http`, `tls`, `h2` | io_uring, epoll | kqueue | IOCP | no |
 | Coroutine handlers | x86-64 today, arm64 in task 08 | task 08 | task 08 | no |
 | Worker pool | after the threads plan | after its port task | after its port task | no |
-| `zt::fs watch` | inotify | kqueue | `ReadDirectoryChangesW` | no |
+| `ztcl::fs watch` | inotify | kqueue | `ReadDirectoryChangesW` | no |
 | `sqlite` | yes | yes | yes | an option |
 | `http3` | the first target | later task | later task | no |
 
@@ -868,7 +868,7 @@ The other platform work of `src/sys.zig` (channels, sockets, and processes on ma
 The user approved the plan and these answers on 2026-11-24.
 
 1. Built-in modules load with `package require` by default. The capability `package` is still needed to load a package from a file.
-2. The namespace is `zt`.
+2. The namespace is `ztcl`.
 3. JSON null is an error unless the caller gives `-null` a value. A silent empty string hides bugs.
 4. The zone data is `tzdata.zi` with a rule compiler, about 25 KB of data.
 5. The server gives each request a memory limit. The default `-concurrency` of a worker is 1, so one request runs in one interp at a time, and the pool has many workers (64 by default, or the count that the memory budget allows). A service can raise `-concurrency` for I/O-bound handlers, and then the limit is per worker.
@@ -885,5 +885,5 @@ The user approved the plan and these answers on 2026-11-24.
 - OCSP stapling and revocation checks.
 - A shared, frozen form of large values between workers (the threads plan lists it).
 - `tdbc` on SQLite.
-- The sync form of `zt::http get` in WebAssembly with JSPI.
+- The sync form of `ztcl::http get` in WebAssembly with JSPI.
 - YAML (tcllib `yaml` and `huddle`). Issue 27 does not list it.

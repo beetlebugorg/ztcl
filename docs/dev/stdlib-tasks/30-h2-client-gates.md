@@ -4,7 +4,7 @@ Platform: shared.
 
 ## Goal
 
-HTTP/2 in `zt::http client` with `-http2 auto`, interop, and the HTTP/2 speed gates.
+HTTP/2 in `ztcl::http client` with `-http2 auto`, interop, and the HTTP/2 speed gates.
 
 ## Files
 

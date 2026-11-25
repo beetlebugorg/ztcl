@@ -1,4 +1,4 @@
-# Task 38: `ztcl test`, `zt::bench`, and `ztcl prof`
+# Task 38: `ztcl test`, `ztcl::bench`, and `ztcl prof`
 
 Platform: shared.
 

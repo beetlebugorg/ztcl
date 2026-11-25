@@ -1,4 +1,4 @@
-# Task 35: Zones, `zt::time`, and `zt::log`
+# Task 35: Zones, `ztcl::time`, and `ztcl::log`
 
 Platform: shared.
 
@@ -8,7 +8,7 @@ Decision 4 of the user.
 
 ## Goal
 
-The embedded zone data of decision 4, `zt::time`, `zt::log`, and the tcllib `logger` subset.
+The embedded zone data of decision 4, `ztcl::time`, `ztcl::log`, and the tcllib `logger` subset.
 
 ## Files
 

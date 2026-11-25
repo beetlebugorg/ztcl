@@ -10,7 +10,7 @@ An HTTP/1.1 parser for both sides, and the client of the design with the names o
 
 - `src/http/parse.zig` (new): the request and response heads, chunked bodies, and the limits. It reuses `std.http.HeadParser` and `std.http.ChunkParser` where they pass the tests.
 - `src/http/client.zig` (new): pools, redirects, timeouts, and the network policy for each address.
-- `src/http/cmd.zig` (new): `zt::http get|post|request|client`.
+- `src/http/cmd.zig` (new): `ztcl::http get|post|request|client`.
 - `src/http/compat.tcl` (new, embedded): `http::geturl` and the other names of the design.
 
 ## Test sources

@@ -37,7 +37,7 @@ ztcl uses only the Zig standard library. [References](../references/tcl.md) list
 | `filecmd.zig` | The optional `file`, `glob`, `cd`, and `pwd`. |
 | `pkg.zig` | The `package` command: the full form of the capability `package`, and the small form of the built-in modules. |
 | `modules.zig` | The table of built-in modules and their install. |
-| `hello.zig` | The test modules `zt::hello` and `zt::hellonet`. |
+| `hello.zig` | The test modules `ztcl::hello` and `ztcl::hellonet`. |
 | `child.zig` | The optional `interp` command. |
 | `thread.zig` | The core of threads: the group, the workers, the messages and their neutral form, the group allocator and its totals, the waits, and the stop flag. |
 | `threadcmd.zig` | The `thread::*` commands of the capability `thread`. |

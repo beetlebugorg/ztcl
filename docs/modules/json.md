@@ -1,21 +1,23 @@
-# Module zt::json
+# Module ztcl::json
 
-ztcl has built-in modules under the namespace `zt`. A module loads with `package require` and needs no capability unless its page says so. `zt::json` is the first module. More modules come with the [Batteries milestone](https://github.com/beetlebugorg/ztcl/milestone/2).
+ztcl has built-in modules under the namespace `ztcl`. A module loads with `package require` and needs no capability unless its page says so. `ztcl::json` is the first module. More modules come with the [Batteries milestone](https://github.com/beetlebugorg/ztcl/milestone/2).
 
 > [!NOTE]
-> `zt::json` is on `main` and comes in the next release. [Build from source](../install.md#build-from-source) to use it now.
+> The old name `zt::json` still works until v0.4.0-beta. `package require zt::json` loads the module and makes `::zt::json` an ensemble of the same commands. New code uses `ztcl::json`.
+>
+> `ztcl::json` is on `main` and comes in the next release. [Build from source](../install.md#build-from-source) to use it now.
 
-`zt::json` reads and writes JSON (RFC 8259). The parser is a Zig implementation of the simdjson algorithm: a first pass finds the structural bytes 64 bytes at a time with vectors, and a second pass makes Tcl values from their positions. [References](../references/stdlib.md#json) lists the sources.
+`ztcl::json` reads and writes JSON (RFC 8259). The parser is a Zig implementation of the simdjson algorithm: a first pass finds the structural bytes 64 bytes at a time with vectors, and a second pass makes Tcl values from their positions. [References](../references/stdlib.md#json) lists the sources.
 
 ```tcl
-package require zt::json
+package require ztcl::json
 set text {{"name": "ztcl", "tags": ["tcl", "zig"]}}
-set d [zt::json parse $text]
+set d [ztcl::json parse $text]
 puts [dict get $d name]            ;# ztcl
-puts [zt::json get $text tags 1]   ;# zig, with no full parse
+puts [ztcl::json get $text tags 1]   ;# zig, with no full parse
 ```
 
-`zt::json parse` is faster than `JSON.parse` of Node.js and each Python parser on two of the three standard test files, and `zt::json get` is faster on all three. [Performance](../performance.md#json) has the numbers.
+`ztcl::json parse` is faster than `JSON.parse` of Node.js and each Python parser on two of the three standard test files, and `ztcl::json get` is faster on all three. [Performance](../performance.md#json) has the numbers.
 
 The module needs no capability. `package require json` and `package require json::write` give the tcllib names over the same code.
 
@@ -24,7 +26,7 @@ The module needs no capability. `package require json` and `package require json
 ### parse
 
 ```tcl
-zt::json parse ?-null VALUE? ?-typed? ?--? TEXT
+ztcl::json parse ?-null VALUE? ?-typed? ?--? TEXT
 ```
 
 Gives the Tcl value of a JSON text:
@@ -45,7 +47,7 @@ A lone surrogate in a `\u` escape becomes U+FFFD.
 ### valid
 
 ```tcl
-zt::json valid TEXT
+ztcl::json valid TEXT
 ```
 
 Gives 1 for a valid JSON text and 0 for another text.
@@ -53,8 +55,8 @@ Gives 1 for a valid JSON text and 0 for another text.
 ### get and exists
 
 ```tcl
-zt::json get ?-null VALUE? ?--? TEXT ?STEP ...?
-zt::json exists TEXT ?STEP ...?
+ztcl::json get ?-null VALUE? ?--? TEXT ?STEP ...?
+ztcl::json exists TEXT ?STEP ...?
 ```
 
 `get` gives the value at a path. A step is a key in an object or a decimal index in an array. The walk uses the structural index of the text and makes only the value at the end of the path. It checks the brackets of each value that it skips, and it does not check the scalars in them, so `get` can give a value of a text that `valid` rejects. A path with no value is an error with the code `ZT JSON PATH`. `exists` gives 1 or 0.
@@ -62,9 +64,9 @@ zt::json exists TEXT ?STEP ...?
 ### encode
 
 ```tcl
-zt::json encode -schema SCHEMA VALUE
-zt::json encode -typed TREE
-zt::json encode -auto VALUE
+ztcl::json encode -schema SCHEMA VALUE
+ztcl::json encode -typed TREE
+ztcl::json encode -auto VALUE
 ```
 
 A Tcl value has no visible type, so `encode` needs a schema or a typed tree. The schema words:
@@ -87,13 +89,13 @@ A guess makes a number of the canonical text of an integer or a double, a bool o
 ### The builders
 
 ```tcl
-zt::json object ?KEY JSON ...?
-zt::json array ?JSON ...?
-zt::json string S
-zt::json number N
-zt::json bool B
-zt::json null
-zt::json raw JSON
+ztcl::json object ?KEY JSON ...?
+ztcl::json array ?JSON ...?
+ztcl::json string S
+ztcl::json number N
+ztcl::json bool B
+ztcl::json null
+ztcl::json raw JSON
 ```
 
 Each builder gives JSON text with no spaces. A value of `object` and an element of `array` is JSON text, for example the result of another builder. `raw` checks its text.
@@ -101,7 +103,7 @@ Each builder gives JSON text with no spaces. A value of `object` and an element 
 ### pretty
 
 ```tcl
-zt::json pretty ?-indent N? TEXT
+ztcl::json pretty ?-indent N? TEXT
 ```
 
 Gives the text with one member on each line and N spaces (2 by default) for each level.

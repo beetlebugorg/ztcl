@@ -2,11 +2,12 @@
 
 ## Unreleased
 
+- Renames the namespace of the built-in modules from `zt` to `ztcl`: `ztcl::json`, `ztcl::hello`, and `ztcl::hellonet`. The old names `zt::json`, `zt::hello`, and `zt::hellonet` are deprecated aliases until v0.4.0-beta. `package require` of an old name loads the module and makes the old namespace an ensemble of the same commands.
 - Adds `ztcl build --wasm`: a copy of `ztcl.wasm` with Tcl scripts and read-only files in it, made with no Zig toolchain. `run()` and `Interp.run()` of `ztcl.mjs` run the scripts, and `allow: ["file"]` turns on `source` and `open` for the files under `//zipfs:/app/`. See `docs/webassembly.md`.
 - Adds an interactive shell to the runner, with a line editor of its own: Emacs and vim keys, multi-line input, history in `~/.ztcl_history` with prefix and fuzzy search, completion, colors as you type, hints, bracketed paste, results in color, and `~/.ztclrc`. See `docs/shell.md`.
 - Fixes the `exec` allowlist. A script could write a file at the path of an allowed program, and `exec` ran that file. `exec` now resolves each program to one full host path, checks the allowlist on that path, and runs only that path. A file below the root folder runs only from the new list `Interp.exec_host.allow_root` (runner flag `--exec-allow-root`). A relative `PATH` entry is an error.
 - Fixes a crash of `file delete -force` and `file copy` on a deep tree in a coroutine. Both commands now walk the tree with a list on the heap, pay steps for each entry, and stop at 2048 levels. `file copy` of a folder into itself is now an error before the copy.
-- Adds the module `zt::json`: a parser on the simdjson algorithm, `get` and `exists` on a path, `encode` with a schema, the builders, `pretty`, and the tcllib names `json` and `json::write`. See `docs/modules/json.md`.
+- Adds the module `ztcl::json`: a parser on the simdjson algorithm, `get` and `exists` on a path, `encode` with a schema, the builders, `pretty`, and the tcllib names `json` and `json::write`. See `docs/modules/json.md`.
 - Adds tier 1 and tier 2 of the JIT on arm64 macOS.
 - Runs threads in WebAssembly with Web Workers: `web/ztcl-threads.mjs` and the modules `ztcl-threads.wasm` and `ztcl-async.wasm`.
 - Adds channels, sockets, the event loop, `exec`, and the root folder jail on arm64 macOS, and the jail on x86-64 Windows.

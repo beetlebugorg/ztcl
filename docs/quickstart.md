@@ -64,10 +64,10 @@ hello from ztcl
 ## Read JSON
 
 ```tcl
-package require zt::json
-set d [zt::json parse {{"name": "ztcl", "tags": ["tcl", "zig"]}}]
+package require ztcl::json
+set d [ztcl::json parse {{"name": "ztcl", "tags": ["tcl", "zig"]}}]
 puts [dict get $d name]
-puts [zt::json encode -schema {object {name string stars int}} {name ztcl stars 43}]
+puts [ztcl::json encode -schema {object {name string stars int}} {name ztcl stars 43}]
 ```
 
 ```sh

@@ -4,7 +4,7 @@ Platform: shared.
 
 ## Goal
 
-`zt::tmpl` of the design.
+`ztcl::tmpl` of the design.
 
 ## Files
 

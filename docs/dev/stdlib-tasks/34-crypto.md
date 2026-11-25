@@ -4,7 +4,7 @@ Platform: shared.
 
 ## Goal
 
-`zt::hash`, `zt::crypto`, the capability `random`, and the tcllib names `sha2::*`, `sha1::sha1`, `md5::md5`, `crc::crc32`, and `uuid::uuid`.
+`ztcl::hash`, `ztcl::crypto`, the capability `random`, and the tcllib names `sha2::*`, `sha1::sha1`, `md5::md5`, `crc::crc32`, and `uuid::uuid`.
 
 ## Files
 
@@ -26,7 +26,7 @@ CAP zig-out/bin/ztcl tests/stdlib/crypto.test
 Gates:
 
 - Each vector passes.
-- Without `random`, `zt::crypto random`, `uuid`, and `keypair` are absent, and a script stays deterministic.
+- Without `random`, `ztcl::crypto random`, `uuid`, and `keypair` are absent, and a script stays deterministic.
 - argon2 memory counts in the memory limit: a test with a 1 GiB cost and a 64 MiB limit stops with the memory error.
 - Speed: SHA-256 and BLAKE3 at least 0.8 of `openssl speed` and of the `b3sum` program on 1 MiB inputs.
 - Size: the `crypto` row of the design.

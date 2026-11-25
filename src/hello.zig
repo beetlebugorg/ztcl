@@ -1,8 +1,8 @@
-//! The test modules of the module table: `zt::hello` and `zt::hellonet`.
+//! The test modules of the module table: `ztcl::hello` and `ztcl::hellonet`.
 //!
-//! `zt::hello` has one native command and a script that counts its
-//! installs in `::zt::hello::installs`. The alias `hello` adds the
-//! command `hello` in its own script. `zt::hellonet` needs the
+//! `ztcl::hello` has one native command and a script that counts its
+//! installs in `::ztcl::hello::installs`. The alias `hello` adds the
+//! command `hello` in its own script. `ztcl::hellonet` needs the
 //! capability `socket` and has no commands. The tests of the module
 //! system use them, and the flag `-Dmod-hello` leaves them out.
 //!
@@ -16,12 +16,16 @@ const Value = @import("value.zig").Value;
 
 pub const modules_list = [_]mods.Module{
     .{
-        .name = "zt::hello",
+        .name = "ztcl::hello",
         .version = "1.0",
-        .aliases = &.{.{ .name = "hello", .version = "0.9", .script = "proc ::hello {name} {::zt::hello greet $name}" }},
+        .aliases = &.{
+            .{ .name = "hello", .version = "0.9", .script = "proc ::hello {name} {::ztcl::hello greet $name}" },
+            // The old name, until v0.4.0-beta.
+            .{ .name = "zt::hello", .version = "1.0", .script = mods.oldNamespace("hello") },
+        },
         .install = install,
         .script =
-        \\namespace eval ::zt::hello {
+        \\namespace eval ::ztcl::hello {
         \\    variable installs
         \\    incr installs
         \\    namespace export greet
@@ -30,8 +34,9 @@ pub const modules_list = [_]mods.Module{
         ,
     },
     .{
-        .name = "zt::hellonet",
+        .name = "ztcl::hellonet",
         .version = "1.0",
+        .aliases = &.{.{ .name = "zt::hellonet", .version = "1.0", .script = "" }},
         .needs = @intFromEnum(interp.Capability.socket),
     },
 };
@@ -43,10 +48,10 @@ const plant: [@import("build_options").size_plant]u8 = @splat(0xa5);
 
 fn install(it: *Interp) interp.Error!void {
     if (plant.len > 0) std.mem.doNotOptimizeAway(&plant);
-    try it.register("zt::hello::greet", greet);
+    try it.register("ztcl::hello::greet", greet);
 }
 
 fn greet(it: *Interp, argv: []const Value, _: ?*interp.Cmd) interp.Error!Value {
-    if (argv.len != 2) return it.wrongArgs("zt::hello greet name");
+    if (argv.len != 2) return it.wrongArgs("ztcl::hello greet name");
     return .{ .str = try std.fmt.allocPrint(it.alloc(), "hello, {s}", .{try it.str(argv[1])}) };
 }

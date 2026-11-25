@@ -3,9 +3,9 @@
 # Prints the time of one read.
 # SPDX-License-Identifier: BSD-2-Clause
 lassign $argv file n
-package require zt::json
+package require ztcl::json
 set f [open $file]; fconfigure $f -encoding utf-8; set text [read $f]; close $f
-set doc [zt::json parse -null {} $text]
+set doc [ztcl::json parse -null {} $text]
 proc rd_twitter {doc} {
   set c 0
   foreach s [dict get $doc statuses] {

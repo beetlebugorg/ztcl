@@ -6,7 +6,7 @@
 
 | Milestone | Tasks | Result |
 |---|---|---|
-| 1: modules and JSON | 01 to 05 | `package require` loads built-in modules. CI reports the size of each module. `zt::json` and the tcllib `json` names pass JSONTestSuite and the speed gates. |
+| 1: modules and JSON | 01 to 05 | `package require` loads built-in modules. CI reports the size of each module. `ztcl::json` and the tcllib `json` names pass JSONTestSuite and the speed gates. |
 | 2: async I/O | 06 to 10 | The event loop on io_uring, kqueue, and IOCP. Blocking calls yield in a coroutine on each target. |
 | 3: HTTP/1.1 | 11 to 15 | The client, the server with routes and middleware, the worker pool with limits, WebSockets, SSE, and the HTTP speed gates. |
 | 4: TLS 1.3 | 16 to 27 | The server and the client on one record layer, X.509 chains, resumption, interop, fuzzing, constant-time checks, and the external review. TLS is on by default only after task 27. |
@@ -75,7 +75,7 @@ Milestones 2 to 5 depend on the threads plan for the worker pool: task 13 starts
 | [02](02-size-report.md) | shared | The size report and its CI gate |
 | [03](03-baselines.md) | Linux | The outside benchmark harness and the first numbers |
 | [04](04-json-parse.md) | shared | The JSON parser: the SIMD index and the builder |
-| [05](05-json-api.md) | shared | `zt::json`, the tcllib names, and the JSON gates |
+| [05](05-json-api.md) | shared | `ztcl::json`, the tcllib names, and the JSON gates |
 | [05b](05b-json-jit.md) | Linux | JSON with the JIT: shapes, paths, writers, tier 2 reads, and a fused parse and loop |
 | [06](06-aio-linux.md) | Linux | `aio` on io_uring and epoll |
 | [07](07-event-on-aio.md) | Linux | The event loop, channels, and sockets on `aio`, and calls that yield |
@@ -90,7 +90,7 @@ Milestones 2 to 5 depend on the threads plan for the worker pool: task 13 starts
 | [16](16-tls-record.md) | shared | The TLS record layer and the key schedule |
 | [17](17-x509.md) | shared | PEM, keys, X.509 chains, and root stores |
 | [18](18-tls-server.md) | shared | The TLS 1.3 server handshake, SNI, and ALPN |
-| [19](19-tls-client.md) | shared | The client on the shared code, `zt::tls`, and `tls::socket` |
+| [19](19-tls-client.md) | shared | The client on the shared code, `ztcl::tls`, and `tls::socket` |
 | [20](20-tls-resume.md) | shared | Resumption, tickets, 0-RTT off by default, and key update |
 | [21](21-tls-interop.md) | Linux | The interop matrix and the negative tests |
 | [22](22-tls-fuzz.md) | Linux | Fuzzing of the parsers and the state machines |
@@ -104,12 +104,12 @@ Milestones 2 to 5 depend on the threads plan for the worker pool: task 13 starts
 | [30](30-h2-client-gates.md) | shared | HTTP/2 in the client, h2spec, and the HTTP/2 speed gates |
 | [31](31-formats.md) | shared | CSV, URLs, encodings, and the tcllib names |
 | [32](32-toml-msgpack-cbor.md) | shared | TOML, MessagePack, and CBOR |
-| [33](33-compress.md) | shared | `zlib`, `zt::zstd`, and HTTP content encodings |
+| [33](33-compress.md) | shared | `zlib`, `ztcl::zstd`, and HTTP content encodings |
 | [34](34-crypto.md) | shared | Hashes, crypto, the capability `random`, and the tcllib names |
-| [35](35-time-log.md) | shared | Zones, `zt::time`, and `zt::log` |
+| [35](35-time-log.md) | shared | Zones, `ztcl::time`, and `ztcl::log` |
 | [36](36-system.md) | shared | Files, paths, processes, the environment, arguments, and DNS |
 | [37](37-templates.md) | shared | Templates that escape by default |
-| [38](38-tooling.md) | shared | `ztcl test`, `zt::bench`, and `ztcl prof` |
+| [38](38-tooling.md) | shared | `ztcl test`, `ztcl::bench`, and `ztcl prof` |
 | [39](39-sqlite-build.md) | shared | The SQLite build with no libc, the VFS, and the allocator |
 | [40](40-sqlite-binding.md) | shared | The `sqlite3` command, the statement cache, and the limits |
 | [41](41-sqlite-tests.md) | Linux | The SQLite tests and the speed gate |

@@ -4,12 +4,12 @@ Platform: shared.
 
 ## Goal
 
-`zt::fs`, `zt::path`, `zt::proc`, `zt::sys`, `zt::args`, `zt::dns`, and the tcllib names of `fileutil` and `cmdline`.
+`ztcl::fs`, `ztcl::path`, `ztcl::proc`, `ztcl::sys`, `ztcl::args`, `ztcl::dns`, and the tcllib names of `fileutil` and `cmdline`.
 
 ## Files
 
 - `src/sys/` (new): one file for each command.
-- `src/sock.zig`: `sys.resolve` calls `zt::dns` when the module is present. One hunk.
+- `src/sock.zig`: `sys.resolve` calls `ztcl::dns` when the module is present. One hunk.
 
 ## Test sources
 
@@ -25,7 +25,7 @@ CAP zig build dns-fuzz -- --seconds 600
 
 Gates:
 
-- `zt::fs watch` reports a create, a write, a rename, and a delete on each system.
-- `zt::proc run -memory` stops a child that allocates above the limit on Linux, macOS, and Windows.
+- `ztcl::fs watch` reports a create, a write, a rename, and a delete on each system.
+- `ztcl::proc run -memory` stops a child that allocates above the limit on Linux, macOS, and Windows.
 - A DNS answer with an address outside the policy is dropped.
 - Size: the `sys` row of the design.
