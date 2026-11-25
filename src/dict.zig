@@ -35,7 +35,12 @@ fn intText(b: *[24]u8, i: i64) []const u8 {
     return value.writeInt(b, i);
 }
 
+/// The hash of a key for the table. Wyhash uses a 64-bit multiply with
+/// a 128-bit result, which a 32-bit target such as wasm32 builds from
+/// four multiplies, so a 32-bit target uses XxHash32. The table alone
+/// reads the hash, so the choice does not change the order of a dict.
 fn hashText(s: []const u8) u32 {
+    if (@sizeOf(usize) == 4) return std.hash.XxHash32.hash(0x7a74636c, s);
     return @truncate(std.hash.Wyhash.hash(0x7a74636c, s));
 }
 
