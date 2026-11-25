@@ -16,8 +16,9 @@ The user answers the questions below before task 01 merges.
 
 - Task 01: merged in PR #79.
 - Task 02: merged in PR #81. The user chose choice 1 (decision 7 of the plan).
-- Task 03: PR #87. `ztcl compile` and `tools/point-wasm-diff.sh`. The module equals `Program.run` in bits for the fixed procs of `tests/point/`, in both forms.
-- Tasks 04 to 07: not started.
+- Task 03: merged in PR #87. `ztcl compile` and `tools/point-wasm-diff.sh`. The module equals `Program.run` in bits for the fixed procs of `tests/point/`, in both forms.
+- Task 04: PR #88. `Program.steps(n)` and `tools/point-wasm-limits.mjs`.
+- Tasks 05 to 07: not started.
 
 ## Platforms
 
