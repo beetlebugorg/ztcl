@@ -56,6 +56,8 @@ pub const Options = struct {
     typed: bool = false,
     /// Keep the text of each number, as tcllib does.
     number_text: bool = false,
+    /// Accept the numbers `1.` and `.1`, as tcllib does.
+    lenient: bool = false,
 };
 
 const Kind = enum { build, validate };
@@ -286,6 +288,10 @@ pub fn Parser(comptime kind: Kind) type {
                             try p.push(if (p.opts.typed) Value{ .str = "null" } else nv);
                         },
                         '-', '0'...'9' => try p.push(try p.tag("number", try p.number(at))),
+                        '.' => {
+                            if (!p.opts.lenient) return p.err(at, "unexpected character");
+                            try p.push(try p.tag("number", try p.number(at)));
+                        },
                         else => return p.err(at, "unexpected character"),
                     }
                     continue :state .after;
@@ -527,10 +533,11 @@ pub fn Parser(comptime kind: Kind) type {
             var i: usize = at;
             const neg = in[i] == '-';
             if (neg) i += 1;
-            if (i >= in.len or !isDigit(in[i])) return p.err(i, "a digit expected");
+            const lenient_dot = p.opts.lenient and i < in.len and in[i] == '.';
+            if (!lenient_dot and (i >= in.len or !isDigit(in[i]))) return p.err(i, "a digit expected");
             var mant: u64 = 0;
             var digits: usize = 0;
-            if (in[i] == '0') {
+            if (lenient_dot) {} else if (in[i] == '0') {
                 i += 1;
             } else {
                 while (i < in.len and isDigit(in[i])) : (i += 1) {
@@ -544,7 +551,7 @@ pub fn Parser(comptime kind: Kind) type {
             if (i < in.len and in[i] == '.') {
                 float = true;
                 i += 1;
-                if (i >= in.len or !isDigit(in[i])) return p.err(i, "a digit expected after \".\"");
+                if (!p.opts.lenient and (i >= in.len or !isDigit(in[i]))) return p.err(i, "a digit expected after \".\"");
                 while (i < in.len and isDigit(in[i])) : (i += 1) {
                     if (digits < 19) {
                         mant = mant * 10 + (in[i] - '0');

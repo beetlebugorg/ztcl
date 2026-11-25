@@ -207,3 +207,23 @@ test "the UTF-8 check agrees with std.unicode" {
         try std.testing.expectEqual(ok, ix.fault != .utf8);
     }
 }
+
+test "a path query keeps its memory below two times the input" {
+    const a = std.testing.allocator;
+    var text: std.ArrayList(u8) = .empty;
+    defer text.deinit(a);
+    try text.appendSlice(a, "{\"performances\":[");
+    for (0..20000) |i| {
+        if (i > 0) try text.append(a, ',');
+        try text.print(a, "{{\"id\":{d},\"name\":\"show {d}\",\"seats\":[1,2,3,4],\"venueCode\":\"V{d}\"}}", .{ i, i, i % 7 });
+    }
+    try text.appendSlice(a, "],\"end\":1}");
+    var it: Interp = undefined;
+    try it.init(a);
+    defer it.deinit();
+    const base = it.counter.used;
+    it.counter.mem_peak = base;
+    const v = (try build.get(&it, text.items, &.{ "performances", "19000", "venueCode" }, .{})).?;
+    try std.testing.expectEqualStrings("V2", try it.str(v));
+    try std.testing.expect(it.counter.mem_peak - base < 2 * text.items.len);
+}

@@ -6,7 +6,7 @@
 row	bytes	note
 table	10000	module table and package require
 hello	12000	test modules zt::hello and zt::hellonet; while hello is the only module, its row also has the module table
-json	80000	zt::json and the tcllib json names
+json	115000	zt::json and the tcllib json names; task 05 measured 104 480 (two forms of the walk, the writer, and the tcllib names)
 formats	90000	csv, toml, msgpack, cbor, url, encode
 compress	270000	flate and zstd
 crypto	200000	hashes, HMAC, argon2, AEAD, signatures, random

@@ -110,7 +110,7 @@ The estimates are guesses from the measured std sizes above and from the size of
 |---|---|---|
 | Core of today | 2 344 | measured |
 | Module table and `package require` | 10 | estimate |
-| `json` | 80 | estimate. Task 04 measured 42.6 for the parser and four commands (x86-64 Linux, `ReleaseFast`). |
+| `json` | 115 | measured: 104.5 in task 05 (x86-64 Linux, `ReleaseFast`). The parser has two forms of the walk (build and check), and the module has the writer and the tcllib names. |
 | `formats` (csv, toml, msgpack, cbor), `url`, `encode` | 90 | estimate |
 | `compress` (flate, zstd both ways) | 270 | std flate and zstd measured as upper bounds, a new zstd compressor estimated at 60 |
 | `crypto` (the hashes, HMAC, argon2, AEAD, signatures, random) | 200 | estimate |
@@ -125,9 +125,9 @@ The estimates are guesses from the measured std sizes above and from the size of
 | `tooling` (test runner, bench, profiler) | 60 | estimate |
 | `build` (the bundle reader) | 30 | estimate |
 | `sqlite` | 800 | 761 615 bytes measured (text, data, and bss of `sqlite3.o`, see below), and 40 for the binding |
-| **Full build without `http3`** | **5 139** | sum |
+| **Full build without `http3`** | **5 174** | sum |
 | `http3` (QUIC, HTTP/3, QPACK) | 250 | estimate |
-| **Full build** | **5 389** | sum, under the budget of 6 000 |
+| **Full build** | **5 424** | sum, under the budget of 6 000 |
 
 The SQLite measure: SQLite 3.53.0 amalgamation, `zig cc -target x86_64-linux-musl -Os -c` with `SQLITE_OS_OTHER=1`, `SQLITE_THREADSAFE=0`, `SQLITE_OMIT_LOAD_EXTENSION`, `SQLITE_DQS=0`, `SQLITE_DEFAULT_MEMSTATUS=0`, `SQLITE_OMIT_DEPRECATED`, `SQLITE_OMIT_SHARED_CACHE`, and `SQLITE_OMIT_LOCALTIME`. `size` gave text 749 535, data 11 136, and bss 944. The compile used 26 s. The same flags without `SQLITE_OS_OTHER`, `SQLITE_OMIT_LOCALTIME`, and with the unix VFS gave 780 265 bytes. Task 39 picks the optimize mode of SQLite. The table assumes `-Os` for SQLite.
 
