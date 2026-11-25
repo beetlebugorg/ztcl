@@ -179,6 +179,32 @@ The second line goes to stderr, with the time of the script. The exit code is 1 
 
 The WebAssembly build does not install the `point` command and has no export to run a point program over typed arrays. [Point procs](embedding.md#point-procs) work in a Zig program.
 
+## Threads
+
+`zig build wasm-threads` makes two more modules with the capability `thread`. The JS module `web/ztcl-threads.mjs` (`ztcl/threads` in the npm package) loads them. Each ztcl thread runs in its own worker: a Web Worker in a browser, or a `worker_threads` worker in Node.js. The main interpreter runs in a worker too, so a wait never blocks the page.
+
+```js
+import { ThreadInterp } from "./ztcl-threads.mjs";
+
+const t = await ThreadInterp.create({ allow: ["thread", "event"], limits: { maxThreads: 4 } });
+const r = await t.eval("set id [thread::create]; thread::send $id {expr {6 * 7}}");
+// r.result is "42"
+t.close();
+```
+
+The host picks one of two modes:
+
+| Mode | When | Module | Commands |
+|---|---|---|---|
+| `shared` | Node.js, or a page that is cross-origin isolated. | `ztcl-threads.wasm` | Each command of [Threads](threads.md), with `tsv`, the mutexes, the conditions, and `tpool`. The capabilities `event`, `clock`, `package`, and `interp` can also be on. |
+| `async` | A page with no cross-origin isolation. | `ztcl-async.wasm` | `thread::create`, `thread::send -async`, `thread::broadcast`, `thread::wait` in a thread, `thread::id`, `thread::names`, `thread::exists`, `thread::preserve`, `thread::release`, and `tpool::create`, `tpool::post`, `tpool::get`, `tpool::names`, `tpool::preserve`, and `tpool::release`. |
+
+- In the `shared` mode, all workers use one shared `WebAssembly.Memory`. Each worker has its own instance of the one compiled module, its own stack, and one interpreter with its own heap. The locks and the waits use `Atomics` on the shared memory, as the futex does on Linux. A value crosses threads as a copy, as on the native platforms. The limits of [Threads](threads.md#the-capability-and-the-limits) apply. The stacks of the threads are 8 MiB each, and the memory can grow to 2 GiB.
+- In the `async` mode, each worker has its own memory. A message is a script, and a reply is the result in a byte form that keeps the kind of each value. The host routes them with `postMessage`. A worker runs a message only between scripts, so the variable of `thread::send -async id script var` gets its value after the current `eval` ends. Only the main interpreter can make threads and pools. Each command that waits gives an error that names the headers, for example `thread::send without -async needs a cross-origin isolated page (COOP and COEP headers)`. The commands of `tsv`, the mutexes, the conditions, `thread::join`, `thread::cancel`, and `tpool::wait` give the same error. `tpool::get` of a job that runs gives it too. Only the limits of one thread apply, and `max_threads` counts the threads of the main interpreter.
+- A page is cross-origin isolated when its server sends `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`. [Embedding](embedding.md#threads-on-the-web) has a service worker for a host that cannot send these headers, such as GitHub Pages.
+
+`tools/wasm-threads.mjs` runs the 9 files of `tests/thread/` that need no channel in Node.js and in headless Chromium on a server with the headers. It also runs `tests/web/threads-async.tcl` in Chromium on a server with no such headers.
+
 ## Later
 
 - [WASI preview 2 and the component model (#2)](https://github.com/beetlebugorg/ztcl/issues/2) adds the `ztcl` program and the library as components. A component host in any language can then run ztcl, and the root folder jail and the network policy map to WASI.

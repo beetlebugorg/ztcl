@@ -9,8 +9,8 @@ Markdown files, and all pages use docs/site/site.css. The build needs
 markdown-it-py (tools/docs-requirements.txt). It stops with an error for a
 link to a missing page or a missing anchor, also on the HTML pages.
 
-The playground is docs/site/playground/ with web/ztcl.mjs,
-web/ztcl-worker.mjs, and zig-out/lib/ztcl.wasm. Run `zig build wasm`
+The playground is docs/site/playground/ with the JS modules of web/ and
+the three modules of zig-out/lib/. Run `zig build wasm wasm-threads`
 before the build.
 """
 
@@ -49,7 +49,9 @@ PAGE_OF = {src: page for src, page, _, _ in PAGES}
 
 SITE_DIR = ROOT / "docs" / "site"
 PLAYGROUND = SITE_DIR / "playground"
-WASM = ROOT / "zig-out" / "lib" / "ztcl.wasm"
+# The files of the playground from web/ and zig-out/lib/.
+WEB_FILES = ["ztcl.mjs", "ztcl-worker.mjs", "ztcl-threads.mjs", "ztcl-thread-worker.mjs"]
+WASM_FILES = ["ztcl.wasm", "ztcl-threads.wasm", "ztcl-async.wasm"]
 # The HTML pages of docs/site and the page folder of each.
 HTML_PAGES = [(SITE_DIR / "index.html", ""), (PLAYGROUND / "index.html", "playground/")]
 
@@ -202,10 +204,10 @@ class Build:
 
     @staticmethod
     def playground_file(name):
-        if name in ("ztcl.mjs", "ztcl-worker.mjs"):
+        if name in WEB_FILES:
             return ROOT / "web" / name
-        if name == "ztcl.wasm":
-            return WASM
+        if name.endswith(".wasm"):
+            return ROOT / "zig-out" / "lib" / name
         return PLAYGROUND / name
 
     def run(self, out):
@@ -213,8 +215,9 @@ class Build:
         for src, page, anchor in self.links:
             if anchor not in self.anchors.get(page, set()):
                 raise SystemExit(f"{src}: link to a missing anchor: {page}#{anchor}")
-        if not WASM.exists():
-            raise SystemExit(f"{WASM.relative_to(ROOT)} is missing: run `zig build wasm` first")
+        for name in WASM_FILES:
+            if not (ROOT / "zig-out" / "lib" / name).exists():
+                raise SystemExit(f"zig-out/lib/{name} is missing: run `zig build wasm wasm-threads` first")
         for path, at in HTML_PAGES:
             self.check_html(path, at)
         if out.exists():
@@ -228,7 +231,7 @@ class Build:
         for name in ("site.css", "favicon.svg"):
             shutil.copy(SITE_DIR / name, out / "assets" / name)
         (out / "playground").mkdir()
-        for name in [p.name for p in PLAYGROUND.iterdir()] + ["ztcl.mjs", "ztcl-worker.mjs", "ztcl.wasm"]:
+        for name in [p.name for p in PLAYGROUND.iterdir()] + WEB_FILES + WASM_FILES:
             shutil.copy(self.playground_file(name), out / "playground" / name)
         (out / ".nojekyll").write_text("", encoding="utf-8")
         print(f"wrote {len(rendered) + len(HTML_PAGES)} pages to {out}")

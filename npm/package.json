@@ -23,7 +23,13 @@
       "types": "./ztcl-worker.d.ts",
       "default": "./ztcl-worker.mjs"
     },
+    "./threads": {
+      "types": "./ztcl-threads.d.ts",
+      "default": "./ztcl-threads.mjs"
+    },
     "./ztcl.wasm": "./ztcl.wasm",
+    "./ztcl-threads.wasm": "./ztcl-threads.wasm",
+    "./ztcl-async.wasm": "./ztcl-async.wasm",
     "./package.json": "./package.json"
   },
   "files": [
@@ -32,10 +38,15 @@
     "ztcl.wasm",
     "ztcl.d.ts",
     "ztcl-worker.d.ts",
+    "ztcl-threads.mjs",
+    "ztcl-thread-worker.mjs",
+    "ztcl-threads.wasm",
+    "ztcl-async.wasm",
+    "ztcl-threads.d.ts",
     "NOTICE",
     "licenses/"
   ],
-  "sideEffects": ["./ztcl-worker.mjs"],
+  "sideEffects": ["./ztcl-worker.mjs", "./ztcl-thread-worker.mjs"],
   "engines": {
     "node": ">=22.3"
   }

@@ -45,8 +45,20 @@ const Allocator = std.mem.Allocator;
 /// True when the channels of a group share their name counters.
 const chan_names_ok = @import("sys.zig").supported;
 
-/// True when the target has threads. The WebAssembly build has none.
-pub const supported = !builtin.single_threaded and !builtin.cpu.arch.isWasm() and builtin.os.tag != .freestanding;
+/// True in the WebAssembly build with one shared memory. Each thread
+/// is a worker of the host there (`webthread.zig`).
+pub const web = builtin.cpu.arch.isWasm() and !builtin.single_threaded;
+const webthread = if (web) @import("webthread.zig") else struct {};
+
+/// True when the target has threads.
+pub const supported = web or (!builtin.single_threaded and !builtin.cpu.arch.isWasm() and builtin.os.tag != .freestanding);
+
+/// The stack of a thread. A worker on the web uses the shared memory for
+/// its stack, so it gets less. The interpreter uses 5 MiB at most.
+const stack_size: usize = if (web) 8 << 20 else 32 << 20;
+
+/// The thread of the system, or the worker of the host on the web.
+const OsThread = if (web) webthread.Thread else std.Thread;
 
 /// The limits of the threads of one host. The embedder sets them in
 /// `Interp.thread_limits` before it turns the capability on.
@@ -73,7 +85,7 @@ fn io() std.Io {
     return std.Io.Threaded.global_single_threaded.io();
 }
 
-pub const Lock = struct {
+pub const Lock = if (web) webthread.Lock else if (!supported) NoLock else struct {
     m: std.Io.Mutex = .init,
 
     pub fn lock(l: *Lock) void {
@@ -83,6 +95,12 @@ pub const Lock = struct {
     pub fn unlock(l: *Lock) void {
         l.m.unlock(io());
     }
+};
+
+/// The lock of a build with one thread.
+const NoLock = struct {
+    pub fn lock(_: *NoLock) void {}
+    pub fn unlock(_: *NoLock) void {}
 };
 
 /// A wake-up counter on a futex. A waiter holds `l`, reads the count,
@@ -115,13 +133,14 @@ pub const Event = struct {
     /// Sleeps until the count is not `s` or `ns` nanoseconds end, and
     /// removes the waiter of `enter`.
     pub fn sleep(e: *Event, s: u32, ns: u64) void {
-        io().futexWaitTimeout(u32, &e.seq.raw, s, .{ .duration = .{ .raw = .fromNanoseconds(@intCast(ns)), .clock = .awake } }) catch {};
+        if (web) webthread.futexWait(&e.seq.raw, s, @intCast(ns)) else if (!supported) {} else io().futexWaitTimeout(u32, &e.seq.raw, s, .{ .duration = .{ .raw = .fromNanoseconds(@intCast(ns)), .clock = .awake } }) catch {};
         _ = e.waiters.fetchSub(1, .release);
     }
 
     pub fn signal(e: *Event) void {
         _ = e.seq.fetchAdd(1, .seq_cst);
-        if (e.waiters.load(.seq_cst) != 0) io().futexWake(u32, &e.seq.raw, std.math.maxInt(u32));
+        if (e.waiters.load(.seq_cst) == 0) return;
+        if (web) webthread.futexWake(&e.seq.raw, std.math.maxInt(u32)) else if (!supported) {} else io().futexWake(u32, &e.seq.raw, std.math.maxInt(u32));
     }
 };
 
@@ -130,7 +149,7 @@ pub const slice_ns: u64 = 50 * std.time.ns_per_ms;
 
 /// Nanoseconds on a clock that does not go back.
 pub fn nowNs() i96 {
-    return std.Io.Clock.awake.now(io()).nanoseconds;
+    return if (web) webthread.nowNs() else if (!supported) 0 else std.Io.Clock.awake.now(io()).nanoseconds;
 }
 
 // ---- The memory of a group ----
@@ -341,7 +360,7 @@ pub const Worker = struct {
     /// The interpreter of the thread. It is null before the start and
     /// after the end. Another thread reads it only under the group lock.
     it: ?*Interp = null,
-    os: ?std.Thread = null,
+    os: ?OsThread = null,
     is_main: bool = false,
     state: State = .starting,
     /// The queue and its lock. `ev` wakes a waiter of the queue.
@@ -506,6 +525,14 @@ fn lockedWrite(ctx: ?*anyopaque, bytes: []const u8) void {
     g.out_lock.lock();
     defer g.out_lock.unlock();
     if (g.output) |o| o.write(o.ctx, bytes);
+}
+
+/// The lock of the output of the group of a host, or null with no
+/// group. The WebAssembly host holds it while it reads the output.
+pub fn outLock(host: *Interp) ?*Lock {
+    if (comptime !supported) return null;
+    const w = host.worker orelse return null;
+    return &w.group.out_lock;
 }
 
 /// Makes the group of a host. `allow` calls it for the capability.
@@ -761,7 +788,7 @@ pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
     };
     // The lock stays held across the spawn, so the new thread finds its
     // handle in `w.os` when it ends.
-    w.os = std.Thread.spawn(.{ .stack_size = 32 << 20, .allocator = g.gpa }, threadMain, .{ w, st }) catch {
+    w.os = OsThread.spawn(.{ .stack_size = stack_size, .allocator = g.gpa }, threadMain, .{ w, st }) catch {
         _ = g.workers.pop();
         g.running -= 1;
         if (g.limits.total_steps != std.math.maxInt(u64)) g.steps_left += steps;

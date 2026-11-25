@@ -88,5 +88,14 @@ check(!b.eval("set v").ok, "interpreters are separate");
 const w = new WorkerInterp({ stepLimit: 5 });
 check(w.wasm === wasmURL().href && w.stepLimit === 5, "WorkerInterp default module");
 
+// The threads entry: Node.js has the shared mode.
+{
+  const { ThreadInterp } = await import(`${name}/threads`);
+  const t = await ThreadInterp.create({ allow: ["thread"] });
+  const r = await t.eval("set t [thread::create]; thread::send $t {expr {6 * 7}}");
+  check(t.mode === "shared" && r.ok && r.result === "42", "ThreadInterp send");
+  t.close();
+}
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

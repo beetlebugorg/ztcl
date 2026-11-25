@@ -69,4 +69,38 @@ puts "in stock: [dict keys [dict filter $stock script {k v} {expr {$v > 0}}]]"
 puts "total:    [tcl::mathop::+ {*}[dict values $stock]]"
 `,
   },
+  {
+    name: "Threads (a pool and tsv)",
+    code: `# Four worker threads count the primes below 40000.
+# Each thread has its own interpreter in its own Web Worker.
+# This needs a cross-origin isolated page. The service worker of the
+# playground makes the page isolated.
+proc isprime {n} {
+    if {$n < 2} { return 0 }
+    for {set d 2} {$d * $d <= $n} {incr d} {
+        if {$n % $d == 0} { return 0 }
+    }
+    return 1
+}
+set pool [tpool::create -maxworkers 4 -initcmd [list proc isprime {n} [info body isprime]]]
+set jobs {}
+foreach a {0 10000 20000 30000} {
+    lappend jobs [tpool::post $pool [string map [list A $a] {
+        set c 0
+        for {set i A} {$i < A + 10000} {incr i} {
+            if {[isprime $i]} { incr c }
+        }
+        tsv::incr counts primes $c
+        list [thread::id] $c
+    }]]
+}
+foreach j $jobs {
+    tpool::wait $pool $j
+    lassign [tpool::get $pool $j] id n
+    puts "job $j in $id: $n primes"
+}
+tpool::release $pool
+puts "total: [tsv::get counts primes]"
+`,
+  },
 ];

@@ -143,10 +143,34 @@ pub fn build(b: *std.Build) void {
     }
 
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
-    const wasm = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
+    const wasm = addWasm(b, "ztcl", .none, gc_precise, size_plant, on);
+    const wasm_install = b.addInstallArtifact(wasm, .{ .dest_dir = .{ .override = .lib } });
+    b.step("wasm", "Build the WebAssembly library").dependOn(&wasm_install.step);
+
+    // The libraries of the capability `thread` on the web (task 14):
+    // ztcl-threads.wasm shares one memory between the workers, and
+    // ztcl-async.wasm gives each worker its own memory.
+    const threads_step = b.step("wasm-threads", "Build the WebAssembly libraries with threads");
+    for ([_]struct { []const u8, WebThreads }{ .{ "ztcl-threads", .shared }, .{ "ztcl-async", .async } }) |wt| {
+        const w = addWasm(b, wt[0], wt[1], gc_precise, size_plant, on);
+        threads_step.dependOn(&b.addInstallArtifact(w, .{ .dest_dir = .{ .override = .lib } }).step);
+    }
+}
+
+/// The thread model of a WebAssembly build. `none` has no thread
+/// command. `shared` runs each thread in a worker on one shared memory.
+/// `async` runs each thread in a worker with its own memory, and only
+/// the commands that do not wait work.
+const WebThreads = enum { none, shared, async };
+
+fn addWasm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise: bool, size_plant: usize, on: [all_modules.len]bool) *std.Build.Step.Compile {
+    var query: std.Target.Query = .{ .cpu_arch = .wasm32, .os_tag = .freestanding };
+    if (threads == .shared) query.cpu_features_add = std.Target.wasm.featureSet(&.{ .atomics, .bulk_memory });
+    const wasm = b.addExecutable(.{ .name = name, .root_module = b.createModule(.{
         .root_source_file = b.path("src/wasm.zig"),
-        .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
+        .target = b.resolveTargetQuery(query),
         .optimize = .ReleaseSmall,
+        .single_threaded = threads != .shared,
     }) });
     // The WebAssembly build has no JIT.
     const wasm_options = b.addOptions();
@@ -155,14 +179,22 @@ pub fn build(b: *std.Build) void {
     wasm_options.addOption(bool, "jit_bug", false);
     wasm_options.addOption(bool, "tsan_plant", false);
     wasm_options.addOption(usize, "size_plant", size_plant);
+    wasm_options.addOption(WebThreads, "web_threads", threads);
     addModuleOptions(b, wasm_options, on);
     wasm.root_module.addOptions("build_options", wasm_options);
     wasm.entry = .disabled;
     wasm.rdynamic = true;
     // The interpreter can use 5 MiB of native stack (`max_native`).
     wasm.stack_size = 8 << 20;
-    const wasm_install = b.addInstallArtifact(wasm, .{ .dest_dir = .{ .override = .lib } });
-    b.step("wasm", "Build the WebAssembly library").dependOn(&wasm_install.step);
+    if (threads == .shared) {
+        // The host makes the memory and gives it to each instance.
+        wasm.import_memory = true;
+        wasm.shared_memory = true;
+        // web/ztcl-threads.mjs makes the memory with these sizes.
+        wasm.initial_memory = 32 << 20;
+        wasm.max_memory = 2 << 30;
+    }
+    return wasm;
 }
 
 const Batteries = enum { core, std, full };
