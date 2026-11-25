@@ -47,7 +47,8 @@
 //! and the proc runs with that code in two interpreters with the same
 //! history: one with the JIT and one without it. The step limit is
 //! 10 000, or below 64 in one run of four. One run of four has a memory
-//! limit a little above the count before the run. The result,
+//! limit a little above the count before the run, and the others have a
+//! limit 256 MiB above it. The result,
 //! `errorInfo`, the steps used, the memory count, and the output must be
 //! equal, and the run of the JIT must end in one second. The process
 //! must not crash, and no safety check may fail. The collector is off
@@ -1661,8 +1662,13 @@ fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start:
                 std.debug.print("run {s} steps {d}\n", .{ pname, steps });
                 printIns(held.ins);
             }
-            const mem = if (mem_room) |m| ref.it.memUsed() +| m else std.math.maxInt(usize);
+            // With no small limit, a limit of 256 MiB above the count
+            // stops a changed Code that allocates in one command without
+            // end, so both interpreters stay inside the memory cap of the
+            // process.
+            const mem = ref.it.memUsed() +| (mem_room orelse 256 << 20);
             try ref.run(a, rb[0], held_ref, call.items, steps, mem, &want);
+            if (verbose) std.debug.print("--- interpreter\n{s}\n", .{want.items});
             const t0 = Io.Clock.awake.now(io);
             try jit_side.run(a, p, held, call.items, steps, mem, &got);
             const ms = @divFloor(t0.untilNow(io, .awake).toNanoseconds(), std.time.ns_per_ms);
