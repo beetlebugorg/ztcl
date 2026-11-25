@@ -1476,7 +1476,8 @@ pub const Interp = struct {
         if (comptime exec_supported) {
             if (new & @intFromEnum(Capability.exec) != 0) try @import("proc.zig").register(it);
         }
-        if (comptime chan_supported) {
+        // WASI preview 1 has no sockets.
+        if (comptime chan_supported and @import("builtin").os.tag != .wasi) {
             if (new & @intFromEnum(Capability.socket) != 0) try it.register("socket", @import("sock.zig").cmdSocket);
         }
         if (comptime thread_mod.supported) {

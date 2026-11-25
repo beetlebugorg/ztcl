@@ -32,8 +32,10 @@ const linux = sys.os;
 const on_mac = builtin.os.tag == .macos;
 const on_win = builtin.os.tag == .windows and builtin.cpu.arch == .x86_64;
 const win = @import("fsroot_windows.zig");
+const on_wasi = builtin.os.tag == .wasi;
+const wfs = @import("fsroot_wasi.zig");
 /// ARM64 Windows stays off until its tests can run.
-pub const supported = builtin.os.tag == .linux or (on_mac and builtin.cpu.arch == .aarch64) or on_win;
+pub const supported = builtin.os.tag == .linux or (on_mac and builtin.cpu.arch == .aarch64) or on_win or on_wasi;
 
 // The macOS open flag that `std.c.O` does not name.
 const o_exec: u32 = 0x40000000;
@@ -57,6 +59,7 @@ pub const State = struct {
 /// Opens the root. The runner calls it. Later paths stay below it.
 pub fn setRoot(it: *Interp, path: []const u8) !void {
     if (comptime on_win) return win.setRoot(it, path);
+    if (comptime on_wasi) return wfs.setRoot(it, path);
     if (comptime !supported) return error.BadRoot;
     const z = try it.alloc().dupeZ(u8, path);
     const rc = if (comptime on_mac)
@@ -214,6 +217,7 @@ pub const OpenResult = union(enum) { fd: i32, err: sys.Errno };
 
 pub fn openRel(it: *Interp, rel: []const u8, flags: sys.OpenFlags, mode: u32) Error!OpenResult {
     if (comptime on_win) return win.openRel(it, rel, flags, mode);
+    if (comptime on_wasi) return wfs.openRel(it, rel, flags, mode);
     // With no jail for this target, each open is an error.
     if (comptime !supported) return it.fail("the file system is not available on this target", .{});
     if (it.fs.fd < 0) return it.fail("the embedder gave no root folder", .{});
@@ -271,6 +275,7 @@ pub const StatResult = union(enum) { ok: Info, err: sys.Errno };
 /// The data of a path. A symlink is reported as a symlink.
 pub fn stat(it: *Interp, rel: []const u8) Error!StatResult {
     if (comptime on_win) return win.stat(it, rel);
+    if (comptime on_wasi) return wfs.stat(it, rel);
     if (comptime on_mac) {
         var st: std.c.Stat = undefined;
         var src: usize = undefined;
@@ -329,6 +334,7 @@ pub const ListResult = union(enum) { ok: []const []const u8, err: sys.Errno };
 /// The names in a folder, with no `.` or `..`.
 pub fn listDir(it: *Interp, rel: []const u8) Error!ListResult {
     if (comptime on_win) return win.listDir(it, rel);
+    if (comptime on_wasi) return wfs.listDir(it, rel);
     const fd = switch (try openRel(it, rel, .{ .directory = true }, 0)) {
         .fd => |x| x,
         .err => |e| return .{ .err = e },
@@ -374,6 +380,7 @@ fn nameLess(_: void, x: []const u8, y: []const u8) bool {
 /// Gives a child interpreter its own descriptor of the root.
 pub fn shareRoot(it: *const Interp, child: *Interp) std.mem.Allocator.Error!void {
     if (comptime on_win) return win.shareRoot(it, child);
+    if (comptime on_wasi) return wfs.shareRoot(it, child);
     if (it.fs.fd >= 0) {
         const rc = linux.fcntl(it.fs.fd, linux.F.DUPFD_CLOEXEC, 3);
         if (linux.errno(rc) == .SUCCESS) child.fs.fd = @intCast(rc);
@@ -383,6 +390,7 @@ pub fn shareRoot(it: *const Interp, child: *Interp) std.mem.Allocator.Error!void
 /// Deletes the last name of a parent. Gives null or the error.
 pub fn removeAt(p: Parent, dir: bool) ?sys.Errno {
     if (comptime on_win) return win.removeAt(p, dir);
+    if (comptime on_wasi) return wfs.removeAt(p, dir);
     const e = linux.errno(linux.unlinkat(p.fd, p.base, if (dir) linux.AT.REMOVEDIR else 0));
     return if (e == .SUCCESS) null else e;
 }
@@ -390,6 +398,7 @@ pub fn removeAt(p: Parent, dir: bool) ?sys.Errno {
 /// Makes a folder at the last name of a parent.
 pub fn mkdirAt(p: Parent) ?sys.Errno {
     if (comptime on_win) return win.mkdirAt(p);
+    if (comptime on_wasi) return wfs.mkdirAt(p);
     const e = linux.errno(linux.mkdirat(p.fd, p.base, 0o777));
     return if (e == .SUCCESS) null else e;
 }
@@ -397,6 +406,7 @@ pub fn mkdirAt(p: Parent) ?sys.Errno {
 /// Moves a name between two parents below the root.
 pub fn renameAt(p: Parent, q: Parent) ?sys.Errno {
     if (comptime on_win) return win.renameAt(p, q);
+    if (comptime on_wasi) return wfs.renameAt(p, q);
     const e = linux.errno(linux.renameat(p.fd, p.base, q.fd, q.base));
     return if (e == .SUCCESS) null else e;
 }
