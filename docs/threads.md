@@ -119,7 +119,7 @@ Zig 0.16 has no `std.Thread.Mutex` or `std.Thread.Condition`. The locks are `std
 
 ## Platforms
 
-The commands use `std.Thread`, so they build for Linux, macOS, and Windows. The channel commands of `thread::transfer`, `thread::detach`, and `thread::attach` need the channel capability, which exists only on Linux. The WebAssembly build has no threads, and the capability adds no command there.
+The commands use `std.Thread`, so they build for Linux, macOS, and Windows. The channel commands of `thread::transfer`, `thread::detach`, and `thread::attach` need the channel capability, which exists only on Linux. The WebAssembly build has no threads yet, and the capability adds no command there. Task 14 adds them.
 
 ## The tests of Tcl
 
@@ -133,12 +133,19 @@ The commands use `std.Thread`, so they build for Linux, macOS, and Windows. The 
 2. The default limits in the table above.
 3. The suite turns on `thread` for each file. A file that tests `info commands` or the namespaces can change. Task 02 checks each file of `tools/suite.sh -a`.
 
+## WebAssembly
+
+[Task 14](threads-tasks/14-wasm-workers.md) adds threads to the WebAssembly build. Each thread is a Web Worker, or a `worker_threads` worker in Node.js, with its own instance of the module. A message is the `Shared` form as bytes in `postMessage`.
+
+- On a cross-origin isolated page and in Node.js, the main interpreter also runs in a worker, and each command works. The shared tables, the queues, the stop flags, and the group totals are in a `SharedArrayBuffer` under `Atomics`.
+- Without cross-origin isolation, only the commands that do not wait work. Each command that waits gives an error that names the missing isolation. Only the limits of one thread apply.
+- GitHub Pages cannot set the headers COOP and COEP. A service worker can add them on a static site.
+
 ## Future work
 
 - A frozen shared form of large values (see above).
 - Bytecode and JIT code that threads share (see "Compiled code").
 - `ttrace`, `tsv::array bind`, and the storage handlers of `tsv`.
-- Threads in the WebAssembly build: wasm threads and shared memory need extra browser setup.
 
 ## Differences from the Thread package
 

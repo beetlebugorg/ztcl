@@ -12,6 +12,7 @@
 | 4: proof | 08 to 10 | The tests of the limits, the races, the teardown, ThreadSanitizer, and the benchmarks. |
 | 5: ports | 11 to 12 | macOS and Windows. |
 | 6: docs | 13 | The counts and the pages for the embedder. |
+| 7: web | 14 | Threads in WebAssembly with Web Workers, after tasks 01 to 05 and 08. |
 
 The user decides the three points of "Decisions for the user" in the design before task 01 merges.
 
@@ -23,6 +24,7 @@ The user decides the three points of "Decisions for the user" in the design befo
 | macOS | macOS. |
 | Windows | Windows. |
 | shared | Any platform. The code is the same on each platform, and the tests run on Linux first. |
+| shared/web | The WebAssembly build in Node.js and in a browser. |
 
 ## Rules for each task
 
@@ -54,7 +56,7 @@ The user decides the three points of "Decisions for the user" in the design befo
 7. Each wait is a slice of at most 50 ms, and the thread checks its stop flag after each slice.
 8. Each new source file starts with a `//!` comment that explains its algorithm, and an SPDX line for BSD-2-Clause.
 9. Write fresh code. Copy no code from the Thread package or another project. Credit each source in `docs/references/thread.md`.
-10. Use only the Zig 0.16.0 standard library. The WebAssembly build has no thread command.
+10. Use only the Zig 0.16.0 standard library. The WebAssembly build has no thread command until task 14.
 11. Use the words "step limit" for the limit on steps. Name no AI model or vendor in the repository. Add no attribution line.
 12. If a gate fails, do not change the gate. Report the measured number and the cause.
 13. If a fact in a task is wrong, stop and report it. Do not guess.
@@ -76,3 +78,4 @@ The user decides the three points of "Decisions for the user" in the design befo
 | [11](11-macos.md) | macOS | arm64 and x86-64 macOS |
 | [12](12-windows.md) | Windows | x86-64 Windows |
 | [13](13-docs.md) | shared | The counts and the docs |
+| [14](14-wasm-workers.md) | shared/web | Threads in WebAssembly with Web Workers |
