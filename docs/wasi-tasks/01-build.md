@@ -23,7 +23,7 @@ Platform: shared/wasi.
 ```sh
 CAP zig build -Dtarget=wasm32-wasi
 printf 'puts [expr {6*7}]\n' | timeout 10 wasmtime run zig-out/bin/ztcl.wasm         # 42
-timeout 10 wasmtime run --dir tests::/ zig-out/bin/ztcl.wasm /hello.tcl             # one small script
+printf 'puts ok\n' > zig-out/t.tcl && timeout 10 wasmtime run --dir zig-out::/ zig-out/bin/ztcl.wasm /t.tcl   # ok
 printf 'while 1 {}\n' | timeout 10 wasmtime run zig-out/bin/ztcl.wasm --max-steps 1000  # the step limit error
 ```
 
