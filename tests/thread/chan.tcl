@@ -55,10 +55,12 @@ test refuse-1 {thread::transfer $t $srv} "!cannot move server socket \"$srv\""
 set p [open |cat r+]
 test refuse-2 {thread::transfer $t $p} "!cannot move command pipeline \"$p\""
 close $p
+
+# The move removes the fileevent handlers, as in tclsh.
 fileevent $cl readable {set x 1}
-test refuse-3 {thread::transfer $t $cl} "!cannot move channel \"$cl\" with a fileevent handler"
-fileevent $cl readable {}
-test refuse-4 {thread::transfer $t $cl; thread::send $t [list close $cl]} {}
+fileevent $cl writable {set y 1}
+test handlers-1 {thread::transfer $t $cl; thread::send $t [string map [list @ $cl] {list [fileevent @ readable] [fileevent @ writable]}]} {{} {}}
+test handlers-2 {thread::send $t [list close $cl]} {}
 close $::conn
 close $srv
 

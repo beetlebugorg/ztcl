@@ -63,7 +63,7 @@ A shared form needs a buffer kind that each of these paths copies first, and a m
 | `thread::errorproc ?proc?` | Sets the procedure that gets the errors of all threads: `proc id errorInfo`. It runs in the thread that set it. |
 | `thread::configure id ?option? ?value?` | `-eventmark N` makes `thread::send -async` wait while the queue of the target has N messages. `-unwindonerror bool` ends the thread after a send with an error. |
 | `thread::eval ?-lock mutex? arg ?arg ...?` | Runs the script while it holds the mutex, or a mutex of the group. |
-| `thread::transfer id channel`, `thread::detach channel`, `thread::attach channel` | Move a file or socket channel between threads. A server socket and a command pipeline stay with their thread. The channel commands exist only on Linux. |
+| `thread::transfer id channel`, `thread::detach channel`, `thread::attach channel` | Move a file or socket channel between threads. A server socket and a command pipeline stay with their thread. The move removes the `fileevent` handlers of the channel. The channel commands exist only on Linux. |
 
 ## The shared variables
 

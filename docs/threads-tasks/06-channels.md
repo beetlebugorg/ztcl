@@ -14,7 +14,7 @@ A file or socket channel moves between threads with its name and its options.
 ## Rules
 
 1. A detached channel is a descriptor and its options in group memory.
-2. A server socket, a command pipeline, and a channel with a handler of `fileevent` give an error.
+2. A server socket and a command pipeline give an error. The move removes the `fileevent` handlers of the channel, as `thread::detach` of `tclsh` does.
 3. Buffered output goes out before the move. Buffered input moves with the channel.
 4. `endGroup` closes each detached channel.
 

@@ -9,9 +9,10 @@
 //! the process.
 //!
 //! Buffered output goes out before the move. A server socket, a command
-//! pipeline, a standard channel, and a channel with a handler of
-//! `fileevent` stay with their thread. A socket with a connect in the
-//! background moves, and its new thread sees the end of the connect.
+//! pipeline, and a standard channel stay with their thread. The move
+//! removes the `fileevent` handlers of the channel, as in tclsh. A
+//! socket with a connect in the background moves, and its new thread
+//! sees the end of the connect.
 //!
 //! `transfer` detaches the channel and sends `thread::attach` to the
 //! target, and waits for the reply. When the target fails, the channel
@@ -99,7 +100,6 @@ fn check(it: *Interp, name: []const u8) Error!*Channel {
     if (c.kind == .server) return it.fail("cannot move server socket \"{s}\"", .{name});
     if (c.pids.len > 0) return it.fail("cannot move command pipeline \"{s}\"", .{name});
     if (c.kind == .pipe) return it.fail("channel is shared", .{});
-    if (c.on_read != null or c.on_write != null) return it.fail("cannot move channel \"{s}\" with a fileevent handler", .{name});
     if (c.draining) return notFound(it, name);
     try chan.flushChannel(it, c);
     if (c.wbuf.items.len > 0) return it.fail("cannot move channel \"{s}\" with output that waits", .{name});
@@ -128,6 +128,9 @@ fn detachChannel(it: *Interp, name: []const u8) Error!void {
     };
     d.c.rpos = 0;
     d.c.wbuf = .empty;
+    // The scripts are in the heap of this thread.
+    d.c.on_read = null;
+    d.c.on_write = null;
     d.c.buffering = a.dupe(u8, c.buffering) catch &.{};
     d.c.peer_host = a.dupe(u8, c.peer_host) catch &.{};
     t.lock.lock();
