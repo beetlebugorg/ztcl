@@ -1,7 +1,7 @@
 //! ztcl: a Tcl interpreter in Zig.
 //!
 //! The module stands alone: it uses only the standard library. See
-//! docs/design.md for the design.
+//! docs/dev/design.md for the design.
 //!
 //! ```zig
 //! var it: ztcl.Interp = undefined;

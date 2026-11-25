@@ -3,7 +3,7 @@
 #   group  measure  case (* is each case)  other runtime  ratio  better
 # "higher" means the ratio is ztcl / other (a speed). "lower" means the
 # ratio is other / ztcl (a time or a latency).
-# The numbers are the targets of docs/stdlib.md, with the goal of the
+# The numbers are the targets of docs/dev/stdlib.md, with the goal of the
 # user for validate (0.67 of the DOM parse of simdjson), until the user
 # sets them (decision 11).
 group	measure	case	other	ratio	better

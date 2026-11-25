@@ -1,4 +1,4 @@
-# A reader of a parsed document for docs/values.md:
+# A reader of a parsed document for docs/dev/values.md:
 #   ztcl --allow channels,clock --root DATA --tclsh read_ztcl.tcl FILE.json N
 # Prints the time of one read.
 # SPDX-License-Identifier: BSD-2-Clause

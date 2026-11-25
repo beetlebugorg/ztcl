@@ -219,7 +219,7 @@ img, svg { max-width: 100%; }
 .prose h2 { font-size: 26px; line-height: 1.25; letter-spacing: -.015em; margin: 48px 0 12px; padding-top: 8px; }
 .prose h3 { font-size: 20px; margin: 32px 0 8px; }
 .prose h4 { font-size: 17px; margin: 24px 0 6px; }
-.prose p, .prose ul, .prose ol { margin: 0 0 16px; }
+.prose p, .prose ul, .prose ol { margin: 0 0 16px; overflow-wrap: break-word; }
 .prose li + li { margin-top: 4px; }
 .prose code { font-size: .88em; background: var(--code-bg); padding: .14em .36em; border-radius: 5px; }
 .prose pre { background: var(--code-bg); border: 1px solid var(--line); padding: 16px 18px; border-radius: 10px; overflow: auto; line-height: 1.5; font-size: 14px; margin: 0 0 20px; }

@@ -9,7 +9,7 @@
 //! `fcmp` and `b.vs`, and checks the epoch and the memory count. A
 //! failed check goes back to the tier 1 code of the loop head.
 //!
-//! The registers follow the plan of `docs/jit.md`: `x9` to `x13` for the
+//! The registers follow the plan of `docs/dev/jit.md`: `x9` to `x13` for the
 //! integer slots, `x3` to `x8` for the integer stack places and
 //! constants, `d16` to `d19` for the double slots, and `d22` to `d31`
 //! for the double places and constants. A slot register that no slot

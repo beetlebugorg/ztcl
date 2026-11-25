@@ -27,25 +27,37 @@ ROOT = Path(__file__).resolve().parent.parent
 REPO = "https://github.com/beetlebugorg/ztcl"
 SITE = "https://beetlebug.org/ztcl/"
 
-# Source file, page folder, sidebar group, sidebar title.
+# Source file, page folder, sidebar group, sidebar title. Plans, task
+# lists, and reports are in docs/dev/ and are not part of the site.
 PAGES = [
     ("README.md", "overview/", "Start", "Overview"),
-    ("docs/language.md", "language/", "Use", "Language and commands"),
-    ("docs/shell.md", "shell/", "Use", "Interactive shell"),
-    ("docs/embedding.md", "embedding/", "Use", "Embed in Zig"),
-    ("docs/webassembly.md", "webassembly/", "Use", "WebAssembly"),
-    ("docs/npm.md", "npm/", "Use", "npm package"),
-    ("docs/design.md", "design/", "Internals", "Design"),
-    ("docs/testing.md", "testing/", "Internals", "Tests and benchmarks"),
-    ("docs/compatibility.md", "compatibility/", "Internals", "Compatibility"),
-    ("docs/tcl9.md", "tcl9/", "Internals", "Tcl 8.6 and Tcl 9"),
-    ("docs/release.md", "release/", "Project", "Releases"),
-    ("docs/roadmap.md", "roadmap/", "Project", "Roadmap"),
+    ("docs/install.md", "install/", "Start", "Install"),
+    ("docs/quickstart.md", "quickstart/", "Start", "Quick start"),
+    ("docs/language.md", "language/", "Guide", "Language"),
+    ("docs/shell.md", "shell/", "Guide", "The shell"),
+    ("docs/limits.md", "limits/", "Guide", "Limits and capabilities"),
+    ("docs/threads.md", "threads/", "Guide", "Threads"),
+    ("docs/jit.md", "jit/", "Guide", "The JIT"),
+    ("docs/modules/json.md", "modules/json/", "Guide", "Module zt::json"),
+    ("docs/embedding.md", "embedding/", "Embed", "Embed in Zig"),
+    ("docs/webassembly.md", "webassembly/", "Embed", "WebAssembly"),
+    ("docs/performance.md", "performance/", "Project", "Performance"),
+    ("docs/faq.md", "faq/", "Project", "FAQ"),
     ("CHANGELOG.md", "changelog/", "Project", "Changelog"),
     ("CONTRIBUTING.md", "contributing/", "Project", "Contributing"),
     ("SECURITY.md", "security/", "Project", "Security"),
     ("docs/references/tcl.md", "references/tcl/", "Project", "References"),
 ]
+# Old page folders and their new place.
+REDIRECTS = {
+    "npm/": "install/#npm",
+    "design/": f"{REPO}/blob/main/docs/dev/design.md",
+    "testing/": "performance/",
+    "compatibility/": "language/",
+    "tcl9/": "language/#tcl-9",
+    "release/": "changelog/",
+    "roadmap/": "faq/#where-is-the-roadmap",
+}
 PAGE_OF = {src: page for src, page, _, _ in PAGES}
 
 SITE_DIR = ROOT / "docs" / "site"
@@ -234,6 +246,19 @@ class Build:
         (out / "playground").mkdir()
         for name in [p.name for p in PLAYGROUND.iterdir()] + WEB_FILES + WASM_FILES:
             shutil.copy(self.playground_file(name), out / "playground" / name)
+        for old, new in REDIRECTS.items():
+            if not new.startswith("https:"):
+                page, _, frag = new.partition("#")
+                if page not in self.anchors or (frag and frag not in self.anchors[page]):
+                    raise SystemExit(f"redirect {old}: link to a missing page or anchor: {new}")
+                new = rel(old, page) + (f"#{frag}" if frag else "")
+            (out / old).mkdir(parents=True, exist_ok=True)
+            target = html.escape(new)
+            (out / old / "index.html").write_text(
+                f'<!doctype html><meta charset="utf-8"><title>Moved</title>'
+                f'<meta http-equiv="refresh" content="0; url={target}">'
+                f'<link rel="canonical" href="{target}"><a href="{target}">This page moved.</a>\n',
+                encoding="utf-8")
         (out / ".nojekyll").write_text("", encoding="utf-8")
         print(f"wrote {len(rendered) + len(HTML_PAGES)} pages to {out}")
 

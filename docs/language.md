@@ -1,6 +1,6 @@
-# Language and command reference
+# Language
 
-ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6. The status below comes from the test files of Tcl 8.6.16. [Compatibility](compatibility.md) has all 152 files. ztcl makes no claim of Tcl 9 compatibility.
+ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: lists, strings, dicts, arrays, `expr`, `format`, `scan`, `binary`, `regexp`, namespaces, `try`, `apply`, `lmap`, `upvar`, `uplevel`, coroutines, and TclOO. It passes 37 413 of the 46 494 tests of the Tcl 8.6.16 suite. The status of each command below comes from its test file. [The full results](dev/compatibility.md) have all 152 files.
 
 ## Commands
 
@@ -73,7 +73,7 @@ The counts are pass / fail / skip for the test file of the command.
 
 ## Embedder commands
 
-`point proc` exists only after `point.install`. See [Embedding](embedding.md) and [Design](design.md).
+`point proc` exists only after `point.install`. See [Embed in Zig](embedding.md#point-procs).
 
 ## Intentionally absent
 
@@ -114,3 +114,8 @@ A host name resolves through one function. It reads an address literal, the name
 - Some errors of core commands still have the error code `NONE`. Arithmetic errors, wrong argument counts, list syntax, and lookups have the codes of Tcl.
 - Unicode classes and case maps use a small model of the Unicode tables.
 - `Interp.compact` drops traces.
+- A value from `eval` in Zig is valid until the next call into the interpreter. `Interp.hold` keeps it longer.
+
+## Tcl 9
+
+ztcl follows Tcl 8.6 and makes no claim of Tcl 9 compatibility. On the 37 core test files of Tcl 9.1.0, ztcl passes 9 298 tests, fails 2 799, and skips 529. [The Tcl 9 notes](dev/tcl9.md) list the differences.

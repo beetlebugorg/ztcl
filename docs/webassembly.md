@@ -6,7 +6,7 @@ The WebAssembly build has the interpreter only, with no JIT. It has no command t
 
 ## Install from npm
 
-The package [`@beetlebug/ztcl`](https://www.npmjs.com/package/@beetlebug/ztcl) has `ztcl.wasm`, the JS module, the worker, and the TypeScript types. It works with a bundler, in Node.js, and from a CDN with no build step. See [the npm package](npm.md).
+The package [`@beetlebug/ztcl`](https://www.npmjs.com/package/@beetlebug/ztcl) has `ztcl.wasm`, the JS module, the worker, and the TypeScript types. It works with a bundler, in Node.js, and from a CDN with no build step. See [Install](install.md#npm).
 
 ```sh
 npm install @beetlebug/ztcl
@@ -205,8 +205,6 @@ The host picks one of two modes:
 
 `tools/wasm-threads.mjs` runs the 9 files of `tests/thread/` that need no channel in Node.js and in headless Chromium on a server with the headers. It also runs `tests/web/threads-async.tcl` in Chromium on a server with no such headers.
 
-## Later
+## More
 
-- [WASI preview 2 and the component model (#2)](https://github.com/beetlebugorg/ztcl/issues/2) adds the `ztcl` program and the library as components. A component host in any language can then run ztcl, and the root folder jail and the network policy map to WASI.
-- [Compile Tcl scripts to WebAssembly modules (#3)](https://github.com/beetlebugorg/ztcl/issues/3).
-- [ztk](https://beetlebug.org/ztk/), the Tk replacement on ztcl, will also run on the web.
+The [issues](https://github.com/beetlebugorg/ztcl/issues) track the planned WebAssembly work, such as WASI components and scripts compiled to WebAssembly modules.

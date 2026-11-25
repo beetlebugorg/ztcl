@@ -1,6 +1,6 @@
 # References for the memory work and the JIT
 
-[The JIT design](../jit.md) uses these sources. ztcl has no code of any of them. The plan cites public papers, articles, and documentation. For each project with source code, the authors read only its public articles and documentation for this plan, and no source file.
+[The JIT design](../dev/jit.md) uses these sources. ztcl has no code of any of them. The plan cites public papers, articles, and documentation. For each project with source code, the authors read only its public articles and documentation for this plan, and no source file.
 
 ## Compilers
 
@@ -54,7 +54,7 @@ Brian T. Lewis, "An On-the-fly Bytecode Compiler for Tcl", USENIX Tcl/Tk Worksho
 
 **License:** Paper
 
-**How ztcl uses it:** Background for the inline forms of the bytecode and their guards against a redefined command. `docs/design.md` describes the forms of ztcl.
+**How ztcl uses it:** Background for the inline forms of the bytecode and their guards against a redefined command. `docs/dev/design.md` describes the forms of ztcl.
 
 ### Floating-point arithmetic
 

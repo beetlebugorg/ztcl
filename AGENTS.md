@@ -2,7 +2,7 @@
 
 ztcl is an experimental, sandboxed Tcl interpreter in Zig. It is built for zslice and has no dependency on it. It uses only the Zig standard library.
 
-Read [WRITING.md](WRITING.md) before you write code comments, commits, or PRs. Read [docs/design.md](docs/design.md) before you change the interpreter.
+Read [WRITING.md](WRITING.md) before you write code comments, commits, or PRs. Read [docs/dev/design.md](docs/dev/design.md) before you change the interpreter.
 
 ## Commands
 
