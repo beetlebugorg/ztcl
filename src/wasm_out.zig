@@ -319,6 +319,25 @@ pub const Body = struct {
         if (t) |v| try b.push(v);
     }
 
+    /// `br_table`: the label of `depths[k]` for the index k on the
+    /// stack, or of `default` for another index. The labels have no
+    /// values.
+    pub fn brTable(b: *Body, depths: []const u32, default: u32) Error!void {
+        try b.pop(.i32);
+        for (depths) |d| if (try b.labelType(d) != null) return error.InvalidBody;
+        if (try b.labelType(default) != null) return error.InvalidBody;
+        try b.op(0x0e);
+        try uleb(&b.code, b.a, depths.len);
+        for (depths) |d| try uleb(&b.code, b.a, d);
+        try uleb(&b.code, b.a, default);
+        b.kill();
+    }
+
+    pub fn @"unreachable"(b: *Body) Error!void {
+        try b.op(0x00);
+        b.kill();
+    }
+
     pub fn ret(b: *Body) Error!void {
         if (b.frames.items[0].result) |r| try b.pop(r);
         try b.op(0x0f);
@@ -482,9 +501,18 @@ pub const Body = struct {
         i32_gt_u = 0x4b,
         i32_le_u = 0x4d,
         i32_ge_u = 0x4f,
+        i32_ge_s = 0x4e,
         i64_eqz = 0x50,
+        i64_eq = 0x51,
+        i64_ne = 0x52,
         i64_lt_s = 0x53,
+        i64_lt_u = 0x54,
+        i64_gt_s = 0x55,
+        i64_gt_u = 0x56,
+        i64_le_s = 0x57,
+        i64_le_u = 0x58,
         i64_ge_s = 0x59,
+        i64_ge_u = 0x5a,
         f64_eq = 0x61,
         f64_ne = 0x62,
         f64_lt = 0x63,
@@ -502,6 +530,11 @@ pub const Body = struct {
         i64_add = 0x7c,
         i64_sub = 0x7d,
         i64_mul = 0x7e,
+        i64_div_s = 0x7f,
+        i64_rem_s = 0x81,
+        i64_and = 0x83,
+        i64_or = 0x84,
+        i64_xor = 0x85,
         f64_abs = 0x99,
         f64_neg = 0x9a,
         f64_ceil = 0x9b,
@@ -518,11 +551,11 @@ pub const Body = struct {
         fn sig(n: Num) struct { []const ValType, ValType } {
             return switch (n) {
                 .i32_eqz => .{ &.{.i32}, .i32 },
-                .i32_eq, .i32_ne, .i32_lt_s, .i32_lt_u, .i32_gt_s, .i32_gt_u, .i32_le_u, .i32_ge_u, .i32_add, .i32_sub, .i32_mul, .i32_and, .i32_or, .i32_xor, .i32_shl, .i32_shr_u => .{ &.{ .i32, .i32 }, .i32 },
+                .i32_eq, .i32_ne, .i32_lt_s, .i32_lt_u, .i32_gt_s, .i32_gt_u, .i32_le_u, .i32_ge_s, .i32_ge_u, .i32_add, .i32_sub, .i32_mul, .i32_and, .i32_or, .i32_xor, .i32_shl, .i32_shr_u => .{ &.{ .i32, .i32 }, .i32 },
                 .i64_eqz => .{ &.{.i64}, .i32 },
-                .i64_lt_s, .i64_ge_s => .{ &.{ .i64, .i64 }, .i32 },
+                .i64_eq, .i64_ne, .i64_lt_s, .i64_lt_u, .i64_gt_s, .i64_gt_u, .i64_le_s, .i64_le_u, .i64_ge_s, .i64_ge_u => .{ &.{ .i64, .i64 }, .i32 },
                 .f64_eq, .f64_ne, .f64_lt, .f64_gt, .f64_le, .f64_ge => .{ &.{ .f64, .f64 }, .i32 },
-                .i64_add, .i64_sub, .i64_mul => .{ &.{ .i64, .i64 }, .i64 },
+                .i64_add, .i64_sub, .i64_mul, .i64_div_s, .i64_rem_s, .i64_and, .i64_or, .i64_xor => .{ &.{ .i64, .i64 }, .i64 },
                 .f64_abs, .f64_neg, .f64_ceil, .f64_floor, .f64_trunc, .f64_sqrt => .{ &.{.f64}, .f64 },
                 .f64_add, .f64_sub, .f64_mul, .f64_div => .{ &.{ .f64, .f64 }, .f64 },
                 .i64_extend_i32_u => .{ &.{.i32}, .i64 },

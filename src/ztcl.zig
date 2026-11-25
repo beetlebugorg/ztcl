@@ -73,5 +73,4 @@ test {
     _ = wasmbundle;
     _ = @import("wasmfiles.zig");
     _ = @import("jit/tests.zig");
-    _ = @import("wasm_aot/wasm.zig");
 }

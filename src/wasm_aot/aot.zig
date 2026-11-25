@@ -22,7 +22,7 @@ const verify = @import("../jit/verify.zig");
 const helpers = @import("../jit/helpers.zig");
 const gen = @import("gen.zig");
 const rt = @import("rt.zig");
-const wasm = @import("wasm.zig");
+const link = @import("../wasm_link.zig");
 const Layout = @import("../jit/layout.zig").Layout;
 
 const Allocator = std.mem.Allocator;
@@ -31,7 +31,7 @@ const Value = value.Value;
 
 pub const Source = struct { args: []const u8, body: []const u8 };
 
-pub const Error = gen.Error || wasm.Error || interp.Error || error{ NoDirectoryVariable, BadRecord };
+pub const Error = gen.Error || link.Error || interp.Error || error{ NoDirectoryVariable, BadRecord };
 
 /// The results of `compile`.
 pub const Result = struct {
@@ -145,22 +145,24 @@ pub const Options = struct {
 };
 
 pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const Source, opts: Options) Error!Result {
-    var m = try wasm.Module.parse(a, runtime);
-    defer m.deinit(a);
+    // The reader of wasm_link.zig frees nothing, so it uses an arena.
+    var arena_state = std.heap.ArenaAllocator.init(a);
+    defer arena_state.deinit();
+    const m = try link.read(arena_state.allocator(), runtime);
     var hs: gen.Helpers = .{};
     inline for (gen.exported) |h| {
-        if (try m.exportOf(gen.exportName(h, false), 0)) |f| hs.proc[@intFromEnum(h)] = f;
-        if (try m.exportOf(gen.exportName(h, true), 0)) |f| hs.named[@intFromEnum(h)] = f;
+        if (m.func(gen.exportName(h, false))) |f| hs.proc[@intFromEnum(h)] = f;
+        if (m.func(gen.exportName(h, true))) |f| hs.named[@intFromEnum(h)] = f;
     }
-    const dir_var = try m.dataAddress("ztcl_aot_dir") orelse return error.NoDirectoryVariable;
+    const dir_var = try link.dataAddress(&m, "ztcl_aot_dir") orelse return error.NoDirectoryVariable;
     // The layout of the runtime. A module with no layout gets the helper
     // form only.
     var lay: Layout = undefined;
     var inline_paths = false;
-    if (try m.dataAddress("ztcl_aot_layout_data")) |at| {
+    if (try link.dataAddress(&m, "ztcl_aot_layout_data")) |at| {
         const fields = std.meta.fields(Layout);
         var words: [fields.len * 4]u8 = undefined;
-        try m.readData(at, &words);
+        try link.readData(&m, at, &words);
         inline for (fields, 0..) |f, k| @field(lay, f.name) = @intCast(std.mem.readInt(u32, words[k * 4 ..][0..4], .little));
         inline_paths = opts.inline_paths;
     }
@@ -193,7 +195,7 @@ pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const 
             continue;
         };
         defer info.deinit(a);
-        const entry = try gen.function(a, code, &info, if (code.named) &hs.named else &hs.proc, &lay, inline_paths);
+        const entry = try gen.function(a, code, &info, if (code.named) &hs.named else &hs.proc, &lay, inline_paths, m.func_types);
         errdefer a.free(entry);
         const depth = try a.alloc(u16, code.ins.len);
         errdefer a.free(depth);
@@ -210,7 +212,7 @@ pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const 
     }.lt);
     res.functions = fns.items.len;
 
-    const ml = try m.layout();
+    const ml = try link.shape(&m);
     const base = ml.freeAddress();
     // The directory: the header, the records, then the bytecode and the
     // depths of each function.
@@ -240,8 +242,6 @@ pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const 
         putWord(dir.items, r + 20, ml.table.min + @as(u32, @intCast(k)));
         putWord(dir.items, r + 24, @intFromBool(f.named));
     }
-    const fn_type = try wasm.funcType(a, &.{.i32}, &.{.i32});
-    defer a.free(fn_type);
     const types = try a.alloc(u32, fns.items.len);
     defer a.free(types);
     @memset(types, ml.types);
@@ -255,13 +255,13 @@ pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const 
     }
     var addr: [4]u8 = undefined;
     std.mem.writeInt(u32, &addr, base, .little);
-    res.bytes = try wasm.link(a, &m, .{
-        .types = &.{fn_type},
+    res.bytes = try link.append(a, &m, .{
+        .types = &.{gen.fn_type},
         .funcs = types,
         .code = code,
         .table_funcs = table,
-        .data = &.{ .{ .addr = base, .bytes = dir.items }, .{ .addr = dir_var, .bytes = &addr } },
-        .pages = @intCast((dir.items.len + wasm.page - 1) / wasm.page),
+        .data = &.{ .{ .offset = base, .bytes = dir.items }, .{ .offset = dir_var, .bytes = &addr } },
+        .pages = @intCast((dir.items.len + link.page - 1) / link.page),
     });
     return res;
 }
