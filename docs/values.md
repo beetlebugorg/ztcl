@@ -43,14 +43,30 @@ In a flat `perf` profile of the canada reader, `vm.exec` has 57 %, `expr.binaryO
 
 | Idea | Measured cost that it removes | Estimated gain | Risk | Decision |
 |---|---|---|---|---|
-| Direct Eisel-Lemire on the parsed mantissa | 2/3 of 33 % on canada | canada +30 % to +45 % | Low: one function, compared bit for bit with `std.fmt.parseFloat` | Task 01 |
-| One block for each container, a value stack that keeps its size | Half of the allocations, the stack growth | +5 % to +10 % on all files | Low: the layout is the one of `allocList` | Task 02 |
-| Document arena | The rest of the allocation, and the mark and sweep of many small blocks | +5 % to +15 % with the collector | Medium: retention of the whole document | Task 03 |
+| Direct Eisel-Lemire on the parsed mantissa | 2/3 of 33 % on canada | canada +30 % to +45 % | Low: one function, compared bit for bit with `std.fmt.parseFloat` | Task 01, done |
+| An inline push on the value stack | The call of `ArrayList.append` for each value | +5 % to +10 % on all files | Low | Task 02, done |
+| One block for each container | Half of the allocations | Measured: slower (see below) | Medium: more page faults | Task 03, after a heap change |
+| Document arena | The rest of the allocation | Measured: slower (see below) | Medium: page faults and retention | Task 03, after a heap change |
 | Interned keys | The key compare of the duplicate check | Below 3 % | Low | Part of task 05 |
 | Dict shapes | The key slots of each record, the duplicate check | Memory: 24 bytes for each key of each record. Speed: small for the parse | High: each dict path, the list view, the JIT | Tasks 05 and 06, after a measure |
 | Lazy numbers | The conversion of a number that no script reads | canada: up to the rest of the conversion | High: a new tag in each switch of the code and the JIT | Rejected for now |
 | Lazy document | Each value that no script reads | Large for a script that reads a few fields | High: each value path | Rejected: `zt::json get` has this gain today |
 | Zero-copy strings | Copies of plain strings | 0: done today | None | Done |
+
+### What the first measures showed
+
+Tasks 01 and 02 went in as planned. One block for each container and the arena were built and measured, and both are slower in time with fewer instructions:
+
+| Runner, 200 parses of twitter.json | Page faults | Instructions |
+|---|---|---|
+| main | 10 064 | 1.79 G |
+| One block for each container | 29 124 | 1.89 G |
+| Arena of 64 KiB chunks | 45 649 | 2.07 G |
+| Arena of 8 KiB chunks | 47 642 | 2.31 G |
+
+`bench_ztcl.tcl parse` gave 612 MB/s for the arena and 803 MB/s for main on twitter, and 698 and 1004 MB/s on citm. The sweep gives each span with no live block back to the backing allocator (`Heap.freeSpan`). The likely cause of the faults: a parse of the next document maps the pages again, and each first touch of a page is a fault. Small blocks of one size class (the `ListObj` of main) leave a span empty less often than blocks of many sizes and chunks. This is not checked yet. Task 03 checks it. The collector also marked more bytes in each collection with the new layouts (the mark count of `markHit` went from 134 578 to 394 007 for 20 parses of twitter). The cause is not found. A test that cleared the free part of each chunk did not change the count.
+
+So task 03 starts with a change of the heap: keep a small set of empty spans for reuse, with a cap that the memory limit counts. The arena is measured again after that change.
 
 ### 1. Document arenas
 

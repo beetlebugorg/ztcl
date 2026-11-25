@@ -35,9 +35,9 @@
 
 | Task | Change | Gate |
 |---|---|---|
-| [01](01-numbers.md) | Eisel-Lemire on the parsed mantissa | canada: 25 % fewer instructions |
-| [02](02-one-block.md) | One block for each container, a kept value stack | 5 % fewer instructions on each file |
-| [03](03-arena.md) | Document arena | Collector work of a parse loop 30 % lower |
+| [01](01-numbers.md) | Eisel-Lemire on the parsed mantissa. Done: canada 30 % fewer instructions | canada: 25 % fewer instructions |
+| [02](02-inline-push.md) | An inline push on the value stack. Done: 6 % to 9 % fewer instructions | 5 % fewer instructions on each file |
+| [03](03-arena.md) | A cache of empty spans in the heap, then one block for each container and the arena | No mode slower in time, page faults equal to main or lower |
 | [04](04-measure-dicts.md) | Measure dicts outside JSON | A table in `docs/values.md` |
 | [05](05-shapes.md) | Dict shapes, behind a flag | Memory of twitter and citm 15 % lower |
 | [06](06-shape-users.md) | Shapes for TclOO, CSV, SQLite, `dict create` | Each user gives its measured gain |
