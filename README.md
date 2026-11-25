@@ -151,6 +151,7 @@ ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: list
 - [JIT compiler](docs/jit.md)
 - [Language reference](docs/language.md)
 - [Embedding in Zig](docs/embedding.md)
+- [WebAssembly](docs/webassembly.md): the JS module, the examples, and the [playground](https://beetlebug.org/ztcl/playground/)
 - [Testing and benchmarks](docs/testing.md)
 - [Tcl 8.6 and Tcl 9](docs/tcl9.md)
 - [Roadmap](docs/roadmap.md)

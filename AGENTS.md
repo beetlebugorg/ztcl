@@ -20,6 +20,7 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 | `zig build bench` | Runs the point proc benchmark. |
 | `python3 -I tools/bench.py --tclsh tclsh` | Compares the scripts in `bench/` with a tclsh. |
 | `zig build wasm` | Builds the WebAssembly library. |
+| `node tools/wasm-web.mjs zig-out/lib/ztcl.wasm` | Tests `web/ztcl.mjs` and the Node.js example. |
 | `tools/suite.sh -t core-8-6-16` | Runs the Tcl test suite. |
 | `tools/suite.sh -j` | Runs the suite with the JIT at threshold 0. |
 | `tools/jit-diff.sh` | Compares the JIT with the interpreter on the test scripts. |

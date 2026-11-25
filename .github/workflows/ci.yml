@@ -73,3 +73,4 @@ jobs:
           node-version: 22
       - run: zig build wasm
       - run: node tools/wasm-smoke.mjs zig-out/lib/ztcl.wasm
+      - run: node tools/wasm-web.mjs zig-out/lib/ztcl.wasm

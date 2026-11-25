@@ -1,0 +1,44 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ztcl in a Web Worker</title>
+<link rel="stylesheet" href="example.css">
+<!-- A long script runs in a Web Worker. The clock shows that the page
+     stays live, and Cancel ends the worker. -->
+<h1>A long script in a Web Worker</h1>
+<p>The clock updates while the script runs. Cancel ends the worker and the script.</p>
+<textarea id="code" rows="7" spellcheck="false" aria-label="The script">set sum 0
+for {set i 0} {$i < 50000000} {incr i} {
+    incr sum $i
+}
+puts "sum = $sum"</textarea>
+<div class="row"><button id="run">Run</button><button id="cancel" disabled>Cancel</button><span id="clock">0.0 s</span></div>
+<pre id="out" aria-live="polite"></pre>
+<script type="module">
+import { WorkerInterp } from "../../web/ztcl.mjs";
+
+const $ = (id) => document.getElementById(id);
+const tcl = new WorkerInterp("../../zig-out/lib/ztcl.wasm", { memLimit: 64 << 20 });
+let t0 = 0;
+let frame = 0;
+const tick = () => {
+  $("clock").textContent = `${((performance.now() - t0) / 1000).toFixed(1)} s`;
+  frame = requestAnimationFrame(tick);
+};
+
+$("run").onclick = async () => {
+  $("run").disabled = true;
+  $("cancel").disabled = false;
+  $("out").textContent = "running";
+  t0 = performance.now();
+  tick();
+  tcl.reset();
+  const r = await tcl.eval($("code").value);
+  cancelAnimationFrame(frame);
+  $("out").textContent = r.ok ? r.output : `${r.output}${r.result}\n`;
+  $("out").className = r.ok ? "" : "bad";
+  $("run").disabled = false;
+  $("cancel").disabled = true;
+};
+$("cancel").onclick = () => tcl.stop();
+</script>

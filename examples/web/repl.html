@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ztcl REPL</title>
+<link rel="stylesheet" href="example.css">
+<!-- A REPL: each line runs in the same interpreter, so procs and
+     variables stay. Up and Down go through the history. -->
+<h1>ztcl REPL</h1>
+<p>Type a command and press Enter. Each command can use 1 000 000 steps and the interpreter can use 64 MiB.</p>
+<pre id="log" aria-live="polite"></pre>
+<div class="row"><span>%</span><input id="line" autocomplete="off" spellcheck="false" style="flex:1" aria-label="Command"></div>
+<script type="module">
+import { Interp } from "../../web/ztcl.mjs";
+
+const log = document.getElementById("log");
+const line = document.getElementById("line");
+const show = (text, cls = "") => {
+  const s = document.createElement("span");
+  s.className = cls;
+  s.textContent = text;
+  log.append(s);
+};
+
+const tcl = await Interp.create("../../zig-out/lib/ztcl.wasm", {
+  stepLimit: 1_000_000,
+  memLimit: 64 << 20,
+  onOutput: (text) => show(text),
+});
+show(`ztcl ${tcl.eval("info patchlevel").result} in WebAssembly\n`);
+
+const history = [];
+let back = 0;
+line.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+    back = Math.max(0, Math.min(history.length, back + (e.key === "ArrowUp" ? 1 : -1)));
+    line.value = back ? history[history.length - back] : "";
+    e.preventDefault();
+    return;
+  }
+  if (e.key !== "Enter" || !line.value.trim()) return;
+  const cmd = line.value;
+  history.push(cmd);
+  back = 0;
+  line.value = "";
+  show(`% ${cmd}\n`);
+  const r = tcl.eval(cmd);
+  if (!r.ok) show(`${r.result}\n`, "bad");
+  else if (r.result) show(`${r.result}\n`);
+  log.scrollTop = log.scrollHeight;
+});
+line.focus();
+</script>
