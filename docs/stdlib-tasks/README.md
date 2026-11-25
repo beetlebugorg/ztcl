@@ -76,6 +76,7 @@ Milestones 2 to 5 depend on the threads plan for the worker pool: task 13 starts
 | [03](03-baselines.md) | Linux | The outside benchmark harness and the first numbers |
 | [04](04-json-parse.md) | shared | The JSON parser: the SIMD index and the builder |
 | [05](05-json-api.md) | shared | `zt::json`, the tcllib names, and the JSON gates |
+| [05b](05b-json-jit.md) | Linux | JSON with the JIT: shapes, paths, writers, tier 2 reads, and a fused parse and loop |
 | [06](06-aio-linux.md) | Linux | `aio` on io_uring and epoll |
 | [07](07-event-on-aio.md) | Linux | The event loop, channels, and sockets on `aio`, and calls that yield |
 | [08](08-coroutines.md) | shared | The coroutine switch on arm64, macOS, and Windows |
