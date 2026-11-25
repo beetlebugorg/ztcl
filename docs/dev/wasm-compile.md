@@ -66,6 +66,13 @@ A compiled point proc fits this design:
 
 `ztcl compile -manifest FILE` writes a manifest fragment with these facts. The zslice plugin runtime is not chosen yet, so ztcl tests the module in Node.js and in wasmtime. This plan does not change zslice.
 
-## Decisions for the user
+## Decisions
 
-The open questions are in [the task list](wasm-compile-tasks/README.md#questions-for-the-user).
+The user answered the questions of [the task list](wasm-compile-tasks/README.md#questions-for-the-user) on 2026-11-25:
+
+1. **The speed gate.** The reference is the native `Program.run`.
+2. **The step unit.** One step is one operation of the program for each block of 1024 points, as proposed.
+3. **The scalar form.** Yes. `-simd off` makes a module for a runtime with no SIMD.
+4. **The manifest.** The module has the custom section `ztcl.point`. `-manifest FILE` writes an optional manifest fragment.
+5. **Imports.** A host function in a point proc is later work. A level 2 module has no imports.
+6. **The IR.** The IR is the vector program of `src/point.zig`. The code generator does not use tier 2.

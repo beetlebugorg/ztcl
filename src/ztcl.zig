@@ -20,6 +20,8 @@ pub const interp = @import("interp.zig");
 pub const expr = @import("expr.zig");
 pub const noise = @import("noise.zig");
 pub const point = @import("point.zig");
+/// The writer of WebAssembly modules, for `ztcl compile`.
+pub const wasm_out = @import("wasm_out.zig");
 pub const compact = @import("compact.zig");
 pub const heap = @import("heap.zig");
 pub const gc = @import("gc.zig");
@@ -58,6 +60,7 @@ test {
     _ = expr;
     _ = noise;
     _ = point;
+    _ = wasm_out;
     _ = compact;
     _ = heap;
     _ = @import("tests.zig");
