@@ -1430,7 +1430,9 @@ pub const Interp = struct {
             if (new & @intFromEnum(Capability.socket) != 0) try it.register("socket", @import("sock.zig").cmdSocket);
         }
         if (comptime thread_mod.supported) {
-            if (new & @intFromEnum(Capability.thread) != 0) try thread_mod.register(it);
+            // The thread commands depend on the other bits, so each new
+            // bit registers them again.
+            if (new != 0 and it.capabilities & @intFromEnum(Capability.thread) != 0) try thread_mod.register(it);
         }
     }
 
