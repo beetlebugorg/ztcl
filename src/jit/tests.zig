@@ -39,7 +39,8 @@ test "enableJit follows the build, and reset keeps the state" {
     const it = try newInterp();
     defer freeInterp(it);
     const on = it.enableJit(.{});
-    try testing.expectEqual(jit.built, on);
+    // A gc-precise build has no JIT: enable returns false.
+    try testing.expectEqual(jit.built and !tcl.gc.precise, on);
     if (!on) {
         try testing.expect(it.jit == null);
         return;
