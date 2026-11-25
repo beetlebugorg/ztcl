@@ -18,7 +18,7 @@ Say what changed and why. Leave out summaries of the work, reflection on it, and
 
 ## Voice
 
-Use US English. Use present tense for what the code does and past tense for what it did. Keep sentences short and active, with one idea in each. Do not use em dashes. Do not join two clauses with a semicolon for effect.
+Use US English. Write a number of five or more digits with commas between the groups of three digits: 10,000, 37,413, 1,000,000. Do not separate the groups with spaces. Leave numbers in code, in test data, and in program output as they are. Use present tense for what the code does and past tense for what it did. Keep sentences short and active, with one idea in each. Do not use em dashes. Do not join two clauses with a semicolon for effect.
 
 ## Commit messages
 

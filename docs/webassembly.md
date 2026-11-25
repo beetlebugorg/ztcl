@@ -178,7 +178,7 @@ Then open `http://127.0.0.1:8000/examples/web/repl.html`, `rules.html`, or `work
 
 ### A REPL
 
-[`repl.html`](../examples/web/repl.html) runs each line in one interpreter, so procs and variables stay. Up and Down go through the history. Each line can use 1 000 000 steps.
+[`repl.html`](../examples/web/repl.html) runs each line in one interpreter, so procs and variables stay. Up and Down go through the history. Each line can use 1,000,000 steps.
 
 ```js
 const tcl = await Interp.create("../../zig-out/lib/ztcl.wasm", {
@@ -192,7 +192,7 @@ if (!r.ok) show(r.result, "bad");
 
 ### A rule engine
 
-[`rules.html`](../examples/web/rules.html) lets the user write a `price` proc in Tcl. The page calls it for each line of an order, with 10 000 steps and 8 MiB for each call. Select "A rule that never ends" and the Price column shows `stopped: step limit reached`. The page stays live.
+[`rules.html`](../examples/web/rules.html) lets the user write a `price` proc in Tcl. The page calls it for each line of an order, with 10,000 steps and 8 MiB for each call. Select "A rule that never ends" and the Price column shows `stopped: step limit reached`. The page stays live.
 
 ```js
 const tcl = await Interp.create(module, { stepLimit: 100_000, memLimit: 8 << 20 });

@@ -28,10 +28,10 @@ Each benchmark of `bench/` is as fast as `tclsh` 8.6.16 with Thread 2.8.11, or f
 
 | Benchmark | ztcl | tclsh 8.6.16 |
 |---|---|---|
-| `thread_map.tcl`: 1 000 000 integers in 8 parts | 99 | 305 |
-| `thread_pipe.tcl`: 4 stages, 100 000 messages | 605 | 706 |
-| `thread_tsv.tcl`: 8 threads, 100 000 `tsv::incr` each, 8 elements | 1214 | 3276 |
-| `thread_tpool.tcl`: 8 workers, 100 000 jobs | 466 | 639 |
+| `thread_map.tcl`: 1,000,000 integers in 8 parts | 99 | 305 |
+| `thread_pipe.tcl`: 4 stages, 100,000 messages | 605 | 706 |
+| `thread_tsv.tcl`: 8 threads, 100,000 `tsv::incr` each, 8 elements | 1214 | 3276 |
+| `thread_tpool.tcl`: 8 workers, 100,000 jobs | 466 | 639 |
 
 ## The model
 
@@ -51,7 +51,7 @@ Each benchmark of `bench/` is as fast as `tclsh` 8.6.16 with Thread 2.8.11, or f
 | `mem_limit` | 256 MiB | The bytes of the heap of one thread. |
 | `total_steps` | no limit | The steps of all threads together. |
 | `total_mem` | 1 GiB | The bytes of all threads together, with the shared variables, the queues, and the JIT data of the threads. |
-| `max_queue` | 10 000 | The messages that wait in the queue of one thread. |
+| `max_queue` | 10,000 | The messages that wait in the queue of one thread. |
 
 - A new thread gets its step limit from `total_steps` at its start, and the steps that it did not use go back at its end. So the sum of the steps of the threads is at most `total_steps`.
 - The allocator of a thread adds each byte to an atomic count of the group. When the count passes `total_mem`, the allocation fails, and the thread stops with an error.

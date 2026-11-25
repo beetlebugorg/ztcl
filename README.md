@@ -45,7 +45,7 @@ fib.tcl:2: step limit reached
 
 ## Status
 
-ztcl is experimental, and its APIs can change in any release. It passes 37 413 of the 46 494 tests of the Tcl 8.6.16 suite, so it is not yet a drop-in replacement for Tcl. The code and the docs were written largely with AI coding agents, under human direction. Review the code before you depend on it. The [issues](https://github.com/beetlebugorg/ztcl/issues) and the [milestones](https://github.com/beetlebugorg/ztcl/milestones) have the roadmap.
+ztcl is experimental, and its APIs can change in any release. It passes 37,413 of the 46,494 tests of the Tcl 8.6.16 suite, so it is not yet a drop-in replacement for Tcl. The code and the docs were written largely with AI coding agents, under human direction. Review the code before you depend on it. The [issues](https://github.com/beetlebugorg/ztcl/issues) and the [milestones](https://github.com/beetlebugorg/ztcl/milestones) have the roadmap.
 
 ## License
 

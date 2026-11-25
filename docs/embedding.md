@@ -152,7 +152,7 @@ try it.allow(@intFromEnum(cap.thread) | @intFromEnum(cap.event));
 | `mem_limit` | 256 MiB | The heap of one thread. |
 | `total_steps` | no limit | The steps of all threads together. |
 | `total_mem` | 1 GiB | The memory of all threads together, with the shared variables and the queues. |
-| `max_queue` | 10 000 | The messages that wait in the queue of one thread. |
+| `max_queue` | 10,000 | The messages that wait in the queue of one thread. |
 
 - The allocator that you give to `Interp.init` must be safe for threads. Each thread allocates its heap and the memory of the group from it.
 - The output callback runs under a lock of the group, so it needs no lock of its own.

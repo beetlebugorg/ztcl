@@ -14,13 +14,13 @@ CPU milliseconds of the whole process, best of 11 runs, one thread, 2026-11-23. 
 | Benchmark | ztcl | tclsh 8.6.16 | tclsh 9.1.0 |
 |---|---|---|---|
 | `sum.tcl`: 1 million `expr` and `incr` | 20.2 | 58.3 | 57.8 |
-| `fib.tcl`: fib 25, about 250 000 calls | 14.4 | 50.8 | 49.4 |
+| `fib.tcl`: fib 25, about 250,000 calls | 14.4 | 50.8 | 49.4 |
 | `nested.tcl`: 1000 x 1000, `lappend`, `llength` | 31.8 | 73.7 | 84.7 |
-| `strbuild.tcl`: 500 000 `append` | 23.0 | 63.8 | 99.2 |
-| `foreach.tcl`: 10 passes over 100 000 items | 16.2 | 33.2 | 38.6 |
-| `dict.tcl`: 200 000 `dict incr`, 200 000 `dict get` | 22.8 | 48.6 | 58.5 |
-| `dictgrow.tcl`: 200 000 new keys, 200 000 `dict get` | 61.4 | 104.9 | 144.2 |
-| `readloop.tcl`: 200 000 `llength` and `lindex` on a string | 17.7 | 27.9 | 32.7 |
+| `strbuild.tcl`: 500,000 `append` | 23.0 | 63.8 | 99.2 |
+| `foreach.tcl`: 10 passes over 100,000 items | 16.2 | 33.2 | 38.6 |
+| `dict.tcl`: 200,000 `dict incr`, 200,000 `dict get` | 22.8 | 48.6 | 58.5 |
+| `dictgrow.tcl`: 200,000 new keys, 200,000 `dict get` | 61.4 | 104.9 | 144.2 |
+| `readloop.tcl`: 200,000 `llength` and `lindex` on a string | 17.7 | 27.9 | 32.7 |
 
 The two `tclsh` builds can differ in compiler flags.
 
@@ -61,11 +61,11 @@ tclsh bench/thread_pipe.tcl
 
 | Benchmark | ztcl | tclsh 8.6.16 |
 |---|---|---|
-| `thread_map.tcl`: 1 000 000 integers in 8 parts, a proc on each | 99 | 305 |
-| `thread_pipe.tcl`: 4 stages, 100 000 messages | 605 | 706 |
-| `thread_tsv.tcl`: 8 threads, 100 000 `tsv::incr` each, one element | 1249 | 2458 |
+| `thread_map.tcl`: 1,000,000 integers in 8 parts, a proc on each | 99 | 305 |
+| `thread_pipe.tcl`: 4 stages, 100,000 messages | 605 | 706 |
+| `thread_tsv.tcl`: 8 threads, 100,000 `tsv::incr` each, one element | 1249 | 2458 |
 | `thread_tsv.tcl`: the same, 8 elements | 1214 | 3276 |
-| `thread_tpool.tcl`: 8 workers, 100 000 jobs | 466 | 639 |
+| `thread_tpool.tcl`: 8 workers, 100,000 jobs | 466 | 639 |
 
 ## JSON
 
