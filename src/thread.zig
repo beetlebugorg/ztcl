@@ -406,6 +406,10 @@ pub const Group = struct {
     lock: Lock = .{},
     /// Wakes a wait for a change of the registry.
     ev: Event = .{},
+    /// Wakes a sender that waits for room in a queue, and the count of
+    /// such senders.
+    space_ev: Event = .{},
+    space_waiters: std.atomic.Value(u32) = .init(0),
     /// The running threads, the main thread first.
     workers: std.ArrayList(*Worker) = .empty,
     /// Ended joinable threads that no join took yet.
@@ -1117,11 +1121,43 @@ pub fn queueLen(g: *Group, id: u64) ?usize {
 /// Takes the first message of the queue that is not a reply.
 fn takeEvent(w: *Worker) ?*Msg {
     w.lock.lock();
-    defer w.lock.unlock();
-    for (w.queue.items, 0..) |m, i| {
-        if (m.kind != .reply) return w.queue.orderedRemove(i);
+    const m = for (w.queue.items, 0..) |m, i| {
+        if (m.kind != .reply) break w.queue.orderedRemove(i);
+    } else null;
+    w.lock.unlock();
+    // A sender that waits for room in this queue (`-eventmark`) wakes.
+    const g = w.group;
+    if (m != null and g.space_waiters.load(.acquire) != 0) g.space_ev.signal();
+    return m;
+}
+
+/// Waits until the queue of the thread `id` has fewer than its
+/// `-eventmark` messages. The wait is in slices, and the thread checks
+/// its flags after each slice. The main thread runs the messages of its
+/// own queue between the slices, so a thread that sends to it and waits
+/// cannot stop the host. Another thread runs none: a script of its queue
+/// could send to the same full queue again.
+pub fn waitRoom(it: *Interp, id: u64) Error!void {
+    const me = it.worker orelse return;
+    const g = me.group;
+    while (true) {
+        const seq = g.space_ev.seq.load(.acquire);
+        g.lock.lock();
+        const t = g.find(id) orelse {
+            g.lock.unlock();
+            return;
+        };
+        t.lock.lock();
+        const full = t.eventmark > 0 and t.queue.items.len >= t.eventmark;
+        t.lock.unlock();
+        g.lock.unlock();
+        if (!full) return;
+        _ = g.space_waiters.fetchAdd(1, .acq_rel);
+        io().futexWaitTimeout(u32, &g.space_ev.seq.raw, seq, .{ .duration = .{ .raw = .fromNanoseconds(@intCast(if (me.is_main) std.time.ns_per_ms else slice_ns)), .clock = .awake } }) catch {};
+        _ = g.space_waiters.fetchSub(1, .acq_rel);
+        try checkFlags(it, me);
+        if (me.is_main) _ = try serve(it, 16);
     }
-    return null;
 }
 
 /// Takes the reply with the number `seq`.
