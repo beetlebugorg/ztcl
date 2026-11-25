@@ -4,6 +4,8 @@ ztcl is an experimental, sandboxed Tcl interpreter in Zig. It is built for zslic
 
 Read [WRITING.md](WRITING.md) before you write code comments, commits, or PRs. Read [docs/dev/design.md](docs/dev/design.md) before you change the interpreter.
 
+Put plans, task lists, reviews, and results in `docs/dev/`. The docs site publishes only the user pages that `tools/build-docs.py` lists.
+
 ## Commands
 
 Use Zig 0.16.0. Run each test, bench, and suite command under a memory cap:

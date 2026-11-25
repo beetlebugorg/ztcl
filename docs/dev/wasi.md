@@ -64,7 +64,7 @@ The root folder jail maps to one preopened directory. The runner gives `--root D
 
 - The WASI build uses the same collector options as `zig build wasm`.
 - `coroutine` is present and gives an error, as in the browser build. A design for wasm coroutines is separate work.
-- `thread` is absent. `thread.supported` is false for wasm today. [Threads task 14](threads-tasks/14-wasm-workers.md) adds Web Workers for the browser library only. WASI 0.3 adds async concurrency on one thread, and no thread interface. wasi-threads is a preview 1 proposal. The WASI build keeps the `thread` command absent until a WASI thread interface is stable. A test proves the absence.
+- `thread` is absent. `thread.supported` is false for wasm today. [Threads task 14](../threads-tasks/14-wasm-workers.md) adds Web Workers for the browser library only. WASI 0.3 adds async concurrency on one thread, and no thread interface. wasi-threads is a preview 1 proposal. The WASI build keeps the `thread` command absent until a WASI thread interface is stable. A test proves the absence.
 
 ## The component for embedders
 

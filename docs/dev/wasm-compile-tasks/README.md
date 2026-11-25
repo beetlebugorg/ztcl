@@ -22,7 +22,7 @@ The user answers the questions below before task 01 merges.
 
 ## Rules for each task
 
-1. Read AGENTS.md, WRITING.md, `docs/design.md` (the section on point procs), `docs/webassembly.md`, and `docs/wasm-compile.md` first.
+1. Read AGENTS.md, WRITING.md, `docs/design.md` (the section on point procs), `docs/webassembly.md`, and `docs/dev/wasm-compile.md` first.
 2. Run each build, test, and benchmark under the memory cap. `CAP` in each task means this prefix:
 
    ```sh
