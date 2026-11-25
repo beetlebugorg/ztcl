@@ -106,20 +106,23 @@ fn offset(base: anytype, field: anytype) u32 {
     return @intCast(@intFromPtr(field) - @intFromPtr(base));
 }
 
+/// The bytes of a pointer: 8 on a 64-bit target, 4 on wasm32.
+const word: u32 = @sizeOf(usize);
+
 /// The two words of a slice: the offset of the pointer and of the length.
 fn sliceWords() ?[2]u32 {
     const bytes = [_]u8{0} ** 8;
     const s: []const u8 = bytes[0..5];
     var words: [2]usize = undefined;
     @memcpy(std.mem.asBytes(&words), std.mem.asBytes(&s));
-    if (words[0] == @intFromPtr(&bytes) and words[1] == 5) return .{ 0, 8 };
-    if (words[1] == @intFromPtr(&bytes) and words[0] == 5) return .{ 8, 0 };
+    if (words[0] == @intFromPtr(&bytes) and words[1] == 5) return .{ 0, word };
+    if (words[1] == @intFromPtr(&bytes) and words[0] == 5) return .{ word, 0 };
     return null;
 }
 
 pub fn probe() ?Layout {
     var l: Layout = undefined;
-    if (@sizeOf([]const u8) != 16) return null;
+    if (@sizeOf([]const u8) != 2 * word) return null;
     const sw = sliceWords() orelse return null;
     l.slice_ptr = sw[0];
     l.slice_len = sw[1];
@@ -163,7 +166,7 @@ pub fn probe() ?Layout {
     l.value_len = str_len;
     if (offset(&vl, &vl.list) + l.list_len != l.value_len) return null;
     // The payload words come before the tag.
-    if (l.value_payload + 8 > l.value_tag or l.value_len + 8 > l.value_tag) return null;
+    if (l.value_payload + 8 > l.value_tag or l.value_len + word > l.value_tag) return null;
 
     // The tag of a cell.
     const CTag = std.meta.Tag(@TypeOf(@as(Var, undefined).v));
@@ -207,7 +210,7 @@ pub fn probe() ?Layout {
     l.obj_used = @offsetOf(value.ListObj, "used");
     l.obj_dict_len = @offsetOf(value.ListObj, "dict_len");
     l.obj_index = @offsetOf(value.ListObj, "index");
-    if (@sizeOf(@FieldType(value.ListObj, "index")) != 8 or @sizeOf(@FieldType(value.ListObj, "dict_len")) != 8) return null;
+    if (@sizeOf(@FieldType(value.ListObj, "index")) != word or @sizeOf(@FieldType(value.ListObj, "dict_len")) != word) return null;
     l.it_epoch = @offsetOf(Interp, "epoch");
     l.it_safe_epoch = @offsetOf(Interp, "safe_epoch");
     l.it_step_limit = @offsetOf(Interp, "step_limit");
@@ -220,7 +223,7 @@ pub fn probe() ?Layout {
     l.cmd_epoch = @offsetOf(interp.Cmd, "epoch");
     l.cmd_ns = @offsetOf(interp.Cmd, "ns");
     if (@sizeOf(@FieldType(interp.Cmd, "epoch")) != 4 or @sizeOf(@FieldType(Interp, "epoch")) != 4) return null;
-    if (@sizeOf(@FieldType(interp.Cmd, "resolved")) != 8) return null;
+    if (@sizeOf(@FieldType(interp.Cmd, "resolved")) != word) return null;
     l.code_sites = @offsetOf(vm.Code, "sites") + l.slice_ptr;
     l.code_lits = @offsetOf(vm.Code, "lits") + l.slice_ptr;
     l.code_ins = @offsetOf(vm.Code, "ins") + l.slice_ptr;

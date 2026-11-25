@@ -38,6 +38,26 @@ const vm = @import("../vm.zig");
 const verify = @import("../jit/verify.zig");
 const helpers = @import("../jit/helpers.zig");
 const wasm = @import("wasm.zig");
+const expr = @import("../expr.zig");
+const Layout = @import("../jit/layout.zig").Layout;
+
+/// The places in the tagged unions and in a slice on wasm32, from
+/// `layout.probe()` in the runtime. `rt.zig` checks them.
+pub const union32 = .{
+    .slice_ptr = 0,
+    .slice_len = 4,
+    .value_tag = 8,
+    .value_payload = 0,
+    .value_len = 4,
+    .var_tag = 16,
+    .var_payload = 0,
+};
+
+/// The facts of the layout that the inline paths need: a `Value` of
+/// whole 8-byte words with the tag after the 8 bytes of the integer.
+pub fn layoutUsable(l: *const Layout) bool {
+    return l.value_size % 8 == 0 and l.value_payload + 8 <= l.value_tag and l.value_tag < l.value_size;
+}
 
 const Allocator = std.mem.Allocator;
 const Helper = helpers.Helper;
@@ -147,6 +167,20 @@ pub const Error = Allocator.Error || error{MissingHelper};
 const local_ctx = 0;
 const local_blk = 1;
 const local_r = 2;
+/// Cell addresses.
+const local_c1 = 3;
+const local_c2 = 4;
+/// The fields of the context, loaded once at the entry.
+const local_it = 5;
+const local_stack = 6;
+const local_frame = 7;
+const local_code = 8;
+const i32_locals = 8;
+/// Integers of the inline paths.
+const local_x = 9;
+const local_y = 10;
+const local_z = 11;
+const i64_locals = 3;
 
 const Gen = struct {
     a: Allocator,
@@ -154,6 +188,9 @@ const Gen = struct {
     code: *const vm.Code,
     info: *const verify.Info,
     h: *const [helpers.count]u32,
+    l: *const Layout,
+    /// False: each instruction calls its helper.
+    inline_paths: bool,
     /// The block of each instruction that starts one, or `no_block`.
     block_of: []u32,
     /// The nesting level of the label of each block, and of `$top`.
@@ -204,32 +241,442 @@ const Gen = struct {
             .jump => try g.jumpTo(i.a),
             .ret => try g.exit(pc, sp, status_done),
             else => {
-                const h = helpers.forIns(i).?;
-                try g.callHelper(h, pc, sp);
-                if (helpers.isBranch(h)) {
-                    try g.b.localTee(local_r);
-                    try g.b.i32Const(helpers.failed);
-                    try g.b.i32Op(.eq);
-                    try g.b.if_();
-                    try g.exit(pc, sp, status_error);
-                    try g.b.end();
-                    try g.b.localGet(local_r);
-                    try g.b.if_();
-                    try g.jumpTo(targetOf(i).?);
-                    try g.b.end();
-                } else {
-                    try g.b.if_();
-                    try g.exit(pc, sp, status_error);
-                    try g.b.end();
-                }
+                if (g.inline_paths and try g.fast(pc)) return;
+                try g.whole(pc);
             },
         }
+    }
+
+    /// The helper of the whole instruction, and its result: the error
+    /// exit, and the jump of a branch.
+    fn whole(g: *Gen, pc: u32) Error!void {
+        const i = &g.code.ins[pc];
+        const sp: u32 = g.info.depth[pc];
+        const h = helpers.forIns(i).?;
+        try g.callHelper(h, pc, sp);
+        if (helpers.isBranch(h)) {
+            try g.b.localTee(local_r);
+            try g.b.i32Const(helpers.failed);
+            try g.b.i32Op(.eq);
+            try g.b.if_();
+            try g.exit(pc, sp, status_error);
+            try g.b.end();
+            try g.b.localGet(local_r);
+            try g.b.if_();
+            try g.jumpTo(targetOf(i).?);
+            try g.b.end();
+        } else {
+            try g.b.if_();
+            try g.exit(pc, sp, status_error);
+            try g.b.end();
+        }
+    }
+
+    // ---- The inline paths ----
+    //
+    // Each inline path is `block $done block $slow <fast> br $done end
+    // <whole> end`. A check that fails goes to `$slow`, where the helper
+    // runs the whole instruction, as `exec` does. The fast part has the
+    // effect of the instruction only when each check passed, so the
+    // helper always starts from the state before the instruction.
+
+    const Fast = struct { done: u32, slow: u32 };
+
+    fn openFast(g: *Gen) Error!Fast {
+        try g.b.block();
+        const done = g.b.open;
+        try g.b.block();
+        return .{ .done = done, .slow = g.b.open };
+    }
+
+    fn closeFast(g: *Gen, f: Fast, pc: u32) Error!void {
+        try g.b.br(g.b.open - f.done);
+        try g.b.end();
+        try g.whole(pc);
+        try g.b.end();
+    }
+
+    fn toSlow(g: *Gen, f: Fast) Error!void {
+        try g.b.brIf(g.b.open - f.slow);
+    }
+
+    fn vs(g: *Gen) u32 {
+        return g.l.value_size;
+    }
+
+    /// The address of a field of the stack value `k` is the local `stack`
+    /// with the offset of this function.
+    fn stackOff(g: *Gen, k: u32, field: u32) u32 {
+        return k * g.vs() + field;
+    }
+
+    /// Copies one `Value` from `src + so` to `dst + do`.
+    fn copy(g: *Gen, dst: u32, do: u32, src: u32, so: u32) Error!void {
+        var w: u32 = 0;
+        while (w < g.vs()) : (w += 8) {
+            try g.b.localGet(dst);
+            try g.b.localGet(src);
+            try g.b.i64Load(so + w);
+            try g.b.i64Store(do + w);
+        }
+    }
+
+    /// The raw cell of slot `slot` in `local`. A cell with no tag in
+    /// `want` goes to the slow path.
+    fn cell(g: *Gen, f: Fast, slot: u32, local: u32, want: []const u8) Error!void {
+        const l = g.l;
+        try g.b.localGet(local_frame);
+        try g.b.i32Load(l.frame_items);
+        try g.b.i32Load(slot * l.entry_size + l.entry_cell);
+        try g.b.localTee(local);
+        try g.b.i32Load8u(l.var_tag);
+        try g.b.i32Const(l.var_mask);
+        try g.b.i32Op(.@"and");
+        try g.b.localSet(local_r);
+        for (want, 0..) |t, k| {
+            try g.b.localGet(local_r);
+            try g.b.i32Const(t);
+            try g.b.i32Op(.ne);
+            if (k > 0) try g.b.i32Op(.@"and");
+        }
+        try g.toSlow(f);
+    }
+
+    /// The integer of the value of cell `c` into `x`.
+    fn cellInt(g: *Gen, f: Fast, c: u32, x: u32) Error!void {
+        const l = g.l;
+        try g.tagIs(c, l.var_payload + l.value_tag, l.tag_int, f);
+        try g.b.localGet(c);
+        try g.b.i64Load(l.var_payload + l.value_payload);
+        try g.b.localSet(x);
+    }
+
+    /// Goes to the slow path unless the tag byte at `base + off` is `tag`.
+    fn tagIs(g: *Gen, base: u32, off: u32, tag: u8, f: Fast) Error!void {
+        try g.b.localGet(base);
+        try g.b.i32Load8u(off);
+        try g.b.i32Const(g.l.value_mask);
+        try g.b.i32Op(.@"and");
+        try g.b.i32Const(tag);
+        try g.b.i32Op(.ne);
+        try g.toSlow(f);
+    }
+
+    fn stackInt(g: *Gen, f: Fast, k: u32, x: u32) Error!void {
+        const l = g.l;
+        try g.tagIs(local_stack, g.stackOff(k, l.value_tag), l.tag_int, f);
+        try g.b.localGet(local_stack);
+        try g.b.i64Load(g.stackOff(k, l.value_payload));
+        try g.b.localSet(x);
+    }
+
+    /// The integer literal `index` into `x`. The verifier proved that it
+    /// is an integer.
+    fn litInt(g: *Gen, index: u32, x: u32) Error!void {
+        try g.b.localGet(local_code);
+        try g.b.i32Load(g.l.code_lits);
+        try g.b.i64Load(index * g.vs() + g.l.value_payload);
+        try g.b.localSet(x);
+    }
+
+    /// Writes the integer `x` as stack value `k`.
+    fn putInt(g: *Gen, k: u32, x: u32) Error!void {
+        try g.b.localGet(local_stack);
+        try g.b.localGet(x);
+        try g.b.i64Store(g.stackOff(k, g.l.value_payload));
+        try g.b.localGet(local_stack);
+        try g.b.i32Const(g.l.tag_int);
+        try g.b.i32Store8(g.stackOff(k, g.l.value_tag));
+    }
+
+    /// The step check of `step`: the steps left are not 0, and the memory
+    /// count is below the limit. Then one step is used.
+    fn stepCheck(g: *Gen, f: Fast) Error!void {
+        const l = g.l;
+        try g.b.localGet(local_it);
+        try g.b.i64Load(l.it_step_limit);
+        try g.b.i64Op(.eqz);
+        try g.toSlow(f);
+        try g.b.localGet(local_it);
+        try g.b.i32Load(l.it_mem_trip);
+        try g.b.localGet(local_it);
+        try g.b.i32Load(l.it_mem_limit);
+        try g.b.i32Op(.ge_u);
+        try g.toSlow(f);
+        try g.b.localGet(local_it);
+        try g.b.localGet(local_it);
+        try g.b.i64Load(l.it_step_limit);
+        try g.b.i64Const(1);
+        try g.b.i64Op(.sub);
+        try g.b.i64Store(l.it_step_limit);
+    }
+
+    fn fastOp(op: expr.BinOp) bool {
+        return switch (op) {
+            .add, .sub, .mul, .div, .mod, .lt, .gt, .le, .ge, .eq, .ne => true,
+            else => false,
+        };
+    }
+
+    fn compareOp(op: expr.BinOp) ?Body.I64 {
+        return switch (op) {
+            .lt => .lt_s,
+            .gt => .gt_s,
+            .le => .le_s,
+            .ge => .ge_s,
+            .eq => .eq,
+            .ne => .ne,
+            else => null,
+        };
+    }
+
+    /// Goes to the slow path unless `x` is in the range of i32.
+    fn smallInt(g: *Gen, f: Fast, x: u32) Error!void {
+        try g.b.localGet(x);
+        try g.b.i64Const(0x8000_0000);
+        try g.b.i64Op(.add);
+        try g.b.i64Const(0x1_0000_0000);
+        try g.b.i64Op(.ge_u);
+        try g.toSlow(f);
+    }
+
+    /// `x = x op y`, or 0 or 1 for a compare. An overflow goes to the
+    /// slow path. `*` goes there unless both operands fit in 32 bits.
+    /// `/` and `%` send a divisor of 0 or -1 there, and round the
+    /// quotient down as Tcl does.
+    fn arith(g: *Gen, f: Fast, op: expr.BinOp) Error!void {
+        const b = &g.b;
+        if (compareOp(op)) |c| {
+            try b.localGet(local_x);
+            try b.localGet(local_y);
+            try b.i64Op(c);
+            try b.i64Op(.extend_i32_u);
+            try b.localSet(local_x);
+            return;
+        }
+        switch (op) {
+            .add, .sub => {
+                try b.localGet(local_x);
+                try b.localGet(local_y);
+                try b.i64Op(if (op == .add) .add else .sub);
+                try b.localSet(local_z);
+                // add: ((x ^ z) & (y ^ z)) < 0. sub: ((x ^ y) & (x ^ z)) < 0.
+                try b.localGet(local_x);
+                try b.localGet(if (op == .add) local_z else local_y);
+                try b.i64Op(.xor);
+                try b.localGet(if (op == .add) local_y else local_x);
+                try b.localGet(local_z);
+                try b.i64Op(.xor);
+                try b.i64Op(.@"and");
+                try b.i64Const(0);
+                try b.i64Op(.lt_s);
+                try g.toSlow(f);
+                try b.localGet(local_z);
+                try b.localSet(local_x);
+            },
+            .mul => {
+                try g.smallInt(f, local_x);
+                try g.smallInt(f, local_y);
+                try b.localGet(local_x);
+                try b.localGet(local_y);
+                try b.i64Op(.mul);
+                try b.localSet(local_x);
+            },
+            .div, .mod => {
+                // y + 1 <= 1 unsigned: y is 0 or -1.
+                try b.localGet(local_y);
+                try b.i64Const(1);
+                try b.i64Op(.add);
+                try b.i64Const(1);
+                try b.i64Op(.le_u);
+                try g.toSlow(f);
+                // z = x % y, x = x / y.
+                try b.localGet(local_x);
+                try b.localGet(local_y);
+                try b.i64Op(.rem_s);
+                try b.localSet(local_z);
+                try b.localGet(local_x);
+                try b.localGet(local_y);
+                try b.i64Op(.div_s);
+                try b.localSet(local_x);
+                // A remainder with the sign opposite to the divisor.
+                try b.localGet(local_z);
+                try b.localGet(local_y);
+                try b.i64Op(.xor);
+                try b.i64Const(0);
+                try b.i64Op(.lt_s);
+                try b.localGet(local_z);
+                try b.i64Op(.eqz);
+                try b.i32Op(.eqz);
+                try b.i32Op(.@"and");
+                try b.if_();
+                try b.localGet(local_x);
+                try b.i64Const(1);
+                try b.i64Op(.sub);
+                try b.localSet(local_x);
+                try b.localGet(local_z);
+                try b.localGet(local_y);
+                try b.i64Op(.add);
+                try b.localSet(local_z);
+                try b.end();
+                if (op == .mod) {
+                    try b.localGet(local_z);
+                    try b.localSet(local_x);
+                }
+            },
+            else => unreachable,
+        }
+    }
+
+    /// The two operands of `bin_vv`, `bin_vi`, `jf_vv`, and `jf_vi` into
+    /// `x` and `y`.
+    fn slotOperands(g: *Gen, f: Fast, i: *const vm.Ins) Error!void {
+        try g.cell(f, i.a, local_c1, &.{g.l.var_val});
+        try g.cellInt(f, local_c1, local_x);
+        if (i.op == .bin_vv or i.op == .jf_vv) {
+            try g.cell(f, i.b, local_c2, &.{g.l.var_val});
+            try g.cellInt(f, local_c2, local_y);
+        } else try g.litInt(i.b, local_y);
+    }
+
+    /// Writes the inline path of instruction `pc`, or returns false.
+    fn fast(g: *Gen, pc: u32) Error!bool {
+        const i = &g.code.ins[pc];
+        const sp: u32 = g.info.depth[pc];
+        const l = g.l;
+        const b = &g.b;
+        // Named code reads each variable by its name: the helper.
+        if (g.code.named) switch (i.op) {
+            .load, .store, .store_pop, .incr, .incr_drop, .incr_value, .bin_vv, .bin_vi, .jf_vv, .jf_vi => return false,
+            else => {},
+        };
+        switch (i.op) {
+            .step, .guard => {
+                const f = try g.openFast();
+                if (i.op == .guard) {
+                    try b.localGet(local_it);
+                    try b.i32Load(l.it_epoch);
+                    try b.localGet(local_it);
+                    try b.i32Load(l.it_safe_epoch);
+                    try b.i32Op(.ne);
+                    try g.toSlow(f);
+                }
+                try g.stepCheck(f);
+                try g.closeFast(f, pc);
+            },
+            .push => {
+                try b.localGet(local_code);
+                try b.i32Load(l.code_lits);
+                try b.localSet(local_c1);
+                try g.copy(local_stack, g.stackOff(sp, 0), local_c1, i.a * g.vs());
+            },
+            .push_empty => {
+                try b.localGet(local_ctx);
+                try b.i32Load(@offsetOf(Ctx32, "empty"));
+                try b.localSet(local_c1);
+                try g.copy(local_stack, g.stackOff(sp, 0), local_c1, 0);
+            },
+            .load => {
+                const f = try g.openFast();
+                if (i.x == 1) try g.cell(f, i.a, local_c1, &.{ l.var_val, l.var_owned }) else try g.cell(f, i.a, local_c1, &.{l.var_val});
+                try g.copy(local_stack, g.stackOff(sp, 0), local_c1, l.var_payload);
+                try g.closeFast(f, pc);
+            },
+            .store, .store_pop => {
+                const f = try g.openFast();
+                try g.cell(f, i.a, local_c1, &.{l.var_val});
+                try g.copy(local_c1, l.var_payload, local_stack, g.stackOff(sp - 1, 0));
+                try g.closeFast(f, pc);
+            },
+            .jump_false, .jump_true, .to_bool => {
+                const f = try g.openFast();
+                try g.stackInt(f, sp - 1, local_x);
+                if (i.op == .to_bool) {
+                    try b.localGet(local_stack);
+                    try b.localGet(local_x);
+                    try b.i64Op(.eqz);
+                    try b.i32Op(.eqz);
+                    try b.i64Op(.extend_i32_u);
+                    try b.i64Store(g.stackOff(sp - 1, l.value_payload));
+                } else {
+                    try b.localGet(local_x);
+                    try b.i64Op(.eqz);
+                    if (i.op == .jump_true) try b.i32Op(.eqz);
+                    try b.if_();
+                    try g.jumpTo(i.a);
+                    try b.end();
+                }
+                try g.closeFast(f, pc);
+            },
+            .bin_vv, .bin_vi => {
+                const op: expr.BinOp = @enumFromInt(i.x);
+                if (!fastOp(op)) return false;
+                const f = try g.openFast();
+                try g.slotOperands(f, i);
+                try g.arith(f, op);
+                try g.putInt(sp, local_x);
+                try g.closeFast(f, pc);
+            },
+            .binary => {
+                const op: expr.BinOp = @enumFromInt(i.x);
+                if (!fastOp(op)) return false;
+                const f = try g.openFast();
+                try g.stackInt(f, sp - 2, local_x);
+                try g.stackInt(f, sp - 1, local_y);
+                try g.arith(f, op);
+                try b.localGet(local_stack);
+                try b.localGet(local_x);
+                try b.i64Store(g.stackOff(sp - 2, l.value_payload));
+                try g.closeFast(f, pc);
+            },
+            .jf_vv, .jf_vi => {
+                const op: expr.BinOp = @enumFromInt(i.x);
+                const c = compareOp(op) orelse return false;
+                const f = try g.openFast();
+                try g.slotOperands(f, i);
+                try b.localGet(local_x);
+                try b.localGet(local_y);
+                try b.i64Op(c);
+                try b.i32Op(.eqz);
+                try b.if_();
+                try g.jumpTo(i.c);
+                try b.end();
+                try g.closeFast(f, pc);
+            },
+            .incr, .incr_drop, .incr_value => {
+                const f = try g.openFast();
+                try g.cell(f, i.a, local_c1, &.{l.var_val});
+                try g.cellInt(f, local_c1, local_x);
+                if (i.op == .incr_value) {
+                    try g.stackInt(f, sp - 1, local_y);
+                } else {
+                    try b.i64Const(@as(i32, @bitCast(i.b)));
+                    try b.localSet(local_y);
+                }
+                try g.arith(f, .add);
+                try b.localGet(local_c1);
+                try b.localGet(local_x);
+                try b.i64Store(l.var_payload + l.value_payload);
+                switch (i.op) {
+                    .incr => try g.putInt(sp, local_x),
+                    .incr_value => {
+                        try b.localGet(local_stack);
+                        try b.localGet(local_x);
+                        try b.i64Store(g.stackOff(sp - 1, l.value_payload));
+                    },
+                    else => {},
+                }
+                try g.closeFast(f, pc);
+            },
+            else => return false,
+        }
+        return true;
     }
 };
 
 /// The code entry of the function of `code`. `h` is the helper index
 /// table for the kind of `code`.
-pub fn function(a: Allocator, code: *const vm.Code, info: *const verify.Info, h: *const [helpers.count]u32) Error![]u8 {
+pub fn function(a: Allocator, code: *const vm.Code, info: *const verify.Info, h: *const [helpers.count]u32, l: *const Layout, inline_paths: bool) Error![]u8 {
     const n = code.ins.len;
     const ents = try entries(a, code, info);
     defer a.free(ents);
@@ -258,9 +705,15 @@ pub fn function(a: Allocator, code: *const vm.Code, info: *const verify.Info, h:
     const level = try a.alloc(u32, m);
     defer a.free(level);
 
-    var g: Gen = .{ .a = a, .b = .{ .a = a }, .code = code, .info = info, .h = h, .block_of = block_of, .level = level, .top_level = 0 };
+    var g: Gen = .{ .a = a, .b = .{ .a = a }, .code = code, .info = info, .h = h, .l = l, .inline_paths = inline_paths and layoutUsable(l), .block_of = block_of, .level = level, .top_level = 0 };
     defer g.b.deinit();
     const b = &g.b;
+    // The fields of the context that each inline path reads.
+    for ([_][2]u32{ .{ local_it, @offsetOf(Ctx32, "it") }, .{ local_stack, @offsetOf(Ctx32, "stack") }, .{ local_frame, @offsetOf(Ctx32, "frame") }, .{ local_code, @offsetOf(Ctx32, "code") } }) |p| {
+        try b.localGet(local_ctx);
+        try b.i32Load(p[1]);
+        try b.localSet(p[0]);
+    }
 
     try b.block(); // $fallback
     const fallback_level = b.open;
@@ -313,5 +766,5 @@ pub fn function(a: Allocator, code: *const vm.Code, info: *const verify.Info, h:
     try b.end(); // $fallback
     try b.i32Const(status_exit);
     std.debug.assert(b.open == 0);
-    return b.entry(a, 2, 0);
+    return b.entry(a, i32_locals, i64_locals);
 }

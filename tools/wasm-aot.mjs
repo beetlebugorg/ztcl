@@ -67,6 +67,7 @@ export async function runIn(module, text, { record = false, stepLimit = steps } 
     output: str(x.ztcl_output_ptr(h), x.ztcl_output_len(h)),
     steps: stepLimit - x.ztcl_steps_left(h),
     found: x.ztcl_aot_stat(0),
+    layoutOk: x.ztcl_aot_stat(4),
     missed: x.ztcl_aot_stat(1),
   };
   if (record) out.record = new Uint8Array(x.memory.buffer, x.ztcl_aot_record_ptr(), x.ztcl_aot_record_len()).slice();
@@ -103,6 +104,10 @@ async function main() {
     const a = await runIn(base, text, { record: true });
     const { app } = compileApp(file, a.record, dir);
     const b = await runIn(await WebAssembly.compile(fs.readFileSync(app)), text);
+    if (!b.layoutOk) {
+      console.log("the layout of the runtime differs from ztcl_aot_layout_data: see staticLayout in src/wasm_aot/rt.zig and gen.union32");
+      process.exit(1);
+    }
     found += b.found;
     missed += b.missed;
     const appMod = await WebAssembly.compile(fs.readFileSync(app));

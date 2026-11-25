@@ -23,6 +23,7 @@ const helpers = @import("../jit/helpers.zig");
 const gen = @import("gen.zig");
 const rt = @import("rt.zig");
 const wasm = @import("wasm.zig");
+const Layout = @import("../jit/layout.zig").Layout;
 
 const Allocator = std.mem.Allocator;
 const Interp = interp.Interp;
@@ -138,7 +139,12 @@ fn codeOf(it: *Interp, src: Source) Error!?*vm.Code {
 
 /// Compiles `sources` into a copy of the runtime module `runtime`.
 /// `it` is a scratch interpreter.
-pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const Source) Error!Result {
+pub const Options = struct {
+    /// False: each instruction calls its helper.
+    inline_paths: bool = true,
+};
+
+pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const Source, opts: Options) Error!Result {
     var m = try wasm.Module.parse(a, runtime);
     defer m.deinit(a);
     var hs: gen.Helpers = .{};
@@ -147,6 +153,17 @@ pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const 
         if (try m.exportOf(gen.exportName(h, true), 0)) |f| hs.named[@intFromEnum(h)] = f;
     }
     const dir_var = try m.dataAddress("ztcl_aot_dir") orelse return error.NoDirectoryVariable;
+    // The layout of the runtime. A module with no layout gets the helper
+    // form only.
+    var lay: Layout = undefined;
+    var inline_paths = false;
+    if (try m.dataAddress("ztcl_aot_layout_data")) |at| {
+        const fields = std.meta.fields(Layout);
+        var words: [fields.len * 4]u8 = undefined;
+        try m.readData(at, &words);
+        inline for (fields, 0..) |f, k| @field(lay, f.name) = @intCast(std.mem.readInt(u32, words[k * 4 ..][0..4], .little));
+        inline_paths = opts.inline_paths;
+    }
 
     var fns: std.ArrayList(Fn) = .empty;
     defer {
@@ -176,7 +193,7 @@ pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const 
             continue;
         };
         defer info.deinit(a);
-        const entry = try gen.function(a, code, &info, if (code.named) &hs.named else &hs.proc);
+        const entry = try gen.function(a, code, &info, if (code.named) &hs.named else &hs.proc, &lay, inline_paths);
         errdefer a.free(entry);
         const depth = try a.alloc(u16, code.ins.len);
         errdefer a.free(depth);
@@ -193,8 +210,8 @@ pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const 
     }.lt);
     res.functions = fns.items.len;
 
-    const lay = try m.layout();
-    const base = lay.freeAddress();
+    const ml = try m.layout();
+    const base = ml.freeAddress();
     // The directory: the header, the records, then the bytecode and the
     // depths of each function.
     var dir: std.ArrayList(u8) = .empty;
@@ -220,21 +237,21 @@ pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const 
         putWord(dir.items, r + 8, ins_at);
         putWord(dir.items, r + 12, @intCast(f.ins.len));
         putWord(dir.items, r + 16, depth_at);
-        putWord(dir.items, r + 20, lay.table.min + @as(u32, @intCast(k)));
+        putWord(dir.items, r + 20, ml.table.min + @as(u32, @intCast(k)));
         putWord(dir.items, r + 24, @intFromBool(f.named));
     }
     const fn_type = try wasm.funcType(a, &.{.i32}, &.{.i32});
     defer a.free(fn_type);
     const types = try a.alloc(u32, fns.items.len);
     defer a.free(types);
-    @memset(types, lay.types);
+    @memset(types, ml.types);
     const code = try a.alloc([]const u8, fns.items.len);
     defer a.free(code);
     const table = try a.alloc(u32, fns.items.len);
     defer a.free(table);
     for (fns.items, 0..) |f, k| {
         code[k] = f.entry;
-        table[k] = lay.funcs + @as(u32, @intCast(k));
+        table[k] = ml.funcs + @as(u32, @intCast(k));
     }
     var addr: [4]u8 = undefined;
     std.mem.writeInt(u32, &addr, base, .little);
