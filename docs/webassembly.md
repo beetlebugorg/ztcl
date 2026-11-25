@@ -165,6 +165,43 @@ tcl.close();
 
 The bundle is level 1 of [issue #3](https://github.com/beetlebugorg/ztcl/issues/3) in a short form, for a browser and Node.js. The full level 1 is a WASI component and follows [#2](https://github.com/beetlebugorg/ztcl/issues/2). The virtual file system of [#40](https://github.com/beetlebugorg/ztcl/issues/40), with `glob`, `file`, and zip archives, replaces the file table of the bundle.
 
+## Compile procs to WebAssembly
+
+`ztcl compile --wasm` makes a module with a WebAssembly function for each proc of a script. The runtime stays in the module for lists, strings, dicts, and each slow path. The command patches the module and needs no Zig toolchain.
+
+```sh
+zig build wasm-aot
+ztcl compile --wasm -o app.wasm app.tcl
+```
+
+```
+app.wasm: 6 procs compiled to 6 functions, 0 skipped
+```
+
+- The runtime is `ztcl-aot.wasm` from `zig build wasm-aot`: `ztcl.wasm` with the helpers of the compiled code as exports. `--runtime FILE` gives another path. With no `--runtime`, the command uses `../lib/ztcl-aot.wasm` from the folder of the `ztcl` program.
+- `app.wasm` has the exports of `ztcl.wasm`, so `web/ztcl.mjs` and the npm package load it. The host runs the script with `eval` as before. When a proc body compiles to the same bytecode as a function of the module, that function runs in place of the interpreter.
+- The command finds each `proc`, `method`, `constructor`, and `destructor` with literal words in the scripts, also in literal words that are scripts, such as the body of `namespace eval`. A proc that the script makes from a computed string runs in the interpreter. `--record FILE` adds the procs of a run in the record mode of the runtime (`ztcl_aot_record`), so each proc of that run gets a function.
+- The output, the errors, `errorInfo`, the step count, and the memory limit are the same as in the interpreter. A function keeps the state of the interpreter at each bytecode instruction, and each rare case calls the code of the interpreter. A function that the runtime cannot use, for example after a change of the runtime, leaves its proc in the interpreter.
+- Coroutines are not in the WebAssembly build, so a compiled proc never suspends.
+
+Speed in Node.js 26 on an x86-64 Linux machine with other load, the best of 5 runs of each `eval`, against `tclsh` 8.6.16 (the whole process, best of 5):
+
+| Script | `ztcl.wasm` interpreter | Compiled | Compiled / interpreter | `tclsh` |
+|---|---|---|---|---|
+| `bench/sum.tcl` | 42.5 ms | 11.8 ms | 0.28 | 60.2 ms |
+| `bench/foreach.tcl` | 33.0 ms | 17.8 ms | 0.54 | 35.0 ms |
+| `bench/readloop.tcl` | 23.7 ms | 13.4 ms | 0.56 | 29.3 ms |
+| `bench/nested.tcl` | 77.6 ms | 49.6 ms | 0.64 | 75.6 ms |
+| `bench/fib.tcl` | 29.6 ms | 19.8 ms | 0.67 | 52.7 ms |
+| `bench/dict.tcl` | 51.7 ms | 36.4 ms | 0.70 | 50.5 ms |
+| `bench/dsum.tcl` | 92.3 ms | 65.1 ms | 0.71 | 98.4 ms |
+| `bench/strbuild.tcl` | 52.6 ms | 38.7 ms | 0.74 | 65.8 ms |
+| `bench/dictgrow.tcl` | 155.1 ms | 136.6 ms | 0.88 | 106.1 ms |
+| kostya `bf.tcl bench.b`, one run | 207.58 s | 148.38 s | 0.71 | 257.33 s |
+| kostya `base64/test.tcl`, one run | 4.54 s | 4.56 s | 1.00 | 4.24 s |
+
+The gain is in the bytecode of the procs. Work in the builtins, such as `binary encode base64`, runs at the same speed. `node tools/wasm-aot-bench.mjs --kostya bench/*.tcl` makes this table. `tools/wasm-aot.mjs`, `tools/wasm-aot-suite.mjs`, and `tools/wasm-aot-fuzz.sh` compare the compiled modules with the interpreter. [The design](dev/wasm-aot.md) has the details.
+
 ## Examples
 
 The examples are in [`examples/web/`](../examples/web/). To run the browser examples, build the module and serve the root of the repository:
@@ -263,4 +300,4 @@ The host picks one of two modes:
 
 ## More
 
-The [issues](https://github.com/beetlebugorg/ztcl/issues) track the planned WebAssembly work, such as WASI components and scripts compiled to WebAssembly modules.
+The [issues](https://github.com/beetlebugorg/ztcl/issues) track the planned WebAssembly work, such as WASI components.
