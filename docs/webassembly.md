@@ -74,6 +74,10 @@ tcl.close();
 | `interp.stepLimit`, `interp.memLimit` | Change the limits for the next `eval`. |
 | `interp.memorySize` | The size of the linear memory in bytes. The memory never shrinks, so this is the peak. |
 | `interp.close()` | Frees the interpreter. |
+| `options.allow` | A list of capabilities. `ztcl.wasm` has only `"file"`, for the files of a bundle. See [Bundle a script](#bundle-a-script). |
+| `interp.run()` | Runs the scripts of a bundle. Returns `{ ok, result, output }`. |
+| `interp.bundleSize` | The bytes of the scripts and files of a bundle, or 0. |
+| `run(source, options)` | Makes an interpreter for the bundle `source`, runs its scripts, and frees it. Returns a promise of `{ ok, result, output }`. |
 | `new WorkerInterp(wasmUrl, options)` | Runs scripts in a Web Worker (`ztcl-worker.mjs`). The options are as for `Interp.create`. `wasmUrl` can be left out. When `ztcl.mjs` comes from another origin, such as a CDN, the worker starts from a blob script that imports `ztcl-worker.mjs`. |
 | `wasmURL()` | The URL of the `ztcl.wasm` file next to `ztcl.mjs`. |
 | `worker.eval(script)` | Returns a promise of `{ ok, result, output, memorySize }`. |
@@ -97,6 +101,9 @@ One interpreter keeps its procs and variables from one `eval` to the next. Each 
 | `ztcl_set_step_limit(h, n)` | Sets the steps that are left, as a `u64` (a `BigInt` in JS). Each script uses steps from this count. |
 | `ztcl_set_mem_limit(h, bytes)` | Sets the memory limit. |
 | `ztcl_set_gc_stress(h, n)` | A test mode: a collection at each Nth safe point. 0 turns it off. |
+| `ztcl_bundle_size()` | The bytes of the payload of a bundle, or 0. |
+| `ztcl_bundle_run(h)` | Runs the scripts of a bundle in order. Returns 0 on success and 1 on an error. |
+| `ztcl_allow(h, bits)` | Turns on capabilities. This module has only `file` (16). Returns 0 on success, 1 when the memory ends, and 2 for another bit. |
 | `memory` | The linear memory. |
 
 `Interp.eval` sets the step limit before each call. So the limit applies to each `eval`, and not to the sum of all calls.
@@ -108,6 +115,55 @@ One interpreter keeps its procs and variables from one `eval` to the next. Each 
 - After the memory error, the data of the script can stay live above the limit. The next `eval` in the same interpreter runs a collection first. While the live data stays above the limit, only the hard cap applies, so the script can run and free its data with `unset`. When a collection brings the count below the limit, the limit applies again. Use `close` and a new `Interp` to give the memory back to the host.
 - **Output.** The module has no imports, so `puts` goes into a buffer. `eval` returns the text, and `onOutput` gets it when the script ends. When `stop` ends a worker, the output of that script is lost.
 - **Stop.** A script on the main thread blocks the page until it ends or hits a limit. Use `WorkerInterp` when a person must be able to stop a script.
+
+## Bundle a script
+
+`ztcl build --wasm` writes a copy of `ztcl.wasm` with Tcl scripts and read-only files in it. The command patches the module and needs no Zig toolchain.
+
+```sh
+zig build wasm
+ztcl build --wasm --base zig-out/lib/ztcl.wasm --embed data -o app.wasm lib.tcl app.tcl
+```
+
+```
+app.wasm: 1014418 bytes (ztcl.wasm: 1014098 bytes, bundle: 311 bytes)
+```
+
+- The scripts run in order in one interpreter, as `ztcl lib.tcl app.tcl` runs them. An error stops the scripts.
+- `--embed PATH` adds a file, or each file below a folder. Give a relative path with no `..`. Use `--embed` more than one time for more paths.
+- `--base FILE` is the module to copy. With no `--base`, the command uses the environment variable `ZTCL_WASM`, then `../lib/ztcl.wasm` from the folder of the `ztcl` program. Use the `ztcl.wasm` of the same version as the `ztcl` program, or the `ztcl.wasm` of the npm package. The module of `zig build wasm-threads` is not a base.
+- The bundle has the source text of the scripts. The interpreter compiles them when the bundle runs.
+- The bundle is the size of the base module plus the scripts and the files, plus a few bytes. The scripts and the files go in a new data segment above the initial memory, so the initial memory grows by the same number of 64 KiB pages.
+
+Run the bundle with the JS module or the npm package:
+
+```js
+import { Interp, run } from "@beetlebug/ztcl";
+
+// Make an interpreter, run the scripts, and free the interpreter.
+const r = await run(new URL("./app.wasm", import.meta.url), {
+  stepLimit: 1_000_000,
+  memLimit: 64 << 20,
+  allow: ["file"],
+  onOutput: (text) => console.log(text),
+});
+
+// Or keep the interpreter, and call procs of the bundle after the run.
+const tcl = await Interp.create("app.wasm", { allow: ["file"] });
+tcl.run();
+tcl.eval("sq 9");
+tcl.close();
+```
+
+- `run()` returns `{ ok, result, output }` as `eval` does. On an error, `result` is `name:line: message`, as `ztcl` writes it.
+- The step limit and the memory limit apply as for `eval`. The step limit of one `run()` applies to all the scripts together.
+- The files of `--embed` and the scripts are under the mount `//zipfs:/app/`, with the path as given to `ztcl build`. A relative name is relative to the mount, so `open data/a.txt` reads the file of `--embed data`. With `allow: ["file"]`, the module has `source`, and `open` with the access `r`, `read`, `gets`, `eof`, and `close` on these files. `open` with another access gives the error `read-only file system`. A name outside the mount is not found. Without the capability, the module has none of these commands.
+- `read` and `gets` give the bytes of the file. They do no encoding conversion and no end-of-line translation.
+- A non-JS host calls `ztcl_new`, then `ztcl_allow(h, 16)` for the files, then `ztcl_bundle_run(h)`.
+
+`node tools/wasm-bundle.mjs zig-out/bin/ztcl zig-out/lib/ztcl.wasm` checks that the output of each bundle equals the output of `ztcl`, the limits, and the files. The npm package tests run a bundle in Node.js and in headless Chromium.
+
+The bundle is level 1 of [issue #3](https://github.com/beetlebugorg/ztcl/issues/3) in a short form, for a browser and Node.js. The full level 1 is a WASI component and follows [#2](https://github.com/beetlebugorg/ztcl/issues/2). The virtual file system of [#40](https://github.com/beetlebugorg/ztcl/issues/40), with `glob`, `file`, and zip archives, replaces the file table of the bundle.
 
 ## Examples
 

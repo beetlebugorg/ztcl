@@ -130,6 +130,9 @@ jobs:
       - run: zig build wasm
       - run: node tools/wasm-smoke.mjs zig-out/lib/ztcl.wasm
       - run: node tools/wasm-web.mjs zig-out/lib/ztcl.wasm
+      # A bundle of `ztcl build --wasm`. The native ztcl makes it.
+      - run: zig build
+      - run: node tools/wasm-bundle.mjs zig-out/bin/ztcl zig-out/lib/ztcl.wasm
       # The threads in Node.js and in Chromium, with and without
       # cross-origin isolation. The browser test uses the Chrome of the
       # runner.

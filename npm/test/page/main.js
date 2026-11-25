@@ -1,6 +1,6 @@
 // The browser test of the package. run.mjs puts the name of the
 // package, or a URL for the no-build test, in place of the name below.
-import { Interp, WorkerInterp } from "{{import}}";
+import { Interp, WorkerInterp, run } from "{{import}}";
 
 async function main() {
   const res = {};
@@ -14,6 +14,9 @@ async function main() {
   res.stopped = (await forever).result;
   res.after = (await w.eval("expr {1 + 1}")).result;
   w.stop();
+  // A bundle of `ztcl build --wasm` next to the page.
+  const b = await run(new URL("./app.wasm", location.href), { stepLimit: 100_000, memLimit: 16 << 20, allow: ["file"] });
+  res.bundle = b.ok ? b.output : `error: ${b.result}`;
   return res;
 }
 

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Adds `ztcl build --wasm`: a copy of `ztcl.wasm` with Tcl scripts and read-only files in it, made with no Zig toolchain. `run()` and `Interp.run()` of `ztcl.mjs` run the scripts, and `allow: ["file"]` turns on `source` and `open` for the files under `//zipfs:/app/`. See `docs/webassembly.md`.
 - Adds an interactive shell to the runner, with a line editor of its own: Emacs and vim keys, multi-line input, history in `~/.ztcl_history` with prefix and fuzzy search, completion, colors as you type, hints, bracketed paste, results in color, and `~/.ztclrc`. See `docs/shell.md`.
 - Fixes the `exec` allowlist. A script could write a file at the path of an allowed program, and `exec` ran that file. `exec` now resolves each program to one full host path, checks the allowlist on that path, and runs only that path. A file below the root folder runs only from the new list `Interp.exec_host.allow_root` (runner flag `--exec-allow-root`). A relative `PATH` entry is an error.
 - Kills the whole process tree of a pipeline at the time limit: a cgroup on Linux, or a scan of /proc when the embedder cannot make a cgroup. A process that calls `setsid` no longer stays.

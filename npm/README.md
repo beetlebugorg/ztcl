@@ -87,12 +87,25 @@ The next `eval` after `stop` starts a new worker with a new interpreter. `{{name
 | `new WorkerInterp(wasmUrl?, options?)` | An interpreter in a Web Worker. `eval` returns a promise. `reset()` makes a new interpreter. `stop()` ends the worker. |
 | `compile(source?)` | Compiles the module one time, for many interpreters. |
 | `wasmURL()` | The URL of the `ztcl.wasm` file of the package. |
+| `run(source, options?)` | Runs the scripts of a bundle from `ztcl build --wasm` in a new interpreter. |
+| `interp.run()` | Runs the scripts of a bundle. Returns `{ ok, result, output }`. |
 
-The options are `stepLimit`, `memLimit`, and `onOutput`. `stepLimit` is the steps of each `eval`, and `null` (the default) is no limit. `memLimit` is in bytes, and the default is 2 GiB. `onOutput(text)` gets the text of `puts` when each `eval` ends.
+The options are `stepLimit`, `memLimit`, `onOutput`, and `allow`. `allow: ["file"]` turns on `source` and `open` for reading on the files of a bundle. `stepLimit` is the steps of each `eval`, and `null` (the default) is no limit. `memLimit` is in bytes, and the default is 2 GiB. `onOutput(text)` gets the text of `puts` when each `eval` ends.
 
 A source is a URL, a file path in Node.js, a `Response`, bytes, or a `WebAssembly.Module`. With no source, the module is the `ztcl.wasm` file of the package.
 
 One interpreter keeps its procs and variables from one `eval` to the next. Each `Interp` has its own instance and its own memory, so `close` and a new `Interp` give the memory back.
+
+## A bundle
+
+`ztcl build --wasm -o app.wasm app.tcl` writes a copy of the `ztcl.wasm` of the package with the script in it. `--embed PATH` adds read-only files under `//zipfs:/app/`. The limits apply as for `eval`. See [Bundle a script](https://beetlebug.org/ztcl/webassembly/#bundle-a-script).
+
+```js
+import { run } from "{{name}}";
+
+const r = await run(new URL("./app.wasm", import.meta.url), { stepLimit: 1_000_000, allow: ["file"] });
+console.log(r.output);
+```
 
 ## Threads
 

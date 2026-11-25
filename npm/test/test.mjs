@@ -7,7 +7,7 @@ import fs from "node:fs";
 
 const deps = JSON.parse(fs.readFileSync(new URL("./package.json", import.meta.url), "utf8")).dependencies;
 const name = Object.keys(deps).find((d) => d.endsWith("/ztcl") || d === "ztcl");
-const { compile, Interp, WorkerInterp, wasmURL } = await import(name);
+const { compile, Interp, WorkerInterp, run, wasmURL } = await import(name);
 
 let failed = 0;
 let passed = 0;
@@ -87,6 +87,22 @@ check(!b.eval("set v").ok, "interpreters are separate");
 // WorkerInterp needs a browser. Its constructor works in Node.js.
 const w = new WorkerInterp({ stepLimit: 5 });
 check(w.wasm === wasmURL().href && w.stepLimit === 5, "WorkerInterp default module");
+
+// A bundle of `ztcl build --wasm`. app.out is the output of the native
+// ztcl. The limits hold, and the files need the capability.
+{
+  const want = fs.readFileSync(new URL("./app.out", import.meta.url), "utf8");
+  let out = "";
+  const r = await run("app.wasm", { stepLimit: 100_000, allow: ["file"], onOutput: (t) => (out += t) });
+  check(r.ok && r.output === want && out === want, "bundle output equals ztcl");
+  const no = await run("app.wasm");
+  check(!no.ok && no.result.includes('invalid command name "open"'), "bundle files need the capability");
+  const few = await run("app.wasm", { stepLimit: 2, allow: ["file"] });
+  check(!few.ok && few.result.endsWith("step limit reached"), "bundle step limit");
+  const t = await Interp.create("app.wasm", { allow: ["file"] });
+  check(t.bundleSize > 0 && t.eval("source //zipfs:/app/lib.tcl; sq 9").result === "81", "bundle source under the mount");
+  t.close();
+}
 
 // The threads entry: Node.js has the shared mode.
 {

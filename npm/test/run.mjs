@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// Tests the npm package as a user gets it. Run `zig build wasm` and
-// `node npm/build.mjs` first.
+// Tests the npm package as a user gets it. Run `zig build`,
+// `zig build wasm`, and `node npm/build.mjs` first. The tests also run
+// a bundle that `zig-out/bin/ztcl build --wasm` makes from the
+// ztcl.wasm of the package and the files of npm/test/bundle/.
 //
 //   node npm/test/run.mjs [node] [browser] [cdn]
 //
@@ -34,6 +36,13 @@ const expected = { eval: "42", steps: "step limit reached", worker: "499500", st
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "ztcl-npm-"));
 const run = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, stdio: "inherit" });
+
+// The bundle, and its output from the native `ztcl`.
+const ztcl = process.env.ZTCL || path.join(root, "zig-out/bin/ztcl");
+const fixture = path.join(here, "bundle");
+const bundle = path.join(work, "app.wasm");
+execFileSync(ztcl, ["build", "--wasm", "--base", path.join(stage, "ztcl.wasm"), "--embed", "data", "-o", bundle, "lib.tcl", "app.tcl"], { cwd: fixture, stdio: "inherit" });
+expected.bundle = execFileSync(ztcl, ["--allow", "channels,file", "--root", fixture, "lib.tcl", "app.tcl"], { cwd: fixture, encoding: "utf8" });
 const servers = [];
 let failed = 0;
 
@@ -137,6 +146,8 @@ try {
     const dir = path.join(work, "node");
     project(dir, { typescript: "^5.9.0" });
     fs.copyFileSync(path.join(here, "test.mjs"), path.join(dir, "test.mjs"));
+    fs.copyFileSync(bundle, path.join(dir, "app.wasm"));
+    fs.writeFileSync(path.join(dir, "app.out"), expected.bundle);
     try {
       run("node", ["test.mjs"], dir);
       console.log("ok node test.mjs");
@@ -158,6 +169,8 @@ try {
     project(dir, { vite: "^7.0.0" });
     fs.copyFileSync(path.join(here, "page/index.html"), path.join(dir, "index.html"));
     fs.writeFileSync(path.join(dir, "main.js"), fill(path.join(here, "page/main.js"), { import: pkg.name }));
+    fs.mkdirSync(path.join(dir, "public"));
+    fs.copyFileSync(bundle, path.join(dir, "public/app.wasm"));
     // The configuration of the README: the dev server serves the files
     // of the package as they are, so ztcl.wasm stays next to ztcl.mjs.
     fs.writeFileSync(path.join(dir, "vite.config.js"), `export default { optimizeDeps: { exclude: [${JSON.stringify(pkg.name)}] } };\n`);
@@ -182,6 +195,7 @@ try {
     const site = path.join(work, "site");
     fs.mkdirSync(site);
     fs.copyFileSync(path.join(here, "page/index.html"), path.join(site, "index.html"));
+    fs.copyFileSync(bundle, path.join(site, "app.wasm"));
     fs.writeFileSync(path.join(site, "main.js"), fill(path.join(here, "page/main.js"), { import: `${cdnBase}/npm/${pkg.name}@${pkg.version}/ztcl.mjs` }));
     const siteBase = await serve(site);
     compare("no build step, package from a second origin", await browserResult(`${siteBase}/index.html`));

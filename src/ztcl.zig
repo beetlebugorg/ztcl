@@ -39,6 +39,8 @@ pub const jit = @import("jit.zig");
 pub const vm = @import("vm.zig");
 pub const jit_verify = @import("jit/verify.zig");
 pub const jit_tier2 = @import("jit/tier2.zig");
+/// The bundle of `ztcl build --wasm`.
+pub const wasmbundle = @import("wasmbundle.zig");
 /// The JSON parser, for the tools of the JSON module.
 pub const json = struct {
     pub const index = @import("json/index.zig");
@@ -59,5 +61,7 @@ test {
     _ = compact;
     _ = heap;
     _ = @import("tests.zig");
+    _ = wasmbundle;
+    _ = @import("wasmfiles.zig");
     _ = @import("jit/tests.zig");
 }
