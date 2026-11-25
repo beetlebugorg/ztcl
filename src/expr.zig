@@ -191,9 +191,9 @@ const ExprParser = struct {
         if (s.len == 0) return null;
         const two = if (s.len >= 2) s[0..2] else "";
         const table2 = [_]struct { []const u8, BinOp }{
-            .{ "**", .pow }, .{ "<<", .shl },   .{ ">>", .shr },   .{ "<=", .le },  .{ ">=", .ge },
-            .{ "==", .eq },  .{ "!=", .ne },    .{ "&&", .land },  .{ "||", .lor },
-            .{ "eq", .streq }, .{ "ne", .strne }, .{ "in", .in }, .{ "ni", .ni },
+            .{ "**", .pow },   .{ "<<", .shl }, .{ ">>", .shr },  .{ "<=", .le },  .{ ">=", .ge },
+            .{ "==", .eq },    .{ "!=", .ne },  .{ "&&", .land }, .{ "||", .lor }, .{ "eq", .streq },
+            .{ "ne", .strne }, .{ "in", .in },  .{ "ni", .ni },
         };
         for (table2) |t| if (std.mem.eql(u8, two, t[0])) {
             return .{ t[1], 2 };

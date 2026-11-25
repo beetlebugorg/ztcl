@@ -225,11 +225,11 @@ test "the block form of the noise gives the bits of the scalar form" {
 
 test "the block form equals the scalar form on random and edge inputs" {
     const edge = [_]f64{
-        0,                  -0.0,                1,                 -1,
-        0.5,                -0.5,                1.9999999999999998, -1.0000000000000002,
-        2e9,                -2e9,                2e9 - 1,           -2e9 + 1,
-        2147483647.5,       -2147483648.5,       1e300,             -1e300,
-        5e-324,             -5e-324,             std.math.inf(f64), -std.math.inf(f64),
+        0,                 -0.0,          1,                  -1,
+        0.5,               -0.5,          1.9999999999999998, -1.0000000000000002,
+        2e9,               -2e9,          2e9 - 1,            -2e9 + 1,
+        2147483647.5,      -2147483648.5, 1e300,              -1e300,
+        5e-324,            -5e-324,       std.math.inf(f64),  -std.math.inf(f64),
         std.math.nan(f64),
     };
     var prng = std.Random.DefaultPrng.init(11);

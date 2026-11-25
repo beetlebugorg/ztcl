@@ -171,8 +171,8 @@ pub const Code = struct {
 const inline_names = [_][]const u8{
     "set",     "incr",   "expr",    "if",       "while",   "for",
     "foreach", "return", "break",   "continue", "lappend", "dict",
-    "append",  "lindex", "llength", "string",
-    "switch", "lassign", "lset",
+    "append",  "lindex", "llength", "string",   "switch",  "lassign",
+    "lset",
 };
 
 /// The read forms of the `access` instruction.

@@ -242,7 +242,7 @@ fn ensembleCall(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     const params = argv[1 .. 1 + np];
     const sub = try it.str(argv[1 + np]);
-    const rest = argv[2 + np..];
+    const rest = argv[2 + np ..];
     var tried_unknown = false;
     while (true) {
         const names = try ensembleNames(it, e);

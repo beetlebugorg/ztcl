@@ -24,25 +24,25 @@ const Error = interp.Error;
 
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     const table = .{
-        .{ "set", cmdSet },           .{ "unset", cmdUnset },       .{ "incr", cmdIncr },
-        .{ "append", cmdAppend },     .{ "if", cmdIf },             .{ "while", cmdWhile },
-        .{ "for", cmdFor },           .{ "foreach", cmdForeach },   .{ "lmap", cmdForeach },
-        .{ "break", cmdBreak },       .{ "continue", cmdContinue }, .{ "proc", cmdProc },
-        .{ "return", cmdReturn },     .{ "error", cmdError },       .{ "catch", cmdCatch },
-        .{ "uplevel", cmdUplevel },   .{ "upvar", cmdUpvar },       .{ "global", cmdGlobal },
-        .{ "expr", cmdExpr },         .{ "eval", cmdEval },         .{ "list", cmdList },
-        .{ "lindex", cmdLindex },     .{ "llength", cmdLlength },   .{ "lappend", cmdLappend },
-        .{ "lrange", cmdLrange },     .{ "lsearch", cmdLsearch },   .{ "lsort", more.cmdLsort },
-        .{ "lreverse", cmdLreverse }, .{ "linsert", cmdLinsert },   .{ "lreplace", cmdLreplace },
-        .{ "lassign", cmdLassign },   .{ "lrepeat", cmdLrepeat },   .{ "join", cmdJoin },
-        .{ "split", cmdSplit },       .{ "concat", cmdConcat },     .{ "string", cmdString },
-        .{ "format", format.cmdFormat }, .{ "info", cmdInfo },      .{ "puts", cmdPuts },
-        .{ "switch", cmdSwitch },     .{ "rename", cmdRename },
-        .{ "apply", cmdApply },       .{ "noise3", cmdNoise3 },     .{ "subst", cmdSubst },
-        .{ "lset", more.cmdLset },    .{ "binary", more.cmdBinary }, .{ "scan", more.cmdScan },
-        .{ "regexp", regex.cmdRegexp }, .{ "regsub", regex.cmdRegsub },
-        .{ "variable", cmdVariable }, .{ "namespace", ns.cmdNamespace }, .{ "try", cmdTry },           .{ "throw", cmdThrow },
-        .{ "dict", @import("dict.zig").cmdDict }, .{ "trace", trace.cmdTrace }, .{ "unknown", ns.cmdUnknown },
+        .{ "set", cmdSet },              .{ "unset", cmdUnset },        .{ "incr", cmdIncr },
+        .{ "append", cmdAppend },        .{ "if", cmdIf },              .{ "while", cmdWhile },
+        .{ "for", cmdFor },              .{ "foreach", cmdForeach },    .{ "lmap", cmdForeach },
+        .{ "break", cmdBreak },          .{ "continue", cmdContinue },  .{ "proc", cmdProc },
+        .{ "return", cmdReturn },        .{ "error", cmdError },        .{ "catch", cmdCatch },
+        .{ "uplevel", cmdUplevel },      .{ "upvar", cmdUpvar },        .{ "global", cmdGlobal },
+        .{ "expr", cmdExpr },            .{ "eval", cmdEval },          .{ "list", cmdList },
+        .{ "lindex", cmdLindex },        .{ "llength", cmdLlength },    .{ "lappend", cmdLappend },
+        .{ "lrange", cmdLrange },        .{ "lsearch", cmdLsearch },    .{ "lsort", more.cmdLsort },
+        .{ "lreverse", cmdLreverse },    .{ "linsert", cmdLinsert },    .{ "lreplace", cmdLreplace },
+        .{ "lassign", cmdLassign },      .{ "lrepeat", cmdLrepeat },    .{ "join", cmdJoin },
+        .{ "split", cmdSplit },          .{ "concat", cmdConcat },      .{ "string", cmdString },
+        .{ "format", format.cmdFormat }, .{ "info", cmdInfo },          .{ "puts", cmdPuts },
+        .{ "switch", cmdSwitch },        .{ "rename", cmdRename },      .{ "apply", cmdApply },
+        .{ "noise3", cmdNoise3 },        .{ "subst", cmdSubst },        .{ "lset", more.cmdLset },
+        .{ "binary", more.cmdBinary },   .{ "scan", more.cmdScan },     .{ "regexp", regex.cmdRegexp },
+        .{ "regsub", regex.cmdRegsub },  .{ "variable", cmdVariable },  .{ "namespace", ns.cmdNamespace },
+        .{ "try", cmdTry },              .{ "throw", cmdThrow },        .{ "dict", @import("dict.zig").cmdDict },
+        .{ "trace", trace.cmdTrace },    .{ "unknown", ns.cmdUnknown },
     };
     inline for (table) |t| try it.register(t[0], t[1]);
     try @import("mathns.zig").register(it);
@@ -86,12 +86,13 @@ pub fn classify(command: *interp.Command, c: *Cmd) interp.Fast {
 /// The function of a core command that the bytecode inlines.
 pub fn coreFn(name: []const u8) ?interp.NativeFn {
     const table = [_]struct { []const u8, interp.NativeFn }{
-        .{ "set", cmdSet },         .{ "incr", cmdIncr },     .{ "expr", cmdExpr },
-        .{ "if", cmdIf },           .{ "while", cmdWhile },   .{ "for", cmdFor },
-        .{ "foreach", cmdForeach }, .{ "return", cmdReturn }, .{ "break", cmdBreak },
-        .{ "continue", cmdContinue }, .{ "lappend", cmdLappend }, .{ "append", cmdAppend }, .{ "dict", @import("dict.zig").cmdDict },
-        .{ "lindex", cmdLindex },   .{ "llength", cmdLlength }, .{ "string", cmdString },
-        .{ "switch", cmdSwitch }, .{ "lassign", cmdLassign }, .{ "lset", more.cmdLset },
+        .{ "set", cmdSet },                       .{ "incr", cmdIncr },       .{ "expr", cmdExpr },
+        .{ "if", cmdIf },                         .{ "while", cmdWhile },     .{ "for", cmdFor },
+        .{ "foreach", cmdForeach },               .{ "return", cmdReturn },   .{ "break", cmdBreak },
+        .{ "continue", cmdContinue },             .{ "lappend", cmdLappend }, .{ "append", cmdAppend },
+        .{ "dict", @import("dict.zig").cmdDict }, .{ "lindex", cmdLindex },   .{ "llength", cmdLlength },
+        .{ "string", cmdString },                 .{ "switch", cmdSwitch },   .{ "lassign", cmdLassign },
+        .{ "lset", more.cmdLset },
     };
     for (table) |e| if (eql(e[0], name)) return e[1];
     return null;
@@ -1491,7 +1492,6 @@ pub fn globSteps(it: *Interp, pat: []const u8, s: []const u8, nocase: bool) Erro
     return globMatch(pat, s, nocase);
 }
 
-
 /// The count of characters of a UTF-8 string: the bytes that do not
 /// continue a character.
 pub fn charCount(s: []const u8) usize {
@@ -1514,7 +1514,6 @@ pub fn byteOf(s: []const u8, n: usize, k: usize) usize {
     return s.len;
 }
 
-
 /// The one name of the enum that starts with the text, or null.
 fn uniquePrefix(comptime E: type, text: []const u8) ?E {
     if (text.len == 0) return null;
@@ -1527,7 +1526,6 @@ fn uniquePrefix(comptime E: type, text: []const u8) ?E {
     }
     return found;
 }
-
 
 pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("string subcommand ?arg ...?");
