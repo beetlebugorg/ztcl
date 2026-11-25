@@ -84,19 +84,28 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
         <p class="note">With tier 2, the loop is about 28 times as fast as in tclsh 8.6.16. With the interpreter only, it is 2.6 times as fast.</p>
       </figure>
       <div>
-        <h3>A larger program</h3>
-        <p class="muted">The brainfuck benchmark of kostya/benchmarks (<code>bf.tcl bench.b</code>), in seconds of wall time.</p>
+        <h3>Larger programs</h3>
+        <p class="muted">Three programs of kostya/benchmarks: the brainfuck interpreter <code>bf.tcl</code>, its TclOO version <code>bf_oo.tcl</code>, and <code>base64</code>. With <code>small.b</code>, each output of ztcl equals the output of tclsh 8.6.16.</p>
         <figure class="chart" style="margin-top:16px">
-          <dl class="bars">
-            <dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100%" title="tclsh 8.6.16: 252.7 s"></span></span><span class="val">252.7 <small>s</small></span></dd>
-            <dt>ztcl interpreter</dt><dd><span class="track"><span class="fill t0" style="width:45.4%" title="ztcl interpreter: 114.7 s"></span></span><span class="val">114.7 <small>s</small></span></dd>
-            <dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:44.4%" title="--jit: 112.2 s"></span></span><span class="val">112.2 <small>s</small></span></dd>
-          </dl>
-          <p class="note">Proc calls and method calls still go through the interpreter, so the JIT gives a small gain here.</p>
+          <p class="how">Instructions of ztcl divided by the instructions of tclsh 8.6.16, with <code>bench.b</code>. Counted with <code>perf stat -e instructions:u</code>, <code>ReleaseFast</code>, x86-64 Linux, 2026-11-24. The counts of tclsh come from an earlier run on the same day. Below 1.00, ztcl uses fewer instructions. JIT is <code>--jit</code>, and JIT tier 2 is <code>--jit --jit-tier2</code>.</p>
+          <div class="ktable"><table>
+            <thead><tr><th></th><th>Interpreter</th><th>JIT</th><th>JIT tier 2</th></tr></thead>
+            <tbody>
+            <tr><th scope="row"><code>bf.tcl</code></th><td>0.36</td><td>0.25</td><td>0.25</td></tr>
+            <tr><th scope="row"><code>bf_oo.tcl</code></th><td>0.46</td><td>0.37</td><td>0.37</td></tr>
+            <tr><th scope="row"><code>base64</code></th><td>0.70</td><td>0.70</td><td>0.70</td></tr>
+            </tbody>
+          </table></div>
+          <p class="how" style="margin-top:20px">Wall time in seconds. The best of 5 runs, each run pinned to one core with <code>taskset</code>. <code>bf.tcl</code> and <code>bf_oo.tcl</code> use <code>small.b</code>: <code>bench.b</code> with one level of the inner loops removed. One run with <code>bench.b</code> lasts minutes. Other jobs shared the machine, so the times are rough: two series of <code>base64</code> differed by up to 40 %, with equal instruction counts.</p>
+          <div class="ktable"><table>
+            <thead><tr><th></th><th>Interpreter</th><th>JIT</th><th>JIT tier 2</th><th>tclsh 8.6.16</th></tr></thead>
+            <tbody>
+            <tr><th scope="row"><code>bf.tcl small.b</code></th><td>0.84</td><td>0.65</td><td>0.65</td><td>2.73</td></tr>
+            <tr><th scope="row"><code>bf_oo.tcl small.b</code></th><td>4.22</td><td>3.40</td><td>3.70</td><td>8.17</td></tr>
+            <tr><th scope="row"><code>base64</code></th><td>4.88</td><td>5.78</td><td>5.81</td><td>5.84</td></tr>
+            </tbody>
+          </table></div>
         </figure>
-        <div class="callout">
-          <p><b>A known gap.</b> The TclOO version of the same benchmark (<code>bf_oo</code>) is still slower than tclsh. It uses 1.33 times the instructions of tclsh 8.6.16. Work on method calls is in progress.</p>
-        </div>
       </div>
     </div>
 
@@ -110,54 +119,54 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
 <dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:41.5%" title="Interpreter: 283.8 million instructions"></span></span><span class="val">283.8</span></dd>
 <dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:13.3%" title="--jit: 90.9 million instructions"></span></span><span class="val">90.9</span></dd>
 <dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:2.2%" title="--jit --jit-tier2: 15.0 million instructions"></span></span><span class="val">15.0</span></dd>
-<dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 684.2 million instructions"></span></span><span class="val">684.2</span></dd>
+<dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 684.3 million instructions"></span></span><span class="val">684.3</span></dd>
 </dl></figure>
 <figure class="chart"><h4>dsum.tcl</h4><dl class="bars">
-<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:57.8%" title="Interpreter: 700.8 million instructions"></span></span><span class="val">700.8</span></dd>
-<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:46.0%" title="--jit: 558.0 million instructions"></span></span><span class="val">558.0</span></dd>
+<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:56.8%" title="Interpreter: 688.8 million instructions"></span></span><span class="val">688.8</span></dd>
+<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:45.9%" title="--jit: 555.9 million instructions"></span></span><span class="val">555.9</span></dd>
 <dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:1.4%" title="--jit --jit-tier2: 16.6 million instructions"></span></span><span class="val">16.6</span></dd>
 <dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 1212.5 million instructions"></span></span><span class="val">1212.5</span></dd>
 </dl></figure>
 <figure class="chart"><h4>nested.tcl</h4><dl class="bars">
-<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:36.1%" title="Interpreter: 337.6 million instructions"></span></span><span class="val">337.6</span></dd>
-<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:13.2%" title="--jit: 123.7 million instructions"></span></span><span class="val">123.7</span></dd>
-<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:5.9%" title="--jit --jit-tier2: 55.5 million instructions"></span></span><span class="val">55.5</span></dd>
-<dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 933.9 million instructions"></span></span><span class="val">933.9</span></dd>
+<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:35.7%" title="Interpreter: 333.4 million instructions"></span></span><span class="val">333.4</span></dd>
+<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:13.2%" title="--jit: 123.5 million instructions"></span></span><span class="val">123.5</span></dd>
+<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:5.9%" title="--jit --jit-tier2: 55.3 million instructions"></span></span><span class="val">55.3</span></dd>
+<dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 934.0 million instructions"></span></span><span class="val">934.0</span></dd>
 </dl></figure>
 <figure class="chart"><h4>foreach.tcl</h4><dl class="bars">
-<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:55.2%" title="Interpreter: 213.8 million instructions"></span></span><span class="val">213.8</span></dd>
+<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:53.4%" title="Interpreter: 206.9 million instructions"></span></span><span class="val">206.9</span></dd>
 <dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:20.8%" title="--jit: 80.4 million instructions"></span></span><span class="val">80.4</span></dd>
 <dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:10.5%" title="--jit --jit-tier2: 40.6 million instructions"></span></span><span class="val">40.6</span></dd>
 <dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 387.1 million instructions"></span></span><span class="val">387.1</span></dd>
 </dl></figure>
 <figure class="chart"><h4>dict.tcl</h4><dl class="bars">
-<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:50.6%" title="Interpreter: 281.0 million instructions"></span></span><span class="val">281.0</span></dd>
+<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:50.6%" title="Interpreter: 280.7 million instructions"></span></span><span class="val">280.7</span></dd>
 <dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:35.1%" title="--jit: 194.9 million instructions"></span></span><span class="val">194.9</span></dd>
 <dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:34.0%" title="--jit --jit-tier2: 188.6 million instructions"></span></span><span class="val">188.6</span></dd>
 <dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 555.3 million instructions"></span></span><span class="val">555.3</span></dd>
 </dl></figure>
 <figure class="chart"><h4>dictgrow.tcl</h4><dl class="bars">
-<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:78.2%" title="Interpreter: 645.6 million instructions"></span></span><span class="val">645.6</span></dd>
-<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:69.3%" title="--jit: 572.4 million instructions"></span></span><span class="val">572.4</span></dd>
-<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:69.1%" title="--jit --jit-tier2: 570.4 million instructions"></span></span><span class="val">570.4</span></dd>
+<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:78.5%" title="Interpreter: 647.7 million instructions"></span></span><span class="val">647.7</span></dd>
+<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:71.5%" title="--jit: 590.3 million instructions"></span></span><span class="val">590.3</span></dd>
+<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:71.3%" title="--jit --jit-tier2: 588.3 million instructions"></span></span><span class="val">588.3</span></dd>
 <dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 825.5 million instructions"></span></span><span class="val">825.5</span></dd>
 </dl></figure>
 <figure class="chart"><h4>readloop.tcl</h4><dl class="bars">
-<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:69.1%" title="Interpreter: 208.9 million instructions"></span></span><span class="val">208.9</span></dd>
-<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:51.2%" title="--jit: 154.7 million instructions"></span></span><span class="val">154.7</span></dd>
-<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:48.6%" title="--jit --jit-tier2: 146.9 million instructions"></span></span><span class="val">146.9</span></dd>
+<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:48.1%" title="Interpreter: 145.3 million instructions"></span></span><span class="val">145.3</span></dd>
+<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:30.9%" title="--jit: 93.3 million instructions"></span></span><span class="val">93.3</span></dd>
+<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:28.2%" title="--jit --jit-tier2: 85.3 million instructions"></span></span><span class="val">85.3</span></dd>
 <dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 302.3 million instructions"></span></span><span class="val">302.3</span></dd>
 </dl></figure>
 <figure class="chart"><h4>strbuild.tcl</h4><dl class="bars">
-<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:39.9%" title="Interpreter: 324.0 million instructions"></span></span><span class="val">324.0</span></dd>
-<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:31.1%" title="--jit: 252.6 million instructions"></span></span><span class="val">252.6</span></dd>
-<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:29.9%" title="--jit --jit-tier2: 243.2 million instructions"></span></span><span class="val">243.2</span></dd>
+<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:39.7%" title="Interpreter: 322.9 million instructions"></span></span><span class="val">322.9</span></dd>
+<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:31.1%" title="--jit: 252.5 million instructions"></span></span><span class="val">252.5</span></dd>
+<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:29.9%" title="--jit --jit-tier2: 243.1 million instructions"></span></span><span class="val">243.1</span></dd>
 <dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 812.4 million instructions"></span></span><span class="val">812.4</span></dd>
 </dl></figure>
 <figure class="chart"><h4>fib.tcl</h4><dl class="bars">
-<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:27.6%" title="Interpreter: 165.8 million instructions"></span></span><span class="val">165.8</span></dd>
-<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:22.9%" title="--jit: 137.4 million instructions"></span></span><span class="val">137.4</span></dd>
-<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:22.9%" title="--jit --jit-tier2: 137.4 million instructions"></span></span><span class="val">137.4</span></dd>
+<dt>Interpreter</dt><dd><span class="track"><span class="fill t0" style="width:25.1%" title="Interpreter: 151.0 million instructions"></span></span><span class="val">151.0</span></dd>
+<dt><code>--jit</code></dt><dd><span class="track"><span class="fill t1" style="width:17.6%" title="--jit: 106.0 million instructions"></span></span><span class="val">106.0</span></dd>
+<dt><code>--jit --jit-tier2</code></dt><dd><span class="track"><span class="fill" style="width:17.6%" title="--jit --jit-tier2: 106.0 million instructions"></span></span><span class="val">106.0</span></dd>
 <dt>tclsh 8.6.16</dt><dd><span class="track"><span class="fill base" style="width:100.0%" title="tclsh 8.6.16: 600.9 million instructions"></span></span><span class="val">600.9</span></dd>
 </dl></figure>
     </div>
@@ -339,7 +348,7 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
       <li><span class="st ok">Works</span><span>The interpreter, point procs, and the WebAssembly build.</span></li>
       <li><span class="st wip">Experimental</span><span>The JIT on x86-64 Linux. It is off by default. Turn it on with <code>--jit</code> and <code>--jit-tier2</code>.</span></li>
       <li><span class="st wip">In progress</span><span>The JIT on arm64 macOS.</span></li>
-      <li><span class="st wip">In progress</span><span>The speed of TclOO method calls. <code>bf_oo</code> uses 1.33 times the instructions of tclsh 8.6.16.</span></li>
+      <li><span class="st ok">Works</span><span>TclOO method calls have call caches. With <code>--jit</code>, <code>bf_oo</code> uses 0.37 of the instructions of tclsh 8.6.16, and 0.46 with the interpreter only.</span></li>
       <li><span class="st no">Open bug</span><span><a href="https://github.com/beetlebugorg/ztcl/issues/6">A step limit cost bug (#6)</a>: a recheck after an epoch change costs O(n²) CPU time.</span></li>
       <li><span class="st plan">Note</span><span>The code and the docs were written largely with AI coding agents, under human direction. Review the code before you depend on it.</span></li>
     </ul>

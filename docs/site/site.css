@@ -176,6 +176,18 @@ img, svg { max-width: 100%; }
 .legend i.t1 { background: color-mix(in srgb, var(--accent) 70%, var(--bg)); }
 .legend i.t0 { background: color-mix(in srgb, var(--accent) 42%, var(--bg)); }
 
+.ktable { overflow-x: auto; }
+.ktable table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.ktable th, .ktable td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: bottom; }
+.ktable td { white-space: nowrap; }
+.ktable tbody th, .ktable tbody td { vertical-align: middle; }
+.chart .how code { white-space: nowrap; }
+@media (max-width: 480px) { .ktable th, .ktable td { padding: 6px 4px; } .ktable td { font-size: 13px; } }
+.ktable td { font: 600 14px var(--mono); }
+.ktable thead th { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.ktable th[scope=row], .ktable thead th:first-child { text-align: left; font-weight: 400; color: var(--text-2); padding-left: 0; }
+.ktable tbody tr:last-child td, .ktable tbody tr:last-child th { border-bottom: 0; }
+
 .callout { border: 1px solid var(--line); border-left: 4px solid var(--warn); background: var(--warn-soft); border-radius: 0 12px 12px 0; padding: 16px 20px; margin: 24px 0 0; }
 .callout p { margin: 0; }
 .checks { list-style: none; padding: 0; margin: 0; }
