@@ -22,6 +22,7 @@ pub const noise = @import("noise.zig");
 pub const point = @import("point.zig");
 /// The writer of WebAssembly modules, for `ztcl compile`.
 pub const wasm_out = @import("wasm_out.zig");
+pub const wasm_link = @import("wasm_link.zig");
 pub const compact = @import("compact.zig");
 pub const heap = @import("heap.zig");
 pub const gc = @import("gc.zig");
@@ -63,6 +64,7 @@ test {
     _ = noise;
     _ = point;
     _ = wasm_out;
+    _ = wasm_link;
     _ = compact;
     _ = heap;
     _ = @import("tests.zig");

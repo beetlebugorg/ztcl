@@ -102,11 +102,11 @@ pub fn bound(pts: *const Points) void {
     }
     if (pts.out[@intFromEnum(Out.offset)]) |o| for (o, 0..) |*v, i| {
         const w = @abs(if (widths) |col| col[i] else lim.fallback_width) * lim.max_offset;
-        v.* = @max(-w, @min(w, v.*));
+        v.* = expr.maxF(-w, expr.minF(w, v.*));
     };
     if (pts.out[@intFromEnum(Out.width)]) |o| for (o, 0..) |*v, i| {
         const w = @abs(if (widths) |col| col[i] else lim.fallback_width);
-        v.* = @max(w * lim.min_width, @min(w * lim.max_width, v.*));
+        v.* = expr.maxF(w * lim.min_width, expr.minF(w * lim.max_width, v.*));
     };
     const mx = pts.out[@intFromEnum(Out.move_x)] orelse return;
     const my = pts.out[@intFromEnum(Out.move_y)] orelse return;
@@ -266,7 +266,7 @@ fn exec(op: Op, pts: *const Points, scratch: [*][*]f64, direct: bool, start: usi
             o.* = if (m != 0) x else y;
         },
         .clamp => for (d, reg(scratch, op.a, n), reg(scratch, op.b, n), reg(scratch, op.c, n)) |*o, x, lo, hi| {
-            o.* = @min(@max(x, lo), hi);
+            o.* = clamp(x, lo, hi);
         },
         .lerp => for (d, reg(scratch, op.a, n), reg(scratch, op.b, n), reg(scratch, op.c, n)) |*o, x, y, t| {
             o.* = x + (y - x) * t;
@@ -373,7 +373,13 @@ fn exec(op: Op, pts: *const Points, scratch: [*][*]f64, direct: bool, start: usi
     }
 }
 
-fn scalar1(f: expr.Func, x: f64) f64 {
+/// The runtime of a compiled point proc (`point_rt.zig`) calls
+/// `scalar1`, `scalar2`, and `clamp`.
+pub inline fn clamp(x: f64, lo: f64, hi: f64) f64 {
+    return expr.clamp(x, lo, hi);
+}
+
+pub fn scalar1(f: expr.Func, x: f64) f64 {
     return switch (f) {
         .acos => std.math.acos(x),
         .asin => std.math.asin(x),
@@ -391,7 +397,7 @@ fn scalar1(f: expr.Func, x: f64) f64 {
     };
 }
 
-fn scalar2(seed: u32, f: expr.Func, x: f64, y: f64) f64 {
+pub fn scalar2(seed: u32, f: expr.Func, x: f64, y: f64) f64 {
     return switch (f) {
         .atan2 => std.math.atan2(x, y),
         .fmod => @rem(x, y),

@@ -12,6 +12,12 @@
 
 The user answers the questions below before task 01 merges.
 
+## State
+
+- Task 01: merged in PR #79.
+- Task 02: PR #81. The user chose choice 1 (decision 7 of the plan), and the gate passes.
+- Tasks 03 to 07: not started.
+
 ## Platforms
 
 | Mark | Where the task runs |
@@ -40,7 +46,7 @@ The user answers the questions below before task 01 merges.
    CAP tools/point-wasm-diff.sh             # from task 03 on
    ```
 
-5. Do not change the behavior of `point.compile`, `Program.run`, or `point.runSlow`. A task may add a pure function to `src/point.zig`, as named in the task.
+5. Do not change the behavior of `point.compile`, `Program.run`, or `point.runSlow`. A task may add a pure function to `src/point.zig`, as named in the task. Decision 7 of [the plan](../wasm-compile.md#decisions) is the one exception: task 02 fixes the result of `clamp` and the limits for zeros and NaN.
 6. A module has no import, and no code path in it reaches the host.
 7. Each new source file starts with a `//!` comment that explains its algorithm, and an SPDX line for BSD-2-Clause.
 8. Use only the Zig 0.16.0 standard library. Node.js, `wasm-tools`, and `wasmtime` are test tools.
