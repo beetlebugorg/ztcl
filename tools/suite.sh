@@ -64,8 +64,9 @@ for f in "$@"; do
     # `exec` runs only for the test files, in the root folder, with a
     # program list, a time limit, and an environment with no data of
     # the caller. `ztclsh` is the `tclsh` of the tests: this runner.
-    progs=cat,echo,sh,/bin/sh,sleep,ls,grep,fgrep,wc,id,groups,whoami,ps,kill,mknod,true,false,/ztclsh
-    set_exec="--exec-timeout 120000 --exec-env PATH=/usr/bin:/bin --exec-env HOME=$root --exec-env LANG=C --exec-allow $progs --exe-name /ztclsh"
+    # `/ztclsh` is a file below the root, so it goes in its own list.
+    progs=cat,echo,sh,/bin/sh,sleep,ls,grep,fgrep,wc,id,groups,whoami,ps,kill,mknod,true,false
+    set_exec="--exec-timeout 120000 --exec-env PATH=/usr/bin:/bin --exec-env HOME=$root --exec-env LANG=C --exec-allow $progs --exec-allow-root /ztclsh --exe-name /ztclsh"
     cat > "$root/ztclsh" <<EOF
 #!/bin/sh
 exec "$tcl" $gc --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --cwd "\$PWD" --tclsh "\$@"

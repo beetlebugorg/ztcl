@@ -13,15 +13,29 @@
 //! the pipeline in the background.
 //!
 //! The embedder sets `Interp.exec_host`:
-//! - `allow` is a list of programs. With a list, each other program is
-//!   an error before any process starts.
+//! - `allow` is a list of host programs. With a list, each other
+//!   program is an error before any process starts.
+//! - `allow_root` is a list of files below the root folder that a
+//!   script can run.
 //! - `timeout_ms` is the longest run time of a pipeline. At the end of
-//!   that time the process group gets SIGKILL.
+//!   that time each process of the pipeline tree gets SIGKILL.
 //! - `env` is the whole environment of each program.
 //!
-//! Each pipeline is one process group. `abandonAll` sends SIGKILL to
-//! each group that still runs when the interpreter ends, so no process
-//! stays behind.
+//! `resolve` changes the first word of each program to one full host
+//! path before any process starts. A bare name goes through the `PATH`
+//! of `env`, and each entry of that `PATH` must be a full path. Each
+//! symlink, `.`, and `..` of the path is resolved. The allowlist check
+//! compares that path, and the child runs only that path. A file below
+//! the root folder runs only when `allow_root` names it.
+//!
+//! Each pipeline is one process tree. On Linux the tree is a cgroup
+//! below the cgroup of the embedder when the embedder can make one.
+//! Each child joins it before `execve`, so each descendant is in it,
+//! also after `setsid` or a double fork. The kill writes `cgroup.kill`.
+//! With no cgroup, the kill stops the process group and each process
+//! that a scan of /proc finds below the pipeline, and then kills them.
+//! `abandonAll` kills each tree that still runs when the interpreter
+//! ends.
 //!
 //! The error output and the text of `<<` use an anonymous memory file,
 //! so the parent waits on one descriptor only.
@@ -40,10 +54,21 @@ const Cmd = interp.Cmd;
 const Error = interp.Error;
 const linux = std.os.linux;
 
+pub const supported = @import("builtin").os.tag == .linux;
+
 pub const Host = struct {
-    /// The programs that a script can run, as the word of the script
-    /// or as a full path. Null allows each program.
+    /// The host programs that a script can run. An entry with no `/` is
+    /// a bare name: the word of the script must be that name, and the
+    /// program is the first match in the `PATH` of `env`. An entry with
+    /// a `/` is a full host path. It matches each word that resolves to
+    /// the same file. Null allows each host program. No entry matches a
+    /// file below the root folder.
     allow: ?[]const []const u8 = null,
+    /// The files below the root folder that a script can run, as full
+    /// paths of the script, for example `/tool`. A script with `file`
+    /// can write these files, so each entry lets the script run its own
+    /// code.
+    allow_root: []const []const u8 = &.{},
     /// The longest run time of a pipeline in milliseconds. 0 is no limit.
     timeout_ms: u32 = 0,
     /// The environment of each program: `NAME=value` strings.
@@ -51,11 +76,11 @@ pub const Host = struct {
 };
 
 pub const State = struct {
-    /// The process groups of the background pipelines.
+    /// The trees of the pipelines that can still have a process.
     groups: std.ArrayList(Group) = .empty,
 };
 
-const Group = struct { pgid: i32, pids: []const i32, start: i64 };
+const Group = struct { tree: Tree, pids: []const i32, start: i64 };
 
 fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
@@ -243,50 +268,177 @@ fn parse(it: *Interp, words: []const []const u8, plan: *Plan) Error!void {
     try plan.cmds.append(a, cur);
 }
 
-/// The paths to try for a program word.
-fn candidates(it: *Interp, word: []const u8) Error![]const [:0]const u8 {
-    const a = it.alloc();
-    var out: std.ArrayList([:0]const u8) = .empty;
-    if (std.mem.indexOfScalar(u8, word, '/') != null) {
-        // A path names a file below the root first, as each path of a
-        // script does. The host path is the second choice.
-        if (it.fs_ok() and it.fs.path.len > 0) {
-            if (try fsroot.normal(it, word)) |rel| try out.append(a, try std.fmt.allocPrintSentinel(a, "{s}/{s}", .{ it.fs.path, rel }, 0));
+const statx_mask = linux.STATX.BASIC_STATS;
+const max_links = 40;
+
+fn hostStat(path: [:0]const u8, st: *linux.Statx) linux.E {
+    return linux.errno(linux.statx(linux.AT.FDCWD, path, linux.AT.SYMLINK_NOFOLLOW, statx_mask, st));
+}
+
+/// The host path with each symlink, `.`, and `..` resolved, or the
+/// error of the first part that does not resolve. `path` is a full
+/// path.
+fn canonical(a: std.mem.Allocator, path: []const u8) Error!union(enum) { ok: [:0]const u8, err: linux.E } {
+    var out: std.ArrayList(u8) = .empty;
+    var rest: []const u8 = path;
+    var links: usize = 0;
+    var buf: [4096]u8 = undefined;
+    while (true) {
+        rest = std.mem.trimStart(u8, rest, "/");
+        if (rest.len == 0) break;
+        const end = std.mem.indexOfScalar(u8, rest, '/') orelse rest.len;
+        const name = rest[0..end];
+        rest = rest[end..];
+        if (eql(name, ".")) continue;
+        if (eql(name, "..")) {
+            // Each part of `out` is a folder with no symlink, so `..`
+            // removes the last part.
+            out.shrinkRetainingCapacity(std.mem.lastIndexOfScalar(u8, out.items, '/') orelse 0);
+            continue;
         }
-        if (word[0] == '/') try out.append(a, try a.dupeZ(u8, word));
-        return out.items;
+        const mark = out.items.len;
+        try out.append(a, '/');
+        try out.appendSlice(a, name);
+        const z = try a.dupeZ(u8, out.items);
+        var st: linux.Statx = undefined;
+        const e = hostStat(z, &st);
+        if (e != .SUCCESS) return .{ .err = e };
+        if (st.mode & 0o170000 != 0o120000) continue;
+        links += 1;
+        if (links > max_links) return .{ .err = .LOOP };
+        const n = linux.readlinkat(linux.AT.FDCWD, z, &buf, buf.len);
+        if (linux.errno(n) != .SUCCESS) return .{ .err = linux.errno(n) };
+        if (n >= buf.len) return .{ .err = .NAMETOOLONG };
+        const target = buf[0..n];
+        out.shrinkRetainingCapacity(if (target.len > 0 and target[0] == '/') 0 else mark);
+        rest = try std.mem.concat(a, u8, &.{ target, "/", rest });
+    }
+    if (out.items.len == 0) try out.append(a, '/');
+    return .{ .ok = try a.dupeZ(u8, out.items) };
+}
+
+fn sameFile(x: linux.Statx, y: linux.Statx) bool {
+    return x.ino == y.ino and x.dev_major == y.dev_major and x.dev_minor == y.dev_minor;
+}
+
+/// True when a canonical host path is the root folder or a path below
+/// it. The check compares the device and inode of each folder of the
+/// path with the root, so a bind mount of the root also counts. An
+/// error counts as below the root.
+fn belowRoot(it: *Interp, path: []const u8) Error!bool {
+    if (it.fs.fd < 0) return false;
+    var root: linux.Statx = undefined;
+    if (linux.errno(linux.statx(it.fs.fd, "", 0x1000, statx_mask, &root)) != .SUCCESS) return true;
+    var k: usize = 0;
+    while (k <= path.len) : (k += 1) {
+        if (k < path.len and path[k] != '/') continue;
+        const z = try it.alloc().dupeZ(u8, if (k == 0) "/" else path[0..k]);
+        var st: linux.Statx = undefined;
+        if (hostStat(z, &st) != .SUCCESS) return true;
+        if (sameFile(st, root)) return true;
+    }
+    return false;
+}
+
+fn denied(it: *Interp, word: []const u8, why: []const u8) Error {
+    return it.failCode("ZTCL EXEC DENIED", "couldn't execute \"{s}\": {s}", .{ word, why });
+}
+
+fn cannotRun(it: *Interp, word: []const u8, e: linux.E) Error {
+    return posix(it, e, try std.fmt.allocPrint(it.alloc(), "couldn't execute \"{s}\": ", .{word}));
+}
+
+/// The full host path of the root folder. It must still name the
+/// folder of the root descriptor.
+fn rootPath(it: *Interp, word: []const u8) Error![:0]const u8 {
+    const a = it.alloc();
+    var full: []const u8 = it.fs.path;
+    if (full.len == 0 or full[0] != '/') {
+        var buf: [4096]u8 = undefined;
+        const n = linux.getcwd(&buf, buf.len);
+        if (linux.errno(n) != .SUCCESS) return cannotRun(it, word, linux.errno(n));
+        const cwd = std.mem.sliceTo(&buf, 0);
+        full = try std.fmt.allocPrint(a, "{s}/{s}", .{ cwd, full });
+    }
+    const p = switch (try canonical(a, full)) {
+        .ok => |x| x,
+        .err => |e| return cannotRun(it, word, e),
+    };
+    var root: linux.Statx = undefined;
+    var st: linux.Statx = undefined;
+    if (linux.errno(linux.statx(it.fs.fd, "", 0x1000, statx_mask, &root)) != .SUCCESS or
+        hostStat(p, &st) != .SUCCESS or !sameFile(st, root))
+        return denied(it, word, "the host path of the root folder changed");
+    return p;
+}
+
+/// The host path of a file below the root folder that `allow_root`
+/// names, or null.
+fn rootProgram(it: *Interp, word: []const u8) Error!?[:0]const u8 {
+    if (it.exec_host.allow_root.len == 0 or it.fs.fd < 0) return null;
+    const rel = (try fsroot.normal(it, word)) orelse return null;
+    for (it.exec_host.allow_root) |entry| {
+        if (entry.len == 0 or entry[0] != '/') continue;
+        const want = (try fsroot.normal(it, entry)) orelse continue;
+        if (want.len == 0 or !eql(rel, want)) continue;
+        return try std.fmt.allocPrintSentinel(it.alloc(), "{s}/{s}", .{ try rootPath(it, word), rel }, 0);
+    }
+    return null;
+}
+
+/// Checks a resolved host program against the root folder and the
+/// allowlist.
+fn checked(it: *Interp, word: []const u8, path: [:0]const u8) Error![:0]const u8 {
+    if (try belowRoot(it, path)) return denied(it, word, "the program is in the root folder");
+    const list = it.exec_host.allow orelse return path;
+    for (list) |ok| {
+        if (std.mem.indexOfScalar(u8, ok, '/') == null) {
+            if (eql(ok, word)) return path;
+            continue;
+        }
+        if (ok[0] != '/') continue;
+        switch (try canonical(it.alloc(), ok)) {
+            .ok => |p| if (eql(p, path)) return path,
+            .err => {},
+        }
+    }
+    return denied(it, word, "the embedder does not allow this program");
+}
+
+/// The one full host path that a program word runs. A word with a `/`
+/// is a host path, or a file of `allow_root`. A bare name goes through
+/// the `PATH` of the embedder.
+fn resolve(it: *Interp, word: []const u8) Error![:0]const u8 {
+    const a = it.alloc();
+    if (std.mem.indexOfScalar(u8, word, '/') != null) {
+        if (try rootProgram(it, word)) |p| return p;
+        if (word[0] != '/') return denied(it, word, "a program path must be a full path or a bare name");
+        return switch (try canonical(a, word)) {
+            .ok => |p| checked(it, word, p),
+            .err => |e| cannotRun(it, word, e),
+        };
     }
     var path: []const u8 = "/usr/bin:/bin";
     for (it.exec_host.env) |e| {
         if (std.mem.startsWith(u8, e, "PATH=")) path = e[5..];
     }
-    var iter = std.mem.tokenizeScalar(u8, path, ':');
-    while (iter.next()) |dir| try out.append(a, try std.fmt.allocPrintSentinel(a, "{s}/{s}", .{ dir, word }, 0));
-    return out.items;
-}
-
-fn runnable(p: [:0]const u8) bool {
-    return linux.errno(linux.access(p.ptr, 1)) == .SUCCESS;
-}
-
-/// True when the embedder allows the program. An entry of the list is
-/// the word of the script, or the full path that the word gives.
-fn allowed(it: *Interp, word: []const u8, paths: []const [:0]const u8) bool {
-    const list = it.exec_host.allow orelse return true;
-    var found: ?[]const u8 = null;
-    for (paths) |p| {
-        if (runnable(p)) {
-            found = p;
-            break;
-        }
+    var iter = std.mem.splitScalar(u8, path, ':');
+    while (iter.next()) |dir| {
+        // An empty or relative entry depends on the working folder.
+        if (dir.len == 0 or dir[0] != '/') return it.failCode("ZTCL EXEC PATH", "couldn't execute \"{s}\": the PATH entry \"{s}\" is not a full path", .{ word, dir });
     }
-    // A word with no file to run gives the error of the system.
-    if (found == null) return true;
-    for (list) |ok| {
-        if (eql(ok, word)) return true;
-        if (found) |p| if (eql(ok, p)) return true;
+    iter.reset();
+    while (iter.next()) |dir| {
+        const p = switch (try canonical(a, try std.fmt.allocPrint(a, "{s}/{s}", .{ dir, word }))) {
+            .ok => |x| x,
+            .err => continue,
+        };
+        var st: linux.Statx = undefined;
+        if (hostStat(p, &st) != .SUCCESS or st.mode & 0o170000 != 0o100000) continue;
+        if (linux.errno(linux.access(p.ptr, 1)) != .SUCCESS) continue;
+        return checked(it, word, p);
     }
-    return false;
+    return cannotRun(it, word, .NOENT);
 }
 
 const Started = struct {
@@ -298,6 +450,7 @@ const Started = struct {
     /// The memory file of the error output, or -1.
     err: i32 = -1,
     start: i64,
+    tree: Tree = .{},
     /// True when the time limit ended the pipeline.
     timed_out: bool = false,
 };
@@ -315,13 +468,12 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
     const a = it.alloc();
     const count = plan.cmds.items.len;
     // The checks and the paths come before the first process.
-    const paths = try a.alloc([]const [:0]const u8, count);
+    const progs = try a.alloc([:0]const u8, count);
     const argvs = try a.alloc([:null]?[*:0]const u8, count);
     for (plan.cmds.items, 0..) |c, k| {
         const word = c.words.items[0];
         try noTilde(it, word);
-        paths[k] = try candidates(it, word);
-        if (!allowed(it, word, paths[k])) return it.failCode("ZTCL EXEC DENIED", "couldn't execute \"{s}\": the embedder does not allow this program", .{word});
+        progs[k] = try resolve(it, word);
         const av = try a.allocSentinel(?[*:0]const u8, c.words.items.len, null);
         for (c.words.items, 0..) |w, j| av[j] = (try a.dupeZ(u8, w)).ptr;
         argvs[k] = av;
@@ -374,8 +526,10 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
             err_fd = st.err;
         },
     }
-    // A pipe that reports a failed start of a program.
+    // A pipe that reports a failed start of a program: the index of
+    // the program and the error.
     const report = try pipe(it);
+    st.tree = treeOpen();
     var prev_read: i32 = -1;
     var failure: ?Error = null;
     var pgid: i32 = 0;
@@ -400,7 +554,16 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
             break;
         }
         if (rc == 0) {
-            // The child. It uses only system calls from here.
+            // The child. It uses only system calls from here. It joins
+            // the cgroup first, so each process that it starts is in it.
+            if (st.tree.procs >= 0) {
+                const e = linux.errno(linux.write(st.tree.procs, "0", 1));
+                if (e != .SUCCESS) {
+                    const msg = [2]u32{ @intCast(k), @intFromEnum(e) };
+                    _ = linux.write(report[1], std.mem.asBytes(&msg), 8);
+                    linux.exit(127);
+                }
+            }
             _ = linux.setpgid(0, pgid);
             // Copy the three descriptors above 2 first, so that one
             // `dup2` cannot overwrite the source of the next.
@@ -411,17 +574,16 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
             _ = linux.dup2(out0, 1);
             _ = linux.dup2(err0, 2);
             if (cwd_fd >= 0) _ = linux.fchdir(cwd_fd);
-            var last: linux.E = .NOENT;
-            for (paths[k]) |p| {
-                const e = linux.errno(linux.execve(p.ptr, argvs[k].ptr, envp.ptr));
-                if (e != .NOENT and e != .NOTDIR) last = e;
-            }
-            const code: u32 = @intFromEnum(last);
-            _ = linux.write(report[1], std.mem.asBytes(&code), 4);
+            const e = linux.errno(linux.execve(progs[k].ptr, argvs[k].ptr, envp.ptr));
+            const msg = [2]u32{ @intCast(k), @intFromEnum(e) };
+            _ = linux.write(report[1], std.mem.asBytes(&msg), 8);
             linux.exit(127);
         }
         const pid: i32 = @intCast(rc);
-        if (pgid == 0) pgid = pid;
+        if (pgid == 0) {
+            pgid = pid;
+            st.tree.pgid = pid;
+        }
         _ = linux.setpgid(pid, pgid);
         st.pids[made] = pid;
         made += 1;
@@ -438,13 +600,14 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
     closePlan(plan);
     st.pids = st.pids[0..made];
     sys.close(report[1]);
-    // The report pipe closes at each successful exec.
-    var code: u32 = 0;
-    var got = false;
+    // The report pipe closes at each successful exec. The message
+    // names the first program that did not start.
+    var msg = [2]u32{ 0, 0 };
+    var got: ?[2]u32 = null;
     while (true) {
-        switch (sys.read(report[0], std.mem.asBytes(&code))) {
-            .n => |n| if (n == 4) {
-                got = true;
+        switch (sys.read(report[0], std.mem.asBytes(&msg))) {
+            .n => |n| if (n == 8) {
+                if (got == null or msg[0] < got.?[0]) got = msg;
                 continue;
             },
             else => {},
@@ -452,26 +615,15 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
         break;
     }
     sys.close(report[0]);
-    if (failure == null and got) {
-        // The message names the first program with no file to run.
-        var word = plan.cmds.items[0].words.items[0];
-        for (plan.cmds.items, 0..) |c, k| {
-            var found = false;
-            for (paths[k]) |p| {
-                if (runnable(p)) found = true;
-            }
-            if (!found) {
-                word = c.words.items[0];
-                break;
-            }
-        }
-        failure = posix(it, @enumFromInt(code), try std.fmt.allocPrint(a, "couldn't execute \"{s}\": ", .{word}));
-    }
+    if (failure == null) if (got) |g| {
+        failure = cannotRun(it, plan.cmds.items[@min(g[0], count - 1)].words.items[0], @enumFromInt(g[1]));
+    };
     if (failure) |e| {
         const saved = it.result;
         const saved_code = it.error_code;
-        killGroup(pgid);
+        treeKill(&st.tree, st.pids);
         for (st.pids) |p| _ = waitPid(p, true);
+        treeClose(&st.tree);
         if (st.out >= 0) sys.close(st.out);
         if (st.in >= 0) sys.close(st.in);
         if (st.err >= 0) sys.close(st.err);
@@ -484,6 +636,215 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
 
 fn killGroup(pgid: i32) void {
     if (pgid > 0) _ = linux.kill(-pgid, linux.SIG.KILL);
+}
+
+/// The process tree of one pipeline. With a cgroup, `dir` is its
+/// folder. With no cgroup, the kill uses the process group and a scan
+/// of /proc.
+pub const Tree = struct {
+    /// The folder of the cgroup, or -1.
+    dir: i32 = -1,
+    /// The folder that has `dir`, for the removal.
+    parent: i32 = -1,
+    /// `cgroup.procs` of the cgroup, for each child to join, or -1.
+    procs: i32 = -1,
+    name: [40:0]u8 = undefined,
+    /// The process group of the pipeline.
+    pgid: i32 = 0,
+};
+
+/// True turns off the cgroup, so a test can check the kill with no
+/// cgroup.
+pub var test_no_cgroup = false;
+var tree_count = std.atomic.Value(u32).init(0);
+
+fn sleepMs(ms: i32) void {
+    _ = linux.poll(@ptrFromInt(8), 0, ms);
+}
+
+/// Reads a small file into `buf`. Gives the text, or null.
+fn readSmall(dir: i32, name: [*:0]const u8, buf: []u8) ?[]const u8 {
+    const rc = linux.openat(dir, name, .{ .CLOEXEC = true }, 0);
+    if (linux.errno(rc) != .SUCCESS) return null;
+    const fd: i32 = @intCast(rc);
+    defer sys.close(fd);
+    var at: usize = 0;
+    while (at < buf.len) {
+        switch (sys.read(fd, buf[at..])) {
+            .n => |n| if (n > 0) {
+                at += n;
+                continue;
+            },
+            else => {},
+        }
+        break;
+    }
+    return buf[0..at];
+}
+
+fn writeAt(dir: i32, name: [*:0]const u8, text: []const u8) bool {
+    const rc = linux.openat(dir, name, .{ .ACCMODE = .WRONLY, .CLOEXEC = true }, 0);
+    if (linux.errno(rc) != .SUCCESS) return false;
+    const fd: i32 = @intCast(rc);
+    defer sys.close(fd);
+    return linux.errno(linux.write(fd, text.ptr, text.len)) == .SUCCESS;
+}
+
+/// Makes a cgroup for a new pipeline below the cgroup of this process.
+/// Gives a tree with no cgroup when the process cannot make one.
+fn treeOpen() Tree {
+    var t: Tree = .{};
+    if (test_no_cgroup) return t;
+    var buf: [4096]u8 = undefined;
+    const text = readSmall(linux.AT.FDCWD, "/proc/self/cgroup", &buf) orelse return t;
+    var lines = std.mem.tokenizeScalar(u8, text, '\n');
+    const own = while (lines.next()) |l| {
+        if (std.mem.startsWith(u8, l, "0::/")) break l[3..];
+    } else return t;
+    var pbuf: [4200:0]u8 = undefined;
+    const full = std.fmt.bufPrintZ(&pbuf, "/sys/fs/cgroup{s}", .{own}) catch return t;
+    const prc = linux.openat(linux.AT.FDCWD, full, .{ .DIRECTORY = true, .CLOEXEC = true }, 0);
+    if (linux.errno(prc) != .SUCCESS) return t;
+    const parent: i32 = @intCast(prc);
+    _ = std.fmt.bufPrintZ(&t.name, "ztcl-{d}-{d}", .{ linux.getpid(), tree_count.fetchAdd(1, .monotonic) }) catch unreachable;
+    if (linux.errno(linux.mkdirat(parent, &t.name, 0o755)) != .SUCCESS) {
+        sys.close(parent);
+        return t;
+    }
+    const drc = linux.openat(parent, &t.name, .{ .DIRECTORY = true, .CLOEXEC = true }, 0);
+    const jrc = if (linux.errno(drc) == .SUCCESS) linux.openat(@intCast(drc), "cgroup.procs", .{ .ACCMODE = .WRONLY, .CLOEXEC = true }, 0) else drc;
+    if (linux.errno(drc) != .SUCCESS or linux.errno(jrc) != .SUCCESS) {
+        if (linux.errno(drc) == .SUCCESS) sys.close(@intCast(drc));
+        _ = linux.unlinkat(parent, &t.name, linux.AT.REMOVEDIR);
+        sys.close(parent);
+        return t;
+    }
+    t.parent = parent;
+    t.dir = @intCast(drc);
+    t.procs = @intCast(jrc);
+    return t;
+}
+
+/// True when this process can make a cgroup for a pipeline.
+pub fn treeAvailable() bool {
+    var t = treeOpen();
+    const ok = t.dir >= 0;
+    treeClose(&t);
+    return ok;
+}
+
+/// True while a process of the cgroup runs. A tree with no cgroup
+/// gives false.
+fn treeLive(t: *const Tree) bool {
+    if (t.dir < 0) return false;
+    var buf: [256]u8 = undefined;
+    const text = readSmall(t.dir, "cgroup.events", &buf) orelse return false;
+    return std.mem.indexOf(u8, text, "populated 1") != null;
+}
+
+/// Kills each process of the tree. `pids` are the programs of the
+/// pipeline.
+fn treeKill(t: *const Tree, pids: []const i32) void {
+    if (t.dir >= 0) {
+        if (!writeAt(t.dir, "cgroup.kill", "1")) {
+            // A kernel before 5.14 has no `cgroup.kill`. The freeze
+            // stops each fork, and the loop kills each listed process.
+            _ = writeAt(t.dir, "cgroup.freeze", "1");
+            var round: usize = 0;
+            while (round < 1000) : (round += 1) {
+                var buf: [4096]u8 = undefined;
+                const text = readSmall(t.dir, "cgroup.procs", &buf) orelse break;
+                var any = false;
+                var iter = std.mem.tokenizeScalar(u8, text, '\n');
+                while (iter.next()) |w| {
+                    const pid = std.fmt.parseInt(i32, w, 10) catch continue;
+                    _ = linux.kill(pid, linux.SIG.KILL);
+                    any = true;
+                }
+                if (!any) break;
+            }
+            _ = writeAt(t.dir, "cgroup.freeze", "0");
+        }
+    }
+    if (t.dir < 0) killScan(t.pgid, pids);
+    killGroup(t.pgid);
+}
+
+/// The kill with no cgroup. SIGSTOP stops the group, each program, and
+/// each process below them that a scan of /proc finds, until a scan
+/// finds no new process. Then each one gets SIGKILL. A process whose
+/// parent ended before the scan is no longer below the pipeline, so
+/// this kill does not find it.
+fn killScan(pgid: i32, pids: []const i32) void {
+    const pa = std.heap.page_allocator;
+    var found: std.ArrayList(i32) = .empty;
+    defer found.deinit(pa);
+    found.appendSlice(pa, pids) catch {};
+    if (pgid > 0) _ = linux.kill(-pgid, linux.SIG.STOP);
+    for (pids) |p| _ = linux.kill(p, linux.SIG.STOP);
+    var round: usize = 0;
+    while (round < 64) : (round += 1) {
+        const before = found.items.len;
+        scanChildren(pa, &found);
+        if (found.items.len == before) break;
+    }
+    for (found.items) |p| _ = linux.kill(p, linux.SIG.KILL);
+}
+
+/// Adds each process of /proc whose parent is in `found`, and stops it.
+fn scanChildren(pa: std.mem.Allocator, found: *std.ArrayList(i32)) void {
+    const rc = linux.open("/proc", .{ .DIRECTORY = true, .CLOEXEC = true }, 0);
+    if (linux.errno(rc) != .SUCCESS) return;
+    const fd: i32 = @intCast(rc);
+    defer sys.close(fd);
+    var buf: [8192]u8 align(8) = undefined;
+    while (true) {
+        const n = linux.getdents64(fd, &buf, buf.len);
+        if (linux.errno(n) != .SUCCESS or n == 0) break;
+        var off: usize = 0;
+        while (off < n) {
+            const reclen = std.mem.readInt(u16, buf[off + 16 ..][0..2], .little);
+            const name = std.mem.sliceTo(@as([*:0]const u8, @ptrCast(&buf[off + 19])), 0);
+            off += reclen;
+            const pid = std.fmt.parseInt(i32, name, 10) catch continue;
+            if (std.mem.indexOfScalar(i32, found.items, pid) != null) continue;
+            var sb: [512]u8 = undefined;
+            var path: [32:0]u8 = undefined;
+            const z = std.fmt.bufPrintZ(&path, "/proc/{d}/stat", .{pid}) catch continue;
+            const text = readSmall(linux.AT.FDCWD, z, &sb) orelse continue;
+            // The name of the program is in parentheses and can have
+            // spaces, so the fields start after the last `)`.
+            const close = std.mem.lastIndexOfScalar(u8, text, ')') orelse continue;
+            var fields = std.mem.tokenizeScalar(u8, text[close + 1 ..], ' ');
+            _ = fields.next();
+            const ppid = std.fmt.parseInt(i32, fields.next() orelse continue, 10) catch continue;
+            if (std.mem.indexOfScalar(i32, found.items, ppid) == null) continue;
+            _ = linux.kill(pid, linux.SIG.STOP);
+            found.append(pa, pid) catch return;
+        }
+    }
+}
+
+/// Removes the cgroup of a tree and closes its descriptors. After a
+/// kill, it waits up to one second for the processes to end.
+fn treeClose(t: *Tree) void {
+    if (t.dir < 0) return;
+    var waited: usize = 0;
+    while (treeLive(t) and waited < 500) : (waited += 1) sleepMs(2);
+    sys.close(t.procs);
+    sys.close(t.dir);
+    _ = linux.unlinkat(t.parent, &t.name, linux.AT.REMOVEDIR);
+    sys.close(t.parent);
+    t.* = .{ .pgid = t.pgid };
+}
+
+/// Ends a pipeline whose programs ended. A tree that still has a
+/// process goes to the list, so the time limit and `abandonAll` still
+/// reach it.
+fn settle(it: *Interp, tree: Tree, start_ms: i64) Error!void {
+    var t = tree;
+    if (treeLive(&t)) return it.execs.groups.append(it.alloc(), .{ .tree = t, .pids = &.{}, .start = start_ms });
+    treeClose(&t);
 }
 
 /// The wait status of a process, or null while it runs.
@@ -534,7 +895,7 @@ fn finish(it: *Interp, st: Started, text: *std.ArrayList(u8), ignore_err: bool) 
             if (status != null) break;
             if (nowMs() >= limit.?) {
                 timed_out = true;
-                killGroup(st.pids[0]);
+                treeKill(&st.tree, st.pids);
                 status = waitPid(pid, true);
                 break;
             }
@@ -614,7 +975,7 @@ fn cmdExec(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     errdefer closePlan(&plan);
     if (plan.background) {
         const st = try start(it, &plan, false, false);
-        try it.execs.groups.append(a, .{ .pgid = st.pids[0], .pids = st.pids, .start = st.start });
+        try it.execs.groups.append(a, .{ .tree = st.tree, .pids = st.pids, .start = st.start });
         var out: std.ArrayList(Value) = .empty;
         for (st.pids) |p| try out.append(a, .{ .int = p });
         return value.wrapList(a, out.items);
@@ -629,7 +990,7 @@ fn cmdExec(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (limit) |l| {
                 const left = l - nowMs();
                 if (left <= 0) {
-                    killGroup(st.pids[0]);
+                    treeKill(&st.tree, st.pids);
                     st.timed_out = true;
                     break;
                 }
@@ -641,7 +1002,7 @@ fn cmdExec(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 .n => |n| if (n > 0) {
                     try text.appendSlice(a, buf[0..n]);
                     if (!it.overLimit()) continue;
-                    killGroup(st.pids[0]);
+                    treeKill(&st.tree, st.pids);
                 },
                 else => {},
             }
@@ -649,7 +1010,11 @@ fn cmdExec(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }
         sys.close(st.out);
     }
-    const failed = try finish(it, st, &text, plan.ignore_err);
+    const failed = finish(it, st, &text, plan.ignore_err) catch |e| {
+        try settle(it, st.tree, st.start);
+        return e;
+    };
+    try settle(it, st.tree, st.start);
     const res = if (plan.keep_newline) text.items else stripNewline(text.items);
     if (failed) {
         it.result = .{ .str = res };
@@ -682,20 +1047,26 @@ pub fn openPipeline(it: *Interp, command: []const u8, readable: bool, writable: 
     c.pids = st.pids;
     c.err_fd = st.err;
     c.started = st.start;
+    c.tree = st.tree;
     return .{ .str = c.name };
 }
 
 /// Waits for the processes of a pipeline channel that closed.
 pub fn reap(it: *Interp, c: *chan.Channel) Error!void {
     var text: std.ArrayList(u8) = .empty;
-    const st: Started = .{ .pids = @constCast(c.pids), .err = c.err_fd, .start = c.started };
+    const st: Started = .{ .pids = @constCast(c.pids), .err = c.err_fd, .start = c.started, .tree = c.tree };
     // A channel that does not block does not wait for its processes.
     if (!c.blocking) {
-        try it.execs.groups.append(it.alloc(), .{ .pgid = c.pids[0], .pids = c.pids, .start = c.started });
+        try it.execs.groups.append(it.alloc(), .{ .tree = c.tree, .pids = c.pids, .start = c.started });
         if (c.err_fd >= 0) sys.close(c.err_fd);
         return;
     }
-    if (try finish(it, st, &text, false)) {
+    const failed = finish(it, st, &text, false) catch |e| {
+        try settle(it, st.tree, st.start);
+        return e;
+    };
+    try settle(it, st.tree, st.start);
+    if (failed) {
         it.result = .{ .str = stripNewline(text.items) };
         return error.TclError;
     }
@@ -703,35 +1074,44 @@ pub fn reap(it: *Interp, c: *chan.Channel) Error!void {
 
 /// Ends the processes of a pipeline channel with no wait for output.
 pub fn abandon(c: *chan.Channel) void {
-    killGroup(c.pids[0]);
+    treeKill(&c.tree, c.pids);
     for (c.pids) |p| _ = waitPid(p, true);
+    treeClose(&c.tree);
     if (c.err_fd >= 0) sys.close(c.err_fd);
 }
 
-/// Collects the background processes that ended, and stops each group
-/// that is past the time limit.
+/// Collects the trees that ended, and kills each tree that is past the
+/// time limit.
 pub fn sweep(it: *Interp) void {
     var i: usize = 0;
     while (i < it.execs.groups.items.len) {
-        const g = it.execs.groups.items[i];
+        const g = &it.execs.groups.items[i];
         var live = false;
         const late = if (deadline(it, g.start)) |l| nowMs() >= l else false;
-        if (late) killGroup(g.pgid);
+        if (late) treeKill(&g.tree, g.pids);
         for (g.pids) |p| {
             // The group stays live while a wait gives no status. A pid
             // that was collected before gives an error, which counts
             // as ended.
             if (waitPid(p, late) == null) live = true;
         }
-        if (live) i += 1 else _ = it.execs.groups.orderedRemove(i);
+        // A process below the programs keeps the tree live.
+        if (!late and treeLive(&g.tree)) live = true;
+        if (live) {
+            i += 1;
+        } else {
+            treeClose(&g.tree);
+            _ = it.execs.groups.orderedRemove(i);
+        }
     }
 }
 
-/// Stops each background process when the interpreter ends.
+/// Kills each tree when the interpreter ends.
 pub fn abandonAll(it: *Interp) void {
-    for (it.execs.groups.items) |g| {
-        killGroup(g.pgid);
+    for (it.execs.groups.items) |*g| {
+        treeKill(&g.tree, g.pids);
         for (g.pids) |p| _ = waitPid(p, true);
+        treeClose(&g.tree);
     }
     it.execs.groups = .empty;
 }

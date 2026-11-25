@@ -10,6 +10,8 @@
 //! suite passes it.
 //! `--exec-timeout MS`, `--exec-env NAME=value`, and `--exec-allow a,b`
 //! set the time limit, the environment, and the program list of `exec`.
+//! `--exec-allow-root /a,/b` lists the files below the root that `exec`
+//! can run.
 //! A program of `exec` gets only the environment of `--exec-env`.
 //! `--tclsh` makes the runner act as `tclsh` for the Tcl test suite. The
 //! first file is the script, and the other words are its `argv`. With
@@ -379,6 +381,16 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             if (comptime exec_ok) {
                 try exec_env.append(arena, try arena.dupeZ(u8, args[i]));
                 it.exec_host.env = exec_env.items;
+            }
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--exec-allow-root") and i + 1 < args.len) {
+            i += 1;
+            if (comptime exec_ok) {
+                var list: std.ArrayList([]const u8) = .empty;
+                var iter = std.mem.tokenizeScalar(u8, args[i], ',');
+                while (iter.next()) |w| try list.append(arena, w);
+                it.exec_host.allow_root = list.items;
             }
             continue;
         }

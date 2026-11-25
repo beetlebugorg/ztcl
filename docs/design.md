@@ -215,7 +215,7 @@ A channel that does not block keeps output that the peer has no room for. The lo
 
 ### Sockets and processes
 
-`sock.zig` has the network policy: `loopback`, a list of rules, or `any`. `sys.resolve` is the only name lookup. `sock.zig` checks each address against the policy before `sys.listenAt` or `sys.connectTo`, checks the peer address of a new connection again, and checks each peer that a server accepts. `proc.zig` starts each pipeline as one process group and keeps the groups of background pipelines. The interpreter sends SIGKILL to each group when it ends, at the time limit of the embedder, and at a failed start. `exec` is not sandboxed.
+`sock.zig` has the network policy: `loopback`, a list of rules, or `any`. `sys.resolve` is the only name lookup. `sock.zig` checks each address against the policy before `sys.listenAt` or `sys.connectTo`, checks the peer address of a new connection again, and checks each peer that a server accepts. `proc.zig` resolves each program word to one full host path, checks the allowlist on that path, and runs only that path. It starts each pipeline as one process tree: a cgroup on Linux when the embedder can make one, and the process group with a scan of /proc when it cannot. It keeps each tree that can still have a process. The interpreter kills each tree when it ends, at the time limit of the embedder, and at a failed start. `exec` is not sandboxed.
 
 ### The platform interface
 
