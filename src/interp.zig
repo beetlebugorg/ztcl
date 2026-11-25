@@ -691,15 +691,26 @@ pub const Counting = struct {
     /// next limit check then stops the script, and `catch` cannot catch
     /// the error. `evalTop` clears the flag.
     refused: bool = false,
+    /// True while a top-level eval runs that started with live data
+    /// above the memory limit. Only the hard cap then applies, so the
+    /// script can free the data. A collection that brings `used` below
+    /// the limit clears the flag.
+    over_start: bool = false,
 
     fn sync(c: *Counting) void {
         c.mem_peak = @max(c.mem_peak, c.used);
-        c.trip = if (c.used >= c.gc_at or c.refused) std.math.maxInt(usize) else c.used;
+        c.trip = if (c.used >= c.gc_at or c.refused)
+            std.math.maxInt(usize)
+        else if (c.over_start)
+            0
+        else
+            c.used;
         var f = c.followers;
         while (f) |x| : (f = x.next_follower) {
             x.used = c.used;
             x.trip = c.trip;
             x.refused = c.refused;
+            x.over_start = c.over_start;
         }
     }
 
@@ -720,6 +731,12 @@ pub const Counting = struct {
     pub fn clearRefused(c: *Counting) void {
         if (!c.refused) return;
         c.refused = false;
+        c.sync();
+    }
+
+    pub fn setOverStart(c: *Counting, on: bool) void {
+        if (c.over_start == on) return;
+        c.over_start = on;
         c.sync();
     }
 
@@ -1124,6 +1141,7 @@ pub const Interp = struct {
                 heap_mod.collect(h);
                 collected = h.mark_ok;
                 if (collected) next = @max(h.threshold, c.used +| (1 << 20));
+                if (collected and c.used <= root.mem_limit) c.over_start = false;
             }
         }
         // A precise build that waits for a clean safe point keeps `trip`
@@ -1291,6 +1309,7 @@ pub const Interp = struct {
         it.held.clearRetainingCapacity();
         it.pins.clearRetainingCapacity();
         it.counter.refused = false;
+        it.counter.over_start = false;
         if (it.isRoot()) it.counter.rearm(if (it.heap.stress != 0) 0 else @import("heap.zig").min_threshold);
         it.mem_limit = keep.mem_limit;
         it.step_limit = keep.step_limit;
@@ -1324,9 +1343,10 @@ pub const Interp = struct {
     }
 
     /// True above the memory limit, or after the counter refused a
-    /// request above the hard cap.
+    /// request above the hard cap. In a top-level eval that started
+    /// above the limit, only the hard cap applies.
     pub fn overLimit(it: *const Interp) bool {
-        return it.counter.used > it.mem_limit or it.counter.refused;
+        return it.counter.refused or (it.counter.used > it.mem_limit and !it.counter.over_start);
     }
 
     fn start(it: *Interp) Allocator.Error!void {
@@ -1499,6 +1519,7 @@ pub const Interp = struct {
         // Inside any other entry of the tree, the frames above this one
         // can hold values. This call then adds no scan range.
         const outer = it.heap.scopes == 0;
+        if (outer) try it.startTop(s);
         it.heap.scopes += 1;
         defer it.heap.scopes -= 1;
         if (outer) {
@@ -1514,6 +1535,7 @@ pub const Interp = struct {
         defer if (outer) {
             it.gc_scope = 0;
             if (gc.precise) it.gc_token = false;
+            it.rootCounter().setOverStart(false);
         };
         if (outer) it.rootCounter().clearRefused();
         var r = it.evalTopInner(s);
@@ -1527,6 +1549,24 @@ pub const Interp = struct {
             if (e == error.TclError) try it.finishError();
             return e;
         };
+    }
+
+    /// Prepares the memory limit of a top-level eval. A memory error can
+    /// leave live data above the limit, up to the hard cap. When `used`
+    /// is above the limit, a collection runs first. When the live data
+    /// stays above the limit, the eval runs with the hard cap only, so
+    /// the script can free the data. The script `s` is a pin during the
+    /// collection, because no other root holds it.
+    fn startTop(it: *Interp, s: *Script) Allocator.Error!void {
+        var root = it;
+        while (root.parent) |p| root = p;
+        const c = &root.counter;
+        c.setOverStart(false);
+        if (c.used <= root.mem_limit) return;
+        try it.pins.append(it.heap.backing, @intFromPtr(s));
+        it.collect();
+        it.pins.items.len -= 1;
+        c.setOverStart(c.used > root.mem_limit);
     }
 
     /// The counter of the root interpreter. Only it counts allocations.

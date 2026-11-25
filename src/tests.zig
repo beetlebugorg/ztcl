@@ -555,6 +555,33 @@ test "a request above twice the memory limit stops the script, and catch cannot 
     try std.testing.expectEqual(@as(?i64, 0), v.asInt());
 }
 
+test "after a memory error, the next eval runs and the limit still holds" {
+    // The bomb leaves `s` live above the limit. The next eval must run,
+    // and a second bomb must stop at the hard cap.
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.mem_limit = 16 << 20;
+    it.step_limit = 10_000_000;
+    const bomb = "set s x; catch {while 1 {append s $s}}";
+    try std.testing.expectError(error.TclError, it.eval(bomb));
+    try std.testing.expectEqualStrings("the script used too much memory", try it.str(it.result));
+    try std.testing.expect(it.memUsed() > it.mem_limit);
+    const v = try it.eval("set x 1; expr {$x+1}");
+    try std.testing.expectEqual(@as(?i64, 2), v.asInt());
+    try std.testing.expectError(error.TclError, it.eval(bomb));
+    try std.testing.expectEqualStrings("the script used too much memory", try it.str(it.result));
+    try std.testing.expect(it.counter.mem_peak <= 2 * it.mem_limit);
+    // After `unset`, a collection brings the count below the limit, and
+    // the limit applies again in the same eval. With only the hard cap,
+    // the list grows to about 320 strings.
+    try std.testing.expectError(error.TclError, it.eval("unset s; set l {}; while 1 {lappend l [string repeat x 100000]}"));
+    try std.testing.expectEqualStrings("the script used too much memory", try it.str(it.result));
+    const n = (try it.eval("llength $l")).asInt().?;
+    try std.testing.expect(n > 100 and n * 100000 < 16 << 20);
+    try std.testing.expectEqual(@as(?i64, 3), (try it.eval("unset l; expr {1+2}")).asInt());
+}
+
 test "lset, lsort options, and binary" {
     try check(&.{
         .{ "set l {a b c}; lset l 1 x", "a x c" },
