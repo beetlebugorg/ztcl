@@ -86,3 +86,14 @@ The JS host can compile a module at run time and add its functions to the table 
 - **A differential fuzzer.** The generators of `tools/jit-fuzz.zig` make programs. Each program runs in the interpreter and in the compiled module, and the output, the error, and the step count must be equal.
 - **The scripts of `tests/jit/` and `bench/`**, as in `tools/jit-diff.sh`.
 - **Speed.** Measured against the WebAssembly interpreter and native `tclsh` on `bench/` and the outside programs. No target is set before the measurement.
+
+## State
+
+| Part | State |
+|---|---|
+| The design and the module writer (`src/wasm_aot/wasm.zig`) | Done. |
+| The runtime (`zig build wasm-aot`, `src/wasm_aot/rt.zig`), the generator with one helper call for each instruction (`gen.zig`), the compiler (`aot.zig`, `src/compile.zig`), and `tools/wasm-aot.mjs` | Done. On the scripts of `tests/jit/`, `tests/mem/`, and `bench/`: 89 scripts, no difference, 177 functions found, no proc body with no function. Also with `--sweep 8` (8 step limits for each script). |
+| Inline paths: the step check, integer math, compares, jumps, `load`, `store`, `push`, `incr` | Next. The generator needs the wasm32 form of `jit/layout.zig`: put the probed layout in `gen.zig` as a constant, and make the runtime compare `layout.probe()` with it at the first lookup and turn the directory off when they differ. |
+| The suite in a compile-everything mode | Next. Run `tools/tcltest.tcl`, each top-level command of a test file in its own `ztcl_eval`, and `tools/tcltest-end.tcl` in Node.js, with the record mode, then on the compiled module. Compare the counts of each file. |
+| The fuzzer | Next. Reuse the program generators of `tools/jit-fuzz.zig` to write scripts for `tools/wasm-aot.mjs`. |
+| The speed numbers, `docs/webassembly.md`, and the site | Next. |
