@@ -371,6 +371,15 @@ fn cmdCoroutine(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         @memset(slots[0..20], 0);
         slots[0] = @intFromPtr(c); // x19
         slots[1] = @intFromPtr(&entry); // x20
+        // x29 points to a frame record of zeros at the top of the stack:
+        // a walk of the stack ends there with a return address of 0. The
+        // unwinder of the Zig standard library on macOS reads at `fp - 8`
+        // with no check of `fp`, so an `fp` of 0 overflows, and the panic
+        // of a safe build then waits on the lock of the unwinder.
+        const record: [*]usize = @ptrFromInt(top);
+        record[0] = 0;
+        record[1] = 0;
+        slots[10] = top; // x29
         slots[11] = @intFromPtr(&ztcl_coro_start); // x30
         c.sp = top - 160;
     } else if (on_win) {
