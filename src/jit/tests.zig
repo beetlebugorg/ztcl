@@ -1704,6 +1704,18 @@ const step_cost_scripts = [_]struct { limit: u64, script: []const u8 }{
     // A long list of traces: each add moved the list, and each run
     // of a trace searched the list.
     .{ .limit = 200_000, .script = "proc f {} {for {set i 0} {$i < 20000} {incr i} {trace add variable ::x write [list list $i]}; while 1 {set ::x 1}}; f" },
+    // One command that edits each key of a dict with 20 000 keys. Each
+    // edit copied the dict, so each script used the memory limit.
+    .{ .limit = 200_000, .script = "proc f {} {for {set i 0} {$i < 20000} {incr i} {dict set d k$i $i}; dict with d {}; while 1 {}}; f" },
+    .{ .limit = 200_000, .script = "proc f {} {for {set i 0} {$i < 20000} {incr i} {dict set d k$i $i}; dict remove $d {*}[dict keys $d]; while 1 {}}; f" },
+    .{ .limit = 200_000, .script = "proc f {} {for {set i 0} {$i < 20000} {incr i} {dict set d k$i $i}; dict replace $d {*}$d; while 1 {}}; f" },
+    .{ .limit = 200_000, .script = "proc f {} {for {set i 0} {$i < 20000} {incr i} {dict set d k$i $i}; set a {}; foreach k [dict keys $d] {lappend a $k $k}; dict update d {*}$a {}; while 1 {}}; f" },
+    // Many split characters, and many characters to trim: each byte or
+    // code point of the string searched the list of characters.
+    .{ .limit = 20_000, .script = "proc f {} {set s [string repeat a 1000]; set c [string repeat b 1000]; while 1 {split $s $c}}; f" },
+    .{ .limit = 20_000, .script = "proc f {} {set s [string repeat a 1000]; set c [string repeat b 1000]a; while 1 {string trimleft $s $c}}; f" },
+    .{ .limit = 20_000, .script = "proc f {} {set s [string repeat \\u4e00 300]; set c [string repeat \\u4e01 300]\\u4e00; while 1 {string trimright $s $c}}; f" },
+    .{ .limit = 20_000, .script = "proc f {} {set s [string repeat \\u4e00 300]; set c [string repeat \\u4e01 300]\\u4e00; while 1 {string trim $s $c}}; f" },
 };
 
 /// The CPU time of the thread, in nanoseconds.

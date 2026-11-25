@@ -61,7 +61,11 @@ Two lookups have a fixed cost. After each change of the command table, the guard
 
 A collection of the collector reads the live blocks. The next collection waits until the heap grows to twice the live bytes. So the work of the collector is linear in the bytes that the script allocates.
 
-These cases have no separate limit: a dict with many keys, `split` with many split characters, and `string trim` with many characters. Their work grows with the product of two sizes, and the memory limit bounds each size.
+Some commands test each key or character against a set. A table makes each test one lookup, so the work is linear in both sizes:
+
+- `dict remove`, `dict replace`, `dict update`, and `dict with` make one table of the keys for all the keys that they edit.
+- `split` tests each byte in a bitmap of the 256 bytes.
+- `string trim`, `string trimleft`, and `string trimright` test each code point in a bitmap of the code points below 256, or in a hash table for the others. A long probe of the hash table uses one step for each 64 slots, as in the table of a dict.
 
 ## Report a problem
 
