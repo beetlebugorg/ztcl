@@ -77,7 +77,10 @@ const Pool = struct {
     queue: std.ArrayList(*Job) = .empty,
     head: usize = 0,
     /// Each job that a script can name: pending, running, or done.
-    jobs: std.AutoHashMapUnmanaged(u64, *Job) = .empty,
+    /// An array hash map: its remove leaves no tombstone. The ids grow
+    /// with each post, and `tpool::get` removes each job, so the
+    /// tombstones of a plain hash map made each insert probe far.
+    jobs: std.AutoArrayHashMapUnmanaged(u64, *Job) = .empty,
     next_job: u64 = 1,
     /// The workers that run, and the idle ones among them.
     workers: u32 = 0,
@@ -124,12 +127,11 @@ const Pool = struct {
     fn free(p: *Pool) void {
         const a = p.alloc();
         for (p.queue.items[p.head..]) |j| if (j.canceled or j.state == .pending) {
-            if (!j.canceled) _ = p.jobs.remove(j.id);
+            if (!j.canceled) _ = p.jobs.swapRemove(j.id);
             j.destroy(a);
         };
         p.queue.deinit(a);
-        var iter = p.jobs.valueIterator();
-        while (iter.next()) |j| j.*.destroy(a);
+        for (p.jobs.values()) |j| j.destroy(a);
         p.jobs.deinit(a);
         a.free(p.initcmd);
         a.free(p.exitcmd);
@@ -483,7 +485,7 @@ fn cmdPost(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (workers == 0) {
                 p.lock.lock();
                 j.canceled = true;
-                _ = p.jobs.remove(id);
+                _ = p.jobs.swapRemove(id);
                 p.lock.unlock();
                 return e;
             }
@@ -573,7 +575,7 @@ fn cmdCancel(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const j = p.jobs.get(id) orelse continue;
         if (j.state == .pending) {
             j.canceled = true;
-            _ = p.jobs.remove(id);
+            _ = p.jobs.swapRemove(id);
             try gone.append(it.alloc(), id);
         } else try rest.append(it.alloc(), id);
     }
@@ -595,7 +597,7 @@ fn cmdGet(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         p.lock.unlock();
         return it.fail("job not completed", .{});
     }
-    _ = p.jobs.remove(id);
+    _ = p.jobs.swapRemove(id);
     p.lock.unlock();
     defer j.destroy(p.alloc());
     const v = try thread.unshare(it, j.res);
