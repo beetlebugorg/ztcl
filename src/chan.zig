@@ -75,6 +75,24 @@ pub const State = struct {
     table: std.StringArrayHashMapUnmanaged(*Channel) = .empty,
     next: u32 = 3,
     next_sock: u32 = 0,
+    /// The counters of the names of a thread group. With them, each
+    /// channel of the group has its own name, so a channel can move to
+    /// another thread (`tchan.zig`).
+    shared: ?*Counters = null,
+
+    /// The number of the next name with `prefix`.
+    fn number(s: *State, sock: bool) u32 {
+        if (s.shared) |c| return (if (sock) &c.next_sock else &c.next).fetchAdd(1, .monotonic);
+        const n = if (sock) &s.next_sock else &s.next;
+        defer n.* += 1;
+        return n.*;
+    }
+};
+
+/// The name counters of a thread group.
+pub const Counters = struct {
+    next: std.atomic.Value(u32) = .init(3),
+    next_sock: std.atomic.Value(u32) = .init(0),
 };
 
 fn eql(a: []const u8, b: []const u8) bool {
@@ -342,8 +360,7 @@ fn cmdOpen(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(a, "couldn't open \"{s}\": ", .{path})),
     };
     const c = try a.create(Channel);
-    const name = try std.fmt.allocPrint(a, "file{d}", .{it.chans.next});
-    it.chans.next += 1;
+    const name = try std.fmt.allocPrint(a, "file{d}", .{it.chans.number(false)});
     c.* = .{ .name = name, .fd = fd, .readable = m.read, .writable = m.write, .append = m.append };
     try it.chans.table.put(a, name, c);
     return .{ .str = name };
@@ -399,14 +416,7 @@ pub fn closeAll(it: *Interp) void {
 pub fn adopt(it: *Interp, prefix: []const u8, fd: i32, readable: bool, writable: bool) Error!*Channel {
     const a = it.alloc();
     const c = try a.create(Channel);
-    var n: u32 = undefined;
-    if (eql(prefix, "sock")) {
-        n = it.chans.next_sock;
-        it.chans.next_sock += 1;
-    } else {
-        n = it.chans.next;
-        it.chans.next += 1;
-    }
+    const n = it.chans.number(eql(prefix, "sock"));
     const name = try std.fmt.allocPrint(a, "{s}{d}", .{ prefix, n });
     c.* = .{ .name = name, .fd = fd, .readable = readable, .writable = writable };
     try it.chans.table.put(a, name, c);

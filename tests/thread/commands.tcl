@@ -151,5 +151,5 @@ vwait ::errs
 test errorproc-3 {list [expr {[lindex $::errs 0] eq $e}] [lindex [split [lindex $::errs 1] \n] 0]} {1 start-bad}
 test errorproc-4 {thread::errorproc a b} {!wrong # args: should be "thread::errorproc ?proc?"}
 
-foreach x [thread::names] {if {$x ne $main} {thread::release $x}}
+foreach x [thread::names] {if {$x ne $main} {catch {thread::release $x}}}
 done
