@@ -102,13 +102,35 @@ fn hostZone(_: ?*anyopaque, name: []const u8, a: std.mem.Allocator) ?[]const u8 
     return Io.Dir.cwd().readFileAlloc(host_io, path, a, .limited(1 << 20)) catch null;
 }
 
-/// The path of a script file for `Io.Dir.cwd()`. On WASI, `cwd` is the
-/// first preopen, and the host maps it to `/`. A WASI open refuses an
-/// absolute path, so the leading slashes go.
-fn hostPath(path: []const u8) []const u8 {
-    if (builtin.os.tag != .wasi) return path;
-    const rel = std.mem.trimStart(u8, path, "/");
-    return if (rel.len == 0) "." else rel;
+var host_preopens: std.process.Preopens = .empty;
+
+/// The folder and the path in it of a script file. On WASI, a relative
+/// path goes to `Io.Dir.cwd()`, the first preopen. An absolute path goes
+/// to the preopen with the longest name that is a prefix of the path at
+/// a `/`, and the rest of the path is relative to it. A WASI open
+/// refuses an absolute path.
+const HostPath = struct { dir: Io.Dir, sub: []const u8 };
+
+fn hostPath(path: []const u8) HostPath {
+    if (builtin.os.tag != .wasi or path.len == 0 or path[0] != '/') return .{ .dir = .cwd(), .sub = path };
+    var best: ?HostPath = null;
+    var best_len: usize = 0;
+    for (host_preopens.map.keys(), 0..) |name, fd| {
+        if (fd < 3 or name.len == 0 or name[0] != '/') continue;
+        const base = std.mem.trimEnd(u8, name, "/");
+        if (!std.mem.startsWith(u8, path, base)) continue;
+        if (path.len > base.len and path[base.len] != '/') continue;
+        if (best != null and base.len < best_len) continue;
+        const rest = std.mem.trimStart(u8, path[base.len..], "/");
+        best = .{ .dir = .{ .handle = @intCast(fd) }, .sub = if (rest.len == 0) "." else rest };
+        best_len = base.len;
+    }
+    return best orelse .{ .dir = .cwd(), .sub = std.mem.trimStart(u8, path, "/") };
+}
+
+fn readScript(io: Io, path: []const u8, a: std.mem.Allocator) ![]u8 {
+    const hp = hostPath(path);
+    return hp.dir.readFileAlloc(io, hp.sub, a, .limited(64 << 20));
 }
 
 var exit_out: *Io.Writer = undefined;
@@ -197,7 +219,7 @@ fn runTclsh(it: *tcl.Interp, out: *Io.Writer, words: []const [:0]const u8, root:
         \\}}
     ;
     if (words.len > 0 and !channels) {
-        const text = try Io.Dir.cwd().readFileAlloc(host_io, hostPath(words[0]), a, .limited(64 << 20));
+        const text = try readScript(host_io, words[0], a);
         it.script_name = words[0];
         _ = it.eval(text) catch |e| return tclshError(it, e);
         leave(it, 0);
@@ -227,6 +249,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     const io = init.io;
     host_io = io;
     const args = try init.minimal.args.toSlice(arena);
+    host_preopens = init.preopens;
     if (args.len > 1 and std.mem.eql(u8, args[1], "compile")) std.process.exit(try @import("compile.zig").run(init, args[2..]));
 
     var out_buf: [1 << 16]u8 = undefined;
@@ -455,7 +478,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             continue;
         }
         ran = true;
-        const text = Io.Dir.cwd().readFileAlloc(io, hostPath(arg), arena, .limited(64 << 20)) catch |e| {
+        const text = readScript(io, arg, arena) catch |e| {
             try out.print("{s}: {s}\n", .{ arg, @errorName(e) });
             out.flush() catch {};
             std.process.exit(2);
