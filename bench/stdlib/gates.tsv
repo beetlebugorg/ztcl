@@ -1,0 +1,26 @@
+# The gates of the outside benchmarks: the minimum ratio of ztcl to
+# another runtime, on the same machine in the same job.
+#   group  measure  case (* is each case)  other runtime  ratio  better
+# "higher" means the ratio is ztcl / other (a speed). "lower" means the
+# ratio is other / ztcl (a time or a latency).
+# The numbers are the targets of docs/stdlib.md, with the goal of the
+# user for validate (0.67 of the DOM parse of simdjson), until the user
+# sets them (decision 11).
+group	measure	case	other	ratio	better
+json	validate	*	simdjson dom	0.67	higher
+json	parse	*	python json	1.0	higher
+json	parse	*	node	0.8	higher
+json	parse	*	tclsh tcllib json	10	higher
+json	query	*	node	2.0	higher
+json	encode	*	python json	1.0	higher
+json	encode	*	node	0.7	higher
+http	rps	*	go net/http	0.8	higher
+http	rps	*	node http	1.0	higher
+http	rps	*	python uvicorn	3.0	higher
+http	p99	*	go net/http	0.667	lower
+http	h2-rps	plaintext	go net/http h2c	0.7	higher
+tls	handshake	*	go crypto/tls	0.7	higher
+tls	resumed	*	go crypto/tls	0.7	higher
+tls	bulk	*	go crypto	0.8	higher
+sqlite	select	per-row	tclsh sqlite3	1.0	lower
+sqlite	insert	per-row	tclsh sqlite3	1.0	lower

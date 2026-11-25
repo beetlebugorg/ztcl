@@ -1,0 +1,8 @@
+{
+  "twitter": {"query": ["statuses", 50, "user", "screen_name"],
+              "read": [["search_metadata", "count"], ["statuses", 0, "id"], ["statuses", 99, "text"]]},
+  "canada": {"query": ["features", 0, "geometry", "coordinates", 400, 0, 1],
+             "read": [["type"], ["features", 0, "type"], ["features", 0, "properties", "name"]]},
+  "citm_catalog": {"query": ["performances", 200, "venueCode"],
+                   "read": [["areaNames", "205705993"], ["performances", 0, "id"], ["venueNames", "PLEYEL_PLEYEL"]]}
+}
