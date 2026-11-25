@@ -120,17 +120,33 @@ User CPU instructions of the whole process, in millions, on the scripts in `benc
 
 | Script | Interpreter | `--jit` | `--jit --jit-tier2` | tclsh 8.6.16 |
 |---|---|---|---|---|
-| `sum.tcl` | 283.8 | 90.9 | 15.0 | 684.2 |
-| `dsum.tcl` | 700.8 | 558.0 | 16.6 | 1212.5 |
-| `nested.tcl` | 337.6 | 123.7 | 55.5 | 933.9 |
-| `foreach.tcl` | 213.8 | 80.4 | 40.6 | 387.1 |
-| `dict.tcl` | 281.0 | 194.9 | 188.6 | 555.3 |
-| `dictgrow.tcl` | 645.6 | 572.4 | 570.4 | 825.5 |
-| `readloop.tcl` | 208.9 | 154.7 | 146.9 | 302.3 |
-| `strbuild.tcl` | 324.0 | 252.6 | 243.2 | 812.4 |
-| `fib.tcl` | 165.8 | 137.4 | 137.4 | 600.9 |
+| `sum.tcl` | 283.8 | 90.9 | 15.0 | 684.3 |
+| `dsum.tcl` | 688.8 | 555.9 | 16.6 | 1212.5 |
+| `nested.tcl` | 333.4 | 123.5 | 55.3 | 934.0 |
+| `foreach.tcl` | 206.9 | 80.4 | 40.6 | 387.1 |
+| `dict.tcl` | 280.7 | 194.9 | 188.6 | 555.3 |
+| `dictgrow.tcl` | 647.7 | 590.3 | 588.3 | 825.5 |
+| `readloop.tcl` | 145.3 | 93.3 | 85.3 | 302.3 |
+| `strbuild.tcl` | 322.9 | 252.5 | 243.1 | 812.4 |
+| `fib.tcl` | 151.0 | 106.0 | 106.0 | 600.9 |
 
-The `bf.tcl bench.b` program of kostya/benchmarks used 114.7 s of wall time in the interpreter, 112.2 s with `--jit`, and 252.7 s in tclsh 8.6.16. Its instruction count with `--jit` is 0.38 of the count of tclsh, and tier 2 does not change it. Proc calls and method calls still go through the interpreter. [The JIT design](docs/jit.md) has the plan and the gates.
+Three programs of kostya/benchmarks with `bench.b`, measured on one build on 2026-11-24. The ratio is the instructions of ztcl over the instructions of tclsh 8.6.16, from `perf stat -e instructions:u`. The counts of tclsh come from an earlier run on the same day. With `small.b`, each output of ztcl equals the output of tclsh.
+
+| Program | Interpreter | `--jit` | `--jit --jit-tier2` |
+|---|---|---|---|
+| `bf.tcl` | 0.363 | 0.245 | 0.247 |
+| `bf_oo.tcl` | 0.463 | 0.373 | 0.374 |
+| `base64/test.tcl` | 0.701 | 0.701 | 0.701 |
+
+Wall time in seconds, the best of 5 runs, each run pinned to one core with `taskset`. `bf.tcl` and `bf_oo.tcl` use `small.b`: `bench.b` with one level of the inner loops removed. One run with `bench.b` lasts minutes. Other jobs shared the machine, so the times are rough: two series of `base64` differed by up to 40 %, with equal instruction counts.
+
+| Program | Interpreter | `--jit` | `--jit --jit-tier2` | tclsh 8.6.16 |
+|---|---|---|---|---|
+| `bf.tcl small.b` | 0.84 | 0.65 | 0.65 | 2.73 |
+| `bf_oo.tcl small.b` | 4.22 | 3.40 | 3.70 | 8.17 |
+| `base64/test.tcl` | 4.88 | 5.78 | 5.81 | 5.84 |
+
+[The JIT design](docs/jit.md) has the plan and the gates.
 
 ## Compatibility
 
