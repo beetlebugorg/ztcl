@@ -355,8 +355,36 @@ fn parse(it: *Interp, words: []const []const u8, plan: *Plan) Error!void {
 const statx_mask = linux.STATX.BASIC_STATS;
 const max_links = 40;
 
-fn hostStat(path: [:0]const u8, st: *linux.Statx) linux.E {
-    return linux.errno(linux.statx(linux.AT.FDCWD, path, linux.AT.SYMLINK_NOFOLLOW, statx_mask, st));
+/// The kind, the device, and the inode of a file: `statx` on Linux and
+/// `fstatat` on macOS.
+const Id = struct { mode: u32 = 0, dev: u64 = 0, ino: u64 = 0 };
+
+/// The `Id` of a host path. A symlink is the symlink itself.
+fn hostStat(path: [:0]const u8, st: *Id) linux.E {
+    if (comptime on_mac) {
+        var s: std.c.Stat = undefined;
+        if (std.c.fstatat(std.c.AT.FDCWD, path, &s, std.c.AT.SYMLINK_NOFOLLOW) != 0) return std.c.errno(-1);
+        st.* = .{ .mode = s.mode, .dev = @bitCast(@as(i64, s.dev)), .ino = s.ino };
+        return .SUCCESS;
+    }
+    var x: linux.Statx = undefined;
+    const e = linux.errno(linux.statx(linux.AT.FDCWD, path, linux.AT.SYMLINK_NOFOLLOW, statx_mask, &x));
+    if (e == .SUCCESS) st.* = .{ .mode = x.mode, .dev = @as(u64, x.dev_major) << 32 | x.dev_minor, .ino = x.ino };
+    return e;
+}
+
+/// The `Id` of an open descriptor.
+fn fdStat(fd: i32, st: *Id) linux.E {
+    if (comptime on_mac) {
+        var s: std.c.Stat = undefined;
+        if (std.c.fstat(fd, &s) != 0) return std.c.errno(-1);
+        st.* = .{ .mode = s.mode, .dev = @bitCast(@as(i64, s.dev)), .ino = s.ino };
+        return .SUCCESS;
+    }
+    var x: linux.Statx = undefined;
+    const e = linux.errno(linux.statx(fd, "", 0x1000, statx_mask, &x));
+    if (e == .SUCCESS) st.* = .{ .mode = x.mode, .dev = @as(u64, x.dev_major) << 32 | x.dev_minor, .ino = x.ino };
+    return e;
 }
 
 /// The host path with each symlink, `.`, and `..` resolved, or the
@@ -384,14 +412,21 @@ fn canonical(a: std.mem.Allocator, path: []const u8) Error!union(enum) { ok: [:0
         try out.append(a, '/');
         try out.appendSlice(a, name);
         const z = try a.dupeZ(u8, out.items);
-        var st: linux.Statx = undefined;
+        var st: Id = .{};
         const e = hostStat(z, &st);
         if (e != .SUCCESS) return .{ .err = e };
         if (st.mode & 0o170000 != 0o120000) continue;
         links += 1;
         if (links > max_links) return .{ .err = .LOOP };
-        const n = linux.readlinkat(linux.AT.FDCWD, z, &buf, buf.len);
-        if (linux.errno(n) != .SUCCESS) return .{ .err = linux.errno(n) };
+        const n: usize = if (comptime on_mac) blk: {
+            const r = std.c.readlinkat(std.c.AT.FDCWD, z, &buf, buf.len);
+            if (r < 0) return .{ .err = std.c.errno(-1) };
+            break :blk @intCast(r);
+        } else blk: {
+            const r = linux.readlinkat(linux.AT.FDCWD, z, &buf, buf.len);
+            if (linux.errno(r) != .SUCCESS) return .{ .err = linux.errno(r) };
+            break :blk r;
+        };
         if (n >= buf.len) return .{ .err = .NAMETOOLONG };
         const target = buf[0..n];
         out.shrinkRetainingCapacity(if (target.len > 0 and target[0] == '/') 0 else mark);
@@ -401,8 +436,8 @@ fn canonical(a: std.mem.Allocator, path: []const u8) Error!union(enum) { ok: [:0
     return .{ .ok = try a.dupeZ(u8, out.items) };
 }
 
-fn sameFile(x: linux.Statx, y: linux.Statx) bool {
-    return x.ino == y.ino and x.dev_major == y.dev_major and x.dev_minor == y.dev_minor;
+fn sameFile(x: Id, y: Id) bool {
+    return x.ino == y.ino and x.dev == y.dev;
 }
 
 /// True when a canonical host path is the root folder or a path below
@@ -411,13 +446,13 @@ fn sameFile(x: linux.Statx, y: linux.Statx) bool {
 /// error counts as below the root.
 fn belowRoot(it: *Interp, path: []const u8) Error!bool {
     if (it.fs.fd < 0) return false;
-    var root: linux.Statx = undefined;
-    if (linux.errno(linux.statx(it.fs.fd, "", 0x1000, statx_mask, &root)) != .SUCCESS) return true;
+    var root: Id = .{};
+    if (fdStat(it.fs.fd, &root) != .SUCCESS) return true;
     var k: usize = 0;
     while (k <= path.len) : (k += 1) {
         if (k < path.len and path[k] != '/') continue;
         const z = try it.alloc().dupeZ(u8, if (k == 0) "/" else path[0..k]);
-        var st: linux.Statx = undefined;
+        var st: Id = .{};
         if (hostStat(z, &st) != .SUCCESS) return true;
         if (sameFile(st, root)) return true;
     }
@@ -439,8 +474,12 @@ fn rootPath(it: *Interp, word: []const u8) Error![:0]const u8 {
     var full: []const u8 = it.fs.path;
     if (full.len == 0 or full[0] != '/') {
         var buf: [4096]u8 = undefined;
-        const n = linux.getcwd(&buf, buf.len);
-        if (linux.errno(n) != .SUCCESS) return cannotRun(it, word, linux.errno(n));
+        if (comptime on_mac) {
+            if (std.c.getcwd(&buf, buf.len) == null) return cannotRun(it, word, std.c.errno(-1));
+        } else {
+            const n = linux.getcwd(&buf, buf.len);
+            if (linux.errno(n) != .SUCCESS) return cannotRun(it, word, linux.errno(n));
+        }
         const cwd = std.mem.sliceTo(&buf, 0);
         full = try std.fmt.allocPrint(a, "{s}/{s}", .{ cwd, full });
     }
@@ -448,9 +487,9 @@ fn rootPath(it: *Interp, word: []const u8) Error![:0]const u8 {
         .ok => |x| x,
         .err => |e| return cannotRun(it, word, e),
     };
-    var root: linux.Statx = undefined;
-    var st: linux.Statx = undefined;
-    if (linux.errno(linux.statx(it.fs.fd, "", 0x1000, statx_mask, &root)) != .SUCCESS or
+    var root: Id = .{};
+    var st: Id = .{};
+    if (fdStat(it.fs.fd, &root) != .SUCCESS or
         hostStat(p, &st) != .SUCCESS or !sameFile(st, root))
         return denied(it, word, "the host path of the root folder changed");
     return p;
@@ -517,7 +556,7 @@ fn resolve(it: *Interp, word: []const u8) Error![:0]const u8 {
             .ok => |x| x,
             .err => continue,
         };
-        var st: linux.Statx = undefined;
+        var st: Id = .{};
         if (hostStat(p, &st) != .SUCCESS or st.mode & 0o170000 != 0o100000) continue;
         if (linux.errno(linux.access(p.ptr, 1)) != .SUCCESS) continue;
         return checked(it, word, p);
@@ -884,8 +923,27 @@ fn killScan(pgid: i32, pids: []const i32) void {
     for (found.items) |p| _ = linux.kill(p, linux.SIG.KILL);
 }
 
+extern "c" fn proc_listchildpids(ppid: c_int, buffer: ?*anyopaque, buffersize: c_int) c_int;
+
+/// Adds each child of each process in `found` that is not in it yet, and
+/// stops it: `proc_listchildpids` of libproc on macOS.
+fn scanChildrenMac(pa: std.mem.Allocator, found: *std.ArrayList(i32)) void {
+    var k: usize = 0;
+    while (k < found.items.len) : (k += 1) {
+        var kids: [512]c_int = undefined;
+        const n = proc_listchildpids(found.items[k], &kids, @intCast(@sizeOf(@TypeOf(kids))));
+        if (n <= 0) continue;
+        for (kids[0..@min(@as(usize, @intCast(n)), kids.len)]) |pid| {
+            if (pid <= 0 or std.mem.indexOfScalar(i32, found.items, pid) != null) continue;
+            _ = linux.kill(pid, linux.SIG.STOP);
+            found.append(pa, pid) catch return;
+        }
+    }
+}
+
 /// Adds each process of /proc whose parent is in `found`, and stops it.
 fn scanChildren(pa: std.mem.Allocator, found: *std.ArrayList(i32)) void {
+    if (comptime on_mac) return scanChildrenMac(pa, found);
     const rc = linux.open("/proc", .{ .DIRECTORY = true, .CLOEXEC = true }, 0);
     if (linux.errno(rc) != .SUCCESS) return;
     const fd: i32 = @intCast(rc);

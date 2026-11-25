@@ -432,6 +432,9 @@ pub fn stat(it: *Interp, rel: []const u8) Error!fsroot.StatResult {
         .mtime = unixTime(basic.write),
         .atime = unixTime(basic.access),
         .ctime = unixTime(basic.change),
+        // The file index names the file on its volume. Each file of the
+        // jail is on the volume of the root: a reparse point (also a
+        // mount point) does not open, so `dev` stays 0.
         .ino = @bitCast(index),
         .nlink = standard.links,
         .uid = 0,
