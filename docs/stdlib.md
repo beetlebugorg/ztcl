@@ -877,7 +877,7 @@ The user approved the plan and these answers on 2026-11-24.
 8. The external review of TLS is open: the user decides who does it, the budget, and the time. TLS stays behind a flag until the review is done.
 9. The SQLite amalgamation is fetched at build time with a pinned checksum. AGENTS.md rule 7 gets an exception for it.
 10. macOS bundles use `codesign` first. A Zig signer for ad hoc signatures is later work.
-11. The final performance gates are set after task 03 measures the other runtimes.
+11. The final performance gates are set after task 03 measures the other runtimes. On 2026-11-25 the user set the JSON gates of `bench/stdlib/gates.tsv`: the targets of task 03, and four floors about 10 % below the lowest measured ratio where task 05 did not reach the target: `valid` against simdjson DOM is at least 0.56 on twitter and 0.60 on citm_catalog, and `encode` against Node is at least 0.35 on twitter and 0.60 on canada. The floors catch regressions. Task 05b and the work on the value representation are expected to raise them.
 
 ## Future work
 

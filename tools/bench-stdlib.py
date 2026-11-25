@@ -37,7 +37,7 @@ TOP = os.path.dirname(HERE)
 BENCH = os.path.join(TOP, "bench", "stdlib")
 JSON_FILES = ["twitter.json", "canada.json", "citm_catalog.json"]
 JSON_MODES = ["validate", "parse", "query", "read3", "walk", "encode"]
-RUNS = 5
+RUNS = int(os.environ.get("BENCH_RUNS", "5"))
 
 rows = []  # (group, measure, case, runtime, version, value, unit)
 
