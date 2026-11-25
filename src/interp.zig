@@ -2115,6 +2115,11 @@ pub const Interp = struct {
 
     /// Adds one command to the trace of the current error.
     fn addErrorInfo(it: *Interp, c: *Cmd) Allocator.Error!void {
+        return it.addErrorText(c.text);
+    }
+
+    /// Adds the text of one command to the trace of the current error.
+    fn addErrorText(it: *Interp, text: []const u8) Allocator.Error!void {
         const a = it.alloc();
         if (it.skip_info) {
             it.skip_info = false;
@@ -2126,10 +2131,10 @@ pub const Interp = struct {
             try it.error_info.appendSlice(a, try it.str(it.result));
             try it.error_info.appendSlice(a, "\n    while executing\n\"");
         } else try it.error_info.appendSlice(a, "\n    invoked from within\n\"");
-        if (c.text.len > 150) {
-            try it.error_info.appendSlice(a, c.text[0..150]);
+        if (text.len > 150) {
+            try it.error_info.appendSlice(a, text[0..150]);
             try it.error_info.appendSlice(a, "...");
-        } else try it.error_info.appendSlice(a, c.text);
+        } else try it.error_info.appendSlice(a, text);
         try it.error_info.append(a, '"');
     }
 
@@ -2263,6 +2268,47 @@ pub const Interp = struct {
         const name = try it.str(argv[0]);
         const command = it.findCommand(name) orelse &it.missing;
         return it.call(command, argv, null);
+    }
+
+    /// Runs the items of a list value as the words of one command, as
+    /// `eval` of the text of the list does, with no text and no compile.
+    /// The words go to the value stack first, so a command that changes
+    /// the list in place does not change its own words. The trace of an
+    /// error has the text of the list.
+    pub fn evalWords(it: *Interp, items: []const Value) Error!Value {
+        try it.checkNative();
+        if (it.nest >= it.max_nest) return it.fail("too many nested evaluations (infinite loop?)", .{});
+        it.nest += 1;
+        defer it.nest -= 1;
+        if (items.len == 0) return Value.empty;
+        const mark_chunk = it.chunk;
+        const mark_top = it.top;
+        defer {
+            it.chunk = mark_chunk;
+            it.top = mark_top;
+        }
+        if (it.step_limit == 0) return it.fail("step limit reached", .{});
+        it.step_limit -= 1;
+        try it.checkMem();
+        const argv = try it.stackAlloc(items.len);
+        @memcpy(argv, items);
+        const name = it.str(argv[0]) catch |e| return it.noteWords(argv, e);
+        const command = it.findCommand(name) orelse &it.missing;
+        return it.call(command, argv, null) catch |e| it.noteWords(argv, e);
+    }
+
+    /// `noteLine` for the command of `evalWords`: line 1, and the text of
+    /// the words in the trace.
+    fn noteWords(it: *Interp, argv: []const Value, raw: Error) Error {
+        const e = it.limitError(raw);
+        if (e != error.TclError) return e;
+        if (it.error_line == 0) it.error_line = 1;
+        it.proc_line = 1;
+        if (it.step_limit != 0 and !it.overLimit()) {
+            const text = value.listToString(it.alloc(), argv) catch return e;
+            it.addErrorText(text) catch {};
+        }
+        return e;
     }
 
     pub fn pushFrame(it: *Interp, argv: []const Value) Error!*Frame {

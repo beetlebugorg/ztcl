@@ -880,6 +880,8 @@ fn cmdExpr(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
 
 fn cmdEval(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("eval arg ?arg ...?");
+    // A list value has its words already, as in Tcl: no text, no parse.
+    if (argv.len == 2 and argv[1] == .list and it.nest != 0) return it.evalWords(argv[1].list.items());
     if (argv.len == 2) return it.evalBody(try it.scriptOf(argv, 1, cmd), argv, &.{});
     return it.evalBody(try it.scriptOfValue(.{ .str = try concat(it, argv[1..]) }, null), argv, &.{});
 }
