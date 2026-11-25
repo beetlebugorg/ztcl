@@ -50,6 +50,9 @@ The rule for a command whose work grows with a table, a list, or its result: it 
 | `string first`, `string last` | The needle length for each position that it compares. |
 | `string map` | The key length for each compare of a key. |
 | `trace add`, `trace remove`, and each run of the traces of a variable or a command | Each trace of the list. |
+| `file delete -force`, `file copy` of a folder | Each entry of the tree: the units of one entry and one unit for each byte of its path. `file copy` also pays one entry for each folder of the target path that it checks. |
+
+`file delete -force` and `file copy` walk a tree with a list of folders on the heap. They use no native stack for each level, so a deep tree is safe in a coroutine, and the memory limit counts the list. A walk stops with the error `ZTCL TREE DEPTH` at 2048 folder levels below the path that the script gives. `file copy` gives the error `POSIX EINVAL` before it copies when the target is the source folder or a folder below it. The check compares the device and inode of each folder of the target path with the source, so a second name of the source also fails.
 
 A glob pattern in these commands pays for the pattern length times the string length, as in `string match`. A regular expression uses one step for each 32 steps of its matcher. An operation on big integers uses steps by the square of its size.
 

@@ -3,6 +3,12 @@
 //! that make or read a link are errors, so a script has no way to make
 //! a path that leaves the root.
 //!
+//! `file delete -force` and `file copy` walk a tree with a list of
+//! folders on the heap, with no recursion. Each entry pays steps by the
+//! rule of `cmds.chargeWork`, and the walk stops at `tree_depth_limit`
+//! levels. `file copy` compares the device and inode of each folder of
+//! the target path with the source, so a copy into the source fails.
+//!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
@@ -100,33 +106,94 @@ fn typeName(mode: u32) []const u8 {
     };
 }
 
-fn deleteTree(it: *Interp, rel: []const u8, force: bool, shown: []const u8) Error!void {
-    const st = switch (try fsroot.stat(it, rel)) {
-        .ok => |x| x,
-        .err => |e| {
-            if (e == .NOENT) return;
-            return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "error deleting \"{s}\": ", .{shown}));
-        },
-    };
-    if (rel.len == 0) return it.failCode("POSIX EACCES {permission denied}", "error deleting \"{s}\": permission denied", .{shown});
-    if (fsroot.isDir(st.mode)) {
-        const names = switch (try fsroot.listDir(it, rel)) {
-            .ok => |x| x,
-            .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "error deleting \"{s}\": ", .{shown})),
-        };
-        if (names.len > 0 and !force) {
-            return it.failCode("POSIX EEXIST {file already exists}", "error deleting \"{s}\": directory not empty", .{shown});
-        }
-        for (names) |n| try deleteTree(it, try std.fmt.allocPrint(it.alloc(), "{s}/{s}", .{ rel, n }), force, shown);
-    }
+/// The most folder levels below the path that `file delete -force` and
+/// `file copy` walk. A deeper tree gives an error. The tests lower it.
+pub var tree_depth_limit: usize = 2048;
+
+/// One folder of a tree walk: its path, its names, and the next name.
+const Level = struct {
+    rel: []const u8,
+    to: []const u8 = "",
+    names: []const []const u8,
+    next: usize = 0,
+};
+
+fn tooDeep(it: *Interp, verb: []const u8, shown: []const u8) Error {
+    return it.failCode("ZTCL TREE DEPTH", "error {s} \"{s}\": the tree is deeper than {d} levels", .{ verb, shown, tree_depth_limit });
+}
+
+/// Uses the steps of one entry of a tree walk: the units of one entry
+/// and one unit for each byte of its path. Each entry is also a check
+/// of the memory limit.
+fn chargeEntry(it: *Interp, meter: *cmds.Meter, path_len: usize) Error!void {
+    try meter.add(it, cmds.entry_units + path_len);
+    try it.checkMem();
+}
+
+fn removeOne(it: *Interp, rel: []const u8, dir: bool, shown: []const u8) Error!void {
     const p = switch (try fsroot.parentOf(it, rel)) {
         .ok => |x| x,
         .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "error deleting \"{s}\": ", .{shown})),
     };
     defer _ = linux.close(p.fd);
-    const rc = linux.unlinkat(p.fd, p.base, if (fsroot.isDir(st.mode)) linux.AT.REMOVEDIR else 0);
-    const e = linux.errno(rc);
+    const e = linux.errno(linux.unlinkat(p.fd, p.base, if (dir) linux.AT.REMOVEDIR else 0));
     if (e != .SUCCESS) return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "error deleting \"{s}\": ", .{shown}));
+}
+
+fn listOrFail(it: *Interp, rel: []const u8, what: []const u8) Error![]const []const u8 {
+    return switch (try fsroot.listDir(it, rel)) {
+        .ok => |x| x,
+        .err => |e| fsroot.posixError(it, e, what),
+    };
+}
+
+/// Deletes a file or a tree. The walk keeps its folders in a list on the
+/// heap, so a deep tree uses no native stack, and the memory limit
+/// counts the list.
+fn deleteTree(it: *Interp, rel: []const u8, force: bool, shown: []const u8) Error!void {
+    const a = it.alloc();
+    const what = try std.fmt.allocPrint(a, "error deleting \"{s}\": ", .{shown});
+    const st = switch (try fsroot.stat(it, rel)) {
+        .ok => |x| x,
+        .err => |e| {
+            if (e == .NOENT) return;
+            return fsroot.posixError(it, e, what);
+        },
+    };
+    if (rel.len == 0) return it.failCode("POSIX EACCES {permission denied}", "error deleting \"{s}\": permission denied", .{shown});
+    if (!fsroot.isDir(st.mode)) return removeOne(it, rel, false, shown);
+    var meter: cmds.Meter = .{};
+    try chargeEntry(it, &meter, rel.len);
+    const names = try listOrFail(it, rel, what);
+    if (names.len > 0 and !force) {
+        return it.failCode("POSIX EEXIST {file already exists}", "error deleting \"{s}\": directory not empty", .{shown});
+    }
+    var stack: std.ArrayList(Level) = .empty;
+    try stack.append(a, .{ .rel = rel, .names = names });
+    while (stack.items.len > 0) {
+        const top = &stack.items[stack.items.len - 1];
+        if (top.next == top.names.len) {
+            try removeOne(it, top.rel, true, shown);
+            stack.items.len -= 1;
+            continue;
+        }
+        const child = try std.fmt.allocPrint(a, "{s}/{s}", .{ top.rel, top.names[top.next] });
+        top.next += 1;
+        try chargeEntry(it, &meter, child.len);
+        const cst = switch (try fsroot.stat(it, child)) {
+            .ok => |x| x,
+            .err => |e| {
+                if (e == .NOENT) continue;
+                return fsroot.posixError(it, e, what);
+            },
+        };
+        if (!fsroot.isDir(cst.mode)) {
+            try removeOne(it, child, false, shown);
+            continue;
+        }
+        if (stack.items.len >= tree_depth_limit) return tooDeep(it, "deleting", shown);
+        try stack.append(a, .{ .rel = child, .names = try listOrFail(it, child, what) });
+    }
 }
 
 fn mkdirAll(it: *Interp, rel: []const u8, shown: []const u8) Error!void {
@@ -183,22 +250,83 @@ fn copyFile(it: *Interp, from: []const u8, to: []const u8, shown: []const u8) Er
     }
 }
 
-fn copyTree(it: *Interp, from: []const u8, to: []const u8, shown: []const u8) Error!void {
+fn mkdirOne(it: *Interp, rel: []const u8, shown: []const u8) Error!void {
+    const p = switch (try fsroot.parentOf(it, rel)) {
+        .ok => |x| x,
+        .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "can't create directory \"{s}\": ", .{shown})),
+    };
+    defer _ = linux.close(p.fd);
+    const e = linux.errno(linux.mkdirat(p.fd, p.base, 0o777));
+    if (e == .EXIST) {
+        switch (try fsroot.stat(it, rel)) {
+            .ok => |st| if (fsroot.isDir(st.mode)) return,
+            .err => {},
+        }
+    }
+    if (e != .SUCCESS) return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "can't create directory \"{s}\": ", .{shown}));
+}
+
+/// True when the folder `to` would be the folder `src` or a folder below
+/// it. The check compares the device and inode of `src` with each
+/// folder of the path `to`, so a second name of the same folder also
+/// counts.
+fn insideSource(it: *Interp, src: fsroot.Info, to: []const u8) Error!bool {
+    var k: usize = 0;
+    while (k <= to.len) : (k += 1) {
+        if (k < to.len and to[k] != '/') continue;
+        try cmds.chargeEntries(it, 1);
+        switch (try fsroot.stat(it, to[0..k])) {
+            .ok => |st| if (st.same(src)) return true,
+            .err => return false,
+        }
+    }
+    return false;
+}
+
+/// Copies a file or a tree. The walk keeps its folders in a list on the
+/// heap, as `deleteTree` does.
+fn copyTree(it: *Interp, from: []const u8, to: []const u8, shown: []const u8, target: []const u8) Error!void {
+    const a = it.alloc();
+    const what = try std.fmt.allocPrint(a, "error copying \"{s}\": ", .{shown});
     const st = switch (try fsroot.stat(it, from)) {
         .ok => |x| x,
-        .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "error copying \"{s}\": ", .{shown})),
+        .err => |e| return fsroot.posixError(it, e, what),
     };
-    if (fsroot.isDir(st.mode)) {
-        try mkdirAll(it, to, shown);
-        const names = switch (try fsroot.listDir(it, from)) {
-            .ok => |x| x,
-            .err => |e| return fsroot.posixError(it, e, "error copying: "),
-        };
-        for (names) |n| try copyTree(it, try std.fmt.allocPrint(it.alloc(), "{s}/{s}", .{ from, n }), try std.fmt.allocPrint(it.alloc(), "{s}/{s}", .{ to, n }), shown);
-        return;
+    if (!fsroot.isDir(st.mode)) {
+        if (!fsroot.isFile(st.mode)) return it.failCode("POSIX EACCES {permission denied}", "error copying \"{s}\": permission denied", .{shown});
+        return copyFile(it, from, to, shown);
     }
-    if (!fsroot.isFile(st.mode)) return it.failCode("POSIX EACCES {permission denied}", "error copying \"{s}\": permission denied", .{shown});
-    return copyFile(it, from, to, shown);
+    // A copy into the source or below it does not end.
+    if (try insideSource(it, st, to)) return it.failCode("POSIX EINVAL {invalid argument}", "error copying \"{s}\" to \"{s}\": trying to copy a directory into itself", .{ shown, target });
+    try mkdirAll(it, to, shown);
+    var meter: cmds.Meter = .{};
+    try chargeEntry(it, &meter, from.len + to.len);
+    var stack: std.ArrayList(Level) = .empty;
+    try stack.append(a, .{ .rel = from, .to = to, .names = try listOrFail(it, from, "error copying: ") });
+    while (stack.items.len > 0) {
+        const top = &stack.items[stack.items.len - 1];
+        if (top.next == top.names.len) {
+            stack.items.len -= 1;
+            continue;
+        }
+        const name = top.names[top.next];
+        top.next += 1;
+        const cfrom = try std.fmt.allocPrint(a, "{s}/{s}", .{ top.rel, name });
+        const cto = try std.fmt.allocPrint(a, "{s}/{s}", .{ top.to, name });
+        try chargeEntry(it, &meter, cfrom.len + cto.len);
+        const cst = switch (try fsroot.stat(it, cfrom)) {
+            .ok => |x| x,
+            .err => |e| return fsroot.posixError(it, e, what),
+        };
+        if (fsroot.isDir(cst.mode)) {
+            if (stack.items.len >= tree_depth_limit) return tooDeep(it, "copying", shown);
+            try mkdirOne(it, cto, shown);
+            try stack.append(a, .{ .rel = cfrom, .to = cto, .names = try listOrFail(it, cfrom, "error copying: ") });
+            continue;
+        }
+        if (!fsroot.isFile(cst.mode)) return it.failCode("POSIX EACCES {permission denied}", "error copying \"{s}\": permission denied", .{shown});
+        try copyFile(it, cfrom, cto, shown);
+    }
 }
 
 fn renameOrCopy(it: *Interp, args: []const Value, is_rename: bool) Error!Value {
@@ -242,7 +370,7 @@ fn renameOrCopy(it: *Interp, args: []const Value, is_rename: bool) Error!Value {
         };
         if (exists and !force) return it.failCode("POSIX EEXIST {file already exists}", "error {s} \"{s}\" to \"{s}\": target file exists", .{ verb, src, target });
         if (!is_rename) {
-            try copyTree(it, srel, drel, src);
+            try copyTree(it, srel, drel, src, target);
             continue;
         }
         const p = switch (try fsroot.parentOf(it, srel)) {

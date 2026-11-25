@@ -116,7 +116,24 @@ pub fn parentOf(it: *Interp, rel: []const u8) Error!union(enum) { ok: Parent, er
     }
 }
 
-pub const Info = struct { mode: u32, size: u64, mtime: i64, atime: i64, ctime: i64, ino: u64, nlink: u32, uid: u32, gid: u32 };
+pub const Info = struct {
+    mode: u32,
+    size: u64,
+    mtime: i64,
+    atime: i64,
+    ctime: i64,
+    ino: u64,
+    nlink: u32,
+    uid: u32,
+    gid: u32,
+    /// The device of the file. With `ino`, it names one file.
+    dev: u64 = 0,
+
+    /// True when both name the same file.
+    pub fn same(x: Info, y: Info) bool {
+        return x.ino == y.ino and x.dev == y.dev;
+    }
+};
 
 /// The data of a path. A symlink is reported as a symlink.
 pub fn stat(it: *Interp, rel: []const u8) Error!union(enum) { ok: Info, err: linux.E } {
@@ -134,7 +151,7 @@ pub fn stat(it: *Interp, rel: []const u8) Error!union(enum) { ok: Info, err: lin
     }
     const e = linux.errno(rc);
     if (e != .SUCCESS) return .{ .err = e };
-    return .{ .ok = .{ .mode = st.mode, .size = st.size, .mtime = st.mtime.sec, .atime = st.atime.sec, .ctime = st.ctime.sec, .ino = st.ino, .nlink = st.nlink, .uid = st.uid, .gid = st.gid } };
+    return .{ .ok = .{ .mode = st.mode, .size = st.size, .mtime = st.mtime.sec, .atime = st.atime.sec, .ctime = st.ctime.sec, .ino = st.ino, .nlink = st.nlink, .uid = st.uid, .gid = st.gid, .dev = (@as(u64, st.dev_major) << 32) | st.dev_minor } };
 }
 
 pub fn isDir(mode: u32) bool {

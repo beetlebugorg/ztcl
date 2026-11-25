@@ -1453,6 +1453,104 @@ test "the time limit of exec kills a process that calls setsid" {
     try escapeKilled("list [catch {exec sh -c {(setsid sh -c 'echo $$ > pid; exec sleep 48' > /dev/null 2>&1 < /dev/null &); sleep 5}} m] $m");
 }
 
+/// Makes a fresh folder in /tmp for a test, and an interpreter with
+/// `file` in it.
+fn fileJail(it: *tcl.Interp, buf: *[64:0]u8, what: []const u8) ![:0]const u8 {
+    const linux = std.os.linux;
+    const root = try std.fmt.bufPrintZ(buf, "/tmp/ztcl-{s}-{d}", .{ what, linux.getpid() });
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.mkdirat(linux.AT.FDCWD, root, 0o700)));
+    try it.init(std.testing.allocator);
+    try tcl.fsroot.setRoot(it, root);
+    const cap = tcl.interp.Capability;
+    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.file));
+    return root;
+}
+
+/// Deletes the tree of a test and its root folder.
+fn fileJailEnd(it: *tcl.Interp, root: [:0]const u8) void {
+    const linux = std.os.linux;
+    it.step_limit = std.math.maxInt(u64);
+    _ = it.eval("foreach f [glob -nocomplain /*] {file delete -force $f}") catch {};
+    it.deinit();
+    _ = linux.unlinkat(linux.AT.FDCWD, root, linux.AT.REMOVEDIR);
+}
+
+test "a delete of a deep tree in a coroutine gives an error and no crash" {
+    if (!tcl.coro.supported or !tcl.fsroot.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
+    var name: [64:0]u8 = undefined;
+    var it: tcl.Interp = undefined;
+    const root = try fileJail(&it, &name, "deep");
+    defer fileJailEnd(&it, root);
+    _ = try it.eval("file mkdir /[string repeat d/ 2040]");
+    // Before the walk on the heap, a ReleaseSafe build on x86-64 Linux
+    // ended with SIGSEGV here: the recursion overflowed the coroutine
+    // stack.
+    it.step_limit = 1000;
+    const got = it.eval("coroutine c apply {{} {file delete -force /d}}");
+    if (got) |_| {} else |_| try std.testing.expectEqualStrings("step limit reached", try it.str(it.result));
+    it.step_limit = std.math.maxInt(u64);
+    _ = try it.eval("coroutine c2 apply {{} {file delete -force /d}}");
+    try std.testing.expectEqualStrings("0", try it.str(try it.eval("file exists /d")));
+}
+
+test "a copy of a folder into itself gives an error at once" {
+    if (!tcl.fsroot.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
+    var name: [64:0]u8 = undefined;
+    var it: tcl.Interp = undefined;
+    const root = try fileJail(&it, &name, "self");
+    defer fileJailEnd(&it, root);
+    _ = try it.eval("file mkdir /d/e; close [open /d/e/f w]");
+    it.step_limit = 100000;
+    for ([_][]const u8{ "file copy /d /d/x", "file copy /d /d/e/x", "file copy -force /d /d", "file copy /d/./e/.. /d/e/x", "cd /d/e; file copy /d x" }) |script| {
+        try std.testing.expectError(error.TclError, it.eval(script));
+        try std.testing.expect(std.mem.endsWith(u8, try it.str(it.result), "trying to copy a directory into itself"));
+        try std.testing.expectEqualStrings("POSIX EINVAL {invalid argument}", try it.str(try it.eval("set ::errorCode")));
+    }
+    _ = try it.eval("cd /");
+    try std.testing.expectEqualStrings("/d/e /d/e/f", try it.str(try it.eval("lsort [concat [glob /d/*] [glob /d/*/*]]")));
+}
+
+test "file copy and file delete still work on a deep tree" {
+    if (!tcl.fsroot.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
+    var name: [64:0]u8 = undefined;
+    var it: tcl.Interp = undefined;
+    const root = try fileJail(&it, &name, "tree");
+    defer fileJailEnd(&it, root);
+    const script =
+        \\set p /a
+        \\for {set i 0} {$i < 300} {incr i} {
+        \\    append p /n$i
+        \\    file mkdir $p
+        \\    set f [open $p/f w]; puts -nonewline $f $i; close $f
+        \\}
+        \\file mkdir /a/n0/empty
+        \\file copy /a /b
+        \\set f [open [string map {/a/ /b/} $p]/f]; set x [read $f]; close $f
+        \\set r [list $x [llength [glob /b/n0/*]]]
+        \\file copy -force /a /b
+        \\lappend r [file exists /b/a/n0/empty]
+        \\file delete -force /a /b
+        \\lappend r [glob -nocomplain /*]
+    ;
+    try std.testing.expectEqualStrings("299 3 1 {}", try it.str(try it.eval(script)));
+    try std.testing.expectEqualStrings("1 {error deleting \"/c\": directory not empty}", try it.str(try it.eval("file mkdir /c/d; list [catch {file delete /c} m] $m")));
+}
+
+test "the tree walk has a depth limit" {
+    if (!tcl.fsroot.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
+    var name: [64:0]u8 = undefined;
+    var it: tcl.Interp = undefined;
+    const root = try fileJail(&it, &name, "depth");
+    defer fileJailEnd(&it, root);
+    const keep = tcl.filecmd.tree_depth_limit;
+    tcl.filecmd.tree_depth_limit = 50;
+    defer tcl.filecmd.tree_depth_limit = keep;
+    _ = try it.eval("file mkdir /[string repeat d/ 60]");
+    try std.testing.expectEqualStrings("1 {error deleting \"/d\": the tree is deeper than 50 levels} {ZTCL TREE DEPTH}", try it.str(try it.eval("list [catch {file delete -force /d} m] $m $::errorCode")));
+    try std.testing.expectEqualStrings("1 {error copying \"/d\": the tree is deeper than 50 levels}", try it.str(try it.eval("list [catch {file copy /d /e} m] $m")));
+    tcl.filecmd.tree_depth_limit = keep;
+}
+
 test "TclOO: classes, methods, next, mixins, and destructors" {
     try check(&.{
         .{ "oo::class create A {variable n; constructor {x} {set n $x}; method get {} {return $n}; method Hidden {} {return h}}; set o [A new 5]; list [$o get] [catch {$o Hidden}]", "5 1" },
