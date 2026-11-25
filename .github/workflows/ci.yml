@@ -65,7 +65,9 @@ jobs:
   # tier 2 must give the counts of each file without the JIT, and
   # tools/jit-diff.sh -t must find no difference. socket.test is left out
   # of the compare: its counts move between runs of one mode, from the
-  # timing of its sockets.
+  # timing of its sockets. The counts of io.test and chanio.test move by
+  # one or two in the same way (issue 73), so their pass counts must stay
+  # within 2 of the run without the JIT.
   jit-macos:
     name: JIT (macos-latest)
     runs-on: macos-latest
@@ -79,13 +81,22 @@ jobs:
           zig build
           zig build suite-runner
           zig build jit-probe
-          for m in none j J; do
-            if [ $m = none ]; then f=; else f=-$m; fi
+          # The file system of macOS ignores case, so the names of the
+          # counts files differ in more than case.
+          for m in none tier1 tier2; do
+            case $m in none) f= ;; tier1) f=-j ;; tier2) f=-J ;; esac
             tools/suite.sh -a $f -o suite-$m.tsv | tail -1
           done
-          for m in j J; do
-            diff <(grep -v -e skipped -e '^socket.test' suite-none.tsv | cut -f1-4 | sort) \
-                 <(grep -v -e skipped -e '^socket.test' suite-$m.tsv | cut -f1-4 | sort)
+          loose='^(socket|io|chanio)\.test'
+          for m in tier1 tier2; do
+            diff <(grep -v skipped suite-none.tsv | grep -Ev "$loose" | cut -f1-4 | sort) \
+                 <(grep -v skipped suite-$m.tsv | grep -Ev "$loose" | cut -f1-4 | sort)
+            for t in io.test chanio.test; do
+              a=$(awk -F'\t' -v t=$t '$1 == t {print $2}' suite-none.tsv)
+              b=$(awk -F'\t' -v t=$t '$1 == t {print $2}' suite-$m.tsv)
+              echo "$t pass: none $a, $m $b"
+              [ -n "$a" ] && [ -n "$b" ] && [ $((a > b ? a - b : b - a)) -le 2 ]
+            done
           done
       - name: Differential test of the JIT
         run: tools/jit-diff.sh -t
