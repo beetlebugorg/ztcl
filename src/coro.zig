@@ -95,7 +95,9 @@ pub const Coro = struct {
 // StackLimit, and DeallocationStack of the thread block at 224. The
 // arguments are in rcx and rdx. On a new stack, `ztcl_coro_start` calls
 // the function in `rbp` with the value in `rbx`, with 32 bytes of shadow
-// space.
+// space. The shadow space and `rbp` are 0 at the call: `ztcl_coro_start`
+// has no unwind data, so a stack walk takes the first word of the shadow
+// space as its return address, and a walk ends there.
 fn swapAsm() callconv(.naked) void {
     if (on_arm) asm volatile (
         \\ sub sp, sp, #160
@@ -204,8 +206,14 @@ fn startAsm() callconv(.naked) void {
         \\ brk #1
     ) else if (on_win) asm volatile (
         \\ movq %%rbx, %%rcx
+        \\ movq %%rbp, %%rax
+        \\ xorl %%ebp, %%ebp
         \\ subq $32, %%rsp
-        \\ callq *%%rbp
+        \\ movq $0, 0(%%rsp)
+        \\ movq $0, 8(%%rsp)
+        \\ movq $0, 16(%%rsp)
+        \\ movq $0, 24(%%rsp)
+        \\ callq *%%rax
         \\ ud2
     ) else asm volatile (
         \\ movq %%rbx, %%rdi
