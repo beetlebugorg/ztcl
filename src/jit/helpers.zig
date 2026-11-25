@@ -82,6 +82,7 @@ pub const Helper = enum(u8) {
     /// 1 when the bytes of the string on the top of the stack equal the
     /// string literal of `str_eq_jump`. It has no error.
     str_bytes_eq,
+    lmap_add,
 };
 
 pub const count = @typeInfo(Helper).@"enum".fields.len;
@@ -124,6 +125,7 @@ fn opOf(comptime h: Helper) @TypeOf(vm.opLoad) {
         .dict_update_drop => vm.opDictUpdateDrop,
         .append => vm.opAppend,
         .foreach_init => vm.opForeachInit,
+        .lmap_add => vm.opLmapAdd,
         else => unreachable,
     };
 }
