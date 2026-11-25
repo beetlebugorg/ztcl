@@ -112,7 +112,7 @@ pub fn main(init: std.process.Init) !u8 {
         for (runs[0][k]) |v| try out.print("{x:0>16}\n", .{@as(u64, @bitCast(v))});
     }
     try out.print("slow-skipped {d}\n", .{skipped});
-    try out.print("steps {d}\n", .{prog.setup.len + (n + point.block - 1) / point.block * prog.ops.len});
+    try out.print("steps {d}\n", .{prog.steps(n)});
     try out.flush();
     return 0;
 }

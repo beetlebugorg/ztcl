@@ -188,6 +188,14 @@ pub const Program = struct {
         return p.regs * block + p.regs;
     }
 
+    /// The steps of a run over `n` points: the count of `setup` once,
+    /// and the count of `ops` for each block. A compiled module counts
+    /// the same steps.
+    pub fn steps(p: *const Program, n: usize) u64 {
+        const blocks = (n + block - 1) / block;
+        return p.setup.len + blocks * p.ops.len;
+    }
+
     /// Runs the program over all points. `scratch` has `scratchLen()`
     /// elements. Two threads can run one program with their own scratch.
     pub fn run(p: *const Program, pts: *const Points, scratch: []f64) void {
@@ -1201,4 +1209,18 @@ test "the outputs of a point proc have limits, and the seed changes the noise" {
         if (runs[0][@intFromEnum(Out.flow)][i] != runs[2][@intFromEnum(Out.flow)][i]) differ = true;
     }
     try std.testing.expect(differ);
+}
+
+test "Program.steps counts the setup once and the ops for each block" {
+    var state: State = .{};
+    var it: Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try install(&it, &state);
+    _ = try it.eval(fuzzy);
+    const p = state.program("fuzzy").?;
+    try std.testing.expectEqual(@as(u64, p.setup.len), p.steps(0));
+    try std.testing.expectEqual(p.setup.len + p.ops.len, p.steps(1));
+    try std.testing.expectEqual(p.setup.len + p.ops.len, p.steps(block));
+    try std.testing.expectEqual(p.setup.len + 2 * p.ops.len, p.steps(block + 1));
 }
