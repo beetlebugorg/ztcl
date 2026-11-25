@@ -92,8 +92,8 @@ jobs:
             diff <(grep -v skipped suite-none.tsv | grep -Ev "$loose" | cut -f1-4 | sort) \
                  <(grep -v skipped suite-$m.tsv | grep -Ev "$loose" | cut -f1-4 | sort)
             for t in io.test chanio.test; do
-              a=$(awk -F'\t' -v t=$t '$1 == t {print $2}' suite-none.tsv)
-              b=$(awk -F'\t' -v t=$t '$1 == t {print $2}' suite-$m.tsv)
+              a=$(awk -F'\t' -v t=$t '$1 == t && $2 != "skipped" {print $2}' suite-none.tsv)
+              b=$(awk -F'\t' -v t=$t '$1 == t && $2 != "skipped" {print $2}' suite-$m.tsv)
               echo "$t pass: none $a, $m $b"
               [ -n "$a" ] && [ -n "$b" ] && [ $((a > b ? a - b : b - a)) -le 2 ]
             done
