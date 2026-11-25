@@ -1186,6 +1186,9 @@ test "file and channels cannot leave the root folder" {
         "open etc/passwd",          "open out w",          "source ../secret",           "source out",         "cd ..",
         "cd etc",                   "file size ../secret", "file delete ../secret",      "file mkdir ../made", "file rename sub ../moved",
         "file copy ../secret here", "file copy out here",  "file link -symbolic x /etc", "file readlink out",
+        // Case variants of a symlink name: on a file system that ignores
+        // case (APFS), they name the same symlink.
+        "open OUT",                 "open Sub/UP/../secret", "source OUT",                "cd ETC",             "file copy -force sub out",
     }) |script| {
         if (it.eval(script)) |_| {
             std.debug.print("escaped: {s}\n", .{script});
@@ -1382,6 +1385,9 @@ test "the Windows jail gives an error for each escape" {
         "open {\\\\localhost\\c$\\x}", "open PROGRA~1",            "open nul",                "open NUL.txt",
         "open con w",              "open {COM1.log} w",         "open {LPT9} w",           "open {AUX .txt} w",
         "open {trailing.} w",      "open {trailing } w",        "open {a*b} w",            "open {a?b} w",
+        "open OUT/secret",         "open Sub/UP/secret",        "open WIN/win.ini",        "cd OUT",
+        "glob -directory Win *",   "file delete -force OUT",    "file copy -force sub out", "file mkdir OUT/made",
+        "open {COM\u{b9}} w",     "open {conin$}",             "open {CONOUT$.txt} w",    "open {out::$INDEX_ALLOCATION}",
     });
     for ([_][]const u8{ "$MFT", "$MFTMirr", "$LogFile", "$Volume", "$AttrDef", "$Bitmap", "$Boot", "$BadClus", "$Secure", "$UpCase", "$Extend" }) |meta| {
         const low = try std.ascii.allocLowerString(a, meta);
@@ -1565,10 +1571,14 @@ test "exec has an allowlist and a time limit, and leaves no process" {
     try it.init(std.testing.allocator);
 }
 
+/// The temporary folder of the tests. On macOS /tmp is a symlink, and
+/// the root folder of a jail must be a path with no symlink.
+const tmp_base = if (@import("builtin").os.tag == .macos) "/private/tmp" else "/tmp";
+
 /// Makes a fresh folder in /tmp for a test. The caller removes it.
 fn tmpFolder(buf: *[64:0]u8, what: []const u8) ![:0]const u8 {
-    const linux = std.os.linux;
-    const z = try std.fmt.bufPrintZ(buf, "/tmp/ztcl-{s}-{d}", .{ what, linux.getpid() });
+    const linux = tcl.sys.os;
+    const z = try std.fmt.bufPrintZ(buf, "{s}/ztcl-{s}-{d}", .{ tmp_base, what, linux.getpid() });
     try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.mkdirat(linux.AT.FDCWD, z, 0o700)));
     return z;
 }
@@ -1637,7 +1647,7 @@ test "exec refuses a relative PATH entry" {
 
 test "exec follows symlinks in the root folder to the host file" {
     if (!tcl.proc.supported or !tcl.fsroot.supported) return error.SkipZigTest;
-    const linux = std.os.linux;
+    const linux = tcl.sys.os;
     var name: [64:0]u8 = undefined;
     const root = try tmpFolder(&name, "links");
     defer removeFolder(root);
@@ -1668,12 +1678,12 @@ test "exec follows symlinks in the root folder to the host file" {
 
 /// Gives true when a process with this pid ended within one second.
 fn processEnds(pid: i32) bool {
-    const linux = std.os.linux;
+    const linux = tcl.sys.os;
     var n: usize = 0;
     while (n < 100) : (n += 1) {
         if (linux.errno(linux.kill(pid, @enumFromInt(0))) == .SRCH) return true;
-        const ts: linux.timespec = .{ .sec = 0, .nsec = 10_000_000 };
-        _ = linux.nanosleep(&ts, null);
+        // A poll of no descriptor waits 10 ms.
+        _ = linux.poll(@ptrFromInt(8), 0, 10);
     }
     _ = linux.kill(pid, linux.SIG.KILL);
     return false;
@@ -1689,7 +1699,7 @@ fn escapeKilled(script: []const u8) !void {
     var it: tcl.Interp = undefined;
     try execJail(&it, root);
     defer it.deinit();
-    it.exec_host = .{ .allow = &.{ "sh", "setsid", "sleep" }, .timeout_ms = 300, .env = &.{"PATH=/usr/bin:/bin"} };
+    it.exec_host = .{ .allow = &.{ "sh", "setsid", "sleep", "perl" }, .timeout_ms = 300, .env = &.{"PATH=/usr/bin:/bin"} };
     try std.testing.expectEqualStrings("1 {child killed: the time limit of 300 ms ended}", try it.str(try it.eval(script)));
     const text = try it.str(try it.eval("set f [open /pid]; set p [string trim [read $f]]; close $f; set p"));
     try std.testing.expect(processEnds(try std.fmt.parseInt(i32, text, 10)));
@@ -1697,7 +1707,11 @@ fn escapeKilled(script: []const u8) !void {
 
 test "the time limit of exec kills a process that calls setsid" {
     if (!tcl.proc.supported or !tcl.fsroot.supported) return error.SkipZigTest;
-    const setsid = "list [catch {exec sh -c {setsid sh -c 'echo $$ > pid; exec sleep 47' > /dev/null 2>&1 < /dev/null & sleep 5}} m] $m";
+    // macOS has no setsid program: perl calls setsid there.
+    const setsid = if (@import("builtin").os.tag == .macos)
+        "list [catch {exec sh -c {perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' sh -c 'echo $$ > pid; exec sleep 47' > /dev/null 2>&1 < /dev/null & sleep 5}} m] $m"
+    else
+        "list [catch {exec sh -c {setsid sh -c 'echo $$ > pid; exec sleep 47' > /dev/null 2>&1 < /dev/null & sleep 5}} m] $m";
     // With no cgroup, the scan finds the process below the shell.
     tcl.proc.test_no_cgroup = true;
     defer tcl.proc.test_no_cgroup = false;
@@ -1713,8 +1727,8 @@ test "the time limit of exec kills a process that calls setsid" {
 /// Makes a fresh folder in /tmp for a test, and an interpreter with
 /// `file` in it.
 fn fileJail(it: *tcl.Interp, buf: *[64:0]u8, what: []const u8) ![:0]const u8 {
-    const linux = std.os.linux;
-    const root = try std.fmt.bufPrintZ(buf, "/tmp/ztcl-{s}-{d}", .{ what, linux.getpid() });
+    const linux = tcl.sys.os;
+    const root = try std.fmt.bufPrintZ(buf, "{s}/ztcl-{s}-{d}", .{ tmp_base, what, linux.getpid() });
     try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.mkdirat(linux.AT.FDCWD, root, 0o700)));
     try it.init(std.testing.allocator);
     try tcl.fsroot.setRoot(it, root);
@@ -1725,7 +1739,7 @@ fn fileJail(it: *tcl.Interp, buf: *[64:0]u8, what: []const u8) ![:0]const u8 {
 
 /// Deletes the tree of a test and its root folder.
 fn fileJailEnd(it: *tcl.Interp, root: [:0]const u8) void {
-    const linux = std.os.linux;
+    const linux = tcl.sys.os;
     it.step_limit = std.math.maxInt(u64);
     _ = it.eval("foreach f [glob -nocomplain /*] {file delete -force $f}") catch {};
     it.deinit();
