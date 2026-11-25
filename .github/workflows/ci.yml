@@ -140,6 +140,12 @@ jobs:
           zig build wasm-aot
           node tools/wasm-aot.mjs --quiet --sweep 4 tests/jit/*.tcl tests/mem/*.tcl bench/*.tcl
           node tools/wasm-aot.mjs --quiet --gc-stress 7 tests/jit/*.tcl tests/mem/*.tcl
+      # Point procs compiled to wasm (docs/dev/wasm-compile.md) against
+      # Program.run and point.runSlow, and the random proc fuzzer.
+      - name: Point procs compiled to wasm
+        run: |
+          tools/point-wasm-diff.sh
+          zig build point-wasm-fuzz -- --count 300
       # The threads in Node.js and in Chromium, with and without
       # cross-origin isolation. The browser test uses the Chrome of the
       # runner.

@@ -24,6 +24,7 @@ pub const point = @import("point.zig");
 pub const wasm_out = @import("wasm_out.zig");
 pub const wasm_link = @import("wasm_link.zig");
 pub const point_wasm = @import("point_wasm.zig");
+pub const point_fuzz = @import("point_fuzz.zig");
 pub const compact = @import("compact.zig");
 pub const heap = @import("heap.zig");
 pub const gc = @import("gc.zig");
@@ -67,6 +68,7 @@ test {
     _ = wasm_out;
     _ = wasm_link;
     _ = point_wasm;
+    _ = point_fuzz;
     _ = compact;
     _ = heap;
     _ = @import("tests.zig");
