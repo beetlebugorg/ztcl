@@ -483,6 +483,68 @@ Facts from the profile:
 - `bf_oo.tcl` spends 70 % of its instructions in the machinery of a method call, outside the method bodies.
 - A call of `fib` with the JIT costs about 566 instructions: `callProc` 180, the machine code 118, `vm.run` and `jit.enter` 157, the helper of `invoke` 64, and the free frame list 42.
 
+### The changes
+
+| Change | Cause in the profile |
+|---|---|
+| A TclOO object keeps its last four call chains for one epoch of the OO state. A command site keeps the command of a name word that is not a literal. `::oo::Link` keeps the global cell of each name in the object. | `::oo::Link`, `chainOf`, `isPublic`, and the two lookups of the object name: about 70 % of `bf_oo.tcl` |
+| A load for `llength` or `lindex` keeps an owned list owned. A dropped `lset` or `lassign` at the end of an arm of `if` or `switch` drops its result itself. A new list is one block. | The second `lset` copy in each call of `run` |
+| A fast path for a proc call with a compiled body and exact arguments. A free frame keeps its cells for the next call of the same `Code`. A short entry of `vm.run` for ready machine code. | `callProc`, `vm.run`, and `jit.enter`: about 400 instructions for each call of `fib` |
+| `Interp.list` reads a list value inline. Tier 1 has an inline `lassign_drop` and reads an owned cell inline for a load of an `access`. `str_eq_jump` compares inline. | `Value.asList` (7.2 %) and the helper of `lassign` (15.7 %) of `bf.tcl` with the JIT, after the changes above |
+| The list cache compares the text of an entry once after each collection. | `mem.eql` of `readloop.tcl` |
+
+The rule of an owned list is in [the design](design.md#the-bytecode): a list that a cell owns is in no other place, so no value that a script can see changes. `tests/jit/owned_lists.tcl`, `tests/jit/oo_cache.tcl`, and `tests/jit/op_lassign_drop.tcl` compare each case with tclsh 8.6.16 in each mode of `tools/jit-diff.sh`.
+
+### Results
+
+Measured on 2026-11-24, `ReleaseFast`, x86-64 Linux, with `perf stat -e instructions:u` of the whole process, against commit `958d3dd` in the same session.
+
+| Script | Interpreter, before | after | `--jit`, before | after | `--jit --jit-tier2`, before | after |
+|---|---|---|---|---|---|---|
+| `puts hi` | 0.72 M | 0.73 M | 0.73 M | 0.73 M | 0.73 M | 0.73 M |
+| `sum.tcl` | 283.8 M | 283.8 M | 90.9 M | 90.9 M | 15.1 M | 15.1 M |
+| `fib.tcl` | 165.8 M | 150.3 M | 137.4 M | 107.0 M | 137.4 M | 107.0 M |
+| `nested.tcl` | 337.6 M | 333.4 M | 123.8 M | 123.5 M | 55.4 M | 55.1 M |
+| `strbuild.tcl` | 324.0 M | 323.0 M | 252.6 M | 252.6 M | 243.2 M | 243.2 M |
+| `foreach.tcl` | 213.8 M | 206.9 M | 80.4 M | 80.4 M | 40.7 M | 40.6 M |
+| `dict.tcl` | 281.0 M | 280.8 M | 194.9 M | 194.9 M | 188.6 M | 188.6 M |
+| `dictgrow.tcl` | 645.6 M | 642.9 M | 572.4 M | 572.4 M | 570.4 M | 570.4 M |
+| `dsum.tcl` | 700.8 M | 688.8 M | 558.0 M | 556.0 M | 16.6 M | 16.6 M |
+| `readloop.tcl` | 208.9 M | 145.3 M | 154.7 M | 93.3 M | 146.9 M | 85.3 M |
+
+`tools/jit-perf.sh --check off`, `--check jit`, and `--check jit2` pass. The two gates that failed before pass now: `fib.tcl` 107.0 M (gate 112 M) and `readloop.tcl` 93.3 M (gate 150 M). `puts hi` is 3017 instructions above the baseline, and the limit is 5000.
+
+The outside programs with `tools/kostya.sh` and `bench.b`, against `tclsh` 8.6.16 in the same session. Each output equals the output of `tclsh`. The ratio is the instructions of ztcl over the instructions of `tclsh`.
+
+| Program | Mode | ztcl before | ztcl after | Ratio before | Ratio after |
+|---|---|---|---|---|---|
+| `bf.tcl` | interpreter | 1309.0 G | 1005.8 G | 0.472 | 0.363 |
+| `bf.tcl` | `--jit` | 1047.9 G | 680.8 G | 0.378 | 0.245 |
+| `bf.tcl` | `--jit --jit-tier2` | 1053.2 G | 686.1 G | 0.380 | 0.247 |
+| `bf_oo.tcl` | interpreter | 7452.3 G | 2445.7 G | 1.387 | 0.455 |
+| `bf_oo.tcl` | `--jit` | 7150.5 G | 1970.0 G | 1.331 | 0.367 |
+| `bf_oo.tcl` | `--jit --jit-tier2` | 7156.6 G | 1975.3 G | 1.332 | 0.368 |
+| `base64/test.tcl` | each mode | 50.7 G | 50.7 G | 0.701 | 0.701 |
+
+`tclsh` used 2774 G instructions for `bf.tcl`, 5372 G for `bf_oo.tcl`, and 72.4 G for `base64/test.tcl`. The targets of this work were `bf.tcl` at most 0.25 and `bf_oo.tcl` at most 1.0.
+
+Wall time, best of 5, each run on one processor with `taskset`, with `small.b` (`bench.b` with one level of the inner loops removed). Other jobs shared the machine (load average about 10 on 8 processors), so each time is noisy: `base64/test.tcl` gave 5.1 s and 7.0 s for two builds with equal instruction counts.
+
+| Program | Mode | Before | After | `tclsh` |
+|---|---|---|---|---|
+| `bf.tcl small.b` | interpreter | 1.43 s | 1.07 s | 3.06 s |
+| `bf.tcl small.b` | `--jit` | 1.20 s | 0.69 s | |
+| `bf.tcl small.b` | `--jit --jit-tier2` | 1.18 s | 0.78 s | |
+| `bf_oo.tcl small.b` | interpreter | 9.82 s | 3.24 s | 6.26 s |
+| `bf_oo.tcl small.b` | `--jit` | 8.88 s | 2.62 s | |
+| `bf_oo.tcl small.b` | `--jit --jit-tier2` | 9.12 s | 2.17 s | |
+| `fib.tcl` | `--jit` | 37 ms | 29 ms | 109 ms |
+| `readloop.tcl` | `--jit` | 32 ms | 23 ms | 46 ms |
+
+The tests: `zig build test` in Debug, in `ReleaseSafe`, and with `-Djit=false`; the wasm build with `tools/wasm-smoke.mjs` and `tools/wasm-mem.mjs`; `tools/suite.sh -a`, `-a -j`, and `-a -J` with the suite runner, each 37 383 with each of the 152 files equal to the run of `958d3dd`; `tools/jit-diff.sh` and `-t`; `zig build jit-fuzz -Doptimize=ReleaseSafe -- --tier2 --seconds 600` (38 000 programs, 266 000 runs, no difference); and `tools/gc-fuzz.py -j -T -g 1` with a `ReleaseSafe` suite runner (300 programs, no difference: one run reached the time limit, and one stopped at another depth at the nesting limit, as in milestone 1).
+
+These checks were reversed one at a time, and a test failed each time: the change of the OO epoch in a definition, the filter check and the export check of the chain cache, the namespace check of the link cache, the epoch check of the command site, the flag of the peek load, the use of an arm, the reset of the kept cells, the `Code` check of the kept cells, the length reset of a free frame, the list tag check and the end check of the inline `lassign_drop`, and the length check of the inline compare of `switch`. Two checks have no test that fails. The check of the name in `Interp.siteCommand` is not reachable from a script: each caller of a native command passes the name word of its own site. The count of collections in the list cache repeats a rule that holds already, because each collection clears the cache. The changes of the OO epoch at an object creation, an object end, and a copy were not reversed one at a time.
+
 ## The design of the JIT
 
 ### The tiers
