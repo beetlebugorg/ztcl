@@ -1,0 +1,10 @@
+# Suppressions of ThreadSanitizer for the thread tests. tools/tsan.sh
+# uses this file.
+#
+# The stop flag of a thread: stopWorker stores zero in mem_limit of the
+# interpreter of another thread, and the safe points of that thread
+# read mem_limit with a plain load. docs/threads.md describes the
+# order. The report of this pair has stopWorker in the stack of the
+# store.
+# SPDX-License-Identifier: BSD-2-Clause
+race:thread.stopWorker
