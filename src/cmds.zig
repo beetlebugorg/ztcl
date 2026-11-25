@@ -1529,6 +1529,17 @@ pub fn charCount(s: []const u8) usize {
     return s.len - cont;
 }
 
+/// The count of characters of a string of a value. The count of a long
+/// string in the heap goes in the cache of the heap, so a loop of
+/// `string index` over one string counts it once.
+pub fn charCountOf(it: *Interp, s: []const u8) usize {
+    if (s.len < 256) return charCount(s);
+    if (it.heap.cachedCount(s)) |n| return n;
+    const n = charCount(s);
+    it.heap.putCount(s, n);
+    return n;
+}
+
 /// The byte offset of character `k` of a string with `n` characters.
 pub fn byteOf(s: []const u8, n: usize, k: usize) usize {
     if (n == s.len) return @min(k, s.len);
@@ -1571,12 +1582,12 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         },
         .length => {
             if (args.len != 1) return it.wrongArgs("string length string");
-            return .{ .int = @intCast(charCount(try it.str(args[0]))) };
+            return .{ .int = @intCast(charCountOf(it, try it.str(args[0]))) };
         },
         .index => {
             if (args.len != 2) return it.wrongArgs("string index string charIndex");
             const s = try it.str(args[0]);
-            const n = charCount(s);
+            const n = charCountOf(it, s);
             const i = try index(it, args[1], n);
             if (i < 0 or i >= n) return Value.empty;
             return .{ .str = s[byteOf(s, n, @intCast(i))..byteOf(s, n, @intCast(i + 1))] };
@@ -1584,14 +1595,14 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         .range => {
             if (args.len != 3) return it.wrongArgs("string range string first last");
             const s = try it.str(args[0]);
-            const n = charCount(s);
+            const n = charCountOf(it, s);
             const r = clampRange(try index(it, args[1], n), try index(it, args[2], n), n) orelse return Value.empty;
             return .{ .str = s[byteOf(s, n, r[0])..byteOf(s, n, r[1] + 1)] };
         },
         .replace => {
             if (args.len != 3 and args.len != 4) return it.wrongArgs("string replace string first last ?string?");
             const s = try it.str(args[0]);
-            const n = charCount(s);
+            const n = charCountOf(it, s);
             var first = try index(it, args[1], n);
             var last = try index(it, args[2], n);
             const count: i64 = @intCast(n);
@@ -1638,7 +1649,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             const hay = try it.str(args[1]);
             if (needle.len == 0) return .{ .int = -1 };
             // The indexes count characters; the search uses bytes.
-            const n = charCount(hay);
+            const n = charCountOf(it, hay);
             const count: i64 = @intCast(n);
             if (which == .first) {
                 var start: usize = 0;
@@ -1697,7 +1708,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         .tolower, .toupper, .totitle => {
             if (args.len < 1 or args.len > 3) return it.fail("wrong # args: should be \"string {s} string ?first? ?last?\"", .{@tagName(which)});
             const s = try it.str(args[0]);
-            const n = charCount(s);
+            const n = charCountOf(it, s);
             var first: i64 = 0;
             var last: i64 = @as(i64, @intCast(n)) - 1;
             if (args.len >= 2) {
