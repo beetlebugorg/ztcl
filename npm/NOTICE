@@ -1,0 +1,16 @@
+ztcl
+Copyright (c) 2026 The ztcl authors
+Licensed under the BSD 2-Clause License. See LICENSE.
+
+ztcl.wasm contains the Zig standard library. The Zig standard library
+has ports of code from other projects. The license texts are in the
+licenses/ folder.
+
+Source                   Use                                License text
+Zig standard library     All of ztcl                        licenses/zig-std-MIT.txt
+musl libc                Math functions of std.math         licenses/musl-MIT.txt
+Go                       std.fmt.parseFloat, std.math.pow   licenses/go-BSD-3-Clause.txt
+ARM optimized-routines   std.math.acos, std.math.atan       licenses/arm-optimized-routines.txt
+
+ztcl follows the language rules and the command behavior of Tcl. It has
+no code of Tcl. The Tcl/Tk License is in licenses/tcl-license.txt.

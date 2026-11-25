@@ -6,6 +6,11 @@
 // back to the host. ztcl.wasm has no imports. The text of `puts` goes
 // into a buffer, and eval() passes it to `onOutput` when the script ends.
 //
+// The default module is the ztcl.wasm file next to this file. Bundlers
+// (Vite, webpack 5, esbuild, Rollup) find it through the
+// `new URL("./ztcl.wasm", import.meta.url)` form, and a CDN serves it
+// from the folder of this file.
+//
 // SPDX-License-Identifier: BSD-2-Clause
 
 const encoder = new TextEncoder();
@@ -14,16 +19,34 @@ const decoder = new TextDecoder();
 // The step limit of the C ABI is a u64. This value is "no limit".
 const NO_LIMIT = 0xffffffffffffffffn;
 
+/// The URL of the ztcl.wasm file next to this file.
+export function wasmURL() {
+  return new URL("./ztcl.wasm", import.meta.url);
+}
+
+// The built-in modules of Node.js, through process.getBuiltinModule
+// (Node.js 22.3 and later). The file has no `node:` import, so a
+// bundler for the browser needs no shim.
+function nodeModule(name) {
+  return globalThis.process?.getBuiltinModule?.(name);
+}
+
+// True when `x` is an options object and not a source.
+function isOptions(x) {
+  return x != null && Object.getPrototypeOf(x) === Object.prototype;
+}
+
 /// Compiles ztcl.wasm. `source` is a URL, a Response, bytes, or a
-/// WebAssembly.Module.
-export async function compile(source) {
+/// WebAssembly.Module. With no source, it is the ztcl.wasm file next
+/// to this file.
+export async function compile(source = wasmURL()) {
   if (source instanceof WebAssembly.Module) return source;
   if (typeof source === "string" || source instanceof URL) {
     // In Node.js, a string with no scheme is a file path.
-    const path = typeof source === "string" && !globalThis.location && !/^[a-z][a-z0-9+.-]*:/i.test(source);
-    const url = path ? new URL(`file://${(await import("node:path")).resolve(source)}`) : new URL(source, globalThis.location?.href);
-    if (url.protocol === "file:") {
-      const fs = await import("node:fs/promises");
+    const fs = nodeModule("node:fs/promises");
+    const path = typeof source === "string" && fs && !globalThis.location && !/^[a-z][a-z0-9+.-]*:/i.test(source);
+    const url = path ? nodeModule("node:url").pathToFileURL(source) : new URL(source, globalThis.location?.href);
+    if (url.protocol === "file:" && fs) {
       return WebAssembly.compile(await fs.readFile(url));
     }
     source = await fetch(url);
@@ -39,10 +62,12 @@ export async function compile(source) {
 }
 
 export class Interp {
-  /// Makes an interpreter in a new instance of `module`.
+  /// Makes an interpreter in a new instance of `module`. `module` is a
+  /// source as for compile(), and it can be left out.
   /// Options: stepLimit (steps for each eval, null for no limit),
   /// memLimit (bytes), onOutput (a function that gets the `puts` text).
   static async create(module, options = {}) {
+    if (isOptions(module)) [module, options] = [undefined, module];
     const instance = await WebAssembly.instantiate(await compile(module), {});
     return new Interp(instance, options);
   }
@@ -108,9 +133,12 @@ export class Interp {
 /// page. stop() ends the worker and the script in it. The next eval()
 /// starts a new worker with a new interpreter.
 export class WorkerInterp {
-  /// `wasm` is the URL of ztcl.wasm. Options are as for Interp.create.
-  constructor(wasm, { stepLimit = null, memLimit = null, onOutput = null } = {}) {
-    this.wasm = new URL(wasm, globalThis.location?.href).href;
+  /// `wasm` is the URL of ztcl.wasm, and it can be left out. Options
+  /// are as for Interp.create.
+  constructor(wasm, options = {}) {
+    if (isOptions(wasm)) [wasm, options] = [undefined, wasm];
+    const { stepLimit = null, memLimit = null, onOutput = null } = options;
+    this.wasm = new URL(wasm ?? wasmURL(), globalThis.location?.href).href;
     this.stepLimit = stepLimit;
     this.memLimit = memLimit;
     this.onOutput = onOutput;
@@ -120,7 +148,17 @@ export class WorkerInterp {
   }
 
   _start() {
-    this.worker = new Worker(new URL("./ztcl-worker.mjs", import.meta.url), { type: "module" });
+    // A browser starts a worker only from a URL of the same origin as
+    // the page. When this file comes from a CDN, a small worker from a
+    // blob URL imports the worker file. Bundlers find the second form.
+    const here = new URL(import.meta.url);
+    if (globalThis.location && here.origin !== globalThis.location.origin) {
+      const url = new URL("ztcl-worker.mjs", here.href.replace(/[^/]*$/, ""));
+      const blob = new Blob([`import ${JSON.stringify(url.href)};`], { type: "text/javascript" });
+      this.worker = new Worker(URL.createObjectURL(blob), { type: "module" });
+    } else {
+      this.worker = new Worker(new URL("./ztcl-worker.mjs", import.meta.url), { type: "module" });
+    }
     this.worker.onmessage = ({ data }) => {
       const p = this.pending.get(data.id);
       if (!p) return;
