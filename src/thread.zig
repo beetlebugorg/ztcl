@@ -87,21 +87,41 @@ pub const Lock = struct {
 
 /// A wake-up counter on a futex. A waiter holds `l`, reads the count,
 /// releases `l`, and sleeps until the count changes or the time ends.
+///
+/// `waiters` counts the threads in a wait, so a signal with no waiter
+/// makes no system call. A waiter adds itself before it reads the count,
+/// and a signal adds to the count before it reads `waiters`. Both use
+/// sequential consistency, so the signal sees the waiter, or the waiter
+/// sees the new count and its futex wait returns at once.
 pub const Event = struct {
     seq: std.atomic.Value(u32) = .init(0),
+    waiters: std.atomic.Value(u32) = .init(0),
 
     /// Waits at most `ns` nanoseconds. The caller holds `l`, and holds it
     /// again at the return.
     pub fn wait(e: *Event, l: *Lock, ns: u64) void {
-        const s = e.seq.load(.acquire);
+        const s = e.enter();
         l.unlock();
-        io().futexWaitTimeout(u32, &e.seq.raw, s, .{ .duration = .{ .raw = .fromNanoseconds(@intCast(ns)), .clock = .awake } }) catch {};
+        e.sleep(s, ns);
         l.lock();
     }
 
+    /// Adds a waiter and gives the count for `sleep`.
+    pub fn enter(e: *Event) u32 {
+        _ = e.waiters.fetchAdd(1, .seq_cst);
+        return e.seq.load(.seq_cst);
+    }
+
+    /// Sleeps until the count is not `s` or `ns` nanoseconds end, and
+    /// removes the waiter of `enter`.
+    pub fn sleep(e: *Event, s: u32, ns: u64) void {
+        io().futexWaitTimeout(u32, &e.seq.raw, s, .{ .duration = .{ .raw = .fromNanoseconds(@intCast(ns)), .clock = .awake } }) catch {};
+        _ = e.waiters.fetchSub(1, .release);
+    }
+
     pub fn signal(e: *Event) void {
-        _ = e.seq.fetchAdd(1, .release);
-        io().futexWake(u32, &e.seq.raw, std.math.maxInt(u32));
+        _ = e.seq.fetchAdd(1, .seq_cst);
+        if (e.waiters.load(.seq_cst) != 0) io().futexWake(u32, &e.seq.raw, std.math.maxInt(u32));
     }
 };
 
@@ -406,10 +426,8 @@ pub const Group = struct {
     lock: Lock = .{},
     /// Wakes a wait for a change of the registry.
     ev: Event = .{},
-    /// Wakes a sender that waits for room in a queue, and the count of
-    /// such senders.
+    /// Wakes a sender that waits for room in a queue.
     space_ev: Event = .{},
-    space_waiters: std.atomic.Value(u32) = .init(0),
     /// The running threads, the main thread first.
     workers: std.ArrayList(*Worker) = .empty,
     /// Ended joinable threads that no join took yet.
@@ -1126,8 +1144,7 @@ fn takeEvent(w: *Worker) ?*Msg {
     } else null;
     w.lock.unlock();
     // A sender that waits for room in this queue (`-eventmark`) wakes.
-    const g = w.group;
-    if (m != null and g.space_waiters.load(.acquire) != 0) g.space_ev.signal();
+    if (m != null) w.group.space_ev.signal();
     return m;
 }
 
@@ -1141,20 +1158,22 @@ pub fn waitRoom(it: *Interp, id: u64) Error!void {
     const me = it.worker orelse return;
     const g = me.group;
     while (true) {
-        const seq = g.space_ev.seq.load(.acquire);
+        const seq = g.space_ev.enter();
         g.lock.lock();
         const t = g.find(id) orelse {
             g.lock.unlock();
+            _ = g.space_ev.waiters.fetchSub(1, .release);
             return;
         };
         t.lock.lock();
         const full = t.eventmark > 0 and t.queue.items.len >= t.eventmark;
         t.lock.unlock();
         g.lock.unlock();
-        if (!full) return;
-        _ = g.space_waiters.fetchAdd(1, .acq_rel);
-        io().futexWaitTimeout(u32, &g.space_ev.seq.raw, seq, .{ .duration = .{ .raw = .fromNanoseconds(@intCast(if (me.is_main) std.time.ns_per_ms else slice_ns)), .clock = .awake } }) catch {};
-        _ = g.space_waiters.fetchSub(1, .acq_rel);
+        if (!full) {
+            _ = g.space_ev.waiters.fetchSub(1, .release);
+            return;
+        }
+        g.space_ev.sleep(seq, if (me.is_main) std.time.ns_per_ms else slice_ns);
         try checkFlags(it, me);
         if (me.is_main) _ = try serve(it, 16);
     }
