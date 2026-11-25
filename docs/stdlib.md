@@ -862,17 +862,19 @@ The other platform work of `src/sys.zig` (channels, sockets, and processes on ma
 
 ## Decisions for the user
 
-1. A small `package require` for the built-in modules, present by default. The other choice: modules need the capability `package`.
-2. The namespace `zt`.
-3. JSON null: the empty string by default (as tcllib), or an error without `-null`.
-4. The zone data: `tzdata.zi` with a rule compiler (about 25 KB of data), or the compiled TZif files (about 143 KB with gzip, 75 KB with zstd).
-5. The default `-concurrency` of a worker: 64 (a memory limit for each worker) or 1 (a memory limit for each request).
-6. RSA server keys in the first TLS milestone, or later.
-7. TLS 1.2 in the client for older peers, through the std client, or TLS 1.3 only.
-8. The external review of TLS: who and the budget. TLS stays behind a flag until then.
-9. The SQLite amalgamation in the repository, or a fetch at build time with a checksum. Both change AGENTS.md rule 7, which says "Add no dependency".
-10. macOS bundles: a Zig code signer for ad hoc signatures, or `codesign` only.
-11. The performance gates in "Performance targets" are targets. The user sets the final numbers after task 03.
+The user approved the plan and these answers on 2026-11-24.
+
+1. Built-in modules load with `package require` by default. The capability `package` is still needed to load a package from a file.
+2. The namespace is `zt`.
+3. JSON null is an error unless the caller gives `-null` a value. A silent empty string hides bugs.
+4. The zone data is `tzdata.zi` with a rule compiler, about 25 KB of data.
+5. The server gives each request a memory limit. The default `-concurrency` of a worker is 1, so one request runs in one interp at a time, and the pool has many workers (64 by default, or the count that the memory budget allows). A service can raise `-concurrency` for I/O-bound handlers, and then the limit is per worker.
+6. RSA server keys are in the TLS milestone, because many certificates still use RSA.
+7. The client also speaks TLS 1.2 through the std client, for older servers. The server speaks TLS 1.3 only.
+8. The external review of TLS is open: the user decides who does it, the budget, and the time. TLS stays behind a flag until the review is done.
+9. The SQLite amalgamation is fetched at build time with a pinned checksum. AGENTS.md rule 7 gets an exception for it.
+10. macOS bundles use `codesign` first. A Zig signer for ad hoc signatures is later work.
+11. The final performance gates are set after task 03 measures the other runtimes.
 
 ## Future work
 
