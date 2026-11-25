@@ -1231,6 +1231,15 @@ fn cmdLsearch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const n = try index(it, sv, items.len);
         first = if (n < 0) 0 else @intCast(n);
     }
+    // The first exact match needs only equality. A string item of
+    // another length fails with one compare.
+    if (match == .exact and kind == .ascii and !nocase and path == null and !all and !not) {
+        for (items[@min(first, items.len)..], @min(first, items.len)..) |key, k| {
+            const text = if (key == .str) key.str else try it.str(key);
+            if (text.len == pat.len and std.mem.eql(u8, text, pat)) return if (inl) key else .{ .int = @intCast(k) };
+        }
+        return if (inl) Value.empty else .{ .int = -1 };
+    }
     var out: std.ArrayList(Value) = .empty;
     var best: i64 = -1;
     var i = first;
