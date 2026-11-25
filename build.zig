@@ -226,6 +226,17 @@ fn addPointRuntime(b: *std.Build, mods: []const *std.Build.Module, fast: *std.Bu
         .imports = &.{.{ .name = "ztcl", .module = fast }},
     }) });
     step.dependOn(&b.addInstallArtifact(wasm_ref, .{}).step);
+    // The differential fuzzer: zig build point-wasm-fuzz -- --count N.
+    const fuzz = b.addExecutable(.{ .name = "point-wasm-fuzz", .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/point-wasm-fuzz.zig"),
+        .target = fast.resolved_target.?,
+        .optimize = .ReleaseFast,
+        .imports = &.{.{ .name = "ztcl", .module = fast }},
+    }) });
+    const fuzz_run = b.addRunArtifact(fuzz);
+    fuzz_run.setCwd(b.path("."));
+    if (b.args) |args| fuzz_run.addArgs(args);
+    b.step("point-wasm-fuzz", "Run the differential fuzzer of compiled point procs").dependOn(&fuzz_run.step);
 }
 
 /// The thread model of a WebAssembly build. `none` has no thread

@@ -583,6 +583,10 @@ const Compiler = struct {
         var i: usize = 1;
         while (true) {
             c.line = line;
+            // A condition runs for the points that no earlier branch took.
+            // `branch` leaves the mask of the last body in `c.mask`, and
+            // `noise3` in the condition uses the mask.
+            c.mask = rest;
             if (i >= w.len) return c.fail("if needs a condition", .{});
             const cond_text = try c.litText(&w[i]) orelse return c.fail("a condition must be in braces", .{});
             const cond = try c.truthy(try c.exprText(cond_text));
@@ -625,6 +629,15 @@ const Compiler = struct {
         // A variable that starts in a branch is not set on all paths.
         c.locals.shrinkRetainingCapacity(count);
         c.depth -= 1;
+    }
+
+    /// An integer of Tcl has no -0. The vector program holds an integer
+    /// as a double, so an integer result that can be -0 (`0 * -3`,
+    /// `0 / -2`, `-0`, `int(-0.5)`) gets `+ 0.0`, which makes -0 into +0
+    /// and keeps each other value.
+    fn intZero(c: *Compiler, r: u16, kind: Kind) Error!u16 {
+        if (kind != .int) return r;
+        return c.emit(.{ .code = .add, .a = r, .b = try c.konst(0) });
     }
 
     fn truthy(c: *Compiler, v: V) Error!u16 {
@@ -725,7 +738,7 @@ const Compiler = struct {
                 const x = try c.lower(u.a);
                 const r = try c.num(x);
                 return switch (u.op) {
-                    .neg => .{ .reg = try c.emit(.{ .code = .neg, .a = r }), .kind = x.kind },
+                    .neg => .{ .reg = try c.intZero(try c.emit(.{ .code = .neg, .a = r }), x.kind), .kind = x.kind },
                     .pos => x,
                     .not => .{ .reg = try c.emit(.{ .code = .lnot, .a = r }), .kind = .int },
                     .bitnot => c.fail("\"~\" is not allowed in a point proc", .{}),
@@ -767,7 +780,7 @@ const Compiler = struct {
                     .pow => {
                         const r = try c.emit(.{ .code = .fn2, .f = .pow, .a = xr, .b = yr });
                         // Two integers give an integer, as in Tcl.
-                        return .{ .reg = if (ints) try c.emit(.{ .code = .fn1, .f = .int, .a = r }) else r, .kind = kind };
+                        return .{ .reg = if (ints) try c.intZero(try c.emit(.{ .code = .fn1, .f = .int, .a = r }), .int) else r, .kind = kind };
                     },
                     .lt => .lt,
                     .le => .le,
@@ -787,7 +800,8 @@ const Compiler = struct {
                     .lt, .le, .gt, .ge, .eq, .ne => true,
                     else => false,
                 };
-                return .{ .reg = try c.emit(.{ .code = code, .a = xr, .b = yr }), .kind = if (cmp) .int else kind };
+                const res = try c.emit(.{ .code = code, .a = xr, .b = yr });
+                return .{ .reg = if (cmp) res else try c.intZero(res, kind), .kind = if (cmp) .int else kind };
             },
             .func => |f| {
                 var args: [3]V = undefined;
@@ -814,8 +828,8 @@ const Compiler = struct {
                 switch (f.f) {
                     .bool => return .{ .reg = try c.emit(.{ .code = .truthy, .a = a0 }), .kind = .int },
                     .abs => return .{ .reg = try c.emit(.{ .code = .fn1, .f = .abs, .a = a0 }), .kind = args[0].kind },
-                    .int, .wide, .entier => return .{ .reg = try c.emit(.{ .code = .fn1, .f = .int, .a = a0 }), .kind = .int },
-                    .round => return .{ .reg = try c.emit(.{ .code = .fn1, .f = .round, .a = a0 }), .kind = .int },
+                    .int, .wide, .entier => return .{ .reg = try c.intZero(try c.emit(.{ .code = .fn1, .f = .int, .a = a0 }), .int), .kind = .int },
+                    .round => return .{ .reg = try c.intZero(try c.emit(.{ .code = .fn1, .f = .round, .a = a0 }), .int), .kind = .int },
                     .atan2, .fmod, .hypot, .pow, .noise2 => return .{ .reg = try c.emit(.{ .code = .fn2, .f = f.f, .a = a0, .b = args[1].reg }), .kind = .double },
                     .clamp => return .{ .reg = try c.emit(.{ .code = .clamp, .a = a0, .b = args[1].reg, .c = args[2].reg }), .kind = .double },
                     .lerp => return .{ .reg = try c.emit(.{ .code = .lerp, .a = a0, .b = args[1].reg, .c = args[2].reg }), .kind = .double },
