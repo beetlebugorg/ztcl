@@ -121,21 +121,18 @@ pub fn isBuiltinFunc(command: *const interp.Command, f: expr.Func) bool {
 
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     const ops = .{
-        .{ "+", foldCmd(.add, 0) },        .{ "*", foldCmd(.mul, 1) },
-        .{ "&", foldCmd(.bitand, -1) },    .{ "|", foldCmd(.bitor, 0) },
-        .{ "^", foldCmd(.bitxor, 0) },     .{ "-", leftCmd(.sub) },
-        .{ "/", leftCmd(.div) },           .{ "**", &powCmd },
-        .{ "%", twoCmd(.mod, "integer integer") },
-        .{ "<<", twoCmd(.shl, "integer shift") },
-        .{ ">>", twoCmd(.shr, "integer shift") },
-        .{ "!=", twoCmd(.ne, "value value") },
-        .{ "ne", twoCmd(.strne, "value value") },
-        .{ "in", twoCmd(.in, "value list") },
-        .{ "ni", twoCmd(.ni, "value list") },
-        .{ "==", chainCmd(.eq) },          .{ "eq", chainCmd(.streq) },
-        .{ "<", chainCmd(.lt) },           .{ "<=", chainCmd(.le) },
-        .{ ">", chainCmd(.gt) },           .{ ">=", chainCmd(.ge) },
-        .{ "!", &notCmd },                 .{ "~", &bitNotCmd },
+        .{ "+", foldCmd(.add, 0) },                .{ "*", foldCmd(.mul, 1) },
+        .{ "&", foldCmd(.bitand, -1) },            .{ "|", foldCmd(.bitor, 0) },
+        .{ "^", foldCmd(.bitxor, 0) },             .{ "-", leftCmd(.sub) },
+        .{ "/", leftCmd(.div) },                   .{ "**", &powCmd },
+        .{ "%", twoCmd(.mod, "integer integer") }, .{ "<<", twoCmd(.shl, "integer shift") },
+        .{ ">>", twoCmd(.shr, "integer shift") },  .{ "!=", twoCmd(.ne, "value value") },
+        .{ "ne", twoCmd(.strne, "value value") },  .{ "in", twoCmd(.in, "value list") },
+        .{ "ni", twoCmd(.ni, "value list") },      .{ "==", chainCmd(.eq) },
+        .{ "eq", chainCmd(.streq) },               .{ "<", chainCmd(.lt) },
+        .{ "<=", chainCmd(.le) },                  .{ ">", chainCmd(.gt) },
+        .{ ">=", chainCmd(.ge) },                  .{ "!", &notCmd },
+        .{ "~", &bitNotCmd },
     };
     inline for (ops) |o| try it.register("tcl::mathop::" ++ o[0], o[1]);
     inline for (@typeInfo(expr.Func).@"enum".fields) |field| {

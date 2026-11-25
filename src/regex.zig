@@ -862,12 +862,12 @@ fn collateName(name: []const u21) ?u21 {
         buf[i] = @intCast(x);
     }
     const table = [_]struct { []const u8, u21 }{
-        .{ "NUL", 0 },       .{ "tab", 9 },            .{ "newline", 10 },      .{ "space", ' ' },
-        .{ "hyphen", '-' },  .{ "hyphen-minus", '-' }, .{ "period", '.' },      .{ "full-stop", '.' },
-        .{ "slash", '/' },   .{ "solidus", '/' },      .{ "comma", ',' },       .{ "colon", ':' },
-        .{ "semicolon", ';' }, .{ "equals-sign", '=' }, .{ "asterisk", '*' },   .{ "plus-sign", '+' },
-        .{ "left-square-bracket", '[' }, .{ "right-square-bracket", ']' }, .{ "backslash", '\\' },
-        .{ "circumflex", '^' }, .{ "underscore", '_' }, .{ "tilde", '~' },
+        .{ "NUL", 0 },                   .{ "tab", 9 },                    .{ "newline", 10 },     .{ "space", ' ' },
+        .{ "hyphen", '-' },              .{ "hyphen-minus", '-' },         .{ "period", '.' },     .{ "full-stop", '.' },
+        .{ "slash", '/' },               .{ "solidus", '/' },              .{ "comma", ',' },      .{ "colon", ':' },
+        .{ "semicolon", ';' },           .{ "equals-sign", '=' },          .{ "asterisk", '*' },   .{ "plus-sign", '+' },
+        .{ "left-square-bracket", '[' }, .{ "right-square-bracket", ']' }, .{ "backslash", '\\' }, .{ "circumflex", '^' },
+        .{ "underscore", '_' },          .{ "tilde", '~' },
     };
     for (table) |t| if (std.mem.eql(u8, t[0], buf[0..name.len])) return t[1];
     return null;
@@ -1588,12 +1588,12 @@ pub fn capValue(it: *Interp, m: *const Matcher, k: usize, indices: bool) Error!V
 pub fn aboutValue(it: *Interp, re: *const Regex) Error!Value {
     const a = it.alloc();
     const names = [_]struct { u16, []const u8 }{
-        .{ Info.backref, "REG_UBACKREF" },     .{ Info.lookahead, "REG_ULOOKAHEAD" },
-        .{ Info.bounds, "REG_UBOUNDS" },       .{ Info.braces, "REG_UBRACES" },
-        .{ Info.bsalnum, "REG_UBSALNUM" },     .{ Info.pbotch, "REG_UPBOTCH" },
-        .{ Info.bbs, "REG_UBBS" },             .{ Info.nonposix, "REG_UNONPOSIX" },
-        .{ Info.unspec, "REG_UUNSPEC" },       .{ Info.unport, "REG_UUNPORT" },
-        .{ Info.locale, "REG_ULOCALE" },       .{ Info.emptymatch, "REG_UEMPTYMATCH" },
+        .{ Info.backref, "REG_UBACKREF" },       .{ Info.lookahead, "REG_ULOOKAHEAD" },
+        .{ Info.bounds, "REG_UBOUNDS" },         .{ Info.braces, "REG_UBRACES" },
+        .{ Info.bsalnum, "REG_UBSALNUM" },       .{ Info.pbotch, "REG_UPBOTCH" },
+        .{ Info.bbs, "REG_UBBS" },               .{ Info.nonposix, "REG_UNONPOSIX" },
+        .{ Info.unspec, "REG_UUNSPEC" },         .{ Info.unport, "REG_UUNPORT" },
+        .{ Info.locale, "REG_ULOCALE" },         .{ Info.emptymatch, "REG_UEMPTYMATCH" },
         .{ Info.impossible, "REG_UIMPOSSIBLE" }, .{ Info.shortest, "REG_USHORTEST" },
     };
     var flags: std.ArrayList(Value) = .empty;

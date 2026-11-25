@@ -279,7 +279,7 @@ fn findSearch(it: *Interp, m: *interp.ArrayMap, name: []const u8, id: []const u8
         if (!std.mem.startsWith(u8, id, "s-")) break :blk false;
         const dash = std.mem.indexOfScalarPos(u8, id, 2, '-') orelse break :blk false;
         _ = std.fmt.parseInt(u32, id[2..dash], 10) catch break :blk false;
-        break :blk eql(id[dash + 1..], name);
+        break :blk eql(id[dash + 1 ..], name);
     };
     if (!good) return it.failCode("TCL LOOKUP ARRAYSEARCH", "illegal search identifier \"{s}\"", .{id});
     for (it.searches.items, 0..) |s, i| {

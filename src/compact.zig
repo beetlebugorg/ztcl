@@ -262,7 +262,7 @@ pub const Copier = struct {
                 const mid = lo + (hi - lo) / 2;
                 if (spans[mid].start <= start) lo = mid else hi = mid;
             }
-            p.* = spans[lo].base[start - spans[lo].start..][0..p.len];
+            p.* = spans[lo].base[start - spans[lo].start ..][0..p.len];
         }
     }
 };

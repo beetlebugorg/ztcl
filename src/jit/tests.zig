@@ -805,12 +805,15 @@ test "the verifier fails a Code that breaks one check" {
             }
         }.f },
         // 6. The site of dict_update.
-        .{ .name = "dict site", .f = struct {
-            fn f(m: *Mutable, _: std.mem.Allocator) !void {
-                // The site of `llength $l` has two words.
-                m.ins[m.find(.dict_update_drop)].b = m.ins[m.find(.access) + 1].a;
-            }
-        }.f },
+        .{
+            .name = "dict site",
+            .f = struct {
+                fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                    // The site of `llength $l` has two words.
+                    m.ins[m.find(.dict_update_drop)].b = m.ins[m.find(.access) + 1].a;
+                }
+            }.f,
+        },
         // 7. Depths.
         .{ .name = "depth above max_stack", .f = struct {
             fn f(m: *Mutable, _: std.mem.Allocator) !void {
@@ -823,14 +826,17 @@ test "the verifier fails a Code that breaks one check" {
                 m.ins[m.find(.concat)].a = 60;
             }
         }.f },
-        .{ .name = "two depths", .f = struct {
-            fn f(m: *Mutable, _: std.mem.Allocator) !void {
-                // A jump to the instruction after a push.
-                const p = m.find(.push);
-                const j = m.find(.jump);
-                m.ins[j].a = @intCast(p + 1);
-            }
-        }.f },
+        .{
+            .name = "two depths",
+            .f = struct {
+                fn f(m: *Mutable, _: std.mem.Allocator) !void {
+                    // A jump to the instruction after a push.
+                    const p = m.find(.push);
+                    const j = m.find(.jump);
+                    m.ins[j].a = @intCast(p + 1);
+                }
+            }.f,
+        },
         // 8. The marks of foreach.
         .{ .name = "foreach mark", .f = struct {
             fn f(m: *Mutable, _: std.mem.Allocator) !void {
@@ -868,19 +874,22 @@ test "the verifier fails a Code that breaks one check" {
         }.f },
         // 11. Named code with `dict_update_drop` and `lset_drop`: they
         // read a cell of the frame by its slot.
-        .{ .name = "named", .f = struct {
-            fn f(m: *Mutable, al: std.mem.Allocator) !void {
-                m.code.named = true;
-                const hints = try al.alloc(u32, m.code.names.len);
-                @memset(hints, 0);
-                m.code.hints = hints;
-                // The `ret` of `return` goes to the last `ret`, so only
-                // the two instructions break a rule of named code.
-                for (m.ins[0 .. m.ins.len - 1], 0..) |*i, k| {
-                    if (i.op == .ret and m.ins[k + 1].op == .ret) i.* = .{ .op = .jump, .a = @intCast(k + 1) };
+        .{
+            .name = "named",
+            .f = struct {
+                fn f(m: *Mutable, al: std.mem.Allocator) !void {
+                    m.code.named = true;
+                    const hints = try al.alloc(u32, m.code.names.len);
+                    @memset(hints, 0);
+                    m.code.hints = hints;
+                    // The `ret` of `return` goes to the last `ret`, so only
+                    // the two instructions break a rule of named code.
+                    for (m.ins[0 .. m.ins.len - 1], 0..) |*i, k| {
+                        if (i.op == .ret and m.ins[k + 1].op == .ret) i.* = .{ .op = .jump, .a = @intCast(k + 1) };
+                    }
                 }
-            }
-        }.f },
+            }.f,
+        },
     };
     for (cases) |c| {
         var m = try Mutable.init(a, code);
@@ -1341,7 +1350,7 @@ test "jit: compiled code with a collection at each allocation" {
         const got = try runModeGc(script, true, std.math.maxInt(u64), 1, 1);
         defer got.deinit();
         // The reference has the memory count: compare the lines before it.
-        const want = ref.text[0 .. std.mem.lastIndexOf(u8, ref.text, "mem: ").?];
+        const want = ref.text[0..std.mem.lastIndexOf(u8, ref.text, "mem: ").?];
         testing.expectEqualStrings(want, got.text) catch |e| {
             std.debug.print("script:\n{s}\n", .{script});
             return e;
@@ -1367,7 +1376,6 @@ test "jit: a child interp deleted while its compiled code runs" {
         \\for {set k 0} {$k < 20} {incr k} { interp create e$k; e$k eval { proc p {} { set s 0; for {set i 0} {$i < 10} {incr i} {incr s}; return $s }; p; p }; interp delete e$k }
     , 0);
 }
-
 
 test "jit: / and % for each sign pair, 0, and -1" {
     try same(
