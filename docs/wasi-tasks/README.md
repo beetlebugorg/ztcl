@@ -6,8 +6,8 @@
 
 | Milestone | Tasks | Result |
 |---|---|---|
-| 1: preview 1 | 01 to 04 | `ztcl.wasm` runs scripts under wasmtime, with the capabilities and the suite. CI runs it. The first component comes from the adapter. |
-| 2: preview 2 | 05 to 07 | Native WASI 0.2 imports, no adapter, and sockets. |
+| 1: preview 1 | 01 to 03 | `ztcl.wasm` runs scripts under wasmtime, with the capabilities and the suite. CI runs it. |
+| 2: WASI 0.3.2 | 04 to 07 | The async canonical ABI, native WASI 0.3.2 imports, the command component, and sockets. |
 | 3: embedding | 08 to 09 | The `ztcl:embed` world, the counts under two runtimes, and the docs. |
 
 The user answers the questions below before task 01 merges.
@@ -59,18 +59,18 @@ The user answers the questions below before task 01 merges.
 | [01](01-build.md) | shared/wasi | `zig build -Dtarget=wasm32-wasi` on preview 1 |
 | [02](02-ci.md) | shared/wasi | The smoke tests and the CI job under wasmtime |
 | [03](03-p1-capabilities.md) | shared/wasi | Files, clock, random, env, and the event loop on preview 1 |
-| [04](04-adapter-component.md) | shared/wasi | The first component with the adapter |
-| [05](05-wit-bindings.md) | shared | The WIT files and the bindings generator |
-| [06](06-p2-native.md) | shared/wasi | Native preview 2 for the CLI, clocks, random, and files |
-| [07](07-p2-sockets.md) | shared/wasi | Sockets and the event loop on `wasi:sockets` and `wasi:io/poll` |
+| [04](04-async-abi.md) | shared/wasi | The async canonical ABI of WASI 0.3, and the first component |
+| [05](05-wit-bindings.md) | shared | The WIT files of WASI 0.3.2 and the bindings generator |
+| [06](06-native.md) | shared/wasi | Native WASI 0.3 for the CLI, clocks, random, and files |
+| [07](07-sockets.md) | shared/wasi | Sockets on `wasi:sockets` 0.3 |
 | [08](08-embed-world.md) | shared/wasi | The `ztcl:embed` world for the library |
 | [09](09-counts-docs.md) | shared/wasi | Two runtimes, the counts, threads, and the docs |
 
 ## Questions for the user
 
-1. **The pinned WASI version.** Plan: WASI 0.2.N, with N the newest version that wasmtime 50 and the second runtime both support. Is a preview 3 track out of scope for now?
-2. **The adapter.** Task 04 downloads the preview 1 adapter module of the pinned wasmtime release, with a SHA-256 check, at build time. The adapter goes away at task 06. Is a downloaded build input acceptable for this step? The other choice is to skip task 04 and go to preview 2 directly.
-3. **The second runtime** for the counts of task 09. Candidates: jco in Node.js (a test tool from npm), and WAMR or Wasmer if they run 0.2 components. Which one?
+1. **The pinned WASI version.** Decided: WASI 0.3.2, the newest release. Task 04 checks that the pinned wasmtime accepts it, and reports the newest 0.3.N if it does not.
+2. **A WASI 0.2 build.** A host on wasmtime 45 or older, or on a runtime with only 0.2, cannot run a 0.3 component. Is a second build for WASI 0.2 wanted, or is 0.3 enough? The plan builds only 0.3.
+3. **The second runtime** for the counts of task 09. jco supports WASI 0.3 and runs in Node.js (a test tool from npm). Another runtime needs WASI 0.3 support. The plan proposes jco.
 4. **Threads.** The plan keeps `thread` absent on WASI until a WASI thread interface is stable. Is that the right call, or does the WASI build need threads earlier?
 5. **The `ztcl:embed` world.** Is the shape in the design (an `interp` resource, `eval`, `call`, one `host-command` import) right for zslice and other hosts?
 6. **Issue 2 names `docs/ports.md`** for the name lookup rule. The file is not on main. The plan uses AGENTS.md rule 3. Is a separate ports doc wanted?
