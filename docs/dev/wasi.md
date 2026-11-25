@@ -54,7 +54,7 @@ The root folder jail maps to one preopened directory. The runner gives `--root D
 
 ### Sockets
 
-`socket` goes through the network policy of the embedder. `sys.resolve` is the only name lookup, and it uses `wasi:sockets/ip-name-lookup`. The policy check runs on each resolved address, on the address of each connection, and on each peer of a server. The tests use only loopback addresses. Issue 2 points to a rule in `docs/ports.md`. That file is not on main, so the rule of AGENTS.md rule 3 applies.
+`socket` goes through the network policy of the embedder. `sys.resolve` is the only name lookup, and it uses `wasi:sockets/ip-name-lookup`. The policy check runs on each resolved address, on the address of each connection, and on each peer of a server. The tests use only loopback addresses. Issue 2 points to a rule in `docs/ports.md`. The ports doc is now [docs/dev/ports.md](ports.md), and the rule goes there.
 
 ### exec
 
@@ -82,6 +82,6 @@ The world imports `host-command: async func(name, list<string>) -> result<string
 - A CI job installs a pinned wasmtime release with a SHA-256 check, builds with `-Dtarget=wasm32-wasi`, runs the smoke tests, and runs the core suite.
 - The last task runs the suite under a second component runtime and publishes both counts.
 
-## Decisions for the user
+## Decisions
 
-The open questions are in [the task list](wasi-tasks/README.md#questions-for-the-user).
+The answers of the user are in [the task list](wasi-tasks/README.md#decisions).

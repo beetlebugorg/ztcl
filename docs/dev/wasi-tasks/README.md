@@ -10,8 +10,6 @@
 | 2: WASI 0.3.2 | 04 to 07 | The async canonical ABI, native WASI 0.3.2 imports, the command component, and sockets. |
 | 3: embedding | 08 to 09 | The `ztcl:embed` world, the counts under two runtimes, and the docs. |
 
-The user answers the questions below before task 01 merges.
-
 ## Platforms
 
 | Mark | Where the task runs |
@@ -66,11 +64,13 @@ The user answers the questions below before task 01 merges.
 | [08](08-embed-world.md) | shared/wasi | The `ztcl:embed` world for the library |
 | [09](09-counts-docs.md) | shared/wasi | Two runtimes, the counts, threads, and the docs |
 
-## Questions for the user
+## Decisions
 
-1. **The pinned WASI version.** Decided: WASI 0.3.2, the newest release. Task 04 checks that the pinned wasmtime accepts it, and reports the newest 0.3.N if it does not.
-2. **A WASI 0.2 build.** A host on wasmtime 45 or older, or on a runtime with only 0.2, cannot run a 0.3 component. Is a second build for WASI 0.2 wanted, or is 0.3 enough? The plan builds only 0.3.
-3. **The second runtime** for the counts of task 09. jco supports WASI 0.3 and runs in Node.js (a test tool from npm). Another runtime needs WASI 0.3 support. The plan proposes jco.
-4. **Threads.** The plan keeps `thread` absent on WASI until a WASI thread interface is stable. Is that the right call, or does the WASI build need threads earlier?
-5. **The `ztcl:embed` world.** Is the shape in the design (an `interp` resource, `eval`, `call`, one `host-command` import) right for zslice and other hosts?
-6. **Issue 2 names `docs/ports.md`** for the name lookup rule. The file is not on main. The plan uses AGENTS.md rule 3. Is a separate ports doc wanted?
+The user answered the questions on 25 November 2026:
+
+1. **The pinned WASI version.** WASI 0.3.2, the newest 0.3.N release. Task 04 checks that the pinned wasmtime accepts it.
+2. **A WASI 0.2 build.** No 0.2 build for now. The plan builds only 0.3.
+3. **The second runtime** for the counts of task 09 is jco in Node.js.
+4. **Threads.** `thread` stays absent on WASI for now.
+5. **The `ztcl:embed` world.** The shape in the design is the world: an `interp` resource, `eval`, `call`, and one `host-command` import.
+6. **The ports doc.** No new doc for WASI. The rule of the name lookup goes in the existing ports doc, [docs/dev/ports.md](../ports.md).
