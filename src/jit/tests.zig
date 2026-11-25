@@ -2417,11 +2417,12 @@ test "jit: named code of events stays in its part of the JIT memory" {
     event_ticks = 0;
     it.event_host = .{ .now = eventNow, .sleep = eventSleep };
     if (!it.enableJit(.{})) return error.SkipZigTest;
-    // Each event parses its script again, so the body and the step of
-    // the loop are new named Code values that each run three times.
+    // Each event has its own text, so the text cache has no hit. The
+    // body and the step of the loop are new named Code values that each
+    // run three times.
     _ = try it.eval(
         \\set n 0
-        \\set script {incr n; for {set i 0} {$i < 3} {incr i} {incr t}; if {$n < 10000} { after 0 $script } else { set done 1 }}
+        \\set script {incr n; for {set i 0} {$i < 3} {incr i} {incr t}; if {$n < 10000} { after 0 $script ";#$n" } else { set done 1 }}
         \\after 0 $script
         \\vwait done
     );
@@ -2435,6 +2436,27 @@ test "jit: named code of events stays in its part of the JIT memory" {
     const v = try it.eval("proc f {n} {set t 0; for {set i 0} {$i < $n} {incr i} {incr t $i}; return $t}; f 10");
     try testing.expectEqual(@as(i64, 45), v.asInt().?);
     try testing.expectEqual(before + 1, s.stats.compiled);
+}
+
+test "jit: an event script that comes again compiles one time" {
+    if (!jit.built) return error.SkipZigTest;
+    const it = try newInterp();
+    defer freeInterp(it);
+    try it.allow(@intFromEnum(tcl.interp.Capability.event));
+    event_ticks = 0;
+    it.event_host = .{ .now = eventNow, .sleep = eventSleep };
+    if (!it.enableJit(.{})) return error.SkipZigTest;
+    // The text cache gives each event the same script, so the Code of
+    // the loop is the same value at each event.
+    _ = try it.eval(
+        \\set n 0
+        \\set script {incr n; for {set i 0} {$i < 3} {incr i} {incr t}; if {$n < 2000} { after 0 $script } else { set done 1 }}
+        \\after 0 $script
+        \\vwait done
+    );
+    const s = it.jit.?;
+    try testing.expectEqual(@as(u64, 0), s.stats.named_stops);
+    try testing.expect(s.stats.compiled <= 8);
 }
 
 test "tier 2: a conditional jump back stays in tier 1" {

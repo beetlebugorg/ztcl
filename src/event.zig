@@ -147,10 +147,10 @@ fn runGlobal(cur: *Interp, x: *Interp, text: []const u8) Error!?cmds.Caught {
             x.frame = frame;
             x.ns = ns;
         }
-        return try cmds.runCaught(x, x.compile(text));
+        return try cmds.runCaught(x, x.scriptOfText(text));
     }
     const s = child.enter(cur, x);
-    const r = cmds.runCaught(x, x.compile(text));
+    const r = cmds.runCaught(x, x.scriptOfText(text));
     x.frame = frame;
     x.ns = ns;
     // `leave` frees a deleted interpreter when its last call ends.
