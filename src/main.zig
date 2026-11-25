@@ -53,6 +53,10 @@
 const std = @import("std");
 const Io = std.Io;
 const tcl = @import("ztcl");
+const shell = struct {
+    const shell = @import("shell/shell.zig");
+    const term = @import("shell/term.zig");
+};
 
 fn write(ctx: ?*anyopaque, bytes: []const u8) void {
     const w: *Io.Writer = @ptrCast(@alignCast(ctx.?));
@@ -474,6 +478,22 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     }
     if (ran) return;
     if (tclsh) return runTclsh(&it, out, &.{}, root, cwd);
+
+    // The interactive shell, when stdin and stdout are a terminal.
+    const env = init.environ_map;
+    if (shell.term.interactive(io, env.get("TERM"))) {
+        try out.flush();
+        // The output of `puts` shows at once, before the next prompt.
+        flush_each = true;
+        var sh = shell.shell.Shell.init(std.heap.smp_allocator, &it, .{
+            .io = io,
+            .home = env.get("HOME") orelse env.get("USERPROFILE"),
+            .no_color = env.get("NO_COLOR") != null,
+            .editor_cmd = env.get("VISUAL") orelse env.get("EDITOR"),
+        });
+        defer sh.deinit();
+        if (sh.loop()) |_| return else |e| if (e != error.NoTerminal) return e;
+    }
 
     // The command line: one command for each line of stdin.
     var in_buf: [1 << 16]u8 = undefined;
