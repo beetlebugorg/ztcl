@@ -38,9 +38,10 @@
 //! `script_cache` and `expr_cache` have tables outside the heap. An
 //! entry stays while its text is live, and the mark then keeps its
 //! compiled form. So a collection does not change which run of a script
-//! is its second run, and the step counts stay equal. The list cache and
-//! the tails of `append` hold no state that a script can see. They go
-//! away at each collection.
+//! is its second run, and the step counts stay equal. The text cache is
+//! in the interpreter, so `markInterp` marks its scripts and texts as
+//! roots. The list cache and the tails of `append` hold no state that a
+//! script can see. They go away at each collection.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 

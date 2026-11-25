@@ -899,6 +899,23 @@ const ListCacheEntry = struct {
     gc: u64 = 0,
 };
 
+/// The count of entries of the text cache.
+const text_cache_size = 32;
+/// The most bytes of text in the text cache.
+const text_cache_bytes = 256 << 10;
+/// A longer text does not go in the text cache.
+const text_cache_max = 64 << 10;
+
+const TextCacheEntry = struct {
+    hash: u64 = 0,
+    /// A copy of the text in the heap. The script points into it.
+    text: []const u8 = &.{},
+    script: ?*Script = null,
+    /// The bit of the clock: set at each hit, cleared when the hand
+    /// goes past.
+    used: bool = false,
+};
+
 /// The bytes above the frame address that the stack scan also reads. A
 /// target can keep locals of a frame above its frame record.
 const host_margin: usize = 128;
@@ -966,6 +983,13 @@ pub const Interp = struct {
     /// keeps an entry while its text is live (see `gc.zig`).
     script_cache: std.AutoHashMapUnmanaged(SliceKey, *Script) = .empty,
     expr_cache: std.AutoHashMapUnmanaged(SliceKey, *expr.Node) = .empty,
+    /// The scripts of texts that come again at a new address, such as
+    /// event scripts and the joined words of `eval`. The key is the text.
+    /// The entries are in the interpreter, so a collection marks each
+    /// script and its text as a root.
+    text_cache: [text_cache_size]TextCacheEntry = @splat(.{}),
+    text_cache_hand: u32 = 0,
+    text_cache_used: usize = 0,
     /// The parsed form of strings that a read command sees again.
     list_cache: [list_cache_size]ListCacheEntry = @splat(.{}),
     /// The stack of command words.
@@ -1312,12 +1336,16 @@ pub const Interp = struct {
         }
     }
 
-    /// Frees the tables of the caches that key a value by its address.
+    /// Frees the tables of the caches that key a value by its address,
+    /// and empties the text cache.
     pub fn freeCaches(it: *Interp) void {
         it.script_cache.deinit(it.heap.backing);
         it.expr_cache.deinit(it.heap.backing);
         it.script_cache = .empty;
         it.expr_cache = .empty;
+        it.text_cache = @splat(.{});
+        it.text_cache_hand = 0;
+        it.text_cache_used = 0;
     }
 
     /// True when this interpreter owns its heap.
@@ -1697,7 +1725,7 @@ pub const Interp = struct {
         if (slot == null and v == .str) {
             if (it.script_cache.get(key)) |sc| return sc;
         }
-        const sc = try it.compile(text);
+        const sc = if (slot == null) try it.scriptOfText(text) else try it.compile(text);
         if (slot) |s| {
             s.script = sc;
         } else if (v == .str) {
@@ -1706,6 +1734,47 @@ pub const Interp = struct {
             try it.script_cache.put(it.heap.backing, key, sc);
         }
         return sc;
+    }
+
+    /// The compiled script of `text`. A text that ran before at another
+    /// address gets the same script from the text cache, so its sub-scripts
+    /// and their bytecode are used again. A script keeps no state of one
+    /// run: each command site checks the epoch and the namespace before
+    /// it uses its looked-up command. The clock of the cache uses only the
+    /// order of the calls, so the result does not depend on a collection.
+    pub fn scriptOfText(it: *Interp, text: []const u8) Error!*Script {
+        if (text.len > text_cache_max) return it.compile(text);
+        const h = std.hash.Wyhash.hash(0, text);
+        for (&it.text_cache) |*e| {
+            const sc = e.script orelse continue;
+            if (e.hash == h and std.mem.eql(u8, e.text, text)) {
+                e.used = true;
+                return sc;
+            }
+        }
+        const copy = try it.alloc().dupe(u8, text);
+        const sc = try it.compile(copy);
+        var e = it.textCacheEvict();
+        while (it.text_cache_used + copy.len > text_cache_bytes) e = it.textCacheEvict();
+        e.* = .{ .hash = h, .text = copy, .script = sc };
+        it.text_cache_used += copy.len;
+        return sc;
+    }
+
+    /// Empties the next entry of the clock that has no hit since the hand
+    /// went past it, and gives that entry.
+    fn textCacheEvict(it: *Interp) *TextCacheEntry {
+        while (true) {
+            const e = &it.text_cache[it.text_cache_hand];
+            it.text_cache_hand = (it.text_cache_hand + 1) % text_cache_size;
+            if (e.used) {
+                e.used = false;
+                continue;
+            }
+            it.text_cache_used -= e.text.len;
+            e.* = .{};
+            return e;
+        }
     }
 
     /// The compiled expression of argument `i` of a command.

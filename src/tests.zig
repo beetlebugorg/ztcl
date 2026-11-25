@@ -954,6 +954,35 @@ test "compact keeps a root value and leaves shared data shared" {
     try std.testing.expectEqualStrings("1", try evalStr(&it, "llength $deep"));
 }
 
+test "the text cache gives the same script to a text that comes again" {
+    try check(&.{
+        // A redefined command and a changed namespace give a new lookup.
+        .{ "proc p {} {return g}; namespace eval n1 {proc p {} {return n1}}; set r {}; foreach k {1 2} {lappend r [eval p {}] [namespace eval n1 {eval p {}}]}; proc p {} {return h}; lappend r [eval p {}]", "g n1 g n1 h" },
+        // A renamed command gives a new lookup.
+        .{ "proc p {} {return a}; set r [eval p {}]; rename p q; proc p {} {return b}; lappend r [eval p {}] [eval q {}]", "a b a" },
+        // A syntax error gives the error at each eval.
+        .{ "set r {}; foreach k {1 2} {lappend r [catch {eval {set x [} {}} m] $m}; set r", "1 {missing close-bracket} 1 {missing close-bracket}" },
+    });
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    // A text that comes again at a new address has one script.
+    _ = try it.eval("proc t {} {eval {set y 0} {;for {set i 0} {$i < 3} {incr i} {incr y}}; return $y}; t; t");
+    var n: usize = 0;
+    for (it.text_cache) |e| if (e.script != null) {
+        n += 1;
+    };
+    try std.testing.expectEqual(@as(usize, 1), n);
+    // The count and the bytes stay in their bounds.
+    _ = try it.eval("for {set i 0} {$i < 200} {incr i} {eval set z$i [string repeat x 4000]}");
+    try std.testing.expect(it.text_cache_used <= 256 << 10);
+    try it.compact(&.{}, .{});
+    try std.testing.expectEqual(@as(usize, 0), it.text_cache_used);
+    try std.testing.expectEqualStrings("3", try evalStr(&it, "t"));
+    try it.reset();
+    try std.testing.expectEqual(@as(usize, 0), it.text_cache_used);
+}
+
 fn callCompact(it: *tcl.Interp, _: []const tcl.Value, _: ?*tcl.interp.Cmd) tcl.Error!tcl.Value {
     it.compact(&.{}, .{}) catch |e| switch (e) {
         error.InterpBusy => return .{ .str = "busy" },
