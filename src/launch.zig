@@ -16,8 +16,16 @@
 //! Windows opens the target with `ShellExecuteExW` and the verb `open`,
 //! with COM on the thread as the shell asks. An embedder can give
 //! `Interp.launch_host`, which gets each target in place of the system,
-//! as the tests do. Linux and macOS have no backend yet: with no
-//! `launch_host`, the command gives the error `ZTCL OPEN UNAVAILABLE`.
+//! as the tests do.
+//!
+//! macOS runs `/usr/bin/open`, the program of LaunchServices, with the
+//! URL or the full path, and waits for its exit status. The full path of
+//! a file in the jail comes from `F_GETPATH` on a descriptor of the file,
+//! so the app gets the file that the check saw. An app bundle, a file
+//! that macOS runs as code (`.command`, `.pkg`, and the others of
+//! `blocked_mac`), and a file with an execute bit are errors. Linux has
+//! no backend yet: with no `launch_host`, the command gives the error
+//! `ZTCL OPEN UNAVAILABLE`.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 const std = @import("std");
@@ -30,6 +38,7 @@ const Interp = interp.Interp;
 const Value = value.Value;
 const Error = interp.Error;
 const on_win = builtin.os.tag == .windows;
+const on_mac = builtin.os.tag == .macos;
 
 /// The callback of an embedder. It opens the target (a URL, or the full
 /// host path of a file) and gives false on a failure.
@@ -57,6 +66,23 @@ const blocked = [_][]const u8{
     "img",               "vhd",       "vhdx",
 };
 
+/// The extensions of the files and the bundles that macOS runs as code,
+/// or that point at another program or place.
+const blocked_mac = [_][]const u8{
+    "app",    "command",   "tool",    "terminal", "workflow", "action",  "pkg",  "mpkg",
+    "scpt",   "scptd",     "applescript", "jar",  "webloc",   "inetloc", "fileloc", "prefpane",
+    "kext",   "plugin",    "bundle",  "framework", "sh",      "zsh",     "bash", "csh",
+    "py",     "pl",        "rb",      "osax",     "saver",    "mobileconfig", "dylib", "xpc",
+};
+
+fn blockedMac(full: []const u8) bool {
+    const trimmed = std.mem.trimEnd(u8, full, "/");
+    const base = trimmed[(std.mem.lastIndexOfScalar(u8, trimmed, '/') orelse return false) + 1 ..];
+    const dot = std.mem.lastIndexOfScalar(u8, base, '.') orelse return false;
+    for (blocked_mac) |b| if (std.ascii.eqlIgnoreCase(base[dot + 1 ..], b)) return true;
+    return false;
+}
+
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try it.register("ztcl::open", cmdOpen);
 }
@@ -71,6 +97,10 @@ fn cmdOpen(it: *Interp, args: []const Value, _: ?*interp.Cmd) Error!Value {
     } else try filePath(it, t);
     if (it.launch_host) |h| {
         if (!h.open(h.ctx, target)) return failed(it, t);
+        return .{ .str = "" };
+    }
+    if (comptime on_mac) {
+        if (!mac.open(it.alloc(), target)) return failed(it, t);
         return .{ .str = "" };
     }
     if (comptime !on_win) return unavailable(it);
@@ -125,7 +155,7 @@ fn filePath(it: *Interp, path: []const u8) Error![]const u8 {
     if (it.capabilities & @intFromEnum(interp.Capability.file) == 0 or !it.fs_ok())
         return it.failCode("ZTCL OPEN NOFILE", "ztcl::open of a file needs the file capability", .{});
     const rel = try fsroot.need(it, path);
-    const full = if (comptime on_win) try win.finalPath(it, rel, path) else if (it.fs.host) rel else return unavailable(it);
+    const full = if (comptime on_win) try win.finalPath(it, rel, path) else if (comptime on_mac) try mac.finalPath(it, rel, path) else if (it.fs.host) rel else return unavailable(it);
     if (comptime on_win) {
         // A named stream: a colon after the drive.
         const start: usize = if (full.len >= 2 and full[1] == ':') 2 else 0;
@@ -134,6 +164,56 @@ fn filePath(it: *Interp, path: []const u8) Error![]const u8 {
     }
     return full;
 }
+
+pub const mac = if (on_mac) struct {
+    const c = std.c;
+    /// F_GETPATH of fcntl on macOS, and MAXPATHLEN.
+    const f_getpath = 50;
+    const max_path = 1024;
+
+    /// Runs `/usr/bin/open target` and gives true for an exit status of 0.
+    pub fn open(a: std.mem.Allocator, target: []const u8) bool {
+        const arg = a.dupeZ(u8, target) catch return false;
+        defer a.free(arg);
+        const argv = [_:null]?[*:0]const u8{ "/usr/bin/open", arg.ptr };
+        const envp = [_:null]?[*:0]const u8{};
+        // The messages of `open` go to /dev/null: the exit status has the answer.
+        var actions: c.posix_spawn_file_actions_t = undefined;
+        if (c.posix_spawn_file_actions_init(&actions) != 0) return false;
+        defer _ = c.posix_spawn_file_actions_destroy(&actions);
+        const null_flags: c_int = @bitCast(c.O{ .ACCMODE = .WRONLY });
+        if (c.posix_spawn_file_actions_addopen(&actions, 1, "/dev/null", null_flags, 0) != 0) return false;
+        if (c.posix_spawn_file_actions_addopen(&actions, 2, "/dev/null", null_flags, 0) != 0) return false;
+        var pid: c.pid_t = 0;
+        if (c.posix_spawn(&pid, "/usr/bin/open", &actions, null, @ptrCast(&argv), @ptrCast(&envp)) != 0) return false;
+        var status: c_int = 0;
+        while (c.waitpid(pid, &status, 0) < 0) {
+            if (@as(c.E, @enumFromInt(c._errno().*)) != .INTR) return false;
+        }
+        return status == 0;
+    }
+
+    /// The full host path of a file that the jail allows, from its
+    /// descriptor. A bundle or a file that macOS runs is an error.
+    pub fn finalPath(it: *Interp, rel: []const u8, shown: []const u8) Error![]const u8 {
+        var r = try fsroot.openRel(it, rel, .{}, 0);
+        if (r == .err and r.err == .ISDIR) r = try fsroot.openRel(it, rel, .{ .directory = true }, 0);
+        const fd = switch (r) {
+            .fd => |fd| fd,
+            .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "couldn't open \"{s}\": ", .{shown})),
+        };
+        defer sys.close(fd);
+        var buf: [max_path]u8 = @splat(0);
+        if (c.fcntl(fd, f_getpath, &buf) < 0) return it.failCode("ZTCL OPEN PATH", "ztcl::open has no host path for \"{s}\"", .{shown});
+        const full = std.mem.sliceTo(&buf, 0);
+        var st: c.Stat = undefined;
+        if (c.fstat(fd, &st) != 0) return it.failCode("ZTCL OPEN PATH", "ztcl::open has no host path for \"{s}\"", .{shown});
+        const is_file = st.mode & c.S.IFMT == c.S.IFREG;
+        if (blockedMac(full) or (is_file and st.mode & 0o111 != 0))
+            return it.failCode("ZTCL OPEN BLOCKED", "ztcl::open does not open the file \"{s}\": the system runs it as a program", .{shown});
+        return try it.alloc().dupe(u8, full);
+    }
+} else struct {};
 
 pub const win = if (on_win) struct {
     const HANDLE = *anyopaque;
