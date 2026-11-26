@@ -7,6 +7,8 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+/// The process code of the target: `proc_windows.zig` on Windows.
+const proc_mod = if (@import("builtin").os.tag == .windows) @import("proc_windows.zig") else @import("proc.zig");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
 const fsroot = @import("fsroot.zig");
@@ -17,8 +19,8 @@ const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
 const sys = @import("sys.zig");
-const proc_ok = @import("proc.zig").supported;
-const ProcTree = if (proc_ok) @import("proc.zig").Tree else struct {};
+const proc_ok = proc_mod.supported;
+const ProcTree = if (proc_ok) proc_mod.Tree else struct {};
 const event = @import("event.zig");
 
 pub const Translation = enum { auto, lf, cr, crlf, binary };
@@ -373,7 +375,7 @@ fn cmdOpen(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         // A command pipeline needs the capability `exec`.
         if (it.capabilities & @backingInt(interp.Capability.exec) == 0) return it.fail("couldn't open \"{s}\": command pipelines are not available", .{path});
         if (comptime !proc_ok) return it.fail("couldn't open \"{s}\": exec is not available on this target", .{path});
-        return @import("proc.zig").openPipeline(it, path[1..], m.read, m.write);
+        return proc_mod.openPipeline(it, path[1..], m.read, m.write);
     }
     if (try vfs.gate(it, path, .channels, "couldn't open")) |h| {
         if (m.write) return vfs.readOnly(it, "couldn't open", path);
@@ -436,7 +438,7 @@ fn closeChan(it: *Interp, c: *Channel) Error!void {
     if (comptime proc_ok) {
         if (c.pty) {
             @import("pty.zig").hangup(it, c);
-        } else if (c.pids.len > 0) try @import("proc.zig").reap(it, c);
+        } else if (c.pids.len > 0) try proc_mod.reap(it, c);
     }
 }
 
@@ -446,7 +448,7 @@ pub fn closeAll(it: *Interp) void {
         flushOut(it, c) catch {};
         closeFds(c);
         if (comptime proc_ok) {
-            if (c.pids.len > 0) @import("proc.zig").abandon(c);
+            if (c.pids.len > 0) proc_mod.abandon(c);
         }
     }
     it.chans.table = .empty;

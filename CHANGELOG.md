@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Adds `exec`, `pid`, and command pipelines (`open "|cmd"`) on Windows. A bare name goes through the `PATH` and `PATHEXT` of `exec_host.env`, each program gets one full path before it starts, and the allowlist compares that path. A `.bat` or `.cmd` file is an error, because `cmd.exe` reads its arguments with other rules. Each pipeline is a Job Object, so a kill or the time limit ends each process that a program started. See `docs/dev/exec-windows.md`.
+
 - Adds `ztcl::open` behind the new capability `launch` (`--allow launch`): a URL with the scheme `http`, `https`, or `mailto`, or a file, in the default app of the host. A file also needs `file`, and its path goes through the jail or host mode. On Windows it uses `ShellExecuteExW` on the final path of the file, and a file of a type that runs as code is an error. `Interp.launch_host` lets an embedder open the target itself. Linux and macOS give `ZTCL OPEN UNAVAILABLE` until their backends land.
 - Adds `ztcl::win::registry` on Windows behind the new capability `registry`: `get`, `set`, `type`, `delete`, `keys`, and `values`, with the value types of the `registry` package of Tcl. It reaches only the keys of `Interp.registry_allow` (runner flag `--registry-allow`) and the keys below them.
 
