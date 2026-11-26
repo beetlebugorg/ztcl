@@ -82,7 +82,7 @@ test "ztcl::pty runs a program on a terminal" {
     try ptyInterp(&it);
     defer it.deinit();
     _ = try ev(&it, read_until);
-    try has(&it, "set t [ztcl::pty spawn sh -c {tty; echo END}]; readUntil $t END", "/dev/pts/");
+    try has(&it, "set t [ztcl::pty spawn sh -c {tty; echo END}]; readUntil $t END", if (builtin.os.tag == .macos) "/dev/ttys" else "/dev/pts/");
     _ = try ev(&it, "close $t");
     // The size of -size, and then the size of resize.
     try has(&it, "set t [ztcl::pty spawn -size {100 40} sh -c {stty size; read x; stty size; echo END}]; readUntil $t {40 100}", "40 100");
