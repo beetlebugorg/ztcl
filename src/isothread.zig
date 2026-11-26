@@ -365,13 +365,18 @@ fn spawnRunner(b: *Bridge, runner: []const u8) ?Fd {
 /// Starts `runner --iso-handle 0x...` in the sandbox of Windows: an
 /// AppContainer with no folder of the user and a Job Object. The child
 /// gets the network only with the capability `socket`, and its job ends
-/// it past `sandboxMem` of the memory limit of the thread. Gives the
-/// pipe, which the transport then owns.
+/// it past `sandboxMem` of the memory limit of the thread. With the
+/// capability `file` or `channels`, the AppContainer can read and write
+/// the root folder of the creator, which the child opens as its jail.
+/// Gives the pipe, which the transport then owns.
 fn spawnSandbox(b: *Bridge, runner: []const u8) ?Fd {
     if (comptime !on_win) return null;
     const net = b.caps & @backingInt(interp.Capability.socket) != 0;
+    const file_bits = @backingInt(interp.Capability.file) | @backingInt(interp.Capability.channels);
+    const files = b.caps & file_bits != 0 and !b.host_files and b.root.len > 0;
     var c = isow.spawn(b.gpa, runner, .{
         .args = &.{},
+        .root = if (files) b.root else null,
         .net = net,
         .limits = .{ .mem_bytes = sandboxMem(b.mem) },
     }) catch return null;
