@@ -1130,7 +1130,7 @@ test "the optional commands are absent by default" {
     defer it.deinit();
     // A build with modules has the small `package` by default.
     try std.testing.expect((it.findCommand("package") == null) == (modules.table.len == 0));
-    for ([_][]const u8{ "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror" }) |name| {
+    for ([_][]const u8{ "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror", "ztcl::open" }) |name| {
         try std.testing.expect(it.findCommand(name) == null);
     }
 }
@@ -2677,4 +2677,74 @@ test "fsroot: host mode uses the real paths of the host, and a root ends it" {
     try tcl.fsroot.setRoot(&it, ".");
     try std.testing.expect(!it.fs.host);
     try std.testing.expectEqualStrings("/", try it.str(try it.eval("pwd")));
+}
+
+var launch_buf: [512]u8 = undefined;
+var launched: []const u8 = "";
+
+fn recordOpen(_: ?*anyopaque, target: []const u8) bool {
+    @memcpy(launch_buf[0..target.len], target);
+    launched = launch_buf[0..target.len];
+    return true;
+}
+
+test "ztcl::open gives a URL or the host path of a file to the opener" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.launch_host = .{ .open = recordOpen };
+    try it.allow(@intFromEnum(tcl.interp.Capability.launch));
+    _ = try it.eval("ztcl::open https://example.com/a?b=1");
+    try std.testing.expectEqualStrings("https://example.com/a?b=1", launched);
+    _ = try it.eval("ztcl::open MAILTO:a@example.com");
+    try std.testing.expectEqualStrings("{ZTCL OPEN SCHEME} {ZTCL OPEN SCHEME} {ZTCL OPEN URL}", try it.str(try it.eval(
+        \\set r {}
+        \\foreach u [list file:///etc/passwd javascript:x "http://a\nb"] { catch {ztcl::open $u}; lappend r $::errorCode }
+        \\set r
+    )));
+    // A file needs `file` too.
+    try std.testing.expectEqualStrings("ZTCL OPEN NOFILE", try it.str(try it.eval("catch {ztcl::open a.txt}; set ::errorCode")));
+    if (comptime !tcl.fsroot.supported or @import("builtin").os.tag == .wasi) return;
+    try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.file));
+    try tcl.fsroot.setHost(&it);
+    _ = try it.eval(
+        \\set d [file join [pwd] .zig-cache ztcl-open-test]
+        \\file delete -force $d
+        \\file mkdir $d/sub
+        \\foreach n {a.txt b.EXE c.ps1} { set f [open $d/sub/$n w]; close $f }
+    );
+    try tcl.fsroot.setRoot(&it, ".zig-cache/ztcl-open-test");
+    launched = "";
+    _ = try it.eval("ztcl::open sub/../sub/a.txt");
+    try std.testing.expect(std.mem.endsWith(u8, launched, "/ztcl-open-test/sub/a.txt"));
+    try std.testing.expect(launched[0] == '/' or launched[1] == ':');
+    _ = try it.eval("ztcl::open sub");
+    try std.testing.expect(std.mem.endsWith(u8, launched, "/ztcl-open-test/sub"));
+    if (@import("builtin").os.tag == .windows) {
+        try std.testing.expectEqualStrings("{ZTCL OPEN BLOCKED} {ZTCL OPEN BLOCKED} {POSIX ENOENT {no such file or directory}}", try it.str(try it.eval(
+            \\set r {}
+            \\foreach p {sub/b.EXE /sub/c.ps1 sub/none.txt} { catch {ztcl::open $p}; lappend r $::errorCode }
+            \\set r
+        )));
+    }
+    // The jail holds: a path out of the root is an error.
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {ztcl::open ../../build.zig}")));
+    try tcl.fsroot.setHost(&it);
+    _ = try it.eval("file delete -force [file join [pwd] .zig-cache ztcl-open-test]");
+}
+
+test "ztcl::open: the scheme of a URL, and the blocked file types" {
+    const l = tcl.launch;
+    try std.testing.expectEqualStrings("https", l.schemeOf("https://a").?);
+    try std.testing.expect(l.schemeOf("C:/a.txt") == null);
+    try std.testing.expect(l.schemeOf("a/b:c") == null);
+    try std.testing.expect(l.isBlocked("C:/x/setup.Exe"));
+    try std.testing.expect(l.isBlocked("run.bat"));
+    try std.testing.expect(!l.isBlocked("C:/x.exe/notes.txt"));
+    try std.testing.expect(!l.isBlocked("README"));
+}
+
+test "ztcl::open: the shell of Windows fails on a missing file, with no dialog" {
+    if (@import("builtin").os.tag != .windows) return error.SkipZigTest;
+    try std.testing.expect(!(try tcl.launch.win.shellOpen(std.testing.allocator, "C:/ztcl-no-such-folder/none.txt")));
 }
