@@ -100,6 +100,42 @@ ztcl::watch remove W
 
 Stops the watch and closes its descriptor. The result is empty, and the handle is then invalid.
 
+## Try the commands
+
+The browser has no folders to watch, so the commands of this helper do not run in the page. The helper builds the commands for a folder under a root folder (`ztcl --root DIR --allow file`), and shows the result of `changes` after one action of a program, from the rules above.
+
+<!-- helper: ztcl::watch -->
+```tcl
+# shell: none
+# height: 215
+helper::form
+helper::row Folder [ttk::entry .f.dir -textvariable dir -font TkFixedFont]
+helper::row "" [ttk::checkbutton .f.rec -text -recursive -variable rec]
+helper::row "A program" [ttk::combobox .f.act -textvariable act -state readonly -values {
+    "makes a.txt" "changes a.txt" "deletes a.txt" "moves a.txt out"
+    "makes a.txt, then changes it" "makes and deletes a.txt"
+}]
+helper::footer 3 0
+set dir /site
+set rec 0
+set act "makes a.txt, then changes it"
+proc build {} {
+    set add [list ztcl::watch add]
+    if {$::rec} { lappend add -recursive }
+    lappend add $::dir
+    set helper::cmd "set w \[$add\]; ztcl::watch changes \$w"
+    set path [string trimright $::dir /]/a.txt
+    switch -- $::act {
+        "makes a.txt" - "makes a.txt, then changes it" { set kind created }
+        "changes a.txt" { set kind modified }
+        "deletes a.txt" - "makes and deletes a.txt" { set kind deleted }
+        "moves a.txt out" { set kind moved }
+    }
+    helper::result 1 "add gives watch1, and changes gives:\n[list $kind $path]"
+}
+helper::watch build dir rec act
+```
+
 ## Errors
 
 | Error code | Message | Cause |

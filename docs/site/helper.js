@@ -21,7 +21,8 @@ import { pageShell } from "./shell.js";
 // the rows of the form, with a label in the first column. helper::watch
 // runs a script now and after each change of the variables. helper::show
 // shows a command and runs it in the shell. helper::footer makes the
-// bottom of the helper: the command, its result, and the button.
+// bottom of the helper: the command, its result, and the button. A
+// second argument of 0 leaves out the button, for a helper with no shell.
 const PRELUDE = String.raw`
 namespace eval helper {
     variable rows 0
@@ -69,7 +70,7 @@ proc helper::watch {cmd args} {
     foreach v $args { trace add variable ::$v write "$cmd ;#" }
     uplevel #0 $cmd
 }
-proc helper::footer {{lines 2}} {
+proc helper::footer {{lines 2} {button 1}} {
     ttk::frame .foot -padding {8 4 8 8}
     ttk::label .foot.cl -text Command -width 8
     ttk::entry .foot.cmd -textvariable helper::cmd -font TkFixedFont -state readonly
@@ -80,7 +81,7 @@ proc helper::footer {{lines 2}} {
     ttk::button .foot.put -text "Put in the shell" -command {helper::shell $helper::cmd}
     grid .foot.cl .foot.cmd -sticky ew -pady 2
     grid .foot.rl .foot.res -sticky ew -pady 2
-    grid x .foot.put -sticky e -pady {6 0}
+    if {$button} { grid x .foot.put -sticky e -pady {6 0} }
     grid configure .foot.cl .foot.rl -sticky nw
     grid columnconfigure .foot 1 -weight 1
     pack .foot -side top -fill x
@@ -115,7 +116,10 @@ const unescape = (s) => s.replace(/\\(.)/g, (_, c) => (c === "n" ? "\n" : c));
 async function start(fig) {
   const box = fig.querySelector(".zhelper-app");
   const code = fig.querySelector("details code").textContent;
-  const [view, { mount }] = await Promise.all([pageShell(), loadZtk()]);
+  // A helper with data-shell="none" has no shell: its commands do not
+  // run, and its footer has no button.
+  const alone = fig.dataset.shell === "none";
+  const [view, { mount }] = await Promise.all([alone ? null : pageShell(), loadZtk()]);
   let app = null;
   let buf = "";
   const replies = [];
@@ -125,10 +129,10 @@ async function start(fig) {
   };
   const handle = (msg) => {
     const body = unescape(msg.slice(2));
-    if (msg[0] === "S") view.put(body);
+    if (msg[0] === "S") view?.put(body);
     if (msg[0] === "E") {
       const sp = body.indexOf(" ");
-      const r = view.run(body.slice(sp + 1));
+      const r = view ? view.run(body.slice(sp + 1)) : { ok: false, result: "this page has no shell" };
       replies.push(`helper::reply ${body.slice(0, sp)} ${r.ok ? 1 : 0} ${tclWord(r.result)}`);
       setTimeout(flush, 0);
     }
@@ -150,20 +154,48 @@ async function start(fig) {
   fig.classList.add("zhelper-live");
 }
 
+const SMALL = "(max-width: 640px)";
+
+// On a small screen a helper is one line with an Open button, and it
+// starts only when the reader opens it. Else it starts when it comes
+// into view.
 function watch(fig) {
+  if (matchMedia(SMALL).matches) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn ghost zhelper-open";
+    btn.textContent = "Open the helper";
+    btn.addEventListener("click", () => {
+      btn.remove();
+      fig.classList.add("zhelper-opened");
+      // The focus goes to the box, so that it does not go to the top of
+      // the page with the removed button.
+      const box = fig.querySelector(".zhelper-app");
+      box.tabIndex = -1;
+      box.focus({ preventScroll: true });
+      begin(fig);
+    });
+    fig.querySelector(".zhelper-bar").append(btn);
+    return;
+  }
+  fig.classList.add("zhelper-opened");
   const seen = new IntersectionObserver((entries) => {
     if (!entries.some((e) => e.isIntersecting)) return;
     seen.disconnect();
-    start(fig).catch((err) => {
-      const box = fig.querySelector(".zhelper-app");
-      box.textContent = "";
-      const p = document.createElement("p");
-      p.className = "zhelper-poster";
-      p.textContent = `The helper did not start: ${err.message}`;
-      box.append(p);
-    });
+    begin(fig);
   });
   seen.observe(fig);
+}
+
+function begin(fig) {
+  start(fig).catch((err) => {
+    const box = fig.querySelector(".zhelper-app");
+    box.textContent = "";
+    const p = document.createElement("p");
+    p.className = "zhelper-poster";
+    p.textContent = `The helper did not start: ${err.message}`;
+    box.append(p);
+  });
 }
 
 if (typeof WebAssembly === "object") document.querySelectorAll(".zhelper").forEach(watch);

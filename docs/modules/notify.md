@@ -24,6 +24,46 @@ Shows one notification and gives an empty string. The options can come in any or
 
 No text can have a NUL byte.
 
+The browser page cannot show a notification of the system, so the commands of this helper do not run in the page. The helper builds the command and checks the lengths of the texts from the table above.
+
+<!-- helper: ztcl::notify -->
+```tcl
+# shell: none
+# height: 200
+helper::form
+helper::row Title [ttk::entry .f.t -textvariable title]
+helper::row Subtitle [ttk::entry .f.s -textvariable sub]
+helper::row Body [ttk::entry .f.b -textvariable body]
+helper::footer 2 0
+set title "Build done"
+set sub ztcl
+set body "All 312 tests pass."
+# The length of a text in UTF-8.
+proc bytes {s} {
+    set n 0
+    foreach c [split $s ""] {
+        scan $c %c u
+        incr n [expr {$u < 0x80 ? 1 : $u < 0x800 ? 2 : $u < 0x10000 ? 3 : 4}]
+    }
+    return $n
+}
+proc build {} {
+    set cmd [list ztcl::notify $::title]
+    if {$::sub ne ""} { lappend cmd -subtitle $::sub }
+    if {$::body ne ""} { lappend cmd -body $::body }
+    set helper::cmd $cmd
+    set n(title) [bytes $::title]
+    set n(subtitle) [bytes $::sub]
+    set n(body) [bytes $::body]
+    if {$n(title) == 0} { return [helper::result 0 "ZTCL NOTIFY TEXT: a notification needs a title"] }
+    foreach {part max} {title 256 subtitle 256 body 4096} {
+        if {$n($part) > $max} { return [helper::result 0 "ZTCL NOTIFY LENGTH: the $part of a notification has more than $max bytes"] }
+    }
+    helper::result 1 "Bytes: title $n(title), subtitle $n(subtitle), body $n(body). It needs the capability notify."
+}
+helper::watch build title sub body
+```
+
 ## The notifier
 
 The notifier is the first of these that exists:

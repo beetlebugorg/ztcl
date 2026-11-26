@@ -26,6 +26,7 @@ Emacs keys are the default.
 | Tab | Complete |
 | Ctrl-X Ctrl-E | Edit the command in `$VISUAL` or `$EDITOR` |
 | Alt-T | Show the whole `errorInfo` of the last error |
+| Alt-I | On the docs site: open the inspector on the last result |
 | Ctrl-L | Clear the screen |
 | Ctrl-C | Drop the command |
 | Ctrl-D | Exit, on an empty line |

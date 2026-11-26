@@ -43,13 +43,17 @@ PAGES = [
     ("docs/processes.md", "processes/", "Guide", "Run programs"),
     ("docs/jit.md", "jit/", "Guide", "The JIT"),
     ("docs/build.md", "build/", "Guide", "Build a program"),
-    ("docs/modules/json.md", "modules/json/", "Guide", "Module ztcl::json"),
-    ("docs/modules/open.md", "modules/open/", "Guide", "Module ztcl::open"),
-    ("docs/modules/pty.md", "modules/pty/", "Guide", "Module ztcl::pty"),
-    ("docs/modules/win.md", "modules/win/", "Guide", "Module ztcl::win"),
-    ("docs/modules/vt.md", "modules/vt/", "Guide", "Module ztcl::vt"),
-    ("docs/modules/watch.md", "modules/watch/", "Guide", "Module ztcl::watch"),
-    ("docs/modules/vm.md", "modules/vm/", "Guide", "Module ztcl::vm"),
+    ("docs/targets.md", "targets/", "Guide", "Targets"),
+    ("docs/modules/README.md", "modules/", "Modules", "All modules"),
+    ("docs/modules/json.md", "modules/json/", "Modules", "ztcl::json"),
+    ("docs/modules/vt.md", "modules/vt/", "Modules", "ztcl::vt"),
+    ("docs/modules/pty.md", "modules/pty/", "Modules", "ztcl::pty"),
+    ("docs/modules/watch.md", "modules/watch/", "Modules", "ztcl::watch"),
+    ("docs/modules/open.md", "modules/open/", "Modules", "ztcl::open"),
+    ("docs/modules/notify.md", "modules/notify/", "Modules", "ztcl::notify"),
+    ("docs/modules/vm.md", "modules/vm/", "Modules", "ztcl::vm"),
+    ("docs/modules/win.md", "modules/win/", "Modules", "ztcl::win"),
+    ("docs/modules/mac.md", "modules/mac/", "Modules", "ztcl::mac"),
     ("docs/embedding.md", "embedding/", "Embed", "Embed in Zig"),
     ("docs/webassembly.md", "webassembly/", "Embed", "WebAssembly"),
     ("docs/performance.md", "performance/", "Project", "Performance"),
@@ -139,7 +143,7 @@ class Build:
         it to the shell. Each other comment line stops the build, so that
         no comment shows as text on a page."""
         out, i, count = [], 0, 0
-        self.page_files, self.page_shell, helpers = {}, False, 0
+        self.page_files, self.page_shell, helpers, needs_shell = {}, False, 0, False
         while i < len(tokens):
             t = tokens[i]
             text = tokens[i + 1].content.strip() if t.type == "paragraph_open" and i + 1 < len(tokens) else ""
@@ -170,6 +174,8 @@ class Build:
                 if text.startswith("<!-- helper: ") and text.endswith(" -->"):
                     helpers += 1
                     fence.meta = {"helper": text[len("<!-- helper: "):-4].strip(), "id": f"helper-{helpers}"}
+                    if not re.search(r"^# shell: none$", fence.content, re.M):
+                        needs_shell = True
                     out.append(fence)
                     i += 4
                     continue
@@ -186,7 +192,7 @@ class Build:
                 continue
             out.append(t)
             i += 1
-        if helpers and not self.page_shell:
+        if needs_shell and not self.page_shell:
             raise SystemExit(f"{src}: a page with a helper needs a shell (<!-- shell -->)")
         return out
 
@@ -204,7 +210,7 @@ class Build:
 <pre class="zshell-poster" aria-hidden="true">{poster}
 <span class="p">%</span> </pre>
   <div class="zshell-foot">
-    <span class="zshell-hint" id="shell-hint"><kbd>Tab</kbd> completes. <kbd>Up</kbd> is history. <kbd>Ctrl-X</kbd> <kbd>Ctrl-E</kbd> edits. <kbd>Esc</kbd> <kbd>Tab</kbd> leaves.</span>
+    <span class="zshell-hint" id="shell-hint"><kbd>Tab</kbd> completes. <kbd>Up</kbd> is history. <kbd>Ctrl-X</kbd> <kbd>Ctrl-E</kbd> edits. <kbd>Alt-I</kbd> inspects the last result. <kbd>Esc</kbd> <kbd>Tab</kbd> leaves.</span>
     <span class="zshell-meter"><span>Compute limit: 10,000,000 compute units for each command</span><progress value="0" max="10000000" aria-label="Compute units of the last command"></progress></span>
   </div>
   <noscript><p class="zshell-foot">The shell needs JavaScript and WebAssembly.</p></noscript>
@@ -221,8 +227,13 @@ class Build:
         m = re.search(r"^# height: (\d+)$", script, re.M)
         height = int(m.group(1)) if m else 240
         t = html.escape(title)
-        return (f'<figure class="zhelper" id="{hid}" aria-label="Helper: {t}">'
-                f'<figcaption class="zhelper-bar"><span>Helper: {t}</span><span class="zhelper-hint">The command goes into the <a href="#shell">shell</a> with the button.</span></figcaption>'
+        # A helper with the line `# shell: none` runs no command. It shows
+        # the shape of the commands of a module that the page cannot run.
+        alone = re.search(r"^# shell: none$", script, re.M)
+        hint = ("The commands of this helper do not run in the page." if alone else
+                'The command goes into the <a href="#shell">shell</a> with the button.')
+        return (f'<figure class="zhelper" id="{hid}" aria-label="Helper: {t}"{' data-shell="none"' if alone else ''}>'
+                f'<figcaption class="zhelper-bar"><span>Helper: {t}</span><span class="zhelper-hint">{hint}</span></figcaption>'
                 f'<div class="zhelper-app" style="height: {height}px"><p class="zhelper-poster">The helper starts when it comes into view. It needs JavaScript and WebAssembly.</p></div>'
                 f'<details><summary>The code of this helper ({lines} lines of Tcl and ztk)</summary><pre><code class="language-tcl">{html.escape(script)}</code></pre></details></figure>\n')
 

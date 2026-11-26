@@ -9,6 +9,9 @@ An example is a ```tcl block that follows a line `<!-- run -->` or
 process, with the FLAGS before the script, in a new empty folder. When a ```text block
 follows the example, the output of the run must equal that block. The
 script exits with 1 when an example fails or its output differs.
+The flag `native` goes to no runner: `<!-- run: native -->` marks an
+example that needs a command of the native build, such as `coroutine`,
+so the page shows it as plain code.
 """
 import pathlib
 import re
@@ -30,7 +33,7 @@ def main():
             line = text.count("\n", 0, m.start()) + 1
             with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8") as f:
                 f.write(m.group(2))
-            flags = (m.group(1) or "").split()
+            flags = [f for f in (m.group(1) or "").split() if f != "native"]
             with tempfile.TemporaryDirectory() as cwd:
                 r = subprocess.run([runner, *flags, f.name], capture_output=True, text=True, timeout=60, cwd=cwd)
             pathlib.Path(f.name).unlink()

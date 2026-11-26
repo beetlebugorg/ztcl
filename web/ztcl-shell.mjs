@@ -145,6 +145,14 @@ export class Shell {
     return this.x.ztcl_shell_scrollback(this.s);
   }
 
+  /// The result of the last command that did not fail, or null before
+  /// the first one.
+  get lastResult() {
+    const p = this.x.ztcl_shell_last_result_ptr(this.s);
+    if (!p) return null;
+    return decoder.decode(new Uint8Array(this.x.memory.buffer, p, this.x.ztcl_shell_last_result_len(this.s)));
+  }
+
   /// The compute units of the last command.
   get lastCompute() {
     return Number(this.x.ztcl_shell_last_compute(this.s));

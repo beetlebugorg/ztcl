@@ -60,12 +60,16 @@ const screen = (s) => s.text().join("\n");
 
 {
   const s = await shell();
+  check("no result before the first command", s.lastResult === null, String(s.lastResult));
   s.feed("while 1 {}\r");
   check("the compute limit stops a loop", screen(s).includes("compute limit"), screen(s));
   check("the last command used the compute limit", s.lastCompute === 100_000, String(s.lastCompute));
   s.feed("expr {6*7}\r");
   check("a command after the limit runs", s.text().some((l) => l === "42"), screen(s));
   check("a short command uses few compute units", s.lastCompute > 0 && s.lastCompute < 100, String(s.lastCompute));
+  check("lastResult is the result of the last command", s.lastResult === "42", String(s.lastResult));
+  s.feed("error boom\r");
+  check("an error keeps the last result", s.lastResult === "42", String(s.lastResult));
 }
 
 {
