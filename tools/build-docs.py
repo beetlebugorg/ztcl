@@ -206,7 +206,7 @@ class Build:
         poster = html.escape(banner.replace("\\n", "\n"))
         data = json.dumps({"setup": setup, "files": self.page_files}).replace("</", "<\\/")
         return f"""<div class="zshell zpage-shell" id="shell" style="--rows: 12" data-rows="12" data-label="ztcl shell of this page. Type a Tcl command. Tab completes." data-banner="{html.escape(banner)}">
-  <div class="bar"><i></i><i></i><i></i><span>ztcl shell</span><label><input class="zshell-vi" type="checkbox" disabled> vim keys</label></div>
+  <div class="bar"><i></i><i></i><i></i><span>ztcl shell</span><button type="button" class="zshell-dock" aria-pressed="false" hidden>Keep in view</button><label><input class="zshell-vi" type="checkbox" disabled> vim keys</label></div>
 <pre class="zshell-poster" aria-hidden="true">{poster}
 <span class="p">%</span> </pre>
   <div class="zshell-foot">
@@ -226,16 +226,21 @@ class Build:
         lines = script.count("\n")
         m = re.search(r"^# height: (\d+)$", script, re.M)
         height = int(m.group(1)) if m else 240
-        t = html.escape(title)
+        # The comment is `<!-- helper: TITLE | CAPTION -->`. The title
+        # names the tool, and the caption says what to do with it.
+        title, _, caption = title.partition("|")
+        t = html.escape(title.strip())
+        c = html.escape(caption.strip())
         # A helper with the line `# shell: none` runs no command. It shows
         # the shape of the commands of a module that the page cannot run.
         alone = re.search(r"^# shell: none$", script, re.M)
-        hint = ("The commands of this helper do not run in the page." if alone else
-                'The command goes into the <a href="#shell">shell</a> with the button.')
+        hint = ("Its commands do not run in this page." if alone else
+                "Put in the shell puts the command on the line of the shell of this page.")
         return (f'<figure class="zhelper" id="{hid}" aria-label="Helper: {t}"{' data-shell="none"' if alone else ''}>'
-                f'<figcaption class="zhelper-bar"><span>Helper: {t}</span><span class="zhelper-hint">{hint}</span></figcaption>'
-                f'<div class="zhelper-app" style="height: {height}px"><p class="zhelper-poster">The helper starts when it comes into view. It needs JavaScript and WebAssembly.</p></div>'
-                f'<details><summary>The code of this helper ({lines} lines of Tcl and ztk)</summary><pre><code class="language-tcl">{html.escape(script)}</code></pre></details></figure>\n')
+                f'<figcaption class="zhelper-bar"><span class="zhelper-tag">Tool</span><span class="zhelper-title">{t}</span>'
+                f'{f"<span class=\"zhelper-caption\">{c}</span>" if c else ""}<span class="zhelper-hint">{hint}</span></figcaption>'
+                f'<div class="zhelper-app" style="height: {height}px"><p class="zhelper-poster">The tool starts when it comes into view. It needs JavaScript and WebAssembly.</p></div>'
+                f'<details><summary>How this tool is made: {lines} lines of Tcl with the ztk GUI toolkit</summary><pre><code class="language-tcl">{html.escape(script)}</code></pre></details></figure>\n')
 
     def render(self, src, page):
         tokens = self.live_blocks(src, self.md.parse((ROOT / src).read_text(encoding="utf-8")))

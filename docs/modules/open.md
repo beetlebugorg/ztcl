@@ -38,7 +38,7 @@ An embedder can give `Interp.launch_host`, a function that gets each target (the
 
 The browser cannot start an app, so the commands of this helper do not run in the page. The helper shows how `ztcl::open` reads a target: a URL or a path, the capabilities that it needs, and the refusal of a scheme other than `http`, `https`, and `mailto`.
 
-<!-- helper: ztcl::open -->
+<!-- helper: Open a link | Type a URL or a path, and see the ztcl::open command. -->
 ```tcl
 # shell: none
 # height: 155

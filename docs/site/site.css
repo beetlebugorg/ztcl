@@ -349,11 +349,21 @@ figure.chart { margin: 0; }
 .live-demo .ld-term { margin: 0; padding: 10px 16px; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: var(--surface); color: var(--text); font: 13px/1.3 var(--mono); white-space: pre; overflow: auto; max-height: 24em; }
 /* The helpers of a docs page (helper.js) and the shell of the page. */
 .zpage-shell { margin: 24px 0 8px; }
+.zshell .bar .zshell-dock { margin-left: auto; font: 13px var(--sans); color: var(--text-2); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
+.zshell .bar .zshell-dock + label { margin-left: 12px; }
+.zshell .bar .zshell-dock[hidden] { display: none; }
+.zshell .bar .zshell-dock[hidden] + label { margin-left: auto; }
+.zshell-docked { position: fixed; z-index: 30; right: 16px; bottom: 16px; width: min(var(--dock-w), calc(100vw - 32px)); margin: 0; box-shadow: 0 12px 40px rgb(0 0 0 / 0.3); }
+@media (max-width: 640px) {
+  .zshell-docked { left: 0; right: 0; bottom: 0; width: 100%; border-radius: 14px 14px 0 0; }
+}
 .zsetup { margin: 0 0 24px; font-size: 14px; color: var(--text-2); }
 .zsetup pre { margin-top: 8px; }
 .zhelper { margin: 24px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; min-width: 0; }
 .zhelper-bar { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--bg-soft); font-size: 13px; color: var(--text-3); }
-.zhelper-bar span:first-child { font: 600 13px var(--mono); color: var(--text-2); }
+.zhelper-bar .zhelper-tag { font: 600 11px var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; }
+.zhelper-bar .zhelper-title { font: 600 14px var(--sans); color: var(--text); }
+.zhelper-bar .zhelper-caption { flex-basis: 100%; font-size: 14px; color: var(--text-2); }
 .zhelper-app { position: relative; overflow: hidden; }
 .zhelper-open { margin-left: auto; padding: 2px 12px; font-size: 13px; }
 @media (max-width: 640px) {

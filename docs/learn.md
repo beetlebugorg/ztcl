@@ -1,6 +1,6 @@
 # Learn Tcl
 
-This page teaches Tcl from the start. Each section has examples. A live example runs in the page: edit its code, and its output changes. The shell below has the state of the page: the variables, the procs, and the files of the examples. Type a command in the shell and press Enter. A helper makes a command from a small form, and its button puts the command on the line of the shell. In the shell, Alt-I shows the last result as a tree.
+This page teaches Tcl with live examples: edit an example, and its output changes. The shell below has the variables and the procs of the examples, and "Keep in view" docks it in the window.
 
 If you know Tcl already, [Coming from tclsh](language.md) lists what ztcl does differently.
 
@@ -108,31 +108,6 @@ puts [expr {2 ** 100}]
 
 An integer divided by an integer gives an integer. Integers have no fixed size.
 
-<!-- helper: expr -->
-```tcl
-# height: 320
-helper::form
-helper::row Expression [ttk::entry .f.e -textvariable e -font TkFixedFont]
-ttk::frame .f.keys
-set n 0
-foreach k {7 8 9 / sqrt( 4 5 6 * abs( 1 2 3 - pow( 0 . , + ) ( ** % ?: Clear} {
-    if {$k eq "Clear"} {
-        set do {set e ""}
-    } elseif {$k eq "?:"} {
-        set do {append e " ? 1 : 0"}
-    } else {
-        set do [list append e $k]
-    }
-    ttk::button .f.keys.b$n -text $k -width 5 -command $do
-    grid .f.keys.b$n -row [expr {$n / 5}] -column [expr {$n % 5}] -padx 1 -pady 1
-    incr n
-}
-helper::row "" .f.keys
-helper::footer 1
-set e "2 ** 10 + sqrt(16)"
-helper::watch {helper::show [list expr $e]} e
-```
-
 ## Lists
 
 A list is a string with words that are split by spaces. Braces group a word that has spaces. `list` makes a list with the right braces, and `lindex`, `llength`, `lappend`, `lrange`, and `lsort` work on lists. `foreach` runs a body for each element.
@@ -157,32 +132,6 @@ star fruit
 
 `lsort` sorts as text by default. With `-integer` it sorts numbers, and `-dictionary` sorts text with numbers in it, so `a9` comes before `a10`.
 
-<!-- helper: lsort -->
-```tcl
-# height: 236
-helper::form
-helper::row List [ttk::entry .f.l -textvariable l]
-helper::row Compare [ttk::combobox .f.c -textvariable how -state readonly -values {-ascii -dictionary -integer -real}]
-ttk::frame .f.o
-foreach {flag v} {-decreasing dec -unique uniq -nocase nocase} {
-    ttk::checkbutton .f.o.$v -text $flag -variable $v
-    pack .f.o.$v -side left -padx {0 12}
-}
-helper::row "" .f.o
-helper::footer 1
-set l {a10 B2 a9 b2 a10}
-set how -dictionary
-lassign {0 0 0} dec uniq nocase
-proc build {} {
-    set cmd [list lsort $::how]
-    foreach {flag v} {-decreasing dec -unique uniq -nocase nocase} {
-        if {[set ::$v]} { lappend cmd $flag }
-    }
-    helper::show [lappend cmd $::l]
-}
-helper::watch build l how dec uniq nocase
-```
-
 ## Dicts
 
 A dict is a list of keys and values. `dict get` reads a value, and `dict set` changes a value in a variable. `dict for` runs a body for each key and value. A dict keeps the order of its keys.
@@ -202,42 +151,7 @@ lang = Tcl
 year = 1843
 ```
 
-The helper below uses the commands that give a new dict and do not change a variable: `dict replace`, `dict remove`, and `dict merge`. The table shows the dict of the result.
-
-<!-- helper: dict -->
-```tcl
-# height: 402
-helper::form
-helper::row Dict [ttk::entry .f.d -textvariable d]
-helper::row Command [ttk::combobox .f.op -textvariable op -state readonly -values {get replace remove exists keys}]
-helper::row Key [ttk::entry .f.k -textvariable key]
-helper::row Value [ttk::entry .f.v -textvariable val]
-ttk::treeview .f.t -columns {key value} -show headings -height 4
-.f.t heading key -text Key
-.f.t heading value -text Value
-helper::row Table .f.t
-helper::footer 1
-set d {name Ada lang Tcl}
-set op replace
-set key year
-set val 1843
-proc build {} {
-    switch -- $::op {
-        replace { set cmd [list dict replace $::d $::key $::val] }
-        keys { set cmd [list dict keys $::d] }
-        default { set cmd [list dict $::op $::d $::key] }
-    }
-    helper::show $cmd
-    helper::run $cmd table
-}
-proc table {ok r} {
-    .f.t delete [.f.t children {}]
-    if {!$ok || $::op ni {replace remove}} { set r $::d }
-    if {[catch {dict size $r}]} return
-    dict for {k v} $r { .f.t insert {} end -values [list $k $v] }
-}
-helper::watch build d op key val
-```
+`dict replace`, `dict remove`, and `dict merge` give a new dict and do not change a variable. Try `dict replace $user lang Zig` in the shell.
 
 ## Strings
 
@@ -261,25 +175,6 @@ pi    | 3.14|
 
 `string map` replaces each key of a list of pairs with its value. It reads the string once, from left to right, and at each place it tries the keys in their order.
 
-<!-- helper: string map -->
-```tcl
-# height: 234
-helper::form
-helper::row String [ttk::entry .f.s -textvariable s]
-helper::row Pairs [ttk::entry .f.m -textvariable map]
-helper::row "" [ttk::checkbutton .f.n -text -nocase -variable nocase]
-helper::footer
-set s "the cat sat on the mat"
-set map {cat dog mat rug}
-set nocase 0
-proc build {} {
-    set cmd [list string map]
-    if {$::nocase} { lappend cmd -nocase }
-    helper::show [lappend cmd $::map $::s]
-}
-helper::watch build s map nocase
-```
-
 `regexp` finds a pattern in a string. With `-inline` it gives the match and the text of each group in parentheses. With `-all` it finds each match. `regsub` replaces the matches.
 
 <!-- run -->
@@ -297,7 +192,7 @@ a b c
 
 The helper marks each match in the string, and each group in a second color.
 
-<!-- helper: regexp -->
+<!-- helper: Build a regexp | Type a pattern and a string, and see each match, with its groups in a second color. -->
 ```tcl
 # height: 284
 helper::form
@@ -417,28 +312,6 @@ puts $x
 
 The shell has a small game in its procs: type `look`, `go north`, and `take lamp`. The game keeps the map in the dict `rooms`, and each command is a proc. Type `info body go` to see the code, or change a proc and play again.
 
-The helper below makes a proc from its three words and calls it with the words of "Call with". The result is the result of the call. The button puts the `proc` command into the shell, and then the reader can call the new command.
-
-<!-- helper: proc -->
-```tcl
-# height: 280
-helper::form
-helper::row Name [ttk::entry .f.n -textvariable name -font TkFixedFont]
-helper::row Arguments [ttk::entry .f.a -textvariable params -font TkFixedFont]
-helper::row Body [ttk::entry .f.b -textvariable body -font TkFixedFont]
-helper::row "Call with" [ttk::entry .f.c -textvariable call -font TkFixedFont]
-helper::footer 2
-set name greet
-set params {name {greeting Hello}}
-set body {return "$greeting, $name!"}
-set call Ada
-proc build {} {
-    set helper::cmd [list proc $::name $::params $::body]
-    helper::run "[list apply [list $::params $::body]] $::call" helper::result
-}
-helper::watch build name params body call
-```
-
 ## Namespaces
 
 A namespace keeps a group of commands and variables apart from other names. `namespace eval` runs a script in a namespace, and `::` joins the names. `namespace ensemble create` makes a command with subcommands, as `string` and `dict` are.
@@ -461,28 +334,7 @@ puts $counter::n
 2
 ```
 
-The namespace `counter` is in the shell too: type `counter next`. The helper below lists the children, the commands, or the variables of a namespace. The list of namespaces comes from the shell when the helper starts.
-
-<!-- helper: namespace -->
-```tcl
-# height: 230
-helper::form
-helper::row Namespace [ttk::combobox .f.ns -textvariable ns -values {:: ::counter ::tcl ::oo}]
-helper::row Show [ttk::combobox .f.what -textvariable what -state readonly -values {children commands vars}]
-helper::footer 3
-set ns ::counter
-set what commands
-proc build {} {
-    set pattern [string trimright $::ns :]::*
-    switch -- $::what {
-        children { helper::show [list namespace children $::ns] }
-        commands { helper::show [list info commands $pattern] }
-        vars { helper::show [list info vars $pattern] }
-    }
-}
-helper::watch build ns what
-helper::run {namespace children ::} {apply {{ok r} { if {$ok} { .f.ns configure -values [linsert $r 0 ::] } }}}
-```
+The namespace `counter` is in the shell too: type `counter next`. `info commands counter::*` lists its commands.
 
 ## Errors
 
@@ -510,28 +362,7 @@ error: 7 is odd
 done
 ```
 
-`catch` with two variable names gives the message and a dict of options. The option `-errorcode` is a list that a program can test, and `-errorline` is the line of the error in the script. The helper below runs a script with `catch` and shows the code, the message, and the two options. It runs the script at the top level of the shell, so `$user` and the other variables of the page work.
-
-<!-- helper: catch -->
-```tcl
-# height: 215
-helper::form
-helper::row Script [ttk::entry .f.s -textvariable script -font TkFixedFont]
-helper::footer 4
-set script {expr {[lindex $nums 0] / 0}}
-proc build {} {
-    set helper::cmd [list catch $::script msg opts]
-    helper::run [list apply {{s} {
-        set code [catch {uplevel #0 $s} msg opts]
-        set out "code $code\nmessage $msg"
-        if {$code == 1} {
-            append out "\n-errorcode [dict get $opts -errorcode]\n-errorline [dict get $opts -errorline]"
-        }
-        return $out
-    }} $::script] helper::result
-}
-helper::watch build script
-```
+`catch` with two variable names gives the message and a dict of options. The option `-errorcode` is a list that a program can test, and `-errorline` is the line of the error in the script.
 
 ## Files
 
@@ -553,29 +384,6 @@ close $f
 ```
 
 In ztcl, files and channels are a capability. The `ztcl` program has them, and an app that embeds ztcl turns them on or keeps them off. [Limits and capabilities](limits.md) tells how.
-
-The helper below reads `notes.txt` in four ways. The command opens the file, reads it, and closes it. The helper runs the command in a lambda, so the variables `f` and `text` stay local until the reader puts the command into the shell.
-
-<!-- helper: read a file -->
-```tcl
-# height: 195
-helper::form
-helper::row Read [ttk::combobox .f.how -textvariable how -state readonly -values {read "read -nonewline" gets "read 8"}]
-helper::footer 3
-set how gets
-proc build {} {
-    switch -- $::how {
-        read { set body {read $f} }
-        "read -nonewline" { set body {read -nonewline $f} }
-        gets { set body {gets $f} }
-        default { set body {read $f 8} }
-    }
-    set cmd "set f \[open notes.txt\]; set text \[$body\]; close \$f; set text"
-    set helper::cmd $cmd
-    helper::run [list apply [list {} $cmd]] helper::result
-}
-helper::watch build how
-```
 
 ## Events
 
@@ -621,19 +429,7 @@ balance 30
 balance 42
 ```
 
-The class `Account` is in the shell too: type `set a [Account new]` and then `$a deposit 5`. `info class` shows the parts of a class, and the helper below builds its subcommands.
-
-<!-- helper: info class -->
-```tcl
-# height: 230
-helper::form
-helper::row Class [ttk::combobox .f.c -textvariable cls -values Account]
-helper::row Show [ttk::combobox .f.what -textvariable what -state readonly -values {methods variables "definition deposit" constructor instances}]
-helper::footer 3
-set cls Account
-set what methods
-helper::watch {helper::show "info class $what [list $cls]"} cls what
-```
+The class `Account` is in the shell too: type `set a [Account new]` and then `$a deposit 5`. `info class methods Account` lists its methods.
 
 ## Coroutines
 
