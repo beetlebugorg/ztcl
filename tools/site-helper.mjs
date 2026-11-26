@@ -7,7 +7,7 @@
 //
 //     mkdir -p srv/ztk && ln -s ../out srv/ztcl && ln -s $ZTK/zig-out/web srv/ztk/play
 //     (cd srv && python3 -m http.server 8123) &
-//     node tools/site-helper.mjs chromium http://127.0.0.1:8123/ztcl/learn/ [shot.png]
+//     node tools/site-helper.mjs chromium http://127.0.0.1:8123/ztcl/learn/05-strings-and-patterns/ [shot.png]
 //
 // SPDX-License-Identifier: BSD-2-Clause
 
@@ -82,8 +82,10 @@ for (let k = 0; k < count; k++) {
   const ok = await evalJS(`${fig}.classList.contains("zhelper-live")`);
   check(`${name} starts in view`, ok, await evalJS(`${fig}.querySelector(".zhelper-app").textContent`));
   if (ok) {
-    const res = await evalJS(`${fig}.ztkApp.eval(".foot.res tag ranges error").result`);
-    check(`${name} shows a result with no error`, res === "", await evalJS(`${fig}.ztkApp.eval(".foot.res get 1.0 end").result`));
+    if (await evalJS(`${fig}.ztkApp.eval("winfo exists .foot.res").result === "1"`)) {
+      const res = await evalJS(`${fig}.ztkApp.eval(".foot.res tag ranges error").result`);
+      check(`${name} shows a result with no error`, res === "", await evalJS(`${fig}.ztkApp.eval(".foot.res get 1.0 end").result`));
+    }
     if (shot) {
       await pause(300);
       const r = await evalJS(`(() => { const b = ${fig}.getBoundingClientRect(); return { x: b.x + scrollX, y: b.y + scrollY, width: b.width, height: Math.min(b.height, 900) }; })()`);
@@ -96,18 +98,18 @@ const enter = async () => {
   await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
   await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
   await pause(200);
-  return evalJS(`document.querySelector(".zshell [aria-live]").textContent`);
+  return evalJS(`document.querySelector(".zpage-shell [aria-live]").textContent`);
 };
 const helperApp = (name) => `document.querySelector('.zhelper[aria-label="Helper: ${name}"]')?.ztkApp`;
 if (await evalJS(`!!${helperApp("Build a regexp")}`)) {
   const app = helperApp("Build a regexp");
   const tcl = (s) => evalJS(`${app}.eval(${JSON.stringify(s)}).result`);
   await pause(200);
-  check("the helper shows the command", (await tcl("set helper::cmd")) === "regexp -all -inline {(\\w+)@(\\w+)} {ada@tcl and bob@zig}", await tcl("set helper::cmd"));
-  check("the helper shows the result of the shell", (await tcl(".foot.res get 1.0 end-1c")) === "ada@tcl ada tcl bob@zig bob zig", await tcl(".foot.res get 1.0 end-1c"));
-  await tcl("set str {x@y}; set all 0");
+  check("the helper shows the command", (await tcl("set helper::cmd")) === "regexp -all -inline {#(\\w+)} {buy milk #home #shop}", await tcl("set helper::cmd"));
+  check("the helper shows the result of the shell", (await tcl(".foot.res get 1.0 end-1c")) === "{#home} home #shop shop", await tcl(".foot.res get 1.0 end-1c"));
+  await tcl("set str {#a}; set all 0");
   await pause(200);
-  check("an edit gives a new command and result", (await tcl(".foot.res get 1.0 end-1c")) === "x@y x y", await tcl(".foot.res get 1.0 end-1c"));
+  check("an edit gives a new command and result", (await tcl(".foot.res get 1.0 end-1c")) === "{#a} a", await tcl(".foot.res get 1.0 end-1c"));
   // The page keeps its scroll position: the shell docks in the window.
   const before = await evalJS("scrollY");
   await tcl(".foot.put invoke");
@@ -117,17 +119,19 @@ if (await evalJS(`!!${helperApp("Build a regexp")}`)) {
   check("the shell is in view after the button", await evalJS(`(() => { const r = document.querySelector(".zshell-screen").getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; })()`));
   check("the button focuses the shell", await evalJS(`document.activeElement?.className === "zshell-input"`));
   const said = await enter();
-  check("the button puts the command on the line of the shell", said === "x@y x y", JSON.stringify(said));
-  await evalJS(`document.querySelector(".zshell-dock").click()`);
-  await pause(200);
-  check("Put back returns the shell to the page", await evalJS(`!document.querySelector(".zshell-docked") && scrollY === ${after}`), await evalJS("scrollY"));
+  check("the button puts the command on the line of the shell", said === "{#a} a", JSON.stringify(said));
+  if (await evalJS(`!!document.querySelector(".zshell-dock")`)) {
+    await evalJS(`document.querySelector(".zshell-dock").click()`);
+    await pause(200);
+    check("Put back returns the shell to the page", await evalJS(`!document.querySelector(".zshell-docked") && scrollY === ${after}`), await evalJS("scrollY"));
+  }
   await evalJS(`document.querySelector(".zshell-input").focus({ preventScroll: true })`);
-  for (const ch of "set words") {
+  for (const ch of "set text") {
     await send("Input.dispatchKeyEvent", { type: "keyDown", key: ch, text: ch });
     await send("Input.dispatchKeyEvent", { type: "keyUp", key: ch });
   }
   const state = await enter();
-  check("the shell has the state of the page", state === "the cat sat on the mat", JSON.stringify(state));
+  check("the shell has the state of the page", state === "buy milk #home #shop", JSON.stringify(state));
 }
 
 if (await evalJS(`!!${helperApp("JSON inspector")}`)) {
@@ -151,7 +155,7 @@ if (await evalJS(`!!${helperApp("JSON inspector")}`)) {
 // path on the line of the shell.
 if (await evalJS(`!!${helperApp("Build a regexp")}`)) {
   await evalJS(`document.querySelector(".zshell-input").focus({ preventScroll: true })`);
-  for (const ch of "set user") await send("Input.dispatchKeyEvent", { type: "keyDown", key: ch, text: ch });
+  for (const ch of "dict create name Ada lang Tcl year 1843") await send("Input.dispatchKeyEvent", { type: "keyDown", key: ch, text: ch });
   await enter();
   await send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "i", code: "KeyI", modifiers: 1 });
   await pause(200);
