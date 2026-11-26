@@ -331,10 +331,15 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     host_io = io;
     const args = try init.minimal.args.toSlice(arena);
     host_preopens = init.preopens;
-    // The child process of an isolated thread (ztcl#209): `--iso-fd N`.
+    // The child process of an isolated thread (ztcl#209): `--iso-fd N`,
+    // or `--iso-handle 0x...` on Windows, the value of an inherited handle.
     if (comptime tcl.isothread.supported) {
-        if (setup == null and args.len == 3 and std.mem.eql(u8, args[1], "--iso-fd")) {
-            const fd = std.fmt.parseInt(i32, args[2], 10) catch std.process.exit(2);
+        const flag = if (builtin.os.tag == .windows) "--iso-handle" else "--iso-fd";
+        if (setup == null and args.len == 3 and std.mem.eql(u8, args[1], flag)) {
+            const fd: tcl.isothread.Fd = if (comptime builtin.os.tag == .windows)
+                @ptrFromInt(std.fmt.parseInt(usize, args[2], 0) catch std.process.exit(2))
+            else
+                std.fmt.parseInt(i32, args[2], 10) catch std.process.exit(2);
             std.process.exit(tcl.isothread.childProcess(init.gpa, fd, .{
                 .clock = .{ .now = hostNow, .zone = hostZone },
                 .event = .{ .now = hostTicks, .sleep = hostSleep },
@@ -493,10 +498,10 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             };
             continue;
         }
-        // The transport of a thread of the `process` level (ztcl#209,
-        // docs/dev/isolation.md). The child side of the protocol is
-        // step 3 of that plan. Until then the runner skips the handle.
-        if ((std.mem.eql(u8, arg, "--iso-handle") or std.mem.eql(u8, arg, "--iso-fd")) and i + 1 < args.len) {
+        // A test of the sandbox of Windows (`isolate_windows_tests.zig`)
+        // runs a script in the sandbox, after the handle of the
+        // transport. The runner skips the handle there.
+        if (std.mem.eql(u8, arg, "--iso-handle") and i + 1 < args.len) {
             i += 1;
             continue;
         }
