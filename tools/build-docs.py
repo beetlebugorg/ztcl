@@ -45,6 +45,7 @@ PAGES = [
     ("docs/modules/pty.md", "modules/pty/", "Guide", "Module ztcl::pty"),
     ("docs/modules/win.md", "modules/win/", "Guide", "Module ztcl::win"),
     ("docs/modules/vt.md", "modules/vt/", "Guide", "Module ztcl::vt"),
+    ("docs/modules/watch.md", "modules/watch/", "Guide", "Module ztcl::watch"),
     ("docs/embedding.md", "embedding/", "Embed", "Embed in Zig"),
     ("docs/webassembly.md", "webassembly/", "Embed", "WebAssembly"),
     ("docs/performance.md", "performance/", "Project", "Performance"),

@@ -4,8 +4,9 @@
 
 Use: python3 -I tools/doc-examples.py RUNNER docs/modules/NAME.md ...
 
-An example is a ```tcl block that follows a line `<!-- run -->`. The
-script runs each example in its own runner process. When a ```text block
+An example is a ```tcl block that follows a line `<!-- run -->` or
+`<!-- run: FLAGS -->`. The script runs each example in its own runner
+process, with the FLAGS before the script, in a new empty folder. When a ```text block
 follows the example, the output of the run must equal that block. The
 script exits with 1 when an example fails or its output differs.
 """
@@ -15,11 +16,11 @@ import subprocess
 import sys
 import tempfile
 
-BLOCK = re.compile(r"<!-- run -->\n```tcl\n(.*?)```\n(?:\n?```text\n(.*?)```\n)?", re.S)
+BLOCK = re.compile(r"<!-- run(?:: ([^>]*?))? -->\n```tcl\n(.*?)```\n(?:\n?```text\n(.*?)```\n)?", re.S)
 
 
 def main():
-    runner, pages = sys.argv[1], sys.argv[2:]
+    runner, pages = str(pathlib.Path(sys.argv[1]).resolve()), sys.argv[2:]
     fail = 0
     count = 0
     for page in pages:
@@ -28,10 +29,12 @@ def main():
             count += 1
             line = text.count("\n", 0, m.start()) + 1
             with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8") as f:
-                f.write(m.group(1))
-            r = subprocess.run([runner, f.name], capture_output=True, text=True, timeout=60)
+                f.write(m.group(2))
+            flags = (m.group(1) or "").split()
+            with tempfile.TemporaryDirectory() as cwd:
+                r = subprocess.run([runner, *flags, f.name], capture_output=True, text=True, timeout=60, cwd=cwd)
             pathlib.Path(f.name).unlink()
-            want = m.group(2)
+            want = m.group(3)
             if r.returncode != 0:
                 print(f"FAIL {page}:{line}: exit {r.returncode}: {r.stderr.strip()}")
                 fail = 1
