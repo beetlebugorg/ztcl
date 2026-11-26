@@ -9,6 +9,7 @@
 const std = @import("std");
 /// The process code of the target: `proc_windows.zig` on Windows.
 const proc_mod = if (@import("builtin").os.tag == .windows) @import("proc_windows.zig") else @import("proc.zig");
+const pty_mod = if (@import("builtin").os.tag == .windows) @import("pty_windows.zig") else @import("pty.zig");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
 const fsroot = @import("fsroot.zig");
@@ -437,7 +438,7 @@ fn closeChan(it: *Interp, c: *Channel) Error!void {
     try r;
     if (comptime proc_ok) {
         if (c.pty) {
-            @import("pty.zig").hangup(it, c);
+            pty_mod.hangup(it, c);
         } else if (c.pids.len > 0) try proc_mod.reap(it, c);
     }
 }

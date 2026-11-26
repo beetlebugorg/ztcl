@@ -153,6 +153,7 @@ extern "kernel32" fn GetTempFileNameW(dir: [*:0]const u16, prefix: [*:0]const u1
 extern "kernel32" fn GetSystemDirectoryW(buf: [*]u16, len: u32) callconv(.winapi) u32;
 extern "kernel32" fn GetLastError() callconv(.winapi) DWORD;
 extern "kernel32" fn Sleep(ms: DWORD) callconv(.winapi) void;
+extern "kernel32" fn ClosePseudoConsole(pc: HANDLE) callconv(.winapi) void;
 
 const invalid: HANDLE = @ptrFromInt(std.math.maxInt(usize));
 const HANDLE_FLAG_INHERIT = 0x1;
@@ -162,6 +163,7 @@ const EXTENDED_STARTUPINFO_PRESENT = 0x80000;
 const CREATE_NO_WINDOW = 0x08000000;
 const STARTF_USESTDHANDLES = 0x100;
 const PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x20002;
+const PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE = 0x20016;
 const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000;
 const generic_read = 0x80000000;
 const generic_write = 0x40000000;
@@ -174,7 +176,7 @@ const file_attribute_temporary = 0x100;
 const file_attribute_directory = 0x10;
 const invalid_attributes = 0xffffffff;
 /// The exit code of a process that the kill of its tree ended.
-const kill_code: u32 = 137;
+pub const kill_code: u32 = 137;
 
 pub const Host = struct {
     /// The host programs that a script can run. An entry with no `/`,
@@ -206,6 +208,10 @@ const Group = struct { tree: Tree, pids: []const i32, start: i64 };
 pub const Tree = struct {
     job: ?HANDLE = null,
     procs: []const HANDLE = &.{},
+    /// The pseudo console of `ztcl::pty`, and its size.
+    pty: ?HANDLE = null,
+    cols: u16 = 0,
+    rows: u16 = 0,
     /// True after a kill, so the code 137 is a kill.
     killed: bool = false,
 };
@@ -279,7 +285,7 @@ fn closePlan(p: *Plan) void {
     p.err = .none;
 }
 
-fn handleOf(fd: i32) HANDLE {
+pub fn handleOf(fd: i32) HANDLE {
     return @ptrFromInt(@as(usize, @intCast(fd)));
 }
 
@@ -630,7 +636,7 @@ fn lessName(_: void, x: [:0]const u8, y: [:0]const u8) bool {
 
 /// The environment block: the strings sorted by name, each with a 0,
 /// and one more 0 at the end.
-fn envBlock(a: std.mem.Allocator, env: []const [:0]const u8) Error![]u16 {
+pub fn envBlockOf(a: std.mem.Allocator, env: []const [:0]const u8) Error![]u16 {
     const sorted = try a.dupe([:0]const u8, env);
     std.mem.sort([:0]const u8, sorted, {}, lessName);
     var out: std.ArrayList(u16) = .empty;
@@ -729,6 +735,50 @@ fn spawn(it: *Interp, job: HANDLE, prog: []const u8, words: []const []const u8, 
     return pi;
 }
 
+/// Starts one program in the job on the pseudo console `pc`, with no
+/// handle of the parent.
+pub fn spawnConsole(it: *Interp, job: HANDLE, prog: []const u8, words: []const []const u8, env: []u16, cwd: ?[]const u8, pc: HANDLE) Error!PROCESS_INFORMATION {
+    const a = it.alloc();
+    var argv = try a.dupe([]const u8, words);
+    argv[0] = prog;
+    const line = try wide(a, try commandLine(a, argv));
+    var size: usize = 0;
+    _ = InitializeProcThreadAttributeList(null, 1, 0, &size);
+    const attrs = try a.alignedAlloc(u8, .@"8", size);
+    if (InitializeProcThreadAttributeList(attrs.ptr, 1, 0, &size) == 0) return posix(it, lastErrno(), "couldn't start a process: ");
+    defer DeleteProcThreadAttributeList(attrs.ptr);
+    // The value of this attribute is the handle of the console itself.
+    if (UpdateProcThreadAttribute(attrs.ptr, 0, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, pc, @sizeOf(HANDLE), null, null) == 0) return posix(it, lastErrno(), "couldn't start a process: ");
+    // Empty standard handles, so the program writes to the pseudo
+    // console and to no handle of the parent.
+    var si: STARTUPINFOEXW = .{ .info = .{ .cb = @sizeOf(STARTUPINFOEXW), .dwFlags = STARTF_USESTDHANDLES }, .attrs = attrs.ptr };
+    var pi: PROCESS_INFORMATION = undefined;
+    const wprog = try wide(a, prog);
+    const wcwd: ?[:0]u16 = if (cwd) |c| try wide(a, c) else null;
+    if (CreateProcessW(wprog.ptr, line.ptr, null, null, 0, CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT, env.ptr, if (wcwd) |c| c.ptr else null, &si, &pi) == 0) return cannotRun(it, words[0], lastErrno());
+    if (AssignProcessToJobObject(job, pi.hProcess) == 0) {
+        const e = lastErrno();
+        _ = TerminateProcess(pi.hProcess, kill_code);
+        _ = CloseHandle(pi.hThread);
+        _ = CloseHandle(pi.hProcess);
+        return posix(it, e, "couldn't put a process in its job: ");
+    }
+    _ = ResumeThread(pi.hThread);
+    _ = CloseHandle(pi.hThread);
+    return pi;
+}
+
+/// The final host path of a folder of `file` (a normal path).
+pub fn folderPath(it: *Interp, rel: []const u8) Error!?[]const u8 {
+    return switch (try fsroot.openRel(it, rel, .{ .directory = true }, 0)) {
+        .fd => |fd| blk: {
+            defer sys.close(fd);
+            break :blk try finalOf(it.alloc(), handleOf(fd));
+        },
+        .err => |e| posix(it, e, "couldn't open the working folder: "),
+    };
+}
+
 pub fn treeOpen() Tree {
     const job = CreateJobObjectW(null, null) orelse return .{};
     var info: EXTENDED_LIMIT = .{};
@@ -752,6 +802,8 @@ fn treeLive(t: *const Tree) bool {
 }
 
 pub fn treeClose(t: *Tree) void {
+    if (t.pty) |pc| ClosePseudoConsole(pc);
+    t.pty = null;
     for (t.procs) |h| _ = CloseHandle(h);
     t.procs = &.{};
     if (t.job) |j| _ = CloseHandle(j);
@@ -759,7 +811,7 @@ pub fn treeClose(t: *Tree) void {
 }
 
 /// The exit code of a process, or null while it runs.
-fn waitProc(h: HANDLE, ms: DWORD) ?u32 {
+pub fn waitProc(h: HANDLE, ms: DWORD) ?u32 {
     if (WaitForSingleObject(h, ms) != 0) return null;
     var code: DWORD = 0;
     _ = GetExitCodeProcess(h, &code);
@@ -778,7 +830,7 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
         try noTilde(it, word);
         progs[k] = try resolve(it, word);
     }
-    const env = try envBlock(a, it.exec_host.env);
+    const env = try envBlockOf(a, it.exec_host.env);
     // The working folder: the current folder of `file`.
     var cwd: ?[:0]const u16 = null;
     if (it.fs_ok()) {

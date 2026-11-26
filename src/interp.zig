@@ -17,6 +17,7 @@
 const std = @import("std");
 /// The process code of the target: `proc_windows.zig` on Windows.
 const proc_mod = if (@import("builtin").os.tag == .windows) @import("proc_windows.zig") else @import("proc.zig");
+const pty_mod = if (@import("builtin").os.tag == .windows) @import("pty_windows.zig") else @import("pty.zig");
 const Allocator = std.mem.Allocator;
 const value = @import("value.zig");
 const expr = @import("expr.zig");
@@ -1521,7 +1522,7 @@ pub const Interp = struct {
         if (comptime exec_supported) {
             if (new & @backingInt(Capability.exec) != 0) {
                 try proc_mod.register(it);
-                try @import("pty.zig").register(it);
+                try pty_mod.register(it);
             }
         }
         // WASI preview 1 has no sockets.

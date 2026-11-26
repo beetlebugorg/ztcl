@@ -35,7 +35,7 @@ pub const fsroot = @import("fsroot.zig");
 pub const launch = @import("launch.zig");
 pub const winreg = @import("winreg.zig");
 pub const proc = if (@import("builtin").os.tag == .windows) @import("proc_windows.zig") else @import("proc.zig");
-pub const pty = @import("pty.zig");
+pub const pty = if (@import("builtin").os.tag == .windows) @import("pty_windows.zig") else @import("pty.zig");
 pub const watch = @import("watch.zig");
 pub const vfs = @import("vfs.zig");
 pub const zipread = @import("zipread.zig");
@@ -83,6 +83,7 @@ test {
     _ = @import("tests.zig");
     _ = @import("pty_tests.zig");
     _ = @import("proc_windows_tests.zig");
+    _ = @import("pty_windows_tests.zig");
     _ = @import("watch_tests.zig");
     _ = @import("zipread.zig");
     _ = @import("inflate.zig");
