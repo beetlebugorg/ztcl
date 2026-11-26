@@ -220,6 +220,8 @@ jobs:
         run: |
           tools/point-wasm-diff.sh
           zig build point-wasm-fuzz -- --count 300
+          zig build wasm-simd
+          node tools/wasm-point.mjs zig-out/lib/ztcl-simd.wasm
       # The threads in Node.js and in Chromium, with and without
       # cross-origin isolation. The browser test uses the Chrome of the
       # runner.

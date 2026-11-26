@@ -300,7 +300,21 @@ The second line goes to stderr, with the time of the script. The exit code is 1 
 
 ### Point procs
 
-The WebAssembly build does not install the `point` command and has no export to run a point program over typed arrays. [Point procs](embedding.md#point-procs) work in a Zig program.
+`ztcl-simd.wasm` (`zig build wasm-simd`) has point procs. `ztcl.wasm` does not, so that it stays in its size limit. With the option `point: true`, `Interp.create` adds `point proc` and the output commands. `pointProc(name)` gives the columns that the proc writes (`outputs`) and `run`, which runs the proc over typed arrays:
+
+```js
+const tcl = await Interp.create("ztcl-simd.wasm", { point: true });
+tcl.eval(`point proc fuzzy {x y z feature} {
+    if {$feature ne "outer_wall"} { return }
+    offset [expr {[noise3 $x $y [expr {$z * 4}]] * 0.3}]
+}`);
+const fuzzy = tcl.pointProc("fuzzy");
+const n = 1000;
+const offset = new Float64Array(n);
+const units = fuzzy.run({ n, inputs: { x, y, z }, feature, outputs: { offset } });
+```
+
+`inputs` maps the names `x y z width height speed flow layer path dist` to `Float64Array` columns, `feature` is a `Uint8Array` of feature numbers, and `outputs` maps the names `offset move_x move_y width flow speed skip` to `Float64Array` columns with the start values. `run` writes the new values into `outputs` and gives the compute units. The compute limit of the Interp applies to each call. The results equal the native `Program.run`, bit for bit: `node tools/wasm-point.mjs zig-out/lib/ztcl-simd.wasm` checks the procs of `tests/point/`. `ztcl-simd.wasm` is built with the SIMD instructions of wasm (`simd128`), so the compiler can use them in the loops of `Program.run`. [Point procs](embedding.md#point-procs) also work in a Zig program.
 
 ## Threads
 

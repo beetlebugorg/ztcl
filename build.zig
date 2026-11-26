@@ -214,6 +214,11 @@ pub fn build(b: *std.Build) void {
     const wasm_shell = addWasm(b, "ztcl-shell", .none, gc_precise, size_plant, on, false, true);
     b.step("wasm-shell", "Build the WebAssembly library with the shell").dependOn(&b.addInstallArtifact(wasm_shell, .{ .dest_dir = .{ .override = .lib } }).step);
 
+    // The library with wasm SIMD: zig-out/lib/ztcl-simd.wasm. `ztcl.wasm`
+    // stays the strict form for a runtime with no SIMD.
+    const wasm_simd = addWasmSimd(b, "ztcl-simd", .none, gc_precise, size_plant, on, false, false, true);
+    b.step("wasm-simd", "Build the WebAssembly library with SIMD").dependOn(&b.addInstallArtifact(wasm_simd, .{ .dest_dir = .{ .override = .lib } }).step);
+
     // The runtime of `ztcl compile --wasm`: zig-out/lib/ztcl-aot.wasm.
     // It is the library with the helpers of the JIT as exports.
     const wasm_aot = addWasm(b, "ztcl-aot", .none, gc_precise, size_plant, on, true, false);
@@ -287,7 +292,14 @@ fn addPointRuntime(b: *std.Build, mods: []const *std.Build.Module, fast: *std.Bu
 const WebThreads = enum { none, shared, async };
 
 fn addWasm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise: bool, size_plant: usize, on: [all_modules.len]bool, aot: bool, shell: bool) *std.Build.Step.Compile {
+    return addWasmSimd(b, name, threads, gc_precise, size_plant, on, aot, shell, false);
+}
+
+/// `addWasm` with the SIMD instructions of wasm (`simd128`) when `simd`
+/// is true, so the compiler can use them in the loops of `Program.run`.
+fn addWasmSimd(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise: bool, size_plant: usize, on: [all_modules.len]bool, aot: bool, shell: bool, simd: bool) *std.Build.Step.Compile {
     var query: std.Target.Query = .{ .cpu_arch = .wasm32, .os_tag = .freestanding };
+    if (simd) query.cpu_features_add = std.Target.wasm.featureSet(&.{.simd128});
     if (threads == .shared) query.cpu_features_add = std.Target.wasm.featureSet(&.{ .atomics, .bulk_memory });
     const wasm = b.addExecutable(.{ .name = name, .root_module = b.createModule(.{
         .root_source_file = b.path("src/wasm.zig"),
@@ -305,6 +317,9 @@ fn addWasm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise: boo
     wasm_options.addOption(bool, "tsan_plant", false);
     wasm_options.addOption(usize, "size_plant", size_plant);
     wasm_options.addOption(WebThreads, "web_threads", threads);
+    // The point procs of task 01 of #26, in the SIMD form only: they do
+    // not fit in the size limit of ztcl.wasm.
+    wasm_options.addOption(bool, "wasm_point", simd);
     // libghostty-vt uses `std.heap.wasm_allocator`, which has no form for
     // a shared memory, so the build with shared threads has no `ztcl::vt`.
     var mods_on = on;

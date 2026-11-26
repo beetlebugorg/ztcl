@@ -29,6 +29,12 @@ pub const Handle = struct {
     result: []const u8 = "",
     /// The files of the bundle, for `ztcl_allow` with `file`.
     files: wasmfiles.State = .{},
+    /// The point procs, after `ztcl_point_install`.
+    points: ztcl.point.State = .{},
+    point_on: bool = false,
+    /// The names of the procs of `ztcl_point_compile`. An id is an index
+    /// plus 1, so a proc that the script defines again runs in its new form.
+    point_names: std.ArrayList([]u8) = .empty,
 };
 
 const wasmbundle = @import("wasmbundle.zig");
@@ -75,6 +81,8 @@ export fn ztcl_new() ?*Handle {
 }
 
 export fn ztcl_delete(h: *Handle) void {
+    for (h.point_names.items) |n| gpa.free(n);
+    h.point_names.deinit(gpa);
     h.files.deinit(gpa);
     h.out.deinit(gpa);
     h.taken.deinit(gpa);
@@ -112,6 +120,99 @@ export fn ztcl_eval(h: *Handle, ptr: [*]const u8, len: usize) i32 {
         h.result = if (e == error.TclError) h.it.str(h.it.result) catch "out of memory" else @errorName(e);
         return 1;
     }
+}
+
+// ---- Point procs (docs/webassembly.md, "Point procs") ----
+
+/// The point procs are in `ztcl-simd.wasm` and the other forms of
+/// `addWasmForm` with `point`, so `ztcl.wasm` keeps its size budget.
+const point_on = @hasDecl(build_options, "wasm_point") and build_options.wasm_point;
+
+comptime {
+    if (point_on) {
+        @export(&ztcl_point_install, .{ .name = "ztcl_point_install" });
+        @export(&ztcl_point_compile, .{ .name = "ztcl_point_compile" });
+        @export(&ztcl_point_outputs, .{ .name = "ztcl_point_outputs" });
+        @export(&ztcl_point_run, .{ .name = "ztcl_point_run" });
+    }
+}
+
+const point = ztcl.point;
+const point_fields = @typeInfo(point.Field).@"enum".field_names.len;
+const point_outs = @typeInfo(point.Out).@"enum".field_names.len;
+
+/// Adds `point proc` and the output commands (`offset`, `move`, `width`,
+/// `flow`, `speed`, `skip`) to the interpreter. Gives false when the
+/// memory is full.
+fn ztcl_point_install(h: *Handle) callconv(.c) bool {
+    if (h.point_on) return true;
+    point.install(&h.it, &h.points) catch return false;
+    h.point_on = true;
+    return true;
+}
+
+/// Gives the id of the point proc `name`, or 0 with an error message in
+/// the result when `name` is not a point proc.
+fn ztcl_point_compile(h: *Handle, ptr: [*]const u8, len: usize) callconv(.c) u32 {
+    const name = ptr[0..len];
+    if (!h.point_on or h.points.program(name) == null) {
+        h.result = std.fmt.allocPrint(h.it.alloc(), "\"{s}\" is not a point proc", .{name}) catch "out of memory";
+        return 0;
+    }
+    for (h.point_names.items, 0..) |n, k| if (std.mem.eql(u8, n, name)) return @intCast(k + 1);
+    const copy = gpa.dupe(u8, name) catch return 0;
+    h.point_names.append(gpa, copy) catch {
+        gpa.free(copy);
+        return 0;
+    };
+    return @intCast(h.point_names.items.len);
+}
+
+/// The mask of the output columns that the point proc `prog` writes, in
+/// the order of `point.Out`, or 0 for a bad id.
+fn ztcl_point_outputs(h: *Handle, prog: u32) callconv(.c) u32 {
+    if (prog == 0 or prog > h.point_names.items.len) return 0;
+    const p = h.points.program(h.point_names.items[prog - 1]) orelse return 0;
+    var m: u32 = 0;
+    for (ztcl.point_wasm.outputs(p), 0..) |b, k| if (b) {
+        m |= @as(u32, 1) << @intCast(k);
+    };
+    return m;
+}
+
+/// Runs the point proc `prog` over `count` points at `ptr`, which must be
+/// 8-byte aligned: 11 input columns of `count` f64 in the order of
+/// `point.Field` (the column of `feature` is not read), then 7 output
+/// columns of `count` f64 with the start values in the order of
+/// `point.Out`, then `count` feature numbers of one byte. A bit of
+/// `in_mask` or `out_mask` marks a column as present. Gives the compute
+/// units of the run (`Program.steps`), -1 when they are more than the
+/// compute units that are left, -2 for a bad id, and -3 when the memory
+/// is full. The compute units come off the compute limit.
+fn ztcl_point_run(h: *Handle, prog: u32, ptr: [*]align(8) u8, count: usize, seed: u32, in_mask: u32, out_mask: u32) callconv(.c) i64 {
+    if (prog == 0 or prog > h.point_names.items.len) return -2;
+    const p = h.points.program(h.point_names.items[prog - 1]) orelse return -2;
+    const units = p.steps(count);
+    if (units > h.it.compute_limit) return -1;
+    if (h.it.compute_limit != std.math.maxInt(u64)) h.it.compute_limit -= units;
+    const cols: [*]f64 = @ptrCast(ptr);
+    var pts: point.Points = .{ .len = count, .seed = seed };
+    for (0..point_fields) |k| {
+        if (in_mask & (@as(u32, 1) << @intCast(k)) == 0) continue;
+        if (k == @backingInt(point.Field.feature)) {
+            pts.feature = ptr[(point_fields + point_outs) * count * 8 ..][0..count];
+        } else pts.in[k] = cols[k * count ..][0..count];
+    }
+    // Only the columns that the proc writes, as in the native host: the
+    // limits of `point.bound` apply to each column of `out`.
+    const writes = ztcl.point_wasm.outputs(p);
+    for (0..point_outs) |k| {
+        if (out_mask & (@as(u32, 1) << @intCast(k)) != 0 and writes[k]) pts.out[k] = cols[(point_fields + k) * count ..][0..count];
+    }
+    const scratch = gpa.alloc(f64, p.scratchLen()) catch return -3;
+    defer gpa.free(scratch);
+    p.run(&pts, scratch);
+    return @intCast(units);
 }
 
 export fn ztcl_result_ptr(h: *Handle) [*]const u8 {
