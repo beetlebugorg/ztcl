@@ -87,7 +87,40 @@ pub fn build(b: *std.Build) void {
     // The interpreter can use 5 MiB of native stack (`max_native`), as
     // in the WebAssembly library.
     if (t.os.tag == .wasi) exe.stack_size = 8 << 20;
+    if (t.os.tag == .macos) exe.headerpad_size = 0x1000;
     b.installArtifact(exe);
+
+    // `zig build runtimes`: the runner of each target of `ztcl build`,
+    // in ReleaseSmall and stripped, in lib/ztcl/runtime/TARGET/.
+    const runtimes = b.step("runtimes", "Build the runtime binary of each target of ztcl build");
+    var rt_mods: [runtime_targets.len]*std.Build.Module = undefined;
+    for (runtime_targets, 0..) |name, ri| {
+        const rt = b.resolveTargetQuery(std.Target.Query.parse(.{ .arch_os_abi = name }) catch unreachable);
+        const r = rt.result;
+        const opts = b.addOptions();
+        opts.addOption(bool, "gc_precise", false);
+        opts.addOption(bool, "aot", false);
+        opts.addOption(bool, "jit", (r.cpu.arch == .x86_64 and r.os.tag == .linux) or (r.cpu.arch == .aarch64 and r.os.tag == .macos));
+        opts.addOption(bool, "jit_bug", false);
+        addModuleOptions(b, opts, on);
+        opts.addOption(usize, "size_plant", 0);
+        opts.addOption(bool, "tsan_plant", false);
+        const lib = b.createModule(.{ .root_source_file = b.path("src/ztcl.zig"), .target = rt, .optimize = .ReleaseSmall });
+        lib.addOptions("build_options", opts);
+        rt_mods[ri] = lib;
+        const rexe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = rt,
+            .optimize = .ReleaseSmall,
+            .strip = true,
+            .imports = &.{.{ .name = "ztcl", .module = lib }},
+        }) });
+        // Space after the load commands, for the code signature that
+        // `ztcl build` adds to a Mach-O file.
+        if (r.os.tag == .macos) rexe.headerpad_size = 0x1000;
+        const inst = b.addInstallArtifact(rexe, .{ .dest_dir = .{ .override = .{ .custom = b.fmt("lib/ztcl/runtime/{s}", .{name}) } } });
+        runtimes.dependOn(&inst.step);
+    }
 
     const run = b.addRunArtifact(exe);
     if (b.args) |args| run.addArgs(args);
@@ -166,7 +199,7 @@ pub fn build(b: *std.Build) void {
     // The probe has no meaning on WASI, which has no executable memory.
     if (t.os.tag != .wasi) b.installArtifact(probe_exe);
 
-    addPointRuntime(b, &.{ ztcl, fast }, fast);
+    addPointRuntime(b, &(.{ ztcl, fast } ++ rt_mods), fast);
 
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
     const wasm = addWasm(b, "ztcl", .none, gc_precise, size_plant, on, false);
@@ -298,6 +331,9 @@ const all_modules = [_]Mod{
 
 /// The flag of each module after the preset, the flags, and the rule
 /// that a module that another module needs is in the build too.
+/// The targets of `zig build runtimes` and `ztcl build --target`.
+const runtime_targets = [_][]const u8{ "x86_64-linux", "aarch64-linux", "x86_64-macos", "aarch64-macos", "x86_64-windows", "aarch64-windows" };
+
 fn moduleFlags(b: *std.Build, batteries: Batteries) [all_modules.len]bool {
     var on: [all_modules.len]bool = undefined;
     for (all_modules, 0..) |m, i| {
