@@ -53,7 +53,7 @@ exec pandoc notes.md -o notes.pdf
 set f [open ~/notes.md w]
 ```
 
-The prompt said "use no capability", and the answer uses two. In the sandbox, each one is an error, and nothing outside the interpreter changes: [`catch {exec pandoc notes.md -o notes.pdf} msg`](run: "1") and [`catch {open ~/notes.md w} msg`](run: "1"). [`set msg`](run:) has the message.
+The prompt said "use no capability", and the answer uses two. In the sandbox, each one is an error, and the files of the computer stay the same: [`catch {exec pandoc notes.md -o notes.pdf} msg`](run: "1") and [`catch {open ~/notes.md w} msg`](run: "1"). [`set msg`](run:) has the message.
 
 Tell the agent what was wrong, in one line: "The proc uses `exec` and `open`; give the Markdown as the result, and use no capability."
 
