@@ -68,7 +68,15 @@ class View {
     probe.font = this.font;
     this.cellW = probe.measureText("MMMMMMMMMM").width / 10;
     const cols = this.colsFor(this.poster.clientWidth);
-    this.shell = await this.mod.Shell.create({ cols, rows: this.rows, computeLimit: LIMIT, files: FILES });
+    const state = el.querySelector("script.zpage-state");
+    const page = state ? JSON.parse(state.textContent) : null;
+    this.shell = await this.mod.Shell.create({ cols, rows: this.rows, computeLimit: LIMIT, files: page ? page.files : FILES });
+    // The state of a docs page runs first, with the same compute limit.
+    this.shell.it.computeLimit = LIMIT;
+    if (page?.setup) {
+      const r = this.shell.it.eval(page.setup);
+      if (!r.ok) this.shell.print(`The state of the page did not load: ${r.result}\n`);
+    }
     this.shell.print(el.dataset.banner.replaceAll("\\n", "\n") + "\n");
 
     const box = document.createElement("div");
@@ -107,6 +115,23 @@ class View {
     }
     this.meter = el.querySelector(".zshell-meter");
     this.fit();
+  }
+
+  // A helper puts a command on the line. The reader runs it with Enter.
+  put(text) {
+    this.shell.setLine(text);
+    this.up = 0;
+    this.render();
+    const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.el.scrollIntoView({ block: "nearest", behavior: smooth ? "smooth" : "auto" });
+    this.input.focus({ preventScroll: true });
+  }
+
+  // A helper runs a command in the interpreter of the shell, with the
+  // compute limit, and gets { ok, result }. The screen does not change.
+  run(script) {
+    const r = this.shell.it.eval(script);
+    return { ok: r.ok, result: r.result };
   }
 
   colsFor(width) {
@@ -264,22 +289,40 @@ async function load() {
   return mod;
 }
 
+// The start of each shell, once: on view, or when a helper asks for it.
+const starts = new WeakMap();
+function begin(el) {
+  if (!starts.has(el)) {
+    starts.set(el, (async () => {
+      try {
+        const view = new View(el, await load());
+        await view.start();
+        return view;
+      } catch (err) {
+        const hint = el.querySelector(".zshell-hint");
+        if (hint) hint.textContent = `The shell did not start: ${err.message}`;
+        throw err;
+      }
+    })());
+  }
+  return starts.get(el);
+}
+
 function mount(el) {
-  const go = async () => {
-    try {
-      await new View(el, await load()).start();
-    } catch (err) {
-      const hint = el.querySelector(".zshell-hint");
-      if (hint) hint.textContent = `The shell did not start: ${err.message}`;
-    }
-  };
   const seen = new IntersectionObserver((entries) => {
     if (entries.some((e) => e.isIntersecting)) {
       seen.disconnect();
-      go();
+      begin(el).catch(() => {});
     }
   });
   seen.observe(el);
+}
+
+/// The shell of a docs page (docs/site/helper.js uses it). It starts the
+/// shell if it is not started.
+export function pageShell() {
+  const el = document.querySelector(".zpage-shell");
+  return el ? begin(el) : Promise.reject(new Error("this page has no shell"));
 }
 
 if (typeof WebAssembly === "object") document.querySelectorAll(".zshell").forEach(mount);
