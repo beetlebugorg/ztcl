@@ -1,0 +1,135 @@
+diff --git i/src/wasm.zig w/src/wasm.zig
+index a74ccd0..118fbe2 100644
+--- i/src/wasm.zig
++++ w/src/wasm.zig
+@@ -476,3 +476,130 @@ fn ztcl_allow(h: *Handle, bits: u32) callconv(.c) i32 {
+     }
+     return 0;
+ }
++
++// ---- Spike only (cext task 02, never merged): commands of a C module ----
++
++const cext_host = struct {
++    extern "ztcl_host" fn cext_call(argc: u32, argv: [*]const [3]u32) i32;
++};
++
++/// The reply text of the last `cext_call`, put by the host with `ztcl_alloc`.
++pub export var ztcl_cext_reply: [2]u32 = .{ 0, 0 };
++
++/// The kind of a value for the host: 0 text, 1 int, 2 double, 3 list.
++fn tagOf(v: ztcl.Value) u32 {
++    return switch (v) {
++        .str => 0,
++        .int => 1,
++        .double => 2,
++        .list => 3,
++    };
++}
++
++/// The kind of the result of the last `ztcl_cext_eval`.
++pub export var ztcl_cext_tag: u32 = 0;
++
++fn cextCmd(it: *ztcl.Interp, argv: []const ztcl.Value, cmd: ?*ztcl.interp.Cmd) ztcl.interp.Error!ztcl.Value {
++    _ = cmd;
++    const a = it.alloc();
++    const pairs = try a.alloc([3]u32, argv.len);
++    for (argv, 0..) |v, i| {
++        const s = try it.str(v);
++        pairs[i] = .{ @intCast(@intFromPtr(s.ptr)), @intCast(s.len), tagOf(v) };
++    }
++    ztcl_cext_reply = .{ 0, 0 };
++    const rc = cext_host.cext_call(@intCast(argv.len), pairs.ptr);
++    var text: []const u8 = "";
++    if (ztcl_cext_reply[1] > 0) {
++        const p: [*]u8 = @ptrFromInt(ztcl_cext_reply[0]);
++        text = try a.dupe(u8, p[0..ztcl_cext_reply[1]]);
++        gpa.free(p[0..ztcl_cext_reply[1]]);
++    }
++    return switch (rc) {
++        0 => .{ .str = text },
++        2 => error.TclReturn,
++        3 => error.TclBreak,
++        4 => error.TclContinue,
++        else => blk: {
++            it.result = .{ .str = text };
++            it.error_code = .{ .str = "NONE" };
++            break :blk error.TclError;
++        },
++    };
++}
++
++fn ztcl_cext_command(h: *Handle, ptr: [*]const u8, len: usize) callconv(.c) i32 {
++    const name = h.it.alloc().dupe(u8, ptr[0..len]) catch return 1;
++    h.it.register(name, cextCmd) catch return 1;
++    return 0;
++}
++
++/// Runs a script in the current frame and gives the code: 0 ok, 1 error,
++/// 2 return, 3 break, 4 continue. The result is in `ztcl_result_ptr`.
++fn ztcl_cext_eval(h: *Handle, ptr: [*]const u8, len: usize) callconv(.c) i32 {
++    const it = &h.it;
++    const text = it.alloc().dupe(u8, ptr[0..len]) catch return 1;
++    const s = it.compile(text) catch {
++        h.result = it.str(it.result) catch "out of memory";
++        return 1;
++    };
++    ztcl_cext_tag = 0;
++    if (it.evalScript(s)) |v| {
++        h.result = it.str(v) catch "out of memory";
++        ztcl_cext_tag = tagOf(v);
++        return 0;
++    } else |e| {
++        h.result = it.str(it.result) catch "out of memory";
++        return switch (e) {
++            error.TclReturn => 2,
++            error.TclBreak => 3,
++            error.TclContinue => 4,
++            error.TclError => 1,
++            else => blk: {
++                h.result = @errorName(e);
++                break :blk 1;
++            },
++        };
++    }
++}
++
++/// Reads a variable of the current frame. Gives 0, or 1 with the error
++/// in `ztcl_result_ptr`.
++fn ztcl_cext_get(h: *Handle, ptr: [*]const u8, len: usize) callconv(.c) i32 {
++    const it = &h.it;
++    ztcl_cext_tag = 0;
++    const v = it.getVar(ptr[0..len]) catch {
++        h.result = it.str(it.result) catch "out of memory";
++        return 1;
++    };
++    h.result = it.str(v) catch return 1;
++    ztcl_cext_tag = tagOf(v);
++    return 0;
++}
++
++/// Sets a variable of the current frame to a text, an int (tag 1), or a
++/// double (tag 2). Gives 0, or 1 with the error in `ztcl_result_ptr`.
++fn ztcl_cext_set(h: *Handle, np: [*]const u8, nl: usize, vp: [*]const u8, vl: usize, tag: u32) callconv(.c) i32 {
++    const it = &h.it;
++    const text = it.alloc().dupe(u8, vp[0..vl]) catch return 1;
++    var v: ztcl.Value = .{ .str = text };
++    if (tag == 1) {
++        if (std.fmt.parseInt(i64, text, 10)) |n| v = .{ .int = n } else |_| {}
++    } else if (tag == 2) {
++        if (std.fmt.parseFloat(f64, text)) |d| v = .{ .double = d } else |_| {}
++    }
++    it.setVar(np[0..nl], v) catch {
++        h.result = it.str(it.result) catch "out of memory";
++        return 1;
++    };
++    return 0;
++}
++
++comptime {
++    if (host_imports) {
++        @export(&ztcl_cext_command, .{ .name = "ztcl_cext_command" });
++        @export(&ztcl_cext_eval, .{ .name = "ztcl_cext_eval" });
++        @export(&ztcl_cext_get, .{ .name = "ztcl_cext_get" });
++        @export(&ztcl_cext_set, .{ .name = "ztcl_cext_set" });
++    }
++}

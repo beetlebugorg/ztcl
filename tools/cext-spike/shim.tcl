@@ -17,27 +17,24 @@ proc sqlite3_memdebug_malloc_count args { return 0 }
 proc sqlite3_memdebug_pending args { return -1 }
 proc sqlite3_memdebug_fail args { return 0 }
 proc working_64bit_int {} { return 1 }
+proc fpnum_compare {a b} { return 0 }
 proc sqlite_options_dummy {} {}
 array set ::sqlite_options {}
 set ::sqlite_open_file_count 0
-# Any other command of testfixture returns "", and the count goes in ::shimmed.
-rename unknown _orig_unknown
-proc unknown {cmd args} {
-  if {[catch {uplevel 1 [list _orig_unknown $cmd {*}$args]} r o]} {
-    if {[string match "invalid command name*" $r]} { dict incr ::shimmed $cmd; return "" }
-    return -options $o $r
+# Any other command of testfixture returns "", and the count goes in
+# ::shimmed. tclsh has an `unknown`, and ztcl does not.
+if {[info commands unknown] ne ""} {
+  rename unknown _orig_unknown
+  proc unknown {cmd args} {
+    if {[catch {uplevel 1 [list _orig_unknown $cmd {*}$args]} r o]} {
+      if {[string match "invalid command name*" $r]} { dict incr ::shimmed $cmd; return "" }
+      return -options $o $r
+    }
+    return $r
   }
-  return $r
+} else {
+  proc unknown {cmd args} { dict incr ::shimmed $cmd; return "" }
 }
 set ::shimmed {}
-# sqlite_options: 1 for a feature, 0 for the extensions that this build has not.
-foreach o {fts3 fts4 fts5 rtree geopoly session preupdate icu dbstat_vtab stat4 rbu
-           default_autovacuum mem3 mem5 memdebug malloc_fail threadsafe2 columnmetadata
-           unlock_notify atomic_write batch_atomic_write zipvfs bytecode tabledef
-           carray offset_sql_func normalize stmtvtab dbpage diskio crashtest
-           lock_proxy_pragmas prefer_proxy_locking secure_delete} {
-  set ::sqlite_options($o) 0
-}
-proc _opt_read {n e op} { if {![info exists ::sqlite_options($e)]} { set ::sqlite_options($e) 1 } }
-trace add variable ::sqlite_options read _opt_read
-set ::sqlite_options(threadsafe) 1
+if {![info exists ::shimdir]} { set ::shimdir [file dirname [info script]] }
+source [file join $::shimdir options.tcl]
