@@ -1,0 +1,45 @@
+# Maintainer: beetlebugorg
+# Builds ztcl from the main branch with the Zig of Arch Linux.
+pkgname=ztcl-git
+pkgver=r320.d2840725
+pkgrel=1
+pkgdesc='Tcl, compiled: a Tcl in Zig with a JIT'
+arch=('x86_64' 'aarch64')
+url='https://beetlebug.org/ztcl/'
+license=('BSD-2-Clause')
+makedepends=('git' 'zig>=0.17.0' 'zig<0.18.0')
+provides=('ztcl')
+conflicts=('ztcl' 'ztcl-bin')
+options=('!debug' '!strip')
+source=('ztcl::git+https://github.com/beetlebugorg/ztcl.git')
+sha256sums=('SKIP')
+
+pkgver() {
+  cd ztcl
+  printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=8 HEAD)"
+}
+
+prepare() {
+  cd ztcl
+  export ZIG_GLOBAL_CACHE_DIR="$srcdir/zig-global"
+  zig build --fetch
+}
+
+build() {
+  cd ztcl
+  export ZIG_GLOBAL_CACHE_DIR="$srcdir/zig-global"
+  zig build -Doptimize=ReleaseFast -Dcpu=baseline
+}
+
+check() {
+  cd ztcl
+  printf 'puts [expr {6 * 7}]\n' > "$srcdir/check.tcl"
+  ./zig-out/bin/ztcl "$srcdir/check.tcl" | grep -qx 42
+}
+
+package() {
+  cd ztcl
+  install -Dm755 zig-out/bin/ztcl "$pkgdir/usr/bin/ztcl"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

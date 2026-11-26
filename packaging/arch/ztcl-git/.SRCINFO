@@ -1,0 +1,20 @@
+pkgbase = ztcl-git
+	pkgdesc = Tcl, compiled: a Tcl in Zig with a JIT
+	pkgver = r320.d2840725
+	pkgrel = 1
+	url = https://beetlebug.org/ztcl/
+	arch = x86_64
+	arch = aarch64
+	license = BSD-2-Clause
+	makedepends = git
+	makedepends = zig>=0.17.0
+	makedepends = zig<0.18.0
+	provides = ztcl
+	conflicts = ztcl
+	conflicts = ztcl-bin
+	options = !debug
+	options = !strip
+	source = ztcl::git+https://github.com/beetlebugorg/ztcl.git
+	sha256sums = SKIP
+
+pkgname = ztcl-git
