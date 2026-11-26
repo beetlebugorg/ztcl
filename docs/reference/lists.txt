@@ -1,0 +1,104 @@
+# The command reference: lists. The format is in docs/reference/README.md.
+
+== list
+syn: list ?arg ...?
+does: Makes a list with each argument as one element. It adds the braces and backslashes that an element needs, so that each value stays one element.
+ex: list a "b c" {} => a {b c} {}
+
+== llength
+syn: llength list
+does: The count of elements of a list.
+ex: llength {a {b c} d} => 3
+err: llength "a {b" | unmatched open brace in list
+
+== lindex
+syn: lindex list ?index ...?
+does: Gets an element. Each further index goes into the element of the earlier one. An index past the end gives an empty string. An index is an integer from 0, `end`, or `end-N`, with `+` and `-` of integers.
+ex: lindex {a b c} end => c
+ex: lindex {{a b} {c d}} 1 0 => c
+
+== lrange
+syn: lrange list first last
+does: The elements from first to last, as a list.
+ex: lrange {a b c d} 1 end-1 => b c
+
+== lappend
+syn: lappend varName ?value ...?
+does: Adds each value as one element to the list in the variable, and gives the new list. It makes the variable when it has no value.
+ex: set l {a}; lappend l "b c" => a {b c}
+
+== linsert
+syn: linsert list index ?element ...?
+does: A new list with the elements put in before index.
+ex: linsert {a d} 1 b c => a b c d
+
+== lreplace
+syn: lreplace list first last ?element ...?
+does: A new list with the elements from first to last replaced by the new elements. With no new elements, it removes them.
+ex: lreplace {a b c d} 1 2 x => a x d
+
+== lset
+syn: lset listVar ?index? ?index ...? value
+does: Sets one element of the list in a variable, and gives the new list. More indexes go into nested lists. The index `end+1` adds an element.
+ex: set l {a b c}; lset l 1 x => a x c
+
+== lassign
+syn: lassign list ?varName ...?
+does: Puts the elements of a list in the variables, in order, and gives the elements that are left. A variable with no element gets an empty string.
+ex: lassign {1 2 3} a b => 3
+
+== lrepeat
+syn: lrepeat count ?value ...?
+does: A list of the values, count times.
+ex: lrepeat 3 x => x x x
+
+== lreverse
+syn: lreverse list
+does: The elements in the reverse order.
+ex: lreverse {a b c} => c b a
+
+== lsearch
+syn: lsearch ?-option value ...? list pattern
+does: Finds an element. It gives the index of the first match, or -1. The default match is a glob pattern.
+opt: -exact | The element equals the pattern.
+opt: -glob | A glob pattern (the default).
+opt: -regexp | A regular expression.
+opt: -all | Gives each index that matches.
+opt: -inline | Gives the elements in place of the indexes.
+opt: -not | Finds the elements that do not match.
+opt: -nocase | Matches letters with no case.
+opt: -index INDEX | Compares element INDEX of each element.
+opt: -sorted | The list is sorted, and the search is a binary search.
+opt: -start INDEX | Starts at INDEX.
+ex: lsearch {a b c} c => 2
+ex: lsearch -all -inline {apple box ant} a* => apple ant
+ex: lsearch -index 0 {{x 1} {y 2}} y => 1
+
+== lsort
+syn: lsort ?-option value ...? list
+does: A sorted copy of a list. The default order compares the text of the elements. The sort is stable: equal elements keep their order.
+opt: -ascii | Compares the text (the default).
+opt: -dictionary | Compares the text with no case, and runs of digits as numbers: `a2` before `a10`.
+opt: -integer | Compares integers.
+opt: -real | Compares floats.
+opt: -command CMD | Calls CMD with two elements. It gives a negative, zero, or positive integer.
+opt: -increasing | The smallest first (the default).
+opt: -decreasing | The largest first.
+opt: -index INDEX | Compares element INDEX of each element.
+opt: -unique | Keeps one of each run of equal elements.
+opt: -nocase | Compares letters with no case.
+ex: lsort {pear apple fig} => apple fig pear
+ex: lsort -integer {10 9 100} => 9 10 100
+ex: lsort -dictionary {a10 a2 A1} => A1 a2 a10
+ex: lsort -index 1 -decreasing {{a 1} {b 3} {c 2}} => {b 3} {c 2} {a 1}
+
+== lmap
+syn: lmap varList list ?varList list ...? command
+does: Runs the command for each element, as `foreach` does, and gives a list of the results. A `continue` leaves out that element.
+ex: lmap x {1 2 3} {expr {$x * $x}} => 1 4 9
+ex: lmap x {1 2 3 4} {if {$x % 2} continue; set x} => 2 4
+
+== foreach
+syn: foreach varList list ?varList list ...? command
+does: Runs the command for each element of the list. With a varList of more than one name, it gets that many elements each time. With more than one list, it goes through each list in step.
+ex: set out {}; foreach {k v} {a 1 b 2} {append out $k=$v,}; set out => a=1,b=2,

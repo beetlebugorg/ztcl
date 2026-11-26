@@ -28,6 +28,8 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 | `node tools/site-shell.mjs chromium URL` | Tests the shell of a page of the built site in a headless Chromium. |
 | `node tools/site-helper.mjs chromium URL` | Tests the helpers of a page of the built site and their shell in a headless Chromium. The server needs the site at `/ztcl/` and a ztk web build at `/ztk/play/`; the top of the file has the commands. |
 | `node tools/site-course.mjs chromium URL` | Tests the shell of a lesson of the Learn course in a headless Chromium: the Run links, the scroll position, the saved commands, and the sheet on a small screen. |
+| `python3 -I tools/ref-coverage.py zig-out/bin/ztcl` | Checks that each registered command and each subcommand of an ensemble has an entry in the command reference (`docs/reference/`, format in `docs/dev/reference.md`). |
+| `python3 -I tools/doc-examples.py zig-out/bin/ztcl --reference` | Runs the examples of the command reference. |
 | `tests/site.sh [site folder]` | Checks that no page of the built site shows a comment line of the Markdown, such as `<!-- run -->`, as text. |
 | `tools/suite.sh -t core-8-6-16` | Runs the Tcl test suite. |
 | `tools/suite.sh -j` | Runs the suite with the JIT at threshold 0. |
@@ -51,7 +53,7 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 
 ## Modules
 
-A new `ztcl::` command goes in with its page in `docs/modules/` and a row in `docs/modules/README.md`, in the same PR.
+A new `ztcl::` command goes in with its page in `docs/modules/` and a row in `docs/modules/README.md`, in the same PR. Each new command, and each new subcommand of an ensemble, goes in with its entry in `docs/reference/`.
 
 ## Commits and merges
 

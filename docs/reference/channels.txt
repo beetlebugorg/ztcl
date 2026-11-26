@@ -1,0 +1,170 @@
+# The command reference: files and channels. The format is in
+# docs/reference/README.md. The examples run with --root in an empty
+# folder.
+
+== open
+syn: open fileName ?access? ?permissions?
+does: Opens a file and gives a channel name. access is `r` (the default), `w` (a new file), `a` (add at the end), `r+`, `w+`, or `a+`, or a list of flags such as `{WRONLY CREAT}`. permissions is the mode of a new file, 0666 by default.
+cap: channels
+flags: --root . --allow channels,file
+ex: set f [open notes.txt w]; puts $f "buy milk"; close $f =>
+ex: set f [open notes.txt]; set t [gets $f]; close $f; set t => buy milk
+err: open nope.txt | couldn't open "nope.txt": no such file or directory
+
+== close
+syn: close channelId ?direction?
+does: Writes what is left in the buffer and closes the channel. direction `read` or `write` closes one side of a socket or a pipe.
+cap: channels
+
+== gets
+syn: gets channelId ?varName?
+does: Reads one line with no newline. With varName, it puts the line in the variable and gives its length, or -1 at the end of the input. Without varName, it gives the line.
+cap: channels
+flags: --root . --allow channels,file
+ex: set f [open t.txt w]; puts $f "a\nb"; close $f; set f [open t.txt]; set n 0; while {[gets $f line] >= 0} {incr n}; close $f; set n => 2
+
+== read
+syn: read ?-nonewline? channelId ?numChars?
+does: Reads numChars characters, or all of the input to its end. `-nonewline` removes the last newline.
+cap: channels
+
+== puts
+syn: puts ?-nonewline? ?channelId? string
+does: Writes the string and a newline. The default channel is `stdout`. In an interpreter with no channels, `puts` goes to a callback of the host, and `stdout` and `stderr` are the only channel names.
+ex: puts -nonewline "no newline" =>
+
+== flush
+syn: flush channelId
+does: Writes the buffer of the channel now.
+cap: channels
+
+== eof
+syn: eof channelId
+does: 1 after a read reached the end of the input.
+cap: channels
+
+== seek
+syn: seek channelId offset ?origin?
+does: Moves the place of the next read or write. origin is `start` (the default), `current`, or `end`.
+cap: channels
+
+== tell
+syn: tell channelId
+does: The place of the next read or write, in bytes from the start.
+cap: channels
+
+== fconfigure
+syn: fconfigure channelId ?-option value ...?
+does: Gives or sets the options of a channel: `-blocking`, `-buffering` (`full`, `line`, or `none`), `-buffersize`, `-encoding`, `-translation` (`auto`, `lf`, `crlf`, or `binary`), and `-eofchar`. A socket also has `-sockname` and `-peername`. `chan configure` is the same command.
+cap: channels
+
+== fblocked
+syn: fblocked channelId
+does: 1 when the last read of a channel that does not block had no full line.
+cap: channels
+
+== fcopy
+syn: fcopy input output ?-size size? ?-command callback?
+does: Copies from one channel to another. With `-command`, the copy runs in the event loop, and the callback gets the count of bytes.
+cap: channels
+
+== chan
+syn: chan subcommand ?arg ...?
+does: The channel commands as one ensemble. Each subcommand works as the command of the same name.
+cap: channels
+sub: chan close CHAN ?DIRECTION? | As `close`.
+sub: chan configure CHAN ?-option value ...? | As `fconfigure`.
+sub: chan copy IN OUT ?-size N? ?-command CB? | As `fcopy`.
+sub: chan eof CHAN | As `eof`.
+sub: chan flush CHAN | As `flush`.
+sub: chan gets CHAN ?VAR? | As `gets`.
+sub: chan names ?PATTERN? | The names of the open channels.
+sub: chan puts ?-nonewline? ?CHAN? STRING | As `puts`.
+sub: chan read ?-nonewline? CHAN ?N? | As `read`.
+sub: chan seek CHAN OFFSET ?ORIGIN? | As `seek`.
+sub: chan tell CHAN | As `tell`.
+diff: `chan pipe`, `chan pending`, `chan push`, and the other subcommands of Tcl 8.6 that are not in the list are not in ztcl in this version.
+
+== source
+syn: source ?-encoding name? fileName
+does: Runs the script in a file, and gives the result of its last command.
+cap: channels
+
+== file
+syn: file subcommand ?arg ...?
+does: Commands for paths and files. The name commands (`join`, `split`, `dirname`, `tail`, `extension`, `rootname`) work on text. The others read the file system, inside the root folder of the interpreter.
+cap: file
+flags: --root . --allow channels,file
+sub: file join NAME ?NAME ...? | One path from parts.
+sub: file split NAME | The parts of a path.
+sub: file dirname NAME | The path without its last part.
+sub: file tail NAME | The last part.
+sub: file extension NAME | The extension with its dot, such as `.json`.
+sub: file rootname NAME | The path without its extension.
+sub: file normalize NAME | The full path with `.` and `..` removed.
+sub: file pathtype NAME | `absolute`, `relative`, or `volumerelative`.
+sub: file nativename NAME | The path with the separator of the platform.
+sub: file separator ?NAME? | The separator of paths.
+sub: file exists NAME | 1 when the file exists.
+sub: file isfile NAME | 1 for a file.
+sub: file isdirectory NAME | 1 for a folder.
+sub: file readable NAME | 1 when the file can be read.
+sub: file writable NAME | 1 when the file can be written.
+sub: file executable NAME | 1 when the file can run.
+sub: file owned NAME | 1 when the user owns the file.
+sub: file size NAME | The size in bytes.
+sub: file mtime NAME ?TIME? | The time of the last change, in seconds.
+sub: file atime NAME ?TIME? | The time of the last read, in seconds.
+sub: file stat NAME VAR | Puts the facts of the file in an array.
+sub: file lstat NAME VAR | As `stat`, for a link itself.
+sub: file type NAME | `file`, `directory`, `link`, and others.
+sub: file attributes NAME ?OPTION ?VALUE ...?? | The attributes of the platform, such as `-permissions`.
+sub: file mkdir ?DIR ...? | Makes folders, with each missing parent.
+sub: file copy ?-force? ?--? SOURCE ?SOURCE ...? TARGET | Copies files and folders.
+sub: file rename ?-force? ?--? SOURCE ?SOURCE ...? TARGET | Moves files and folders.
+sub: file delete ?-force? ?--? ?NAME ...? | Removes files, and folders with `-force`.
+sub: file link ?-symbolic|-hard? LINK ?TARGET? | Makes a link, or gives its target.
+sub: file readlink NAME | The target of a symbolic link.
+sub: file tempfile ?VAR? ?TEMPLATE? | Opens a new temporary file and gives its channel.
+sub: file channels ?PATTERN? | The names of the open channels.
+sub: file system NAME | The file system of a path.
+sub: file volumes | The volumes, such as `/`.
+ex: file join notes 2026 a.json => notes/2026/a.json
+ex: file extension notes.json => .json
+ex: file mkdir data; file isdirectory data => 1
+
+== glob
+syn: glob ?switches? name ?name ...?
+does: The names of the files that match glob patterns. A pattern with no match is an error, unless `-nocomplain`.
+cap: file
+opt: -nocomplain | No match gives an empty list.
+opt: -directory DIR | Matches in DIR.
+opt: -types TYPES | Only files of the types, such as `f` and `d`.
+opt: -tails | Gives the names without the folder of `-directory`.
+
+== cd
+syn: cd ?dirName?
+does: Changes the working folder, inside the root folder of the interpreter.
+cap: file
+
+== pwd
+syn: pwd
+does: The working folder.
+cap: file
+
+== zipfs
+syn: zipfs subcommand ?arg ...?
+does: The zip file systems under `//zipfs:/`. A binary of `ztcl build` has its files at `//zipfs:/app/`.
+cap: file
+sub: zipfs mount ?ZIPFILE? ?MOUNTPOINT? | Mounts a zip file, or gives the mounts.
+sub: zipfs unmount MOUNTPOINT | Removes a mount.
+sub: zipfs list ?(-glob|-regexp)? ?PATTERN? | The names of the files in the mounts.
+sub: zipfs exists NAME | 1 when the file is in a mount.
+sub: zipfs info NAME | The zip file, the size, the packed size, and the offset of a file.
+sub: zipfs root | The root of the mounts: `//zipfs:/`.
+
+== socket
+syn: socket ?-myaddr addr? ?-myport myport? ?-async? host port
+syn: socket -server command ?-myaddr addr? port
+does: Opens a TCP connection and gives a channel, or with `-server` makes a server that calls the command with a channel, an address, and a port for each new connection. Port 0 asks the system for a free port. Each address goes through the network policy of the host: loopback only by default.
+cap: socket

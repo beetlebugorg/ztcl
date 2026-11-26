@@ -25,6 +25,9 @@ from pathlib import Path
 
 from markdown_it import MarkdownIt
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import reference  # noqa: E402  (tools/reference.py: the table of the command reference)
+
 ROOT = Path(__file__).resolve().parent.parent
 REPO = "https://github.com/beetlebugorg/ztcl"
 SITE = "https://beetlebug.org/ztcl/"
@@ -66,6 +69,7 @@ PAGES = [
     ("docs/jit.md", "jit/", "Guide", "The JIT"),
     ("docs/build.md", "build/", "Guide", "Build a program"),
     ("docs/targets.md", "targets/", "Guide", "Targets"),
+    ("docs/reference/README.md", "reference/", "Reference", "Commands"),
     ("docs/modules/README.md", "modules/", "Modules", "All modules"),
     ("docs/modules/json.md", "modules/json/", "Modules", "ztcl::json"),
     ("docs/modules/vt.md", "modules/vt/", "Modules", "ztcl::vt"),
@@ -269,18 +273,18 @@ class Build:
         the window, so that a Run link never scrolls the page. shell.js
         runs the checkpoint of the lesson (setup), then the commands that
         the reader ran on this lesson in this tab."""
-        banner = "ztcl in your browser. No network or clock.\\nThe state of this lesson is loaded.\\nEach command can use 10,000,000 compute units."
+        banner = "ztcl in your browser. No network or clock.\\nThe state of this page is loaded.\\nEach command can use 10,000,000 compute units."
         if files:
             banner += "\\nRead-only files:" + "".join(f" {n}" for n in files)
         data = json.dumps({"setup": setup or "", "files": files}).replace("</", "<\\/")
-        lesson = page.split("/")[1][:2]
+        lesson = page.strip("/").replace("/", ":")
         return f"""<aside class="zcourse-dock" aria-label="The shell of the course">
-<div class="zshell zpage-shell zcourse" id="shell" data-rows="12" data-lesson="{lesson}" data-label="ztcl shell of the course. Type a Tcl command. Tab completes." data-banner="{html.escape(banner)}">
+<div class="zshell zpage-shell zcourse" id="shell" data-rows="12" data-lesson="{lesson}" data-label="ztcl shell of this page. Type a Tcl command. Tab completes." data-banner="{html.escape(banner)}">
   <div class="bar"><i></i><i></i><i></i><span>ztcl shell</span><button type="button" class="zcourse-again">Start again</button><button type="button" class="zcourse-size" aria-expanded="true">Make small</button></div>
 <pre class="zshell-poster" aria-hidden="true">{html.escape(banner.replace("\\n", chr(10)))}
 <span class="p">%</span> </pre>
   <div class="zshell-foot">
-    <span class="zshell-hint" id="shell-hint">A <kbd>Run</kbd> link in the lesson runs its command here. <kbd>Tab</kbd> completes. <kbd>Up</kbd> is history. <kbd>Esc</kbd> <kbd>Tab</kbd> leaves.</span>
+    <span class="zshell-hint" id="shell-hint">A <kbd>Run</kbd> link on this page runs its command here. <kbd>Tab</kbd> completes. <kbd>Up</kbd> is history. <kbd>Esc</kbd> <kbd>Tab</kbd> leaves.</span>
     <span class="zshell-meter"><span>Compute limit: 10,000,000 compute units for each command</span><progress value="0" max="10000000" aria-label="Compute units of the last command"></progress></span>
   </div>
   <noscript><p class="zshell-foot">The shell needs JavaScript and WebAssembly.</p></noscript>
@@ -317,8 +321,10 @@ class Build:
                 f'<div class="zhelper-app" style="height: {height}px"><p class="zhelper-poster">It starts when it comes into view. It needs JavaScript and WebAssembly.</p></div>'
                 f'<details><summary>How {what} is made: {lines} lines of Tcl with the ztk GUI toolkit</summary><pre><code class="language-tcl">{html.escape(script)}</code></pre></details></figure>\n')
 
-    def render(self, src, page):
-        tokens = self.live_blocks(src, self.md.parse((ROOT / src).read_text(encoding="utf-8")))
+    def render(self, src, page, text=None):
+        if text is None:
+            text = (ROOT / src).read_text(encoding="utf-8")
+        tokens = self.live_blocks(src, self.md.parse(text))
         ids, seen, title = set(), {}, None
         for i, token in enumerate(tokens):
             if token.type == "heading_open":
@@ -410,7 +416,7 @@ class Build:
         root = rel(page, "")
         name = f"{html.escape(title)} · ztcl"
         script = f'\n<script type="module" src="{root}assets/live.js"></script>' if 'class="live-demo"' in body else ""
-        course, dock = page.startswith("learn/"), ""
+        course, dock = page.startswith("learn/") or (page.startswith("reference/") and page != "reference/"), ""
         if course:
             setup = self.checkpoints.get(page) or ""
             dock = self.course_html(page, setup, self.files_of.get(page) or {})
@@ -434,7 +440,7 @@ class Build:
 <nav class="toplinks" aria-label="Site"><a href="{root}overview/" aria-current="page">Docs</a><a href="{root}playground/">Playground</a><a href="{root}try/">Shell</a><a class="sib" href="https://beetlebug.org/ztk/">ztk</a><a href="{REPO}">GitHub</a></nav></div></header>
 <div class="docs"><input class="toc-toggle" type="checkbox" id="toc"><label class="toc-button" for="toc">Contents</label>
 <aside class="sidebar"><nav aria-label="Documentation">{self.nav(page)}</nav></aside>
-<main class="prose" id="content">{body}{self.pager(page)}</main></div>{dock}
+<main class="prose" id="content">{body}{self.pager(page) if any(p == page for _, p, _, _ in PAGES) else ""}</main></div>{dock}
 <footer class="foot docs-foot"><div class="wrap"><span>ztcl · BSD-2-Clause</span><span class="right"><a href="{root}">Home</a><a href="https://beetlebug.org/ztk/">ztk</a><a href="{REPO}">Source on GitHub</a></span></div></footer>
 </body></html>
 """
@@ -496,13 +502,46 @@ class Build:
                 group = section
             lines.append(f"- [{label}]({SITE}{page})\n")
             full.append(f"\n\n<!-- {SITE}{page} -->\n\n" + (ROOT / src).read_text(encoding="utf-8"))
-        lines.append(f"\n## For agents\n\n- [Full text]({SITE}llms-full.txt): the Markdown of each page above.\n"
+        lines.append(f"\n## For agents\n\n- [Full text]({SITE}llms-full.txt): the Markdown of each page above and of each command.\n"
+                     f"- [api.json]({SITE}reference/api.json): each command with its synopsis, options, subcommands, capability, compute cost, examples, and errors.\n"
                      f"- [ztk](https://beetlebug.org/ztk/llms.txt): Tk on ztcl, for GUI apps.\n")
         (out / "llms.txt").write_text("".join(lines), encoding="utf-8")
         (out / "llms-full.txt").write_text("".join(full), encoding="utf-8")
 
+    def reference_pages(self):
+        """The pages of the command reference (tools/reference.py), and the
+        list of each area for the index page reference/."""
+        entries = reference.parse()
+        pages, areas = [], []
+        for area, label in reference.AREAS:
+            items = [e for e in entries if e["area"] == area]
+            if not items:
+                continue
+            rows = []
+            for e in items:
+                slug = reference.slug(e["name"])
+                page = f"reference/{slug}/"
+                text = reference.markdown(e, lambda n: n)
+                title, body = self.render(f"docs/reference/{slug}/index.md", page, text)
+                pages.append((page, title, body))
+                cap = f' <span class="ref-cap">{html.escape(e["cap"])}</span>' if "cap" in e else ""
+                first = e["does"].split(". ")[0].rstrip(".") + "."
+                rows.append(f'<li data-name="{html.escape(" ".join(reference.names(e)).lower())}"><a href="{slug}/"><code>{html.escape(e["name"])}</code></a>{cap} {re.sub(r"`([^`]+)`", r"<code>\1</code>", html.escape(first))}</li>')
+            areas.append(f'<section class="ref-area"><h2 id="{area}">{html.escape(label)}</h2><ul class="ref-list">{"".join(rows)}</ul></section>')
+        index = ('<p class="ref-search"><label>Find a command <input type="search" id="ref-q" autocomplete="off" spellcheck="false" placeholder="lsort, dict get, socket"></label></p>'
+                 '<p class="ref-none" hidden>No command matches.</p>' + "".join(areas) +
+                 '<script>{const q=document.getElementById("ref-q"),none=document.querySelector(".ref-none");'
+                 'q.addEventListener("input",()=>{const t=q.value.trim().toLowerCase();let n=0;'
+                 'document.querySelectorAll(".ref-list li").forEach(li=>{const on=!t||li.dataset.name.includes(t)||li.textContent.toLowerCase().includes(t);li.hidden=!on;if(on)n++;});'
+                 'document.querySelectorAll(".ref-area").forEach(s=>{s.hidden=!s.querySelector("li:not([hidden])");});none.hidden=n>0;});}</script>')
+        self.reference_md = [(page, reference.markdown(e, lambda n: n)) for e in entries for page in [f"reference/{reference.slug(e['name'])}/"]]
+        self.api_json = reference.api(entries)
+        return pages, index
+
     def run(self, out):
+        ref_pages, ref_index = self.reference_pages()
         rendered = [(page, *self.render(src, page)) for src, page, _, _ in PAGES]
+        rendered = [(p, t, b + ref_index if p == "reference/" else b) for p, t, b in rendered] + ref_pages
         for src, page, anchor in self.links:
             if anchor not in self.anchors.get(page, set()):
                 raise SystemExit(f"{src}: link to a missing anchor: {page}#{anchor}")
@@ -549,6 +588,10 @@ class Build:
             f'<meta http-equiv="refresh" content="0; url={first}"><a href="{first}">The course starts here.</a>\n',
             encoding="utf-8")
         self.agents(out)
+        (out / "reference" / "api.json").write_text(self.api_json, encoding="utf-8")
+        with (out / "llms-full.txt").open("a", encoding="utf-8") as f:
+            for page, text in self.reference_md:
+                f.write(f"\n\n<!-- {SITE}{page} -->\n\n{text}")
         (out / ".nojekyll").write_text("", encoding="utf-8")
         print(f"wrote {len(rendered) + len(HTML_PAGES)} pages to {out}")
 

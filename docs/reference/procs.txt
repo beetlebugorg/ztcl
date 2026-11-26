@@ -1,0 +1,77 @@
+# The command reference: procs and namespaces. The format is in
+# docs/reference/README.md.
+
+== proc
+syn: proc name args body
+does: Makes a command from a body of Tcl. args is a list of the argument names. An argument `{name default}` has a default value, and the last argument `args` gets each extra word as a list. A proc of the same name replaces the earlier one.
+ex: proc greet {who {word Hello}} {return "$word, $who"}; greet Ada => Hello, Ada
+ex: proc sum {args} {tcl::mathop::+ {*}$args}; sum 1 2 3 => 6
+err: greet | wrong # args: should be "greet who ?word?"
+
+== return
+syn: return ?-code code? ?-errorcode list? ?-level n? ?-options dict? ?value?
+does: Ends the proc and gives the value as its result. `-code error` gives an error to the caller with the value as its message. `-code break` and `-code continue` stop a loop of the caller.
+ex: proc check {n} {if {$n < 0} {return -code error -errorcode {NEG} "negative"}; return ok}; check 1 => ok
+err: check -1 | negative
+
+== tailcall
+syn: tailcall command ?arg ...?
+does: Ends the proc and runs the command in its place, so that the stack does not grow. The result of the command is the result of the proc.
+ex: proc down {n} {if {$n == 0} {return done}; tailcall down [incr n -1]}; down 100000 => done
+
+== rename
+syn: rename oldName newName
+does: Gives a command a new name. An empty newName removes the command.
+ex: proc a {} {return 1}; rename a b; b => 1
+
+== namespace
+syn: namespace subcommand ?arg ...?
+does: The commands for namespaces: groups of commands and variables with a name. `::` is the top namespace, and `a::b` is a namespace in `a`.
+sub: namespace eval NS SCRIPT | Runs SCRIPT in NS, and makes NS when it does not exist.
+sub: namespace current | The name of the current namespace.
+sub: namespace children ?NS? ?PATTERN? | The namespaces in NS.
+sub: namespace parent ?NS? | The namespace around NS.
+sub: namespace exists NS | 1 when NS exists.
+sub: namespace delete ?NS ...? | Removes namespaces with their commands and variables.
+sub: namespace export ?-clear? ?PATTERN ...? | The commands that other code can import, and that an ensemble has.
+sub: namespace import ?-force? ?PATTERN ...? | Makes the exported commands of another namespace callable by their short names.
+sub: namespace forget ?PATTERN ...? | Removes imported commands.
+sub: namespace ensemble create ?-option value ...? | Makes the namespace a command with its exported commands as subcommands. `configure` and `exists` go with it.
+sub: namespace path ?LIST? | The namespaces where a command name is looked up after the current one.
+sub: namespace which ?-command? ?-variable? NAME | The full name of a command or variable, or an empty string.
+sub: namespace origin CMD | The full name of the command that an imported command points to.
+sub: namespace qualifiers NAME | The part of NAME before its last `::`.
+sub: namespace tail NAME | The part of NAME after its last `::`.
+sub: namespace code SCRIPT | A script that runs in the current namespace from each place, for a callback.
+sub: namespace inscope NS SCRIPT ?ARG ...? | Runs SCRIPT in NS. `namespace code` makes this form.
+sub: namespace upvar NS OTHERVAR MYVAR ?OTHERVAR MYVAR ...? | Links local names to variables of NS.
+sub: namespace unknown ?SCRIPT? | The handler of an unknown command in the namespace.
+ex: namespace eval jot {proc add {} {return added}; namespace export add; namespace ensemble create}; jot add => added
+ex: namespace tail ::a::b::c => c
+ex: namespace qualifiers ::a::b::c => ::a::b
+
+== unknown
+syn: unknown commandName ?arg ...?
+does: The command that runs for a command name that does not exist. The default gives the error `invalid command name`. A new `unknown` can load or make the command.
+err: nosuchcommand | invalid command name "nosuchcommand"
+
+== coroutine
+syn: coroutine name cmd ?arg ...?
+does: Makes a command name and runs cmd until its first `yield`. The value of that `yield` is the result of `coroutine`. Each call of name goes on to the next `yield`, and its argument is the result of that `yield`. The coroutine ends when cmd returns.
+diff: The WebAssembly builds have no `coroutine` in this version: the error is "coroutine is not available on this target".
+ex: coroutine gen apply {{} {yield 1; yield 2; return 3}} => 1
+ex: gen => 2
+
+== yield
+syn: yield ?value?
+does: Stops the coroutine that runs it and gives the value to the caller. The next call of the coroutine goes on after the `yield`.
+ex: coroutine c apply {{} {set got [yield first]; return "got $got"}}; c hello => got hello
+
+== yieldto
+syn: yieldto command ?arg ...?
+does: Stops the coroutine and runs the command in the place of the caller. The arguments of the next call of the coroutine are the result of `yieldto`, as a list.
+
+== walk
+syn: walk
+does: A command of the runner of ztcl for its own tests.
+diff: Tcl has no `walk`.
