@@ -2949,7 +2949,15 @@ test "ztcl::vm: the capability, the jail of its paths, and the limits" {
     try std.testing.expectEqualStrings("ZTCL VM ENTITLEMENT", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {share /mnt}}; set ::errorCode")));
 }
 
-fn isoSpawn(_: ?*anyopaque) ?i32 {
+fn isoSpawn(_: ?*anyopaque) ?tcl.isothread.Fd {
+    if (comptime @import("builtin").os.tag == .windows) {
+        // An overlapped pipe pair, as the sandbox makes it.
+        const ends = @import("isolate_windows.zig").pipePair(std.heap.page_allocator) catch return null;
+        const t = tcl.isoproto.Transport.init(ends.child) catch return null;
+        const th = std.Thread.spawn(.{}, isoChild, .{t}) catch return null;
+        th.detach();
+        return ends.parent;
+    }
     var fds: [2]i32 = undefined;
     if (@import("builtin").os.tag == .linux) {
         const l = std.os.linux;

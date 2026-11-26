@@ -182,3 +182,25 @@ test "isolate on Windows: the CPU limit and the memory limit of the job end the 
         try t.expect(c.usage().peak_bytes <= 64 << 20);
     }
 }
+
+test "isolate on Windows: thread::create -isolation process runs the runner in the sandbox" {
+    if (!on or comptime !tcl.isothread.supported) return error.SkipZigTest;
+    var h: tcl.Interp = undefined;
+    try hostInterp(&h);
+    defer h.deinit();
+    const exe = (try runner(&h)) orelse return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(t.allocator);
+    defer it.deinit();
+    it.iso_runner = exe;
+    try it.allow(@backingInt(tcl.interp.Capability.thread));
+    _ = try ev(&it, "set t [thread::create -isolation process -joinable {proc sq x {expr {$x*$x}}; thread::wait}]");
+    try t.expectEqualStrings("42", try ev(&it, "thread::send $t {expr {6*7}}"));
+    try t.expectEqualStrings("144", try ev(&it, "thread::send $t {sq 12}"));
+    try t.expectEqualStrings("boom", try ev(&it, "catch {thread::send $t {error boom}} m; set m"));
+    // The child has no file and no exec: the capabilities stay off.
+    try t.expectEqualStrings("1", try ev(&it, "thread::send $t {catch {open C:/Windows/win.ini}}"));
+    _ = try ev(&it, "thread::release $t");
+    try t.expectEqualStrings("0", try ev(&it, "thread::join $t"));
+    try t.expectEqualStrings("3", try ev(&it, "thread::join [thread::create -isolation process -joinable {thread::exit 3}]"));
+}

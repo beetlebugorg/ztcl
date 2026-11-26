@@ -101,6 +101,8 @@ pub const Child = struct {
     /// The root folder with the ACE of `sid`, or null.
     root: ?[:0]u16,
     killed: bool = false,
+    /// False after `takePipe`.
+    pipe_owned: bool = true,
     status: ?ExitStatus = null,
 
     /// The status of the end, or null while the child runs after
@@ -117,6 +119,12 @@ pub const Child = struct {
         _ = GetExitCodeProcess(c.process, &code);
         c.status = .{ .code = code, .killed = c.killed };
         return c.status;
+    }
+
+    /// Gives the pipe to the caller, who then closes it.
+    pub fn takePipe(c: *Child) HANDLE {
+        c.pipe_owned = false;
+        return c.pipe;
     }
 
     /// Ends the child at once.
@@ -148,7 +156,7 @@ pub const Child = struct {
             setAce(r, c.sid, 0, revoke_access, 0) catch {};
             c.a.free(r);
         }
-        _ = CloseHandle(c.pipe);
+        if (c.pipe_owned) _ = CloseHandle(c.pipe);
         _ = CloseHandle(c.process);
         _ = CloseHandle(c.job);
         _ = CloseHandle(c.port);
@@ -375,10 +383,10 @@ fn setupJob(job: HANDLE, port: HANDLE, s: Spawn) SpawnError!void {
     if (SetInformationJobObject(job, job_basic_ui, &ui, @sizeOf(DWORD)) == 0) return failed();
 }
 
-const Ends = struct { parent: HANDLE, child: HANDLE };
+pub const Ends = struct { parent: HANDLE, child: HANDLE };
 
 /// One duplex pipe: the parent end, and an inheritable client end.
-fn pipePair(a: std.mem.Allocator) SpawnError!Ends {
+pub fn pipePair(a: std.mem.Allocator) SpawnError!Ends {
     var rnd: [16]u8 = undefined;
     if (BCryptGenRandom(null, &rnd, rnd.len, 2) != 0) return failed();
     var name_buf: [80]u8 = undefined;

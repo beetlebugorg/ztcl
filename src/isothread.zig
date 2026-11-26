@@ -48,16 +48,22 @@ const Shared = thread.Shared;
 const Allocator = std.mem.Allocator;
 const on_win = builtin.os.tag == .windows;
 
-pub const supported = thread.supported and !thread.web and (builtin.os.tag == .linux or builtin.os.tag == .macos);
-/// The platforms where the bridge starts the runner itself. The Linux
-/// and Windows sandboxes (`isolate_*.zig`) bring their own start.
-pub const spawns_runner = builtin.os.tag == .macos;
+pub const supported = thread.supported and !thread.web and (builtin.os.tag == .linux or builtin.os.tag == .macos or (on_win and isow.supported));
+/// The platforms where the bridge starts the runner itself. On Windows
+/// the runner starts in the sandbox of `isolate_windows.zig`. The Linux
+/// sandbox (`isolate_linux.zig`) brings its own start.
+pub const spawns_runner = builtin.os.tag == .macos or on_win;
+const isow = @import("isolate_windows.zig");
+
+/// The parent end of a transport: a descriptor, or a pipe handle on
+/// Windows.
+pub const Fd = if (on_win) *anyopaque else i32;
 
 /// The hook of a test or an embedder: starts a child and gives the
 /// parent end of its transport.
 pub const Spawner = struct {
     ctx: ?*anyopaque = null,
-    spawn: *const fn (ctx: ?*anyopaque) ?i32,
+    spawn: *const fn (ctx: ?*anyopaque) ?Fd,
 };
 
 const flag_reply: u8 = 1;
@@ -241,6 +247,8 @@ pub const Bridge = struct {
     caps: u32,
     link: Link = undefined,
     pid: i32 = -1,
+    /// The sandbox of the child on Windows.
+    win: if (on_win) ?isow.Child else void = if (on_win) null else {},
     /// The error of a failed start, for `startError`.
     err: []const u8 = "",
     err_code: []const u8 = "ZTCL ISOLATION START",
@@ -290,7 +298,7 @@ pub fn startError(it: *Interp, b: *Bridge) Error {
     return it.failCode(b.err_code, "{s}", .{b.err});
 }
 
-fn spawnChild(b: *Bridge) ?i32 {
+fn spawnChild(b: *Bridge) ?Fd {
     if (b.spawner) |s| return s.spawn(s.ctx);
     const runner = b.runner orelse return null;
     return spawnRunner(b, runner);
@@ -298,8 +306,9 @@ fn spawnChild(b: *Bridge) ?i32 {
 
 /// Starts `runner --iso-fd 3` with one end of a socket pair as its
 /// descriptor 3. Gives the other end.
-fn spawnRunner(b: *Bridge, runner: []const u8) ?i32 {
+fn spawnRunner(b: *Bridge, runner: []const u8) ?Fd {
     if (comptime !spawns_runner) return null;
+    if (comptime on_win) return spawnSandbox(b, runner);
     const c = std.c;
     var fds: [2]c.fd_t = undefined;
     if (c.socketpair(c.AF.UNIX, c.SOCK.STREAM, 0, &fds) != 0) return null;
@@ -322,14 +331,45 @@ fn spawnRunner(b: *Bridge, runner: []const u8) ?i32 {
     return fds[0];
 }
 
+/// Starts `runner --iso-handle 0x...` in the sandbox of Windows: an
+/// AppContainer with no folder of the user and a Job Object. The child
+/// gets the network only with the capability `socket`. Gives the pipe,
+/// which the transport then owns.
+fn spawnSandbox(b: *Bridge, runner: []const u8) ?Fd {
+    if (comptime !on_win) return null;
+    const net = b.caps & @backingInt(interp.Capability.socket) != 0;
+    var c = isow.spawn(b.gpa, runner, .{ .args = &.{}, .net = net }) catch return null;
+    const h = c.takePipe();
+    b.win = c;
+    return h;
+}
+
+fn closeFd(fd: Fd) void {
+    if (comptime on_win) {
+        _ = CloseHandle(fd);
+    } else _ = @import("sys.zig").os.close(fd);
+}
+extern "kernel32" fn CloseHandle(h: *anyopaque) callconv(.winapi) i32;
+
 fn killChild(b: *Bridge) void {
     if (comptime !spawns_runner) return;
+    if (comptime on_win) {
+        if (b.win) |*c| c.kill();
+        return;
+    }
     if (b.pid > 0) _ = std.c.kill(b.pid, std.c.SIG.KILL);
 }
 
 /// Waits up to `ms` for the child to end.
 fn reapChild(b: *Bridge, ms: u32) bool {
     if (comptime !spawns_runner) return true;
+    if (comptime on_win) {
+        const c = if (b.win) |*c| c else return true;
+        if (c.wait(ms) == null) return false;
+        c.deinit();
+        b.win = null;
+        return true;
+    }
     if (b.pid <= 0) return true;
     var waited: u32 = 0;
     while (true) : (waited += 10) {
@@ -361,7 +401,7 @@ pub fn bridgeMain(w: *Worker, b: *Bridge, st: anytype) void {
     const a = b.gpa;
     const fd = spawnChild(b) orelse return failBridge(w, b, st, "the system could not start the child process");
     b.link = .{ .t = iso.Transport.init(fd) catch {
-        _ = @import("sys.zig").os.close(fd);
+        closeFd(fd);
         return failBridge(w, b, st, "no transport for the child process");
     } };
     b.link.conn = iso.Conn.init(&b.link.t);
@@ -766,8 +806,9 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     return 0;
 }
 
-/// The entry of the runner for `--iso-fd N`.
-pub fn childProcess(a: Allocator, fd: i32, hosts: Hosts) u8 {
+/// The entry of the runner for `--iso-fd N`, or `--iso-handle 0x...` on
+/// Windows.
+pub fn childProcess(a: Allocator, fd: Fd, hosts: Hosts) u8 {
     if (comptime !supported) return 2;
     const t = iso.Transport.init(fd) catch return 2;
     return childMain(a, t, hosts);

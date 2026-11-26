@@ -1146,6 +1146,8 @@ fn dupFd(fd: i32) i32 {
 pub fn closeFd(fd: i32) void {
     if (comptime builtin.os.tag == .linux) {
         _ = std.os.linux.close(fd);
+    } else if (comptime builtin.os.tag == .windows) {
+        @import("sys.zig").close(fd);
     } else _ = std.c.close(fd);
 }
 

@@ -156,15 +156,15 @@ const WinTransport = struct {
         offset_high: u32 = 0,
         event: ?HANDLE = null,
     };
-    extern "kernel32" fn CreateEventW(attrs: ?*anyopaque, manual: w.BOOL, initial: w.BOOL, name: ?[*:0]const u16) callconv(.winapi) ?HANDLE;
-    extern "kernel32" fn SetEvent(h: HANDLE) callconv(.winapi) w.BOOL;
-    extern "kernel32" fn ReadFile(h: HANDLE, buf: [*]u8, n: u32, got: ?*u32, ov: *OVERLAPPED) callconv(.winapi) w.BOOL;
-    extern "kernel32" fn WriteFile(h: HANDLE, buf: [*]const u8, n: u32, put: ?*u32, ov: *OVERLAPPED) callconv(.winapi) w.BOOL;
-    extern "kernel32" fn GetOverlappedResult(h: HANDLE, ov: *OVERLAPPED, n: *u32, wait: w.BOOL) callconv(.winapi) w.BOOL;
-    extern "kernel32" fn CancelIoEx(h: HANDLE, ov: ?*OVERLAPPED) callconv(.winapi) w.BOOL;
-    extern "kernel32" fn WaitForMultipleObjects(n: u32, hs: [*]const HANDLE, all: w.BOOL, ms: u32) callconv(.winapi) u32;
+    extern "kernel32" fn CreateEventW(attrs: ?*anyopaque, manual: i32, initial: i32, name: ?[*:0]const u16) callconv(.winapi) ?HANDLE;
+    extern "kernel32" fn SetEvent(h: HANDLE) callconv(.winapi) i32;
+    extern "kernel32" fn ReadFile(h: HANDLE, buf: [*]u8, n: u32, got: ?*u32, ov: *OVERLAPPED) callconv(.winapi) i32;
+    extern "kernel32" fn WriteFile(h: HANDLE, buf: [*]const u8, n: u32, put: ?*u32, ov: *OVERLAPPED) callconv(.winapi) i32;
+    extern "kernel32" fn GetOverlappedResult(h: HANDLE, ov: *OVERLAPPED, n: *u32, wait: i32) callconv(.winapi) i32;
+    extern "kernel32" fn CancelIoEx(h: HANDLE, ov: ?*OVERLAPPED) callconv(.winapi) i32;
+    extern "kernel32" fn WaitForMultipleObjects(n: u32, hs: [*]const HANDLE, all: i32, ms: u32) callconv(.winapi) u32;
     extern "kernel32" fn GetLastError() callconv(.winapi) u32;
-    extern "kernel32" fn CloseHandle(h: HANDLE) callconv(.winapi) w.BOOL;
+    extern "kernel32" fn CloseHandle(h: HANDLE) callconv(.winapi) i32;
     const error_io_pending = 997;
     const error_broken_pipe = 109;
     const error_operation_aborted = 995;
