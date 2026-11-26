@@ -1146,6 +1146,8 @@ pub const Interp = struct {
     script_name: []const u8 = "",
     /// The state of TclOO. The first use of an `oo::` command makes it.
     oo: ?*anyopaque = null,
+    /// The terminals of the module `ztcl::vt` (`vt.State`).
+    vt_state: ?*anyopaque = null,
     /// The result of `info nameofexecutable`, from the embedder.
     exe_name: []const u8 = "",
     /// The value of `tcl_precision`.
@@ -1412,6 +1414,7 @@ pub const Interp = struct {
         @import("event.zig").forget(it);
         if (comptime chan_supported) @import("chan.zig").closeAll(it);
         @import("watch.zig").closeAll(it);
+        if (comptime @import("build_options").mod_vt) @import("vt.zig").closeAll(it);
         if (comptime exec_supported) proc_mod.abandonAll(it);
         // The arena frees the memory of the mounts.
         it.vfs = .{};
@@ -1567,6 +1570,7 @@ pub const Interp = struct {
         @import("child.zig").destroyAll(it);
         if (comptime chan_supported) @import("chan.zig").closeAll(it);
         @import("watch.zig").closeAll(it);
+        if (comptime @import("build_options").mod_vt) @import("vt.zig").closeAll(it);
         if (comptime exec_supported) proc_mod.abandonAll(it);
         if (comptime fs_supported) {
             if (it.fs.fd >= 0) @import("sys.zig").close(it.fs.fd);

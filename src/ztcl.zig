@@ -37,6 +37,8 @@ pub const winreg = @import("winreg.zig");
 pub const mac = @import("mac.zig");
 pub const proc = if (@import("builtin").os.tag == .windows) @import("proc_windows.zig") else @import("proc.zig");
 pub const pty = if (@import("builtin").os.tag == .windows) @import("pty_windows.zig") else @import("pty.zig");
+/// The terminal state of the module `ztcl::vt`, on libghostty-vt.
+pub const vt = @import("vt.zig");
 pub const watch = @import("watch.zig");
 pub const vfs = @import("vfs.zig");
 pub const zipread = @import("zipread.zig");

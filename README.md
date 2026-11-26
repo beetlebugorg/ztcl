@@ -6,7 +6,7 @@ A fast, sandboxed Tcl interpreter in Zig. ztcl runs Tcl 8.6 scripts with exact c
 
 - **Fast.** The bytecode interpreter is 1.6 to 3.5 times as fast as `tclsh` 8.6.16 on the benchmark scripts. With the JIT, an integer loop is 28 times as fast.
 - **Safe by default.** A script has no file, socket, or process access until your program turns on a capability. The compute limit and the memory cap are exact.
-- **Small.** One static binary with no dependency outside the Zig standard library.
+- **Small.** One static binary. Its one dependency outside the Zig standard library is libghostty-vt, which the build compiles from source into the binary for `ztcl::vt`.
 - **Portable.** Linux, macOS, Windows, WebAssembly in the browser, and Node.js.
 
 ## Install

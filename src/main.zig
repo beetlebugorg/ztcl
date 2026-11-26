@@ -55,6 +55,9 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+
+/// libghostty-vt logs to stderr. The runner drops the log.
+pub const std_options: std.Options = .{ .logFn = @import("ztcl").vt.noLog };
 const builtin = @import("builtin");
 const Io = std.Io;
 const tcl = @import("ztcl");

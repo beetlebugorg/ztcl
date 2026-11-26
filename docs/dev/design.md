@@ -1,6 +1,6 @@
 # Design
 
-ztcl uses only the Zig standard library. [References](../references/tcl.md) lists the sources that it follows.
+ztcl uses the Zig standard library and libghostty-vt (the module `ztcl::vt`, [references](../references/ghostty.md)). [References](../references/tcl.md) lists the sources that it follows.
 
 ## The files
 

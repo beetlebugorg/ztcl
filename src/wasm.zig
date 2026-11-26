@@ -6,6 +6,9 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+
+/// libghostty-vt logs, and WebAssembly has no stderr.
+pub const std_options: std.Options = .{ .logFn = @import("vt.zig").noLog };
 const ztcl = @import("ztcl.zig");
 const build_options = @import("build_options");
 const thread = @import("thread.zig");
