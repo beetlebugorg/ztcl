@@ -154,6 +154,9 @@ class Build:
                     f'<figcaption class="ld-bar"><span class="ld-tag">Live</span></figcaption></figure>\n')
         self.md.renderer.rules["fence"] = fence
         self.anchors = {}
+        # Each command name of the reference and its page, for the links
+        # of the lessons.
+        self.ref_names = {n: f"reference/{reference.slug(e['name'])}/" for e in reference.parse() for n in reference.names(e) if "::" not in n or n.startswith("ztcl::")}
         self.checkpoints = {}
         self.files_of = {}
         self.links = []
@@ -325,7 +328,7 @@ class Build:
         if text is None:
             text = (ROOT / src).read_text(encoding="utf-8")
         tokens = self.live_blocks(src, self.md.parse(text))
-        ids, seen, title = set(), {}, None
+        ids, seen, title, linked = set(), {}, None, set()
         for i, token in enumerate(tokens):
             if token.type == "heading_open":
                 text = inline_text(tokens[i + 1])
@@ -353,6 +356,14 @@ class Build:
                         kids[k + 2].type, kids[k + 2].content = "html_inline", "</span>"
                     elif child.type == "link_open":
                         child.attrSet("href", self.link(src, page, child.attrGet("href")))
+                    elif (page.startswith("learn/") and child.type == "code_inline" and child.content in self.ref_names
+                          and child.content not in linked and not (k > 0 and kids[k - 1].type in ("link_open", "html_inline"))):
+                        # The first mention of a command in a lesson links
+                        # to its page of the command reference.
+                        linked.add(child.content)
+                        target = rel(page, self.ref_names[child.content])
+                        child.type, child.tag = "html_inline", ""
+                        child.content = f'<a class="ref-link" href="{target}"><code>{html.escape(child.content)}</code></a>'
         self.anchors[page] = ids
         self.checkpoints[page] = self.checkpoint
         self.files_of[page] = self.page_files
