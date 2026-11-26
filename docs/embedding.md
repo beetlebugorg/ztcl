@@ -163,7 +163,7 @@ ztcl::pty status $t   ;# running, {exit code}, or {signal NAME}
 close $t              ;# SIGHUP, then SIGKILL after 500 ms
 ```
 
-`-cwd dir` names a folder below the root folder, and it needs `file`. `ztcl::pty kill $t ?signal?` sends a signal to the process group of the program. In this version only Linux has the PTY. On macOS, `spawn` gives the error code `ZTCL PTY UNAVAILABLE`. The plan for macOS and Windows is in `docs/dev/pty.md`.
+`-cwd dir` names a folder below the root folder, and it needs `file`. `ztcl::pty kill $t ?signal?` sends a signal to the process group of the program. Linux and Windows have the PTY. On Windows it is a pseudo console (ConPTY): the program gets the escape sequences of a VT terminal, `kill` with `INT` sends Ctrl-C, and each other signal ends the program and each process that it started. On macOS, `spawn` gives the error code `ZTCL PTY UNAVAILABLE`. The plan for macOS is in `docs/dev/pty.md`.
 
 ### Threads
 

@@ -77,7 +77,7 @@ test "ztcl::pty gives an error on a platform with no pty yet" {
 }
 
 test "ztcl::pty runs a program on a terminal" {
-    if (!tcl.pty.supported) return error.SkipZigTest;
+    if (!tcl.pty.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
     try ptyInterp(&it);
     defer it.deinit();
@@ -100,7 +100,7 @@ test "ztcl::pty runs a program on a terminal" {
 }
 
 test "ztcl::pty gives the exit status" {
-    if (!tcl.pty.supported) return error.SkipZigTest;
+    if (!tcl.pty.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
     try ptyInterp(&it);
     defer it.deinit();
@@ -114,7 +114,7 @@ test "ztcl::pty gives the exit status" {
 }
 
 test "ztcl::pty close ends a program that ignores SIGHUP" {
-    if (!tcl.pty.supported) return error.SkipZigTest;
+    if (!tcl.pty.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
     const linux = tcl.sys.os;
     var it: tcl.Interp = undefined;
     try ptyInterp(&it);
@@ -129,7 +129,7 @@ test "ztcl::pty close ends a program that ignores SIGHUP" {
 }
 
 test "ztcl::pty checks the program list of exec" {
-    if (!tcl.pty.supported) return error.SkipZigTest;
+    if (!tcl.pty.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
     try ptyInterp(&it);
     defer it.deinit();

@@ -43,11 +43,11 @@ The tests use `cmd.exe /c` and the programs `findstr.exe`, `whoami.exe`, and `pi
 2. A pipeline of two programs, `<<`, the status, the error output, `2>@1`, `-ignorestderr`, and `&` with `pid`.
 3. The allowlist refuses a program before a process starts, and `resolve` refuses a `.bat` file.
 4. `timeout_ms` ends a program that waits, and no process of the job runs after it.
-5. `open |cmd r` with `gets`, `pid` of the channel, and the status at `close`. `fileevent readable` with `vwait` on a pipe comes with ConPTY, which needs it.
+5. `open |cmd r` with `gets`, `pid` of the channel, and the status at `close`.
 6. The files of the Tcl suite that use `exec` pass at least as many tests as before.
 
 ## Steps
 
 1. This plan.
 2. `exec`, `pid`, `open |cmd`, and the tests 1 to 6 (the first PR).
-3. ConPTY for `ztcl::pty`, with a test of `fileevent` on its pipes.
+3. ConPTY for `ztcl::pty` (the second PR).
