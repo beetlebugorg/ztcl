@@ -4,9 +4,9 @@
 // `<!-- live -->`. This file makes the code an editor, with a text area
 // over a highlighted copy of the code, and runs it in a WorkerInterp of
 // playground/ztcl.mjs. The page loads the module only when an example
-// comes near the viewport. Each example has its own worker, with a step
+// comes near the viewport. Each example has its own worker, with a compute
 // limit and no capability, so a script has no file, network, or process
-// access, and an endless loop stops at the limit or at Stop.
+// access, and an endless loop stops at the compute limit or at Stop.
 //
 // The example runs again 400 ms after the last key, in a new
 // interpreter. The output and the result show under the code.
@@ -104,7 +104,7 @@ class Example {
     button("Reset", () => { this.ta.value = this.original; this.paint(); this.run(); });
     this.info = document.createElement("span");
     this.info.className = "ld-hud";
-    this.info.textContent = `Step limit ${LIMIT.toLocaleString("en-US")}`;
+    this.info.textContent = `Compute limit ${LIMIT.toLocaleString("en-US")}`;
     bar.appendChild(this.info);
   }
 
@@ -145,7 +145,7 @@ class Example {
       res.textContent = r.ok ? `=> ${r.result}` : `error: ${r.result}`;
       this.out.append(res);
     }
-    this.info.textContent = `${ms.toFixed(1)} ms in a worker · step limit ${LIMIT.toLocaleString("en-US")}`;
+    this.info.textContent = `${ms.toFixed(1)} ms in a worker · compute limit ${LIMIT.toLocaleString("en-US")}`;
     return r;
   }
 }
