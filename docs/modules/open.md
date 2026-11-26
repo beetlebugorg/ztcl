@@ -36,6 +36,31 @@ The command does not exist without `launch`. A file needs `file` because its pat
 
 An embedder can give `Interp.launch_host`, a function that gets each target (the URL, or the full host path of a file) in place of the system, and gives false for a failure. The checks of this page run before it, so it gets only the targets that pass them.
 
+The browser cannot start an app, so the commands of this helper do not run in the page. The helper shows how `ztcl::open` reads a target: a URL or a path, the capabilities that it needs, and the refusal of a scheme other than `http`, `https`, and `mailto`.
+
+<!-- helper: ztcl::open -->
+```tcl
+# shell: none
+# height: 155
+helper::form
+helper::row Target [ttk::entry .f.t -textvariable target -font TkFixedFont]
+helper::footer 3 0
+set target https://example.com/docs
+proc build {} {
+    set helper::cmd [list ztcl::open $::target]
+    if {[regexp {^([A-Za-z][A-Za-z0-9+.-]+):} $::target -> scheme]} {
+        if {[string tolower $scheme] ni {http https mailto}} {
+            helper::result 0 "ZTCL OPEN SCHEME: ztcl::open does not open URLs with the scheme \"$scheme\""
+        } else {
+            helper::result 1 "A URL with the scheme $scheme. It needs launch:\nztcl --allow launch script.tcl"
+        }
+    } else {
+        helper::result 1 "A path. It needs launch and file, and the type of the file must not be one that the system runs as code:\nztcl --allow launch,file script.tcl"
+    }
+}
+helper::watch build target
+```
+
 ## Platforms
 
 | System | How | Refused files |

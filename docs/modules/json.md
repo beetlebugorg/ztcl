@@ -49,7 +49,7 @@ proc readfile {name} {
  "recent": ["todo.txt", "plan.md"], "theme": "dark", "scale": 1.5}
 ```
 
-The inspector shows a JSON value as a tree. An object is a list of keys, and an array is a list of numbered items. Select a node, and the command line of the inspector gets the Tcl path of the node in `$d`. The button puts the command into the shell. Paste your own JSON in the text box, or pick a sample file.
+The inspector shows a JSON value as a tree. An object is a list of keys, and an array is a list of numbered items. Select a node, and the command line of the inspector gets the Tcl path of the node in `$d`. The button puts the command into the shell. Paste your own JSON in the text box, or pick a sample file. In the shell, Alt-I shows the last result as a tree too, and the variable `_` gets the result, so the paths of that tree use `$_`.
 
 <!-- helper: JSON inspector -->
 ```tcl

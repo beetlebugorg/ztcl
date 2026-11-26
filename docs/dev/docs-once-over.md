@@ -25,14 +25,16 @@ Each docs page gets the shell of the page (`docs/site/shell.js`, `ztcl-shell.was
 - The component is done: `<!-- shell -->` before a `tcl` block puts the shell of the page there, and the block is the state of the page. `<!-- file: NAME -->` makes a code block a read-only file of that shell. `<!-- helper: TITLE -->` makes a `tcl` block a helper. `docs/site/helper.js` runs it in ztk.wasm from `/ztk/play/ztk.js` and gives it the procs `helper::form`, `helper::row`, `helper::watch`, `helper::show`, `helper::run`, and `helper::footer`. A helper runs its commands in the interpreter of the shell, so the result is the result of the shell. `tools/site-helper.mjs` tests it.
 - "Learn Tcl" (`docs/learn.md`) has the sections of #173 and the helpers `expr`, `lsort`, `dict`, `string map`, and `regexp`. The shell has a small text game in its state.
 - The JSON page has the shell, two sample files, and the inspector.
-- `clock format` has no helper: the shell module has no clock (only `ztcl-host.wasm` has `ztcl_clock_allow`). See the questions file.
+- `clock format` has no helper: `ztcl-shell.wasm` is a build with no host imports, so it has no `ztcl_clock_allow` (only `ztcl-host.wasm` has it, since ztcl #194). See the questions file.
+- Learn Tcl has helpers for `proc`, `namespace`, `catch`, reading a file, and `info class`. The shell state has the namespace `counter` and the class `Account`. The coroutine example is `<!-- run: native -->`: the WebAssembly builds have no `coroutine`.
+- The vt page has a shell and a feed helper. The watch, open, and notify pages have helpers with `# shell: none`: they build the command and show its shape in the page, with no shell.
+- Alt-I in the shell opens the inspector on the last result (`Shell.lastResult`), and sets `_` to it.
+- On a screen of 640 pixels or less, a helper is one line with an Open button.
+- `docs/targets.md`, with `tests/targets.sh` in the docs job of CI. `docs/modules/README.md` and the Modules section of the nav and of llms.txt.
 
 ## Next, in order
 
-1. `docs/language.md` becomes "Coming from tclsh".
-2. `docs/targets.md` per the comments of #173.
-3. The module pages and the index of #172, with the CI check of the registered `ztcl::` commands. Each module page gets a shell, where the module works in the browser.
-4. A key of the shell that opens the inspector on the last result.
-5. On a small screen, a helper is one line until the reader opens it.
+1. A helper for `clock format` when the page shell has a clock (see the questions file).
+2. A pass over each page for accuracy against main (#173).
 
-Resume: `git checkout wip-learn-tcl`, build with `zig build wasm wasm-threads wasm-shell` (own ZIG_LOCAL_CACHE_DIR and ZIG_GLOBAL_CACHE_DIR, memory cap), then `python3 tools/build-docs.py site && sh tests/site.sh site`. For the helpers, serve the site at `/ztcl/` and a ztk web build at `/ztk/play/`, and run `node tools/site-helper.mjs chromium URL` (see the top of that file).
+Resume: build with `zig build wasm wasm-threads wasm-shell` (own ZIG_LOCAL_CACHE_DIR and ZIG_GLOBAL_CACHE_DIR, memory cap), then `python3 tools/build-docs.py site && sh tests/site.sh site`. For the helpers, serve the site at `/ztcl/` and a ztk web build at `/ztk/play/`, and run `node tools/site-helper.mjs chromium URL` (see the top of that file).

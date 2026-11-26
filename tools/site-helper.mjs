@@ -53,7 +53,7 @@ const done = (code) => {
   rmSync(profile, { recursive: true, force: true });
   process.exit(code);
 };
-setTimeout(() => { console.log("FAIL: timeout"); done(1); }, 60000);
+setTimeout(() => { console.log("FAIL: timeout"); done(1); }, 120000);
 
 const { result: { targetId } } = await send("Target.createTarget", { url: "about:blank" });
 session = (await send("Target.attachToTarget", { targetId, flatten: true })).result.sessionId;
@@ -144,8 +144,42 @@ if (await evalJS(`!!${helperApp("JSON inspector")}`)) {
   const said = await enter();
   check("the path runs in the shell", said === "Ada", JSON.stringify(said));
 }
+// Alt-I opens the inspector on the last result, and a node puts its
+// path on the line of the shell.
+if (await evalJS(`!!${helperApp("string map")}`)) {
+  await evalJS(`document.querySelector(".zshell-input").focus()`);
+  for (const ch of "set user") await send("Input.dispatchKeyEvent", { type: "keyDown", key: ch, text: ch });
+  await enter();
+  await send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "i", code: "KeyI", modifiers: 1 });
+  await pause(200);
+  const rows = await evalJS(`[...document.querySelectorAll("dialog.zshell-inspect .row code")].map((c) => c.textContent).join("|")`);
+  check("Alt-I shows the paths of the last result", rows === "set _|dict get $_ name|dict get $_ lang|dict get $_ year", rows);
+  await evalJS(`[...document.querySelectorAll("dialog.zshell-inspect .row")].find((r) => r.textContent.startsWith("dict get $_ name")).querySelector("button").click()`);
+  await pause(200);
+  check("the inspector closes and focuses the shell", await evalJS(`!document.querySelector("dialog") && document.activeElement?.className === "zshell-input"`));
+  const said = await enter();
+  check("the path of a node runs in the shell", said === "Ada", JSON.stringify(said));
+}
+
 if (shot) {
   const { result } = await send("Page.captureScreenshot", { format: "png" });
   writeFileSync(shot, Buffer.from(result.data, "base64"));
+}
+
+// On a small screen each helper is one line until the reader opens it.
+if (count) {
+  await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
+  await send("Page.reload");
+  await pause(1500);
+  const fig = `document.querySelector(".zhelper")`;
+  check("a helper is one line on a small screen", await evalJS(`${fig}.offsetHeight < 140 && !!${fig}.querySelector(".zhelper-open") && !${fig}.classList.contains("zhelper-live")`),
+    String(await evalJS(`${fig}.offsetHeight`)));
+  await evalJS(`${fig}.querySelector(".zhelper-open").click()`);
+  let live = false;
+  for (let i = 0; i < 300 && !live; i++) {
+    await pause(100);
+    live = await evalJS(`${fig}.classList.contains("zhelper-live")`);
+  }
+  check("the Open button starts the helper", live);
 }
 done(failed ? 1 : 0);

@@ -1,6 +1,6 @@
 # Learn Tcl
 
-This page teaches Tcl from the start. Each section has examples. A live example runs in the page: edit its code, and its output changes. The shell below has the state of the page: the variables, the procs, and the files of the examples. Type a command in the shell and press Enter. A helper makes a command from a small form, and its button puts the command on the line of the shell.
+This page teaches Tcl from the start. Each section has examples. A live example runs in the page: edit its code, and its output changes. The shell below has the state of the page: the variables, the procs, and the files of the examples. Type a command in the shell and press Enter. A helper makes a command from a small form, and its button puts the command on the line of the shell. In the shell, Alt-I shows the last result as a tree.
 
 If you know Tcl already, [Coming from tclsh](language.md) lists what ztcl does differently.
 
@@ -29,6 +29,18 @@ proc go {dir} {
     if {![dict exists $exits $dir]} { return "You cannot go $dir." }
     set here [dict get $exits $dir]
     look
+}
+namespace eval counter {
+    variable n 0
+    proc next {} { variable n; incr n }
+    namespace export next
+    namespace ensemble create
+}
+oo::class create Account {
+    variable balance
+    constructor {} { set balance 0 }
+    method deposit {n} { incr balance $n; my show }
+    method show {} { return "balance $balance" }
 }
 proc take {thing} {
     global rooms here bag
@@ -405,6 +417,28 @@ puts $x
 
 The shell has a small game in its procs: type `look`, `go north`, and `take lamp`. The game keeps the map in the dict `rooms`, and each command is a proc. Type `info body go` to see the code, or change a proc and play again.
 
+The helper below makes a proc from its three words and calls it with the words of "Call with". The result is the result of the call. The button puts the `proc` command into the shell, and then the reader can call the new command.
+
+<!-- helper: proc -->
+```tcl
+# height: 280
+helper::form
+helper::row Name [ttk::entry .f.n -textvariable name -font TkFixedFont]
+helper::row Arguments [ttk::entry .f.a -textvariable params -font TkFixedFont]
+helper::row Body [ttk::entry .f.b -textvariable body -font TkFixedFont]
+helper::row "Call with" [ttk::entry .f.c -textvariable call -font TkFixedFont]
+helper::footer 2
+set name greet
+set params {name {greeting Hello}}
+set body {return "$greeting, $name!"}
+set call Ada
+proc build {} {
+    set helper::cmd [list proc $::name $::params $::body]
+    helper::run "[list apply [list $::params $::body]] $::call" helper::result
+}
+helper::watch build name params body call
+```
+
 ## Namespaces
 
 A namespace keeps a group of commands and variables apart from other names. `namespace eval` runs a script in a namespace, and `::` joins the names. `namespace ensemble create` makes a command with subcommands, as `string` and `dict` are.
@@ -425,6 +459,29 @@ puts $counter::n
 ```text
 2
 2
+```
+
+The namespace `counter` is in the shell too: type `counter next`. The helper below lists the children, the commands, or the variables of a namespace. The list of namespaces comes from the shell when the helper starts.
+
+<!-- helper: namespace -->
+```tcl
+# height: 230
+helper::form
+helper::row Namespace [ttk::combobox .f.ns -textvariable ns -values {:: ::counter ::tcl ::oo}]
+helper::row Show [ttk::combobox .f.what -textvariable what -state readonly -values {children commands vars}]
+helper::footer 3
+set ns ::counter
+set what commands
+proc build {} {
+    set pattern [string trimright $::ns :]::*
+    switch -- $::what {
+        children { helper::show [list namespace children $::ns] }
+        commands { helper::show [list info commands $pattern] }
+        vars { helper::show [list info vars $pattern] }
+    }
+}
+helper::watch build ns what
+helper::run {namespace children ::} {apply {{ok r} { if {$ok} { .f.ns configure -values [linsert $r 0 ::] } }}}
 ```
 
 ## Errors
@@ -453,6 +510,29 @@ error: 7 is odd
 done
 ```
 
+`catch` with two variable names gives the message and a dict of options. The option `-errorcode` is a list that a program can test, and `-errorline` is the line of the error in the script. The helper below runs a script with `catch` and shows the code, the message, and the two options. It runs the script at the top level of the shell, so `$user` and the other variables of the page work.
+
+<!-- helper: catch -->
+```tcl
+# height: 215
+helper::form
+helper::row Script [ttk::entry .f.s -textvariable script -font TkFixedFont]
+helper::footer 4
+set script {expr {[lindex $nums 0] / 0}}
+proc build {} {
+    set helper::cmd [list catch $::script msg opts]
+    helper::run [list apply {{s} {
+        set code [catch {uplevel #0 $s} msg opts]
+        set out "code $code\nmessage $msg"
+        if {$code == 1} {
+            append out "\n-errorcode [dict get $opts -errorcode]\n-errorline [dict get $opts -errorline]"
+        }
+        return $out
+    }} $::script] helper::result
+}
+helper::watch build script
+```
+
 ## Files
 
 `open` gives a channel. `gets` reads one line, `read` reads all of it, and `puts` with a channel writes to it. `close` closes the channel. The shell of this page has the read-only file `notes.txt` from the top of the page. In the shell, type `set f [open notes.txt]` and then `gets $f`.
@@ -473,6 +553,29 @@ close $f
 ```
 
 In ztcl, files and channels are a capability. The `ztcl` program has them, and an app that embeds ztcl turns them on or keeps them off. [Limits and capabilities](limits.md) tells how.
+
+The helper below reads `notes.txt` in four ways. The command opens the file, reads it, and closes it. The helper runs the command in a lambda, so the variables `f` and `text` stay local until the reader puts the command into the shell.
+
+<!-- helper: read a file -->
+```tcl
+# height: 195
+helper::form
+helper::row Read [ttk::combobox .f.how -textvariable how -state readonly -values {read "read -nonewline" gets "read 8"}]
+helper::footer 3
+set how gets
+proc build {} {
+    switch -- $::how {
+        read { set body {read $f} }
+        "read -nonewline" { set body {read -nonewline $f} }
+        gets { set body {gets $f} }
+        default { set body {read $f 8} }
+    }
+    set cmd "set f \[open notes.txt\]; set text \[$body\]; close \$f; set text"
+    set helper::cmd $cmd
+    helper::run [list apply [list {} $cmd]] helper::result
+}
+helper::watch build how
+```
 
 ## Events
 
@@ -518,11 +621,27 @@ balance 30
 balance 42
 ```
 
+The class `Account` is in the shell too: type `set a [Account new]` and then `$a deposit 5`. `info class` shows the parts of a class, and the helper below builds its subcommands.
+
+<!-- helper: info class -->
+```tcl
+# height: 230
+helper::form
+helper::row Class [ttk::combobox .f.c -textvariable cls -values Account]
+helper::row Show [ttk::combobox .f.what -textvariable what -state readonly -values {methods variables "definition deposit" constructor instances}]
+helper::footer 3
+set cls Account
+set what methods
+helper::watch {helper::show "info class $what [list $cls]"} cls what
+```
+
 ## Coroutines
 
 A coroutine is a proc that can stop in the middle with `yield` and go on at the next call. Each call gives the next value. The traffic light below never ends, and each call gives its next state.
 
-<!-- run -->
+The WebAssembly build of ztcl has no `coroutine`, so this example does not run in the page, and the shell of the page has no coroutines. [Targets](targets.md) lists the features of each target.
+
+<!-- run: native -->
 ```tcl
 proc light {} {
     yield

@@ -174,6 +174,17 @@ export fn ztcl_shell_set_line(ws: *WebShell, ptr: [*]const u8, len: usize) i32 {
     return 0;
 }
 
+/// The result of the last command that did not fail: a pointer and a
+/// length in `ztcl_shell_last_result_len`. The pointer is 0 before the
+/// first such command.
+export fn ztcl_shell_last_result_ptr(ws: *WebShell) usize {
+    return if (ws.sh.last_result) |t| @intFromPtr(t.ptr) else 0;
+}
+
+export fn ztcl_shell_last_result_len(ws: *WebShell) usize {
+    return if (ws.sh.last_result) |t| t.len else 0;
+}
+
 /// The compute units of the last command.
 export fn ztcl_shell_last_compute(ws: *WebShell) u64 {
     return ws.sh.last_compute;

@@ -145,6 +145,11 @@ class View {
 
   // The keys with no text go here. The text of a key goes to typed().
   key(e) {
+    if (e.altKey && e.code === "KeyI" && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      this.inspect();
+      return;
+    }
     if (e.key === "Tab" && !e.shiftKey && performance.now() - this.escAt < 1000) return;
     if (e.key === "Escape") this.escAt = performance.now();
     if (e.key === "c" && e.ctrlKey && e.shiftKey) return;
@@ -218,6 +223,34 @@ class View {
     document.body.append(d);
     d.showModal();
     ta.focus();
+  }
+
+  // Alt-I: a dialog with the last result as a tree. The page sets the
+  // variable _ to the result, so that the path of each node runs.
+  inspect() {
+    const v = this.shell.lastResult;
+    const d = document.createElement("dialog");
+    d.className = "zshell-editor zshell-inspect";
+    d.innerHTML = `<form method="dialog"><h2>The last result</h2><p class="note"></p><div class="tree"></div>
+<div class="btns"><button value="cancel" class="btn ghost">Close</button></div></form>`;
+    const note = d.querySelector(".note");
+    if (v === null) note.textContent = "No command gave a result yet. Run a command, then press Alt-I.";
+    else {
+      this.shell.it.eval("set ::_ " + tclQuote(v));
+      note.textContent = "The variable _ has the result. A button puts the path of its node on the line of the shell.";
+      d.querySelector(".tree").append(inspectNode("_", v, "$_", [], 0, (path) => {
+        this.shell.setLine(path);
+        d.close();
+      }));
+    }
+    d.addEventListener("close", () => {
+      d.remove();
+      this.render();
+      this.input.focus();
+    });
+    document.body.append(d);
+    d.showModal();
+    (d.querySelector(".tree summary, .tree button") || d.querySelector("button")).focus();
   }
 
   render() {
@@ -316,6 +349,130 @@ function mount(el) {
     }
   });
   seen.observe(el);
+}
+
+// A Tcl word for any text: a quoted string with the special characters
+// escaped.
+function tclQuote(s) {
+  return '"' + s.replace(/[\\"$[\]]/g, (c) => "\\" + c).replace(/\n/g, "\\n").replace(/\r/g, "\\r") + '"';
+}
+
+// A word for a dict key or a list index in a path: bare when it has no
+// special characters, else in braces or quotes.
+function pathWord(s) {
+  if (/^[\w.:-]+$/.test(s)) return s;
+  if (!/[{}\\]/.test(s)) return `{${s}}`;
+  return tclQuote(s);
+}
+
+const SPACE = " \t\n\r\v\f";
+const ESC = { n: "\n", t: "\t", r: "\r", f: "\f", v: "\v", a: "\x07", b: "\b" };
+
+/// The words of a Tcl list, or null when the text is not a list. The
+/// backslash escapes of one character are the only ones it changes.
+export function tclList(s) {
+  const out = [];
+  let i = 0;
+  const n = s.length;
+  for (;;) {
+    while (i < n && SPACE.includes(s[i])) i++;
+    if (i >= n) return out;
+    let w = "";
+    if (s[i] === "{") {
+      let depth = 1;
+      const start = ++i;
+      while (i < n && depth) {
+        if (s[i] === "\\") i++;
+        else if (s[i] === "{") depth++;
+        else if (s[i] === "}") depth--;
+        i++;
+      }
+      if (depth) return null;
+      w = s.slice(start, i - 1);
+    } else {
+      const quoted = s[i] === '"';
+      if (quoted) i++;
+      while (i < n && (quoted ? s[i] !== '"' : !SPACE.includes(s[i]))) {
+        if (s[i] === "\\" && i + 1 < n) {
+          w += ESC[s[i + 1]] ?? s[i + 1];
+          i += 2;
+        } else w += s[i++];
+      }
+      if (quoted) {
+        if (i >= n) return null;
+        i++;
+      }
+    }
+    if (i < n && !SPACE.includes(s[i])) return null;
+    out.push(w);
+  }
+}
+
+// The kind of a value for the inspector: a dict when it is a list of an
+// even count with unique keys that are names, a list when it has more
+// than one word, else a leaf.
+function kindOf(v) {
+  const w = tclList(v);
+  if (!w || w.length === 0 || (w.length === 1 && w[0] === v)) return { kind: "leaf" };
+  if (w.length % 2 === 0) {
+    const keys = w.filter((_, i) => i % 2 === 0);
+    if (new Set(keys).size === keys.length && keys.every((k) => /^[A-Za-z_][\w.:-]*$/.test(k))) return { kind: "dict", w };
+  }
+  return { kind: "list", w };
+}
+
+const MAX_ROWS = 200;
+
+// One node of the inspector. base is a Tcl word for a value, and keys
+// is a path of dict keys in it.
+function inspectNode(name, v, base, keys, depth, put) {
+  const word = keys.length ? `[dict get ${base} ${keys.map(pathWord).join(" ")}]` : base;
+  const path = word === "$_" ? "set _" : word.startsWith("[") ? word.slice(1, -1) : `set ${word.slice(1)}`;
+  const k = depth < 8 ? kindOf(v) : { kind: "leaf" };
+  const row = document.createElement("div");
+  row.className = "row";
+  const code = document.createElement("code");
+  code.textContent = path;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn ghost";
+  btn.textContent = "Put in the shell";
+  btn.addEventListener("click", () => put(path));
+  row.append(code, btn);
+  const label = (text) => {
+    const b = document.createElement("b");
+    b.textContent = name;
+    const span = document.createElement("span");
+    span.textContent = text;
+    return [b, " ", span];
+  };
+  if (k.kind === "leaf") {
+    const div = document.createElement("div");
+    div.className = "leaf";
+    div.append(...label(v.length > 80 ? v.slice(0, 80) + " (" + v.length + " characters)" : v || "(empty)"), row);
+    return div;
+  }
+  const det = document.createElement("details");
+  det.open = depth === 0;
+  const sum = document.createElement("summary");
+  const count = k.kind === "dict" ? `dict of ${k.w.length / 2} keys` : `list of ${k.w.length} items`;
+  sum.append(...label(count));
+  det.append(sum, row);
+  const kids = document.createElement("div");
+  kids.className = "kids";
+  if (k.kind === "dict") {
+    for (let i = 0; i < k.w.length && i < 2 * MAX_ROWS; i += 2) kids.append(inspectNode(k.w[i], k.w[i + 1], base, [...keys, k.w[i]], depth + 1, put));
+  } else {
+    k.w.slice(0, MAX_ROWS).forEach((item, i) => kids.append(inspectNode(String(i), item, `[lindex ${word} ${i}]`, [], depth + 1, put)));
+  }
+  const total = k.kind === "dict" ? k.w.length / 2 : k.w.length;
+  if (total > MAX_ROWS) {
+    const more = document.createElement("p");
+    more.textContent = `${total - MAX_ROWS} more are not shown.`;
+    kids.append(more);
+  }
+  det.append(kids);
+  return det;
 }
 
 /// The shell of a docs page (docs/site/helper.js uses it). It starts the

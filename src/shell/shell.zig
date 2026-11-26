@@ -109,6 +109,9 @@ pub const Shell = struct {
     bindings: std.ArrayList(Binding) = .empty,
     /// The whole errorInfo of the last error, for Alt-T.
     last_trace: ?[]u8 = null,
+    /// The result of the last command that did not fail, for the
+    /// inspector of the docs site.
+    last_result: ?[]u8 = null,
     /// The open completion menu: its items, the selection, and the start
     /// of the word that it replaces.
     menu: std.ArrayList([]u8) = .empty,
@@ -146,6 +149,7 @@ pub const Shell = struct {
         if (s.prompt_proc) |p| s.a.free(p);
         s.bindings.deinit(s.a);
         if (s.last_trace) |t| s.a.free(t);
+        if (s.last_result) |t| s.a.free(t);
         s.clearMenu();
         s.menu.deinit(s.a);
         if (s.hist_path) |p| s.a.free(p);
@@ -571,6 +575,8 @@ pub const Shell = struct {
         s.last_compute = before - it.compute_limit;
         _ = s.term.enableRaw();
         if (res) |v| {
+            if (s.last_result) |old| a.free(old);
+            s.last_result = try a.dupe(u8, try it.str(v));
             try s.printResult(&out, v);
         } else |e| {
             const msg = if (e == error.TclError) it.str(it.result) catch "out of memory" else @errorName(e);

@@ -22,6 +22,50 @@ hello bold
 4 1
 ```
 
+## Try it
+
+The shell below has the module and a terminal `t` of 40 columns and 10 rows. Type `ztcl::vt feed $t "hi \x1b\[1mbold"` and then `ztcl::vt rows $t 0 2`.
+
+<!-- shell -->
+```tcl
+package require ztcl::vt
+set t [ztcl::vt new -size {40 10}]
+```
+
+The helper below feeds bytes to a new terminal and shows its rows, its cursor, or its title. Type the bytes with the escapes of Tcl: `\x1b` is the escape byte, and `\r\n` starts a new row. The helper puts a backslash before `[`, `]`, `$`, `"`, and the braces, so the bytes are one word of the command.
+
+<!-- helper: ztcl::vt feed -->
+```tcl
+# height: 300
+helper::form
+helper::row Bytes [ttk::entry .f.b -textvariable bytes -font TkFixedFont]
+ttk::frame .f.size
+ttk::spinbox .f.size.w -from 10 -to 80 -width 4 -textvariable cols
+ttk::label .f.size.x -text " by "
+ttk::spinbox .f.size.h -from 1 -to 10 -width 4 -textvariable rows
+pack .f.size.w .f.size.x .f.size.h -side left
+helper::row Size .f.size
+helper::row Show [ttk::combobox .f.what -textvariable what -state readonly -values {rows cursor title}]
+helper::footer 5
+set bytes {hello\r\n\x1b[1mbold\x1b[0m \x1b]0;my title\x07}
+set cols 30
+set rows 4
+set what rows
+proc build {} {
+    if {![string is integer -strict $::cols] || ![string is integer -strict $::rows]} return
+    set word "\"[string map {[ \\[ ] \\] $ \\$ \" \\\" \{ \\\{ \} \\\}} $::bytes]\""
+    switch -- $::what {
+        rows { set read "ztcl::vt rows \$t 0 [expr {$::rows - 1}]" }
+        default { set read "ztcl::vt $::what \$t" }
+    }
+    set cmd "set t \[ztcl::vt new -size {$::cols $::rows}\]; ztcl::vt feed \$t $word; $read"
+    set helper::cmd $cmd
+    set show [expr {$::what eq "rows" ? "join \[$read\] \\n" : $read}]
+    helper::run "apply {{} {set t \[ztcl::vt new -size {$::cols $::rows}\]; ztcl::vt feed \$t $word; set r \[$show\]; ztcl::vt delete \$t; return \$r}}" helper::result
+}
+helper::watch build bytes cols rows what
+```
+
 ## Synopsis
 
 ```tcl
