@@ -4,6 +4,8 @@ A script with the `vm` capability starts a small Linux guest on the hypervisor o
 
 The rule of the issue: native hypervisor APIs only. That is Virtualization.framework on macOS, the KVM ioctls on Linux with our own virtio devices, and the Host Compute Service on Windows. ztcl links no QEMU, no libkrun, and no other VMM.
 
+ztcl is BSD-2-Clause and the work stays clean-room: it reads the virtio specification, Apple's documentation, Microsoft's documentation, man pages, and papers, and no source code of GPL or other copyleft projects (Linux beyond its configuration, QEMU, copyleft VMMs). The guest kernel and BusyBox are GPL binary inputs: the build configures them and copies no code from them into ztcl.
+
 ## The spike (macOS)
 
 `tools/vm-guest` has the spike. It boots a guest, echoes a line over vsock, and shares one folder with virtio-fs.
