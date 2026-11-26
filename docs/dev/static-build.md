@@ -1,6 +1,11 @@
 # Plan: static binaries and a virtual file system (`ztcl build`)
 
-Issue #40 asks for one native binary from a Tcl program, as `go build` gives. This plan has the first form: a prebuilt runtime binary of ztcl with the scripts and the files of the program in it. The interpreter runs the scripts at start, and the JIT runs where the target has one. Machine code compiled at build time (the AOT tiers of #40) is a later phase, and it uses the same binary layout, the same mounts, and the same command.
+Issue #40 asks for one native binary from a Tcl program, as `go build` gives, with the program compiled to machine code. The work has two phases on one binary layout:
+
+1. Bundles: a prebuilt runtime binary of ztcl with the scripts and the files of the program in it. The interpreter runs the scripts at start, and the JIT runs where the target has one. This is the first deliverable.
+2. Compiled code (AOT): the code generators of the JIT run at build time over each proc and each top-level script, and the machine code goes into the text segment of the runtime binary. See "Phase 2: compiled code".
+
+The build runs in the `ztcl` CLI and in the browser. The build core (the payload, the patch of the runtime binary, the Mach-O signature, and in phase 2 the code generators) is Zig code on byte slices with no file system and no system call, so it also goes into `ztcl.wasm`. A page of the docs site builds an app and gives a native binary for Linux, macOS, or Windows, on x86-64 or arm64, to download. The site publishes the runtime binary of each target next to the docs.
 
 ## The command
 
@@ -96,9 +101,39 @@ The patch reads only the file formats, so the output depends only on the runtime
 
 The runtime of each target has the JIT of its back end: x86-64 on Linux, macOS, and Windows, and arm64 on Linux and macOS. `jit on` in the manifest turns it on at start, with the default options. On arm64 macOS the JIT uses `MAP_JIT`, which an ad hoc signed binary with no hardened runtime has. A program with the hardened runtime needs the entitlement `com.apple.security.cs.allow-jit`, and the docs say so. A target with no JIT runs the interpreter, and `--jit` gives a warning.
 
+## Phase 2: compiled code
+
+### The compiler
+
+The AOT compiler is the JIT code generators of `src/jit/` (tier 1 and tier 2, x86-64 and arm64), run at build time over each proc and each top-level script of the program. Tier 2 gets the types from static guesses with guards, or from a profile of a training run (`ztcl run --profile`). Each guard that fails exits to the bytecode, as in the JIT. The bytecode of each proc stays in the payload as the fallback, so `eval`, `uplevel` of a string, `source`, a proc defined again, and a trace run in the interpreter, and the compiled code of a proc defined again is not used. The step limit and the memory limit stay exact, because the compiled code makes the step checks of the JIT tiers.
+
+The code generators are Zig that writes bytes into a buffer, with no `mmap` and no call to the code. A build of them goes into `ztcl.wasm`, so the browser and the CLI run the same compiler and give the same bytes. A JIT target and an AOT target are separate options of the code generators: AOT code is position independent. It reaches the helpers of the runtime through a table of addresses in the data region (a PC-relative load), and it reaches its constants with PC-relative addresses in its own region.
+
+### Slot linking
+
+The build uses no general linker. Each runtime binary has three reserved parts, made by the Zig linker when CI builds the runtime:
+
+| Part | Where | What the build writes |
+|---|---|---|
+| The code region | A section in the text segment (read and execute), filled with trap instructions | The machine code of each proc and script. |
+| The data region | A section in a read-only data segment | The table of the helper addresses, the constants of the code, and the relocations. |
+| The table | The slot of "The binary layout", made larger | The offset and the length of the code and the data, and one record for each compiled proc: the name, the bytecode hash, and the entry offset. |
+
+The build writes the code and the data into the regions, applies the relocations of each proc (offsets inside the regions only), and patches the table. At start the runtime reads the table and points each proc with a matching bytecode hash at its entry. The code is in the text segment of the file, so the program needs no JIT, no writable and executable page, and no `MAP_JIT` on macOS. A position-independent runtime (PIE, ASLR) needs no change, because the code uses only PC-relative addresses and the helper table, which the loader relocates as a normal data symbol.
+
+### Region size
+
+The AOT runtime is a separate variant of the runtime of each target, so a bundle of phase 1 has no reserved space. Its default form has a code region of 1 MiB and a data region of 256 KiB, and the regions add their full size to each binary. The JIT tiers give about 20 to 60 bytes of code for each bytecode instruction, so 1 MiB holds a program of about 25,000 bytecode instructions. These numbers are a guess, and step 6 measures them on the corpus. A program that does not fit gets the error "the program needs N bytes of code and the runtime has 1 MiB: use --runtime-size large", and the large variant has 16 MiB of code and 4 MiB of data. A program can also compile only some procs (`--aot-procs PATTERN`) and run the others in the interpreter.
+
+### Targets
+
+- Linux and macOS use the System V calling convention of the code generators. arm64 macOS keeps x18 free, as the arm64 JIT does now.
+- Windows x86-64 uses the Win64 calling convention: the arguments in rcx, rdx, r8, and r9, 32 bytes of shadow space, and rdi, rsi, and xmm6 to xmm15 saved by the callee. The x86-64 code generator needs a Win64 form of its prologue, its epilogue, and its helper calls before AOT works on Windows. Unwind data (`.pdata`) for each proc goes in the data region.
+- Microcontrollers (#9): the same compiler with a target that has no bytecode fallback (`--no-eval`), and a runtime with no interpreter. It is a later target of this compiler.
+
 ## Signing
 
-- macOS: arm64 macOS runs only signed code. The build writes an ad hoc signature in Zig: a code directory with a SHA-256 hash of each 4 KiB page of the file up to the signature, the identifier of the output name, and no requirements. This is the format that the Zig linker writes for an ad hoc signature, and the reference names it. A developer ID signature and notarization stay a step on a Mac (`codesign`, then `notarytool`), after the build.
+- macOS: arm64 macOS runs only signed code. The build writes an ad hoc signature in Zig, so the signature works from the CLI on each host and from the browser: a code directory with a SHA-256 hash of each 4 KiB page of the file up to the signature, the identifier of the output name, and no requirements. This is the format that the Zig linker writes for an ad hoc signature, and the reference names it. A developer ID signature and notarization stay a step on a Mac (`codesign`, then `notarytool`), after the build.
 - Windows: no signature. `signtool` or `osslsigncode` signs the output after the build, and the signature covers the payload overlay.
 - Linux: no signature.
 
@@ -106,7 +141,7 @@ The runtime of each target has the JIT of its back end: x86-64 on Linux, macOS, 
 
 The binary is the runtime plus the payload. The runtime builds with `ReleaseSmall`, and the size job (`size.yml`) reports each target. The goals:
 
-- Hello world: at most 1.5 MB on Linux x86-64 with the interpreter and the JIT. The 1 MB goal of #40 is for the AOT phase, with `--no-eval`.
+- Hello world: at most 1.5 MB on Linux x86-64 with the interpreter and the JIT. The 1 MB goal of #40 is for the AOT phase, with `--no-eval` and a region size fit to the program, which needs a rewrite of the section headers after the code region (a later step).
 - A JSON HTTP service with the batteries: at most 6 MB.
 - The payload: at most the zip of the input plus 1 KiB.
 
@@ -116,5 +151,12 @@ The binary is the runtime plus the payload. The runtime builds with `ReleaseSmal
 2. `src/zipread.zig` and `src/vfs.zig`: the zip reader (stored and deflate), the mount table, the hooks in `open`, `source`, `glob`, and `file`, the `embedded` capability, and the `zipfs` command. Tests: zip files from Python's `zipfile` and Info-ZIP, deflate entries, a zip bomb at the memory limit, malformed archives, and the absent commands with no capability.
 3. `ztcl build` native on Linux x86-64: the slot, the payload, the manifest, and the start path in `src/main.zig`. Then the other targets by cross-compile: the ELF of Linux arm64, the PE of Windows x86-64, and the Mach-O with the ad hoc signature of macOS x86-64 and arm64. A CI job builds each target on Linux and runs each output on a runner of its OS.
 4. The user page `docs/build.md` with examples that ran, and a line in the README.
+
+Phase 2, after step 4:
+
+5. An AOT target in the code generators: position-independent code, the helper table, and the relocations, with a test that compares AOT code with JIT code on `tests/jit/`.
+6. The reserved regions in the runtime, the table at start, and `ztcl build --aot` on Linux x86-64, checked with `tools/jit-diff.sh` against the interpreter.
+7. arm64 Linux and macOS, then Win64 for Windows x86-64.
+8. The code generators and the build core in `ztcl.wasm`, and the build page of the docs site.
 
 The macOS and Windows parts of step 3 can go to a session on those machines. Each part is in new files (`src/buildnative.zig`, `src/macho_sign.zig`) with small hooks in `src/buildcmd.zig` and `src/main.zig`.
