@@ -2711,13 +2711,14 @@ test "ztcl::open gives a URL or the host path of a file to the opener" {
         \\set d [file join [pwd] .zig-cache ztcl-open-test]
         \\file delete -force $d
         \\file mkdir $d/sub
-        \\foreach n {a.txt b.EXE c.ps1} { set f [open $d/sub/$n w]; close $f }
+        \\file mkdir $d/sub/Tool.app
+        \\foreach n {a.txt b.EXE c.ps1 d.command} { set f [open $d/sub/$n w]; close $f }
     );
     // In host mode the opener gets the normal host path.
     _ = try it.eval("ztcl::open $d/sub/../sub/a.txt");
     try std.testing.expect(std.mem.endsWith(u8, launched, "/ztcl-open-test/sub/a.txt"));
-    if (@import("builtin").os.tag != .windows) {
-        // Only Windows has the host path of a file in the jail.
+    if (@import("builtin").os.tag != .windows and @import("builtin").os.tag != .macos) {
+        // Only Windows and macOS have the host path of a file in the jail.
         _ = try it.eval("file delete -force $d");
         return;
     }
@@ -2732,6 +2733,13 @@ test "ztcl::open gives a URL or the host path of a file to the opener" {
         try std.testing.expectEqualStrings("{ZTCL OPEN BLOCKED} {ZTCL OPEN BLOCKED} {POSIX ENOENT {no such file or directory}}", try it.str(try it.eval(
             \\set r {}
             \\foreach p {sub/b.EXE /sub/c.ps1 sub/none.txt} { catch {ztcl::open $p}; lappend r $::errorCode }
+            \\set r
+        )));
+    }
+    if (@import("builtin").os.tag == .macos) {
+        try std.testing.expectEqualStrings("{ZTCL OPEN BLOCKED} {ZTCL OPEN BLOCKED} {POSIX ENOENT {no such file or directory}}", try it.str(try it.eval(
+            \\set r {}
+            \\foreach p {sub/d.command /sub/Tool.app sub/none.txt} { catch {ztcl::open $p}; lappend r $::errorCode }
             \\set r
         )));
     }
@@ -2805,4 +2813,9 @@ test "ztcl::win::registry: set, get, type, keys, values, and delete" {
     try std.testing.expectEqualStrings("ZTCL REGISTRY DENIED", try ev(&it, "catch {ztcl::win::registry get HKCU/Software/Microsoft x}; set ::errorCode"));
     _ = try ev(&it, "ztcl::win::registry delete HKCU/Software/ztcl-test");
     try std.testing.expectEqualStrings("ZTCL REGISTRY NOENT", try ev(&it, "catch {ztcl::win::registry keys HKCU/Software/ztcl-test}; set ::errorCode"));
+}
+
+test "ztcl::open: the open program of macOS fails on a missing file" {
+    if (@import("builtin").os.tag != .macos) return error.SkipZigTest;
+    try std.testing.expect(!tcl.launch.mac.open(std.testing.allocator, "/ztcl-no-such-folder/none.txt"));
 }
