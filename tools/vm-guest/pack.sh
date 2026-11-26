@@ -1,15 +1,21 @@
 #!/bin/sh
-# Makes out/initramfs.cpio.gz from out/busybox, the agent, and init, on
-# any host with Zig, cpio, and gzip.
+# Makes the initramfs files of the spike guest from out/busybox, the
+# agent, and init, on any host with Zig, cpio, and gzip:
+#   out/initramfs.cpio.gz  BusyBox, init (a shell script), and the agent
+#   out/agent.cpio         the agent alone, as /sbin/agent, uncompressed
+#   out/agent.cpio.gz      the same, with gzip
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 out=${OUT:-$here/out}
 root=$(mktemp -d)
-mkdir -p "$root/bin" "$root/sbin" "$root/dev"
+mkdir -p "$root/bin" "$root/sbin" "$root/dev" "$root/mnt/share"
+zig build-exe -target aarch64-linux-musl -OReleaseSmall -fstrip "$here/agent.zig" -femit-bin="$root/sbin/agent"
+rm -f "$root/sbin/agent.o"
+(cd "$root" && find . | cpio -o -H newc 2>/dev/null) > "$out/agent.cpio"
+gzip -9 < "$out/agent.cpio" > "$out/agent.cpio.gz"
 cp "$out/busybox" "$root/bin/busybox"
 chmod +x "$root/bin/busybox"
-zig build-exe -target aarch64-linux-musl -OReleaseSmall -fstrip "$here/agent.zig" -femit-bin="$root/sbin/agent"
 cp "$here/init" "$root/init"
 (cd "$root" && find . | cpio -o -H newc 2>/dev/null) | gzip -9 > "$out/initramfs.cpio.gz"
 rm -rf "$root"
-ls -l "$out/initramfs.cpio.gz"
+ls -l "$out"/*.cpio*
