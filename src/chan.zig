@@ -755,6 +755,10 @@ fn cmdRead(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     while (want == null or c.rbuf.items.len - c.rpos < want.?) {
         if (!try fill(it, c)) break;
+        // A channel that does not block stops at a short read, as Tcl
+        // does: a read that left free space in the buffer. The end of
+        // the file shows at the next read.
+        if (!c.blocking and c.rbuf.items.len < c.rbuf.capacity) break;
     }
     var raw = c.rbuf.items[c.rpos..];
     if (want) |n| {
