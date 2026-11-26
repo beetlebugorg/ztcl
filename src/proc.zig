@@ -93,13 +93,13 @@ fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 
-fn nowMs() i64 {
+pub fn nowMs() i64 {
     var ts: linux.timespec = undefined;
     _ = linux.clock_gettime(.MONOTONIC, &ts);
     return @as(i64, ts.sec) * 1000 + @divFloor(@as(i64, ts.nsec), 1_000_000);
 }
 
-fn posix(it: *Interp, e: linux.E, what: []const u8) Error {
+pub fn posix(it: *Interp, e: linux.E, what: []const u8) Error {
     const f = sys.failOf(e);
     const code = try std.fmt.allocPrint(it.alloc(), "POSIX {s} {{{s}}}", .{ f.name, f.text });
     return it.failCode(code, "{s}{s}", .{ what, f.text });
@@ -239,7 +239,7 @@ fn memFile(it: *Interp, text: []const u8) Error!i32 {
 }
 
 /// A path of the form `~user` is an error: no user lookup exists.
-fn noTilde(it: *Interp, path: []const u8) Error!void {
+pub fn noTilde(it: *Interp, path: []const u8) Error!void {
     if (path.len < 2 or path[0] != '~' or path[1] == '/') return;
     const end = std.mem.indexOfScalar(u8, path, '/') orelse path.len;
     return it.fail("user \"{s}\" doesn't exist", .{path[1..end]});
@@ -463,7 +463,7 @@ fn denied(it: *Interp, word: []const u8, why: []const u8) Error {
     return it.failCode("ZTCL EXEC DENIED", "couldn't execute \"{s}\": {s}", .{ word, why });
 }
 
-fn cannotRun(it: *Interp, word: []const u8, e: linux.E) Error {
+pub fn cannotRun(it: *Interp, word: []const u8, e: linux.E) Error {
     return posix(it, e, try std.fmt.allocPrint(it.alloc(), "couldn't execute \"{s}\": ", .{word}));
 }
 
@@ -531,7 +531,7 @@ fn checked(it: *Interp, word: []const u8, path: [:0]const u8) Error![:0]const u8
 /// The one full host path that a program word runs. A word with a `/`
 /// is a host path, or a file of `allow_root`. A bare name goes through
 /// the `PATH` of the embedder.
-fn resolve(it: *Interp, word: []const u8) Error![:0]const u8 {
+pub fn resolve(it: *Interp, word: []const u8) Error![:0]const u8 {
     const a = it.alloc();
     if (std.mem.indexOfScalar(u8, word, '/') != null) {
         if (try rootProgram(it, word)) |p| return p;
@@ -578,7 +578,7 @@ const Started = struct {
     timed_out: bool = false,
 };
 
-fn pipe(it: *Interp) Error![2]i32 {
+pub fn pipe(it: *Interp) Error![2]i32 {
     var p: [2]i32 = undefined;
     const rc = linux.pipe2(&p, .{ .CLOEXEC = true });
     if (linux.errno(rc) != .SUCCESS) return posix(it, linux.errno(rc), "couldn't create pipe: ");
@@ -790,7 +790,7 @@ pub const Tree = struct {
 pub var test_no_cgroup = false;
 var tree_count = std.atomic.Value(u32).init(0);
 
-fn sleepMs(ms: i32) void {
+pub fn sleepMs(ms: i32) void {
     _ = linux.poll(@ptrFromInt(8), 0, ms);
 }
 
@@ -824,7 +824,7 @@ fn writeAt(dir: i32, name: [*:0]const u8, text: []const u8) bool {
 
 /// Makes a cgroup for a new pipeline below the cgroup of this process.
 /// Gives a tree with no cgroup when the process cannot make one.
-fn treeOpen() Tree {
+pub fn treeOpen() Tree {
     var t: Tree = .{};
     if (test_no_cgroup) return t;
     var buf: [4096]u8 = undefined;
@@ -876,7 +876,7 @@ fn treeLive(t: *const Tree) bool {
 
 /// Kills each process of the tree. `pids` are the programs of the
 /// pipeline.
-fn treeKill(t: *const Tree, pids: []const i32) void {
+pub fn treeKill(t: *const Tree, pids: []const i32) void {
     if (t.dir >= 0) {
         if (!writeAt(t.dir, "cgroup.kill", "1")) {
             // A kernel before 5.14 has no `cgroup.kill`. The freeze
@@ -978,7 +978,7 @@ fn scanChildren(pa: std.mem.Allocator, found: *std.ArrayList(i32)) void {
 
 /// Removes the cgroup of a tree and closes its descriptors. After a
 /// kill, it waits up to one second for the processes to end.
-fn treeClose(t: *Tree) void {
+pub fn treeClose(t: *Tree) void {
     if (t.dir < 0) return;
     var waited: usize = 0;
     while (treeLive(t) and waited < 500) : (waited += 1) sleepMs(2);
@@ -999,7 +999,7 @@ fn settle(it: *Interp, tree: Tree, start_ms: i64) Error!void {
 }
 
 /// The wait status of a process, or null while it runs.
-fn waitPid(pid: i32, block: bool) ?u32 {
+pub fn waitPid(pid: i32, block: bool) ?u32 {
     var status: u32 = 0;
     while (true) {
         const rc = linux.wait4(pid, &status, if (block) @as(u32, 0) else @as(u32, linux.W.NOHANG), null);
@@ -1016,7 +1016,7 @@ fn deadline(it: *Interp, start_ms: i64) ?i64 {
     return start_ms + it.exec_host.timeout_ms;
 }
 
-fn signalName(sig: u32) struct { []const u8, []const u8 } {
+pub fn signalName(sig: u32) struct { []const u8, []const u8 } {
     return switch (sig) {
         1 => .{ "SIGHUP", "hangup" },
         2 => .{ "SIGINT", "interrupt" },

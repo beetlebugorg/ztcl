@@ -62,6 +62,10 @@ pub const Channel = struct {
     started: i64 = 0,
     /// The process tree of the pipeline.
     tree: ProcTree = .{},
+    /// True for the master side of a PTY of `ztcl::pty`.
+    pty: bool = false,
+    /// The wait status of the program of a PTY after it ended.
+    pty_status: ?u32 = null,
     /// True for a closed channel that still has output to write. The
     /// event loop writes the rest and then closes the descriptor.
     draining: bool = false,
@@ -199,7 +203,8 @@ fn fillMore(it: *Interp, c: *Channel) Error!Fill {
         .again => return .again,
         .err => |f| {
             // A reset connection reads as the end of the data.
-            if (c.kind != .file and eql(f.name, "ECONNRESET")) {
+            // A PTY whose other side closed reads EIO on Linux.
+            if ((c.kind != .file and eql(f.name, "ECONNRESET")) or (c.pty and eql(f.name, "EIO"))) {
                 c.hit_eof = true;
                 return .eof;
             }
@@ -414,7 +419,9 @@ fn closeChan(it: *Interp, c: *Channel) Error!void {
     if (c.draining) return;
     try r;
     if (comptime proc_ok) {
-        if (c.pids.len > 0) try @import("proc.zig").reap(it, c);
+        if (c.pty) {
+            @import("pty.zig").hangup(it, c);
+        } else if (c.pids.len > 0) try @import("proc.zig").reap(it, c);
     }
 }
 
