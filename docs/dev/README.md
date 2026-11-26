@@ -20,6 +20,7 @@ These files are the plans, the task lists, the reviews, and the test results of 
 | [wasm-host-tasks/](wasm-host-tasks/README.md) | The tasks of the WebAssembly host API: point procs from JavaScript, live output, and capabilities of the page (#26). |
 | [dom-tasks/](dom-tasks/README.md) | The tasks of the capability `dom`: DOM access for Tcl in the browser (#85). |
 | [static-build.md](static-build.md) | The plan of static binaries with embedded files, the virtual file system, and cross-compiling (`ztcl build`). |
+| [exec-windows.md](exec-windows.md) | The plan of `exec`, `pid`, and pipelines on Windows: the paths of the programs, the command line, the Job Object of each pipeline, and ConPTY. |
 | [ports.md](ports.md) | The plan of the macOS and Windows ports. |
 | [linux-tasks/](linux-tasks/README.md) | The tasks of `ztcl::linux`: desktop portals and D-Bus calls (#110). |
 | [cext-tasks/](cext-tasks/README.md) | The tasks of Tcl packages with C modules, native and in WebAssembly (#1). |
