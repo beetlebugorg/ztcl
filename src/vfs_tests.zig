@@ -75,6 +75,8 @@ test "vfs: source, open, and file on an embedded mount" {
     try expectEv(&it, "glob -directory //zipfs:/app/lib -tails *.tcl", "util.tcl");
     try expectEv(&it, "glob -types d //zipfs:/app/*", "//zipfs:/app/data //zipfs:/app/lib");
     try expectEv(&it, "glob //zipfs:/*", "//zipfs:/app");
+    try tcl.vfs.mountBytes(&it, "dot", "", @embedFile("testdata/zip/python-stored.zip"));
+    try expectEv(&it, "glob -directory //zipfs:/ -tails .* d*", "dot");
     try expectEv(&it, "glob -nocomplain //zipfs:/app/*.none", "");
 }
 
