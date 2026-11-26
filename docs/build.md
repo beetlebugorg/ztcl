@@ -50,7 +50,7 @@ $ ztcl build --target x86_64-windows -o hello.exe --embed greet.tcl --embed data
 hello.exe: 2106047 bytes (x86_64-windows runtime: 2105344 bytes, payload: 703 bytes)
 ```
 
-The targets are `x86_64-linux`, `aarch64-linux`, `x86_64-macos`, `aarch64-macos`, `x86_64-windows`, and `aarch64-windows`. The default is the host.
+The targets are `x86_64-linux`, `aarch64-linux`, `x86_64-macos`, `aarch64-macos`, `x86_64-windows`, and `aarch64-windows`. The default is the host. [Targets](targets.md) lists the features, the limits, and the CI checks of each target.
 
 Each target has a prebuilt runtime binary. `ztcl build` copies it, adds the payload (a zip archive of the scripts and the files), and writes the offset of the payload into the copy. It looks for the runtime of a target in this order:
 

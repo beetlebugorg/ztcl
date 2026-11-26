@@ -326,3 +326,4 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -r tools/docs-requirements.txt
       - run: python tools/build-docs.py site
+      - run: sh tests/targets.sh

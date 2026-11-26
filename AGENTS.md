@@ -48,6 +48,10 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 9. Stop only your own processes, by PID.
 10. The JIT and the interpreter must agree: the same output, errors, compute units, and memory count for each script. Run `tools/jit-diff.sh` and `tools/suite.sh -j` after a change to `src/vm.zig` or `src/jit/`.
 
+## Modules
+
+A new `ztcl::` command goes in with its page in `docs/modules/` and a row in `docs/modules/README.md`, in the same PR.
+
 ## Commits and merges
 
 - Follow the commit rules in WRITING.md.
