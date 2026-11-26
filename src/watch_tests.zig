@@ -60,3 +60,26 @@ test "ztcl::watch reports the changes of a folder" {
     _ = try ev(&it, "ztcl::watch remove $w");
     try std.testing.expectEqualStrings("1", try ev(&it, "catch {ztcl::watch changes $w}"));
 }
+
+test "ztcl::watch gives host paths in host mode" {
+    if (!tcl.watch.supported) return error.SkipZigTest;
+    const linux = tcl.sys.os;
+    var buf: [64:0]u8 = undefined;
+    const dir = try std.fmt.bufPrintSentinel(&buf, "/tmp/ztcl-watch-host-{d}", .{linux.getpid()}, 0);
+    _ = linux.mkdirat(linux.AT.FDCWD, dir, 0o700);
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer {
+        _ = it.eval("file delete -force $d") catch {};
+        it.deinit();
+    }
+    try tcl.fsroot.setHost(&it);
+    try it.allow(@backingInt(cap.channels) | @backingInt(cap.file));
+    var script: [128]u8 = undefined;
+    _ = try ev(&it, try std.fmt.bufPrint(&script, "set d {s}; file mkdir $d/src; set w [ztcl::watch add -recursive $d]", .{dir}));
+    _ = try ev(&it, "set f [open $d/a.tcl w]; close $f; set f [open $d/src/b.tcl w]; close $f");
+    try std.testing.expectEqualStrings("1", try ev(&it, "expr {[ztcl::watch changes $w] eq [list [list created $d/a.tcl] [list created $d/src/b.tcl]]}"));
+    _ = try ev(&it, "file mkdir $d/src/new; ztcl::watch changes $w; set f [open $d/src/new/c.tcl w]; close $f");
+    try std.testing.expectEqualStrings("1", try ev(&it, "expr {[ztcl::watch changes $w] eq [list [list created $d/src/new/c.tcl]]}"));
+    _ = try ev(&it, "ztcl::watch remove $w");
+}

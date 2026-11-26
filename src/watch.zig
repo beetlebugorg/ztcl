@@ -41,7 +41,8 @@ const Watcher = struct {
     id: u32,
     fd: i32,
     recursive: bool,
-    /// The paths of the script for each watch descriptor.
+    /// The normal path (`fsroot.normal`) of the folder of each watch
+    /// descriptor.
     dirs: std.AutoHashMapUnmanaged(i32, []const u8) = .empty,
     changes: std.ArrayList(Change) = .empty,
     overflow: bool = false,
@@ -61,9 +62,12 @@ fn find(it: *Interp, v: Value) Error!*Watcher {
     return it.fail("can not find watcher named \"{s}\"", .{name});
 }
 
-/// The path of the script for a relative path of the jail.
-fn scriptPath(a: std.mem.Allocator, rel: []const u8) Error![]const u8 {
-    return std.fmt.allocPrint(a, "/{s}", .{rel});
+/// The normal path of the entry `name` in the folder `dir`. In the jail
+/// the root is the empty path, and in host mode it is `/`.
+fn child(a: std.mem.Allocator, dir: []const u8, name: []const u8) Error![]const u8 {
+    if (dir.len == 0) return a.dupe(u8, name);
+    if (dir[dir.len - 1] == '/') return std.fmt.allocPrint(a, "{s}{s}", .{ dir, name });
+    return std.fmt.allocPrint(a, "{s}/{s}", .{ dir, name });
 }
 
 fn addDir(it: *Interp, w: *Watcher, rel: []const u8) Error!void {
@@ -79,11 +83,11 @@ fn addDir(it: *Interp, w: *Watcher, rel: []const u8) Error!void {
     const rc = linux.inotify_add_watch(w.fd, proc_path, mask);
     if (linux.errno(rc) != .SUCCESS) return fsroot.posixError(it, linux.errno(rc), "couldn't watch the folder: ");
     const wd: i32 = @intCast(rc);
-    try w.dirs.put(it.alloc(), wd, try scriptPath(it.alloc(), rel));
+    try w.dirs.put(it.alloc(), wd, try it.alloc().dupe(u8, rel));
     if (!w.recursive) return;
     switch (try fsroot.listDir(it, rel)) {
         .ok => |names| for (names) |n| {
-            const sub = if (rel.len == 0) try it.alloc().dupe(u8, n) else try std.fmt.allocPrint(it.alloc(), "{s}/{s}", .{ rel, n });
+            const sub = try child(it.alloc(), rel, n);
             switch (try fsroot.stat(it, sub)) {
                 .ok => |st| if (fsroot.isDir(st.mode)) try addDir(it, w, sub),
                 else => {},
@@ -153,7 +157,8 @@ fn drain(it: *Interp, w: *Watcher) Error!void {
             const dir = w.dirs.get(ev.wd) orelse continue;
             const name = std.mem.sliceTo(@as([*:0]const u8, @ptrCast(&buf[off - ev.len])), 0);
             if (ev.len == 0 or name.len == 0) continue;
-            const path = if (dir.len == 1) try std.fmt.allocPrint(it.alloc(), "/{s}", .{name}) else try std.fmt.allocPrint(it.alloc(), "{s}/{s}", .{ dir, name });
+            const rel = try child(it.alloc(), dir, name);
+            const path = try fsroot.shown(it, rel);
             const m = ev.mask;
             const kind: Kind = if (m & linux.IN.CREATE != 0 or m & linux.IN.MOVED_TO != 0)
                 .created
@@ -164,7 +169,7 @@ fn drain(it: *Interp, w: *Watcher) Error!void {
             else
                 .modified;
             try note(it, w, kind, path);
-            if (w.recursive and m & linux.IN.ISDIR != 0 and kind == .created) addDir(it, w, path[1..]) catch {};
+            if (w.recursive and m & linux.IN.ISDIR != 0 and kind == .created) addDir(it, w, rel) catch {};
         }
     }
 }
