@@ -745,7 +745,7 @@ pub const Emitter = struct {
         try e.ldr(rdx, abi.it, l.it_ns);
         try s.cmpR(rcx, rdx, .lsl, 0);
         try s.bcond(.ne, slow_l);
-        try e.plain(.call_cached, pc);
+        try e.plain(.call_direct, pc);
     }
 
     // ---- The cold code ----
