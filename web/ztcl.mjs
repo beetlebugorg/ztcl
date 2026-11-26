@@ -74,8 +74,19 @@ export class Interp {
   /// bundle), and point (true adds `point proc` and the output commands).
   static async create(module, options = {}) {
     if (isOptions(module)) [module, options] = [undefined, module];
-    const instance = await WebAssembly.instantiate(await compile(module), {});
-    return new Interp(instance, options);
+    const mod = await compile(module);
+    // `ztcl-host.wasm` imports the module `ztcl_host`. Its calls go to
+    // the Interp, which exists after the instance.
+    let self = null;
+    const imports = {};
+    if (WebAssembly.Module.imports(mod).some((i) => i.module === "ztcl_host")) {
+      imports.ztcl_host = {
+        output: (ptr, len) => self._live(ptr, len),
+      };
+    }
+    const instance = await WebAssembly.instantiate(mod, imports);
+    self = new Interp(instance, options);
+    return self;
   }
 
   constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false } = {}) {
@@ -206,17 +217,25 @@ export class Interp {
     }
   }
 
+  /// The text of one `puts` of `ztcl-host.wasm`, at the time of the call.
+  _live(ptr, len) {
+    const text = this._text(ptr, len);
+    this._liveOut += text;
+    if (this.onOutput) this.onOutput(text);
+  }
+
   _call(f) {
     const x = this.x;
     if (!this.h) throw new Error("the interpreter is closed");
     const units = this.computeLimit == null ? NO_LIMIT : BigInt(this.computeLimit);
     x.ztcl_set_compute_limit(this.h, units);
+    this._liveOut = "";
     const rc = f();
     const result = this._text(x.ztcl_result_ptr(this.h), x.ztcl_result_len(this.h));
-    const output = this._text(x.ztcl_output_ptr(this.h), x.ztcl_output_len(this.h));
+    const kept = this._text(x.ztcl_output_ptr(this.h), x.ztcl_output_len(this.h));
     x.ztcl_output_clear(this.h);
-    if (output && this.onOutput) this.onOutput(output);
-    return { ok: rc === 0, result, output };
+    if (kept && this.onOutput) this.onOutput(kept);
+    return { ok: rc === 0, result, output: this._liveOut + kept };
   }
 
   /// Frees the interpreter. Drop the Interp after this call.

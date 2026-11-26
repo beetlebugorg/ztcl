@@ -24,6 +24,8 @@ A wasm module cannot have an optional import: the host must give each import tha
 
 - Task 01: `ztcl_point_install`, `ztcl_point_compile`, `ztcl_point_outputs`, and `ztcl_point_run` in `ztcl-simd.wasm` (with them, `ztcl.wasm` was 1,532,277 bytes, over its limit of 1,500,000 in `tools/size-report.sh`), `pointProc` of `web/ztcl.mjs`, `zig build wasm-simd`, and `tools/wasm-point.mjs`. `point` is installed only with the option `point: true`, so the commands `offset`, `width`, `speed`, and the others do not appear in each interpreter.
 
+- Task 02: `zig build wasm-host` makes `ztcl-host.wasm` with the import `ztcl_host.output`. `web/ztcl.mjs` gives the import, and `onOutput` gets each `puts` at the time of the call. Each write costs one compute unit in both forms. `tools/wasm-host.mjs` checks both.
+
 ## Rules for each task
 
 1. Read AGENTS.md, WRITING.md, `docs/dev/design.md`, `docs/webassembly.md`, and `docs/embedding.md` first.

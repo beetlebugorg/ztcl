@@ -69,7 +69,7 @@ tcl.close();
 | `Interp.create(source, options)` | Makes an interpreter in a new WebAssembly instance. `source` is as for `compile`, and it can be left out: `Interp.create(options)`. Compile once and pass the module to make many interpreters. |
 | `options.computeLimit` | The compute units of each `eval`. `null` is no limit, and it is the default. |
 | `options.memLimit` | The memory limit in bytes. The default is 2 GiB. |
-| `options.onOutput(text)` | Gets the text of `puts` when each `eval` ends. |
+| `options.onOutput(text)` | Gets the text of `puts` when each `eval` ends. With `ztcl-host.wasm`, it gets the text of each `puts` at the time of the call. |
 | `interp.eval(script)` | Runs a script. Returns `{ ok, result, output }`. `result` is the value of the script, or the error message when `ok` is false. |
 | `interp.computeLimit`, `interp.memLimit` | Change the limits for the next `eval`. |
 | `interp.memorySize` | The size of the linear memory in bytes. The memory never shrinks, so this is the peak. |
@@ -113,7 +113,7 @@ One interpreter keeps its procs and variables from one `eval` to the next. Each 
 - **Compute units.** Each command and each loop pass uses compute units. At the limit, the script stops with the error `compute limit reached`. `catch` and `try` cannot catch it. The same script stops at the same point in each browser and in Node.js.
 - **Memory.** At the limit, the script stops with the error `the script used too much memory`. `catch` cannot catch it. The heap has a hard cap of twice the limit, so the linear memory can grow to about twice the limit. A script that doubles a string with a limit of 64 MiB stopped with 116 MiB of linear memory.
 - After the memory error, the data of the script can stay live above the limit. The next `eval` in the same interpreter runs a collection first. While the live data stays above the limit, only the hard cap applies, so the script can run and free its data with `unset`. When a collection brings the count below the limit, the limit applies again. Use `close` and a new `Interp` to give the memory back to the host.
-- **Output.** The module has no imports, so `puts` goes into a buffer. `eval` returns the text, and `onOutput` gets it when the script ends. When `stop` ends a worker, the output of that script is lost.
+- **Output.** `ztcl.wasm` has no imports, so `puts` goes into a buffer. `eval` returns the text, and `onOutput` gets it when the script ends. `ztcl-host.wasm` (`zig build wasm-host`) imports `ztcl_host.output`, and `onOutput` gets each `puts` at once, so a long script can show its output as it runs. Each write of `puts` costs one compute unit in both modules. When `stop` ends a worker, the output of that script is lost.
 - **Stop.** A script on the main thread blocks the page until it ends or hits a limit. Use `WorkerInterp` when a person must be able to stop a script.
 
 ## Bundle a script

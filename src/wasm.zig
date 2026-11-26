@@ -53,8 +53,25 @@ fn payload() []const u8 {
     return @as([*]const u8, @ptrFromInt(ptr))[0..slot[3]];
 }
 
+/// True for `ztcl-host.wasm`, the form with the imports of the module
+/// `ztcl_host`. `ztcl.wasm` has no imports.
+const host_imports = @hasDecl(build_options, "wasm_host") and build_options.wasm_host;
+
+const host = struct {
+    extern "ztcl_host" fn output(ptr: [*]const u8, len: usize) void;
+};
+
+/// The text of `puts`. `ztcl-host.wasm` gives it to the host at once
+/// (`ztcl_host.output`), and `ztcl.wasm` keeps it until the eval ends.
+/// Each write costs one compute unit in both forms, so a script that
+/// writes in a loop stops at the same point in each form.
 fn write(ctx: ?*anyopaque, bytes: []const u8) void {
     const h: *Handle = @ptrCast(@alignCast(ctx.?));
+    if (h.it.compute_limit > 0 and h.it.compute_limit != std.math.maxInt(u64)) h.it.compute_limit -= 1;
+    if (comptime host_imports) {
+        host.output(bytes.ptr, bytes.len);
+        return;
+    }
     h.out.appendSlice(gpa, bytes) catch {};
 }
 

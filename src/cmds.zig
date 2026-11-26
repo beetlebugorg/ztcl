@@ -2414,8 +2414,10 @@ fn cmdPuts(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }
     }
     if (it.output) |out| {
-        out.write(out.ctx, try it.str(args[0]));
-        if (newline) out.write(out.ctx, "\n");
+        // One call for each `puts`, so a host that shows each call sees
+        // the line and its newline together.
+        const s = try it.str(args[0]);
+        out.write(out.ctx, if (newline) try std.mem.concat(it.alloc(), u8, &.{ s, "\n" }) else s);
     }
     return Value.empty;
 }
