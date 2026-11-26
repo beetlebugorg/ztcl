@@ -1130,7 +1130,7 @@ test "the optional commands are absent by default" {
     defer it.deinit();
     // A build with modules has the small `package` by default.
     try std.testing.expect((it.findCommand("package") == null) == (modules.table.len == 0));
-    for ([_][]const u8{ "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror", "ztcl::open" }) |name| {
+    for ([_][]const u8{ "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror", "ztcl::open", "ztcl::notify" }) |name| {
         try std.testing.expect(it.findCommand(name) == null);
     }
 }
@@ -2755,4 +2755,44 @@ test "ztcl::open: the scheme of a URL, and the blocked file types" {
 test "ztcl::open: the shell of Windows fails on a missing file, with no dialog" {
     if (@import("builtin").os.tag != .windows) return error.SkipZigTest;
     try std.testing.expect(!(try tcl.launch.win.shellOpen(std.testing.allocator, "C:/ztcl-no-such-folder/none.txt")));
+}
+
+var notified: [3][128]u8 = undefined;
+var notified_len: [3]usize = .{ 0, 0, 0 };
+
+fn recordNote(_: ?*anyopaque, note: *const tcl.notify.Note) bool {
+    for ([_][]const u8{ note.title, note.subtitle, note.body }, 0..) |s, k| {
+        @memcpy(notified[k][0..s.len], s);
+        notified_len[k] = s.len;
+    }
+    return !std.mem.eql(u8, note.title, "fail");
+}
+
+test "ztcl::notify gives the texts to the notifier" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@intFromEnum(tcl.interp.Capability.notify));
+    it.notify_host = .{ .show = recordNote };
+    _ = try it.eval("ztcl::notify Build -subtitle ztcl -body {all \"tests\" pass}");
+    try std.testing.expectEqualStrings("Build", notified[0][0..notified_len[0]]);
+    try std.testing.expectEqualStrings("ztcl", notified[1][0..notified_len[1]]);
+    try std.testing.expectEqualStrings("all \"tests\" pass", notified[2][0..notified_len[2]]);
+    try std.testing.expectEqualStrings("ZTCL NOTIFY FAILED", try it.str(try it.eval("catch {ztcl::notify fail}; set ::errorCode")));
+    try std.testing.expectEqualStrings("ZTCL NOTIFY TEXT", try it.str(try it.eval("catch {ztcl::notify {}}; set ::errorCode")));
+    try std.testing.expectEqualStrings("ZTCL NOTIFY LENGTH", try it.str(try it.eval("catch {ztcl::notify [string repeat x 300]}; set ::errorCode")));
+    try std.testing.expectEqualStrings("bad option \"-icon\": must be -body or -subtitle", try it.str(try it.eval("catch {ztcl::notify a -icon b} m; set m")));
+}
+
+test "ztcl::notify: the texts are arguments of the script of osascript" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const argv = try tcl.notify.osascriptArgs(arena.allocator(), &.{ .title = "a\" & (do shell script \"x\")", .body = "b", .subtitle = "c" });
+    try std.testing.expectEqualStrings("/usr/bin/osascript", std.mem.span(argv[0].?));
+    // The script is the fixed lines, and the texts come after them.
+    try std.testing.expectEqualStrings("on run argv", std.mem.span(argv[2].?));
+    try std.testing.expectEqualStrings("a\" & (do shell script \"x\")", std.mem.span(argv[7].?));
+    try std.testing.expectEqualStrings("b", std.mem.span(argv[8].?));
+    try std.testing.expectEqualStrings("c", std.mem.span(argv[9].?));
+    try std.testing.expect(argv[10] == null);
 }
