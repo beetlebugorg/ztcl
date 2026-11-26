@@ -172,6 +172,12 @@ export class Shell {
     return decoder.decode(new Uint8Array(this.x.memory.buffer, p, this.x.ztcl_shell_line_len(this.s)));
   }
 
+  /// The text of the line that the reader edits.
+  get line() {
+    const p = this.x.ztcl_shell_line_ptr(this.s);
+    return decoder.decode(new Uint8Array(this.x.memory.buffer, p, this.x.ztcl_shell_line_len(this.s)));
+  }
+
   setLine(text) {
     this._with(text, (p, n) => this.x.ztcl_shell_set_line(this.s, p, n));
   }
