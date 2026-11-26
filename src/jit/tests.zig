@@ -15,16 +15,32 @@ const Interp = tcl.Interp;
 const testing = std.testing;
 const builtin = @import("builtin");
 
+/// An interp of these tests with its own allocator. The allocator keeps
+/// no stack traces. With the stack traces of the testing allocator, each
+/// interp with tier 2 code adds megabytes of resident memory that stay
+/// after the interp and after the `deinit` of the allocator, outside of
+/// it: about 13 MB for `sum.tcl`. The tests of this file make thousands
+/// of such interps, so the test binary needed more than 4 GB (#225). The
+/// capture of a stack trace with JIT code on it is the likely cause:
+/// with no stack traces, the memory stays flat.
+const Owned = struct { sa: std.heap.SafeAllocator, it: Interp };
+
 fn newInterp() !*Interp {
-    const it = try testing.allocator.create(Interp);
-    errdefer testing.allocator.destroy(it);
-    try it.init(testing.allocator);
-    return it;
+    const o = try testing.allocator.create(Owned);
+    errdefer testing.allocator.destroy(o);
+    o.sa = .init(std.heap.page_allocator, .{ .stack_trace_frames = 0, .check_write_after_free = true });
+    errdefer _ = o.sa.deinit();
+    try o.it.init(o.sa.allocator());
+    return &o.it;
 }
 
+/// Frees an interp of newInterp. A leak of the interp stops the tests.
 fn freeInterp(it: *Interp) void {
+    const o: *Owned = @alignCast(@fieldParentPtr("it", it));
     it.deinit();
-    testing.allocator.destroy(it);
+    const leaks = o.sa.deinit();
+    testing.allocator.destroy(o);
+    if (leaks != 0) std.debug.panic("an interp of the JIT tests leaked {d} allocations", .{leaks});
 }
 
 test "the default interpreter has no JIT state" {
@@ -1768,6 +1784,45 @@ test "tier 2: sum, and the compute limit at each step of the loop" {
     defer test_tier2 = false;
     var limit: u64 = 0;
     while (limit <= full) : (limit += 1) try sameLimit(sum_script, limit, 0);
+}
+
+/// The resident memory of the process, in KiB, from /proc/self/statm.
+fn residentKib() ?usize {
+    if (builtin.os.tag != .linux) return null;
+    const l = std.os.linux;
+    var buf: [128]u8 = undefined;
+    const rc: isize = @bitCast(l.open("/proc/self/statm", .{}, 0));
+    if (rc < 0) return null;
+    const fd: i32 = @intCast(rc);
+    defer _ = l.close(fd);
+    const n = l.read(fd, &buf, buf.len);
+    if (n == 0 or n > buf.len) return null;
+    var t = std.mem.tokenizeScalar(u8, buf[0..n], ' ');
+    _ = t.next();
+    const pages = std.fmt.parseInt(usize, t.next() orelse return null, 10) catch return null;
+    return pages * (std.heap.pageSize() / 1024);
+}
+
+fn runTier2Once() !void {
+    const r = try runMode(sum_script, true, std.math.maxInt(u64), 0);
+    r.deinit();
+}
+
+test "tier 2: the memory of the process stays flat over many interps" {
+    if (!jit.built) return error.SkipZigTest;
+    test_tier2 = true;
+    defer test_tier2 = false;
+    // The first runs fill the caches of the process.
+    for (0..5) |_| try runTier2Once();
+    const before = residentKib() orelse return error.SkipZigTest;
+    for (0..200) |_| try runTier2Once();
+    const after = residentKib() orelse return error.SkipZigTest;
+    // A leak of 64 KiB for each interp, for example the pages of a code
+    // region that stay mapped, gives 12.5 MiB.
+    testing.expect(after < before + 8 * 1024) catch |e| {
+        std.debug.print("resident memory: {d} KiB before, {d} KiB after\n", .{ before, after });
+        return e;
+    };
 }
 
 test "tier 2: an overflow in pass 1000 gives a big integer" {
