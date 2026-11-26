@@ -28,6 +28,10 @@ Issue #110 has the goal: `ztcl::linux::*`, calls to the desktop portals and a sm
 | 04 | The portal request: the `Request` object, its `Response` signal, `settings read`, and `screenshot`. |
 | 05 | Docs: a page `docs/linux.md`, the capability in `docs/limits.md` and AGENTS.md rule 3, and the commands in `docs/language.md`. |
 
+## State
+
+- Task 01: `src/dbus.zig` with `marshal`, `unmarshal`, and `typeEnd`, and unit tests of the wire format.
+
 ## Rules for each task
 
 1. Read AGENTS.md, WRITING.md, and `docs/dev/design.md` first. Run each build and test under the memory cap.
