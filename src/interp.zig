@@ -882,13 +882,16 @@ pub const Capability = enum(u32) {
     /// keys below them, on Windows. A key such as `Run` starts a program
     /// at the next login, so the list is the only reach.
     registry = 16384,
-    // 16384 is `registry` (ztcl#150), and 32768 is `notify` (ztcl#153).
+    // 16384 is `registry`, and 32768 is `notify`.
     /// `ztcl::mac::keychain`: the generic passwords of the login keychain,
     /// for the services of `Interp.keychain_allow` only, on macOS.
     keychain = 65536,
     /// `ztcl::mac::defaults`: the user defaults of the domains of
     /// `Interp.defaults_allow` only, on macOS.
     defaults = 131072,
+    /// `ztcl::notify`: a notification of the system with the texts of the
+    /// script. 16384 is `registry` of ztcl#150.
+    notify = 32768,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -1068,6 +1071,8 @@ pub const Interp = struct {
     keychain_allow: []const []const u8 = &.{},
     /// The defaults domains of `ztcl::mac::defaults`. Empty: none.
     defaults_allow: []const []const u8 = &.{},
+    /// The notifier of `ztcl::notify`, from the embedder. Null: the system.
+    notify_host: ?@import("notify.zig").Host = null,
     /// The event loop that this interpreter shares with its parent.
     events: ?*@import("event.zig").State = null,
     /// The network policy of `socket`. The embedder sets it.
@@ -1452,6 +1457,7 @@ pub const Interp = struct {
         it.registry_allow = keep.registry_allow;
         it.keychain_allow = keep.keychain_allow;
         it.defaults_allow = keep.defaults_allow;
+        it.notify_host = keep.notify_host;
         it.exec_host = keep.exec_host;
         it.net = keep.net;
         it.thread_limits = keep.thread_limits;
@@ -1519,6 +1525,7 @@ pub const Interp = struct {
         if (new & @backingInt(Capability.registry) != 0) try @import("winreg.zig").register(it);
         if (new & @backingInt(Capability.keychain) != 0) try @import("mac.zig").registerKeychain(it);
         if (new & @backingInt(Capability.defaults) != 0) try @import("mac.zig").registerDefaults(it);
+        if (new & @backingInt(Capability.notify) != 0) try @import("notify.zig").register(it);
         if (comptime chan_supported) {
             if (new & @backingInt(Capability.channels) != 0) try @import("chan.zig").register(it);
         }
