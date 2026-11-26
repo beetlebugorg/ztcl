@@ -71,7 +71,7 @@ ztcl::vm delete $vm
 - `create` checks the configuration and gives a handle. The default is 1 CPU, 256 MB, and the base image of the guest (see "The guest image"). `-kernel` and `-initrd` give another kernel and initramfs.
 - `-disk` adds a virtio block device, in the order of the options (`/dev/vda`, `/dev/vdb`, ...). A disk is read-only unless its file name is followed by `rw`, as in `-disk {data.img rw}`.
 - `-share {host guest}` gives the folder `host` to the guest, mounted at `guest` by the agent. A share is read-only unless the third word is `rw`.
-- `start` waits for the agent of the guest to answer on vsock, so the next `exec` works at once.
+- `start` waits for the framework to say that the guest runs. `vsock` tries a refused connection again at once until its timeout, so the first connection waits for the program of the guest. With the agent of step 4, `start` waits for the agent.
 - `exec` runs a program in the guest through the agent and gives its standard output, as `exec` does on the host. A program that ends with a code other than 0, or that writes to its standard error, gives an error with the code `CHILDSTATUS` or the text, as with `exec`. There is no shell, as with `exec` on the host.
 - `vsock` connects to a port of the guest and gives a channel, readable and writable, in binary translation. `fileevent` and `fconfigure -blocking 0` work on it as on a socket.
 - `console` gives the console of the guest (`hvc0`) as a channel.
@@ -80,9 +80,9 @@ ztcl::vm delete $vm
 
 ## The `vm` capability and the limits
 
-`ztcl::vm` exists only with the new capability `vm` (bit 262144). A child interp gets it only when its parent has `vm`. The channels of `vsock` and `console` also need `channels`.
+`ztcl::vm` exists only with the new capability `vm` (bit 262144). A child interp never gets it, so the limits count the guests of one interpreter. The channels of `vsock` and `console` also need `channels`.
 
-- Each path (`-kernel`, `-initrd`, `-disk`, `-share`) also needs `file`, and each is a path below the root folder of the file jail (`fsroot.zig`). ztcl opens the path in the jail and gives the framework the final path of the open descriptor (`F_GETPATH` on macOS), so a link that a script makes cannot point the guest outside the root folder. On macOS 14 and later a disk goes to the framework as the open descriptor itself (`VZDiskBlockDeviceStorageDeviceAttachment`).
+- Each path (`-kernel`, `-initrd`, `-disk`, `-share`) also needs `file`, and each is a path below the root folder of the file jail (`fsroot.zig`). ztcl opens the path in the jail and gives the framework the final path of the open descriptor (`F_GETPATH` on macOS), so a link that a script makes cannot point the guest outside the root folder. The framework opens the path again, so a script that swaps the file between the two opens can give the guest another file below the root folder, and none outside it. The attachment of the framework for an open descriptor (`VZDiskBlockDeviceStorageDeviceAttachment`) is for block devices, so a disk image goes by its path.
 - The guest is apart from the host: it reaches only its shares, its disks, and the vsock ports that the host connects to. The guest has no network in the first steps.
 - The embedder sets the limits in `Interp.vm_host`: the most CPUs and memory of one guest, and the most guests at once. The default is 4 CPUs, 2,048 MB, and 4 guests.
 - The memory of a guest is outside the memory limit of the interpreter, as the memory of a process of `exec` is.
@@ -136,7 +136,7 @@ The spike builds its own guest. The proper image is the tiny kernel and BusyBox 
 ## Steps
 
 1. The spike (this PR).
-2. `vz.zig` as the core of `src/vm.zig` with `create`, `start`, `stop`, `status`, `console`, `vsock`, and the capability, on macOS. `vm.zig` is the name of the bytecode file today, so the new file is `src/microvm.zig`, and the command stays `ztcl::vm`.
+2. `vz.zig` as the core of `src/microvm.zig` with `create`, `start`, `stop`, `status`, `console`, `vsock`, `delete`, `-warm`, and the capability, on macOS (done). `vm.zig` is the name of the bytecode file, so the new file is `src/microvm.zig`, and the command stays `ztcl::vm`. A child interp has no `vm`, so the limits count the guests of one interpreter. `tools/vm-guest/test.sh` runs the boot test on a Mac with the hypervisor.
 3. The entitlements in the Zig signer.
 4. The agent with `exec` and `mount`, and the guest image from dockyard#13.
 5. The KVM part.
