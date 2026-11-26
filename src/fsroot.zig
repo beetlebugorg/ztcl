@@ -488,7 +488,7 @@ pub fn listDir(it: *Interp, rel: []const u8) Error!ListResult {
     var out: std.ArrayList([]const u8) = .empty;
     if (comptime on_mac) {
         // `closedir` closes the descriptor.
-        const dir = std.c.fdopendir(fd) orelse {
+        const dir = sys.os.openDir(fd) orelse {
             _ = linux.close(fd);
             return .{ .err = .IO };
         };

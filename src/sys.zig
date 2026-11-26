@@ -105,21 +105,28 @@ const darwin = struct {
         return ret(c.symlinkat(target, dir, path));
     }
 
-    extern "c" fn fstatat(dir: c_int, path: [*:0]const u8, st: *c.Stat, flags: c_int) c_int;
-    extern "c" fn fstat(fd: c_int, st: *c.Stat) c_int;
-    extern "c" fn readdir(dir: *c.DIR) ?*c.dirent;
+    // `std.c` links the forms with 64-bit inodes on x86-64 macOS
+    // (`fstat$INODE64` and the others), which have the layout of `c.Stat`
+    // and `c.dirent`. The plain names there have the old layout.
 
     /// The data of a name in a folder, with no symlink followed.
     pub fn statAt(dir: i32, path: [*:0]const u8, st: *c.Stat) usize {
-        return ret(fstatat(dir, path, st, AT.SYMLINK_NOFOLLOW));
+        return ret(c.fstatat(dir, path, st, @intCast(AT.SYMLINK_NOFOLLOW)));
     }
 
     pub fn statFd(fd: i32, st: *c.Stat) usize {
-        return ret(fstat(fd, st));
+        return ret(c.fstat(fd, st));
     }
 
+    /// `fdopendir` of the form that `readdir` of `std.c` reads.
+    pub fn openDir(fd: i32) ?*c.DIR {
+        if (comptime builtin.cpu.arch == .x86_64) return @"fdopendir$INODE64"(fd);
+        return c.fdopendir(fd);
+    }
+    extern "c" fn @"fdopendir$INODE64"(fd: c_int) ?*c.DIR;
+
     pub fn nextName(dir: *c.DIR) ?[]const u8 {
-        const d = readdir(dir) orelse return null;
+        const d = c.readdir(dir) orelse return null;
         return d.name[0..d.namlen];
     }
 
