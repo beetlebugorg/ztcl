@@ -413,6 +413,11 @@ pub fn stat(it: *Interp, rel: []const u8) Error!fsroot.StatResult {
     }
     defer _ = CloseHandle(h);
     if (!insideRoot(it, h)) return .{ .err = .ACCES };
+    return statHandle(h);
+}
+
+/// The data of an open handle.
+fn statHandle(h: HANDLE) fsroot.StatResult {
     var io: IoStatus = undefined;
     var basic: BasicInfo = undefined;
     var standard: StandardInfo = undefined;
@@ -446,7 +451,8 @@ pub fn stat(it: *Interp, rel: []const u8) Error!fsroot.StatResult {
 
 pub fn listDir(it: *Interp, rel: []const u8) Error!fsroot.ListResult {
     const a = it.alloc();
-    const fd = switch (try openRel(it, rel, .{ .directory = true }, 0)) {
+    // The open of fsroot, which also has host mode.
+    const fd = switch (try fsroot.openRel(it, rel, .{ .directory = true }, 0)) {
         .fd => |x| x,
         .err => |e| return .{ .err = e },
     };
@@ -566,4 +572,122 @@ pub fn renameAt(p: fsroot.Parent, q: fsroot.Parent) ?E {
         rc = NtSetInformationFile(h, &io, &info, size, class_rename);
     }
     return if (rc < 0) ntError(rc) else null;
+}
+
+// ---- Host mode ----
+//
+// In host mode the path is an absolute path of the host (`C:/a/b` or
+// `//server/share/a`), and each open names it in full with `CreateFileW`,
+// which follows symlinks, junctions, and mount points as tclsh does. The
+// calls at a parent (`removeAt`, `mkdirAt`, `renameAt`) run on a handle of
+// the parent folder, which `hostParent` opens by its full path.
+
+extern "kernel32" fn GetCurrentDirectoryW(len: DWORD, buf: ?[*]u16) callconv(.winapi) DWORD;
+extern "kernel32" fn GetLastError() callconv(.winapi) DWORD;
+
+const create_new: u32 = 1;
+const open_always: u32 = 4;
+
+/// The current folder of the process.
+pub fn currentFolder(a: std.mem.Allocator) ![]const u16 {
+    const n = GetCurrentDirectoryW(0, null);
+    if (n == 0) return error.BadRoot;
+    const buf = try a.alloc(u16, n);
+    const got = GetCurrentDirectoryW(n, buf.ptr);
+    if (got == 0 or got >= n) return error.BadRoot;
+    return buf[0..got];
+}
+
+/// The error of the last call, with the codes of the same meaning joined.
+fn lastError() E {
+    return switch (GetLastError()) {
+        2, 3, 161 => .NOENT,
+        5, 32 => .ACCES,
+        80, 183 => .EXIST,
+        145 => .NOTEMPTY,
+        267 => .NOTDIR,
+        206 => .NAMETOOLONG,
+        else => |c| @enumFromInt(c),
+    };
+}
+
+fn widePath(a: std.mem.Allocator, path: []const u8) ![:0]u16 {
+    const w = try std.unicode.utf8ToUtf16LeAllocZ(a, path);
+    for (w) |*c| {
+        if (c.* == '/') c.* = '\\';
+    }
+    return w;
+}
+
+fn isFolder(h: HANDLE) ?bool {
+    var io: IoStatus = undefined;
+    var tag: TagInfo = undefined;
+    if (NtQueryInformationFile(h, &io, &tag, @sizeOf(TagInfo), class_attribute_tag) < 0) return null;
+    return tag.attributes & attr_directory != 0;
+}
+
+pub fn hostOpen(it: *Interp, path: []const u8, flags: sys.OpenFlags, mode: u32) Error!fsroot.OpenResult {
+    const wide = widePath(it.alloc(), path) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => return .{ .err = .ACCES },
+    };
+    var access: u32 = read_access;
+    if (flags.directory or flags.path_only) {
+        access = dir_access;
+    } else {
+        if (flags.access == .write) access = write_access;
+        if (flags.access == .read_write) access = read_access | write_access;
+        if (flags.access != .read) access |= if (flags.append and !flags.truncate) file_append_data else file_write_data | file_append_data;
+    }
+    const disposition: u32 = if (flags.create and flags.exclusive) create_new else if (flags.create) open_always else open_existing;
+    const attributes: u32 = if (flags.create and mode & 0o200 == 0) attr_readonly else attr_normal;
+    // Backup semantics open a folder too. The kind check is below.
+    const h = CreateFileW(wide.ptr, access, share_all, null, disposition, attributes | flag_backup_semantics, null);
+    if (h == invalid_handle) return .{ .err = lastError() };
+    var keep = false;
+    defer if (!keep) {
+        _ = CloseHandle(h);
+    };
+    const folder = isFolder(h) orelse return .{ .err = .ACCES };
+    if (flags.directory and !folder) return .{ .err = .NOTDIR };
+    // As on Linux, a folder opens for reading, and its read is an error.
+    if (!flags.directory and !flags.path_only and flags.access != .read and folder) return .{ .err = .ISDIR };
+    if (flags.truncate) {
+        var io: IoStatus = undefined;
+        const zero: i64 = 0;
+        const rc = NtSetInformationFile(h, &io, &zero, @sizeOf(i64), class_end_of_file);
+        if (rc < 0) return .{ .err = ntError(rc) };
+    }
+    const fd = sys.win.fdOfHandle(h) orelse return .{ .err = .ACCES };
+    keep = true;
+    return .{ .fd = fd };
+}
+
+/// A handle of the parent folder of an absolute host path, and the last name.
+pub fn hostParent(it: *Interp, path: []const u8) Error!fsroot.ParentResult {
+    const cut = std.mem.lastIndexOfScalar(u8, path, '/') orelse return .{ .err = .ACCES };
+    const base = path[cut + 1 ..];
+    if (base.len == 0) return .{ .err = .ACCES };
+    // The parent of `C:/x` is `C:/`, with its separator.
+    const dir = if (cut > 0 and path[cut - 1] == ':') path[0 .. cut + 1] else path[0..cut];
+    const h = switch (try hostOpen(it, dir, .{ .directory = true }, 0)) {
+        .fd => |fd| fd,
+        .err => |e| return .{ .err = e },
+    };
+    const name = it.alloc().dupeZ(u8, base) catch |e| {
+        sys.close(h);
+        return e;
+    };
+    return .{ .ok = .{ .fd = h, .base = name } };
+}
+
+pub fn hostStat(it: *Interp, path: []const u8) Error!fsroot.StatResult {
+    const wide = widePath(it.alloc(), path) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => return .{ .err = .ACCES },
+    };
+    const h = CreateFileW(wide.ptr, file_read_attributes | synchronize, share_all, null, open_existing, flag_backup_semantics, null);
+    if (h == invalid_handle) return .{ .err = lastError() };
+    defer _ = CloseHandle(h);
+    return statHandle(h);
 }

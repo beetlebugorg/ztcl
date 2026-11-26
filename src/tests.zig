@@ -2630,3 +2630,51 @@ test "a constructor keeps its call chain through collections" {
 comptime {
     _ = @import("thread_tests.zig");
 }
+
+test "fsroot: the absolute host paths of host mode, for POSIX and Windows" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fs = tcl.fsroot;
+    try std.testing.expectEqualStrings("/home/u/x", (try fs.joinPosix(a, "/home/u", "x")).?);
+    try std.testing.expectEqualStrings("/etc/hosts", (try fs.joinPosix(a, "/home/u", "/etc/./hosts")).?);
+    try std.testing.expectEqualStrings("/", (try fs.joinPosix(a, "/home", "../../..")).?);
+    try std.testing.expectEqualStrings("/home/v", (try fs.joinPosix(a, "/home/u", "../v/")).?);
+    try std.testing.expect((try fs.joinPosix(a, "/", "a\x00b")) == null);
+    try std.testing.expectEqualStrings("C:/Users/u/x.txt", (try fs.joinWindows(a, "C:/Users/u", "x.txt")).?);
+    try std.testing.expectEqualStrings("D:/a/c", (try fs.joinWindows(a, "C:/Users/u", "D:\\a\\b\\..\\c")).?);
+    try std.testing.expectEqualStrings("C:/Windows", (try fs.joinWindows(a, "C:/Users/u", "/Windows")).?);
+    try std.testing.expectEqualStrings("C:/", (try fs.joinWindows(a, "C:/Users", "../..")).?);
+    try std.testing.expectEqualStrings("//srv/share/a", (try fs.joinWindows(a, "C:/x", "\\\\srv\\share\\a")).?);
+    try std.testing.expectEqualStrings("//srv/share/b", (try fs.joinWindows(a, "//srv/share/a", "../b")).?);
+    try std.testing.expectEqualStrings("E:/x", (try fs.joinWindows(a, "C:/", "E:x")).?);
+}
+
+test "fsroot: host mode uses the real paths of the host, and a root ends it" {
+    if (comptime !tcl.fsroot.supported or @import("builtin").os.tag == .wasi) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.file));
+    try tcl.fsroot.setHost(&it);
+    const v = try it.eval(
+        \\set d [file join [pwd] .zig-cache ztcl-host-test]
+        \\file delete -force $d
+        \\file mkdir $d/sub
+        \\set f [open $d/sub/a.txt w]; puts -nonewline $f hello; close $f
+        \\set f [open $d/sub/a.txt]; set got [read $f]; close $f
+        \\cd $d
+        \\set r [list $got [glob sub/*.txt] [string equal [pwd] $d] [file exists $d/sub/a.txt]]
+        \\lappend r [string equal [file normalize sub/../sub/a.txt] $d/sub/a.txt]
+        \\file rename sub/a.txt sub/b.txt
+        \\lappend r [file exists sub/b.txt]
+        \\cd ..
+        \\file delete -force $d
+        \\lappend r [file exists $d]
+    );
+    try std.testing.expectEqualStrings("hello sub/a.txt 1 1 1 1 0", try it.str(v));
+    // A root after host mode puts the interpreter in the jail again.
+    try tcl.fsroot.setRoot(&it, ".");
+    try std.testing.expect(!it.fs.host);
+    try std.testing.expectEqualStrings("/", try it.str(try it.eval("pwd")));
+}

@@ -129,7 +129,7 @@ ztcl.sys.ignorePipeSignal(); // a write to a closed peer is an error, with no si
 | Capability | Data of the embedder |
 |---|---|
 | `clock` | `Interp.clock_host`: the time and the zone data. |
-| `channels`, `file` | `ztcl.fsroot.setRoot`: the one root folder. |
+| `channels`, `file` | `ztcl.fsroot.setRoot`: the one root folder. Or `ztcl.fsroot.setHost`: the real paths of the host, as in tclsh. |
 | `event` | `Interp.event_host`: a clock that does not go back, and a sleep. |
 | `socket` | `Interp.net`: the network policy. The default is `loopback`. |
 | `exec` | `Interp.exec_host`: the program list, the list of files below the root, the time limit, and the environment. |

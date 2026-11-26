@@ -434,6 +434,10 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             // script. It must not end the runner.
             if (comptime chan_ok) tcl.sys.ignorePipeSignal();
             try it.allow(bits);
+            // The files of the host, as in tclsh, unless --root came first.
+            // A --root after this flag turns the jail on.
+            const fs_bits = @intFromEnum(tcl.interp.Capability.file) | @intFromEnum(tcl.interp.Capability.channels);
+            if (root == null and bits & fs_bits != 0 and !it.fs.host) tcl.fsroot.setHost(&it) catch {};
             continue;
         }
         if (std.mem.eql(u8, arg, "--exec-timeout") and i + 1 < args.len) {

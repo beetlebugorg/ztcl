@@ -41,7 +41,9 @@ fn joinPath(it: *Interp, parts: []const Value) Error![]const u8 {
     for (parts) |v| {
         const s = try it.str(v);
         if (s.len == 0) continue;
-        if (s[0] == '/') out.clearRetainingCapacity();
+        // A part from the top starts again: `/a`, and in host mode on
+        // Windows a drive or a share, such as `C:/a`.
+        if (s[0] == '/' or fsroot.hostPrefix(it, s) != null) out.clearRetainingCapacity();
         for (try splitPath(it, s)) |w| {
             const t = try it.str(w);
             if (eql(t, "/")) {
@@ -464,6 +466,10 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (eql(s, "nativename")) return .{ .str = try one(it, s, args) };
     if (eql(s, "pathtype")) {
         const p = try one(it, s, args);
+        // In host mode on Windows, as in tclsh: a drive or a share is
+        // absolute, and `/a` is on the volume of the current folder.
+        if (fsroot.hostPrefix(it, p) != null) return .{ .str = "absolute" };
+        if (it.fs.host and @import("builtin").os.tag == .windows and p.len > 0 and p[0] == '/') return .{ .str = "volumerelative" };
         return .{ .str = if (p.len > 0 and p[0] == '/') "absolute" else "relative" };
     }
     if (eql(s, "separator")) return .{ .str = "/" };
@@ -476,7 +482,7 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     if (eql(s, "normalize")) {
         const rel = try fsroot.need(it, try one(it, s, args));
-        return .{ .str = try std.fmt.allocPrint(a, "/{s}", .{rel}) };
+        return .{ .str = try fsroot.shown(it, rel) };
     }
     if (eql(s, "link") or eql(s, "readlink")) {
         return it.failCode("POSIX EACCES {permission denied}", "could not {s}: links are not available in the root folder", .{s});
@@ -543,7 +549,7 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                     sys.close(fd);
                     const argv2 = [_]Value{ .{ .str = "open" }, .{ .str = name }, .{ .str = "r+" } };
                     const ch = try it.callWords(&argv2);
-                    if (args.len >= 1) try it.setVar(try it.str(args[0]), .{ .str = try std.fmt.allocPrint(a, "/{s}", .{rel}) });
+                    if (args.len >= 1) try it.setVar(try it.str(args[0]), .{ .str = try fsroot.shown(it, rel) });
                     return ch;
                 },
                 .err => |e| if (e != .EXIST) return fsroot.posixError(it, e, "couldn't create temporary file: "),
@@ -556,7 +562,7 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 
 fn cmdPwd(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 1) return it.wrongArgs("pwd");
-    return .{ .str = try std.fmt.allocPrint(it.alloc(), "/{s}", .{it.fs.cwd}) };
+    return .{ .str = try fsroot.shown(it, it.fs.cwd) };
 }
 
 fn cmdCd(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
@@ -625,7 +631,8 @@ fn globWalk(it: *Interp, base: []const u8, shown: []const u8, parts: []const []c
     const p = parts[0];
     if (!hasMeta(p)) {
         const rel = try join(a, base, p);
-        const norm = (try fsroot.normal(it, try std.fmt.allocPrint(a, "/{s}", .{rel}))) orelse return;
+        // In host mode the joined path is a host path already.
+        const norm = (try fsroot.normal(it, if (it.fs.host) rel else try std.fmt.allocPrint(a, "/{s}", .{rel}))) orelse return;
         switch (try fsroot.stat(it, norm)) {
             .ok => try globWalk(it, norm, try join(a, shown, p), parts[1..], out),
             .err => {},
@@ -695,12 +702,15 @@ fn cmdGlob(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         try braces(it, try std.mem.concat(a, u8, &.{ prefix, try it.str(v) }), &pats);
         for (pats.items) |pat| {
             var words: std.ArrayList([]const u8) = .empty;
-            var iter = std.mem.tokenizeScalar(u8, pat, '/');
+            // A drive or a share of Windows in host mode starts the walk there.
+            const lead: ?[]const u8 = if (dir == null) fsroot.hostPrefix(it, pat) else null;
+            var iter = std.mem.tokenizeScalar(u8, if (lead) |l| pat[l.len..] else pat, '/');
             while (iter.next()) |w| try words.append(a, w);
-            const absolute = dir == null and pat.len > 0 and pat[0] == '/';
-            const from = if (absolute) "/" else (dir orelse ".");
+            const absolute = dir == null and (lead != null or (pat.len > 0 and pat[0] == '/'));
+            const top: []const u8 = if (lead) |l| try std.fmt.allocPrint(a, "{s}/", .{l}) else "/";
+            const from = if (absolute) top else (dir orelse ".");
             const base = (try fsroot.normal(it, from)) orelse return it.failCode("POSIX EACCES {permission denied}", "couldn't read directory \"{s}\": permission denied", .{from});
-            const shown: []const u8 = if (absolute) "/" else (dir orelse "");
+            const shown: []const u8 = if (absolute) top else (dir orelse "");
             try globWalk(it, base, shown, words.items, &results);
         }
     }
