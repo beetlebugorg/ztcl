@@ -74,6 +74,11 @@ pub const Spawn = struct {
     root: ?[]const u8 = null,
     /// Whether the child can use the network (the capability `socket`).
     net: bool = false,
+    /// The files of the host (`thread::create -files host`): the child
+    /// runs with no AppContainer, so it reaches each file and each
+    /// network address of the user. It keeps the job and gets a token
+    /// with no privilege. `root` and `net` do not apply.
+    host_files: bool = false,
     /// For a test: a handle that the child gets as its standard output
     /// and error. Null gives the child no standard handle.
     stdout: ?HANDLE = null,
@@ -95,9 +100,10 @@ pub const Child = struct {
     job: HANDLE,
     port: HANDLE,
     pid: u32,
-    sid: PSID,
-    /// The name of the AppContainer profile of the child.
-    name: [:0]u16,
+    /// The SID and the profile name of the AppContainer of the child, or
+    /// null for a child of `host_files`.
+    sid: ?PSID,
+    name: ?[:0]u16,
     /// The root folder with the ACE of `sid`, or null.
     root: ?[:0]u16,
     killed: bool = false,
@@ -153,16 +159,18 @@ pub const Child = struct {
             _ = c.wait(5000);
         }
         if (c.root) |r| {
-            setAce(r, c.sid, 0, revoke_access, 0) catch {};
+            if (c.sid) |sid| setAce(r, sid, 0, revoke_access, 0) catch {};
             c.a.free(r);
         }
         if (c.pipe_owned) _ = CloseHandle(c.pipe);
         _ = CloseHandle(c.process);
         _ = CloseHandle(c.job);
         _ = CloseHandle(c.port);
-        _ = FreeSid(c.sid);
-        _ = DeleteAppContainerProfile(c.name.ptr);
-        c.a.free(c.name);
+        if (c.sid) |sid| _ = FreeSid(sid);
+        if (c.name) |n| {
+            _ = DeleteAppContainerProfile(n.ptr);
+            c.a.free(n);
+        }
         c.* = undefined;
     }
 
@@ -202,36 +210,45 @@ pub fn spawn(a: std.mem.Allocator, self_exe: []const u8, s: Spawn) SpawnError!Ch
     const runner = try runnerCopy(a, self_exe);
     defer a.free(runner);
 
-    // The AppContainer of this child.
-    var name_buf: [64]u8 = undefined;
-    const name = std.fmt.bufPrint(&name_buf, "ztcl.iso.{d}.{d}", .{ GetCurrentProcessId(), counter.fetchAdd(1, .monotonic) }) catch unreachable;
-    const name_w = try wide(a, name);
-    var name_owned = true;
-    errdefer if (name_owned) a.free(name_w);
-    // A profile from a parent with the same pid that ended before it
-    // could delete it.
-    _ = DeleteAppContainerProfile(name_w.ptr);
-    var sid: PSID = undefined;
-    const display = std.unicode.utf8ToUtf16LeStringLiteral("ztcl thread");
-    const hr = CreateAppContainerProfile(name_w.ptr, display, display, null, 0, &sid);
-    if (hr < 0) {
-        last_error = @bitCast(hr);
-        return error.SpawnFailed;
-    }
-    var sid_owned = true;
-    errdefer if (sid_owned) {
-        _ = FreeSid(sid);
-        _ = DeleteAppContainerProfile(name_w.ptr);
+    // The AppContainer of this child, with no AppContainer for the files
+    // of the host.
+    var name_w: ?[:0]u16 = null;
+    var sid: ?PSID = null;
+    var owned = true;
+    errdefer if (owned) {
+        if (sid) |p| _ = FreeSid(p);
+        if (name_w) |n| {
+            _ = DeleteAppContainerProfile(n.ptr);
+            a.free(n);
+        }
     };
+    if (!s.host_files) {
+        var name_buf: [64]u8 = undefined;
+        const name = std.fmt.bufPrint(&name_buf, "ztcl.iso.{d}.{d}", .{ GetCurrentProcessId(), counter.fetchAdd(1, .monotonic) }) catch unreachable;
+        const n = try wide(a, name);
+        name_w = n;
+        // A profile from a parent with the same pid that ended before it
+        // could delete it.
+        _ = DeleteAppContainerProfile(n.ptr);
+        var p: PSID = undefined;
+        const display = std.unicode.utf8ToUtf16LeStringLiteral("ztcl thread");
+        const hr = CreateAppContainerProfile(n.ptr, display, display, null, 0, &p);
+        if (hr < 0) {
+            last_error = @bitCast(hr);
+            return error.SpawnFailed;
+        }
+        sid = p;
+    }
 
     var root_w: ?[:0]u16 = null;
     errdefer if (root_w) |r| {
-        setAce(r, sid, 0, revoke_access, 0) catch {};
+        if (sid) |p| setAce(r, p, 0, revoke_access, 0) catch {};
         a.free(r);
     };
-    if (s.root) |r| {
+    if (sid != null and s.root != null) {
+        const r = s.root.?;
         const rw = try wide(a, r);
-        setAce(rw, sid, file_modify, grant_access, sub_containers_and_objects) catch {
+        setAce(rw, sid.?, file_modify, grant_access, sub_containers_and_objects) catch {
             a.free(rw);
             return error.SpawnFailed;
         };
@@ -303,7 +320,7 @@ pub fn spawn(a: std.mem.Allocator, self_exe: []const u8, s: Spawn) SpawnError!Ch
             ncaps += 1;
         }
     }
-    var sc: SECURITY_CAPABILITIES = .{ .AppContainerSid = sid, .Capabilities = if (ncaps > 0) &caps else null, .CapabilityCount = ncaps };
+    var sc: SECURITY_CAPABILITIES = .{ .AppContainerSid = sid orelse undefined, .Capabilities = if (ncaps > 0) &caps else null, .CapabilityCount = ncaps };
     var handles: [2]HANDLE = .{ ends.child, undefined };
     var nhandles: usize = 1;
     if (s.stdout) |h| {
@@ -317,7 +334,9 @@ pub fn spawn(a: std.mem.Allocator, self_exe: []const u8, s: Spawn) SpawnError!Ch
     if (InitializeProcThreadAttributeList(attrs.ptr, 2, 0, &size) == 0) return failed();
     defer DeleteProcThreadAttributeList(attrs.ptr);
     if (UpdateProcThreadAttribute(attrs.ptr, 0, attr_handle_list, &handles, nhandles * @sizeOf(HANDLE), null, null) == 0) return failed();
-    if (UpdateProcThreadAttribute(attrs.ptr, 0, attr_security_capabilities, &sc, @sizeOf(SECURITY_CAPABILITIES), null, null) == 0) return failed();
+    if (sid != null) {
+        if (UpdateProcThreadAttribute(attrs.ptr, 0, attr_security_capabilities, &sc, @sizeOf(SECURITY_CAPABILITIES), null, null) == 0) return failed();
+    }
 
     var si: STARTUPINFOEXW = .{ .info = .{ .cb = @sizeOf(STARTUPINFOEXW) }, .attrs = attrs.ptr };
     if (s.stdout) |h| {
@@ -329,7 +348,15 @@ pub fn spawn(a: std.mem.Allocator, self_exe: []const u8, s: Spawn) SpawnError!Ch
     }
     var pi: PROCESS_INFORMATION = undefined;
     const flags: DWORD = extended_startupinfo_present | create_suspended | create_no_window | create_unicode_environment;
-    if (CreateProcessW(exe_w.ptr, line_w.ptr, null, null, 1, flags, env.items.ptr, if (root_w) |r| r.ptr else null, &si, &pi) == 0) return failed();
+    const cwd: ?[*:0]const u16 = if (root_w) |r| r.ptr else null;
+    if (sid == null) {
+        // The files of the host: the token of the user with no privilege
+        // past the bypass of traverse checks. The child starts in the
+        // current folder of the parent.
+        const token = try plainToken();
+        defer _ = CloseHandle(token);
+        if (CreateProcessAsUserW(token, exe_w.ptr, line_w.ptr, null, null, 1, flags, env.items.ptr, null, &si, &pi) == 0) return failed();
+    } else if (CreateProcessW(exe_w.ptr, line_w.ptr, null, null, 1, flags, env.items.ptr, cwd, &si, &pi) == 0) return failed();
     defer _ = CloseHandle(pi.hThread);
     if (AssignProcessToJobObject(job, pi.hProcess) == 0) {
         _ = TerminateProcess(pi.hProcess, killed_code);
@@ -337,8 +364,7 @@ pub fn spawn(a: std.mem.Allocator, self_exe: []const u8, s: Spawn) SpawnError!Ch
         return error.SpawnFailed;
     }
     _ = ResumeThread(pi.hThread);
-    sid_owned = false;
-    name_owned = false;
+    owned = false;
     return .{
         .a = a,
         .pipe = ends.parent,
@@ -350,6 +376,26 @@ pub fn spawn(a: std.mem.Allocator, self_exe: []const u8, s: Spawn) SpawnError!Ch
         .name = name_w,
         .root = root_w,
     };
+}
+
+/// The token of a child of `host_files`: the token of this process with
+/// no privilege past `SeChangeNotifyPrivilege` (`DISABLE_MAX_PRIVILEGE`)
+/// and the group of the administrators for deny only, so an elevated
+/// parent gives no power of an administrator.
+fn plainToken() SpawnError!HANDLE {
+    const token_assign_primary = 0x1;
+    const token_duplicate = 0x2;
+    var mine: HANDLE = undefined;
+    if (OpenProcessToken(GetCurrentProcess(), token_assign_primary | token_duplicate | token_query, &mine) == 0) return failed();
+    defer _ = CloseHandle(mine);
+    var admins: PSID = undefined;
+    if (ConvertStringSidToSidW(std.unicode.utf8ToUtf16LeStringLiteral("S-1-5-32-544"), &admins) == 0) return failed();
+    defer _ = LocalFree(admins);
+    var disable = [_]SID_AND_ATTRIBUTES{.{ .Sid = admins, .Attributes = 0 }};
+    const disable_max_privilege = 0x1;
+    var out: HANDLE = undefined;
+    if (CreateRestrictedToken(mine, disable_max_privilege, 1, &disable, 0, null, 0, null, &out) == 0) return failed();
+    return out;
 }
 
 /// The variables of the environment of a child, in order.
@@ -663,6 +709,8 @@ extern "kernel32" fn CopyFileW(src: [*:0]const u16, dst: [*:0]const u16, fail_if
 extern "kernel32" fn GetFileAttributesExW(name: [*:0]const u16, level: c_int, info: *FILE_ATTRIBUTE_DATA) callconv(.winapi) BOOL;
 extern "kernel32" fn LocalFree(p: ?*anyopaque) callconv(.winapi) ?*anyopaque;
 extern "advapi32" fn OpenProcessToken(proc: HANDLE, access: DWORD, token: *HANDLE) callconv(.winapi) BOOL;
+extern "advapi32" fn CreateRestrictedToken(token: HANDLE, flags: DWORD, ndisable: DWORD, disable: ?[*]SID_AND_ATTRIBUTES, ndelete: DWORD, delete: ?*anyopaque, nrestrict: DWORD, restrict: ?*anyopaque, new: *HANDLE) callconv(.winapi) BOOL;
+extern "advapi32" fn CreateProcessAsUserW(token: HANDLE, app: ?[*:0]const u16, cmd: ?[*:0]u16, pa: ?*anyopaque, ta: ?*anyopaque, inherit: BOOL, flags: DWORD, env: ?*anyopaque, cwd: ?[*:0]const u16, si: *STARTUPINFOEXW, pi: *PROCESS_INFORMATION) callconv(.winapi) BOOL;
 extern "advapi32" fn GetTokenInformation(token: HANDLE, class: c_int, info: *anyopaque, len: DWORD, ret: *DWORD) callconv(.winapi) BOOL;
 extern "advapi32" fn ConvertSidToStringSidW(sid: PSID, out: *?[*:0]u16) callconv(.winapi) BOOL;
 extern "advapi32" fn ConvertStringSidToSidW(s: [*:0]const u16, out: *PSID) callconv(.winapi) BOOL;

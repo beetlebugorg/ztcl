@@ -761,6 +761,9 @@ pub const Opts = struct {
     /// The level of the thread (ztcl#209). A level past `interp` runs the
     /// thread in a child process through `isothread.zig`.
     isolation: Isolation = .interp,
+    /// `-files host`: an isolated thread of a creator in host mode gets
+    /// the files of the host (`isothread.prepare`).
+    host_files: bool = false,
 };
 
 pub const Isolation = enum { interp, process };
@@ -817,7 +820,7 @@ pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
         }
         return it.failCode("ZTCL ISOLATION LEVEL", "the level process is not available on this platform yet", .{});
     }
-    const iso = if (comptime iso_ok) (if (o.isolation != .interp) @import("isothread.zig").prepare(it, w, st) catch |e| {
+    const iso = if (comptime iso_ok) (if (o.isolation != .interp) @import("isothread.zig").prepare(it, w, st, o.host_files) catch |e| {
         if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left += steps;
         g.lock.unlock();
         g.alloc().free(text);

@@ -295,13 +295,21 @@ fn rootOf(it: *Interp) *Interp {
 
 /// Makes the bridge of a new isolated thread. The caller holds the
 /// group lock, so this only allocates.
-pub fn prepare(it: *Interp, w: *Worker, st: anytype) Error!*Bridge {
+pub fn prepare(it: *Interp, w: *Worker, st: anytype, host_files: bool) Error!*Bridge {
     if (comptime !supported) return it.failCode("ZTCL ISOLATION LEVEL", "the level process is not available on this platform yet", .{});
     const root = rootOf(it);
     if (root.iso_spawn == null and !spawns_runner)
         return it.failCode("ZTCL ISOLATION LEVEL", "the level process is not available on this platform yet", .{});
     if (root.iso_runner == null and root.iso_spawn == null)
         return it.failCode("ZTCL ISOLATION RUNNER", "the embedder gives no runner for isolated threads", .{});
+    // The sandbox of a child gives it no folder of the user, so host mode
+    // with no `-files host` gives it only errors of access later. A
+    // creator with a root folder has no files of the host to give.
+    const file_bits = @backingInt(interp.Capability.file) | @backingInt(interp.Capability.channels);
+    if (root.fs.host and st.caps & file_bits != 0 and !host_files)
+        return it.failCode("ZTCL ISOLATION HOSTFILES", "host file mode is not available in an isolated thread: give the thread a root folder, or pass -files host", .{});
+    if (host_files and !root.fs.host)
+        return it.failCode("ZTCL ISOLATION HOSTFILES", "-files host needs a creator in host mode", .{});
     const g = w.group;
     const b = try g.gpa.create(Bridge);
     b.* = .{
@@ -313,7 +321,7 @@ pub fn prepare(it: *Interp, w: *Worker, st: anytype) Error!*Bridge {
         .caps = st.caps,
         .root = st.fs_path,
         .cwd = st.fs_cwd,
-        .host_files = root.fs.host,
+        .host_files = host_files and st.caps & file_bits != 0,
         .mem_limit = st.mem_limit,
     };
     return b;
@@ -368,7 +376,8 @@ fn spawnRunner(b: *Bridge, runner: []const u8) ?Fd {
 /// it past `sandboxMem` of the memory limit of the thread. With the
 /// capability `file` or `channels`, the AppContainer can read and write
 /// the root folder of the creator, which the child opens as its jail.
-/// Gives the pipe, which the transport then owns.
+/// With `-files host` the child runs with no AppContainer
+/// (`Spawn.host_files`). Gives the pipe, which the transport then owns.
 fn spawnSandbox(b: *Bridge, runner: []const u8) ?Fd {
     if (comptime !on_win) return null;
     const net = b.caps & @backingInt(interp.Capability.socket) != 0;
@@ -377,6 +386,7 @@ fn spawnSandbox(b: *Bridge, runner: []const u8) ?Fd {
     var c = isow.spawn(b.gpa, runner, .{
         .args = &.{},
         .root = if (files) b.root else null,
+        .host_files = b.host_files,
         .net = net,
         .limits = .{ .mem_bytes = sandboxMem(b.mem) },
     }) catch return null;
