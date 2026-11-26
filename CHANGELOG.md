@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Adds the module `ztcl::vt`: the state of a terminal on libghostty-vt 1.0.2, which the build compiles from source with `-Dsimd=false` and links statically. A script feeds it bytes and reads back the rows, the cells, the cursor, the modes, and the dirty rows. It needs no capability. `-Dmod-vt=false` leaves it out. See `docs/modules/vt.md`.
 - Adds `ztcl::pty` on Windows with a pseudo console (ConPTY): `spawn`, `resize`, `size`, `status`, `kill`, and `close`, with the program in the Job Object of `exec`. `kill` with `INT` writes Ctrl-C, and each other signal ends the job.
 
 - Adds `exec`, `pid`, and command pipelines (`open "|cmd"`) on Windows. A bare name goes through the `PATH` and `PATHEXT` of `exec_host.env`, each program gets one full path before it starts, and the allowlist compares that path. A `.bat` or `.cmd` file is an error, because `cmd.exe` reads its arguments with other rules. Each pipeline is a Job Object, so a kill or the time limit ends each process that a program started. See `docs/dev/exec-windows.md`.

@@ -7,3 +7,6 @@ dist/
 
 # The benchmark files that tools/fetch-kostya.sh downloads.
 .kostya/
+
+# The packages that zig fetch unpacks.
+zig-pkg/

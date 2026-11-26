@@ -1135,6 +1135,33 @@ test "the optional commands are absent by default" {
     }
 }
 
+test "ztcl::vt keeps a terminal state with no capability" {
+    if (modules.find("ztcl::vt") == null) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try std.testing.expectEqual(@as(u32, 0), it.capabilities);
+    try std.testing.expectEqualStrings("vt0 {[2;7R} {hello {red 中}} {6 1} 2", try it.str(try it.eval(
+        \\package require ztcl::vt
+        \\set t [ztcl::vt new -size {10 3}]
+        \\ztcl::vt dirty $t
+        \\set r [ztcl::vt feed $t "hello\r\n\x1b\[1;31mred\x1b\[0m \u4e2d\x1b\[6n"]
+        \\list $t [string range $r 1 end] [ztcl::vt rows $t 0 1] [ztcl::vt cursor $t] [llength [ztcl::vt dirty $t]]
+    )));
+    try std.testing.expectEqualStrings("{r 1 1 {} bold} {中 2 {} {} {}} {{} 0 {} {} {}}", try it.str(try it.eval(
+        \\set row [lindex [ztcl::vt cells $t 1] 0]
+        \\list [lindex $row 0] {*}[lrange $row 4 5]
+    )));
+    try std.testing.expectEqualStrings("1 {4 2} 1", try it.str(try it.eval(
+        \\ztcl::vt feed $t "a\r\nb\r\nc\r\n"
+        \\ztcl::vt resize $t 4 2
+        \\list [expr {[ztcl::vt scrollback $t] > 0}] [ztcl::vt size $t] [dict get [ztcl::vt modes $t] cursor_visible]
+    )));
+    // The interpreter frees a terminal that the script did not delete.
+    _ = try it.eval("ztcl::vt new");
+    try std.testing.expectEqualStrings("can not find terminal \"vt0\"", try it.str(try it.eval("ztcl::vt delete vt0; catch {ztcl::vt size vt0} m; set m")));
+}
+
 test "a built-in module installs once and runs with the limits" {
     if (modules.find("ztcl::hello") == null) return error.SkipZigTest;
     var it: tcl.Interp = undefined;

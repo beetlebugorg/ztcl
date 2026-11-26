@@ -52,6 +52,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = if (tsan) true else null,
     });
     ztcl.addOptions("build_options", gc_options);
+    addVt(b, ztcl, target, optimize);
 
     const tests = b.addTest(.{ .root_module = ztcl });
     const test_step = b.step("test", "Run the tests of the interpreter and the shell");
@@ -74,6 +75,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = if (tsan) true else null,
     });
     fast.addOptions("build_options", gc_options);
+    addVt(b, fast, target, runner_optimize);
 
     const exe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -107,6 +109,7 @@ pub fn build(b: *std.Build) void {
         opts.addOption(bool, "tsan_plant", false);
         const lib = b.createModule(.{ .root_source_file = b.path("src/ztcl.zig"), .target = rt, .optimize = .small });
         lib.addOptions("build_options", opts);
+        addVt(b, lib, rt, .small);
         rt_mods[ri] = lib;
         const rexe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
@@ -296,8 +299,13 @@ fn addWasm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise: boo
     wasm_options.addOption(bool, "tsan_plant", false);
     wasm_options.addOption(usize, "size_plant", size_plant);
     wasm_options.addOption(WebThreads, "web_threads", threads);
-    addModuleOptions(b, wasm_options, on);
+    // libghostty-vt uses `std.heap.wasm_allocator`, which has no form for
+    // a shared memory, so the build with shared threads has no `ztcl::vt`.
+    var mods_on = on;
+    if (threads == .shared) mods_on[moduleIndex("vt")] = false;
+    addModuleOptions(b, wasm_options, mods_on);
     wasm.root_module.addOptions("build_options", wasm_options);
+    if (threads != .shared) addVt(b, wasm.root_module, wasm.root_module.resolved_target.?, .small);
     wasm.entry = .disabled;
     wasm.rdynamic = true;
     // The interpreter can use 5 MiB of native stack (`max_native`).
@@ -327,10 +335,20 @@ const Mod = struct {
 const all_modules = [_]Mod{
     .{ .name = "hello", .std = true },
     .{ .name = "json", .std = true },
+    .{ .name = "vt", .std = true },
 };
 
 /// The flag of each module after the preset, the flags, and the rule
 /// that a module that another module needs is in the build too.
+/// Adds the import `ghostty-vt`: the terminal module of libghostty-vt,
+/// built from source with `-Dsimd=false`, so it needs no libc and no
+/// C++ code. The module is Zig code in the program, so each target
+/// links it statically. `src/vt.zig` is the only user.
+fn addVt(b: *std.Build, m: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    const dep = b.dependency("ghostty", .{ .target = target, .optimize = optimize, .simd = false, .@"emit-lib-vt" = true, .@"vt-features" = @as([]const u8, "-kitty_graphics") });
+    m.addImport("ghostty-vt", dep.module("ghostty-vt"));
+}
+
 /// The targets of `zig build runtimes` and `ztcl build --target`.
 const runtime_targets = [_][]const u8{ "x86_64-linux", "aarch64-linux", "x86_64-macos", "aarch64-macos", "x86_64-windows", "aarch64-windows" };
 
@@ -363,6 +381,14 @@ fn moduleFlags(b: *std.Build, batteries: Batteries) [all_modules.len]bool {
         }
     }
     return on;
+}
+
+/// The index of a module in `all_modules`.
+fn moduleIndex(comptime name: []const u8) usize {
+    inline for (all_modules, 0..) |m, i| {
+        if (comptime std.mem.eql(u8, m.name, name)) return i;
+    }
+    @compileError("no module " ++ name);
 }
 
 /// Adds `mod_NAME` for each module and `modules`, the names in the build.
