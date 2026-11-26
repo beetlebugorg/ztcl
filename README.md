@@ -20,6 +20,7 @@ npm install @beetlebug/ztcl            # WebAssembly, for the browser and Node.j
 
 ## Example
 
+<!-- live -->
 ```tcl
 proc fib {n} {
     if {$n < 2} { return $n }

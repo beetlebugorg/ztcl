@@ -86,11 +86,42 @@ def rel(from_page, to_page):
 class Build:
     def __init__(self):
         self.md = MarkdownIt("commonmark", {"html": False}).enable("table").enable("strikethrough")
+        plain = self.md.renderer.rules.get("fence")
+
+        def fence(tokens, idx, options, env):
+            t = tokens[idx]
+            if not t.meta.get("live"):
+                return plain(tokens, idx, options, env)
+            # A live example (docs/site/live.js): an editor and its output.
+            return (f'<figure class="live-demo" id="{t.meta["id"]}"><div class="ld-code"><pre><code class="language-tcl">'
+                    f'{html.escape(t.content)}</code></pre></div><pre class="ld-out" aria-live="polite"></pre>'
+                    f'<figcaption class="ld-bar"><span class="ld-tag">Live</span></figcaption></figure>\n')
+        self.md.renderer.rules["fence"] = fence
         self.anchors = {}
         self.links = []
 
+    @staticmethod
+    def live_blocks(src, tokens):
+        """Marks each `tcl` block after a line `<!-- live -->` as a live
+        example, and drops the line."""
+        out, i, count = [], 0, 0
+        while i < len(tokens):
+            t = tokens[i]
+            if t.type == "paragraph_open" and i + 1 < len(tokens) and tokens[i + 1].content.strip() == "<!-- live -->":
+                fence = tokens[i + 3] if i + 3 < len(tokens) else None
+                if fence is None or fence.type != "fence" or fence.info.strip() != "tcl":
+                    raise SystemExit(f"{src}: a live marker is not just before a tcl block")
+                count += 1
+                fence.meta = {"live": True, "id": f"live-{count}"}
+                out.append(fence)
+                i += 4
+                continue
+            out.append(t)
+            i += 1
+        return out
+
     def render(self, src, page):
-        tokens = self.md.parse((ROOT / src).read_text(encoding="utf-8"))
+        tokens = self.live_blocks(src, self.md.parse((ROOT / src).read_text(encoding="utf-8")))
         ids, seen, title = set(), {}, None
         for i, token in enumerate(tokens):
             if token.type == "heading_open":
@@ -166,6 +197,7 @@ class Build:
     def document(self, page, title, body):
         root = rel(page, "")
         name = f"{html.escape(title)} · ztcl"
+        script = f'\n<script type="module" src="{root}assets/live.js"></script>' if 'class="live-demo"' in body else ""
         desc = "A sandboxed Tcl interpreter in Zig, with a bytecode VM and an optional JIT."
         return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -173,7 +205,7 @@ class Build:
 <title>{name}</title><meta name="description" content="{desc}">
 <link rel="canonical" href="{SITE}{page}">
 <link rel="icon" href="{root}assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="{root}assets/site.css"></head>
+<link rel="stylesheet" href="{root}assets/site.css">{script}</head>
 <body><a class="skip" href="#content">Skip to the content</a>
 <header class="top"><div class="wrap"><a class="logo" href="{root}"><span class="glyph" aria-hidden="true">tc</span>ztcl</a>
 <nav class="toplinks" aria-label="Site"><a href="{root}overview/" aria-current="page">Docs</a><a href="{root}playground/">Playground</a><a class="sib" href="https://beetlebug.org/ztk/">ztk</a><a href="{REPO}">GitHub</a></nav></div></header>
@@ -241,7 +273,7 @@ class Build:
             (folder / "index.html").write_text(self.document(page, title, body), encoding="utf-8")
         shutil.copy(SITE_DIR / "index.html", out / "index.html")
         (out / "assets").mkdir()
-        for name in ("site.css", "favicon.svg"):
+        for name in ("site.css", "favicon.svg", "live.js"):
             shutil.copy(SITE_DIR / name, out / "assets" / name)
         (out / "playground").mkdir()
         for name in [p.name for p in PLAYGROUND.iterdir()] + WEB_FILES + WASM_FILES:

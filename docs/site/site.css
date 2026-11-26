@@ -292,3 +292,22 @@ figure.chart { margin: 0; }
 .bars .track.budget::after { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; border-left: 2px dashed var(--text-3); }
 .bars .fill.over { background: var(--warn); }
 .prose :not(pre) > code { overflow-wrap: anywhere; }
+
+/* Live examples (assets/live.js): the code as an editor, and its output. */
+.o { color: var(--accent); }
+.live-demo { margin: 8px 0 28px; display: grid; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.live-demo .ld-code { position: relative; min-width: 0; background: var(--code-bg); }
+.live-demo .ld-code pre, .live-demo .ld-code textarea { margin: 0; padding: 14px 16px; border: 0; border-radius: 0; background: none; font: 13px/1.55 var(--mono); tab-size: 4; white-space: pre-wrap; overflow-wrap: break-word; box-sizing: border-box; }
+.live-demo .ld-code textarea { position: absolute; inset: 0; width: 100%; height: 100%; resize: none; overflow: hidden; color: transparent; caret-color: var(--text); outline: none; }
+.live-demo .ld-code textarea::selection { background: var(--accent-soft); color: transparent; }
+.live-demo .ld-code:focus-within { box-shadow: inset 0 0 0 2px var(--accent); }
+.live-demo .ld-out { margin: 0; padding: 10px 16px; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: var(--bg-soft); font: 13px/1.5 var(--mono); white-space: pre-wrap; min-height: 1.5em; max-height: 16em; overflow: auto; }
+.live-demo .ld-out:empty::before { content: "The output shows here."; color: var(--text-3); }
+.live-demo .ld-result { color: var(--text-3); }
+.live-demo .ld-error { color: var(--warn); }
+.live-demo .ld-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: 13px; color: var(--text-3); }
+.live-demo .ld-bar button { font: inherit; color: var(--text-2); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+.live-demo .ld-bar button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.live-demo .ld-tag { font-weight: 650; }
+.live-demo[data-live="1"] .ld-tag { color: var(--accent); }
+.live-demo .ld-hud { margin-left: auto; font: 12px var(--mono); }
