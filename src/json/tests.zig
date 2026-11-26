@@ -133,7 +133,7 @@ test "the depth limit" {
     try std.testing.expectError(error.TclError, build.parse(&it, deep[100_000 - 513 .. 100_000 + 513], .{}));
 }
 
-test "the step limit and the memory limit stop a large parse early" {
+test "the compute limit and the memory limit stop a large parse early" {
     const a = std.testing.allocator;
     // 16 MiB of "[1,1,1,...]".
     const size = 16 << 20;
@@ -151,10 +151,10 @@ test "the step limit and the memory limit stop a large parse early" {
         var it: Interp = undefined;
         try it.init(a);
         defer it.deinit();
-        it.step_limit = 5000;
+        it.compute_limit = 5000;
         var p = try build.Parser(.build).init(&it, text, .{});
         try std.testing.expectError(error.TclError, p.document());
-        try std.testing.expectEqual(@as(u64, 0), it.step_limit);
+        try std.testing.expectEqual(@as(u64, 0), it.compute_limit);
         // A chunk of 64 KiB has 32 768 values. The safe point before the
         // second chunk pays them, so the parse stops after two chunks.
         try std.testing.expect(p.s.vec.pos <= 2 * 64 * 1024);

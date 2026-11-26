@@ -16,7 +16,7 @@
 #       `file<TAB>skipped<TAB>reason<TAB>count`.
 #
 # Prints one line for each file (the counts of the tests that pass,
-# fail, and are skipped), then the totals. The step limit stops a test that loops.
+# fail, and are skipped), then the totals. The compute limit stops a test that loops.
 # The memory limit (2 GiB) stops a test that allocates without end.
 # SPDX-License-Identifier: BSD-2-Clause
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -89,10 +89,10 @@ for f in "$@"; do
     [ -n "$jail" ] || set_exec=
     cat > "$root/ztclsh" <<EOF
 #!/bin/sh
-exec "$tcl" $gc --max-steps 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --cwd "\$PWD" --tclsh "\$@"
+exec "$tcl" $gc --compute 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --cwd "\$PWD" --tclsh "\$@"
 EOF
     chmod +x "$root/ztclsh"
-    raw=$(limit 1200 "$tcl" $gc --max-steps 200000000 --mem 2147483648 --allow $caps ${jail:+--root} ${jail:+"$root"} $set_exec --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
+    raw=$(limit 1200 "$tcl" $gc --compute 200000000 --mem 2147483648 --allow $caps ${jail:+--root} ${jail:+"$root"} $set_exec --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
     rc=$?
     rm -rf -- "$root"
     out=$(printf '%s\n' "$raw" | grep -aE '^pass [0-9]+ fail' | tail -1)

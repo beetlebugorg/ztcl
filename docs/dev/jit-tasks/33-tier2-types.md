@@ -40,7 +40,7 @@ CAP zig build test
 CAP zig build jit-census -- --plan bench/*.tcl      # prints the plan of each loop
 ```
 
-New tests: the plan of the loop of `sum.tcl` has `i`, `s`, `n` as `int`, one part with 4 steps, and exits at `bin_vv` and `incr_drop`; the loop of `strbuild.tcl` has `s` as `any`; a loop whose variable changes from `int` to a string in the body is planned with that slot as `any`; a loop with `upvar` inside is a loop with a call.
+New tests: the plan of the loop of `sum.tcl` has `i`, `s`, `n` as `int`, one part with 4 compute units, and exits at `bin_vv` and `incr_drop`; the loop of `strbuild.tcl` has `s` as `any`; a loop whose variable changes from `int` to a string in the body is planned with that slot as `any`; a loop with `upvar` inside is a loop with a call.
 
 ## Must not change
 

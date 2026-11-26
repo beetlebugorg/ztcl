@@ -31,7 +31,7 @@
 //! of the brackets.
 //!
 //! Limits: the depth (512 by default), the bytes of a number (1 MiB),
-//! and the step limit and the memory limit of the interpreter. Stage 1
+//! and the compute limit and the memory limit of the interpreter. Stage 1
 //! runs in chunks of 64 KiB. After each chunk, the parse pays one step
 //! for each 4096 bytes and one step for each value that it made, and it
 //! checks the memory limit.
@@ -179,11 +179,11 @@ pub const Stream = struct {
         const it = s.it;
         const cost = bytes / 4096 + s.made + 1;
         s.made = 0;
-        if (cost > it.step_limit) {
-            it.step_limit = 0;
-            return it.fail("step limit reached", .{});
+        if (cost > it.compute_limit) {
+            it.compute_limit = 0;
+            return it.fail("compute limit reached", .{});
         }
-        it.step_limit -= cost;
+        it.compute_limit -= cost;
         if (it.overLimit()) return it.memError();
     }
 

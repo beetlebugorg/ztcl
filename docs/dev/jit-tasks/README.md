@@ -43,7 +43,7 @@ The user decides three things before the work passes them: the collector (before
 7. Write fresh code. Copy no code from another project. Read no source of a GPL or AGPL project for this work. When a task uses an idea from a source that `docs/references/jit.md` does not list, add the source there.
 8. Use only the Zig 0.16.0 standard library. On macOS, the functions of `libSystem` are available. On Windows, declare each `kernel32` function in the JIT file that calls it.
 9. Do not change `src/coro.zig`, `src/sys.zig`, `src/sys_windows.zig`, `src/fsroot.zig`, or `src/proc.zig`. The ports on `ports3` own them. A change to `src/interp.zig`, `src/main.zig`, or `src/ztcl.zig` stays inside the hunks that the task names.
-10. Use the words "step limit" for the limit on steps. Name no AI model or vendor in the repository. Add no attribution line.
+10. Use the words "compute limit" for the limit on steps. Name no AI model or vendor in the repository. Add no attribution line.
 11. If a gate fails, do not change the gate. Report the measured number and the cause.
 12. If a fact in a task is wrong, stop and report it. Do not guess.
 

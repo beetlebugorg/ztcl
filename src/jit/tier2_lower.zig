@@ -6,7 +6,7 @@
 //!   backend gives its counts of registers as a `Budget`.
 //! - `slotClass` puts each slot in a register of integers, a register of
 //!   doubles, or its cell.
-//! - `checkAt` and `stepsLeft` give the place of the step check of each
+//! - `checkAt` and `computeLeft` give the place of the step check of each
 //!   part and the steps that an exit gives back.
 //! - `needsFix` finds the edges where a place goes from a register to
 //!   the value stack.
@@ -131,7 +131,7 @@ pub fn checkAt(code: *const vm.Code, part: tier2.Part) u32 {
 /// For each instruction of the loop: the steps of its part from the
 /// instruction to the end of the part. An exit before the instruction
 /// gives these steps back.
-pub fn stepsLeft(a: Allocator, code: *const vm.Code, p: *const tier2.LoopPlan) Allocator.Error![]u32 {
+pub fn computeLeft(a: Allocator, code: *const vm.Code, p: *const tier2.LoopPlan) Allocator.Error![]u32 {
     const left = try a.alloc(u32, p.back - p.head + 1);
     for (p.parts) |part| {
         var steps: u32 = 0;

@@ -18,7 +18,7 @@ Tier 2 compiles a loop with no call out. `sum.tcl` reaches its gate.
 
 - At most 5 slots are in registers: `r8` to `r11` and `rdx`. The plan picks the slots with the most uses. Each other `int` slot stays in its cell and is read and written with no tag check.
 - The value stack is virtual: the compiler knows for each place a register, a literal, or a slot. An integer literal is read from `code.lits` into a scratch register.
-- A part with `k` steps: `cmp step_limit, k`, `jb` to the exit at the first instruction of the part, `sub step_limit, k`. `step_limit` is in memory.
+- A part with `k` steps: `cmp compute_limit, k`, `jb` to the exit at the first instruction of the part, `sub compute_limit, k`. `compute_limit` is in memory.
 - `+`, `-`, `*`, `incr`: the operation, then `jo` to the exit of that instruction. The operation writes a scratch register first, and the slot register changes only after the check.
 - A `store` to a slot in a register is a register move.
 - The back jump goes to the top of the body, after the entry block.
@@ -43,7 +43,7 @@ CAP zig build jit-fuzz -- --tier2 --count 500000
 
 Gate: `sum.tcl` at most 16 M instructions with `--jit --jit-tier2`, or the number that task 32 set.
 
-New unit tests, each compared with the interpreter: the step limit ends at each of the four steps of one pass of the `sum.tcl` loop; an overflow in pass 1000 (the result is a big integer); a memory limit that is passed before the loop; a slot that is an `upvar` link (no tier 2, same result); two slots that link to one cell; a loop whose bound is a string `"10"`; `break` and `continue` in the loop.
+New unit tests, each compared with the interpreter: the compute limit ends at each of the four steps of one pass of the `sum.tcl` loop; an overflow in pass 1000 (the result is a big integer); a memory limit that is passed before the loop; a slot that is an `upvar` link (no tier 2, same result); two slots that link to one cell; a loop whose bound is a string `"10"`; `break` and `continue` in the loop.
 
 ## Must not change
 

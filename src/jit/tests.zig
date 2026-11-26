@@ -1170,7 +1170,7 @@ fn runModeOpts(script: []const u8, opts: ?jit.Options, limit: u64, min_compiled:
     defer out.deinit(testing.allocator);
     it.output = .{ .ctx = &out, .write = collect };
     if (stress == 0) it.gc_on = false else it.setGcStress(stress);
-    it.step_limit = limit;
+    it.compute_limit = limit;
     if (allow_interp) try it.allow(@backingInt(tcl.interp.Capability.interp));
     if (test_mem_limit) |m| it.mem_limit = m;
     if (test_native) |n| try it.register(n[0], n[1]);
@@ -1186,7 +1186,7 @@ fn runModeOpts(script: []const u8, opts: ?jit.Options, limit: u64, min_compiled:
     }
     const info = it.getVarPlain("::errorInfo") catch Value.empty;
     const code = it.getVarPlain("::errorCode") catch Value.empty;
-    try w.print(a, "output: {s}\nerrorInfo: {s}\nerrorCode: {s}\nsteps: {d}\n", .{ out.items, try it.str(info), try it.str(code), limit - it.step_limit });
+    try w.print(a, "output: {s}\nerrorInfo: {s}\nerrorCode: {s}\nsteps: {d}\n", .{ out.items, try it.str(info), try it.str(code), limit - it.compute_limit });
     if (stress == 0) try w.print(a, "mem: {d}\n", .{it.memUsed()});
     last_peak = it.counter.mem_peak;
     if (on) {
@@ -1288,7 +1288,7 @@ test "jit: catch around a compiled proc" {
     , 1);
 }
 
-test "jit: a step limit inside a compiled loop leaves the same steps" {
+test "jit: a compute limit inside a compiled loop leaves the same steps" {
     const script =
         \\proc spin {} { set s 0; for {set i 0} {$i < 1000} {incr i} { incr s $i; set t [expr {$s % 7}] }; return $s }
         \\spin
@@ -1757,7 +1757,7 @@ const sum_script =
     \\sum 30
 ;
 
-test "tier 2: sum, and the step limit at each step of the loop" {
+test "tier 2: sum, and the compute limit at each step of the loop" {
     if (!jit.built) return error.SkipZigTest;
     try sameT2(sum_script, 1);
     const ref = try runMode(sum_script, false, std.math.maxInt(u64), 0);
@@ -1836,8 +1836,8 @@ test "one command that builds a large result stops below twice the memory limit"
 
 /// Scripts in which one step did work that grew without a bound: with
 /// a count of procs, of global variables, of table entries, or with the
-/// size of a value. Each one has a step limit. With the work charged to
-/// the step limit, each one stops at the limit in well under a second.
+/// size of a value. Each one has a compute limit. With the work charged to
+/// the compute limit, each one stops at the limit in well under a second.
 /// Before the charges, each one used many seconds of CPU time.
 const step_cost_scripts = [_]struct { limit: u64, script: []const u8 }{
     // The issue case: the guard scanned each command after each new proc.
@@ -1883,11 +1883,11 @@ fn cpuNow() i96 {
     return std.Io.Clock.cpu_thread.now(testing.io).toNanoseconds();
 }
 
-test "the step limit bounds the CPU time of each step" {
+test "the compute limit bounds the CPU time of each step" {
     // A generous bound: each script stops in under 0.5 s in a Debug
     // build. Before the charges, each script used far more.
     const bound: i96 = 4 * std.time.ns_per_s;
-    const want = "error TclError: step limit reached\n";
+    const want = "error TclError: compute limit reached\n";
     for (step_cost_scripts) |s| {
         errdefer std.debug.print("script:\n{s}\n", .{s.script});
         const t0 = cpuNow();
@@ -2197,7 +2197,7 @@ test "tier 2 layer: the step checks and the steps that an exit gives back" {
     var p = (try planOf(it, "sum", &.{ .{ "i", .int }, .{ "s", .int }, .{ "n", .int } })).?;
     defer p.deinit();
     const code = try procCode(it, "sum");
-    const left = try lower.stepsLeft(testing.allocator, code, &p);
+    const left = try lower.computeLeft(testing.allocator, code, &p);
     defer testing.allocator.free(left);
     // The loop: jf_vv | step guard guard bin_vv store_pop guard incr_drop jump.
     try testing.expectEqualSlices(u32, &.{ 0, 4, 3, 2, 1, 1, 1, 0, 0 }, left);
@@ -2691,7 +2691,7 @@ test "tier 2: a conditional jump back stays in tier 1" {
     @memset(kinds, .int);
     try testing.expectEqual(@as(usize, 1), info.loop_heads.len);
     try testing.expect((try tier2.plan(testing.allocator, &m.code, &info, info.loop_heads[0], kinds)) == null);
-    // The changed Code runs in tier 1 until the step limit.
+    // The changed Code runs in tier 1 until the compute limit.
     const held = try arena.allocator().create(vm.Code);
     held.* = m.code;
     _ = jit.prepare(it, held) orelse return error.NotCompiled;
@@ -2699,7 +2699,7 @@ test "tier 2: a conditional jump back stays in tier 1" {
     const saved = p.code;
     p.code = held;
     defer p.code = saved;
-    it.step_limit = 2000;
+    it.compute_limit = 2000;
     try testing.expectError(error.TclError, it.eval("q"));
     try testing.expectEqual(@as(u64, 0), it.jit.?.stats.tier2);
 }
@@ -2707,7 +2707,7 @@ test "tier 2: a conditional jump back stays in tier 1" {
 test "tier 2: an exit at the loop head lets tier 1 take a step" {
     if (!jit.built) return error.SkipZigTest;
     // The jit-fuzz --verify mode found it: a changed Code with the loop
-    // `guard; jump` at address 0. With the step limit below the steps
+    // `guard; jump` at address 0. With the compute limit below the steps
     // of a pass, tier 2 exits to the loop head. The pass counter of
     // tier 1 then called `tier_up` before the step check of the head,
     // and the two tiers went back and forth with no step.
@@ -2732,9 +2732,9 @@ test "tier 2: an exit at the loop head lets tier 1 take a step" {
     const saved = p.code;
     p.code = held;
     defer p.code = saved;
-    it.step_limit = 2000;
+    it.compute_limit = 2000;
     try testing.expectError(error.TclError, it.eval("q"));
-    try testing.expectEqualStrings("step limit reached", try it.str(it.result));
+    try testing.expectEqualStrings("compute limit reached", try it.str(it.result));
     try testing.expectEqual(@as(u64, 1), it.jit.?.stats.tier2);
 }
 
@@ -2750,7 +2750,7 @@ test "tier 2 layer: a part that no path from the head reaches has no step check"
     var p = (try planOf(it, "f", &.{ .{ "i", .int }, .{ "s", .int }, .{ "n", .int } })).?;
     defer p.deinit();
     const code = try procCode(it, "f");
-    const left = try lower.stepsLeft(testing.allocator, code, &p);
+    const left = try lower.computeLeft(testing.allocator, code, &p);
     defer testing.allocator.free(left);
     var dead: usize = 0;
     for (p.parts) |pt| {
@@ -2765,7 +2765,7 @@ test "tier 2 layer: a part that no path from the head reaches has no step check"
     try testing.expect(dead > 0);
 }
 
-test "tier 2: a part that the verifier does not reach compiles and stops at the step limit" {
+test "tier 2: a part that the verifier does not reach compiles and stops at the compute limit" {
     if (!jit.built) return error.SkipZigTest;
     // The jit-fuzz --verify --tier2 mode found it. A change made the
     // commands after `continue` unreachable, so the verifier gave them
@@ -2798,9 +2798,9 @@ test "tier 2: a part that the verifier does not reach compiles and stops at the 
     p.code = held;
     defer p.code = saved;
     const before = it.jit.?.stats.tier2;
-    it.step_limit = 2000;
+    it.compute_limit = 2000;
     try testing.expectError(error.TclError, it.eval("f 100000"));
-    try testing.expectEqualStrings("step limit reached", try it.str(it.result));
+    try testing.expectEqualStrings("compute limit reached", try it.str(it.result));
     try testing.expectEqual(before + 1, it.jit.?.stats.tier2);
 }
 
@@ -2843,16 +2843,16 @@ test "tier 2: a loop that pops a place below the depth of its head stays in tier
     p.code = held;
     defer p.code = saved;
     const before = it.jit.?.stats.tier2;
-    it.step_limit = 2000;
+    it.compute_limit = 2000;
     try testing.expectError(error.TclError, it.eval("q"));
-    try testing.expectEqualStrings("step limit reached", try it.str(it.result));
+    try testing.expectEqualStrings("compute limit reached", try it.str(it.result));
     try testing.expectEqual(before, it.jit.?.stats.tier2);
 }
 
-test "tier 2: a loop condition with a guard stops at each small step limit" {
+test "tier 2: a loop condition with a guard stops at each small compute limit" {
     if (!jit.built) return error.SkipZigTest;
     // The condition `[incr i] <= $n` puts a guard in the part of the
-    // loop head, so tier 2 checks steps at the head. With a step limit
+    // loop head, so tier 2 checks steps at the head. With a compute limit
     // below the steps of that part, tier 2 exited at the head with no
     // step, and before the counter rule of resume_at tier 1 called
     // tier_up at once. The script then looped with no step. This test
@@ -2865,7 +2865,7 @@ test "tier 2: a loop condition with a guard stops at each small step limit" {
         const got = try runModeOpts(script, .{ .threshold = 0, .tier2 = true, .tier2_count = 1 }, limit, 0, 0);
         defer got.deinit();
         testing.expectEqualStrings(ref.text, got.text) catch |e| {
-            std.debug.print("step limit {d}\n", .{limit});
+            std.debug.print("compute limit {d}\n", .{limit});
             return e;
         };
         if (last_tier2 > 0) tier2_runs += 1;
@@ -2934,8 +2934,8 @@ test "tier 2: the plan reads no table of an instruction that no path reaches" {
     p.code = held;
     defer p.code = saved;
     const before = it.jit.?.stats.tier2;
-    it.step_limit = 2000;
+    it.compute_limit = 2000;
     try testing.expectError(error.TclError, it.eval("f 100000"));
-    try testing.expectEqualStrings("step limit reached", try it.str(it.result));
+    try testing.expectEqualStrings("compute limit reached", try it.str(it.result));
     try testing.expectEqual(before + 1, it.jit.?.stats.tier2);
 }

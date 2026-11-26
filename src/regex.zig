@@ -11,7 +11,7 @@
 //! capture groups. Each part of a concatenation takes the longest (or
 //! shortest) length that leaves a match for the rest. A pattern with a
 //! back reference has no simulation and searches with the second pass
-//! alone. The step limit bounds each pass.
+//! alone. The compute limit bounds each pass.
 //!
 //! Before the first match, a program with no assert and no lookahead
 //! runs as a lazy DFA over the thread lists of the simulation. Each
@@ -1298,8 +1298,8 @@ pub const Matcher = struct {
         m.steps += 1;
         if (m.steps >= 32) {
             m.steps = 0;
-            if (m.it.step_limit == 0) return m.it.fail("step limit reached", .{});
-            m.it.step_limit -= 1;
+            if (m.it.compute_limit == 0) return m.it.fail("compute limit reached", .{});
+            m.it.compute_limit -= 1;
         }
     }
 
@@ -1308,11 +1308,11 @@ pub const Matcher = struct {
         const total = m.steps + n;
         const cost = total / 32;
         m.steps = @intCast(total % 32);
-        if (cost > m.it.step_limit) {
-            m.it.step_limit = 0;
-            return m.it.fail("step limit reached", .{});
+        if (cost > m.it.compute_limit) {
+            m.it.compute_limit = 0;
+            return m.it.fail("compute limit reached", .{});
         }
-        m.it.step_limit -= @intCast(cost);
+        m.it.compute_limit -= @intCast(cost);
     }
 
     /// The first position at or after `i` whose character a first thread
@@ -1391,7 +1391,7 @@ pub const Matcher = struct {
     }
 
     /// `addThread`. With `dry`, the ticks go to `visits` and not to the
-    /// step limit. A program of the DFA has no assert and no lookahead.
+    /// compute limit. A program of the DFA has no assert and no lookahead.
     inline fn addThreadAs(m: *Matcher, comptime dry: bool, list: []Thread, count: *usize, pc0: u32, start: u32, pos: usize, visits: *u32) Error!bool {
         var matched = false;
         m.work.clearRetainingCapacity();

@@ -9,7 +9,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
         .intel_syntax noprefix
         .text
-        .set STEP, 0        # the step limit
+        .set STEP, 0        # the compute limit
         .set INCR, 8        # the step of `incr`, read at the entry
         .set ITEMS, 16      # the list buffer: 24-byte Values
         .set LEN, 24        # the list length

@@ -320,7 +320,7 @@ fn runJob(x: *Interp, p: *Pool, j: *Job) bool {
         }
     } else |e| {
         ok = false;
-        // The step limit, the memory limit, or a stop ended the job.
+        // The compute limit, the memory limit, or a stop ended the job.
         const msg: []const u8 = if (e == error.OutOfMemory) "out of memory" else x.str(x.result) catch "error";
         res = .{ .str = a.dupe(u8, msg) catch &.{} };
         info = a.dupe(u8, msg) catch &.{};

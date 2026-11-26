@@ -102,13 +102,13 @@ test "reset of the host ends its threads and keeps the limits" {
     try testing.expectEqual(@as(u32, 1), it.thread_limits.max_threads);
 }
 
-test "the step limit of a thread stops only that thread" {
+test "the compute limit of a thread stops only that thread" {
     if (!thread.supported) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
     try host(&it);
     defer it.deinit();
     var lim = it.thread_limits;
-    lim.step_limit = 10_000;
+    lim.compute_limit = 10_000;
     thread.setLimits(&it, lim);
     const id = try thread.create(&it, "", false, false);
     try testing.expectError(error.TclError, thread.sendWait(&it, id, "while 1 {}", false));
@@ -122,14 +122,14 @@ test "the total steps bound the sum of the steps of the threads" {
     try host(&it);
     defer it.deinit();
     var lim = it.thread_limits;
-    lim.step_limit = 600;
-    lim.total_steps = 1000;
+    lim.compute_limit = 600;
+    lim.total_compute = 1000;
     thread.setLimits(&it, lim);
     const a = try thread.create(&it, "", false, false);
     // The second thread gets the 400 steps that are left.
     const b = try thread.create(&it, "", false, false);
     try testing.expectError(error.TclError, thread.sendWait(&it, b, "for {set i 0} {$i < 1000} {incr i} {}", false));
-    try testing.expectEqualStrings("step limit reached", try it.str(it.result));
+    try testing.expectEqualStrings("compute limit reached", try it.str(it.result));
     _ = try thread.sendWait(&it, a, "for {set i 0} {$i < 100} {incr i} {}", false);
 }
 

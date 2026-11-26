@@ -366,7 +366,7 @@ pub const Emitter = struct {
 
     // ---- The templates ----
 
-    /// The step limit and the memory limit. `h` is the helper that runs
+    /// The compute limit and the memory limit. `h` is the helper that runs
     /// the whole check on the slow path: it sees the state before the
     /// check.
     fn step(e: *Emitter, pc: u32, comptime h: Helper) Error!void {
@@ -379,9 +379,9 @@ pub const Emitter = struct {
     fn stepTo(e: *Emitter, slow_l: Label) Error!void {
         const s = e.s;
         const l = e.l;
-        try s.aluMI(.cmp, itAt(l.it_step_limit), 0);
+        try s.aluMI(.cmp, itAt(l.it_compute_limit), 0);
         try s.jcc(.e, slow_l);
-        try s.decM(itAt(l.it_step_limit));
+        try s.decM(itAt(l.it_compute_limit));
         try s.movRM(.rax, itAt(l.it_mem_trip));
         try s.aluRM(.cmp, .rax, itAt(l.it_mem_limit));
         const restore = try s.newLabel();
@@ -822,7 +822,7 @@ pub const Emitter = struct {
                 },
                 .restore => |c| {
                     s.bind(c.at);
-                    try s.incM(itAt(e.l.it_step_limit));
+                    try s.incM(itAt(e.l.it_compute_limit));
                     try s.jmp(c.slow);
                 },
                 .tier_up => |c| {

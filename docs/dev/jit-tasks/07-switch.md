@@ -40,4 +40,4 @@ New tests: each form above, fall through, `default`, no match, an integer string
 
 ## Must not change
 
-The pass count of each suite file. The step count of a script with no `switch`. A `switch` uses one step for its guard, as each inline form does. Record the new step count of a script with `switch` in the PR body.
+The pass count of each suite file. The step count of a script with no `switch`. A `switch` uses one compute unit for its guard, as each inline form does. Record the new step count of a script with `switch` in the PR body.

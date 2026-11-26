@@ -65,7 +65,7 @@ pub const Layout = struct {
     // Offsets in `Interp`.
     it_epoch: u32,
     it_safe_epoch: u32,
-    it_step_limit: u32,
+    it_compute_limit: u32,
     it_mem_used: u32,
     /// `counter.trip`: the count that the limit check of a step reads.
     it_mem_trip: u32,
@@ -213,7 +213,7 @@ pub fn probe() ?Layout {
     if (@sizeOf(@FieldType(value.ListObj, "index")) != word or @sizeOf(@FieldType(value.ListObj, "dict_len")) != word) return null;
     l.it_epoch = @offsetOf(Interp, "epoch");
     l.it_safe_epoch = @offsetOf(Interp, "safe_epoch");
-    l.it_step_limit = @offsetOf(Interp, "step_limit");
+    l.it_compute_limit = @offsetOf(Interp, "compute_limit");
     const counter = @offsetOf(Interp, "counter");
     l.it_mem_used = counter + @offsetOf(interp.Counting, "used");
     l.it_mem_trip = counter + @offsetOf(interp.Counting, "trip");

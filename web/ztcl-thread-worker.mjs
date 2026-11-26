@@ -47,8 +47,8 @@ function output() {
   return text;
 }
 
-function evalScript(script, stepLimit) {
-  x.ztcl_set_step_limit(h, stepLimit == null ? NO_LIMIT : BigInt(stepLimit));
+function evalScript(script, computeLimit) {
+  x.ztcl_set_compute_limit(h, computeLimit == null ? NO_LIMIT : BigInt(computeLimit));
   const bytes = encoder.encode(script);
   const p = bytesIn(bytes);
   const rc = x.ztcl_eval(h, p, bytes.length);
@@ -71,7 +71,7 @@ function setup(init) {
   const limits = init.limits ?? {};
   const n = (v) => (v == null ? 0 : v);
   const big = (v) => (v == null ? 0n : BigInt(v));
-  x.ztcl_set_thread_limits(h, n(limits.maxThreads), big(limits.stepLimit), n(limits.memLimit), big(limits.totalSteps), n(limits.totalMem), n(limits.maxQueue));
+  x.ztcl_set_thread_limits(h, n(limits.maxThreads), big(limits.computeLimit), n(limits.memLimit), big(limits.totalCompute), n(limits.totalMem), n(limits.maxQueue));
   if (init.memLimit != null) x.ztcl_set_mem_limit(h, init.memLimit);
   const rc = x.ztcl_allow(h, init.caps);
   if (rc !== 0) throw new Error(rc === 2 ? "the build does not have one of these capabilities" : "ztcl_allow: out of memory");
@@ -142,7 +142,7 @@ async function startAsync(init) {
   x.ztcl_web_init(h, init.id, init.role === "main" ? 1 : 0);
   setup(init);
   if (init.role === "thread") {
-    const r = evalScript(init.script, init.stepLimit);
+    const r = evalScript(init.script, init.computeLimit);
     if (r.output) post({ output: r.output });
     if (!r.ok) post({ output: `Error from thread tid0x${init.id.toString(16)}\n${r.result}\n` });
     if (ending || !x.ztcl_web_waiting(h)) end();
@@ -195,7 +195,7 @@ async function handle(data) {
   if (data.gone) return x.ztcl_web_gone(h, data.gone);
   if (data.eval != null) {
     try {
-      const r = evalScript(data.script, data.stepLimit);
+      const r = evalScript(data.script, data.computeLimit);
       post({ id: data.eval, ...r });
     } catch (e) {
       post({ id: data.eval, error: String(e?.message ?? e) });

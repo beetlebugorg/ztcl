@@ -1,5 +1,5 @@
-# total_steps and total_mem stop a thread and leave the others running.
-# thread-tests-flags: --thread-steps 400000 --threads-steps 1000000 --thread-mem 268435456 --threads-mem 134217728
+# total_compute and total_mem stop a thread and leave the others running.
+# thread-tests-flags: --thread-compute 400000 --threads-compute 1000000 --thread-mem 268435456 --threads-mem 134217728
 # SPDX-License-Identifier: BSD-2-Clause
 
 # Two threads get 400 000 steps each. The third gets the 200 000 that

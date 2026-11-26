@@ -14,11 +14,11 @@ export type WasmSource = string | URL | Response | BufferSource | WebAssembly.Mo
 /** The options of an interpreter. */
 export interface InterpOptions {
   /**
-   * The steps of each `eval`. Each command and each loop pass uses one
-   * step. At the limit, the script stops with the error
-   * `step limit reached`. `null` is no limit, and it is the default.
+   * The compute units of each `eval`. Each command and each loop pass uses one
+   * compute unit. At the limit, the script stops with the error
+   * `compute limit reached`. `null` is no limit, and it is the default.
    */
-  stepLimit?: number | bigint | null;
+  computeLimit?: number | bigint | null;
   /**
    * The memory limit in bytes. At the limit, the script stops with the
    * error `the script used too much memory`. The default is 2 GiB.
@@ -66,7 +66,7 @@ export function compile(source?: WasmSource): Promise<WebAssembly.Module>;
  * files, sockets, `exec`, `clock`, or event loop.
  *
  * @example
- * const tcl = await Interp.create({ stepLimit: 1_000_000, memLimit: 64 << 20 });
+ * const tcl = await Interp.create({ computeLimit: 1_000_000, memLimit: 64 << 20 });
  * tcl.eval("expr {6 * 7}"); // { ok: true, result: "42", output: "" }
  */
 export class Interp {
@@ -82,8 +82,8 @@ export class Interp {
   /** Makes an interpreter in an instance of `ztcl.wasm`. Use {@link Interp.create}. */
   constructor(instance: WebAssembly.Instance, options?: InterpOptions);
 
-  /** The steps of each `eval`. `null` is no limit. A change applies to the next `eval`. */
-  stepLimit: number | bigint | null;
+  /** The compute units of each `eval`. `null` is no limit. A change applies to the next `eval`. */
+  computeLimit: number | bigint | null;
   /** The memory limit in bytes. A change applies to the next `eval`. */
   memLimit: number;
   /** Gets the text of `puts` when each `eval` ends. */
@@ -95,7 +95,7 @@ export class Interp {
   readonly memorySize: number;
 
   /**
-   * Runs a script on the calling thread. The step limit applies to
+   * Runs a script on the calling thread. The compute limit applies to
    * this call. A script blocks the page until it ends or hits a limit.
    */
   eval(script: string): EvalResult;
@@ -108,7 +108,7 @@ export class Interp {
 
   /**
    * Runs the scripts of a bundle in order, as `ztcl a.tcl b.tcl` does.
-   * The step limit applies to all the scripts of the call together. On
+   * The compute limit applies to all the scripts of the call together. On
    * an error, the next scripts do not run, and `result` is
    * `"name:line: message"`. Throws for a module with no bundle.
    */
@@ -122,7 +122,7 @@ export class Interp {
  * Runs the scripts of a bundle in a new interpreter, then frees it.
  *
  * @example
- * const r = await run(new URL("./app.wasm", import.meta.url), { stepLimit: 1_000_000 });
+ * const r = await run(new URL("./app.wasm", import.meta.url), { computeLimit: 1_000_000 });
  * console.log(r.output);
  * @param source The bundle, as for {@link compile}.
  * @param options The limits, the output function, and the capabilities.
@@ -148,8 +148,8 @@ export class WorkerInterp {
   /** Uses the default module. */
   constructor(options: InterpOptions);
 
-  /** The steps of each `eval`. `null` is no limit. */
-  stepLimit: number | bigint | null;
+  /** The compute units of each `eval`. `null` is no limit. */
+  computeLimit: number | bigint | null;
   /** The memory limit in bytes. `null` keeps the default. */
   memLimit: number | null;
   /** Gets the text of `puts` when each `eval` ends. */

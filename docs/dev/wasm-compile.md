@@ -27,8 +27,8 @@ ABI version 1:
 - **Imports:** none. Point procs declare no host functions today. The math functions and the noise are in the module.
 - **Memory:** one memory, defined in the module and exported as `memory`. Its minimum and maximum are the same page count. The code has no `memory.grow`.
 - **Globals:** exported immutable `i32` values: `abi` (1), `cap` (the most points for one call), and the byte offset of each column: `in_<field>` for each parameter, `feature` for the feature numbers (one byte for each point), `out_<column>` for each output that the proc writes, and `limits` (the five `f64` of `point.Limits`).
-- **Function:** `run(n: i32, seed: i32, in_mask: i32, out_mask: i32, steps: i64) -> i64`. A bit of `in_mask` says that an input column is present. A missing input reads as 0. A bit of `out_mask` says that an output column is present. A missing output is not written. The result is the count of steps used, or -1 for the step limit, or -2 when `n` is more than `cap`.
-- **Custom section `ztcl.point`:** JSON with the ABI version, the proc name, the parameters, the outputs, the feature names in their number order, the block size, the steps of one block, and the SHA-256 of the source.
+- **Function:** `run(n: i32, seed: i32, in_mask: i32, out_mask: i32, steps: i64) -> i64`. A bit of `in_mask` says that an input column is present. A missing input reads as 0. A bit of `out_mask` says that an output column is present. A missing output is not written. The result is the count of steps used, or -1 for the compute limit, or -2 when `n` is more than `cap`.
+- **Custom section `ztcl.point`:** JSON with the ABI version, the proc name, the parameters, the outputs, the feature names in their number order, the block size, the compute units of one block, and the SHA-256 of the source.
 
 The host writes the columns into `memory` at the offsets, calls `run`, and reads the outputs. A module has no state between calls.
 
@@ -46,23 +46,23 @@ The runtime is a wasm module that the build makes from Zig source: the math func
 
 ## The limits
 
-- **Steps.** One block costs a fixed count of steps: the count of `ops`. The setup costs the count of `setup` one time. `run` checks the steps that are left before each block. When a block does not fit, `run` returns -1. The outputs of the blocks before the stop are written, and the host discards them. `Program.steps(n)` gives the same count in the interpreter, so a test can compare the two.
+- **Steps.** One block costs a fixed count of steps: the count of `ops`. The setup costs the count of `setup` one time. `run` checks the compute units that are left before each block. When a block does not fit, `run` returns -1. The outputs of the blocks before the stop are written, and the host discards them. `Program.steps(n)` gives the same count in the interpreter, so a test can compare the two.
 - **Memory.** `ztcl compile -max-mem BYTES` sets the size of the memory. `cap` comes from the size and the bytes of one point. The module cannot grow its memory, so the memory limit holds in any host.
 - **Native stack.** The code has no recursion. The wasm stack of `run` has a fixed depth.
 
 ## The test against the interpreter
 
-A differential test runs each proc three ways on the same random points: `Program.run`, `point.runSlow`, and the module in Node.js. All outputs must be equal, bit for bit, and the step count of the module must equal `Program.steps(n)`. A generator makes random procs from the subset. The fuzzer and the fixed procs (the fuzzy skin proc and the proc with branches of the point tests) run in CI.
+A differential test runs each proc three ways on the same random points: `Program.run`, `point.runSlow`, and the module in Node.js. All outputs must be equal, bit for bit, and the count of compute units of the module must equal `Program.steps(n)`. A generator makes random procs from the subset. The fuzzer and the fixed procs (the fuzzy skin proc and the proc with branches of the point tests) run in CI.
 
 ## How zslice loads a module
 
-The zslice plugin design is a proposal: a plugin is a WebAssembly module and a JSON manifest with permissions. zslice checks each import against the manifest and sets a step limit and a memory limit for each call. A per-layer path transform (fuzzy skin is one) needs the permission `slice.write`.
+The zslice plugin design is a proposal: a plugin is a WebAssembly module and a JSON manifest with permissions. zslice checks each import against the manifest and sets a compute limit and a memory limit for each call. A per-layer path transform (fuzzy skin is one) needs the permission `slice.write`.
 
 A compiled point proc fits this design:
 
 - It has no imports, so the manifest lists no imports for it.
 - zslice reads the custom section `ztcl.point` to find the columns and the feature names, and maps its own path features to those numbers.
-- For each path of a layer, zslice writes the columns, calls `run` with its step limit for the call, and reads the outputs. On -1 the slice goes on without the plugin, with a message.
+- For each path of a layer, zslice writes the columns, calls `run` with its compute limit for the call, and reads the outputs. On -1 the slice goes on without the plugin, with a message.
 
 `ztcl compile -manifest FILE` writes a manifest fragment with these facts. The zslice plugin runtime is not chosen yet, so ztcl tests the module in Node.js and in wasmtime. This plan does not change zslice.
 

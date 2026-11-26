@@ -21,8 +21,8 @@ The `thread` capability works in the WebAssembly build. Each ztcl thread is a We
 
 ## Limits
 
-- The step limit and the memory limit of one thread work as on the native platforms. Each instance has its own memory, so the memory limit is the limit of that instance.
-- In mode a, `total_steps` and `total_mem` use an atomic counter in the `SharedArrayBuffer`.
+- The compute limit and the memory limit of one thread work as on the native platforms. Each instance has its own memory, so the memory limit is the limit of that instance.
+- In mode a, `total_compute` and `total_mem` use an atomic counter in the `SharedArrayBuffer`.
 - In mode b, only the limits of one thread apply. `max_threads` is a count in the main instance.
 - The stop flag is a word in the `SharedArrayBuffer` in mode a. In mode b, a stop is `Worker.terminate()`.
 

@@ -8,7 +8,7 @@
 //! braced `expr` is not parsed again.
 //!
 //! `Interp` runs a script. All memory comes from one arena on the given
-//! allocator, and `deinit` frees it in one step. A step limit stops a
+//! allocator, and `deinit` frees it in one step. A compute limit stops a
 //! script that runs too long. Commands that reach the outside world do
 //! not exist; `puts` writes to a callback.
 //!
@@ -986,8 +986,9 @@ pub const Interp = struct {
     skip_info: bool = false,
     /// The line of the last failed command in its own script.
     proc_line: u32 = 0,
-    /// Steps left. Each command and each loop pass uses one step.
-    step_limit: u64 = std.math.maxInt(u64),
+    /// The compute units left. Each command and each loop pass uses one
+    /// compute unit. Work on large data uses one unit for each 4,096 bytes.
+    compute_limit: u64 = std.math.maxInt(u64),
     depth: u32 = 0,
     max_depth: u32 = 600,
     /// The nesting of scripts in scripts, and its limit.
@@ -1423,7 +1424,7 @@ pub const Interp = struct {
         it.counter.over_start = false;
         if (it.isRoot()) it.counter.rearm(if (it.heap.stress != 0) 0 else @import("heap.zig").min_threshold);
         it.mem_limit = keep.mem_limit;
-        it.step_limit = keep.step_limit;
+        it.compute_limit = keep.compute_limit;
         it.max_depth = keep.max_depth;
         it.max_nest = keep.max_nest;
         it.max_native = keep.max_native;
@@ -1935,8 +1936,8 @@ pub const Interp = struct {
         if (it.nest == 0) return it.hostCmd(c);
         const from_exec = gc.precise and it.gc_from_exec;
         if (gc.precise) it.gc_from_exec = false;
-        if (it.step_limit == 0) return it.fail("step limit reached", .{});
-        it.step_limit -= 1;
+        if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
+        it.compute_limit -= 1;
         try it.checkMem();
         if (c.fast != .none and c.epoch == it.epoch and c.ns == it.ns.ptr) {
             if (it.evalFast(c) catch |e| return it.noteLine(c, e)) |v| return v;
@@ -2157,8 +2158,8 @@ pub const Interp = struct {
         if (e != error.TclError) return e;
         if (it.error_line == 0) it.error_line = c.line;
         it.proc_line = c.line;
-        // The end of the step limit leaves no trace: the unwind stays cheap.
-        if (it.step_limit != 0 and !it.overLimit()) it.addErrorInfo(c) catch {};
+        // The end of the compute limit leaves no trace: the unwind stays cheap.
+        if (it.compute_limit != 0 and !it.overLimit()) it.addErrorInfo(c) catch {};
         return e;
     }
 
@@ -2312,8 +2313,8 @@ pub const Interp = struct {
     /// Runs a command given as a list of words.
     pub fn callWords(it: *Interp, argv: []const Value) Error!Value {
         if (argv.len == 0) return Value.empty;
-        if (it.step_limit == 0) return it.fail("step limit reached", .{});
-        it.step_limit -= 1;
+        if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
+        it.compute_limit -= 1;
         const name = try it.str(argv[0]);
         const command = it.findCommand(name) orelse &it.missing;
         return it.call(command, argv, null);
@@ -2336,8 +2337,8 @@ pub const Interp = struct {
             it.chunk = mark_chunk;
             it.top = mark_top;
         }
-        if (it.step_limit == 0) return it.fail("step limit reached", .{});
-        it.step_limit -= 1;
+        if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
+        it.compute_limit -= 1;
         try it.checkMem();
         const argv = try it.stackAlloc(items.len);
         @memcpy(argv, items);
@@ -2353,7 +2354,7 @@ pub const Interp = struct {
         if (e != error.TclError) return e;
         if (it.error_line == 0) it.error_line = 1;
         it.proc_line = 1;
-        if (it.step_limit != 0 and !it.overLimit()) {
+        if (it.compute_limit != 0 and !it.overLimit()) {
             const text = value.listToString(it.alloc(), argv) catch return e;
             it.addErrorText(text) catch {};
         }
@@ -2509,8 +2510,8 @@ pub const Interp = struct {
             // A script can forge the tail code with `return -code`.
             const words = it.tail_words orelse return error.TclCustom;
             it.tail_words = null;
-            if (it.step_limit == 0) return it.fail("step limit reached", .{});
-            it.step_limit -= 1;
+            if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
+            it.compute_limit -= 1;
             const name = try it.str(words[0]);
             const command = it.findCommand(name) orelse &it.missing;
             const r = switch (command.impl) {

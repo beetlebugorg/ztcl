@@ -4,7 +4,7 @@
 //! comes through the counter of its parent, so the memory limit of the
 //! parent also counts the child. A call into a child takes the step
 //! limit, the nesting counts, and the native stack base of the caller,
-//! and gives the step limit back, so a chain of interpreters has the
+//! and gives the compute limit back, so a chain of interpreters has the
 //! same bounds as one interpreter. A child has at most the capabilities
 //! of its parent. A safe child has none.
 //!
@@ -45,7 +45,7 @@ const Saved = struct { depth: u32, nest: u32, base: usize, native: usize, limit:
 pub fn enter(from: *Interp, to: *Interp) Saved {
     const s: Saved = .{ .depth = to.depth, .nest = to.nest, .base = to.native_base, .native = to.max_native, .limit = to.mem_limit, .scope = to.gc_scope };
     to.active += 1;
-    to.step_limit = from.step_limit;
+    to.compute_limit = from.compute_limit;
     to.depth += from.depth;
     to.nest += from.nest + 1;
     to.native_base = from.native_base;
@@ -59,7 +59,7 @@ pub fn enter(from: *Interp, to: *Interp) Saved {
 }
 
 pub fn leave(from: *Interp, to: *Interp, s: Saved) void {
-    from.step_limit = to.step_limit;
+    from.compute_limit = to.compute_limit;
     to.depth = s.depth;
     to.nest = s.nest;
     to.native_base = s.base;
@@ -115,7 +115,7 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
     child.parent = it;
     child.is_safe = safe or it.is_safe;
     child.mem_limit = it.mem_limit;
-    child.step_limit = it.step_limit;
+    child.compute_limit = it.compute_limit;
     child.output = it.output;
     child.user = it.user;
     child.noise_seed = it.noise_seed;

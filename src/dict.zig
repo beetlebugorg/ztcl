@@ -397,8 +397,8 @@ fn eql(a: []const u8, b: []const u8) bool {
 }
 
 fn step(it: *Interp) Error!void {
-    if (it.step_limit == 0) return it.fail("step limit reached", .{});
-    it.step_limit -= 1;
+    if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
+    it.compute_limit -= 1;
 }
 
 /// The subcommands remove, replace, map, filter, update, and with.
@@ -619,8 +619,8 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
             const body = try it.scriptOf(argv, 4, cmd);
             var i: usize = 0;
             while (i < items.len) : (i += 2) {
-                if (it.step_limit == 0) return it.fail("step limit reached", .{});
-                it.step_limit -= 1;
+                if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
+                it.compute_limit -= 1;
                 try it.setVar(try it.str(names[0]), items[i]);
                 try it.setVar(try it.str(names[1]), items[i + 1]);
                 _ = it.evalScript(body) catch |e| switch (e) {

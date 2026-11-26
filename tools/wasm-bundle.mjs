@@ -67,7 +67,7 @@ try {
   const want = native(["lib.tcl", "app.tcl"]);
   check(want.status === 0, "native ztcl runs the scripts", want.stdout);
   let out = "";
-  const tcl = await Interp.create(bundle("app.wasm"), { stepLimit: 1_000_000, onOutput: (t) => (out += t) });
+  const tcl = await Interp.create(bundle("app.wasm"), { computeLimit: 1_000_000, onOutput: (t) => (out += t) });
   check(tcl.bundleSize > 0, "bundleSize");
   let r = tcl.run();
   check(r.ok && r.output === want.stdout && out === want.stdout, "bundle output equals ztcl", r);
@@ -83,12 +83,12 @@ try {
   r = await run(bundle("bad.wasm"));
   check(!r.ok && r.output === "before\n" && `${r.output}${r.result}\n` === nb.stdout && nb.status === 1, "error stops the bundle", [r, nb.stdout]);
 
-  // The step limit and the memory limit hold.
+  // The compute limit and the memory limit hold.
   build("forever.wasm", "forever.tcl");
-  r = await run(bundle("forever.wasm"), { stepLimit: 100_000 });
-  check(!r.ok && r.result === "forever.tcl:2: step limit reached", "step limit", r);
+  r = await run(bundle("forever.wasm"), { computeLimit: 100_000 });
+  check(!r.ok && r.result === "forever.tcl:2: compute limit reached", "compute limit", r);
   build("bomb.wasm", "bomb.tcl");
-  const big = await Interp.create(bundle("bomb.wasm"), { stepLimit: 10_000_000, memLimit: 16 << 20 });
+  const big = await Interp.create(bundle("bomb.wasm"), { computeLimit: 10_000_000, memLimit: 16 << 20 });
   r = big.run();
   check(!r.ok && r.result.endsWith("the script used too much memory"), "memory limit", r);
   check(big.memorySize <= 4 * (16 << 20), "linear memory near the cap", big.memorySize);

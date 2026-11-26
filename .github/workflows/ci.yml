@@ -194,7 +194,7 @@ jobs:
       - run: zig build
       - run: node tools/wasm-bundle.mjs zig-out/bin/ztcl zig-out/lib/ztcl.wasm
       # Procs compiled to wasm (docs/dev/wasm-aot.md) against the interpreter
-      # of the same runtime, with a step limit sweep and with collections.
+      # of the same runtime, with a compute limit sweep and with collections.
       - name: Procs compiled to wasm
         run: |
           zig build wasm-aot

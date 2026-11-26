@@ -70,7 +70,7 @@ The root folder jail maps to one preopened directory. The runner gives `--root D
 
 A WIT world `ztcl:embed/interp` exports these functions:
 
-- `new(limits) -> interp`: a resource with the step limit and the memory limit.
+- `new(limits) -> interp`: a resource with the compute limit and the memory limit.
 - `eval(interp, script) -> result<string, error>`: the error has the code, the message, and `errorInfo`.
 - `call(interp, list<string>) -> result<string, error>`.
 

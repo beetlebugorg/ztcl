@@ -2,13 +2,39 @@
 
 ztcl runs scripts that you did not write. A script gets no host access by default, and two exact limits bound its CPU work and its memory. Tcl has `interp limit` for commands and time, and no memory limit.
 
-## The step limit
+## The compute limit
 
-Each command and each loop pass uses one step. At the limit, the script stops with the error `step limit reached`. `catch` and `try` cannot catch it.
+The compute limit bounds the CPU work of a script. It counts compute units. At the limit, the script stops with the error `compute limit reached`. `catch` and `try` cannot catch it.
 
-- The count uses no clock, so a slow machine stops a script at the same step as a fast one.
-- The JIT gives the same step counts as the interpreter on the whole Tcl test suite.
-- Runner: `--max-steps N`. Zig: `Interp.step_limit`. JS: `stepLimit`.
+One compute unit is about one Tcl command executed:
+
+- Each command call is one unit. A command that the compiler puts inline keeps one unit for the command that it replaces.
+- Each pass of a loop is one unit, and each guard is one unit.
+- Work on large data costs units in proportion to its size: one unit for each 4,096 bytes of data. A list element, a table entry, and a compare of a sort count as 64 bytes each.
+
+A compute unit is not one bytecode. The interpreter, the JIT, WebAssembly level 3, and the superinstructions give the same count, so a limit gives the same result for each way that the code runs. The count uses no clock, so a slow machine stops a script at the same point as a fast one. The JIT gives the same counts as the interpreter on the whole Tcl test suite.
+
+The nearest feature of Tcl is `interp limit PATH commands`. The compute limit also charges for the size of the data.
+
+- Runner: `--compute N`. `--report` writes the compute units used to stderr.
+- Zig: `Interp.compute_limit`, the units that are left.
+- JS: the option `computeLimit`.
+
+For example, this script uses 28 compute units:
+
+```sh
+$ cat sum.tcl
+set s 0
+foreach x {1 2 3 4 5 6 7 8 9 10} {incr s $x}
+puts $s
+$ ztcl --report sum.tcl
+report compute=28 mem=547928 peak=547928
+55
+$ ztcl --compute 20 sum.tcl
+sum.tcl:2: compute limit reached
+```
+
+A sort of a list of 100,000 elements uses about 28,000 units, most of them for the data.
 
 ## The memory limit
 
@@ -50,13 +76,13 @@ With no capability on, the output of a script depends only on the script, its in
 ## Example
 
 ```sh
-$ ztcl --max-steps 1000000 --mem 67108864 --allow channels,file --root ./data script.tcl
+$ ztcl --compute 1000000 --mem 67108864 --allow channels,file --root ./data script.tcl
 ```
 
 In Zig:
 
 ```zig
-it.step_limit = 1_000_000;
+it.compute_limit = 1_000_000;
 it.mem_limit = 64 << 20;
 const cap = ztcl.interp.Capability;
 try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.file));

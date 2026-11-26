@@ -21,11 +21,8 @@ package require ztcl::json
 
 # parse
 test parse-1 {ztcl::json parse {{"a":1,"b":[true,false,"x"],"c":{"d":2.5}}}} {0 {a 1 b {true false x} c {d 2.5}}}
-# The old name zt::json works until v0.4.0-beta.
-test oldname-1 {
-    package require zt::json
-    list [zt::json get {{"a":[1,2]}} a 1] [zt::json::valid {[1]}] [ztcl::json valid x]
-} {0 {2 1 0}}
+# The old name zt::json is gone.
+test oldname-1 {package require zt::json} {1 {can't find package zt::json}}
 test parse-2 {ztcl::json parse {[1,null]}} {1 {json syntax error at line 1, column 4: null needs the option -null}}
 test parse-3 {catch {ztcl::json parse {[null]}} m o; dict get $o -errorcode} {0 {ZT JSON NULL}}
 test parse-4 {ztcl::json parse -null NULL {[1,null]}} {0 {1 NULL}}
@@ -85,7 +82,7 @@ foreach {name text} {
     test round-$name {ztcl::json valid [ztcl::json encode -typed [ztcl::json parse -typed $text]]} {0 1}
 }
 
-# the step limit stops a parse: the error cannot be caught
+# the compute limit stops a parse: the error cannot be caught
 test limit-1 {
     set big "\[[string repeat 1, 100000]1\]"
     list [llength [ztcl::json parse $big]] [ztcl::json valid $big]

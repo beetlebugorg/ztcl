@@ -13,7 +13,7 @@ The `aio` layer: an implementation of the `std.Io` vtable subset that ztcl needs
 
 ## Rules
 
-1. The step limit and the memory limit do not apply here: `aio` has no interpreter. Each buffer has a fixed top, and the tests check it.
+1. The compute limit and the memory limit do not apply here: `aio` has no interpreter. Each buffer has a fixed top, and the tests check it.
 
 ## Test sources
 

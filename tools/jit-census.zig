@@ -1,6 +1,6 @@
 //! The census of loops for tier 2.
 //!
-//! For each script, the tool runs it in an interpreter with a step limit,
+//! For each script, the tool runs it in an interpreter with a compute limit,
 //! then compiles the body of each proc to bytecode and runs the verifier
 //! of the JIT on it. Each loop head of the verifier starts a loop that
 //! ends at the last backward jump to the head. The tool puts each loop
@@ -111,7 +111,7 @@ pub fn main(init: std.process.Init) !void {
         try it.init(a);
         defer it.deinit();
         it.output = .{ .write = discard };
-        it.step_limit = 20_000_000;
+        it.compute_limit = 20_000_000;
         it.gc_on = false;
         _ = it.eval(text) catch {};
         var counts: [3]u64 = @splat(0);

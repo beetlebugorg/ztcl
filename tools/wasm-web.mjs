@@ -17,20 +17,20 @@ const check = (ok, what) => {
 
 const module = await compile(wasm);
 let out = "";
-const tcl = await Interp.create(module, { stepLimit: 10_000, memLimit: 8 << 20, onOutput: (t) => (out += t) });
+const tcl = await Interp.create(module, { computeLimit: 10_000, memLimit: 8 << 20, onOutput: (t) => (out += t) });
 let r = tcl.eval("proc price {q u} {expr {$q * $u}}; puts hi; price 3 4.5");
 check(r.ok && r.result === "13.5" && r.output === "hi\n" && out === "hi\n", "eval, result, and output");
 r = tcl.eval("set x");
 check(!r.ok && r.result.startsWith("can't read"), "error message");
 r = tcl.eval("set i 0; while 1 {incr i}");
-check(!r.ok && r.result === "step limit reached", "step limit");
-// The step limit applies to each eval, and the steps are the same on each run.
-tcl.stepLimit = null;
+check(!r.ok && r.result === "compute limit reached", "compute limit");
+// The compute limit applies to each eval, and the steps are the same on each run.
+tcl.computeLimit = null;
 check(tcl.eval("set i").result === "4999", "steps of the stopped loop");
-check(tcl.eval("set n 0; while {$n < 100000} {incr n}").ok, "no step limit");
+check(tcl.eval("set n 0; while {$n < 100000} {incr n}").ok, "no compute limit");
 tcl.close();
 
-const big = await Interp.create(module, { stepLimit: 10_000_000, memLimit: 16 << 20 });
+const big = await Interp.create(module, { computeLimit: 10_000_000, memLimit: 16 << 20 });
 r = big.eval("set s x; catch {while 1 {append s $s}}");
 check(!r.ok && r.result === "the script used too much memory", "memory limit");
 check(big.memorySize <= 3 * (16 << 20) + (16 << 20), "linear memory near the cap");
@@ -49,7 +49,7 @@ const run = (...args) =>
 let p = run(path.join(here, "../examples/web/scripts/fib.tcl"));
 check(p.status === 0 && p.stdout === "6765\n", "run.mjs fib");
 p = run("--steps", "100000", path.join(here, "../examples/web/scripts/forever.tcl"));
-check(p.status === 1 && p.stderr.includes("error: step limit reached"), "run.mjs step limit");
+check(p.status === 1 && p.stderr.includes("error: compute limit reached"), "run.mjs compute limit");
 p = run("--mem", "16", path.join(here, "../examples/web/scripts/bomb.tcl"));
 check(p.status === 1 && p.stderr.includes("error: the script used too much memory"), "run.mjs memory limit");
 

@@ -42,7 +42,7 @@ function plan(file) {
   const flags = (text.match(/^# thread-tests-flags: (.*)$/m)?.[1] ?? "").split(/\s+/).filter(Boolean);
   const allow = ["thread", "event", "package", "clock"];
   const limits = {};
-  const names = { "--threads": "maxThreads", "--thread-steps": "stepLimit", "--thread-mem": "memLimit", "--threads-steps": "totalSteps", "--threads-mem": "totalMem" };
+  const names = { "--threads": "maxThreads", "--thread-compute": "computeLimit", "--thread-mem": "memLimit", "--threads-compute": "totalCompute", "--threads-mem": "totalMem" };
   for (let i = 0; i < flags.length; i += 2) {
     if (flags[i] === "--allow") allow.push(...flags[i + 1].split(","));
     else if (names[flags[i]]) limits[names[flags[i]]] = Number(flags[i + 1]);
@@ -164,7 +164,7 @@ if (modes.includes("browser")) {
     for (const f of ["ztcl.mjs", "ztcl-threads.mjs", "ztcl-thread-worker.mjs"]) fs.copyFileSync(path.join(root, "web", f), path.join(site, f));
     for (const f of ["ztcl-threads.wasm", "ztcl-async.wasm"]) fs.copyFileSync(path.join(lib, f), path.join(site, f));
     fs.copyFileSync(path.join(webDir, "threads-run.mjs"), path.join(site, "threads-run.mjs"));
-    const asyncPlan = { file: "threads-async.tcl", allow: ["thread"], limits: { stepLimit: 1_000_000, memLimit: 32 << 20 }, script: fs.readFileSync(path.join(testDir, "lib.tcl"), "utf8") + "\n" + fs.readFileSync(path.join(webDir, "threads-async.tcl"), "utf8") };
+    const asyncPlan = { file: "threads-async.tcl", allow: ["thread"], limits: { computeLimit: 1_000_000, memLimit: 32 << 20 }, script: fs.readFileSync(path.join(testDir, "lib.tcl"), "utf8") + "\n" + fs.readFileSync(path.join(webDir, "threads-async.tcl"), "utf8") };
     fs.writeFileSync(path.join(site, "plans.json"), JSON.stringify({ shared: plans(), async: [asyncPlan] }));
     fs.writeFileSync(
       path.join(site, "index.html"),

@@ -21,7 +21,7 @@
 //!
 //! Each cycle of the reachable instructions must pass through an
 //! instruction that counts a step: `step`, `guard`, `invoke`,
-//! `eval_cmd`, or `foreach_next`. So the step limit stops each loop. A
+//! `eval_cmd`, or `foreach_next`. So the compute limit stops each loop. A
 //! depth-first search over the other instructions finds a cycle.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause

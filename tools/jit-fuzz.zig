@@ -11,14 +11,14 @@
 //! lists, dicts, strings, `switch`, errors, `upvar`, `uplevel`, `rename`,
 //! traces, coroutines, `apply`, and namespaces. Each loop has at most 50
 //! passes, and a proc calls only procs with a lower number, so each
-//! program ends. The step limit also bounds each run.
+//! program ends. The compute limit also bounds each run.
 //!
 //! Each program runs in a new interpreter for each mode of `modes`: the
 //! interpreter (the reference), the JIT at threshold 0, and the JIT at
 //! the default threshold. `--tier2` adds the tier 2 modes: one of them
 //! calls `tier_up` at the first pass of each loop. The summary gives
 //! the count of loops that compiled to tier 2. Then the program runs
-//! again in the interpreter and in one JIT mode with a step limit of a
+//! again in the interpreter and in one JIT mode with a compute limit of a
 //! random part of the full count, and with a random memory limit. Each
 //! run has the collector off, so the memory count is exact. The tool
 //! compares the output, the result or the error, `errorInfo`,
@@ -33,7 +33,7 @@
 //!
 //! `--corpus DIR` runs each `.tcl` file of DIR in the same way, with
 //! eight random limits for each file, in place of the random programs.
-//! The step limit of this mode is 200 000. `tests/jit/corpus/` has
+//! The compute limit of this mode is 200 000. `tests/jit/corpus/` has
 //! scripts of the review of milestone 1, and `tests/jit/found/` has each
 //! program that found a bug.
 //!
@@ -48,7 +48,7 @@
 //! program with 1 to 4 random changes of an opcode or an operand. The
 //! verifier checks each one. When it accepts one, the JIT compiles it,
 //! and the proc runs with that code in two interpreters with the same
-//! history: one with the JIT and one without it. The step limit is
+//! history: one with the JIT and one without it. The compute limit is
 //! 10 000, or below 64 in one run of four. One run of four has a memory
 //! limit a little above the count before the run, and the others have a
 //! limit 256 MiB above it. The result,
@@ -976,7 +976,7 @@ fn runOnce(a: Allocator, text: []const u8, mode: Mode, cfg: Config, out: *std.Ar
     it.output = .{ .ctx = &sink, .write = collect };
     it.gc_on = false;
     it.mem_limit = cfg.mem;
-    it.step_limit = cfg.steps;
+    it.compute_limit = cfg.steps;
     if (coverage) try it.register("_hit", cmdHit);
     if (mode.jit) {
         const opts: tcl.jit.Options = .{ .threshold = mode.threshold, .tier2 = mode.tier2, .tier2_count = mode.tier2_count, .stress = cfg.stress, .fail_from = cfg.fail_from };
@@ -991,9 +991,9 @@ fn runOnce(a: Allocator, text: []const u8, mode: Mode, cfg: Config, out: *std.Ar
     const info = it.getVarPlain("::errorInfo") catch Value.empty;
     const code = it.getVarPlain("::errorCode") catch Value.empty;
     try out.print(a, "errorInfo: {s}\nerrorCode: {s}\nsteps: {d}\nmem: {d}\noutput:\n{s}", .{
-        it.str(info) catch "?", it.str(code) catch "?", cfg.steps - it.step_limit, it.memUsed(), sink.buf.items,
+        it.str(info) catch "?", it.str(code) catch "?", cfg.steps - it.compute_limit, it.memUsed(), sink.buf.items,
     });
-    extra.* = .{ .peak = it.counter.mem_peak, .steps = cfg.steps - it.step_limit, .capped = cap.hit };
+    extra.* = .{ .peak = it.counter.mem_peak, .steps = cfg.steps - it.compute_limit, .capped = cap.hit };
     if (it.jit) |s| {
         extra.ins = s.stats.ins;
         extra.compiled = s.stats.compiled;
@@ -1080,7 +1080,7 @@ const Fuzz = struct {
             f.capped += 1;
             return true;
         }
-        if (std.mem.indexOf(u8, f.ref.items, "step limit reached") != null) f.stopped_steps += 1;
+        if (std.mem.indexOf(u8, f.ref.items, "compute limit reached") != null) f.stopped_steps += 1;
         if (std.mem.indexOf(u8, f.ref.items, "too much memory") != null) f.stopped_mem += 1;
         // A recursion with no end stops at the native stack limit, and
         // the JIT uses less native stack for a call level, so it can go
@@ -1099,7 +1099,7 @@ const Fuzz = struct {
             if (!try f.against(text, m, f.cfg)) return f.report(text, seed, label, m, f.cfg);
         }
         var r = Rng.init(seed, 1);
-        // A step limit inside the run, and a memory limit inside the peak.
+        // A compute limit inside the run, and a memory limit inside the peak.
         const jm = f.modes[1 + @as(usize, @intCast(r.below(f.modes.len - 1)))];
         var c = f.cfg;
         c.steps = r.below(x.steps + 1);
@@ -1118,7 +1118,7 @@ const Fuzz = struct {
         defer f.a.free(path);
         var file: std.ArrayList(u8) = .empty;
         defer file.deinit(f.a);
-        try file.print(f.a, "# jit-fuzz: seed {d}, mode {s}, step limit {d}, memory limit {d}, stress {d}, first failed allocation {d}\n", .{ seed, m.name, c.steps, c.mem, c.stress, c.fail_from });
+        try file.print(f.a, "# jit-fuzz: seed {d}, mode {s}, compute limit {d}, memory limit {d}, stress {d}, first failed allocation {d}\n", .{ seed, m.name, c.steps, c.mem, c.stress, c.fail_from });
         try file.appendSlice(f.a, text);
         try file.appendSlice(f.a, "\n# The reference:\n");
         try comment(f.a, &file, f.ref.items);
@@ -1127,7 +1127,7 @@ const Fuzz = struct {
         Io.Dir.cwd().writeFile(f.io, .{ .sub_path = path, .data = file.items }) catch |e| {
             std.debug.print("cannot write {s}: {t}\n", .{ path, e });
         };
-        std.debug.print("DIFF {s}: mode {s}, step limit {d}, memory limit {d}: {s}\n", .{ label, m.name, c.steps, c.mem, path });
+        std.debug.print("DIFF {s}: mode {s}, compute limit {d}, memory limit {d}: {s}\n", .{ label, m.name, c.steps, c.mem, path });
         return false;
     }
 
@@ -1146,7 +1146,7 @@ const Fuzz = struct {
         if (f.programs == 0) return;
         const pf: f64 = @floatFromInt(f.programs);
         std.debug.print("mean bytecode instructions compiled at threshold 0: {d:.1} in {d:.2} functions\n", .{ @as(f64, @floatFromInt(f.ins)) / pf, @as(f64, @floatFromInt(f.compiled)) / pf });
-        std.debug.print("programs that reached the step limit: {d}, the memory limit: {d}, the nesting limit (depth not compared): {d}\n", .{ f.stopped_steps, f.stopped_mem, f.deep });
+        std.debug.print("programs that reached the compute limit: {d}, the memory limit: {d}, the nesting limit (depth not compared): {d}\n", .{ f.stopped_steps, f.stopped_mem, f.deep });
         std.debug.print("runs that reached the cap of 256 MiB (not compared): {d}\n", .{f.capped});
         if (f.t2_runs > 0) std.debug.print("tier 2: {d} loops compiled in {d} of {d} runs of the tier 2 modes, {d} exits\n", .{ f.t2_loops, f.t2_hit, f.t2_runs, f.t2_exits });
         if (f.marked == 0) return;
@@ -1544,7 +1544,7 @@ const VSide = struct {
         p.code = code;
         out.clearRetainingCapacity();
         vs.sink.buf.clearRetainingCapacity();
-        it.step_limit = steps;
+        it.compute_limit = steps;
         it.mem_limit = mem;
         if (it.eval(call)) |v| {
             try out.print(a, "result: {s}\n", .{it.str(v) catch "?"});
@@ -1552,8 +1552,8 @@ const VSide = struct {
             try out.print(a, "error {t}: {s}\n", .{ e, it.str(it.result) catch "" });
             if (e == error.TclError) it.finishError() catch {};
         }
-        const used = steps -% it.step_limit;
-        it.step_limit = std.math.maxInt(u64);
+        const used = steps -% it.compute_limit;
+        it.compute_limit = std.math.maxInt(u64);
         it.mem_limit = std.math.maxInt(usize);
         const info = it.getVarPlain("::errorInfo") catch Value.empty;
         try out.print(a, "errorInfo: {s}\nsteps: {d}\nmem: {d}\noutput:\n{s}", .{ it.str(info) catch "?", used, it.memUsed(), vs.sink.buf.items });
@@ -1563,10 +1563,10 @@ const VSide = struct {
 /// Each `Code` that the verifier accepts runs in two interpreters with
 /// the same history: one with the JIT and one without it. The result,
 /// `errorInfo`, the steps used, the memory count, and the output must be
-/// equal. So the tool finds a wrong result and a pass of the step limit
+/// equal. So the tool finds a wrong result and a pass of the compute limit
 /// or the memory limit, and a crash or a failed safety check stops the
 /// process. A run of the JIT that runs longer than one second is a hang:
-/// the step limit of each run is at most 10 000.
+/// the compute limit of each run is at most 10 000.
 fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start: Io.Timestamp, verbose: bool, opts: tcl.jit.Options) !void {
     var st: VerifyStats = .{};
     var n: u64 = 0;
@@ -1656,8 +1656,8 @@ fn verifyFuzz(a: Allocator, io: Io, seed: u64, count: u64, seconds: ?u64, start:
             code.jit_gen = 0;
             code.jit_calls = 0;
             code.jit_state = .untried;
-            // Most runs have the step limit of 10 000. One in four has a
-            // step limit below the steps of a few passes of a loop, and
+            // Most runs have the compute limit of 10 000. One in four has a
+            // compute limit below the steps of a few passes of a loop, and
             // one in four has a memory limit a little above the count now.
             const steps: u64 = if (r.chance(25)) r.below(64) else 10_000;
             const mem_room: ?usize = if (r.chance(25)) @intCast(r.below(256 << 10)) else null;

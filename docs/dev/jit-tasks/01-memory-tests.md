@@ -10,7 +10,7 @@ Make the tests and the tools that show the memory growth, before any change to t
 - `tools/mem-flat.sh` (new): runs each script with N and with 10 N passes and prints the peak of `memUsed` for both.
 - `tools/fetch-kostya.sh` (new): gets `kostya/benchmarks` at commit `5bc68b3705` into the ignored folder `.kostya/`, as `tools/fetch-tcl.sh` does for Tcl. Add `.kostya/` to `.gitignore`.
 - `tools/kostya.sh` (new): runs `bf.tcl bench.b`, `bf_oo.tcl bench.b`, and `base64/test.tcl` on ztcl and on a `tclsh`, in the memory cap. It prints the output, the instruction count, and the peak memory of each run, and the ratio of the counts.
-- `src/main.zig`: the flag `--report`. At the end, the runner writes one line to stderr: `report steps=<used> mem=<bytes now> peak=<highest bytes>`.
+- `src/main.zig`: the flag `--report`. At the end, the runner writes one line to stderr: `report compute=<used> mem=<bytes now> peak=<highest bytes>`.
 - `src/interp.zig`: the field `mem_peak` of `Counting`, set in its `alloc` and `resize`.
 - `docs/references/jit.md`: the entry for `kostya/benchmarks` exists. Check it.
 
@@ -36,7 +36,7 @@ Make the tests and the tools that show the memory growth, before any change to t
 - Do not change a benchmark file. The repository has no copy of them.
 - `bf.tcl` prints a checksum only when `::env(QUIET)` exists. `tools/kostya.sh` makes it exist for ztcl and for `tclsh` in the same way, with no change to the file. Use the environment rule of `exec` or a first script that sets the variable and then runs the program. Write in the tool which way it uses.
 - The programs call `socket localhost 9001` inside `catch`. No server is there. Keep the network policy `loopback`.
-- Run ztcl with `--max-steps 100000000000 --allow package,interp,clock,channels,file,event,socket,exec --root <folder> --tclsh <script> <args>`.
+- Run ztcl with `--compute 100000000000 --allow package,interp,clock,channels,file,event,socket,exec --root <folder> --tclsh <script> <args>`.
 - `matmul` is not a gate. It needs `math::linearalgebra` of tcllib.
 
 ## Acceptance

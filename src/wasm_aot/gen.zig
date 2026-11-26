@@ -485,7 +485,7 @@ const Gen = struct {
     fn stepCheck(g: *Gen, f: Fast) Error!void {
         const l = g.l;
         try g.b.localGet(local_it);
-        try g.b.i64Load(l.it_step_limit);
+        try g.b.i64Load(l.it_compute_limit);
         try g.b.i64Op(.eqz);
         try g.toSlow(f);
         try g.b.localGet(local_it);
@@ -496,10 +496,10 @@ const Gen = struct {
         try g.toSlow(f);
         try g.b.localGet(local_it);
         try g.b.localGet(local_it);
-        try g.b.i64Load(l.it_step_limit);
+        try g.b.i64Load(l.it_compute_limit);
         try g.b.i64Const(1);
         try g.b.i64Op(.sub);
-        try g.b.i64Store(l.it_step_limit);
+        try g.b.i64Store(l.it_compute_limit);
     }
 
     fn fastOp(op: expr.BinOp) bool {

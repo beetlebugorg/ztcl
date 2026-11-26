@@ -17,7 +17,7 @@ For each script of `tests/jit/`, `tests/mem/`, and `bench/`, the tool runs the r
 2. `--jit --jit-threshold 0`
 3. `--jit` (default threshold)
 
-It then runs the step limit sweep on each script of `tests/jit/sweep/`: for each step limit from 0 to the full step count of the script (at most 3000 per script), modes 1 and 2 give equal output.
+It then runs the compute limit sweep on each script of `tests/jit/sweep/`: for each compute limit from 0 to the full step count of the script (at most 3000 per script), modes 1 and 2 give equal output.
 
 ## The scripts of `tests/jit/`
 

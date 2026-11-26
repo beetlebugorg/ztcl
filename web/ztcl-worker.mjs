@@ -29,7 +29,7 @@ async function handle(data) {
   }
   try {
     const it = await current();
-    it.stepLimit = data.stepLimit;
+    it.computeLimit = data.computeLimit;
     if (data.memLimit != null) it.memLimit = data.memLimit;
     const r = it.eval(data.script);
     self.postMessage({ id: data.id, ...r, memorySize: it.memorySize });

@@ -60,7 +60,7 @@ Russ Cox, "Regular Expression Matching: the Virtual Machine Approach", 2009. htt
 
 **License:** Article
 
-**How ztcl uses it:** `src/regex.zig` compiles a pattern to a program of the kind in the article (`char`, `split`, `jmp`, `match`) and runs it with a Thompson simulation. ztcl has its own code. It adds the sets, the assertions, lookahead, and the step limit. The syntax follows the manual page `re_syntax.n` of Tcl.
+**How ztcl uses it:** `src/regex.zig` compiles a pattern to a program of the kind in the article (`char`, `split`, `jmp`, `match`) and runs it with a Thompson simulation. ztcl has its own code. It adds the sets, the assertions, lookahead, and the compute limit. The syntax follows the manual page `re_syntax.n` of Tcl.
 
 ### Copying collection
 
@@ -100,7 +100,7 @@ R. Nigel Horspool, "Practical fast searching in strings", Software: Practice and
 
 **License:** Paper
 
-**How ztcl uses it:** `string first` and `string last` in `src/cmds.zig` use the skip table of the paper, forward and in reverse. ztcl has its own code. Each compare of the needle uses units of the step limit.
+**How ztcl uses it:** `string first` and `string last` in `src/cmds.zig` use the skip table of the paper, forward and in reverse. ztcl has its own code. Each compare of the needle uses units of the compute limit.
 
 ## Not used
 

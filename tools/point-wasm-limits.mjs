@@ -1,4 +1,4 @@
-// Checks the step limit and the memory limit of a compiled point proc.
+// Checks the compute limit and the memory limit of a compiled point proc.
 //
 //   node tools/point-wasm-limits.mjs [MODULE.wasm]
 //

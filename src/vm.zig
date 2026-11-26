@@ -46,9 +46,9 @@ pub const Op = enum(u8) {
     store,
     /// Runs the read form `x` (`Access`) on the top values of the stack.
     access,
-    /// Jumps to `a` when a core command changed. Uses one step of the step limit.
+    /// Jumps to `a` when a core command changed. Uses one step of the compute limit.
     guard,
-    /// Uses one step of the step limit. A loop pass runs this.
+    /// Uses one step of the compute limit. A loop pass runs this.
     step,
     jump,
     /// Pops a condition. Jumps to `a` when it is false.
@@ -1302,8 +1302,8 @@ noinline fn slowForeach(it: *Interp, code: *const Code, table: []const u32, item
 }
 
 pub inline fn step(it: *Interp) Error!void {
-    if (it.step_limit == 0) return it.fail("step limit reached", .{});
-    it.step_limit -= 1;
+    if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
+    it.compute_limit -= 1;
     // Each value of this run is on the value stack or in a cell here.
     if (it.counter.trip >= it.mem_limit) try it.memPoint(true);
 }

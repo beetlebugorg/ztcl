@@ -38,8 +38,6 @@ const modules_list = [_]mods.Module{.{
     .aliases = &.{
         .{ .name = "json", .version = "1.3.6", .script = compat },
         .{ .name = "json::write", .version = "1.0.5", .script = compat },
-        // The old name, until v0.4.0-beta.
-        .{ .name = "zt::json", .version = "1.0", .script = mods.oldNamespace("json") },
     },
     .install = install,
     .script =
@@ -120,7 +118,7 @@ fn cmdParse(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 
 /// The error of a limit stays an error. Other errors give `ok = false`.
 fn limitOrFalse(it: *Interp, e: Error) Error!void {
-    if (e != error.TclError or it.step_limit == 0 or it.overLimit()) return e;
+    if (e != error.TclError or it.compute_limit == 0 or it.overLimit()) return e;
 }
 
 fn cmdValid(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {

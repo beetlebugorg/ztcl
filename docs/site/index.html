@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ztcl · Tcl, compiled</title>
-<meta name="description" content="A Tcl 8.6 interpreter in Zig with an optional JIT, exact step and memory limits, real threads, fast JSON, one static binary, and a WebAssembly build. Up to 28 times as fast as tclsh on an integer loop.">
+<meta name="description" content="A Tcl 8.6 interpreter in Zig with an optional JIT, exact compute and memory limits, real threads, fast JSON, one static binary, and a WebAssembly build. Up to 28 times as fast as tclsh on an integer loop.">
 <link rel="canonical" href="https://beetlebug.org/ztcl/">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
@@ -38,7 +38,7 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
         <a class="btn primary" href="playground/">Try it in your browser</a>
         <a class="btn ghost" href="quickstart/">Get started</a>
       </div>
-      <p class="meta">Exact step and memory limits. Real threads. Fast JSON. One static binary with no dependency outside the Zig standard library. A WebAssembly build.</p>
+      <p class="meta">Exact compute and memory limits. Real threads. Fast JSON. One static binary with no dependency outside the Zig standard library. A WebAssembly build.</p>
       <pre class="term" style="margin-top:16px"><code><span class="p">$ </span>brew install beetlebugorg/tap/ztcl</code></pre>
     </div>
     <div class="codecard" aria-label="A code sample">
@@ -179,11 +179,11 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
   <div class="wrap">
     <p class="eyebrow">Exact, deterministic limits</p>
     <h2>Limits that Tcl does not have.</h2>
-    <p class="lede">The <code>interp limit</code> command of Tcl counts commands and time, and it has no memory limit. ztcl counts steps exactly and puts a hard cap on memory. Your program sets both before it runs a script that it did not write.</p>
+    <p class="lede">The <code>interp limit</code> command of Tcl counts commands and time, and it has no memory limit. ztcl counts compute units exactly and puts a hard cap on memory. Your program sets both before it runs a script that it did not write.</p>
     <div class="grid g3">
       <div class="card">
-        <h3>An exact step limit</h3>
-        <p class="muted">Each command and each loop pass uses steps. At the limit, the script stops with an error that <code>catch</code> and <code>try</code> cannot catch.</p>
+        <h3>An exact compute limit</h3>
+        <p class="muted">Each command and each loop pass uses compute units. At the limit, the script stops with an error that <code>catch</code> and <code>try</code> cannot catch.</p>
         <ul>
           <li>The limit holds in JIT machine code too.</li>
           <li>No clock is involved, so a slow machine gets the same count.</li>
@@ -199,7 +199,7 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
       </div>
       <div class="card">
         <h3>The same stop on each run</h3>
-        <p class="muted">A script stops at the same step on each machine and in each JIT tier. A JIT run gives the same step counts as the interpreter on the whole Tcl test suite.</p>
+        <p class="muted">A script stops at the same point on each machine and in each JIT tier. A JIT run gives the same counts of compute units as the interpreter on the whole Tcl test suite.</p>
         <ul>
           <li>With no capability on, output depends only on the script, the seed, and the inputs.</li>
           <li>The collector can move the point of the memory error. <code>--gc off</code> makes it exact.</li>
@@ -245,7 +245,7 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
         <h2>Real threads, faster than tclsh.</h2>
         <p class="lede" style="margin-bottom:24px">The commands of the Tcl Thread package: <code>thread::*</code>, <code>tsv::*</code>, <code>tpool::*</code>, mutexes, and conditions. Each thread has its own interpreter, heap, and JIT code, and no value crosses threads by pointer.</p>
         <ul class="checks">
-          <li><b>Limits for each thread</b> and totals for the group: threads, steps, memory, and queue length.</li>
+          <li><b>Limits for each thread</b> and totals for the group: threads, compute units, memory, and queue length.</li>
           <li><b>A thread that passes a limit stops alone.</b> The other threads keep running.</li>
           <li><b>In the browser too,</b> with one Web Worker for each thread.</li>
         </ul>
@@ -329,7 +329,7 @@ exe.root_module.addImport(<span class="s">"ztcl"</span>, dep.module(<span class=
 <span class="k">var</span> it: ztcl.Interp = <span class="k">undefined</span>;
 <span class="k">try</span> it.init(gpa);
 <span class="k">defer</span> it.deinit();
-it.step_limit = <span class="n">1_000_000</span>;
+it.compute_limit = <span class="n">1_000_000</span>;
 it.mem_limit = <span class="n">64</span> &lt;&lt; <span class="n">20</span>;
 <span class="k">const</span> v = <span class="k">try</span> it.eval(<span class="s">"expr {6 * 7}"</span>);</code></pre>
       </div>
@@ -343,7 +343,7 @@ it.mem_limit = <span class="n">64</span> &lt;&lt; <span class="n">20</span>;
       <div>
         <p class="eyebrow">WebAssembly</p>
         <h2>The same interpreter in the browser.</h2>
-        <p class="lede" style="margin-bottom:24px"><code>npm install @beetlebug/ztcl</code> gives the WebAssembly build with types. The module has no imports. A page runs scripts that its users write, with the same step limit and memory cap.</p>
+        <p class="lede" style="margin-bottom:24px"><code>npm install @beetlebug/ztcl</code> gives the WebAssembly build with types. The module has no imports. A page runs scripts that its users write, with the same compute limit and memory cap.</p>
         <ul class="checks">
           <li><b>A small ES module</b> for the page, a Web Worker, and Node.js.</li>
           <li><b>Stop in a worker.</b> A long script runs off the main thread, and the page can end it.</li>
@@ -361,14 +361,14 @@ it.mem_limit = <span class="n">64</span> &lt;&lt; <span class="n">20</span>;
 <pre><code><span class="k">import</span> { Interp } <span class="k">from</span> <span class="s">"./ztcl.mjs"</span>;
 
 <span class="k">const</span> tcl = <span class="k">await</span> Interp.create(<span class="s">"./ztcl.wasm"</span>, {
-  stepLimit: <span class="n">10_000</span>,
+  computeLimit: <span class="n">10_000</span>,
   memLimit: <span class="n">8</span> &lt;&lt; <span class="n">20</span>,
 });
 tcl.eval(<span class="s">"proc price {q u} {expr {$q * $u}}"</span>);
 tcl.eval(<span class="s">"price 3 4.5"</span>);
 <span class="c">// { ok: true, result: "13.5", output: "" }</span>
 tcl.eval(<span class="s">"while 1 {}"</span>);
-<span class="c">// { ok: false, result: "step limit reached", output: "" }</span></code></pre>
+<span class="c">// { ok: false, result: "compute limit reached", output: "" }</span></code></pre>
       </div>
     </div>
   </div>
@@ -405,7 +405,7 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
       <ul class="checks">
         <li><b>The Tcl suite.</b> 37,413 of 46,494 tests pass in all 152 files (80.5 %). The suite also runs with the JIT on for each proc.</li>
         <li><b>Differential fuzzing.</b> <code>zig build jit-fuzz</code> compares random programs in the interpreter and in the JIT, and fuzzes the assembler and the verifier.</li>
-        <li><b>A comparison tool.</b> <code>tools/jit-diff.sh</code> compares the output, errors, and steps of the JIT and the interpreter on the test scripts.</li>
+        <li><b>A comparison tool.</b> <code>tools/jit-diff.sh</code> compares the output, errors, and compute units of the JIT and the interpreter on the test scripts.</li>
         <li><b>Stress modes.</b> <code>--jit-stress</code> forces the rare paths of the compiler, and <code>--gc-stress N</code> starts a collection at each Nth allocation.</li>
       </ul>
       <ul class="checks">

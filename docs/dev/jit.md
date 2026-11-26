@@ -64,7 +64,7 @@ Each row is one loop of one million passes in a proc. The first row is the empty
 
 ### A model of the compiled loop
 
-A hand-written model of the machine code for the loop of `sum.tcl` gives a measured number for both tiers. The model uses the data layout of the `ReleaseFast` build: the cell pointer in the frame entry, the two tag checks, the step limit, the memory limit, and the epoch check. It is not in the repository.
+A hand-written model of the machine code for the loop of `sum.tcl` gives a measured number for both tiers. The model uses the data layout of the `ReleaseFast` build: the cell pointer in the frame entry, the two tag checks, the compute limit, the memory limit, and the epoch check. It is not in the repository.
 
 | Code for the loop of `sum.tcl` | Instructions | Cycles in the same session |
 |---|---|---|
@@ -93,7 +93,7 @@ This plan promises no gain for the work that a helper function does: the hash of
 
 The Tcl programs of [kostya/benchmarks](https://github.com/kostya/benchmarks) (MIT), at commit `5bc68b3705`, are an outside gate: `brainfuck/bf.tcl` and `brainfuck/bf_oo.tcl` with `bench.b`, and `base64/test.tcl`. The repository has no copy of them. `matmul` needs the tcllib package `math::linearalgebra`, which ztcl does not have, so it is not a gate.
 
-A first run on the busy machine, against `tclsh` 8.6.16, with each capability on, a step limit of 10^11, and a memory limit of 6 GiB:
+A first run on the busy machine, against `tclsh` 8.6.16, with each capability on, a compute limit of 10^11, and a memory limit of 6 GiB:
 
 | Program | ztcl | `tclsh` 8.6.16 |
 |---|---|---|
@@ -249,10 +249,10 @@ The hot work of `bf_oo.tcl` is method calls, which go through helpers and the fr
 
 The tests of milestone 1:
 
-- `tools/jit-diff.sh`: 148 runs of 54 scripts of `tests/jit/`, 12 of `tests/mem/`, and 8 of `bench/` in modes 2 and 3 equal mode 1, also with `-x "--gc-stress 1"`. The step limit sweep compared 682 step limits. The interpreter output of 53 scripts equals the output of tclsh 8.6.16. `tests/jit/errors.tcl` has no `.out` file, because the `errorInfo` of ztcl has more lines than the one of tclsh.
+- `tools/jit-diff.sh`: 148 runs of 54 scripts of `tests/jit/`, 12 of `tests/mem/`, and 8 of `bench/` in modes 2 and 3 equal mode 1, also with `-x "--gc-stress 1"`. The compute limit sweep compared 682 compute limits. The interpreter output of 53 scripts equals the output of tclsh 8.6.16. `tests/jit/errors.tcl` has no `.out` file, because the `errorInfo` of ztcl has more lines than the one of tclsh.
 - `tools/suite.sh -j`: 19 877 on the 37 core files and 37 383 on all 152 files with the suite runner, each file equal to the run without `-j`. A `ReleaseSafe` suite runner with `-g 64` gives 20 644 with and without `-j`, each file equal.
 - `tools/gc-fuzz.py -j -g 1` with a `ReleaseSafe` runner: 300 programs, no crash. One program differed because the JIT uses less native stack for one proc call level, so a recursion with no end stopped at a deeper level. The semantics table above names this case. One program differed with and without the collector at the memory limit, also without the JIT. The tool now counts the first case and does not compare it.
-- Three fixes were reversed one at a time, and a unit test failed each time: the overflow check of `+`, `-`, and `*`, the check of the integer tag of a cell, and the restore of the step count before the slow path of the memory check.
+- Three fixes were reversed one at a time, and a unit test failed each time: the overflow check of `+`, `-`, and `*`, the check of the integer tag of a cell, and the restore of the count of compute units before the slow path of the memory check.
 
 Task 15 moved each handler of `vm.exec` to a function. The guard and `foreach_next` stay in two parts in `exec`: `guardJumps` and `step`, and `foreachAdvance` with no check of the kinds. The joined forms made `sum.tcl` 6 % and `foreach.tcl` 5 % longer. The remaining 1.9 % of `foreach.tcl` comes from the code layout of `exec`: a copy of the old handler made `sum.tcl` and `nested.tcl` 2 % longer.
 
@@ -353,16 +353,16 @@ Tier 2 used 1.4 % more on `bf.tcl` and 0.3 % more on `bf_oo.tcl`. The count of p
 The tests of tier 2:
 
 - `zig build test` passes in Debug, in `ReleaseSafe`, and with `-Djit=false`. `zig build bench` gives `same sum: true` for each row.
-- `tools/jit-diff.sh -t`: 154 runs of the scripts of `tests/jit/`, `tests/mem/`, and `bench/`, and 682 step limits of the sweep, equal to the interpreter. The same with `-x "--jit-stress 32"` and with `-x "--gc-stress 1"`, and without `-t`.
+- `tools/jit-diff.sh -t`: 154 runs of the scripts of `tests/jit/`, `tests/mem/`, and `bench/`, and 682 compute limits of the sweep, equal to the interpreter. The same with `-x "--jit-stress 32"` and with `-x "--gc-stress 1"`, and without `-t`.
 - `tools/suite.sh -a -J` and `tools/suite.sh -a -j`: 37 383 on all 152 files, each file equal.
 - `tools/gc-fuzz.py -j -T -g 1` with a `ReleaseSafe` runner: 300 programs, none differ. One run reached the time limit, and one stopped at another depth at the nesting limit, as in milestone 1.
-- One fix of each task was reversed, and a test failed each time. Task 36: the check of the cell tag in the entry block (the new test with a link whose bytes look like an integer), the checks after a call (two tests), and the write of the slots before a call (a test then loops until it is stopped). Task 37: the NaN check of a result, the NaN check of the entry block, the tag check of `incr_value` on a value from a helper, the write of the kept slots at an exit after a helper that runs no script, and the register of the result of `to_bool` (`tests/jit/tier2_calls.tcl` with `tools/jit-diff.sh`: the unit test does not find it in a Debug build). Task 38: the count of the steps of a part.
+- One fix of each task was reversed, and a test failed each time. Task 36: the check of the cell tag in the entry block (the new test with a link whose bytes look like an integer), the checks after a call (two tests), and the write of the slots before a call (a test then loops until it is stopped). Task 37: the NaN check of a result, the NaN check of the entry block, the tag check of `incr_value` on a value from a helper, the write of the kept slots at an exit after a helper that runs no script, and the register of the result of `to_bool` (`tests/jit/tier2_calls.tcl` with `tools/jit-diff.sh`: the unit test does not find it in a Debug build). Task 38: the count of the compute units of a part.
 - The fuzzer of task 19 (`zig build jit-fuzz`) is on the branch of tasks 19 to 23, so it did not run here, and its double constants of task 37 are not in it.
 - The suite runs, the fuzzer, and the tests in `ReleaseSafe` and with `-Djit=false` ran on the build before the count of passes. After it, `zig build test` in Debug and `tools/jit-diff.sh -t` with and without `-x "--jit-stress 32"` ran again and passed.
 
 Tier 2 differs from the design above in these points:
 
-- The exits are code. Each exit writes the slot registers to their cells and the stack places to the value stack, gives back the steps of its part, and calls `resume_at`, which gives the address of the tier 1 code of the exit address after the checks of `jit.enter`. No exit record is in JIT data, and no `jit.deopt` reads one.
+- The exits are code. Each exit writes the slot registers to their cells and the stack places to the value stack, gives back the compute units of its part, and calls `resume_at`, which gives the address of the tier 1 code of the exit address after the checks of `jit.enter`. No exit record is in JIT data, and no `jit.deopt` reads one.
 - A slot of the kind `int` or `double` is in a register for the whole loop: at most five integers and four doubles. A slot of the kind `any` stays in its cell. A stack place is in a register when its kind is `int` or `double`, and in the value stack when its kind is `any`. A loop that needs more registers stays in tier 1.
 - `r12`, the register of the helper table, holds a stack place or a constant inside a loop. Each call and each exit loads it again from the context.
 - A `guard` is no branch in tier 2. The entry block and each call that can run a script check the epoch, so each `guard` of the loop passes.
@@ -378,7 +378,7 @@ The arm64 code of tier 2 is not written. This branch has the parts that do not d
 What is in place:
 
 - `src/jit/tier2.zig` makes the plan of a loop: the kinds of each slot and each stack place, the parts, and the kinds after each instruction.
-- `src/jit/tier2_lower.zig` reads the plan with no machine code. `eligible` reads the register counts of a backend from a `Budget`, and `a64_budget` has the counts of the registers below. `slotClass`, `checkAt`, `stepsLeft`, `needsFix`, `nanFree`, and `branchTarget` give the class of each slot, the place of each step check, the steps that an exit gives back, the edges that write a place to the value stack, the double results that need no NaN check, and the second successor of a helper call.
+- `src/jit/tier2_lower.zig` reads the plan with no machine code. `eligible` reads the register counts of a backend from a `Budget`, and `a64_budget` has the counts of the registers below. `slotClass`, `checkAt`, `computeLeft`, `needsFix`, `nanFree`, and `branchTarget` give the class of each slot, the place of each step check, the compute units that an exit gives back, the edges that write a place to the value stack, the double results that need no NaN check, and the second successor of a helper call.
 - The tests named `tier 2 layer: ...` in `src/jit/tests.zig` check these facts with no machine code. Each test named `tier 2: ...` compares a script with the interpreter, so it is the acceptance test of each backend.
 - `src/jit/tier2_x64.zig` is the reference for each rule below.
 
@@ -387,7 +387,7 @@ What the Mac session builds:
 1. `src/jit/tier2_a64.zig` with the `assemble` and `eligible` of `tier2_x64.zig`, and a choice of the backend in `jit.compileLoop`. `jit.backend` and `build.zig` then turn tier 2 on for arm64.
 2. The registers of `a64_budget`: `x9` to `x13` for integer slots, `x3` to `x8` for integer places and constants, `d16` to `d19` for double slots, `d22` to `d31` for double places and constants. `x14`, `x15`, `d20`, and `d21` are scratch. Each one is caller-saved, so a call writes and loads them as on x86-64. The code never uses `x18` or `d8` to `d15`.
 3. The entry block: for each slot in a register, the cell tag `.val`, the value tag, the load, and for a double a NaN check (`fcmp d, d` and `b.vs`). Then the epoch and the memory count.
-4. One joined step check at `checkAt` of each part. An exit writes each place in a register and each slot that the loop writes, adds `stepsLeft` back, and goes to one shared block that calls `resume_at`.
+4. One joined step check at `checkAt` of each part. An exit writes each place in a register and each slot that the loop writes, adds `computeLeft` back, and goes to one shared block that calls `resume_at`.
 5. Integers: `adds`, `subs`, and `b.vs` for the overflow check, the multiply check of task 27, and `sdiv` with `msub` for `/` and `%`, with an exit for a divisor of 0 or -1 and the rounding down of Tcl. The operation writes a scratch register, and the slot register changes after the check.
 6. Doubles: `fadd`, `fsub`, `fmul`, `fdiv`, `scvtf` for an integer operand, and `fcmp` with the conditions `mi`, `ls`, `gt`, `ge`, `eq`, `ne` for the six compares. No `fmadd`. A result that `nanFree` does not clear gets `fcmp` with itself and `b.vs` to an exit after the instruction, with the result in its place.
 7. Calls: write the slots and the places, call the helper of tier 1 (for `invoke`, the inline check of the command site and `call_cached`), the error stub, then for each successor the epoch check, the memory check, and the loads of the slots with their checks. After a helper that `tier2.runsNoScript` lists, the integer slot registers can stay on the stack, and each exit after the call writes them first.
@@ -476,14 +476,14 @@ The share of sampled programs that ran each item of the grammar is above 5 % for
 
 The fuzzers found three faults:
 
-- The verifier accepted a loop that counts no step, for example `jump 0`. The machine code then looped with no check of the step limit. The verifier now rejects such a cycle.
+- The verifier accepted a loop that counts no step, for example `jump 0`. The machine code then looped with no check of the compute limit. The verifier now rejects such a cycle.
 - The verifier lost two slices when its last allocation failed. Stress mode 1 found it.
 - A named `Code` with `lset` or a dict update reads a cell of the frame by its slot. The verifier now rejects it.
 
 Two costs of the interpreter showed in the tests. Each is outside the JIT:
 
 - The memory limit is checked at the safe points of the step. One `string length` of a list nested 40 levels in itself allocated 1.1 GB with `--mem 67108864`, before the check stopped it.
-- `recheck` reads each command at each change of the epoch. A loop that defines n procs then uses time in the order of n squared: 40 000 procs took 31 s for 120 000 steps.
+- `recheck` reads each command at each change of the epoch. A loop that defines n procs then uses time in the order of n squared: 40 000 procs took 31 s for 120 000 compute units.
 
 A global loop of one million passes of `incr i` used 441.8 M instructions without the JIT and 487.8 M with it. Each variable instruction of named code is a helper call. An event script parses its script again at each event, so the JIT compiled the bodies of its loops again at each event. After about 4000 events the JIT memory limit stopped the compiler for the interpreter. Named code now has a quarter of the JIT memory. See [What compiles, and when](#what-compiles-and-when).
 
@@ -698,7 +698,7 @@ Each slow path of `vm.exec` becomes a named function in `vm.zig` that both the i
 
 The inline fast paths of tier 1, in the order of their gain:
 
-1. `guard`, `step`: the epoch compare, the step limit, and the memory limit.
+1. `guard`, `step`: the epoch compare, the compute limit, and the memory limit.
 2. `jump`, `jf_vv`, `jf_vi`, `jump_false`, `jump_true`: integer compares.
 3. `bin_vv`, `bin_vi`, `binary`: `+`, `-`, `*`, and the six compares on two integers, with the overflow check.
 4. `load`, `store`, `store_pop`, `push`, `push_empty`, `pop`.
@@ -722,11 +722,11 @@ Tier 2 compiles one loop: the instructions from a loop head to its back jump. Th
 
 Tier 2 uses at most 5 registers for values on x86-64. Other values stay in their cells, with no tag check inside a part of the loop that has no call. The first version has no inlining of procs.
 
-### The step limit and the memory limit
+### The compute limit and the memory limit
 
-Tier 1 runs the same bytecode instructions as the interpreter, in the same order. Each `guard`, `step`, `invoke`, and `foreach_next` has the same check at the same place: the step count is zero, then the count goes down by one, then the memory count is above the limit. So the step count after a script is equal in both modes, and a script stops at the same instruction. Each helper that the interpreter also calls counts its own steps as today.
+Tier 1 runs the same bytecode instructions as the interpreter, in the same order. Each `guard`, `step`, `invoke`, and `foreach_next` has the same check at the same place: the count of compute units is zero, then the count goes down by one, then the memory count is above the limit. So the count of compute units after a script is equal in both modes, and a script stops at the same instruction. Each helper that the interpreter also calls counts its own steps as today.
 
-Tier 2 can join the checks of a part of a loop that has no call and no branch target. The part has `k` steps. The code checks that at least `k` steps are left and subtracts `k`. If fewer are left, it exits at the start of the part with no step used, and the interpreter stops at the exact instruction. An exit in the middle of a part gives back the steps of the instructions that did not run. No code in such a part allocates, so one memory check at the entry of the loop and one after each call equal the checks of the interpreter.
+Tier 2 can join the checks of a part of a loop that has no call and no branch target. The part has `k` steps. The code checks that at least `k` steps are left and subtracts `k`. If fewer are left, it exits at the start of the part with no step used, and the interpreter stops at the exact instruction. An exit in the middle of a part gives back the compute units of the instructions that did not run. No code in such a part allocates, so one memory check at the entry of the loop and one after each call equal the checks of the interpreter.
 
 **JIT memory does not count in `mem_limit`.** All memory of the JIT comes from the allocator of the embedder and from the executable region, and it has its own limit (`jit_mem_limit`, 16 MiB by default). The counter of the heap never sees it. So a script reaches the memory limit at the same instruction in both modes, and rule 4 of AGENTS.md stays true: the output of a script does not depend on the JIT. When the JIT limit is reached, the compiler stops, and the interpreter runs the rest.
 
@@ -741,7 +741,7 @@ Tier 2 can join the checks of a part of a loop that has no call and no branch ta
 | Shimmering | A value never changes its kind in place. The code reads the tag at each use. A string that looks like a number goes to the helper, which gives the result of the interpreter. |
 | Errors and `errorInfo` | A stub for each call writes the exact bytecode address. `run` adds the commands of the ranges to the trace as today. The helpers set `errorCode` and the line. |
 | `return`, `break`, `continue`, custom codes | They are Zig errors in a helper. The status path gives them to `run`, which has the range table. |
-| `catch`, `try` | They are general commands. The step limit error and the memory error stay uncatchable, because the helpers raise them as today. |
+| `catch`, `try` | They are general commands. The compute limit error and the memory error stay uncatchable, because the helpers raise them as today. |
 | Coroutines | A coroutine runs machine code on its own native stack. `yield` is a helper call, so the switch saves the callee-saved registers as for Zig code. The JIT frame has a fixed size below 256 bytes, and `checkNative` runs before each entry. `coro.zig` does not change. |
 | `tailcall` | It is a private return code. The status path gives it to `callProc`. |
 | TclOO | A method body is a proc body: `callMethod` calls `runProc`. `my`, `next`, and `self` are commands. |
@@ -899,16 +899,16 @@ Other limits on the attacker:
 
 ### Limits that hold in machine code
 
-- The step limit and the memory limit are exact. See [above](#the-step-limit-and-the-memory-limit).
+- The compute limit and the memory limit are exact. See [above](#the-step-limit-and-the-memory-limit).
 - `max_depth`, `max_nest`, and `max_native` are checked by the same functions as today: `pushFrame`, `vm.run`, and `checkNative`.
 - The JIT memory limit bounds the region and all JIT data. A script that defines procs without end fills the limit, and the compiler stops. The script then runs in the interpreter and still has its own limits.
 - The compile time of one `Code` is linear, and the bound on bytecode instructions bounds it.
 
 ### Fuzzing
 
-- **Differential fuzzing.** `tools/jit-fuzz.zig` makes random Tcl programs from a grammar: procs, loops, `expr`, lists, dicts, strings, `upvar`, `uplevel`, `catch`, `rename`, traces, and errors. It runs each program in the interpreter and in each JIT mode, with a random step limit, a random memory limit, and the collector off (`--gc off`). The output, the result, `errorInfo`, `errorCode`, the steps used, and the memory count must be equal.
+- **Differential fuzzing.** `tools/jit-fuzz.zig` makes random Tcl programs from a grammar: procs, loops, `expr`, lists, dicts, strings, `upvar`, `uplevel`, `catch`, `rename`, traces, and errors. It runs each program in the interpreter and in each JIT mode, with a random compute limit, a random memory limit, and the collector off (`--gc off`). The output, the result, `errorInfo`, `errorCode`, the steps used, and the memory count must be equal.
 - **Assembler fuzzing.** Each instruction form of each assembler is checked against the assembler of `zig cc` for each register and for the edge values of each operand.
-- **Verifier fuzzing.** Random and mutated bytecode goes to the verifier. Each `Code` that passes then compiles and runs under a step limit in a build with safety checks, in one interpreter with the JIT and in one without it, with the same history. The process must not crash, and the result, `errorInfo`, the steps used, the memory count, and the output must be equal. Some runs have a step limit below 64 or a small memory limit.
+- **Verifier fuzzing.** Random and mutated bytecode goes to the verifier. Each `Code` that passes then compiles and runs under a compute limit in a build with safety checks, in one interpreter with the JIT and in one without it, with the same history. The process must not crash, and the result, `errorInfo`, the steps used, the memory count, and the output must be equal. Some runs have a compute limit below 64 or a small memory limit.
 - **Stress modes.** One mode compiles each `Code` at once. One mode forces each tier 2 guard to fail on a schedule. One mode makes each allocation of the compiler fail in turn.
 
 ### On by default, or a capability
@@ -937,7 +937,7 @@ The runner flag can default to on for one target when all of these are true for 
 | `zig build test` and `zig build test -Djit=false` | The unit tests pass with and without the JIT code. | each |
 | `tools/jit-diff.sh` | Each script of `tests/jit/` and `bench/` gives the same output, exit code, step count, and memory count in each mode. The memory count uses `--gc off`. | 18 |
 | `tools/suite.sh -j` | The suite with `--jit --jit-threshold 0`. Each file has the pass count of the interpreter: 19 877 for the 37 core files and 37 383 for all 152 files with the suite runner. | 18 |
-| The step limit sweep | A script runs with each step limit from 0 to its full count. Both modes stop with the same output. | 18 |
+| The compute limit sweep | A script runs with each compute limit from 0 to its full count. Both modes stop with the same output. | 18 |
 | `zig build jit-fuzz` | See [Fuzzing](#fuzzing). | 19, 20 |
 | The stress modes | Compile failures, the tier 2 exit schedule, and the checksum of the code. | 21, 35 |
 | `Debug` and `ReleaseSafe` runs | The Zig safety checks find a bad index or a bad union read in the helpers and in the compiler. | 21 |

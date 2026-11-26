@@ -11,7 +11,7 @@
 #   3. --jit (the default threshold)
 #
 # It compares stdout, stderr without the `jit` and `report` lines, the
-# exit code, and the `steps` and `mem` fields of the report. When a
+# exit code, and the `compute` and `mem` fields of the report. When a
 # script of tests/jit/ has a file `name.out`, the stdout and stderr of
 # mode 1 must equal it. Each `.out` file comes from tclsh 8.6.16. A
 # script with a line `# jit-diff-flags: ...` gets those flags in each
@@ -21,9 +21,9 @@
 # With the suite runner next to the runner, it runs tests/jit/stack/
 # with and without the JIT: the JIT must use no more native stack.
 #
-# Then it runs the step limit sweep on each script of tests/jit/sweep/:
-# for each step limit from 0 to the full step count of the script (at
-# most 3000), modes 1 and 2 give the same output, exit code, steps, and
+# Then it runs the compute limit sweep on each script of tests/jit/sweep/:
+# for each compute limit from 0 to the full count of compute units of the script (at
+# most 3000), modes 1 and 2 give the same output, exit code, compute units, and
 # memory count.
 #
 # `-t` adds `--jit-tier2 --jit-tier2-count 2` to each JIT mode.
@@ -75,7 +75,7 @@ if stress:
         jit_modes.append(modes[1] + ["--jit-stress", "1", "--jit-stress-alloc", str(k)])
     modes = [modes[0]] + jit_modes
     sweep_mode = ["--jit", "--jit-threshold", "0"] + t2 + ["--jit-stress", "31"]
-base = ["--report", "--gc", "off", "--max-steps", "1000000000"] + extra
+base = ["--report", "--gc", "off", "--compute", "1000000000"] + extra
 compare_mem = not extra
 
 def scripts():
@@ -96,7 +96,7 @@ def flags_of(path):
 def run(path, mode, limit=None):
     args = [runner] + base + flags_of(path) + mode
     if limit is not None:
-        args[args.index("--max-steps") + 1] = str(limit)
+        args[args.index("--compute") + 1] = str(limit)
     if path.startswith("tests/mem/"):
         n = "30" if "b64" in path else "2000"
         args += ["--tclsh", path, n]
@@ -111,7 +111,7 @@ def run(path, mode, limit=None):
         for kv in rep[-1].split()[1:]:
             k, v = kv.split("=")
             fields[k] = v
-    key = {"stdout": p.stdout, "stderr": rest, "code": p.returncode, "steps": fields.get("steps")}
+    key = {"stdout": p.stdout, "stderr": rest, "code": p.returncode, "compute": fields.get("compute")}
     if compare_mem:
         key["mem"] = fields.get("mem")
     return key
@@ -145,19 +145,19 @@ if not only:
         if not f.endswith(".tcl"):
             continue
         path = os.path.join("tests/jit/sweep", f)
-        full = int(run(path, modes[0])["steps"])
+        full = int(run(path, modes[0])["compute"])
         for limit in range(0, min(full, 3000) + 1):
             a = run(path, modes[0], limit)
             b = run(path, sweep_mode, limit)
             sweeps += 1
             if a != b:
-                print("DIFF %s at step limit %d" % (path, limit))
+                print("DIFF %s at compute limit %d" % (path, limit))
                 for k in a:
                     if a[k] != b[k]:
                         print("  %s: %r != %r" % (k, a[k], b[k]))
                 bad += 1
                 break
-    print("sweep: %d step limits compared" % sweeps)
+    print("sweep: %d compute limits compared" % sweeps)
 # The native stack of one proc call level: the JIT uses no more.
 suite = os.path.join(os.path.dirname(runner), "ztcl-suite")
 if not only and os.path.exists(suite):

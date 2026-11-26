@@ -67,11 +67,11 @@ pub const Limits = struct {
     max_threads: u32 = 8,
     /// The steps of one thread. Null gives the steps that the creator
     /// has left.
-    step_limit: ?u64 = null,
+    compute_limit: ?u64 = null,
     /// The heap bytes of one thread.
     mem_limit: usize = 256 << 20,
     /// The steps of all threads together.
-    total_steps: u64 = std.math.maxInt(u64),
+    total_compute: u64 = std.math.maxInt(u64),
     /// The bytes of all threads together, with the shared variables and
     /// the queues.
     total_mem: usize = 1 << 30,
@@ -387,7 +387,7 @@ pub const Worker = struct {
     next_seq: u64 = 1,
     /// The memory limit of the interpreter, for `safePoint`.
     mem_limit: usize = std.math.maxInt(usize),
-    /// The steps that the thread got from `total_steps`.
+    /// The steps that the thread got from `total_compute`.
     steps: u64 = 0,
     /// A descriptor that a new message makes readable, for the poll of
     /// the event loop: an eventfd on Linux, and the read end of a pipe
@@ -426,7 +426,7 @@ pub const Worker = struct {
 /// What a new thread gets from its creator.
 const Start = struct {
     caps: u32,
-    step_limit: u64,
+    compute_limit: u64,
     mem_limit: usize,
     output: ?interp.Output,
     clock_host: ?@import("clock.zig").Host,
@@ -460,7 +460,7 @@ pub const Group = struct {
     limits: Limits,
     /// The threads that run, the main thread not counted.
     running: u32 = 0,
-    steps_left: u64,
+    compute_left: u64,
     stopping: bool = false,
     main: *Worker,
     /// The thread and the procedure of `thread::errorproc`.
@@ -547,7 +547,7 @@ pub fn startGroup(host: *Interp) Allocator.Error!void {
     errdefer gpa.destroy(g);
     const w = try gpa.create(Worker);
     errdefer gpa.destroy(w);
-    g.* = .{ .gpa = gpa, .budget = .{ .gpa = gpa, .limit = lim.total_mem }, .limits = lim, .steps_left = lim.total_steps, .main = w };
+    g.* = .{ .gpa = gpa, .budget = .{ .gpa = gpa, .limit = lim.total_mem }, .limits = lim, .compute_left = lim.total_compute, .main = w };
     w.* = .{ .group = g, .id = g.next_id, .it = host, .is_main = true, .state = .running, .refs = 1 };
     g.next_id += 1;
     try g.workers.append(gpa, w);
@@ -571,9 +571,9 @@ pub fn setLimits(host: *Interp, lim: Limits) void {
     const g = w.group;
     g.lock.lock();
     defer g.lock.unlock();
-    const used = g.limits.total_steps -| g.steps_left;
+    const used = g.limits.total_compute -| g.compute_left;
     g.limits = lim;
-    g.steps_left = lim.total_steps -| used;
+    g.compute_left = lim.total_compute -| used;
     g.budget.limit = lim.total_mem;
 }
 
@@ -708,20 +708,20 @@ pub fn checkFlags(it: *Interp, w: *Worker) Error!void {
     if (f & Flag.stop == 0) w.cancel_text = null;
     w.lock.unlock();
     if (f & Flag.stop != 0) {
-        it.step_limit = 0;
+        it.compute_limit = 0;
         return it.failCode("TCL CANCEL UNWIND", "the thread was stopped", .{});
     }
     defer if (text) |t| w.group.alloc().free(t);
     const msg: []const u8 = text orelse if (f & Flag.unwind != 0) "eval unwound" else "eval canceled";
     if (f & Flag.unwind != 0) {
-        it.step_limit = 0;
+        it.compute_limit = 0;
         return it.failCode("TCL CANCEL IUNWIND", "{s}", .{msg});
     }
     return it.failCode("TCL CANCEL EVAL", "{s}", .{msg});
 }
 
 /// True when the waits of `it` must end: a stop, a cancel, or an end
-/// of the step limit.
+/// of the compute limit.
 fn mustWake(w: *Worker) bool {
     return w.flags.load(.acquire) != 0;
 }
@@ -775,10 +775,10 @@ pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
         g.gpa.destroy(w);
         return it.failCode("THREAD LIMIT", "too many threads: the limit is {d}", .{g.limits.max_threads});
     }
-    const want = g.limits.step_limit orelse it.step_limit;
-    const steps = @min(want, g.steps_left);
-    if (g.limits.total_steps != std.math.maxInt(u64)) g.steps_left -= steps;
-    st.step_limit = steps;
+    const want = g.limits.compute_limit orelse it.compute_limit;
+    const steps = @min(want, g.compute_left);
+    if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left -= steps;
+    st.compute_limit = steps;
     w.* = .{ .group = g, .id = g.next_id, .joinable = joinable, .refs = if (preserved) 1 else 0, .script = text, .steps = steps, .mem_limit = st.mem_limit, .pool = o.pool, .pool_main = o.pool_main };
     g.next_id += 1;
     g.running += 1;
@@ -794,7 +794,7 @@ pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
     w.os = OsThread.spawn(.{ .stack_size = stack_size, .allocator = g.gpa }, threadMain, .{ w, st }) catch {
         _ = g.workers.pop();
         g.running -= 1;
-        if (g.limits.total_steps != std.math.maxInt(u64)) g.steps_left += steps;
+        if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left += steps;
         g.lock.unlock();
         g.alloc().free(text);
         g.gpa.destroy(w);
@@ -822,7 +822,7 @@ fn startOf(it: *Interp) Error!Start {
     const g = me.group;
     var st: Start = .{
         .caps = root.capabilities,
-        .step_limit = 0,
+        .compute_limit = 0,
         .mem_limit = g.limits.mem_limit,
         .output = .{ .ctx = g, .write = lockedWrite },
         .clock_host = root.clock_host,
@@ -849,7 +849,7 @@ fn startOf(it: *Interp) Error!Start {
 
 fn setup(w: *Worker, x: *Interp, st: Start) Allocator.Error!void {
     x.output = st.output;
-    x.step_limit = st.step_limit;
+    x.compute_limit = st.compute_limit;
     x.mem_limit = st.mem_limit;
     x.clock_host = st.clock_host;
     x.event_host = st.event_host;
@@ -933,7 +933,7 @@ fn failStart(w: *Worker, st: Start) void {
     w.state = .failed;
     if (std.mem.indexOfScalar(*Worker, g.workers.items, w)) |i| _ = g.workers.orderedRemove(i);
     g.running -= 1;
-    if (g.limits.total_steps != std.math.maxInt(u64)) g.steps_left += w.steps;
+    if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left += w.steps;
     // The creator frees nothing: the record goes to the zombies, and a
     // later reap joins the thread.
     g.zombies.append(g.gpa, w) catch {};
@@ -1010,7 +1010,7 @@ fn finish(w: *Worker, x: *Interp) void {
     failQueue(w);
     if (g.sync) |_| @import("tsync.zig").releaseOwned(g, w.id);
     if (g.tsv) |_| @import("tsv.zig").releaseOwned(g, w.id);
-    const left = x.step_limit;
+    const left = x.compute_limit;
     g.lock.lock();
     w.it = null;
     g.lock.unlock();
@@ -1019,7 +1019,7 @@ fn finish(w: *Worker, x: *Interp) void {
     g.gpa.destroy(x);
     g.lock.lock();
     if (std.mem.indexOfScalar(*Worker, g.workers.items, w)) |i| _ = g.workers.orderedRemove(i);
-    if (g.limits.total_steps != std.math.maxInt(u64)) g.steps_left += @min(left, w.steps);
+    if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left += @min(left, w.steps);
     g.running -= 1;
     if (w.joinable and !g.stopping) {
         g.ended.append(g.gpa, w) catch g.zombies.append(g.gpa, w) catch {};
@@ -1340,7 +1340,7 @@ fn runMsg(w: *Worker, it: *Interp, m: *Msg) Error!void {
         .script => {
             const text = try it.alloc().dupe(u8, m.text);
             const c = atGlobal(it, runText, .{ it, text }) catch |e| {
-                // A stop, the step limit, or the memory limit ended the
+                // A stop, the compute limit, or the memory limit ended the
                 // script. The sender gets the error, and the thread ends.
                 if (m.seq != 0) {
                     const msg = if (e == error.OutOfMemory) "out of memory" else it.str(it.result) catch "error";
@@ -1470,7 +1470,7 @@ fn loopPass(it: *Interp, me: *Worker, events: bool) Error!void {
 /// that reached the loop between two scripts. The loop drops it, so the
 /// thread keeps its loop. A stop and `-unwind` end the loop.
 fn idleCancel(it: *Interp, me: *Worker) bool {
-    if (it.step_limit == 0 or me.hasFlag(Flag.stop)) return false;
+    if (it.compute_limit == 0 or me.hasFlag(Flag.stop)) return false;
     const code = it.error_code;
     return code == .str and std.mem.eql(u8, code.str, "TCL CANCEL EVAL");
 }

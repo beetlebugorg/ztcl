@@ -406,8 +406,8 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     dead.deinit();
 
     if (opts.vars == .clear) {
-        const steps = it.step_limit;
-        defer it.step_limit = steps;
+        const steps = it.compute_limit;
+        defer it.compute_limit = steps;
         try it.startVars();
     }
 }

@@ -132,7 +132,7 @@ A shape is a key list and its index, shared by many dicts. A shaped dict holds t
 - **Copy on write and owned values** (`docs/dev/jit.md`). A write to a shared shaped dict copies the values array only. An owned dict writes in place.
 - **Threads.** A deep copy makes a plain dict on the other side, or copies the shape. A shape belongs to one heap.
 - **The collector.** A shape is a heap block, and the dicts point to it. No change to the mark.
-- **The step limit and the memory limit.** A shape counts in the memory of the heap like each block. A transition table pays steps for a long probe.
+- **The compute limit and the memory limit.** A shape counts in the memory of the heap like each block. A transition table pays compute units for a long probe.
 - **The JIT.** A shape check is one compare of a pointer. Tier 2 can load a field at a fixed offset after the check. The JSON task 05b has its own shape guards. They must go through the interface of the shape (`shapeOf`, `slotOf`) when this task lands.
 
 Gain: the key slots (24 bytes for each key of each record) and the per-record duplicate check. Twitter and citm have records. Canada has arrays. The profile gives the duplicate check about 5 % on twitter and citm, so the speed gain of the parse is small. The memory gain is about 20 % of the values of twitter and citm by estimate. Shapes go after the tasks 01 to 03 and after a measure of dicts in TclOO objects, CSV rows, SQLite rows, and `dict create` of records.
@@ -163,7 +163,7 @@ A test or a fuzzer checks each of these:
 
 1. No change in any behavior that a script can see: the same results, errors, error codes, and error messages.
 2. The `string` form of each value from a parse is byte-identical to the form on main. `tests/json` and `tools/json-fuzz.zig` compare the string form of a parse with a reference build of the pair list.
-3. The step count of each script is the same, so `tools/jit-diff.sh` and the step limit sweeps give the same results.
+3. The step count of each script is the same, so `tools/jit-diff.sh` and the compute limit sweeps give the same results.
 4. Each double of a parse is bit-identical to `std.fmt.parseFloat` of its text. A unit test compares random numbers and the edges of the exponent range.
 5. The memory count after a parse is equal to main or lower, and the memory limit stops a parse at the same chunk.
 6. The suite in all modes, the thread tests, the collector stress, and the wasm smoke test pass as on main.

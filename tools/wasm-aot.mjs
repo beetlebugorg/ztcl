@@ -11,7 +11,7 @@
 // line for each script, with the functions found and the bodies with no
 // function, and exits with 1 when a script differs. `--gc-stress N`
 // collects at each Nth safe point in both runs. `--sweep K` also runs
-// each script with K step limits below its count, so a script stops at
+// each script with K compute limits below its count, so a script stops at
 // each of them in both runs.
 // SPDX-License-Identifier: BSD-2-Clause
 import fs from "node:fs";
@@ -45,10 +45,10 @@ const enc = new TextEncoder();
 
 // Runs `text` in a new instance of `module`. Returns the result, the
 // output, the steps used, the record, and the counts of the lookups.
-export async function runIn(module, text, { record = false, stepLimit = steps } = {}) {
+export async function runIn(module, text, { record = false, computeLimit = steps } = {}) {
   const { exports: x } = await WebAssembly.instantiate(module, {});
   const h = x.ztcl_new();
-  x.ztcl_set_step_limit(h, stepLimit);
+  x.ztcl_set_compute_limit(h, computeLimit);
   if (gcStress) x.ztcl_set_gc_stress(h, gcStress);
   if (record) x.ztcl_aot_record(1);
   const src = enc.encode(text);
@@ -65,7 +65,7 @@ export async function runIn(module, text, { record = false, stepLimit = steps } 
     rc,
     result: str(x.ztcl_result_ptr(h), x.ztcl_result_len(h)),
     output: str(x.ztcl_output_ptr(h), x.ztcl_output_len(h)),
-    steps: stepLimit - x.ztcl_steps_left(h),
+    steps: computeLimit - x.ztcl_compute_left(h),
     found: x.ztcl_aot_stat(0),
     layoutOk: x.ztcl_aot_stat(4),
     missed: x.ztcl_aot_stat(1),
@@ -112,12 +112,12 @@ async function main() {
     missed += b.missed;
     const appMod = await WebAssembly.compile(fs.readFileSync(app));
     let ok = compare(file, "", a, b);
-    // The step limit sweep: K limits spread below the count of the run.
+    // The compute limit sweep: K limits spread below the count of the run.
     for (let k = 1; ok && k <= sweep; k++) {
       const lim = (a.steps * BigInt(k)) / BigInt(sweep + 1);
-      const sa = await runIn(base, text, { stepLimit: lim });
-      const sb = await runIn(appMod, text, { stepLimit: lim });
-      ok = compare(file, ` at step limit ${lim}`, sa, sb);
+      const sa = await runIn(base, text, { computeLimit: lim });
+      const sb = await runIn(appMod, text, { computeLimit: lim });
+      ok = compare(file, ` at compute limit ${lim}`, sa, sb);
     }
     if (!ok) bad++;
     else if (!quiet) console.log(`same ${file}: ${b.found} found, ${b.missed} proc bodies with no function, ${a.steps} steps`);

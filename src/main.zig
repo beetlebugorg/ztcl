@@ -1,4 +1,4 @@
-//! A runner for Tcl scripts: `ztcl [--time] [--max-steps N] [--mem N] [--repeat N] file.tcl ...`.
+//! A runner for Tcl scripts: `ztcl [--time] [--compute N] [--mem N] [--repeat N] file.tcl ...`.
 //!
 //! `ztcl build --wasm ... -o OUT.wasm file.tcl ...` writes a copy of
 //! ztcl.wasm with the scripts in it. See `src/buildcmd.zig`.
@@ -31,7 +31,7 @@
 //! `--mem N` sets the memory limit in bytes. The default is 2 GiB.
 //! `--gc-stress N` starts a collection at each Nth allocation. `--gc off`
 //! turns the collector off.
-//! `--report` writes one line to stderr at the end: the steps used, the
+//! `--report` writes one line to stderr at the end: the compute units used, the
 //! bytes held now, and the highest number of bytes held.
 //! `--jit` turns the JIT on, when the build and the system have it.
 //! `--jit-threshold N` sets the calls of a proc before it compiles.
@@ -46,8 +46,8 @@
 //! `--jit-dump DIR` writes the bytes of each compiled function to a file
 //! of DIR, for `tools/jit-scan.sh`.
 //! `--threads N` sets the threads that run at one time (capability
-//! `thread`). `--thread-steps N` and `--thread-mem N` set the limits of
-//! one thread, and `--threads-steps N` and `--threads-mem N` set the
+//! `thread`). `--thread-compute N` and `--thread-mem N` set the limits of
+//! one thread, and `--threads-compute N` and `--threads-mem N` set the
 //! totals of all threads.
 //! `--repeat N` runs each file N times in one interpreter. With `--time`,
 //! it prints the best time: the warm time of the file.
@@ -146,8 +146,8 @@ fn cmdExit(it: *tcl.Interp, argv: []const tcl.Value, _: ?*tcl.interp.Cmd) tcl.Er
 
 /// True for `--report`.
 var report_on = false;
-/// The value of `--max-steps`, to find the steps used.
-var max_steps: u64 = std.math.maxInt(u64);
+/// The value of `--compute`, to find the compute units used.
+var max_compute: u64 = std.math.maxInt(u64);
 
 /// The folder of `--jit-dump` and the count of the files in it.
 var dump_dir: []const u8 = "";
@@ -166,12 +166,12 @@ var jit_stats = false;
 fn report(it: *const tcl.Interp) void {
     if (jit_stats) tcl.jit.printStats(it);
     if (!report_on) return;
-    std.debug.print("report steps={d} mem={d} peak={d}\n", .{ max_steps - it.step_limit, it.counter.used, it.counter.mem_peak });
+    std.debug.print("report compute={d} mem={d} peak={d}\n", .{ max_compute - it.compute_limit, it.counter.used, it.counter.mem_peak });
     if (std.debug.runtime_safety) std.debug.print("gc collections={d}\n", .{it.gcCount()});
 }
 
 fn threadFlag(arg: []const u8) bool {
-    for ([_][]const u8{ "--threads", "--thread-steps", "--thread-mem", "--threads-steps", "--threads-mem" }) |f| {
+    for ([_][]const u8{ "--threads", "--thread-compute", "--thread-mem", "--threads-compute", "--threads-mem" }) |f| {
         if (std.mem.eql(u8, arg, f)) return true;
     }
     return false;
@@ -388,10 +388,10 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             _ = try it.eval("set tt_verbose 1");
             continue;
         }
-        if (std.mem.eql(u8, arg, "--max-steps") and i + 1 < args.len) {
+        if (std.mem.eql(u8, arg, "--compute") and i + 1 < args.len) {
             i += 1;
-            it.step_limit = try std.fmt.parseInt(u64, args[i], 10);
-            max_steps = it.step_limit;
+            it.compute_limit = try std.fmt.parseInt(u64, args[i], 10);
+            max_compute = it.compute_limit;
             continue;
         }
         if (std.mem.eql(u8, arg, "--gc-stress") and i + 1 < args.len) {
@@ -559,9 +559,9 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             const n = try std.fmt.parseInt(u64, args[i], 10);
             var lim = it.thread_limits;
             if (std.mem.eql(u8, arg, "--threads")) lim.max_threads = @intCast(@min(n, 1 << 16));
-            if (std.mem.eql(u8, arg, "--thread-steps")) lim.step_limit = n;
+            if (std.mem.eql(u8, arg, "--thread-compute")) lim.compute_limit = n;
             if (std.mem.eql(u8, arg, "--thread-mem")) lim.mem_limit = std.math.cast(usize, n) orelse return error.Overflow;
-            if (std.mem.eql(u8, arg, "--threads-steps")) lim.total_steps = n;
+            if (std.mem.eql(u8, arg, "--threads-compute")) lim.total_compute = n;
             if (std.mem.eql(u8, arg, "--threads-mem")) lim.total_mem = std.math.cast(usize, n) orelse return error.Overflow;
             tcl.thread.setLimits(&it, lim);
             continue;

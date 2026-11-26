@@ -46,7 +46,7 @@ def run(args, script):
     path = os.path.join(work, "s.tcl")
     with open(path, "w") as f:
         f.write(script)
-    p = subprocess.run([runner, "--max-steps", "100000000"] + args + [path], capture_output=True, timeout=600)
+    p = subprocess.run([runner, "--compute", "100000000"] + args + [path], capture_output=True, timeout=600)
     err = p.stderr.decode(errors="replace")
     stats = {}
     for line in err.splitlines():
@@ -123,7 +123,7 @@ else:
     end = os.path.join(work, "end.tcl")
     with open(end, "w") as f:
         f.write('puts "jit-wx [testjitmaps]"\n')
-    p = subprocess.run([suite, "--jit", "--jit-threshold", "0", "--jit-stats", "--max-steps", "200000000", "--mem", "2147483648",
+    p = subprocess.run([suite, "--jit", "--jit-threshold", "0", "--jit-stats", "--compute", "200000000", "--mem", "2147483648",
                         "--allow", "package,interp,clock,channels,file,event", "--root", r, "--keep-going",
                         os.path.join(root, "tools/tcltest.tcl"), os.path.join(tests, "expr.test"),
                         os.path.join(root, "tools/tcltest-end.tcl"), end], capture_output=True, timeout=1200)

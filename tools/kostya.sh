@@ -81,7 +81,7 @@ for name in $only; do
     *) echo "unknown program $name" >&2; exit 2 ;;
     esac
     echo "== $name"
-    run "$name" ztcl "$ztcl" $jit --max-steps 100000000000 --mem "$mem" \
+    run "$name" ztcl "$ztcl" $jit --compute 100000000000 --mem "$mem" \
         --allow package,interp,clock,channels,file,event,socket,exec \
         --root "$work" --tclsh wrap.tcl $args
     run "$name" tclsh "$tclsh" wrap.tcl $args

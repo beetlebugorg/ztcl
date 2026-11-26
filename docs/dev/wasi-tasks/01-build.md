@@ -16,7 +16,7 @@ Platform: shared/wasi.
 
 - First list each compile error. The probe of the plan saw 2 (`sys.zig:127` and `main.zig:413`), and the compiler stops early, so more can follow. Put the full list in the PR body.
 - A capability that has no WASI form yet is absent. Its command gives the same error as when the embedder did not turn it on.
-- The step limit, the memory limit, the nesting limit, and the native stack limit work as on Linux. `--max-steps` and `--max-mem` work.
+- The compute limit, the memory limit, the nesting limit, and the native stack limit work as on Linux. `--compute` and `--max-mem` work.
 
 ## Acceptance
 
@@ -24,7 +24,7 @@ Platform: shared/wasi.
 CAP zig build -Dtarget=wasm32-wasi
 printf 'puts [expr {6*7}]\n' | timeout 10 wasmtime run zig-out/bin/ztcl.wasm         # 42
 printf 'puts ok\n' > zig-out/t.tcl && timeout 10 wasmtime run --dir zig-out::/ zig-out/bin/ztcl.wasm /t.tcl   # ok
-printf 'while 1 {}\n' | timeout 10 wasmtime run zig-out/bin/ztcl.wasm --max-steps 1000  # the step limit error
+printf 'while 1 {}\n' | timeout 10 wasmtime run zig-out/bin/ztcl.wasm --compute 1000  # the compute limit error
 ```
 
 ## Must not change

@@ -25,7 +25,7 @@ for s in "$@"; do
     case $s in b64enc | b64dec) n=300 ;; append | coro) n=1500000 ;; esac
     file="$here/../tests/mem/$s.tcl"
     peak() {
-        "$runner" --report --max-steps 100000000000 --mem 6442450944 --tclsh "$file" "$1" 2>&1 >/dev/null |
+        "$runner" --report --compute 100000000000 --mem 6442450944 --tclsh "$file" "$1" 2>&1 >/dev/null |
             sed -n 's/^report .* peak=\([0-9]*\)$/\1/p'
     }
     a=$(peak "$n")

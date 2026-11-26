@@ -175,9 +175,9 @@ fn cmdExit(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const status = if (argv.len == 2) try it.int(argv[1]) else 666;
     me.status = status;
     me.exiting = true;
-    // A script cannot catch the end of its step limit, so the exit goes
+    // A script cannot catch the end of its compute limit, so the exit goes
     // up to the top of the thread.
-    it.step_limit = 0;
+    it.compute_limit = 0;
     return it.failCode("THREAD EXIT", "thread::exit", .{});
 }
 

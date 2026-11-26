@@ -15,7 +15,7 @@ export interface InitMessage {
 export interface EvalMessage {
   id: number;
   script: string;
-  stepLimit?: number | bigint | null;
+  computeLimit?: number | bigint | null;
   memLimit?: number | null;
 }
 

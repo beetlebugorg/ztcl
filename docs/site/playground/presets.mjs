@@ -21,9 +21,9 @@ foreach n {5 10 15 20 25} {
 `,
   },
   {
-    name: "Endless loop (step limit)",
-    code: `# This loop never ends. The step limit stops it.
-# Each loop pass uses steps. Set a larger limit, or click Stop.
+    name: "Endless loop (compute limit)",
+    code: `# This loop never ends. The compute limit stops it.
+# Each loop pass uses compute units. Set a larger limit, or click Stop.
 set i 0
 while 1 {
     incr i

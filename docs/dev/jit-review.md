@@ -47,12 +47,12 @@ The reviewer runs the acceptance commands of the task again, under the memory ca
 
 ### The limits
 
-- [ ] The step count of each test script is equal with and without the JIT. The step limit sweep passes.
+- [ ] The step count of each test script is equal with and without the JIT. The compute limit sweep passes.
 - [ ] A joined step check in tier 2 exits at the start of its part with no step used, and each exit gives the unused steps back.
-- [ ] The memory limit check is at the same instructions as in the interpreter. With `--gc off`, a script stops at the same step in both modes.
+- [ ] The memory limit check is at the same instructions as in the interpreter. With `--gc off`, a script stops at the same point in both modes.
 - [ ] The memory of the JIT is outside `mem_limit` and inside `jit_mem_limit`. `memUsed` is equal with the JIT on and off.
 - [ ] `max_depth`, `max_nest`, and `max_native` are checked by the functions of today. The JIT frame has a fixed size, and the native stack of one call level is not larger than in the interpreter.
-- [ ] The step limit error and the memory error stay uncatchable.
+- [ ] The compute limit error and the memory error stay uncatchable.
 
 ### The sandbox
 
@@ -104,7 +104,7 @@ The reviewer runs the acceptance commands of the task again, under the memory ca
 - [ ] Each new idea has its source in `docs/references/jit.md`.
 - [ ] Each new file has the `//!` header and the SPDX line.
 - [ ] The diff does not touch `src/coro.zig`, `src/sys.zig`, `src/sys_windows.zig`, `src/fsroot.zig`, or `src/proc.zig`. The hunks in `src/interp.zig`, `src/main.zig`, and `src/ztcl.zig` are those of the task.
-- [ ] The text follows WRITING.md. The words "step limit" name the limit on steps.
+- [ ] The text follows WRITING.md. The words "compute limit" name the limit on steps.
 - [ ] No AI model or vendor is named. No attribution line is in a commit or a file.
 - [ ] No local path and no private data is in the repository.
 - [ ] The commits rebase on `main` with no merge commit.

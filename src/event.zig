@@ -464,8 +464,8 @@ fn cmdAfter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                     try thread.nap(it, @intCast(part * 1000));
                 } else h.sleep(h.ctx, part);
                 left -= part;
-                if (it.step_limit == 0) return it.fail("step limit reached", .{});
-                it.step_limit -= 1;
+                if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
+                it.compute_limit -= 1;
             }
             return Value.empty;
         }
@@ -547,7 +547,7 @@ fn cmdVwait(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         it.ns = n;
     }
     while (!done) {
-        if (it.step_limit == 0) return it.fail("step limit reached", .{});
+        if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
         if (!try doOne(it, true, false)) return it.fail("can't wait for variable \"{s}\": would wait forever", .{name});
     }
     return Value.empty;
@@ -561,7 +561,7 @@ fn cmdUpdate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         idle_only = true;
     } else if (argv.len != 1) return it.wrongArgs("update ?idletasks?");
     while (try doOne(it, false, idle_only)) {
-        if (it.step_limit == 0) return it.fail("step limit reached", .{});
+        if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
     }
     return Value.empty;
 }

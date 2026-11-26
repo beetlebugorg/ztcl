@@ -25,5 +25,5 @@ CAP tools/sqlite-tests.sh
 Gates:
 
 - Each method of the design list works as in the manual page, with the bind forms `$name`, `:name`, and `@name`.
-- A query in an endless recursive CTE stops at the step limit.
+- A query in an endless recursive CTE stops at the compute limit.
 - Without `sqlite`, the command is absent. Without `file`, only `:memory:` opens, and `ATTACH` of a file fails.

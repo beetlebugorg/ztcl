@@ -18,7 +18,7 @@ Random tests of the two parts that turn data of a script into machine code.
 `--verify` makes `Code` values in two ways: random instructions, and the `Code` of a random program of task 19 with 1 to 4 random changes of an operand or an opcode. For each one:
 
 1. `verify` runs. It must not crash.
-2. If `verify` accepts the `Code`, the tool compiles it, makes a frame with `names.len` cells, and runs it with a step limit of 10 000, in a `ReleaseSafe` build. The process must not crash, and no safety check of Zig can fail.
+2. If `verify` accepts the `Code`, the tool compiles it, makes a frame with `names.len` cells, and runs it with a compute limit of 10 000, in a `ReleaseSafe` build. The process must not crash, and no safety check of Zig can fail.
 
 A `Code` that the verifier accepts can still run a general command with strange words. That is correct: the general path handles each word.
 

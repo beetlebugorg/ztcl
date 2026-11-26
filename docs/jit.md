@@ -1,6 +1,6 @@
 # The JIT
 
-ztcl has an optional compiler from bytecode to machine code for x86-64 Linux and arm64 macOS. It is off by default. A script gives the same output, the same step counts, and the same memory count with the JIT on and off.
+ztcl has an optional compiler from bytecode to machine code for x86-64 Linux and arm64 macOS. It is off by default. A script gives the same output, the same counts of compute units, and the same memory count with the JIT on and off.
 
 ## Turn it on
 
@@ -63,7 +63,7 @@ User CPU instructions of the whole process, in millions, from `perf stat -e inst
 - Code memory is never writable and executable at once.
 - A verifier checks each bytecode before it compiles.
 - No value from a script goes into the machine code as a constant.
-- The step limit and the memory limit hold in machine code, exactly as in the interpreter.
+- The compute limit and the memory limit hold in machine code, exactly as in the interpreter.
 - A script cannot turn the JIT on or detect it.
 
 The tests compare the JIT with the interpreter on the whole Tcl test suite, on random programs from a differential fuzzer (`zig build jit-fuzz`), and in stress modes that force the rare paths. One difference stays: an endless recursion can go deeper before the nesting error, because a JIT call uses less native stack.

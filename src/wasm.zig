@@ -58,7 +58,7 @@ export fn ztcl_free(ptr: [*]u8, len: usize) void {
     gpa.free(ptr[0..len]);
 }
 
-/// Makes an interpreter with a memory limit of 2 GiB and no step limit.
+/// Makes an interpreter with a memory limit of 2 GiB and no compute limit.
 export fn ztcl_new() ?*Handle {
     const h = gpa.create(Handle) catch return null;
     h.* = .{ .it = undefined };
@@ -79,14 +79,14 @@ export fn ztcl_delete(h: *Handle) void {
     gpa.destroy(h);
 }
 
-/// Sets the steps that the next scripts can use.
-export fn ztcl_set_step_limit(h: *Handle, step_limit: u64) void {
-    h.it.step_limit = step_limit;
+/// Sets the compute units that the next scripts can use.
+export fn ztcl_set_compute_limit(h: *Handle, compute_limit: u64) void {
+    h.it.compute_limit = compute_limit;
 }
 
-/// The steps that are left of the count of `ztcl_set_step_limit`.
-export fn ztcl_steps_left(h: *Handle) u64 {
-    return h.it.step_limit;
+/// The compute units that are left of the count of `ztcl_set_compute_limit`.
+export fn ztcl_compute_left(h: *Handle) u64 {
+    return h.it.compute_limit;
 }
 
 export fn ztcl_set_mem_limit(h: *Handle, bytes: usize) void {
@@ -261,12 +261,12 @@ fn take(h: *Handle) void {
 
 /// Sets the limits of the threads. Zero in a field keeps its default.
 /// Call it before `ztcl_allow`.
-fn ztcl_set_thread_limits(h: *Handle, max_threads: u32, step_limit: u64, mem_limit: usize, total_steps: u64, total_mem: usize, max_queue: usize) callconv(.c) void {
+fn ztcl_set_thread_limits(h: *Handle, max_threads: u32, compute_limit: u64, mem_limit: usize, total_compute: u64, total_mem: usize, max_queue: usize) callconv(.c) void {
     var lim: thread.Limits = .{};
     if (max_threads != 0) lim.max_threads = max_threads;
-    if (step_limit != 0) lim.step_limit = step_limit;
+    if (compute_limit != 0) lim.compute_limit = compute_limit;
     if (mem_limit != 0) lim.mem_limit = mem_limit;
-    if (total_steps != 0) lim.total_steps = total_steps;
+    if (total_compute != 0) lim.total_compute = total_compute;
     if (total_mem != 0) lim.total_mem = total_mem;
     if (max_queue != 0) lim.max_queue = max_queue;
     thread.setLimits(&h.it, lim);

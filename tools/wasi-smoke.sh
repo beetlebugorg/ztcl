@@ -3,7 +3,7 @@
 # first. Each test runs zig-out/bin/ztcl.wasm under wasmtime through
 # tools/wasi-run.sh and compares the output with the expected text.
 #
-# The tests: a script from stdin and from a file, the step limit, the
+# The tests: a script from stdin and from a file, the compute limit, the
 # memory limit, the nesting limit, the commands of each capability that
 # are absent by default, and `exec`, `thread`, and `socket`, which are
 # absent also when `--allow` names them. With `--allow`, the tests use
@@ -33,7 +33,7 @@ check stdin '% 42' "$(printf 'puts [expr {6*7}]\n' | t | head -1)"
 printf 'puts ok\n' > t.tcl
 check file-absolute ok "$(t /t.tcl)"
 check file-relative ok "$(t t.tcl)"
-check step-limit '% error: step limit reached' "$(printf 'while 1 {}\n' | t --max-steps 1000 | head -1)"
+check step-limit '% error: compute limit reached' "$(printf 'while 1 {}\n' | t --compute 1000 | head -1)"
 printf 'set l {}; while 1 {lappend l [string repeat x 1000]}\n' > m.tcl
 check mem-limit '/m.tcl:1: the script used too much memory' "$(t --mem 1000000 /m.tcl)"
 printf 'proc f {n} {f [incr n]}\ncatch {f 0} m\nputs $m\n' > n.tcl

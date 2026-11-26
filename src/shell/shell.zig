@@ -16,7 +16,7 @@
 //! subcommands that an ensemble lists in its error message, the methods of
 //! a TclOO object, and `glob` when the interpreter has `file`. A probe of
 //! the interpreter keeps `errorInfo`, `errorCode`, the result, and the
-//! step limit as they were, so the questions of the shell do not change
+//! compute limit as they were, so the questions of the shell do not change
 //! the state of the script.
 //!
 //! The hint after the cursor is the newest history entry that starts
@@ -128,17 +128,17 @@ pub const Shell = struct {
     // ---- Questions to the interpreter ----
 
     /// Runs a script with the state of the interpreter kept: the result,
-    /// errorInfo, errorCode, and the step limit. Gives a copy of the
+    /// errorInfo, errorCode, and the compute limit. Gives a copy of the
     /// result text, or null after an error.
     fn probe(s: *Shell, script: []const u8) ?[]u8 {
         const it = s.it;
-        const steps = it.step_limit;
+        const steps = it.compute_limit;
         const saved_result = it.result;
         const info = it.getVarPlain("::errorInfo") catch null;
         const code = it.getVarPlain("::errorCode") catch null;
-        it.step_limit = std.math.maxInt(u64);
+        it.compute_limit = std.math.maxInt(u64);
         defer {
-            it.step_limit = steps;
+            it.compute_limit = steps;
             it.result = saved_result;
             if (info) |v| it.setVar("::errorInfo", v) catch {};
             if (code) |v| it.setVar("::errorCode", v) catch {};

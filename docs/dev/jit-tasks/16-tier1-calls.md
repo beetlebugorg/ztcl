@@ -52,7 +52,7 @@ CAP tools/jit-perf.sh --check off
 ```
 
 - Each benchmark prints the output of the interpreter, and `compiled` is at least 1 with `failed` 0.
-- New unit tests, each with threshold 0 and compared with the interpreter: an error in a proc with the full `errorInfo`; `break` and `continue` from `eval` inside a compiled loop; `return -code` of each code; `catch` around a compiled proc; a step limit that ends inside a compiled loop, with the same steps left; a coroutine that yields from a compiled proc and resumes; `rename set foo` inside a running compiled proc; a variable trace added while a compiled loop runs; `upvar` and `uplevel` that change a local of a compiled proc; a proc that redefines itself; `tailcall`; a TclOO method.
+- New unit tests, each with threshold 0 and compared with the interpreter: an error in a proc with the full `errorInfo`; `break` and `continue` from `eval` inside a compiled loop; `return -code` of each code; `catch` around a compiled proc; a compute limit that ends inside a compiled loop, with the same compute units left; a coroutine that yields from a compiled proc and resumes; `rename set foo` inside a running compiled proc; a variable trace added while a compiled loop runs; `upvar` and `uplevel` that change a local of a compiled proc; a proc that redefines itself; `tailcall`; a TclOO method.
 - Report the instruction count of each benchmark with `--jit`. This task has no gate for them.
 
 ## Must not change
