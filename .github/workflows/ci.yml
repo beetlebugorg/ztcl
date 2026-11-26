@@ -67,7 +67,9 @@ jobs:
           test "$(tr -d '\r' < "$RUNNER_TEMP/h.out" | tr '\n' ' ')" = "first hello last "
       - name: Run the examples of the module pages
         if: runner.os == 'Linux'
-        run: python3 -I tools/doc-examples.py zig-out/bin/ztcl docs/modules/vt.md
+        run: |
+          python3 -I tools/doc-examples.py zig-out/bin/ztcl docs/modules/vt.md docs/modules/watch.md
+          python3 -I tools/doc-coverage.py
       - name: Check the format
         if: runner.os == 'Linux'
         run: zig fmt --check build.zig src

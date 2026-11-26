@@ -1,0 +1,134 @@
+# Module ztcl::watch
+
+`ztcl::watch` gives the changes below a folder: the files and the folders that a program makes, changes, deletes, or moves. A script reads the changes when it wants them, for example from an event loop or a timer. It needs the capability `file`, and it watches only folders that the file commands can reach.
+
+> [!NOTE]
+> `ztcl::watch` works on Linux. On macOS, Windows, and WebAssembly, `add` gives the error `ZTCL WATCH UNAVAILABLE`. The designs of the other platforms are in the plan of the repository (`docs/dev/watch.md`).
+
+<!-- run: --root . --allow file,channels -->
+```tcl
+file mkdir site
+set w [ztcl::watch add site]
+set f [open site/index.html w]
+puts $f hello
+close $f
+puts [ztcl::watch changes $w]
+ztcl::watch remove $w
+```
+
+```text
+{created /site/index.html}
+```
+
+## Synopsis
+
+```tcl
+ztcl::watch add ?-recursive? PATH
+ztcl::watch changes W
+ztcl::watch fd W
+ztcl::watch remove W
+```
+
+`W` is a handle from `add`. The command exists when the embedder turns on `file`. The `ztcl` program turns it on with `--allow file`.
+
+## Commands
+
+### add
+
+```tcl
+ztcl::watch add ?-recursive? PATH
+```
+
+Starts a watch of the folder `PATH` and gives its handle, `watch1` for the first one. `PATH` goes through the same rules as `file` and `open`: with a root folder (`--root DIR`, or `fsroot.setRoot` in Zig), a path outside the root is an error, and a symlink cannot lead out of it. In host mode, `PATH` is a path of the host.
+
+With `-recursive`, the watch covers each folder below `PATH`, and a folder that a program makes later gets a watch when its create event arrives. A file that a program makes in a new folder before that event arrives has no event of its own. The new folder shows as `created`.
+
+On Linux, each watch is an inotify descriptor. The descriptor is closed by `remove` and when the interpreter ends or resets.
+
+### changes
+
+```tcl
+ztcl::watch changes W
+```
+
+Reads the events that wait, with no block, and gives a list of pairs `KIND PATH`. Then the list of the watch is empty. `KIND` is one of:
+
+| Kind | Event |
+|---|---|
+| `created` | A file or a folder was made, or moved into the watched folder. |
+| `modified` | The data or the attributes of a file changed. |
+| `deleted` | A file or a folder was deleted. |
+| `moved` | A file or a folder was moved out of its folder. |
+| `overflow` | Too many events came. The path is `/`. Read the folder again. |
+
+The events of one path merge into one pair, in the order of the first event of each path. A create and then a change stay `created`. A later delete or move replaces the kind. More than 4,096 pairs, or an overflow of the kernel queue, give the one pair `{overflow /}`.
+
+With a root folder, a path starts at the root, as `/site/index.html`. In host mode, a path is a path of the host.
+
+<!-- run: --root . --allow file,channels -->
+```tcl
+file mkdir site
+set w [ztcl::watch add -recursive site]
+set f [open site/a.txt w]; puts $f 1; close $f
+set f [open site/a.txt a]; puts $f 2; close $f
+file mkdir site/css
+puts [ztcl::watch changes $w]
+file delete site/a.txt
+puts [ztcl::watch changes $w]
+puts [llength [ztcl::watch changes $w]]
+```
+
+```text
+{created /site/a.txt} {created /site/css}
+{deleted /site/a.txt}
+0
+```
+
+### fd
+
+```tcl
+ztcl::watch fd W
+```
+
+Gives the number of the inotify descriptor. An embedder can wait on it in its own event loop, and then call `changes`.
+
+### remove
+
+```tcl
+ztcl::watch remove W
+```
+
+Stops the watch and closes its descriptor. The result is empty, and the handle is then invalid.
+
+## Errors
+
+| Error code | Message | Cause |
+|---|---|---|
+| `TCL WRONGARGS` | `wrong # args: should be "ztcl::watch add ?-recursive? path"` | A subcommand got the wrong count of arguments. |
+| `NONE` | `bad option "X": must be add, changes, fd, or remove` | An unknown subcommand. |
+| `NONE` | `can not find watcher named "X"` | A handle that `add` did not give, or a removed handle. |
+| `POSIX ENOENT ...` | `couldn't watch the folder: no such file or directory` | `PATH` is not a folder. Each other error of the system has its POSIX code. |
+| `POSIX EACCES ...` | `couldn't access "PATH": permission denied` | With a root folder, `PATH` is outside the root. |
+| `ZTCL WATCH UNAVAILABLE` | `ztcl::watch is not available on macOS yet` | `add` on a platform with no backend. |
+
+<!-- run: --root . --allow file,channels -->
+```tcl
+puts [catch {ztcl::watch add nosuch} m o]
+puts $m
+puts [lindex [dict get $o -errorcode] 1]
+puts [catch {ztcl::watch changes watch9} m]
+puts $m
+```
+
+```text
+1
+couldn't watch the folder: no such file or directory
+ENOENT
+1
+can not find watcher named "watch9"
+```
+
+## Platforms
+
+- Linux: inotify, in the runner and in each embedder that turns on `file`.
+- macOS, Windows, WebAssembly, and WASI: `add` gives `ZTCL WATCH UNAVAILABLE`, and `changes`, `fd`, and `remove` give `can not find watcher named "W"`.
