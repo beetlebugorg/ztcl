@@ -1599,7 +1599,7 @@ test "socket accepts only loopback addresses by default" {
 }
 
 test "exec has an allowlist and a time limit, and leaves no process" {
-    if (!tcl.proc.supported) return error.SkipZigTest;
+    if (!tcl.proc.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
     const linux = tcl.sys.os;
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
@@ -1670,7 +1670,7 @@ fn execJail(it: *tcl.Interp, root: []const u8) !void {
 }
 
 test "the exec allowlist checks the file that runs" {
-    if (!tcl.proc.supported or !tcl.fsroot.supported) return error.SkipZigTest;
+    if (!tcl.proc.supported or !tcl.fsroot.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
     var name: [64:0]u8 = undefined;
     const root = try tmpFolder(&name, "allow");
     defer removeFolder(root);
@@ -1699,7 +1699,7 @@ test "the exec allowlist checks the file that runs" {
 }
 
 test "exec refuses a relative PATH entry" {
-    if (!tcl.proc.supported) return error.SkipZigTest;
+    if (!tcl.proc.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
@@ -1713,7 +1713,7 @@ test "exec refuses a relative PATH entry" {
 }
 
 test "exec follows symlinks in the root folder to the host file" {
-    if (!tcl.proc.supported or !tcl.fsroot.supported) return error.SkipZigTest;
+    if (!tcl.proc.supported or !tcl.fsroot.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
     const linux = tcl.sys.os;
     var name: [64:0]u8 = undefined;
     const root = try tmpFolder(&name, "links");
@@ -1773,7 +1773,7 @@ fn escapeKilled(script: []const u8) !void {
 }
 
 test "the time limit of exec kills a process that calls setsid" {
-    if (!tcl.proc.supported or !tcl.fsroot.supported) return error.SkipZigTest;
+    if (!tcl.proc.supported or !tcl.fsroot.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
     // macOS has no setsid program: perl calls setsid there.
     const setsid = if (@import("builtin").os.tag == .macos)
         "list [catch {exec sh -c {perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV' sh -c 'echo $$ > pid; exec sleep 47' > /dev/null 2>&1 < /dev/null & sleep 5}} m] $m"

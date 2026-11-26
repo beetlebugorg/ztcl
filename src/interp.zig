@@ -15,6 +15,8 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+/// The process code of the target: `proc_windows.zig` on Windows.
+const proc_mod = if (@import("builtin").os.tag == .windows) @import("proc_windows.zig") else @import("proc.zig");
 const Allocator = std.mem.Allocator;
 const value = @import("value.zig");
 const expr = @import("expr.zig");
@@ -893,10 +895,10 @@ pub const Capability = enum(u32) {
 // `fsroot.zig`, and `exec` from `proc.zig`.
 const chan_supported = @import("sys.zig").supported;
 const fs_supported = @import("fsroot.zig").supported;
-const exec_supported = @import("proc.zig").supported;
+const exec_supported = proc_mod.supported;
 const FsState = @import("fsroot.zig").State;
-const ProcHost = if (exec_supported) @import("proc.zig").Host else struct {};
-const ProcState = if (exec_supported) @import("proc.zig").State else struct {};
+const ProcHost = if (exec_supported) proc_mod.Host else struct {};
+const ProcState = if (exec_supported) proc_mod.State else struct {};
 const ChanState = if (chan_supported) @import("chan.zig").State else struct {};
 
 pub const ReturnCode = enum(u32) { ok = 0, @"error" = 1, @"return" = 2, @"break" = 3, @"continue" = 4, _ };
@@ -1390,7 +1392,7 @@ pub const Interp = struct {
         @import("event.zig").forget(it);
         if (comptime chan_supported) @import("chan.zig").closeAll(it);
         @import("watch.zig").closeAll(it);
-        if (comptime exec_supported) @import("proc.zig").abandonAll(it);
+        if (comptime exec_supported) proc_mod.abandonAll(it);
         // The arena frees the memory of the mounts.
         it.vfs = .{};
         const fs_keep = it.fs;
@@ -1509,7 +1511,7 @@ pub const Interp = struct {
         }
         if (comptime exec_supported) {
             if (new & @backingInt(Capability.exec) != 0) {
-                try @import("proc.zig").register(it);
+                try proc_mod.register(it);
                 try @import("pty.zig").register(it);
             }
         }
@@ -1539,7 +1541,7 @@ pub const Interp = struct {
         @import("child.zig").destroyAll(it);
         if (comptime chan_supported) @import("chan.zig").closeAll(it);
         @import("watch.zig").closeAll(it);
-        if (comptime exec_supported) @import("proc.zig").abandonAll(it);
+        if (comptime exec_supported) proc_mod.abandonAll(it);
         if (comptime fs_supported) {
             if (it.fs.fd >= 0) @import("sys.zig").close(it.fs.fd);
         }

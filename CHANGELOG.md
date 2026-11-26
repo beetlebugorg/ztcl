@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Adds `exec`, `pid`, and command pipelines (`open "|cmd"`) on Windows. A bare name goes through the `PATH` and `PATHEXT` of `exec_host.env`, each program gets one full path before it starts, and the allowlist compares that path. A `.bat` or `.cmd` file is an error, because `cmd.exe` reads its arguments with other rules. Each pipeline is a Job Object, so a kill or the time limit ends each process that a program started. See `docs/dev/exec-windows.md`.
+
 - Adds `ztcl::open` behind the new capability `launch` (`--allow launch`): a URL with the scheme `http`, `https`, or `mailto`, or a file, in the default app of the host. A file also needs `file`, and its path goes through the jail or host mode. On Windows it uses `ShellExecuteExW` on the final path of the file, and a file of a type that runs as code is an error. `Interp.launch_host` lets an embedder open the target itself. Linux and macOS give `ZTCL OPEN UNAVAILABLE` until their backends land.
 
 - Adds a host mode for the file commands: `file`, `open`, `glob`, `cd`, `pwd`, and `source` use the real paths of the host and follow symlinks, as tclsh does. The runner turns it on when `--allow` gives `file` or `channels` and no `--root DIR` came before it. `--root` turns the root folder jail on. An embedder gets the jail unless it calls `fsroot.setHost`. A child interp of a host-mode parent is in host mode too. Windows has drive letters and UNC paths.
