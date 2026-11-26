@@ -1,0 +1,7 @@
+package ztcl:spike;
+
+// The world of the check of task 04 (docs/dev/wasi-tasks/04-async-abi.md).
+world spike {
+  import wasi:cli/stdout@0.3.2;
+  export wasi:cli/run@0.3.2;
+}
