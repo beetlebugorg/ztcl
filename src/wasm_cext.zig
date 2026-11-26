@@ -32,9 +32,10 @@ pub const Arg = extern struct {
 };
 
 const glue = struct {
-    /// Runs command `id` of package `pkg`. Gives the code of Tcl, and the
-    /// result in `reply`.
-    extern "ztcl_cext" fn call(pkg: u32, id: u32, argc: usize, argv: [*]const Arg) i32;
+    /// Runs command `id` of package `pkg`. `precision` is the value of
+    /// `tcl_precision`, for the text of the doubles of the package. Gives
+    /// the code of Tcl, and the result in `reply`.
+    extern "ztcl_cext" fn call(pkg: u32, id: u32, argc: usize, argv: [*]const Arg, precision: u32) i32;
 };
 
 /// The reply of a call to the package or of an export of this file.
@@ -82,7 +83,7 @@ fn cextCmd(it: *ztcl.Interp, argv: []const Value, _: ?*ztcl.interp.Cmd) ztcl.int
     const t: *const Target = @ptrCast(@alignCast(self.ctx.?));
     const args = try it.alloc().alloc(Arg, argv.len);
     for (argv, args) |v, *a| a.* = try argOf(it, v);
-    const code = glue.call(t.pkg, t.id, argv.len, args.ptr);
+    const code = glue.call(t.pkg, t.id, argv.len, args.ptr, it.precision);
     const r = try valueOf(it, reply);
     return switch (code) {
         0 => r,
@@ -149,7 +150,12 @@ fn ztcl_cext_eval(h: *Handle, ptr: [*]const u8, len: usize, flags: c_int) callco
     const it = &h.it;
     const text = ptr[0..len];
     const run = struct {
-        fn f(i: *ztcl.Interp, t: []const u8, global: bool) ztcl.interp.Error!Value {
+        fn f(i: *ztcl.Interp, t0: []const u8, global: bool) ztcl.interp.Error!Value {
+            // The text is in the exchange buffer, and the next call writes
+            // over it. The text cache keeps a copy, but a script longer
+            // than the cache compiles in place, and its procs keep slices
+            // of the text. So a long script gets its own copy.
+            const t = if (t0.len > ztcl.interp.text_cache_max) try i.alloc().dupe(u8, t0) else t0;
             if (global) {
                 var out: std.ArrayList(u8) = .empty;
                 try out.appendSlice(i.alloc(), "uplevel #0 ");

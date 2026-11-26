@@ -1262,6 +1262,12 @@ fn ztcl_cext_dispatch(id: u32, argc: usize) callconv(.c) i32 {
 }
 
 /// Makes the interp of the package for interp `handle` of ztcl.
+/// Sets the `tcl_precision` of the text of doubles. ztcl gives its value
+/// before a command of the package when it changes.
+fn ztcl_cext_precision(p: u32) callconv(.c) void {
+    value.precision = @intCast(@min(p, 17));
+}
+
 fn ztcl_cext_interp(handle: u32) callconv(.c) *Interp {
     const ip = gpa.create(Interp) catch panicText("out of memory");
     ip.* = .{ .handle = handle };
@@ -1418,6 +1424,7 @@ comptime {
         @export(&ztcl_cext_dispatch, .{ .name = "ztcl_cext_dispatch" });
         @export(&ztcl_cext_interp, .{ .name = "ztcl_cext_interp" });
         @export(&ztcl_cext_result, .{ .name = "ztcl_cext_result" });
+        @export(&ztcl_cext_precision, .{ .name = "ztcl_cext_precision" });
     }
 }
 
@@ -1466,6 +1473,65 @@ fn missing(comptime n: usize) *const anyopaque {
             panicText(std.fmt.comptimePrint("slot {d} of the Tcl stubs table has no implementation", .{n}));
         }
     }.f);
+}
+
+// ---- Channels ----
+
+/// The first fields of `Tcl_ChannelType` of Tcl 8.6, up to `close2Proc`.
+pub const ChannelType = extern struct {
+    name: ?[*:0]const u8,
+    version: ?*const anyopaque,
+    close: ?*const fn (?*anyopaque, ?*Interp) callconv(.c) c_int,
+    input: ?*const anyopaque,
+    output: ?*const anyopaque,
+    seek: ?*const anyopaque,
+    set_option: ?*const anyopaque,
+    get_option: ?*const anyopaque,
+    watch: ?*const anyopaque,
+    get_handle: ?*const anyopaque,
+    close2: ?*const fn (?*anyopaque, ?*Interp, c_int) callconv(.c) c_int,
+};
+
+/// The `closeProc` value that tells Tcl to call `close2Proc`.
+const TCL_CLOSE2PROC: usize = 1;
+
+/// A channel of the package. Scripts do not see it yet: `read`, `puts`,
+/// `seek`, and `close` of ztcl do not reach it. The package can name it,
+/// and the last unregister closes it with the close procedure of its type.
+pub const Channel = struct {
+    type: *const ChannelType,
+    name: [:0]u8,
+    data: ?*anyopaque,
+    mask: c_int,
+    refs: c_int = 0,
+};
+
+fn Tcl_CreateChannel(t: *const ChannelType, name: ?[*:0]const u8, data: ?*anyopaque, mask: c_int) callconv(.c) *Channel {
+    const c = gpa.create(Channel) catch panicText("out of memory");
+    const n = if (name) |p| std.mem.span(p) else "";
+    c.* = .{ .type = t, .name = gpa.dupeSentinel(u8, n, 0) catch panicText("out of memory"), .data = data, .mask = mask };
+    return c;
+}
+
+fn Tcl_GetChannelName(c: *Channel) callconv(.c) [*:0]const u8 {
+    return c.name.ptr;
+}
+
+fn Tcl_RegisterChannel(_: ?*Interp, c: ?*Channel) callconv(.c) void {
+    if (c) |ch| ch.refs += 1;
+}
+
+/// Removes one reference. The last one closes the channel and frees it.
+fn Tcl_UnregisterChannel(ip: ?*Interp, c: *Channel) callconv(.c) c_int {
+    c.refs -= 1;
+    if (c.refs > 0) return OK;
+    const t = c.type;
+    const rc: c_int = if (t.close != null and @intFromPtr(t.close.?) != TCL_CLOSE2PROC)
+        t.close.?(c.data, ip)
+    else if (t.close2) |f| f(c.data, ip, 0) else OK;
+    gpa.free(c.name);
+    gpa.destroy(c);
+    return rc;
 }
 
 // ---- The table ----
@@ -1518,6 +1584,7 @@ const implemented = [_]struct { usize, *const anyopaque }{
     .{ 69, &Tcl_AppendElement },
     .{ 70, &Tcl_AppendResult },
     .{ 76, &Tcl_BackgroundError },
+    .{ 88, &Tcl_CreateChannel },
     .{ 96, &Tcl_CreateObjCommand },
     .{ 103, &Tcl_DeleteCommand },
     .{ 104, &Tcl_DeleteCommandFromToken },
@@ -1531,6 +1598,7 @@ const implemented = [_]struct { usize, *const anyopaque }{
     .{ 124, &Tcl_DStringSetLength },
     .{ 125, &Tcl_DStringStartSublist },
     .{ 129, &Tcl_Eval },
+    .{ 156, &Tcl_GetChannelName },
     .{ 166, &Tcl_GetObjResult },
     .{ 174, &Tcl_GetStringResult },
     .{ 175, &Tcl_GetVar },
@@ -1538,12 +1606,14 @@ const implemented = [_]struct { usize, *const anyopaque }{
     .{ 177, &Tcl_GlobalEval },
     .{ 195, &Tcl_ObjGetVar2 },
     .{ 196, &Tcl_ObjSetVar2 },
+    .{ 210, &Tcl_RegisterChannel },
     .{ 217, &Tcl_ResetResult },
     .{ 232, &Tcl_SetResult },
     .{ 235, &Tcl_SetObjResult },
     .{ 237, &Tcl_SetVar },
     .{ 238, &Tcl_SetVar2 },
     .{ 249, &Tcl_TranslateFileName },
+    .{ 252, &Tcl_UnregisterChannel },
     .{ 260, &Tcl_VarEval },
     .{ 264, &Tcl_WrongNumArgs },
     .{ 279, &Tcl_GetVersion },
@@ -1785,6 +1855,28 @@ test "freed records go to the free list" {
     try testing.expect(a == b);
     incr(b);
     decr(b);
+}
+
+test "the last unregister of a channel calls its close procedure" {
+    const S = struct {
+        var closed: c_int = 0;
+        fn close(data: ?*anyopaque, _: ?*Interp) callconv(.c) c_int {
+            const n: *c_int = @ptrCast(@alignCast(data.?));
+            closed += n.*;
+            return OK;
+        }
+    };
+    var tag: c_int = 7;
+    const t: ChannelType = .{ .name = "test", .version = null, .close = &S.close, .input = null, .output = null, .seek = null, .set_option = null, .get_option = null, .watch = null, .get_handle = null, .close2 = null };
+    const c = call(88, *const fn (*const ChannelType, ?[*:0]const u8, ?*anyopaque, c_int) callconv(.c) *Channel)(&t, "incrblob_1", &tag, 6);
+    try testing.expectEqualStrings("incrblob_1", std.mem.span(call(156, *const fn (*Channel) callconv(.c) [*:0]const u8)(c)));
+    call(210, *const fn (?*Interp, ?*Channel) callconv(.c) void)(null, c);
+    call(210, *const fn (?*Interp, ?*Channel) callconv(.c) void)(null, c);
+    const unreg = call(252, *const fn (?*Interp, *Channel) callconv(.c) c_int);
+    try testing.expectEqual(OK, unreg(null, c));
+    try testing.expectEqual(@as(c_int, 0), S.closed);
+    try testing.expectEqual(OK, unreg(null, c));
+    try testing.expectEqual(@as(c_int, 7), S.closed);
 }
 
 test "the table has the magic number and each slot" {

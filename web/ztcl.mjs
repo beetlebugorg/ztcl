@@ -71,7 +71,9 @@ export class Interp {
   /// Options: computeLimit (compute units for each eval, null for no limit),
   /// memLimit (bytes), onOutput (a function that gets the `puts` text),
   /// allow (a list of capabilities: only "file", for the files of a
-  /// bundle), and point (true adds `point proc` and the output commands).
+  /// bundle), point (true adds `point proc` and the output commands), and
+  /// packages (a function of a file name for the `load` command of the C
+  /// packages, in a build with `-Dcext-wasm`: see _addLoad).
   static async create(module, options = {}) {
     if (isOptions(module)) [module, options] = [undefined, module];
     const mod = await compile(module);
@@ -90,14 +92,14 @@ export class Interp {
     // A build with `-Dcext-wasm` imports `ztcl_cext.call` for the commands of
     // the C packages of loadPackage().
     if (WebAssembly.Module.imports(mod).some((i) => i.module === "ztcl_cext")) {
-      imports.ztcl_cext = { call: (pkg, id, argc, argv) => self._cextCall(pkg, id, argc, argv) };
+      imports.ztcl_cext = { call: (pkg, id, argc, argv, prec) => self._cextCall(pkg, id, argc, argv, prec) };
     }
     const instance = await WebAssembly.instantiate(mod, imports);
     self = new Interp(instance, options);
     return self;
   }
 
-  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null } = {}) {
+  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
@@ -131,6 +133,7 @@ export class Interp {
       const rc = this.x.ztcl_allow(this.h, 16);
       if (rc !== 0) throw new Error("ztcl_allow: out of memory");
     }
+    if (packages) this._addLoad(packages);
   }
 
   /// The size in bytes of the scripts and files of a bundle. Zero for a
@@ -169,6 +172,7 @@ export class Interp {
   /// to each call.
   eval(script) {
     const x = this.x;
+    if (this._depth) return this._evalIn(script);
     return this._call(() => {
       const bytes = encoder.encode(script);
       const ptr = x.ztcl_alloc(bytes.length || 1);
@@ -340,7 +344,6 @@ export class Interp {
     return { ok: rc === 0, result, output: this._liveOut + kept };
   }
 
-  /// Frees the interpreter. Drop the Interp after this call.
   /// Loads a C package that `zig cc -target wasm32-wasi` built with
   /// libztclstubs.a (docs/dev/cext-tasks/04w-wasm-bridge.md), and runs
   /// its init function, for example "Sqlite3_Init". The module needs a
@@ -349,14 +352,21 @@ export class Interp {
   /// Node.js. With no `wasi`, the package gets no files: each call of
   /// WASI gives ENOSYS, except the clock and random bytes.
   async loadPackage(source, { init, wasi = null } = {}) {
+    const mod = source instanceof WebAssembly.Module ? source : await WebAssembly.compile(source);
+    this._loadModule(mod, init, wasi);
+  }
+
+  // Makes an instance of the package module `mod` and runs `init`. The
+  // instance is made at once, so the `load` command can call it.
+  _loadModule(mod, init, wasi) {
     if (!this.x.ztcl_cext_command) throw new Error("loadPackage: this module has no C packages (build with -Dcext-wasm)");
     if (!init) throw new Error("loadPackage: no init function");
-    const mod = source instanceof WebAssembly.Module ? source : await WebAssembly.compile(source);
     const index = (this._pkgs ??= []).length;
     const pkg = { x: null, index };
     const imports = { ztcl: this._cextImports(pkg), wasi_snapshot_preview1: wasi ?? noWasi(pkg) };
-    const instance = await WebAssembly.instantiate(mod, imports);
+    const instance = new WebAssembly.Instance(mod, imports);
     pkg.x = instance.exports;
+    if (typeof pkg.x[init] !== "function") throw new Error(`loadPackage: the module has no export ${init}`);
     pkg.side = this._side(pkg.x);
     if (wasi?.initialize) wasi.initialize(instance);
     else pkg.x._initialize?.();
@@ -367,6 +377,89 @@ export class Interp {
       const r = new Uint32Array(pkg.x.memory.buffer, pkg.x.ztcl_cext_result(ip), 4);
       throw new Error(`${init}: ${decoder.decode(new Uint8Array(pkg.x.memory.buffer, r[2], r[1]))}`);
     }
+  }
+
+  /// Makes command `name` that runs `fn(args)` in JavaScript. The module
+  /// needs a ztcl library built with `-Dcext-wasm`. `args` has the words
+  /// after the name, as strings. `fn` gives the result, or throws an
+  /// Error for a Tcl error with its message. In `fn`, eval() runs the
+  /// script in the frame of the caller of the command.
+  defineCommand(name, fn) {
+    if (!this.x.ztcl_cext_command) throw new Error("defineCommand: this module has no C packages (build with -Dcext-wasm)");
+    this._zside ??= this._side(this.x);
+    const index = (this._pkgs ??= []).length;
+    this._pkgs.push({ js: fn, index });
+    const bytes = encoder.encode(name);
+    const p = this._zside.xbuf(bytes.length);
+    this._zside.view().u8.set(bytes, p);
+    if (this.x.ztcl_cext_command(this.h, index, 0, p, bytes.length) !== 0) throw new Error("defineCommand: out of memory");
+  }
+
+  // Adds the command `load FILE ?PREFIX?` for the C packages of the
+  // option `packages`. packages(file) gives a WebAssembly.Module, bytes,
+  // or { module, wasi }, or null for no package.
+  _addLoad(packages) {
+    this.defineCommand("load", (args) => {
+      if (args.length < 1 || args.length > 3) throw new Error('wrong # args: should be "load fileName ?prefix? ?interp?"');
+      const file = args[0];
+      let got = packages(file);
+      if (!got) throw new Error(`couldn't load file "${file}": no such package`);
+      if (got instanceof WebAssembly.Module || ArrayBuffer.isView(got) || got instanceof ArrayBuffer) got = { module: got };
+      const mod = got.module instanceof WebAssembly.Module ? got.module : new WebAssembly.Module(got.module);
+      this._loadModule(mod, initName(file, args[1]), got.wasi ?? null);
+      return "";
+    });
+  }
+
+  // The text of argument `i` of an `Arg` array at word `w0` of `side`.
+  _argText(side, w0, i) {
+    const v = side.view(), w = w0 + i * 4;
+    const kind = v.u32[w], len = v.u32[w + 1];
+    if (kind === 0) return decoder.decode(v.u8.subarray(v.u32[w + 2], v.u32[w + 2] + len));
+    const dv = new DataView(side.buf, (w + 2) << 2, 8);
+    if (kind === 1) return String(dv.getBigInt64(0, true));
+    return doubleText(dv.getFloat64(0, true));
+  }
+
+  // Runs JavaScript command `fn` with the arguments at `argv` in ztcl.
+  _jsCall(fn, argc, argv) {
+    const zs = this._zside, w0 = argv >>> 2;
+    const args = [];
+    for (let i = 1; i < argc; i++) args.push(this._argText(zs, w0, i));
+    let rc = 0, out;
+    this._depth = (this._depth ?? 0) + 1;
+    try {
+      out = String(fn(args) ?? "");
+    } catch (e) {
+      rc = 1;
+      out = String(e?.message ?? e);
+    } finally {
+      this._depth--;
+    }
+    const bytes = encoder.encode(out);
+    const p = zs.xbuf(bytes.length);
+    const v = zs.view();
+    v.u8.set(bytes, p);
+    v.u32[zs.reply] = 0; v.u32[zs.reply + 1] = bytes.length; v.u32[zs.reply + 2] = p; v.u32[zs.reply + 3] = 0;
+    return rc;
+  }
+
+  // eval() inside a command of defineCommand: the script runs in the
+  // frame of the caller, and the codes of Tcl stay.
+  _evalIn(script) {
+    const zs = this._zside;
+    const bytes = encoder.encode(script);
+    const p = zs.xbuf(bytes.length);
+    zs.view().u8.set(bytes, p);
+    const code = this.x.ztcl_cext_eval(this.h, p, bytes.length, 0);
+    const result = this._argText(zs, zs.reply, 0);
+    return { ok: code === 0, code, result, output: "" };
+  }
+
+  /// Frees the interpreter. Drop the Interp after this call.
+  close() {
+    if (this.h) this.x.ztcl_delete(this.h);
+    this.h = 0;
   }
 
   // The views of the memory of a side of the bridge (`side.x` is the
@@ -462,8 +555,15 @@ export class Interp {
 
   // The import `ztcl_cext.call`: copies the arguments into the package
   // and runs the command there.
-  _cextCall(pkgIndex, id, argc, argv) {
-    const ps = this._pkgs[pkgIndex].side;
+  _cextCall(pkgIndex, id, argc, argv, prec) {
+    const pkg = this._pkgs[pkgIndex];
+    if (pkg.js) return this._jsCall(pkg.js, argc, argv);
+    const ps = pkg.side;
+    // The package keeps its own copy of `tcl_precision`.
+    if (ps.prec !== prec) {
+      ps.x.ztcl_cext_precision?.(prec);
+      ps.prec = prec;
+    }
     const zs = this._zside.view();
     const src = zs.u32, s0 = argv >>> 2;
     let total = 0;
@@ -493,11 +593,6 @@ export class Interp {
     const rc = ps.x.ztcl_cext_dispatch(id, argc);
     this._cextReply(ps, this._zside);
     return rc;
-  }
-
-  close() {
-    if (this.h) this.x.ztcl_delete(this.h);
-    this.h = 0;
   }
 
   _text(ptr, len) {
@@ -599,6 +694,28 @@ export class WorkerInterp {
 // The WASI imports of a package with no files: ENOSYS (52) for each
 // call, except the clock, random bytes, and empty arguments and
 // environment. `pkg.x` is the instance after instantiate().
+// The init function of `load FILE ?PREFIX?`, by the rule of Tcl: with
+// no prefix, the letters and underscores at the start of the file name,
+// after "lib". The first letter is upper case and the rest lower case.
+function initName(file, prefix) {
+  let p = prefix;
+  if (!p) {
+    let tail = file.slice(file.lastIndexOf("/") + 1);
+    if (tail.startsWith("lib")) tail = tail.slice(3);
+    p = /^[A-Za-z_]*/.exec(tail)[0];
+  }
+  return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() + "_Init";
+}
+
+// The text of a double for a JavaScript command. A whole number keeps
+// its ".0", as in Tcl.
+function doubleText(d) {
+  if (Number.isNaN(d)) return "NaN";
+  if (!Number.isFinite(d)) return d > 0 ? "Inf" : "-Inf";
+  const s = String(d);
+  return /^-?\d+$/.test(s) ? s + ".0" : s;
+}
+
 function noWasi(pkg) {
   const mem = () => pkg.x.memory.buffer;
   const own = {
