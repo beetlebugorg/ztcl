@@ -865,6 +865,11 @@ pub const Capability = enum(u32) {
     /// The commands of the Thread package: `thread::*`, `tsv::*`, and
     /// `tpool::*`. Each thread has its own interpreter (`thread.zig`).
     thread = 2048,
+    /// Reads of the zip mounts of `vfs.zig` (`//zipfs:/`): `open` for
+    /// reading, `source`, `glob`, the `file` queries, and `zipfs`. A
+    /// path outside a mount is an error, so it gives no access to the
+    /// host.
+    embedded = 4096,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -1050,6 +1055,8 @@ pub const Interp = struct {
     fs: FsState = .{},
     /// The watchers of `ztcl::watch`.
     watches: @import("watch.zig").State = .{},
+    /// The zip mounts of `vfs.zig`.
+    vfs: @import("vfs.zig").State = .{},
     chans: ChanState = .{},
     temp_next: u32 = 0,
     /// The state of the `package` command.
@@ -1377,6 +1384,8 @@ pub const Interp = struct {
         if (comptime chan_supported) @import("chan.zig").closeAll(it);
         @import("watch.zig").closeAll(it);
         if (comptime exec_supported) @import("proc.zig").abandonAll(it);
+        // The arena frees the memory of the mounts.
+        it.vfs = .{};
         const fs_keep = it.fs;
         defer it.fs = fs_keep;
         const caps = it.capabilities;
@@ -1477,6 +1486,16 @@ pub const Interp = struct {
             if (new & @intFromEnum(Capability.file) != 0) {
                 try @import("filecmd.zig").register(it);
                 try @import("watch.zig").register(it);
+            }
+            const vfs_bits = @intFromEnum(Capability.embedded) | @intFromEnum(Capability.file);
+            if (new & vfs_bits != 0) try @import("vfs.zig").register(it);
+            if (comptime chan_supported) {
+                // The commands check `vfs.gate`, so a path outside a
+                // mount needs `channels` or `file`.
+                if (new & @intFromEnum(Capability.embedded) != 0) {
+                    try @import("chan.zig").register(it);
+                    try @import("filecmd.zig").register(it);
+                }
             }
         }
         if (comptime exec_supported) {

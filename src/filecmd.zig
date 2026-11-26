@@ -17,6 +17,7 @@ const value = @import("value.zig");
 const fsroot = @import("fsroot.zig");
 const sys = @import("sys.zig");
 const cmds = @import("cmds.zig");
+const vfs = @import("vfs.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
@@ -29,8 +30,10 @@ fn eql(a: []const u8, b: []const u8) bool {
 fn splitPath(it: *Interp, p: []const u8) Error![]Value {
     const a = it.alloc();
     var out: std.ArrayList(Value) = .empty;
-    if (p.len > 0 and p[0] == '/') try out.append(a, .{ .str = "/" });
-    var iter = std.mem.tokenizeScalar(u8, p, '/');
+    // A path of `vfs.zig` starts with the volume `//zipfs:/`, as in Tcl 9.
+    const zip = vfs.isOurs(p);
+    if (zip) try out.append(a, .{ .str = vfs.root }) else if (p.len > 0 and p[0] == '/') try out.append(a, .{ .str = "/" });
+    var iter = std.mem.tokenizeScalar(u8, if (zip) p["//zipfs:".len..] else p, '/');
     while (iter.next()) |w| try out.append(a, .{ .str = w });
     return out.items;
 }
@@ -44,8 +47,8 @@ fn joinPath(it: *Interp, parts: []const Value) Error![]const u8 {
         if (s[0] == '/') out.clearRetainingCapacity();
         for (try splitPath(it, s)) |w| {
             const t = try it.str(w);
-            if (eql(t, "/")) {
-                try out.append(a, '/');
+            if (eql(t, "/") or eql(t, vfs.root)) {
+                try out.appendSlice(a, t);
                 continue;
             }
             if (out.items.len > 0 and out.items[out.items.len - 1] != '/') try out.append(a, '/');
@@ -78,6 +81,7 @@ fn extOf(p: []const u8) []const u8 {
 }
 
 fn statInfo(it: *Interp, p: []const u8) Error!?fsroot.Info {
+    if (try vfs.gate(it, p, .file, "could not read")) |h| return vfs.stat(it, h);
     const rel = (try fsroot.normal(it, p)) orelse return null;
     return switch (try fsroot.stat(it, rel)) {
         .ok => |x| x,
@@ -86,6 +90,9 @@ fn statInfo(it: *Interp, p: []const u8) Error!?fsroot.Info {
 }
 
 fn needInfo(it: *Interp, p: []const u8, verb: []const u8) Error!fsroot.Info {
+    if (try vfs.gate(it, p, .file, "could not read")) |h| {
+        return vfs.stat(it, h) orelse it.failCode("POSIX ENOENT {no such file or directory}", "could not {s} \"{s}\": no such file or directory", .{ verb, p });
+    }
     const rel = try fsroot.need(it, p);
     return switch (try fsroot.stat(it, rel)) {
         .ok => |x| x,
@@ -474,6 +481,7 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         for (it.chans.table.keys()) |k| try out.append(a, .{ .str = k });
         return value.wrapList(a, out.items);
     }
+    if (try onMount(it, s, args)) |v| return v;
     if (eql(s, "normalize")) {
         const rel = try fsroot.need(it, try one(it, s, args));
         return .{ .str = try std.fmt.allocPrint(a, "/{s}", .{rel}) };
@@ -552,6 +560,29 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         return it.fail("couldn't create temporary file", .{});
     }
     return it.fail("file {s} is not available", .{s});
+}
+
+/// The subcommands of `file` on a path of `vfs.zig`. Gives null for
+/// the paths of the jail or the host. The mounts are read-only.
+fn onMount(it: *Interp, s: []const u8, args: []const Value) Error!?Value {
+    const writes = [_][]const u8{ "mkdir", "delete", "rename", "copy", "tempfile", "link" };
+    for (writes) |w| if (eql(s, w)) {
+        for (args) |v| {
+            const p = try it.str(v);
+            if (vfs.isOurs(p)) return vfs.readOnly(it, try std.fmt.allocPrint(it.alloc(), "can't {s}", .{s}), p);
+        }
+        if (it.capabilities & @intFromEnum(interp.Capability.file) == 0) return it.failCode("POSIX EACCES {permission denied}", "can't {s}: permission denied", .{s});
+        return null;
+    };
+    if (eql(s, "normalize") and args.len == 1) {
+        const h = (try vfs.gate(it, try it.str(args[0]), .file, "could not normalize")) orelse return null;
+        return .{ .str = h.full };
+    }
+    if (eql(s, "readlink") and args.len == 1) {
+        const p = try it.str(args[0]);
+        if (try vfs.gate(it, p, .file, "could not read link")) |_| return it.failCode("POSIX EINVAL {invalid argument}", "could not read link \"{s}\": invalid argument", .{p});
+    }
+    return null;
 }
 
 fn cmdPwd(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
@@ -694,6 +725,12 @@ fn cmdGlob(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         var pats: std.ArrayList([]const u8) = .empty;
         try braces(it, try std.mem.concat(a, u8, &.{ prefix, try it.str(v) }), &pats);
         for (pats.items) |pat| {
+            const whole = if (dir) |d| try std.mem.concat(a, u8, &.{ d, "/", pat }) else pat;
+            if (vfs.isOurs(whole)) {
+                try vfs.glob(it, whole, &results);
+                continue;
+            }
+            if (it.capabilities & @intFromEnum(interp.Capability.file) == 0) return it.failCode("POSIX EACCES {permission denied}", "couldn't read directory \"{s}\": permission denied", .{whole});
             var words: std.ArrayList([]const u8) = .empty;
             var iter = std.mem.tokenizeScalar(u8, pat, '/');
             while (iter.next()) |w| try words.append(a, w);

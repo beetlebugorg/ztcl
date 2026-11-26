@@ -10,6 +10,7 @@ const std = @import("std");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
 const fsroot = @import("fsroot.zig");
+const vfs = @import("vfs.zig");
 const cmds = @import("cmds.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
@@ -46,6 +47,9 @@ pub const Channel = struct {
     on_read: ?[]const u8 = null,
     on_write: ?[]const u8 = null,
     kind: enum { file, socket, server, pipe } = .file,
+    /// A file of `vfs.zig`: the read buffer has all of the data, and
+    /// `fd` is -1.
+    mem: bool = false,
     /// The command of a server socket. It gets each new connection.
     accept: []const u8 = "",
     /// A connect that continues in the background.
@@ -371,6 +375,16 @@ fn cmdOpen(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (comptime !proc_ok) return it.fail("couldn't open \"{s}\": exec is not available on this target", .{path});
         return @import("proc.zig").openPipeline(it, path[1..], m.read, m.write);
     }
+    if (try vfs.gate(it, path, .channels, "couldn't open")) |h| {
+        if (m.write) return vfs.readOnly(it, "couldn't open", path);
+        const data = try vfs.read(it, h, "couldn't open", path);
+        const c = try a.create(Channel);
+        const name = try std.fmt.allocPrint(a, "file{d}", .{it.chans.number(false)});
+        c.* = .{ .name = name, .fd = -1, .readable = true, .writable = false, .mem = true, .hit_eof = true };
+        try c.rbuf.appendSlice(a, data);
+        try it.chans.table.put(a, name, c);
+        return .{ .str = name };
+    }
     var perm: u32 = 0o666;
     if (argv.len == 4) perm = @intCast((try it.int(argv[3])) & 0o777);
     const rel = (try fsroot.normal(it, path)) orelse return it.failCode("POSIX EACCES {permission denied}", "couldn't open \"{s}\": permission denied", .{path});
@@ -386,6 +400,7 @@ fn cmdOpen(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 }
 
 fn closeFds(c: *Channel) void {
+    if (c.mem) return;
     if (!c.read_closed or c.wfd < 0) sys.close(c.fd);
     if (c.wfd >= 0 and !c.write_closed) sys.close(c.wfd);
 }
@@ -777,6 +792,7 @@ fn cmdSeek(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             return it.failCode("TCL LOOKUP INDEX origin", "bad origin \"{s}\": must be start, current, or end", .{o});
         }
     }
+    if (c.mem) return memSeek(it, c, off, whence);
     try flushOut(it, c);
     switch (sys.seek(c.fd, off + adjust, @intCast(whence))) {
         .at => {},
@@ -789,9 +805,25 @@ fn cmdSeek(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return Value.empty;
 }
 
+/// `seek` on a channel of `vfs.zig`: the position in the read buffer.
+fn memSeek(it: *Interp, c: *Channel, off: i64, whence: usize) Error!Value {
+    const len: i64 = @intCast(c.rbuf.items.len);
+    const from: i64 = switch (whence) {
+        0 => 0,
+        1 => @intCast(c.rpos),
+        else => len,
+    };
+    const to = from + off;
+    if (to < 0) return it.failCode("POSIX EINVAL {invalid argument}", "error during seek on \"{s}\": invalid argument", .{c.name});
+    c.rpos = @intCast(@min(to, len));
+    c.at_eof = false;
+    return Value.empty;
+}
+
 fn cmdTell(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2) return it.wrongArgs("tell channelId");
     const c = try find(it, argv[1]);
+    if (c.mem) return .{ .int = @intCast(c.rpos) };
     const at: i64 = switch (sys.seek(c.fd, 0, 1)) {
         .at => |x| x,
         .err => return .{ .int = -1 },
@@ -935,6 +967,7 @@ fn cmdSource(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2 and argv.len != 4) return it.wrongArgs("source ?-encoding name? fileName");
     const a = it.alloc();
     const path = try it.str(argv[argv.len - 1]);
+    if (try vfs.gate(it, path, .channels, "couldn't read file")) |h| return sourceText(it, path, try vfs.read(it, h, "couldn't read file", path));
     const rel = (try fsroot.normal(it, path)) orelse return it.failCode("POSIX EACCES {permission denied}", "couldn't read file \"{s}\": permission denied", .{path});
     const fd = switch (try fsroot.openRel(it, rel, .{}, 0)) {
         .fd => |x| x,
@@ -953,8 +986,14 @@ fn cmdSource(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         text.items.len += got;
         try it.checkMem();
     }
+    return sourceText(it, path, text.items);
+}
+
+/// Runs the text of the file `path` as `source` does.
+fn sourceText(it: *Interp, path: []const u8, text: []const u8) Error!Value {
+    const a = it.alloc();
     // The ^Z character ends a script.
-    var body = text.items;
+    var body = text;
     if (std.mem.indexOfScalar(u8, body, 26)) |k| body = body[0..k];
     const saved = it.script_name;
     it.script_name = try a.dupe(u8, path);
