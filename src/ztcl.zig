@@ -92,6 +92,7 @@ test {
     _ = @import("tests.zig");
     _ = @import("pty_tests.zig");
     _ = @import("proc_windows_tests.zig");
+    _ = @import("isolate_windows_tests.zig");
     _ = @import("pty_windows_tests.zig");
     _ = @import("watch_tests.zig");
     _ = @import("zipread.zig");

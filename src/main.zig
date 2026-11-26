@@ -481,6 +481,13 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             };
             continue;
         }
+        // The transport of a thread of the `process` level (ztcl#209,
+        // docs/dev/isolation.md). The child side of the protocol is
+        // step 3 of that plan. Until then the runner skips the handle.
+        if ((std.mem.eql(u8, arg, "--iso-handle") or std.mem.eql(u8, arg, "--iso-fd")) and i + 1 < args.len) {
+            i += 1;
+            continue;
+        }
         if (std.mem.eql(u8, arg, "--exe-name") and i + 1 < args.len) {
             i += 1;
             it.exe_name = args[i];

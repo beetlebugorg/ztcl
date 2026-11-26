@@ -167,6 +167,17 @@ The default keeps the scripts working: the parent runs the sends of a child as t
 5. The `vm` level on the agent of `ztcl::vm`, then `wasm`, then `vm-confidential`.
 6. The Thread package tests at each level, and `docs/isolation.md` with the numbers.
 
+### The sandbox of Windows (step 4, first part)
+
+`src/isolate_windows.zig` has `spawn`, `Child.wait`, `Child.kill`, and `Child.usage` for the Windows `process` level. Its tests run the ztcl runner in the sandbox: the child reads and writes its root folder, gets `permission denied` for the folder next to it, and cannot start a process. `kill` ends it with 137, the CPU and memory limits of the job end it, and the job counts its CPU time. What the work found:
+
+- An AppContainer needs a profile. With a SID from `DeriveAppContainerSidFromAppContainerName` and no profile, `CreateProcessW` gives `ERROR_FILE_NOT_FOUND`. Each child gets a profile of its own (`CreateAppContainerProfile`), and its end deletes it.
+- An AppContainer needs the folders of the user in its environment. With only `SystemRoot`, `CreateProcessW` gives `ERROR_ENVVAR_NOT_FOUND`. The child gets `APPDATA`, `LOCALAPPDATA`, `SystemDrive`, `SystemRoot`, `TEMP`, `TMP`, and `USERPROFILE`, and Windows puts the folders of its container in their place.
+- An AppContainer cannot read the runner under the folder of a user, so the first spawn copies the runner into `%TEMP%\ztcl-iso`, a folder that each AppContainer can read and run.
+- A child with a root folder starts in it, so a relative path of a script names a file in the root.
+
+The transport (`isoproto.Transport` over the pipe) and the child side of the protocol come with steps 2 and 3. Until then the runner skips `--iso-handle`.
+
 ## Questions
 
 These are the defaults of this plan. Each can change in review.
