@@ -1130,7 +1130,7 @@ test "the optional commands are absent by default" {
     defer it.deinit();
     // A build with modules has the small `package` by default.
     try std.testing.expect((it.findCommand("package") == null) == (modules.table.len == 0));
-    for ([_][]const u8{ "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror", "ztcl::open" }) |name| {
+    for ([_][]const u8{ "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror", "ztcl::open", "ztcl::mac::keychain", "ztcl::mac::defaults" }) |name| {
         try std.testing.expect(it.findCommand(name) == null);
     }
 }
@@ -2755,4 +2755,36 @@ test "ztcl::open: the scheme of a URL, and the blocked file types" {
 test "ztcl::open: the shell of Windows fails on a missing file, with no dialog" {
     if (@import("builtin").os.tag != .windows) return error.SkipZigTest;
     try std.testing.expect(!(try tcl.launch.win.shellOpen(std.testing.allocator, "C:/ztcl-no-such-folder/none.txt")));
+}
+
+test "ztcl::mac: the allow lists of the keychain and of the defaults" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@intFromEnum(tcl.interp.Capability.keychain) | @intFromEnum(tcl.interp.Capability.defaults));
+    // An empty list reaches no service and no domain.
+    try std.testing.expectEqualStrings("ZTCL MAC DENIED", try it.str(try it.eval("catch {ztcl::mac::keychain get org.example.app me}; set ::errorCode")));
+    try std.testing.expectEqualStrings("ZTCL MAC DENIED", try it.str(try it.eval("catch {ztcl::mac::defaults get org.example.app k}; set ::errorCode")));
+    const list = [_][]const u8{"org.ztcl.test"};
+    it.keychain_allow = &list;
+    it.defaults_allow = &list;
+    try std.testing.expectEqualStrings("ZTCL MAC DENIED", try it.str(try it.eval("catch {ztcl::mac::keychain get org.ztcl.test.other me}; set ::errorCode")));
+    try std.testing.expectEqualStrings("bad option \"read\": must be delete, get, or set", try it.str(try it.eval("catch {ztcl::mac::defaults read org.ztcl.test k} m; set m")));
+    if (@import("builtin").os.tag != .macos) {
+        try std.testing.expectEqualStrings("ZTCL MAC UNAVAILABLE", try it.str(try it.eval("catch {ztcl::mac::defaults get org.ztcl.test k}; set ::errorCode")));
+        return;
+    }
+    // The calls of the system run only with ZTCL_TEST_MAC=1, as in CI:
+    // a keychain can ask the user on a desktop.
+    const v = std.c.getenv("ZTCL_TEST_MAC") orelse return error.SkipZigTest;
+    if (v[0] != '1') return error.SkipZigTest;
+    _ = try it.eval("ztcl::mac::defaults set org.ztcl.test greeting {héllo}");
+    try std.testing.expectEqualStrings("héllo", try it.str(try it.eval("ztcl::mac::defaults get org.ztcl.test greeting")));
+    _ = try it.eval("ztcl::mac::defaults delete org.ztcl.test greeting");
+    try std.testing.expectEqualStrings("", try it.str(try it.eval("ztcl::mac::defaults get org.ztcl.test greeting")));
+    _ = try it.eval("ztcl::mac::keychain set org.ztcl.test tester s3cret");
+    _ = try it.eval("ztcl::mac::keychain set org.ztcl.test tester s3cret2");
+    try std.testing.expectEqualStrings("s3cret2", try it.str(try it.eval("ztcl::mac::keychain get org.ztcl.test tester")));
+    _ = try it.eval("ztcl::mac::keychain delete org.ztcl.test tester");
+    try std.testing.expectEqualStrings("ZTCL MAC NOTFOUND", try it.str(try it.eval("catch {ztcl::mac::keychain get org.ztcl.test tester}; set ::errorCode")));
 }
