@@ -236,6 +236,9 @@ jobs:
       - run: node tools/wasm-shell.mjs zig-out/lib/ztcl-shell.wasm
       - run: zig build wasm-host
       - run: node tools/wasm-host.mjs zig-out/lib/ztcl.wasm zig-out/lib/ztcl-host.wasm
+      # The core of the VBS enclave of Windows (docs/dev/enclave.md), with
+      # no capability like ztcl.wasm. The link of the DLL needs MSVC.
+      - run: zig build enclave-core
       # A bundle of `ztcl build --wasm`. The native ztcl makes it.
       - run: zig build
       - run: node tools/wasm-bundle.mjs zig-out/bin/ztcl zig-out/lib/ztcl.wasm

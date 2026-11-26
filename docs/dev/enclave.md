@@ -15,7 +15,7 @@ A VBS enclave is a DLL that runs in virtual trust level 1 (VTL1), which the hype
 ### The image
 
 - The enclave runs ztcl with no capability: the freestanding core of the interpreter, the parser, the compute and memory limits, and no host access. That core is the same code as the WebAssembly build, so it needs no system call.
-- Zig builds the core as an object for `x86_64-windows-msvc` with no standard I/O. A small shim in C (or Zig) has `DllMain`, the exported routines, and the configuration of the image. `link.exe` of MSVC links them, because the Zig linker has no `/ENCLAVE`:
+- Zig builds the core for `x86_64-uefi` as a static library of COFF objects with compiler-rt and no import (`zig build enclave-core`). A small shim in C (or Zig) has `DllMain`, the exported routines, and the configuration of the image. `link.exe` of MSVC links them, because the Zig linker has no `/ENCLAVE`:
   - `/ENCLAVE /INCREMENTAL:NO /INTEGRITYCHECK /GUARD:MIXED /NODEFAULTLIB`
   - `libcmt.lib` and `libvcruntime.lib` of the enclave CRT of MSVC (`VC/Tools/MSVC/<version>/lib/x64/enclave`), `vertdll.lib` and `bcrypt.lib` of the SDK, and `ucrt.lib` of `ucrt_enclave`. No other platform library runs in an enclave.
   - A global `const IMAGE_ENCLAVE_CONFIG __enclave_config` with the family and image ids of ztcl, the image version, the security version, the enclave size, the thread count, `IMAGE_ENCLAVE_FLAG_PRIMARY_IMAGE`, and `IMAGE_ENCLAVE_POLICY_STRICT_MEMORY` (so each access to host memory goes through the copy functions).

@@ -228,6 +228,11 @@ pub fn build(b: *std.Build) void {
     const wasm_aot = addWasm(b, "ztcl-aot", .none, gc_precise, size_plant, on, true, false);
     b.step("wasm-aot", "Build the runtime of ztcl compile --wasm").dependOn(&b.addInstallArtifact(wasm_aot, .{ .dest_dir = .{ .override = .lib } }).step);
 
+    // The core of the VBS enclave of Windows: zig-out/lib/ztcl-enclave-core.lib.
+    // See docs/dev/enclave.md.
+    const enclave_core = addEnclaveCore(b, size_plant);
+    b.step("enclave-core", "Build the library of the VBS enclave of Windows").dependOn(&b.addInstallFile(enclave_core.getEmittedBin(), "lib/ztcl-enclave-core.lib").step);
+
     // The libraries of the capability `thread` on the web (task 14):
     // ztcl-threads.wasm shares one memory between the workers, and
     // ztcl-async.wasm gives each worker its own memory.
@@ -416,6 +421,38 @@ fn moduleFlags(b: *std.Build, batteries: Batteries) [all_modules.len]bool {
 }
 
 /// The index of a module in `all_modules`.
+/// The interpreter with no capability as one COFF library for x86_64 with
+/// no import, for `ztcl-enclave.dll`. The target is UEFI, so the
+/// library calls no function of Windows.
+fn addEnclaveCore(b: *std.Build, size_plant: usize) *std.Build.Step.Compile {
+    const obj = b.addLibrary(.{ .name = "ztcl-enclave-core", .linkage = .static, .root_module = b.createModule(.{
+        .root_source_file = b.path("src/enclave_core.zig"),
+        .target = b.resolveTargetQuery(.{ .cpu_arch = .x86_64, .os_tag = .uefi }),
+        .optimize = .ReleaseSmall,
+        .single_threaded = true,
+        .stack_check = false,
+        .red_zone = false,
+    }) });
+    const opts = b.addOptions();
+    opts.addOption(bool, "gc_precise", true);
+    opts.addOption(bool, "jit", false);
+    opts.addOption(bool, "aot", false);
+    opts.addOption(bool, "shell", false);
+    opts.addOption(bool, "jit_bug", false);
+    opts.addOption(bool, "tsan_plant", false);
+    opts.addOption(usize, "size_plant", size_plant);
+    opts.addOption(WebThreads, "web_threads", .none);
+    opts.addOption(bool, "wasm_point", false);
+    opts.addOption(bool, "wasm_host", false);
+    var off: [all_modules.len]bool = @splat(false);
+    off[moduleIndex("json")] = true;
+    addModuleOptions(b, opts, off);
+    obj.root_module.addOptions("build_options", opts);
+    // The enclave CRT has no helpers of 128-bit floats.
+    obj.bundle_compiler_rt = true;
+    return obj;
+}
+
 fn moduleIndex(comptime name: []const u8) usize {
     inline for (all_modules, 0..) |m, i| {
         if (comptime std.mem.eql(u8, m.name, name)) return i;
