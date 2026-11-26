@@ -51,6 +51,11 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = Linux ]; then ulimit -v 6000000; fi
           test "$(zig build run -- bench/sum.tcl | tr -d '\r')" = 499999500000
+          # Two writers on one output file: the output of the runner goes
+          # after the line before it.
+          printf 'puts hello\n' > "$RUNNER_TEMP/h.tcl"
+          { echo first; zig-out/bin/ztcl "$RUNNER_TEMP/h.tcl"; echo last; } > "$RUNNER_TEMP/h.out"
+          test "$(tr -d '\r' < "$RUNNER_TEMP/h.out" | tr '\n' ' ')" = "first hello last "
       - name: Check the format
         if: runner.os == 'Linux'
         run: zig fmt --check build.zig src

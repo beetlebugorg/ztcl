@@ -22,7 +22,7 @@ pub fn run(init: std.process.Init, args: []const []const u8) !u8 {
     const arena = init.arena.allocator();
     const io = init.io;
     var err_buf: [4096]u8 = undefined;
-    var err_w: Io.File.Writer = .init(.stderr(), io, &err_buf);
+    var err_w: Io.File.Writer = .initStreaming(.stderr(), io, &err_buf);
     const err = &err_w.interface;
     defer err.flush() catch {};
 

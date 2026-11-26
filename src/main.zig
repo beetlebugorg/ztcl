@@ -259,7 +259,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     host_preopens = init.preopens;
     if (args.len > 1 and std.mem.eql(u8, args[1], "compile") and isPointCompile(args[2..])) {
         var out_buf: [4096]u8 = undefined;
-        var out_w: Io.File.Writer = .init(.stdout(), io, &out_buf);
+        var out_w: Io.File.Writer = .initStreaming(.stdout(), io, &out_buf);
         const code = try @import("compilecmd.zig").run(io, init.gpa, arena, args[2..], &out_w.interface);
         out_w.interface.flush() catch {};
         std.process.exit(code);
@@ -267,7 +267,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     if (args.len > 1 and std.mem.eql(u8, args[1], "compile")) std.process.exit(try @import("compile.zig").run(init, args[2..]));
 
     var out_buf: [1 << 16]u8 = undefined;
-    var out_w: Io.File.Writer = .init(.stdout(), io, &out_buf);
+    var out_w: Io.File.Writer = .initStreaming(.stdout(), io, &out_buf);
     const out = &out_w.interface;
     defer out.flush() catch {};
 
