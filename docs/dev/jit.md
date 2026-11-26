@@ -704,6 +704,7 @@ The inline fast paths of tier 1, in the order of their gain:
 4. `load`, `store`, `store_pop`, `push`, `push_empty`, `pop`.
 5. `incr`, `incr_drop`, `incr_value` on an integer cell.
 6. Milestone 2: `foreach_next`, `lappend` when the list has room, `llength` and `lindex` on a list value, `/` and `%` on integers, and a direct call of a proc.
+7. Finding 8 of `perf-review.md`: on x86-64, a call of a proc with ready machine code goes from the hit path of `invoke` to `call_direct`, which calls the body with one native frame between the two functions.
 
 Each other case calls a helper. A slot that holds a link (`upvar`, `global`) follows the link in a small loop outside the hot path. A cell with a trace, an array, an element link, or an owned dict goes to the helper.
 
@@ -761,6 +762,7 @@ All new code is in new files. The JIT changes no line of `src/coro.zig`, `src/sy
 | `src/jit/layout.zig` | The layout probe. |
 | `src/jit/verify.zig` | The bytecode verifier and the static stack depths. |
 | `src/jit/helpers.zig` | The helper table. |
+| `src/jit/call.zig` | The helper `call_direct`: the direct call of a compiled proc from machine code. |
 | `src/jit/abi.zig` | The registers and the calling convention of each target. |
 | `src/jit/x64.zig`, `src/jit/a64.zig` | The assemblers. |
 | `src/jit/tier1.zig`, `src/jit/tier1_x64.zig`, `src/jit/tier1_a64.zig` | The template compiler and the templates. |

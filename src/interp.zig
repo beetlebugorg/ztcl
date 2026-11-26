@@ -2401,13 +2401,17 @@ pub const Interp = struct {
     /// parameter, and no `args`. It makes the cells of the frame in one
     /// pass. Each other call goes through `callProc`. The frame, the
     /// cells, the namespace, and the result are the same on both paths.
-    fn callProcFast(it: *Interp, p: *Proc, argv: []const Value) Error!Value {
+    pub fn callProcFast(it: *Interp, p: *Proc, argv: []const Value) Error!Value {
         const bc = p.code orelse return it.callProc(p, argv);
         if (gc.precise or p.has_args or argv.len - 1 != p.params.len) return it.callProc(p, argv);
-        return it.runProcFast(p, bc, argv) catch |e| {
-            if (e == error.TclCustom and it.custom_code == coro.tail_code and it.tail_words != null) return it.runTail();
-            return e;
-        };
+        return it.runProcFast(p, bc, argv) catch |e| it.procTail(e);
+    }
+
+    /// The end of a proc call that failed with `e`: a pending tail call
+    /// runs in the frame of the caller.
+    inline fn procTail(it: *Interp, e: Error) Error!Value {
+        if (e == error.TclCustom and it.custom_code == coro.tail_code and it.tail_words != null) return it.runTail();
+        return e;
     }
 
     inline fn runProcFast(it: *Interp, p: *Proc, bc: *vm.Code, argv: []const Value) Error!Value {
@@ -2417,6 +2421,14 @@ pub const Interp = struct {
         it.ns = p.ns;
         f.space = p.ns;
         defer it.ns = saved_ns;
+        try it.bindFast(f, bc, argv);
+        return vm.runStart(it, bc) catch |e| it.procEnd(e, argv, null);
+    }
+
+    /// Makes the cells of the frame `f` for the body `bc`: one cell for
+    /// each name, and the words of `argv` after the first in the cells
+    /// of the parameters.
+    inline fn bindFast(it: *Interp, f: *Frame, bc: *vm.Code, argv: []const Value) Error!void {
         const names = bc.names;
         const np = argv.len - 1;
         if (f.own_code == bc and f.own == names.len) {
@@ -2437,7 +2449,31 @@ pub const Interp = struct {
             f.own = @intCast(names.len);
             f.own_code = bc;
         }
-        return vm.runInline(it, bc) catch |e| it.procEnd(e, argv, null);
+    }
+
+    /// The first part of `runProcFast` for a direct call from machine
+    /// code (`jit/call.zig`): the frame, the namespace, and the cells.
+    /// The result is the namespace of the caller. On an error, the frame
+    /// and the namespace are as before the call.
+    pub inline fn enterProcDirect(it: *Interp, p: *Proc, bc: *vm.Code, argv: []const Value) Error![]const u8 {
+        const f = try it.takeFrame(argv);
+        errdefer it.popFrame();
+        const saved_ns = it.ns;
+        it.ns = p.ns;
+        f.space = p.ns;
+        errdefer it.ns = saved_ns;
+        try it.bindFast(f, bc, argv);
+        return saved_ns;
+    }
+
+    /// The end of `callProcFast` after `enterProcDirect`, with the result
+    /// `r` of the body: the return code, the namespace, the frame, and a
+    /// pending tail call, in the order of `callProcFast`.
+    pub inline fn leaveProcDirect(it: *Interp, saved_ns: []const u8, argv: []const Value, r: Error!Value) Error!Value {
+        const v = r catch |e| it.procEnd(e, argv, null);
+        it.ns = saved_ns;
+        it.popFrame();
+        return v catch |e| it.procTail(e);
     }
 
     fn callProc(it: *Interp, p: *Proc, argv: []const Value) Error!Value {

@@ -14,6 +14,7 @@ const std = @import("std");
 const vm = @import("../vm.zig");
 const interp = @import("../interp.zig");
 const jit = @import("../jit.zig");
+const call = @import("call.zig");
 
 const EnterCtx = jit.EnterCtx;
 const Error = interp.Error;
@@ -84,6 +85,9 @@ pub const Helper = enum(u8) {
     str_bytes_eq,
     lmap_add,
     store_elem,
+    /// `invoke` for a site whose cached command the code checked, with a
+    /// direct call of a proc body (`jit/call.zig`).
+    call_direct,
 };
 
 pub const count = @typeInfo(Helper).@"enum".fields.len;
@@ -167,6 +171,7 @@ pub fn wrap(comptime h: Helper, comptime named: bool) Fn {
     }.f;
     if (h == .tier_up) return @ptrCast(&jit.tierUp);
     if (h == .resume_at) return @ptrCast(&jit.resumeAt);
+    if (h == .call_direct) return &call.direct;
     if (h == .call_cached) return &struct {
         fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
             const code = ctx.code;

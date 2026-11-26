@@ -1301,7 +1301,7 @@ noinline fn slowForeach(it: *Interp, code: *const Code, table: []const u32, item
     }
 }
 
-inline fn step(it: *Interp) Error!void {
+pub inline fn step(it: *Interp) Error!void {
     if (it.step_limit == 0) return it.fail("step limit reached", .{});
     it.step_limit -= 1;
     // Each value of this run is on the value stack or in a cell here.
@@ -1449,14 +1449,24 @@ pub inline fn runInline(it: *Interp, code: *Code) Error!Value {
     // A call from a script with machine code that is ready takes the
     // short entry. A host entry (nest 0) takes the full path.
     if (jit.built and !gc.precise and it.jit != null and it.nest != 0 and code.jit_state == .ready) {
-        if (jit.readyFn(it, code)) |f| return runReady(it, code, f);
+        if (jit.readyFn(it, code)) |f| return runReady(it, code, f, false);
+    }
+    return runFull(it, code);
+}
+
+/// `runInline` for a proc body in a new frame that has each name of the
+/// body: the machine code starts at address 0 with no check of the
+/// entry table.
+pub inline fn runStart(it: *Interp, code: *Code) Error!Value {
+    if (jit.built and !gc.precise and it.jit != null and it.nest != 0 and code.jit_state == .ready) {
+        if (jit.readyFn(it, code)) |f| return runReady(it, code, f, true);
     }
     return runFull(it, code);
 }
 
 /// `run` for machine code that is ready, not at a host entry. The
 /// checks and the limits are those of `runFull`.
-inline fn runReady(it: *Interp, code: *Code, f: *jit.Fn) Error!Value {
+inline fn runReady(it: *Interp, code: *Code, f: *jit.Fn, comptime start: bool) Error!Value {
     try it.checkNative();
     if (it.nest >= it.max_nest) return it.fail("too many nested evaluations (infinite loop?)", .{});
     it.nest += 1;
@@ -1466,7 +1476,7 @@ inline fn runReady(it: *Interp, code: *Code, f: *jit.Fn) Error!Value {
     const stack = try it.stackAllocPub(code.max_stack);
     var pc: u32 = 0;
     var sp: u32 = 0;
-    const st = @call(.always_inline, jit.enter, .{ it, f, code, stack.ptr, &pc, &sp });
+    const st = if (start) jit.enterStart(it, f, code, stack.ptr, &pc, &sp) else @call(.always_inline, jit.enter, .{ it, f, code, stack.ptr, &pc, &sp });
     if (st == .done) return stack[sp - 1];
     return runRest(it, code, f, stack.ptr, pc, sp, st);
 }
@@ -1506,7 +1516,7 @@ fn runFull(it: *Interp, code: *Code) Error!Value {
 }
 
 /// `runLoop` after a short entry that did not end with a result.
-noinline fn runRest(it: *Interp, code: *Code, f: *jit.Fn, stack: [*]Value, pc: u32, sp: u32, st: jit.Status) Error!Value {
+pub noinline fn runRest(it: *Interp, code: *Code, f: *jit.Fn, stack: [*]Value, pc: u32, sp: u32, st: jit.Status) Error!Value {
     return runLoop(it, code, f, null, stack, pc, sp, st);
 }
 
@@ -1859,7 +1869,13 @@ pub fn opInvokeCached(it: *Interp, code: *const Code, stack: [*]Value, sp: u32, 
     if (gc.precise) return opInvoke(false, it, it.frame, code, stack, sp, i);
     try step(it);
     const c = code.sites[i.a];
-    stack[sp - i.b] = try it.call(c.resolved.?, stack[sp - i.b .. sp], c);
+    const argv = stack[sp - i.b .. sp];
+    // Machine code runs at a nest above 0, so a native command needs no
+    // host wrapper of `Interp.call`.
+    stack[sp - i.b] = switch (c.resolved.?.impl) {
+        .proc => |p| try it.callProcFast(p, argv),
+        .native => |f| try f(it, argv, c),
+    };
 }
 
 pub inline fn opEvalCmd(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {

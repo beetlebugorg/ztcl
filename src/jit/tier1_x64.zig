@@ -777,7 +777,7 @@ pub const Emitter = struct {
     }
 
     /// `invoke`: the checks of `Interp.resolve` on the site inline. A
-    /// valid site calls `call_cached`, and a miss calls the helper of
+    /// valid site calls `call_direct`, and a miss calls the helper of
     /// `invoke`, which resolves the name.
     fn invoke(e: *Emitter, pc: u32) Error!void {
         const s = e.s;
@@ -794,7 +794,7 @@ pub const Emitter = struct {
         try s.movRM(.rcx, try x64.at(.rax, l.cmd_ns));
         try s.aluRM(.cmp, .rcx, itAt(l.it_ns));
         try s.jcc(.ne, slow_l);
-        try e.plain(.call_cached, pc);
+        try e.plain(.call_direct, pc);
     }
 
     // ---- The cold code ----
