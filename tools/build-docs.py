@@ -38,6 +38,7 @@ PAGES = [
     ("docs/limits.md", "limits/", "Guide", "Limits and capabilities"),
     ("docs/threads.md", "threads/", "Guide", "Threads"),
     ("docs/jit.md", "jit/", "Guide", "The JIT"),
+    ("docs/build.md", "build/", "Guide", "Build a program"),
     ("docs/modules/json.md", "modules/json/", "Guide", "Module ztcl::json"),
     ("docs/embedding.md", "embedding/", "Embed", "Embed in Zig"),
     ("docs/webassembly.md", "webassembly/", "Embed", "WebAssembly"),
