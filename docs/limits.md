@@ -35,8 +35,8 @@ The default interpreter has no command that reaches the host. `puts` writes to a
 | `socket` | `socket` | A network policy (`--net`): `loopback` (the default), an allowlist of hosts, ranges, and ports, or `any`. |
 | `thread` | `thread::*`, `tsv::*`, `tpool::*` | Limits for each thread and totals for the group. See [Threads](threads.md). |
 | `exec` | `exec`, `pid`, and pipelines | A program list (`--exec-allow`), a time limit (`--exec-timeout MS`), and a fixed environment (`--exec-env`). |
-| `registry` | `ztcl::win::registry` | The keys of a list (`--registry-allow KEY,KEY`) and the keys below them, on Windows. An empty list reaches no key. A key such as `Run` starts a program at the next login, so list only the keys of your app. |
 | `launch` | `ztcl::open` | A URL (`http`, `https`, or `mailto`) or a file in the default app of the host. A file also needs `file`. A file of a type that the system runs as code is an error: `.exe`, `.bat`, `.lnk`, and others on Windows, and an app bundle, `.command`, `.pkg`, a file with an execute bit, and others on macOS. The app is outside the root folder and each limit. Windows and macOS have a backend in this version. |
+| `registry` | `ztcl::win::registry` | The keys of a list (`--registry-allow KEY,KEY`) and the keys below them, on Windows. An empty list reaches no key. A key such as `Run` starts a program at the next login, so list only the keys of your app. |
 
 > [!WARNING]
 > `exec` is not sandboxed. A process from `exec` runs outside the root folder and outside each limit, with the full power of the user. Turn it on only for scripts that you trust.
