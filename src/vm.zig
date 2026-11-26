@@ -120,6 +120,9 @@ pub const Op = enum(u8) {
     /// Pops a value and appends it to the list of `lmap` below the
     /// `foreach` state.
     lmap_add,
+    /// `set name(index) value` on the array in slot `a`, with the index
+    /// and the value on the stack. The value replaces the index.
+    store_elem,
 };
 
 pub const Ins = extern struct {
@@ -600,6 +603,71 @@ const Compiler = struct {
         try c.ranges.append(c.a, .{ .start = start, .end = c.here(), .cmd = cmd });
     }
 
+    /// `set name(index) value`, where the word of the name starts with a
+    /// literal plain name and "(", and ends with ")". The index is the
+    /// text between, as `Interp.splitName` cuts it from the full name.
+    fn compileSetElem(c: *Compiler, cmd: *Cmd) Error!bool {
+        const w = &cmd.words[1];
+        if (w.expand or c.nest >= max_nest) return false;
+        var parts: []const Part = undefined;
+        var one: [1]Part = undefined;
+        switch (w.kind) {
+            .lit => |v| {
+                if (v != .str) return false;
+                one[0] = .{ .lit = v.str };
+                parts = &one;
+            },
+            .multi => |m| parts = m,
+            .single => return false,
+        }
+        const first = parts[0];
+        const last = parts[parts.len - 1];
+        if (first != .lit or last != .lit) return false;
+        const open = std.mem.indexOfScalar(u8, first.lit, '(') orelse return false;
+        if (!plain(first.lit[0..open])) return false;
+        if (last.lit.len == 0 or last.lit[last.lit.len - 1] != ')') return false;
+        if (parts.len == 1 and last.lit.len < open + 2) return false;
+        for (parts) |*p| if (!simplePart(p)) return false;
+        const base = c.depth;
+        const g = try c.emit(.{ .op = .guard });
+        const start = c.here();
+        // The pieces of the index: the rest of the first literal, the
+        // parts between, and the last literal with no ")".
+        var count: u32 = 0;
+        if (parts.len == 1) {
+            const text = first.lit[open + 1 .. first.lit.len - 1];
+            if (text.len > 0) {
+                try c.lit(.{ .str = text });
+                count += 1;
+            }
+        } else {
+            if (first.lit.len > open + 1) {
+                try c.lit(.{ .str = first.lit[open + 1 ..] });
+                count += 1;
+            }
+            for (parts[1 .. parts.len - 1]) |*p| {
+                try c.compilePart(p);
+                count += 1;
+            }
+            if (last.lit.len > 1) {
+                try c.lit(.{ .str = last.lit[0 .. last.lit.len - 1] });
+                count += 1;
+            }
+        }
+        if (count == 0) {
+            _ = try c.emit(.{ .op = .push_empty });
+            c.push(1);
+        } else if (count > 1) {
+            _ = try c.emit(.{ .op = .concat, .a = count });
+            c.depth -= count;
+            c.push(1);
+        }
+        try c.compileWord(&cmd.words[2]);
+        _ = try c.emit(.{ .op = .store_elem, .a = try c.slot(first.lit[0..open]) });
+        try c.closeGuard(cmd, base, g, start);
+        return true;
+    }
+
     /// The word is one literal plain variable name.
     fn nameWord(cmd: *Cmd, i: usize) ?[]const u8 {
         const w = &cmd.words[i];
@@ -669,6 +737,7 @@ const Compiler = struct {
         const n = cmd.words.len;
         const eql = std.mem.eql;
         if (eql(u8, name, "set")) {
+            if (n == 3 and nameWord(cmd, 1) == null) return c.compileSetElem(cmd);
             if ((n != 2 and n != 3) or nameWord(cmd, 1) == null) return false;
         } else if (eql(u8, name, "incr")) {
             if ((n != 2 and n != 3) or nameWord(cmd, 1) == null) return false;
@@ -1685,6 +1754,36 @@ inline fn lsetOp(comptime drop: bool, it: *Interp, f: *Frame, code: *const Code,
     }
 }
 
+/// A write to an element of a plain array, or of an unset variable,
+/// needs no full name. Other cells go through `Interp.setVar`.
+pub inline fn opStoreElem(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    const v = stack[sp - 1];
+    const idx = try it.str(stack[sp - 2]);
+    const cell = try writeCell(named, it, f, code, i.a);
+    switch (cell.v) {
+        .undef => {
+            const m = try it.alloc().create(interp.ArrayMap);
+            m.* = .empty;
+            cell.v = .{ .arr = m };
+        },
+        .arr => {},
+        else => return storeElemSlow(it, code.names[i.a], idx, stack, sp),
+    }
+    const gop = try cell.v.arr.getOrPut(it.alloc(), idx);
+    if (!gop.found_existing) gop.key_ptr.* = try it.alloc().dupe(u8, idx);
+    gop.value_ptr.* = v;
+    stack[sp - 2] = v;
+}
+
+/// `store_elem` on a cell with traces, a link to an element, or a
+/// scalar value: the general write of the full name.
+noinline fn storeElemSlow(it: *Interp, name: []const u8, idx: []const u8, stack: [*]Value, sp: u32) Error!void {
+    @branchHint(.cold);
+    const full = try std.fmt.allocPrint(it.alloc(), "{s}({s})", .{ name, idx });
+    try it.setVar(full, stack[sp - 1]);
+    stack[sp - 2] = stack[sp - 1];
+}
+
 pub inline fn opLset(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
     _ = named;
     return lsetOp(false, it, f, code, stack, sp, i);
@@ -2101,6 +2200,13 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             },
             .lset => {
                 try opLset(named, it, f, code, stack, sp, i);
+                sp -= 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
+            },
+            .store_elem => {
+                try opStoreElem(named, it, f, code, stack, sp, i);
                 sp -= 1;
                 pc += 1;
                 i = &ins[pc];
