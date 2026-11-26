@@ -16,6 +16,7 @@ Run `zig build wasm wasm-threads wasm-shell` before the build.
 """
 
 import html
+import json
 import posixpath
 import re
 import shutil
@@ -34,7 +35,8 @@ PAGES = [
     ("README.md", "overview/", "Start", "Overview"),
     ("docs/install.md", "install/", "Start", "Install"),
     ("docs/quickstart.md", "quickstart/", "Start", "Quick start"),
-    ("docs/language.md", "language/", "Guide", "Language"),
+    ("docs/learn.md", "learn/", "Learn", "Learn Tcl"),
+    ("docs/language.md", "language/", "Learn", "Coming from tclsh"),
     ("docs/shell.md", "shell/", "Guide", "The shell"),
     ("docs/limits.md", "limits/", "Guide", "Limits and capabilities"),
     ("docs/threads.md", "threads/", "Guide", "Threads"),
@@ -98,6 +100,13 @@ class Build:
 
         def fence(tokens, idx, options, env):
             t = tokens[idx]
+            if t.meta.get("shell"):
+                return self.shell_html(t.content)
+            if t.meta.get("helper"):
+                return self.helper_html(t.meta["helper"], t.meta["id"], t.content)
+            if t.meta.get("file"):
+                name = html.escape(t.meta["file"])
+                return f'<figure class="zfile"><figcaption><code>{name}</code></figcaption>{plain(tokens, idx, options, env)}</figure>\n'
             if not t.meta.get("live"):
                 return plain(tokens, idx, options, env)
             # A live example (docs/site/live.js): an editor and its output.
@@ -111,27 +120,57 @@ class Build:
         self.anchors = {}
         self.links = []
 
-    @staticmethod
-    def live_blocks(src, tokens):
-        """Reads the comment lines before a `tcl` block and drops them.
+    def live_blocks(self, src, tokens):
+        """Reads the comment lines before a code block and drops them.
 
-        `<!-- live -->` and `<!-- run -->` make the block a live example.
+        `<!-- live -->` and `<!-- run -->` make a `tcl` block a live example.
         tools/doc-examples.py runs each `<!-- run -->` block, and a `text`
         block after it is its output: the page shows that output until the
         example runs in the page. `<!-- run: FLAGS -->` needs capabilities
-        of the runner, so the page shows its blocks as plain code. Each
-        other comment line stops the build, so that no comment shows as
-        text on a page."""
+        of the runner, so the page shows its blocks as plain code.
+
+        `<!-- shell -->` puts the shell of the page (docs/site/shell.js) in
+        place of a `tcl` block. The block is the state of the page: the
+        shell runs it first, and the page shows it below the shell.
+        `<!-- file: NAME -->` makes a code block a read-only file of that
+        shell. `<!-- helper: TITLE -->` makes a `tcl` block a helper
+        (docs/site/helper.js): a ztk app that builds a command and gives
+        it to the shell. Each other comment line stops the build, so that
+        no comment shows as text on a page."""
         out, i, count = [], 0, 0
+        self.page_files, self.page_shell, helpers = {}, False, 0
         while i < len(tokens):
             t = tokens[i]
             text = tokens[i + 1].content.strip() if t.type == "paragraph_open" and i + 1 < len(tokens) else ""
             if text.startswith("<!--"):
                 fence = tokens[i + 3] if i + 3 < len(tokens) else None
-                if fence is None or fence.type != "fence" or fence.info.strip() != "tcl":
+                if fence is None or fence.type != "fence":
+                    raise SystemExit(f"{src}: a comment line is not just before a code block: {text}")
+                if text.startswith("<!-- file: ") and text.endswith(" -->"):
+                    name = text[len("<!-- file: "):-4].strip()
+                    self.page_files[name] = fence.content
+                    fence.meta = {"file": name}
+                    out.append(fence)
+                    i += 4
+                    continue
+                if fence.info.strip() != "tcl":
                     raise SystemExit(f"{src}: a comment line is not just before a tcl block: {text}")
                 if text.startswith("<!-- run:"):
                     i += 3
+                    continue
+                if text == "<!-- shell -->":
+                    if self.page_shell:
+                        raise SystemExit(f"{src}: a page has one shell")
+                    self.page_shell = True
+                    fence.meta = {"shell": True}
+                    out.append(fence)
+                    i += 4
+                    continue
+                if text.startswith("<!-- helper: ") and text.endswith(" -->"):
+                    helpers += 1
+                    fence.meta = {"helper": text[len("<!-- helper: "):-4].strip(), "id": f"helper-{helpers}"}
+                    out.append(fence)
+                    i += 4
                     continue
                 if text not in ("<!-- live -->", "<!-- run -->"):
                     raise SystemExit(f"{src}: an unknown comment line: {text}")
@@ -146,7 +185,45 @@ class Build:
                 continue
             out.append(t)
             i += 1
+        if helpers and not self.page_shell:
+            raise SystemExit(f"{src}: a page with a helper needs a shell (<!-- shell -->)")
         return out
+
+    def shell_html(self, setup):
+        """The shell of a docs page, with the state of the page (setup)
+        and its files. The poster is the first screen as text."""
+        banner = "ztcl in your browser. No network or clock.\\nThe state of this page is loaded. Each command can use 10,000,000 compute units."
+        files = "".join(f" {html.escape(n)}" for n in self.page_files)
+        if files:
+            banner += f"\\nRead-only files:{files}"
+        poster = html.escape(banner.replace("\\n", "\n"))
+        data = json.dumps({"setup": setup, "files": self.page_files}).replace("</", "<\\/")
+        return f"""<div class="zshell zpage-shell" id="shell" style="--rows: 12" data-rows="12" data-label="ztcl shell of this page. Type a Tcl command. Tab completes." data-banner="{html.escape(banner)}">
+  <div class="bar"><i></i><i></i><i></i><span>ztcl shell</span><label><input class="zshell-vi" type="checkbox" disabled> vim keys</label></div>
+<pre class="zshell-poster" aria-hidden="true">{poster}
+<span class="p">%</span> </pre>
+  <div class="zshell-foot">
+    <span class="zshell-hint" id="shell-hint"><kbd>Tab</kbd> completes. <kbd>Up</kbd> is history. <kbd>Ctrl-X</kbd> <kbd>Ctrl-E</kbd> edits. <kbd>Esc</kbd> <kbd>Tab</kbd> leaves.</span>
+    <span class="zshell-meter"><span>Compute limit: 10,000,000 compute units for each command</span><progress value="0" max="10000000" aria-label="Compute units of the last command"></progress></span>
+  </div>
+  <noscript><p class="zshell-foot">The shell needs JavaScript and WebAssembly.</p></noscript>
+  <script type="application/json" class="zpage-state">{data}</script>
+</div>
+<details class="zsetup"><summary>The state of the shell</summary><pre><code class="language-tcl">{html.escape(setup)}</code></pre></details>
+"""
+
+    @staticmethod
+    def helper_html(title, hid, script):
+        """A helper: a ztk app in a box of a fixed height, so that the page
+        does not move when it starts. The code shows below it."""
+        lines = script.count("\n")
+        m = re.search(r"^# height: (\d+)$", script, re.M)
+        height = int(m.group(1)) if m else 240
+        t = html.escape(title)
+        return (f'<figure class="zhelper" id="{hid}" aria-label="Helper: {t}">'
+                f'<figcaption class="zhelper-bar"><span>Helper: {t}</span><span class="zhelper-hint">The command goes into the <a href="#shell">shell</a> with the button.</span></figcaption>'
+                f'<div class="zhelper-app" style="height: {height}px"><p class="zhelper-poster">The helper starts when it comes into view. It needs JavaScript and WebAssembly.</p></div>'
+                f'<details><summary>The code of this helper ({lines} lines of Tcl and ztk)</summary><pre><code class="language-tcl">{html.escape(script)}</code></pre></details></figure>\n')
 
     def render(self, src, page):
         tokens = self.live_blocks(src, self.md.parse((ROOT / src).read_text(encoding="utf-8")))
@@ -226,6 +303,10 @@ class Build:
         root = rel(page, "")
         name = f"{html.escape(title)} · ztcl"
         script = f'\n<script type="module" src="{root}assets/live.js"></script>' if 'class="live-demo"' in body else ""
+        if 'class="zshell' in body:
+            script += f'\n<script type="module" src="{root}assets/shell.js"></script>'
+        if 'class="zhelper"' in body:
+            script += f'\n<script type="module" src="{root}assets/helper.js"></script>'
         desc = "A sandboxed Tcl interpreter in Zig, with a bytecode VM and an optional JIT."
         return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -324,7 +405,7 @@ class Build:
             (folder / "index.html").write_text(self.document(page, title, body), encoding="utf-8")
         shutil.copy(SITE_DIR / "index.html", out / "index.html")
         (out / "assets").mkdir()
-        for name in ("site.css", "favicon.svg", "live.js", "shell.js"):
+        for name in ("site.css", "favicon.svg", "live.js", "shell.js", "helper.js"):
             shutil.copy(SITE_DIR / name, out / "assets" / name)
         (out / "try").mkdir()
         shutil.copy(SITE_DIR / "try" / "index.html", out / "try" / "index.html")
