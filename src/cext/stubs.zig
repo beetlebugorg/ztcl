@@ -15,39 +15,22 @@ const std = @import("std");
 const slots = @import("slots.zig");
 const cext = @import("cext.zig");
 
-/// The value of `TCL_STUB_MAGIC` of `tcl.h`.
-pub const magic: c_int = @bitCast(@as(u32, 0xFCA3BACF));
+const table = @import("table.zig");
 
-/// The groups of the build-out. Each one is a struct of C functions with
-/// the names of the slots.
+pub const magic = table.magic;
+pub const Kind = table.Kind;
+pub const name = table.name;
+pub const len = table.len;
+const Table = table.Table;
+
+/// The groups of the native path. Each one is a struct of C functions
+/// with the names of the slots.
 const groups = .{
     @import("mem.zig").slots,
     @import("pkgs.zig").slots,
+    @import("obj.zig").slots,
+    @import("chan.zig").slots,
 };
-
-pub const Kind = enum {
-    public,
-    internal,
-    plat,
-    int_plat,
-
-    pub fn label(k: Kind) []const u8 {
-        return switch (k) {
-            .public => "public",
-            .internal => "internal",
-            .plat => "platform",
-            .int_plat => "internal platform",
-        };
-    }
-};
-
-fn Table(comptime n: usize) type {
-    return extern struct {
-        magic: c_int,
-        hooks: ?*const Hooks,
-        slots: [n]?*const anyopaque,
-    };
-}
 
 /// `TclStubHooks` of `tclDecls.h`.
 pub const Hooks = extern struct {
@@ -56,31 +39,8 @@ pub const Hooks = extern struct {
     int_plat: *const Table(slots.int_plat.len),
 };
 
-/// The name of slot `i` of table `k`, or null for a reserved slot.
-pub fn name(k: Kind, i: usize) ?[]const u8 {
-    return switch (k) {
-        .public => if (slots.public[i]) |s| s.name else null,
-        .internal => slots.internal[i],
-        .plat => if (comptime slots.plat.len == 0) null else slots.plat[i],
-        .int_plat => slots.int_plat[i],
-    };
-}
-
-pub fn len(k: Kind) usize {
-    return switch (k) {
-        .public => slots.public.len,
-        .internal => slots.internal.len,
-        .plat => slots.plat.len,
-        .int_plat => slots.int_plat.len,
-    };
-}
-
-/// The function of a slot name, or null when no group has it.
 fn find(comptime nm: []const u8) ?*const anyopaque {
-    inline for (groups) |g| {
-        if (@hasDecl(g, nm)) return @ptrCast(&@field(g, nm));
-    }
-    return null;
+    return table.find(groups, nm);
 }
 
 /// True when a group has the function of slot `i` of table `k`.
@@ -100,12 +60,7 @@ fn missingFn(comptime k: Kind, comptime i: usize) *const anyopaque {
 }
 
 fn fill(comptime k: Kind) [len(k)]?*const anyopaque {
-    @setEvalBranchQuota(200_000);
-    var out: [len(k)]?*const anyopaque = undefined;
-    for (0..len(k)) |i| {
-        out[i] = if (name(k, i)) |nm| (find(nm) orelse missingFn(k, i)) else null;
-    }
-    return out;
+    return table.fill(groups, k, missingFn);
 }
 
 const plat_table: Table(slots.plat.len) = .{ .magic = magic, .hooks = null, .slots = fill(.plat) };

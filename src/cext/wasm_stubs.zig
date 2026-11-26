@@ -6,929 +6,75 @@
 //! `tclDecls.h`. A slot with no implementation calls `Tcl_Panic` with its
 //! number.
 //!
-//! The `Tcl_Obj` records are in the memory of the package, in the layout
-//! of Tcl 8.6, because C code reads and writes `refCount`, `bytes`, and
-//! `typePtr` directly. Each value has a reference count, an optional text
-//! form, and an internal form of one type. A type has the four procs of
-//! `Tcl_ObjType`, and the library calls them for its own types and for
-//! the types of the package. The text form is made on demand: an int with
-//! the digits, a double with the shortest digits that read back (the
-//! `formatDouble` of ztcl), and a list with the quoting of the `list`
-//! command. A record that is freed goes to a free list for the next
-//! `Tcl_NewObj`.
-//!
-//! The interp result, the dynamic strings, `Tcl_GetIndexFromObjStruct`,
-//! and the memory slots are in the package too, so these slots make no
-//! call out of the module.
+//! The objects, the interp result, the dynamic strings, and
+//! `Tcl_GetIndexFromObjStruct` are in `obj.zig`, and the memory slots
+//! are in `mem.zig`. The native path uses the same two files. These
+//! slots are in the package, so they make no call out of the module.
+//! This file has the slots that call ztcl through the imports of the
+//! module, and the table (`table.zig` builds it from the three groups).
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
 const builtin = @import("builtin");
-const value = @import("value");
+const value = @import("../value.zig");
+const obj = @import("obj.zig");
+const tables = @import("table.zig");
+const chan = @import("chan.zig");
+const ChannelType = chan.ChannelType;
+const Channel = chan.Channel;
 
 const gpa = std.heap.c_allocator;
 
-// ---- The objects ----
-
-pub const FreeProc = *const fn (*Obj) callconv(.c) void;
-pub const DupProc = *const fn (*Obj, *Obj) callconv(.c) void;
-pub const UpdateProc = *const fn (*Obj) callconv(.c) void;
-pub const SetProc = *const fn (?*Interp, *Obj) callconv(.c) c_int;
-
-/// `Tcl_ObjType`.
-pub const ObjType = extern struct {
-    name: [*:0]const u8,
-    free: ?FreeProc,
-    dup: ?DupProc,
-    update: ?UpdateProc,
-    set_from_any: ?SetProc,
-};
-
-/// The internal form of `Tcl_Obj`: 8 bytes on wasm32 and 16 on x86-64.
-pub const Rep = extern union {
-    long: c_long,
-    double: f64,
-    wide: i64,
-    two: extern struct { p1: ?*anyopaque, p2: ?*anyopaque },
-};
-
-/// `Tcl_Obj`.
-pub const Obj = extern struct {
-    refCount: c_int,
-    bytes: ?[*]u8,
-    length: c_int,
-    typePtr: ?*const ObjType,
-    rep: Rep,
-};
-
-/// The public part of `Tcl_Interp` in Tcl 8.6, then the fields of the
-/// library.
-pub const Interp = extern struct {
-    result_dont_use: [*:0]const u8 = "",
-    free_proc_dont_use: ?*anyopaque = null,
-    error_line_dont_use: c_int = 0,
-    result: ?*Obj = null,
-    /// The id of the interp of ztcl.
-    handle: u32 = 0,
-};
-
-pub const OK: c_int = 0;
-pub const ERROR: c_int = 1;
-
-/// The text of an empty string. It is never freed.
-var empty_rep: [1:0]u8 = .{0};
-
-var free_list: ?*Obj = null;
-
-fn newObj() *Obj {
-    const o: *Obj = if (free_list) |f| blk: {
-        free_list = @ptrCast(@alignCast(f.rep.two.p1));
-        break :blk f;
-    } else gpa.create(Obj) catch panicText("out of memory");
-    o.* = .{ .refCount = 0, .bytes = &empty_rep, .length = 0, .typePtr = null, .rep = .{ .wide = 0 } };
-    return o;
-}
-
-fn freeIntRep(o: *Obj) void {
-    if (o.typePtr) |t| if (t.free) |f| f(o);
-    o.typePtr = null;
-}
-
-fn invalidate(o: *Obj) void {
-    if (o.bytes) |b| if (b != @as([*]u8, &empty_rep)) std.c.free(b);
-    o.bytes = null;
-    o.length = 0;
-}
-
-/// Sets the text form to a copy of `s`.
-fn setText(o: *Obj, s: []const u8) void {
-    invalidate(o);
-    if (s.len == 0) {
-        o.bytes = &empty_rep;
-        return;
-    }
-    const p: [*]u8 = @ptrCast(std.c.malloc(s.len + 1) orelse panicText("out of memory"));
-    @memcpy(p[0..s.len], s);
-    p[s.len] = 0;
-    o.bytes = p;
-    o.length = @intCast(s.len);
-}
-
-/// The text form, made on demand.
-pub fn text(o: *Obj) []const u8 {
-    if (o.bytes == null) {
-        const t = o.typePtr orelse unreachable;
-        (t.update orelse panicText("Tcl_GetString: a type with no text and no update proc"))(o);
-    }
-    return o.bytes.?[0..@intCast(o.length)];
-}
-
-fn tclFreeObj(o: *Obj) callconv(.c) void {
-    freeIntRep(o);
-    invalidate(o);
-    o.rep.two.p1 = free_list;
-    free_list = o;
-}
-
-fn incr(o: *Obj) void {
-    o.refCount += 1;
-}
-
-fn decr(o: *Obj) void {
-    o.refCount -= 1;
-    if (o.refCount <= 0) tclFreeObj(o);
-}
-
-// Ints and doubles keep the value in the internal form.
-
-fn updateWide(o: *Obj) callconv(.c) void {
-    var buf: [24]u8 = undefined;
-    setText(o, value.writeInt(&buf, o.rep.wide));
-}
-
-fn updateDouble(o: *Obj) callconv(.c) void {
-    var fba_buf: [512]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&fba_buf);
-    setText(o, value.formatDouble(fba.allocator(), o.rep.double) catch unreachable);
-}
-
-/// Ints have the type name of Tcl on a 32-bit `long`. The SQLite binding
-/// reads the name to bind a variable as a number.
-pub const wide_type: ObjType = .{ .name = "wideInt", .free = null, .dup = null, .update = &updateWide, .set_from_any = null };
-pub const double_type: ObjType = .{ .name = "double", .free = null, .dup = null, .update = &updateDouble, .set_from_any = null };
-
-// A list keeps an array of objects, each with one reference of the list.
-
-const ListRep = struct {
-    items: std.ArrayList(*Obj) = .empty,
-};
-
-fn listRep(o: *Obj) *ListRep {
-    return @ptrCast(@alignCast(o.rep.two.p1));
-}
-
-fn freeList(o: *Obj) callconv(.c) void {
-    const l = listRep(o);
-    for (l.items.items) |e| decr(e);
-    l.items.deinit(gpa);
-    gpa.destroy(l);
-}
-
-fn dupList(src: *Obj, dst: *Obj) callconv(.c) void {
-    const l = gpa.create(ListRep) catch panicText("out of memory");
-    l.* = .{};
-    l.items.appendSlice(gpa, listRep(src).items.items) catch panicText("out of memory");
-    for (l.items.items) |e| incr(e);
-    dst.rep = .{ .two = .{ .p1 = l, .p2 = null } };
-    dst.typePtr = &list_type;
-}
-
-fn updateList(o: *Obj) callconv(.c) void {
-    var out: std.ArrayList(u8) = .empty;
-    defer out.deinit(gpa);
-    for (listRep(o).items.items, 0..) |e, n| {
-        if (n > 0) out.append(gpa, ' ') catch panicText("out of memory");
-        value.appendElement(gpa, &out, text(e), n == 0) catch panicText("out of memory");
-    }
-    setText(o, out.items);
-}
-
-pub const list_type: ObjType = .{ .name = "list", .free = &freeList, .dup = &dupList, .update = &updateList, .set_from_any = null };
-
-// A byte array keeps its bytes. The text form has one character for each
-// byte, U+0000 to U+00FF, in the modified UTF-8 of Tcl (U+0000 is C0 80).
-
-const ByteRep = struct {
-    data: std.ArrayList(u8) = .empty,
-};
-
-fn byteRep(o: *Obj) *ByteRep {
-    return @ptrCast(@alignCast(o.rep.two.p1));
-}
-
-fn freeBytes(o: *Obj) callconv(.c) void {
-    const r = byteRep(o);
-    r.data.deinit(gpa);
-    gpa.destroy(r);
-}
-
-fn dupBytes(src: *Obj, dst: *Obj) callconv(.c) void {
-    setByteRep(dst, byteRep(src).data.items);
-}
-
-fn updateBytes(o: *Obj) callconv(.c) void {
-    var out: std.ArrayList(u8) = .empty;
-    defer out.deinit(gpa);
-    for (byteRep(o).data.items) |c| {
-        if (c >= 1 and c < 0x80) {
-            out.append(gpa, c) catch panicText("out of memory");
-        } else {
-            out.appendSlice(gpa, &.{ 0xC0 | (c >> 6), 0x80 | (c & 0x3F) }) catch panicText("out of memory");
-        }
-    }
-    setText(o, out.items);
-}
-
-pub const bytes_type: ObjType = .{ .name = "bytearray", .free = &freeBytes, .dup = &dupBytes, .update = &updateBytes, .set_from_any = null };
-
-fn setByteRep(o: *Obj, data: []const u8) void {
-    const r = gpa.create(ByteRep) catch panicText("out of memory");
-    r.* = .{};
-    r.data.appendSlice(gpa, data) catch panicText("out of memory");
-    o.rep = .{ .two = .{ .p1 = r, .p2 = null } };
-    o.typePtr = &bytes_type;
-}
-
-// The index type keeps the table and the index of the last match of
-// `Tcl_GetIndexFromObjStruct`. The text form stays.
-
-pub const index_type: ObjType = .{ .name = "index", .free = null, .dup = null, .update = null, .set_from_any = null };
-
-// ---- The slots of the objects group ----
-
-fn Tcl_NewObj() callconv(.c) *Obj {
-    return newObj();
-}
-
-fn Tcl_NewStringObj(bytes: ?[*]const u8, length: c_int) callconv(.c) *Obj {
-    const o = newObj();
-    if (bytes) |b| setText(o, if (length < 0) std.mem.span(@as([*:0]const u8, @ptrCast(b))) else b[0..@intCast(length)]);
-    return o;
-}
-
-pub fn Tcl_NewWideIntObj(w: i64) callconv(.c) *Obj {
-    const o = newObj();
-    o.bytes = null;
-    o.typePtr = &wide_type;
-    o.rep = .{ .wide = w };
-    return o;
-}
-
-fn Tcl_NewIntObj(i: c_int) callconv(.c) *Obj {
-    return Tcl_NewWideIntObj(i);
-}
-
-fn Tcl_NewLongObj(i: c_long) callconv(.c) *Obj {
-    return Tcl_NewWideIntObj(i);
-}
-
-fn Tcl_NewBooleanObj(b: c_int) callconv(.c) *Obj {
-    return Tcl_NewWideIntObj(@intFromBool(b != 0));
-}
-
-pub fn Tcl_NewDoubleObj(d: f64) callconv(.c) *Obj {
-    const o = newObj();
-    o.bytes = null;
-    o.typePtr = &double_type;
-    o.rep = .{ .double = d };
-    return o;
-}
-
-fn Tcl_NewByteArrayObj(bytes: ?[*]const u8, length: c_int) callconv(.c) *Obj {
-    const o = newObj();
-    o.bytes = null;
-    setByteRep(o, if (bytes) |b| b[0..@intCast(@max(length, 0))] else &.{});
-    return o;
-}
-
-fn newListRep(o: *Obj) *ListRep {
-    const l = gpa.create(ListRep) catch panicText("out of memory");
-    l.* = .{};
-    o.bytes = null;
-    o.rep = .{ .two = .{ .p1 = l, .p2 = null } };
-    o.typePtr = &list_type;
-    return l;
-}
-
-pub fn Tcl_NewListObj(objc: c_int, objv: ?[*]const *Obj) callconv(.c) *Obj {
-    const o = newObj();
-    const l = newListRep(o);
-    if (objc > 0) {
-        const items = objv.?[0..@intCast(objc)];
-        l.items.appendSlice(gpa, items) catch panicText("out of memory");
-        for (items) |e| incr(e);
-    }
-    return o;
-}
-
-fn Tcl_DuplicateObj(src: *Obj) callconv(.c) *Obj {
-    const o = newObj();
-    o.bytes = null;
-    if (src.bytes != null) setText(o, text(src));
-    if (src.typePtr) |t| {
-        if (t.dup) |d| d(src, o) else {
-            o.rep = src.rep;
-            o.typePtr = t;
-        }
-    }
-    return o;
-}
-
-fn Tcl_DbIncrRefCount(o: *Obj, _: [*:0]const u8, _: c_int) callconv(.c) void {
-    incr(o);
-}
-
-fn Tcl_DbDecrRefCount(o: *Obj, _: [*:0]const u8, _: c_int) callconv(.c) void {
-    decr(o);
-}
-
-fn Tcl_DbIsShared(o: *Obj, _: [*:0]const u8, _: c_int) callconv(.c) c_int {
-    return @intFromBool(o.refCount > 1);
-}
-
-pub fn Tcl_GetString(o: *Obj) callconv(.c) [*:0]u8 {
-    _ = text(o);
-    return @ptrCast(o.bytes.?);
-}
-
-fn Tcl_GetStringFromObj(o: *Obj, len: ?*c_int) callconv(.c) [*:0]u8 {
-    const s = text(o);
-    if (len) |l| l.* = @intCast(s.len);
-    return @ptrCast(o.bytes.?);
-}
-
-fn Tcl_InvalidateStringRep(o: *Obj) callconv(.c) void {
-    invalidate(o);
-}
-
-fn Tcl_GetCharLength(o: *Obj) callconv(.c) c_int {
-    if (o.typePtr == &bytes_type and o.bytes == null) return @intCast(byteRep(o).data.items.len);
-    return @intCast(std.unicode.utf8CountCodepoints(text(o)) catch text(o).len);
-}
-
-/// Sets the result to "expected WHAT but got "TEXT"" and gives ERROR.
-fn expected(interp: ?*Interp, what: []const u8, o: *Obj) c_int {
-    if (interp) |ip| {
-        var out: std.ArrayList(u8) = .empty;
-        defer out.deinit(gpa);
-        out.print(gpa, "expected {s} but got \"{s}\"", .{ what, text(o) }) catch panicText("out of memory");
-        setResultText(ip, out.items);
-    }
-    return ERROR;
-}
-
-/// Gives the internal form a new type: frees the old one and keeps the
-/// text form.
-fn shimmer(o: *Obj, t: *const ObjType, rep: Rep) void {
-    _ = text(o);
-    freeIntRep(o);
-    o.typePtr = t;
-    o.rep = rep;
-}
-
-pub fn Tcl_GetWideIntFromObj(interp: ?*Interp, o: *Obj, out: *i64) callconv(.c) c_int {
-    if (o.typePtr == &wide_type) {
-        out.* = o.rep.wide;
-        return OK;
-    }
-    if (o.typePtr == &double_type) return expected(interp, "integer", o);
-    const w = value.parseInt(text(o)) orelse return expected(interp, "integer", o);
-    shimmer(o, &wide_type, .{ .wide = w });
-    out.* = w;
-    return OK;
-}
-
-fn Tcl_GetIntFromObj(interp: ?*Interp, o: *Obj, out: *c_int) callconv(.c) c_int {
-    var w: i64 = 0;
-    if (Tcl_GetWideIntFromObj(interp, o, &w) != OK) return ERROR;
-    // Tcl accepts a value up to the range of an unsigned int and wraps it.
-    if (w < -0xFFFFFFFF or w > 0xFFFFFFFF) {
-        if (interp) |ip| setResultText(ip, "integer value too large to represent");
-        return ERROR;
-    }
-    out.* = @bitCast(@as(u32, @truncate(@as(u64, @bitCast(w)))));
-    return OK;
-}
-
-fn Tcl_GetLongFromObj(interp: ?*Interp, o: *Obj, out: *c_long) callconv(.c) c_int {
-    if (@sizeOf(c_long) == 8) return Tcl_GetWideIntFromObj(interp, o, @ptrCast(out));
-    var i: c_int = 0;
-    if (Tcl_GetIntFromObj(interp, o, &i) != OK) return ERROR;
-    out.* = i;
-    return OK;
-}
-
-pub fn Tcl_GetDoubleFromObj(interp: ?*Interp, o: *Obj, out: *f64) callconv(.c) c_int {
-    if (o.typePtr == &double_type) {
-        out.* = o.rep.double;
-        return OK;
-    }
-    if (o.typePtr == &wide_type) {
-        out.* = @floatFromInt(o.rep.wide);
-        return OK;
-    }
-    const s = text(o);
-    if (value.parseInt(s)) |w| {
-        out.* = @floatFromInt(w);
-        return OK;
-    }
-    const d = value.parseDouble(s) orelse return expected(interp, "floating-point number", o);
-    if (std.math.isNan(d)) return expected(interp, "floating-point number", o);
-    shimmer(o, &double_type, .{ .double = d });
-    out.* = d;
-    return OK;
-}
-
-/// The boolean words of Tcl. A unique prefix of a word is also a match.
-fn parseBool(s0: []const u8) ?bool {
-    const s = value.trimSpace(s0);
-    if (s.len == 0 or s.len > 5) return null;
-    var low: [5]u8 = undefined;
-    for (s, 0..) |c, i| low[i] = std.ascii.toLower(c);
-    const w = low[0..s.len];
-    const words = [_]struct { []const u8, bool }{
-        .{ "true", true },   .{ "yes", true }, .{ "on", true },
-        .{ "false", false }, .{ "no", false }, .{ "off", false },
-    };
-    // "o" is a prefix of "on" and "off".
-    if (std.mem.eql(u8, w, "o")) return null;
-    for (words) |e| if (std.mem.startsWith(u8, e[0], w)) return e[1];
-    return null;
-}
-
-fn Tcl_GetBooleanFromObj(interp: ?*Interp, o: *Obj, out: *c_int) callconv(.c) c_int {
-    if (o.typePtr == &wide_type) {
-        out.* = @intFromBool(o.rep.wide != 0);
-        return OK;
-    }
-    if (o.typePtr == &double_type) {
-        out.* = @intFromBool(o.rep.double != 0);
-        return OK;
-    }
-    const s = text(o);
-    if (value.parseInt(s)) |w| {
-        out.* = @intFromBool(w != 0);
-        return OK;
-    }
-    if (parseBool(s)) |b| {
-        out.* = @intFromBool(b);
-        return OK;
-    }
-    if (value.parseDouble(s)) |d| if (!std.math.isNan(d)) {
-        out.* = @intFromBool(d != 0);
-        return OK;
-    };
-    return expected(interp, "boolean value", o);
-}
-
-fn Tcl_GetByteArrayFromObj(o: *Obj, len: ?*c_int) callconv(.c) [*]u8 {
-    if (o.typePtr != &bytes_type) {
-        // Each character gives its low 8 bits.
-        const s = text(o);
-        var data: std.ArrayList(u8) = .empty;
-        defer data.deinit(gpa);
-        var i: usize = 0;
-        while (i < s.len) {
-            // C0 80 is U+0000 in the modified UTF-8 of Tcl. A byte that
-            // starts no valid sequence stands for itself.
-            if (s[i] == 0xC0 and i + 1 < s.len and s[i + 1] == 0x80) {
-                data.append(gpa, 0) catch panicText("out of memory");
-                i += 2;
-                continue;
-            }
-            const n = std.unicode.utf8ByteSequenceLength(s[i]) catch 1;
-            const cp: ?u21 = if (i + n <= s.len) (std.unicode.utf8Decode(s[i..][0..n]) catch null) else null;
-            data.append(gpa, @truncate(cp orelse s[i])) catch panicText("out of memory");
-            i += if (cp != null) n else 1;
-        }
-        freeIntRep(o);
-        setByteRep(o, data.items);
-    }
-    const r = byteRep(o);
-    if (len) |l| l.* = @intCast(r.data.items.len);
-    // An empty array still gives a valid address.
-    return if (r.data.items.len == 0) @ptrCast(&empty_rep) else r.data.items.ptr;
-}
-
-fn Tcl_SetWideIntObj(o: *Obj, w: i64) callconv(.c) void {
-    freeIntRep(o);
-    invalidate(o);
-    o.typePtr = &wide_type;
-    o.rep = .{ .wide = w };
-}
-
-fn Tcl_SetIntObj(o: *Obj, i: c_int) callconv(.c) void {
-    Tcl_SetWideIntObj(o, i);
-}
-
-fn Tcl_SetLongObj(o: *Obj, i: c_long) callconv(.c) void {
-    Tcl_SetWideIntObj(o, i);
-}
-
-fn Tcl_SetBooleanObj(o: *Obj, b: c_int) callconv(.c) void {
-    Tcl_SetWideIntObj(o, @intFromBool(b != 0));
-}
-
-fn Tcl_SetDoubleObj(o: *Obj, d: f64) callconv(.c) void {
-    freeIntRep(o);
-    invalidate(o);
-    o.typePtr = &double_type;
-    o.rep = .{ .double = d };
-}
-
-fn Tcl_SetStringObj(o: *Obj, bytes: ?[*]const u8, length: c_int) callconv(.c) void {
-    freeIntRep(o);
-    const b = bytes orelse return setText(o, "");
-    setText(o, if (length < 0) std.mem.span(@as([*:0]const u8, @ptrCast(b))) else b[0..@intCast(length)]);
-}
-
-fn Tcl_SetByteArrayObj(o: *Obj, bytes: ?[*]const u8, length: c_int) callconv(.c) void {
-    freeIntRep(o);
-    invalidate(o);
-    setByteRep(o, if (bytes) |b| b[0..@intCast(@max(length, 0))] else &.{});
-}
-
-/// Gives the object the list type. The text is parsed by the rules of
-/// Tcl lists.
-fn toList(interp: ?*Interp, o: *Obj) ?*ListRep {
-    if (o.typePtr == &list_type) return listRep(o);
-    const s = text(o);
-    var arena = std.heap.ArenaAllocator.init(gpa);
-    defer arena.deinit();
-    const items = value.parseList(arena.allocator(), s) catch {
-        if (interp) |ip| setResultText(ip, listFaultText(arena.allocator(), s));
-        return null;
-    };
-    var objs: std.ArrayList(*Obj) = .empty;
-    objs.ensureTotalCapacity(gpa, items.len) catch panicText("out of memory");
-    for (items) |e| {
-        const eo = Tcl_NewStringObj(e.str.ptr, @intCast(e.str.len));
-        incr(eo);
-        objs.appendAssumeCapacity(eo);
-    }
-    const l = gpa.create(ListRep) catch panicText("out of memory");
-    l.* = .{ .items = objs };
-    shimmer(o, &list_type, .{ .two = .{ .p1 = l, .p2 = null } });
-    return l;
-}
-
-fn listFaultText(a: std.mem.Allocator, s: []const u8) []const u8 {
-    const f = value.listFault(s) orelse return "bad list";
-    return switch (f.kind) {
-        .brace => "unmatched open brace in list",
-        .quote => "unmatched open quote in list",
-        .after_brace => std.fmt.allocPrint(a, "list element in braces followed by \"{s}\" instead of space", .{f.rest}) catch "bad list",
-        .after_quote => std.fmt.allocPrint(a, "list element in quotes followed by \"{s}\" instead of space", .{f.rest}) catch "bad list",
-    };
-}
-
-fn Tcl_ListObjAppendElement(interp: ?*Interp, o: *Obj, e: *Obj) callconv(.c) c_int {
-    const l = toList(interp, o) orelse return ERROR;
-    l.items.append(gpa, e) catch panicText("out of memory");
-    incr(e);
-    invalidate(o);
-    return OK;
-}
-
-fn Tcl_ListObjAppendList(interp: ?*Interp, o: *Obj, other: *Obj) callconv(.c) c_int {
-    const src = toList(interp, other) orelse return ERROR;
-    const l = toList(interp, o) orelse return ERROR;
-    // `other` can be `o`, so the items are taken first.
-    const items = gpa.dupe(*Obj, src.items.items) catch panicText("out of memory");
-    defer gpa.free(items);
-    l.items.appendSlice(gpa, items) catch panicText("out of memory");
-    for (items) |e| incr(e);
-    invalidate(o);
-    return OK;
-}
-
-fn Tcl_ListObjGetElements(interp: ?*Interp, o: *Obj, objc: *c_int, objv: *[*]*Obj) callconv(.c) c_int {
-    const l = toList(interp, o) orelse return ERROR;
-    objc.* = @intCast(l.items.items.len);
-    objv.* = l.items.items.ptr;
-    return OK;
-}
-
-fn Tcl_ListObjIndex(interp: ?*Interp, o: *Obj, index: c_int, out: *?*Obj) callconv(.c) c_int {
-    const l = toList(interp, o) orelse return ERROR;
-    out.* = if (index >= 0 and index < l.items.items.len) l.items.items[@intCast(index)] else null;
-    return OK;
-}
-
-fn Tcl_ListObjLength(interp: ?*Interp, o: *Obj, len: *c_int) callconv(.c) c_int {
-    const l = toList(interp, o) orelse return ERROR;
-    len.* = @intCast(l.items.items.len);
-    return OK;
-}
-
-fn Tcl_ListObjReplace(interp: ?*Interp, o: *Obj, first0: c_int, count0: c_int, objc: c_int, objv: ?[*]const *Obj) callconv(.c) c_int {
-    const l = toList(interp, o) orelse return ERROR;
-    const n = l.items.items.len;
-    const first: usize = @intCast(std.math.clamp(first0, 0, @as(c_int, @intCast(n))));
-    const count: usize = @intCast(std.math.clamp(count0, 0, @as(c_int, @intCast(n - first))));
-    const add: []const *Obj = if (objc > 0) objv.?[0..@intCast(objc)] else &.{};
-    for (add) |e| incr(e);
-    for (l.items.items[first..][0..count]) |e| decr(e);
-    l.items.replaceRange(gpa, first, count, add) catch panicText("out of memory");
-    invalidate(o);
-    return OK;
-}
-
-fn Tcl_SetListObj(o: *Obj, objc: c_int, objv: ?[*]const *Obj) callconv(.c) void {
-    freeIntRep(o);
-    invalidate(o);
-    const l = newListRep(o);
-    if (objc > 0) {
-        const items = objv.?[0..@intCast(objc)];
-        l.items.appendSlice(gpa, items) catch panicText("out of memory");
-        for (items) |e| incr(e);
-    }
-}
-
-fn appendText(o: *Obj, s: []const u8) void {
-    const old = text(o);
-    var out = gpa.alloc(u8, old.len + s.len) catch panicText("out of memory");
-    defer gpa.free(out);
-    @memcpy(out[0..old.len], old);
-    @memcpy(out[old.len..], s);
-    freeIntRep(o);
-    setText(o, out);
-}
-
-fn Tcl_AppendToObj(o: *Obj, bytes: [*]const u8, length: c_int) callconv(.c) void {
-    appendText(o, if (length < 0) std.mem.span(@as([*:0]const u8, @ptrCast(bytes))) else bytes[0..@intCast(length)]);
-}
-
-fn Tcl_AppendObjToObj(o: *Obj, other: *Obj) callconv(.c) void {
-    const s = gpa.dupe(u8, text(other)) catch panicText("out of memory");
-    defer gpa.free(s);
-    appendText(o, s);
-}
-
-fn Tcl_AppendStringsToObj(o: *Obj, ...) callconv(.c) void {
-    var ap = @cVaStart();
-    defer @cVaEnd(&ap);
-    while (true) {
-        const p = @cVaArg(&ap, ?[*:0]const u8) orelse break;
-        appendText(o, std.mem.span(p));
-    }
-}
-
-// ---- Results ----
-
-fn result(ip: *Interp) *Obj {
-    if (ip.result == null) {
-        const o = newObj();
-        incr(o);
-        ip.result = o;
-    }
-    return ip.result.?;
-}
-
-pub fn Tcl_SetObjResult(ip: *Interp, o: *Obj) callconv(.c) void {
-    incr(o);
-    if (ip.result) |old| decr(old);
-    ip.result = o;
-}
-
-pub fn Tcl_GetObjResult(ip: *Interp) callconv(.c) *Obj {
-    return result(ip);
-}
-
-pub fn setResultText(ip: *Interp, s: []const u8) void {
-    Tcl_SetObjResult(ip, Tcl_NewStringObj(s.ptr, @intCast(s.len)));
-}
-
-/// The values of `Tcl_FreeProc` that are not procs.
-const TCL_STATIC: usize = 0;
-const TCL_VOLATILE: usize = 1;
-const TCL_DYNAMIC: usize = 3;
-
-fn Tcl_SetResult(ip: *Interp, s: ?[*:0]u8, free_proc: usize) callconv(.c) void {
-    const str = s orelse return Tcl_ResetResult(ip);
-    setResultText(ip, std.mem.span(str));
-    switch (free_proc) {
-        TCL_STATIC, TCL_VOLATILE => {},
-        TCL_DYNAMIC => std.c.free(str),
-        else => {
-            const f: *const fn ([*:0]u8) callconv(.c) void = @ptrFromInt(free_proc);
-            f(str);
-        },
-    }
-}
-
-fn Tcl_GetStringResult(ip: *Interp) callconv(.c) [*:0]u8 {
-    return Tcl_GetString(result(ip));
-}
-
-pub fn Tcl_ResetResult(ip: *Interp) callconv(.c) void {
-    if (ip.result) |old| {
-        if (old.refCount == 1 and old.typePtr == null and old.bytes == @as([*]u8, &empty_rep)) return;
-        decr(old);
-    }
-    ip.result = null;
-}
-
-/// Gives an unshared result for an append.
-fn ownResult(ip: *Interp) *Obj {
-    const r = result(ip);
-    if (r.refCount > 1) {
-        const d = Tcl_DuplicateObj(r);
-        Tcl_SetObjResult(ip, d);
-        return d;
-    }
-    return r;
-}
-
-fn Tcl_AppendResult(ip: *Interp, ...) callconv(.c) void {
-    var ap = @cVaStart();
-    defer @cVaEnd(&ap);
-    const r = ownResult(ip);
-    while (true) {
-        const p = @cVaArg(&ap, ?[*:0]const u8) orelse break;
-        appendText(r, std.mem.span(p));
-    }
-}
-
-fn Tcl_AppendElement(ip: *Interp, s: [*:0]const u8) callconv(.c) void {
-    const r = ownResult(ip);
-    var out: std.ArrayList(u8) = .empty;
-    defer out.deinit(gpa);
-    const old = text(r);
-    out.appendSlice(gpa, old) catch panicText("out of memory");
-    if (old.len > 0) out.append(gpa, ' ') catch panicText("out of memory");
-    value.appendElement(gpa, &out, std.mem.span(s), old.len == 0) catch panicText("out of memory");
-    freeIntRep(r);
-    setText(r, out.items);
-}
-
-fn Tcl_WrongNumArgs(ip: *Interp, objc: c_int, objv: ?[*]const *Obj, message: ?[*:0]const u8) callconv(.c) void {
-    var out: std.ArrayList(u8) = .empty;
-    defer out.deinit(gpa);
-    out.appendSlice(gpa, "wrong # args: should be \"") catch panicText("out of memory");
-    var n: usize = 0;
-    while (n < objc) : (n += 1) {
-        if (n > 0) out.append(gpa, ' ') catch panicText("out of memory");
-        value.appendElement(gpa, &out, text(objv.?[n]), false) catch panicText("out of memory");
-    }
-    if (message) |m| {
-        if (objc > 0) out.append(gpa, ' ') catch panicText("out of memory");
-        out.appendSlice(gpa, std.mem.span(m)) catch panicText("out of memory");
-    }
-    out.append(gpa, '"') catch panicText("out of memory");
-    setResultText(ip, out.items);
-}
-
-// ---- Dynamic strings ----
-
-/// `Tcl_DString` of Tcl 8.6.
-pub const DString = extern struct {
-    string: [*]u8,
-    length: c_int,
-    space: c_int,
-    static_space: [200]u8,
-};
-
-fn Tcl_DStringInit(ds: *DString) callconv(.c) void {
-    ds.string = &ds.static_space;
-    ds.length = 0;
-    ds.space = ds.static_space.len;
-    ds.static_space[0] = 0;
-}
-
-fn dsReserve(ds: *DString, need: usize) void {
-    if (need < @as(usize, @intCast(ds.space))) return;
-    const cap = @max(need + 1, @as(usize, @intCast(ds.space)) * 2);
-    const p: [*]u8 = @ptrCast(std.c.malloc(cap) orelse panicText("out of memory"));
-    @memcpy(p[0..@intCast(ds.length + 1)], ds.string[0..@intCast(ds.length + 1)]);
-    if (ds.string != @as([*]u8, &ds.static_space)) std.c.free(ds.string);
-    ds.string = p;
-    ds.space = @intCast(cap);
-}
-
-fn dsAppend(ds: *DString, s: []const u8) void {
-    const len: usize = @intCast(ds.length);
-    dsReserve(ds, len + s.len);
-    @memcpy(ds.string[len..][0..s.len], s);
-    ds.length = @intCast(len + s.len);
-    ds.string[len + s.len] = 0;
-}
-
-fn Tcl_DStringAppend(ds: *DString, bytes: [*]const u8, length: c_int) callconv(.c) [*]u8 {
-    dsAppend(ds, if (length < 0) std.mem.span(@as([*:0]const u8, @ptrCast(bytes))) else bytes[0..@intCast(length)]);
-    return ds.string;
-}
-
-fn Tcl_DStringAppendElement(ds: *DString, s: [*:0]const u8) callconv(.c) [*]u8 {
-    var out: std.ArrayList(u8) = .empty;
-    defer out.deinit(gpa);
-    // A separator goes in after text that does not end a sublist.
-    const len: usize = @intCast(ds.length);
-    const first = len == 0 or ds.string[len - 1] == '{';
-    if (!first) out.append(gpa, ' ') catch panicText("out of memory");
-    value.appendElement(gpa, &out, std.mem.span(s), first) catch panicText("out of memory");
-    dsAppend(ds, out.items);
-    return ds.string;
-}
-
-fn Tcl_DStringFree(ds: *DString) callconv(.c) void {
-    if (ds.string != @as([*]u8, &ds.static_space)) std.c.free(ds.string);
-    Tcl_DStringInit(ds);
-}
-
-fn Tcl_DStringSetLength(ds: *DString, length: c_int) callconv(.c) void {
-    const n: usize = @intCast(@max(length, 0));
-    dsReserve(ds, n);
-    ds.length = @intCast(n);
-    ds.string[n] = 0;
-}
-
-fn Tcl_DStringResult(ip: *Interp, ds: *DString) callconv(.c) void {
-    setResultText(ip, ds.string[0..@intCast(ds.length)]);
-    Tcl_DStringFree(ds);
-}
-
-fn Tcl_DStringGetResult(ip: *Interp, ds: *DString) callconv(.c) void {
-    Tcl_DStringFree(ds);
-    dsAppend(ds, text(result(ip)));
-    Tcl_ResetResult(ip);
-}
-
-fn Tcl_DStringStartSublist(ds: *DString) callconv(.c) void {
-    const len: usize = @intCast(ds.length);
-    dsAppend(ds, if (len == 0 or ds.string[len - 1] == '{') "{" else " {");
-}
-
-fn Tcl_DStringEndSublist(ds: *DString) callconv(.c) void {
-    dsAppend(ds, "}");
-}
-
-// ---- Helpers ----
-
-fn Tcl_GetVersion(major: ?*c_int, minor: ?*c_int, patch: ?*c_int, kind: ?*c_int) callconv(.c) void {
-    if (major) |p| p.* = 8;
-    if (minor) |p| p.* = 6;
-    if (patch) |p| p.* = 16;
-    // TCL_FINAL_RELEASE
-    if (kind) |p| p.* = 2;
-}
-
-const TCL_EXACT: c_int = 1;
-
-pub fn Tcl_GetIndexFromObjStruct(ip: ?*Interp, o: *Obj, tbl: *const anyopaque, offset: c_int, msg: [*:0]const u8, flags: c_int, out: *c_int) callconv(.c) c_int {
-    const base: [*]const u8 = @ptrCast(tbl);
-    const stride: usize = @intCast(offset);
-    const entry = struct {
-        fn at(b: [*]const u8, s: usize, i: usize) ?[*:0]const u8 {
-            const p: *align(1) const ?[*:0]const u8 = @ptrCast(b + i * s);
-            return p.*;
-        }
-    }.at;
-    if (o.typePtr == &index_type and o.rep.two.p1 == @as(?*anyopaque, @ptrCast(@constCast(tbl)))) {
-        out.* = @intCast(@intFromPtr(o.rep.two.p2));
-        return OK;
-    }
-    const key = text(o);
-    var found: ?usize = null;
-    var matches: usize = 0;
-    var i: usize = 0;
-    while (entry(base, stride, i)) |name| : (i += 1) {
-        const n = std.mem.span(name);
-        if (std.mem.eql(u8, n, key)) {
-            found = i;
-            matches = 1;
-            break;
-        }
-        if (flags & TCL_EXACT == 0 and key.len > 0 and std.mem.startsWith(u8, n, key)) {
-            found = i;
-            matches += 1;
-        }
-    }
-    if (found != null and matches == 1) {
-        shimmer(o, &index_type, .{ .two = .{ .p1 = @constCast(tbl), .p2 = @ptrFromInt(found.?) } });
-        out.* = @intCast(found.?);
-        return OK;
-    }
-    if (ip) |interp| {
-        var w: std.ArrayList(u8) = .empty;
-        defer w.deinit(gpa);
-        const m = std.mem.span(msg);
-        w.print(gpa, "{s} {s} \"{s}\": must be ", .{ if (matches > 1) "ambiguous" else "bad", m, key }) catch panicText("out of memory");
-        // Tcl leaves out the empty names from the list.
-        var names: std.ArrayList([]const u8) = .empty;
-        defer names.deinit(gpa);
-        var j: usize = 0;
-        while (entry(base, stride, j)) |name| : (j += 1) {
-            if (name[0] != 0) names.append(gpa, std.mem.span(name)) catch panicText("out of memory");
-        }
-        for (names.items, 0..) |n, k| {
-            if (k > 0) w.appendSlice(gpa, if (k + 1 == names.items.len) (if (names.items.len > 2) ", or " else " or ") else ", ") catch panicText("out of memory");
-            w.appendSlice(gpa, n) catch panicText("out of memory");
-        }
-        setResultText(interp, w.items);
-    }
-    return ERROR;
-}
-
-/// File names go to WASI as they are, so the translation is a copy.
-fn Tcl_TranslateFileName(_: ?*Interp, name: [*:0]const u8, ds: *DString) callconv(.c) [*:0]u8 {
+// The names of obj.zig that this file uses.
+const DString = obj.DString;
+const ERROR = obj.ERROR;
+const Interp = obj.Interp;
+const OK = obj.OK;
+const Obj = obj.Obj;
+const Rep = obj.Rep;
+const Tcl_AppendElement = obj.Tcl_AppendElement;
+const Tcl_DStringAppend = obj.Tcl_DStringAppend;
+const Tcl_DStringAppendElement = obj.Tcl_DStringAppendElement;
+const Tcl_DStringFree = obj.Tcl_DStringFree;
+const Tcl_DStringInit = obj.Tcl_DStringInit;
+const Tcl_GetBooleanFromObj = obj.Tcl_GetBooleanFromObj;
+const Tcl_GetByteArrayFromObj = obj.Tcl_GetByteArrayFromObj;
+const Tcl_GetDoubleFromObj = obj.Tcl_GetDoubleFromObj;
+const Tcl_GetIndexFromObjStruct = obj.Tcl_GetIndexFromObjStruct;
+const Tcl_GetIntFromObj = obj.Tcl_GetIntFromObj;
+const Tcl_GetString = obj.Tcl_GetString;
+const Tcl_GetStringResult = obj.Tcl_GetStringResult;
+const Tcl_GetWideIntFromObj = obj.Tcl_GetWideIntFromObj;
+const Tcl_ListObjAppendElement = obj.Tcl_ListObjAppendElement;
+const Tcl_ListObjGetElements = obj.Tcl_ListObjGetElements;
+const Tcl_ListObjLength = obj.Tcl_ListObjLength;
+const Tcl_NewByteArrayObj = obj.Tcl_NewByteArrayObj;
+const Tcl_NewDoubleObj = obj.Tcl_NewDoubleObj;
+const Tcl_NewIntObj = obj.Tcl_NewIntObj;
+const Tcl_NewListObj = obj.Tcl_NewListObj;
+const Tcl_NewObj = obj.Tcl_NewObj;
+const Tcl_NewStringObj = obj.Tcl_NewStringObj;
+const Tcl_NewWideIntObj = obj.Tcl_NewWideIntObj;
+const Tcl_ResetResult = obj.Tcl_ResetResult;
+const Tcl_SetObjResult = obj.Tcl_SetObjResult;
+const Tcl_WrongNumArgs = obj.Tcl_WrongNumArgs;
+const decr = obj.decr;
+const dsAppend = obj.dsAppend;
+const expected = obj.expected;
+const incr = obj.incr;
+const panicText = obj.panicText;
+const result = obj.result;
+const setResultText = obj.setResultText;
+const text = obj.text;
+
+pub fn Tcl_TranslateFileName(_: ?*Interp, name: [*:0]const u8, ds: *DString) callconv(.c) [*:0]u8 {
     Tcl_DStringInit(ds);
     dsAppend(ds, std.mem.span(name));
     return @ptrCast(ds.string);
 }
 
-fn Tcl_PkgRequireEx(ip: *Interp, name: [*:0]const u8, version: ?[*:0]const u8, exact: c_int, client_data: ?*anyopaque) callconv(.c) ?[*:0]const u8 {
+pub fn Tcl_PkgRequireEx(ip: *Interp, name: [*:0]const u8, version: ?[*:0]const u8, exact: c_int, client_data: ?*anyopaque) callconv(.c) ?[*:0]const u8 {
     _ = exact;
     if (client_data) |cd| @as(*?*anyopaque, @ptrCast(@alignCast(cd))).* = null;
     if (std.mem.eql(u8, std.mem.span(name), "Tcl")) {
@@ -1060,8 +206,8 @@ fn objOf(a: Arg) *Obj {
 /// The value of an object for ztcl. Text stays in the memory of the
 /// package until the next call.
 fn argOf(o: *Obj) Arg {
-    if (o.typePtr == &wide_type) return .{ .kind = 1, .len = 0, .bits = @bitCast(o.rep.wide) };
-    if (o.typePtr == &double_type) return .{ .kind = 2, .len = 0, .bits = @bitCast(o.rep.double) };
+    if (o.typePtr == &obj.wide_type) return .{ .kind = 1, .len = 0, .bits = @bitCast(o.rep.wide) };
+    if (o.typePtr == &obj.double_type) return .{ .kind = 2, .len = 0, .bits = @bitCast(o.rep.double) };
     const s = text(o);
     return .{ .kind = 0, .len = @intCast(s.len), .bits = @intFromPtr(s.ptr) };
 }
@@ -1092,11 +238,11 @@ fn createCommand(ip: *Interp, name: [*:0]const u8, proc: ?ObjCmdProc, nre: ?ObjC
     return c;
 }
 
-fn Tcl_CreateObjCommand(ip: *Interp, name: [*:0]const u8, proc: ObjCmdProc, cd: ?*anyopaque, delete: ?DeleteProc) callconv(.c) *Command {
+pub fn Tcl_CreateObjCommand(ip: *Interp, name: [*:0]const u8, proc: ObjCmdProc, cd: ?*anyopaque, delete: ?DeleteProc) callconv(.c) *Command {
     return createCommand(ip, name, proc, null, cd, delete);
 }
 
-fn Tcl_NRCreateCommand(ip: *Interp, name: [*:0]const u8, proc: ?ObjCmdProc, nre: ObjCmdProc, cd: ?*anyopaque, delete: ?DeleteProc) callconv(.c) *Command {
+pub fn Tcl_NRCreateCommand(ip: *Interp, name: [*:0]const u8, proc: ?ObjCmdProc, nre: ObjCmdProc, cd: ?*anyopaque, delete: ?DeleteProc) callconv(.c) *Command {
     return createCommand(ip, name, proc, nre, cd, delete);
 }
 
@@ -1107,7 +253,7 @@ fn forget(c: *Command) void {
     if (c.delete) |d| d(c.cd);
 }
 
-fn Tcl_DeleteCommand(ip: *Interp, name: [*:0]const u8) callconv(.c) c_int {
+pub fn Tcl_DeleteCommand(ip: *Interp, name: [*:0]const u8) callconv(.c) c_int {
     const n = std.mem.span(name);
     const plain = if (std.mem.startsWith(u8, n, "::")) n[2..] else n;
     for (commands.items) |c| {
@@ -1120,7 +266,7 @@ fn Tcl_DeleteCommand(ip: *Interp, name: [*:0]const u8) callconv(.c) c_int {
     return if (host.cmd_delete(ip.handle, n.ptr, n.len) == 0) 0 else -1;
 }
 
-fn Tcl_DeleteCommandFromToken(ip: *Interp, c: *Command) callconv(.c) c_int {
+pub fn Tcl_DeleteCommandFromToken(ip: *Interp, c: *Command) callconv(.c) c_int {
     if (!c.live) return -1;
     _ = host.cmd_delete(ip.handle, c.name.ptr, c.name.len);
     forget(c);
@@ -1189,7 +335,7 @@ fn popFrame() void {
     f.callbacks.deinit(gpa);
 }
 
-fn Tcl_NREvalObj(_: *Interp, o: *Obj, flags: c_int) callconv(.c) c_int {
+pub fn Tcl_NREvalObj(_: *Interp, o: *Obj, flags: c_int) callconv(.c) c_int {
     const f = top() orelse panicText("Tcl_NREvalObj: no command runs");
     incr(o);
     if (f.eval) |old| decr(old);
@@ -1198,12 +344,12 @@ fn Tcl_NREvalObj(_: *Interp, o: *Obj, flags: c_int) callconv(.c) c_int {
     return OK;
 }
 
-fn Tcl_NRAddCallback(_: *Interp, proc: NRPostProc, d0: ?*anyopaque, d1: ?*anyopaque, d2: ?*anyopaque, d3: ?*anyopaque) callconv(.c) void {
+pub fn Tcl_NRAddCallback(_: *Interp, proc: NRPostProc, d0: ?*anyopaque, d1: ?*anyopaque, d2: ?*anyopaque, d3: ?*anyopaque) callconv(.c) void {
     const f = top() orelse panicText("Tcl_NRAddCallback: no command runs");
     f.callbacks.append(gpa, .{ .proc = proc, .data = .{ d0, d1, d2, d3 } }) catch panicText("out of memory");
 }
 
-fn Tcl_NRCallObjProc(ip: *Interp, proc: ObjCmdProc, cd: ?*anyopaque, objc: c_int, objv: [*]const *Obj) callconv(.c) c_int {
+pub fn Tcl_NRCallObjProc(ip: *Interp, proc: ObjCmdProc, cd: ?*anyopaque, objc: c_int, objv: [*]const *Obj) callconv(.c) c_int {
     pushFrame();
     defer popFrame();
     return runNR(ip, proc(cd, ip, objc, objv));
@@ -1302,19 +448,19 @@ fn evalText(ip: *Interp, s: []const u8, flags: c_int) c_int {
 
 const TCL_EVAL_GLOBAL: c_int = 0x20000;
 
-fn Tcl_Eval(ip: *Interp, script: [*:0]const u8) callconv(.c) c_int {
+pub fn Tcl_Eval(ip: *Interp, script: [*:0]const u8) callconv(.c) c_int {
     return evalText(ip, std.mem.span(script), 0);
 }
 
-fn Tcl_EvalEx(ip: *Interp, script: [*]const u8, len: c_int, flags: c_int) callconv(.c) c_int {
+pub fn Tcl_EvalEx(ip: *Interp, script: [*]const u8, len: c_int, flags: c_int) callconv(.c) c_int {
     return evalText(ip, if (len < 0) std.mem.span(@as([*:0]const u8, @ptrCast(script))) else script[0..@intCast(len)], flags);
 }
 
-fn Tcl_GlobalEval(ip: *Interp, script: [*:0]const u8) callconv(.c) c_int {
+pub fn Tcl_GlobalEval(ip: *Interp, script: [*:0]const u8) callconv(.c) c_int {
     return evalText(ip, std.mem.span(script), TCL_EVAL_GLOBAL);
 }
 
-fn Tcl_VarEval(ip: *Interp, ...) callconv(.c) c_int {
+pub fn Tcl_VarEval(ip: *Interp, ...) callconv(.c) c_int {
     var ap = @cVaStart();
     defer @cVaEnd(&ap);
     var out: std.ArrayList(u8) = .empty;
@@ -1349,20 +495,20 @@ fn getVar(ip: *Interp, n1: []const u8, n2: ?[]const u8, flags: c_int) ?*Obj {
     return own(objOf(reply));
 }
 
-fn Tcl_GetVar2Ex(ip: *Interp, n1: [*:0]const u8, n2: ?[*:0]const u8, flags: c_int) callconv(.c) ?*Obj {
+pub fn Tcl_GetVar2Ex(ip: *Interp, n1: [*:0]const u8, n2: ?[*:0]const u8, flags: c_int) callconv(.c) ?*Obj {
     return getVar(ip, std.mem.span(n1), if (n2) |p| std.mem.span(p) else null, flags);
 }
 
-fn Tcl_ObjGetVar2(ip: *Interp, n1: *Obj, n2: ?*Obj, flags: c_int) callconv(.c) ?*Obj {
+pub fn Tcl_ObjGetVar2(ip: *Interp, n1: *Obj, n2: ?*Obj, flags: c_int) callconv(.c) ?*Obj {
     return getVar(ip, text(n1), if (n2) |p| text(p) else null, flags);
 }
 
-fn Tcl_GetVar2(ip: *Interp, n1: [*:0]const u8, n2: ?[*:0]const u8, flags: c_int) callconv(.c) ?[*:0]u8 {
+pub fn Tcl_GetVar2(ip: *Interp, n1: [*:0]const u8, n2: ?[*:0]const u8, flags: c_int) callconv(.c) ?[*:0]u8 {
     const o = Tcl_GetVar2Ex(ip, n1, n2, flags) orelse return null;
     return Tcl_GetString(o);
 }
 
-fn Tcl_GetVar(ip: *Interp, n: [*:0]const u8, flags: c_int) callconv(.c) ?[*:0]u8 {
+pub fn Tcl_GetVar(ip: *Interp, n: [*:0]const u8, flags: c_int) callconv(.c) ?[*:0]u8 {
     return Tcl_GetVar2(ip, n, null, flags);
 }
 
@@ -1379,24 +525,24 @@ fn setVar(ip: *Interp, n1: []const u8, n2: ?[]const u8, v: *Obj, flags: c_int) ?
     return v;
 }
 
-fn Tcl_ObjSetVar2(ip: *Interp, n1: *Obj, n2: ?*Obj, v: *Obj, flags: c_int) callconv(.c) ?*Obj {
+pub fn Tcl_ObjSetVar2(ip: *Interp, n1: *Obj, n2: ?*Obj, v: *Obj, flags: c_int) callconv(.c) ?*Obj {
     return setVar(ip, text(n1), if (n2) |p| text(p) else null, v, flags);
 }
 
-fn Tcl_SetVar2Ex(ip: *Interp, n1: [*:0]const u8, n2: ?[*:0]const u8, v: *Obj, flags: c_int) callconv(.c) ?*Obj {
+pub fn Tcl_SetVar2Ex(ip: *Interp, n1: [*:0]const u8, n2: ?[*:0]const u8, v: *Obj, flags: c_int) callconv(.c) ?*Obj {
     return setVar(ip, std.mem.span(n1), if (n2) |p| std.mem.span(p) else null, v, flags);
 }
 
-fn Tcl_SetVar2(ip: *Interp, n1: [*:0]const u8, n2: ?[*:0]const u8, s: [*:0]const u8, flags: c_int) callconv(.c) ?[*:0]u8 {
+pub fn Tcl_SetVar2(ip: *Interp, n1: [*:0]const u8, n2: ?[*:0]const u8, s: [*:0]const u8, flags: c_int) callconv(.c) ?[*:0]u8 {
     const o = Tcl_SetVar2Ex(ip, n1, n2, Tcl_NewStringObj(s, -1), flags) orelse return null;
     return Tcl_GetString(o);
 }
 
-fn Tcl_SetVar(ip: *Interp, n: [*:0]const u8, s: [*:0]const u8, flags: c_int) callconv(.c) ?[*:0]u8 {
+pub fn Tcl_SetVar(ip: *Interp, n: [*:0]const u8, s: [*:0]const u8, flags: c_int) callconv(.c) ?[*:0]u8 {
     return Tcl_SetVar2(ip, n, null, s, flags);
 }
 
-fn Tcl_PkgProvideEx(ip: *Interp, name: [*:0]const u8, version: [*:0]const u8, _: ?*const anyopaque) callconv(.c) c_int {
+pub fn Tcl_PkgProvideEx(ip: *Interp, name: [*:0]const u8, version: [*:0]const u8, _: ?*const anyopaque) callconv(.c) c_int {
     const n = std.mem.span(name);
     const v = std.mem.span(version);
     if (host.pkg_provide(ip.handle, n.ptr, n.len, v.ptr, v.len) != 0) {
@@ -1407,7 +553,7 @@ fn Tcl_PkgProvideEx(ip: *Interp, name: [*:0]const u8, version: [*:0]const u8, _:
 }
 
 /// Runs `bgerror` with the result. An error of `bgerror` is dropped.
-fn Tcl_BackgroundError(ip: *Interp) callconv(.c) void {
+pub fn Tcl_BackgroundError(ip: *Interp) callconv(.c) void {
     var out: std.ArrayList(u8) = .empty;
     defer out.deinit(gpa);
     out.appendSlice(gpa, "bgerror ") catch panicText("out of memory");
@@ -1428,40 +574,7 @@ comptime {
     }
 }
 
-// ---- Memory ----
-
-fn Tcl_Alloc(size: c_uint) callconv(.c) [*]u8 {
-    return @ptrCast(std.c.malloc(@max(size, 1)) orelse panicText("out of memory"));
-}
-
-fn Tcl_AttemptAlloc(size: c_uint) callconv(.c) ?[*]u8 {
-    return @ptrCast(std.c.malloc(@max(size, 1)));
-}
-
-fn Tcl_Free(p: ?[*]u8) callconv(.c) void {
-    std.c.free(p);
-}
-
-fn Tcl_Realloc(p: ?[*]u8, size: c_uint) callconv(.c) [*]u8 {
-    return @ptrCast(std.c.realloc(p, @max(size, 1)) orelse panicText("out of memory"));
-}
-
-fn Tcl_AttemptRealloc(p: ?[*]u8, size: c_uint) callconv(.c) ?[*]u8 {
-    return @ptrCast(std.c.realloc(p, @max(size, 1)));
-}
-
-// ---- Panic ----
-
-/// The handler of a panic. The tests set it. In the package it is the
-/// import `ztcl.panic`, then a trap.
-pub var panic_hook: ?*const fn ([]const u8) void = null;
-
-fn panicText(msg: []const u8) noreturn {
-    if (panic_hook) |h| h(msg);
-    @panic(msg);
-}
-
-fn Tcl_Panic(format: [*:0]const u8, ...) callconv(.c) noreturn {
+pub fn Tcl_Panic(format: [*:0]const u8, ...) callconv(.c) noreturn {
     // The format arguments are not expanded.
     panicText(std.mem.span(format));
 }
@@ -1475,195 +588,42 @@ fn missing(comptime n: usize) *const anyopaque {
     }.f);
 }
 
-// ---- Channels ----
-
-/// The first fields of `Tcl_ChannelType` of Tcl 8.6, up to `close2Proc`.
-pub const ChannelType = extern struct {
-    name: ?[*:0]const u8,
-    version: ?*const anyopaque,
-    close: ?*const fn (?*anyopaque, ?*Interp) callconv(.c) c_int,
-    input: ?*const anyopaque,
-    output: ?*const anyopaque,
-    seek: ?*const anyopaque,
-    set_option: ?*const anyopaque,
-    get_option: ?*const anyopaque,
-    watch: ?*const anyopaque,
-    get_handle: ?*const anyopaque,
-    close2: ?*const fn (?*anyopaque, ?*Interp, c_int) callconv(.c) c_int,
-};
-
-/// The `closeProc` value that tells Tcl to call `close2Proc`.
-const TCL_CLOSE2PROC: usize = 1;
-
-/// A channel of the package. Scripts do not see it yet: `read`, `puts`,
-/// `seek`, and `close` of ztcl do not reach it. The package can name it,
-/// and the last unregister closes it with the close procedure of its type.
-pub const Channel = struct {
-    type: *const ChannelType,
-    name: [:0]u8,
-    data: ?*anyopaque,
-    mask: c_int,
-    refs: c_int = 0,
-};
-
-fn Tcl_CreateChannel(t: *const ChannelType, name: ?[*:0]const u8, data: ?*anyopaque, mask: c_int) callconv(.c) *Channel {
-    const c = gpa.create(Channel) catch panicText("out of memory");
-    const n = if (name) |p| std.mem.span(p) else "";
-    c.* = .{ .type = t, .name = gpa.dupeSentinel(u8, n, 0) catch panicText("out of memory"), .data = data, .mask = mask };
-    return c;
-}
-
-fn Tcl_GetChannelName(c: *Channel) callconv(.c) [*:0]const u8 {
-    return c.name.ptr;
-}
-
-fn Tcl_RegisterChannel(_: ?*Interp, c: ?*Channel) callconv(.c) void {
-    if (c) |ch| ch.refs += 1;
-}
-
-/// Removes one reference. The last one closes the channel and frees it.
-fn Tcl_UnregisterChannel(ip: ?*Interp, c: *Channel) callconv(.c) c_int {
-    c.refs -= 1;
-    if (c.refs > 0) return OK;
-    const t = c.type;
-    const rc: c_int = if (t.close != null and @intFromPtr(t.close.?) != TCL_CLOSE2PROC)
-        t.close.?(c.data, ip)
-    else if (t.close2) |f| f(c.data, ip, 0) else OK;
-    gpa.free(c.name);
-    gpa.destroy(c);
-    return rc;
-}
-
 // ---- The table ----
 
-pub const slot_count = 691;
+pub const slot_count = tables.len(.public);
 
-/// The implemented slots, by number.
-const implemented = [_]struct { usize, *const anyopaque }{
-    .{ 0, &Tcl_PkgProvideEx },
-    .{ 1, &Tcl_PkgRequireEx },
-    .{ 2, &Tcl_Panic },
-    .{ 3, &Tcl_Alloc },
-    .{ 4, &Tcl_Free },
-    .{ 5, &Tcl_Realloc },
-    .{ 15, &Tcl_AppendStringsToObj },
-    .{ 16, &Tcl_AppendToObj },
-    .{ 19, &Tcl_DbDecrRefCount },
-    .{ 20, &Tcl_DbIncrRefCount },
-    .{ 21, &Tcl_DbIsShared },
-    .{ 29, &Tcl_DuplicateObj },
-    .{ 30, &tclFreeObj },
-    .{ 32, &Tcl_GetBooleanFromObj },
-    .{ 33, &Tcl_GetByteArrayFromObj },
-    .{ 35, &Tcl_GetDoubleFromObj },
-    .{ 38, &Tcl_GetIntFromObj },
-    .{ 39, &Tcl_GetLongFromObj },
-    .{ 41, &Tcl_GetStringFromObj },
-    .{ 42, &Tcl_InvalidateStringRep },
-    .{ 43, &Tcl_ListObjAppendList },
-    .{ 44, &Tcl_ListObjAppendElement },
-    .{ 45, &Tcl_ListObjGetElements },
-    .{ 46, &Tcl_ListObjIndex },
-    .{ 47, &Tcl_ListObjLength },
-    .{ 48, &Tcl_ListObjReplace },
-    .{ 49, &Tcl_NewBooleanObj },
-    .{ 50, &Tcl_NewByteArrayObj },
-    .{ 51, &Tcl_NewDoubleObj },
-    .{ 52, &Tcl_NewIntObj },
-    .{ 53, &Tcl_NewListObj },
-    .{ 54, &Tcl_NewLongObj },
-    .{ 55, &Tcl_NewObj },
-    .{ 56, &Tcl_NewStringObj },
-    .{ 57, &Tcl_SetBooleanObj },
-    .{ 59, &Tcl_SetByteArrayObj },
-    .{ 60, &Tcl_SetDoubleObj },
-    .{ 61, &Tcl_SetIntObj },
-    .{ 62, &Tcl_SetListObj },
-    .{ 63, &Tcl_SetLongObj },
-    .{ 65, &Tcl_SetStringObj },
-    .{ 69, &Tcl_AppendElement },
-    .{ 70, &Tcl_AppendResult },
-    .{ 76, &Tcl_BackgroundError },
-    .{ 88, &Tcl_CreateChannel },
-    .{ 96, &Tcl_CreateObjCommand },
-    .{ 103, &Tcl_DeleteCommand },
-    .{ 104, &Tcl_DeleteCommandFromToken },
-    .{ 117, &Tcl_DStringAppend },
-    .{ 118, &Tcl_DStringAppendElement },
-    .{ 119, &Tcl_DStringEndSublist },
-    .{ 120, &Tcl_DStringFree },
-    .{ 121, &Tcl_DStringGetResult },
-    .{ 122, &Tcl_DStringInit },
-    .{ 123, &Tcl_DStringResult },
-    .{ 124, &Tcl_DStringSetLength },
-    .{ 125, &Tcl_DStringStartSublist },
-    .{ 129, &Tcl_Eval },
-    .{ 156, &Tcl_GetChannelName },
-    .{ 166, &Tcl_GetObjResult },
-    .{ 174, &Tcl_GetStringResult },
-    .{ 175, &Tcl_GetVar },
-    .{ 176, &Tcl_GetVar2 },
-    .{ 177, &Tcl_GlobalEval },
-    .{ 195, &Tcl_ObjGetVar2 },
-    .{ 196, &Tcl_ObjSetVar2 },
-    .{ 210, &Tcl_RegisterChannel },
-    .{ 217, &Tcl_ResetResult },
-    .{ 232, &Tcl_SetResult },
-    .{ 235, &Tcl_SetObjResult },
-    .{ 237, &Tcl_SetVar },
-    .{ 238, &Tcl_SetVar2 },
-    .{ 249, &Tcl_TranslateFileName },
-    .{ 252, &Tcl_UnregisterChannel },
-    .{ 260, &Tcl_VarEval },
-    .{ 264, &Tcl_WrongNumArgs },
-    .{ 279, &Tcl_GetVersion },
-    .{ 286, &Tcl_AppendObjToObj },
-    .{ 291, &Tcl_EvalEx },
-    .{ 293, &Tcl_EvalObjEx },
-    .{ 304, &Tcl_GetIndexFromObjStruct },
-    .{ 306, &Tcl_GetVar2Ex },
-    .{ 317, &Tcl_SetVar2Ex },
-    .{ 340, &Tcl_GetString },
-    .{ 380, &Tcl_GetCharLength },
-    .{ 428, &Tcl_AttemptAlloc },
-    .{ 430, &Tcl_AttemptRealloc },
-    .{ 487, &Tcl_GetWideIntFromObj },
-    .{ 488, &Tcl_NewWideIntObj },
-    .{ 489, &Tcl_SetWideIntObj },
-    .{ 583, &Tcl_NRCreateCommand },
-    .{ 584, &Tcl_NREvalObj },
-    .{ 587, &Tcl_NRAddCallback },
-    .{ 588, &Tcl_NRCallObjProc },
+/// The groups of the WebAssembly path, for the builder of `table.zig`.
+/// The slots of this file come first, then the slots of the two paths.
+const groups = .{
+    @This(),
+    @import("obj.zig").slots,
+    @import("chan.zig").slots,
+    @import("mem.zig").slots,
 };
 
-/// `TclStubs` of Tcl 8.6: the magic number, the hooks, and the slots.
-pub const Table = extern struct {
-    magic: c_int,
-    hooks: *const Hooks,
-    slots: [slot_count]*const anyopaque,
-};
+fn missingFn(comptime k: tables.Kind, comptime n: usize) *const anyopaque {
+    _ = k;
+    return missing(n);
+}
 
-pub const Hooks = extern struct {
-    plat: ?*const anyopaque = null,
-    int: ?*const anyopaque = null,
-    int_plat: ?*const anyopaque = null,
-};
+pub const Table = tables.Table(slot_count);
 
 /// TCL_STUB_MAGIC of Tcl 8.6.
-pub const stub_magic: c_int = @bitCast(@as(u32, 0xFCA3BACF));
+pub const stub_magic = tables.magic;
 
-const hooks: Hooks = .{};
-
-pub const table: Table = blk: {
-    @setEvalBranchQuota(100_000);
-    var t: Table = .{ .magic = stub_magic, .hooks = &hooks, .slots = undefined };
-    for (0..slot_count) |n| t.slots[n] = missing(n);
-    for (implemented) |e| t.slots[e[0]] = e[1];
-    break :blk t;
-};
+pub const table: Table = .{ .magic = stub_magic, .hooks = null, .slots = tables.fill(groups, .public, missingFn) };
 
 /// The number of slots with an implementation.
-pub const implemented_count = implemented.len;
+pub const implemented_count = blk: {
+    @setEvalBranchQuota(400_000);
+    var n: usize = 0;
+    for (0..slot_count) |i| {
+        if (tables.name(.public, i)) |nm| {
+            if (tables.find(groups, nm) != null) n += 1;
+        }
+    }
+    break :blk n;
+};
 
 /// The pointers that the stubs macros of `tcl.h` read.
 pub var tclStubsPtr: ?*const Table = null;
@@ -1671,7 +631,7 @@ pub var tclPlatStubsPtr: ?*const anyopaque = null;
 pub var tclIntStubsPtr: ?*const anyopaque = null;
 pub var tclIntPlatStubsPtr: ?*const anyopaque = null;
 
-fn Tcl_InitStubs(ip: *Interp, version: ?[*:0]const u8, exact: c_int) callconv(.c) ?[*:0]const u8 {
+pub fn Tcl_InitStubs(ip: *Interp, version: ?[*:0]const u8, exact: c_int) callconv(.c) ?[*:0]const u8 {
     tclStubsPtr = &table;
     return Tcl_PkgRequireEx(ip, "Tcl", version, exact, null);
 }
@@ -1836,7 +796,7 @@ test "Tcl_GetIndexFromObjStruct accepts a unique prefix and caches it" {
     defer decr(o);
     try testing.expectEqual(OK, Tcl_GetIndexFromObjStruct(&ip, o, &names, @sizeOf(?[*:0]const u8), "option", 0, &idx));
     try testing.expectEqual(2, idx);
-    try testing.expect(o.typePtr == &index_type);
+    try testing.expect(o.typePtr == &obj.index_type);
     try testing.expectEqual(OK, Tcl_GetIndexFromObjStruct(&ip, o, &names, @sizeOf(?[*:0]const u8), "option", 0, &idx));
     try testing.expectEqual(2, idx);
     try testing.expectEqualStrings("ev", std.mem.span(Tcl_GetString(o)));

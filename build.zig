@@ -77,9 +77,14 @@ pub fn build(b: *std.Build) void {
 
     // The stubs table of a C package in WebAssembly (docs/dev/cext-tasks/04w-wasm-bridge.md).
     // It links into the package and is never part of ztcl.
-    const stubs_tests = b.addTest(.{ .root_module = addCextStubs(b, target, optimize) });
-    test_step.dependOn(&b.addRunArtifact(stubs_tests).step);
-    b.step("test-cext", "Run the tests of the stubs table of C packages").dependOn(&b.addRunArtifact(stubs_tests).step);
+    // Zig 0.17 has no std.builtin.VaList on x86-64 Windows with LLVM, and
+    // the variadic slots use it, so these tests skip that target.
+    const stubs_step = b.step("test-cext", "Run the tests of the stubs table of C packages");
+    if (!(target.result.os.tag == .windows and target.result.cpu.arch == .x86_64)) {
+        const stubs_tests = b.addTest(.{ .root_module = addCextStubs(b, target, optimize) });
+        test_step.dependOn(&b.addRunArtifact(stubs_tests).step);
+        stubs_step.dependOn(&b.addRunArtifact(stubs_tests).step);
+    }
     const stubs_lib = b.addLibrary(.{ .name = "ztclstubs", .linkage = .static, .root_module = addCextStubs(
         b,
         b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi }),
@@ -407,16 +412,16 @@ const all_modules = [_]Mod{
 /// built from source with `-Dsimd=false`, so it needs no libc and no
 /// C++ code. The module is Zig code in the program, so each target
 /// links it statically. `src/vt.zig` is the only user.
-/// The module of `src/cext/wasm_stubs.zig`. It uses only the value
-/// helpers of `src/value.zig` and the C library of the target.
+/// The module of `src/cext/wasm_stubs.zig`, with its root in
+/// `src/cext_stubs.zig`. It uses only the value helpers of
+/// `src/value.zig` and the C library of the target.
 fn addCextStubs(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
     const m = b.createModule(.{
-        .root_source_file = b.path("src/cext/wasm_stubs.zig"),
+        .root_source_file = b.path("src/cext_stubs.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    m.addImport("value", b.createModule(.{ .root_source_file = b.path("src/value.zig"), .target = target, .optimize = optimize }));
     return m;
 }
 
