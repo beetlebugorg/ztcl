@@ -1,0 +1,66 @@
+# The command reference: the system. The format is in
+# docs/reference/README.md.
+
+== info
+syn: info subcommand ?arg ...?
+does: Facts about the interpreter: its commands, procs, variables, and the call stack.
+sub: info commands ?PATTERN? | The names of the commands.
+sub: info procs ?PATTERN? | The names of the procs.
+sub: info exists VAR | 1 when the variable has a value.
+sub: info vars ?PATTERN? | The visible variables.
+sub: info globals ?PATTERN? | The variables of the top level.
+sub: info locals ?PATTERN? | The local variables of the proc.
+sub: info args PROC | The argument names of a proc.
+sub: info body PROC | The body of a proc.
+sub: info default PROC ARG VAR | 1 when the argument has a default, which goes in VAR.
+sub: info level ?N? | The depth of the call stack, or the command at level N.
+sub: info complete SCRIPT | 1 when the script has no open brace, bracket, or quote.
+sub: info script ?NAME? | The file of the script that `source` runs.
+sub: info functions ?PATTERN? | The names of the math functions.
+sub: info cmdcount | The count of commands that ran.
+sub: info patchlevel | The version of Tcl that ztcl follows: 8.6.16.
+sub: info tclversion | 8.6.
+sub: info library | The folder of the Tcl library: empty in ztcl.
+sub: info loaded | The loaded binary packages.
+sub: info nameofexecutable | The path of the program.
+sub: info sharedlibextension | The extension of a shared library.
+ex: proc f {a {b 2}} {}; info args f => a b
+ex: info complete "set x \{" => 0
+ex: info patchlevel => 8.6.16
+
+== clock
+syn: clock subcommand ?arg ...?
+does: The time. `clock seconds` gives the seconds since 1970-01-01 UTC. The time and the zone data come from the host.
+cap: clock
+flags: --allow clock
+sub: clock seconds | The seconds since the epoch.
+sub: clock milliseconds | The milliseconds since the epoch.
+sub: clock microseconds | The microseconds since the epoch.
+sub: clock clicks ?-milliseconds|-microseconds? | A counter for time spans.
+sub: clock format SECONDS ?-format FMT? ?-gmt BOOL? ?-timezone ZONE? ?-locale L? | The time as text. `%Y-%m-%d %H:%M:%S` and the other fields of `strftime`.
+sub: clock scan TEXT ?-format FMT? ?-gmt BOOL? ?-timezone ZONE? ?-base SECONDS? | The seconds of a time in text.
+sub: clock add SECONDS ?COUNT UNIT ...? ?-gmt BOOL? ?-timezone ZONE? | The seconds after adding days, months, and other units.
+ex: clock format 0 -format %Y-%m-%d -gmt 1 => 1970-01-01
+ex: clock scan 1970-01-02 -format %Y-%m-%d -gmt 1 => 86400
+
+== msgcat
+syn: msgcat::mc src ?arg ...?
+does: Message catalogs for text in more than one language. `mcset` adds a translation for a locale, `mclocale` sets the locale, and `mc` gives the text for the current locale, with `format` on the arguments.
+cap: clock
+flags: --allow clock
+names: msgcat::mc msgcat::mclocale msgcat::mcmset msgcat::mcset
+ex: msgcat::mclocale fr; msgcat::mcset fr Hello Bonjour; msgcat::mc Hello => Bonjour
+
+== exec
+syn: exec ?-option ...? arg ?arg ...?
+does: Runs a program and gives its output. `|` makes a pipeline, `<` and `>` redirect, and `&` runs it in the background. A process of `exec` is outside the root folder and each limit, with the full power of the user. Turn it on only for scripts that you trust.
+cap: exec
+
+== pid
+syn: pid ?fileId?
+does: The process id of the program, or of the processes of a pipeline.
+cap: exec
+
+== exit
+syn: exit ?returnCode?
+does: Ends the program with the code (0 by default). In an embedded interpreter, the host gets the code.

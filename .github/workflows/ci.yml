@@ -94,7 +94,8 @@ jobs:
       - name: Run the examples of the module pages
         if: runner.os == 'Linux'
         run: |
-          python3 -I tools/doc-examples.py zig-out/bin/ztcl docs/modules/vt.md docs/modules/watch.md docs/learn/*.md
+          python3 -I tools/doc-examples.py zig-out/bin/ztcl --reference docs/modules/vt.md docs/modules/watch.md docs/learn/*.md
+          python3 -I tools/ref-coverage.py zig-out/bin/ztcl
           python3 -I tools/doc-coverage.py
       - name: Check the format
         if: runner.os == 'Linux'

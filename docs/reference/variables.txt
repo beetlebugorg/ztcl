@@ -1,0 +1,43 @@
+# The command reference: variables. The format is in
+# docs/reference/README.md.
+
+== set
+syn: set varName ?newValue?
+does: With a value, sets the variable and gives the value. Without one, gives the value of the variable. `name(el)` is an element of an array.
+ex: set note "buy milk" => buy milk
+ex: set note => buy milk
+err: set nope | can't read "nope": no such variable
+
+== unset
+syn: unset ?-nocomplain? ?--? ?name ...?
+does: Removes variables. A missing variable is an error, unless `-nocomplain`.
+ex: set x 1; unset x; info exists x => 0
+err: unset nope | can't unset "nope": no such variable
+
+== global
+syn: global ?varName ...?
+does: In a proc, links each name to the variable of the same name at the top level. Outside a proc it has no effect.
+ex: set total 5; proc show {} {global total; return $total}; show => 5
+
+== variable
+syn: variable ?name value ...? name ?value?
+does: In a namespace, makes namespace variables and gives them values. In a proc, links each name to the variable of the namespace of the proc.
+ex: namespace eval cfg {variable size 10}; set cfg::size => 10
+
+== upvar
+syn: upvar ?level? otherVar localVar ?otherVar localVar ...?
+does: Links a local name to a variable of a caller. The level is `1` for the caller (the default), `2` for its caller, or `#0` for the top level. This is the way to pass a variable by name.
+ex: proc bump {name} {upvar 1 $name v; incr v}; set c 1; bump c => 2
+
+== trace
+syn: trace option ?arg ...?
+does: Runs a command when a variable is read, written, or unset, or when a command is renamed, deleted, or run.
+sub: trace add variable NAME OPS CMD | OPS is a list of `read`, `write`, `unset`, and `array`. CMD gets the name, the element, and the op.
+sub: trace add command NAME OPS CMD | OPS is a list of `rename` and `delete`.
+sub: trace add execution NAME OPS CMD | OPS is a list of `enter`, `leave`, `enterstep`, and `leavestep`.
+sub: trace remove TYPE NAME OPS CMD | Removes a trace.
+sub: trace info TYPE NAME | The traces of a name.
+sub: trace variable NAME OPS CMD | The old form of `trace add variable`.
+sub: trace vdelete NAME OPS CMD | The old form of `trace remove variable`.
+sub: trace vinfo NAME | The old form of `trace info variable`.
+ex: set log {}; set v 0; trace add variable v write {apply {{n e op} {lappend ::log $op}}}; set v 1; set log => write

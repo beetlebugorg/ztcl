@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 """Runs the examples of the reference pages of the modules.
 
-Use: python3 -I tools/doc-examples.py RUNNER docs/modules/NAME.md ...
+Use: python3 -I tools/doc-examples.py RUNNER [--reference] docs/modules/NAME.md ...
 
 An example is a ```tcl block that follows a line `<!-- run -->` or
 `<!-- run: FLAGS -->`. The script runs each example in its own runner
@@ -20,7 +20,8 @@ result of the command must equal the title of the link, or the message
 of its error when the title starts with "error: ". A step that expects
 "error: compute limit reached" runs alone after the checkpoint, with the
 compute limit of the shell of the site. A Run link with no
-title must not fail. The files of the page (`<!-- file: NAME -->`) are
+title must not fail. `--reference` also runs the examples of each entry
+of the command reference (tools/reference.py). The files of the page (`<!-- file: NAME -->`) are
 in the folder of the run. `<!-- checkpoint: FLAGS -->` gives FLAGS to the
 runner, for a lesson that needs a capability.
 """
@@ -100,10 +101,33 @@ def lesson(runner, page, text):
     return len(steps) + len(limited), fail
 
 
+def reference(runner):
+    """Runs the examples of each entry of the command reference, one
+    script for each entry, with the flags of the entry."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("reference", pathlib.Path(__file__).with_name("reference.py"))
+    ref = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ref)
+    count = fail = 0
+    for e in ref.parse():
+        if "cap" in e and "flags" not in e:
+            continue
+        text = ref.markdown(e, lambda n: n, check=True)
+        if "flags" in e:
+            text = f"<!-- checkpoint: {e['flags']} -->\n```tcl\n```\n" + text
+        n, bad = lesson(runner, f"{e['file']}:{e['line']} {e['name']}", text)
+        count += n
+        fail |= bad
+    return count, fail
+
+
 def main():
     runner, pages = str(pathlib.Path(sys.argv[1]).resolve()), sys.argv[2:]
     fail = 0
     count = 0
+    if "--reference" in pages:
+        pages.remove("--reference")
+        count, fail = reference(runner)
     for page in pages:
         text = pathlib.Path(page).read_text(encoding="utf-8")
         if "<!-- checkpoint" in text or "/learn/" in page:

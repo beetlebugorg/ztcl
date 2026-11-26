@@ -1,0 +1,25 @@
+# The command reference: errors. The format is in
+# docs/reference/README.md.
+
+== error
+syn: error message ?errorInfo? ?errorCode?
+does: Gives an error with the message. The error goes up through each caller until a `catch` or a `try` stops it. errorCode is a list that code can match, such as `{JOT EMPTY}`. With no errorCode it is `NONE`.
+err: error "a note needs text" | a note needs text
+
+== throw
+syn: throw type message
+does: Gives an error with the error code type and the message. `try` with `trap` matches the start of type.
+ex: try {throw {JOT EMPTY} "no text"} trap {JOT} {msg} {set msg} => no text
+
+== catch
+syn: catch script ?resultVarName? ?optionVarName?
+does: Runs the script and gives its return code: 0 for a result, 1 for an error, 2 for `return`, 3 for `break`, and 4 for `continue`. resultVarName gets the result or the message, and optionVarName gets the options dict with `-errorcode` and `-errorinfo`. The error of the compute limit goes through `catch`.
+ex: catch {expr {1 / 0}} msg => 1
+ex: catch {expr {1 / 0}} msg opts; dict get $opts -errorcode => ARITH DIVZERO {divide by zero}
+
+== try
+syn: try body ?handler ...? ?finally script?
+does: Runs the body and then the first handler that matches its result. `on CODE VARS SCRIPT` matches a return code: `ok`, `error`, `return`, `break`, `continue`, or a number. `trap PATTERN VARS SCRIPT` matches an error whose error code starts with the list PATTERN. VARS names the variables for the result and the options. `finally` runs at the end in each case.
+ex: try {expr {1 / 0}} trap {ARITH DIVZERO} {} {set r "no zero"} => no zero
+ex: try {set x 1} on ok {v} {set r "got $v"} finally {set f done} => got 1
+diff: The error of the compute limit goes through each handler and through `finally`.

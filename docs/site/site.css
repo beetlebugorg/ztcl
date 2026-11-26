@@ -432,3 +432,9 @@ body.course { --panel: min(42vw, 600px); --sheet: 42vh; }
 }
 @media (max-width: 640px) { .zcourse .zshell-hint { display: none; } }
 .course .prose code { font-variant-ligatures: none; }
+/* The index of the command reference. */
+.ref-search input { font: 16px var(--mono); width: min(100%, 420px); padding: 8px 12px; margin-left: 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--text); }
+.ref-list { list-style: none; padding: 0; margin: 0 0 16px; }
+.ref-list li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.ref-list li a { margin-right: 8px; }
+.ref-cap { font: 600 11px var(--sans); letter-spacing: .05em; text-transform: uppercase; color: var(--warn); border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; margin-right: 6px; }

@@ -1,0 +1,44 @@
+# The command reference: math. The format is in docs/reference/README.md.
+
+== expr
+syn: expr arg ?arg ...?
+does: Computes an expression with the operators of C and the math functions. Put the expression in braces: then `expr` does its own substitution, a value from a variable stays a value, and the expression is compiled once. Integers have no fixed size. An integer divided by an integer is an integer, rounded down.
+ex: expr {2 ** 100} => 1267650600228229401496703205376
+ex: expr {7 / 2} => 3
+ex: expr {-7 / 2} => -4
+ex: expr {7 / 2.0} => 3.5
+ex: expr {"a" eq "a" ? "same" : "other"} => same
+ex: expr {5 in {1 5 9}} => 1
+err: expr {1 / 0} | divide by zero
+err: expr {"ten" + 1} | can't use non-numeric string as operand of "+"
+diff: The operators `eq`, `ne`, `in`, and `ni` compare strings and lists, as in Tcl 8.6.
+
+== incr
+syn: incr varName ?increment?
+does: Adds increment (1 by default) to the integer in a variable, and gives the new value. It makes the variable with 0 first when it has no value.
+ex: set n 5; incr n -2 => 3
+err: set s abc; incr s | expected integer but got "abc"
+
+== tcl::mathfunc
+syn: tcl::mathfunc::NAME ?arg ...?
+does: The functions of `expr`, each one also a command in this namespace. `abs`, `ceil`, `floor`, `round`, `int`, `wide`, `entier`, `double`, `bool`, `sqrt`, `isqrt`, `exp`, `log`, `log10`, `pow`, `fmod`, `hypot`, `max`, `min`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `rand`, and `srand`. A proc in this namespace adds a function to `expr`.
+names: tcl::mathfunc::abs tcl::mathfunc::acos tcl::mathfunc::asin tcl::mathfunc::atan tcl::mathfunc::atan2 tcl::mathfunc::bool tcl::mathfunc::ceil tcl::mathfunc::cos tcl::mathfunc::cosh tcl::mathfunc::double tcl::mathfunc::entier tcl::mathfunc::exp tcl::mathfunc::floor tcl::mathfunc::fmod tcl::mathfunc::hypot tcl::mathfunc::int tcl::mathfunc::isqrt tcl::mathfunc::log tcl::mathfunc::log10 tcl::mathfunc::max tcl::mathfunc::min tcl::mathfunc::pow tcl::mathfunc::rand tcl::mathfunc::round tcl::mathfunc::sin tcl::mathfunc::sinh tcl::mathfunc::sqrt tcl::mathfunc::srand tcl::mathfunc::tan tcl::mathfunc::tanh tcl::mathfunc::wide
+ex: expr {max(3, 9, 4)} => 9
+ex: expr {round(2.5)} => 3
+ex: expr {isqrt(17)} => 4
+ex: proc tcl::mathfunc::twice {x} {expr {$x * 2}}; expr {twice(21)} => 42
+diff: `rand()` has a fixed seed in a new interpreter, so that a script with no capability gives the same output each run.
+
+== tcl::mathop
+syn: tcl::mathop::OP ?arg ...?
+does: Each operator of `expr` as a command: `+`, `-`, `*`, `/`, `%`, `**`, `<<`, `>>`, `&`, `|`, `^`, `~`, `!`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `eq`, `ne`, `in`, and `ni`. `+` and `*` take any count of arguments. Import them with `namespace path tcl::mathop` to write `+ 1 2`.
+names: tcl::mathop::! tcl::mathop::!= tcl::mathop::% tcl::mathop::& tcl::mathop::* tcl::mathop::** tcl::mathop::+ tcl::mathop::- tcl::mathop::/ tcl::mathop::< tcl::mathop::<< tcl::mathop::<= tcl::mathop::== tcl::mathop::> tcl::mathop::>= tcl::mathop::>> tcl::mathop::^ tcl::mathop::eq tcl::mathop::in tcl::mathop::ne tcl::mathop::ni tcl::mathop::| tcl::mathop::~
+ex: tcl::mathop::+ 1 2 3 => 6
+ex: tcl::mathop::< 1 2 3 => 1
+
+== noise3
+syn: noise3 x y z
+does: Smooth noise of three coordinates, a float from -1 to 1, for shapes and textures. The same coordinates give the same value. The noise seed of the interpreter sets the pattern.
+cost: a few compute units.
+ex: expr {[noise3 0 0 0] == [noise3 0 0 0]} => 1
+diff: Tcl has no `noise3`.

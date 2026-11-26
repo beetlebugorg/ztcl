@@ -1,0 +1,67 @@
+# The command reference: control flow. The format is in
+# docs/reference/README.md.
+
+== if
+syn: if expr1 ?then? body1 elseif expr2 ?then? body2 ... ?else? ?bodyN?
+does: Runs the body of the first condition that is true. Each condition is an `expr` expression in braces. The result is the result of the body that ran, or an empty string.
+ex: set n 7; if {$n > 5} {set r big} else {set r small} => big
+
+== while
+syn: while test command
+does: Runs the command while the test, an `expr` expression, is true. Put the test in braces, so that it is read again on each pass. The result is an empty string.
+ex: set i 0; while {$i < 3} {incr i}; set i => 3
+
+== for
+syn: for start test next command
+does: Runs start once, then the command and next while the test is true, as the `for` of C.
+ex: set s 0; for {set i 1} {$i <= 4} {incr i} {incr s $i}; set s => 10
+
+== break
+syn: break
+does: Stops the loop that runs it: `while`, `for`, `foreach`, `lmap`, or `dict for`.
+ex: foreach x {1 2 3} {if {$x == 2} break; set last $x}; set last => 1
+
+== continue
+syn: continue
+does: Goes on with the next pass of the loop that runs it.
+ex: set s {}; foreach x {1 2 3} {if {$x == 2} continue; append s $x}; set s => 13
+
+== switch
+syn: switch ?-option ...? string ?pattern body ...? ?default body?
+does: Runs the body of the first pattern that matches the string. A body of `-` uses the body of the next pattern. The patterns and bodies can be one list in braces.
+opt: -exact | The pattern equals the string (the default).
+opt: -glob | A glob pattern.
+opt: -regexp | A regular expression.
+opt: -nocase | Matches letters with no case.
+opt: -- | The end of the options, for a string that starts with `-`.
+ex: switch -glob -- milk {m* {set r m} default {set r other}} => m
+
+== case
+syn: case string ?in? ?pattern body ...? ?default body?
+does: The old form of `switch -glob`. Use `switch` in new code.
+ex: case abc in {a* {set r yes}} => yes
+
+== eval
+syn: eval arg ?arg ...?
+does: Joins its arguments as `concat` does and runs the result as a script. The text of each value runs as code: use it only on scripts that you built with `list`.
+ex: eval [list set x "a b"] => a b
+
+== uplevel
+syn: uplevel ?level? command ?arg ...?
+does: Runs a script in the scope of a caller: `1` (the default) is the caller, and `#0` is the top level. Code that makes control commands uses it.
+ex: proc setInCaller {} {uplevel 1 {set made yes}}; setInCaller; set made => yes
+
+== apply
+syn: apply lambdaExpr ?arg ...?
+does: Runs a lambda: a list of the arguments and a body, with an optional namespace. It works as a proc with no name.
+ex: apply {{x y} {expr {$x + $y}}} 2 3 => 5
+
+== time
+syn: time command ?count?
+does: Runs the command count times (1 by default) and gives the mean time of one run in microseconds.
+cap: clock
+
+== timerate
+syn: timerate ?-direct? ?-calibrate? ?-overhead double? command ?time ?max-count??
+does: Runs the command for a time (1,000 ms by default) and gives the time of one run, the count of runs, and the rate.
+cap: clock

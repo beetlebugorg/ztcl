@@ -1,0 +1,34 @@
+# The command reference: events. The format is in
+# docs/reference/README.md.
+
+== after
+syn: after ms ?script ...?
+syn: after cancel id|script
+syn: after idle script ?script ...?
+syn: after info ?id?
+does: With a script, runs it from the event loop after ms milliseconds and gives an id. With no script, waits ms milliseconds. `after idle` runs the script when the loop has no other work. The script runs at the top level: build it with `list`.
+cap: event
+flags: --allow event
+ex: after 10 {set ::done 1}; vwait done; set done => 1
+err: after nope | bad argument "nope": must be cancel, idle, info, or an integer
+
+== vwait
+syn: vwait varName
+does: Runs the event loop until the variable is set.
+cap: event
+
+== update
+syn: update ?idletasks?
+does: Runs each event that is ready, and returns. `idletasks` runs only the scripts of `after idle`.
+cap: event
+
+== fileevent
+syn: fileevent channelId event ?script?
+does: Runs the script from the event loop when the channel is `readable` or `writable`. An empty script removes the handler. `chan event` is the same command in Tcl.
+cap: event
+
+== tcl::Bgerror
+syn: tcl::Bgerror message options
+does: The default handler of an error in a script that the event loop runs. It calls `bgerror` with the message when a proc of that name exists.
+cap: event
+names: bgerror

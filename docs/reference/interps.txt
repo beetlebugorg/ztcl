@@ -1,0 +1,44 @@
+# The command reference: interpreters and packages. The format is in
+# docs/reference/README.md.
+
+== interp
+syn: interp cmd ?arg ...?
+does: Makes and runs child interpreters. A child has its own commands and variables, and never more capabilities than its parent. An alias is a command of a child that runs a command of the parent, and is the way to give a child one exact power.
+cap: interp
+flags: --allow interp
+sub: interp create ?-safe? ?--? ?PATH? | A new child, and its path.
+sub: interp eval PATH ARG ?ARG ...? | Runs a script in the child.
+sub: interp alias SRCPATH SRCCMD TARGETPATH TARGETCMD ?ARG ...? | Makes SRCCMD of the child run TARGETCMD of the parent.
+sub: interp aliases ?PATH? | The aliases of a child.
+sub: interp delete ?PATH ...? | Removes children.
+sub: interp exists PATH | 1 when the child exists.
+sub: interp children ?PATH? | The children.
+sub: interp slaves ?PATH? | The old name of `children`.
+sub: interp issafe ?PATH? | 1 for a safe interpreter.
+sub: interp hide PATH CMD ?NAME? | Hides a command from the scripts of the child.
+sub: interp expose PATH NAME ?CMD? | Makes a hidden command visible again.
+sub: interp hidden ?PATH? | The hidden commands.
+sub: interp invokehidden PATH ?-global? NAME ?ARG ...? | Runs a hidden command.
+sub: interp marktrusted PATH | Makes a safe child trusted.
+sub: interp recursionlimit PATH ?N? | The nesting limit of the child.
+sub: interp target PATH ALIAS | The target of an alias.
+ex: set c [interp create]; interp eval $c {expr {6 * 7}} => 42
+ex: interp alias $c double {} apply {{x} {expr {$x * 2}}}; interp eval $c {double 4} => 8
+diff: `interp limit` is not in ztcl. Each interpreter has the compute limit and the memory limit of the host instead.
+
+== package
+syn: package option ?arg ...?
+does: Loads packages by name and version. ztcl reads no folder by itself: a script or the host runs `package ifneeded`, or sources a `pkgIndex.tcl`. A build with modules loads the built-in `ztcl::` modules by name. With no capability, only `names`, `present`, `provide`, `require`, and `versions` exist.
+sub: package require ?-exact? NAME ?VERSION ...? | Loads a package and gives its version.
+sub: package provide NAME ?VERSION? | Says that the package is loaded, or gives its version.
+sub: package ifneeded NAME VERSION ?SCRIPT? | The script that loads a version.
+sub: package present ?-exact? NAME ?VERSION? | The version of a loaded package, or an error.
+sub: package names | The names of the known packages.
+sub: package versions NAME | The versions of a package that `ifneeded` knows.
+sub: package forget ?NAME ...? | Forgets packages.
+sub: package vcompare V1 V2 | -1, 0, or 1.
+sub: package vsatisfies VERSION REQ ?REQ ...? | 1 when VERSION fits a requirement such as `1.2`, `1.2-`, or `1.2-2.0`.
+sub: package prefer ?latest|stable? | Which versions `require` picks.
+sub: package unknown ?CMD? | The command that runs for a missing package.
+ex: package require ztcl::json => 1.0
+ex: package provide jot 0.1.0; package present jot => 0.1.0

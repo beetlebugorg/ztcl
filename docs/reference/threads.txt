@@ -1,0 +1,62 @@
+# The command reference: threads. The format is in
+# docs/reference/README.md and the guide is docs/threads.md.
+
+== thread
+syn: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?script?
+does: The `thread` package: a thread is one interpreter that runs a script, with its own limits. Threads talk with messages: `thread::send` runs a script in another thread. Each thread of a group gets the limits of the host, and the group has totals.
+cap: thread
+names: thread::attach thread::broadcast thread::cancel thread::cond thread::configure thread::create thread::detach thread::errorproc thread::eval thread::exists thread::exit thread::id thread::join thread::mutex thread::names thread::preserve thread::release thread::rwmutex thread::send thread::transfer thread::unwind thread::wait
+sub: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?SCRIPT? | A new thread that runs SCRIPT, and its id. With no SCRIPT, it waits for messages. `-isolation process` runs it in a child process.
+sub: thread::send ?-async? ?-head? ID SCRIPT ?VAR? | Runs SCRIPT in the thread and gives its result. With `-async`, it does not wait.
+sub: thread::broadcast SCRIPT | Sends SCRIPT to each other thread.
+sub: thread::wait | Runs the event loop of the thread until `thread::release`.
+sub: thread::id | The id of this thread.
+sub: thread::names | The ids of the threads.
+sub: thread::exists ID | 1 when the thread exists.
+sub: thread::join ID | Waits for a joinable thread to end.
+sub: thread::preserve ?ID? | Adds a reference. `thread::release` removes one, and the thread ends at zero.
+sub: thread::release ?-wait? ?ID? | Takes a reference away.
+sub: thread::cancel ?-unwind? ID ?RESULT? | Stops the script that runs in a thread.
+sub: thread::unwind | Ends `thread::wait` of this thread.
+sub: thread::exit ?STATUS? | Ends this thread.
+sub: thread::configure ID ?OPTION? ?VALUE? | The options of a thread, such as `-eventmark`.
+sub: thread::errorproc ?PROC? | The proc for errors of scripts of `-async` sends.
+sub: thread::transfer ID CHANNEL | Moves a channel to a thread. `thread::detach` and `thread::attach` do it in two steps.
+sub: thread::mutex create|destroy|lock|unlock ?ID? | Mutexes. `thread::rwmutex` has read and write locks, and `thread::cond` condition variables.
+sub: thread::eval ?-lock MUTEX? SCRIPT | Runs SCRIPT with a mutex locked.
+diff: The isolation levels of `-isolation` are from ztcl. See [Threads](../../threads.md).
+
+== tsv
+syn: tsv::set array element ?value?
+does: Shared variables for threads: arrays that each thread of the process can read and change, with a lock for each command. The list commands change a list in place.
+cap: thread
+names: tsv::append tsv::array tsv::exists tsv::get tsv::handlers tsv::incr tsv::keyldel tsv::keylget tsv::keylkeys tsv::keylset tsv::lappend tsv::lindex tsv::linsert tsv::llength tsv::lock tsv::lpop tsv::lpush tsv::lrange tsv::lreplace tsv::lsearch tsv::lset tsv::move tsv::names tsv::object tsv::pop tsv::set tsv::unset
+sub: tsv::set ARRAY ELEMENT ?VALUE? | Sets or gives a value.
+sub: tsv::get ARRAY ELEMENT ?VAR? | The value. With VAR, 1 when it exists and the value in VAR.
+sub: tsv::exists ARRAY ?ELEMENT? | 1 when it exists.
+sub: tsv::unset ARRAY ?ELEMENT ...? | Removes elements or the array.
+sub: tsv::incr ARRAY ELEMENT ?N? | Adds to an integer.
+sub: tsv::append ARRAY ELEMENT VALUE ... | Adds text.
+sub: tsv::lappend ARRAY ELEMENT VALUE ... | Adds list elements. `lindex`, `llength`, `lrange`, `linsert`, `lreplace`, `lsearch`, `lset`, `lpush`, and `lpop` work as the list commands.
+sub: tsv::pop ARRAY ELEMENT | The value, and removes it.
+sub: tsv::move ARRAY OLD NEW | Gives an element a new name.
+sub: tsv::names ?PATTERN? | The names of the arrays.
+sub: tsv::array set|get|names|size|reset ARRAY ... | Commands on a whole array.
+sub: tsv::lock ARRAY ARG ?ARG ...? | Runs a script with the lock of the array.
+sub: tsv::keylset ARRAY ELEMENT KEY VALUE | Keyed lists: `keylget`, `keylkeys`, and `keyldel` go with it.
+sub: tsv::object ARRAY ELEMENT | A command for one element.
+sub: tsv::handlers | The names of the storage handlers.
+
+== tpool
+syn: tpool::create ?-minworkers N? ?-maxworkers N? ?-idletime S? ?-initcmd SCRIPT? ?-exitcmd SCRIPT?
+does: Thread pools: a group of worker threads that run jobs. `tpool::post` gives a job and gets a job id, and `tpool::wait` and `tpool::get` give the results.
+cap: thread
+names: tpool::cancel tpool::create tpool::get tpool::names tpool::post tpool::preserve tpool::release tpool::resume tpool::suspend tpool::wait
+sub: tpool::create ?OPTIONS? | A new pool, and its id.
+sub: tpool::post ?-detached? ?-nowait? POOL SCRIPT | Gives a job to the pool, and its job id.
+sub: tpool::wait POOL JOBLIST ?VAR? | Waits for one job of the list to end, and gives the ids of the jobs that ended.
+sub: tpool::get POOL JOB | The result of a job that ended.
+sub: tpool::cancel POOL JOBLIST ?VAR? | Removes jobs that have not started.
+sub: tpool::suspend POOL | Stops the start of new jobs. `tpool::resume` starts them again.
+sub: tpool::preserve POOL | Adds a reference. `tpool::release` removes one.
+sub: tpool::names | The ids of the pools.

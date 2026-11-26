@@ -1,0 +1,54 @@
+# The command reference: objects. The format is in
+# docs/reference/README.md.
+
+== oo::class
+syn: oo::class create name ?definition?
+syn: oo::class new ?definition?
+does: Makes a class. The definition is a script of `oo::define` commands: `constructor`, `destructor`, `method`, `variable`, `superclass`, `mixin`, `filter`, `export`, and `unexport`. A class is an object with the methods `create`, `new`, and `destroy`. `cls create NAME ARGS` makes an object with a name, and `cls new ARGS` makes one with a name that ztcl picks.
+names: oo::object
+ex: oo::class create Note {variable text; constructor {t} {set text $t}; method show {} {return "note: $text"}} => ::Note
+ex: Note create milk "buy milk"; milk show => note: buy milk
+err: milk nope | unknown method "nope": must be destroy or show
+
+== oo::define
+syn: oo::define className arg ?arg ...?
+does: Changes the definition of a class. A change goes to each object of the class at once.
+names: oo::define::constructor oo::define::deletemethod oo::define::destructor oo::define::export oo::define::filter oo::define::forward oo::define::method oo::define::mixin oo::define::renamemethod oo::define::self oo::define::superclass oo::define::unexport oo::define::variable
+sub: constructor ARGS BODY | The code that runs when an object is made.
+sub: destructor BODY | The code that runs when an object is removed.
+sub: method NAME ARGS BODY | A method. A name that starts with a lowercase letter is exported.
+sub: variable ?NAME ...? | Variables that each method sees with no `my variable`.
+sub: superclass ?CLASS ...? | The parent classes.
+sub: mixin ?CLASS ...? | Classes whose methods come before the methods of the class.
+sub: filter ?METHOD ...? | Methods that run around each call.
+sub: forward NAME CMD ?ARG ...? | A method that runs a command.
+sub: export NAME ?NAME ...? | Makes methods callable from outside.
+sub: unexport NAME ?NAME ...? | Makes methods callable only with `my`.
+sub: deletemethod NAME ?NAME ...? | Removes methods.
+sub: renamemethod OLD NEW | Gives a method a new name.
+sub: self SCRIPT | Changes the definition of the class object itself.
+ex: oo::class create A; oo::define A method hi {} {return hi}; [A new] hi => hi
+
+== oo::objdefine
+syn: oo::objdefine object arg ?arg ...?
+does: Changes the definition of one object, with the words of `oo::define` and `class` to change its class.
+names: oo::objdefine::class oo::objdefine::deletemethod oo::objdefine::export oo::objdefine::filter oo::objdefine::forward oo::objdefine::method oo::objdefine::mixin oo::objdefine::renamemethod oo::objdefine::unexport oo::objdefine::variable
+
+== oo::copy
+syn: oo::copy sourceObject ?targetObject?
+does: Makes a new object with the class, the methods, and the variables of an object.
+
+== my
+syn: my methodName ?arg ...?
+does: In a method, calls a method of the same object, also one that is not exported.
+
+== self
+syn: self ?subcommand?
+names: oo::Helpers::self
+does: In a method, gives facts about the call: `self` or `self object` is the name of the object, `self class` the class of the method, `self method` the name of the method, and `self next` the next method of the chain.
+err: oo::class create T; self | self may only be called from inside a method
+
+== next
+syn: next ?arg ...?
+does: In a method, calls the method of the same name of the next class of the chain, such as the parent class, and gives its result. `nextto CLASS` calls the method of one class of the chain.
+names: nextto oo::Helpers::next oo::Helpers::nextto
