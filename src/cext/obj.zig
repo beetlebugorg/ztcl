@@ -743,6 +743,57 @@ pub fn Tcl_AppendResult(ip: *Interp, ...) callconv(.c) void {
     }
 }
 
+pub fn Tcl_AppendResultVA(ip: *Interp, ap: *std.builtin.VaList) callconv(.c) void {
+    const r = ownResult(ip);
+    while (true) {
+        const p = @cVaArg(ap, ?[*:0]const u8) orelse break;
+        appendText(r, std.mem.span(p));
+    }
+}
+
+/// The text of `Tcl_SetResult` is in the result object, so there is no
+/// separate text to free, and the result stays.
+pub fn Tcl_FreeResult(_: *Interp) callconv(.c) void {}
+
+/// `Tcl_SavedResult` of `tcl.h`. Only `objResultPtr` holds a value here:
+/// the result object of the interp.
+pub const SavedResult = extern struct {
+    result: ?[*:0]u8,
+    free_proc: ?*anyopaque,
+    obj: ?*Obj,
+    append_result: ?[*]u8,
+    append_avl: c_int,
+    append_used: c_int,
+    space: [201]u8,
+};
+
+/// Moves the result to `state` and leaves the interp with the empty
+/// result.
+pub fn Tcl_SaveResult(ip: *Interp, state: *SavedResult) callconv(.c) void {
+    state.obj = result(ip);
+    ip.result = null;
+}
+
+pub fn Tcl_RestoreResult(ip: *Interp, state: *SavedResult) callconv(.c) void {
+    Tcl_ResetResult(ip);
+    if (ip.result) |old| decr(old);
+    ip.result = state.obj;
+    state.obj = null;
+}
+
+pub fn Tcl_DiscardResult(state: *SavedResult) callconv(.c) void {
+    if (state.obj) |o| decr(o);
+    state.obj = null;
+}
+
+/// Moves the result of `src` to `dst`.
+pub fn Tcl_TransferResult(src: *Interp, _: c_int, dst: ?*Interp) callconv(.c) void {
+    const to = dst orelse return;
+    if (to == src) return;
+    Tcl_SetObjResult(to, result(src));
+    Tcl_ResetResult(src);
+}
+
 pub fn Tcl_AppendElement(ip: *Interp, s: [*:0]const u8) callconv(.c) void {
     const r = ownResult(ip);
     var out: std.ArrayList(u8) = .empty;

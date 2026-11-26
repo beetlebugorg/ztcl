@@ -139,7 +139,7 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | memory | 16 | 16 | 16 | none |
 | packages | 18 | 12 | 3 | `Tcl_RegisterConfig`, `Tcl_PkgRequireProc`, `Tcl_SetStartupScript`, `Tcl_GetStartupScript`, `Tcl_LoadFile`, `Tcl_FindSymbol` |
 | objects | 58 | 52 | 52 | `Tcl_NewBignumObj`, `Tcl_DbNewBignumObj`, `Tcl_SetBignumObj`, `Tcl_GetBignumFromObj`, `Tcl_TakeBignumFromObj`, `Tcl_InitBignumFromDouble` |
-| scripts and results | 58 | 16 | 16 | 42 slots |
+| scripts and results | 58 | 48 | 48 | 10 slots |
 | channels | 92 | 4 | 4 | 88 slots |
 | strings and encodings | 86 | 10 | 10 | 76 slots |
 | lists and dicts | 28 | 9 | 9 | 19 slots |
@@ -152,7 +152,7 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | threads | 15 | 0 | 0 | 15 slots |
 | filesystem | 63 | 1 | 1 | 62 slots |
 | zlib | 13 | 0 | 0 | 13 slots |
-| **public, all** | **630** | **136** (21%) | **127** (20%) | |
+| **public, all** | **630** | **168** (26%) | **159** (25%) | |
 | **internal** | **173** | **0** | **0** | |
 | **internal platform** | **23** | **0** | **0** | |
 | **platform** | **0** | **0** | **0** | |

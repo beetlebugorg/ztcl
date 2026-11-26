@@ -35,6 +35,11 @@ const Tcl_GetIndexFromObjStruct = obj.Tcl_GetIndexFromObjStruct;
 const Tcl_GetString = obj.Tcl_GetString;
 const Tcl_NewDoubleObj = obj.Tcl_NewDoubleObj;
 const Tcl_NewStringObj = obj.Tcl_NewStringObj;
+const Tcl_GetBooleanFromObj = obj.Tcl_GetBooleanFromObj;
+const Tcl_GetDoubleFromObj = obj.Tcl_GetDoubleFromObj;
+const Tcl_GetLongFromObj = obj.Tcl_GetLongFromObj;
+const setText = obj.setText;
+const freeIntRep = obj.freeIntRep;
 const Tcl_NewWideIntObj = obj.Tcl_NewWideIntObj;
 const Tcl_ResetResult = obj.Tcl_ResetResult;
 const Tcl_SetObjResult = obj.Tcl_SetObjResult;
@@ -538,4 +543,368 @@ pub fn Tcl_BackgroundError(ip: *Interp) callconv(.c) void {
     value.appendElement(gpa, &out, text(result(ip)), false) catch panicText("out of memory");
     _ = host.eval(ip.handle, out.items.ptr, out.items.len, TCL_EVAL_GLOBAL);
     Tcl_ResetResult(ip);
+}
+
+// ---- More scripts ----
+
+pub fn Tcl_EvalObj(ip: *Interp, o: *Obj) callconv(.c) c_int {
+    return Tcl_EvalObjEx(ip, o, 0);
+}
+
+pub fn Tcl_GlobalEvalObj(ip: *Interp, o: *Obj) callconv(.c) c_int {
+    return Tcl_EvalObjEx(ip, o, TCL_EVAL_GLOBAL);
+}
+
+/// The text of a command of the words `objv`, with the quoting of the
+/// `list` command, so each word is one word with no substitution.
+fn wordsText(out: *std.ArrayList(u8), objv: []const *Obj) void {
+    for (objv, 0..) |o, i| {
+        if (i > 0) out.append(gpa, ' ') catch panicText("out of memory");
+        value.appendElement(gpa, out, text(o), i == 0) catch panicText("out of memory");
+    }
+}
+
+pub fn Tcl_EvalObjv(ip: *Interp, objc: c_int, objv: [*]const *Obj, flags: c_int) callconv(.c) c_int {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(gpa);
+    wordsText(&out, objv[0..@intCast(objc)]);
+    return evalText(ip, out.items, flags);
+}
+
+pub fn Tcl_NREvalObjv(ip: *Interp, objc: c_int, objv: [*]const *Obj, flags: c_int) callconv(.c) c_int {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(gpa);
+    wordsText(&out, objv[0..@intCast(objc)]);
+    return Tcl_NREvalObj(ip, Tcl_NewStringObj(out.items.ptr, @intCast(out.items.len)), flags);
+}
+
+pub fn Tcl_VarEvalVA(ip: *Interp, ap: *std.builtin.VaList) callconv(.c) c_int {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(gpa);
+    while (true) {
+        const p = @cVaArg(ap, ?[*:0]const u8) orelse break;
+        out.appendSlice(gpa, std.mem.span(p)) catch panicText("out of memory");
+    }
+    return evalText(ip, out.items, 0);
+}
+
+/// Runs `cmd` and `word` as a command of two words.
+fn evalWith(ip: *Interp, cmd: []const u8, word: []const u8, flags: c_int) c_int {
+    var out: std.ArrayList(u8) = .empty;
+    defer out.deinit(gpa);
+    out.appendSlice(gpa, cmd) catch panicText("out of memory");
+    out.append(gpa, ' ') catch panicText("out of memory");
+    value.appendElement(gpa, &out, word, false) catch panicText("out of memory");
+    return evalText(ip, out.items, flags);
+}
+
+pub fn Tcl_EvalFile(ip: *Interp, name: [*:0]const u8) callconv(.c) c_int {
+    return evalWith(ip, "source", std.mem.span(name), 0);
+}
+
+/// `TCL_NO_EVAL` of `tcl.h`. ztcl keeps no history, so the record part
+/// of these two slots has no effect.
+const TCL_NO_EVAL: c_int = 0x10000;
+
+pub fn Tcl_RecordAndEval(ip: *Interp, cmd: [*:0]const u8, flags: c_int) callconv(.c) c_int {
+    if (flags & TCL_NO_EVAL != 0) return OK;
+    return evalText(ip, std.mem.span(cmd), TCL_EVAL_GLOBAL);
+}
+
+pub fn Tcl_RecordAndEvalObj(ip: *Interp, o: *Obj, flags: c_int) callconv(.c) c_int {
+    if (flags & TCL_NO_EVAL != 0) return OK;
+    return Tcl_EvalObjEx(ip, o, TCL_EVAL_GLOBAL);
+}
+
+// The expression slots run the `expr` command of ztcl.
+
+fn expr(ip: *Interp, s: []const u8) c_int {
+    return evalWith(ip, "expr", s, 0);
+}
+
+/// The object of the value of an expression, with one reference.
+pub fn Tcl_ExprObj(ip: *Interp, o: *Obj, out: **Obj) callconv(.c) c_int {
+    incr(o);
+    defer decr(o);
+    if (expr(ip, text(o)) != OK) return ERROR;
+    const r = result(ip);
+    incr(r);
+    out.* = r;
+    Tcl_ResetResult(ip);
+    return OK;
+}
+
+fn exprTo(ip: *Interp, s: []const u8, comptime f: anytype, out: anytype) c_int {
+    if (expr(ip, s) != OK) return ERROR;
+    const r = result(ip);
+    incr(r);
+    defer decr(r);
+    Tcl_ResetResult(ip);
+    return f(ip, r, out);
+}
+
+/// The number of an expression for the long and double forms. A value
+/// that is not a number gets the message of Tcl.
+fn exprNumber(ip: *Interp, s: []const u8, comptime f: anytype, out: anytype) c_int {
+    if (expr(ip, s) != OK) return ERROR;
+    const r = result(ip);
+    incr(r);
+    defer decr(r);
+    Tcl_ResetResult(ip);
+    if (f(null, r, out) == OK) return OK;
+    var w: std.ArrayList(u8) = .empty;
+    defer w.deinit(gpa);
+    w.print(gpa, "expected number but got \"{s}\"", .{text(r)}) catch panicText("out of memory");
+    setResultText(ip, w.items);
+    return ERROR;
+}
+
+pub fn Tcl_ExprLongObj(ip: *Interp, o: *Obj, out: *c_long) callconv(.c) c_int {
+    return exprNumber(ip, text(o), Tcl_GetLongFromObj, out);
+}
+
+pub fn Tcl_ExprDoubleObj(ip: *Interp, o: *Obj, out: *f64) callconv(.c) c_int {
+    return exprNumber(ip, text(o), Tcl_GetDoubleFromObj, out);
+}
+
+pub fn Tcl_ExprBooleanObj(ip: *Interp, o: *Obj, out: *c_int) callconv(.c) c_int {
+    return exprTo(ip, text(o), Tcl_GetBooleanFromObj, out);
+}
+
+pub fn Tcl_ExprLong(ip: *Interp, s: [*:0]const u8, out: *c_long) callconv(.c) c_int {
+    return exprNumber(ip, std.mem.span(s), Tcl_GetLongFromObj, out);
+}
+
+pub fn Tcl_ExprDouble(ip: *Interp, s: [*:0]const u8, out: *f64) callconv(.c) c_int {
+    return exprNumber(ip, std.mem.span(s), Tcl_GetDoubleFromObj, out);
+}
+
+pub fn Tcl_ExprBoolean(ip: *Interp, s: [*:0]const u8, out: *c_int) callconv(.c) c_int {
+    return exprTo(ip, std.mem.span(s), Tcl_GetBooleanFromObj, out);
+}
+
+/// The value of the expression is the result.
+pub fn Tcl_ExprString(ip: *Interp, s: [*:0]const u8) callconv(.c) c_int {
+    return expr(ip, std.mem.span(s));
+}
+
+/// The non-recursive form runs the expression at once. `out` gets the
+/// value.
+pub fn Tcl_NRExprObj(ip: *Interp, o: *Obj, out: *Obj) callconv(.c) c_int {
+    incr(o);
+    defer decr(o);
+    if (expr(ip, text(o)) != OK) return ERROR;
+    setText(out, text(result(ip)));
+    freeIntRep(out);
+    Tcl_ResetResult(ip);
+    return OK;
+}
+
+/// The flags of `subst` in `tcl.h`.
+const TCL_SUBST_COMMANDS: c_int = 1;
+const TCL_SUBST_VARIABLES: c_int = 2;
+const TCL_SUBST_BACKSLASHES: c_int = 4;
+
+fn substCmd(flags: c_int) []const u8 {
+    const i: usize = @intCast(flags & 7);
+    return switch (i) {
+        7 => "subst",
+        6 => "subst -nocommands",
+        5 => "subst -novariables",
+        4 => "subst -nocommands -novariables",
+        3 => "subst -nobackslashes",
+        2 => "subst -nobackslashes -nocommands",
+        1 => "subst -nobackslashes -novariables",
+        else => "subst -nobackslashes -nocommands -novariables",
+    };
+}
+
+/// A new object with no reference, or null with the error in the
+/// result.
+pub fn Tcl_SubstObj(ip: *Interp, o: *Obj, flags: c_int) callconv(.c) ?*Obj {
+    incr(o);
+    defer decr(o);
+    if (evalWith(ip, substCmd(flags), text(o), 0) != OK) return null;
+    const r = result(ip);
+    incr(r);
+    Tcl_ResetResult(ip);
+    r.refCount -= 1;
+    return r;
+}
+
+/// The non-recursive form runs `subst` at once, and the value is the
+/// result.
+pub fn Tcl_NRSubstObj(ip: *Interp, o: *Obj, flags: c_int) callconv(.c) c_int {
+    incr(o);
+    defer decr(o);
+    return evalWith(ip, substCmd(flags), text(o), 0);
+}
+
+/// ztcl has no cancel of a script from C code.
+pub fn Tcl_CancelEval(ip: ?*Interp, _: ?*Obj, _: ?*anyopaque, _: c_int) callconv(.c) c_int {
+    if (ip) |i| setResultText(i, "Tcl_CancelEval: ztcl has no cancel of a script from C code");
+    return ERROR;
+}
+
+pub fn Tcl_Canceled(_: *Interp, _: c_int) callconv(.c) c_int {
+    return OK;
+}
+
+/// Runs the command of token `c` with the words `objv`.
+pub fn Tcl_NRCmdSwap(ip: *Interp, c: *Command, objc: c_int, objv: [*]const *Obj, _: c_int) callconv(.c) c_int {
+    const proc = c.nre orelse c.proc orelse return ERROR;
+    return Tcl_NRCallObjProc(ip, proc, c.cd, objc, objv);
+}
+
+/// The state of `Tcl_SaveInterpState`: the code, the result, and the
+/// values of `::errorInfo` and `::errorCode`.
+const InterpState = struct {
+    code: c_int,
+    result: *Obj,
+    info: ?*Obj,
+    code_var: ?*Obj,
+};
+
+fn readGlobal(ip: *Interp, name: []const u8) ?*Obj {
+    if (host.var_get(ip.handle, name.ptr, name.len, 0) != 0) return null;
+    const o = objOf(reply);
+    incr(o);
+    return o;
+}
+
+pub fn Tcl_SaveInterpState(ip: *Interp, code: c_int) callconv(.c) *InterpState {
+    const st = gpa.create(InterpState) catch panicText("out of memory");
+    const r = result(ip);
+    incr(r);
+    st.* = .{ .code = code, .result = r, .info = readGlobal(ip, "::errorInfo"), .code_var = readGlobal(ip, "::errorCode") };
+    return st;
+}
+
+pub fn Tcl_DiscardInterpState(st: *InterpState) callconv(.c) void {
+    decr(st.result);
+    if (st.info) |o| decr(o);
+    if (st.code_var) |o| decr(o);
+    gpa.destroy(st);
+}
+
+pub fn Tcl_RestoreInterpState(ip: *Interp, st: *InterpState) callconv(.c) c_int {
+    const code = st.code;
+    inline for (.{ .{ "::errorInfo", "info" }, .{ "::errorCode", "code_var" } }) |p| {
+        if (@field(st, p[1])) |o| {
+            const a = argOf(o);
+            _ = host.var_set(ip.handle, p[0].ptr, p[0].len, &a, 0);
+        }
+    }
+    Tcl_SetObjResult(ip, st.result);
+    Tcl_DiscardInterpState(st);
+    return code;
+}
+
+/// True when `s` has no open brace, quote, or bracket: the rule of
+/// `info complete`.
+pub fn Tcl_CommandComplete(s: [*:0]const u8) callconv(.c) c_int {
+    return @intFromBool(complete(std.mem.span(s)));
+}
+
+pub fn complete(s: []const u8) bool {
+    var i: usize = 0;
+    return scanScript(s, &i, false) and i >= s.len;
+}
+
+/// Scans commands up to the end, or up to the "]" of a nested command.
+/// False when the text ends in an open word.
+fn scanScript(s: []const u8, i: *usize, nested: bool) bool {
+    var start = true;
+    while (i.* < s.len) {
+        const c = s[i.*];
+        switch (c) {
+            ' ', '\t', '\r', '\x0b', '\x0c' => i.* += 1,
+            '\n', ';' => {
+                i.* += 1;
+                start = true;
+                continue;
+            },
+            ']' => {
+                if (nested) return true;
+                i.* += 1;
+            },
+            '#' => {
+                if (!start) {
+                    if (!scanWord(s, i)) return false;
+                } else {
+                    while (i.* < s.len and s[i.*] != '\n') {
+                        if (s[i.*] == '\\') i.* += 1;
+                        i.* += 1;
+                    }
+                }
+            },
+            '\\' => {
+                if (i.* + 1 < s.len and s[i.* + 1] == '\n') {
+                    i.* += 2;
+                    continue;
+                }
+                if (!scanWord(s, i)) return false;
+            },
+            else => if (!scanWord(s, i)) return false,
+        }
+        start = false;
+    }
+    return !nested;
+}
+
+fn scanWord(s: []const u8, i: *usize) bool {
+    if (s[i.*] == '{') {
+        var depth: usize = 0;
+        while (i.* < s.len) : (i.* += 1) {
+            switch (s[i.*]) {
+                '\\' => i.* += 1,
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if (depth == 0) {
+                        i.* += 1;
+                        return true;
+                    }
+                },
+                else => {},
+            }
+        }
+        return false;
+    }
+    const quoted = s[i.*] == '"';
+    if (quoted) i.* += 1;
+    while (i.* < s.len) {
+        switch (s[i.*]) {
+            '\\' => i.* += 2,
+            '[' => {
+                i.* += 1;
+                if (!scanScript(s, i, true) or i.* >= s.len) return false;
+                i.* += 1;
+            },
+            '"' => {
+                i.* += 1;
+                if (quoted) return true;
+            },
+            ' ', '\t', '\n', ';', '\r' => if (quoted) {
+                i.* += 1;
+            } else return true,
+            ']' => if (quoted) {
+                i.* += 1;
+            } else return true,
+            else => i.* += 1,
+        }
+    }
+    return !quoted;
+}
+
+test "Tcl_CommandComplete follows info complete" {
+    try std.testing.expect(complete("set a 1"));
+    try std.testing.expect(complete(""));
+    try std.testing.expect(!complete("set a {"));
+    try std.testing.expect(!complete("set a \"b"));
+    try std.testing.expect(!complete("set a [b"));
+    try std.testing.expect(complete("set a [b {c]}]"));
+    try std.testing.expect(complete("set a \\{"));
+    try std.testing.expect(complete("# {\n"));
+    try std.testing.expect(!complete("puts \"[x\""));
 }
