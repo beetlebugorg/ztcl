@@ -33,6 +33,21 @@ Zig has no OS tag for WASI 0.3, so the build is still `-Dtarget=wasm32-wasi`. A 
 
 The interpreter runs a script to its end on one task. The event loop of `vwait`, `after`, and `fileevent` is a wait on a waitable set of the futures and the streams that the script uses.
 
+## The names of the core module
+
+Task 04 measured these names with wasm-tools 1.261.0 on 26 November 2026. The `standard32` names (`cm32p2|wasi:cli/stdout@0.3`) have no names for the built-ins of streams and futures. The error of wasm-tools says: "standard32 name mangling only supports the synchronous ABI and does not define future/stream intrinsic imports; use legacy mangling for these imports". So the core module uses the legacy names:
+
+- An import of an interface has the module name with the full version, `wasi:cli/stdout@0.3.2`, and the function name, `write-via-stream`.
+- A built-in of a stream or a future has the module of the function that has the type, and the name `[stream-new-N]FUNC`. `N` is the index of the type in the list of the streams and the futures of the function, in the order of the WIT text. For `write-via-stream: func(data: stream<u8>) -> future<result<_, error-code>>`, the stream is 0 and the future is 1:
+  - `[stream-new-0]write-via-stream` (result `i64`: the two handles), `[stream-write-0]write-via-stream` (handle, address, count), and `[stream-drop-writable-0]write-via-stream`.
+  - `[future-read-1]write-via-stream` (handle, address) and `[future-drop-readable-1]write-via-stream`.
+  - The other names of this form are `stream-read`, `stream-cancel-read`, `stream-cancel-write`, `stream-drop-readable`, `future-new`, `future-write`, `future-cancel-read`, `future-cancel-write`, and `future-drop-writable`.
+- The built-ins with no type are in the module `$root`: `[waitable-set-new]`, `[waitable-set-wait]`, `[waitable-set-poll]`, `[waitable-set-drop]`, `[waitable-join]`, `[subtask-drop]`, `[subtask-cancel]`, `[thread-yield]`, `[backpressure-inc]`, `[backpressure-dec]`, `[context-get-0]`, and `[context-set-0]`.
+- A synchronous lift of the export is `wasi:cli/run@0.3.2#run`. The async lift with a callback is `[async-lift]wasi:cli/run@0.3.2#run` and `[callback][async-lift]wasi:cli/run@0.3.2#run`, with the import `[task-return]run` of the module `[export]wasi:cli/run@0.3.2`.
+- The memory is `memory`, and the allocator is `cabi_realloc`.
+
+A module with these imports, embedded with `wasm-tools component embed` and made with `component new`, passes `wasm-tools validate --features all`. `wasm-tools component embed --dummy-names legacy --async-callback` gives the names of `$root` and of the lift, but not the names of the stream and the future.
+
 ## The capabilities
 
 Each capability stays off by default, as on the other targets (AGENTS.md rule 3). The runner turns them on from its flags, as on Linux.
