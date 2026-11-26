@@ -402,7 +402,7 @@ test "cext: a slot with no function makes the call an error" {
     try it.init(std.testing.allocator);
     defer it.deinit();
     const sh = try shadowOf(&it);
-    const f: *const fn () callconv(.c) usize = @ptrCast(stubs.public.slots[slot.?].?);
+    const f: *const fn () callconv(.c) usize = @ptrCast(@alignCast(stubs.public.slots[slot.?].?));
     try std.testing.expectError(error.TclError, callC(sh, usize, f, .{}));
     const want = try std.fmt.allocPrint(std.testing.allocator, "the C package called {s} (slot {d} of the public stubs table), which ztcl does not have", .{ stubs.name(.public, slot.?).?, slot.? });
     defer std.testing.allocator.free(want);
