@@ -13,6 +13,7 @@
 | 3: ports | 26 to 31 | arm64 macOS, x86-64 macOS, x86-64 Windows, arm64 Linux. WebAssembly keeps the interpreter. |
 | 4: tier 2 | 32 to 38 | Loops of numbers with values in registers. |
 | 5: the default | 39 | The check of the condition for a default of on. |
+| 6: RV64 | 40 to 43 | Tier 1 and tier 2 on 64-bit RISC-V Linux under qemu (#8). |
 
 The user decides three things before the work passes them: the collector (before task 02), the order of milestones 3 and 4 (before task 26), and tier 2 at all (at task 32).
 
@@ -89,3 +90,7 @@ The user decides three things before the work passes them: the collector (before
 | [37](37-tier2-doubles.md) | Doubles |
 | [38](38-tier2-arm64.md) | Tier 2 on arm64 |
 | [39](39-default.md) | The condition for a default of on |
+| [40](40-rv64-assembler.md) | The RV64 assembler |
+| [41](41-rv64-linux.md) | Tier 1 on RV64 Linux |
+| [42](42-rv64-tier2.md) | Tier 2 on RV64 |
+| [43](43-rv64-ci.md) | RV64 in CI and the docs |
