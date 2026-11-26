@@ -8,6 +8,10 @@ A fast, sandboxed Tcl interpreter in Zig. ztcl runs Tcl 8.6 scripts with exact c
 - **Safe by default.** A script has no file, socket, or process access until your program turns on a capability. The compute limit and the memory cap are exact.
 - **Small.** One static binary. Its one dependency outside the Zig standard library is libghostty-vt, which the build compiles from source into the binary for `ztcl::vt`.
 - **Portable.** Linux, macOS, Windows, WebAssembly in the browser, and Node.js.
+- **One binary for your program.** `ztcl build` puts the runtime and your scripts in one static binary for Linux, macOS, or Windows.
+- **Made for code from an agent.** The [Learn course](docs/learn/01-read-a-command.md) teaches Tcl to review agent code, and the [command reference](docs/reference/README.md) and its `api.json` give an agent each synopsis, error, and capability.
+
+Coming, each in an open issue: more isolation levels for threads ([#209](https://github.com/beetlebugorg/ztcl/issues/209)), ztcl as a host of wasm modules ([#202](https://github.com/beetlebugorg/ztcl/issues/202)), and sandboxed agents ([#216](https://github.com/beetlebugorg/ztcl/issues/216)).
 
 ## Install
 

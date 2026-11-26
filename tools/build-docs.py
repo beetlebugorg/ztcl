@@ -460,7 +460,7 @@ class Build:
                 if not (SITE_DIR / full[len("assets/"):]).exists():
                     raise SystemExit(f"{name}: link to a missing file: {href}")
                 continue
-            if full in ("llms.txt", "llms-full.txt"):
+            if full in ("llms.txt", "llms-full.txt", "reference/api.json"):
                 # The files for agents (agents()).
                 continue
             if full.startswith("playground/") and not href.endswith("/") and target:

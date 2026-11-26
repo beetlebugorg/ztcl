@@ -224,16 +224,22 @@ Each command can use 10,000,000 compute units.
 
 <section class="section" id="agents">
   <div class="wrap">
-    <p class="eyebrow">Code that an agent wrote</p>
-    <h2>Run it fast, and run it safely.</h2>
-    <p class="lede">Agents write Tcl well: the syntax is small, and a script is short enough for a person to read. ztcl runs that script with the speed above and with limits that the host sets.</p>
+    <p class="eyebrow">What you get</p>
+    <h2>Fast, small, and safe to run code that you did not write.</h2>
+    <p class="lede">Agents write Tcl well: the syntax is small, and a script is short enough for a person to read. ztcl runs that script fast, inside limits that the host sets. Each card says if the feature is in the current release or in an open issue.</p>
     <div class="grid g3">
-      <div class="card"><span class="tag">Works</span><h3>No host access by default</h3><p class="muted">A new interpreter has no file, socket, process, or environment access. The host turns on each capability by name.</p></div>
-      <div class="card"><span class="tag">Works</span><h3>Compute and memory</h3><p class="muted">An exact compute limit and a hard memory cap stop a loop that does not end, and a script cannot catch the error.</p></div>
-      <div class="card"><span class="tag">Works</span><h3>In a browser</h3><p class="muted">The WebAssembly module runs a script in a worker with the same limits. The <a href="playground/">playground</a> runs in your browser with no server.</p></div>
-      <div class="card"><span class="tag">Works</span><h3>The shell in the page</h3><p class="muted">The line editor of the ztcl shell, with completion, history, vim keys, and colors, on a terminal of <code>ztcl::vt</code>. Try it at the top of this page or on the <a href="try/">shell page</a>.</p></div>
-      <div class="card"><span class="tag">Works</span><h3>Files for agents</h3><p class="muted"><a href="llms.txt">llms.txt</a> lists the docs pages, and <a href="llms-full.txt">llms-full.txt</a> has their full text.</p></div>
-      <div class="card"><span class="tag">Works</span><h3>GUI apps</h3><p class="muted"><a href="https://beetlebug.org/ztk/">ztk</a> runs Tk scripts on ztcl, and an agent can see and drive the window it builds.</p></div>
+      <div class="card"><span class="tag">Shipped</span><h3>One static binary</h3><p class="muted"><code>ztcl build</code> makes one program from your scripts and files, for Linux, macOS, and Windows, from one computer. No install step and no C toolchain. <a href="build/">Build a program</a>.</p></div>
+      <div class="card"><span class="tag">Shipped</span><h3>Host access by capability</h3><p class="muted">A new interpreter has no file, socket, process, clock, or environment access. The host turns on each capability by name, and a child never gets more than its parent. <a href="limits/">Limits and capabilities</a>.</p></div>
+      <div class="card"><span class="tag">Shipped</span><h3>The compute limit</h3><p class="muted">An exact count of the work of a script, in compute units, and a hard memory cap. A loop that does not end stops at the same point on each machine, and <code>catch</code> cannot stop the error.</p></div>
+      <div class="card"><span class="tag">Shipped</span><h3>A JIT for hot loops</h3><p class="muted">Up to 28 times as fast as tclsh 8.6.16 on an integer loop. The JIT gives the same results, errors, and compute units as the interpreter on the whole Tcl test suite. <a href="jit/">The JIT</a>.</p></div>
+      <div class="card"><span class="tag">Shipped</span><h3>WebAssembly: ztcl as a guest</h3><p class="muted">The same interpreter runs in a browser, in Node.js, and under WASI with the same limits. The <a href="playground/">playground</a> runs here with no server.</p></div>
+      <div class="card"><span class="tag">Shipped</span><h3>Threads in their own process</h3><p class="muted"><code>thread::create -isolation process</code> runs a thread in a child process on macOS: a crash or a bad C package ends only the child. <a href="threads/#isolated-threads">Threads</a>.</p></div>
+      <div class="card"><span class="tag">Shipped</span><h3>Made for review</h3><p class="muted">The <a href="learn/01-read-a-command/">Learn course</a> teaches Tcl to read, judge, and steer code from an agent. The <a href="reference/">command reference</a>, <a href="reference/api.json">api.json</a>, and <a href="llms.txt">llms.txt</a> give an agent the exact synopsis, errors, and capability of each command.</p></div>
+      <div class="card"><span class="tag">Shipped</span><h3>GUI apps that an agent can see</h3><p class="muted"><a href="https://beetlebug.org/ztk/">ztk</a> runs Tk scripts on ztcl. An agent reads the widget tree and drives the window that it built.</p></div>
+      <div class="card"><span class="tag">Shipped</span><h3>No bloat</h3><p class="muted">One approved dependency. The runner is 4.7 MB, starts in 0.9 ms, and <code>ztcl.wasm</code> is 504 KB with gzip. <a href="#no-bloat">The numbers</a>.</p></div>
+      <div class="card"><span class="tag plan">Coming</span><h3>More isolation levels</h3><p class="muted">The levels <code>wasm</code>, <code>vm</code>, and <code>vm-confidential</code> for threads, with published start times and costs, and the process level on Linux and Windows. <a href="https://github.com/beetlebugorg/ztcl/issues/209">#209</a>.</p></div>
+      <div class="card"><span class="tag plan">Coming</span><h3>WebAssembly: ztcl as a host</h3><p class="muted">An engine of our own that runs wasm modules and WASI components inside ztcl, for plugins in any language. <a href="https://github.com/beetlebugorg/ztcl/issues/202">#202</a>.</p></div>
+      <div class="card"><span class="tag plan">Coming</span><h3>Sandboxed agents</h3><p class="muted">An agent that runs in an isolated thread with only the data and the capabilities that you give it. <a href="https://github.com/beetlebugorg/ztcl/issues/216">#216</a>. A safety net for agent code: reach declarations, dry runs, and undo. <a href="https://github.com/beetlebugorg/ztcl/issues/178">#178</a>.</p></div>
     </div>
   </div>
 </section>
@@ -306,11 +312,11 @@ Each command can use 10,000,000 compute units.
     <h2>Small, fast to start, and with one dependency.</h2>
     <p class="lede">ztcl has its own code for the parts that other interpreters take from libraries: the regular expressions, the big integers, deflate and zip, JSON, and the line editor of the shell. The one dependency is <a href="https://github.com/ghostty-org/ghostty">libghostty-vt</a> for <code>ztcl::vt</code>, built from source by the Zig toolchain.</p>
     <div class="grid g3">
-      <div class="card"><h3>4.6 MB</h3><p class="muted">The <code>ztcl</code> runner for x86-64 Linux: one static binary, stripped, with the JIT and the built-in modules. It is 1.9 MB with gzip.</p></div>
-      <div class="card"><h3>0.8 ms</h3><p class="muted">The time of <code>ztcl hi.tcl</code> for a script with one <code>puts</code>: the median of 50 runs.</p></div>
+      <div class="card"><h3>4.7 MB</h3><p class="muted">The <code>ztcl</code> runner for x86-64 Linux: one static binary, stripped, with the JIT and the built-in modules. It is 2.0 MB with gzip.</p></div>
+      <div class="card"><h3>0.9 ms</h3><p class="muted">The time of <code>ztcl hi.tcl</code> for a script with one <code>puts</code>: the median of 50 runs.</p></div>
       <div class="card"><h3>504 KB</h3><p class="muted"><code>ztcl.wasm</code> with gzip -9, for the browser and Node.js. It needs no imports from the host.</p></div>
     </div>
-    <p class="muted" style="margin-top:20px">Measured on 2026-11-26 on an Intel Core i7-6700K with Linux, from a ReleaseFast build of <code>main</code> and <code>zig build wasm</code>.</p>
+    <p class="muted" style="margin-top:20px">Measured on 2026-11-26 on an Intel Core i7-6700K with Linux, from a ReleaseFast build of <code>main</code> at c912727 and <code>zig build wasm</code>: the size of the stripped runner (4,688,048 bytes), and the median wall time of 50 runs from a Python loop.</p>
   </div>
 </section>
 
