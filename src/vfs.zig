@@ -215,6 +215,9 @@ pub fn glob(it: *Interp, pattern: []const u8, results: *std.ArrayList([]const u8
             const h = (try find(it, try std.mem.concat(it.alloc(), u8, &.{ root, dir }))).?;
             if (kind(it, h) != .dir) continue;
             for (try list(it, h)) |name| {
+                // As in Tcl, a pattern matches a name with a leading `.`
+                // only when the pattern has the `.`.
+                if (name[0] == '.' and p[0] != '.') continue;
                 if (!cmds.globMatch(p, name, false)) continue;
                 try next.append(it.alloc(), if (dir.len == 0) name else try std.mem.concat(it.alloc(), u8, &.{ dir, "/", name }));
             }
