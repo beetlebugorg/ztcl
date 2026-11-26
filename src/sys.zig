@@ -243,7 +243,7 @@ pub const win = @import("sys_windows.zig");
 /// The WASI preview 1 form. It has no sockets.
 const is_wasi = builtin.os.tag == .wasi;
 const wasi = @import("sys_wasi.zig");
-pub const supported = builtin.os.tag == .linux or (is_win and builtin.cpu.arch == .x86_64) or (on_mac and builtin.cpu.arch == .aarch64) or is_wasi;
+pub const supported = builtin.os.tag == .linux or (is_win and builtin.cpu.arch == .x86_64) or on_mac or is_wasi;
 
 pub const Fd = i32;
 

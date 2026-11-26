@@ -71,7 +71,7 @@ Sends a signal to the program. `SIGNAL` is `HUP` (the default), `INT`, `QUIT`, `
 
 ## Platforms
 
-| | Linux | macOS (arm64) | Windows (x86-64) |
+| | Linux | macOS (arm64 and x86-64) | Windows (x86-64) |
 |---|---|---|---|
 | The terminal | `/dev/ptmx` with `TIOCGPTPEER` (or `TIOCGPTN` and `/dev/pts/N` on a kernel before 4.13) | `posix_openpt`, `grantpt`, `unlockpt`, and `ptsname_r` | ConPTY: `CreatePseudoConsole` on two pipes |
 | The start | `fork`, `setsid`, `TIOCSCTTY`, and `execve` | `posix_spawn` with `POSIX_SPAWN_SETSID` and `POSIX_SPAWN_CLOEXEC_DEFAULT`, so the program gets descriptors 0, 1, and 2 only: the first open of the terminal goes on 0 and makes it the controlling terminal, with copies on 1 and 2, and `-cwd` uses `posix_spawn_file_actions_addfchdir_np` | `CreateProcessW` with `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` and no handle of the parent |
@@ -88,7 +88,7 @@ On macOS, `spawn` sets the size of `-size` on the other side of the terminal: th
 
 A signal number of `kill` is the number of the system. The names mean the same signal on Linux and macOS, but the numbers of STOP and CONT differ: 19 and 18 on Linux, 17 and 19 on macOS. Give the name to send the same signal on each system.
 
-`ztcl::pty` does not exist on WebAssembly, on x86-64 macOS, or on arm64 Windows, because those targets have no `exec`.
+`ztcl::pty` does not exist on WebAssembly or on arm64 Windows, because those targets have no `exec`.
 
 ## Examples
 

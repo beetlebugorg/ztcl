@@ -35,7 +35,7 @@ const win = @import("fsroot_windows.zig");
 const on_wasi = builtin.os.tag == .wasi;
 const wfs = @import("fsroot_wasi.zig");
 /// ARM64 Windows stays off until its tests can run.
-pub const supported = builtin.os.tag == .linux or (on_mac and builtin.cpu.arch == .aarch64) or on_win or on_wasi;
+pub const supported = builtin.os.tag == .linux or on_mac or on_win or on_wasi;
 
 // The macOS open flag that `std.c.O` does not name.
 const o_exec: u32 = 0x40000000;
