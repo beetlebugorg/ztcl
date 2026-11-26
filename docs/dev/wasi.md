@@ -46,6 +46,13 @@ Task 04 measured these names with wasm-tools 1.261.0 on 26 November 2026. The `s
 - A synchronous lift of the export is `wasi:cli/run@0.3.2#run`. The async lift with a callback is `[async-lift]wasi:cli/run@0.3.2#run` and `[callback][async-lift]wasi:cli/run@0.3.2#run`, with the import `[task-return]run` of the module `[export]wasi:cli/run@0.3.2`.
 - The memory is `memory`, and the allocator is `cabi_realloc`.
 
+The forms that wasmtime 50.0.0 runs, measured with `zig build wasi-spike`:
+
+- The synchronous lift of `run` runs.
+- The synchronous form of `[stream-write-0]write-via-stream` gives the error "synchronous `stream.write` requires the component model more async builtins feature" when wasmtime loads the component.
+- The `[async-lower]` form, `[async-lower][stream-write-0]write-via-stream`, runs. A copy that cannot end at once gives `0xffffffff`, and the task waits for the event in a waitable set. `src/wasi/async.zig` uses this form.
+- `stream.new` gives the readable end in the low 32 bits of its `i64` and the writable end in the high 32 bits.
+
 A module with these imports, embedded with `wasm-tools component embed` and made with `component new`, passes `wasm-tools validate --features all`. `wasm-tools component embed --dummy-names legacy --async-callback` gives the names of `$root` and of the lift, but not the names of the stream and the future.
 
 ## The capabilities

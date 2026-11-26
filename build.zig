@@ -92,6 +92,29 @@ pub fn build(b: *std.Build) void {
     ) });
     b.step("cext-stubs", "Build zig-out/lib/libztclstubs.a for C packages in WebAssembly").dependOn(&b.addInstallArtifact(stubs_lib, .{}).step);
 
+    // The check of the async canonical ABI of WASI 0.3 (docs/dev/wasi-tasks/04-async-abi.md).
+    // `wasm-tools` makes the component from the core module and the WIT files.
+    const spike_mod = b.createModule(.{
+        .root_source_file = b.path("tools/wasi-spike/spike.zig"),
+        .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
+        .optimize = .ReleaseSmall,
+    });
+    spike_mod.addImport("async", b.createModule(.{ .root_source_file = b.path("src/wasi/async.zig") }));
+    const spike_core = b.addExecutable(.{ .name = "wasi-spike", .root_module = spike_mod });
+    spike_core.entry = .disabled;
+    spike_core.root_module.export_symbol_names = &.{ "wasi:cli/run@0.3.2#run", "cabi_realloc" };
+    const embed = b.addSystemCommand(&.{ "wasm-tools", "component", "embed", "--world", "spike" });
+    embed.addDirectoryArg(b.path("tools/wasi-spike/wit"));
+    embed.addArtifactArg(spike_core);
+    embed.addArg("-o");
+    const embedded = embed.addOutputFileArg("wasi-spike.embed.wasm");
+    const new = b.addSystemCommand(&.{ "wasm-tools", "component", "new" });
+    new.addFileArg(embedded);
+    new.addArg("-o");
+    const component = new.addOutputFileArg("wasi-spike.component.wasm");
+    b.step("wasi-spike", "Build zig-out/bin/wasi-spike.component.wasm, the check of WASI 0.3 (needs wasm-tools)")
+        .dependOn(&b.addInstallBinFile(component, "wasi-spike.component.wasm").step);
+
     // The runner and the benchmark always build in ReleaseFast.
     const fast = b.createModule(.{
         .root_source_file = b.path("src/ztcl.zig"),
