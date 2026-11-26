@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "A Tcl interpreter in WebAssembly, with a compute limit and a memory limit for untrusted scripts",
   "license": "BSD-2-Clause",
-  "author": "The ztcl authors",
+  "author": "The ztcl authors <opensource@beetlebug.org>",
   "homepage": "https://beetlebug.org/ztcl/",
   "repository": {
     "type": "git",
