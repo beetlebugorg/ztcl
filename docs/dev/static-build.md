@@ -18,8 +18,7 @@ ztcl build --wasm -o app.wasm main.tcl          # the form of today
 | `--embed PATH` | Adds a file, or each file below a folder, under the mount `//zipfs:/app/`. The option can repeat. |
 | `--runtime FILE` | The runtime binary to use in place of the one that ships with ztcl. |
 | `--allow LIST` | The capabilities of the program, with the names of `ztcl --allow`. The default is `embedded`: the program reads its own files and has no access to the host. |
-| `--root PATH` | The root folder of `file` and channels at run time. The default is the current folder at start. |
-| `--host-files` | Gives `file` in host mode (#122) at run time, with real host paths and no jail. |
+| `--root PATH` | Puts `file` and channels in the jail at run time, with `PATH` as the root folder. Without it, a program with `file` is in host mode (#122), as the `ztcl` runner is. |
 | `--jit` | Turns on the JIT in the program, on a target with a JIT. |
 | `--compress` | Stores each file with deflate. The default is stored entries, which the runtime reads with no copy. |
 | `--wasm` | The form of today (`src/buildcmd.zig`), with no change. |
@@ -66,7 +65,7 @@ The table gets each path first. The jail of `fsroot.zig`, or the host in host mo
 
 ### The jail and host mode
 
-The `file` capability has two modes: the jail of `fsroot.zig` (a root folder seen as `/`, the default) and host mode of #122 (real host paths, as in tclsh). The mount table is outside both modes. The lookup runs on the path of the script before the jail or the host gets it, so a mount is at the same path in either mode. A mount prefix of the form `//zipfs:/...` is not a valid path in the jail or on a host, so a mount never hides a real file. In host mode a program can also mount a zip at a host folder path, such as `zipfs mount data.zip /opt/app/data`, and the files of the mount then hide the real files below that path for that interpreter. The mount table does not depend on the code of `fsroot*.zig`, so host mode and the VFS can merge in either order.
+The `file` capability has two modes: the jail of `fsroot.zig` (a root folder seen as `/`) and host mode of #122 (real host paths, as in tclsh). Embedders get the jail by default. The `ztcl` runner and a binary of `ztcl build` are programs, so they get host mode by default, and `--root` turns the jail on. The embedded mounts of a binary are visible in both modes. The mount table is outside both modes. The lookup runs on the path of the script before the jail or the host gets it, so a mount is at the same path in either mode. A mount prefix of the form `//zipfs:/...` is not a valid path in the jail or on a host, so a mount never hides a real file. In host mode a program can also mount a zip at a host folder path, such as `zipfs mount data.zip /opt/app/data`, and the files of the mount then hide the real files below that path for that interpreter. The mount table does not depend on the code of `fsroot*.zig`, so host mode and the VFS can merge in either order.
 
 The `zipfs` command follows Tcl 9: `zipfs mount ?zipfile? ?mountpoint?`, `zipfs unmount mountpoint`, `zipfs list ?pattern?`, `zipfs info file`, `zipfs exists file`, and `zipfs root`. A mount of a zip file at run time reads the file through the jail, so the archive is a file inside the root. `zipfs mkzip`, scripted mounts, and overlays on a real folder are later steps of #40.
 
