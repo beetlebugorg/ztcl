@@ -1,13 +1,15 @@
 # Builds ztcl-enclave.dll and ztcl-enclave-host.exe into zig-out/enclave
 # (ztcl#180). The DLL is not signed: see docs/dev/enclave.md, "Signing".
 #
-# Usage: pwsh enclave/windows/build.ps1 [-Zig zig] [-Debug]
+# Usage: pwsh enclave/windows/build.ps1 [-Zig zig] [-Debug] [-Define NAME=VALUE]
 #
 # SPDX-License-Identifier: BSD-2-Clause
 
 param(
     [string]$Zig = "zig",
-    [switch]$Debug
+    [switch]$Debug,
+    # More macros for shim.c, as NAME or NAME=VALUE.
+    [string[]]$Define = @()
 )
 $ErrorActionPreference = "Stop"
 
@@ -44,6 +46,7 @@ Push-Location $out
 try {
     $def = @()
     if ($Debug) { $def = @("/DZTCL_ENCLAVE_DEBUG") }
+    $def += $Define | ForEach-Object { "/D$_" }
     & "$bin/cl.exe" /nologo /c /O2 /W4 /GS /guard:cf /Gy /Zi @inc @def "$PSScriptRoot/shim.c" /Fo"shim.obj"
     if ($LASTEXITCODE -ne 0) { throw "cl shim.c" }
     & "$bin/link.exe" /nologo /DLL /ENCLAVE /INCREMENTAL:NO /INTEGRITYCHECK /GUARD:MIXED /NODEFAULTLIB /DEBUG `
@@ -56,7 +59,7 @@ try {
     & "$kits/bin/$sdk/x64/veiid.exe" ztcl-enclave.dll
     if ($LASTEXITCODE -ne 0) { throw "veiid ztcl-enclave.dll" }
 
-    & "$bin/cl.exe" /nologo /O2 /W4 @inc "$PSScriptRoot/host.c" /Fe"ztcl-enclave-host.exe" `
+    & "$bin/cl.exe" /nologo /O2 /W4 /D_CRT_SECURE_NO_WARNINGS @inc "$PSScriptRoot/host.c" /Fe"ztcl-enclave-host.exe" `
         /link /LIBPATH:"$msvc/lib/x64" /LIBPATH:"$um" /LIBPATH:"$kits/Lib/$sdk/ucrt/x64" onecore.lib
     if ($LASTEXITCODE -ne 0) { throw "cl host.c" }
 }

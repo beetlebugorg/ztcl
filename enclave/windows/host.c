@@ -5,6 +5,10 @@
  * of Windows. See docs/dev/enclave.md.
  *
  * Usage: ztcl-enclave-host.exe [script]
+ *        ztcl-enclave-host.exe -unseal
+ *
+ * A run writes the blob and the report into ztcl-enclave.blob and
+ * ztcl-enclave.report. With -unseal, a new enclave unseals the blob.
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -34,7 +38,7 @@ static int call(void *routine, ztcl_enclave_request *req, const char *step)
         return 0;
     }
     if (FAILED((HRESULT)(LONG_PTR)ret)) {
-        printf("%s: HRESULT 0x%08lx\n", step, (unsigned long)(LONG_PTR)ret);
+        printf("%s: HRESULT 0x%08lx at line %lu of shim.c\n", step, (unsigned long)(LONG_PTR)ret, (unsigned long)req->step);
         return 0;
     }
     return 1;
@@ -42,7 +46,8 @@ static int call(void *routine, ztcl_enclave_request *req, const char *step)
 
 int main(int argc, char **argv)
 {
-    const char *script = argc > 1 ? argv[1] : "puts [expr {6*7}]";
+    int unseal_only = argc > 1 && strcmp(argv[1], "-unseal") == 0;
+    const char *script = argc > 1 && !unseal_only ? argv[1] : "puts [expr {6*7}]";
     static char out[1 << 16];
     static uint8_t blob[1 << 16];
     static uint8_t report[ZTCL_ENCLAVE_MAX_REPORT];
@@ -84,6 +89,27 @@ int main(int argc, char **argv)
     }
 
     memset(&req, 0, sizeof(req));
+    if (unseal_only) {
+        /* A new enclave of the same image unseals the blob of an
+         * earlier run. */
+        FILE *f = fopen("ztcl-enclave.blob", "rb");
+        if (f == NULL) {
+            printf("no ztcl-enclave.blob\n");
+            return 1;
+        }
+        req.blob_len = (uint32_t)fread(blob, 1, sizeof(blob), f);
+        fclose(f);
+        req.mode = ZTCL_ENCLAVE_UNSEAL;
+        req.blob = blob;
+        req.blob_cap = sizeof(blob);
+        req.out = out;
+        req.out_cap = sizeof(out);
+        ok = call(routine, &req, "ztcl_run(unseal)");
+        if (ok) printf("unsealed in a new enclave: %.*s", (int)req.out_len, out);
+        TerminateEnclave(base, TRUE);
+        DeleteEnclave(base);
+        return ok ? 0 : 1;
+    }
     req.mode = ZTCL_ENCLAVE_RUN;
     req.script = script;
     req.script_len = (uint32_t)strlen(script);
@@ -97,13 +123,24 @@ int main(int argc, char **argv)
     req.report = report;
     req.report_cap = sizeof(report);
     ok = call(routine, &req, "ztcl_run(run)");
-    if (ok) {
-        printf("code: %ld\noutput: %.*s", (long)req.code, (int)req.out_len, out);
+    {
+        printf("code: %ld (0x%08lx)\noutput (%lu bytes): %.*s\n", (long)req.code, (unsigned long)req.code, (unsigned long)req.out_len, (int)(req.out_len < sizeof(out) ? req.out_len : 0), out);
         printf("sealed blob: %lu bytes\nreport: %lu bytes\n", (unsigned long)req.blob_len, (unsigned long)req.report_len);
     }
 
     if (ok && req.blob_len > 0) {
         uint32_t blob_len = req.blob_len, report_len = req.report_len;
+        FILE *f = fopen("ztcl-enclave.blob", "wb");
+        if (f != NULL) {
+            fwrite(blob, 1, blob_len, f);
+            fclose(f);
+        }
+        f = fopen("ztcl-enclave.report", "wb");
+        if (f != NULL) {
+            fwrite(report, 1, report_len, f);
+            fclose(f);
+        }
+        printf("wrote ztcl-enclave.blob and ztcl-enclave.report\n");
         memset(out, 0, sizeof(out));
         req.mode = ZTCL_ENCLAVE_UNSEAL;
         req.blob_len = blob_len;

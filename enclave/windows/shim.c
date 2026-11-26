@@ -53,6 +53,14 @@ static uint8_t blob[ZTCL_ENCLAVE_MAX_BLOB];
 static uint8_t report[ZTCL_ENCLAVE_MAX_REPORT];
 static volatile LONG busy;
 
+/* A failed step records its line of this file in `req.step`. */
+#define FAILAT(e) do { req.step = __LINE__; return (e); } while (0)
+#define CHECK(hr) do { if (FAILED(hr)) FAILAT(hr); } while (0)
+
+#ifndef ZTCL_SEAL_POLICY
+#define ZTCL_SEAL_POLICY ENCLAVE_IDENTITY_POLICY_SEAL_SAME_IMAGE
+#endif
+
 /* The capability list of the first version is empty. */
 static const uint8_t caps[1] = {0};
 
@@ -63,29 +71,37 @@ static HRESULT run(void)
     UINT32 blob_len = 0, report_len = 0;
     uint8_t data[ENCLAVE_REPORT_DATA_LENGTH];
 
-    if (req.script_len > sizeof(script) || req.out_cap > sizeof(out)) return E_INVALIDARG;
+    if (req.script_len > sizeof(script) || req.out_cap > sizeof(out)) FAILAT(E_INVALIDARG);
     hr = EnclaveCopyIntoEnclave(script, req.script, req.script_len);
-    if (FAILED(hr)) return hr;
+    CHECK(hr);
     req.code = ztcl_core_run(script, req.script_len, req.compute_limit, (size_t)req.mem_limit, out, req.out_cap, &out_len);
     req.out_len = (uint32_t)out_len;
     hr = EnclaveCopyOutOfEnclave(req.out, out, out_len);
-    if (FAILED(hr)) return hr;
+    CHECK(hr);
     if (req.code != 0) return S_OK;
 
-    hr = EnclaveSealData(out, (UINT32)out_len, ENCLAVE_IDENTITY_POLICY_SEAL_SAME_IMAGE, 0, blob, sizeof(blob), &blob_len);
-    if (FAILED(hr)) return hr;
-    if (blob_len > req.blob_cap) return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+    /* The first call gives the size of the blob. */
+    hr = EnclaveSealData(out, (UINT32)out_len, ZTCL_SEAL_POLICY, 0, NULL, 0, &blob_len);
+    if (hr != HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER) && hr != HRESULT_FROM_WIN32(ERROR_MORE_DATA)) CHECK(hr);
+    if (blob_len > sizeof(blob)) FAILAT(HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER));
+    hr = EnclaveSealData(out, (UINT32)out_len, ZTCL_SEAL_POLICY, 0, blob, blob_len, &blob_len);
+    CHECK(hr);
+    if (blob_len > req.blob_cap) FAILAT(HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER));
     hr = EnclaveCopyOutOfEnclave(req.blob, blob, blob_len);
-    if (FAILED(hr)) return hr;
+    CHECK(hr);
     req.blob_len = blob_len;
 
     ztcl_core_report_data(req.nonce, sizeof(req.nonce), req.compute_limit, req.mem_limit, caps, 0, script,
                           req.script_len, data);
-    hr = EnclaveGetAttestationReport(data, report, sizeof(report), &report_len);
-    if (FAILED(hr)) return hr;
-    if (report_len > req.report_cap) return HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+    /* The first call gives the size of the report. */
+    hr = EnclaveGetAttestationReport(data, NULL, 0, &report_len);
+    CHECK(hr);
+    if (report_len > sizeof(report)) FAILAT(HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER));
+    hr = EnclaveGetAttestationReport(data, report, report_len, &report_len);
+    CHECK(hr);
+    if (report_len > req.report_cap) FAILAT(HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER));
     hr = EnclaveCopyOutOfEnclave(req.report, report, report_len);
-    if (FAILED(hr)) return hr;
+    CHECK(hr);
     req.report_len = report_len;
     return S_OK;
 }
@@ -94,14 +110,19 @@ static HRESULT unseal(void)
 {
     HRESULT hr;
     UINT32 out_len = 0, flags = 0;
+    ENCLAVE_IDENTITY identity;
 
-    if (req.blob_len > sizeof(blob) || req.out_cap > sizeof(out)) return E_INVALIDARG;
+    if (req.blob_len > sizeof(blob) || req.out_cap > sizeof(out)) FAILAT(E_INVALIDARG);
     hr = EnclaveCopyIntoEnclave(blob, req.blob, req.blob_len);
-    if (FAILED(hr)) return hr;
-    hr = EnclaveUnsealData(blob, req.blob_len, out, req.out_cap, &out_len, NULL, &flags);
-    if (FAILED(hr)) return hr;
+    CHECK(hr);
+    /* EnclaveUnsealData gives E_INVALIDARG for a NULL buffer, and for a
+     * buffer of 64 KiB with a blob of 231 bytes. The data is shorter
+     * than its blob, so the size of the blob is enough. */
+    hr = EnclaveUnsealData(blob, req.blob_len, out, req.blob_len < req.out_cap ? req.blob_len : req.out_cap, &out_len,
+                           &identity, &flags);
+    CHECK(hr);
     hr = EnclaveCopyOutOfEnclave(req.out, out, out_len);
-    if (FAILED(hr)) return hr;
+    CHECK(hr);
     req.out_len = out_len;
     req.code = 0;
     return S_OK;
@@ -111,9 +132,9 @@ static HRESULT verify(void)
 {
     HRESULT hr;
 
-    if (req.report_len > sizeof(report)) return E_INVALIDARG;
+    if (req.report_len > sizeof(report)) FAILAT(E_INVALIDARG);
     hr = EnclaveCopyIntoEnclave(report, req.report, req.report_len);
-    if (FAILED(hr)) return hr;
+    CHECK(hr);
     hr = EnclaveVerifyAttestationReport(ENCLAVE_TYPE_VBS, report, req.report_len);
     req.code = hr;
     return hr;
@@ -127,6 +148,7 @@ void *CALLBACK ztcl_run(void *context)
 
     if (InterlockedCompareExchange(&busy, 1, 0) != 0) return (void *)(LONG_PTR)HRESULT_FROM_WIN32(ERROR_BUSY);
     hr = EnclaveCopyIntoEnclave(&req, context, sizeof(req));
+    req.step = 0;
     if (SUCCEEDED(hr)) {
         if (req.mode == ZTCL_ENCLAVE_RUN) hr = run();
         else if (req.mode == ZTCL_ENCLAVE_UNSEAL) hr = unseal();
