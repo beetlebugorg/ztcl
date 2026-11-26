@@ -27,7 +27,7 @@ const spawn_setsid: c_short = 0x0400;
 const spawn_cloexec_default: c_short = 0x4000;
 
 fn errno() E {
-    return @enumFromInt(c._errno().*);
+    return @fromBackingInt(@intCast(c._errno().*));
 }
 
 /// The master side of a new PTY, and the path of the other side in `name`.
@@ -47,7 +47,7 @@ pub fn openMaster(name: *[128]u8) union(enum) { fd: i32, err: E } {
     const rc = ptsname_r(m, name, name.len - 1);
     if (rc != 0) {
         _ = c.close(m);
-        return .{ .err = @enumFromInt(rc) };
+        return .{ .err = @fromBackingInt(@intCast(rc)) };
     }
     return .{ .fd = m };
 }
@@ -85,9 +85,9 @@ pub fn start(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:n
     if (rc == 0) rc = c.posix_spawn_file_actions_adddup2(&actions, 0, 2);
     if (rc == 0 and cwd_fd >= 0) rc = posix_spawn_file_actions_addfchdir_np(&actions, cwd_fd);
     if (rc == 0) rc = c.posix_spawnattr_setflags(&attr, @bitCast(spawn_setsid | spawn_cloexec_default));
-    if (rc != 0) return .{ .err = @enumFromInt(rc) };
+    if (rc != 0) return .{ .err = @fromBackingInt(@intCast(rc)) };
     var pid: c.pid_t = 0;
     rc = c.posix_spawn(&pid, path, &actions, &attr, @ptrCast(argv), @ptrCast(envp));
-    if (rc != 0) return .{ .err = @enumFromInt(rc) };
+    if (rc != 0) return .{ .err = @fromBackingInt(@intCast(rc)) };
     return .{ .pid = pid };
 }
