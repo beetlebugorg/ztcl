@@ -37,6 +37,8 @@ Linux on x86-64 is first. macOS uses the same `dlopen` and the same table. The p
 
 ## Notes for step 2
 
+Step 2 is done except the 6 bignum slots of the area objects, which need the `mp_int` of libtommath. They go with the libtommath table in step 17. `src/cext/obj.zig` has the slots of both paths, and `cext.toObj` and `cext.fromObj` are the bridge of values. `tests/cext/cxobj.c` checks the area against tclsh.
+
 - `Tcl_Obj` is 48 bytes on x86-64: `refCount` (int), `bytes`, `length` (int), `typePtr`, and 16 bytes of internal form. `Tcl_IncrRefCount` and `Tcl_DecrRefCount` are macros in the package, so the count is in that memory, and the package calls `TclFreeObj` at 0.
 - `Tcl_Alloc` is `malloc` (`mem.zig`), so `std.heap.c_allocator` and `ckfree` free the same blocks. A package can set `bytes` with `ckalloc` in its own `updateStringProc`.
 - The type names on LP64 Unix are the names of Tcl 8.6 there: `int` (no `wideInt`), `double`, `bytearray`, `list`, `dict`, `bignum`. Windows is LLP64, so `wideInt` is a separate type there.

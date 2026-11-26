@@ -667,7 +667,7 @@ test "ints and doubles get the text of Tcl on demand" {
     defer decr(i);
     try testing.expect(i.bytes == null);
     try testing.expectEqualStrings("-1234567", std.mem.span(Tcl_GetString(i)));
-    try testing.expectEqualStrings("wideInt", std.mem.span(i.typePtr.?.name));
+    try testing.expectEqualStrings(if (@sizeOf(c_long) == 8) "int" else "wideInt", std.mem.span(i.typePtr.?.name));
     const d = Tcl_NewDoubleObj(1.0);
     incr(d);
     defer decr(d);
