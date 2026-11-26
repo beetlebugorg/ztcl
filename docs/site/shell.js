@@ -114,16 +114,56 @@ class View {
       vi.addEventListener("change", () => { this.shell.vi = vi.checked; this.render(); this.input.focus(); });
     }
     this.meter = el.querySelector(".zshell-meter");
+    // The dock button keeps the shell in a corner of the window while
+    // the reader scrolls, and puts it back in the page.
+    this.docked = false;
+    this.dockBtn = el.querySelector(".zshell-dock");
+    if (this.dockBtn) {
+      this.dockBtn.hidden = false;
+      this.dockBtn.addEventListener("click", () => { this.dock(!this.docked); this.input.focus({ preventScroll: true }); });
+    }
     this.fit();
   }
 
+  // A docked shell is fixed in the window. An empty box of the same size
+  // keeps its place in the page, so that the text does not move.
+  dock(on) {
+    if (on === this.docked) return;
+    this.docked = on;
+    if (on) {
+      const r = this.el.getBoundingClientRect();
+      const css = getComputedStyle(this.el);
+      this.hold = document.createElement("div");
+      this.hold.style.height = `${r.height}px`;
+      this.hold.style.margin = `${css.marginTop} 0 ${css.marginBottom}`;
+      this.el.before(this.hold);
+      this.el.style.setProperty("--dock-w", `${r.width}px`);
+      this.el.classList.add("zshell-docked");
+    } else {
+      this.hold?.remove();
+      this.hold = null;
+      this.el.classList.remove("zshell-docked");
+    }
+    if (this.dockBtn) {
+      this.dockBtn.textContent = on ? "Put back" : "Keep in view";
+      this.dockBtn.setAttribute("aria-pressed", String(on));
+    }
+  }
+
+  // True when the screen of the shell is all in the window.
+  inView() {
+    const r = this.box.getBoundingClientRect();
+    return r.top >= 0 && r.bottom <= innerHeight;
+  }
+
   // A helper puts a command on the line. The reader runs it with Enter.
+  // The page keeps its scroll position.
   put(text) {
     this.shell.setLine(text);
     this.up = 0;
+    // The page does not scroll: a shell out of view docks in the window.
+    if (!this.inView()) this.dock(true);
     this.render();
-    const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
-    this.el.scrollIntoView({ block: "nearest", behavior: smooth ? "smooth" : "auto" });
     this.input.focus({ preventScroll: true });
   }
 

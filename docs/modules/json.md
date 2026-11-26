@@ -51,7 +51,7 @@ proc readfile {name} {
 
 The inspector shows a JSON value as a tree. An object is a list of keys, and an array is a list of numbered items. Select a node, and the command line of the inspector gets the Tcl path of the node in `$d`. The button puts the command into the shell. Paste your own JSON in the text box, or pick a sample file. In the shell, Alt-I shows the last result as a tree too, and the variable `_` gets the result, so the paths of that tree use `$_`.
 
-<!-- helper: JSON inspector -->
+<!-- helper: JSON inspector | Click a node of the tree, and get the dict get path to it and its value. -->
 ```tcl
 # height: 492
 helper::form

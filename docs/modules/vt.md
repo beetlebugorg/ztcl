@@ -34,7 +34,7 @@ set t [ztcl::vt new -size {40 10}]
 
 The helper below feeds bytes to a new terminal and shows its rows, its cursor, or its title. Type the bytes with the escapes of Tcl: `\x1b` is the escape byte, and `\r\n` starts a new row. The helper puts a backslash before `[`, `]`, `$`, `"`, and the braces, so the bytes are one word of the command.
 
-<!-- helper: ztcl::vt feed -->
+<!-- helper: Feed a terminal | Type bytes with escape sequences, and see the rows, the cursor, or the title that ztcl::vt keeps. -->
 ```tcl
 # height: 300
 helper::form

@@ -175,7 +175,10 @@ function watch(fig) {
       box.focus({ preventScroll: true });
       begin(fig);
     });
-    fig.querySelector(".zhelper-bar").append(btn);
+    // The button goes on the line of the title, before the caption.
+    const title = fig.querySelector(".zhelper-title");
+    if (title) title.after(btn);
+    else fig.querySelector(".zhelper-bar").append(btn);
     return;
   }
   fig.classList.add("zhelper-opened");

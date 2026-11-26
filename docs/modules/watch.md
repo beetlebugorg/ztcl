@@ -104,7 +104,7 @@ Stops the watch and closes its descriptor. The result is empty, and the handle i
 
 The browser has no folders to watch, so the commands of this helper do not run in the page. The helper builds the commands for a folder under a root folder (`ztcl --root DIR --allow file`), and shows the result of `changes` after one action of a program, from the rules above.
 
-<!-- helper: ztcl::watch -->
+<!-- helper: Watch a folder | Type a folder, pick what the program does, and see the ztcl::watch script. -->
 ```tcl
 # shell: none
 # height: 215

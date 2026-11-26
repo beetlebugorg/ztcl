@@ -26,7 +26,7 @@ No text can have a NUL byte.
 
 The browser page cannot show a notification of the system, so the commands of this helper do not run in the page. The helper builds the command and checks the lengths of the texts from the table above.
 
-<!-- helper: ztcl::notify -->
+<!-- helper: Make a notification | Type a title, a subtitle, and a body, and see the ztcl::notify command. -->
 ```tcl
 # shell: none
 # height: 200
