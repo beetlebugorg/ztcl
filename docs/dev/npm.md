@@ -11,7 +11,7 @@ npm install @beetlebug/ztcl
 ```js
 import { Interp } from "@beetlebug/ztcl";
 
-const tcl = await Interp.create({ stepLimit: 1_000_000, memLimit: 64 << 20 });
+const tcl = await Interp.create({ computeLimit: 1_000_000, memLimit: 64 << 20 });
 console.log(tcl.eval("expr {6 * 7}").result); // 42
 ```
 

@@ -1,5 +1,5 @@
 # The capability, max_threads, the memory limit of one thread, and cancel.
-# thread-tests-flags: --allow interp --threads 8 --thread-steps 20000000 --thread-mem 67108864
+# thread-tests-flags: --allow interp --threads 8 --thread-compute 20000000 --thread-mem 67108864
 # SPDX-License-Identifier: BSD-2-Clause
 
 set main [thread::id]

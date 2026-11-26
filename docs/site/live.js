@@ -124,7 +124,7 @@ class Example {
       return;
     }
     this.tcl?.stop();
-    const tcl = (this.tcl = new m.WorkerInterp(new URL("ztcl.wasm", base), { stepLimit: LIMIT }));
+    const tcl = (this.tcl = new m.WorkerInterp(new URL("ztcl.wasm", base), { computeLimit: LIMIT }));
     let text = "";
     tcl.onOutput = (t) => { text += t; };
     this.stop.disabled = false;

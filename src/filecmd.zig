@@ -646,8 +646,8 @@ fn hasMeta(s: []const u8) bool {
 
 fn globWalk(it: *Interp, base: []const u8, shown: []const u8, parts: []const []const u8, out: *std.ArrayList([]const u8)) Error!void {
     const a = it.alloc();
-    if (it.step_limit == 0) return it.fail("step limit reached", .{});
-    it.step_limit -= 1;
+    if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
+    it.compute_limit -= 1;
     const join = struct {
         fn f(x: std.mem.Allocator, l: []const u8, r: []const u8) ![]const u8 {
             if (l.len == 0) return x.dupe(u8, r);

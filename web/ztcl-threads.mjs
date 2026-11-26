@@ -77,15 +77,15 @@ export class ThreadInterp {
   /// Options: `mode` ("auto", "shared", or "async"), `wasm` (the URL of
   /// ztcl-threads.wasm), `asyncWasm` (the URL of ztcl-async.wasm),
   /// `allow` (capability names: "thread", "event", "clock", "package",
-  /// "interp"), `limits` (maxThreads, stepLimit, memLimit, totalSteps,
-  /// totalMem, maxQueue), `stepLimit`, `memLimit`, and `onOutput`.
+  /// "interp"), `limits` (maxThreads, computeLimit, memLimit, totalCompute,
+  /// totalMem, maxQueue), `computeLimit`, `memLimit`, and `onOutput`.
   static async create(options = {}) {
     const t = new ThreadInterp(options);
     await t._start();
     return t;
   }
 
-  constructor({ mode = "auto", wasm, asyncWasm, allow = ["thread"], limits = {}, stepLimit = null, memLimit = null, onOutput = null } = {}) {
+  constructor({ mode = "auto", wasm, asyncWasm, allow = ["thread"], limits = {}, computeLimit = null, memLimit = null, onOutput = null } = {}) {
     if (mode === "auto") mode = isolated() ? "shared" : "async";
     if (mode === "shared" && !isolated()) throw new Error("the shared mode needs a cross-origin isolated page (COOP and COEP headers)");
     this.mode = mode;
@@ -96,7 +96,7 @@ export class ThreadInterp {
       this.caps |= CAPS[c];
     }
     this.limits = limits;
-    this.stepLimit = stepLimit;
+    this.computeLimit = computeLimit;
     this.memLimit = memLimit;
     this.onOutput = onOutput;
     this.workers = new Map(); // id to worker; the main interpreter is 1
@@ -167,7 +167,7 @@ export class ThreadInterp {
     if (m.create) {
       // The async mode: the main interpreter made a thread.
       const { id: tid, script } = m.create;
-      this._worker(tid, { role: "thread", script, stepLimit: this.limits.stepLimit ?? this.stepLimit, memLimit: this.limits.memLimit });
+      this._worker(tid, { role: "thread", script, computeLimit: this.limits.computeLimit ?? this.computeLimit, memLimit: this.limits.memLimit });
       return;
     }
     if (m.send) {
@@ -202,7 +202,7 @@ export class ThreadInterp {
     const id = this.next++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.main.post({ eval: id, script, stepLimit: this.stepLimit });
+      this.main.post({ eval: id, script, computeLimit: this.computeLimit });
     });
   }
 

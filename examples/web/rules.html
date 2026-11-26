@@ -4,10 +4,10 @@
 <title>ztcl price rules</title>
 <link rel="stylesheet" href="example.css">
 <!-- A rule engine: a user writes the `price` proc in Tcl, and the page
-     calls it for each order line. Each line has a step limit and a memory
+     calls it for each order line. Each line has a compute limit and a memory
      limit, so a bad rule stops with an error and the page keeps working. -->
 <h1>Price rules</h1>
-<p>Write a <code>price</code> proc. The page calls it for each order line, with 10 000 steps and 8 MiB of memory for each call.</p>
+<p>Write a <code>price</code> proc. The page calls it for each order line, with 10,000 compute units and 8 MiB of memory for each call.</p>
 <div class="row">
   <select id="preset" aria-label="Example rule">
     <option value="bulk">Bulk discount</option>
@@ -50,9 +50,9 @@ async function apply() {
   const t0 = performance.now();
   // A new interpreter for each apply. A rule that hit the memory limit
   // does not affect the next one.
-  const tcl = await Interp.create(module, { stepLimit: 100_000, memLimit: 8 << 20 });
+  const tcl = await Interp.create(module, { computeLimit: 100_000, memLimit: 8 << 20 });
   const def = tcl.eval($("rule").value);
-  tcl.stepLimit = 10_000;
+  tcl.computeLimit = 10_000;
   $("rows").replaceChildren();
   for (const [item, qty, unit] of order) {
     // The values are numbers, so the command needs no quoting.

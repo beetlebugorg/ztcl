@@ -22,7 +22,7 @@ fn check(cases: []const Case) !void {
         var it: tcl.Interp = undefined;
         try it.init(std.testing.allocator);
         defer it.deinit();
-        it.step_limit = 10_000_000;
+        it.compute_limit = 10_000_000;
         var got: []const u8 = undefined;
         if (it.eval(c[0])) |v| {
             got = try it.str(v);
@@ -269,9 +269,9 @@ test "control flow" {
         .{ "switch a {a - b {set r ab} c {set r c}}", "ab" },
         .{ "switch -glob abc {a* {set r glob} default {set r no}}", "glob" },
         .{ "switch x {a {set r 1}}", "" },
-        .{ "while 1 {}", "!step limit reached" },
-        .{ "catch {while 1 {}}", "!step limit reached" },
-        .{ "proc f {} {f2}; proc f2 {} {catch {while 1 {}}}; f", "!step limit reached" },
+        .{ "while 1 {}", "!compute limit reached" },
+        .{ "catch {while 1 {}}", "!compute limit reached" },
+        .{ "proc f {} {f2}; proc f2 {} {catch {while 1 {}}}; f", "!compute limit reached" },
     });
 }
 
@@ -488,15 +488,15 @@ test "deep nesting is an error and no crash" {
     try std.testing.expectEqualStrings("the expression is too large", try it.str(it.result));
 }
 
-test "the step limit stops a long script" {
+test "the compute limit stops a long script" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    it.step_limit = 1000;
+    it.compute_limit = 1000;
     try std.testing.expectError(error.TclError, it.eval("set i 0; while {1} {incr i}"));
-    try std.testing.expectEqualStrings("step limit reached", try it.str(it.result));
-    // A higher step limit lets the interpreter run again.
-    it.step_limit = 1000;
+    try std.testing.expectEqualStrings("compute limit reached", try it.str(it.result));
+    // A higher compute limit lets the interpreter run again.
+    it.compute_limit = 1000;
     const v = try it.eval("set i");
     try std.testing.expect(v.asInt().? > 100);
 }
@@ -569,7 +569,7 @@ test "after a memory error, the next eval runs and the limit still holds" {
     try it.init(std.testing.allocator);
     defer it.deinit();
     it.mem_limit = 16 << 20;
-    it.step_limit = 10_000_000;
+    it.compute_limit = 10_000_000;
     const bomb = "set s x; catch {while 1 {append s $s}}";
     try std.testing.expectError(error.TclError, it.eval(bomb));
     try std.testing.expectEqualStrings("the script used too much memory", try it.str(it.result));
@@ -916,7 +916,7 @@ test "the list parse cache keeps each read correct" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    it.step_limit = 10_000_000;
+    it.compute_limit = 10_000_000;
     _ = try it.eval("set s [string repeat {x y } 30]; llength $s; llength $s");
     try it.compact(&.{}, .{});
     _ = try it.eval("set junk [string repeat {p q r } 30]");
@@ -928,7 +928,7 @@ test "compact keeps the commands and returns the memory" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    it.step_limit = 100_000_000;
+    it.compute_limit = 100_000_000;
     _ = try it.eval(
         \\proc add {a {b 2}} { expr {$a + $b} }
         \\namespace eval m { variable n 5; proc f {} { variable n; incr n }; namespace export f; namespace ensemble create }
@@ -965,7 +965,7 @@ test "compact keeps a root value and leaves shared data shared" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    it.step_limit = 100_000_000;
+    it.compute_limit = 100_000_000;
     var roots = [_]tcl.Value{
         try it.eval("list a {b c} [list d [expr {1 + 2}]]"),
         try it.eval("set s [string repeat abc 10]; string range $s 3 8"),
@@ -1149,11 +1149,11 @@ test "a built-in module installs once and runs with the limits" {
     // `package forget` hides a built-in name, as it does a script package.
     try std.testing.expectEqualStrings("0 1 1", try it.str(try it.eval("package forget ztcl::hello; list [expr {\"ztcl::hello\" in [package names]}] [expr {\"hello\" in [package names]}] [catch {package require ztcl::hello}]")));
 
-    // The script of a module stops at the step limit.
+    // The script of a module stops at the compute limit.
     var it2: tcl.Interp = undefined;
     try it2.init(std.testing.allocator);
     defer it2.deinit();
-    it2.step_limit = 3;
+    it2.compute_limit = 3;
     try std.testing.expectError(error.TclError, it2.eval("package require ztcl::hello"));
     try std.testing.expect(it2.findCommand("ztcl::hello") == null);
 }
@@ -1807,7 +1807,7 @@ fn fileJail(it: *tcl.Interp, buf: *[64:0]u8, what: []const u8) ![:0]const u8 {
 /// Deletes the tree of a test and its root folder.
 fn fileJailEnd(it: *tcl.Interp, root: [:0]const u8) void {
     const linux = tcl.sys.os;
-    it.step_limit = std.math.maxInt(u64);
+    it.compute_limit = std.math.maxInt(u64);
     _ = it.eval("foreach f [glob -nocomplain /*] {file delete -force $f}") catch {};
     it.deinit();
     _ = linux.unlinkat(linux.AT.FDCWD, root, linux.AT.REMOVEDIR);
@@ -1823,10 +1823,10 @@ test "a delete of a deep tree in a coroutine gives an error and no crash" {
     // Before the walk on the heap, a ReleaseSafe build on x86-64 Linux
     // ended with SIGSEGV here: the recursion overflowed the coroutine
     // stack.
-    it.step_limit = 1000;
+    it.compute_limit = 1000;
     const got = it.eval("coroutine c apply {{} {file delete -force /d}}");
-    if (got) |_| {} else |_| try std.testing.expectEqualStrings("step limit reached", try it.str(it.result));
-    it.step_limit = std.math.maxInt(u64);
+    if (got) |_| {} else |_| try std.testing.expectEqualStrings("compute limit reached", try it.str(it.result));
+    it.compute_limit = std.math.maxInt(u64);
     _ = try it.eval("coroutine c2 apply {{} {file delete -force /d}}");
     try std.testing.expectEqualStrings("0", try it.str(try it.eval("file exists /d")));
 }
@@ -1838,7 +1838,7 @@ test "a copy of a folder into itself gives an error at once" {
     const root = try fileJail(&it, &name, "self");
     defer fileJailEnd(&it, root);
     _ = try it.eval("file mkdir /d/e; close [open /d/e/f w]");
-    it.step_limit = 100000;
+    it.compute_limit = 100000;
     for ([_][]const u8{ "file copy /d /d/x", "file copy /d /d/e/x", "file copy -force /d /d", "file copy /d/./e/.. /d/e/x", "cd /d/e; file copy /d x" }) |script| {
         try std.testing.expectError(error.TclError, it.eval(script));
         try std.testing.expect(std.mem.endsWith(u8, try it.str(it.result), "trying to copy a directory into itself"));
@@ -2088,13 +2088,13 @@ fn gcSame(script: []const u8, n: u32) !void {
     var a: tcl.Interp = undefined;
     try a.init(std.testing.allocator);
     defer a.deinit();
-    a.step_limit = 10_000_000;
+    a.compute_limit = 10_000_000;
     try a.allow(@backingInt(tcl.interp.Capability.interp));
     want = try a.str(try a.eval(script));
     var b: tcl.Interp = undefined;
     try b.init(std.testing.allocator);
     defer b.deinit();
-    b.step_limit = 10_000_000;
+    b.compute_limit = 10_000_000;
     try b.allow(@backingInt(tcl.interp.Capability.interp));
     b.setGcStress(n);
     const got = try b.str(b.eval(script) catch |e| {
@@ -2200,7 +2200,7 @@ test "a child on the shared heap stops at the memory limit of its parent" {
         defer it.deinit();
         try it.allow(@backingInt(tcl.interp.Capability.interp));
         it.mem_limit = 8 << 20;
-        it.step_limit = 50_000_000;
+        it.compute_limit = 50_000_000;
         it.setGcStress(stress);
         _ = try it.eval("interp create c");
         const r = it.eval("c eval {set l {}; while 1 {lappend l [string repeat x 4000]}}");
@@ -2383,7 +2383,7 @@ test "a collection frees the garbage of a long loop" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    it.step_limit = 100_000_000;
+    it.compute_limit = 100_000_000;
     it.collect();
     const start = it.memUsed();
     _ = try it.eval("proc go {n} {for {set i 0} {$i < $n} {incr i} {set s x$i; set l [list $i $i]; set d [dict create a $i]}}; go 200000");
@@ -2432,12 +2432,12 @@ fn stepsAtLimit(gc: bool, limit: usize) !u64 {
     try it.init(std.testing.allocator);
     defer it.deinit();
     it.gc_on = gc;
-    it.step_limit = 1_000_000_000;
+    it.compute_limit = 1_000_000_000;
     it.mem_limit = limit;
     const r = it.eval("set l {}; for {set i 0} {$i < 100000000} {incr i} {lappend l [string repeat x 50]}");
     try std.testing.expectError(error.TclError, r);
     try std.testing.expectEqualStrings("the script used too much memory", try it.str(it.result));
-    return it.step_limit;
+    return it.compute_limit;
 }
 
 test "with the collector off, the memory error stops at the same step" {
@@ -2452,7 +2452,7 @@ test "a loop under the limit gives the same result with the collector on or off"
         try it.init(std.testing.allocator);
         defer it.deinit();
         it.gc_on = gc;
-        it.step_limit = 100_000_000;
+        it.compute_limit = 100_000_000;
         const v = try it.eval("set t 0; for {set i 0} {$i < 20000} {incr i} {set s [string repeat x [expr {$i % 50}]]; incr t [string length $s]}; set t");
         try std.testing.expectEqualStrings("490000", try it.str(v));
     }
@@ -2465,7 +2465,7 @@ fn dropCheck(setup: []const u8, name: []const u8, index: []const u8, v: []const 
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    it.step_limit = 1_000_000;
+    it.compute_limit = 1_000_000;
     _ = try it.eval(setup);
     const cell = (try it.findVar(it.frame, name, false)).?;
     try std.testing.expect(try tcl.more.lsetOwned(&it, cell, .{ .str = index }, .{ .str = v }));
@@ -2488,7 +2488,7 @@ test "a second dropped lset writes in place" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    it.step_limit = 1_000_000;
+    it.compute_limit = 1_000_000;
     _ = try it.eval("set a [lrepeat 100 0]");
     const cell = (try it.findVar(it.frame, "a", false)).?;
     try std.testing.expect(try tcl.more.lsetOwned(&it, cell, .{ .int = 3 }, .{ .int = 5 }));

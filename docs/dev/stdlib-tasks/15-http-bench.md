@@ -23,4 +23,4 @@ CAP python3 -I tools/bench-stdlib.py --only http --check bench/stdlib/gates.tsv
 
 Gates:
 
-- The HTTP/1.1 gates of the design: requests per second, p99 latency, and the cost of the step limit.
+- The HTTP/1.1 gates of the design: requests per second, p99 latency, and the cost of the compute limit.

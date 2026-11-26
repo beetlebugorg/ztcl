@@ -8,7 +8,7 @@ The plan adds no code. The user approves it before task 01 starts.
 
 - Each module is Zig code in the binary. `package require` loads it from memory. A build flag leaves it out.
 - The new API is in the namespace `ztcl`. The names of tcllib, of the core `http` package, and of TclTLS stay where they exist, as thin commands over the same native code.
-- The HTTP server has a pool of workers. Each worker is a thread with its own interpreter, as in [the threads plan](../threads.md). A request runs with its own step limit, memory limit, and deadline, so a runaway handler fails alone.
+- The HTTP server has a pool of workers. Each worker is a thread with its own interpreter, as in [the threads plan](../threads.md). A request runs with its own compute limit, memory limit, and deadline, so a runaway handler fails alone.
 - Async I/O runs on io_uring (Linux), kqueue (macOS), and IOCP (Windows) behind the `std.Io` interface. A handler runs in a coroutine and looks synchronous.
 - TLS 1.3 is new code on `std.crypto` for both the server and the client. It stays behind a flag until an external review is done.
 - HTTP/1.1, WebSockets, SSE, and HTTP/2 come first. HTTP/3 over QUIC is the last milestone.
@@ -146,7 +146,7 @@ The reasons:
 - tcllib, the Tcl core (`tcl::` and `::oo`), and the packages that issue 27 names do not use it. The task of the module system checks the names of tcllib 2.0 and of Tcl 9.1 again.
 - The other choices: `ztcl::` is longer in each call. `std::` is generic, a user namespace can have that name, and it says that the API is a standard. `tcl::` belongs to the Tcl core.
 
-**Decision for the user (2):** the name `ztcl`. The first name was `zt`. The modules moved to `ztcl` before v0.3.0-beta, and the old names stay as deprecated aliases until v0.4.0-beta.
+**Decision for the user (2):** the name `ztcl`. The first name was `zt`. The modules moved to `ztcl` before v0.3.0-beta, and the deprecated aliases `zt::` went away in #134.
 
 ### Rules for the new API
 
@@ -156,7 +156,7 @@ The reasons:
 4. Bytes are byte strings (each character below 256), as in `binary`. A text result is UTF-8. A command that reads bytes says so in its manual.
 5. Errors have an `errorCode` that starts with `ZT` and the module: `ZT JSON SYNTAX 1 17`, `ZT HTTP TIMEOUT`, `ZT TLS ALERT bad_certificate`.
 6. A blocking call inside a coroutine yields to the event loop and looks synchronous. Outside a coroutine, it runs the event loop until it is done, as `vwait` does.
-7. Each command with a cost that grows with its input pays steps and gets its memory through the counter (see "Limits and capabilities").
+7. Each command with a cost that grows with its input pays compute units and gets its memory through the counter (see "Limits and capabilities").
 
 ### The choice for each module
 
@@ -195,9 +195,9 @@ A wrapped command keeps the result and the error message of the old package for 
 
 ### The rule for each module
 
-1. **Steps.** A native command pays one step for each 4096 bytes of input or output, and one step for each element of a list or dict that it makes. A command that runs a script (a handler, a callback) pays as a script does.
+1. **Steps.** A native command pays one compute unit for each 4,096 bytes of input or output, and one compute unit for each element of a list or dict that it makes. A command that runs a script (a handler, a callback) pays as a script does.
 2. **Memory.** Each allocation of a Tcl value goes through the counter of the interpreter. A native buffer outside the heap (a socket buffer, a TLS record, a zstd window) counts in the per-connection limits of its module, and the module has a fixed top for it.
-3. **Safe points.** A loop in native code over large input checks the step limit and the memory limit at least each 64 KiB, so a limit stops one command at a bounded point.
+3. **Safe points.** A loop in native code over large input checks the compute limit and the memory limit at least each 64 KiB, so a limit stops one command at a bounded point.
 4. **Host access.** A command that reaches the host needs a capability. The default interpreter stays deterministic: no clock, no entropy, no network, no files.
 5. **Network.** Each address goes through the policy of `src/sock.zig`: the check runs on each resolved address, on each connection, and on each peer of a server.
 6. **Files.** Each path goes through the root folder of `src/fsroot.zig`.
@@ -233,7 +233,7 @@ The server needs `socket`, `event`, and `thread`. TLS also needs `random` and a 
 | `http` client | `socket` and `event` | 64 KiB of headers, 100 headers, the body at most the memory limit, 20 redirects |
 | `http` server | `socket`, `event`, and `thread` | see "The server" |
 | `tls` | `socket`, `random` | 16 KiB records, a chain of at most 10 certificates, 64 KiB of handshake messages |
-| `h2` | as `http` | 100 streams, 64 KiB of header list, 4096 bytes of HPACK table, a reset flood limit |
+| `h2` | as `http` | 100 streams, 64 KiB of header list, 4,096 bytes of HPACK table, a reset flood limit |
 | `sqlite` | `sqlite`, and `file` for files | see "SQLite" |
 | `build` | `file` | |
 
@@ -371,7 +371,7 @@ All primitives are `std.crypto`. The hashes are SHA-1, SHA-2, SHA-3, BLAKE2b, BL
 ## Tooling
 
 - `ztcl test ?files?`: runs `.test` files with the `tcltest` package of Tcl. It uses the stand-in of `tools/tcltest.tcl` until a full `tcltest` passes its own test file. It has `-j N` with one worker thread for each file, a filter, and a JUnit XML report.
-- `ztcl::bench`: `ztcl::bench run -iterations N -warmup M {script}` gives the time and the steps of each pass, the mean, and the spread. `ztcl bench file.tcl` runs the `bench` blocks of a file and compares with a saved result.
+- `ztcl::bench`: `ztcl::bench run -iterations N -warmup M {script}` gives the time and the compute units of each pass, the mean, and the spread. `ztcl bench file.tcl` runs the `bench` blocks of a file and compares with a saved result.
 - `ztcl prof script.tcl`: samples the stack of procs at each N steps (a step count, so the result is deterministic) and writes the folded format of flame graphs. A JIT frame reports its proc name.
 
 ## The HTTP module
@@ -754,7 +754,7 @@ db status; db errorcode; db version; db close
 
 ### Limits
 
-- **Steps.** `sqlite3_progress_handler` runs each 1000 virtual machine instructions of SQLite and pays one step of the step limit. At the step limit, the handler stops the query, and the script gets the step limit error. A `db progress` of the script runs on top of this.
+- **Steps.** `sqlite3_progress_handler` runs each 1000 virtual machine instructions of SQLite and pays one compute unit of the compute limit. At the compute limit, the handler stops the query, and the script gets the compute limit error. A `db progress` of the script runs on top of this.
 - **Memory.** The allocator of SQLite counts in the memory limit. At the limit, the allocator fails, SQLite gives `SQLITE_NOMEM`, and the script gets the memory error.
 - **Limits of SQLite.** `sqlite3_limit` sets the length of a string or a blob (the default is the memory limit, at most 1 GB), the SQL length (1 MB), the columns (2000), the depth of an expression (1000), and the attached databases (0 when the capability `file` is off, so `ATTACH` reaches no file).
 - **Capability.** `sqlite3` exists only with the capability `sqlite`. A path needs `file` and stays under the root folder. `ATTACH` follows the same rule.
@@ -824,7 +824,7 @@ The test: the TechEmpower plaintext test (`/plaintext`, with pipelining of 16) a
 | Requests per second, plaintext and JSON, HTTP/1.1 | Go `net/http`, Node `http`, Python `uvicorn` with a plain ASGI app | at least 0.8 of Go, at least Node, at least 3 times uvicorn |
 | p99 latency at 50 % of the peak rate of Go | the same | at most 1.5 times Go |
 | The same over HTTP/2 with `h2load` | Go `net/http` with h2c | at least 0.7 of Go |
-| One worker with a step limit, to show the cost of the limits | ztcl with no step limit | at most 5 % slower |
+| One worker with a compute limit, to show the cost of the limits | ztcl with no compute limit | at most 5 % slower |
 
 A worker runs a Tcl handler for each request. Go and Node run their own code. The ratio is the cost of a scripted handler against a compiled one.
 

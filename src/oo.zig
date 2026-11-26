@@ -354,7 +354,7 @@ fn destroyMode(it: *Interp, st: *State, o: *Object, run_dtor: bool, explicit: bo
             const saved = it.result;
             _ = run(it, st, &call) catch |e| {
                 if (e == error.OutOfMemory) return e;
-                if (e == error.TclError and (it.step_limit == 0 or it.overLimit())) return e;
+                if (e == error.TclError and (it.compute_limit == 0 or it.overLimit())) return e;
                 if (explicit) {
                     failure = e;
                     fail_result = it.result;

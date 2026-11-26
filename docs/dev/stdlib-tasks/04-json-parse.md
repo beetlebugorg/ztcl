@@ -31,6 +31,6 @@ Gates:
 
 - All `y_` and `n_` files pass on both paths.
 - A depth of 512 and the number limit of the design give the error, with no crash at depth 100 000.
-- The step limit and the memory limit stop a parse of a 1 GB input at a bounded point. A test checks the point.
+- The compute limit and the memory limit stop a parse of a 1 GB input at a bounded point. A test checks the point.
 - Speed: `canada.json`, `twitter.json`, and `citm_catalog.json` parse to a Tcl value at the target of the design against Python and Node. Report the instruction count for each file too.
 - Size: the `json` row of the design.

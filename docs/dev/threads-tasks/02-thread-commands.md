@@ -16,7 +16,7 @@ The commands of `thread.n` that the design lists, and 17 passes in `thread.test`
 
 1. `thread::send` without `-async` runs the messages of the own queue while it waits.
 2. An error of a send has the trace of the target, then `invoked from within` and the send command.
-3. `thread::exit` and `thread::cancel -unwind` set the step limit of the thread to zero, so `catch` cannot catch them.
+3. `thread::exit` and `thread::cancel -unwind` set the compute limit of the thread to zero, so `catch` cannot catch them.
 4. The main thread cannot be the target of `thread::cancel` and cannot use `thread::exit`.
 5. A thread id has no address.
 6. The error messages follow `tclsh` 8.6.16 with Thread 2.8.11.

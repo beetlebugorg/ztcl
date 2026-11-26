@@ -39,11 +39,11 @@ fn mem(e: anyerror) Error {
 /// Uses steps for an operation on `limbs` limbs.
 fn charge(it: *Interp, limbs: usize) Error!void {
     const cost = limbs * limbs / 64 + 1;
-    if (it.step_limit < cost) {
-        it.step_limit = 0;
-        return it.fail("step limit reached", .{});
+    if (it.compute_limit < cost) {
+        it.compute_limit = 0;
+        return it.fail("compute limit reached", .{});
     }
-    it.step_limit -= cost;
+    it.compute_limit -= cost;
 }
 
 const Parts = struct { neg: bool, base: u8, body: []const u8 };

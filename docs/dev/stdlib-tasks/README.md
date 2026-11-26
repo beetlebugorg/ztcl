@@ -63,7 +63,7 @@ Milestones 2 to 5 depend on the threads plan for the worker pool: task 13 starts
 10. Use only the Zig 0.16.0 standard library. The one exception is the SQLite amalgamation (task 39), after decision 9.
 11. A size gate is the module row of the size table in the design, plus 10 %. A task that needs more changes the row in the same PR and says why.
 12. A speed gate is a ratio in the same job (see "Performance targets" in the design). The numbers in a task are targets until the user sets them after task 03.
-13. Use the words "step limit" for the limit on steps. Name no AI model or vendor in the repository. Add no attribution line.
+13. Use the words "compute limit" for the limit on steps. Name no AI model or vendor in the repository. Add no attribution line.
 14. If a gate fails, do not change the gate. Report the measured number and the cause.
 15. If a fact in a task is wrong, stop and report it. Do not guess.
 

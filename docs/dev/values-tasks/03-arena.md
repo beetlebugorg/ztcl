@@ -15,7 +15,7 @@ Make one block for each container and the arena of the parse faster in time as w
 ## Rules
 
 - A chunk is an ordinary heap block, so the memory count and the memory limit see it.
-- The steps of a parse do not change.
+- The compute units of a parse do not change.
 
 ## Acceptance
 

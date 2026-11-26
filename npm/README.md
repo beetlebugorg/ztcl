@@ -1,6 +1,6 @@
 # {{name}}
 
-ztcl is a Tcl interpreter in Zig. This package has the WebAssembly build and a small ES module over it. A page or a Node.js program runs Tcl scripts with an exact step limit and a memory limit, so it can run scripts that its users write.
+ztcl is a Tcl interpreter in Zig. This package has the WebAssembly build and a small ES module over it. A page or a Node.js program runs Tcl scripts with an exact compute limit and a memory limit, so it can run scripts that its users write.
 
 - The module is 871 KB, or about 300 KB with gzip. It has no imports.
 - It runs in a browser, in a Web Worker, and in Node.js 22.3 or later.
@@ -20,7 +20,7 @@ npm install {{name}}
 <script type="module">
 import { Interp } from "https://cdn.jsdelivr.net/npm/{{name}}@{{version}}/ztcl.mjs";
 
-const tcl = await Interp.create({ stepLimit: 1_000_000, memLimit: 64 << 20 });
+const tcl = await Interp.create({ computeLimit: 1_000_000, memLimit: 64 << 20 });
 console.log(tcl.eval("expr {6 * 7}").result); // 42
 </script>
 ```
@@ -33,7 +33,7 @@ The module loads `ztcl.wasm` from its own folder on the CDN. `WorkerInterp` also
 import { Interp, WorkerInterp } from "{{name}}";
 
 const tcl = await Interp.create({
-  stepLimit: 1_000_000,
+  computeLimit: 1_000_000,
   memLimit: 64 << 20,
   onOutput: (text) => console.log(text),
 });
@@ -55,7 +55,7 @@ The tests of the package run Vite 7. Webpack 5 and Rollup also have support for 
 ```js
 import { Interp } from "{{name}}";
 
-const tcl = await Interp.create({ stepLimit: 1_000_000, memLimit: 64 << 20 });
+const tcl = await Interp.create({ computeLimit: 1_000_000, memLimit: 64 << 20 });
 const r = tcl.eval("proc sq {x} {expr {$x * $x}}; sq 12");
 console.log(r.result); // 144
 tcl.close();
@@ -81,7 +81,7 @@ The next `eval` after `stop` starts a new worker with a new interpreter. `{{name
 |---|---|
 | `Interp.create(source?, options?)` | Makes an interpreter in a new WebAssembly instance. |
 | `interp.eval(script)` | Runs a script. Returns `{ ok, result, output }`. `result` is the value, or the error message when `ok` is false. |
-| `interp.stepLimit`, `interp.memLimit` | The limits of the next `eval`. |
+| `interp.computeLimit`, `interp.memLimit` | The limits of the next `eval`. |
 | `interp.memorySize` | The size of the linear memory in bytes. The memory never shrinks, so this is the peak. |
 | `interp.close()` | Frees the interpreter. |
 | `new WorkerInterp(wasmUrl?, options?)` | An interpreter in a Web Worker. `eval` returns a promise. `reset()` makes a new interpreter. `stop()` ends the worker. |
@@ -90,7 +90,7 @@ The next `eval` after `stop` starts a new worker with a new interpreter. `{{name
 | `run(source, options?)` | Runs the scripts of a bundle from `ztcl build --wasm` in a new interpreter. |
 | `interp.run()` | Runs the scripts of a bundle. Returns `{ ok, result, output }`. |
 
-The options are `stepLimit`, `memLimit`, `onOutput`, and `allow`. `allow: ["file"]` turns on `source` and `open` for reading on the files of a bundle. `stepLimit` is the steps of each `eval`, and `null` (the default) is no limit. `memLimit` is in bytes, and the default is 2 GiB. `onOutput(text)` gets the text of `puts` when each `eval` ends.
+The options are `computeLimit`, `memLimit`, `onOutput`, and `allow`. `allow: ["file"]` turns on `source` and `open` for reading on the files of a bundle. `computeLimit` is the compute units of each `eval`, and `null` (the default) is no limit. `memLimit` is in bytes, and the default is 2 GiB. `onOutput(text)` gets the text of `puts` when each `eval` ends.
 
 A source is a URL, a file path in Node.js, a `Response`, bytes, or a `WebAssembly.Module`. With no source, the module is the `ztcl.wasm` file of the package.
 
@@ -103,7 +103,7 @@ One interpreter keeps its procs and variables from one `eval` to the next. Each 
 ```js
 import { run } from "{{name}}";
 
-const r = await run(new URL("./app.wasm", import.meta.url), { stepLimit: 1_000_000, allow: ["file"] });
+const r = await run(new URL("./app.wasm", import.meta.url), { computeLimit: 1_000_000, allow: ["file"] });
 console.log(r.output);
 ```
 
@@ -121,7 +121,7 @@ t.close();
 
 ## Limits and capabilities
 
-- **Steps.** Each command and each loop pass uses one step. At the limit, the script stops with the error `step limit reached`. `catch` and `try` cannot catch it. The same script stops at the same step in each browser and in Node.js.
+- **Compute units.** Each command and each loop pass uses one compute unit. At the limit, the script stops with the error `compute limit reached`. `catch` and `try` cannot catch it. The same script stops at the same point in each browser and in Node.js.
 - **Memory.** At the limit, the script stops with the error `the script used too much memory`. `catch` cannot catch it. The linear memory can grow to about twice the limit.
 - **No host access.** The module has the interpreter only, with no JIT. It has no command that reaches the host: no files, sockets, `exec`, `clock`, `interp`, or event loop. `coroutine` returns an error.
 - **Output.** `puts` goes into a buffer. `eval` returns the text, and `onOutput` gets it when the script ends.

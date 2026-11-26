@@ -371,10 +371,10 @@ pub const Emitter = struct {
     fn stepTo(e: *Emitter, slow_l: Label) Error!void {
         const s = e.s;
         const l = e.l;
-        try e.ldr(rax, abi.it, l.it_step_limit);
+        try e.ldr(rax, abi.it, l.it_compute_limit);
         try s.cbz(rax, slow_l);
         try s.subI(rax, rax, 1, false);
-        try e.str(rax, abi.it, l.it_step_limit);
+        try e.str(rax, abi.it, l.it_compute_limit);
         try e.ldr(rax, abi.it, l.it_mem_trip);
         try e.ldr(rcx, abi.it, l.it_mem_limit);
         try s.cmpR(rax, rcx, .lsl, 0);
@@ -771,7 +771,7 @@ pub const Emitter = struct {
                 },
                 .restore => |c| {
                     s.bind(c.at);
-                    try e.incAt(abi.it, e.l.it_step_limit);
+                    try e.incAt(abi.it, e.l.it_compute_limit);
                     try s.b(c.slow);
                 },
                 .tier_up => |c| {

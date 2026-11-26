@@ -45,7 +45,7 @@ for name in "$@"; do
     cp -R "$dir/modules/$mod" "$root/modules/$mod"
     # The test file reads its data files from the folder of the module.
     printf 'cd /modules/%s\n' "$mod" > "$root/cd.tcl"
-    out=$(timeout 600 "$tcl" --max-steps 2000000000 --mem 2147483648 --allow channels,file,clock \
+    out=$(timeout 600 "$tcl" --compute 2000000000 --mem 2147483648 --allow channels,file,clock \
         --root "$root" "$root/cd.tcl" "$here/tcltest.tcl" "$here/tcllib-shim.tcl" \
         "$root/modules/$mod/$name.test" "$here/tcltest-end.tcl" 2>&1)
     rm -rf -- "$root"

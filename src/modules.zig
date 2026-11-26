@@ -27,18 +27,6 @@ pub const Alias = struct {
     script: []const u8 = "",
 };
 
-/// The script of the old name `zt::NAME` of the module `ztcl::NAME`. It
-/// imports the exported commands of `::ztcl::NAME` into `::zt::NAME`
-/// and makes an ensemble of them, so each old call works. The old names
-/// stay until v0.4.0-beta.
-pub fn oldNamespace(comptime name: []const u8) []const u8 {
-    return "namespace eval ::zt::" ++ name ++ " {\n" ++
-        "    namespace import ::ztcl::" ++ name ++ "::*\n" ++
-        "    namespace export *\n" ++
-        "    namespace ensemble create\n" ++
-        "}\n";
-}
-
 pub const Module = struct {
     name: []const u8,
     version: []const u8,

@@ -13,7 +13,7 @@
 //! output. So each load and store has the column address in its memory
 //! argument, and the address operand is the point index times 8.
 //!
-//! `run` checks the step limit before each block of `point.block`
+//! `run` checks the compute limit before each block of `point.block`
 //! points, as `Program.steps` counts. In a block, the SIMD form runs the
 //! operations of the program for two points at a time, with each
 //! register in a `v128` local of two f64 lanes, and the last point of

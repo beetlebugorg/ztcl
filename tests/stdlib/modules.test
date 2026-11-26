@@ -30,10 +30,9 @@ test present-1 {package present ztcl::hello} {1 {package ztcl::hello is not pres
 test versions-1 {package versions ztcl::hello} {0 1.0}
 test versions-2 {package versions hello} {0 0.9}
 
-# The old name zt:: works until v0.4.0-beta.
-test oldname-1 {
-    list [package require zt::hello] [zt::hello greet a] [ztcl::hello greet b] [zt::hello::greet c] [package versions zt::hellonet]
-} {0 {1.0 {hello, a} {hello, b} {hello, c} 1.0}}
+# The old names zt:: are gone.
+test oldname-1 {package require zt::hello} {1 {can't find package zt::hello}}
+test oldname-2 {package require zt::hellonet} {1 {can't find package zt::hellonet}}
 
 test require-1 {package require ztcl::hello} {0 1.0}
 test require-2 {set ::ztcl::hello::installs} {0 1}

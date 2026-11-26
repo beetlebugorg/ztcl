@@ -1,11 +1,11 @@
 # ztcl
 
-A fast, sandboxed Tcl interpreter in Zig. ztcl runs Tcl 8.6 scripts with exact step and memory limits, an optional JIT compiler, real threads, and a WebAssembly build for the browser.
+A fast, sandboxed Tcl interpreter in Zig. ztcl runs Tcl 8.6 scripts with exact compute and memory limits, an optional JIT compiler, real threads, and a WebAssembly build for the browser.
 
 **Docs:** https://beetlebug.org/ztcl/ · **Playground:** https://beetlebug.org/ztcl/playground/
 
 - **Fast.** The bytecode interpreter is 1.6 to 3.5 times as fast as `tclsh` 8.6.16 on the benchmark scripts. With the JIT, an integer loop is 28 times as fast.
-- **Safe by default.** A script has no file, socket, or process access until your program turns on a capability. The step limit and the memory cap are exact.
+- **Safe by default.** A script has no file, socket, or process access until your program turns on a capability. The compute limit and the memory cap are exact.
 - **Small.** One static binary with no dependency outside the Zig standard library.
 - **Portable.** Linux, macOS, Windows, WebAssembly in the browser, and Node.js.
 
@@ -32,8 +32,8 @@ puts [fib 20]
 ```sh
 $ ztcl fib.tcl
 6765
-$ ztcl --max-steps 1000 fib.tcl
-fib.tcl:2: step limit reached
+$ ztcl --compute 1000 fib.tcl
+fib.tcl:2: compute limit reached
 ```
 
 ## Documentation

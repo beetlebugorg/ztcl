@@ -14,7 +14,7 @@ Platform: shared/wasi.
 
 ## Rules
 
-- The step limit and the memory limit come from `new`. A script over a limit gives the error of the native library.
+- The compute limit and the memory limit come from `new`. A script over a limit gives the error of the native library.
 - A host command runs only when the embedder listed its name at `new`.
 - Each capability import is in the world only when the build turns the capability on. The default build imports only `host-command`.
 - Use the form of the lift and the lowering that task 04 measured.
@@ -24,5 +24,5 @@ Platform: shared/wasi.
 ```sh
 CAP zig build wasi-lib
 wasm-tools component wit zig-out/lib/ztcl.component.wasm      # the default build imports only host-command
-CAP tools/wasi-embed-test.sh      # eval, call, an error with errorInfo, a host command, the step limit, the memory limit
+CAP tools/wasi-embed-test.sh      # eval, call, an error with errorInfo, a host command, the compute limit, the memory limit
 ```

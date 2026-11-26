@@ -20,7 +20,7 @@ An `Interp` must not move after `init`. Set the limits before you run a script f
 var it: ztcl.Interp = undefined;
 try it.init(gpa);
 defer it.deinit();
-it.step_limit = 1_000_000;
+it.compute_limit = 1_000_000;
 it.mem_limit = 64 << 20;
 const v = try it.eval("expr {6 * 7}");
 const text = try it.str(v);
@@ -30,7 +30,7 @@ On `error.TclError`, `it.result` holds the message and `it.error_line` holds the
 
 | Field or function | Use |
 |---|---|
-| `step_limit` | The steps left. The default has no limit. |
+| `compute_limit` | The compute units left. The default has no limit. |
 | `mem_limit` | The memory limit in bytes. A request fails when the heap then holds more than twice this count. A memory error can leave live data above the limit. A top-level `eval` that starts above the limit runs a collection first. While the live data stays above the limit, only the hard cap applies to that `eval`. |
 | `output` | The callback of `puts`. With no callback, the output is dropped. |
 | `noise_seed` | The seed of `noise2` and `noise3`. |
@@ -59,7 +59,7 @@ if (!it.enableJit(.{})) {
 | `threshold` | The calls of a proc before it compiles (default 2). 0 compiles before the first run. A body with a loop compiles at its first call. |
 | `mem_limit` | The most bytes of executable memory and JIT data of the interpreter and its children (default 16 MiB). It is outside the `mem_limit` of the interpreter. |
 
-- A script cannot turn the JIT on or see it. With the JIT on, a script gives the same output, the same steps, and the same memory count.
+- A script cannot turn the JIT on or see it. With the JIT on, a script gives the same output, the same compute units, and the same memory count.
 - `enableJit` returns false when the build has `-Djit=false`, the target has no backend, the layout probe fails, or the system refuses executable memory (for example SELinux `execmem` rules, a seccomp filter, or `PR_SET_MDWE`). A build with `-Dgc-precise=true` has no JIT.
 - A child interpreter gets the JIT only when its parent has it.
 - On arm64 macOS, an app with the hardened runtime needs the entitlement `com.apple.security.cs.allow-jit`. Without it, `enableJit` returns false and the interpreter runs each script. ztcl never needs `com.apple.security.cs.allow-unsigned-executable-memory` or `com.apple.security.cs.disable-executable-page-protection`. Do not add them for ztcl. The JIT compiles on the thread of the interpreter.
@@ -80,7 +80,7 @@ pub fn main(init: std.process.Init) !void {
     var it: ztcl.Interp = undefined;
     try it.init(gpa);
     defer it.deinit();
-    it.step_limit = 1_000_000;
+    it.compute_limit = 1_000_000;
     it.mem_limit = 64 << 20;
     try ztcl.point.install(&it, &state);
 
@@ -171,16 +171,16 @@ close $t              ;# SIGHUP, then SIGKILL after 500 ms
 The capability `thread` adds `thread::*`, `tsv::*`, `tpool::*`, and the mutexes and conditions. Set `Interp.thread_limits` before the call of `allow`:
 
 ```zig
-it.thread_limits = .{ .max_threads = 4, .step_limit = 10_000_000, .mem_limit = 64 << 20, .total_mem = 256 << 20 };
+it.thread_limits = .{ .max_threads = 4, .compute_limit = 10_000_000, .mem_limit = 64 << 20, .total_mem = 256 << 20 };
 try it.allow(@intFromEnum(cap.thread) | @intFromEnum(cap.event));
 ```
 
 | Field of `thread.Limits` | Default | What it limits |
 |---|---|---|
 | `max_threads` | 8 | The threads that run at one time, the workers of the pools included. |
-| `step_limit` | the step limit of the host | The steps of one thread. |
+| `compute_limit` | the compute limit of the host | The compute units of one thread. |
 | `mem_limit` | 256 MiB | The heap of one thread. |
-| `total_steps` | no limit | The steps of all threads together. |
+| `total_compute` | no limit | The compute units of all threads together. |
 | `total_mem` | 1 GiB | The memory of all threads together, with the shared variables and the queues. |
 | `max_queue` | 10,000 | The messages that wait in the queue of one thread. |
 
@@ -235,7 +235,7 @@ _ = try it.eval("source //zipfs:/app/main.tcl");
 | `ztcl_eval(h, ptr, len)` | Runs a script. Returns 0 or 1. |
 | `ztcl_result_ptr`, `ztcl_result_len` | The result or the error message. |
 | `ztcl_output_ptr`, `ztcl_output_len`, `ztcl_output_clear` | The text of `puts`. |
-| `ztcl_set_step_limit`, `ztcl_set_mem_limit` | The limits. |
+| `ztcl_set_compute_limit`, `ztcl_set_mem_limit` | The limits. |
 | `ztcl_set_gc_stress(h, n)` | A test mode: a collection at each Nth safe point. |
 
 The result pointer is valid until the next `ztcl_eval`. The build reclaims memory while a script runs. A long loop in a native command other than `catch`, `try`, `eval`, `uplevel`, `apply`, `namespace eval`, or a method, for example the body of `lmap`, holds its garbage until that command ends. The memory limit still stops it.

@@ -1,7 +1,7 @@
 {
   "name": "@beetlebug/ztcl",
   "version": "0.0.0",
-  "description": "A Tcl interpreter in WebAssembly, with a step limit and a memory limit for untrusted scripts",
+  "description": "A Tcl interpreter in WebAssembly, with a compute limit and a memory limit for untrusted scripts",
   "license": "BSD-2-Clause",
   "author": "The ztcl authors",
   "homepage": "https://beetlebug.org/ztcl/",

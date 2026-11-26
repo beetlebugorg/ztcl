@@ -22,7 +22,7 @@ The common case of the hot instructions runs with no call. The gates of mileston
 
 | Instruction | Fast path |
 |---|---|
-| `step` | If `step_limit` is 0: slow. Decrement it. If `counter.used > mem_limit`: slow, after an increment that restores the count. |
+| `step` | If `compute_limit` is 0: slow. Decrement it. If `counter.used > mem_limit`: slow, after an increment that restores the count. |
 | `guard` | If `epoch != safe_epoch`: call `hRecheck`; on 1, jump to the cold block. Then the code of `step`. |
 | `jump` | `jmp` |
 | `push`, `push_empty`, `pop` | Copy the literal. `pop` has no code. |
@@ -61,7 +61,7 @@ Gates in `bench/jit-gates.tsv` (instructions, `--jit`, default threshold):
 
 Milestones 0 and B change the counts of the interpreter. If the baseline of task 10 differs from the table "Instruction counts" of `docs/dev/jit.md` by more than 3 % for a script, scale the gate of that script by the same ratio and say so.
 
-Also: `--jit --jit-stats` on the eight scripts gives a mean of at most 96 code bytes for one bytecode instruction. The compile uses at most 400 machine instructions for one bytecode instruction: measure `sum.tcl` with a step limit of 0 (the script stops at once) with and without `--jit --jit-threshold 0`.
+Also: `--jit --jit-stats` on the eight scripts gives a mean of at most 96 code bytes for one bytecode instruction. The compile uses at most 400 machine instructions for one bytecode instruction: measure `sum.tcl` with a compute limit of 0 (the script stops at once) with and without `--jit --jit-threshold 0`.
 
 New unit tests, each compared with the interpreter: an overflow of `+`, `-`, `*`, and `incr` at both ends of the 64-bit range (the result is a big integer); a string operand `"10"`; a double operand; an unset variable (the error text); a slot that is an `upvar` link to a global, two links deep; a traced cell; an array name used as a scalar; a compare of the smallest and the largest integer.
 

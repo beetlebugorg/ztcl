@@ -47,13 +47,13 @@ Each benchmark of `bench/` is as fast as `tclsh` 8.6.16 with Thread 2.8.11, or f
 | Field | Default | What it limits |
 |---|---|---|
 | `max_threads` | 8 | The threads that run at one time, the workers of the pools included. The main thread does not count. |
-| `step_limit` | the step limit of the host | The steps of one thread. |
+| `compute_limit` | the compute limit of the host | The compute units of one thread. |
 | `mem_limit` | 256 MiB | The bytes of the heap of one thread. |
-| `total_steps` | no limit | The steps of all threads together. |
+| `total_compute` | no limit | The compute units of all threads together. |
 | `total_mem` | 1 GiB | The bytes of all threads together, with the shared variables, the queues, and the JIT data of the threads. |
 | `max_queue` | 10,000 | The messages that wait in the queue of one thread. |
 
-- A new thread gets its step limit from `total_steps` at its start, and the steps that it did not use go back at its end. So the sum of the steps of the threads is at most `total_steps`.
+- A new thread gets its compute limit from `total_compute` at its start, and the compute units that it did not use go back at its end. So the sum of the compute units of the threads is at most `total_compute`.
 - The allocator of a thread adds each byte to an atomic count of the group. When the count passes `total_mem`, the allocation fails, and the thread stops with an error.
 - A thread that passes a limit stops alone. The other threads and the host keep running. The error goes to the joiner, to the procedure of `thread::errorproc`, or to the output.
 - A new thread has the capabilities of its creator, the JIT options of its creator, and the collector settings of its creator (`gc_on` and the stress mode). A child interpreter of a thread has no `thread` capability.
@@ -128,9 +128,9 @@ The queue of a thread is a source of the event loop. `vwait`, `update`, and `thr
 A thread checks a stop flag at its safe points. Another thread sets the flag and then writes zero to `mem_limit` of the target interpreter. Each safe point of the interpreter and of the JIT code already compares the memory count with `mem_limit`, so the next safe point calls `Interp.memPoint`. There the target restores its limit and reads the flag. The fast path of the interpreter and of the JIT has no new check.
 
 - The flag is atomic. The write of `mem_limit` is an aligned word that only the target restores. The other thread sets the flag and stores the zero under the lock of the worker. The target reads the flag and restores the limit under the same lock. So a cancel is never lost, and no zero store comes after a restore. `Interp.overLimit` compares a thread interpreter with the limit of its worker, so a memory check between the two steps gives no false error.
-- A thread that runs in a child interpreter sees the cancel when the call into the child returns. The step limit of the thread bounds that call.
+- A thread that runs in a child interpreter sees the cancel when the call into the child returns. The compute limit of the thread bounds that call.
 - A thread deletes its own interpreter, the JIT code included, on its own thread after its script ends. So no JIT code of a thread runs when its interpreter goes.
-- When the host ends (`deinit` or `reset`), the group sets the stop flag of each thread, wakes each wait, and joins each thread. A thread with no step limit in a loop with no safe point can delay that. Set a step limit for untrusted scripts.
+- When the host ends (`deinit` or `reset`), the group sets the stop flag of each thread, wakes each wait, and joins each thread. A thread with no compute limit in a loop with no safe point can delay that. Set a compute limit for untrusted scripts.
 
 ## Compiled code
 

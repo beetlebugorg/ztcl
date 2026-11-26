@@ -285,8 +285,8 @@ fn cmdIf(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
 }
 
 fn step(it: *Interp) Error!void {
-    if (it.step_limit == 0) return it.fail("step limit reached", .{});
-    it.step_limit -= 1;
+    if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
+    it.compute_limit -= 1;
     try it.checkMem();
 }
 
@@ -731,7 +731,7 @@ pub const Caught = struct {
     }
 };
 
-/// Runs a script and catches its end. The end of the step limit is not
+/// Runs a script and catches its end. The end of the compute limit is not
 /// caught: it stays an error.
 pub fn runCaught(it: *Interp, script: Error!*interp.Script) Error!Caught {
     return runCaughtBody(it, script, &.{});
@@ -761,8 +761,8 @@ fn runCaughtBody(it: *Interp, script: Error!*interp.Script, argv: []const Value)
         }
     }
     if (c.code == 1) {
-        // A script cannot catch the end of its step limit or of its memory.
-        if (it.step_limit == 0 or it.overLimit() or coro.unwinding(it)) return error.TclError;
+        // A script cannot catch the end of its compute limit or of its memory.
+        if (it.compute_limit == 0 or it.overLimit() or coro.unwinding(it)) return error.TclError;
         c.error_line = it.proc_line;
         try it.finishError();
         c.error_code = it.error_code;
@@ -1424,23 +1424,23 @@ fn globOne(pat: []const u8, p_in: usize, c_in: u21, nocase: bool) ?usize {
     return if (want == ch) p + lit.len else null;
 }
 
-/// The units of work of one step. A command whose work grows with the
-/// size of its input or of its result uses one step for each
-/// `work_per_step` units. One byte is one unit.
-pub const work_per_step = 4096;
-/// The units of one entry of a table, one element of a list, or one
-/// compare of a sort.
+/// The bytes of work of one compute unit. A command whose work grows
+/// with the size of its input or of its result uses one compute unit for
+/// each `bytes_per_unit` bytes of work.
+pub const bytes_per_unit = 4096;
+/// The bytes of work of one entry of a table, one element of a list, or
+/// one compare of a sort.
 pub const entry_units = 64;
 
-/// Uses one step for each `work_per_step` units of work. The caller
+/// Uses one compute unit for each `bytes_per_unit` bytes of work. The caller
 /// charges the work before it does the work, when it knows the size.
 pub fn chargeWork(it: *Interp, units: usize) Error!void {
-    const cost = units / work_per_step;
-    if (cost > it.step_limit) {
-        it.step_limit = 0;
-        return it.fail("step limit reached", .{});
+    const cost = units / bytes_per_unit;
+    if (cost > it.compute_limit) {
+        it.compute_limit = 0;
+        return it.fail("compute limit reached", .{});
     }
-    it.step_limit -= cost;
+    it.compute_limit -= cost;
 }
 
 /// Uses the steps of a scan or a build of `n` entries.
@@ -1449,22 +1449,22 @@ pub fn chargeEntries(it: *Interp, n: usize) Error!void {
 }
 
 /// Counts the units of work of a loop, and uses one step for each
-/// `work_per_step` units. The rest stays for the next call of `add`.
+/// `bytes_per_unit` units. The rest stays for the next call of `add`.
 pub const Meter = struct {
     units: usize = 0,
 
     pub inline fn add(m: *Meter, it: *Interp, n: usize) Error!void {
         m.units +|= n;
-        if (m.units >= work_per_step) {
+        if (m.units >= bytes_per_unit) {
             try chargeWork(it, m.units);
-            m.units %= work_per_step;
+            m.units %= bytes_per_unit;
         }
     }
 };
 
 /// The first position of `needle` in `hay` at or after `start`, or null.
 /// The search is Boyer-Moore-Horspool. Each compare of the needle uses
-/// `needle.len` units of the step limit, so a text that makes each
+/// `needle.len` units of the compute limit, so a text that makes each
 /// position compare the full needle uses steps for that work.
 fn findFirst(it: *Interp, hay: []const u8, start: usize, needle: []const u8) Error!?usize {
     if (needle.len <= 4 or hay.len < 52) return std.mem.indexOfPos(u8, hay, start, needle);
@@ -1500,7 +1500,7 @@ fn findLast(it: *Interp, hay: []const u8, needle: []const u8) Error!?usize {
     }
 }
 
-/// A glob match that uses the step limit: one step for each 4096 units of
+/// A glob match that uses the compute limit: one step for each 4096 units of
 /// the pattern length times the string length.
 pub fn globSteps(it: *Interp, pat: []const u8, s: []const u8, nocase: bool) Error!bool {
     try chargeWork(it, pat.len *| s.len);
@@ -2226,7 +2226,7 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     for ([_][]const u8{ "cmdcount", "nameofexecutable", "patchlevel", "sharedlibextension", "tclversion", "library" }) |n| {
         if (eql(sub, n) and argv.len != 2) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"info {s}\"", .{n});
     }
-    if (eql(sub, "cmdcount")) return .{ .int = @bitCast(std.math.maxInt(u64) - it.step_limit) };
+    if (eql(sub, "cmdcount")) return .{ .int = @bitCast(std.math.maxInt(u64) - it.compute_limit) };
     if (eql(sub, "coroutine")) {
         if (argv.len != 2) return it.wrongArgs("info coroutine");
         return coro.current(it);

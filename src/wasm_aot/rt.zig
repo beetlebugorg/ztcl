@@ -172,7 +172,7 @@ fn staticLayout() layout.Layout {
     l.obj_index = @offsetOf(value.ListObj, "index");
     l.it_epoch = @offsetOf(Interp, "epoch");
     l.it_safe_epoch = @offsetOf(Interp, "safe_epoch");
-    l.it_step_limit = @offsetOf(Interp, "step_limit");
+    l.it_compute_limit = @offsetOf(Interp, "compute_limit");
     const counter = @offsetOf(Interp, "counter");
     l.it_mem_used = counter + @offsetOf(interp_.Counting, "used");
     l.it_mem_trip = counter + @offsetOf(interp_.Counting, "trip");

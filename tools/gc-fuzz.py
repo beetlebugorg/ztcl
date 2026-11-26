@@ -147,7 +147,7 @@ def main():
     ap.add_argument("-j", action="store_true", help="run the test run with the JIT at threshold 0")
     ap.add_argument("-T", action="store_true", help="add tier 2 to -j")
     o = ap.parse_args()
-    base = ["--max-steps", "400000", "--mem", str(256 << 20), "--allow", "interp"]
+    base = ["--compute", "400000", "--mem", str(256 << 20), "--allow", "interp"]
     bad = slow = deep = 0
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "p.tcl")

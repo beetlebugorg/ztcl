@@ -52,7 +52,7 @@ if (files.length === 0) {
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
-const stepLimit = 200_000_000n;
+const computeLimit = 200_000_000n;
 const tcltest = fs.readFileSync(path.join(here, "tcltest.tcl"), "utf8");
 const tcltestEnd = fs.readFileSync(path.join(here, "tcltest-end.tcl"), "utf8");
 
@@ -68,7 +68,7 @@ async function runFile(module, text, record) {
   if (record) x.ztcl_aot_record(1);
   const out = [];
   const ev = (t) => {
-    x.ztcl_set_step_limit(h, stepLimit);
+    x.ztcl_set_compute_limit(h, computeLimit);
     const s = enc.encode(t);
     const p = x.ztcl_alloc(s.length);
     new Uint8Array(x.memory.buffer, p, s.length).set(s);

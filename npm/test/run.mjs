@@ -32,7 +32,7 @@ const stage = path.join(root, "zig-out/npm");
 const modes = process.argv.slice(2).length ? process.argv.slice(2) : ["node", "browser", "cdn"];
 const pkg = JSON.parse(fs.readFileSync(path.join(stage, "package.json"), "utf8"));
 // The result of page/main.js.
-const expected = { eval: "42", steps: "step limit reached", worker: "499500", stopped: "stopped", after: "2" };
+const expected = { eval: "42", compute: "compute limit reached", worker: "499500", stopped: "stopped", after: "2" };
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "ztcl-npm-"));
 const run = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, stdio: "inherit" });

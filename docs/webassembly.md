@@ -1,6 +1,6 @@
 # WebAssembly
 
-`zig build wasm` builds the interpreter for the browser and for Node.js. The module runs Tcl scripts with an exact step limit and a memory limit, so a page can run scripts that its users write. [The playground](https://beetlebug.org/ztcl/playground/) uses this build.
+`zig build wasm` builds the interpreter for the browser and for Node.js. The module runs Tcl scripts with an exact compute limit and a memory limit, so a page can run scripts that its users write. [The playground](https://beetlebug.org/ztcl/playground/) uses this build.
 
 The WebAssembly build has the interpreter only, with no JIT. It has no command that reaches the host, and it has no capability that an embedder can turn on: no files, sockets, `exec`, `clock`, `interp`, or event loop. `coroutine` is present and returns an error. The `point` command is not installed.
 
@@ -15,7 +15,7 @@ npm install @beetlebug/ztcl
 ```js
 import { Interp } from "@beetlebug/ztcl";
 
-const tcl = await Interp.create({ stepLimit: 1_000_000, memLimit: 64 << 20 });
+const tcl = await Interp.create({ computeLimit: 1_000_000, memLimit: 64 << 20 });
 console.log(tcl.eval("expr {6 * 7}").result); // 42
 ```
 
@@ -40,7 +40,7 @@ In a page:
 import { Interp } from "./ztcl.mjs";
 
 const tcl = await Interp.create("./ztcl.wasm", {
-  stepLimit: 1_000_000,
+  computeLimit: 1_000_000,
   memLimit: 64 << 20,
   onOutput: (text) => console.log(text),
 });
@@ -56,7 +56,7 @@ In Node.js, give a file path or a `file:` URL:
 ```js
 import { Interp } from "./web/ztcl.mjs";
 
-const tcl = await Interp.create("zig-out/lib/ztcl.wasm", { stepLimit: 1_000_000 });
+const tcl = await Interp.create("zig-out/lib/ztcl.wasm", { computeLimit: 1_000_000 });
 console.log(tcl.eval("string repeat ab 3").result); // ababab
 tcl.close();
 ```
@@ -67,11 +67,11 @@ tcl.close();
 |---|---|
 | `compile(source)` | Compiles `ztcl.wasm`. `source` is a URL, a file path in Node.js, a `Response`, bytes, or a `WebAssembly.Module`. With no source, it is the `ztcl.wasm` file next to `ztcl.mjs`. |
 | `Interp.create(source, options)` | Makes an interpreter in a new WebAssembly instance. `source` is as for `compile`, and it can be left out: `Interp.create(options)`. Compile once and pass the module to make many interpreters. |
-| `options.stepLimit` | The steps of each `eval`. `null` is no limit, and it is the default. |
+| `options.computeLimit` | The compute units of each `eval`. `null` is no limit, and it is the default. |
 | `options.memLimit` | The memory limit in bytes. The default is 2 GiB. |
 | `options.onOutput(text)` | Gets the text of `puts` when each `eval` ends. |
 | `interp.eval(script)` | Runs a script. Returns `{ ok, result, output }`. `result` is the value of the script, or the error message when `ok` is false. |
-| `interp.stepLimit`, `interp.memLimit` | Change the limits for the next `eval`. |
+| `interp.computeLimit`, `interp.memLimit` | Change the limits for the next `eval`. |
 | `interp.memorySize` | The size of the linear memory in bytes. The memory never shrinks, so this is the peak. |
 | `interp.close()` | Frees the interpreter. |
 | `options.allow` | A list of capabilities. `ztcl.wasm` has only `"file"`, for the files of a bundle. See [Bundle a script](#bundle-a-script). |
@@ -92,13 +92,13 @@ One interpreter keeps its procs and variables from one `eval` to the next. Each 
 
 | Export | Use |
 |---|---|
-| `ztcl_new()` | Makes an interpreter. Returns a handle, or 0. The memory limit is 2 GiB, and there is no step limit. |
+| `ztcl_new()` | Makes an interpreter. Returns a handle, or 0. The memory limit is 2 GiB, and there is no compute limit. |
 | `ztcl_delete(h)` | Frees the interpreter. |
 | `ztcl_alloc(len)`, `ztcl_free(ptr, len)` | Allocate and free memory for the text of a script. |
 | `ztcl_eval(h, ptr, len)` | Runs the UTF-8 script at `ptr`. Returns 0 on success and 1 on an error. |
 | `ztcl_result_ptr(h)`, `ztcl_result_len(h)` | The result or the error message. It is valid until the next `ztcl_eval`. |
 | `ztcl_output_ptr(h)`, `ztcl_output_len(h)`, `ztcl_output_clear(h)` | The text of `puts` since the last clear. |
-| `ztcl_set_step_limit(h, n)` | Sets the steps that are left, as a `u64` (a `BigInt` in JS). Each script uses steps from this count. |
+| `ztcl_set_compute_limit(h, n)` | Sets the compute units that are left, as a `u64` (a `BigInt` in JS). Each script uses compute units from this count. |
 | `ztcl_set_mem_limit(h, bytes)` | Sets the memory limit. |
 | `ztcl_set_gc_stress(h, n)` | A test mode: a collection at each Nth safe point. 0 turns it off. |
 | `ztcl_bundle_size()` | The bytes of the payload of a bundle, or 0. |
@@ -106,11 +106,11 @@ One interpreter keeps its procs and variables from one `eval` to the next. Each 
 | `ztcl_allow(h, bits)` | Turns on capabilities. This module has only `file` (16). Returns 0 on success, 1 when the memory ends, and 2 for another bit. |
 | `memory` | The linear memory. |
 
-`Interp.eval` sets the step limit before each call. So the limit applies to each `eval`, and not to the sum of all calls.
+`Interp.eval` sets the compute limit before each call. So the limit applies to each `eval`, and not to the sum of all calls.
 
 ## Limits
 
-- **Steps.** Each command and each loop pass uses steps. At the limit, the script stops with the error `step limit reached`. `catch` and `try` cannot catch it. The same script stops at the same step in each browser and in Node.js.
+- **Compute units.** Each command and each loop pass uses compute units. At the limit, the script stops with the error `compute limit reached`. `catch` and `try` cannot catch it. The same script stops at the same point in each browser and in Node.js.
 - **Memory.** At the limit, the script stops with the error `the script used too much memory`. `catch` cannot catch it. The heap has a hard cap of twice the limit, so the linear memory can grow to about twice the limit. A script that doubles a string with a limit of 64 MiB stopped with 116 MiB of linear memory.
 - After the memory error, the data of the script can stay live above the limit. The next `eval` in the same interpreter runs a collection first. While the live data stays above the limit, only the hard cap applies, so the script can run and free its data with `unset`. When a collection brings the count below the limit, the limit applies again. Use `close` and a new `Interp` to give the memory back to the host.
 - **Output.** The module has no imports, so `puts` goes into a buffer. `eval` returns the text, and `onOutput` gets it when the script ends. When `stop` ends a worker, the output of that script is lost.
@@ -142,7 +142,7 @@ import { Interp, run } from "@beetlebug/ztcl";
 
 // Make an interpreter, run the scripts, and free the interpreter.
 const r = await run(new URL("./app.wasm", import.meta.url), {
-  stepLimit: 1_000_000,
+  computeLimit: 1_000_000,
   memLimit: 64 << 20,
   allow: ["file"],
   onOutput: (text) => console.log(text),
@@ -156,7 +156,7 @@ tcl.close();
 ```
 
 - `run()` returns `{ ok, result, output }` as `eval` does. On an error, `result` is `name:line: message`, as `ztcl` writes it.
-- The step limit and the memory limit apply as for `eval`. The step limit of one `run()` applies to all the scripts together.
+- The compute limit and the memory limit apply as for `eval`. The compute limit of one `run()` applies to all the scripts together.
 - The files of `--embed` and the scripts are under the mount `//zipfs:/app/`, with the path as given to `ztcl build`. A relative name is relative to the mount, so `open data/a.txt` reads the file of `--embed data`. With `allow: ["file"]`, the module has `source`, and `open` with the access `r`, `read`, `gets`, `eof`, and `close` on these files. `open` with another access gives the error `read-only file system`. A name outside the mount is not found. Without the capability, the module has none of these commands.
 - `read` and `gets` give the bytes of the file. They do no encoding conversion and no end-of-line translation.
 - A non-JS host calls `ztcl_new`, then `ztcl_allow(h, 16)` for the files, then `ztcl_bundle_run(h)`.
@@ -181,7 +181,7 @@ app.wasm: 6 procs compiled to 6 functions, 0 skipped
 - The runtime is `ztcl-aot.wasm` from `zig build wasm-aot`: `ztcl.wasm` with the helpers of the compiled code as exports. `--runtime FILE` gives another path. With no `--runtime`, the command uses `../lib/ztcl-aot.wasm` from the folder of the `ztcl` program.
 - `app.wasm` has the exports of `ztcl.wasm`, so `web/ztcl.mjs` and the npm package load it. The host runs the script with `eval` as before. When a proc body compiles to the same bytecode as a function of the module, that function runs in place of the interpreter.
 - The command finds each `proc`, `method`, `constructor`, and `destructor` with literal words in the scripts, also in literal words that are scripts, such as the body of `namespace eval`. A proc that the script makes from a computed string runs in the interpreter. `--record FILE` adds the procs of a run in the record mode of the runtime (`ztcl_aot_record`), so each proc of that run gets a function.
-- The output, the errors, `errorInfo`, the step count, and the memory limit are the same as in the interpreter. A function keeps the state of the interpreter at each bytecode instruction, and each rare case calls the code of the interpreter. A function that the runtime cannot use, for example after a change of the runtime, leaves its proc in the interpreter.
+- The output, the errors, `errorInfo`, the count of compute units, and the memory limit are the same as in the interpreter. A function keeps the state of the interpreter at each bytecode instruction, and each rare case calls the code of the interpreter. A function that the runtime cannot use, for example after a change of the runtime, leaves its proc in the interpreter.
 - Coroutines are not in the WebAssembly build, so a compiled proc never suspends.
 
 Speed in Node.js 26 on an x86-64 Linux machine with other load, the best of 5 runs of each `eval`, against `tclsh` 8.6.16 (the whole process, best of 5):
@@ -215,11 +215,11 @@ Then open `http://127.0.0.1:8000/examples/web/repl.html`, `rules.html`, or `work
 
 ### A REPL
 
-[`repl.html`](../examples/web/repl.html) runs each line in one interpreter, so procs and variables stay. Up and Down go through the history. Each line can use 1,000,000 steps.
+[`repl.html`](../examples/web/repl.html) runs each line in one interpreter, so procs and variables stay. Up and Down go through the history. Each line can use 1,000,000 compute units.
 
 ```js
 const tcl = await Interp.create("../../zig-out/lib/ztcl.wasm", {
-  stepLimit: 1_000_000,
+  computeLimit: 1_000_000,
   memLimit: 64 << 20,
   onOutput: (text) => show(text),
 });
@@ -229,12 +229,12 @@ if (!r.ok) show(r.result, "bad");
 
 ### A rule engine
 
-[`rules.html`](../examples/web/rules.html) lets the user write a `price` proc in Tcl. The page calls it for each line of an order, with 10,000 steps and 8 MiB for each call. Select "A rule that never ends" and the Price column shows `stopped: step limit reached`. The page stays live.
+[`rules.html`](../examples/web/rules.html) lets the user write a `price` proc in Tcl. The page calls it for each line of an order, with 10,000 compute units and 8 MiB for each call. Select "A rule that never ends" and the Price column shows `stopped: compute limit reached`. The page stays live.
 
 ```js
-const tcl = await Interp.create(module, { stepLimit: 100_000, memLimit: 8 << 20 });
+const tcl = await Interp.create(module, { computeLimit: 100_000, memLimit: 8 << 20 });
 const def = tcl.eval(ruleText);
-tcl.stepLimit = 10_000;
+tcl.computeLimit = 10_000;
 for (const [item, qty, unit] of order) {
   const r = tcl.eval(`price ${Number(qty)} ${Number(unit)}`);
   cell.textContent = r.ok ? r.result : `stopped: ${r.result}`;
@@ -258,15 +258,15 @@ cancel.onclick = () => tcl.stop(); // r is { ok: false, result: "stopped" }
 [`run.mjs`](../examples/web/run.mjs) runs a script file with limits:
 
 ```sh
-node examples/web/run.mjs --steps 1000000 --mem 16 examples/web/scripts/forever.tcl
+node examples/web/run.mjs --compute 1000000 --mem 16 examples/web/scripts/forever.tcl
 ```
 
 ```
-error: step limit reached
+error: compute limit reached
 49.6 ms, 9.2 MiB of linear memory
 ```
 
-The second line goes to stderr, with the time of the script. The exit code is 1 on an error of the script. `--steps` sets the steps and `--mem` sets the memory limit in MiB.
+The second line goes to stderr, with the time of the script. The exit code is 1 on an error of the script. `--compute` sets the compute limit and `--mem` sets the memory limit in MiB.
 
 ### Point procs
 

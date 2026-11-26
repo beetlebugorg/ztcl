@@ -3,8 +3,6 @@
 ztcl has built-in modules under the namespace `ztcl`. A module loads with `package require` and needs no capability unless its page says so. `ztcl::json` is the first module. More modules come with the [Batteries milestone](https://github.com/beetlebugorg/ztcl/milestone/2).
 
 > [!NOTE]
-> The old name `zt::json` still works until v0.4.0-beta. `package require zt::json` loads the module and makes `::zt::json` an ensemble of the same commands. New code uses `ztcl::json`.
->
 > `ztcl::json` is on `main` and comes in the next release. [Build from source](../install.md#build-from-source) to use it now.
 
 `ztcl::json` reads and writes JSON (RFC 8259). The parser is a Zig implementation of the simdjson algorithm: a first pass finds the structural bytes 64 bytes at a time with vectors, and a second pass makes Tcl values from their positions. [References](../references/stdlib.md#json) lists the sources.
@@ -121,7 +119,7 @@ Gives the text with one member on each line and N spaces (2 by default) for each
 
 ## Limits
 
-The first pass runs in chunks of 64 KiB. After each chunk, a command pays one step of the step limit for each 4096 bytes and one step for each value that it made, and it checks the memory limit. So a limit stops a parse of a large text within one chunk. A string with no escape is a slice of the text, so the text stays in memory while a part of it lives.
+The first pass runs in chunks of 64 KiB. After each chunk, a command pays one compute unit of the compute limit for each 4,096 bytes and one compute unit for each value that it made, and it checks the memory limit. So a limit stops a parse of a large text within one chunk. A string with no escape is a slice of the text, so the text stays in memory while a part of it lives.
 
 ## The tcllib names
 

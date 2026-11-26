@@ -59,9 +59,9 @@ function setBusy(on) {
 
 async function go() {
   if (busy) return;
-  const steps = Math.max(1, Math.floor(Number($("steps").value) || 1));
+  const units = Math.max(1, Math.floor(Number($("units").value) || 1));
   const mib = Math.min(1024, Math.max(1, Math.floor(Number($("mem").value) || 1)));
-  tcl.stepLimit = steps;
+  tcl.computeLimit = units;
   tcl.memLimit = mib * 1024 * 1024;
   tcl.reset();
   out.textContent = "";
@@ -74,7 +74,7 @@ async function go() {
       threads?.close();
       // The async mode has no event loop of ztcl.
       const allow = isolated() ? ["thread", "event"] : ["thread"];
-      threads = await ThreadInterp.create({ allow, stepLimit: steps, memLimit: mib * 1024 * 1024, onOutput: (t) => out.append(t) });
+      threads = await ThreadInterp.create({ allow, computeLimit: units, memLimit: mib * 1024 * 1024, onOutput: (t) => out.append(t) });
       r = await threads.eval(code.value);
       r = { ...r, output: "", mode: threads.mode };
       threads.close();

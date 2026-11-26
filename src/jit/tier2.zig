@@ -475,7 +475,7 @@ pub fn inlineOp(op: expr.BinOp, x: Kind, y: Kind) bool {
 
 /// True when tier 2 runs the instruction with no helper call on any
 /// path. Each other instruction ends its part, because a helper counts
-/// its own steps and a script that it runs can use the step limit.
+/// its own steps and a script that it runs can use the compute limit.
 pub fn noCall(i: vm.Ins, stack: []const Kind, slots: []const Kind, b: anytype) bool {
     const top = stack.len;
     return switch (i.op) {

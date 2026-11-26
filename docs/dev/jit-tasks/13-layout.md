@@ -25,7 +25,7 @@ pub const Layout = struct {
     slice_ptr: u32, slice_len: u32,
     list_obj: u32, list_len: u32, obj_buf: u32, obj_used: u32,
     // offsets in Interp
-    it_epoch: u32, it_safe_epoch: u32, it_step_limit: u32, it_mem_used: u32, it_mem_limit: u32,
+    it_epoch: u32, it_safe_epoch: u32, it_compute_limit: u32, it_mem_used: u32, it_mem_limit: u32,
     // offsets in vm.Code
     code_lits: u32, code_ins: u32,
 };

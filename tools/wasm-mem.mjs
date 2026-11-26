@@ -27,7 +27,7 @@ async function runAll(bytes, scripts, stress) {
   async function once(text, n, gcStress) {
     const { exports: x } = await WebAssembly.instantiate(module, {});
     const h = x.ztcl_new();
-    x.ztcl_set_step_limit(h, 100000000000n);
+    x.ztcl_set_compute_limit(h, 100000000000n);
     x.ztcl_set_mem_limit(h, 1 << 30);
     if (gcStress) x.ztcl_set_gc_stress(h, gcStress);
     const src = enc.encode(`set argv ${n}\n${text}`);

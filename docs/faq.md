@@ -14,7 +14,7 @@ A script has no host access by default. Turn on the capabilities that the script
 
 ## Is it safe to run scripts from untrusted users?
 
-That is the main use of ztcl. Set a step limit and a memory limit, and turn on only the capabilities that you need. Never turn on `exec` for untrusted scripts: it is not sandboxed. [Security](../SECURITY.md) has the threat model and how to report a problem.
+That is the main use of ztcl. Set a compute limit and a memory limit, and turn on only the capabilities that you need. Never turn on `exec` for untrusted scripts: it is not sandboxed. [Security](../SECURITY.md) has the threat model and how to report a problem.
 
 ## Which platforms does it run on?
 

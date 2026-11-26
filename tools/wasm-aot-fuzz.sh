@@ -6,7 +6,7 @@
 # Writes COUNT programs of the generator of tools/jit-fuzz.zig, from
 # seed SEED, and runs them with tools/wasm-aot.mjs: each program runs in
 # the interpreter of ztcl-aot.wasm and on a module with each of its
-# procs compiled, with SWEEP more step limits. The result, the output,
+# procs compiled, with SWEEP more compute limits. The result, the output,
 # the error, and the steps used must be equal. A difference prints the
 # file, and the program stays in zig-out/wasm-aot-fuzz.
 # SPDX-License-Identifier: BSD-2-Clause

@@ -41,7 +41,7 @@ CAP sh -c 'for f in bench/*.tcl; do perf stat -e instructions:u zig-out/bin/ztcl
 Gates:
 
 - Each script of `bench/` uses at most 3 % more instructions than the baseline of task 01.
-- A test runs one script two times with `--gc off --mem M --report` for a limit M that the script reaches. Both runs stop at the same step count.
+- A test runs one script two times with `--gc off --mem M --report` for a limit M that the script reaches. Both runs stop at the same point count.
 - A test proves that a value under `hold` survives 100 collections, and that the same value with no `hold` is gone (the 0xDD fill) in a build with safety checks.
 
 ## Must not change

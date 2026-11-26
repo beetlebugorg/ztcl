@@ -16,7 +16,7 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-// The step limit of the C ABI is a u64. This value is "no limit".
+// The compute limit of the C ABI is a u64. This value is "no limit".
 const NO_LIMIT = 0xffffffffffffffffn;
 
 /// The URL of the ztcl.wasm file next to this file.
@@ -64,7 +64,7 @@ export async function compile(source = wasmURL()) {
 export class Interp {
   /// Makes an interpreter in a new instance of `module`. `module` is a
   /// source as for compile(), and it can be left out.
-  /// Options: stepLimit (steps for each eval, null for no limit),
+  /// Options: computeLimit (compute units for each eval, null for no limit),
   /// memLimit (bytes), onOutput (a function that gets the `puts` text),
   /// allow (a list of capabilities: only "file", for the files of a
   /// bundle).
@@ -74,11 +74,11 @@ export class Interp {
     return new Interp(instance, options);
   }
 
-  constructor(instance, { stepLimit = null, memLimit = null, onOutput = null, allow = [] } = {}) {
+  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [] } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
-    this.stepLimit = stepLimit;
+    this.computeLimit = computeLimit;
     this.onOutput = onOutput;
     if (memLimit != null) this.memLimit = memLimit;
     if (allow.length) {
@@ -97,7 +97,7 @@ export class Interp {
 
   /// Runs the scripts of a bundle (`ztcl build --wasm`) in order.
   /// Returns { ok, result, output } as eval() does. On an error,
-  /// `result` is "name:line: message". The step limit applies to all
+  /// `result` is "name:line: message". The compute limit applies to all
   /// the scripts of the call together.
   run() {
     if (!this.bundleSize) throw new Error("the module has no bundle");
@@ -121,7 +121,7 @@ export class Interp {
   }
 
   /// Runs a script. Returns { ok, result, output }. `result` is the
-  /// value of the script or the error message. The step limit applies
+  /// value of the script or the error message. The compute limit applies
   /// to each call.
   eval(script) {
     const x = this.x;
@@ -139,8 +139,8 @@ export class Interp {
   _call(f) {
     const x = this.x;
     if (!this.h) throw new Error("the interpreter is closed");
-    const steps = this.stepLimit == null ? NO_LIMIT : BigInt(this.stepLimit);
-    x.ztcl_set_step_limit(this.h, steps);
+    const units = this.computeLimit == null ? NO_LIMIT : BigInt(this.computeLimit);
+    x.ztcl_set_compute_limit(this.h, units);
     const rc = f();
     const result = this._text(x.ztcl_result_ptr(this.h), x.ztcl_result_len(this.h));
     const output = this._text(x.ztcl_output_ptr(this.h), x.ztcl_output_len(this.h));
@@ -180,9 +180,9 @@ export class WorkerInterp {
   /// are as for Interp.create.
   constructor(wasm, options = {}) {
     if (isOptions(wasm)) [wasm, options] = [undefined, wasm];
-    const { stepLimit = null, memLimit = null, onOutput = null } = options;
+    const { computeLimit = null, memLimit = null, onOutput = null } = options;
     this.wasm = new URL(wasm ?? wasmURL(), globalThis.location?.href).href;
-    this.stepLimit = stepLimit;
+    this.computeLimit = computeLimit;
     this.memLimit = memLimit;
     this.onOutput = onOutput;
     this.worker = null;
@@ -223,7 +223,7 @@ export class WorkerInterp {
     const id = this.next++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ id, script, stepLimit: this.stepLimit, memLimit: this.memLimit });
+      this.worker.postMessage({ id, script, computeLimit: this.computeLimit, memLimit: this.memLimit });
     });
   }
 

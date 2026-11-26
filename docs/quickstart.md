@@ -29,16 +29,16 @@ Run `ztcl` with no file to start the [interactive shell](shell.md).
 
 ## Set limits
 
-A script from a user or from the network can loop forever or fill the memory. Set a step limit, and a memory limit in bytes. `hog.tcl` is the line `set l {}; while 1 {lappend l [string repeat x 1000]}`.
+A script from a user or from the network can loop forever or fill the memory. Set a compute limit, and a memory limit in bytes. `hog.tcl` is the line `set l {}; while 1 {lappend l [string repeat x 1000]}`.
 
 ```sh
-$ ztcl --max-steps 1000 sum.tcl
-sum.tcl:3: step limit reached
+$ ztcl --compute 1000 sum.tcl
+sum.tcl:3: compute limit reached
 $ ztcl --mem 67108864 hog.tcl
 hog.tcl:1: the script used too much memory
 ```
 
-`catch` and `try` cannot catch the step limit. The default memory limit of the runner is 2 GiB.
+`catch` and `try` cannot catch the compute limit. The default memory limit of the runner is 2 GiB.
 
 ## Turn on host access
 

@@ -129,7 +129,7 @@ The instructions:
 | Control | `guard`, `step`, `jump`, `jump_false`, `jump_true`, `jf_vv`, `jf_vi`, `str_eq_jump`, `foreach_init`, `foreach_next`, `ret` |
 | General path | `invoke`, `eval_cmd`, `word`, `node` |
 
-`switch` compiles for `switch ?-exact? ?--? string {pattern body ...}` and for the same form with the patterns and the bodies as separate literal words. Each pattern and each body is a literal. Without `--`, the string is a literal that does not start with a minus sign, because the general command reads such a value as an option. `str_eq_jump` compares the string form of the top of the stack with a pattern and jumps to the body, and an integer needs no string. A body of `-` falls through to the next body. A last pattern `default` takes each string. The other options and each other form use the general command. The guard of the form uses one step.
+`switch` compiles for `switch ?-exact? ?--? string {pattern body ...}` and for the same form with the patterns and the bodies as separate literal words. Each pattern and each body is a literal. Without `--`, the string is a literal that does not start with a minus sign, because the general command reads such a value as an option. `str_eq_jump` compares the string form of the top of the stack with a pattern and jumps to the body, and an integer needs no string. A body of `-` falls through to the next body. A last pattern `default` takes each string. The other options and each other form use the general command. The guard of the form uses one compute unit.
 
 A cell that holds the canonical text of an integer gets the integer when a compare or an operator reads it (`shimmer`). The string form does not change. A loop bound that comes from `argv` then needs no parse in each pass.
 
@@ -151,7 +151,7 @@ The semantics of Tcl stay:
 - `upvar`, `global`, `variable`, `uplevel`, and `info locals` use the same cells in `Frame.vars`. A slot can hold a link to a cell of another frame.
 - A table of ranges maps an address to its commands and loops. An error adds each enclosing command to `errorInfo`. A `break` or a `continue` from a general command goes to the innermost loop.
 - A cell can own a dict. `dict incr` or `dict set` with a dropped result then writes to the buffer in place. Each general read of the cell ends the ownership first, so a copy of the value never changes.
-- The guard, each loop pass, and each `invoke` use one step of the step limit and check the memory limit.
+- The guard, each loop pass, and each `invoke` use one step of the compute limit and check the memory limit.
 
 ## The evaluator
 
@@ -188,8 +188,8 @@ A namespace is a prefix of names (`ns.zig`).
 
 - A Thompson simulation finds the leftmost match and its longest end, or its shortest end when the first quantifier is non-greedy. Its time is the program size times the text length.
 - A second pass splits the known span over the tree to find the capture groups. Each part of a concatenation takes the longest or shortest length that leaves a match for the rest. A table of failed spans keeps this pass polynomial.
-- A pattern with a back reference has no simulation. It searches with the second pass alone, and the step limit bounds it.
-- Each 32 steps of a matcher use one step of the step limit. A repeat count is at most 255, and a program has at most 40 000 instructions.
+- A pattern with a back reference has no simulation. It searches with the second pass alone, and the compute limit bounds it.
+- Each 32 compute units of a matcher use one step of the compute limit. A repeat count is at most 255, and a program has at most 40 000 instructions.
 - Positions count characters. A cache with 64 places keeps the compiled patterns.
 
 `regexp`, `regsub`, `switch -regexp` (with `-matchvar` and `-indexvar`), and `lsearch -regexp` use it.
@@ -202,7 +202,7 @@ A string is UTF-8 bytes. The `string` subcommands and glob patterns work on char
 
 ## expr
 
-`expr.zig` parses an expression into a tree and walks the tree. Two integers use a fast path with no string work. An integer that overflows 64 bits continues as a big integer, as in Tcl. A big integer has at most 2^20 bits. An operation on big integers uses steps of the step limit by the square of its size.
+`expr.zig` parses an expression into a tree and walks the tree. Two integers use a fast path with no string work. An integer that overflows 64 bits continues as a big integer, as in Tcl. A big integer has at most 2^20 bits. An operation on big integers uses compute units of the compute limit by the square of its size.
 
 The functions are those of Tcl 8.6, and four additions for zslice: `clamp`, `lerp`, `noise2`, and `noise3`. `rand()` uses a fixed seed.
 
@@ -218,7 +218,7 @@ A coroutine has its own native stack, word stack, and frame chain. An exported a
 
 ## Capabilities
 
-`Interp.allow` turns on optional commands. The default interpreter has none. A build with modules has a small `package` command by default (`names`, `present`, `provide`, `require`, and `versions`). It loads a built-in module from memory and reads no file. A module that needs a capability gives an error without it, and a child interpreter installs each module itself. A child interpreter allocates through the counter of its parent, so the parent limit counts it. A call into a child passes the step limit, the nesting counts, and the native stack base. A child that is deleted while it runs is freed when the last call leaves it. `compact` gives `InterpBusy` for an interpreter with capabilities.
+`Interp.allow` turns on optional commands. The default interpreter has none. A build with modules has a small `package` command by default (`names`, `present`, `provide`, `require`, and `versions`). It loads a built-in module from memory and reads no file. A module that needs a capability gives an error without it, and a child interpreter installs each module itself. A child interpreter allocates through the counter of its parent, so the parent limit counts it. A call into a child passes the compute limit, the nesting counts, and the native stack base. A child that is deleted while it runs is freed when the last call leaves it. `compact` gives `InterpBusy` for an interpreter with capabilities.
 
 ### The event loop
 
@@ -238,21 +238,21 @@ A channel that does not block keeps output that the peer has no room for. The lo
 
 - In the default interpreter the commands `open`, `socket`, `exec`, `file`, `clock`, `source`, `cd`, `glob`, `after`, `vwait`, and `update` do not exist. The library has no `exit` and no `load`. A test checks this.
 - `puts` writes to a callback of the embedder.
-- Step limit: each command and each loop pass uses one step. At zero, the script stops with an error. `catch` cannot catch this error.
+- Compute limit: each command and each loop pass uses one compute unit. At zero, the script stops with an error. `catch` cannot catch this error.
 - The nesting of scripts in scripts has a limit (2000 levels): `eval`, a loop body, a command substitution, `try`, `catch`. Before, `set s {eval $s}; eval $s` used up the native stack and crashed the process.
 - `lsort` uses a merge sort with its buffer in the heap, so a compare command that sorts again uses little native stack.
 - The nested scripts can use at most 5 MiB of native stack (`max_native`). A frame of the bytecode loop is large in a debug build, so the count of levels alone is not safe.
 - A call of `subst`, an ensemble, or the unknown handler counts as one level of nesting.
 - The nesting of calls has a limit (600 levels). The nesting of command substitutions and of an expression has a limit (200 levels), and an expression has at most 2000 nodes. A deep script gives an error and does not use up the native stack.
-- A glob match goes back only to the last `*`. Its time is at most the pattern length times the string length. `string match`, `switch -glob`, `lsearch -glob`, and `dict filter` pay one step of the step limit for each 4096 units of that product.
-- A regular expression uses the step limit (see above).
-- A command whose work grows with a table, with a list, or with the size of its result uses the step limit for that work. The rule and the commands are in [SECURITY.md](../../SECURITY.md#the-cpu-time-of-a-step).
+- A glob match goes back only to the last `*`. Its time is at most the pattern length times the string length. `string match`, `switch -glob`, `lsearch -glob`, and `dict filter` pay one compute unit for each 4,096 units of that product.
+- A regular expression uses the compute limit (see above).
+- A command whose work grows with a table, with a list, or with the size of its result uses the compute limit for that work. The rule and the commands are in [SECURITY.md](../../SECURITY.md#the-cpu-time-of-a-step).
 - All memory comes from one heap (`src/heap.zig`) on the allocator that the embedder gives. The heap has pages of blocks in 32 size classes and large blocks for a request above 8 KiB. A heap below 2 MiB uses pages of 4 KiB, so a short script holds little memory. A child interpreter shares the heap of its parent.
 - A collector frees the blocks that a script no longer reaches. It is a mark-and-sweep collector that does not move a block, and it finds pointers conservatively: each aligned word of a root or of a live block that has the address of a block (also an address inside the block) keeps the block. A number that looks like an address keeps a dead block. This costs memory and never safety.
 - The roots on each target are the bytes of each `Interp` struct of the tree, the state of the point procs, each range from `addRoot`, each value from `hold`, and the pin list of a precise build. A native build also scans the native stack up to `native_base`, the callee-saved registers, the stack of the resumer of each running coroutine, and the stack block of each coroutine. A word on a native stack also keeps the block before it and the block after it, because an optimizing compiler can hold a pointer just outside a block. A block of a type with an alignment below the size of a pointer holds no pointer, and the mark does not read it.
 - A collection starts at a safe point: the limit check between two commands or two bytecode instructions. An allocation does not start one, so a command that does not run a script never sees a collection. The check reads one field, `trip`. It holds the byte count, or the largest number when a collection is due. A collection is due at 16 MiB and at twice the live bytes, or at four times the live bytes after a collection that freed under half of the heap, or above `mem_limit`. The trigger reads byte counts and no clock. `--gc off` and `gc_on = false` turn the collector off. `--gc-stress N` starts a collection at each Nth safe point, and on a native target also at each Nth allocation. The gap grows by N for each 16 MiB of heap. The stress mode fills a freed block with the byte 0xDD in each build mode, so a missed root shows at once.
 - Only `eval`, `evalTop`, and `enterHost` make the native stack scannable. A host call of `evalCmd`, `call`, `callWords`, `evalScript`, or `vm.run` at nest 0 runs with no collection, also through a nested `eval`. So a missing `enterHost` costs memory and cannot free a live block. A stack range that is not valid stops the collection before the sweep.
-- `script_cache` and `expr_cache` have tables outside the heap. An entry stays while the block of its text is live, and the mark then keeps its compiled form. So a collection does not change the step count of a script.
+- `script_cache` and `expr_cache` have tables outside the heap. An entry stays while the block of its text is live, and the mark then keeps its compiled form. So a collection does not change the count of compute units of a script.
 - The text cache is a root, and its clock uses only the order of the calls. So a collection does not change which run of an event script or an `eval` text is its second run.
 - A value from `eval` is valid until the next call into the interpreter. `hold` keeps it longer, and `release` ends that. A native command of the embedder keeps a value in a variable of the interpreter, or registers the memory that holds it with `addRoot`.
 - WebAssembly uses the same heap in linear memory with precise roots. The WebAssembly GC proposal does not apply: Zig 0.16 has no `gc` target feature (`-mcpu=generic+gc` is an error) and emits linear-memory code, so a ztcl value cannot be a managed object. A module also cannot read its locals or its value stack, so a stack scan is not sound. The build collects only at a safe point of `vm.exec` when each native frame of the run is a clean frame: `evalTop`, `vm.run`, `vm.exec`, a proc call from bytecode, or a direct call of `catch`, `try`, `eval`, `uplevel`, `apply`, `namespace eval`, or a method. Each clean frame keeps its values on the word stack, in cells, or in the pin list. `vm.run` ends the chain unless its caller sets a token, so a new native command is safe with no change. While another native command runs, for example `lmap`, the collection waits for the next clean safe point, and the memory limit still applies. `-Dgc-precise=true` builds these rules on a native target, so the stress tests run them with safety checks.
@@ -271,7 +271,7 @@ The JIT is off by default. On x86-64 Linux, `-Djit` builds it, and an embedder t
 - Before a compile, the verifier checks each instruction and gives the static stack depth of each address. The machine code has no stack pointer: a stack value has a fixed offset.
 - Each instruction becomes one template. The state at each instruction boundary equals the state of the interpreter: the values are on the value stack and in the cells. The fast paths of `step`, `guard`, `push`, `load`, `store`, the jumps, `+`, `-`, `*`, the compares, and `incr` check each tag and run with no call. Each other case calls the helper of the instruction. The helper runs the function of `vm.exec` for that instruction. So each slow path has one implementation.
 - An error stub writes the address and the depth of its instruction, and `run` handles the error as for `exec`: the error trace, `break`, `continue`, and the return codes.
-- The step limit and the memory check run at the same instructions as in the interpreter. A test compares the steps of each script in both modes, and a sweep compares the stop at each step limit.
+- The compute limit and the memory check run at the same instructions as in the interpreter. A test compares the compute units of each script in both modes, and a sweep compares the stop at each compute limit.
 - No value is in a register across a helper call, so the collector finds each value in the value stack and the cells. The memory of the JIT comes from the allocator of the embedder and is outside `mem_limit`. `Options.mem_limit` (16 MiB) bounds the region and the records of an interpreter and its children.
 - No value of a script is an immediate operand, and the code has no absolute address. A page is writable or executable, never both, and an executable page never becomes writable again.
 - `reset`, `compact`, and `deinit` free the machine code. A flush gets a new generation number, and a `Code` runs its function only when its number equals the number of the state.

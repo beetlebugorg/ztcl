@@ -7,9 +7,9 @@ export type ThreadCapability = "thread" | "event" | "clock" | "package" | "inter
 /** The limits of the threads. A missing field keeps its default. */
 export interface ThreadLimits {
   maxThreads?: number;
-  stepLimit?: number;
+  computeLimit?: number;
   memLimit?: number;
-  totalSteps?: number;
+  totalCompute?: number;
   totalMem?: number;
   maxQueue?: number;
 }
@@ -24,8 +24,8 @@ export interface ThreadInterpOptions {
   /** The default is ["thread"]. "event" works only in the shared mode. */
   allow?: ThreadCapability[];
   limits?: ThreadLimits;
-  /** The steps of each eval of the main interpreter. */
-  stepLimit?: number | null;
+  /** The compute units of each eval of the main interpreter. */
+  computeLimit?: number | null;
   memLimit?: number | null;
   /** The text of `puts` of each thread. */
   onOutput?: ((text: string) => void) | null;
@@ -46,7 +46,7 @@ export function asyncURL(): URL;
 export class ThreadInterp {
   static create(options?: ThreadInterpOptions): Promise<ThreadInterp>;
   readonly mode: "shared" | "async";
-  stepLimit: number | null;
+  computeLimit: number | null;
   onOutput: ((text: string) => void) | null;
   /** Runs a script in the main interpreter. */
   eval(script: string): Promise<ThreadEvalResult>;

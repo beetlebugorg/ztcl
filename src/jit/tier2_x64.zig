@@ -1214,9 +1214,9 @@ const Emitter = struct {
         }
         // The step of `foreach_next`. No code since the last memory check
         // allocates, so the memory check of the step passes.
-        try s.aluMI(.cmp, itAt(l.it_step_limit), 0);
+        try s.aluMI(.cmp, itAt(l.it_compute_limit), 0);
         try s.jcc(.e, slow_l);
-        try s.decM(itAt(l.it_step_limit));
+        try s.decM(itAt(l.it_compute_limit));
         var k: usize = table.len;
         while (k > 0) {
             k -= 1;
@@ -1409,7 +1409,7 @@ const Emitter = struct {
                     try e.writePlace(k, kind, e.xplace(k));
                 }
                 try e.writeSlots();
-                if (x.refund > 0) try s.aluMI(.add, itAt(l.it_step_limit), @intCast(x.refund));
+                if (x.refund > 0) try s.aluMI(.add, itAt(l.it_compute_limit), @intCast(x.refund));
             }
             try s.movRI32(abi.arg1, @intCast(x.pc));
             try s.movRI32(abi.arg2, @intCast(e.depth(x.pc)));
@@ -1457,7 +1457,7 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
     const stubs = try a.alloc(?Label, n);
     defer a.free(stubs);
     @memset(stubs, null);
-    const left = try lower.stepsLeft(a, code, p);
+    const left = try lower.computeLeft(a, code, p);
     defer a.free(left);
     // The registers of the slots of the kind `int`.
     const slot_reg = try a.alloc(?Reg, p.slots.len);
@@ -1595,9 +1595,9 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
         if (targets[k]) @memset(e.known, null);
         s.bind(labels[k]);
         if (check) {
-            try s.aluMI(.cmp, Emitter.itAt(l.it_step_limit), @intCast(pt.steps));
+            try s.aluMI(.cmp, Emitter.itAt(l.it_compute_limit), @intCast(pt.steps));
             try s.jcc(.b, try e.exit(pc, 0));
-            try s.aluMI(.sub, Emitter.itAt(l.it_step_limit), @intCast(pt.steps));
+            try s.aluMI(.sub, Emitter.itAt(l.it_compute_limit), @intCast(pt.steps));
         }
         if (!p.seen[k]) {
             try s.ud2();

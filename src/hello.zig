@@ -20,8 +20,6 @@ pub const modules_list = [_]mods.Module{
         .version = "1.0",
         .aliases = &.{
             .{ .name = "hello", .version = "0.9", .script = "proc ::hello {name} {::ztcl::hello greet $name}" },
-            // The old name, until v0.4.0-beta.
-            .{ .name = "zt::hello", .version = "1.0", .script = mods.oldNamespace("hello") },
         },
         .install = install,
         .script =
@@ -36,7 +34,6 @@ pub const modules_list = [_]mods.Module{
     .{
         .name = "ztcl::hellonet",
         .version = "1.0",
-        .aliases = &.{.{ .name = "zt::hellonet", .version = "1.0", .script = "" }},
         .needs = @backingInt(interp.Capability.socket),
     },
 };

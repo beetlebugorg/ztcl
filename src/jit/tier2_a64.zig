@@ -1086,10 +1086,10 @@ const Emitter = struct {
         }
         // The step of `foreach_next`. No code since the last memory check
         // allocates, so the memory check of the step passes.
-        try e.ldr(rcx, abi.it, l.it_step_limit);
+        try e.ldr(rcx, abi.it, l.it_compute_limit);
         try s.cbz(rcx, slow_l);
         try s.subI(rcx, rcx, 1, false);
-        try e.str(rcx, abi.it, l.it_step_limit);
+        try e.str(rcx, abi.it, l.it_compute_limit);
         var k: usize = table.len;
         while (k > 0) {
             k -= 1;
@@ -1268,7 +1268,7 @@ const Emitter = struct {
                     try e.writePlace(k, kind, e.dplace(k));
                 }
                 try e.writeSlots();
-                if (x.refund > 0) try e.addWord(abi.it, l.it_step_limit, x.refund);
+                if (x.refund > 0) try e.addWord(abi.it, l.it_compute_limit, x.refund);
             }
             try s.movImm(abi.arg1, @intCast(x.pc));
             try s.movImm(abi.arg2, @intCast(e.depth(x.pc)));
@@ -1312,7 +1312,7 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
     const stubs = try a.alloc(?Label, n);
     defer a.free(stubs);
     @memset(stubs, null);
-    const left = try lower.stepsLeft(a, code, p);
+    const left = try lower.computeLeft(a, code, p);
     defer a.free(left);
     const slot_reg = try a.alloc(?Reg, p.slots.len);
     defer a.free(slot_reg);
@@ -1443,9 +1443,9 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
         if (check) {
             // At least `steps` steps are left, or the exit, with no step
             // used.
-            try e.cmpWord(abi.it, l.it_step_limit, pt.steps);
+            try e.cmpWord(abi.it, l.it_compute_limit, pt.steps);
             try s.bcond(.lo, try e.exit(pc, 0));
-            try e.addWord(abi.it, l.it_step_limit, -@as(i64, pt.steps));
+            try e.addWord(abi.it, l.it_compute_limit, -@as(i64, pt.steps));
         }
         if (!p.seen[k]) {
             try s.udf(0);

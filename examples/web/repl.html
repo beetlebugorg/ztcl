@@ -6,7 +6,7 @@
 <!-- A REPL: each line runs in the same interpreter, so procs and
      variables stay. Up and Down go through the history. -->
 <h1>ztcl REPL</h1>
-<p>Type a command and press Enter. Each command can use 1 000 000 steps and the interpreter can use 64 MiB.</p>
+<p>Type a command and press Enter. Each command can use 1,000,000 compute units and the interpreter can use 64 MiB.</p>
 <pre id="log" aria-live="polite"></pre>
 <div class="row"><span>%</span><input id="line" autocomplete="off" spellcheck="false" style="flex:1" aria-label="Command"></div>
 <script type="module">
@@ -22,7 +22,7 @@ const show = (text, cls = "") => {
 };
 
 const tcl = await Interp.create("../../zig-out/lib/ztcl.wasm", {
-  stepLimit: 1_000_000,
+  computeLimit: 1_000_000,
   memLimit: 64 << 20,
   onOutput: (text) => show(text),
 });

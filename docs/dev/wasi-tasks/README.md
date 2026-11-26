@@ -46,7 +46,7 @@
 7. Each new source file starts with a `//!` comment that explains its algorithm, and an SPDX line for BSD-2-Clause.
 8. Use only the Zig 0.16.0 standard library. `wasmtime` and `wasm-tools` are test and packaging tools. Pin each version, and check each download with SHA-256.
 9. Write fresh code. Credit each source in `docs/references/wasi.md`.
-10. Use the words "step limit" for the limit on steps. Name no AI model or vendor in the repository. Add no attribution line.
+10. Use the words "compute limit" for the limit on steps. Name no AI model or vendor in the repository. Add no attribution line.
 11. If a gate fails, do not change the gate. Report the measured number and the cause.
 12. If a fact in a task is wrong, stop and report it. Do not guess.
 

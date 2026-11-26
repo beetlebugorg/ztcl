@@ -62,11 +62,11 @@ pub const Writer = struct {
         const cost = (w.out.items.len - w.paid_at) / 4096 + w.made;
         w.paid_at = w.out.items.len;
         w.made = 0;
-        if (cost > it.step_limit) {
-            it.step_limit = 0;
-            return it.fail("step limit reached", .{});
+        if (cost > it.compute_limit) {
+            it.compute_limit = 0;
+            return it.fail("compute limit reached", .{});
         }
-        it.step_limit -= cost;
+        it.compute_limit -= cost;
         if (it.overLimit()) return it.memError();
     }
 

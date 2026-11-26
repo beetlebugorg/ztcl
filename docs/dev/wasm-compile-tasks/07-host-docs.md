@@ -8,8 +8,8 @@ An embedder can load a compiled point proc from the docs alone. `ztcl compile -m
 
 ## Files
 
-- `examples/point-wasm/`: a Node.js host. It reads the custom section `ztcl.point`, maps the feature names, writes the columns, calls `run` with a step limit, and reads the outputs.
-- `src/main.zig`: one hunk: the option `-manifest FILE` of `compile`. The fragment has the ABI version, the export names, the columns, the feature names, the steps of one block, `cap`, the memory size, and an empty list of imports.
+- `examples/point-wasm/`: a Node.js host. It reads the custom section `ztcl.point`, maps the feature names, writes the columns, calls `run` with a compute limit, and reads the outputs.
+- `src/main.zig`: one hunk: the option `-manifest FILE` of `compile`. The fragment has the ABI version, the export names, the columns, the feature names, the compute units of one block, `cap`, the memory size, and an empty list of imports.
 - `docs/dev/wasm-compile.md`: the module ABI as a reference for hosts, and a section for zslice.
 - `docs/webassembly.md`: a section "Compile a point proc".
 - `docs/references/wasm-compile.md`: the sources.

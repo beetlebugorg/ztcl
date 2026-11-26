@@ -26,7 +26,7 @@ set jobs {}
 foreach x {1 2 3 4 5} {lappend jobs [tpool::post $p "tw $x"]}
 test tpool-1 {llength $jobs} 5
 test tpool-2 {tpool::wait $p $jobs} {!tpool::wait needs a cross-origin isolated page (COOP and COEP headers)}
-# The limits of one thread: tools/wasm-threads.mjs sets a step limit of
+# The limits of one thread: tools/wasm-threads.mjs sets a compute limit of
 # 1000000 and a memory limit of 32 MiB for each thread.
 set lim [thread::create {thread::wait}]
 thread::send -async $lim {while 1 {}} ::steps
@@ -51,7 +51,7 @@ proc jobsDone {} {
     expr {[llength $left] == 0}
 }
 # ---- wait: {[info exists ::bgot] && [info exists ::tgot] && [jobsDone] && [info exists ::steps] && [info exists ::mem] && ![thread::exists $lim] && ![thread::exists $big]}
-test limit-1 {set ::steps} {step limit reached}
+test limit-1 {set ::steps} {compute limit reached}
 test limit-2 {set ::mem} {the script used too much memory}
 # A thread that passes a limit ends.
 test limit-3 {list [thread::exists $lim] [thread::exists $big]} {0 0}

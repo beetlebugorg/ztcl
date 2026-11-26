@@ -54,7 +54,7 @@ The user answers the questions below before task 01 merges.
 7. Each new source file starts with a `//!` comment that explains its algorithm, and an SPDX line for BSD-2-Clause.
 8. Use only the Zig 0.16.0 standard library. Node.js, `wasm-tools`, and `wasmtime` are test tools.
 9. Write fresh code. Write the encoder from the WebAssembly specification. Credit each source in `docs/references/wasm-compile.md`.
-10. Use the words "step limit" for the limit on steps. Name no AI model or vendor in the repository. Add no attribution line.
+10. Use the words "compute limit" for the limit on steps. Name no AI model or vendor in the repository. Add no attribution line.
 11. If a gate fails, do not change the gate. Report the measured number and the cause.
 12. If a fact in a task is wrong, stop and report it. Do not guess.
 
@@ -65,7 +65,7 @@ The user answers the questions below before task 01 merges.
 | [01](01-writer.md) | shared | The wasm writer |
 | [02](02-runtime.md) | shared/web | The runtime module and the function append |
 | [03](03-codegen.md) | shared/web | The code generation and `ztcl compile` |
-| [04](04-limits.md) | shared/web | The step limit and the memory limit in the module |
+| [04](04-limits.md) | shared/web | The compute limit and the memory limit in the module |
 | [05](05-fuzzer.md) | shared/web | The random proc fuzzer and the wasmtime run |
 | [06](06-speed.md) | shared/web | The speed gate |
 | [07](07-host-docs.md) | shared | The host example, the manifest fragment, and the docs |
@@ -73,7 +73,7 @@ The user answers the questions below before task 01 merges.
 ## Questions for the user
 
 1. **The speed gate.** Issue 3 asks that each point is faster than the vector path of the interpreter. The plan compares the module with the interpreter's vector path in the same host: `Program.run` in a wasm build of ztcl, both in Node.js. The other choice is the native `Program.run`. Which one?
-2. **The step unit.** The plan counts one step for each operation of the program for each block of 1024 points. The vector path of the interpreter counts no steps today. Is that unit right for zslice?
+2. **The step unit.** The plan counts one compute unit for each operation of the program for each block of 1024 points. The vector path of the interpreter counts no steps today. Is that unit right for zslice?
 3. **The scalar form.** The plan has a `-simd off` form for a host with no wasm SIMD. The zslice plugin runtime is not chosen yet. Is the scalar form needed?
 4. **The manifest.** The plan writes a manifest fragment with `-manifest FILE` and puts the facts in the custom section `ztcl.point`. Does zslice want the fragment, or only the custom section?
 5. **Imports.** Point procs declare no host functions today, so a module has no imports. Is a declared import (a host function in a point proc) part of level 2, or later work?

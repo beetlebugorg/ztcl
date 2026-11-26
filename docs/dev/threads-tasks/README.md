@@ -57,7 +57,7 @@ The user decides the three points of "Decisions for the user" in the design befo
 8. Each new source file starts with a `//!` comment that explains its algorithm, and an SPDX line for BSD-2-Clause.
 9. Write fresh code. Copy no code from the Thread package or another project. Credit each source in `docs/references/thread.md`.
 10. Use only the Zig 0.16.0 standard library. The WebAssembly build has no thread command until task 14.
-11. Use the words "step limit" for the limit on steps. Name no AI model or vendor in the repository. Add no attribution line.
+11. Use the words "compute limit" for the limit on steps. Name no AI model or vendor in the repository. Add no attribution line.
 12. If a gate fails, do not change the gate. Report the measured number and the cause.
 13. If a fact in a task is wrong, stop and report it. Do not guess.
 
