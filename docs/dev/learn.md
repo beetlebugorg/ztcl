@@ -2,42 +2,53 @@
 
 This file is the design of the Learn section of the docs site. It replaces the one long page `docs/learn.md`. It is not on the site.
 
-## The reader
+## The reader and the aim
 
-- A programmer who knows Python, JavaScript, or Go and wants to write Tcl soon. The course does not teach programming.
+Many readers do not write most of their code now. An agent writes it, and the person reads it, judges it, and steers the agent. The course teaches Tcl well enough for that: to read a script, to say what it does and where it can go wrong, and to fix it. The reader learns these skills by changes to code in the shell.
+
+- A programmer who knows Python, JavaScript, or Go. The course does not teach programming.
 - A person who reads Tcl that an agent wrote, and must judge what it does and what it can reach.
+
+The course still covers the language fully and correctly. A reader who finishes it can review a script and fix it with confidence.
 
 ## What the user asked for (2026-11-26)
 
 - Fewer boxes of code. One short example for each idea.
 - Helpers that say what they are for, and only where a form is better than typing.
 - "Put in the shell" must not move the page.
-- A walkthrough of the basics for the first 15 minutes, linked from the landing page as "Start here".
+- A walkthrough of the basics, linked from the landing page as "Start here".
 - Short lessons with next and previous links.
+- The agent side in each part, practical and checkable.
 
 ## The shape
 
-The course is 15 lessons of about 5 minutes. Each lesson has one idea. Each lesson adds one capability to one project, `jot`, a small notes tool. The reader builds `jot` in the shell from lesson 1 to lesson 15.
+The course is 15 lessons of about 5 minutes. Each lesson has one idea. Each lesson adds one capability to one project, `jot`, a small notes tool. The examples are code that the reader will see, often from an agent. Each example says what the code does and where it can go wrong. The exercises are "change this and see" on code that is already in the shell, and seldom a new script from an empty line.
 
-| # | Lesson | The idea | What `jot` gets |
+| # | Lesson | The idea, and the traps to look for | What `jot` gets |
 |---|---|---|---|
-| 1 | Words | A command is words. `$`, `[ ]`, `{ }`, and `" "` with notes for Python and JavaScript readers. | `puts` of a first note |
-| 2 | Variables and math | `set`, `incr`, `expr` in braces, values as strings. | A count of notes |
-| 3 | Lists and dicts | `list`, `lappend`, `lindex`, `dict`. | Notes as a list of dicts |
-| 4 | Procs and control flow | `proc`, `if`, `foreach`, `return`. | `add` and `show` |
-| 5 | Strings and patterns | `string`, `split`, `join`, `format`, `regexp`. | Tags such as `#home` in a note |
-| 6 | Errors | `error`, `try`, `catch`, `return -code`, `errorInfo`. | A check of the input |
-| 7 | Namespaces | `namespace eval`, `variable`, an ensemble. | `jot add`, `jot show` as one command |
-| 8 | Files and JSON | `open`, `gets`, `puts` on a channel, `ztcl::json`. | Notes in `notes.json` |
+| 1 | Read a command | A command is words. `$`, `[ ]`, `{ }`, and `" "`, with the Python and JavaScript forms next to them. Traps: a missing brace around an `expr`, double substitution. | A first note |
+| 2 | Variables and math | `set`, `incr`, `expr` in braces, each value a string. Traps: integer division, `expr` with no braces on input. | A count of notes |
+| 3 | Lists and dicts | `list`, `lappend`, `lindex`, `dict`. Traps: a string used as a list, a list built with `"..."`. | Notes as a list of dicts |
+| 4 | Procs and control flow | `proc`, `if`, `foreach`, `return`, `global`, `upvar`. Traps: `upvar` to the wrong level, a body in quotes. | `add` and `show` |
+| 5 | Strings and patterns | `string`, `split`, `join`, `format`, `regexp`. Traps: a pattern in quotes, `regexp` with no anchors. | Tags such as `#home` |
+| 6 | Errors | `error`, `try`, `catch`, `return -code`, `errorInfo`. Traps: a `catch` that hides each error. | A check of the input |
+| 7 | Namespaces | `namespace eval`, `variable`, an ensemble. | `jot add` and `jot show` |
+| 8 | Files and JSON | Channels, `ztcl::json`. Traps: a file that is not closed, a path from input. | Notes in `notes.json` |
 | 9 | Events | `after`, `vwait`, `coroutine` and `yield`. | A reminder |
 | 10 | Objects | `oo::class`, methods, `my`. | A `Note` class |
-| 11 | A small service | `socket -server` on loopback, a line protocol. | `jot` answers on a port |
+| 11 | A small service | `socket -server` on loopback, a line protocol. Traps: input that becomes code. | `jot` answers on a port |
 | 12 | A window | A ztk window that lists and adds notes. | A GUI |
-| 13 | The sandbox | Capabilities and the compute limit: what a script can reach, and a loop that hits the limit. | Runs with only `file` |
-| 14 | Speed and threads | The JIT, threads with no shared interpreter. | A search on a second thread |
-| 15 | Ship it, and read code you did not write | `ztcl build` to one binary; how to audit a script that an agent wrote: its capabilities, its limits, Alt-I. | One binary |
+| 13 | The sandbox | Capabilities and the compute limit: what a script can reach, and a loop that stops at the limit. | Runs with only `file` |
+| 14 | An agent writes a part | The reader gives a prompt, gets an export feature from an agent (the course shows a recorded answer), reviews it, and runs it under a compute limit and a capability list. A bad change (a write outside the folder, an `exec`) stops at the sandbox with an error. Later the sandboxed agent of ztcl issue 216 runs here live. | Export to Markdown |
+| 15 | Ship it | `ztcl build` to one binary, its capabilities, and the JIT and threads in short. | One binary |
 
-Lessons 1 to 4 are "Start here": a newcomer runs them from start to end in about 15 minutes in the shell. The landing page links lesson 1 as "Start here". The old sections that are good (the substitution rules, "Mistakes to avoid", "Coming from tclsh") go into the lessons and the last page.
+Lessons 1 to 4 are "Read Tcl in 15 minutes", the "Start here" link of the landing page. A newcomer goes through them from start to end in the shell. The good parts of the old page (the substitution rules, "Mistakes to avoid", "Coming from tclsh") go into these lessons.
+
+## The agent in each lesson
+
+- Each lesson ends with "Reading code an agent wrote": two to four checks for the idea of the lesson, and what a good result looks like. For example, lesson 2: "Each `expr` has braces. A value from input never goes into `expr` without them."
+- Each lesson has one prompt that gives idiomatic ztcl from an agent, for example "Use a dict for each note, `dict get` with a default, and `try` with `trap` for the errors". The prompts are text. The page makes no API call.
+- The course points an agent to `llms.txt`, `llms-full.txt`, and the api.json of the command reference.
 
 ## The advanced track
 
@@ -45,7 +56,7 @@ The advanced track comes after lesson 15. Its lessons are longer, and each one i
 
 | Lesson | The job |
 |---|---|
-| Write a package | A namespace, `package provide`, `pkgIndex.tcl`, tests with `tcltest`, docs, and version numbers. Then the ways to give it to others: a `.tm` module, and a package in a binary of `ztcl build`. The ztcl part: declare the capabilities that the package needs, and give its users a compute cost for each command. |
+| Write a package | A namespace, `package provide`, `pkgIndex.tcl`, tests with `tcltest`, docs, and version numbers. Then the ways to give it to others: a `.tm` module, and a package in a binary of `ztcl build`. The ztcl part: declare the capabilities that the package needs, and give its users a compute cost for each command. The agent part: a capability list in one place, examples that run in CI, and a docs page in the shape of the command reference, so that an agent can call the package correctly. |
 | A C package | A package in C through the stubs table, when issue 1 is far enough. |
 | Threads and isolation | The isolation levels of ztcl, and when to use each one. |
 | Coroutines in depth | Generators, pipelines, and a scheduler of coroutines on the event loop. |
@@ -81,7 +92,7 @@ Lesson 12 has one toy: the `jot` window in a live ztk snippet, with its code nex
 
 ## The command reference
 
-The issue "Command reference" is a separate job. A lesson links each command that it uses to its page in the reference. The course does not repeat the reference.
+The issue "Command reference" is a separate job, with its own design. A lesson links each command that it uses to its page in the reference, and the course does not repeat it. The reference is for a person who checks what a call does and for an agent that writes the call. Each page has one machine-readable form in `llms-full.txt` and the api.json: the synopsis, the options, the errors, the compute cost, the capability, and examples. A command that needs a capability has a mark, so that an agent knows to ask for it.
 
 ## The source
 
@@ -93,8 +104,8 @@ The issue "Command reference" is a separate job. A lesson links each command tha
 
 1. The shell does not move the page (done on a branch): a shell out of view docks in the window, and a "Keep in view" button docks it. `tools/site-helper.mjs` checks that `scrollY` stays the same after "Put in the shell".
 2. This design, for review.
-3. Lessons 1 to 4 and the course shell. "Start here" on the landing page.
-4. Lessons 5 to 15.
+3. Lessons 1 to 4 ("Read Tcl in 15 minutes") and the course shell. "Start here" on the landing page.
+4. Lessons 5 to 15, then "Write a package".
 5. The command reference.
 
 ## Questions
@@ -102,3 +113,4 @@ The issue "Command reference" is a separate job. A lesson links each command tha
 1. Is `jot` a good project? Default: yes.
 2. Lesson 11 runs over in-memory channels in the page. Default: yes, and a real port in the text.
 3. The reader's commands go to `sessionStorage` (per tab). Default: yes; `localStorage` keeps them after the tab closes.
+4. Lesson 14 shows a recorded answer of an agent until issue 216 is ready. Default: yes, with the prompt and the review steps.
