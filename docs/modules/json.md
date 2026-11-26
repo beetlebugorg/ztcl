@@ -19,6 +19,121 @@ puts [ztcl::json get $text tags 1]   ;# zig, with no full parse
 
 The module needs no capability. `package require json` and `package require json::write` give the tcllib names over the same code.
 
+## Try it
+
+The shell below has `ztcl::json` and two sample files, `users.json` and `config.json`. The proc `readfile` gives the text of a file. Type `set d [ztcl::json parse -null null [readfile users.json]]` and then `puts $d`, or use the inspector under the shell.
+
+<!-- shell -->
+```tcl
+package require ztcl::json
+proc readfile {name} {
+    set f [open $name]
+    try { read $f } finally { close $f }
+}
+```
+
+<!-- file: users.json -->
+```json
+{
+  "page": 1,
+  "users": [
+    {"id": 7, "name": "Ada", "langs": ["tcl", "zig"], "admin": true},
+    {"id": 9, "name": "Bob", "langs": [], "admin": false, "team": null}
+  ]
+}
+```
+
+<!-- file: config.json -->
+```json
+{"window": {"width": 640, "height": 480, "title": "Notes"},
+ "recent": ["todo.txt", "plan.md"], "theme": "dark", "scale": 1.5}
+```
+
+The inspector shows a JSON value as a tree. An object is a list of keys, and an array is a list of numbered items. Select a node, and the command line of the inspector gets the Tcl path of the node in `$d`. The button puts the command into the shell. Paste your own JSON in the text box, or pick a sample file.
+
+<!-- helper: JSON inspector -->
+```tcl
+# height: 492
+helper::form
+helper::row Source [ttk::combobox .f.src -textvariable src -state readonly -values {users.json config.json "the text below"}]
+text .f.text -height 3 -font TkFixedFont -wrap char -relief solid -borderwidth 1
+helper::row Text .f.text
+helper::row Show [ttk::combobox .f.show -textvariable show -state readonly -values {"set d" pretty "the selected node"}]
+ttk::treeview .f.tree -columns value -height 7
+.f.tree heading #0 -text Path
+.f.tree heading value -text Value
+helper::row Tree .f.tree
+helper::footer 2
+set src users.json
+set show "set d"
+set path {}
+
+# The text of the source, as a Tcl word for the command.
+proc source_word {} {
+    if {$::src eq "the text below"} { return [list [.f.text get 1.0 end-1c]] }
+    return "\[readfile $::src\]"
+}
+proc build {} {
+    set parse "ztcl::json parse -null null [source_word]"
+    switch -- $::show {
+        "set d" { helper::show "set d \[$parse\]" }
+        pretty { helper::show "ztcl::json pretty [source_word]" }
+        default {
+            helper::show $::path
+            helper::run "[list apply [list d $::path]] \[$parse\]" helper::result
+        }
+    }
+    helper::run "ztcl::json parse -typed -null null [source_word]" fill
+}
+# Fills the tree from the -typed form. A node is a value word (base:
+# $d or a command in brackets) and a list of dict keys in it.
+proc fill {ok typed} {
+    .f.tree delete [.f.tree children {}]
+    if {$ok} { add {} d {$d} {} $typed }
+}
+proc word {base keys} {
+    if {$keys eq ""} { return $base }
+    return "\[dict get $base $keys\]"
+}
+proc add {parent name base keys node} {
+    lassign $node type v
+    switch -- $type {
+        object { set shown "{[expr {[llength $v] / 2}] keys}" }
+        array { set shown "\[[llength $v] items\]" }
+        null { set shown null }
+        default { set shown $v }
+    }
+    set id [.f.tree insert $parent end -text $name -values [list $shown] -open [expr {$parent eq ""}]]
+    set w [word $base $keys]
+    set ::paths($id) [expr {$w eq {$d} ? "set d" : [string range $w 1 end-1]}]
+    if {$type eq "object"} {
+        foreach {k child} $v { add $id $k $base [linsert $keys end $k] $child }
+    } elseif {$type eq "array"} {
+        set i 0
+        foreach child $v {
+            add $id $i "\[lindex $w $i\]" {} $child
+            incr i
+        }
+    }
+}
+bind .f.tree <<TreeviewSelect>> {
+    set sel [.f.tree selection]
+    if {$sel ne ""} {
+        set path $paths($sel)
+        if {$path ne "set d"} { set show "the selected node" } else { set show "set d" }
+        build
+    }
+}
+bind .f.text <KeyRelease> { if {$src eq "the text below"} build }
+proc load {} {
+    if {$::src eq "the text below"} return
+    helper::run [list readfile $::src] {apply {{ok t} { .f.text delete 1.0 end; .f.text insert end $t }}}
+}
+trace add variable src write "load ;#"
+load
+helper::watch build src show
+```
+
 ## Commands
 
 ### parse
