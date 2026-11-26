@@ -1,6 +1,6 @@
 //! The native side of `tools/point-wasm-diff.mjs`.
 //!
-//!   point-wasm-ref FILE PROC IN.bin N SEED IN_MASK OUT_MASK
+//!   point-wasm-ref FILE PROC IN.bin N SEED IN_MASK OUT_MASK [--bench RUNS]
 //!
 //! IN.bin has 11 input columns of N f64 in the order of `point.Field`,
 //! N feature bytes, and 7 output columns of N f64 with the start values,
@@ -12,6 +12,12 @@
 //! each value, column after column, then the line `slow-skipped K`
 //! (the points where the slow path gave a Tcl error), and last the
 //! line `steps S`.
+//!
+//! With `--bench RUNS`, the tool is the native side of
+//! `tools/point-wasm-bench.mjs`: it runs `Program.run` 3 times to warm
+//! up and then RUNS times, with the start values of the outputs before
+//! each run, and writes the line `ns T`, the median time of one run in
+//! nanoseconds.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -26,8 +32,9 @@ pub fn main(init: std.process.Init) !u8 {
     const io = init.io;
     const a = init.arena.allocator();
     const args = try init.minimal.args.toSlice(a);
-    if (args.len != 8) {
-        std.debug.print("usage: point-wasm-ref FILE PROC IN.bin N SEED IN_MASK OUT_MASK\n", .{});
+    const bench_runs: ?usize = if (args.len == 10 and std.mem.eql(u8, args[8], "--bench")) try std.fmt.parseInt(usize, args[9], 10) else null;
+    if (args.len != 8 and bench_runs == null) {
+        std.debug.print("usage: point-wasm-ref FILE PROC IN.bin N SEED IN_MASK OUT_MASK [--bench RUNS]\n", .{});
         return 2;
     }
     const text = try std.Io.Dir.cwd().readFileAlloc(io, args[1], a, .limited(1 << 24));
@@ -73,7 +80,24 @@ pub fn main(init: std.process.Init) !u8 {
             if (out_mask & (@as(u32, 1) << @intCast(k)) != 0 and writes[k]) p.out[k] = outs[k];
         }
     }
-    prog.run(&pts[0], try a.alloc(f64, prog.scratchLen()));
+    const scratch = try a.alloc(f64, prog.scratchLen());
+    if (bench_runs) |runs_n| {
+        const times = try a.alloc(u64, runs_n);
+        for (0..3 + runs_n) |r| {
+            for (runs[0], 0..) |c, k| @memcpy(std.mem.sliceAsBytes(c), raw[outs_at + k * n * 8 ..][0 .. n * 8]);
+            const t0 = std.Io.Clock.awake.now(io);
+            prog.run(&pts[0], scratch);
+            const ns: u64 = @intCast(t0.untilNow(io, .awake).toNanoseconds());
+            if (r >= 3) times[r - 3] = ns;
+        }
+        std.mem.sort(u64, times, {}, std.sort.asc(u64));
+        var buf: [64]u8 = undefined;
+        var w = std.Io.File.stdout().writer(io, &buf);
+        try w.interface.print("ns {d}\n", .{times[runs_n / 2]});
+        try w.interface.flush();
+        return 0;
+    }
+    prog.run(&pts[0], scratch);
     // The slow path runs one point at a time. A point where Tcl gives an
     // error (a NaN or an integer that is too large) has no result on the
     // slow path, and only Program.run checks it.

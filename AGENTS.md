@@ -26,6 +26,7 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 | `tools/suite.sh -t core-8-6-16` | Runs the Tcl test suite. |
 | `tools/suite.sh -j` | Runs the suite with the JIT at threshold 0. |
 | `tools/jit-diff.sh` | Compares the JIT with the interpreter on the test scripts. |
+| `node tools/point-wasm-bench.mjs --check` | Compares the speed of compiled point procs with the native `Program.run`. Build with `zig build point-rt` first. |
 | `tools/jit-perf.sh --check off` | Checks that the interpreter did not slow down. |
 
 ## Rules
