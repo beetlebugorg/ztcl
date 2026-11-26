@@ -29,7 +29,7 @@ The two paths use one implementation of each slot that has no call into ztcl. `s
 | Group | SQLite slots | WebAssembly | Native |
 |---|---:|---|---|
 | Memory | 2 | 2 of 2, and the other 14 slots of the area memory (shared) | 2 of 2, and the other 14 slots of the area memory (shared) |
-| Objects | 22 | 22 of 22, and 19 more setters, getters, and list slots (shared) | 22 of 22, and 19 more (shared) |
+| Objects | 22 | 22 of 22, and the area objects except the bignum slots (shared) | 22 of 22, and the area objects except the bignum slots (shared) |
 | Results | 8 | 8 of 8, and `Tcl_AppendElement` | 7 of 8 (shared), and `Tcl_AppendElement`. `Tcl_BackgroundError` is absent. |
 | Commands | 3 | 3 of 3, and `Tcl_DeleteCommandFromToken` | 0 of 3 |
 | Scripts | 6 | 6 of 6, and `Tcl_EvalEx`, `Tcl_NRCallObjProc` | 0 of 6 |
@@ -138,11 +138,11 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 |---|---:|---:|---:|---|
 | memory | 16 | 16 | 16 | none |
 | packages | 18 | 12 | 3 | `Tcl_RegisterConfig`, `Tcl_PkgRequireProc`, `Tcl_SetStartupScript`, `Tcl_GetStartupScript`, `Tcl_LoadFile`, `Tcl_FindSymbol` |
-| objects | 58 | 33 | 33 | 25 slots |
+| objects | 58 | 52 | 52 | `Tcl_NewBignumObj`, `Tcl_DbNewBignumObj`, `Tcl_SetBignumObj`, `Tcl_GetBignumFromObj`, `Tcl_TakeBignumFromObj`, `Tcl_InitBignumFromDouble` |
 | scripts and results | 58 | 7 | 16 | 51 slots |
 | channels | 92 | 4 | 4 | 88 slots |
 | strings and encodings | 86 | 10 | 10 | 76 slots |
-| lists and dicts | 28 | 8 | 8 | 20 slots |
+| lists and dicts | 28 | 9 | 9 | 19 slots |
 | errors | 25 | 4 | 5 | 21 slots |
 | interps and commands | 64 | 0 | 3 | 64 slots |
 | hash tables | 13 | 0 | 0 | 13 slots |
@@ -152,7 +152,7 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | threads | 15 | 0 | 0 | 15 slots |
 | filesystem | 63 | 0 | 1 | 63 slots |
 | zlib | 13 | 0 | 0 | 13 slots |
-| **public, all** | **630** | **94** (14%) | **107** (16%) | |
+| **public, all** | **630** | **114** (18%) | **127** (20%) | |
 | **internal** | **173** | **0** | **0** | |
 | **internal platform** | **23** | **0** | **0** | |
 | **platform** | **0** | **0** | **0** | |

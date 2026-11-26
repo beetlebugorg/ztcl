@@ -154,12 +154,15 @@ pub fn updateDouble(o: *Obj) callconv(.c) void {
 
 /// Ints have the type name of Tcl on a 32-bit `long`. The SQLite binding
 /// reads the name to bind a variable as a number.
-pub const wide_type: ObjType = .{ .name = "wideInt", .free = null, .dup = null, .update = &updateWide, .set_from_any = null };
+/// The name of the int type of Tcl 8.6: "int" where a long has 64 bits
+/// (LP64 Unix), and "wideInt" where it has 32 bits.
+const wide_name = if (@sizeOf(c_long) == 8) "int" else "wideInt";
+pub const wide_type: ObjType = .{ .name = wide_name, .free = null, .dup = null, .update = &updateWide, .set_from_any = null };
 pub const double_type: ObjType = .{ .name = "double", .free = null, .dup = null, .update = &updateDouble, .set_from_any = null };
 
 // A list keeps an array of objects, each with one reference of the list.
 
-const ListRep = struct {
+pub const ListRep = struct {
     items: std.ArrayList(*Obj) = .empty,
 };
 
@@ -920,6 +923,194 @@ pub fn Tcl_GetIndexFromObjStruct(ip: ?*Interp, o: *Obj, tbl: *const anyopaque, o
 }
 
 /// File names go to WASI as they are, so the translation is a copy.
+
+// ---- The debug forms ----
+//
+// A package built with TCL_MEM_DEBUG calls these forms with its file
+// and line. ztcl has no memory debugger, so they make the plain objects.
+
+pub fn Tcl_DbNewObj(_: ?[*:0]const u8, _: c_int) callconv(.c) *Obj {
+    return Tcl_NewObj();
+}
+
+pub fn Tcl_DbNewBooleanObj(b: c_int, _: ?[*:0]const u8, _: c_int) callconv(.c) *Obj {
+    return Tcl_NewBooleanObj(b);
+}
+
+pub fn Tcl_DbNewByteArrayObj(bytes: ?[*]const u8, length: c_int, _: ?[*:0]const u8, _: c_int) callconv(.c) *Obj {
+    return Tcl_NewByteArrayObj(bytes, length);
+}
+
+pub fn Tcl_DbNewDoubleObj(d: f64, _: ?[*:0]const u8, _: c_int) callconv(.c) *Obj {
+    return Tcl_NewDoubleObj(d);
+}
+
+pub fn Tcl_DbNewLongObj(i: c_long, _: ?[*:0]const u8, _: c_int) callconv(.c) *Obj {
+    return Tcl_NewLongObj(i);
+}
+
+pub fn Tcl_DbNewWideIntObj(w: i64, _: ?[*:0]const u8, _: c_int) callconv(.c) *Obj {
+    return Tcl_NewWideIntObj(w);
+}
+
+pub fn Tcl_DbNewStringObj(bytes: ?[*]const u8, length: c_int, _: ?[*:0]const u8, _: c_int) callconv(.c) *Obj {
+    return Tcl_NewStringObj(bytes, length);
+}
+
+pub fn Tcl_DbNewListObj(objc: c_int, objv: ?[*]const *Obj, _: ?[*:0]const u8, _: c_int) callconv(.c) *Obj {
+    return Tcl_NewListObj(objc, objv);
+}
+
+// ---- The string forms of the Get slots ----
+//
+// Each one reads the text through a temporary object, so the rules and
+// the error messages are the ones of the object form.
+
+fn withText(s: [*:0]const u8, comptime f: anytype, ip: ?*Interp, out: anytype) c_int {
+    const o = Tcl_NewStringObj(s, -1);
+    incr(o);
+    defer decr(o);
+    return f(ip, o, out);
+}
+
+pub fn Tcl_GetInt(ip: ?*Interp, s: [*:0]const u8, out: *c_int) callconv(.c) c_int {
+    return withText(s, Tcl_GetIntFromObj, ip, out);
+}
+
+pub fn Tcl_GetDouble(ip: ?*Interp, s: [*:0]const u8, out: *f64) callconv(.c) c_int {
+    return withText(s, Tcl_GetDoubleFromObj, ip, out);
+}
+
+pub fn Tcl_GetBoolean(ip: ?*Interp, s: [*:0]const u8, out: *c_int) callconv(.c) c_int {
+    return withText(s, Tcl_GetBooleanFromObj, ip, out);
+}
+
+/// The table is an array of string pointers that ends with null.
+pub fn Tcl_GetIndexFromObj(ip: ?*Interp, o: *Obj, tbl: *const anyopaque, msg: [*:0]const u8, flags: c_int, out: *c_int) callconv(.c) c_int {
+    return Tcl_GetIndexFromObjStruct(ip, o, tbl, @sizeOf(?[*:0]const u8), msg, flags, out);
+}
+
+// ---- Lengths ----
+
+/// Sets the length of the text form. The new bytes have no set value,
+/// as in Tcl, and the internal form is freed.
+pub fn Tcl_SetObjLength(o: *Obj, length: c_int) callconv(.c) void {
+    if (Tcl_AttemptSetObjLength(o, length) == 0) panicText("out of memory");
+}
+
+pub fn Tcl_AttemptSetObjLength(o: *Obj, length: c_int) callconv(.c) c_int {
+    const n: usize = @intCast(@max(length, 0));
+    const old = text(o);
+    const p: [*]u8 = @ptrCast(std.c.malloc(n + 1) orelse return 0);
+    const keep = @min(old.len, n);
+    @memcpy(p[0..keep], old[0..keep]);
+    if (n > keep) @memset(p[keep..n], 0);
+    p[n] = 0;
+    freeIntRep(o);
+    invalidate(o);
+    o.bytes = p;
+    o.length = @intCast(n);
+    return 1;
+}
+
+/// Sets the length of a byte array. Tcl leaves the new bytes unset, and
+/// here they are 0.
+pub fn Tcl_SetByteArrayLength(o: *Obj, length: c_int) callconv(.c) [*]u8 {
+    _ = Tcl_GetByteArrayFromObj(o, null);
+    const r = byteRep(o);
+    const n: usize = @intCast(@max(length, 0));
+    const old = r.data.items.len;
+    r.data.resize(gpa, n) catch panicText("out of memory");
+    if (n > old) @memset(r.data.items[old..n], 0);
+    invalidate(o);
+    // A byte array of length 0 has a buffer too.
+    r.data.ensureTotalCapacity(gpa, 1) catch panicText("out of memory");
+    return r.data.items.ptr;
+}
+
+pub fn Tcl_AppendStringsToObjVA(o: *Obj, ap: *std.builtin.VaList) callconv(.c) void {
+    while (true) {
+        const p = @cVaArg(ap, ?[*:0]const u8) orelse break;
+        appendText(o, std.mem.span(p));
+    }
+}
+
+// ---- The registry of types ----
+//
+// The types of this file are in the registry from the start, and a
+// package adds its own types. A lookup by name gives the last type of
+// that name. The registry is for the process, as in Tcl.
+
+var types: std.ArrayList(*const ObjType) = .empty;
+var types_lock: std.atomic.Mutex = .unlocked;
+
+fn lockTypes() void {
+    while (!types_lock.tryLock()) {}
+}
+
+fn builtinTypes() [4]*const ObjType {
+    return .{ &wide_type, &double_type, &list_type, &bytes_type };
+}
+
+pub fn Tcl_RegisterObjType(t: *const ObjType) callconv(.c) void {
+    lockTypes();
+    defer types_lock.unlock();
+    types.append(gpa, t) catch panicText("out of memory");
+}
+
+pub fn Tcl_GetObjType(name: [*:0]const u8) callconv(.c) ?*const ObjType {
+    const n = std.mem.span(name);
+    lockTypes();
+    defer types_lock.unlock();
+    var i = types.items.len;
+    while (i > 0) {
+        i -= 1;
+        if (std.mem.eql(u8, std.mem.span(types.items[i].name), n)) return types.items[i];
+    }
+    for (builtinTypes()) |t| {
+        if (std.mem.eql(u8, std.mem.span(t.name), n)) return t;
+    }
+    return null;
+}
+
+/// Appends the name of each type to the list `o`.
+pub fn Tcl_AppendAllObjTypes(ip: ?*Interp, o: *Obj) callconv(.c) c_int {
+    if (toList(ip, o) == null) return ERROR;
+    for (builtinTypes()) |t| _ = Tcl_ListObjAppendElement(ip, o, Tcl_NewStringObj(t.name, -1));
+    lockTypes();
+    const all = gpa.dupe(*const ObjType, types.items) catch panicText("out of memory");
+    types_lock.unlock();
+    defer gpa.free(all);
+    for (all) |t| _ = Tcl_ListObjAppendElement(ip, o, Tcl_NewStringObj(t.name, -1));
+    return OK;
+}
+
+/// Gives `o` the internal form of type `t`. The types of this file have
+/// no `setFromAnyProc`, so the Get slot of the type makes the form.
+pub fn Tcl_ConvertToType(ip: ?*Interp, o: *Obj, t: *const ObjType) callconv(.c) c_int {
+    if (o.typePtr == t) return OK;
+    if (t == &wide_type) {
+        var w: i64 = 0;
+        return Tcl_GetWideIntFromObj(ip, o, &w);
+    }
+    if (t == &double_type) {
+        var d: f64 = 0;
+        return Tcl_GetDoubleFromObj(ip, o, &d);
+    }
+    if (t == &list_type) return if (toList(ip, o) != null) OK else ERROR;
+    if (t == &bytes_type) {
+        _ = Tcl_GetByteArrayFromObj(o, null);
+        return OK;
+    }
+    if (t.set_from_any) |f| return f(ip, o);
+    if (ip) |interp| {
+        var w: std.ArrayList(u8) = .empty;
+        defer w.deinit(gpa);
+        w.print(gpa, "can't convert value to type {s}", .{t.name}) catch panicText("out of memory");
+        setResultText(interp, w.items);
+    }
+    return ERROR;
+}
 
 // ---- Panic ----
 

@@ -23,7 +23,8 @@ const fsroot = @import("../fsroot.zig");
 const stubs = @import("stubs.zig");
 const obj = @import("obj.zig");
 const Interp = interp_mod.Interp;
-const Value = @import("../value.zig").Value;
+const value = @import("../value.zig");
+const Value = value.Value;
 const Error = interp_mod.Error;
 const Cmd = interp_mod.Cmd;
 
@@ -253,13 +254,85 @@ pub fn takeResult(sh: *Shadow) Error!Value {
     const r: Value = if (legacy.len != 0)
         .{ .str = try sh.it.alloc().dupe(u8, legacy) }
     else if (sh.core.result != null and obj.text(sh.core.result.?).len != 0)
-        .{ .str = try sh.it.alloc().dupe(u8, obj.text(sh.core.result.?)) }
+        try fromObj(sh.it, sh.core.result.?)
     else
         sh.it.result;
     sh.core.result_dont_use = "";
     obj.Tcl_ResetResult(&sh.core);
     sh.it.result = Value.empty;
     return r;
+}
+
+// ---- The bridge of values ----
+//
+// A value of ztcl becomes a new `Tcl_Obj` at each call into C, and a
+// `Tcl_Obj` becomes a value at each return. The kind stays: an int, a
+// double, or a list with its elements. Text is in the modified UTF-8 of
+// Tcl in C memory, where U+0000 is the two bytes C0 80. A `Tcl_Obj` of
+// another type, such as a type of a package, becomes its text.
+
+/// A new `Tcl_Obj` with no reference for `v`.
+pub fn toObj(it: *Interp, v: Value) Error!*obj.Obj {
+    return switch (v) {
+        .int => |i| obj.Tcl_NewWideIntObj(i),
+        .double => |d| obj.Tcl_NewDoubleObj(d),
+        .list => |l| blk: {
+            const o = obj.Tcl_NewListObj(0, null);
+            for (l.items()) |e| _ = obj.Tcl_ListObjAppendElement(null, o, try toObj(it, e));
+            break :blk o;
+        },
+        .str => |s| blk: {
+            if (std.mem.indexOfScalar(u8, s, 0) == null) break :blk obj.Tcl_NewStringObj(s.ptr, @intCast(s.len));
+            var out: std.ArrayList(u8) = .empty;
+            defer out.deinit(gpa);
+            for (s) |c| {
+                if (c == 0) try out.appendSlice(gpa, &.{ 0xC0, 0x80 }) else try out.append(gpa, c);
+            }
+            break :blk obj.Tcl_NewStringObj(out.items.ptr, @intCast(out.items.len));
+        },
+    };
+}
+
+/// The value of `o`, in the memory of the interpreter.
+pub fn fromObj(it: *Interp, o: *obj.Obj) Error!Value {
+    if (o.typePtr == &obj.wide_type) return .{ .int = o.rep.wide };
+    if (o.typePtr == &obj.double_type) return .{ .double = o.rep.double };
+    if (o.typePtr == &obj.list_type) {
+        const items = obj.listRep(o).items.items;
+        const vals = try it.alloc().alloc(Value, items.len);
+        for (items, vals) |e, *v| v.* = try fromObj(it, e);
+        return value.newList(it.alloc(), vals);
+    }
+    const s = obj.text(o);
+    const out = try it.alloc().alloc(u8, s.len);
+    var n: usize = 0;
+    var i: usize = 0;
+    while (i < s.len) : (i += 1) {
+        if (s[i] == 0xC0 and i + 1 < s.len and s[i + 1] == 0x80) {
+            out[n] = 0;
+            i += 1;
+        } else out[n] = s[i];
+        n += 1;
+    }
+    return .{ .str = out[0..n] };
+}
+
+test "cext: the bridge keeps the kind of a value" {
+    if (comptime !supported) return error.SkipZigTest;
+    var it: Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const l = try value.newList(it.alloc(), &.{ .{ .int = 7 }, .{ .double = 0.5 }, .{ .str = "a\x00b" } });
+    const o = try toObj(&it, l);
+    obj.incr(o);
+    defer obj.decr(o);
+    try std.testing.expectEqualStrings("7 0.5 a\xc0\x80b", obj.text(o));
+    const back = try fromObj(&it, o);
+    try std.testing.expect(back == .list);
+    const items = back.list.items();
+    try std.testing.expectEqual(@as(i64, 7), items[0].int);
+    try std.testing.expectEqual(@as(f64, 0.5), items[1].double);
+    try std.testing.expectEqualStrings("a\x00b", items[2].str);
 }
 
 /// The host path of the file of a script. The root folder mode has no
