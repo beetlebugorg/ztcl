@@ -8,7 +8,7 @@
 //! line at a time. The runner reads the files itself; a script has no
 //! command that reads a file.
 //!
-//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, `exec`, `random`, `env`, `sqlite`, `thread`). `--keychain-allow S,S` and `--defaults-allow D,D` list the keychain services and the defaults domains of `ztcl::mac`. `--root DIR` is
+//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, `exec`, `random`, `env`, `sqlite`, `thread`, `vm`, and the others of `interp.Capability`). `--keychain-allow S,S` and `--defaults-allow D,D` list the keychain services and the defaults domains of `ztcl::mac`. `--root DIR` is
 //! the one folder of `file` and channels. Only the
 //! suite passes it.
 //! `--exec-timeout MS`, `--exec-env NAME=value`, and `--exec-allow a,b`

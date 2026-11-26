@@ -7,7 +7,7 @@ mount -t sysfs sys /sys
 mount -t devtmpfs dev /dev 2>/dev/null
 mount -t tmpfs tmp /tmp
 echo "ztvm: kernel $(uname -r), $(nproc) cpus"
-if mount -t virtiofs share /mnt/share; then
+if mount -t virtiofs share0 /mnt/share; then
     echo "ztvm: share: $(cat /mnt/share/hello.txt)"
     echo "written by the guest" > /mnt/share/from-guest.txt
 else

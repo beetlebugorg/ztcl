@@ -110,6 +110,7 @@ const Guest = struct {
 
     fn config(g: Guest, arena: std.mem.Allocator) !vz.Id {
         var why: []const u8 = "";
+        const shares: []const vz.Share = if (g.share) |s| try arena.dupe(vz.Share, &.{.{ .path = s, .tag = "share0", .read_only = false }}) else &.{};
         return vz.configure(.{
             .kernel = try std.fmt.allocPrint(arena, "{s}/Image", .{g.dir}),
             .initrd = try std.fmt.allocPrint(arena, "{s}/{s}", .{ g.dir, g.initrd }),
@@ -117,7 +118,7 @@ const Guest = struct {
             .cpus = 1,
             .memory_mb = g.memory_mb,
             .console = if (g.console) |p| .{ .in = p[0], .out = p[1] } else null,
-            .share = if (g.share) |s| .{ .path = s, .tag = "share" } else null,
+            .shares = shares,
             .machine_id = g.machine_id,
             .entropy = c.getenv("ZTVM_NO_RNG") == null,
         }, &why) catch fail("configuration: {s}", .{why});

@@ -138,6 +138,7 @@ ztcl.sys.ignorePipeSignal(); // a write to a closed peer is an error, with no si
 | `keychain` | `Interp.keychain_allow`: the keychain services that `ztcl::mac::keychain` reaches. |
 | `defaults` | `Interp.defaults_allow`: the defaults domains that `ztcl::mac::defaults` reaches. |
 | `notify` | `Interp.notify_host`: a notifier for `ztcl::notify` in place of the system. It gets the title, the subtitle, and the body. An app in a macOS bundle can show them with `UNUserNotificationCenter`. |
+| `vm` | `Interp.vm_host`: the most CPUs and memory of one guest, and the most guests at once. The program needs the entitlement `com.apple.security.virtualization` on macOS. |
 
 `exec` is not sandboxed. A process that a script starts has the full power of the user. Give a program list and a time limit, and turn `exec` on only for scripts that you trust. An entry of `allow` is a bare name or a full host path. The `PATH` of `env` must have only full paths. A file below the root folder runs only when `allow_root` lists it. See [the rules of `exec`](../SECURITY.md#the-rules-of-exec).
 
