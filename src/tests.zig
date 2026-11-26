@@ -2713,6 +2713,14 @@ test "ztcl::open gives a URL or the host path of a file to the opener" {
         \\file mkdir $d/sub
         \\foreach n {a.txt b.EXE c.ps1} { set f [open $d/sub/$n w]; close $f }
     );
+    // In host mode the opener gets the normal host path.
+    _ = try it.eval("ztcl::open $d/sub/../sub/a.txt");
+    try std.testing.expect(std.mem.endsWith(u8, launched, "/ztcl-open-test/sub/a.txt"));
+    if (@import("builtin").os.tag != .windows) {
+        // Only Windows has the host path of a file in the jail.
+        _ = try it.eval("file delete -force $d");
+        return;
+    }
     try tcl.fsroot.setRoot(&it, ".zig-cache/ztcl-open-test");
     launched = "";
     _ = try it.eval("ztcl::open sub/../sub/a.txt");
