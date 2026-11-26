@@ -41,6 +41,8 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -r tools/docs-requirements.txt
       - run: python tools/build-docs.py site
+      # No page shows a comment line of the Markdown as text.
+      - run: sh tests/site.sh site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

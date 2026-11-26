@@ -101,8 +101,11 @@ class Build:
             if not t.meta.get("live"):
                 return plain(tokens, idx, options, env)
             # A live example (docs/site/live.js): an editor and its output.
-            return (f'<figure class="live-demo" id="{t.meta["id"]}"><div class="ld-code"><pre><code class="language-tcl">'
-                    f'{html.escape(t.content)}</code></pre></div><pre class="ld-out" aria-live="polite"></pre>'
+            # The output of the page shows until the example runs. An
+            # example of ztcl::vt also gets a view of the screen.
+            term = ' data-term="1"' if "ztcl::vt" in t.content else ""
+            return (f'<figure class="live-demo" id="{t.meta["id"]}"{term}><div class="ld-code"><pre><code class="language-tcl">'
+                    f'{html.escape(t.content)}</code></pre></div><pre class="ld-out" aria-live="polite">{html.escape(t.meta.get("out", ""))}</pre>'
                     f'<figcaption class="ld-bar"><span class="ld-tag">Live</span></figcaption></figure>\n')
         self.md.renderer.rules["fence"] = fence
         self.anchors = {}
@@ -110,19 +113,36 @@ class Build:
 
     @staticmethod
     def live_blocks(src, tokens):
-        """Marks each `tcl` block after a line `<!-- live -->` as a live
-        example, and drops the line."""
+        """Reads the comment lines before a `tcl` block and drops them.
+
+        `<!-- live -->` and `<!-- run -->` make the block a live example.
+        tools/doc-examples.py runs each `<!-- run -->` block, and a `text`
+        block after it is its output: the page shows that output until the
+        example runs in the page. `<!-- run: FLAGS -->` needs capabilities
+        of the runner, so the page shows its blocks as plain code. Each
+        other comment line stops the build, so that no comment shows as
+        text on a page."""
         out, i, count = [], 0, 0
         while i < len(tokens):
             t = tokens[i]
-            if t.type == "paragraph_open" and i + 1 < len(tokens) and tokens[i + 1].content.strip() == "<!-- live -->":
+            text = tokens[i + 1].content.strip() if t.type == "paragraph_open" and i + 1 < len(tokens) else ""
+            if text.startswith("<!--"):
                 fence = tokens[i + 3] if i + 3 < len(tokens) else None
                 if fence is None or fence.type != "fence" or fence.info.strip() != "tcl":
-                    raise SystemExit(f"{src}: a live marker is not just before a tcl block")
+                    raise SystemExit(f"{src}: a comment line is not just before a tcl block: {text}")
+                if text.startswith("<!-- run:"):
+                    i += 3
+                    continue
+                if text not in ("<!-- live -->", "<!-- run -->"):
+                    raise SystemExit(f"{src}: an unknown comment line: {text}")
                 count += 1
                 fence.meta = {"live": True, "id": f"live-{count}"}
                 out.append(fence)
                 i += 4
+                after = tokens[i] if i < len(tokens) else None
+                if text == "<!-- run -->" and after is not None and after.type == "fence" and after.info.strip() == "text":
+                    fence.meta["out"] = after.content
+                    i += 1
                 continue
             out.append(t)
             i += 1

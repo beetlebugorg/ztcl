@@ -26,6 +26,7 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 | `zig build wasm-shell` | Builds `zig-out/lib/ztcl-shell.wasm`: the library with the shell, for the site. |
 | `node tools/wasm-shell.mjs zig-out/lib/ztcl-shell.wasm` | Tests that shell through `web/ztcl-shell.mjs`. |
 | `node tools/site-shell.mjs chromium URL` | Tests the shell of a page of the built site in a headless Chromium. |
+| `tests/site.sh [site folder]` | Checks that no page of the built site shows a comment line of the Markdown, such as `<!-- run -->`, as text. |
 | `tools/suite.sh -t core-8-6-16` | Runs the Tcl test suite. |
 | `tools/suite.sh -j` | Runs the suite with the JIT at threshold 0. |
 | `tools/jit-diff.sh` | Compares the JIT with the interpreter on the test scripts. |

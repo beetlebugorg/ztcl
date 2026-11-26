@@ -9,7 +9,15 @@
 // access, and an endless loop stops at the compute limit or at Stop.
 //
 // The example runs again 400 ms after the last key, in a new
-// interpreter. The output and the result show under the code.
+// interpreter. The output and the result show under the code. Until the
+// first run, the output from the page shows there.
+//
+// An example of ztcl::vt (data-term on the figure) gets a "Screen"
+// button. The button shows the screen of the last terminal of the
+// example: an execution trace on ztcl::vt keeps the handle of each `new`
+// and reads the cells before a `delete`, and the page renders the cells
+// with their colors and attributes. The screen shows only after a click,
+// so the layout does not move by itself.
 //
 // The editor and the highlighter come from docs/site/live.js of ztk
 // (github.com/beetlebugorg/ztk), BSD-2-Clause.
@@ -19,6 +27,72 @@ const params = new URLSearchParams(location.search);
 const LIMIT = 50_000_000;
 let lib = null;
 const load = () => (lib ??= import(new URL("ztcl.mjs", base).href));
+
+// The trace of the terminal view, and the script that gives the cells:
+// one line for each row, cells split by \x1e, fields by \x1f.
+const TERM_TRACE = String.raw`package require ztcl::vt
+namespace eval ::__term { variable last {} snap {} }
+proc ::__term::cells {t} {
+    set out {}
+    foreach row [ztcl::vt cells $t] {
+        set r {}
+        foreach c $row { lappend r [join $c \x1f] }
+        lappend out [join $r \x1e]
+    }
+    join $out \n
+}
+proc ::__term::enter {cmd op} { if {[lindex $cmd 1] eq "delete"} { catch {set ::__term::snap [::__term::cells [lindex $cmd 2]]} } }
+proc ::__term::leave {cmd code result op} { if {$code == 0 && [lindex $cmd 1] eq "new"} { set ::__term::last $result; set ::__term::snap {} } }
+trace add execution ::ztcl::vt enter ::__term::enter
+trace add execution ::ztcl::vt leave ::__term::leave`;
+const TERM_CELLS = String.raw`if {$::__term::snap ne ""} { set ::__term::snap } elseif {$::__term::last eq "" || [catch {::__term::cells $::__term::last} v]} { list } else { set v }`;
+
+// The 256 colors of a terminal: the 16 colors from the tokens of
+// site.css, then the cube and the grays.
+function palette() {
+  const css = getComputedStyle(document.documentElement);
+  const v = (n) => css.getPropertyValue(n).trim();
+  const base = [v("--text"), v("--tok-num"), v("--tok-str"), v("--tok-var"), v("--accent"), v("--tok-kw"), v("--accent-strong"), v("--text-2")];
+  const p = [...base, ...base];
+  const step = [0, 95, 135, 175, 215, 255];
+  for (let i = 16; i < 232; i++) {
+    const k = i - 16;
+    p.push(`rgb(${step[Math.floor(k / 36)]},${step[Math.floor(k / 6) % 6]},${step[k % 6]})`);
+  }
+  for (let i = 0; i < 24; i++) p.push(`rgb(${8 + i * 10},${8 + i * 10},${8 + i * 10})`);
+  return p;
+}
+
+// Renders the cells into the <pre> of the screen: one span for each cell
+// with a color or an attribute.
+function renderScreen(pre, text) {
+  pre.replaceChildren();
+  if (!text) { pre.textContent = "The example has no terminal."; return; }
+  const pal = palette();
+  const color = (c) => (c === "" ? null : c.startsWith("#") ? c : pal[Number(c)]);
+  for (const line of text.split("\n")) {
+    for (const cell of line.split("\x1e")) {
+      const [ch, width, fg, bg, attrs = ""] = cell.split("\x1f");
+      if (width === "0") continue;
+      const a = attrs.split(" ");
+      let f = color(fg), b = color(bg);
+      if (a.includes("inverse")) [f, b] = [b ?? "var(--surface)", f ?? "var(--text)"];
+      const t = a.includes("hidden") ? " " : ch || " ";
+      if (!f && !b && attrs === "") { pre.append(t); continue; }
+      const s = document.createElement("span");
+      s.textContent = t;
+      if (f) s.style.color = f;
+      if (b) s.style.background = b;
+      if (a.includes("bold")) s.style.fontWeight = "bold";
+      if (a.includes("dim")) s.style.opacity = "0.6";
+      if (a.includes("italic")) s.style.fontStyle = "italic";
+      const deco = [a.includes("underline") && "underline", a.includes("strike") && "line-through"].filter(Boolean).join(" ");
+      if (deco) s.style.textDecoration = deco;
+      pre.append(s);
+    }
+    pre.append("\n");
+  }
+}
 
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
 const span = (cls, s) => `<span class="${cls}">${esc(s)}</span>`;
@@ -102,6 +176,19 @@ class Example {
     this.stop = button("Stop", () => this.tcl?.stop());
     this.stop.disabled = true;
     button("Reset", () => { this.ta.value = this.original; this.paint(); this.run(); });
+    if (fig.dataset.term) {
+      this.screen = document.createElement("pre");
+      this.screen.className = "ld-term";
+      this.screen.hidden = true;
+      this.screen.setAttribute("aria-label", "The screen of the terminal");
+      this.out.after(this.screen);
+      const show = button("Screen", () => {
+        this.screen.hidden = !this.screen.hidden;
+        show.setAttribute("aria-expanded", String(!this.screen.hidden));
+        if (!this.screen.hidden) this.run();
+      });
+      show.setAttribute("aria-expanded", "false");
+    }
     this.info = document.createElement("span");
     this.info.className = "ld-hud";
     this.info.textContent = `Compute limit ${LIMIT.toLocaleString("en-US")}`;
@@ -128,9 +215,12 @@ class Example {
     let text = "";
     tcl.onOutput = (t) => { text += t; };
     this.stop.disabled = false;
+    const term = this.screen && !this.screen.hidden;
+    if (term) await tcl.eval(TERM_TRACE);
     const t0 = performance.now();
     const r = await tcl.eval(this.ta.value);
     const ms = performance.now() - t0;
+    const cells = term ? await tcl.eval(TERM_CELLS) : null;
     if (seq !== this.seq) return;
     this.stop.disabled = true;
     tcl.stop();
@@ -145,6 +235,7 @@ class Example {
       res.textContent = r.ok ? `=> ${r.result}` : `error: ${r.result}`;
       this.out.append(res);
     }
+    if (cells && seq === this.seq) renderScreen(this.screen, cells.ok ? cells.result : "");
     this.info.textContent = `${ms.toFixed(1)} ms in a worker · compute limit ${LIMIT.toLocaleString("en-US")}`;
     return r;
   }
