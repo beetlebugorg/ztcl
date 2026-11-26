@@ -15,6 +15,10 @@
 //! buffer of the console, and the shell reads it again before each draw.
 //! This part was written without a Windows machine and has no test.
 //!
+//! An embedder with a terminal of its own sets `out`, `cols`, and
+//! `rows`. Then the output goes to `out`, the size is `cols` by `rows`,
+//! and raw mode does nothing. `ztk::terminal -shell` uses this form.
+//!
 //! The terminal is interactive when standard input and standard output
 //! are a terminal and TERM is not "dumb". Each other case gets plain
 //! line input in the shell.
@@ -27,7 +31,14 @@ const posix = std.posix;
 
 const is_win = builtin.os.tag == .windows;
 
+pub const Out = @import("term_web.zig").Out;
+
 pub const Term = struct {
+    /// The output of an embedder, or null for standard output.
+    out: ?Out = null,
+    /// The size with `out`.
+    cols: usize = 80,
+    rows: usize = 24,
     in_fd: posix.fd_t,
     out_fd: posix.fd_t,
     saved: if (is_win) [2]u32 else ?posix.termios = if (is_win) .{ 0, 0 } else null,
@@ -38,7 +49,7 @@ pub const Term = struct {
     }
 
     pub fn enableRaw(t: *Term) bool {
-        if (t.raw_on) return true;
+        if (t.raw_on or t.out != null) return true;
         if (comptime is_win) {
             var in_mode: u32 = 0;
             var out_mode: u32 = 0;
@@ -85,6 +96,7 @@ pub const Term = struct {
 
     /// The width and the height of the window, or 80 by 24.
     pub fn size(t: *const Term) struct { cols: usize, rows: usize } {
+        if (t.out != null) return .{ .cols = t.cols, .rows = t.rows };
         if (comptime is_win) {
             var info: ConsoleInfo = undefined;
             if (GetConsoleScreenBufferInfo(t.out_fd, &info) == 0) return .{ .cols = 80, .rows = 24 };
@@ -121,6 +133,7 @@ pub const Term = struct {
     }
 
     pub fn write(t: *Term, bytes: []const u8) void {
+        if (t.out) |o| return o.write(o.ctx, bytes);
         var at: usize = 0;
         while (at < bytes.len) {
             if (comptime is_win) {

@@ -38,16 +38,27 @@
 //!
 //! The environment variable NO_COLOR turns the colors off.
 //!
+//! The runner calls `loop`, which reads the terminal and gives each read
+//! to `feed`. The WebAssembly build has no terminal: the embedder calls
+//! `begin`, gives each key to `feed`, and gets the output from the
+//! terminal of `term_web.zig`. An embedder with a terminal of its own,
+//! such as `ztk::terminal -shell`, sets `term.out` in the same way on
+//! each platform. With `term.out`, the editor key sets `editor_request`,
+//! and the embedder edits the text and calls `setLine`.
+//! `Options.compute_limit` sets the compute units of each command.
+//!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
 const builtin = @import("builtin");
-const tcl = @import("ztcl");
+/// The WebAssembly build of `src/wasm.zig`, with no host.
+const web = builtin.os.tag == .freestanding;
+const tcl = @import("../ztcl.zig");
 const keys = @import("keys.zig");
 const text = @import("text.zig");
 const hl = @import("highlight.zig");
 const render = @import("render.zig");
-const termmod = @import("term.zig");
+const termmod = if (web) @import("term_web.zig") else @import("term.zig");
 const editor = @import("editor.zig");
 const History = @import("history.zig").History;
 
@@ -62,6 +73,16 @@ pub const Options = struct {
     home: ?[]const u8 = null,
     no_color: bool = false,
     editor_cmd: ?[]const u8 = null,
+    /// The compute units of each command, or null for the limit of the
+    /// interpreter.
+    compute_limit: ?u64 = null,
+    /// The compute units of each question of the shell: a completion or
+    /// the color of a command name.
+    probe_limit: u64 = std.math.maxInt(u64),
+    /// True to send the output of `puts` during a command to the
+    /// terminal, with each "\n" as "\r\n". An embedder with a terminal
+    /// of its own sets it.
+    puts_to_term: bool = false,
 };
 
 /// The actions that `shell bind` names.
@@ -96,6 +117,10 @@ pub const Shell = struct {
     hist_path: ?[]u8 = null,
     /// True for the last draw of a command: no hint, menu, or parameters.
     final: bool = false,
+    /// True after the editor key in the WebAssembly build, until `setLine`.
+    editor_request: bool = false,
+    /// The compute units that the last command used.
+    last_compute: u64 = 0,
 
     pub fn init(a: Allocator, it: *tcl.Interp, opts: Options) Shell {
         var s: Shell = .{
@@ -113,6 +138,7 @@ pub const Shell = struct {
     }
 
     pub fn deinit(s: *Shell) void {
+        if (active == s) active = null;
         s.ed.deinit();
         s.hist.deinit();
         s.screen.deinit();
@@ -136,7 +162,7 @@ pub const Shell = struct {
         const saved_result = it.result;
         const info = it.getVarPlain("::errorInfo") catch null;
         const code = it.getVarPlain("::errorCode") catch null;
-        it.compute_limit = std.math.maxInt(u64);
+        it.compute_limit = s.opts.probe_limit;
         defer {
             it.compute_limit = steps;
             it.result = saved_result;
@@ -438,6 +464,14 @@ pub const Shell = struct {
     // ---- The editor of the system ----
 
     fn openEditor(s: *Shell) !void {
+        if (comptime web) {
+            s.editor_request = true;
+            return;
+        }
+        if (s.term.out != null) {
+            s.editor_request = true;
+            return;
+        }
         const a = s.a;
         const io = s.opts.io;
         const prog = s.opts.editor_cmd orelse "vi";
@@ -528,7 +562,13 @@ pub const Shell = struct {
         // The command runs with the terminal in its normal mode, so the
         // output of `exec` and of a child program shows as usual.
         s.term.restore();
+        if (s.opts.compute_limit) |n| it.compute_limit = n;
+        const saved_output = it.output;
+        defer it.output = saved_output;
+        if (s.opts.puts_to_term) it.output = .{ .ctx = s, .write = putsToTerm };
+        const before = it.compute_limit;
         const res = it.eval(cmd);
+        s.last_compute = before - it.compute_limit;
         _ = s.term.enableRaw();
         if (res) |v| {
             try s.printResult(&out, v);
@@ -549,6 +589,17 @@ pub const Shell = struct {
             };
         }
         s.term.write(out.items);
+    }
+
+    fn putsToTerm(ctx: ?*anyopaque, bytes: []const u8) void {
+        const s: *Shell = @ptrCast(@alignCast(ctx.?));
+        var rest = bytes;
+        while (std.mem.indexOfScalar(u8, rest, '\n')) |k| {
+            s.term.write(rest[0..k]);
+            s.term.write("\r\n");
+            rest = rest[k + 1 ..];
+        }
+        s.term.write(rest);
     }
 
     // ---- Settings ----
@@ -608,6 +659,7 @@ pub const Shell = struct {
     }
 
     fn loadFiles(s: *Shell) !void {
+        if (comptime web) return;
         const a = s.a;
         const io = s.opts.io;
         const home = s.opts.home orelse return;
@@ -630,6 +682,7 @@ pub const Shell = struct {
     }
 
     fn saveHistory(s: *Shell) void {
+        if (comptime web) return;
         const a = s.a;
         const io = s.opts.io;
         const path = s.hist_path orelse return;
@@ -641,104 +694,154 @@ pub const Shell = struct {
         s.hist.markSaved();
     }
 
-    /// The main loop. Ends at Ctrl-D on an empty line, at the end of the
-    /// input, or when the terminal cannot go to raw mode.
-    pub fn loop(s: *Shell) !void {
-        const a = s.a;
-        if (!s.term.enableRaw()) return error.NoTerminal;
-        defer s.term.restore();
+    /// Registers `shell`, reads the rc file and the history, and draws the
+    /// first prompt. The terminal is in raw mode.
+    pub fn begin(s: *Shell) !void {
         active = s;
-        defer active = null;
         try s.it.register("shell", cmdShell);
         s.ed.host = .{ .ctx = s, .complete = isComplete };
         s.ed.history = &s.hist;
-        termmod.watchResize();
         s.term.write("\x1b[?2004h");
-        defer s.term.write("\x1b[?2004l\x1b[0 q");
         try s.loadFiles();
+        try s.beginLine();
+    }
+
+    fn beginLine(s: *Shell) !void {
+        s.ed.reset();
+        s.clearMenu();
+        s.screen.forget();
+        try s.draw();
+    }
+
+    /// Handles the keys of `bytes`. `flush` is true when no more bytes of
+    /// an escape sequence can follow, so a lone Escape is a key. Returns
+    /// false at Ctrl-D on an empty line.
+    pub fn feed(s: *Shell, bytes: []const u8, flush: bool) !bool {
+        const a = s.a;
+        active = s;
+        try s.decoder.feed(bytes);
+        while (try s.decoder.next(flush)) |k| {
+            // A key in the menu: Tab cycles, each other key closes.
+            if (s.menu.items.len > 0 and !(k.code == .special and k.code.special == .tab)) s.clearMenu();
+            // The hint of the history.
+            const at_end = s.ed.cur == s.ed.buf.items.len and s.ed.mode != .normal;
+            const accepts_hint = (k.code == .special and (k.code.special == .right or k.code.special == .end)) or (k.code == .ctrl and k.code.ctrl == 'f');
+            if (at_end and accepts_hint and !k.alt) {
+                const h = s.historyHint();
+                if (h.len > 0) {
+                    const copy = try a.dupe(u8, h);
+                    defer a.free(copy);
+                    try s.ed.insertText(copy);
+                    continue;
+                }
+            }
+            const act = s.bound(k) orelse try s.ed.handle(k);
+            switch (act) {
+                .none => {},
+                .accept => {
+                    const c = try a.dupe(u8, s.ed.buf.items);
+                    defer a.free(c);
+                    try s.endFrame();
+                    try s.hist.add(c);
+                    s.saveHistory();
+                    try s.run(c);
+                    try s.beginLine();
+                    continue;
+                },
+                .eof => {
+                    try s.endFrame();
+                    return false;
+                },
+                .interrupt => {
+                    s.ed.reset();
+                    var out: std.ArrayList(u8) = .empty;
+                    defer out.deinit(a);
+                    try s.screen.finish(&out);
+                    s.term.write(out.items);
+                },
+                .clear_screen => {
+                    s.term.write("\x1b[H\x1b[2J");
+                    s.screen.forget();
+                },
+                .complete => try s.complete(),
+                .open_editor => {
+                    try s.openEditor();
+                    s.screen.forget();
+                },
+                .show_trace => if (s.last_trace) |tr| {
+                    var out: std.ArrayList(u8) = .empty;
+                    defer out.deinit(a);
+                    try s.screen.finish(&out);
+                    var lines = std.mem.splitScalar(u8, tr, '\n');
+                    while (lines.next()) |l| {
+                        try out.appendSlice(a, l);
+                        try out.appendSlice(a, "\r\n");
+                    }
+                    s.term.write(out.items);
+                },
+            }
+        }
+        try s.draw();
+        return true;
+    }
+
+    /// The last frame of a command: no hint, menu, or parameter row.
+    fn endFrame(s: *Shell) !void {
+        var out: std.ArrayList(u8) = .empty;
+        defer out.deinit(s.a);
+        s.clearMenu();
+        s.final = true;
+        try s.draw();
+        s.final = false;
+        try s.screen.finish(&out);
+        s.term.write(out.items);
+    }
+
+    /// Puts `t` in the line after the editor key, and draws the line.
+    pub fn setLine(s: *Shell, t: []const u8) !void {
+        s.editor_request = false;
+        try s.ed.setText(std.mem.trimEnd(u8, t, "\n"));
+        s.screen.forget();
+        try s.draw();
+    }
+
+    /// Turns the vim keys on or off, as `shell mode` does, and draws again.
+    pub fn setVi(s: *Shell, on: bool) !void {
+        s.ed.setVi(on);
+        try s.draw();
+    }
+
+    /// Sets the size of a terminal with `out` and draws again.
+    pub fn resize(s: *Shell, cols: usize, rows: usize) !void {
+        if (s.term.out == null) return;
+        s.term.cols = @max(cols, 10);
+        s.term.rows = @max(rows, 2);
+        s.term.write("\r\x1b[J");
+        s.screen.forget();
+        try s.draw();
+    }
+
+    /// The main loop. Ends at Ctrl-D on an empty line, at the end of the
+    /// input, or when the terminal cannot go to raw mode.
+    pub fn loop(s: *Shell) !void {
+        if (!s.term.enableRaw()) return error.NoTerminal;
+        defer s.term.restore();
+        defer active = null;
+        termmod.watchResize();
+        try s.begin();
+        defer s.term.write("\x1b[?2004l\x1b[0 q");
         var inbuf: [4096]u8 = undefined;
         while (true) {
-            s.ed.reset();
-            s.clearMenu();
-            s.screen.forget();
-            try s.draw();
-            const cmd: ?[]u8 = read: while (true) {
-                const n = s.term.read(&inbuf, if (s.decoder.pending()) 30 else -1) orelse break :read null;
-                if (termmod.resized.swap(false, .acq_rel)) {
-                    // The terminal moved the old rows: draw again below.
-                    s.term.write("\r\x1b[J");
-                    s.screen.forget();
-                }
-                try s.decoder.feed(inbuf[0..n]);
-                while (try s.decoder.next(n == 0)) |k| {
-                    // A key in the menu: Tab cycles, each other key closes.
-                    if (s.menu.items.len > 0 and !(k.code == .special and k.code.special == .tab)) s.clearMenu();
-                    // The hint of the history.
-                    const at_end = s.ed.cur == s.ed.buf.items.len and s.ed.mode != .normal;
-                    const accepts_hint = (k.code == .special and (k.code.special == .right or k.code.special == .end)) or (k.code == .ctrl and k.code.ctrl == 'f');
-                    if (at_end and accepts_hint and !k.alt) {
-                        const h = s.historyHint();
-                        if (h.len > 0) {
-                            const copy = try a.dupe(u8, h);
-                            defer a.free(copy);
-                            try s.ed.insertText(copy);
-                            continue;
-                        }
-                    }
-                    const act = s.bound(k) orelse try s.ed.handle(k);
-                    switch (act) {
-                        .none => {},
-                        .accept => break :read try a.dupe(u8, s.ed.buf.items),
-                        .eof => break :read null,
-                        .interrupt => {
-                            s.ed.reset();
-                            var out: std.ArrayList(u8) = .empty;
-                            defer out.deinit(a);
-                            try s.screen.finish(&out);
-                            s.term.write(out.items);
-                        },
-                        .clear_screen => {
-                            s.term.write("\x1b[H\x1b[2J");
-                            s.screen.forget();
-                        },
-                        .complete => try s.complete(),
-                        .open_editor => {
-                            try s.openEditor();
-                            s.screen.forget();
-                        },
-                        .show_trace => if (s.last_trace) |tr| {
-                            var out: std.ArrayList(u8) = .empty;
-                            defer out.deinit(a);
-                            try s.screen.finish(&out);
-                            var lines = std.mem.splitScalar(u8, tr, '\n');
-                            while (lines.next()) |l| {
-                                try out.appendSlice(a, l);
-                                try out.appendSlice(a, "\r\n");
-                            }
-                            s.term.write(out.items);
-                        },
-                    }
-                }
-                try s.draw();
-            };
-            var out: std.ArrayList(u8) = .empty;
-            defer out.deinit(a);
-            // The frame without the hint, the menu, and the parameter row.
-            s.clearMenu();
-            s.final = true;
-            try s.draw();
-            s.final = false;
-            const c = cmd orelse {
-                try s.screen.finish(&out);
-                s.term.write(out.items);
+            const n = s.term.read(&inbuf, if (s.decoder.pending()) 30 else -1) orelse {
+                try s.endFrame();
                 return;
             };
-            defer a.free(c);
-            try s.screen.finish(&out);
-            s.term.write(out.items);
-            try s.hist.add(c);
-            s.saveHistory();
-            try s.run(c);
+            if (termmod.resized.swap(false, .acq_rel)) {
+                // The terminal moved the old rows: draw again below.
+                s.term.write("\r\x1b[J");
+                s.screen.forget();
+            }
+            if (!try s.feed(inbuf[0..n], n == 0)) return;
         }
     }
 };

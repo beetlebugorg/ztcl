@@ -5,6 +5,8 @@
 
 `ztcl` with no file starts an interactive shell when standard input and standard output are a terminal. With a pipe, a file, or `TERM=dumb`, the runner reads one command for each line, with no editor. The line editor is code of ztcl. It uses no readline, libedit, or ncurses, and it talks to the terminal with termios and ANSI escape sequences.
 
+The [shell page](https://beetlebug.org/ztcl/try/) of the site runs the same shell in your browser. There, ztcl-shell.wasm has the line editor and a terminal of `ztcl::vt`, and the page renders the cells of the terminal on a canvas. That shell has no capability. Its files are a few read-only files of the page, and each command can use 10,000,000 compute units. `web/ztcl-shell.mjs` is its JavaScript interface.
+
 ## Keys
 
 Emacs keys are the default.

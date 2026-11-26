@@ -61,6 +61,10 @@ pub const jit_verify = @import("jit/verify.zig");
 pub const jit_tier2 = @import("jit/tier2.zig");
 /// The bundle of `ztcl build --wasm`.
 pub const wasmbundle = @import("wasmbundle.zig");
+/// The interactive shell of the runner and its terminal, for the runner
+/// and for the WebAssembly builds with a shell.
+pub const shell = @import("shell/shell.zig");
+pub const shell_term = if (@import("builtin").os.tag == .freestanding) @import("shell/term_web.zig") else @import("shell/term.zig");
 /// The JSON parser, for the tools of the JSON module.
 pub const json = struct {
     pub const index = @import("json/index.zig");

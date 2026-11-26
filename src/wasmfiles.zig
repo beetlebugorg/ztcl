@@ -1,10 +1,12 @@
 //! The files of a bundle (`src/wasmbundle.zig`) for the scripts of
-//! ztcl.wasm: `source`, and `open` for reading with `read`, `gets`,
-//! `eof`, and `close`.
+//! ztcl.wasm: `source`, `glob`, and `open` for reading with `read`,
+//! `gets`, `eof`, and `close`.
 //!
 //! The files are read-only and are under the mount `//zipfs:/app/`. A
 //! relative name is relative to the mount. `read` and `gets` give the
 //! bytes of the file with no encoding and no end-of-line translation.
+//! A folder is each prefix of a name that ends at a slash. `glob` matches
+//! each part of a name with `string match`, so `*` stops at a slash.
 //! The host turns the commands on with the `file` capability. The full
 //! virtual file system of issue #40 replaces this table.
 //!
@@ -17,6 +19,7 @@ const Interp = interp.Interp;
 const Value = @import("value.zig").Value;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
+const globMatch = @import("cmds.zig").globMatch;
 
 pub const mount = "//zipfs:/app/";
 
@@ -72,6 +75,7 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             try it.register("gets", gets);
             try it.register("eof", eof);
             try it.register("close", close);
+            try it.register("glob", glob);
         }
 
         fn notFound(it: *Interp, what: []const u8, path: []const u8) Error {
@@ -185,6 +189,59 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             return .{ .int = @intFromBool((try find(it, argv[1])).eof) };
         }
 
+        fn glob(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+            const usage = "glob ?-nocomplain? ?-types d|f? ?--? pattern ?pattern ...?";
+            var nocomplain = false;
+            var types: u8 = 0;
+            var k: usize = 1;
+            while (k < argv.len) : (k += 1) {
+                const o = try it.str(argv[k]);
+                if (std.mem.eql(u8, o, "--")) {
+                    k += 1;
+                    break;
+                } else if (std.mem.eql(u8, o, "-nocomplain")) {
+                    nocomplain = true;
+                } else if (std.mem.eql(u8, o, "-types") and k + 1 < argv.len) {
+                    k += 1;
+                    const t = try it.str(argv[k]);
+                    if (!std.mem.eql(u8, t, "d") and !std.mem.eql(u8, t, "f")) return it.fail("bad argument to \"-types\": {s}", .{t});
+                    types = t[0];
+                } else if (o.len > 0 and o[0] == '-') {
+                    return it.fail("bad option \"{s}\": must be -nocomplain, -types, or --", .{o});
+                } else break;
+            }
+            if (k >= argv.len) return it.wrongArgs(usage);
+            const a = it.alloc();
+            var found: std.ArrayList(Value) = .empty;
+            var pats = std.ArrayList([]const u8).empty;
+            for (argv[k..]) |v| try pats.append(a, try it.str(v));
+            for (pats.items) |full| {
+                const in_mount = std.mem.startsWith(u8, full, mount);
+                const pat = if (in_mount) full[mount.len..] else full;
+                const parts = std.mem.count(u8, pat, "/");
+                var r: bundle.Reader = .init(stateOf(it).payload);
+                while (r.next()) |e| {
+                    // The name, then each folder above it.
+                    var end = e.name.len;
+                    var is_dir = false;
+                    while (true) {
+                        const name = e.name[0..end];
+                        if (std.mem.count(u8, name, "/") == parts and (types == 0 or types == (if (is_dir) @as(u8, 'd') else 'f')) and globMatch(pat, name, false)) {
+                            const out = if (in_mount) try std.fmt.allocPrint(a, "{s}{s}", .{ mount, name }) else try a.dupe(u8, name);
+                            const dup = for (found.items) |f| {
+                                if (std.mem.eql(u8, f.str, out)) break true;
+                            } else false;
+                            if (!dup) try found.append(a, .{ .str = out });
+                        }
+                        end = std.mem.lastIndexOfScalar(u8, name, '/') orelse break;
+                        is_dir = true;
+                    }
+                }
+            }
+            if (found.items.len == 0 and !nocomplain) return it.fail("no files matched glob pattern{s} \"{s}\"", .{ if (pats.items.len > 1) "s" else "", std.mem.join(a, " ", pats.items) catch "" });
+            return @import("value.zig").newList(a, found.items);
+        }
+
         fn close(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (argv.len < 2 or argv.len > 3) return it.wrongArgs("close channelId ?direction?");
             stateOf(it).chans.items[try index(it, argv[1])] = null;
@@ -207,4 +264,38 @@ test "a name resolves under the mount" {
     try std.testing.expect(lookup(p, "/data/a.txt") == null);
     try std.testing.expect(lookup(p, "../app.tcl") == null);
     try std.testing.expect(lookup(p, "data") == null);
+}
+
+test "glob gives the files and the folders of the bundle" {
+    const a = std.testing.allocator;
+    const p = try bundle.encode(a, &.{
+        .{ .kind = .script, .name = "app.tcl", .data = "" },
+        .{ .kind = .file, .name = "data/a.txt", .data = "" },
+        .{ .kind = .file, .name = "data/b.txt", .data = "" },
+    });
+    defer a.free(p);
+    var it: Interp = undefined;
+    try it.init(a);
+    defer it.deinit();
+    var st: State = .{ .payload = p, .on = true };
+    defer st.deinit(a);
+    test_state = &st;
+    try Commands(testState, a).register(&it);
+    const cases = [_][2][]const u8{
+        .{ "glob -nocomplain *", "app.tcl data" },
+        .{ "glob -nocomplain -types d -- d*", "data" },
+        .{ "glob -types f data/*", "data/a.txt data/b.txt" },
+        .{ "glob //zipfs:/app/a*", "//zipfs:/app/app.tcl" },
+        .{ "glob -nocomplain x*", "" },
+        .{ "catch {glob x*} m; set m", "no files matched glob pattern \"x*\"" },
+    };
+    for (cases) |c| {
+        const v = try it.eval(c[0]);
+        try std.testing.expectEqualStrings(c[1], try it.str(v));
+    }
+}
+
+var test_state: *State = undefined;
+fn testState(_: *Interp) *State {
+    return test_state;
 }

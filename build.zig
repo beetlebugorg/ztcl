@@ -205,13 +205,18 @@ pub fn build(b: *std.Build) void {
     addPointRuntime(b, &(.{ ztcl, fast } ++ rt_mods), fast);
 
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
-    const wasm = addWasm(b, "ztcl", .none, gc_precise, size_plant, on, false);
+    const wasm = addWasm(b, "ztcl", .none, gc_precise, size_plant, on, false, false);
     const wasm_install = b.addInstallArtifact(wasm, .{ .dest_dir = .{ .override = .lib } });
     b.step("wasm", "Build the WebAssembly library").dependOn(&wasm_install.step);
 
+    // The library with the shell of the runner (src/wasm_shell.zig):
+    // zig-out/lib/ztcl-shell.wasm, for the shell of the site.
+    const wasm_shell = addWasm(b, "ztcl-shell", .none, gc_precise, size_plant, on, false, true);
+    b.step("wasm-shell", "Build the WebAssembly library with the shell").dependOn(&b.addInstallArtifact(wasm_shell, .{ .dest_dir = .{ .override = .lib } }).step);
+
     // The runtime of `ztcl compile --wasm`: zig-out/lib/ztcl-aot.wasm.
     // It is the library with the helpers of the JIT as exports.
-    const wasm_aot = addWasm(b, "ztcl-aot", .none, gc_precise, size_plant, on, true);
+    const wasm_aot = addWasm(b, "ztcl-aot", .none, gc_precise, size_plant, on, true, false);
     b.step("wasm-aot", "Build the runtime of ztcl compile --wasm").dependOn(&b.addInstallArtifact(wasm_aot, .{ .dest_dir = .{ .override = .lib } }).step);
 
     // The libraries of the capability `thread` on the web (task 14):
@@ -219,7 +224,7 @@ pub fn build(b: *std.Build) void {
     // ztcl-async.wasm gives each worker its own memory.
     const threads_step = b.step("wasm-threads", "Build the WebAssembly libraries with threads");
     for ([_]struct { []const u8, WebThreads }{ .{ "ztcl-threads", .shared }, .{ "ztcl-async", .async } }) |wt| {
-        const w = addWasm(b, wt[0], wt[1], gc_precise, size_plant, on, false);
+        const w = addWasm(b, wt[0], wt[1], gc_precise, size_plant, on, false, false);
         threads_step.dependOn(&b.addInstallArtifact(w, .{ .dest_dir = .{ .override = .lib } }).step);
     }
 }
@@ -281,7 +286,7 @@ fn addPointRuntime(b: *std.Build, mods: []const *std.Build.Module, fast: *std.Bu
 /// the commands that do not wait work.
 const WebThreads = enum { none, shared, async };
 
-fn addWasm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise: bool, size_plant: usize, on: [all_modules.len]bool, aot: bool) *std.Build.Step.Compile {
+fn addWasm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise: bool, size_plant: usize, on: [all_modules.len]bool, aot: bool, shell: bool) *std.Build.Step.Compile {
     var query: std.Target.Query = .{ .cpu_arch = .wasm32, .os_tag = .freestanding };
     if (threads == .shared) query.cpu_features_add = std.Target.wasm.featureSet(&.{ .atomics, .bulk_memory });
     const wasm = b.addExecutable(.{ .name = name, .root_module = b.createModule(.{
@@ -295,6 +300,7 @@ fn addWasm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise: boo
     wasm_options.addOption(bool, "gc_precise", gc_precise);
     wasm_options.addOption(bool, "jit", false);
     wasm_options.addOption(bool, "aot", aot);
+    wasm_options.addOption(bool, "shell", shell);
     wasm_options.addOption(bool, "jit_bug", false);
     wasm_options.addOption(bool, "tsan_plant", false);
     wasm_options.addOption(usize, "size_plant", size_plant);
