@@ -131,6 +131,21 @@ The AOT runtime is a separate variant of the runtime of each target, so a bundle
 - Windows x86-64 uses the Win64 calling convention: the arguments in rcx, rdx, r8, and r9, 32 bytes of shadow space, and rdi, rsi, and xmm6 to xmm15 saved by the callee. The x86-64 code generator needs a Win64 form of its prologue, its epilogue, and its helper calls before AOT works on Windows. Unwind data (`.pdata`) for each proc goes in the data region.
 - Microcontrollers (#9): the same compiler with a target that has no bytecode fallback (`--no-eval`), and a runtime with no interpreter. It is a later target of this compiler.
 
+## The API of the build in the browser
+
+The ztk docs site has a download panel for a native app (`web/download.js` of ztk, and "Download your app" in `docs/dev/interactive-docs.md` of ztk). It calls the build through one module, `ztcl-build.js`, next to the playground files:
+
+```js
+import { build } from "./ztcl-build.js";
+// runtime: the bytes of the runtime binary of the target, with the slot.
+// files: { name: text } for the payload. main: the first script.
+// target: "x86_64-linux", "aarch64-linux", "x86_64-macos", "aarch64-macos",
+// "x86_64-windows", or "aarch64-windows".
+const bytes = await build({ runtime, files, main, target }); // a Uint8Array
+```
+
+The function throws an Error with the text of the build error. The site serves the runtimes in `runtimes/`, with `runtimes/manifest.json`: `{"targets": {"x86_64-linux": {"file": "...", "size": N, "sha256": "..."}}}`. The panel shows only when both files exist. The runtime of a ztk app is the `ztk` program of each target with the same slot, so the slot format stays the same for ztk. This section is a request of the ztk docs, and the step "the build page of the docs site" can change it.
+
 ## Signing
 
 - macOS: arm64 macOS runs only signed code. The build writes an ad hoc signature in Zig, so the signature works from the CLI on each host and from the browser: a code directory with a SHA-256 hash of each 4 KiB page of the file up to the signature, the identifier of the output name, and no requirements. This is the format that the Zig linker writes for an ad hoc signature, and the reference names it. A developer ID signature and notarization stay a step on a Mac (`codesign`, then `notarytool`), after the build.
