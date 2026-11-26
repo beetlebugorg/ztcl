@@ -875,6 +875,10 @@ pub const Capability = enum(u32) {
     /// outside each limit, with the power of the user. It is not
     /// sandboxed.
     launch = 8192,
+    /// `ztcl::win::registry`: the keys of `Interp.registry_allow` and the
+    /// keys below them, on Windows. A key such as `Run` starts a program
+    /// at the next login, so the list is the only reach.
+    registry = 16384,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -1046,6 +1050,9 @@ pub const Interp = struct {
     event_host: ?@import("event.zig").Host = null,
     /// The opener of `ztcl::open`, from the embedder. Null: the system.
     launch_host: ?@import("launch.zig").Host = null,
+    /// The registry keys that `ztcl::win::registry` reaches, with the keys
+    /// below them. Empty: no key.
+    registry_allow: []const []const u8 = &.{},
     /// The event loop that this interpreter shares with its parent.
     events: ?*@import("event.zig").State = null,
     /// The network policy of `socket`. The embedder sets it.
@@ -1424,6 +1431,7 @@ pub const Interp = struct {
         it.clock_host = keep.clock_host;
         it.event_host = keep.event_host;
         it.launch_host = keep.launch_host;
+        it.registry_allow = keep.registry_allow;
         it.exec_host = keep.exec_host;
         it.net = keep.net;
         it.thread_limits = keep.thread_limits;
@@ -1488,6 +1496,7 @@ pub const Interp = struct {
         if (new & @backingInt(Capability.clock) != 0) try @import("clock.zig").register(it);
         if (new & @backingInt(Capability.event) != 0) try @import("event.zig").register(it);
         if (new & @backingInt(Capability.launch) != 0) try @import("launch.zig").register(it);
+        if (new & @backingInt(Capability.registry) != 0) try @import("winreg.zig").register(it);
         if (comptime chan_supported) {
             if (new & @backingInt(Capability.channels) != 0) try @import("chan.zig").register(it);
         }

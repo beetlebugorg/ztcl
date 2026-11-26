@@ -1130,7 +1130,7 @@ test "the optional commands are absent by default" {
     defer it.deinit();
     // A build with modules has the small `package` by default.
     try std.testing.expect((it.findCommand("package") == null) == (modules.table.len == 0));
-    for ([_][]const u8{ "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror", "ztcl::open" }) |name| {
+    for ([_][]const u8{ "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror", "ztcl::open", "ztcl::win::registry" }) |name| {
         try std.testing.expect(it.findCommand(name) == null);
     }
 }
@@ -2755,4 +2755,54 @@ test "ztcl::open: the scheme of a URL, and the blocked file types" {
 test "ztcl::open: the shell of Windows fails on a missing file, with no dialog" {
     if (@import("builtin").os.tag != .windows) return error.SkipZigTest;
     try std.testing.expect(!(try tcl.launch.win.shellOpen(std.testing.allocator, "C:/ztcl-no-such-folder/none.txt")));
+}
+
+test "ztcl::win::registry: the keys of the allow list" {
+    const r = tcl.winreg;
+    const a = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(a);
+    defer arena.deinit();
+    const aa = arena.allocator();
+    const k = (try r.parseKey(aa, "hkcu/Software//App/x")).?;
+    try std.testing.expectEqual(@as(usize, 1), k.root);
+    try std.testing.expect(std.mem.eql(u8, k.path, "Software" ++ [_]u8{'\x5c'} ++ "App" ++ [_]u8{'\x5c'} ++ "x"));
+    try std.testing.expect((try r.parseKey(aa, "HKEY_NOWHERE/a")) == null);
+    const list = [_][]const u8{"HKEY_CURRENT_USER/Software/App"};
+    try std.testing.expect(try r.allowed(aa, &list, (try r.parseKey(aa, "HKCU/software/app")).?));
+    try std.testing.expect(try r.allowed(aa, &list, (try r.parseKey(aa, "HKCU/Software/App/Sub")).?));
+    try std.testing.expect(!try r.allowed(aa, &list, (try r.parseKey(aa, "HKCU/Software/AppX")).?));
+    try std.testing.expect(!try r.allowed(aa, &list, (try r.parseKey(aa, "HKLM/Software/App")).?));
+    try std.testing.expect(!try r.allowed(aa, &.{}, (try r.parseKey(aa, "HKCU/Software/App")).?));
+}
+
+test "ztcl::win::registry: set, get, type, keys, values, and delete" {
+    if (!tcl.winreg.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const list = [_][]const u8{"HKEY_CURRENT_USER/Software/ztcl-test"};
+    it.registry_allow = &list;
+    try it.allow(@backingInt(tcl.interp.Capability.registry));
+    const ev = struct {
+        fn f(i: *tcl.Interp, s: []const u8) ![]const u8 {
+            return i.str(try i.eval(s));
+        }
+    }.f;
+    _ = try ev(&it, "catch {ztcl::win::registry delete HKCU/Software/ztcl-test}");
+    _ = try ev(&it, "set k HKCU/Software/ztcl-test/a");
+    _ = try ev(&it, "ztcl::win::registry set $k s {hello world}");
+    _ = try ev(&it, "ztcl::win::registry set $k n 42 dword");
+    _ = try ev(&it, "ztcl::win::registry set $k q -5 qword");
+    _ = try ev(&it, "ztcl::win::registry set $k m {one {two three}} multi_sz");
+    _ = try ev(&it, "ztcl::win::registry set $k b [binary format c3 {1 255 0}] binary");
+    _ = try ev(&it, "ztcl::win::registry set $k/sub");
+    try std.testing.expectEqualStrings("{hello world} 42 -5 {one {two three}} sz dword multi_sz binary 3 1", try ev(&it, "list [ztcl::win::registry get $k s] [ztcl::win::registry get $k n] [ztcl::win::registry get $k q] [ztcl::win::registry get $k m] [ztcl::win::registry type $k s] [ztcl::win::registry type $k n] [ztcl::win::registry type $k m] [ztcl::win::registry type $k b] [string length [ztcl::win::registry get $k b]] [string equal [ztcl::win::registry get $k b] [binary format c3 {1 255 0}]]"));
+    try std.testing.expectEqualStrings("b m n q s", try ev(&it, "lsort [ztcl::win::registry values $k]"));
+    try std.testing.expectEqualStrings("sub", try ev(&it, "ztcl::win::registry keys $k"));
+    try std.testing.expectEqualStrings("s", try ev(&it, "ztcl::win::registry values $k {[s]*}"));
+    _ = try ev(&it, "ztcl::win::registry delete $k s");
+    try std.testing.expectEqualStrings("ZTCL REGISTRY NOENT", try ev(&it, "catch {ztcl::win::registry get $k s}; set ::errorCode"));
+    try std.testing.expectEqualStrings("ZTCL REGISTRY DENIED", try ev(&it, "catch {ztcl::win::registry get HKCU/Software/Microsoft x}; set ::errorCode"));
+    _ = try ev(&it, "ztcl::win::registry delete HKCU/Software/ztcl-test");
+    try std.testing.expectEqualStrings("ZTCL REGISTRY NOENT", try ev(&it, "catch {ztcl::win::registry keys HKCU/Software/ztcl-test}; set ::errorCode"));
 }
