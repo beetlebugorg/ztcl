@@ -42,7 +42,9 @@ const on_mac = builtin.os.tag == .macos;
 const mac = @import("pty_mac.zig");
 
 /// True on the platforms where `spawn` starts a program.
-pub const supported = builtin.os.tag == .linux or on_mac;
+/// The same targets as `exec`, because the PTY uses its process tree:
+/// Linux and arm64 macOS. x86-64 macOS has no `exec`, so it has no PTY.
+pub const supported = proc.supported and (builtin.os.tag == .linux or on_mac);
 
 const usage = "ztcl::pty spawn|resize|size|status|kill ?arg ...?";
 
