@@ -125,7 +125,9 @@ The spike builds its own guest. The proper image is the tiny kernel and BusyBox 
 - vsock is a Hyper-V socket on the host (`AF_HYPERV` with the VM id and a service id made from the port), and `AF_VSOCK` in the guest. The guest kernel needs `CONFIG_HYPERV_VSOCKETS`.
 - A share is a Plan 9 share of HCS, mounted in the guest with `9p` over vsock. The guest kernel needs `CONFIG_NET_9P` and `CONFIG_9P_FS`.
 - The Windows Hypervisor Platform (`WHvCreatePartition`) is the fallback, the same shape as KVM with our own devices, for a Windows edition without HCS.
-- HCS needs the Hyper-V and the Virtual Machine Platform features of Windows, and the user in the group `Hyper-V Administrators` or an admin.
+- A service of a Hyper-V socket of a normal VM needs a key under `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\GuestCommunicationServices`, which needs an administrator. The JSON schema of HCS has `HvSocketConfig` with a table of services for one compute system, with no change to the registry: the spike of the Windows part checks that route first. Port 1024 of vsock is the service GUID `00000400-FACB-11E6-BD58-64006A7986D3`.
+- HCS needs the feature Virtual Machine Platform (the one of WSL 2), which Windows 11 Home has. The calls of HCS likely need an administrator, so the Windows part may need a service: the spike checks it.
+- The bootstrap secret of `docs/dev/isolation.md` goes on the command line of the kernel, which HCS gives with `LinuxKernelDirect`.
 
 ## Tests
 
