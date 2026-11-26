@@ -870,6 +870,10 @@ pub const Capability = enum(u32) {
     /// path outside a mount is an error, so it gives no access to the
     /// host.
     embedded = 4096,
+    /// `ztcl::win::registry`: the keys of `Interp.registry_allow` and the
+    /// keys below them, on Windows. A key such as `Run` starts a program
+    /// at the next login, so the list is the only reach.
+    registry = 16384,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -1039,6 +1043,9 @@ pub const Interp = struct {
     clock: @import("clock.zig").State = .{},
     /// The clock and the sleep of the event loop, from the embedder.
     event_host: ?@import("event.zig").Host = null,
+    /// The registry keys that `ztcl::win::registry` reaches, with the keys
+    /// below them. Empty: no key.
+    registry_allow: []const []const u8 = &.{},
     /// The event loop that this interpreter shares with its parent.
     events: ?*@import("event.zig").State = null,
     /// The network policy of `socket`. The embedder sets it.
@@ -1416,6 +1423,7 @@ pub const Interp = struct {
         it.noise_seed = keep.noise_seed;
         it.clock_host = keep.clock_host;
         it.event_host = keep.event_host;
+        it.registry_allow = keep.registry_allow;
         it.exec_host = keep.exec_host;
         it.net = keep.net;
         it.thread_limits = keep.thread_limits;
@@ -1479,6 +1487,7 @@ pub const Interp = struct {
         if (new & @intFromEnum(Capability.interp) != 0) try it.register("interp", @import("child.zig").cmdInterp);
         if (new & @intFromEnum(Capability.clock) != 0) try @import("clock.zig").register(it);
         if (new & @intFromEnum(Capability.event) != 0) try @import("event.zig").register(it);
+        if (new & @intFromEnum(Capability.registry) != 0) try @import("winreg.zig").register(it);
         if (comptime chan_supported) {
             if (new & @intFromEnum(Capability.channels) != 0) try @import("chan.zig").register(it);
         }

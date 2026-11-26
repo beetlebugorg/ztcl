@@ -133,6 +133,7 @@ ztcl.sys.ignorePipeSignal(); // a write to a closed peer is an error, with no si
 | `event` | `Interp.event_host`: a clock that does not go back, and a sleep. |
 | `socket` | `Interp.net`: the network policy. The default is `loopback`. |
 | `exec` | `Interp.exec_host`: the program list, the list of files below the root, the time limit, and the environment. |
+| `registry` | `Interp.registry_allow`: the registry keys that a script reaches, with the keys below them. |
 
 `exec` is not sandboxed. A process that a script starts has the full power of the user. Give a program list and a time limit, and turn `exec` on only for scripts that you trust. An entry of `allow` is a bare name or a full host path. The `PATH` of `env` must have only full paths. A file below the root folder runs only when `allow_root` lists it. See [the rules of `exec`](../SECURITY.md#the-rules-of-exec).
 

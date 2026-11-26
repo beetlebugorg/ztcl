@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Adds `ztcl::win::registry` on Windows behind the new capability `registry`: `get`, `set`, `type`, `delete`, `keys`, and `values`, with the value types of the `registry` package of Tcl. It reaches only the keys of `Interp.registry_allow` (runner flag `--registry-allow`) and the keys below them.
+
 - Adds a host mode for the file commands: `file`, `open`, `glob`, `cd`, `pwd`, and `source` use the real paths of the host and follow symlinks, as tclsh does. The runner turns it on when `--allow` gives `file` or `channels` and no `--root DIR` came before it. `--root` turns the root folder jail on. An embedder gets the jail unless it calls `fsroot.setHost`. A child interp of a host-mode parent is in host mode too. Windows has drive letters and UNC paths.
 
 - Renames the namespace of the built-in modules from `zt` to `ztcl`: `ztcl::json`, `ztcl::hello`, and `ztcl::hellonet`. The old names `zt::json`, `zt::hello`, and `zt::hellonet` are deprecated aliases until v0.4.0-beta. `package require` of an old name loads the module and makes the old namespace an ensemble of the same commands.
