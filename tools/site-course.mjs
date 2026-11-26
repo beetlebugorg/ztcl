@@ -61,6 +61,9 @@ await send("Emulation.setFocusEmulationEnabled", { enabled: true });
 await send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
 await send("Page.navigate", { url });
 await send("Page.enable");
+// Wait for the load of the page, so that a slow network does not race
+// the first scroll.
+for (let i = 0; i < 300 && (await evalJS("document.readyState")) !== "complete"; i++) await pause(100);
 let failed = 0;
 const check = (name, ok, detail = "") => {
   if (!ok) failed++;
