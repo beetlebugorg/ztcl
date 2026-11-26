@@ -41,7 +41,7 @@ An embedder can give `Interp.launch_host`, a function that gets each target (the
 | System | How | Refused files |
 |---|---|---|
 | Windows | `ShellExecuteExW` with the verb `open`, with no dialog of the shell | the types that Windows runs as code (below), and a named stream (`a.txt:s`) |
-| macOS | `/usr/bin/open`, the program of LaunchServices, and its exit status | app bundles, the types that macOS runs as code (below), and each file with an execute bit |
+| macOS | `/usr/bin/open`, the program of LaunchServices, and its exit status | the types that macOS runs as code (below), with app bundles such as `.app`, and each regular file with an execute bit; a folder opens in Finder |
 | Linux | none yet | the command gives `ZTCL OPEN UNAVAILABLE` unless `launch_host` is set |
 | WebAssembly | none | the same error |
 
