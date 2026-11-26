@@ -16,6 +16,10 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+-alpha"
       - "v[0-9]+.[0-9]+.[0-9]+-beta"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - "tools/build-docs.py"
   workflow_dispatch:
 
 permissions:

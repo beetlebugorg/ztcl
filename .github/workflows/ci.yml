@@ -22,8 +22,34 @@ env:
   ZIG_VERSION: "0.17.0"
 
 jobs:
+  # Which parts of the repository changed: a pull request that touches
+  # only docs and site files skips the build and test jobs of the code.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.f.outputs.code }}
+      docs: ${{ steps.f.outputs.docs }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - id: f
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ]; then
+            echo code=true >> "$GITHUB_OUTPUT"; echo docs=true >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD)
+          printf '%s\n' "$files"
+          docs_re='^(docs/|README\.md|CHANGELOG\.md|CONTRIBUTING\.md|SECURITY\.md|WRITING\.md|AGENTS\.md|tools/build-docs\.py|tools/docs-requirements\.txt|licenses/)'
+          if printf '%s\n' "$files" | grep -qvE "$docs_re"; then code=true; else code=false; fi
+          if printf '%s\n' "$files" | grep -qE "$docs_re"; then docs=true; else docs=false; fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"; echo "docs=$docs" >> "$GITHUB_OUTPUT"
+
   test:
     name: Test (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -88,6 +114,8 @@ jobs:
   # so the run checks the ad hoc signature of src/macho.zig.
   build-native:
     name: ztcl build (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -173,6 +201,8 @@ jobs:
 
   suite:
     name: Tcl 8.6.16 suite
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -188,6 +218,8 @@ jobs:
 
   wasm:
     name: WebAssembly
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -231,6 +263,8 @@ jobs:
 
   wasi:
     name: WASI
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     env:
       WASMTIME_VERSION: "50.0.0"
@@ -267,3 +301,21 @@ jobs:
           gh issue create -R "${{ github.repository }}" \
             --title "The full CI run failed on $(date -u +%Y-%m-%d)" \
             --body "The scheduled full run failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  # A pull request that changes the docs builds the site, so a broken page
+  # shows before the merge. The Docs workflow deploys it from main.
+  docs:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - run: zig build wasm wasm-threads wasm-shell
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r tools/docs-requirements.txt
+      - run: python tools/build-docs.py site
