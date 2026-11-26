@@ -38,7 +38,31 @@ signtool sign /ph /fd SHA256 /sha1 <thumbprint> ztcl-enclave.dll
 
 So a self-signed enclave needs test signing, as the guide of Microsoft says.
 
+## Run with test signing on
+
+The user turned test signing on (`bcdedit /set testsigning on` and a restart, 2026-11-26). The options of the boot then have `TESTSIGNING`. The run of `ztcl-enclave-host.exe` with the self-signed image:
+
+| Step | Result |
+|---|---|
+| `CreateEnclave` | ok |
+| `LoadEnclaveImageW` | ok |
+| `InitializeEnclave` (1 thread) | ok |
+| `ztcl_run`: `puts [expr {6*7}]` | code 0, output `42` |
+| `EnclaveSealData` (the same image) | a blob of 231 bytes |
+| `EnclaveGetAttestationReport` | a report of 936 bytes |
+| `EnclaveUnsealData`, the same enclave | `42` |
+| `EnclaveUnsealData`, a new enclave of the same image (`-unseal`) | `42` |
+| `EnclaveVerifyAttestationReport(ENCLAVE_TYPE_VBS)` | ok |
+| `puts [string repeat ab 3]; error boom` | code 1, the message `boom` |
+
+### What the spike found
+
+- `EnclaveUnsealData` gives `E_INVALIDARG` for a NULL buffer of size 0, and for a buffer of 64 KiB or 1 MiB with a blob of 231 bytes. It unseals into a buffer of the exact size, of 64 bytes, or of 4,096 bytes. The shim gives it the size of the blob, since the data is shorter than its blob. `EnclaveSealData` and `EnclaveGetAttestationReport` accept a NULL buffer of size 0 and give the size.
+- The report starts with its size (`0x3a8`, 936). It has the owner id of `CreateEnclave` (`ztcl-enclave-host`), the family id (`ztcl`) and the image id (`ztcl-core`) of the configuration of the image, and the name and a hash of each module: `ztcl-enclave.dll`, `vertdll.dll`, and `ucrtbase_enclave.dll`. A signature ends it. The format of the fields is still an open item of [enclave.md](enclave.md).
+- The image needs about 1.2 MB, and the enclave runs the interpreter on its arena of 48 MiB with no call to the host.
+
 ## Next
 
-1. Test signing on: `bcdedit /set testsigning on` in a prompt of an administrator, then a restart. The session of the spike has no administrator rights, so the user runs it. Then record the output `42`, the sizes of the sealed blob and the report, the unsealed output, and the result of `EnclaveVerifyAttestationReport`.
-2. Test signing off again after the spike (`bcdedit /set testsigning off` and a restart), and the certificate out of the store.
+1. Test signing off again (`bcdedit /set testsigning off` and a restart), and the certificate out of the store, when the user agrees.
+2. `ztcl::enclave` as commands of the interpreter inside the enclave, in place of the fixed steps of the shim.
+3. The host side in Zig (`src/enclave_windows.zig`), and a test that skips with no VBS enclave.

@@ -47,6 +47,9 @@ typedef struct ztcl_enclave_request {
     uint8_t *report;
     uint32_t report_cap;
     uint32_t report_len;
+    /* Out: the step of the enclave that failed, for the message of the
+     * host. 0 for none. */
+    uint32_t step;
 } ztcl_enclave_request;
 
 #endif
