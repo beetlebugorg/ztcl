@@ -17,6 +17,7 @@ Issue #1 has the goal: load an existing Tcl package with a C module through an o
 | [02](02-wasm.md) | Spike, WebAssembly: build the same binding with `zig cc -target wasm32-wasi` and a recording shim, run its tests in Node.js with stub imports that forward to the wasm build of ztcl, and report the slots, the module size, and the speed against task 01. |
 | [03](../cext.md) | The result page `docs/dev/cext.md`: the slots of both spikes, the shape of the `Tcl_Obj` bridge (a shadow `Tcl_Obj` for each value, synced at each call), and the choice for the user. |
 | 04 | After the choice: the bridge for the slots of task 03, one group of slots for each branch. |
+| [04n](04n-native.md) | The native path: the stubs tables in ztcl, `load` with the capability `cext`, and the areas of the public table in order. |
 | [04w](04w-wasm-bridge.md) | The bridge of the WebAssembly path: the stubs table in a Zig library in the package, and the imports to ztcl for commands, scripts, and variables. |
 | [04e](04e-wasm-engine.md) | The plan for native ztcl to run the packages of 04w with the WebAssembly engine of #202. |
 
@@ -33,3 +34,4 @@ Issue #1 has the goal: load an existing Tcl package with a C module through an o
 - Task 02: [02-wasm.md](02-wasm.md). The module called 53 public slots, each one also in task 01. 636 test files have the same counts as in task 01.
 - Task 03: [../cext.md](../cext.md). On 2026-11-26 the user chose both paths.
 - Task 04w: [04w-wasm-bridge.md](04w-wasm-bridge.md). Steps 1 and 2: 90 slots, and the `insert` part of `bench.tcl` is 2.5 times tclsh.
+- Task 04n: [04n-native.md](04n-native.md). Step 1: the tables, `load`, memory, and packages.

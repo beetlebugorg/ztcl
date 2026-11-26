@@ -896,6 +896,10 @@ pub const Capability = enum(u32) {
     /// (ztcl#203), within `Interp.vm_host`. A path of a guest also needs
     /// `file`, and a channel of a guest needs `channels`.
     vm = 262144,
+    /// `load` of Tcl C packages, in a build with `-Dcext`. The code of a
+    /// package runs with the rights of the process, outside the root
+    /// folder and outside each limit. It is not sandboxed.
+    cext = 524288,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -915,6 +919,12 @@ pub const Capability = enum(u32) {
 const chan_supported = @import("sys.zig").supported;
 const fs_supported = @import("fsroot.zig").supported;
 const exec_supported = proc_mod.supported;
+// The loader of C packages is only in a build with `-Dcext`.
+const cext_mod = if ((@hasDecl(@import("build_options"), "cext") and @import("build_options").cext)) @import("cext/cext.zig") else struct {
+    pub const supported = false;
+    pub fn register(_: *Interp) Allocator.Error!void {}
+    pub fn drop(_: *Interp) void {}
+};
 const FsState = @import("fsroot.zig").State;
 const ProcHost = if (exec_supported) proc_mod.Host else struct {};
 const ProcState = if (exec_supported) proc_mod.State else struct {};
@@ -1091,6 +1101,8 @@ pub const Interp = struct {
     bg_handler: ?[]const u8 = null,
     /// The program list, the time limit, and the environment of `exec`.
     exec_host: ProcHost = .{},
+    /// The shadow `Tcl_Interp` of C packages (`cext/cext.zig`).
+    cext: ?*anyopaque = null,
     execs: ProcState = .{},
     /// The root folder and the channels of the file capabilities.
     fs: FsState = .{},
@@ -1429,6 +1441,7 @@ pub const Interp = struct {
         if (comptime @import("build_options").mod_vt) @import("vt.zig").closeAll(it);
         @import("microvm.zig").closeAll(it);
         if (comptime exec_supported) proc_mod.abandonAll(it);
+        if (comptime cext_mod.supported) cext_mod.drop(it);
         // The arena frees the memory of the mounts.
         it.vfs = .{};
         const fs_keep = it.fs;
@@ -1536,6 +1549,9 @@ pub const Interp = struct {
         if (new & @backingInt(Capability.defaults) != 0) try @import("mac.zig").registerDefaults(it);
         if (new & @backingInt(Capability.notify) != 0) try @import("notify.zig").register(it);
         if (new & @backingInt(Capability.vm) != 0) try @import("microvm.zig").register(it);
+        if (comptime cext_mod.supported) {
+            if (new & @backingInt(Capability.cext) != 0) try cext_mod.register(it);
+        }
         if (comptime chan_supported) {
             if (new & @backingInt(Capability.channels) != 0) try @import("chan.zig").register(it);
         }
@@ -1590,6 +1606,7 @@ pub const Interp = struct {
         if (comptime @import("build_options").mod_vt) @import("vt.zig").closeAll(it);
         @import("microvm.zig").closeAll(it);
         if (comptime exec_supported) proc_mod.abandonAll(it);
+        if (comptime cext_mod.supported) cext_mod.drop(it);
         if (comptime fs_supported) {
             if (it.fs.fd >= 0) @import("sys.zig").close(it.fs.fd);
         }

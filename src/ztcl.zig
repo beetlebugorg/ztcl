@@ -90,6 +90,10 @@ test {
     _ = compact;
     _ = heap;
     _ = @import("tests.zig");
+    if ((@hasDecl(@import("build_options"), "cext") and @import("build_options").cext)) {
+        _ = @import("cext/cext.zig");
+        _ = @import("cext/pkgs.zig");
+    }
     _ = @import("pty_tests.zig");
     _ = @import("proc_windows_tests.zig");
     _ = @import("isolate_windows_tests.zig");

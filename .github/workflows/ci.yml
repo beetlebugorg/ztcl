@@ -106,6 +106,30 @@ jobs:
           ulimit -v 6000000
           zig build test -Dgc-precise=true
 
+  # C packages: the build with -Dcext, its unit tests, and the test
+  # packages of tests/cext, each one compared with tclsh.
+  cext:
+    name: C packages (Linux)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Install tclsh and the Tcl headers
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tcl8.6 tcl8.6-dev > /dev/null
+      - name: Build and test with -Dcext
+        run: |
+          ulimit -v 6000000
+          zig build -Dcext=true
+          zig build test-cext-native -Dcext=true
+      - name: Compare the test packages with tclsh
+        run: TCLSH=tclsh8.6 tools/cext/check.sh zig-out/bin/ztcl
+      - name: Check the coverage table
+        run: python3 -I tools/cext/coverage.py --check
+
   # ztcl build: each runtime of `zig build runtimes`, and a binary for
   # each target with a payload. Each runner builds and runs the binary
   # of its own target from the runtime of `zig build runtimes`. Linux

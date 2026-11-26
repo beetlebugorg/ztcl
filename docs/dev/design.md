@@ -60,6 +60,9 @@ ztcl uses the Zig standard library and libghostty-vt (the module `ztcl::vt`, [re
 | `main.zig` | The runner. |
 | `tests.zig` | The tests of the language and the commands. |
 | `wasm.zig` | The WebAssembly interface. |
+| `cext/cext.zig` | The capability `cext` of `-Dcext`: the shadow `Tcl_Interp` of C packages, `load`, and the call into C. |
+| `cext/stubs.zig`, `cext/slots.zig` | The four stubs tables of Tcl 8.6, built at compile time from the slot list and the group files. |
+| `cext/mem.zig`, `cext/pkgs.zig` | The group files of the memory slots and the package slots. |
 
 ## Values
 
