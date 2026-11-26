@@ -1,0 +1,349 @@
+//! Virtualization.framework from Zig, for `ztcl::vm` on macOS (ztcl#203).
+//!
+//! The calls go through the Objective-C runtime: `objc_msgSend` cast to a
+//! function pointer of the type of each method, as the AppKit backend of
+//! ztk does. The runtime and the framework load with `dlopen` at the
+//! first call, so a build of ztcl for macOS needs no SDK.
+//!
+//! A `VZVirtualMachine` belongs to the serial dispatch queue that it was
+//! made with: each call to it runs on that queue (`onQueue`), and its
+//! completion handlers run there too. A handler is a block. `Block` makes
+//! one on the stack of the caller from a Zig function and a pointer to
+//! Zig data; the framework copies it to the heap before the call returns.
+//!
+//! The process needs the entitlement `com.apple.security.virtualization`
+//! (tools/vm-guest/vz.entitlements) in its signature, an ad hoc one too.
+//!
+//! SPDX-License-Identifier: BSD-2-Clause
+const std = @import("std");
+
+pub const Id = *opaque {};
+pub const Sel = *opaque {};
+pub const Class = *opaque {};
+
+extern "c" fn dlopen(path: [*:0]const u8, mode: c_int) ?*anyopaque;
+extern "c" fn dlsym(handle: ?*anyopaque, name: [*:0]const u8) ?*anyopaque;
+
+pub const Queue = *opaque {};
+pub const Semaphore = *opaque {};
+extern "c" fn dispatch_queue_create(label: [*:0]const u8, attr: ?*anyopaque) Queue;
+extern "c" fn dispatch_async_f(q: Queue, ctx: ?*anyopaque, f: *const fn (?*anyopaque) callconv(.c) void) void;
+extern "c" fn dispatch_sync_f(q: Queue, ctx: ?*anyopaque, f: *const fn (?*anyopaque) callconv(.c) void) void;
+extern "c" fn dispatch_semaphore_create(n: isize) Semaphore;
+extern "c" fn dispatch_semaphore_signal(s: Semaphore) isize;
+extern "c" fn dispatch_semaphore_wait(s: Semaphore, timeout: u64) isize;
+extern "c" fn dispatch_time(when: u64, delta: i64) u64;
+
+pub const Error = error{ Unavailable, Framework };
+
+const Rt = struct {
+    msg_send: *const anyopaque,
+    get_class: *const fn ([*:0]const u8) callconv(.c) ?Class,
+    sel: *const fn ([*:0]const u8) callconv(.c) Sel,
+    stack_block: *anyopaque,
+};
+
+var rt: ?Rt = null;
+
+/// Loads the Objective-C runtime and Virtualization.framework. Gives
+/// `error.Unavailable` on a system with no framework (before macOS 11).
+pub fn load() Error!void {
+    if (rt != null) return;
+    const objc = dlopen("/usr/lib/libobjc.A.dylib", 1) orelse return error.Unavailable;
+    const system = dlopen("/usr/lib/libSystem.B.dylib", 1) orelse return error.Unavailable;
+    _ = dlopen("/System/Library/Frameworks/Foundation.framework/Foundation", 1) orelse return error.Unavailable;
+    _ = dlopen("/System/Library/Frameworks/Virtualization.framework/Virtualization", 1) orelse return error.Unavailable;
+    rt = .{
+        .msg_send = dlsym(objc, "objc_msgSend") orelse return error.Unavailable,
+        .get_class = @ptrCast(@alignCast(dlsym(objc, "objc_getClass") orelse return error.Unavailable)),
+        .sel = @ptrCast(@alignCast(dlsym(objc, "sel_registerName") orelse return error.Unavailable)),
+        .stack_block = dlsym(system, "_NSConcreteStackBlock") orelse return error.Unavailable,
+    };
+}
+
+pub fn class(name: [*:0]const u8) Error!Class {
+    return rt.?.get_class(name) orelse error.Unavailable;
+}
+
+/// Sends `selector` to `target` with `args`. `Fn` is the type of the
+/// method as a C function, with the receiver and the selector first.
+pub fn call(comptime Fn: type, target: anytype, selector: [*:0]const u8, args: anytype) @typeInfo(Fn).@"fn".return_type.? {
+    const f: *const Fn = @ptrCast(@alignCast(rt.?.msg_send));
+    const Receiver = @typeInfo(Fn).@"fn".param_types[0].?;
+    return @call(.auto, f, .{ @as(Receiver, @ptrCast(target)), rt.?.sel(selector) } ++ args);
+}
+
+pub fn send0(target: anytype, selector: [*:0]const u8) Id {
+    return call(fn (@TypeOf(target), Sel) callconv(.c) Id, target, selector, .{});
+}
+
+pub fn send1(target: anytype, selector: [*:0]const u8, arg: anytype) Id {
+    return call(fn (@TypeOf(target), Sel, @TypeOf(arg)) callconv(.c) Id, target, selector, .{arg});
+}
+
+pub fn setter(target: Id, selector: [*:0]const u8, arg: anytype) void {
+    call(fn (Id, Sel, @TypeOf(arg)) callconv(.c) void, target, selector, .{arg});
+}
+
+/// `[[cls alloc] init]`.
+pub fn new(name: [*:0]const u8) Error!Id {
+    return send0(send0(try class(name), "alloc"), "init");
+}
+
+pub fn alloc(name: [*:0]const u8) Error!Id {
+    return send0(try class(name), "alloc");
+}
+
+pub fn retain(obj: Id) void {
+    _ = send0(obj, "retain");
+}
+
+pub fn release(obj: Id) void {
+    _ = send0(obj, "release");
+}
+
+/// An autoreleased `NSString` with a copy of `text`.
+pub fn string(text: []const u8) Error!Id {
+    const s = call(fn (Id, Sel, [*]const u8, usize, usize) callconv(.c) Id, try alloc("NSString"), "initWithBytes:length:encoding:", .{ text.ptr, text.len, 4 });
+    return send0(s, "autorelease");
+}
+
+/// An autoreleased file URL of `path`.
+pub fn fileUrl(path: []const u8) Error!Id {
+    return send1(try class("NSURL"), "fileURLWithPath:", try string(path));
+}
+
+/// An autoreleased `NSArray` with one object.
+pub fn array1(obj: Id) Error!Id {
+    return send1(try class("NSArray"), "arrayWithObject:", obj);
+}
+
+/// The text of an `NSError`, valid while the autorelease pool lives.
+pub fn errorText(err: ?Id) []const u8 {
+    const e = err orelse return "no error";
+    const d = send0(e, "localizedDescription");
+    const p = call(fn (Id, Sel) callconv(.c) ?[*:0]const u8, d, "UTF8String", .{}) orelse return "";
+    return std.mem.span(p);
+}
+
+/// A block on the stack of the caller: a Zig function of the C calling
+/// convention, with the block as its first parameter, and a pointer to
+/// Zig data. The callee copies it with `Block_copy` when it keeps it, so
+/// the block lives until the call that it is an argument of returns.
+pub fn Block(comptime Ctx: type) type {
+    return extern struct {
+        isa: *anyopaque,
+        flags: i32 = 0,
+        reserved: i32 = 0,
+        invoke: *const anyopaque,
+        descriptor: *const Descriptor,
+        ctx: *Ctx,
+
+        const Self = @This();
+        const Descriptor = extern struct { reserved: usize = 0, size: usize };
+        const desc: Descriptor = .{ .size = @sizeOf(Self) };
+
+        /// `invoke` has the type `fn (*Self, ...) callconv(.c) void`.
+        pub fn init(ctx: *Ctx, invoke: *const anyopaque) Self {
+            return .{ .isa = rt.?.stack_block, .invoke = invoke, .descriptor = &desc, .ctx = ctx };
+        }
+    };
+}
+
+pub fn queue(label: [*:0]const u8) Queue {
+    return dispatch_queue_create(label, null);
+}
+
+/// Runs `f(ctx)` on `q` and waits for it to return.
+pub fn onQueue(q: Queue, comptime Ctx: type, ctx: *Ctx, comptime f: fn (*Ctx) void) void {
+    const S = struct {
+        fn run(p: ?*anyopaque) callconv(.c) void {
+            const pool = send0(send0(class("NSAutoreleasePool") catch unreachable, "alloc"), "init");
+            defer release(pool);
+            f(@ptrCast(@alignCast(p.?)));
+        }
+    };
+    dispatch_sync_f(q, ctx, S.run);
+}
+
+/// A semaphore that a completion handler signals and a thread waits on.
+pub const Signal = struct {
+    sem: Semaphore,
+
+    pub fn init() Signal {
+        return .{ .sem = dispatch_semaphore_create(0) };
+    }
+    pub fn post(s: Signal) void {
+        _ = dispatch_semaphore_signal(s.sem);
+    }
+    /// False when `seconds` pass first.
+    pub fn wait(s: Signal, seconds: f64) bool {
+        const ns: i64 = @intFromFloat(seconds * 1e9);
+        return dispatch_semaphore_wait(s.sem, dispatch_time(0, ns)) == 0;
+    }
+};
+
+/// The parts of a Linux guest.
+pub const Config = struct {
+    kernel: []const u8,
+    initrd: ?[]const u8 = null,
+    cmdline: []const u8 = "console=hvc0",
+    cpus: usize = 1,
+    memory_mb: u64 = 256,
+    /// The ends of the console of the guest: the host writes to `console_in`
+    /// and reads `console_out`.
+    console_in: c_int,
+    console_out: c_int,
+    /// One directory of the host for virtio-fs, with the tag that the
+    /// guest mounts.
+    share: ?struct { path: []const u8, tag: []const u8, read_only: bool = false } = null,
+    vsock: bool = true,
+};
+
+/// Makes and checks a `VZVirtualMachineConfiguration`. On an error,
+/// `why` has the text of the framework.
+pub fn configure(c: Config, why: *[]const u8) Error!Id {
+    const boot = send1(try alloc("VZLinuxBootLoader"), "initWithKernelURL:", try fileUrl(c.kernel));
+    if (c.initrd) |p| setter(boot, "setInitialRamdiskURL:", try fileUrl(p));
+    setter(boot, "setCommandLine:", try string(c.cmdline));
+
+    const vc = try new("VZVirtualMachineConfiguration");
+    setter(vc, "setBootLoader:", boot);
+    release(boot);
+    setter(vc, "setCPUCount:", c.cpus);
+    setter(vc, "setMemorySize:", c.memory_mb * 1024 * 1024);
+
+    const fh_in = call(fn (Id, Sel, c_int) callconv(.c) Id, try alloc("NSFileHandle"), "initWithFileDescriptor:", .{c.console_in});
+    const fh_out = call(fn (Id, Sel, c_int) callconv(.c) Id, try alloc("NSFileHandle"), "initWithFileDescriptor:", .{c.console_out});
+    const att = call(fn (Id, Sel, Id, Id) callconv(.c) Id, try alloc("VZFileHandleSerialPortAttachment"), "initWithFileHandleForReading:fileHandleForWriting:", .{ fh_in, fh_out });
+    release(fh_in);
+    release(fh_out);
+    const port = try new("VZVirtioConsoleDeviceSerialPortConfiguration");
+    setter(port, "setAttachment:", att);
+    release(att);
+    setter(vc, "setSerialPorts:", try array1(port));
+    release(port);
+
+    const rng = try new("VZVirtioEntropyDeviceConfiguration");
+    setter(vc, "setEntropyDevices:", try array1(rng));
+    release(rng);
+
+    if (c.vsock) {
+        const sock = try new("VZVirtioSocketDeviceConfiguration");
+        setter(vc, "setSocketDevices:", try array1(sock));
+        release(sock);
+    }
+
+    if (c.share) |s| {
+        const dir = call(fn (Id, Sel, Id, bool) callconv(.c) Id, try alloc("VZSharedDirectory"), "initWithURL:readOnly:", .{ try fileUrl(s.path), s.read_only });
+        const single = send1(try alloc("VZSingleDirectoryShare"), "initWithDirectory:", dir);
+        release(dir);
+        const fs = send1(try alloc("VZVirtioFileSystemDeviceConfiguration"), "initWithTag:", try string(s.tag));
+        setter(fs, "setShare:", single);
+        release(single);
+        setter(vc, "setDirectorySharingDevices:", try array1(fs));
+        release(fs);
+    }
+
+    var err: ?Id = null;
+    if (!call(fn (Id, Sel, *?Id) callconv(.c) bool, vc, "validateWithError:", .{&err})) {
+        why.* = errorText(err);
+        release(vc);
+        return error.Framework;
+    }
+    return vc;
+}
+
+/// A running Linux guest of Virtualization.framework.
+pub const Machine = struct {
+    q: Queue,
+    vm: Id,
+
+    /// Makes the machine of a checked configuration, on a queue of its own.
+    pub fn init(vc: Id) Error!Machine {
+        const q = queue("org.beetlebug.ztcl.vm");
+        const vm = call(fn (Id, Sel, Id, Queue) callconv(.c) Id, try alloc("VZVirtualMachine"), "initWithConfiguration:queue:", .{ vc, q });
+        return .{ .q = q, .vm = vm };
+    }
+
+    const Done = struct { m: *Machine, sig: Signal, err: ?Id = null, port: u32 = 0, conn: ?Id = null };
+
+    fn errDone(b: *Block(Done), err: ?Id) callconv(.c) void {
+        if (err) |e| retain(e);
+        b.ctx.err = err;
+        b.ctx.sig.post();
+    }
+
+    /// Starts the guest and waits for the framework to say that it runs.
+    pub fn start(m: *Machine, why: *[]const u8) Error!void {
+        var d: Done = .{ .m = m, .sig = Signal.init() };
+        onQueue(m.q, Done, &d, struct {
+            fn f(x: *Done) void {
+                var b = Block(Done).init(x, @ptrCast(&errDone));
+                setter(x.m.vm, "startWithCompletionHandler:", &b);
+            }
+        }.f);
+        if (!d.sig.wait(30)) {
+            why.* = "the start of the guest timed out";
+            return error.Framework;
+        }
+        if (d.err) |e| {
+            why.* = errorText(e);
+            return error.Framework;
+        }
+    }
+
+    /// Stops the guest at once, as a pull of its power cord.
+    pub fn stop(m: *Machine) void {
+        var d: Done = .{ .m = m, .sig = Signal.init() };
+        onQueue(m.q, Done, &d, struct {
+            fn f(x: *Done) void {
+                var b = Block(Done).init(x, @ptrCast(&errDone));
+                setter(x.m.vm, "stopWithCompletionHandler:", &b);
+            }
+        }.f);
+        _ = d.sig.wait(10);
+    }
+
+    fn connDone(b: *Block(Done), conn: ?Id, err: ?Id) callconv(.c) void {
+        if (conn) |c| retain(c);
+        if (err) |e| retain(e);
+        b.ctx.conn = conn;
+        b.ctx.err = err;
+        b.ctx.sig.post();
+    }
+
+    /// A connection to a vsock port of the guest. The connection owns
+    /// the file descriptor: `close` releases it.
+    pub const Conn = struct {
+        obj: Id,
+        fd: c_int,
+        pub fn close(c: Conn) void {
+            release(c.obj);
+        }
+    };
+
+    /// Connects to `port` of the guest. `error.Framework` when no program
+    /// of the guest listens on it.
+    pub fn connect(m: *Machine, port: u32, why: *[]const u8) Error!Conn {
+        var d: Done = .{ .m = m, .sig = Signal.init(), .port = port };
+        onQueue(m.q, Done, &d, struct {
+            fn f(x: *Done) void {
+                const devs = send0(x.m.vm, "socketDevices");
+                const dev = send0(devs, "firstObject");
+                var b = Block(Done).init(x, @ptrCast(&connDone));
+                call(fn (Id, Sel, u32, *Block(Done)) callconv(.c) void, dev, "connectToPort:completionHandler:", .{ x.port, &b });
+            }
+        }.f);
+        if (!d.sig.wait(10)) {
+            why.* = "the connection timed out";
+            return error.Framework;
+        }
+        if (d.conn) |c| {
+            const fd = call(fn (Id, Sel) callconv(.c) c_int, c, "fileDescriptor", .{});
+            return .{ .obj = c, .fd = fd };
+        }
+        why.* = errorText(d.err);
+        return error.Framework;
+    }
+};
