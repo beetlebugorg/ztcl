@@ -25,7 +25,7 @@ These files are the plans, the task lists, the reviews, and the test results of 
 | [enclave-spike.md](enclave-spike.md) | The results of the spike of the VBS enclave: the build of `ztcl-enclave.dll` and each step of the host test on the Windows test machine. |
 | [ports.md](ports.md) | The plan of the macOS and Windows ports. |
 | [linux-tasks/](linux-tasks/README.md) | The tasks of `ztcl::linux`: desktop portals and D-Bus calls (#110). |
-| [cext-tasks/](cext-tasks/README.md) | The tasks of Tcl packages with C modules, native and in WebAssembly (#1). |
+| [cext.md](cext.md), [cext-tasks/](cext-tasks/README.md) | The result of the spikes of Tcl packages with C modules, the choice of path, and the tasks (#1). |
 | [roadmap.md](roadmap.md) | The old roadmap. The issues and the milestones on GitHub replace it. |
 | [release.md](release.md), [npm.md](npm.md) | The release process and the npm package. |
 

@@ -29,3 +29,4 @@ Issue #1 has the goal: load an existing Tcl package with a C module through an o
 
 - Task 01: [01-native.md](01-native.md). The binding called 56 public slots and no internal slot.
 - Task 02: [02-wasm.md](02-wasm.md). The module called 53 public slots, each one also in task 01. 636 test files have the same counts as in task 01.
+- Task 03: [../cext.md](../cext.md). The page waits for the choice of the user.
