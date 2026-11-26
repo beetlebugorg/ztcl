@@ -82,6 +82,7 @@ export class Interp {
     if (WebAssembly.Module.imports(mod).some((i) => i.module === "ztcl_host")) {
       imports.ztcl_host = {
         output: (ptr, len) => self._live(ptr, len),
+        dom: (op, h, a, aLen, b, bLen) => self._dom(op, h, a, aLen, b, bLen),
       };
     }
     const instance = await WebAssembly.instantiate(mod, imports);
@@ -89,7 +90,7 @@ export class Interp {
     return self;
   }
 
-  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false } = {}) {
+  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
@@ -98,6 +99,15 @@ export class Interp {
     this.computeLimit = computeLimit;
     this.onOutput = onOutput;
     if (memLimit != null) this.memLimit = memLimit;
+    if (allow.includes("dom")) {
+      if (!this.x.ztcl_dom_allow) throw new Error("dom: this module has no DOM access (use ztcl-host.wasm)");
+      this._domRoot = domRoot ?? globalThis.document?.body;
+      if (!this._domRoot) throw new Error("dom: no domRoot and no document.body");
+      this._handles = new Map();
+      this._ids = new Map();
+      if (this.x.ztcl_dom_allow(this.h) !== 0) throw new Error("ztcl_dom_allow: out of memory");
+      allow = allow.filter((c) => c !== "dom");
+    }
     if (allow.length) {
       const bad = allow.filter((c) => c !== "file");
       if (bad.length || !this.x.ztcl_allow) throw new Error(`ztcl_allow: this module has no capability ${bad.join(", ") || "file"}`);
@@ -222,6 +232,68 @@ export class Interp {
     const text = this._text(ptr, len);
     this._liveOut += text;
     if (this.onOutput) this.onOutput(text);
+  }
+
+  // The import `ztcl_host.dom` (src/wasmdom.zig). A handle is an index
+  // in a table, and 0 is the root. Each element must be the root or below
+  // it. The reply text goes into the memory of the module.
+  _dom(op, h, a, aLen, b, bLen) {
+    const root = this._domRoot;
+    const reply = (text) => {
+      const bytes = encoder.encode(text);
+      if (!bytes.length) return;
+      const p = this.x.ztcl_alloc(bytes.length);
+      new Uint8Array(this.x.memory.buffer, p, bytes.length).set(bytes);
+      const slot = new Uint32Array(this.x.memory.buffer, this.x.ztcl_dom_reply.value, 2);
+      slot[0] = p;
+      slot[1] = bytes.length;
+    };
+    const fail = (msg) => {
+      reply(msg);
+      return -1;
+    };
+    let el = root;
+    if (h !== 0) {
+      el = this._handles.get(h);
+      if (!el || !(el === root || root.contains(el))) return fail(`invalid DOM handle "dom${h}"`);
+    }
+    const handle = (e) => {
+      let id = this._ids.get(e);
+      if (!id) {
+        id = this._handles.size + 1;
+        this._handles.set(id, e);
+        this._ids.set(e, id);
+      }
+      return id;
+    };
+    const sa = this._text(a, aLen);
+    const sb = this._text(b, bLen);
+    try {
+      switch (op) {
+        case 1: {
+          const e = el.querySelector(sa);
+          return e ? handle(e) : 0;
+        }
+        case 2:
+          reply(Array.from(el.querySelectorAll(sa), (e) => handle(e)).join(" "));
+          return 0;
+        case 3:
+          reply(el.textContent ?? "");
+          return 0;
+        case 4:
+          el.textContent = sa;
+          return 0;
+        case 5:
+          reply(el.getAttribute(sa) ?? "");
+          return 0;
+        case 6:
+          el.setAttribute(sa, sb);
+          return 0;
+      }
+      return fail(`dom: unknown operation ${op}`);
+    } catch (e) {
+      return fail(String(e.message || e));
+    }
   }
 
   _call(f) {

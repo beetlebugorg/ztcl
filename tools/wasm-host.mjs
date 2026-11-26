@@ -41,5 +41,83 @@ const a = await stop(strict);
 const b = await stop(host);
 check(a === b, `the compute limit stops at ${a} in ztcl.wasm and at ${b} in ztcl-host.wasm`);
 
+// #85 task 01: `dom` with a small DOM of plain objects. A selector is
+// `#id`, `.class`, or a tag name.
+class El {
+  constructor(tag, attrs = {}, text = "") {
+    Object.assign(this, { tag, attrs: { ...attrs }, kids: [], parent: null, own: text });
+  }
+  add(...kids) {
+    for (const k of kids) {
+      k.parent = this;
+      this.kids.push(k);
+    }
+    return this;
+  }
+  get textContent() {
+    return this.own + this.kids.map((k) => k.textContent).join("");
+  }
+  set textContent(t) {
+    this.own = t;
+    this.kids = [];
+  }
+  getAttribute(n) {
+    return n in this.attrs ? this.attrs[n] : null;
+  }
+  setAttribute(n, v) {
+    this.attrs[n] = v;
+  }
+  contains(e) {
+    for (; e; e = e.parent) if (e === this) return true;
+    return false;
+  }
+  matches(sel) {
+    if (sel[0] === "#") return this.attrs.id === sel.slice(1);
+    if (sel[0] === ".") return (this.attrs.class ?? "").split(" ").includes(sel.slice(1));
+    return this.tag === sel;
+  }
+  querySelectorAll(sel) {
+    const out = [];
+    const walk = (e) => e.kids.forEach((k) => (k.matches(sel) && out.push(k), walk(k)));
+    walk(this);
+    return out;
+  }
+  querySelector(sel) {
+    return this.querySelectorAll(sel)[0] ?? null;
+  }
+}
+const root = new El("div").add(new El("p", { id: "msg", class: "note" }, "hello"), new El("p", { class: "note" }, "second"));
+const outside = new El("div").add(new El("p", { id: "secret" }, "outside"));
+void outside;
+
+const plain = await Interp.create(host);
+check(plain.eval("info commands dom").result === "", "dom is absent by default in ztcl-host.wasm");
+plain.close();
+let threw = false;
+try {
+  await Interp.create(strict, { allow: ["dom"], domRoot: root });
+} catch {
+  threw = true;
+}
+check(threw, "ztcl.wasm has no dom");
+
+const d = await Interp.create(host, { allow: ["dom"], domRoot: root });
+const ev = (s) => d.eval(s);
+check(ev("set m [dom query #msg]; dom text $m").result === "hello", "dom query and dom text");
+check(ev("llength [dom queryAll .note]").result === "2", "dom queryAll");
+check(ev("dom attr $m class").result === "note", "dom attr");
+check(ev("dom attr $m title").result === "", "dom attr of an absent attribute");
+ev("dom attr $m title Hi; dom text $m changed");
+check(root.kids[0].attrs.title === "Hi" && root.kids[0].textContent === "changed", "dom attr and dom text set the element");
+check(ev("dom query #secret").result === "", "a query does not leave the root");
+check(ev("dom text").ok === false, "dom text needs an element");
+// An element that leaves the root is an invalid handle.
+const second = ev("lindex [dom queryAll .note] 1").result;
+root.kids.pop().parent = null;
+const r2 = ev(`dom text ${second}`);
+check(!r2.ok && r2.result === `invalid DOM handle "${second}"`, `a handle outside the root is an error (got ${r2.result})`);
+check(!ev("dom text dom99").ok, "an unknown handle is an error");
+d.close();
+
 if (failed) process.exit(1);
 console.log("wasm host ok");
