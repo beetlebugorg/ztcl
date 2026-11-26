@@ -167,7 +167,7 @@ The binary is the runtime plus the payload. The runtime builds with `ReleaseSmal
 3. `ztcl build` native on Linux x86-64: the slot, the payload, the manifest, and the start path in `src/main.zig`. Then the other targets by cross-compile: the ELF of Linux arm64, the PE of Windows x86-64, and the Mach-O with the ad hoc signature of macOS x86-64 and arm64. A CI job builds each target on Linux and runs each output on a runner of its OS.
 4. The user page `docs/build.md` with examples that ran, and a line in the README.
 
-Phase 2, after step 4:
+Phase 2, after step 4 ([the task list](aot-tasks/README.md)):
 
 5. An AOT target in the code generators: position-independent code, the helper table, and the relocations, with a test that compares AOT code with JIT code on `tests/jit/`.
 6. The reserved regions in the runtime, the table at start, and `ztcl build --aot` on Linux x86-64, checked with `tools/jit-diff.sh` against the interpreter.
