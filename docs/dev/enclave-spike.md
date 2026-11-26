@@ -21,7 +21,24 @@ The image imports only `vertdll.dll` and `ucrtbase_enclave.dll`. Its load config
 
 So Windows 11 Home makes VBS enclaves, and the next step needs a signed image.
 
+## Run with a self-signed signature
+
+The user said yes to the certificate and to test signing (2026-11-26). The certificate, `CN=ztcl enclave development`, is in the store `Cert:\CurrentUser\My`, with the EKUs `1.3.6.1.5.5.7.3.3` (code signing), `1.3.6.1.4.1.311.76.57.1.15` (enclave), and `1.3.6.1.4.1.311.97.4120.180.209.2026` (author). It signs the image:
+
+```
+signtool sign /ph /fd SHA256 /sha1 <thumbprint> ztcl-enclave.dll
+```
+
+`signtool` signs it, with the warning "VBS enclave support is changing and updating your VBS enclave may cause you to lose support on older OSes" and a link to the page of Microsoft on the change.
+
+| Step | Test signing off |
+|---|---|
+| `CreateEnclave` | ok |
+| `LoadEnclaveImageW` | error 577, `ERROR_INVALID_IMAGE_HASH`, as with no signature |
+
+So a self-signed enclave needs test signing, as the guide of Microsoft says.
+
 ## Next
 
-1. Sign the image with a self-signed certificate with the three EKUs of [enclave.md](enclave.md), and record the result of `LoadEnclaveImageW` with test signing off. The certificate goes into the certificate store of the user, so this step waits for the user's answer.
-2. With the user's answer on test signing, record the result with it on: the output `42`, the sizes of the sealed blob and the report, the unsealed output, and the result of `EnclaveVerifyAttestationReport`.
+1. Test signing on: `bcdedit /set testsigning on` in a prompt of an administrator, then a restart. The session of the spike has no administrator rights, so the user runs it. Then record the output `42`, the sizes of the sealed blob and the report, the unsealed output, and the result of `EnclaveVerifyAttestationReport`.
+2. Test signing off again after the spike (`bcdedit /set testsigning off` and a restart), and the certificate out of the store.
