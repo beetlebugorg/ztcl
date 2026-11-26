@@ -19,8 +19,9 @@
 //! master side, so the kernel sends SIGHUP to the session. After a wait
 //! of 500 ms, `hangup` kills each process of the tree that still runs.
 //!
-//! Only Linux has the PTY in this version. On macOS and Windows,
-//! `spawn` gives an error. The designs for both are in the plan.
+//! macOS has the PTY of `pty_mac.zig`: `posix_openpt` and `posix_spawn`
+//! with a new session, as the plan has it. On Windows, `spawn` gives an
+//! error. The design of ConPTY is in the plan.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -37,9 +38,11 @@ const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
 const linux = sys.os;
+const on_mac = builtin.os.tag == .macos;
+const mac = @import("pty_mac.zig");
 
 /// True on the platforms where `spawn` starts a program.
-pub const supported = builtin.os.tag == .linux;
+pub const supported = builtin.os.tag == .linux or on_mac;
 
 const usage = "ztcl::pty spawn|resize|size|status|kill ?arg ...?";
 
@@ -67,6 +70,7 @@ fn dim(it: *Interp, v: Value, what: []const u8) Error!u16 {
 
 fn setSize(fd: i32, cols: u16, rows: u16) linux.E {
     if (comptime !supported) return .NOSYS;
+    if (comptime on_mac) return mac.setSize(fd, cols, rows);
     var ws: std.posix.winsize = .{ .row = rows, .col = cols, .xpixel = 0, .ypixel = 0 };
     return linux.errno(linux.ioctl(fd, linux.T.IOCSWINSZ, @intFromPtr(&ws)));
 }
@@ -162,6 +166,7 @@ fn spawn(it: *Interp, argv: []const Value) Error!Value {
     }
     defer if (cwd_fd >= 0) sys.close(cwd_fd);
 
+    if (comptime on_mac) return spawnMac(it, word, prog, av, envp, cwd_fd, cols, rows);
     const pair = try openPair(it);
     const m = pair[0];
     const s = pair[1];
@@ -216,8 +221,15 @@ fn spawn(it: *Interp, argv: []const Value) Error!Value {
         proc.treeClose(&tree);
         return proc.cannotRun(it, word, @fromBackingInt(@intCast(msg)));
     }
-    const c = try chan.adopt(it, "pty", m, true, true);
+    const c = try adopt(it, m, pid, tree);
     keep_m = true;
+    return .{ .str = c.name };
+}
+
+/// The channel of the master side of a PTY with its program.
+fn adopt(it: *Interp, m: i32, pid: i32, tree: proc.Tree) Error!*chan.Channel {
+    const a = it.alloc();
+    const c = try chan.adopt(it, "pty", m, true, true);
     c.kind = .pipe;
     c.pty = true;
     c.input = .binary;
@@ -229,6 +241,41 @@ fn spawn(it: *Interp, argv: []const Value) Error!Value {
     c.pids = pids;
     c.started = proc.nowMs();
     c.tree = tree;
+    return c;
+}
+
+/// `spawn` on macOS: the master side, the size, and `posix_spawn` of the
+/// program on the other side in a new session.
+fn spawnMac(it: *Interp, word: []const u8, prog: [:0]const u8, av: [*:null]?[*:0]const u8, envp: [*:null]?[*:0]const u8, cwd_fd: i32, cols: u16, rows: u16) Error!Value {
+    var name: [128]u8 = undefined;
+    const m = switch (mac.openMaster(&name)) {
+        .fd => |x| x,
+        .err => |e| return proc.posix(it, e, "couldn't open a pty: "),
+    };
+    var keep_m = false;
+    defer if (!keep_m) sys.close(m);
+    // macOS answers EIO to a size on the master side while the other side
+    // has no open. The parent opens it, with no controlling terminal, for
+    // the size and until the program has it.
+    const s = switch (mac.openOther(@ptrCast(&name))) {
+        .fd => |x| x,
+        .err => |e| return proc.posix(it, e, "couldn't open the pty: "),
+    };
+    defer sys.close(s);
+    const se = mac.setSize(s, cols, rows);
+    if (se != .SUCCESS) return proc.posix(it, se, "couldn't set the pty size: ");
+    var tree = proc.treeOpen();
+    const pid = switch (mac.start(prog.ptr, av, envp, @ptrCast(&name), cwd_fd)) {
+        .pid => |x| x,
+        .err => |e| {
+            proc.treeClose(&tree);
+            return proc.cannotRun(it, word, e);
+        },
+    };
+    // The child leads a new session, so its group has its pid.
+    tree.pgid = pid;
+    const c = try adopt(it, m, pid, tree);
+    keep_m = true;
     return .{ .str = c.name };
 }
 
@@ -259,7 +306,7 @@ fn statusValue(it: *Interp, st: ?u32) Error!Value {
 fn signalOf(it: *Interp, v: Value) Error!u32 {
     const w = try it.str(v);
     const name = if (std.mem.startsWith(u8, w, "SIG")) w[3..] else w;
-    const names = [_]struct { []const u8, u32 }{ .{ "HUP", 1 }, .{ "INT", 2 }, .{ "QUIT", 3 }, .{ "KILL", 9 }, .{ "TERM", 15 }, .{ "CONT", 18 }, .{ "STOP", 19 }, .{ "WINCH", 28 } };
+    const names = [_]struct { []const u8, u32 }{ .{ "HUP", 1 }, .{ "INT", 2 }, .{ "QUIT", 3 }, .{ "KILL", 9 }, .{ "TERM", 15 }, .{ "CONT", if (on_mac) 19 else 18 }, .{ "STOP", if (on_mac) 17 else 19 }, .{ "WINCH", 28 } };
     for (names) |n| if (std.mem.eql(u8, n[0], name)) return n[1];
     const k = std.fmt.parseInt(u32, w, 10) catch return it.fail("bad signal \"{s}\": must be HUP, INT, QUIT, KILL, TERM, CONT, STOP, WINCH, or a number", .{w});
     if (k == 0 or k > 64) return it.fail("bad signal \"{s}\"", .{w});
@@ -282,7 +329,7 @@ fn cmdPty(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (argv.len != 3) return it.wrongArgs("ztcl::pty size channel");
         const c = try ptyChan(it, argv[2]);
         var ws: std.posix.winsize = undefined;
-        const e = linux.errno(linux.ioctl(c.fd, linux.T.IOCGWINSZ, @intFromPtr(&ws)));
+        const e = if (comptime on_mac) mac.getSize(c.fd, &ws) else linux.errno(linux.ioctl(c.fd, linux.T.IOCGWINSZ, @intFromPtr(&ws)));
         if (e != .SUCCESS) return proc.posix(it, e, "couldn't read the pty size: ");
         var out = [2]Value{ .{ .int = ws.col }, .{ .int = ws.row } };
         return value.wrapList(it.alloc(), try it.alloc().dupe(Value, &out));
