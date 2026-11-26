@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Adds `ztcl::pty` on Windows with a pseudo console (ConPTY): `spawn`, `resize`, `size`, `status`, `kill`, and `close`, with the program in the Job Object of `exec`. `kill` with `INT` writes Ctrl-C, and each other signal ends the job.
+
 - Adds `exec`, `pid`, and command pipelines (`open "|cmd"`) on Windows. A bare name goes through the `PATH` and `PATHEXT` of `exec_host.env`, each program gets one full path before it starts, and the allowlist compares that path. A `.bat` or `.cmd` file is an error, because `cmd.exe` reads its arguments with other rules. Each pipeline is a Job Object, so a kill or the time limit ends each process that a program started. See `docs/dev/exec-windows.md`.
 
 - Adds `ztcl::open` behind the new capability `launch` (`--allow launch`): a URL with the scheme `http`, `https`, or `mailto`, or a file, in the default app of the host. A file also needs `file`, and its path goes through the jail or host mode. On Windows it uses `ShellExecuteExW` on the final path of the file, and a file of a type that runs as code is an error. `Interp.launch_host` lets an embedder open the target itself. Linux and macOS give `ZTCL OPEN UNAVAILABLE` until their backends land.
