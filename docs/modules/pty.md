@@ -74,15 +74,19 @@ Sends a signal to the program. `SIGNAL` is `HUP` (the default), `INT`, `QUIT`, `
 | | Linux | macOS (arm64) | Windows (x86-64) |
 |---|---|---|---|
 | The terminal | `/dev/ptmx` with `TIOCGPTPEER` (or `TIOCGPTN` and `/dev/pts/N` on a kernel before 4.13) | `posix_openpt`, `grantpt`, `unlockpt`, and `ptsname_r` | ConPTY: `CreatePseudoConsole` on two pipes |
-| The start | `fork`, `setsid`, `TIOCSCTTY`, and `execve` | `posix_spawn` with `POSIX_SPAWN_SETSID`, and the first open of the terminal makes it the controlling terminal | `CreateProcessW` with `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` and no handle of the parent |
-| The process tree | the cgroup or the process group of `exec` | the process group of `exec` | the Job Object of `exec` |
+| The start | `fork`, `setsid`, `TIOCSCTTY`, and `execve` | `posix_spawn` with `POSIX_SPAWN_SETSID` and `POSIX_SPAWN_CLOEXEC_DEFAULT`, so the program gets descriptors 0, 1, and 2 only: the first open of the terminal goes on 0 and makes it the controlling terminal, with copies on 1 and 2, and `-cwd` uses `posix_spawn_file_actions_addfchdir_np` | `CreateProcessW` with `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE` and no handle of the parent |
+| The process tree | the cgroup of `exec`, which the child joins before `execve`, so a descendant after `setsid` or a double fork stays in it; or the process group | the process group of `exec` | the Job Object of `exec` |
 | `-size` and `resize` | 1 to 10,000 for each side | 1 to 10,000 for each side | 1 to 32,767 for each side |
-| `size` | the size of the terminal from the kernel | the size of the terminal, read on the other side | the last size of `spawn` or `resize` |
+| `size` | the size of the terminal from the kernel | the size of the terminal from the kernel, as on Linux | the last size of `spawn` or `resize` |
 | `kill` | the signal to the process group | the signal to the process group | `INT` writes Ctrl-C (byte 3) to the input; `CONT`, `STOP`, and `WINCH` have no effect; each other signal ends the Job Object; the numbers are 1, 2, 3, 9, and 15 |
 | `close` | the kernel sends SIGHUP to the session | the kernel sends SIGHUP to the session | `ClosePseudoConsole` sends the close event to the program |
 | The output | the bytes of the program | the bytes of the program | the console renders the program and sends VT escape sequences |
 
 On Windows a program writes to a console, and ConPTY turns that console into the escape sequences of a VT terminal, so the output of a program has cursor moves and colors even when the program writes plain text. On Linux and macOS, the end of the program gives the end of the file on the channel (Linux reports EIO on the master side, and the channel reads it as the end).
+
+On macOS, `spawn` sets the size of `-size` on the other side of the terminal: the parent opens it with `O_NOCTTY`, sets the size there, and closes it after the start, because macOS gives EIO to a size on the master side before the other side has an open.
+
+A signal number of `kill` is the number of the system. The names mean the same signal on Linux and macOS, but the numbers of STOP and CONT differ: 19 and 18 on Linux, 17 and 19 on macOS. Give the name to send the same signal on each system.
 
 `ztcl::pty` does not exist on WebAssembly, on x86-64 macOS, or on arm64 Windows, because those targets have no `exec`.
 
