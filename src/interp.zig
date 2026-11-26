@@ -892,6 +892,10 @@ pub const Capability = enum(u32) {
     /// `ztcl::notify`: a notification of the system with the texts of the
     /// script. 16384 is `registry` of ztcl#150.
     notify = 32768,
+    /// `ztcl::vm`: small Linux guests on the hypervisor of the host
+    /// (ztcl#203), within `Interp.vm_host`. A path of a guest also needs
+    /// `file`, and a channel of a guest needs `channels`.
+    vm = 262144,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -1073,6 +1077,9 @@ pub const Interp = struct {
     defaults_allow: []const []const u8 = &.{},
     /// The notifier of `ztcl::notify`, from the embedder. Null: the system.
     notify_host: ?@import("notify.zig").Host = null,
+    /// The limits of the guests of `ztcl::vm`.
+    vm_host: @import("microvm.zig").Host = .{},
+    vm_state: ?*anyopaque = null,
     /// The event loop that this interpreter shares with its parent.
     events: ?*@import("event.zig").State = null,
     /// The network policy of `socket`. The embedder sets it.
@@ -1420,6 +1427,7 @@ pub const Interp = struct {
         if (comptime chan_supported) @import("chan.zig").closeAll(it);
         @import("watch.zig").closeAll(it);
         if (comptime @import("build_options").mod_vt) @import("vt.zig").closeAll(it);
+        @import("microvm.zig").closeAll(it);
         if (comptime exec_supported) proc_mod.abandonAll(it);
         // The arena frees the memory of the mounts.
         it.vfs = .{};
@@ -1458,6 +1466,7 @@ pub const Interp = struct {
         it.keychain_allow = keep.keychain_allow;
         it.defaults_allow = keep.defaults_allow;
         it.notify_host = keep.notify_host;
+        it.vm_host = keep.vm_host;
         it.exec_host = keep.exec_host;
         it.net = keep.net;
         it.thread_limits = keep.thread_limits;
@@ -1526,6 +1535,7 @@ pub const Interp = struct {
         if (new & @backingInt(Capability.keychain) != 0) try @import("mac.zig").registerKeychain(it);
         if (new & @backingInt(Capability.defaults) != 0) try @import("mac.zig").registerDefaults(it);
         if (new & @backingInt(Capability.notify) != 0) try @import("notify.zig").register(it);
+        if (new & @backingInt(Capability.vm) != 0) try @import("microvm.zig").register(it);
         if (comptime chan_supported) {
             if (new & @backingInt(Capability.channels) != 0) try @import("chan.zig").register(it);
         }
@@ -1578,6 +1588,7 @@ pub const Interp = struct {
         if (comptime chan_supported) @import("chan.zig").closeAll(it);
         @import("watch.zig").closeAll(it);
         if (comptime @import("build_options").mod_vt) @import("vt.zig").closeAll(it);
+        @import("microvm.zig").closeAll(it);
         if (comptime exec_supported) proc_mod.abandonAll(it);
         if (comptime fs_supported) {
             if (it.fs.fd >= 0) @import("sys.zig").close(it.fs.fd);

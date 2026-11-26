@@ -124,6 +124,7 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
     child.launch_host = it.launch_host;
     child.registry_allow = it.registry_allow;
     child.keychain_allow = it.keychain_allow;
+    child.vm_host = it.vm_host;
     child.defaults_allow = it.defaults_allow;
     child.exec_host = it.exec_host;
     // A child has the network policy of its parent. No command of a
@@ -139,8 +140,9 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
             child.fs.path = try child.alloc().dupe(u8, it.fs.path);
         }
         // A child has no `thread` capability: a thread has one
-        // interpreter that gets its messages.
-        const no_thread = ~@as(u32, @backingInt(interp.Capability.thread));
+        // interpreter that gets its messages. A child has no `vm`, so
+        // the limits of `vm_host` count the guests of one interpreter.
+        const no_thread = ~@as(u32, @backingInt(interp.Capability.thread) | @backingInt(interp.Capability.vm));
         try child.allow((if (child.fs_ok()) it.capabilities else it.capabilities & ~@as(u32, 8 | 16)) & no_thread);
     }
     // A safe child has the event loop of its parent. A timer reaches

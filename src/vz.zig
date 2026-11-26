@@ -183,6 +183,19 @@ pub const Signal = struct {
     }
 };
 
+pub const Share = struct { path: []const u8, tag: []const u8, read_only: bool = true };
+pub const Disk = struct { path: []const u8, read_only: bool = true };
+
+/// An autoreleased `NSMutableArray`.
+fn mutableArray() Error!Id {
+    return send0(try class("NSMutableArray"), "array");
+}
+
+fn push(list: Id, obj: Id) void {
+    setter(list, "addObject:", obj);
+    release(obj);
+}
+
 /// The parts of a Linux guest.
 pub const Config = struct {
     kernel: []const u8,
@@ -190,13 +203,15 @@ pub const Config = struct {
     cmdline: []const u8 = "console=hvc0",
     cpus: usize = 1,
     memory_mb: u64 = 256,
-    /// The ends of the console of the guest: the host writes to `console_in`
-    /// and reads `console_out`.
-    /// No console when null.
+    /// The descriptors of the console of the guest (`hvc0`): the guest
+    /// reads `in` and writes `out`, which can be one socket. No console
+    /// when null.
     console: ?struct { in: c_int, out: c_int } = null,
-    /// One directory of the host for virtio-fs, with the tag that the
-    /// guest mounts.
-    share: ?struct { path: []const u8, tag: []const u8, read_only: bool = false } = null,
+    /// The directories of the host for virtio-fs, each with the tag that
+    /// the guest mounts.
+    shares: []const Share = &.{},
+    /// The disk image files, as virtio block devices in this order.
+    disks: []const Disk = &.{},
     vsock: bool = true,
     entropy: bool = true,
     /// The `VZGenericMachineIdentifier` of the platform. A saved state
@@ -247,15 +262,34 @@ pub fn configure(c: Config, why: *[]const u8) Error!Id {
         release(sock);
     }
 
-    if (c.share) |s| {
-        const dir = call(fn (Id, Sel, Id, bool) callconv(.c) Id, try alloc("VZSharedDirectory"), "initWithURL:readOnly:", .{ try fileUrl(s.path), s.read_only });
-        const single = send1(try alloc("VZSingleDirectoryShare"), "initWithDirectory:", dir);
-        release(dir);
-        const fs = send1(try alloc("VZVirtioFileSystemDeviceConfiguration"), "initWithTag:", try string(s.tag));
-        setter(fs, "setShare:", single);
-        release(single);
-        setter(vc, "setDirectorySharingDevices:", try array1(fs));
-        release(fs);
+    if (c.shares.len > 0) {
+        const list = try mutableArray();
+        for (c.shares) |sh| {
+            const dir = call(fn (Id, Sel, Id, bool) callconv(.c) Id, try alloc("VZSharedDirectory"), "initWithURL:readOnly:", .{ try fileUrl(sh.path), sh.read_only });
+            const single = send1(try alloc("VZSingleDirectoryShare"), "initWithDirectory:", dir);
+            release(dir);
+            const fs = send1(try alloc("VZVirtioFileSystemDeviceConfiguration"), "initWithTag:", try string(sh.tag));
+            setter(fs, "setShare:", single);
+            release(single);
+            push(list, fs);
+        }
+        setter(vc, "setDirectorySharingDevices:", list);
+    }
+
+    if (c.disks.len > 0) {
+        const list = try mutableArray();
+        for (c.disks) |d| {
+            var err: ?Id = null;
+            const att = call(fn (Id, Sel, Id, bool, *?Id) callconv(.c) ?Id, try alloc("VZDiskImageStorageDeviceAttachment"), "initWithURL:readOnly:error:", .{ try fileUrl(d.path), d.read_only, &err }) orelse {
+                why.* = errorText(err);
+                release(vc);
+                return error.Framework;
+            };
+            const blk = send1(try alloc("VZVirtioBlockDeviceConfiguration"), "initWithAttachment:", att);
+            release(att);
+            push(list, blk);
+        }
+        setter(vc, "setStorageDevices:", list);
     }
 
     var err: ?Id = null;
@@ -331,6 +365,35 @@ pub const Machine = struct {
     pub fn stop(m: *Machine) void {
         var why: []const u8 = "";
         m.op("stopWithCompletionHandler:", null, 10, &why) catch {};
+    }
+
+    /// The states of `VZVirtualMachineState`.
+    pub const State = enum(isize) { stopped = 0, running, paused, @"error", starting, pausing, resuming, stopping, saving, restoring, _ };
+
+    pub fn state(m: *Machine) State {
+        const S = struct { m: *Machine, out: isize = 0 };
+        var x: S = .{ .m = m };
+        onQueue(m.q, S, &x, struct {
+            fn f(p: *S) void {
+                p.out = call(fn (Id, Sel) callconv(.c) isize, p.m.vm, "state", .{});
+            }
+        }.f);
+        return @fromBackingInt(x.out);
+    }
+
+    /// Asks the guest to power off, as a press of its power button.
+    /// False when the guest cannot get the request.
+    pub fn requestStop(m: *Machine) bool {
+        const S = struct { m: *Machine, ok: bool = false };
+        var x: S = .{ .m = m };
+        onQueue(m.q, S, &x, struct {
+            fn f(p: *S) void {
+                if (!call(fn (Id, Sel) callconv(.c) bool, p.m.vm, "canRequestStop", .{})) return;
+                var err: ?Id = null;
+                p.ok = call(fn (Id, Sel, *?Id) callconv(.c) bool, p.m.vm, "requestStopWithError:", .{&err});
+            }
+        }.f);
+        return x.ok;
     }
 
     pub fn pause(m: *Machine, why: *[]const u8) Error!void {

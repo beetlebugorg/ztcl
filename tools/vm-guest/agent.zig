@@ -7,8 +7,9 @@
 //! A first byte of 1 from the host asks for the kernel log instead.
 //!
 //! As the first process (`rdinit=/sbin/agent`), the agent mounts the
-//! virtio-fs share with the tag `share` at /mnt/share, when the guest has
-//! it, and writes a file there.
+//! virtio-fs share with the tag `share0` (the first `-share` of
+//! `ztcl::vm create`) at /mnt/share, when the guest has it, and writes
+//! a file there.
 //!
 //!   zig build-exe -target aarch64-linux-musl -O ReleaseSmall agent.zig
 //!
@@ -46,7 +47,7 @@ fn bootNs() u64 {
 fn share() void {
     _ = linux.mkdir("/mnt", 0o755);
     _ = linux.mkdir("/mnt/share", 0o755);
-    _ = ok(linux.mount("share", "/mnt/share", "virtiofs", 0, 0)) orelse return;
+    _ = ok(linux.mount("share0", "/mnt/share", "virtiofs", 0, 0)) orelse return;
     const fd: i32 = @intCast(ok(linux.open("/mnt/share/from-guest.txt", .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644)) orelse return);
     const text = "written by the guest\n";
     _ = linux.write(fd, text, text.len);

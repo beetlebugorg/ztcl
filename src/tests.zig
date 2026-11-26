@@ -2918,3 +2918,33 @@ test "ztcl::notify: the texts are arguments of the script of osascript" {
     try std.testing.expectEqualStrings("c", std.mem.span(argv[9].?));
     try std.testing.expect(argv[10] == null);
 }
+
+test "ztcl::vm: the capability, the jail of its paths, and the limits" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try std.testing.expectEqualStrings("0", try it.str(try it.eval("llength [info commands ztcl::vm]")));
+    try it.allow(@backingInt(tcl.interp.Capability.vm) | @backingInt(tcl.interp.Capability.interp));
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("llength [info commands ztcl::vm]")));
+    // A child interp has no `vm`, so the limits count the guests of one
+    // interpreter.
+    try std.testing.expectEqualStrings("0", try it.str(try it.eval("interp create k; k eval {llength [info commands ztcl::vm]}")));
+    if (@import("builtin").os.tag != .macos) {
+        try std.testing.expectEqualStrings("ZTCL VM UNAVAILABLE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image}; set ::errorCode")));
+        return;
+    }
+    try std.testing.expectEqualStrings("ZTCL VM KERNEL", try it.str(try it.eval("catch {ztcl::vm create}; set ::errorCode")));
+    try std.testing.expectEqualStrings("ZTCL VM NOFILE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image}; set ::errorCode")));
+    try std.testing.expectEqualStrings("ZTCL VM LIMIT", try it.str(try it.eval("catch {ztcl::vm create -cpus 5}; set ::errorCode")));
+    try std.testing.expectEqualStrings("ZTCL VM LIMIT", try it.str(try it.eval("catch {ztcl::vm create -memory 4096}; set ::errorCode")));
+    try std.testing.expectEqualStrings("ZTCL VM NAME", try it.str(try it.eval("catch {ztcl::vm start vm9}; set ::errorCode")));
+
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setHost(&it);
+    _ = try it.eval("file mkdir .zig-cache/ztcl-vm-test/share; close [open .zig-cache/ztcl-vm-test/Image w]");
+    try tcl.fsroot.setRoot(&it, ".zig-cache/ztcl-vm-test");
+    try std.testing.expectEqualStrings("POSIX EACCES {permission denied}", try it.str(try it.eval("catch {ztcl::vm create -kernel ../../build.zig}; set ::errorCode")));
+    try std.testing.expectEqualStrings("bad mode \"rx\": must be ro or rw", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {share /mnt rx}} m; set m")));
+    // The test program has no entitlement for the framework.
+    try std.testing.expectEqualStrings("ZTCL VM ENTITLEMENT", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {share /mnt}}; set ::errorCode")));
+}
