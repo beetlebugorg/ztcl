@@ -231,6 +231,9 @@ class Build:
                 if not (SITE_DIR / full[len("assets/"):]).exists():
                     raise SystemExit(f"{name}: link to a missing file: {href}")
                 continue
+            if full in ("llms.txt", "llms-full.txt"):
+                # The files for agents (agents()).
+                continue
             if full.startswith("playground/") and not href.endswith("/") and target:
                 if not (self.playground_file(full[len("playground/"):])).exists():
                     raise SystemExit(f"{name}: link to a missing file: {href}")
@@ -254,6 +257,26 @@ class Build:
         if name.endswith(".wasm"):
             return ROOT / "zig-out" / "lib" / name
         return PLAYGROUND / name
+
+    @staticmethod
+    def agents(out):
+        """The files for agents (https://llmstxt.org): llms.txt lists the
+        pages, and llms-full.txt has the Markdown of each page."""
+        intro = ("# ztcl\n\n> A Tcl interpreter in Zig with a bytecode VM and a JIT. A new interpreter has no host "
+                 "access: the host turns on each capability by name, and sets a compute limit and a memory limit "
+                 "before it runs a script that it did not write. It runs as a CLI, as a library in Zig, and in a "
+                 "browser as WebAssembly.\n\n")
+        lines, full, group = [intro], [intro], None
+        for src, page, section, label in PAGES:
+            if section != group:
+                lines.append(f"\n## {section}\n\n")
+                group = section
+            lines.append(f"- [{label}]({SITE}{page})\n")
+            full.append(f"\n\n<!-- {SITE}{page} -->\n\n" + (ROOT / src).read_text(encoding="utf-8"))
+        lines.append(f"\n## For agents\n\n- [Full text]({SITE}llms-full.txt): the Markdown of each page above.\n"
+                     f"- [ztk](https://beetlebug.org/ztk/llms.txt): Tk on ztcl, for GUI apps.\n")
+        (out / "llms.txt").write_text("".join(lines), encoding="utf-8")
+        (out / "llms-full.txt").write_text("".join(full), encoding="utf-8")
 
     def run(self, out):
         rendered = [(page, *self.render(src, page)) for src, page, _, _ in PAGES]
@@ -291,6 +314,7 @@ class Build:
                 f'<meta http-equiv="refresh" content="0; url={target}">'
                 f'<link rel="canonical" href="{target}"><a href="{target}">This page moved.</a>\n',
                 encoding="utf-8")
+        self.agents(out)
         (out / ".nojekyll").write_text("", encoding="utf-8")
         print(f"wrote {len(rendered) + len(HTML_PAGES)} pages to {out}")
 
