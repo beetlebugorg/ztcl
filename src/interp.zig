@@ -1090,6 +1090,11 @@ pub const Interp = struct {
     /// The limits of the guests of `ztcl::vm`.
     vm_host: @import("microvm.zig").Host = .{},
     vm_state: ?*anyopaque = null,
+    /// The runner of the child process of an isolated thread (ztcl#209):
+    /// a ztcl runner that takes `--iso-fd N`. The CLI sets it to itself.
+    iso_runner: ?[]const u8 = null,
+    /// A starter of the child in place of the runner, for tests.
+    iso_spawn: ?@import("isothread.zig").Spawner = null,
     /// The event loop that this interpreter shares with its parent.
     events: ?*@import("event.zig").State = null,
     /// The network policy of `socket`. The embedder sets it.

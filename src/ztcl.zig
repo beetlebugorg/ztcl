@@ -48,6 +48,7 @@ pub const buildnative = @import("buildnative.zig");
 pub const dbus = @import("dbus.zig");
 pub const macho = @import("macho.zig");
 pub const isoproto = @import("isoproto.zig");
+pub const isothread = @import("isothread.zig");
 pub const filecmd = @import("filecmd.zig");
 pub const sys = @import("sys.zig");
 pub const thread = @import("thread.zig");

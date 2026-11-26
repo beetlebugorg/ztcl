@@ -400,6 +400,9 @@ pub const Worker = struct {
     /// A pool worker: the pool and its loop.
     pool: ?*anyopaque = null,
     pool_main: ?*const fn (w: *Worker, it: *Interp) void = null,
+    /// The bridge of an isolated thread (`isothread.zig`): the worker has
+    /// no interpreter, and its queue goes to a child process.
+    bridge: ?*anyopaque = null,
 
     pub const State = enum { starting, running, failed, done };
 
@@ -442,6 +445,18 @@ const Start = struct {
     fs_path: []const u8,
 };
 
+/// The way of a child process to the group of its parent.
+pub const Remote = struct {
+    ctx: *anyopaque,
+    /// Sends a script to the thread `to` of the parent.
+    send: *const fn (ctx: *anyopaque, to: u64, script: []const u8, seq: u64, var_name: []const u8, head: bool) SendError!void,
+    /// Gives a reply or an async result to the thread `to` of the parent.
+    /// It takes `m`.
+    deliver: *const fn (ctx: *anyopaque, to: u64, m: *Msg) void,
+    /// Gives an error to `thread::errorproc` of the parent.
+    bgerror: *const fn (ctx: *anyopaque, info: []const u8) void,
+};
+
 pub const Group = struct {
     gpa: Allocator,
     budget: Budget,
@@ -481,6 +496,10 @@ pub const Group = struct {
     eval_lock: ?[]const u8 = null,
     /// Frees a table at the end of the group.
     finalizers: std.ArrayList(*const fn (g: *Group) void) = .empty,
+    /// In the child process of an isolated thread: the way to the threads
+    /// of the parent (`isothread.zig`). A thread id that the group does
+    /// not have goes there.
+    remote: ?Remote = null,
 
     pub fn alloc(g: *Group) Allocator {
         return g.budget.allocator();
@@ -580,7 +599,7 @@ pub fn setLimits(host: *Interp, lim: Limits) void {
 /// Stops each thread of the group of the host and frees the group.
 pub fn endGroup(host: *Interp) void {
     const w = host.worker orelse return;
-    if (!w.is_main) return;
+    if (w != w.group.main) return;
     const g = w.group;
     g.lock.lock();
     g.stopping = true;
@@ -589,7 +608,7 @@ pub fn endGroup(host: *Interp) void {
     // other thread gets the stop flag.
     while (true) {
         g.lock.lock();
-        for (g.workers.items) |x| if (!x.is_main) stopWorker(x, Flag.stop);
+        for (g.workers.items) |x| if (x != g.main) stopWorker(x, Flag.stop);
         const left = g.running;
         if (left == 0) {
             g.lock.unlock();
@@ -739,7 +758,15 @@ pub const Opts = struct {
     /// place of a script (`tpool.zig`).
     pool: ?*anyopaque = null,
     pool_main: ?*const fn (w: *Worker, it: *Interp) void = null,
+    /// The level of the thread (ztcl#209). A level past `interp` runs the
+    /// thread in a child process through `isothread.zig`.
+    isolation: Isolation = .interp,
 };
+
+pub const Isolation = enum { interp, process };
+
+/// The platforms of isolated threads (`isothread.zig`).
+const iso_ok = @import("isothread.zig").supported;
 
 /// Starts a thread with options. Gives its id.
 pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
@@ -780,6 +807,26 @@ pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
     if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left -= steps;
     st.compute_limit = steps;
     w.* = .{ .group = g, .id = g.next_id, .joinable = joinable, .refs = if (preserved) 1 else 0, .script = text, .steps = steps, .mem_limit = st.mem_limit, .pool = o.pool, .pool_main = o.pool_main };
+    if (o.isolation != .interp and comptime !iso_ok) {
+        if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left += steps;
+        g.lock.unlock();
+        g.alloc().free(text);
+        g.gpa.destroy(w);
+        if (comptime fd_os) {
+            if (st.fs_fd >= 0) closeFd(st.fs_fd);
+        }
+        return it.failCode("ZTCL ISOLATION LEVEL", "the level process is not available on this platform yet", .{});
+    }
+    const iso = if (comptime iso_ok) (if (o.isolation != .interp) @import("isothread.zig").prepare(it, w, st) catch |e| {
+        if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left += steps;
+        g.lock.unlock();
+        g.alloc().free(text);
+        g.gpa.destroy(w);
+        if (comptime fd_os) {
+            if (st.fs_fd >= 0) closeFd(st.fs_fd);
+        }
+        return e;
+    } else null) else null;
     g.next_id += 1;
     g.running += 1;
     g.workers.append(g.gpa, w) catch {
@@ -791,7 +838,9 @@ pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
     };
     // The lock stays held across the spawn, so the new thread finds its
     // handle in `w.os` when it ends.
-    w.os = OsThread.spawn(.{ .stack_size = stack_size, .allocator = g.gpa }, threadMain, .{ w, st }) catch {
+    const spawned = if (comptime !iso_ok) OsThread.spawn(.{ .stack_size = stack_size, .allocator = g.gpa }, threadMain, .{ w, st }) else if (iso) |b| OsThread.spawn(.{ .stack_size = stack_size, .allocator = g.gpa }, @import("isothread.zig").bridgeMain, .{ w, b, st }) else OsThread.spawn(.{ .stack_size = stack_size, .allocator = g.gpa }, threadMain, .{ w, st });
+    w.os = spawned catch {
+        if (comptime iso_ok) if (iso) |b| @import("isothread.zig").unprepare(b);
         _ = g.workers.pop();
         g.running -= 1;
         if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left += steps;
@@ -804,7 +853,10 @@ pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
     const ok = w.state != .failed;
     const id = w.id;
     g.lock.unlock();
-    if (!ok) return it.failCode("THREAD CREATE", "the new thread could not start its interpreter", .{});
+    if (!ok) {
+        if (comptime iso_ok) if (iso) |b| return @import("isothread.zig").startError(it, b);
+        return it.failCode("THREAD CREATE", "the new thread could not start its interpreter", .{});
+    }
     return id;
 }
 
@@ -910,7 +962,7 @@ const host_margin: usize = 128;
 /// does for a script. The collector then scans the native stack from
 /// here, so the wait loop and the loop of a pool worker collect between
 /// their scripts.
-fn topScope(x: *Interp, comptime f: anytype, args: anytype) @typeInfo(@TypeOf(f)).@"fn".return_type.? {
+pub fn topScope(x: *Interp, comptime f: anytype, args: anytype) @typeInfo(@TypeOf(f)).@"fn".return_type.? {
     const outer = x.heap.scopes == 0;
     x.heap.scopes += 1;
     defer x.heap.scopes -= 1;
@@ -924,7 +976,7 @@ fn topScope(x: *Interp, comptime f: anytype, args: anytype) @typeInfo(@TypeOf(f)
     return @call(.never_inline, f, args);
 }
 
-fn failStart(w: *Worker, st: Start) void {
+pub fn failStart(w: *Worker, st: Start) void {
     if (comptime fd_os) {
         if (st.fs_fd >= 0) closeFd(st.fs_fd);
     }
@@ -942,7 +994,7 @@ fn failStart(w: *Worker, st: Start) void {
 }
 
 /// Reports the error that ended the script of a thread.
-fn endError(w: *Worker, x: *Interp, e: Error) void {
+pub fn endError(w: *Worker, x: *Interp, e: Error) void {
     if (w.exiting) return;
     if (w.hasFlag(Flag.stop)) return;
     w.status = 1;
@@ -964,6 +1016,7 @@ pub fn reportError(w: *Worker, x: *Interp, info: []const u8) void {
     const g = w.group;
     var buf: [32]u8 = undefined;
     const id = w.name(&buf);
+    if (g.remote) |r| return r.bgerror(r.ctx, info);
     g.lock.lock();
     const target = if (g.errorproc.len > 0) g.findLive(g.errorproc_id) else null;
     if (target) |t| {
@@ -1017,6 +1070,20 @@ fn finish(w: *Worker, x: *Interp) void {
     x.worker = null;
     x.deinit();
     g.gpa.destroy(x);
+    retireLocked(w, left);
+}
+
+/// The end of the record of an isolated thread (`isothread.zig`), after
+/// its queue got its replies.
+pub fn retire(w: *Worker, left: u64) void {
+    const g = w.group;
+    if (g.sync) |_| @import("tsync.zig").releaseOwned(g, w.id);
+    if (g.tsv) |_| @import("tsv.zig").releaseOwned(g, w.id);
+    retireLocked(w, left);
+}
+
+fn retireLocked(w: *Worker, left: u64) void {
+    const g = w.group;
     g.lock.lock();
     if (std.mem.indexOfScalar(*Worker, g.workers.items, w)) |i| _ = g.workers.orderedRemove(i);
     if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left += @min(left, w.steps);
@@ -1032,7 +1099,7 @@ fn finish(w: *Worker, x: *Interp) void {
 
 /// Answers each send that waits in the queue of an ended thread, and
 /// frees the queue.
-fn failQueue(w: *Worker) void {
+pub fn failQueue(w: *Worker) void {
     const g = w.group;
     w.lock.lock();
     const items = w.queue.toOwnedSlice(g.alloc()) catch &.{};
@@ -1076,7 +1143,7 @@ fn dupFd(fd: i32) i32 {
     return if (rc >= 0) rc else -1;
 }
 
-fn closeFd(fd: i32) void {
+pub fn closeFd(fd: i32) void {
     if (comptime builtin.os.tag == .linux) {
         _ = std.os.linux.close(fd);
     } else _ = std.c.close(fd);
@@ -1165,7 +1232,12 @@ fn replyText(g: *Group, to: u64, seq: u64, code: i64, text: []const u8, ecode: [
     m.info = a.dupe(u8, text) catch &.{};
     g.lock.lock();
     defer g.lock.unlock();
-    if (g.findLive(to)) |t| pushMsg(t, m, false) else m.destroy(a);
+    if (g.findLive(to)) |t| pushMsg(t, m, false) else if (g.remote) |r| r.deliver(r.ctx, to, m) else m.destroy(a);
+}
+
+/// The reply "target thread died" to a send that waits.
+pub fn replyFailed(g: *Group, to: u64, seq: u64) void {
+    replyText(g, to, seq, 1, "target thread died", "THREAD DIED");
 }
 
 pub const SendError = error{ NoThread, QueueFull, GroupFull, OutOfMemory };
@@ -1189,6 +1261,7 @@ pub fn sendScript(me: *Worker, to: u64, script: []const u8, seq: u64, var_name: 
     defer g.lock.unlock();
     const t = g.find(to) orelse {
         m.destroy(a);
+        if (g.remote) |r| return r.send(r.ctx, to, script, seq, var_name, head);
         return error.NoThread;
     };
     t.lock.lock();
@@ -1255,7 +1328,7 @@ pub fn waitRoom(it: *Interp, id: u64) Error!void {
 }
 
 /// Takes the reply with the number `seq`.
-fn takeReply(w: *Worker, seq: u64) ?*Msg {
+pub fn takeReply(w: *Worker, seq: u64) ?*Msg {
     for (w.queue.items, 0..) |m, i| {
         if (m.kind == .reply and m.seq == seq) return w.queue.orderedRemove(i);
     }
@@ -1397,7 +1470,7 @@ fn sendResult(w: *Worker, it: *Interp, m: *Msg, c: cmds.Caught) Error!void {
     g.lock.lock();
     defer g.lock.unlock();
     ok = true;
-    if (g.findLive(m.from)) |t| pushMsg(t, r, false) else r.destroy(a);
+    if (g.findLive(m.from)) |t| pushMsg(t, r, false) else if (g.remote) |rem| rem.deliver(rem.ctx, m.from, r) else r.destroy(a);
 }
 
 /// Waits for the reply `seq` of the thread `to` and runs the other
@@ -1421,7 +1494,9 @@ pub fn awaitReply(it: *Interp, to: u64, seq: u64) Error!*Msg {
             live = true;
         };
         g.lock.unlock();
-        if (!live) {
+        // A thread of the parent of a child process answers through the
+        // remote, and an error comes back when it ended.
+        if (!live and g.remote == null) {
             w.lock.lock();
             const r = takeReply(w, seq);
             w.lock.unlock();
