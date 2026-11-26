@@ -1,0 +1,28 @@
+name: VM guest
+
+# Builds the kernel and BusyBox of the spike guest of ztcl::vm (ztcl#203)
+# on an arm64 runner (tools/vm-guest/build.sh), and keeps them as an
+# artifact for the macOS spike. The proper guest image comes from the
+# build of dockyard#13.
+on:
+  push:
+    paths:
+      - "tools/vm-guest/build.sh"
+      - "tools/vm-guest/kernel.fragment"
+      - ".github/workflows/vm-guest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guest:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - run: sudo apt-get update && sudo apt-get install -y build-essential flex bison bc libelf-dev libssl-dev cpio
+      - run: tools/vm-guest/build.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vm-guest
+          path: tools/vm-guest/out/
