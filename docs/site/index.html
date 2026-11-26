@@ -22,6 +22,7 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
   <nav class="toplinks" aria-label="Site">
     <a href="overview/">Docs</a>
     <a href="playground/">Playground</a>
+    <a href="try/">Shell</a>
     <a class="sib" href="https://beetlebug.org/ztk/">ztk</a>
     <a href="https://github.com/beetlebugorg/ztcl">GitHub</a>
   </nav>
@@ -36,23 +37,22 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
       <p class="sub">On a 10-million-pass integer loop, ztcl with JIT tier 2 runs in 15 ms. tclsh 8.6.16 uses 413 ms. With the JIT off, the bytecode interpreter is 1.6 to 3.5 times as fast as tclsh on the benchmark scripts.</p>
       <div class="actions">
         <a class="btn primary" href="playground/">Try it in your browser</a>
+        <a class="btn ghost" href="try/">Full-page shell</a>
         <a class="btn ghost" href="quickstart/">Get started</a>
       </div>
       <p class="meta">Exact compute and memory limits. Real threads. Fast JSON. One static binary with no dependency outside the Zig standard library. A WebAssembly build.</p>
       <pre class="term" style="margin-top:16px"><code><span class="p">$ </span>brew install beetlebugorg/tap/ztcl</code></pre>
     </div>
-    <div class="codecard" aria-label="A code sample">
-      <div class="bar"><i></i><i></i><i></i><span>sum.tcl</span></div>
-<pre><code><span class="k">proc</span> sum {n} {
-    <span class="k">set</span> total <span class="n">0</span>
-    <span class="k">for</span> {<span class="k">set</span> i <span class="n">0</span>} {<span class="v">$i</span> &lt; <span class="v">$n</span>} {<span class="k">incr</span> i} {
-        <span class="k">incr</span> total <span class="v">$i</span>
-    }
-    <span class="k">return</span> <span class="v">$total</span>
-}
-<span class="k">puts</span> [sum <span class="n">10000000</span>]</code></pre>
-<pre class="term"><code><span class="p">$ </span>ztcl --jit --jit-tier2 sum.tcl
-49999995000000</code></pre>
+    <div class="zshell" style="--rows: 12" data-rows="12" data-label="ztcl shell in the page. Type a Tcl command. Tab completes." data-banner="ztcl in your browser. No files, network, or clock.\nEach command can use 10,000,000 compute units.">
+      <div class="bar"><i></i><i></i><i></i><span>ztcl shell</span><label><input class="zshell-vi" type="checkbox" disabled> vim keys</label></div>
+<pre class="zshell-poster" aria-hidden="true">ztcl in your browser. No files, network, or clock.
+Each command can use 10,000,000 compute units.
+<span class="p">%</span> </pre>
+      <div class="zshell-foot">
+        <span class="zshell-hint" id="hero-shell-hint"><kbd>Tab</kbd> completes. <kbd>Up</kbd> is history. <kbd>Ctrl-X</kbd> <kbd>Ctrl-E</kbd> edits. <kbd>Esc</kbd> <kbd>Tab</kbd> leaves.</span>
+        <span class="zshell-meter"><span>Compute limit: 10,000,000 compute units for each command</span><progress value="0" max="10000000" aria-label="Compute units of the last command"></progress></span>
+      </div>
+      <noscript><p class="zshell-foot">The shell needs JavaScript and WebAssembly. The <a href="shell/">shell docs</a> tell what it does.</p></noscript>
     </div>
   </div>
 </section>
@@ -230,7 +230,7 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
       <div class="card"><span class="tag">Works</span><h3>No host access by default</h3><p class="muted">A new interpreter has no file, socket, process, or environment access. The host turns on each capability by name.</p></div>
       <div class="card"><span class="tag">Works</span><h3>Compute and memory</h3><p class="muted">An exact compute limit and a hard memory cap stop a loop that does not end, and a script cannot catch the error.</p></div>
       <div class="card"><span class="tag">Works</span><h3>In a browser</h3><p class="muted">The WebAssembly module runs a script in a worker with the same limits. The <a href="playground/">playground</a> runs in your browser with no server.</p></div>
-      <div class="card"><span class="tag plan">Planned</span><h3>The shell in the page</h3><p class="muted">The line editor of the ztcl shell, with history, completion, and colors, in a terminal on this site.</p></div>
+      <div class="card"><span class="tag">Works</span><h3>The shell in the page</h3><p class="muted">The line editor of the ztcl shell, with completion, history, vim keys, and colors, on a terminal of <code>ztcl::vt</code>. Try it at the top of this page or on the <a href="try/">shell page</a>.</p></div>
       <div class="card"><span class="tag">Works</span><h3>Files for agents</h3><p class="muted"><a href="llms.txt">llms.txt</a> lists the docs pages, and <a href="llms-full.txt">llms-full.txt</a> has their full text.</p></div>
       <div class="card"><span class="tag">Works</span><h3>GUI apps</h3><p class="muted"><a href="https://beetlebug.org/ztk/">ztk</a> runs Tk scripts on ztcl, and an agent can see and drive the window it builds.</p></div>
     </div>
@@ -299,7 +299,21 @@ if (location.hash && !document.getElementById(decodeURIComponent(location.hash.s
   </div>
 </section>
 
-<section class="section" id="embedding">
+<section class="section" id="no-bloat">
+  <div class="wrap">
+    <p class="eyebrow">No bloat</p>
+    <h2>Small, fast to start, and with one dependency.</h2>
+    <p class="lede">ztcl has its own code for the parts that other interpreters take from libraries: the regular expressions, the big integers, deflate and zip, JSON, and the line editor of the shell. The one dependency is <a href="https://github.com/ghostty-org/ghostty">libghostty-vt</a> for <code>ztcl::vt</code>, built from source by the Zig toolchain.</p>
+    <div class="grid g3">
+      <div class="card"><h3>4.6 MB</h3><p class="muted">The <code>ztcl</code> runner for x86-64 Linux: one static binary, stripped, with the JIT and the built-in modules. It is 1.9 MB with gzip.</p></div>
+      <div class="card"><h3>0.8 ms</h3><p class="muted">The time of <code>ztcl hi.tcl</code> for a script with one <code>puts</code>: the median of 50 runs.</p></div>
+      <div class="card"><h3>504 KB</h3><p class="muted"><code>ztcl.wasm</code> with gzip -9, for the browser and Node.js. It needs no imports from the host.</p></div>
+    </div>
+    <p class="muted" style="margin-top:20px">Measured on 2026-11-26 on an Intel Core i7-6700K with Linux, from a ReleaseFast build of <code>main</code> and <code>zig build wasm</code>.</p>
+  </div>
+</section>
+
+<section class="section alt" id="embedding">
   <div class="wrap">
     <div class="split">
       <div>
@@ -337,7 +351,7 @@ it.mem_limit = <span class="n">64</span> &lt;&lt; <span class="n">20</span>;
   </div>
 </section>
 
-<section class="section alt" id="webassembly">
+<section class="section" id="webassembly">
   <div class="wrap">
     <div class="split">
       <div>
@@ -374,7 +388,7 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
   </div>
 </section>
 
-<section class="section" id="point-procs">
+<section class="section alt" id="point-procs">
   <div class="wrap">
     <div class="split">
       <div>
@@ -396,7 +410,7 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
   </div>
 </section>
 
-<section class="section alt" id="testing">
+<section class="section" id="testing">
   <div class="wrap">
     <p class="eyebrow">Tested hard</p>
     <h2>37,413 passing tests of the Tcl suite.</h2>
@@ -419,7 +433,7 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
   </div>
 </section>
 
-<section class="section" id="status">
+<section class="section alt" id="status">
   <div class="wrap">
     <div class="callout">
       <p class="eyebrow">Status</p>
@@ -428,7 +442,7 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
   </div>
 </section>
 
-<section class="section alt">
+<section class="section">
   <div class="wrap">
     <div class="family">
       <div>
@@ -454,5 +468,6 @@ tcl.eval(<span class="s">"while 1 {}"</span>);
     <a href="https://github.com/beetlebugorg/ztcl">GitHub</a>
   </span>
 </div></footer>
+<script type="module" src="assets/shell.js"></script>
 </body>
 </html>

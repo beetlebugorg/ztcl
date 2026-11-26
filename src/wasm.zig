@@ -18,9 +18,9 @@ const thread = @import("thread.zig");
 const web_threads = if (@hasDecl(build_options, "web_threads")) build_options.web_threads else .none;
 const shared = web_threads == .shared;
 
-const gpa = if (shared) @import("webthread.zig").heap_allocator else std.heap.wasm_allocator;
+pub const gpa = if (shared) @import("webthread.zig").heap_allocator else std.heap.wasm_allocator;
 
-const Handle = struct {
+pub const Handle = struct {
     it: ztcl.Interp,
     out: std.ArrayList(u8) = .empty,
     /// With threads, the output that `ztcl_output_take` moved out of
@@ -134,6 +134,12 @@ export fn ztcl_output_clear(h: *Handle) void {
     if (web_threads == .none) h.out.clearRetainingCapacity() else h.taken.clearRetainingCapacity();
 }
 
+// The shell of the runner on a terminal of `ztcl::vt`, in
+// ztcl-shell.wasm. See src/wasm_shell.zig.
+comptime {
+    if (web_threads == .none and build_options.mod_vt and build_options.shell) _ = @import("wasm_shell.zig");
+}
+
 // The exports of the build with no threads for a bundle. See
 // web/ztcl.mjs.
 comptime {
@@ -170,7 +176,7 @@ fn ztcl_bundle_run(h: *Handle) callconv(.c) i32 {
     return 0;
 }
 
-fn filesOf(it: *ztcl.Interp) *wasmfiles.State {
+pub fn filesOf(it: *ztcl.Interp) *wasmfiles.State {
     const h: *Handle = @fieldParentPtr("it", it);
     return &h.files;
 }

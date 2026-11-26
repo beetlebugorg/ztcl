@@ -62,8 +62,8 @@ const builtin = @import("builtin");
 const Io = std.Io;
 const tcl = @import("ztcl");
 const shell = struct {
-    const shell = @import("shell/shell.zig");
-    const term = @import("shell/term.zig");
+    const shell = tcl.shell;
+    const term = tcl.shell_term;
 };
 
 fn write(ctx: ?*anyopaque, bytes: []const u8) void {

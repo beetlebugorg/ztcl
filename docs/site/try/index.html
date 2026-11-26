@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shell · ztcl</title>
+<meta name="description" content="The interactive shell of ztcl in your browser: completion, history, vim keys, and colors, with a compute limit and no host access.">
+<link rel="canonical" href="https://beetlebug.org/ztcl/try/">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/site.css">
+<style>
+.shellpage { padding: 32px 0 56px; }
+.shellpage h1 { font-size: clamp(26px, 3.2vw, 34px); letter-spacing: -.02em; margin: 0 0 6px; }
+.shellpage .intro { color: var(--text-2); margin: 0 0 20px; max-width: 46em; }
+.shellpage .notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 24px; }
+.shellpage .notes h2 { font-size: 16px; margin: 0 0 6px; }
+.shellpage .notes p, .shellpage .notes li { color: var(--text-2); font-size: 15px; }
+.shellpage .notes ul { margin: 0; padding-left: 18px; }
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<header class="top"><div class="wrap">
+  <a class="logo" href="../"><span class="glyph" aria-hidden="true">tc</span>ztcl</a>
+  <nav class="toplinks" aria-label="Site">
+    <a href="../overview/">Docs</a>
+    <a href="../playground/">Playground</a>
+    <a href="./" aria-current="page">Shell</a>
+    <a class="sib" href="https://beetlebug.org/ztk/">ztk</a>
+    <a href="https://github.com/beetlebugorg/ztcl">GitHub</a>
+  </nav>
+</div></header>
+
+<main id="content" class="shellpage"><div class="wrap">
+<h1>The ztcl shell</h1>
+<p class="intro">This is the shell of the <code>ztcl</code> program, compiled to WebAssembly. The line editor, the completion, and the colors are the same code as in your terminal. A terminal of <code>ztcl::vt</code> (libghostty-vt) in the same module holds the screen, and the page renders its cells on a canvas. The shell has no access to files, the network, or the clock. Each command can use 10,000,000 compute units.</p>
+
+<div class="zshell" style="--rows: 24" data-rows="24" data-label="ztcl shell. Type a Tcl command. Tab completes." data-banner="ztcl in your browser. No files, network, or clock.\nEach command can use 10,000,000 compute units.\nRead-only files are in the current folder. Type  source ex  and Tab.">
+  <div class="bar"><i></i><i></i><i></i><span>ztcl shell</span><label><input class="zshell-vi" type="checkbox" disabled> vim keys</label></div>
+<pre class="zshell-poster" aria-hidden="true">ztcl in your browser. No files, network, or clock.
+Each command can use 10,000,000 compute units.
+Read-only files are in the current folder. Type  source ex  and Tab.
+<span class="p">%</span> </pre>
+  <div class="zshell-foot">
+    <span class="zshell-hint" id="page-shell-hint"><kbd>Tab</kbd> completes. <kbd>Up</kbd> is history. <kbd>Ctrl-R</kbd> searches it. <kbd>Ctrl-X</kbd> <kbd>Ctrl-E</kbd> edits. <kbd>Esc</kbd> <kbd>Tab</kbd> leaves.</span>
+    <span class="zshell-meter"><span>Compute limit: 10,000,000 compute units for each command</span><progress value="0" max="10000000" aria-label="Compute units of the last command"></progress></span>
+  </div>
+  <noscript><p class="zshell-foot">The shell needs JavaScript and WebAssembly.</p></noscript>
+</div>
+
+<div class="notes">
+  <section><h2>Completion</h2><p>Tab completes command names, namespaces, the subcommands of an ensemble (<code>string tou</code>), variables after <code>$</code>, TclOO methods, and the names of the read-only files of this page. With more than one match, a menu shows them, and Tab again puts in each one in turn.</p></section>
+  <section><h2>Keys</h2><ul><li>Up and Down go through the history. A gray hint after the cursor is the newest match; Right arrow puts it in.</li><li>The vim keys box is the same as <code>shell mode vi</code>. Escape goes to normal mode, and <code>v</code> opens the editor.</li><li>Ctrl-X Ctrl-E opens the command in an editor in the page.</li><li>Escape and then Tab moves the focus out of the shell.</li></ul></section>
+  <section><h2>Limits</h2><p>The meter shows the compute units of the last command. A command that uses all 10,000,000 stops with an error, and the next command gets the full count again. The memory limit is 64 MiB. Each completion can use 1,000,000 compute units. The <a href="../limits/">limits page</a> defines a compute unit, and the <a href="../shell/">shell docs</a> list all keys.</p></section>
+</div>
+</div></main>
+<script type="module" src="../assets/shell.js"></script>
+</body>
+</html>

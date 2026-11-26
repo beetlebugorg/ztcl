@@ -10,8 +10,9 @@ markdown-it-py (tools/docs-requirements.txt). It stops with an error for a
 link to a missing page or a missing anchor, also on the HTML pages.
 
 The playground is docs/site/playground/ with the JS modules of web/ and
-the three modules of zig-out/lib/. Run `zig build wasm wasm-threads`
-before the build.
+the four modules of zig-out/lib/. The shell of the landing page and of
+docs/site/try/ (docs/site/shell.js) loads ztcl-shell.wasm from there.
+Run `zig build wasm wasm-threads wasm-shell` before the build.
 """
 
 import html
@@ -70,10 +71,10 @@ PAGE_OF = {src: page for src, page, _, _ in PAGES}
 SITE_DIR = ROOT / "docs" / "site"
 PLAYGROUND = SITE_DIR / "playground"
 # The files of the playground from web/ and zig-out/lib/.
-WEB_FILES = ["ztcl.mjs", "ztcl-worker.mjs", "ztcl-threads.mjs", "ztcl-thread-worker.mjs"]
-WASM_FILES = ["ztcl.wasm", "ztcl-threads.wasm", "ztcl-async.wasm"]
+WEB_FILES = ["ztcl.mjs", "ztcl-worker.mjs", "ztcl-threads.mjs", "ztcl-thread-worker.mjs", "ztcl-shell.mjs"]
+WASM_FILES = ["ztcl.wasm", "ztcl-threads.wasm", "ztcl-async.wasm", "ztcl-shell.wasm"]
 # The HTML pages of docs/site and the page folder of each.
-HTML_PAGES = [(SITE_DIR / "index.html", ""), (PLAYGROUND / "index.html", "playground/")]
+HTML_PAGES = [(SITE_DIR / "index.html", ""), (PLAYGROUND / "index.html", "playground/"), (SITE_DIR / "try" / "index.html", "try/")]
 
 
 def slug(text):
@@ -215,7 +216,7 @@ class Build:
 <link rel="stylesheet" href="{root}assets/site.css">{script}</head>
 <body><a class="skip" href="#content">Skip to the content</a>
 <header class="top"><div class="wrap"><a class="logo" href="{root}"><span class="glyph" aria-hidden="true">tc</span>ztcl</a>
-<nav class="toplinks" aria-label="Site"><a href="{root}overview/" aria-current="page">Docs</a><a href="{root}playground/">Playground</a><a class="sib" href="https://beetlebug.org/ztk/">ztk</a><a href="{REPO}">GitHub</a></nav></div></header>
+<nav class="toplinks" aria-label="Site"><a href="{root}overview/" aria-current="page">Docs</a><a href="{root}playground/">Playground</a><a href="{root}try/">Shell</a><a class="sib" href="https://beetlebug.org/ztk/">ztk</a><a href="{REPO}">GitHub</a></nav></div></header>
 <div class="docs"><input class="toc-toggle" type="checkbox" id="toc"><label class="toc-button" for="toc">Contents</label>
 <aside class="sidebar"><nav aria-label="Documentation">{self.nav(page)}</nav></aside>
 <main class="prose" id="content">{body}{self.pager(page)}</main></div>
@@ -292,7 +293,7 @@ class Build:
                 raise SystemExit(f"{src}: link to a missing anchor: {page}#{anchor}")
         for name in WASM_FILES:
             if not (ROOT / "zig-out" / "lib" / name).exists():
-                raise SystemExit(f"zig-out/lib/{name} is missing: run `zig build wasm wasm-threads` first")
+                raise SystemExit(f"zig-out/lib/{name} is missing: run `zig build wasm wasm-threads wasm-shell` first")
         for path, at in HTML_PAGES:
             self.check_html(path, at)
         if out.exists():
@@ -303,8 +304,10 @@ class Build:
             (folder / "index.html").write_text(self.document(page, title, body), encoding="utf-8")
         shutil.copy(SITE_DIR / "index.html", out / "index.html")
         (out / "assets").mkdir()
-        for name in ("site.css", "favicon.svg", "live.js"):
+        for name in ("site.css", "favicon.svg", "live.js", "shell.js"):
             shutil.copy(SITE_DIR / name, out / "assets" / name)
+        (out / "try").mkdir()
+        shutil.copy(SITE_DIR / "try" / "index.html", out / "try" / "index.html")
         (out / "playground").mkdir()
         for name in [p.name for p in PLAYGROUND.iterdir()] + WEB_FILES + WASM_FILES:
             shutil.copy(self.playground_file(name), out / "playground" / name)
