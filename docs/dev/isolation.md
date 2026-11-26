@@ -176,6 +176,7 @@ The default keeps the scripts working: the parent runs the sends of a child as t
 - An AppContainer cannot read the runner under the folder of a user, so the first spawn copies the runner into `%TEMP%\ztcl-iso`, a folder that each AppContainer can read and run.
 - A child with a root folder starts in it, so a relative path of a script names a file in the root.
 - The job of a child of `thread::create -isolation process` ends it past the memory limit of the thread plus 64 MiB for the runtime (`isothread.sandboxMem`). A thread with no memory limit gets a job with no memory limit.
+- A creator with a root folder and the capability `file` or `channels` gives its root and its current folder in `START`, and the parent gives the AppContainer of the child read and write access to that folder only. The child opens it as its jail (`fsroot.setRoot`). A creator in host mode gives host mode, and its child reaches only the folders that an AppContainer can read, such as `C:\Windows`.
 
 The transport (`isoproto.Transport` over the pipe) and the child side of the protocol come with steps 2 and 3. Until then the runner skips `--iso-handle`.
 

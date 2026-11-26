@@ -211,3 +211,25 @@ test "isolate on Windows: the job of a child gets the memory limit of the thread
     try t.expectEqual(@as(u64, (256 << 20) + it.runtime_mem), it.sandboxMem(256 << 20));
     try t.expectEqual(it.runtime_mem, it.sandboxMem(0));
 }
+
+test "isolate on Windows: an isolated thread opens the root folder of its creator" {
+    if (!on or comptime !tcl.isothread.supported) return error.SkipZigTest;
+    var f: Fixture = undefined;
+    if (!try f.init("thread-root")) return error.SkipZigTest;
+    defer f.deinit();
+    var it: tcl.Interp = undefined;
+    try it.init(t.allocator);
+    defer it.deinit();
+    it.iso_runner = f.exe;
+    try it.allow(@backingInt(tcl.interp.Capability.thread) | @backingInt(tcl.interp.Capability.file) | @backingInt(tcl.interp.Capability.channels));
+    try tcl.fsroot.setRoot(&it, f.root_w);
+    _ = try ev(&it, "set t [thread::create -isolation process -joinable {thread::wait}]");
+    // The child writes in the root, and its creator reads the file.
+    _ = try ev(&it, "thread::send $t {set fh [open /made.txt w]; puts -nonewline $fh made; close $fh}");
+    try t.expectEqualStrings("made", try f.readRoot("made.txt"));
+    try t.expectEqualStrings("1", try ev(&it, "thread::send $t {file exists made.txt}"));
+    // The jail of the child stops a path out of the root.
+    try t.expectEqualStrings("1", try ev(&it, "thread::send $t {catch {open ../outside/secret.txt}}"));
+    _ = try ev(&it, "thread::release $t");
+    try t.expectEqualStrings("0", try ev(&it, "thread::join $t"));
+}

@@ -895,6 +895,13 @@ fn startOf(it: *Interp) Error!Start {
             st.fs_path = root.fs.path;
             st.fs_fd = dupFd(root.fs.fd);
         }
+    } else if (comptime builtin.os.tag == .windows) {
+        // The path of the root for an isolated child, which opens it
+        // in its own process. A thread of the process shares no jail.
+        if (root.fs.fd >= 0 and !root.fs.host) {
+            st.fs_cwd = root.fs.cwd;
+            st.fs_path = root.fs.path;
+        }
     }
     return st;
 }
