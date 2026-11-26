@@ -52,6 +52,8 @@ The forms that wasmtime 50.0.0 runs, measured with `zig build wasi-spike`:
 - The synchronous form of `[stream-write-0]write-via-stream` gives the error "synchronous `stream.write` requires the component model more async builtins feature" when wasmtime loads the component.
 - The `[async-lower]` form, `[async-lower][stream-write-0]write-via-stream`, runs. A copy that cannot end at once gives `0xffffffff`, and the task waits for the event in a waitable set. `src/wasi/async.zig` uses this form.
 - `stream.new` gives the readable end in the low 32 bits of its `i64` and the writable end in the high 32 bits.
+- The async lift with a callback (`zig build wasi-spike -Dwasi-lift=callback`, `tools/wasi-spike/callback.zig`) also runs. The task never blocks: each step gives the code 2 (wait) with the waitable set in the high bits, and the callback gets the next event.
+- The time of a full `wasmtime run` of each form is 4 ms, the mean of 20 runs after one run that fills the compile cache, on a machine with a load average of 1. The start of the process is most of the time, so the two forms have the same cost for one call. The interpreter uses the synchronous lift: it runs a script to its end on one task, and the event loop blocks in `waitable-set.wait`. The callback form stays a check of CI, for an embedder that runs many tasks.
 
 A module with these imports, embedded with `wasm-tools component embed` and made with `component new`, passes `wasm-tools validate --features all`. `wasm-tools component embed --dummy-names legacy --async-callback` gives the names of `$root` and of the lift, but not the names of the stream and the future.
 

@@ -300,6 +300,8 @@ jobs:
     env:
       WASMTIME_VERSION: "50.0.0"
       WASMTIME_SHA256: "77c19ee0437991f9ac7837b9c269d9c7076744f85dad263fea5214cc2723c7ff"
+      WASM_TOOLS_VERSION: "1.261.0"
+      WASM_TOOLS_SHA256: "ad62b2176037e93e1348cb65d6212d128ca9f097b63d155569f25215818ff7b1"
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
@@ -314,6 +316,25 @@ jobs:
           echo "$PWD/$name" >> "$GITHUB_PATH"
       - run: zig build -Dtarget=wasm32-wasi
       - run: tools/wasi-smoke.sh
+      - name: Install wasm-tools
+        run: |
+          name=wasm-tools-$WASM_TOOLS_VERSION-x86_64-linux
+          curl -sSfLO "https://github.com/bytecodealliance/wasm-tools/releases/download/v$WASM_TOOLS_VERSION/$name.tar.gz"
+          echo "$WASM_TOOLS_SHA256  $name.tar.gz" | sha256sum -c -
+          tar -xzf "$name.tar.gz"
+          echo "$PWD/$name" >> "$GITHUB_PATH"
+      # The check of the async canonical ABI of WASI 0.3 (docs/dev/wasi-tasks/04-async-abi.md).
+      - name: WASI 0.3 component, both lifts
+        run: |
+          for lift in sync callback; do
+            zig build wasi-spike -Dwasi-lift=$lift --prefix zig-out/$lift
+            c=zig-out/$lift/bin/wasi-spike.component.wasm
+            wasm-tools validate --features component-model,cm-async $c
+            wit=$(wasm-tools component wit $c)
+            case $wit in *"import wasi:cli/stdout@0.3.2"*) ;; *) echo "no stdout import"; exit 1;; esac
+            out=$(timeout 10 wasmtime run $c)
+            case $out in "ztcl: a WASI 0.3.2 stream"*) ;; *) echo "wrong output: $out"; exit 1;; esac
+          done
 
   # A failure of the scheduled full run opens an issue, so it is fixed
   # in the next batch of work.

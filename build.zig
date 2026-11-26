@@ -94,15 +94,20 @@ pub fn build(b: *std.Build) void {
 
     // The check of the async canonical ABI of WASI 0.3 (docs/dev/wasi-tasks/04-async-abi.md).
     // `wasm-tools` makes the component from the core module and the WIT files.
+    // `-Dwasi-lift=callback` builds the form with the async lift and a callback.
+    const lift = b.option(enum { sync, callback }, "wasi-lift", "The lift of run in wasi-spike: sync (default) or callback") orelse .sync;
     const spike_mod = b.createModule(.{
-        .root_source_file = b.path("tools/wasi-spike/spike.zig"),
+        .root_source_file = b.path(if (lift == .sync) "tools/wasi-spike/spike.zig" else "tools/wasi-spike/callback.zig"),
         .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
         .optimize = .ReleaseSmall,
     });
     spike_mod.addImport("async", b.createModule(.{ .root_source_file = b.path("src/wasi/async.zig") }));
     const spike_core = b.addExecutable(.{ .name = "wasi-spike", .root_module = spike_mod });
     spike_core.entry = .disabled;
-    spike_core.root_module.export_symbol_names = &.{ "wasi:cli/run@0.3.2#run", "cabi_realloc" };
+    spike_core.root_module.export_symbol_names = if (lift == .sync)
+        &.{ "wasi:cli/run@0.3.2#run", "cabi_realloc" }
+    else
+        &.{ "[async-lift]wasi:cli/run@0.3.2#run", "[callback][async-lift]wasi:cli/run@0.3.2#run", "cabi_realloc" };
     const embed = b.addSystemCommand(&.{ "wasm-tools", "component", "embed", "--world", "spike" });
     embed.addDirectoryArg(b.path("tools/wasi-spike/wit"));
     embed.addArtifactArg(spike_core);

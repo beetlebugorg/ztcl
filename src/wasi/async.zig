@@ -44,7 +44,7 @@ pub const Copy = struct {
     count: u32,
 
     pub fn of(raw: u32) Copy {
-        return .{ .state = @enumFromInt(@as(u4, @truncate(raw))), .count = raw >> 4 };
+        return .{ .state = @fromBackingInt(@intCast(@as(u4, @truncate(raw)))), .count = raw >> 4 };
     }
 };
 
@@ -82,7 +82,7 @@ pub const WaitSet = struct {
     pub fn wait(s: WaitSet) struct { event: Event, waitable: u32, payload: u32 } {
         var out: [2]u32 = .{ 0, 0 };
         const code = root.@"[waitable-set-wait]"(s.handle, &out);
-        return .{ .event = @enumFromInt(code), .waitable = out[0], .payload = out[1] };
+        return .{ .event = @fromBackingInt(@intCast(code)), .waitable = out[0], .payload = out[1] };
     }
 };
 
