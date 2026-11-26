@@ -233,3 +233,24 @@ test "isolate on Windows: an isolated thread opens the root folder of its creato
     _ = try ev(&it, "thread::release $t");
     try t.expectEqualStrings("0", try ev(&it, "thread::join $t"));
 }
+
+test "isolate on Windows: -files host gives an isolated thread the files of the host" {
+    if (!on or comptime !tcl.isothread.supported) return error.SkipZigTest;
+    var f: Fixture = undefined;
+    if (!try f.init("thread-host")) return error.SkipZigTest;
+    defer f.deinit();
+    var it: tcl.Interp = undefined;
+    try hostInterp(&it);
+    defer it.deinit();
+    it.iso_runner = f.exe;
+    try it.allow(@backingInt(tcl.interp.Capability.thread) | @backingInt(tcl.interp.Capability.exec));
+    try it.setVar("base", .{ .str = try ev(&f.it, "set base") });
+    _ = try ev(&it, "set t [thread::create -isolation process -files host -joinable {thread::wait}]");
+    // The folder next to the root is under the folder of the user, which
+    // an AppContainer cannot read.
+    try t.expectEqualStrings("secret", try ev(&it, "thread::send $t [list apply {f {set fh [open $f]; set d [read $fh]; close $fh; set d}} $base/outside/secret.txt]"));
+    // The job still allows one process only, so exec fails in the child.
+    try t.expectEqualStrings("couldn't execute \"cmd\": I/O error", try ev(&it, "thread::send $t {catch {exec cmd /c echo hi} m; set m}"));
+    _ = try ev(&it, "thread::release $t");
+    try t.expectEqualStrings("0", try ev(&it, "thread::join $t"));
+}

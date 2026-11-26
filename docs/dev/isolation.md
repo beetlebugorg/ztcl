@@ -142,6 +142,13 @@ The default keeps the scripts working: the parent runs the sends of a child as t
 - At the `vm`, `vm-confidential`, and `wasm` levels a descriptor cannot cross, so the channel stays in the parent and the child gets a proxy channel: each read and write of the child is `CHAN data`, with credits (`CHAN credit`, 256 KiB to start) so a fast writer cannot fill the memory of the other side. `fileevent` on a proxy channel works from the credits and the data that arrived.
 - A server socket and a command pipeline stay with their thread, as today. A transfer of one gives `ZTCL ISOLATION TRANSFER`, with a message that names the level.
 
+## Files
+
+- `START` gives the root folder of the creator and its current folder, and the child opens that root as its jail (`fsroot.setRoot`) before its first script. The sandbox of each platform gives the child that folder only.
+- A creator in host mode with the capability `file` or `channels` gets `ZTCL ISOLATION HOSTFILES` from `thread::create` at the level `process` or a stronger level: "host file mode is not available in an isolated thread: give the thread a root folder, or pass -files host". The sandbox gives the child no folder of the user, so a silent host mode there gives only errors of access later. The rule is the same on each platform.
+- `thread::create -files host` gives the child the files of the host (`files` 1 in `START`), with the other parts of the isolation in place: the crash of the child ends only the child, the limits of the system apply, and the network and the processes stay limited where the platform can. A creator with a root folder gets `ZTCL ISOLATION HOSTFILES` for `-files host`, so a thread never gets more files than its creator.
+- On Windows an AppContainer reaches no folder of the user, so a child of `-files host` runs with no AppContainer (`Spawn.host_files`). It keeps the Job Object with each of its limits, and gets a token from `CreateRestrictedToken` with `DISABLE_MAX_PRIVILEGE` and the group of the administrators for deny only. It loses the network limit of the AppContainer: the capability `socket` in the child is then the only limit of the network. It also loses the limits of an AppContainer on the objects of the session, such as named pipes and the registry of the user.
+
 ## Limits and cancels
 
 - The child enforces the compute limit and the memory limit of the thread in its own interpreter, as a thread does today. The limits come in `START`.
@@ -176,8 +183,7 @@ The default keeps the scripts working: the parent runs the sends of a child as t
 - An AppContainer cannot read the runner under the folder of a user, so the first spawn copies the runner into `%TEMP%\ztcl-iso`, a folder that each AppContainer can read and run.
 - A child with a root folder starts in it, so a relative path of a script names a file in the root.
 - The job of a child of `thread::create -isolation process` ends it past the memory limit of the thread plus 64 MiB for the runtime (`isothread.sandboxMem`). A thread with no memory limit gets a job with no memory limit.
-- A creator with a root folder and the capability `file` or `channels` gives its root and its current folder in `START`, and the parent gives the AppContainer of the child read and write access to that folder only. The child opens it as its jail (`fsroot.setRoot`). A creator in host mode gives host mode, and its child reaches only the folders that an AppContainer can read, such as `C:\Windows`.
-
+- A creator with a root folder and the capability `file` or `channels` gives its root and its current folder in `START`, and the parent gives the AppContainer of the child read and write access to that folder only. The child opens it as its jail (`fsroot.setRoot`).
 The transport (`isoproto.Transport` over the pipe) and the child side of the protocol come with steps 2 and 3. Until then the runner skips `--iso-handle`.
 
 ## Questions
