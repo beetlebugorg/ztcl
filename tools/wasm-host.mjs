@@ -119,5 +119,26 @@ check(!r2.ok && r2.result === `invalid DOM handle "${second}"`, `a handle outsid
 check(!ev("dom text dom99").ok, "an unknown handle is an error");
 d.close();
 
+// #26 task 03: `clock` follows the clock of the host.
+const noClock = await Interp.create(host);
+check(noClock.eval("info commands clock").result === "", "clock is absent by default");
+noClock.close();
+let fake = 1700000000123;
+const c = await Interp.create(host, { allow: ["clock"], now: () => fake });
+check(c.eval("clock milliseconds").result === "1700000000123", "clock milliseconds follows the host");
+fake += 2500;
+check(c.eval("clock seconds").result === "1700000002", "clock seconds follows the host");
+check(c.eval("clock format 0 -format %Y -gmt 1").result === "1970", "clock format in UTC");
+c.close();
+// A zone comes from the host as TZif bytes. The check needs the zone
+// files of the system.
+const { existsSync, readFileSync } = await import("node:fs");
+if (existsSync("/usr/share/zoneinfo/America/New_York")) {
+  const z = await Interp.create(host, { allow: ["clock"], zone: (name) => readFileSync(`/usr/share/zoneinfo/${name}`) });
+  const r = z.eval("clock format 0 -format %H -timezone :America/New_York");
+  check(r.ok && r.result === "19", `a zone of the host (got ${r.result})`);
+  z.close();
+} else console.log("SKIP: no /usr/share/zoneinfo");
+
 if (failed) process.exit(1);
 console.log("wasm host ok");
