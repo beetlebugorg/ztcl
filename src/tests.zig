@@ -626,6 +626,13 @@ test "regexp, regsub, and the -regexp options" {
         .{ "regexp -inline -indices -nocase {B+} \\u00e9\\u00e9abbb", "{3 5}" },
         .{ "regexp -inline -indices {\\u65e5} xx\\u00e9\\u65e5", "{3 3}" },
         .{ "regexp -inline -start 3 -indices {a*b} aabxab", "{4 5}" },
+        // The lazy DFA: threads of more than one start, a character
+        // above 255, and a match after many cached steps.
+        .{ "regexp -all -inline {[a-z]+ps} {the jumps cups x}", "jumps cups" },
+        .{ "regexp -indices {ab*c|bd} abbbbd m; set m", "4 5" },
+        .{ "regexp -inline -indices {x[ab]*y} xaxbby", "{2 5}" },
+        .{ "regexp -inline -indices {a[^ ]*s} \"a\\u00e9 b a\\u00e9\\u00e9s\"", "{5 8}" },
+        .{ "regsub -all {o[^ ]*s} {foos boots so} <&>", "f<oos> b<oots> so" },
         .{ "regexp -indices {an+} banana m; set m", "1 2" },
         .{ "regexp -nocase {HELLO} {say hello}", "1" },
         .{ "regexp {a|ab} ab m; set m", "ab" },
