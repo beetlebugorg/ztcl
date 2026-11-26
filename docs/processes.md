@@ -88,7 +88,7 @@ The details for each system follow.
 
 ## Platforms
 
-| | Linux | macOS (arm64) | Windows (x86-64) |
+| | Linux | macOS (arm64 and x86-64) | Windows (x86-64) |
 |---|---|---|---|
 | Separators of a path | `/` | `/` | `/`, `\`, and a drive (`C:`) |
 | `PATH` with none in `env` | `/usr/bin:/bin` | `/usr/bin:/bin` | the system folder (`C:\Windows\System32`) |
@@ -108,7 +108,7 @@ Windows also has these rules:
 - With no console in the parent (a GUI program such as ztk), each program starts with `CREATE_NO_WINDOW`, so no console window opens. With a console, a program shares it.
 - An access violation or a stack overflow of a program is `CHILDKILLED PID SIGSEGV`, an illegal instruction `SIGILL`, a division by zero `SIGFPE`, and Ctrl-C `SIGINT`.
 
-`exec` does not exist on WebAssembly, on x86-64 macOS, or on arm64 Windows.
+`exec` does not exist on WebAssembly or on arm64 Windows.
 
 ## Examples
 

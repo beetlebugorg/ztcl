@@ -61,7 +61,7 @@ const linux = sys.os;
 
 const builtin = @import("builtin");
 const on_mac = builtin.os.tag == .macos;
-pub const supported = builtin.os.tag == .linux or (on_mac and builtin.cpu.arch == .aarch64);
+pub const supported = builtin.os.tag == .linux or on_mac;
 
 pub const Host = struct {
     /// The host programs that a script can run. An entry with no `/` is
