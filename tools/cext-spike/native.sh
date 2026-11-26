@@ -4,7 +4,8 @@
 # SQLite test file on tclsh with it, and writes the counts of each slot
 # to $SPIKE/native/out/NAME.slots. Run fetch.sh first.
 #   tools/cext-spike/native.sh [-j N]
-# FILES (default *.test) picks the test files.
+# FILES (default *.test) picks the test files, or LIST names a file
+# with one name of a test file on each line, with no .test.
 # SPDX-License-Identifier: BSD-2-Clause
 set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -19,7 +20,11 @@ cc -O2 -fPIC -shared -DUSE_TCL_STUBS -DSQLITE_ENABLE_MATH_FUNCTIONS -DSQLITE_ENA
   -DSQLITE_THREADSAFE=1 -I"$tcl/generic" -I"$SPIKE/bld" "$SPIKE/bld/tclsqlite3.c" \
   "$rec/recstub.o" "$rec/tramp.o" -o "$rec/librecsqlite.so" -lm
 out=$SPIKE/native/out; mkdir -p "$out" "$SPIKE/native/work"; : > "$out/status"
-ls "$SPIKE"/src/sqlite-src-3540100/test/${FILES:-*.test} | xargs -P "$jobs" -I{} sh -c '
+if [ -n "${LIST:-}" ]; then
+  sed "s|^|$SPIKE/src/sqlite-src-3540100/test/|; s|\$|.test|" "$LIST"
+else
+  ls "$SPIKE"/src/sqlite-src-3540100/test/${FILES:-*.test}
+fi | xargs -P "$jobs" -I{} sh -c '
   n=$(basename {} .test); d=$SPIKE/native/work/$n; mkdir -p $d; cd $d
   t0=$(date +%s%N)
   RECSTUB_OUT='"$out"'/$n.slots timeout 60 tclsh '"$here"'/one.tcl {} > '"$out"'/$n.log 2>&1

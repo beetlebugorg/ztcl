@@ -14,7 +14,7 @@ Issue #1 has the goal: load an existing Tcl package with a C module through an o
 | Task | Result |
 |---|---|
 | [01](01-native.md) | Spike, native: build the Tcl binding of SQLite against the Tcl 8.6 stubs with a recording table, run its tests on tclsh with the recording table in front of the real one, and report the slots that it calls, out of the 636 public and 223 internal slots of Tcl 8.6. |
-| 02 | Spike, WebAssembly: build the same binding with `zig cc -target wasm32-wasi` and a recording shim, run its tests in Node.js with stub imports that forward to the wasm build of ztcl, and report the slots, the module size, and the speed against task 01. |
+| [02](02-wasm.md) | Spike, WebAssembly: build the same binding with `zig cc -target wasm32-wasi` and a recording shim, run its tests in Node.js with stub imports that forward to the wasm build of ztcl, and report the slots, the module size, and the speed against task 01. |
 | 03 | The result page `docs/dev/cext.md`: the slots of both spikes, the shape of the `Tcl_Obj` bridge (a shadow `Tcl_Obj` for each value, synced at each call), and the choice for the user. |
 | 04 | After the choice: the bridge for the slots of task 03, one group of slots for each branch. |
 
@@ -28,3 +28,4 @@ Issue #1 has the goal: load an existing Tcl package with a C module through an o
 ## State
 
 - Task 01: [01-native.md](01-native.md). The binding called 56 public slots and no internal slot.
+- Task 02: [02-wasm.md](02-wasm.md). The module called 53 public slots, each one also in task 01. 636 test files have the same counts as in task 01.
