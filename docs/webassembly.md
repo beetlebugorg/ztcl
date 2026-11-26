@@ -230,7 +230,7 @@ The module of ABI version 1 has these parts:
 - `run(n, seed, in_mask, out_mask, compute_limit) -> i64`. Bit k of `in_mask` marks the field k as present, in the order `x y z width height speed flow feature layer path dist`. Bit k of `out_mask` marks the output k, in the order `offset move_x move_y width flow speed skip`. The result is the count of compute units, -1 at the compute limit, or -2 when `n` is more than `cap`.
 - The custom section `ztcl.point`: JSON with the proc, its parameters and outputs, the feature names, the block size, and the compute units of the setup and of one block of points.
 
-The host writes the columns at the offsets, calls `run`, and reads the outputs. A module keeps no state between calls. The outputs of a call are equal, bit for bit, to `Program.run` of the native interpreter: `tools/point-wasm-diff.sh` checks each fixed proc of `tests/point/`. [The design](dev/wasm-compile.md) has the details, and `bench/point-wasm.tsv` has the speed against the native `Program.run`.
+The host writes the columns at the offsets, calls `run`, and reads the outputs. A module keeps no state between calls. The outputs of a call are equal, bit for bit, to `Program.run` of the native interpreter: `tools/point-wasm-diff.sh` checks each fixed proc of `tests/point/`. [The design](dev/wasm-compile.md) has the details, and `bench/point-wasm.tsv` has the speed against the native `Program.run`. On an Intel Core i7-6700K with Node.js 26.12.0, a module is 1.7 to 2.7 times slower than the native `Program.run` for the procs `branches`, `elseif_noise`, and `ops`, about equal for `fuzzy`, and faster for `int_zero`.
 
 ## Examples
 
@@ -300,7 +300,7 @@ The second line goes to stderr, with the time of the script. The exit code is 1 
 
 ### Point procs
 
-`ztcl-simd.wasm` (`zig build wasm-simd`) has point procs. `ztcl.wasm` does not, so that it stays in its size limit. With the option `point: true`, `Interp.create` adds `point proc` and the output commands. `pointProc(name)` gives the columns that the proc writes (`outputs`) and `run`, which runs the proc over typed arrays:
+`ztcl-simd.wasm` (`zig build wasm-simd`) and `ztcl-host.wasm` (`zig build wasm-host`) have point procs. `ztcl.wasm` does not, so that it stays in its size limit. With the option `point: true`, `Interp.create` adds `point proc` and the output commands. `pointProc(name)` gives the columns that the proc writes (`outputs`) and `run`, which runs the proc over typed arrays:
 
 ```js
 const tcl = await Interp.create("ztcl-simd.wasm", { point: true });

@@ -19,7 +19,7 @@ The user answers the questions below before task 01 merges.
 - Task 03: merged in PR #87. `ztcl compile` and `tools/point-wasm-diff.sh`. The module equals `Program.run` in bits for the fixed procs of `tests/point/`, in both forms.
 - Task 04: merged in PR #88. `Program.steps(n)` and `tools/point-wasm-limits.mjs`.
 - Task 05: PR #89. The fuzzer and the fixes of decisions 8 and 9.
-- Task 06: `tools/point-wasm-bench.mjs` and `bench/point-wasm.tsv`. The gate fails for 4 of the 5 fixed procs. Only `int_zero` is faster in the module. The task stops here for a choice of the user. The numbers came from `node tools/point-wasm-bench.mjs --write bench/point-wasm.tsv` on 2026-11-26, on an Intel Core i7-6700K with Node.js 26.12.0 on Linux. The three procs with `noise2` or `noise3` are 1.7 to 2.7 times slower in the module, and `elseif_noise` has only `noise3`. So the noise functions of the module are the first suspect. A wasm profile of the module was not made.
+- Task 06: done in PR #184. `tools/point-wasm-bench.mjs` and `bench/point-wasm.tsv`. The gate fails for 4 of the 5 fixed procs. Only `int_zero` is faster in the module. The numbers came from `node tools/point-wasm-bench.mjs --write bench/point-wasm.tsv` on 2026-11-26, on an Intel Core i7-6700K with Node.js 26.12.0 on Linux. The three procs with `noise2` or `noise3` are 1.7 to 2.7 times slower in the module, and `elseif_noise` has only `noise3`. So the noise functions of the module are the first suspect. A wasm profile of the module was not made. On 2026-11-26 the user accepted the gate result as it is, and task 06 is done. Point procs stay opt-in in wasm: `ztcl-simd.wasm` and `ztcl-host.wasm` have them, and the default `ztcl.wasm` does not, for its size limit of 1.5 MB.
 - Task 07: PR #185. `ztcl compile -manifest`, `examples/point-wasm/run.mjs`, and the section "Compile a point proc" of `docs/webassembly.md`.
 
 ## Platforms
@@ -73,7 +73,7 @@ The user answers the questions below before task 01 merges.
 
 ## Questions for the user
 
-1. **The speed gate.** Issue 3 asks that each point is faster than the vector path of the interpreter. The plan compares the module with the interpreter's vector path in the same host: `Program.run` in a wasm build of ztcl, both in Node.js. The other choice is the native `Program.run`. Which one?
+1. **The speed gate.** Answered on 2026-11-26: the user accepted the result of task 06 against the native `Program.run`. Issue 3 asks that each point is faster than the vector path of the interpreter. The plan compares the module with the interpreter's vector path in the same host: `Program.run` in a wasm build of ztcl, both in Node.js. The other choice is the native `Program.run`. Which one?
 2. **The step unit.** The plan counts one compute unit for each operation of the program for each block of 1024 points. The vector path of the interpreter counts no steps today. Is that unit right for zslice?
 3. **The scalar form.** The plan has a `-simd off` form for a host with no wasm SIMD. The zslice plugin runtime is not chosen yet. Is the scalar form needed?
 4. **The manifest.** The plan writes a manifest fragment with `-manifest FILE` and puts the facts in the custom section `ztcl.point`. Does zslice want the fragment, or only the custom section?
