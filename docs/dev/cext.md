@@ -22,6 +22,22 @@ These are the slots in groups, one group for each branch of task 04:
 
 One package gives one list. Other packages use other slots, for example the channel types of a socket package or `Tcl_CreateObjType`. The recording table of task 01 measures a new package with no change.
 
+## Coverage
+
+The two paths fill the same groups. A row gives the slots of the group that each path has, and the test of the path. The WebAssembly path has the slots in `src/cext/wasm_stubs.zig`, with the unit tests of `zig build test-cext`.
+
+| Group | SQLite slots | WebAssembly | Native |
+|---|---:|---|---|
+| Memory | 2 | 2 of 2, and `Tcl_Realloc`, `Tcl_AttemptAlloc`, `Tcl_AttemptRealloc` | |
+| Objects | 22 | 22 of 22, and 19 more setters, getters, and list slots | |
+| Results | 8 | 8 of 8, and `Tcl_AppendElement` | |
+| Commands | 3 | 3 of 3, and `Tcl_DeleteCommandFromToken` | |
+| Scripts | 6 | 6 of 6, and `Tcl_EvalEx`, `Tcl_NRCallObjProc` | |
+| Variables | 2 | 2 of 2, and 6 more get and set slots | |
+| Dynamic strings | 4 | 4 of 4, and 5 more | |
+| Packages and helpers | 5 | 5 of 5 | |
+| Channels | 4 | 0 of 4 | |
+
 ## The shape of the Tcl_Obj bridge
 
 C code reads and writes fields of a `Tcl_Obj` directly, so each value that goes to the module has a shadow `Tcl_Obj` in the memory of the module. Task 02 used this shape, and it ran 636 test files with the same counts as tclsh:

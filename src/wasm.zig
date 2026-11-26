@@ -476,3 +476,9 @@ fn ztcl_allow(h: *Handle, bits: u32) callconv(.c) i32 {
     }
     return 0;
 }
+
+// ---- C packages in WebAssembly (`-Dcext-wasm`, docs/dev/cext-tasks/04w-wasm-bridge.md) ----
+
+comptime {
+    if (@hasDecl(build_options, "cext") and build_options.cext) _ = @import("wasm_cext.zig");
+}

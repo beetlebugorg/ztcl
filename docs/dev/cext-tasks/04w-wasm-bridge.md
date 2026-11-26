@@ -14,7 +14,7 @@ The spike of task 02 kept the objects in JavaScript, so each slot was a call thr
 
 1. **`libztclstubs.a`, in Zig, linked into the package.** It is the stubs table of the package. It has the shadow `Tcl_Obj` records, their reference counts and types, the text form, lists, byte arrays, dynamic strings, and the interp result. The slots of these groups make no call out of the module: memory, objects, results, dynamic strings, `Tcl_GetIndexFromObjStruct`, and `Tcl_GetVersion`. A small C file in the library has the variadic slots (`Tcl_AppendResult`, `Tcl_VarEval`, `Tcl_SetErrorCode`, `Tcl_AppendStringsToObj`, `Tcl_ObjPrintf`, `Tcl_AppendPrintfToObj`, `Tcl_Panic`). It collects the arguments and calls the Zig code.
 2. **A small import set to ztcl.** Only the commands, the scripts, and the variables leave the module. The imports of the module `ztcl` are `cmd_create`, `cmd_delete`, `eval`, `var_get`, `var_set`, and `pkg_provide`. A value crosses as its kind and an int, a double, or text. An int and a double cross as a wasm `i64` or `f64` with no text form.
-3. **ztcl exports.** ztcl.wasm and ztcl-host.wasm get exports for these imports behind the build option `-Dcext`, off by default. A command of the package is a command of ztcl. Its call goes to the export `ztcl_cext_dispatch` of the package with the id of the command and the arguments.
+3. **ztcl exports.** ztcl.wasm and ztcl-host.wasm get exports for these imports behind the build option `-Dcext-wasm`, off by default. A command of the package is a command of ztcl. Its call goes to the export `ztcl_cext_dispatch` of the package with the id of the command and the arguments.
 4. **Text.** Text crosses through one exchange buffer in each memory and one `memory.copy` in the JavaScript glue. In the wasm engine of #202, the engine copies the text and the glue is absent.
 5. **Compiled scripts.** `eval` of the same text again reuses the compiled script of ztcl. The cache key is the text, and the package gives the address of the object as a hint.
 
@@ -25,7 +25,7 @@ The build of a package needs no generator: `libztclstubs.a` has the complete tab
 | Step | Result |
 |---|---|
 | 1 | `src/cext/wasm_stubs.zig`: the objects, the results, the dynamic strings, and the memory slots. Unit tests in Zig on the native target. |
-| 2 | The exports of ztcl (`-Dcext`), the glue in `web/ztcl.mjs` (`Interp.loadPackage(bytes)`), and the `load` command for a `.wasm` file in the `package` capability. |
+| 2 | The exports of ztcl (`-Dcext-wasm`), the glue in `web/ztcl.mjs` (`Interp.loadPackage(bytes)`), and the `load` command for a `.wasm` file in the `package` capability. |
 | 3 | The SQLite binding with `libztclstubs.a`: the test files of task 02 give the same counts. |
 | 4 | The cost of a call: `bench.tcl` and a micro bench of one slot of each group, against tclsh with the native binding. |
 | 5 | The other groups of the public table, in the order of their use by the measured packages. Each group adds its rows to the coverage table of the result page. |
@@ -34,6 +34,23 @@ The build of a package needs no generator: `libztclstubs.a` has the complete tab
 ## Gate
 
 The `insert` part of `tools/cext-spike/bench.tcl` is within 3 times tclsh with the native binding. In task 02, tclsh took 81 ms and the spike took 3,253 ms. The gate is 243 ms on the same machine. Each step reports the 4 parts of `bench.tcl`.
+
+## State
+
+Steps 1 and 2 are in `src/cext/wasm_stubs.zig`, `src/wasm_cext.zig`, and `Interp.loadPackage` of `web/ztcl.mjs`. The table has 90 slots. It has 52 of the 56 slots of the SQLite binding: the 4 slots of channels are absent. `zig build test-cext` runs the unit tests of the library with a fake ztcl. The `load` command of step 2 is still open.
+
+`tools/cext-spike/bridge.sh` builds the binding with `libztclstubs.a` and `ztcl-host.wasm` with `-Dcext-wasm`. `tools/cext-spike/bridge-bench.sh` runs `bench.tcl` 3 times on each side in turns and gives the medians. The run of 2026-11-26 was on a machine with a load average of 3, in ms:
+
+| Part | tclsh | Bridge | Ratio | Ratio of the spike |
+|---|---:|---:|---:|---:|
+| `insert` | 120 | 304 | 2.5 | 40 |
+| `select-list` | 41 | 103 | 2.5 | 23 |
+| `select-script` | 70 | 144 | 2.1 | 104 |
+| `sql-only` | 11 | 18 | 1.6 | 2 |
+
+The `insert` part is within the gate of 3 times. A profile of the `insert` loop had the most time in the VDBE of SQLite, in `Tcl_GetIndexFromObjStruct`, and in the JavaScript glue of each command. The package now keeps the objects of short text arguments in a table by their text, so the index of `Tcl_GetIndexFromObjStruct` stays in the object between calls.
+
+Next: step 3, the test files of task 02 with the bridge, and the 4 channel slots.
 
 ## Resume
 
