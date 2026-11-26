@@ -941,7 +941,7 @@ const Emitter = struct {
         }
         if (i.op == .invoke) {
             // The checks of `Interp.resolve` on the site, as in tier 1. A
-            // valid site calls `call_cached`, and a miss calls `invoke`.
+            // valid site calls `call_direct`, and a miss calls `invoke`.
             const l = e.l;
             const miss = try s.newLabel();
             const called = try s.newLabel();
@@ -955,7 +955,7 @@ const Emitter = struct {
             try s.movRM(.rcx, try x64.at(.rax, l.cmd_ns));
             try s.aluRM(.cmp, .rcx, itAt(l.it_ns));
             try s.jcc(.ne, miss);
-            try e.helperCall(pc, .call_cached);
+            try e.helperCall(pc, .call_direct);
             try s.jmp(called);
             s.bind(miss);
             try e.helperCall(pc, .invoke);

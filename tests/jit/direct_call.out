@@ -1,0 +1,31 @@
+4950
+99
+4950
+0 1 {wrong # args: should be "add a b"}
+1 1 {wrong # args: should be "add a b"}
+2 0 11
+3 0 2
+first second
+global {::ns ::ns} global
+enter traced 1
+enter traced 2
+1 2 3
+1 boom
+boom
+    while executing
+"error boom"
+    (procedure "d0" line 2)
+    invoked from within
+"d0 $x"
+    (procedure "d1" line 3)
+    invoked from within
+"d1 $x"
+    (procedure "deep" line 2)
+    invoked from within
+"deep 3"
+7 seven
+1 {invoked "break" outside of a loop}
+2 lv here
+20
+too many nested evaluations (infinite loop?)
+too many nested evaluations (infinite loop?)

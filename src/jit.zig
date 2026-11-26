@@ -500,6 +500,21 @@ pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp:
     // A named Code runs in any frame: its variables go by name, so its
     // record has no least frame size.
     if (frame.vars.items.len < f.min_vars) return fallback(it);
+    return call(it, f, code, frame, stack, off, pc, sp);
+}
+
+/// `enter` at address 0 with an empty value stack, for a proc call that
+/// bound each name of the body in a new frame. The compiler gives
+/// address 0 an entry at depth 0, and the frame has `min_vars` entries,
+/// so the checks of `enter` on `pc`, `sp`, and the frame hold.
+pub inline fn enterStart(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp: *u32) Status {
+    if (f.enter_stress or f.entries.len == 0 or f.entries[0] >= f.len) return enter(it, f, code, stack, pc, sp);
+    return call(it, f, code, it.frame, stack, f.entries[0], pc, sp);
+}
+
+/// Calls the function `f` at the byte offset `off` of the address
+/// `pc.*`, after the checks of the entry.
+inline fn call(it: *Interp, f: *Fn, code: *vm.Code, frame: *interp.Frame, stack: [*]Value, off: u32, pc: *u32, sp: *u32) Status {
     var ctx: EnterCtx = .{
         .it = it,
         .code = code,
@@ -507,7 +522,7 @@ pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp:
         .stack = stack,
         .helpers = f.helpers,
         .target = @intFromPtr(f.base) + off,
-        .pc = p,
+        .pc = pc.*,
         .sp = sp.*,
         .err = 0,
         .empty = &Value.empty,
@@ -519,8 +534,14 @@ pub fn enter(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp:
     const status = func(&ctx);
     pc.* = ctx.pc;
     sp.* = ctx.sp;
-    if (status == tier1.status_done) return .done;
-    if (status == tier1.status_error) {
+    return statusOf(it, status, &ctx);
+}
+
+/// The `Status` of the status word `raw` of a function that ran with
+/// the context `ctx`.
+pub inline fn statusOf(it: *Interp, raw: u32, ctx: *const EnterCtx) Status {
+    if (raw == tier1.status_done) return .done;
+    if (raw == tier1.status_error) {
         it.jit.?.err = ctx.err;
         return .failed;
     }
