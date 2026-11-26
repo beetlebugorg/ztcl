@@ -65,6 +65,9 @@ jobs:
           printf 'puts hello\n' > "$RUNNER_TEMP/h.tcl"
           { echo first; zig-out/bin/ztcl "$RUNNER_TEMP/h.tcl"; echo last; } > "$RUNNER_TEMP/h.out"
           test "$(tr -d '\r' < "$RUNNER_TEMP/h.out" | tr '\n' ' ')" = "first hello last "
+      - name: Run the examples of the module pages
+        if: runner.os == 'Linux'
+        run: python3 -I tools/doc-examples.py zig-out/bin/ztcl docs/modules/vt.md
       - name: Check the format
         if: runner.os == 'Linux'
         run: zig fmt --check build.zig src
