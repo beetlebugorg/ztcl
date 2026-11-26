@@ -21,7 +21,11 @@ const VaList = std.builtin.VaList;
 extern "c" fn vfprintf(f: *anyopaque, fmt: [*:0]const u8, ap: *VaList) c_int;
 extern "c" fn fprintf(f: *anyopaque, fmt: [*:0]const u8, ...) c_int;
 extern "c" fn fflush(f: ?*anyopaque) c_int;
-extern "c" var stderr: *anyopaque;
+/// The `stderr` of the C library. macOS names it `__stderrp`.
+fn stderr() *anyopaque {
+    const name = if (@import("builtin").os.tag.isDarwin()) "__stderrp" else "stderr";
+    return @extern(**anyopaque, .{ .name = name }).*;
+}
 
 /// `TCL_DYNAMIC` of `tcl.h`: free the block with `Tcl_Free`.
 const dynamic: usize = 3;
@@ -72,9 +76,9 @@ fn panicVA(fmt: [*:0]const u8, ap: *VaList) callconv(.c) noreturn {
         for (&w) |*x| x.* = @cVaArg(ap, usize);
         p(fmt, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
     } else {
-        _ = vfprintf(stderr, fmt, ap);
-        _ = fprintf(stderr, "\n");
-        _ = fflush(stderr);
+        _ = vfprintf(stderr(), fmt, ap);
+        _ = fprintf(stderr(), "\n");
+        _ = fflush(stderr());
     }
     std.c.abort();
 }

@@ -651,7 +651,7 @@ comptime {
 const testing = std.testing;
 
 fn call(comptime n: usize, comptime F: type) F {
-    return @ptrCast(table.slots[n]);
+    return @ptrCast(@alignCast(table.slots[n].?));
 }
 
 test "the layout of Tcl_Obj" {
