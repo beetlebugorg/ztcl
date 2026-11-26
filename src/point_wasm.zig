@@ -722,6 +722,38 @@ pub fn metadata(a: Allocator, p: *const point.Program, l: Layout, opts: Options)
     }, .{});
 }
 
+/// The manifest fragment of `ztcl compile -manifest`: the facts that a
+/// host checks before it loads the module. The module has no imports,
+/// so the list of imports is empty.
+pub fn manifest(a: Allocator, p: *const point.Program, l: Layout, opts: Options) Allocator.Error![]u8 {
+    const Column = struct { name: []const u8, global: []const u8 };
+    var ins: std.ArrayList(Column) = .empty;
+    for (p.params) |q| {
+        const name = @tagName(q);
+        try ins.append(a, .{ .name = name, .global = if (q == .feature) "feature" else try std.fmt.allocPrint(a, "in_{s}", .{name}) });
+    }
+    var outs: std.ArrayList(Column) = .empty;
+    for (outputs(p), 0..) |b, k| if (b) {
+        const name = @tagName(@as(point.Out, @fromBackingInt(@intCast(k))));
+        try outs.append(a, .{ .name = name, .global = try std.fmt.allocPrint(a, "out_{s}", .{name}) });
+    };
+    return std.json.Stringify.valueAlloc(a, .{
+        .abi = abi_version,
+        .proc = p.name,
+        .exports = .{ .run = "run", .memory = "memory", .cap = "cap", .limits = "limits" },
+        .inputs = ins.items,
+        .outputs = outs.items,
+        .features = opts.features,
+        .block = point.block,
+        .setup_compute_units = p.setup.len,
+        .block_compute_units = p.ops.len,
+        .cap = l.cap,
+        .memory = @as(u64, l.pages) * 65536,
+        .simd = opts.simd,
+        .imports = [0][]const u8{},
+    }, .{ .whitespace = .indent_2 });
+}
+
 test "the fuzzy skin proc compiles to a module in both forms" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -745,6 +777,9 @@ test "the fuzzy skin proc compiles to a module in both forms" {
         try std.testing.expect(c.layout.cap > 1000);
         const secs = try w.readSections(a, c.bytes);
         try std.testing.expectEqual(@as(u8, 0), secs[secs.len - 1].id);
+        const m = try manifest(a, prog, c.layout, .{ .simd = simd });
+        try std.testing.expect(std.mem.indexOf(u8, m, "\"global\": \"feature\"") != null);
+        try std.testing.expect(std.mem.indexOf(u8, m, "\"imports\": []") != null);
     }
     try std.testing.expectError(error.MemoryTooSmall, compile(a, prog, .{ .max_mem = 65536 }));
 }

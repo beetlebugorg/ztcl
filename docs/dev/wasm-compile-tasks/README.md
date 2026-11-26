@@ -20,7 +20,7 @@ The user answers the questions below before task 01 merges.
 - Task 04: merged in PR #88. `Program.steps(n)` and `tools/point-wasm-limits.mjs`.
 - Task 05: PR #89. The fuzzer and the fixes of decisions 8 and 9.
 - Task 06: `tools/point-wasm-bench.mjs` and `bench/point-wasm.tsv`. The gate fails for 4 of the 5 fixed procs. Only `int_zero` is faster in the module. The task stops here for a choice of the user. The numbers came from `node tools/point-wasm-bench.mjs --write bench/point-wasm.tsv` on 2026-11-26, on an Intel Core i7-6700K with Node.js 26.12.0 on Linux. The three procs with `noise2` or `noise3` are 1.7 to 2.7 times slower in the module, and `elseif_noise` has only `noise3`. So the noise functions of the module are the first suspect. A wasm profile of the module was not made.
-- Task 07: not started.
+- Task 07: PR #185. `ztcl compile -manifest`, `examples/point-wasm/run.mjs`, and the section "Compile a point proc" of `docs/webassembly.md`.
 
 ## Platforms
 
