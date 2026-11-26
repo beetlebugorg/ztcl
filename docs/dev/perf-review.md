@@ -30,7 +30,7 @@ The rank is the expected gain divided by the effort. A ratio above 1 means that 
 | 3 | `lmap` has no bytecode | 67.5 ms | 39.1 ms | 1.7 | Small | Done: 22.4 ms |
 | 4 | `lsearch -exact` orders each item | 14.7 ms | 9.0 ms | 1.6 | Small | Done: 6.6 ms |
 | 5 | `string map` tries each key at each byte | 26.6 ms | 16.9 ms | 1.6 | Small | Done: 15.6 ms |
-| 6 | The regex search has no literal scan | 6.05 ms | 1.00 ms | 6.0 | Medium | Done, step 1: 0.5 ms |
+| 6 | The regex search has no literal scan | 6.05 ms | 1.00 ms | 6.0 | Medium | Done: 0.3 ms |
 | 7 | Array elements go through the name of the variable | 104.8 ms | 70.9 ms | 1.5 | Medium | Done: 55.4 ms |
 | 8 | A proc call uses about 250 instructions in `callProcFast` | 14.8 ms | 70.5 ms | 0.2 | Large | Open |
 | 9 | `append` in JIT code goes through two helpers | 243.1 M instructions | 812.4 M | 0.3 | Medium | Done: 200.4 M |
@@ -117,7 +117,18 @@ regsub -all {\d+} $s X
 - Change, step 1: at compile time, find the set of bytes that can start a match, and the literal prefix when the pattern has one. In `simulate`, when the thread list is empty, go to the next candidate with `std.mem.indexOfScalar`, `indexOfAny`, or `indexOf`.
 - Change, step 2: a lazy DFA for patterns with no back reference and no capture need.
 - Expected gain: step 1 makes the no-match case a `memchr` scan. `tclsh` shows 1.00 ms for it. The step counter of the matcher must give the same count as today, or the limits of a script change.
-- Done: step 1. When the closure of instruction 0 has no assert, no lookahead, and no match, `compile` keeps a table of the characters that a first thread accepts (`Start` in `src/regex.zig`). With no live thread, `simulate` goes to the next such character with a scan and adds the ticks of the skipped positions, so the step count does not change. The proc with the pattern `zzz` runs in 0.5 ms against 2.0 ms for `tclsh`. The proc with `regsub -all` runs in 2.5 ms against 6.4 ms. Both procs include the `string repeat`. Before the change they ran in 5.6 ms and 8.2 ms on the same machine. Step 2 is open.
+- Done: step 1. When the closure of instruction 0 has no assert, no lookahead, and no match, `compile` keeps a table of the characters that a first thread accepts (`Start` in `src/regex.zig`). With no live thread, `simulate` goes to the next such character with a scan and adds the ticks of the skipped positions, so the step count does not change. The proc with the pattern `zzz` runs in 0.5 ms against 2.0 ms for `tclsh`. The proc with `regsub -all` runs in 2.5 ms against 6.4 ms. Both procs include the `string repeat`. Before the change they ran in 5.6 ms and 8.2 ms on the same machine.
+- Done: step 2. Before the first match, a program with a `Start` and with no assert and no lookahead runs as a lazy DFA (`Dfa` in `src/regex.zig`). A state is the list of thread instructions at a position, with the rank of the start of each thread. The ticks of one step depend only on the instructions and the character, so each transition keeps its ticks, and the step count does not change. A transition also keeps the source of the start of each rank. A step that reaches a match has a mark, and the simulation goes on from that step. One call of `regexp` or `regsub` makes at most 64 states. The script of 20 patterns on an ASCII text and on a text with non-ASCII characters gives the output of `tclsh` and the step count of main (410,308), and a step limit sweep gives the same output and steps as main. Best of 5, on the text of 360,000 bytes:
+
+| Proc | main | DFA | `tclsh` |
+|---|---|---|---|
+| `regexp -all {zzz}` | 0.30 ms | 0.30 ms | 0.95 ms |
+| `regsub -all {\d+} $s X` | 2.49 ms | 2.51 ms | 4.97 ms |
+| `regexp -all {[a-z]+ps}` | 16.00 ms | 2.77 ms | 7.67 ms |
+| `regexp -all {(fox\|dog) [0-9]+}` | 5.04 ms | 3.54 ms | 10.69 ms |
+| `regexp -all {o[^ ]*s}` | 3.44 ms | 0.69 ms | 0.95 ms |
+
+- The instruction count of one `regsub -all {[a-z]+ps}` call goes from 200.3 M to 42.7 M. For `regsub -all {\d+}` it goes from 25.8 M to 27.1 M: each of the 12,000 matches starts a new search, and the DFA of a search ends at the first digit.
 
 ## 7. Array elements go through the name of the variable
 
