@@ -18,6 +18,7 @@ Issue #1 has the goal: load an existing Tcl package with a C module through an o
 | [03](../cext.md) | The result page `docs/dev/cext.md`: the slots of both spikes, the shape of the `Tcl_Obj` bridge (a shadow `Tcl_Obj` for each value, synced at each call), and the choice for the user. |
 | 04 | After the choice: the bridge for the slots of task 03, one group of slots for each branch. |
 | [04w](04w-wasm-bridge.md) | The bridge of the WebAssembly path: the stubs table in a Zig library in the package, and the imports to ztcl for commands, scripts, and variables. |
+| [04e](04e-wasm-engine.md) | The plan for native ztcl to run the packages of 04w with the WebAssembly engine of #202. |
 
 ## Rules for each task
 
