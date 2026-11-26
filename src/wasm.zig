@@ -59,7 +59,38 @@ const host_imports = @hasDecl(build_options, "wasm_host") and build_options.wasm
 
 const host = struct {
     extern "ztcl_host" fn output(ptr: [*]const u8, len: usize) void;
+    extern "ztcl_host" fn now_ms() f64;
+    extern "ztcl_host" fn zone(ptr: [*]const u8, len: usize) i32;
 };
+
+/// The reply of `ztcl_host.zone`: the address and the length of the TZif
+/// bytes that the host put in the memory of the module with `ztcl_alloc`.
+var zone_reply: [2]u32 = .{ 0, 0 };
+
+fn ztcl_zone_reply() callconv(.c) [*]u32 {
+    return &zone_reply;
+}
+
+fn hostNow(_: ?*anyopaque) i64 {
+    return @intFromFloat(@floor(host.now_ms() * 1000));
+}
+
+fn hostZone(_: ?*anyopaque, name: []const u8, a: std.mem.Allocator) ?[]const u8 {
+    zone_reply = .{ 0, 0 };
+    if (host.zone(name.ptr, name.len) != 0 or zone_reply[1] == 0) return null;
+    const p: [*]u8 = @ptrFromInt(zone_reply[0]);
+    const bytes = p[0..zone_reply[1]];
+    defer gpa.free(bytes);
+    return a.dupe(u8, bytes) catch null;
+}
+
+/// Turns on `clock` with the time and the zones of the host, in
+/// `ztcl-host.wasm` only. Gives 0, or 1 when the memory is full.
+fn ztcl_clock_allow(h: *Handle) callconv(.c) i32 {
+    h.it.clock_host = .{ .now = hostNow, .zone = hostZone };
+    h.it.allow(@backingInt(Capability.clock)) catch return 1;
+    return 0;
+}
 
 /// The text of `puts`. `ztcl-host.wasm` gives it to the host at once
 /// (`ztcl_host.output`), and `ztcl.wasm` keeps it until the eval ends.
@@ -149,7 +180,11 @@ fn ztcl_dom_allow(h: *Handle) callconv(.c) i32 {
 }
 
 comptime {
-    if (host_imports) @export(&ztcl_dom_allow, .{ .name = "ztcl_dom_allow" });
+    if (host_imports) {
+        @export(&ztcl_dom_allow, .{ .name = "ztcl_dom_allow" });
+        @export(&ztcl_clock_allow, .{ .name = "ztcl_clock_allow" });
+        @export(&ztcl_zone_reply, .{ .name = "ztcl_zone_reply" });
+    }
 }
 
 // ---- Point procs (docs/webassembly.md, "Point procs") ----

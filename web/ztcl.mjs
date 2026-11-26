@@ -83,6 +83,8 @@ export class Interp {
       imports.ztcl_host = {
         output: (ptr, len) => self._live(ptr, len),
         dom: (op, h, a, aLen, b, bLen) => self._dom(op, h, a, aLen, b, bLen),
+        now_ms: () => self._now(),
+        zone: (ptr, len) => self._zone(ptr, len),
       };
     }
     const instance = await WebAssembly.instantiate(mod, imports);
@@ -90,7 +92,7 @@ export class Interp {
     return self;
   }
 
-  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null } = {}) {
+  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
@@ -99,6 +101,16 @@ export class Interp {
     this.computeLimit = computeLimit;
     this.onOutput = onOutput;
     if (memLimit != null) this.memLimit = memLimit;
+    // `clock` reads the time of the host (`now`, milliseconds since 1970,
+    // Date.now by default) and the TZif bytes of a zone (`zone(name)`,
+    // a Uint8Array or null).
+    this._now = now ?? (() => Date.now());
+    this._zoneOf = zone;
+    if (allow.includes("clock")) {
+      if (!this.x.ztcl_clock_allow) throw new Error("clock: this module has no clock (use ztcl-host.wasm)");
+      if (this.x.ztcl_clock_allow(this.h) !== 0) throw new Error("ztcl_clock_allow: out of memory");
+      allow = allow.filter((c) => c !== "clock");
+    }
     if (allow.includes("dom")) {
       if (!this.x.ztcl_dom_allow) throw new Error("dom: this module has no DOM access (use ztcl-host.wasm)");
       this._domRoot = domRoot ?? globalThis.document?.body;
@@ -232,6 +244,19 @@ export class Interp {
     const text = this._text(ptr, len);
     this._liveOut += text;
     if (this.onOutput) this.onOutput(text);
+  }
+
+  // The import `ztcl_host.zone`: the TZif bytes of a zone name.
+  _zone(ptr, len) {
+    const bytes = this._zoneOf?.(this._text(ptr, len));
+    if (!bytes || !bytes.length) return 1;
+    const p = this.x.ztcl_alloc(bytes.length);
+    if (!p) return 1;
+    new Uint8Array(this.x.memory.buffer, p, bytes.length).set(bytes);
+    const slot = new Uint32Array(this.x.memory.buffer, this.x.ztcl_zone_reply(), 2);
+    slot[0] = p;
+    slot[1] = bytes.length;
+    return 0;
   }
 
   // The import `ztcl_host.dom` (src/wasmdom.zig). A handle is an index

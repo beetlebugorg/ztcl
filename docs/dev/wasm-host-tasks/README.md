@@ -25,6 +25,7 @@ A wasm module cannot have an optional import: the host must give each import tha
 - Task 01: `ztcl_point_install`, `ztcl_point_compile`, `ztcl_point_outputs`, and `ztcl_point_run` in `ztcl-simd.wasm` (with them, `ztcl.wasm` was 1,532,277 bytes, over its limit of 1,500,000 in `tools/size-report.sh`), `pointProc` of `web/ztcl.mjs`, `zig build wasm-simd`, and `tools/wasm-point.mjs`. `point` is installed only with the option `point: true`, so the commands `offset`, `width`, `speed`, and the others do not appear in each interpreter.
 
 - Task 02: `zig build wasm-host` makes `ztcl-host.wasm` with the import `ztcl_host.output`. `web/ztcl.mjs` gives the import, and `onOutput` gets each `puts` at the time of the call. Each write costs one compute unit in both forms. `tools/wasm-host.mjs` checks both.
+- Task 03: `allow: ["clock"]` in `ztcl-host.wasm` calls the export `ztcl_clock_allow`. The imports `ztcl_host.now_ms` and `ztcl_host.zone` give the time and the TZif bytes of a zone. `Interp.create` has the options `now` (Date.now by default) and `zone(name)`. `tools/wasm-host.mjs` checks a fake clock and a zone of the system.
 
 ## Rules for each task
 
