@@ -67,21 +67,16 @@ class View {
     const probe = document.createElement("canvas").getContext("2d");
     probe.font = this.font;
     this.cellW = probe.measureText("MMMMMMMMMM").width / 10;
-    const cols = this.colsFor(this.poster.clientWidth);
-    const state = el.querySelector("script.zpage-state");
-    const page = state ? JSON.parse(state.textContent) : null;
-    this.shell = await this.mod.Shell.create({ cols, rows: this.rows, computeLimit: LIMIT, files: page ? page.files : FILES });
-    // The state of a docs page runs first, with the same compute limit.
-    this.shell.it.computeLimit = LIMIT;
-    if (page?.setup) {
-      const r = this.shell.it.eval(page.setup);
-      if (!r.ok) this.shell.print(`The state of the page did not load: ${r.result}\n`);
-    }
-    this.shell.print(el.dataset.banner.replaceAll("\\n", "\n") + "\n");
+    this.cols0 = this.colsFor(this.poster.clientWidth);
+    // A shell of the Learn course (class zcourse) fills its panel. It
+    // keeps the commands of the reader for its lesson in sessionStorage.
+    this.course = el.dataset.lesson ? `ztcl-learn:${el.dataset.lesson}` : null;
+    if (this.course) this.rows = Math.max(4, Math.floor((this.poster.clientHeight - 20) / this.lineH));
+    await this.boot(true);
 
     const box = document.createElement("div");
     box.className = "zshell-screen";
-    box.style.height = this.poster.offsetHeight + "px";
+    if (!this.course) box.style.height = this.poster.offsetHeight + "px";
     this.canvas = document.createElement("canvas");
     this.canvas.setAttribute("aria-hidden", "true");
     this.input = document.createElement("textarea");
@@ -122,7 +117,78 @@ class View {
       this.dockBtn.hidden = false;
       this.dockBtn.addEventListener("click", () => { this.dock(!this.docked); this.input.focus({ preventScroll: true }); });
     }
+    if (this.course) {
+      el.querySelector(".zcourse-again")?.addEventListener("click", () => this.again());
+      const size = el.querySelector(".zcourse-size");
+      size?.addEventListener("click", () => {
+        const small = document.body.classList.toggle("zcourse-small");
+        size.textContent = small ? "Make large" : "Make small";
+        size.setAttribute("aria-expanded", String(!small));
+      });
+    }
     this.fit();
+  }
+
+  // A new interpreter with the state of the page. A course shell then
+  // runs the saved commands of the reader for this lesson again.
+  async boot(replay) {
+    const el = this.el;
+    const state = el.querySelector("script.zpage-state");
+    const page = state ? JSON.parse(state.textContent) : null;
+    const cols = this.shell ? this.shell.cols : this.cols0;
+    this.shell?.close();
+    this.shell = await this.mod.Shell.create({ cols, rows: this.rows, computeLimit: LIMIT, files: page ? page.files : FILES });
+    // The state of a docs page runs first, with the same compute limit.
+    this.shell.it.computeLimit = LIMIT;
+    if (page?.setup) {
+      const r = this.shell.it.eval(page.setup);
+      if (!r.ok) this.shell.print(`The state of the page did not load: ${r.result}\n`);
+    }
+    this.shell.print(el.dataset.banner.replaceAll("\\n", "\n") + "\n");
+    const saved = replay ? this.saved() : [];
+    for (const cmd of saved) this.shell.it.eval(cmd);
+    if (saved.length) this.shell.print(`Ran your ${saved.length} earlier ${saved.length === 1 ? "command" : "commands"} of this lesson again. Start again clears them.\n`);
+  }
+
+  saved() {
+    try {
+      return JSON.parse(sessionStorage.getItem(this.course) || "[]");
+    } catch {
+      return [];
+    }
+  }
+
+  // A command of the reader goes to the list of the lesson.
+  keep(cmd) {
+    if (!this.course || !cmd.trim()) return;
+    try {
+      const list = this.saved();
+      list.push(cmd);
+      sessionStorage.setItem(this.course, JSON.stringify(list.slice(-200)));
+    } catch {
+      // No storage: the commands go away with the page.
+    }
+  }
+
+  async again() {
+    try {
+      sessionStorage.removeItem(this.course);
+    } catch {
+      // No storage.
+    }
+    await this.boot(false);
+    this.up = 0;
+    this.render();
+    this.input.focus({ preventScroll: true });
+  }
+
+  // A Run link: the command goes on the line and runs, as if the reader
+  // typed it and pressed Enter. The page does not scroll.
+  runLine(cmd) {
+    this.shell.setLine(cmd);
+    this.keep(cmd);
+    this.send(() => this.shell.feed("\r"), true);
+    this.input.focus({ preventScroll: true });
   }
 
   // A docked shell is fixed in the window. An empty box of the same size
@@ -179,6 +245,7 @@ class View {
   }
 
   fit() {
+    if (this.course) this.rows = Math.max(4, Math.floor(this.box.clientHeight / this.lineH));
     this.shell.resize(this.colsFor(this.box.clientWidth), this.rows);
     this.render();
   }
@@ -196,7 +263,11 @@ class View {
     const b = this.mod.keyBytes(e);
     if (b == null) return;
     e.preventDefault();
+    const line = b === "\r" && this.course ? this.shell.line : null;
     this.send(() => this.shell.feed(b), b === "\r");
+    // The line is empty after Enter when the command ran. A line that
+    // goes on (an open brace) stays.
+    if (line && this.shell.line === "") this.keep(line);
   }
 
   // Text from a virtual keyboard or an input method.
@@ -522,4 +593,18 @@ export function pageShell() {
   return el ? begin(el) : Promise.reject(new Error("this page has no shell"));
 }
 
-if (typeof WebAssembly === "object") document.querySelectorAll(".zshell").forEach(mount);
+if (typeof WebAssembly === "object") {
+  document.querySelectorAll(".zshell").forEach(mount);
+  // The Run links and the code boxes of a lesson.
+  const run = (e) => {
+    const b = e.target.closest?.(".zrun, .zrun-box");
+    if (!b) return;
+    e.preventDefault();
+    pageShell().then((v) => v.runLine(b.dataset.cmd)).catch(() => {});
+  };
+  document.addEventListener("click", run);
+  // A Run link is a span with the role of a button: Enter and Space run it.
+  document.addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && e.target.classList?.contains("zrun")) run(e);
+  });
+}

@@ -29,14 +29,36 @@ ROOT = Path(__file__).resolve().parent.parent
 REPO = "https://github.com/beetlebugorg/ztcl"
 SITE = "https://beetlebug.org/ztcl/"
 
+# The lessons of the Learn course (docs/dev/learn.md): docs/learn/NN-slug.md
+# is the page learn/NN-slug/, and the first line of the file is its title.
+# A lesson of the advanced track has a number from 90.
+LEARN = ROOT / "docs" / "learn"
+LESSONS, ADVANCED = [], []
+for _path in sorted(LEARN.glob("[0-9][0-9]-*.md")):
+    _n = int(_path.name[:2])
+    _title = _path.read_text(encoding="utf-8").partition("\n")[0].lstrip("# ").strip()
+    if _n >= 90:
+        ADVANCED.append((f"docs/learn/{_path.name}", f"learn/{_path.stem}/", "Learn: advanced", _title))
+    else:
+        LESSONS.append((f"docs/learn/{_path.name}", f"learn/{_path.stem}/", "Learn", f"{_n}. {_title}"))
+FIRST_LESSON = LESSONS[0][1]
+# The old anchors of the one long page learn/ and their lessons.
+LEARN_ANCHORS = {
+    "words-and-substitution": "01", "variables-and-numbers": "02", "lists": "03", "dicts": "03",
+    "control-flow": "04", "procs": "04", "strings": "05", "errors": "06", "namespaces": "07",
+    "files": "08", "events": "09", "coroutines": "09", "objects": "10", "lambdas": "04",
+    "mistakes-to-avoid": "04",
+}
+
 # Source file, page folder, sidebar group, sidebar title. Plans, task
 # lists, and reports are in docs/dev/ and are not part of the site.
 PAGES = [
     ("README.md", "overview/", "Start", "Overview"),
     ("docs/install.md", "install/", "Start", "Install"),
     ("docs/quickstart.md", "quickstart/", "Start", "Quick start"),
-    ("docs/learn.md", "learn/", "Learn", "Learn Tcl"),
+    *LESSONS,
     ("docs/language.md", "language/", "Learn", "Coming from tclsh"),
+    *ADVANCED,
     ("docs/shell.md", "shell/", "Guide", "The shell"),
     ("docs/limits.md", "limits/", "Guide", "Limits and capabilities"),
     ("docs/threads.md", "threads/", "Guide", "Threads"),
@@ -107,6 +129,11 @@ class Build:
             t = tokens[idx]
             if t.meta.get("shell"):
                 return self.shell_html(t.content)
+            if t.meta.get("define"):
+                code = html.escape(t.content)
+                return (f'<figure class="zdefine"><pre><code class="language-tcl">{code}</code></pre>'
+                        f'<figcaption><button type="button" class="zrun-box" data-cmd="{html.escape(t.content.rstrip(), quote=True)}">'
+                        f'Run in the shell</button></figcaption></figure>\n')
             if t.meta.get("helper"):
                 return self.helper_html(t.meta["helper"], t.meta["id"], t.content)
             if t.meta.get("file"):
@@ -123,6 +150,7 @@ class Build:
                     f'<figcaption class="ld-bar"><span class="ld-tag">Live</span></figcaption></figure>\n')
         self.md.renderer.rules["fence"] = fence
         self.anchors = {}
+        self.checkpoints = {}
         self.links = []
 
     def live_blocks(self, src, tokens):
@@ -144,6 +172,7 @@ class Build:
         no comment shows as text on a page."""
         out, i, count = [], 0, 0
         self.page_files, self.page_shell, helpers, needs_shell = {}, False, 0, False
+        self.checkpoint = None
         while i < len(tokens):
             t = tokens[i]
             text = tokens[i + 1].content.strip() if t.type == "paragraph_open" and i + 1 < len(tokens) else ""
@@ -162,6 +191,19 @@ class Build:
                     raise SystemExit(f"{src}: a comment line is not just before a tcl block: {text}")
                 if text.startswith("<!-- run:"):
                     i += 3
+                    continue
+                if text == "<!-- checkpoint -->":
+                    # The state of a lesson at its start: the course shell
+                    # runs it first, and the page shows it folded at the end.
+                    self.checkpoint = fence.content
+                    i += 4
+                    continue
+                if text == "<!-- define -->":
+                    # The code box of a lesson, with a button that runs it
+                    # in the course shell.
+                    fence.meta = {"define": True}
+                    out.append(fence)
+                    i += 4
                     continue
                 if text == "<!-- shell -->":
                     if self.page_shell:
@@ -192,7 +234,7 @@ class Build:
                 continue
             out.append(t)
             i += 1
-        if needs_shell and not self.page_shell:
+        if needs_shell and not self.page_shell and self.checkpoint is None:
             raise SystemExit(f"{src}: a page with a helper needs a shell (<!-- shell -->)")
         return out
 
@@ -217,6 +259,30 @@ class Build:
   <script type="application/json" class="zpage-state">{data}</script>
 </div>
 <details class="zsetup"><summary>The state of the shell</summary><pre><code class="language-tcl">{html.escape(setup)}</code></pre></details>
+"""
+
+    @staticmethod
+    def course_html(page, setup):
+        """The shell of the Learn course: a panel at the right of a wide
+        window and a sheet at the bottom of a narrow one. It is fixed in
+        the window, so that a Run link never scrolls the page. shell.js
+        runs the checkpoint of the lesson (setup), then the commands that
+        the reader ran on this lesson in this tab."""
+        banner = "ztcl in your browser. No network or clock.\\nThe state of this lesson is loaded.\\nEach command can use 10,000,000 compute units."
+        data = json.dumps({"setup": setup or "", "files": {}}).replace("</", "<\\/")
+        lesson = page.split("/")[1][:2]
+        return f"""<aside class="zcourse-dock" aria-label="The shell of the course">
+<div class="zshell zpage-shell zcourse" id="shell" data-rows="12" data-lesson="{lesson}" data-label="ztcl shell of the course. Type a Tcl command. Tab completes." data-banner="{html.escape(banner)}">
+  <div class="bar"><i></i><i></i><i></i><span>ztcl shell</span><button type="button" class="zcourse-again">Start again</button><button type="button" class="zcourse-size" aria-expanded="true">Make small</button></div>
+<pre class="zshell-poster" aria-hidden="true">{html.escape(banner.replace("\\n", chr(10)))}
+<span class="p">%</span> </pre>
+  <div class="zshell-foot">
+    <span class="zshell-hint" id="shell-hint">A <kbd>Run</kbd> link in the lesson runs its command here. <kbd>Tab</kbd> completes. <kbd>Up</kbd> is history. <kbd>Esc</kbd> <kbd>Tab</kbd> leaves.</span>
+    <span class="zshell-meter"><span>Compute limit: 10,000,000 compute units for each command</span><progress value="0" max="10000000" aria-label="Compute units of the last command"></progress></span>
+  </div>
+  <noscript><p class="zshell-foot">The shell needs JavaScript and WebAssembly.</p></noscript>
+  <script type="application/json" class="zpage-state">{data}</script>
+</div></aside>
 """
 
     @staticmethod
@@ -256,10 +322,24 @@ class Build:
                 token.attrSet("id", anchor)
                 ids.add(anchor)
             if token.type == "inline":
-                for child in token.children or []:
-                    if child.type == "link_open":
+                kids = token.children or []
+                for k, child in enumerate(kids):
+                    if child.type == "link_open" and child.attrGet("href") == "run:":
+                        # A Run link: [`command`](run: "result"). A click runs
+                        # the command in the course shell.
+                        code = kids[k + 1] if k + 1 < len(kids) else None
+                        if code is None or code.type != "code_inline" or kids[k + 2].type != "link_close":
+                            raise SystemExit(f"{src}: a run: link has one code span: {inline_text(token)}")
+                        cmd = html.escape(code.content, quote=True)
+                        want = child.attrGet("title")
+                        want = "" if want is None else f' data-want="{html.escape(want, quote=True)}"'
+                        child.type, child.tag = "html_inline", ""
+                        child.content = f'<span class="zrun" role="button" tabindex="0" data-cmd="{cmd}"{want} aria-label="Run in the shell: {cmd}">'
+                        kids[k + 2].type, kids[k + 2].content = "html_inline", "</span>"
+                    elif child.type == "link_open":
                         child.attrSet("href", self.link(src, page, child.attrGet("href")))
         self.anchors[page] = ids
+        self.checkpoints[page] = self.checkpoint
         body = self.md.renderer.render(tokens, self.md.options, {})
         body = body.replace("<table>", '<div class="table"><table>').replace("</table>", "</table></div>")
         return title or src, self.alerts(body)
@@ -320,7 +400,14 @@ class Build:
         root = rel(page, "")
         name = f"{html.escape(title)} · ztcl"
         script = f'\n<script type="module" src="{root}assets/live.js"></script>' if 'class="live-demo"' in body else ""
-        if 'class="zshell' in body:
+        course, dock = page.startswith("learn/"), ""
+        if course:
+            setup = self.checkpoints.get(page) or ""
+            dock = self.course_html(page, setup)
+            if setup:
+                body += (f'<details class="zsetup"><summary>The state of the shell at the start of this lesson</summary>'
+                         f'<pre><code class="language-tcl">{html.escape(setup)}</code></pre></details>\n')
+        if 'class="zshell' in body or course:
             script += f'\n<script type="module" src="{root}assets/shell.js"></script>'
         if 'class="zhelper"' in body:
             script += f'\n<script type="module" src="{root}assets/helper.js"></script>'
@@ -332,12 +419,12 @@ class Build:
 <link rel="canonical" href="{SITE}{page}">
 <link rel="icon" href="{root}assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="{root}assets/site.css">{script}</head>
-<body><a class="skip" href="#content">Skip to the content</a>
+<body{' class="course"' if course else ''}><a class="skip" href="#content">Skip to the content</a>
 <header class="top"><div class="wrap"><a class="logo" href="{root}"><span class="glyph" aria-hidden="true">tc</span>ztcl</a>
 <nav class="toplinks" aria-label="Site"><a href="{root}overview/" aria-current="page">Docs</a><a href="{root}playground/">Playground</a><a href="{root}try/">Shell</a><a class="sib" href="https://beetlebug.org/ztk/">ztk</a><a href="{REPO}">GitHub</a></nav></div></header>
 <div class="docs"><input class="toc-toggle" type="checkbox" id="toc"><label class="toc-button" for="toc">Contents</label>
 <aside class="sidebar"><nav aria-label="Documentation">{self.nav(page)}</nav></aside>
-<main class="prose" id="content">{body}{self.pager(page)}</main></div>
+<main class="prose" id="content">{body}{self.pager(page)}</main></div>{dock}
 <footer class="foot docs-foot"><div class="wrap"><span>ztcl · BSD-2-Clause</span><span class="right"><a href="{root}">Home</a><a href="https://beetlebug.org/ztk/">ztk</a><a href="{REPO}">Source on GitHub</a></span></div></footer>
 </body></html>
 """
@@ -442,6 +529,15 @@ class Build:
                 f'<meta http-equiv="refresh" content="0; url={target}">'
                 f'<link rel="canonical" href="{target}"><a href="{target}">This page moved.</a>\n',
                 encoding="utf-8")
+        # learn/ was one long page. Its old anchors go to their lessons.
+        table = {a: rel("learn/", p) for a, n in LEARN_ANCHORS.items() for _, p, _, _ in LESSONS if p.startswith(f"learn/{n}-")}
+        first = rel("learn/", FIRST_LESSON)
+        (out / "learn" / "index.html").write_text(
+            f'<!doctype html><meta charset="utf-8"><title>Learn Tcl</title>'
+            f'<link rel="canonical" href="{SITE}{FIRST_LESSON}">'
+            f'<script>const t = {json.dumps(table)}; location.replace(t[location.hash.slice(1)] || "{first}");</script>'
+            f'<meta http-equiv="refresh" content="0; url={first}"><a href="{first}">The course starts here.</a>\n',
+            encoding="utf-8")
         self.agents(out)
         (out / ".nojekyll").write_text("", encoding="utf-8")
         print(f"wrote {len(rendered) + len(HTML_PAGES)} pages to {out}")

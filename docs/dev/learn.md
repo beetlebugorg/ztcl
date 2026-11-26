@@ -67,7 +67,7 @@ The advanced track comes after lesson 15. Its lessons are longer, and each one i
 ## The shell of the course
 
 - One shell for the whole course. It is docked in the window: a panel at the right side on a wide screen (1,100 pixels and more), and a sheet at the bottom on a smaller screen, that the reader can make small. It is always in view, and the page never scrolls to it.
-- The state goes from lesson to lesson. Each lesson has a checkpoint: the Tcl state of `jot` at the start of that lesson, in the source of the lesson. A page loads its checkpoint, and then the commands that the reader ran on the earlier lessons, from `sessionStorage`. "Start again" clears them. A reader who opens lesson 9 from a link gets the checkpoint of lesson 9 and a working `jot`.
+- The state goes from lesson to lesson. Each lesson has a checkpoint: the Tcl state of `jot` at the start of that lesson, in the source of the lesson. A page loads its checkpoint, and then the commands that the reader ran on this lesson, from `sessionStorage`. The commands of the earlier lessons do not run again, because the checkpoint has their state, and a second run of `add` makes a second note. "Start again" clears them. A reader who opens lesson 9 from a link gets the checkpoint of lesson 9 and a working `jot`.
 - The files of the shell are in memory and writable, so that lesson 8 can write `notes.json`. They go away with the tab.
 - Lesson 11 needs a socket. The web build has no network. The page runs the server and a client in one interpreter over a pair of in-memory channels. The lesson also gives the command for a real port on the reader's computer.
 
@@ -96,7 +96,7 @@ The issue "Command reference" is a separate job, with its own design. A lesson l
 
 ## The source
 
-- `docs/learn/NN-slug.md`, one file for each lesson, with `<!-- checkpoint -->` at the top and the Run links as `[cmd](run:)` with the expected result as `[cmd](run: => result)`.
+- `docs/learn/NN-slug.md`, one file for each lesson, with `<!-- checkpoint -->` at the top and the Run links as ``[`cmd`](run:)``, with the expected result as the title of the link: ``[`cmd`](run: "result")``. A result of `error: MESSAGE` expects an error. `<!-- define -->` before a `tcl` block makes the code box of the lesson. A lesson from number 90 is in the advanced track.
 - `tools/build-docs.py` makes the pages `/ztcl/learn/NN-slug/`, the next and previous links, and the sidebar group "Learn".
 - `/ztcl/learn/` is lesson 1. The old anchors of `/ztcl/learn/` (`#lists`, `#procs`) go to their lessons with a small redirect table in the page.
 
