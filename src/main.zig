@@ -287,16 +287,8 @@ fn runApp(init: std.process.Init, args: []const [:0]const u8, off: u64, len: u64
         if (m.root) |r| {
             try tcl.fsroot.setRoot(&it, r);
         } else if (bits & @intFromEnum(tcl.interp.Capability.file) != 0) {
-            // Until the host mode of #122, the jail at the root folder of
-            // the host gives the host paths. Windows has drive letters, so
-            // there the root is the current folder.
-            const here = try std.process.currentPathAlloc(io, arena);
-            if (builtin.os.tag == .windows) {
-                try tcl.fsroot.setRoot(&it, here);
-            } else {
-                try tcl.fsroot.setRoot(&it, "/");
-                it.fs.cwd = std.mem.trim(u8, here, "/");
-            }
+            // A program gets host mode (#122), as the `ztcl` runner does.
+            tcl.fsroot.setHost(&it) catch {};
         }
     }
     try it.allow(bits);
