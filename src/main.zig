@@ -343,6 +343,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             std.process.exit(tcl.isothread.childProcess(init.gpa, fd, .{
                 .clock = .{ .now = hostNow, .zone = hostZone },
                 .event = .{ .now = hostTicks, .sleep = hostSleep },
+                .sandbox = true,
             }));
         }
     }
