@@ -45,7 +45,7 @@ A proc has its own variables. `global notes` links the name `notes` to the varia
 ## Control flow
 
 - `if {cond} {...} elseif {cond} {...} else {...}`. The condition is an `expr` expression, in braces.
-- `foreach x $list {...}` runs the body for each element. `foreach {k v} $dict {...}` takes two at a time.
+- `foreach x $list {...}` runs the body for each element. `foreach {k v} $dict {...}` gets two elements each time.
 - `while {cond} {...}` and `for {init} {cond} {next} {...}` loop. `break` and `continue` work as in C.
 - `switch $value {a {...} b {...} default {...}}` matches strings, and `switch -glob` matches patterns.
 
@@ -64,7 +64,7 @@ A body in braces runs when the command runs it. A body in quotes has its `$` and
 - An `upvar` has a level: `1` for the caller, `#0` for the top level. Check that the proc is called from the level that the code expects.
 - A proc gives an error with `return -code error` or `error`, and the message says what was wrong.
 
-## Mistakes to avoid
+## Mistakes to look for
 
 These are the traps of lessons 1 to 4, in one list.
 
