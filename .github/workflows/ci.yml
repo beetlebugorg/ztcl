@@ -61,6 +61,56 @@ jobs:
           ulimit -v 6000000
           zig build test -Dgc-precise=true
 
+  # ztcl build: each runtime of `zig build runtimes`, and a binary for
+  # each target with a payload. Each runner builds and runs the binary
+  # of its own target from the runtime of `zig build runtimes`. Linux
+  # also builds each other target and runs the arm64 binary under qemu.
+  # On arm64 macOS the kernel runs only a binary with a valid signature,
+  # so the run checks the ad hoc signature of src/macho.zig.
+  build-native:
+    name: ztcl build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Build the runtimes
+        run: |
+          zig build
+          zig build runtimes
+          ls -l zig-out/lib/ztcl/runtime/*/
+      - name: Build and run a binary
+        run: |
+          mkdir -p app/data
+          printf 'puts "hello from [file tail [info script]] $argv"\nsource [file join [file dirname [info script]] lib.tcl]\n' > app/main.tcl
+          printf 'set f [open //zipfs:/app/data/msg.txt]\nputs [gets $f]\nclose $f\n' > app/lib.tcl
+          echo "a file in the payload" > app/data/msg.txt
+          cd app
+          ext=; if [ "$RUNNER_OS" = Windows ]; then ext=.exe; fi
+          ../zig-out/bin/ztcl build -o hello$ext --embed lib.tcl --embed data main.tcl
+          test "$(./hello$ext a b | tr -d '\r')" = "$(printf 'hello from main.tcl a b\na file in the payload')"
+      - name: Build each target from Linux
+        if: runner.os == 'Linux'
+        run: |
+          cd app
+          for t in x86_64-linux aarch64-linux x86_64-macos aarch64-macos x86_64-windows aarch64-windows; do
+            ../zig-out/bin/ztcl build --target $t -o hello-$t --embed lib.tcl --embed data main.tcl
+          done
+          file hello-*
+          sudo apt-get install -y -qq qemu-user-static > /dev/null
+          test "$(qemu-aarch64-static ./hello-aarch64-linux x | head -1)" = "hello from main.tcl x"
+      - name: Show the signature
+        if: runner.os == 'macOS'
+        run: codesign -dv app/hello 2>&1 | head -8
+
   # The JIT on arm64 macOS: the suite with the JIT at threshold 0 and with
   # tier 2 must give the counts of each file without the JIT, and
   # tools/jit-diff.sh -t must find no difference. socket.test is left out

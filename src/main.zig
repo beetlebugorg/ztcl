@@ -242,6 +242,84 @@ fn tclshError(it: *tcl.Interp, e: tcl.Error) noreturn {
     leave(it, 0);
 }
 
+/// Runs the payload of a binary of `ztcl build`: mounts it at
+/// `//zipfs:/app`, turns on the capabilities of the manifest and
+/// `embedded`, and sources each script of the manifest in order. The
+/// words after the program name are `$argv`.
+fn runApp(init: std.process.Init, args: []const [:0]const u8, off: u64, len: u64) !void {
+    const arena = init.arena.allocator();
+    const io = init.io;
+    var out_buf: [1 << 16]u8 = undefined;
+    var out_w: Io.File.Writer = .init(.stdout(), io, &out_buf);
+    const out = &out_w.interface;
+    exit_out = out;
+    const bn = tcl.buildnative;
+    const exe = try std.process.executablePathAlloc(io, arena);
+    const whole = Io.Dir.cwd().readFileAlloc(io, exe, arena, .unlimited) catch |e| {
+        try out.print("{s}: cannot read the program file: {s}\n", .{ exe, @errorName(e) });
+        out.flush() catch {};
+        std.process.exit(70);
+    };
+    if (off > whole.len or whole.len - off < len) {
+        try out.print("{s}: the payload is past the end of the file\n", .{exe});
+        out.flush() catch {};
+        std.process.exit(70);
+    }
+    const payload = whole[@intCast(off)..][0..@intCast(len)];
+
+    var it: tcl.Interp = undefined;
+    try it.init(init.gpa);
+    it.output = .{ .ctx = out, .write = write };
+    it.mem_limit = 2 << 30;
+    tcl.vfs.mountBytes(&it, "app", "", payload) catch |e| {
+        try out.print("{s}: the payload is not a valid zip archive: {s}\n", .{ exe, @errorName(e) });
+        out.flush() catch {};
+        std.process.exit(70);
+    };
+    const z = &it.vfs.mounts.items[0].z;
+    const m_entry = z.find(bn.manifest_name) orelse return error.NoManifest;
+    const m = try bn.Manifest.parse(arena, try z.extract(arena, m_entry));
+    const bits = (tcl.interp.Capability.parse(m.allow) orelse 0) | @intFromEnum(tcl.interp.Capability.embedded);
+    it.clock_host = .{ .now = hostNow, .zone = hostZone };
+    it.event_host = .{ .now = hostTicks, .sleep = hostSleep };
+    if (comptime chan_ok) tcl.sys.ignorePipeSignal();
+    if (comptime chan_ok) {
+        if (m.root) |r| {
+            try tcl.fsroot.setRoot(&it, r);
+        } else if (bits & @intFromEnum(tcl.interp.Capability.file) != 0) {
+            // Until the host mode of #122, the jail at the root folder of
+            // the host gives the host paths. Windows has drive letters, so
+            // there the root is the current folder.
+            const here = try std.process.currentPathAlloc(io, arena);
+            if (builtin.os.tag == .windows) {
+                try tcl.fsroot.setRoot(&it, here);
+            } else {
+                try tcl.fsroot.setRoot(&it, "/");
+                it.fs.cwd = std.mem.trim(u8, here, "/");
+            }
+        }
+    }
+    try it.allow(bits);
+    if (m.jit) _ = it.enableJit(.{});
+    if (comptime chan_ok) {
+        if (bits & @intFromEnum(tcl.interp.Capability.channels) != 0) try tcl.chan.useStdio(&it);
+    }
+    try it.register("exit", cmdExit);
+    const a = it.alloc();
+    var list: std.ArrayList(tcl.Value) = .empty;
+    for (args[1..]) |w| try list.append(a, .{ .str = w });
+    try it.setVar("argv", try tcl.value.wrapList(a, list.items));
+    try it.setVar("argc", .{ .int = @intCast(list.items.len) });
+    try it.setVar("argv0", .{ .str = args[0] });
+    try it.setVar("tcl_interactive", .{ .int = 0 });
+    for (m.scripts) |name| {
+        const path = try std.fmt.allocPrint(a, "//zipfs:/app/{s}", .{name});
+        const cmd = try tcl.value.newList(a, &.{ .{ .str = "source" }, .{ .str = path } });
+        _ = it.eval(try it.str(cmd)) catch |e| tclshError(&it, e);
+    }
+    leave(&it, 0);
+}
+
 /// True for `ztcl compile FILE -proc NAME ...`, the compile of a point
 /// proc (`src/compilecmd.zig`). Other forms go to `src/compile.zig`.
 fn isPointCompile(args: []const [:0]const u8) bool {
@@ -257,6 +335,8 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     host_io = io;
     const args = try init.minimal.args.toSlice(arena);
     host_preopens = init.preopens;
+    // A binary of `ztcl build` runs its payload and reads no option.
+    if (builtin.os.tag != .wasi and setup == null) if (tcl.buildnative.payloadRange()) |r| return runApp(init, args, r.off, r.len);
     if (args.len > 1 and std.mem.eql(u8, args[1], "compile") and isPointCompile(args[2..])) {
         var out_buf: [4096]u8 = undefined;
         var out_w: Io.File.Writer = .init(.stdout(), io, &out_buf);
