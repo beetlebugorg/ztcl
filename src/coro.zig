@@ -38,7 +38,7 @@ const on_x86 = builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux;
 const on_win = builtin.cpu.arch == .x86_64 and builtin.os.tag == .windows;
 pub const supported = on_arm or on_x86 or on_win;
 
-const stack_size: usize = if (builtin.mode == .Debug) 16 << 20 else 1 << 20;
+const stack_size: usize = if (builtin.mode == .debug) 16 << 20 else 1 << 20;
 
 /// The return code of a pending `tailcall`.
 pub const tail_code: u32 = 0x7fff_fff0;
@@ -456,7 +456,7 @@ fn cmdTailcall(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const words = try it.alloc().dupe(Value, argv[1..]);
     words[0] = try qualified(it, words[0]);
     it.tail_words = words;
-    it.ret_code = @enumFromInt(tail_code);
+    it.ret_code = @fromBackingInt(@intCast(tail_code));
     it.ret_level = 1;
     it.result = Value.empty;
     return error.TclReturn;

@@ -371,7 +371,7 @@ fn cmdOpen(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const m = try parseMode(it, if (argv.len >= 3) try it.str(argv[2]) else "r");
     if (path.len > 0 and path[0] == '|') {
         // A command pipeline needs the capability `exec`.
-        if (it.capabilities & @intFromEnum(interp.Capability.exec) == 0) return it.fail("couldn't open \"{s}\": command pipelines are not available", .{path});
+        if (it.capabilities & @backingInt(interp.Capability.exec) == 0) return it.fail("couldn't open \"{s}\": command pipelines are not available", .{path});
         if (comptime !proc_ok) return it.fail("couldn't open \"{s}\": exec is not available on this target", .{path});
         return @import("proc.zig").openPipeline(it, path[1..], m.read, m.write);
     }

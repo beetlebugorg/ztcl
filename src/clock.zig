@@ -1242,7 +1242,7 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try it.register("msgcat::mc", cmdMc);
     try it.register("msgcat::mclocale", cmdMclocale);
     _ = try it.internNs("msgcat");
-    if (it.capabilities & @intFromEnum(interp.Capability.package) != 0) {
+    if (it.capabilities & @backingInt(interp.Capability.package) != 0) {
         _ = it.eval("package provide msgcat 1.6.1") catch {};
     }
 }

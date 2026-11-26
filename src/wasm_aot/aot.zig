@@ -151,8 +151,8 @@ pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const 
     const m = try link.read(arena_state.allocator(), runtime);
     var hs: gen.Helpers = .{};
     inline for (gen.exported) |h| {
-        if (m.func(gen.exportName(h, false))) |f| hs.proc[@intFromEnum(h)] = f;
-        if (m.func(gen.exportName(h, true))) |f| hs.named[@intFromEnum(h)] = f;
+        if (m.func(gen.exportName(h, false))) |f| hs.proc[@backingInt(h)] = f;
+        if (m.func(gen.exportName(h, true))) |f| hs.named[@backingInt(h)] = f;
     }
     const dir_var = try link.dataAddress(&m, "ztcl_aot_dir") orelse return error.NoDirectoryVariable;
     // The layout of the runtime. A module with no layout gets the helper
@@ -160,10 +160,10 @@ pub fn compile(a: Allocator, it: *Interp, runtime: []const u8, sources: []const 
     var lay: Layout = undefined;
     var inline_paths = false;
     if (try link.dataAddress(&m, "ztcl_aot_layout_data")) |at| {
-        const fields = std.meta.fields(Layout);
-        var words: [fields.len * 4]u8 = undefined;
+        const names = comptime std.meta.fieldNames(Layout);
+        var words: [names.len * 4]u8 = undefined;
         try link.readData(&m, at, &words);
-        inline for (fields, 0..) |f, k| @field(lay, f.name) = @intCast(std.mem.readInt(u32, words[k * 4 ..][0..4], .little));
+        inline for (names, 0..) |name, k| @field(lay, name) = @intCast(std.mem.readInt(u32, words[k * 4 ..][0..4], .little));
         inline_paths = opts.inline_paths;
     }
 

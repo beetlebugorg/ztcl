@@ -176,7 +176,7 @@ pub const E = enum(u32) {
 };
 
 pub fn failOf(e: E) Fail {
-    return failCode(@intFromEnum(e));
+    return failCode(@backingInt(e));
 }
 
 fn failCode(e: u32) Fail {
@@ -226,7 +226,7 @@ pub fn read(fd: Fd, buf: []u8) IoResult {
     }
     return switch (readFile(fd, buf)) {
         .n => |n| .{ .n = n },
-        .err => |e| if (@intFromEnum(e) == error_no_data) .again else .{ .err = failOf(e) },
+        .err => |e| if (@backingInt(e) == error_no_data) .again else .{ .err = failOf(e) },
     };
 }
 
@@ -239,13 +239,13 @@ pub fn readFile(fd: Fd, buf: []u8) sys.FileRead {
     if (e == error_broken_pipe or e == error_handle_eof) return .{ .n = 0 };
     // ReadFile on the handle of a folder.
     if (e == error_invalid_function) return .{ .err = .ISDIR };
-    return .{ .err = @enumFromInt(e) };
+    return .{ .err = @fromBackingInt(@intCast(e)) };
 }
 
 pub fn writeFile(fd: Fd, buf: []const u8) sys.FileRead {
     var put: DWORD = 0;
     const size: DWORD = @intCast(@min(buf.len, std.math.maxInt(i32)));
-    if (WriteFile(handleOf(fd), buf.ptr, size, &put, null) == 0) return .{ .err = @enumFromInt(GetLastError()) };
+    if (WriteFile(handleOf(fd), buf.ptr, size, &put, null) == 0) return .{ .err = @fromBackingInt(@intCast(GetLastError())) };
     return .{ .n = put };
 }
 
@@ -484,8 +484,8 @@ pub fn resolve(a: std.mem.Allocator, host: []const u8, out: *std.ArrayList(Addr)
     }
     if (host.len == 0 or host.len > 253) return;
     if (std.ascii.eqlIgnoreCase(host, "localhost")) {
-        try out.append(a, .{ .bytes = .{ 127, 0, 0, 1 } ++ [_]u8{0} ** 12 });
-        try out.append(a, .{ .v6 = true, .bytes = [_]u8{0} ** 15 ++ [_]u8{1} });
+        try out.append(a, .{ .bytes = .{ 127, 0, 0, 1 } ++ @as([12]u8, @splat(0)) });
+        try out.append(a, .{ .v6 = true, .bytes = @as([15]u8, @splat(0)) ++ [_]u8{1} });
         return;
     }
     var path: [320]u16 = undefined;
@@ -559,11 +559,11 @@ pub fn shutdownOn(fd: Fd, how: i32) void {
 }
 
 pub fn seek(fd: Fd, off: i64, whence: u8) sys.SeekResult {
-    if (isSocket(fd)) return .{ .err = @enumFromInt(error_invalid_function) };
+    if (isSocket(fd)) return .{ .err = @fromBackingInt(@intCast(error_invalid_function)) };
     const h = handleOf(fd);
-    if (GetFileType(h) != file_type_disk) return .{ .err = @enumFromInt(error_invalid_function) };
+    if (GetFileType(h) != file_type_disk) return .{ .err = @fromBackingInt(@intCast(error_invalid_function)) };
     var at: i64 = 0;
-    if (SetFilePointerEx(h, off, &at, whence) == 0) return .{ .err = @enumFromInt(GetLastError()) };
+    if (SetFilePointerEx(h, off, &at, whence) == 0) return .{ .err = @fromBackingInt(@intCast(GetLastError())) };
     return .{ .at = at };
 }
 

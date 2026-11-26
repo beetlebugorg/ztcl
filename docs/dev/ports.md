@@ -5,7 +5,7 @@ All platform code is in five files: `src/coro.zig`, `src/sys.zig`, `src/fsroot.z
 ## General rules
 
 - BSD-2-Clause. Write fresh code. Use no code from Tcl or a GPL or AGPL project.
-- Use only the Zig 0.16.0 standard library. Add no libc dependency unless the target already links it.
+- Use only the Zig 0.17.0 standard library. Add no libc dependency unless the target already links it.
 - Each file keeps its `//!` header and SPDX line. Follow WRITING.md and AGENTS.md. Add no attribution lines.
 - Keep `pub const supported` in each file. Set it true for a new target only when the unit tests of that file pass there.
 - The Linux results must not change.

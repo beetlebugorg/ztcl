@@ -251,7 +251,7 @@ pub fn mountBytes(it: *Interp, point: []const u8, file: []const u8, bytes: []con
 }
 
 fn has(it: *Interp, cap: interp.Capability) bool {
-    return it.capabilities & @intFromEnum(cap) != 0;
+    return it.capabilities & @backingInt(cap) != 0;
 }
 
 fn cmdZipfs(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {

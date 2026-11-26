@@ -65,8 +65,8 @@ pub const Term = struct {
         raw.iflag.BRKINT = false;
         raw.iflag.INPCK = false;
         raw.iflag.ISTRIP = false;
-        raw.cc[@intFromEnum(posix.V.MIN)] = 1;
-        raw.cc[@intFromEnum(posix.V.TIME)] = 0;
+        raw.cc[@backingInt(posix.V.MIN)] = 1;
+        raw.cc[@backingInt(posix.V.TIME)] = 0;
         posix.tcsetattr(t.in_fd, .FLUSH, raw) catch return false;
         t.raw_on = true;
         return true;

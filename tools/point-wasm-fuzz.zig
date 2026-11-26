@@ -27,8 +27,8 @@ const Io = std.Io;
 const tcl = @import("ztcl");
 const point = tcl.point;
 
-const nf = @typeInfo(point.Field).@"enum".fields.len;
-const no = @typeInfo(point.Out).@"enum".fields.len;
+const nf = @typeInfo(point.Field).@"enum".field_names.len;
+const no = @typeInfo(point.Out).@"enum".field_names.len;
 
 const Case = struct {
     seed: u64,

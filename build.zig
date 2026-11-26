@@ -32,7 +32,7 @@ pub fn build(b: *std.Build) void {
     // `-Dstrip=true` strips the runner, for the size report.
     const strip = b.option(bool, "strip", "Strip the runner") orelse false;
     // `-Drunner-optimize` sets the mode of the runner and the suite runner.
-    const runner_optimize = b.option(std.builtin.OptimizeMode, "runner-optimize", "The mode of the runners") orelse .ReleaseFast;
+    const runner_optimize = b.option(std.builtin.OptimizeMode, "runner-optimize", "The mode of the runners") orelse .fast;
     // `-Dtsan=true` builds each module with ThreadSanitizer and libc, so
     // `std.Thread` uses pthreads, which ThreadSanitizer sees. It needs a
     // target with a libc, for example `-Dtarget=x86_64-linux-gnu`. Run
@@ -105,13 +105,13 @@ pub fn build(b: *std.Build) void {
         addModuleOptions(b, opts, on);
         opts.addOption(usize, "size_plant", 0);
         opts.addOption(bool, "tsan_plant", false);
-        const lib = b.createModule(.{ .root_source_file = b.path("src/ztcl.zig"), .target = rt, .optimize = .ReleaseSmall });
+        const lib = b.createModule(.{ .root_source_file = b.path("src/ztcl.zig"), .target = rt, .optimize = .small });
         lib.addOptions("build_options", opts);
         rt_mods[ri] = lib;
         const rexe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = rt,
-            .optimize = .ReleaseSmall,
+            .optimize = .small,
             .strip = true,
             .imports = &.{.{ .name = "ztcl", .module = lib }},
         }) });
@@ -123,17 +123,17 @@ pub fn build(b: *std.Build) void {
     }
 
     const run = b.addRunArtifact(exe);
-    if (b.args) |args| run.addArgs(args);
+    run.addPassthruArgs();
     b.step("run", "Run a script: zig build run -- script.tcl").dependOn(&run.step);
 
     const bench_exe = b.addExecutable(.{ .name = "ztcl-bench", .root_module = b.createModule(.{
         .root_source_file = b.path("bench/bench.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = .fast,
         .imports = &.{.{ .name = "ztcl", .module = fast }},
     }) });
     const bench_run = b.addRunArtifact(bench_exe);
-    if (b.args) |args| bench_run.addArgs(args);
+    bench_run.addPassthruArgs();
     b.step("bench", "Run the benchmark of the point procs").dependOn(&bench_run.step);
 
     // The suite runner: the runner with the test commands of
@@ -161,7 +161,7 @@ pub fn build(b: *std.Build) void {
     }) });
     const census_run = b.addRunArtifact(census_exe);
     census_run.setCwd(b.path("."));
-    if (b.args) |args| census_run.addArgs(args);
+    census_run.addPassthruArgs();
     b.step("jit-census", "Count the loops that tier 2 can compile").dependOn(&census_run.step);
 
     // The differential fuzzer of the JIT. It uses the mode of -Doptimize.
@@ -172,7 +172,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{.{ .name = "ztcl", .module = ztcl }},
     }) });
     const fuzz_run = b.addRunArtifact(fuzz_exe);
-    if (b.args) |args| fuzz_run.addArgs(args);
+    fuzz_run.addPassthruArgs();
     b.step("jit-fuzz", "Run the differential fuzzer of the JIT").dependOn(&fuzz_run.step);
 
     // The JSON tools: JSONTestSuite and the fuzzer. They use the mode of
@@ -185,7 +185,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{.{ .name = "ztcl", .module = ztcl }},
         }) });
         const r = b.addRunArtifact(e);
-        if (b.args) |args| r.addArgs(args);
+        r.addPassthruArgs();
         b.step(jt[0], jt[2]).dependOn(&r.step);
     }
     // The probe of executable memory: `zig build jit-probe`.
@@ -234,7 +234,7 @@ fn addPointRuntime(b: *std.Build, mods: []const *std.Build.Module, fast: *std.Bu
         const rt = b.addExecutable(.{ .name = form[0], .root_module = b.createModule(.{
             .root_source_file = b.path("src/point_rt.zig"),
             .target = b.resolveTargetQuery(query),
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .single_threaded = true,
             .strip = true,
         }) });
@@ -247,7 +247,7 @@ fn addPointRuntime(b: *std.Build, mods: []const *std.Build.Module, fast: *std.Bu
     const ref = b.addExecutable(.{ .name = "point-rt-ref", .root_module = b.createModule(.{
         .root_source_file = b.path("tools/point-rt-ref.zig"),
         .target = fast.resolved_target.?,
-        .optimize = .ReleaseFast,
+        .optimize = .fast,
         .imports = &.{.{ .name = "ztcl", .module = fast }},
     }) });
     step.dependOn(&b.addInstallArtifact(ref, .{}).step);
@@ -255,7 +255,7 @@ fn addPointRuntime(b: *std.Build, mods: []const *std.Build.Module, fast: *std.Bu
     const wasm_ref = b.addExecutable(.{ .name = "point-wasm-ref", .root_module = b.createModule(.{
         .root_source_file = b.path("tools/point-wasm-ref.zig"),
         .target = fast.resolved_target.?,
-        .optimize = .ReleaseFast,
+        .optimize = .fast,
         .imports = &.{.{ .name = "ztcl", .module = fast }},
     }) });
     step.dependOn(&b.addInstallArtifact(wasm_ref, .{}).step);
@@ -263,12 +263,12 @@ fn addPointRuntime(b: *std.Build, mods: []const *std.Build.Module, fast: *std.Bu
     const fuzz = b.addExecutable(.{ .name = "point-wasm-fuzz", .root_module = b.createModule(.{
         .root_source_file = b.path("tools/point-wasm-fuzz.zig"),
         .target = fast.resolved_target.?,
-        .optimize = .ReleaseFast,
+        .optimize = .fast,
         .imports = &.{.{ .name = "ztcl", .module = fast }},
     }) });
     const fuzz_run = b.addRunArtifact(fuzz);
     fuzz_run.setCwd(b.path("."));
-    if (b.args) |args| fuzz_run.addArgs(args);
+    fuzz_run.addPassthruArgs();
     b.step("point-wasm-fuzz", "Run the differential fuzzer of compiled point procs").dependOn(&fuzz_run.step);
 }
 
@@ -284,7 +284,7 @@ fn addWasm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise: boo
     const wasm = b.addExecutable(.{ .name = name, .root_module = b.createModule(.{
         .root_source_file = b.path("src/wasm.zig"),
         .target = b.resolveTargetQuery(query),
-        .optimize = .ReleaseSmall,
+        .optimize = .small,
         .single_threaded = threads != .shared,
     }) });
     // The WebAssembly build has no JIT.

@@ -362,7 +362,7 @@ fn destroyMode(it: *Interp, st: *State, o: *Object, run_dtor: bool, explicit: bo
                     fail_code = it.error_code;
                 } else
                 // An error of a destructor goes to the background handler.
-                if (e == error.TclError and it.capabilities & @intFromEnum(interp.Capability.event) != 0) {
+                if (e == error.TclError and it.capabilities & @backingInt(interp.Capability.event) != 0) {
                     try it.finishError();
                     @import("event.zig").background(it, .{ .code = 1, .res = it.result, .error_info = it.last_info, .error_code = it.error_code }) catch {};
                 }

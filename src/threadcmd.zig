@@ -482,7 +482,7 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     };
     inline for (list) |e| try it.register(e[0], e[1]);
     if (comptime @import("tchan.zig").supported) {
-        if (it.capabilities & @intFromEnum(interp.Capability.channels) != 0) {
+        if (it.capabilities & @backingInt(interp.Capability.channels) != 0) {
             try it.register("thread::transfer", cmdTransfer);
             try it.register("thread::detach", cmdDetach);
             try it.register("thread::attach", cmdAttach);

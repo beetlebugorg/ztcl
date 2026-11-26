@@ -74,7 +74,7 @@ fn addDir(it: *Interp, w: *Watcher, rel: []const u8) Error!void {
     };
     defer sys.close(fd);
     var buf: [40:0]u8 = undefined;
-    const proc_path = std.fmt.bufPrintZ(&buf, "/proc/self/fd/{d}", .{fd}) catch unreachable;
+    const proc_path = std.fmt.bufPrintSentinel(&buf, "/proc/self/fd/{d}", .{fd}, 0) catch unreachable;
     const mask: u32 = linux.IN.CREATE | linux.IN.MODIFY | linux.IN.CLOSE_WRITE | linux.IN.DELETE | linux.IN.MOVED_FROM | linux.IN.MOVED_TO | linux.IN.ATTRIB | linux.IN.ONLYDIR;
     const rc = linux.inotify_add_watch(w.fd, proc_path, mask);
     if (linux.errno(rc) != .SUCCESS) return fsroot.posixError(it, linux.errno(rc), "couldn't watch the folder: ");

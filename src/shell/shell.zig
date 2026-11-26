@@ -554,8 +554,8 @@ pub const Shell = struct {
     // ---- Settings ----
 
     fn styleByName(name: []const u8) ?render.Style {
-        inline for (@typeInfo(render.Style).@"enum".fields) |f| {
-            if (std.mem.eql(u8, f.name, name)) return @enumFromInt(f.value);
+        inline for (@typeInfo(render.Style).@"enum".field_names, @typeInfo(render.Style).@"enum".field_values) |f_name, f_value| {
+            if (std.mem.eql(u8, f_name, name)) return @fromBackingInt(@intCast(f_value));
         }
         return null;
     }
@@ -576,7 +576,7 @@ pub const Shell = struct {
         } else if (std.mem.eql(u8, sub, "color")) {
             const name = try arg(it, argv, 2);
             const st = styleByName(name) orelse return it.fail("bad style \"{s}\"", .{name});
-            s.screen.theme.sgr[@intFromEnum(st)] = s.a.dupe(u8, try arg(it, argv, 3)) catch return error.OutOfMemory;
+            s.screen.theme.sgr[@backingInt(st)] = s.a.dupe(u8, try arg(it, argv, 3)) catch return error.OutOfMemory;
         } else if (std.mem.eql(u8, sub, "prompt")) {
             if (s.prompt_proc) |p| s.a.free(p);
             s.prompt_proc = s.a.dupe(u8, try arg(it, argv, 2)) catch return error.OutOfMemory;

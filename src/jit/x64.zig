@@ -58,11 +58,11 @@ const LabelState = struct {
 };
 
 fn lo(r: anytype) u8 {
-    return @as(u8, @intFromEnum(r)) & 7;
+    return @as(u8, @backingInt(r)) & 7;
 }
 
 fn hi(r: anytype) bool {
-    return @intFromEnum(r) >= 8;
+    return @backingInt(r) >= 8;
 }
 
 fn fits8(v: i64) bool {
@@ -240,7 +240,7 @@ pub const Asm = struct {
     }
 
     fn rmR(v: Reg) Rm {
-        return .{ .reg = @intFromEnum(v) };
+        return .{ .reg = @backingInt(v) };
     }
 
     fn rmM(v: Mem) Rm {
@@ -248,7 +248,7 @@ pub const Asm = struct {
     }
 
     fn num(v: anytype) u4 {
-        return @intFromEnum(v);
+        return @backingInt(v);
     }
 
     // ---- Moves ----
@@ -324,18 +324,18 @@ pub const Asm = struct {
 
     pub fn aluRR(s: *Asm, o: Alu, dst: Reg, src: Reg) Allocator.Error!void {
         try s.reserve();
-        try s.op(null, true, &.{@as(u8, @intFromEnum(o)) << 3 | 1}, num(src), rmR(dst), .none);
+        try s.op(null, true, &.{@as(u8, @backingInt(o)) << 3 | 1}, num(src), rmR(dst), .none);
     }
     pub fn aluRM(s: *Asm, o: Alu, dst: Reg, src: Mem) Allocator.Error!void {
         try s.reserve();
-        try s.op(null, true, &.{@as(u8, @intFromEnum(o)) << 3 | 3}, num(dst), rmM(src), .none);
+        try s.op(null, true, &.{@as(u8, @backingInt(o)) << 3 | 3}, num(dst), rmM(src), .none);
     }
     pub fn aluRM32(s: *Asm, o: Alu, dst: Reg, src: Mem) Allocator.Error!void {
         try s.reserve();
-        try s.op(null, false, &.{@as(u8, @intFromEnum(o)) << 3 | 3}, num(dst), rmM(src), .none);
+        try s.op(null, false, &.{@as(u8, @backingInt(o)) << 3 | 3}, num(dst), rmM(src), .none);
     }
     fn aluImm(s: *Asm, o: Alu, w: bool, dst: Rm, v: i32) Allocator.Error!void {
-        const k: u4 = @intFromEnum(o);
+        const k: u4 = @backingInt(o);
         if (fits8(v)) {
             try s.op(null, w, &.{0x83}, k, dst, .none);
             try s.byte(@bitCast(@as(i8, @intCast(v))));
@@ -416,11 +416,11 @@ pub const Asm = struct {
 
     pub fn setcc(s: *Asm, c: Cond, dst: Reg) Allocator.Error!void {
         try s.reserve();
-        try s.op(null, false, &.{ 0x0F, 0x90 + @as(u8, @intFromEnum(c)) }, 0, rmR(dst), .rm);
+        try s.op(null, false, &.{ 0x0F, 0x90 + @as(u8, @backingInt(c)) }, 0, rmR(dst), .rm);
     }
     pub fn jcc(s: *Asm, c: Cond, l: Label) Allocator.Error!void {
         try s.reserve();
-        try s.put(&.{ 0x0F, 0x80 + @as(u8, @intFromEnum(c)) });
+        try s.put(&.{ 0x0F, 0x80 + @as(u8, @backingInt(c)) });
         try s.rel32(l);
     }
     pub fn jmp(s: *Asm, l: Label) Allocator.Error!void {
@@ -474,7 +474,7 @@ pub const Asm = struct {
     // ---- SSE2 ----
 
     fn rmX(v: Xmm) Rm {
-        return .{ .reg = @intFromEnum(v) };
+        return .{ .reg = @backingInt(v) };
     }
 
     pub fn movsdXM(s: *Asm, dst: Xmm, src: Mem) Allocator.Error!void {
@@ -492,7 +492,7 @@ pub const Asm = struct {
     pub const Sse = enum(u8) { addsd = 0x58, mulsd = 0x59, subsd = 0x5C, divsd = 0x5E };
     pub fn sse(s: *Asm, o: Sse, dst: Xmm, src: Xmm) Allocator.Error!void {
         try s.reserve();
-        try s.op(0xF2, false, &.{ 0x0F, @intFromEnum(o) }, num(dst), rmX(src), .none);
+        try s.op(0xF2, false, &.{ 0x0F, @backingInt(o) }, num(dst), rmX(src), .none);
     }
     pub fn ucomisd(s: *Asm, a: Xmm, b: Xmm) Allocator.Error!void {
         try s.reserve();
@@ -588,10 +588,10 @@ pub const Row = struct {
 /// Encodes one row of the golden table. A branch row goes to the next
 /// instruction, so its offset is zero.
 pub fn encodeRow(s: *Asm, row: Row) Allocator.Error!void {
-    const ra: Reg = @enumFromInt(@as(u4, @intCast(row.a)));
-    const rb: Reg = @enumFromInt(@as(u4, @intCast(row.b)));
-    const xa: Xmm = @enumFromInt(@as(u4, @intCast(row.a)));
-    const xb: Xmm = @enumFromInt(@as(u4, @intCast(row.b)));
+    const ra: Reg = @fromBackingInt(@intCast(@as(u4, @intCast(row.a))));
+    const rb: Reg = @fromBackingInt(@intCast(@as(u4, @intCast(row.b))));
+    const xa: Xmm = @fromBackingInt(@intCast(@as(u4, @intCast(row.a))));
+    const xb: Xmm = @fromBackingInt(@intCast(@as(u4, @intCast(row.b))));
     const ma: Mem = .{ .base = ra, .disp = row.d };
     const mb: Mem = .{ .base = rb, .disp = row.d };
     switch (row.f) {
@@ -610,13 +610,13 @@ pub fn encodeRow(s: *Asm, row: Row) Allocator.Error!void {
         .mov_mi32 => try s.movMI32(ma, row.i),
         .mov_mi8 => try s.movMI8(ma, @intCast(row.i)),
         .lea => try s.lea(ra, mb),
-        .alu_rr64 => try s.aluRR(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ra, rb),
-        .alu_rm64 => try s.aluRM(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ra, mb),
-        .alu_ri64 => try s.aluRI(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ra, row.i),
-        .alu_ri32 => try s.aluRI32(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ra, row.i),
-        .alu_mi64 => try s.aluMI(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ma, row.i),
-        .alu_mi32 => try s.aluMI32(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ma, row.i),
-        .alu_rm32 => try s.aluRM32(@as(Alu, @enumFromInt(@as(u3, @intCast(row.k)))), ra, mb),
+        .alu_rr64 => try s.aluRR(@as(Alu, @fromBackingInt(@intCast(@as(u3, @intCast(row.k))))), ra, rb),
+        .alu_rm64 => try s.aluRM(@as(Alu, @fromBackingInt(@intCast(@as(u3, @intCast(row.k))))), ra, mb),
+        .alu_ri64 => try s.aluRI(@as(Alu, @fromBackingInt(@intCast(@as(u3, @intCast(row.k))))), ra, row.i),
+        .alu_ri32 => try s.aluRI32(@as(Alu, @fromBackingInt(@intCast(@as(u3, @intCast(row.k))))), ra, row.i),
+        .alu_mi64 => try s.aluMI(@as(Alu, @fromBackingInt(@intCast(@as(u3, @intCast(row.k))))), ma, row.i),
+        .alu_mi32 => try s.aluMI32(@as(Alu, @fromBackingInt(@intCast(@as(u3, @intCast(row.k))))), ma, row.i),
+        .alu_rm32 => try s.aluRM32(@as(Alu, @fromBackingInt(@intCast(@as(u3, @intCast(row.k))))), ra, mb),
         .cmp_mi8 => try s.cmpMI8(ma, @intCast(row.i)),
         .test_rr32 => try s.testRR32(ra, rb),
         .test_mi8 => try s.testMI8(ma, @intCast(row.i)),
@@ -628,10 +628,10 @@ pub fn encodeRow(s: *Asm, row: Row) Allocator.Error!void {
         .neg_r64 => try s.neg(ra),
         .cqo => try s.cqo(),
         .idiv_r64 => try s.idiv(ra),
-        .setcc => try s.setcc(@enumFromInt(@as(u4, @intCast(row.k))), ra),
+        .setcc => try s.setcc(@fromBackingInt(@intCast(@as(u4, @intCast(row.k)))), ra),
         .jcc, .jmp_rel32 => {
             const l = try s.newLabel();
-            if (row.f == .jcc) try s.jcc(@enumFromInt(@as(u4, @intCast(row.k))), l) else try s.jmp(l);
+            if (row.f == .jcc) try s.jcc(@fromBackingInt(@intCast(@as(u4, @intCast(row.k)))), l) else try s.jmp(l);
             s.bind(l);
         },
         .jmp_r64 => try s.jmpR(ra),
@@ -647,7 +647,7 @@ pub fn encodeRow(s: *Asm, row: Row) Allocator.Error!void {
         .movsd_xm => try s.movsdXM(xa, mb),
         .movsd_mx => try s.movsdMX(ma, xb),
         .movapd => try s.movapd(xa, xb),
-        .sse => try s.sse(@enumFromInt(row.k), xa, xb),
+        .sse => try s.sse(@fromBackingInt(@intCast(row.k)), xa, xb),
         .ucomisd => try s.ucomisd(xa, xb),
         .cvtsi2sd => try s.cvtsi2sd(xa, rb),
         .movq_xr => try s.movqXR(xa, rb),

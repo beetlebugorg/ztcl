@@ -129,7 +129,7 @@ fn ntError(status: i32) E {
         0xC000_00D4 => .XDEV,
         0x8000_002D, 0xC000_0275 => .LOOP,
         0xC000_0002, 0xC000_00BB => .NOSYS,
-        else => @enumFromInt(1117),
+        else => @fromBackingInt(@intCast(1117)),
     };
 }
 
@@ -376,7 +376,7 @@ pub fn parentOf(it: *Interp, rel: []const u8) Error!fsroot.ParentResult {
         _ = CloseHandle(h);
         return .{ .err = .ACCES };
     };
-    const name = it.alloc().dupeZ(u8, base) catch |e| {
+    const name = it.alloc().dupeSentinel(u8, base, 0) catch |e| {
         _ = CloseHandle(h);
         return e;
     };
@@ -607,7 +607,7 @@ fn lastError() E {
         145 => .NOTEMPTY,
         267 => .NOTDIR,
         206 => .NAMETOOLONG,
-        else => |c| @enumFromInt(c),
+        else => |c| @fromBackingInt(@intCast(c)),
     };
 }
 
@@ -674,7 +674,7 @@ pub fn hostParent(it: *Interp, path: []const u8) Error!fsroot.ParentResult {
         .fd => |fd| fd,
         .err => |e| return .{ .err = e },
     };
-    const name = it.alloc().dupeZ(u8, base) catch |e| {
+    const name = it.alloc().dupeSentinel(u8, base, 0) catch |e| {
         sys.close(h);
         return e;
     };

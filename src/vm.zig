@@ -359,9 +359,9 @@ const Compiler = struct {
         if (!isVarNode(x) or !(isVarNode(y) or isIntNode(y))) return false;
         const a = (try c.varNode(x)).?;
         if (isVarNode(y)) {
-            _ = try c.emit(.{ .op = .bin_vv, .x = @intFromEnum(op), .a = a, .b = (try c.varNode(y)).? });
+            _ = try c.emit(.{ .op = .bin_vv, .x = @backingInt(op), .a = a, .b = (try c.varNode(y)).? });
         } else {
-            _ = try c.emit(.{ .op = .bin_vi, .x = @intFromEnum(op), .a = a, .b = try c.intLit(y) });
+            _ = try c.emit(.{ .op = .bin_vi, .x = @backingInt(op), .a = a, .b = try c.intLit(y) });
         }
         c.push(1);
         return true;
@@ -379,9 +379,9 @@ const Compiler = struct {
             if (compare and isVarNode(b.a) and (isVarNode(b.b) or isIntNode(b.b))) {
                 const a = (try c.varNode(b.a)).?;
                 if (isVarNode(b.b)) {
-                    return c.emit(.{ .op = .jf_vv, .x = @intFromEnum(b.op), .a = a, .b = (try c.varNode(b.b)).? });
+                    return c.emit(.{ .op = .jf_vv, .x = @backingInt(b.op), .a = a, .b = (try c.varNode(b.b)).? });
                 }
-                return c.emit(.{ .op = .jf_vi, .x = @intFromEnum(b.op), .a = a, .b = try c.intLit(b.b) });
+                return c.emit(.{ .op = .jf_vi, .x = @backingInt(b.op), .a = a, .b = try c.intLit(b.b) });
             }
         }
         try c.compileNode(n);
@@ -511,7 +511,7 @@ const Compiler = struct {
             .script => |s| try c.compileScript(s),
             .unary => |*u| {
                 try c.compileNode(u.a);
-                _ = try c.emit(.{ .op = .unary, .x = @intFromEnum(u.op) });
+                _ = try c.emit(.{ .op = .unary, .x = @backingInt(u.op) });
             },
             .binary => |*b| switch (b.op) {
                 .land, .lor => {
@@ -530,7 +530,7 @@ const Compiler = struct {
                     if (try c.fusedBinary(b.op, b.a, b.b)) return;
                     try c.compileNode(b.a);
                     try c.compileNode(b.b);
-                    _ = try c.emit(.{ .op = .binary, .x = @intFromEnum(b.op) });
+                    _ = try c.emit(.{ .op = .binary, .x = @backingInt(b.op) });
                     c.depth -= 1;
                 },
             },
@@ -712,7 +712,7 @@ const Compiler = struct {
         } else {
             for (cmd.words[first..]) |*w| try c.compileWord(w);
         }
-        _ = try c.emit(.{ .op = .access, .x = @intFromEnum(kind) });
+        _ = try c.emit(.{ .op = .access, .x = @backingInt(kind) });
         try c.closeGuard(cmd, base, g, start);
         return true;
     }
@@ -1901,7 +1901,7 @@ pub inline fn opConcat(comptime named: bool, it: *Interp, f: *Frame, code: *cons
 
 pub inline fn opBinary(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
     _ = .{ named, f, code };
-    const op: expr.BinOp = @enumFromInt(i.x);
+    const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
     const x = &stack[sp - 2];
     const y = &stack[sp - 1];
     if (x.* == .int and y.* == .int) {
@@ -1915,7 +1915,7 @@ pub inline fn opBinary(comptime named: bool, it: *Interp, f: *Frame, code: *cons
 
 pub inline fn opUnary(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
     _ = .{ named, f, code };
-    stack[sp - 1] = try expr.unaryOp(it, @enumFromInt(i.x), stack[sp - 1]);
+    stack[sp - 1] = try expr.unaryOp(it, @fromBackingInt(@intCast(i.x)), stack[sp - 1]);
 }
 
 pub inline fn opNumberForm(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
@@ -1987,7 +1987,7 @@ pub inline fn opLmapAdd(comptime named: bool, it: *Interp, f: *Frame, code: *con
 }
 
 pub inline fn opBinVv(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
-    const op: expr.BinOp = @enumFromInt(i.x);
+    const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
     const x = intSlot(named, it, f, code, i.a);
     const y = intSlot(named, it, f, code, i.b);
     if (x != null and y != null) {
@@ -2002,7 +2002,7 @@ pub inline fn opBinVv(comptime named: bool, it: *Interp, f: *Frame, code: *const
 }
 
 pub inline fn opBinVi(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
-    const op: expr.BinOp = @enumFromInt(i.x);
+    const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
     const y = code.lits[i.b].int;
     if (intSlot(named, it, f, code, i.a)) |x| {
         stack[sp] = if (intFast(op, x, y)) |r| .{ .int = r } else try expr.intOp(it, op, x, y);
@@ -2016,7 +2016,7 @@ pub inline fn opBinVi(comptime named: bool, it: *Interp, f: *Frame, code: *const
 /// True: compare `i.x` of slot `i.a` and slot `i.b` is false.
 pub inline fn opJfVv(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!bool {
     _ = .{ stack, sp };
-    const op: expr.BinOp = @enumFromInt(i.x);
+    const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
     const x = intSlot(named, it, f, code, i.a);
     const y = intSlot(named, it, f, code, i.b);
     if (x != null and y != null) return !intCompare(op, x.?, y.?);
@@ -2030,7 +2030,7 @@ pub inline fn opJfVv(comptime named: bool, it: *Interp, f: *Frame, code: *const 
 /// True: compare `i.x` of slot `i.a` and literal `i.b` is false.
 pub inline fn opJfVi(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!bool {
     _ = .{ stack, sp };
-    const op: expr.BinOp = @enumFromInt(i.x);
+    const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
     const y = code.lits[i.b].int;
     if (intSlot(named, it, f, code, i.a)) |x| return !intCompare(op, x, y);
     shimmer(named, it, f, code, i.a);
@@ -2173,7 +2173,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 i = &ins[pc];
                 continue :sw i.op;
             },
-            .access => switch (@as(Access, @enumFromInt(i.x))) {
+            .access => switch (@as(Access, @fromBackingInt(@intCast(i.x)))) {
                 .llength => try opLlength(named, it, f, code, stack, sp, i),
                 .lindex => {
                     try opLindex(named, it, f, code, stack, sp, i);

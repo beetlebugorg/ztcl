@@ -68,7 +68,7 @@ pub var last_errno: c_int = 0;
 
 fn failed(f: Failure) void {
     last_failure = f;
-    last_errno = @intFromEnum(c.errno(-1));
+    last_errno = @backingInt(c.errno(-1));
 }
 
 /// True while this thread has its write window open on arm64 macOS.

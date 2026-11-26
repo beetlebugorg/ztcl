@@ -303,14 +303,14 @@ const Builder = struct {
             .bin_vv, .bin_vi => {
                 const x = slots[b.slotIndex(i.a)];
                 const y = if (i.op == .bin_vv) slots[b.slotIndex(i.b)] else .int;
-                const k = binKind(@enumFromInt(i.x), x, y) orelse blk: {
+                const k = binKind(@fromBackingInt(@intCast(i.x)), x, y) orelse blk: {
                     b.calls = true;
                     break :blk .any;
                 };
                 try stack.append(a, k);
             },
             .binary => {
-                const k = binKind(@enumFromInt(i.x), stack.items[top - 2], stack.items[top - 1]) orelse blk: {
+                const k = binKind(@fromBackingInt(@intCast(i.x)), stack.items[top - 2], stack.items[top - 1]) orelse blk: {
                     b.calls = true;
                     break :blk .any;
                 };
@@ -483,13 +483,13 @@ pub fn noCall(i: vm.Ins, stack: []const Kind, slots: []const Kind, b: anytype) b
         .load => slots[b.slotIndex(i.a)] != .any,
         .store, .store_pop => slots[b.slotIndex(i.a)] != .any and stack[top - 1] == slots[b.slotIndex(i.a)],
         .jump_false, .jump_true, .to_bool => stack[top - 1] == .int,
-        .jf_vv => inlineOp(@enumFromInt(i.x), slots[b.slotIndex(i.a)], slots[b.slotIndex(i.b)]),
-        .jf_vi => inlineOp(@enumFromInt(i.x), slots[b.slotIndex(i.a)], .int),
+        .jf_vv => inlineOp(@fromBackingInt(@intCast(i.x)), slots[b.slotIndex(i.a)], slots[b.slotIndex(i.b)]),
+        .jf_vi => inlineOp(@fromBackingInt(@intCast(i.x)), slots[b.slotIndex(i.a)], .int),
         .incr, .incr_drop => slots[b.slotIndex(i.a)] == .int,
         .incr_value => slots[b.slotIndex(i.a)] == .int and stack[top - 1] == .int,
-        .bin_vv => inlineOp(@enumFromInt(i.x), slots[b.slotIndex(i.a)], slots[b.slotIndex(i.b)]),
-        .bin_vi => inlineOp(@enumFromInt(i.x), slots[b.slotIndex(i.a)], .int),
-        .binary => inlineOp(@enumFromInt(i.x), stack[top - 2], stack[top - 1]),
+        .bin_vv => inlineOp(@fromBackingInt(@intCast(i.x)), slots[b.slotIndex(i.a)], slots[b.slotIndex(i.b)]),
+        .bin_vi => inlineOp(@fromBackingInt(@intCast(i.x)), slots[b.slotIndex(i.a)], .int),
+        .binary => inlineOp(@fromBackingInt(@intCast(i.x)), stack[top - 2], stack[top - 1]),
         else => false,
     };
 }
@@ -501,7 +501,7 @@ fn exitsAt(i: vm.Ins, stack: []const Kind, slots: []const Kind, b: *const Builde
     if (!noCall(i, stack, slots, b)) return false;
     return switch (i.op) {
         .incr, .incr_drop, .incr_value => true,
-        .bin_vv, .bin_vi, .binary => !isCompare(@enumFromInt(i.x)),
+        .bin_vv, .bin_vi, .binary => !isCompare(@fromBackingInt(@intCast(i.x))),
         else => false,
     };
 }

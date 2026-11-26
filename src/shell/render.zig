@@ -28,12 +28,12 @@ const Allocator = std.mem.Allocator;
 pub const Style = enum(u8) { plain, command, unknown, string, brace, variable, comment, number, match, prompt, hint, select, menu, menu_sel, prompt_normal };
 
 pub fn fromHl(s: hl.Style) Style {
-    return @enumFromInt(@intFromEnum(s));
+    return @fromBackingInt(@intCast(@backingInt(s)));
 }
 
 /// The SGR text of each style. An empty text is the default color.
 pub const Theme = struct {
-    sgr: [@typeInfo(Style).@"enum".fields.len][]const u8 = .{
+    sgr: [@typeInfo(Style).@"enum".field_names.len][]const u8 = .{
         "", // plain
         "1;34", // command
         "1;31", // unknown
@@ -53,7 +53,7 @@ pub const Theme = struct {
     on: bool = true,
 
     pub fn get(t: *const Theme, s: Style) []const u8 {
-        return if (t.on) t.sgr[@intFromEnum(s)] else "";
+        return if (t.on) t.sgr[@backingInt(s)] else "";
     }
 };
 

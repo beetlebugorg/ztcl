@@ -37,7 +37,7 @@ pub const modules_list = [_]mods.Module{
         .name = "ztcl::hellonet",
         .version = "1.0",
         .aliases = &.{.{ .name = "zt::hellonet", .version = "1.0", .script = "" }},
-        .needs = @intFromEnum(interp.Capability.socket),
+        .needs = @backingInt(interp.Capability.socket),
     },
 };
 

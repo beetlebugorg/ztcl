@@ -47,8 +47,8 @@ pub const Field = enum { x, y, z, width, height, speed, flow, feature, layer, pa
 /// The output columns of a point.
 pub const Out = enum { offset, move_x, move_y, width, flow, speed, skip };
 
-const field_count = @typeInfo(Field).@"enum".fields.len;
-const out_count = @typeInfo(Out).@"enum".fields.len;
+const field_count = @typeInfo(Field).@"enum".field_names.len;
+const out_count = @typeInfo(Out).@"enum".field_names.len;
 
 /// The names of the features. The number of a feature is its index.
 pub const default_features = [_][]const u8{ "outer_wall", "inner_wall", "skin", "infill", "support", "travel" };
@@ -91,25 +91,25 @@ pub const Limits = struct {
 /// `runSlow` call it, so the two paths give equal bits.
 pub fn bound(pts: *const Points) void {
     const lim = pts.limits;
-    const widths = pts.in[@intFromEnum(Field.width)];
+    const widths = pts.in[@backingInt(Field.width)];
     for (pts.out, 0..) |col, k| {
         const o = col orelse continue;
-        const is_width = k == @intFromEnum(Out.width);
+        const is_width = k == @backingInt(Out.width);
         for (o, 0..) |*v, i| {
             if (std.math.isFinite(v.*)) continue;
             v.* = if (is_width) (if (widths) |w| w[i] else lim.fallback_width) else 0;
         }
     }
-    if (pts.out[@intFromEnum(Out.offset)]) |o| for (o, 0..) |*v, i| {
+    if (pts.out[@backingInt(Out.offset)]) |o| for (o, 0..) |*v, i| {
         const w = @abs(if (widths) |col| col[i] else lim.fallback_width) * lim.max_offset;
         v.* = expr.maxF(-w, expr.minF(w, v.*));
     };
-    if (pts.out[@intFromEnum(Out.width)]) |o| for (o, 0..) |*v, i| {
+    if (pts.out[@backingInt(Out.width)]) |o| for (o, 0..) |*v, i| {
         const w = @abs(if (widths) |col| col[i] else lim.fallback_width);
         v.* = expr.maxF(w * lim.min_width, expr.minF(w * lim.max_width, v.*));
     };
-    const mx = pts.out[@intFromEnum(Out.move_x)] orelse return;
-    const my = pts.out[@intFromEnum(Out.move_y)] orelse return;
+    const mx = pts.out[@backingInt(Out.move_x)] orelse return;
+    const my = pts.out[@backingInt(Out.move_y)] orelse return;
     for (mx, my, 0..) |*x, *y, i| {
         const w = @abs(if (widths) |col| col[i] else lim.fallback_width) * lim.max_move;
         const len = @sqrt(x.* * x.* + y.* * y.*);
@@ -568,7 +568,7 @@ const Compiler = struct {
 
     fn output(c: *Compiler, o: Out, v: V) Error!void {
         if (v.kind == .feature) return c.fail("an output needs a number", .{});
-        const k = @intFromEnum(o);
+        const k = @backingInt(o);
         if (c.outs[k] == none) c.outs[k] = try c.emit(.{ .code = .out_load, .col = k });
         const m = try c.effMask();
         c.outs[k] = if (m == none) v.reg else try c.emit(.{ .code = .select, .a = m, .b = v.reg, .c = c.outs[k] });
@@ -852,7 +852,7 @@ pub fn compile(it: *Interp, name: []const u8, params: Value, body_text: []const 
         const f = std.meta.stringToEnum(Field, pname) orelse
             return c.fail("parameter \"{s}\" is not a point field (x y z width height speed flow feature layer path dist)", .{pname});
         try fields.append(a, f);
-        const r = if (f == .feature) try c.emit(.{ .code = .feature }) else try c.emit(.{ .code = .field, .col = @intFromEnum(f) });
+        const r = if (f == .feature) try c.emit(.{ .code = .feature }) else try c.emit(.{ .code = .field, .col = @backingInt(f) });
         try c.locals.append(a, .{ .name = pname, .v = .{ .reg = r, .kind = if (f == .feature) .feature else .double }, .depth = 0 });
     }
     var p: interp.Parser = .{ .a = a, .src = body_text };
@@ -942,14 +942,14 @@ fn cmdOutput(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value {
     const name = try it.str(argv[0]);
     if (std.mem.eql(u8, name, "skip")) {
         if (argv.len != 1) return it.wrongArgs("skip");
-        s.cur[@intFromEnum(Out.skip)] = 1;
+        s.cur[@backingInt(Out.skip)] = 1;
     } else if (std.mem.eql(u8, name, "move")) {
         if (argv.len != 3) return it.wrongArgs("move dx dy");
-        s.cur[@intFromEnum(Out.move_x)] = try toF(it, argv[1]);
-        s.cur[@intFromEnum(Out.move_y)] = try toF(it, argv[2]);
+        s.cur[@backingInt(Out.move_x)] = try toF(it, argv[1]);
+        s.cur[@backingInt(Out.move_y)] = try toF(it, argv[2]);
     } else {
         if (argv.len != 2) return it.fail("wrong # args: should be \"{s} value\"", .{name});
-        s.cur[@intFromEnum(std.meta.stringToEnum(Out, name).?)] = try toF(it, argv[1]);
+        s.cur[@backingInt(std.meta.stringToEnum(Out, name).?)] = try toF(it, argv[1]);
     }
     return Value.empty;
 }
@@ -971,7 +971,7 @@ pub fn runSlow(it: *Interp, name: []const u8, pts: *const Points) Error!void {
                 const id: usize = if (pts.feature) |col| col[i] else 0;
                 argv[k] = .{ .str = if (id < s.features.len) s.features[id] else "" };
             } else {
-                argv[k] = .{ .double = if (pts.in[@intFromEnum(f)]) |col| col[i] else 0 };
+                argv[k] = .{ .double = if (pts.in[@backingInt(f)]) |col| col[i] else 0 };
             }
         }
         for (&s.cur, pts.out) |*c, col| c.* = if (col) |o| o[i] else 0;
@@ -1017,10 +1017,10 @@ const TestPoints = struct {
 
     fn points(t: TestPoints, outs: *[out_count][]f64) Points {
         var p: Points = .{ .len = t.x.len, .feature = t.feature };
-        p.in[@intFromEnum(Field.x)] = t.x;
-        p.in[@intFromEnum(Field.y)] = t.y;
-        p.in[@intFromEnum(Field.z)] = t.z;
-        p.in[@intFromEnum(Field.width)] = t.w;
+        p.in[@backingInt(Field.x)] = t.x;
+        p.in[@backingInt(Field.y)] = t.y;
+        p.in[@backingInt(Field.z)] = t.z;
+        p.in[@backingInt(Field.width)] = t.w;
         for (&p.out, outs) |*o, col| o.* = col;
         return p;
     }
@@ -1053,7 +1053,7 @@ fn expectSameJit(script: []const u8, name: []const u8, n: usize, jit: bool) !voi
         f.* = try a.alloc(f64, n);
         s.* = try a.alloc(f64, n);
         // The width starts at the width of the point; the others at 0.
-        const start: ?[]f64 = if (k == @intFromEnum(Out.width)) t.w else null;
+        const start: ?[]f64 = if (k == @backingInt(Out.width)) t.w else null;
         for (f.*, s.*, 0..) |*fv, *sv, i| {
             fv.* = if (start) |col| col[i] else 0;
             sv.* = fv.*;
@@ -1144,10 +1144,10 @@ test "an output column that is also an input column reads the old input" {
     }
     const start = col;
     var pts: Points = .{ .len = col.len };
-    pts.in[@intFromEnum(Field.x)] = &col;
-    pts.out[@intFromEnum(Out.offset)] = &col;
-    pts.out[@intFromEnum(Out.move_x)] = &mx;
-    pts.out[@intFromEnum(Out.move_y)] = &my;
+    pts.in[@backingInt(Field.x)] = &col;
+    pts.out[@backingInt(Out.offset)] = &col;
+    pts.out[@backingInt(Out.move_x)] = &mx;
+    pts.out[@backingInt(Out.move_y)] = &my;
     const scratch = try std.testing.allocator.alloc(f64, prog.scratchLen());
     defer std.testing.allocator.free(scratch);
     prog.run(&pts, scratch);
@@ -1203,7 +1203,7 @@ test "the outputs of a point proc have limits, and the seed changes the noise" {
     for (&runs, 0..) |*outs, r| {
         for (outs, 0..) |*col, k| {
             col.* = try a.alloc(f64, n);
-            for (col.*, 0..) |*v, i| v.* = if (k == @intFromEnum(Out.width)) t.w[i] else 0;
+            for (col.*, 0..) |*v, i| v.* = if (k == @backingInt(Out.width)) t.w[i] else 0;
         }
         var pts = t.points(outs);
         // Runs 0 and 1 use one seed on the two paths; run 2 uses a new seed.
@@ -1214,13 +1214,13 @@ test "the outputs of a point proc have limits, and the seed changes the noise" {
     for (0..n) |i| {
         const w = t.w[i];
         const o = runs[0];
-        try std.testing.expect(@abs(o[@intFromEnum(Out.offset)][i]) <= w);
-        const mx = o[@intFromEnum(Out.move_x)][i];
-        const my = o[@intFromEnum(Out.move_y)][i];
+        try std.testing.expect(@abs(o[@backingInt(Out.offset)][i]) <= w);
+        const mx = o[@backingInt(Out.move_x)][i];
+        const my = o[@backingInt(Out.move_y)][i];
         try std.testing.expect(@sqrt(mx * mx + my * my) <= w * 1.000001);
-        try std.testing.expectEqual(w, o[@intFromEnum(Out.width)][i]);
+        try std.testing.expectEqual(w, o[@backingInt(Out.width)][i]);
         for (runs[0], runs[1]) |f, s| try std.testing.expectEqual(@as(u64, @bitCast(f[i])), @as(u64, @bitCast(s[i])));
-        if (runs[0][@intFromEnum(Out.flow)][i] != runs[2][@intFromEnum(Out.flow)][i]) differ = true;
+        if (runs[0][@backingInt(Out.flow)][i] != runs[2][@backingInt(Out.flow)][i]) differ = true;
     }
     try std.testing.expect(differ);
 }

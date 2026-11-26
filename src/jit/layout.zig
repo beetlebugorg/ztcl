@@ -111,7 +111,7 @@ const word: u32 = @sizeOf(usize);
 
 /// The two words of a slice: the offset of the pointer and of the length.
 fn sliceWords() ?[2]u32 {
-    const bytes = [_]u8{0} ** 8;
+    const bytes: [8]u8 = @splat(0);
     const s: []const u8 = bytes[0..5];
     var words: [2]usize = undefined;
     @memcpy(std.mem.asBytes(&words), std.mem.asBytes(&s));
@@ -147,12 +147,12 @@ pub fn probe() ?Layout {
     const tags = [_]VTag{ .int, .double, .str, .list };
     for (kinds, tags) |v, t| {
         const b = std.mem.asBytes(v)[l.value_tag];
-        if (b != @intFromEnum(t) or b & l.value_mask != @intFromEnum(t)) return null;
+        if (b != @backingInt(t) or b & l.value_mask != @backingInt(t)) return null;
     }
-    l.tag_int = @intFromEnum(VTag.int);
-    l.tag_double = @intFromEnum(VTag.double);
-    l.tag_str = @intFromEnum(VTag.str);
-    l.tag_list = @intFromEnum(VTag.list);
+    l.tag_int = @backingInt(VTag.int);
+    l.tag_double = @backingInt(VTag.double);
+    l.tag_str = @backingInt(VTag.str);
+    l.tag_list = @backingInt(VTag.list);
 
     // The payloads of a Value.
     l.value_payload = offset(&vi, &vi.int);
@@ -190,14 +190,14 @@ pub fn probe() ?Layout {
     const ctags = [_]CTag{ .undef, .val, .owned, .link, .arr };
     for (cells, ctags) |c, t| {
         const b = std.mem.asBytes(c)[l.var_tag];
-        if (b != @intFromEnum(t) or b & l.var_mask != @intFromEnum(t)) return null;
+        if (b != @backingInt(t) or b & l.var_mask != @backingInt(t)) return null;
     }
     // The tag byte is outside the Value of the cell.
     if (l.var_tag >= l.var_payload and l.var_tag < l.var_payload + l.value_size) return null;
-    l.var_undef = @intFromEnum(CTag.undef);
-    l.var_val = @intFromEnum(CTag.val);
-    l.var_owned = @intFromEnum(CTag.owned);
-    l.var_link = @intFromEnum(CTag.link);
+    l.var_undef = @backingInt(CTag.undef);
+    l.var_val = @backingInt(CTag.val);
+    l.var_owned = @backingInt(CTag.owned);
+    l.var_link = @backingInt(CTag.link);
 
     // Structs.
     l.entry_size = @sizeOf(interp.VarEntry);
@@ -230,8 +230,8 @@ pub fn probe() ?Layout {
     l.ins_size = @sizeOf(vm.Ins);
     if (l.ins_size != 16 or @offsetOf(vm.Ins, "b") != 8) return null;
 
-    inline for (std.meta.fields(Layout)) |f| {
-        if (f.type == u32 and @field(l, f.name) > max_offset) return null;
+    inline for (comptime std.meta.fieldNames(Layout)) |name| {
+        if (@FieldType(Layout, name) == u32 and @field(l, name) > max_offset) return null;
     }
     return l;
 }

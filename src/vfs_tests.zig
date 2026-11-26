@@ -31,7 +31,7 @@ fn evErr(it: *tcl.Interp, script: []const u8) ![]const u8 {
 
 fn embedded(it: *tcl.Interp) !void {
     try it.init(std.testing.allocator);
-    try it.allow(@intFromEnum(cap.embedded));
+    try it.allow(@backingInt(cap.embedded));
     try tcl.vfs.mountBytes(it, "app", "", deflate_zip);
 }
 
@@ -40,7 +40,7 @@ test "vfs: zipfs is absent by default" {
     try it.init(std.testing.allocator);
     defer it.deinit();
     for ([_][]const u8{ "zipfs", "open", "source", "file", "glob" }) |name| try std.testing.expect(it.findCommand(name) == null);
-    try it.allow(@intFromEnum(cap.clock) | @intFromEnum(cap.event));
+    try it.allow(@backingInt(cap.clock) | @backingInt(cap.event));
     try std.testing.expect(it.findCommand("zipfs") == null);
 }
 
@@ -118,7 +118,7 @@ test "vfs: a zip bomb stops at the memory limit" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    try it.allow(@intFromEnum(cap.embedded));
+    try it.allow(@backingInt(cap.embedded));
     // The central header of data/big.txt gives a size of 1 GiB.
     var buf: [deflate_zip.len]u8 = deflate_zip.*;
     var at = std.mem.indexOf(u8, &buf, "PK\x01\x02").?;
@@ -135,10 +135,10 @@ test "vfs: zipfs mount of a file in the jail" {
     if (!tcl.fsroot.supported or @import("builtin").os.tag != .linux) return error.SkipZigTest;
     const linux = tcl.sys.os;
     var buf: [64:0]u8 = undefined;
-    const root = try std.fmt.bufPrintZ(&buf, "/tmp/ztcl-vfs-{d}", .{linux.getpid()});
+    const root = try std.fmt.bufPrintSentinel(&buf, "/tmp/ztcl-vfs-{d}", .{linux.getpid()}, 0);
     _ = linux.mkdirat(linux.AT.FDCWD, root, 0o700);
     var pbuf: [80:0]u8 = undefined;
-    const zpath = try std.fmt.bufPrintZ(&pbuf, "{s}/a.zip", .{root});
+    const zpath = try std.fmt.bufPrintSentinel(&pbuf, "{s}/a.zip", .{root}, 0);
     const fd: i32 = @intCast(linux.openat(linux.AT.FDCWD, zpath, .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o600));
     _ = linux.write(fd, stored_zip.ptr, stored_zip.len);
     _ = linux.close(fd);
@@ -150,7 +150,7 @@ test "vfs: zipfs mount of a file in the jail" {
     try it.init(std.testing.allocator);
     defer it.deinit();
     try tcl.fsroot.setRoot(&it, root);
-    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.file));
+    try it.allow(@backingInt(cap.channels) | @backingInt(cap.file));
     try expectEv(&it, "zipfs mount /a.zip data", "");
     try expectEv(&it, "zipfs mount data", "/a.zip");
     try expectEv(&it, "source //zipfs:/data/lib/util.tcl; hello", "hello from zip");

@@ -25,7 +25,7 @@ pub const slot_len = 32;
 
 /// The slot of this binary. `ztcl build` writes the last 16 bytes of
 /// the slot in a copy of the file.
-pub export var ztcl_app_slot: [slot_len]u8 = ("ztcl.app.slot.v1" ++ [_]u8{0} ** 16).*;
+pub export var ztcl_app_slot: [slot_len]u8 = ("ztcl.app.slot.v1" ++ @as([16]u8, @splat(0))).*;
 
 fn slot() *volatile [slot_len]u8 {
     return &ztcl_app_slot;

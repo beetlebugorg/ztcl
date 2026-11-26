@@ -70,9 +70,9 @@ pub const FuncType = struct {
     pub fn encode(t: FuncType, list: *std.ArrayList(u8), a: Allocator) Allocator.Error!void {
         try list.append(a, 0x60);
         try uleb(list, a, t.params.len);
-        for (t.params) |p| try list.append(a, @intFromEnum(p));
+        for (t.params) |p| try list.append(a, @backingInt(p));
         try uleb(list, a, t.results.len);
-        for (t.results) |r| try list.append(a, @intFromEnum(r));
+        for (t.results) |r| try list.append(a, @backingInt(r));
     }
 };
 
@@ -94,7 +94,7 @@ pub const Global = struct {
     init: u64,
 
     pub fn encode(g: Global, list: *std.ArrayList(u8), a: Allocator) Allocator.Error!void {
-        try list.append(a, @intFromEnum(g.t));
+        try list.append(a, @backingInt(g.t));
         try list.append(a, @intFromBool(g.mutable));
         switch (g.t) {
             .i32 => {
@@ -124,7 +124,7 @@ pub const Export = struct {
 
     pub fn encode(e: Export, list: *std.ArrayList(u8), a: Allocator) Allocator.Error!void {
         try name(list, a, e.name);
-        try list.append(a, @intFromEnum(e.kind));
+        try list.append(a, @backingInt(e.kind));
         try uleb(list, a, e.index);
     }
 };
@@ -250,7 +250,7 @@ pub const Body = struct {
     }
 
     fn blockType(b: *Body, result: ?ValType) Error!void {
-        try b.op(if (result) |r| @intFromEnum(r) else 0x40);
+        try b.op(if (result) |r| @backingInt(r) else 0x40);
     }
 
     pub fn block(b: *Body, result: ?ValType) Error!void {
@@ -370,7 +370,7 @@ pub const Body = struct {
         if (t == .v128) {
             try b.op(0x1c);
             try uleb(&b.code, b.a, 1);
-            try b.op(@intFromEnum(t));
+            try b.op(@backingInt(t));
         } else try b.op(0x1b);
         try b.push(t);
     }
@@ -426,7 +426,7 @@ pub const Body = struct {
 
     pub fn load(b: *Body, l: Load, m: Mem) Error!void {
         try b.pop(.i32);
-        try b.op(@intFromEnum(l));
+        try b.op(@backingInt(l));
         try b.memarg(m);
         try b.push(loadType(l));
     }
@@ -438,7 +438,7 @@ pub const Body = struct {
             .f64 => .f64,
         });
         try b.pop(.i32);
-        try b.op(@intFromEnum(s));
+        try b.op(@backingInt(s));
         try b.memarg(m);
     }
 
@@ -571,7 +571,7 @@ pub const Body = struct {
             i -= 1;
             try b.pop(s[0][i]);
         }
-        try b.op(@intFromEnum(n));
+        try b.op(@backingInt(n));
         try b.push(s[1]);
     }
 
@@ -613,7 +613,7 @@ pub const Body = struct {
 
     pub fn vec(b: *Body, v: Vec) Error!void {
         for (0..v.arity()) |_| try b.pop(.v128);
-        try b.simd(@intFromEnum(v));
+        try b.simd(@backingInt(v));
         try b.push(if (v == .v128_any_true) .i32 else .v128);
     }
 
@@ -662,7 +662,7 @@ pub const Body = struct {
             const start = i;
             while (i < extra.len and extra[i] == t) i += 1;
             try uleb(&entry, a, i - start);
-            try entry.append(a, @intFromEnum(t));
+            try entry.append(a, @backingInt(t));
         }
         try entry.appendSlice(a, b.code.items);
         var out: std.ArrayList(u8) = .empty;

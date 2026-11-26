@@ -152,7 +152,7 @@ pub const Emitter = struct {
         try s.movRM(abi.arg0, ctxSlot());
         try s.movRI32(abi.arg1, @intCast(pc));
         try s.movRI32(abi.arg2, e.info.depth[pc]);
-        try s.callM(try x64.at(abi.helpers, 8 * @as(i64, @intFromEnum(h))));
+        try s.callM(try x64.at(abi.helpers, 8 * @as(i64, @backingInt(h))));
     }
 
     /// Jumps to the error stub of `pc` when `eax` is above 1. A helper
@@ -476,7 +476,7 @@ pub const Emitter = struct {
     }
 
     fn negate(c: Cond) Cond {
-        return @enumFromInt(@intFromEnum(c) ^ 1);
+        return @fromBackingInt(@intCast(@backingInt(c) ^ 1));
     }
 
     /// True for the operators of the fast path: `+`, `-`, `*`, and the
@@ -539,7 +539,7 @@ pub const Emitter = struct {
 
     fn binSlots(e: *Emitter, pc: u32) Error!void {
         const i = e.code.ins[pc];
-        const op: expr.BinOp = @enumFromInt(i.x);
+        const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
         if (!fastOp(op)) return e.plain(helperOf(i), pc);
         const d: i64 = e.info.depth[pc];
         const slow_l = try e.slow(pc);
@@ -555,7 +555,7 @@ pub const Emitter = struct {
 
     fn binary(e: *Emitter, pc: u32) Error!void {
         const i = e.code.ins[pc];
-        const op: expr.BinOp = @enumFromInt(i.x);
+        const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
         if (!fastOp(op)) return e.plain(.binary, pc);
         const d: i64 = e.info.depth[pc];
         const slow_l = try e.slow(pc);
@@ -567,7 +567,7 @@ pub const Emitter = struct {
 
     fn jfSlots(e: *Emitter, pc: u32) Error!void {
         const i = e.code.ins[pc];
-        const cond = compareCond(@enumFromInt(i.x)).?;
+        const cond = compareCond(@fromBackingInt(@intCast(i.x))).?;
         const slow_l = try e.slow(pc);
         try e.cell(i.a, .r8, slow_l);
         try e.cellInt(.r8, .rax, slow_l);

@@ -174,7 +174,7 @@ pub fn setRoot(it: *Interp, path: []const u8) !void {
     if (comptime on_win) return win.setRoot(it, path);
     if (comptime on_wasi) return wfs.setRoot(it, path);
     if (comptime !supported) return error.BadRoot;
-    const z = try it.alloc().dupeZ(u8, path);
+    const z = try it.alloc().dupeSentinel(u8, path, 0);
     const rc = if (comptime on_mac)
         linux.openat(linux.AT.FDCWD, z, searchFlags(), 0)
     else
@@ -341,7 +341,7 @@ pub fn openRel(it: *Interp, rel: []const u8, flags: sys.OpenFlags, mode: u32) Er
         .fd => |fd| .{ .fd = fd },
         .err => |e| .{ .err = e },
     };
-    const z = try it.alloc().dupeZ(u8, if (rel.len == 0) "." else rel);
+    const z = try it.alloc().dupeSentinel(u8, if (rel.len == 0) "." else rel, 0);
     const f = hostFlags(flags);
     var how: OpenHow = .{ .flags = @as(u32, @bitCast(f)), .mode = if (f.CREAT) mode else 0, .resolve = resolve_flags };
     const rc = linux.syscall4(.openat2, @as(usize, @bitCast(@as(isize, it.fs.fd))), @intFromPtr(z.ptr), @intFromPtr(&how), @sizeOf(OpenHow));
@@ -361,7 +361,7 @@ fn followFlags(flags: sys.OpenFlags) linux.O {
 fn hostOpen(it: *Interp, path: []const u8, flags: sys.OpenFlags, mode: u32) Error!OpenResult {
     if (comptime on_win) return win.hostOpen(it, path, flags, mode);
     if (comptime on_wasi or !supported) return it.fail("the file system is not available on this target", .{});
-    const z = try it.alloc().dupeZ(u8, path);
+    const z = try it.alloc().dupeSentinel(u8, path, 0);
     const f = followFlags(flags);
     const rc = linux.openat(linux.AT.FDCWD, z, f, if (f.CREAT) @intCast(mode) else 0);
     const e = linux.errno(rc);
@@ -380,7 +380,7 @@ pub fn parentOf(it: *Interp, rel: []const u8) Error!ParentResult {
         // The full path from the current folder of the process: the calls
         // at a parent take AT_FDCWD and an absolute path as they take a
         // descriptor and a name, and a close of AT_FDCWD has no effect.
-        return .{ .ok = .{ .fd = linux.AT.FDCWD, .base = try it.alloc().dupeZ(u8, rel) } };
+        return .{ .ok = .{ .fd = linux.AT.FDCWD, .base = try it.alloc().dupeSentinel(u8, rel, 0) } };
     }
     if (comptime on_win) return win.parentOf(it, rel);
     const cut = std.mem.lastIndexOfScalar(u8, rel, '/');
@@ -388,7 +388,7 @@ pub fn parentOf(it: *Interp, rel: []const u8) Error!ParentResult {
     const base = if (cut) |c| rel[c + 1 ..] else rel;
     if (badName(base)) return .{ .err = .ACCES };
     switch (try openRel(it, dir, .{ .directory = true, .path_only = true }, 0)) {
-        .fd => |fd| return .{ .ok = .{ .fd = fd, .base = try it.alloc().dupeZ(u8, base) } },
+        .fd => |fd| return .{ .ok = .{ .fd = fd, .base = try it.alloc().dupeSentinel(u8, base, 0) } },
         .err => |e| return .{ .err = e },
     }
 }
