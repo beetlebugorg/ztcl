@@ -36,7 +36,7 @@ The two paths fill the same groups. A row gives the slots of the group that each
 | Variables | 2 | 2 of 2, and 6 more get and set slots | 0 of 2 |
 | Dynamic strings | 4 | 4 of 4, and 5 more | 0 of 4 |
 | Packages and helpers | 5 | 5 of 5 | 3 of 5: `Tcl_PkgProvideEx`, `Tcl_PkgRequireEx`, `Tcl_GetVersion` |
-| Channels | 4 | 0 of 4 | 0 of 4 |
+| Channels | 4 | 4 of 4: the record and the close; scripts do not see the channel yet | 0 of 4 |
 
 ## The shape of the Tcl_Obj bridge
 

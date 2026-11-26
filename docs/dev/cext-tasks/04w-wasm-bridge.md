@@ -37,7 +37,7 @@ The `insert` part of `tools/cext-spike/bench.tcl` is within 3 times tclsh with t
 
 ## State
 
-Steps 1 and 2 are in `src/cext/wasm_stubs.zig`, `src/wasm_cext.zig`, and `Interp.loadPackage` of `web/ztcl.mjs`. The table has 90 slots. It has 52 of the 56 slots of the SQLite binding: the 4 slots of channels are absent. `zig build test-cext` runs the unit tests of the library with a fake ztcl. The `load` command of step 2 is still open.
+Steps 1 and 2 are in `src/cext/wasm_stubs.zig`, `src/wasm_cext.zig`, and `Interp.loadPackage` of `web/ztcl.mjs`. `zig build test-cext` runs the unit tests of the library with a fake ztcl.
 
 `tools/cext-spike/bridge.sh` builds the binding with `libztclstubs.a` and `ztcl-host.wasm` with `-Dcext-wasm`. `tools/cext-spike/bridge-bench.sh` runs `bench.tcl` 3 times on each side in turns and gives the medians. The run of 2026-11-26 was on a machine with a load average of 3, in ms:
 
@@ -50,7 +50,18 @@ Steps 1 and 2 are in `src/cext/wasm_stubs.zig`, `src/wasm_cext.zig`, and `Interp
 
 The `insert` part is within the gate of 3 times. A profile of the `insert` loop had the most time in the VDBE of SQLite, in `Tcl_GetIndexFromObjStruct`, and in the JavaScript glue of each command. The package now keeps the objects of short text arguments in a table by their text, so the index of `Tcl_GetIndexFromObjStruct` stays in the object between calls.
 
-Next: step 3, the test files of task 02 with the bridge, and the 4 channel slots.
+Step 3 is done. The table has 94 slots, with the 56 slots of the SQLite binding. The 4 channel slots make a channel record in the package, and the last `Tcl_UnregisterChannel` calls the close procedure of its type. Scripts do not see the channel yet: `read`, `puts`, and `close` of ztcl do not reach it.
+
+`Interp.defineCommand(name, fn)` of `web/ztcl.mjs` makes a command in JavaScript, and the option `packages` of `Interp.create` adds `load FILE ?PREFIX?` for the C packages. `tools/cext-spike/bridge-tests.sh` runs the test files with `load sqlite.wasm Sqlite3` and compares the counts of each file with task 02. The run of 2026-11-26 used the 696 files of task 02:
+
+- 665 files ran to the end: 199,209 tests, 5,056 errors. Task 02 had 662 files, 162,439 tests, and 7,058 errors.
+- 688 files have the same counts as in task 02.
+- 6 files have other counts, and each one now has the counts of tclsh in task 01: `atof1`, `like3`, `view`, `fuzzer2`, `tkt1873`, and `tkt-5ee23731f`.
+- 2 files need the channel in scripts: `incrblob_err` stops at "can not find channel", and `tkt2332` writes a blob with `puts` to the channel.
+
+The run found two bugs of the bridge, and both are fixed. A script of more than 64 KiB compiled in place in the exchange buffer, so its procs kept text that the next call wrote over. The package did not follow `tcl_precision`: ztcl now gives its value with each call.
+
+Next: step 4, the cost of a call, and the channel of a package in the scripts.
 
 ## Resume
 

@@ -951,7 +951,7 @@ const text_cache_size = 32;
 /// The most bytes of text in the text cache.
 const text_cache_bytes = 256 << 10;
 /// A longer text does not go in the text cache.
-const text_cache_max = 64 << 10;
+pub const text_cache_max = 64 << 10;
 
 const TextCacheEntry = struct {
     hash: u64 = 0,

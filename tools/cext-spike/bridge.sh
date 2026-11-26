@@ -19,7 +19,7 @@ F="-target wasm32-wasi -O2 -DUSE_TCL_STUBS -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_L
  -D_WASI_EMULATED_GETPID -D_WASI_EMULATED_SIGNAL -I$tcl/generic -I$SPIKE/bld"
 [ "$out/tclsqlite3.o" -nt "$SPIKE/bld/tclsqlite3.c" ] || $zig cc $F -c "$SPIKE/bld/tclsqlite3.c" -o "$out/tclsqlite3.o"
 ex=""
-for n in Sqlite3_Init ztcl_cext_buf ztcl_cext_args ztcl_cext_reply ztcl_cext_dispatch ztcl_cext_interp ztcl_cext_result; do
+for n in Sqlite3_Init ztcl_cext_buf ztcl_cext_args ztcl_cext_reply ztcl_cext_dispatch ztcl_cext_interp ztcl_cext_result ztcl_cext_precision; do
   ex="$ex -Wl,--export=$n"
 done
 $zig cc $F -mexec-model=reactor "$out/tclsqlite3.o" "$root/zig-out/lib/libztclstubs.a" -o "$out/sqlite.wasm" \
