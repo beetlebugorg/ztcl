@@ -29,10 +29,12 @@
 //! A `SEND` with the flag `reply` has its stream id as the number of the
 //! send, and its `RESULT` comes on the same stream.
 //!
-//! Not in this step: `tsv`, the mutexes, and the conditions (the broker
-//! of the plan), `thread::transfer`, a thread that an isolated thread
-//! creates, and the sandbox of each platform. A script of the child that
-//! uses them gets an error.
+//! `tsv`, the mutexes, and the conditions of the child go through the
+//! broker of the parent (`isobroker.zig`), with the frames `TSV`, `LOCK`,
+//! `UNLOCK`, and `CANCEL`.
+//!
+//! Not in this step: `thread::transfer` and a thread that an isolated
+//! thread creates. A script of the child that uses them gets an error.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 const std = @import("std");
@@ -40,6 +42,7 @@ const builtin = @import("builtin");
 const interp = @import("interp.zig");
 const thread = @import("thread.zig");
 const iso = @import("isoproto.zig");
+const isobroker = @import("isobroker.zig");
 const Interp = interp.Interp;
 const Error = interp.Error;
 const Worker = thread.Worker;
@@ -269,7 +272,20 @@ pub const Bridge = struct {
     ended: std.atomic.Value(bool) = .init(false),
     status: i64 = 0,
     exited: bool = false,
+    broker: isobroker.Broker = undefined,
 };
+
+fn bridgeWrite(ctx: *anyopaque, kind: iso.Kind, stream: u32, payload: []const u8) bool {
+    const b: *Bridge = @ptrCast(@alignCast(ctx));
+    return b.link.write(b.gpa, kind, stream, payload);
+}
+
+/// Gives a frame of the child to a broker, with a copy of its payload.
+fn toBroker(a: Allocator, f: iso.Frame, post: anytype) void {
+    var g = f;
+    g.payload = a.dupe(u8, f.payload) catch return;
+    post.post(g);
+}
 
 fn rootOf(it: *Interp) *Interp {
     var root = it;
@@ -456,6 +472,7 @@ pub fn bridgeMain(w: *Worker, b: *Bridge, st: anytype) void {
         return failBridge(w, b, st, "the child process could not start its interpreter");
     }
     if (st.fs_fd >= 0) thread.closeFd(st.fs_fd);
+    b.broker = .init(a, w, .{ .ctx = b, .write = bridgeWrite });
 
     g.lock.lock();
     w.bridge = b;
@@ -623,6 +640,7 @@ fn readerMain(b: *Bridge) void {
                 g.out_lock.unlock();
             },
             .bgerror => bgReport(w, f.payload),
+            .tsv, .lock, .unlock, .cancel => toBroker(a, f, &b.broker),
             .exit => {
                 var r: iso.Reader = .{ .b = f.payload };
                 b.status = r.int(i64) catch 1;
@@ -692,6 +710,8 @@ fn endBridge(w: *Worker, b: *Bridge, reader: ?std.Thread) void {
     }
     b.link.t.cancel();
     if (reader) |r| r.join();
+    // The locks of the child go free before the end of the worker.
+    b.broker.deinit();
     b.link.t.deinit();
     g.lock.lock();
     w.state = .done;
@@ -723,6 +743,12 @@ const Child = struct {
     a: Allocator,
     link: *Link,
     w: *Worker = undefined,
+    caller: isobroker.Caller = undefined,
+
+    fn write(ctx: *anyopaque, kind: iso.Kind, stream: u32, payload: []const u8) bool {
+        const c: *Child = @ptrCast(@alignCast(ctx));
+        return c.link.write(c.a, kind, stream, payload);
+    }
 
     fn remote(c: *Child) thread.Remote {
         return .{ .ctx = c, .send = rSend, .deliver = rDeliver, .bgerror = rBgerror };
@@ -797,11 +823,16 @@ fn childReader(c: *Child) void {
                 w.released.store(true, .release);
                 w.wake();
             },
+            .tsv => {
+                const p = c.a.dupe(u8, f.payload) catch continue;
+                c.caller.deliver(f.stream, p);
+            },
             .goodbye => break,
             else => {},
         }
     }
     // The parent is gone or said goodbye: the thread stops.
+    c.caller.end();
     g.lock.lock();
     thread.stopWorker(w, thread.Flag.stop);
     g.lock.unlock();
@@ -890,6 +921,8 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     w.mem_limit = x.mem_limit;
     w.group.next_id = st.id + 1;
     c.w = w;
+    c.caller = .{ .a = a, .out = .{ .ctx = &c, .write = Child.write }, .w = w };
+    isobroker.install(&x, &c.caller) catch return 2;
     w.group.remote = c.remote();
     if (!jail(a, &x, st, hosts)) return 2;
     if (!link.write(a, .ready, 0, "")) return 2;

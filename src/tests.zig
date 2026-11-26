@@ -2996,6 +2996,24 @@ test "isolated threads: send, results, errors, exit, and names across the protoc
     try std.testing.expectEqualStrings("bad isolation level \"x\": must be interp or process", try it.str(try it.eval("catch {thread::create -isolation x {}} m; set m")));
 }
 
+test "isolated threads: tsv and the locks through the broker" {
+    if (comptime !tcl.isothread.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.iso_spawn = .{ .spawn = isoSpawn };
+    try it.allow(@backingInt(tcl.interp.Capability.thread));
+    _ = try it.eval("tsv::set a x 1; tsv::set a l {1 2}; set t [thread::create -isolation process -joinable {thread::wait}]");
+    try std.testing.expectEqualStrings("6 6", try it.str(try it.eval("list [thread::send $t {tsv::incr a x 5}] [tsv::get a x]")));
+    try std.testing.expectEqualStrings("3", try it.str(try it.eval("thread::send $t {tsv::lappend a l 3; tsv::llength a l}")));
+    try std.testing.expectEqualStrings("no key a(no)", try it.str(try it.eval("thread::send $t {catch {tsv::get a no} m; set m}")));
+    try std.testing.expectEqualStrings("12", try it.str(try it.eval("thread::send $t {tsv::lock a {tsv::set a y [expr {[tsv::get a x] * 2}]}}; tsv::get a y")));
+    try std.testing.expectEqualStrings("16", try it.str(try it.eval("thread::send $t {[tsv::object a x] incr 10}")));
+    // A mutex that the child holds at its end goes free.
+    _ = try it.eval("set m [thread::mutex create]; thread::send $t \"thread::mutex lock $m\"; thread::release $t; thread::join $t");
+    try std.testing.expectEqualStrings("ok", try it.str(try it.eval("thread::mutex lock $m; thread::mutex unlock $m; set _ ok")));
+}
+
 test "isolated threads: no runner gives an error" {
     if (comptime !tcl.isothread.supported or !tcl.isothread.spawns_runner) return error.SkipZigTest;
     var it: tcl.Interp = undefined;

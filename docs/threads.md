@@ -147,7 +147,8 @@ puts [thread::send $t {sq 12}]   ;# 144, from another process
 - At the end of the group, a child that does not stop within 2 seconds gets SIGKILL.
 - The runner starts the child (`Interp.iso_runner`, which the runner sets to itself). An embedder that is not the runner sets `iso_runner` to a ztcl runner, or gets `ZTCL ISOLATION RUNNER`.
 - On macOS the child enters a sandbox (`sandbox_init`) before its first script. Its files are the root folder of the creator, or all files of the user in host mode, or none without the `file` capability. Its network needs the `socket` capability. It cannot start a program or reach a Mach service. The parent ends a child whose physical footprint passes its memory limit by more than 128 MiB, the margin of the runner itself.
-- In this version the level runs on macOS. Linux and Windows get it with their sandboxes. `tsv`, the mutexes, the conditions, `thread::transfer`, and a thread that the child creates are not yet available in the child: they give an error there. The levels `wasm`, `vm`, and `vm-confidential` give `ZTCL ISOLATION LEVEL`.
+- In this version the level runs on macOS. Linux and Windows get it with their sandboxes. `thread::transfer` and a thread that the child creates are not yet available in the child: they give an error there.
+- `tsv`, the mutexes, the conditions, and `thread::eval` work in the child on the arrays and the locks of the group. The parent runs each of these commands for the child (the broker), so each one costs a round trip between the processes. `tsv::lock` and `thread::eval` run their script in the child and hold the lock in the parent. A lock that the child holds at its end goes free. The levels `wasm`, `vm`, and `vm-confidential` give `ZTCL ISOLATION LEVEL`.
 
 > [!WARNING]
 > A send from the child to the parent runs in the parent with the power of the parent, as with any thread. The sandbox limits the child, and a script the child sends to the parent goes past it.
