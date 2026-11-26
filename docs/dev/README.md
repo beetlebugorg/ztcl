@@ -22,6 +22,7 @@ These files are the plans, the task lists, the reviews, and the test results of 
 | [static-build.md](static-build.md) | The plan of static binaries with embedded files, the virtual file system, and cross-compiling (`ztcl build`). |
 | [exec-windows.md](exec-windows.md) | The plan of `exec`, `pid`, and pipelines on Windows: the paths of the programs, the command line, the Job Object of each pipeline, and ConPTY. |
 | [enclave.md](enclave.md) | The plan of ztcl in enclaves and confidential VMs (ztcl#180): the Windows part with VBS enclaves, the image, the host calls, `ztcl::enclave`, attestation, and signing. |
+| [enclave-spike.md](enclave-spike.md) | The results of the spike of the VBS enclave: the build of `ztcl-enclave.dll` and each step of the host test on the Windows test machine. |
 | [ports.md](ports.md) | The plan of the macOS and Windows ports. |
 | [linux-tasks/](linux-tasks/README.md) | The tasks of `ztcl::linux`: desktop portals and D-Bus calls (#110). |
 | [cext-tasks/](cext-tasks/README.md) | The tasks of Tcl packages with C modules, native and in WebAssembly (#1). |

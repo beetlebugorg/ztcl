@@ -1,0 +1,3 @@
+LIBRARY ztcl-enclave
+EXPORTS
+    ztcl_run
