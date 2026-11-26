@@ -43,6 +43,11 @@ jobs:
         run: |
           zig build jit-probe
       - name: Build and test
+        # The tests of ztcl::mac call the keychain and the defaults of the
+        # runner. A development Mac leaves the variable unset, because a
+        # keychain can ask the user there.
+        env:
+          ZTCL_TEST_MAC: "1"
         run: |
           if [ "$RUNNER_OS" = Linux ]; then ulimit -v 6000000; fi
           zig build

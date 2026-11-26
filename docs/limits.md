@@ -36,6 +36,8 @@ The default interpreter has no command that reaches the host. `puts` writes to a
 | `thread` | `thread::*`, `tsv::*`, `tpool::*` | Limits for each thread and totals for the group. See [Threads](threads.md). |
 | `exec` | `exec`, `pid`, and pipelines | A program list (`--exec-allow`), a time limit (`--exec-timeout MS`), and a fixed environment (`--exec-env`). |
 | `launch` | `ztcl::open` | A URL (`http`, `https`, or `mailto`) or a file in the default app of the host. A file also needs `file`. On Windows a file of a type that runs as code (`.exe`, `.bat`, `.lnk`, and others) is an error. The app is outside the root folder and each limit. Only Windows has a backend in this version. |
+| `keychain` | `ztcl::mac::keychain` | The generic passwords of the login keychain of macOS, for the services of a list (`--keychain-allow S,S`) only. An empty list reaches none. A secret goes to the script as a string. |
+| `defaults` | `ztcl::mac::defaults` | The string values of the user defaults of macOS, for the domains of a list (`--defaults-allow D,D`) only. An empty list reaches none. |
 
 > [!WARNING]
 > `exec` is not sandboxed. A process from `exec` runs outside the root folder and outside each limit, with the full power of the user. Turn it on only for scripts that you trust.

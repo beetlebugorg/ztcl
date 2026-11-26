@@ -8,7 +8,7 @@
 //! line at a time. The runner reads the files itself; a script has no
 //! command that reads a file.
 //!
-//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, `exec`, `random`, `env`, `sqlite`, `thread`). `--root DIR` is
+//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, `exec`, `random`, `env`, `sqlite`, `thread`). `--keychain-allow S,S` and `--defaults-allow D,D` list the keychain services and the defaults domains of `ztcl::mac`. `--root DIR` is
 //! the one folder of `file` and channels. Only the
 //! suite passes it.
 //! `--exec-timeout MS`, `--exec-env NAME=value`, and `--exec-allow a,b`
@@ -510,6 +510,14 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             // A --root after this flag turns the jail on.
             const fs_bits = @backingInt(tcl.interp.Capability.file) | @backingInt(tcl.interp.Capability.channels);
             if (root == null and bits & fs_bits != 0 and !it.fs.host) tcl.fsroot.setHost(&it) catch {};
+            continue;
+        }
+        if ((std.mem.eql(u8, arg, "--keychain-allow") or std.mem.eql(u8, arg, "--defaults-allow")) and i + 1 < args.len) {
+            i += 1;
+            var list: std.ArrayList([]const u8) = .empty;
+            var parts = std.mem.tokenizeScalar(u8, args[i], ',');
+            while (parts.next()) |part| try list.append(arena, part);
+            if (arg[2] == 'k') it.keychain_allow = list.items else it.defaults_allow = list.items;
             continue;
         }
         if (std.mem.eql(u8, arg, "--exec-timeout") and i + 1 < args.len) {
