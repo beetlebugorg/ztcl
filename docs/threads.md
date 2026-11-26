@@ -141,12 +141,13 @@ set t [thread::create -isolation process {proc sq x {expr {$x * $x}}; thread::wa
 puts [thread::send $t {sq 12}]   ;# 144, from another process
 ```
 
+- A creator in host file mode (no root folder) gets `ZTCL ISOLATION HOSTFILES` from `thread::create -isolation process`. Give the thread a root folder, or pass `-files host` to give it all files of the user with the rest of its isolation in place. `-files host` needs a creator in host file mode.
 - `thread::send`, `-async` with a variable, a send of the child to another thread, the errors with their codes, `thread::cancel`, `thread::release`, `thread::exit`, `thread::join`, `thread::names`, and `thread::errorproc` work as for a thread of the level `interp`. The values keep their kinds.
 - The child gets the capabilities, the compute limit, and the memory limit of the thread. The clock and the event loop of the child are those of the runner, when the creator has them.
 - A child that ends with no exit, for example a kill from outside, ends the thread: a send that waits gives `target thread died`, `thread::join` gives 1, and `thread::errorproc` gets the error.
 - At the end of the group, a child that does not stop within 2 seconds gets SIGKILL.
 - The runner starts the child (`Interp.iso_runner`, which the runner sets to itself). An embedder that is not the runner sets `iso_runner` to a ztcl runner, or gets `ZTCL ISOLATION RUNNER`.
-- On macOS the child enters a sandbox (`sandbox_init`) before its first script. Its files are the root folder of the creator, or all files of the user in host mode, or none without the `file` capability. Its network needs the `socket` capability. It cannot start a program or reach a Mach service. The parent ends a child whose physical footprint passes its memory limit by more than 128 MiB, the margin of the runner itself.
+- On macOS the child enters a sandbox (`sandbox_init`) before its first script. Its files are the root folder of the creator, or all files of the user with `-files host`, or none without the `file` capability. Its network needs the `socket` capability. It cannot start a program or reach a Mach service. The parent ends a child whose physical footprint passes its memory limit by more than 128 MiB, the margin of the runner itself.
 - In this version the level runs on macOS. Linux and Windows get it with their sandboxes. `thread::transfer` and a thread that the child creates are not yet available in the child: they give an error there.
 - `tsv`, the mutexes, the conditions, and `thread::eval` work in the child on the arrays and the locks of the group. The parent runs each of these commands for the child (the broker), so each one costs a round trip between the processes. `tsv::lock` and `thread::eval` run their script in the child and hold the lock in the parent. A lock that the child holds at its end goes free. The levels `wasm`, `vm`, and `vm-confidential` give `ZTCL ISOLATION LEVEL`.
 

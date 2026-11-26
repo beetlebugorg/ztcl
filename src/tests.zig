@@ -3014,6 +3014,19 @@ test "isolated threads: tsv and the locks through the broker" {
     try std.testing.expectEqualStrings("ok", try it.str(try it.eval("thread::mutex lock $m; thread::mutex unlock $m; set _ ok")));
 }
 
+test "isolated threads: host file mode crosses only with -files host" {
+    if (comptime !tcl.isothread.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.iso_spawn = .{ .spawn = isoSpawn };
+    try it.allow(@backingInt(tcl.interp.Capability.thread) | @backingInt(tcl.interp.Capability.file) | @backingInt(tcl.interp.Capability.channels));
+    try tcl.fsroot.setHost(&it);
+    try std.testing.expectEqualStrings("ZTCL ISOLATION HOSTFILES", try it.str(try it.eval("catch {thread::create -isolation process {}}; set ::errorCode")));
+    try std.testing.expectEqualStrings("-files host needs -isolation process", try it.str(try it.eval("catch {thread::create -files host {}} m; set m")));
+    try std.testing.expectEqualStrings("3", try it.str(try it.eval("thread::join [thread::create -isolation process -files host -joinable {thread::exit 3}]")));
+}
+
 test "isolated threads: no runner gives an error" {
     if (comptime !tcl.isothread.supported or !tcl.isothread.spawns_runner) return error.SkipZigTest;
     var it: tcl.Interp = undefined;

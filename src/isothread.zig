@@ -295,13 +295,22 @@ fn rootOf(it: *Interp) *Interp {
 
 /// Makes the bridge of a new isolated thread. The caller holds the
 /// group lock, so this only allocates.
-pub fn prepare(it: *Interp, w: *Worker, st: anytype) Error!*Bridge {
+pub fn prepare(it: *Interp, w: *Worker, st: anytype, files_host: bool) Error!*Bridge {
     if (comptime !supported) return it.failCode("ZTCL ISOLATION LEVEL", "the level process is not available on this platform yet", .{});
     const root = rootOf(it);
     if (root.iso_spawn == null and !spawns_runner)
         return it.failCode("ZTCL ISOLATION LEVEL", "the level process is not available on this platform yet", .{});
     if (root.iso_runner == null and root.iso_spawn == null)
         return it.failCode("ZTCL ISOLATION RUNNER", "the embedder gives no runner for isolated threads", .{});
+    // Host file mode crosses into a child only on request, so a thread
+    // gets all files of the user by a choice in its own script.
+    const file_bits = @backingInt(interp.Capability.file) | @backingInt(interp.Capability.channels);
+    if (st.caps & file_bits != 0) {
+        if (root.fs.host and !files_host)
+            return it.failCode("ZTCL ISOLATION HOSTFILES", "the creator has all files of the user: give the thread a root folder, or pass -files host", .{});
+        if (files_host and !root.fs.host)
+            return it.failCode("ZTCL ISOLATION HOSTFILES", "-files host needs a creator with all files of the user", .{});
+    }
     const g = w.group;
     const b = try g.gpa.create(Bridge);
     b.* = .{
