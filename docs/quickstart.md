@@ -6,6 +6,7 @@
 
 Save this file as `sum.tcl`:
 
+<!-- live -->
 ```tcl
 proc sum {n} {
     set total 0
@@ -63,6 +64,7 @@ hello from ztcl
 
 ## Read JSON
 
+<!-- live -->
 ```tcl
 package require ztcl::json
 set d [ztcl::json parse {{"name": "ztcl", "tags": ["tcl", "zig"]}}]
