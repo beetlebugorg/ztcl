@@ -16,6 +16,10 @@ pub fn build(b: *std.Build) void {
     // `-Djit=false` builds no JIT code. The default is true on a target
     // with a backend: x86-64 Linux and arm64 macOS.
     const t = target.result;
+    // `-Dcext=true` builds `load` of Tcl C packages and links the C
+    // library. The default build has no code of it.
+    const cext = b.option(bool, "cext", "Build load of Tcl C packages (not sandboxed)") orelse false;
+    gc_options.addOption(bool, "cext", cext);
     const jit_backend = (t.cpu.arch == .x86_64 and t.os.tag == .linux) or (t.cpu.arch == .aarch64 and t.os.tag == .macos);
     gc_options.addOption(bool, "jit", b.option(bool, "jit", "Build the JIT compiler") orelse jit_backend);
     // `-Djit_bug=true` plants a known bug: the `bin_vv` template of tier 1
@@ -43,6 +47,7 @@ pub fn build(b: *std.Build) void {
     // `-Dtsan-plant=true` plants a race for the check of `tools/tsan.sh`:
     // each `tsv::incr` adds 1 to one global word with no lock.
     gc_options.addOption(bool, "tsan_plant", b.option(bool, "tsan-plant", "Plant a race for the ThreadSanitizer check") orelse false);
+    const libc: ?bool = if (tsan or cext) true else null;
 
     // The module that other packages import.
     const ztcl = b.addModule("ztcl", .{
@@ -50,7 +55,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .sanitize_thread = tsan,
-        .link_libc = if (tsan) true else null,
+        .link_libc = libc,
     });
     ztcl.addOptions("build_options", gc_options);
     addVt(b, ztcl, target, optimize);
@@ -58,6 +63,9 @@ pub fn build(b: *std.Build) void {
     const tests = b.addTest(.{ .root_module = ztcl });
     const test_step = b.step("test", "Run the tests of the interpreter and the shell");
     test_step.dependOn(&b.addRunArtifact(tests).step);
+    // The tests of C packages only, for a build with `-Dcext=true`.
+    const cext_tests = b.addTest(.{ .root_module = ztcl, .filters = &.{"cext:"} });
+    b.step("test-cext-native", "Run the tests of the native loader of C packages").dependOn(&b.addRunArtifact(cext_tests).step);
     // The interactive shell of the runner.
     const shell_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/shell/all.zig"),
@@ -85,7 +93,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = runner_optimize,
         .sanitize_thread = tsan,
-        .link_libc = if (tsan) true else null,
+        .link_libc = libc,
     });
     fast.addOptions("build_options", gc_options);
     addVt(b, fast, target, runner_optimize);
@@ -96,7 +104,7 @@ pub fn build(b: *std.Build) void {
         .optimize = runner_optimize,
         .strip = if (strip) true else null,
         .sanitize_thread = tsan,
-        .link_libc = if (tsan) true else null,
+        .link_libc = libc,
         .imports = &.{.{ .name = "ztcl", .module = fast }},
     }) });
     // The interpreter can use 5 MiB of native stack (`max_native`), as

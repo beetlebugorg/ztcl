@@ -24,19 +24,19 @@ One package gives one list. Other packages use other slots, for example the chan
 
 ## Coverage
 
-The two paths fill the same groups. A row gives the slots of the group that each path has, and the test of the path. The WebAssembly path has the slots in `src/cext/wasm_stubs.zig`, with the unit tests of `zig build test-cext`.
+The two paths fill the same groups. A row gives the slots of the group that each path has, and the test of the path. The WebAssembly path has the slots in `src/cext/wasm_stubs.zig`, with the unit tests of `zig build test-cext`. The native path has the slots in the group files of `src/cext/stubs.zig`, with the test packages of `tools/cext/check.sh`. [The coverage of the complete table](#coverage-of-the-complete-table) has the native count over all 630 public slots.
 
 | Group | SQLite slots | WebAssembly | Native |
 |---|---:|---|---|
-| Memory | 2 | 2 of 2, and `Tcl_Realloc`, `Tcl_AttemptAlloc`, `Tcl_AttemptRealloc` | |
-| Objects | 22 | 22 of 22, and 19 more setters, getters, and list slots | |
-| Results | 8 | 8 of 8, and `Tcl_AppendElement` | |
-| Commands | 3 | 3 of 3, and `Tcl_DeleteCommandFromToken` | |
-| Scripts | 6 | 6 of 6, and `Tcl_EvalEx`, `Tcl_NRCallObjProc` | |
-| Variables | 2 | 2 of 2, and 6 more get and set slots | |
-| Dynamic strings | 4 | 4 of 4, and 5 more | |
-| Packages and helpers | 5 | 5 of 5 | |
-| Channels | 4 | 0 of 4 | |
+| Memory | 2 | 2 of 2, and `Tcl_Realloc`, `Tcl_AttemptAlloc`, `Tcl_AttemptRealloc` | 2 of 2, and the other 14 slots of the area memory |
+| Objects | 22 | 22 of 22, and 19 more setters, getters, and list slots | 0 of 22 |
+| Results | 8 | 8 of 8, and `Tcl_AppendElement` | 0 of 8 |
+| Commands | 3 | 3 of 3, and `Tcl_DeleteCommandFromToken` | 0 of 3 |
+| Scripts | 6 | 6 of 6, and `Tcl_EvalEx`, `Tcl_NRCallObjProc` | 0 of 6 |
+| Variables | 2 | 2 of 2, and 6 more get and set slots | 0 of 2 |
+| Dynamic strings | 4 | 4 of 4, and 5 more | 0 of 4 |
+| Packages and helpers | 5 | 5 of 5 | 3 of 5: `Tcl_PkgProvideEx`, `Tcl_PkgRequireEx`, `Tcl_GetVersion` |
+| Channels | 4 | 0 of 4 | 0 of 4 |
 
 ## The shape of the Tcl_Obj bridge
 
@@ -84,3 +84,76 @@ For the native ztcl, the WebAssembly path needs a runtime of our own: an interpr
 3. **Both**: the bridge with two call paths. The native library first for the `ztcl` program, and the WebAssembly loader for the web forms.
 
 Each choice keeps the default build free of this code: the loader and the library are build options that are off by default.
+
+## The build-out of the stubs tables
+
+On 2026-11-26 the user chose both paths, with the complete stubs API of Tcl 8.6 as the goal: all 630 functions of the public table, then the internal and platform tables. A slot with no function is an error that names the slot during the build-out. At the end, no slot is left without a function. [Task 04n](cext-tasks/04n-native.md) has the steps of the native path, and [task 04w](cext-tasks/04w-wasm-bridge.md) has the steps of the WebAssembly path.
+
+### The areas
+
+`tools/cext/stubs.py` reads the slots from the Tcl 8.6 headers and gives each public slot one area by its name. The use of a corpus of packages gives the order of the areas. The memory and package slots go first, because `Tcl_InitStubs` and each package need them.
+
+`tools/cext/corpus.py` reads the output of the C preprocessor with `USE_TCL_STUBS` for each C file of a package. Each call of the C API is then a field of a stubs table, so the scan counts the slots that each package names. A slot in a branch that does not run counts too. So the counts are an upper bound of the slots that a package calls. These are the packages of the corpus, from `tools/cext/corpus.sh`:
+
+| Package | C files read | Public and internal slots |
+|---|---:|---:|
+| SQLite 3.54.1 (`tclsqlite3.c`) | 1 of 1 | 66 |
+| Itcl 4.3.2 | 19 of 20 | 127 |
+| Thread 2.8.11 | 10 of 11 | 68 |
+| TDBC 1.1.10 | 3 of 4 | 9 |
+| tdbc::mysql 1.1.10 | 1 of 2 | 9 |
+| tdbc::odbc 1.1.10 | 1 of 2 | 8 |
+| tdbc::postgres 1.1.10 | 1 of 2 | 8 |
+| TclTLS 1.7.22 | 3 of 4 | 20 |
+| Memchan 2.3 | 19 of 19 | 32 |
+| TclX 8.4.1 | 35 of 35 | 158 |
+
+The preprocessor stops at a file that needs a header of its configure step, so the table shows the files that it read. The corpus names 240 public slots and 31 internal slots, and no platform slot. Itcl and TclX use the internal table, and Itcl also uses the stubs table of TclOO. That table is outside the four tables. tdom has a copyleft license, so it is not in the corpus.
+
+| Order | Area | Slots | Slots the corpus names | Sum of packages over those slots |
+|---:|---|---:|---:|---:|
+| 1 | memory | 16 | 4 | 16 |
+| 2 | packages | 18 | 7 | 16 |
+| 3 | objects | 58 | 32 | 98 |
+| 4 | scripts and results | 58 | 27 | 67 |
+| 5 | channels | 92 | 37 | 52 |
+| 6 | strings and encodings | 86 | 31 | 42 |
+| 7 | lists and dicts | 28 | 14 | 41 |
+| 8 | errors | 25 | 16 | 30 |
+| 9 | interps and commands | 64 | 21 | 28 |
+| 10 | hash tables | 13 | 9 | 21 |
+| 11 | variables | 21 | 8 | 21 |
+| 12 | events | 35 | 12 | 14 |
+| 13 | namespaces | 25 | 13 | 13 |
+| 14 | threads | 15 | 5 | 6 |
+| 15 | filesystem | 63 | 4 | 5 |
+| 16 | zlib | 13 | 0 | 0 |
+
+### Coverage of the complete table
+
+`tools/cext/coverage.py` writes this table from the group files of `src/cext/stubs.zig`. A slot is done when a group has its function and a test checks it against tclsh. The internal and platform tables follow the public table.
+
+<!-- coverage -->
+| Area | Slots | Done | Missing |
+|---|---:|---:|---|
+| memory | 16 | 16 | none |
+| packages | 18 | 12 | `Tcl_RegisterConfig`, `Tcl_PkgRequireProc`, `Tcl_SetStartupScript`, `Tcl_GetStartupScript`, `Tcl_LoadFile`, `Tcl_FindSymbol` |
+| objects | 58 | 0 | 58 slots |
+| scripts and results | 58 | 0 | 58 slots |
+| channels | 92 | 0 | 92 slots |
+| strings and encodings | 86 | 0 | 86 slots |
+| lists and dicts | 28 | 0 | 28 slots |
+| errors | 25 | 3 | 22 slots |
+| interps and commands | 64 | 0 | 64 slots |
+| hash tables | 13 | 0 | 13 slots |
+| variables | 21 | 0 | 21 slots |
+| events | 35 | 0 | 35 slots |
+| namespaces | 25 | 0 | 25 slots |
+| threads | 15 | 0 | 15 slots |
+| filesystem | 63 | 0 | 63 slots |
+| zlib | 13 | 0 | 13 slots |
+| **public, all** | **630** | **31** | 4% |
+| **internal** | **173** | **0** | 0% |
+| **internal platform** | **23** | **0** | 0% |
+| **platform** | **0** | **0** | 100% |
+<!-- /coverage -->
