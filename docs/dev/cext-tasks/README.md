@@ -32,4 +32,4 @@ Issue #1 has the goal: load an existing Tcl package with a C module through an o
 - Task 01: [01-native.md](01-native.md). The binding called 56 public slots and no internal slot.
 - Task 02: [02-wasm.md](02-wasm.md). The module called 53 public slots, each one also in task 01. 636 test files have the same counts as in task 01.
 - Task 03: [../cext.md](../cext.md). On 2026-11-26 the user chose both paths.
-- Task 04w: [04w-wasm-bridge.md](04w-wasm-bridge.md). The plan.
+- Task 04w: [04w-wasm-bridge.md](04w-wasm-bridge.md). Steps 1 and 2: 90 slots, and the `insert` part of `bench.tcl` is 2.5 times tclsh.

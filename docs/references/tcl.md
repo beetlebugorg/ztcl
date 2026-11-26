@@ -127,4 +127,4 @@ The headers `generic/tclDecls.h`, `generic/tclIntDecls.h`, `generic/tclPlatDecls
 
 **License:** Tcl/Tk License (BSD style)
 
-**How ztcl uses it:** the spike of `docs/dev/cext-tasks/` (`tools/cext-spike/slots.py`) reads the slot numbers and the signatures from the output of the C preprocessor on these headers at build time. The tools copy no code of Tcl. The spike also runs the Tcl binding of SQLite (`tclsqlite.c`, public domain) and the SQLite test files as data. ztcl does not build them.
+**How ztcl uses it:** the spike of `docs/dev/cext-tasks/` (`tools/cext-spike/slots.py`) reads the slot numbers and the signatures from the output of the C preprocessor on these headers at build time. `src/cext/wasm_stubs.zig` has the slot numbers, the signatures, and the layouts of `Tcl_Obj`, `Tcl_ObjType`, `Tcl_DString`, the public part of `Tcl_Interp`, and `TclStubs`, from these headers and `generic/tcl.h`. It has its own code for each slot, and the error messages follow the text of Tcl 8.6. The tools copy no code of Tcl. The spike also runs the Tcl binding of SQLite (`tclsqlite.c`, public domain) and the SQLite test files as data. ztcl does not build them.

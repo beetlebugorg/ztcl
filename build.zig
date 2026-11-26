@@ -10,6 +10,7 @@ pub fn build(b: *std.Build) void {
     const gc_options = b.addOptions();
     const gc_precise = b.option(bool, "gc-precise", "Use the precise roots of WebAssembly") orelse false;
     gc_options.addOption(bool, "gc_precise", gc_precise);
+    cext_on = b.option(bool, "cext-wasm", "Add the exports of C packages in WebAssembly to the wasm libraries") orelse false;
     // The runtime of `ztcl compile --wasm` is only a WebAssembly build.
     gc_options.addOption(bool, "aot", false);
     // `-Djit=false` builds no JIT code. The default is true on a target
@@ -65,6 +66,18 @@ pub fn build(b: *std.Build) void {
     }) });
     test_step.dependOn(&b.addRunArtifact(shell_tests).step);
     b.step("test-shell", "Run the tests of the shell").dependOn(&b.addRunArtifact(shell_tests).step);
+
+    // The stubs table of a C package in WebAssembly (docs/dev/cext-tasks/04w-wasm-bridge.md).
+    // It links into the package and is never part of ztcl.
+    const stubs_tests = b.addTest(.{ .root_module = addCextStubs(b, target, optimize) });
+    test_step.dependOn(&b.addRunArtifact(stubs_tests).step);
+    b.step("test-cext", "Run the tests of the stubs table of C packages").dependOn(&b.addRunArtifact(stubs_tests).step);
+    const stubs_lib = b.addLibrary(.{ .name = "ztclstubs", .linkage = .static, .root_module = addCextStubs(
+        b,
+        b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi }),
+        .ReleaseFast,
+    ) });
+    b.step("cext-stubs", "Build zig-out/lib/libztclstubs.a for C packages in WebAssembly").dependOn(&b.addInstallArtifact(stubs_lib, .{}).step);
 
     // The runner and the benchmark always build in ReleaseFast.
     const fast = b.createModule(.{
@@ -312,6 +325,10 @@ fn addWasmSimd(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise:
 
 /// `addWasmSimd` with the imports of the module `ztcl_host` when `host`
 /// is true (docs/dev/wasm-host-tasks/README.md).
+/// The value of `-Dcext-wasm`. The bridge of C packages is off by default
+/// (docs/dev/cext-tasks/04w-wasm-bridge.md).
+var cext_on = false;
+
 fn addWasmForm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise: bool, size_plant: usize, on: [all_modules.len]bool, aot: bool, shell: bool, simd: bool, host: bool) *std.Build.Step.Compile {
     var query: std.Target.Query = .{ .cpu_arch = .wasm32, .os_tag = .freestanding };
     if (simd) query.cpu_features_add = std.Target.wasm.featureSet(&.{.simd128});
@@ -336,6 +353,7 @@ fn addWasmForm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise:
     // form only: they do not fit in the size limit of ztcl.wasm.
     wasm_options.addOption(bool, "wasm_point", simd or host);
     wasm_options.addOption(bool, "wasm_host", host);
+    wasm_options.addOption(bool, "cext", cext_on);
     // libghostty-vt uses `std.heap.wasm_allocator`, which has no form for
     // a shared memory, so the build with shared threads has no `ztcl::vt`.
     var mods_on = on;
@@ -381,6 +399,19 @@ const all_modules = [_]Mod{
 /// built from source with `-Dsimd=false`, so it needs no libc and no
 /// C++ code. The module is Zig code in the program, so each target
 /// links it statically. `src/vt.zig` is the only user.
+/// The module of `src/cext/wasm_stubs.zig`. It uses only the value
+/// helpers of `src/value.zig` and the C library of the target.
+fn addCextStubs(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
+    const m = b.createModule(.{
+        .root_source_file = b.path("src/cext/wasm_stubs.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    m.addImport("value", b.createModule(.{ .root_source_file = b.path("src/value.zig"), .target = target, .optimize = optimize }));
+    return m;
+}
+
 fn addVt(b: *std.Build, m: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
     const dep = b.dependency("ghostty", .{ .target = target, .optimize = optimize, .simd = false, .@"emit-lib-vt" = true, .@"vt-features" = @as([]const u8, "-kitty_graphics") });
     m.addImport("ghostty-vt", dep.module("ghostty-vt"));

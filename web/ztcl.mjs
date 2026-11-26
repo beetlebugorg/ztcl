@@ -87,6 +87,11 @@ export class Interp {
         zone: (ptr, len) => self._zone(ptr, len),
       };
     }
+    // A build with `-Dcext-wasm` imports `ztcl_cext.call` for the commands of
+    // the C packages of loadPackage().
+    if (WebAssembly.Module.imports(mod).some((i) => i.module === "ztcl_cext")) {
+      imports.ztcl_cext = { call: (pkg, id, argc, argv) => self._cextCall(pkg, id, argc, argv) };
+    }
     const instance = await WebAssembly.instantiate(mod, imports);
     self = new Interp(instance, options);
     return self;
@@ -336,6 +341,160 @@ export class Interp {
   }
 
   /// Frees the interpreter. Drop the Interp after this call.
+  /// Loads a C package that `zig cc -target wasm32-wasi` built with
+  /// libztclstubs.a (docs/dev/cext-tasks/04w-wasm-bridge.md), and runs
+  /// its init function, for example "Sqlite3_Init". The module needs a
+  /// ztcl library built with `-Dcext-wasm`. `wasi` is the import object of
+  /// `wasi_snapshot_preview1`, for example the wasiImport of a WASI of
+  /// Node.js. With no `wasi`, the package gets no files: each call of
+  /// WASI gives ENOSYS, except the clock and random bytes.
+  async loadPackage(source, { init, wasi = null } = {}) {
+    if (!this.x.ztcl_cext_command) throw new Error("loadPackage: this module has no C packages (build with -Dcext-wasm)");
+    if (!init) throw new Error("loadPackage: no init function");
+    const mod = source instanceof WebAssembly.Module ? source : await WebAssembly.compile(source);
+    const index = (this._pkgs ??= []).length;
+    const pkg = { x: null, index };
+    const imports = { ztcl: this._cextImports(pkg), wasi_snapshot_preview1: wasi ?? noWasi(pkg) };
+    const instance = await WebAssembly.instantiate(mod, imports);
+    pkg.x = instance.exports;
+    pkg.side = this._side(pkg.x);
+    if (wasi?.initialize) wasi.initialize(instance);
+    else pkg.x._initialize?.();
+    this._pkgs.push(pkg);
+    const ip = pkg.x.ztcl_cext_interp(this.h);
+    const rc = pkg.x[init](ip);
+    if (rc !== 0) {
+      const r = new Uint32Array(pkg.x.memory.buffer, pkg.x.ztcl_cext_result(ip), 4);
+      throw new Error(`${init}: ${decoder.decode(new Uint8Array(pkg.x.memory.buffer, r[2], r[1]))}`);
+    }
+  }
+
+  // The views of the memory of a side of the bridge (`side.x` is the
+  // instance). A view is made again after the memory grows. The reply
+  // record has a fixed address, and the exchange buffer moves only when
+  // it grows, so the glue keeps both.
+  _side(x) {
+    const side = { x, buf: null, u8: null, u32: null, reply: x.ztcl_cext_reply() >>> 2, xb: 0, xcap: -1, args: 0, acap: -1 };
+    side.view = () => {
+      if (side.buf !== x.memory.buffer) {
+        side.buf = x.memory.buffer;
+        side.u8 = new Uint8Array(side.buf);
+        side.u32 = new Uint32Array(side.buf);
+      }
+      return side;
+    };
+    // The address of an exchange buffer of at least `len` bytes.
+    side.xbuf = (len) => {
+      if (len > side.xcap) {
+        side.xb = x.ztcl_cext_buf(Math.max(len, 2 * side.xcap, 256));
+        side.xcap = Math.max(len, 2 * side.xcap, 256);
+      }
+      return side.xb;
+    };
+    return side;
+  }
+
+  // Copies the reply record of `from` to the reply of `to`. Text goes
+  // into the exchange buffer of `to`.
+  _cextReply(from, to) {
+    const f = from.view().u32, r = from.reply;
+    const kind = f[r], len = f[r + 1];
+    if (kind === 0) {
+      const p = f[r + 2];
+      const dst = to.xbuf(len);
+      const t = to.view();
+      t.u8.set(from.u8.subarray(p, p + len), dst);
+      const tr = to.reply;
+      t.u32[tr] = 0; t.u32[tr + 1] = len; t.u32[tr + 2] = dst; t.u32[tr + 3] = 0;
+      return;
+    }
+    const t = to.view().u32, tr = to.reply;
+    t[tr] = kind; t[tr + 1] = len; t[tr + 2] = f[r + 2]; t[tr + 3] = f[r + 3];
+  }
+
+  // Copies `len` bytes at `ptr` of the package into the exchange buffer
+  // of ztcl, with `extra` bytes of room after them.
+  _toZtcl(p, ptr, len, extra = 0) {
+    const z = this._zside;
+    const zb = z.xbuf(len + extra);
+    z.view().u8.set(p.view().u8.subarray(ptr, ptr + len), zb);
+    return zb;
+  }
+
+  _cextImports(pkg) {
+    const z = this.x;
+    this._zside ??= this._side(z);
+    const zs = this._zside;
+    return {
+      cmd_create: (h, id, ptr, len) => z.ztcl_cext_command(h, pkg.index, id, this._toZtcl(pkg.side, ptr, len), len),
+      cmd_delete: (h, ptr, len) => {
+        const rc = z.ztcl_cext_delete(h, this._toZtcl(pkg.side, ptr, len), len);
+        if (rc !== 0) this._cextReply(zs, pkg.side);
+        return rc;
+      },
+      eval: (h, ptr, len, flags) => {
+        const rc = z.ztcl_cext_eval(h, this._toZtcl(pkg.side, ptr, len), len, flags);
+        this._cextReply(zs, pkg.side);
+        return rc;
+      },
+      var_get: (h, ptr, len, flags) => {
+        const rc = z.ztcl_cext_var_get(h, this._toZtcl(pkg.side, ptr, len), len, flags);
+        this._cextReply(zs, pkg.side);
+        return rc;
+      },
+      var_set: (h, ptr, len, arg, flags) => {
+        const ps = pkg.side.view();
+        const a = arg >>> 2;
+        const kind = ps.u32[a], vlen = ps.u32[a + 1], lo = ps.u32[a + 2], hi = ps.u32[a + 3];
+        const extra = kind === 0 ? vlen : 0;
+        const zb = this._toZtcl(ps, ptr, len, extra);
+        const zv = zs.view();
+        if (extra) zv.u8.set(ps.u8.subarray(lo, lo + vlen), zb + len);
+        const zr = zs.reply;
+        zv.u32[zr] = kind; zv.u32[zr + 1] = vlen; zv.u32[zr + 2] = kind === 0 ? zb + len : lo; zv.u32[zr + 3] = kind === 0 ? 0 : hi;
+        const rc = z.ztcl_cext_var_set(h, zb, len, zr << 2, flags);
+        if (rc !== 0) this._cextReply(zs, ps);
+        return rc;
+      },
+      pkg_provide: () => 0,
+    };
+  }
+
+  // The import `ztcl_cext.call`: copies the arguments into the package
+  // and runs the command there.
+  _cextCall(pkgIndex, id, argc, argv) {
+    const ps = this._pkgs[pkgIndex].side;
+    const zs = this._zside.view();
+    const src = zs.u32, s0 = argv >>> 2;
+    let total = 0;
+    for (let i = 0; i < argc; i++) if (src[s0 + i * 4] === 0) total += src[s0 + i * 4 + 1];
+    let off = ps.xbuf(total);
+    if (argc > ps.acap) {
+      ps.acap = Math.max(argc, 16);
+      ps.args = ps.x.ztcl_cext_args(ps.acap);
+    }
+    const p = ps.view();
+    const dst = p.u32, d0 = ps.args >>> 2;
+    const zu8 = zs.u8, pu8 = p.u8;
+    for (let i = 0; i < argc; i++) {
+      const si = s0 + i * 4, di = d0 + i * 4;
+      const k = src[si], len = src[si + 1];
+      dst[di] = k; dst[di + 1] = len;
+      if (k === 0) {
+        const a = src[si + 2];
+        if (len < 16) for (let j = 0; j < len; j++) pu8[off + j] = zu8[a + j];
+        else pu8.set(zu8.subarray(a, a + len), off);
+        dst[di + 2] = off; dst[di + 3] = 0;
+        off += len;
+      } else {
+        dst[di + 2] = src[si + 2]; dst[di + 3] = src[si + 3];
+      }
+    }
+    const rc = ps.x.ztcl_cext_dispatch(id, argc);
+    this._cextReply(ps, this._zside);
+    return rc;
+  }
+
   close() {
     if (this.h) this.x.ztcl_delete(this.h);
     this.h = 0;
@@ -435,4 +594,25 @@ export class WorkerInterp {
     for (const p of this.pending.values()) p.reject(new Error(message));
     this.pending.clear();
   }
+}
+
+// The WASI imports of a package with no files: ENOSYS (52) for each
+// call, except the clock, random bytes, and empty arguments and
+// environment. `pkg.x` is the instance after instantiate().
+function noWasi(pkg) {
+  const mem = () => pkg.x.memory.buffer;
+  const own = {
+    clock_time_get: (id, prec, out) => {
+      new DataView(mem()).setBigUint64(out, BigInt(Date.now()) * 1000000n, true);
+      return 0;
+    },
+    random_get: (ptr, len) => {
+      globalThis.crypto.getRandomValues(new Uint8Array(mem(), ptr, len));
+      return 0;
+    },
+    args_sizes_get: (argc, size) => { new Uint32Array(mem(), argc, 1)[0] = 0; new Uint32Array(mem(), size, 1)[0] = 0; return 0; },
+    environ_sizes_get: (n, size) => { new Uint32Array(mem(), n, 1)[0] = 0; new Uint32Array(mem(), size, 1)[0] = 0; return 0; },
+    proc_exit: (code) => { throw new Error(`the package called proc_exit(${code})`); },
+  };
+  return new Proxy({}, { get: (_, name) => own[name] ?? (() => 52) });
 }
