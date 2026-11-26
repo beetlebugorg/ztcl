@@ -105,8 +105,8 @@ jobs:
             ../zig-out/bin/ztcl build --target $t -o hello-$t --embed lib.tcl --embed data main.tcl
           done
           file hello-*
-          sudo apt-get install -y -qq qemu-user-static > /dev/null
-          test "$(qemu-aarch64-static ./hello-aarch64-linux x | head -1)" = "hello from main.tcl x"
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-user > /dev/null
+          test "$(qemu-aarch64 ./hello-aarch64-linux x | head -1)" = "hello from main.tcl x"
       - name: Show the signature
         if: runner.os == 'macOS'
         run: codesign -dv app/hello 2>&1 | head -8
