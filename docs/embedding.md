@@ -211,6 +211,18 @@ GitHub Pages cannot set headers. A service worker can add them, because the brow
 - A browser with no service worker, or with service workers off (for example some private windows), gets no isolation. `ThreadInterp` then uses the `async` mode.
 - With `require-corp`, the page can load a resource of another origin only when that origin sends `Cross-Origin-Resource-Policy` or CORS headers.
 
+## Zip mounts
+
+A zip archive in the memory of your program is a read-only folder for scripts. Turn on `embedded` for reads of the mounts only, or `file` for the mounts and the root folder:
+
+```zig
+try it.allow(@intFromEnum(ztcl.interp.Capability.embedded));
+try ztcl.vfs.mountBytes(&it, "app", "", zip_bytes);
+_ = try it.eval("source //zipfs:/app/main.tcl");
+```
+
+`mountBytes` reads the central directory and keeps a slice of `zip_bytes`, so the bytes must stay alive until the interpreter ends. A mount of your program has an empty file name, and `zipfs unmount` of it is an error. A child interp starts with no mounts. [Build a program](build.md) has the commands.
+
 ## WebAssembly
 
 `zig build wasm` makes `zig-out/lib/ztcl.wasm`. It exports a small C ABI:
