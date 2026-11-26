@@ -45,6 +45,7 @@ pub const vfs = @import("vfs.zig");
 pub const zipread = @import("zipread.zig");
 pub const zipwrite = @import("zipwrite.zig");
 pub const buildnative = @import("buildnative.zig");
+pub const dbus = @import("dbus.zig");
 pub const macho = @import("macho.zig");
 pub const filecmd = @import("filecmd.zig");
 pub const sys = @import("sys.zig");
@@ -94,6 +95,7 @@ test {
     _ = @import("vfs_tests.zig");
     _ = zipwrite;
     _ = buildnative;
+    _ = dbus;
     _ = macho;
     _ = wasmbundle;
     _ = @import("wasmfiles.zig");
