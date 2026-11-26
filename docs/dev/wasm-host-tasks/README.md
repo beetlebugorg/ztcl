@@ -20,6 +20,10 @@ A wasm module cannot have an optional import: the host must give each import tha
 | 05 | host | A file system that the page gives. `Interp.files` is a map of paths to bytes (`Uint8Array`) that the host can change between calls. `allow: ["file"]` with `files` mounts it at `/` in read and write mode, inside the root folder rules of `src/fsroot.zig`. Test: a script writes a file, and the map has the new bytes after the `eval`. |
 | 06 | both | Docs and examples. `docs/webassembly.md` lists the two modules and each import and export. `examples/web/point.html` runs a point proc over a canvas. The npm package has `ztcl-host.wasm` and the types of the new options. |
 
+## State
+
+- Task 01: `ztcl_point_install`, `ztcl_point_compile`, `ztcl_point_outputs`, and `ztcl_point_run` in `ztcl-simd.wasm` (with them, `ztcl.wasm` was 1,532,277 bytes, over its limit of 1,500,000 in `tools/size-report.sh`), `pointProc` of `web/ztcl.mjs`, `zig build wasm-simd`, and `tools/wasm-point.mjs`. `point` is installed only with the option `point: true`, so the commands `offset`, `width`, `speed`, and the others do not appear in each interpreter.
+
 ## Rules for each task
 
 1. Read AGENTS.md, WRITING.md, `docs/dev/design.md`, `docs/webassembly.md`, and `docs/embedding.md` first.

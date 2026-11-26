@@ -61,23 +61,29 @@ export async function compile(source = wasmURL()) {
   return WebAssembly.compile(source);
 }
 
+// The orders of the columns of ztcl_point_run (`point.Field` and `point.Out`).
+const POINT_FIELDS = ["x", "y", "z", "width", "height", "speed", "flow", "feature", "layer", "path", "dist"];
+const POINT_OUTS = ["offset", "move_x", "move_y", "width", "flow", "speed", "skip"];
+
 export class Interp {
   /// Makes an interpreter in a new instance of `module`. `module` is a
   /// source as for compile(), and it can be left out.
   /// Options: computeLimit (compute units for each eval, null for no limit),
   /// memLimit (bytes), onOutput (a function that gets the `puts` text),
   /// allow (a list of capabilities: only "file", for the files of a
-  /// bundle).
+  /// bundle), and point (true adds `point proc` and the output commands).
   static async create(module, options = {}) {
     if (isOptions(module)) [module, options] = [undefined, module];
     const instance = await WebAssembly.instantiate(await compile(module), {});
     return new Interp(instance, options);
   }
 
-  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [] } = {}) {
+  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
+    if (point && !this.x.ztcl_point_install) throw new Error("point: this module has no point procs (use ztcl-simd.wasm)");
+    if (point && !this.x.ztcl_point_install(this.h)) throw new Error("ztcl_point_install: out of memory");
     this.computeLimit = computeLimit;
     this.onOutput = onOutput;
     if (memLimit != null) this.memLimit = memLimit;
@@ -134,6 +140,70 @@ export class Interp {
       x.ztcl_free(ptr, bytes.length || 1);
       return rc;
     });
+  }
+
+  /// The point proc `name` of a script, after `point: true`: its
+  /// `outputs` (the names of the columns that it writes) and its
+  /// run({ n, seed, inputs, feature, outputs }) runs the proc over n
+  /// points: `inputs` maps field names (x, y, z, width, height, speed,
+  /// flow, layer, path, dist) to Float64Array columns, `feature` is a
+  /// Uint8Array of feature numbers, and `outputs` maps output names
+  /// (offset, move_x, move_y, width, flow, speed, skip) to Float64Array
+  /// columns with the start values. run() writes the new values into
+  /// `outputs` and returns the compute units. The compute limit applies
+  /// to each call.
+  pointProc(name) {
+    const x = this.x;
+    const bytes = encoder.encode(name);
+    const ptr = x.ztcl_alloc(bytes.length || 1);
+    new Uint8Array(x.memory.buffer, ptr, bytes.length).set(bytes);
+    const id = x.ztcl_point_compile(this.h, ptr, bytes.length);
+    x.ztcl_free(ptr, bytes.length || 1);
+    if (!id) throw new Error(this._text(x.ztcl_result_ptr(this.h), x.ztcl_result_len(this.h)));
+    const mask = x.ztcl_point_outputs(this.h, id);
+    return { outputs: POINT_OUTS.filter((_, k) => mask & (1 << k)), run: (points) => this._pointRun(id, points) };
+  }
+
+  _pointRun(id, { n, seed = 1, inputs = {}, feature = null, outputs = {} }) {
+    const x = this.x;
+    const size = (POINT_FIELDS.length + POINT_OUTS.length) * n * 8 + n;
+    // ztcl_point_run reads f64 columns, so the block starts on 8 bytes.
+    const raw = x.ztcl_alloc(size + 8);
+    if (!raw) throw new Error("ztcl_alloc: out of memory");
+    const ptr = (raw + 7) & ~7;
+    try {
+      let inMask = 0;
+      let outMask = 0;
+      const f64 = new Float64Array(x.memory.buffer, ptr, (POINT_FIELDS.length + POINT_OUTS.length) * n);
+      POINT_FIELDS.forEach((f, k) => {
+        if (f === "feature") {
+          if (feature) {
+            new Uint8Array(x.memory.buffer, ptr + (POINT_FIELDS.length + POINT_OUTS.length) * n * 8, n).set(feature.subarray(0, n));
+            inMask |= 1 << k;
+          }
+        } else if (inputs[f]) {
+          f64.set(inputs[f].subarray(0, n), k * n);
+          inMask |= 1 << k;
+        }
+      });
+      POINT_OUTS.forEach((o, k) => {
+        if (outputs[o]) {
+          f64.set(outputs[o].subarray(0, n), (POINT_FIELDS.length + k) * n);
+          outMask |= 1 << k;
+        }
+      });
+      x.ztcl_set_compute_limit(this.h, this.computeLimit == null ? NO_LIMIT : BigInt(this.computeLimit));
+      const units = x.ztcl_point_run(this.h, id, ptr, n, seed, inMask, outMask);
+      if (units === -1n) throw new Error("compute limit reached");
+      if (units < 0n) throw new Error(`ztcl_point_run: error ${units}`);
+      const out = new Float64Array(x.memory.buffer, ptr, (POINT_FIELDS.length + POINT_OUTS.length) * n);
+      POINT_OUTS.forEach((o, k) => {
+        if (outputs[o]) outputs[o].set(out.subarray((POINT_FIELDS.length + k) * n, (POINT_FIELDS.length + k + 1) * n));
+      });
+      return Number(units);
+    } finally {
+      x.ztcl_free(raw, size + 8);
+    }
   }
 
   _call(f) {
