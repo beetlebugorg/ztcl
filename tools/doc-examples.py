@@ -36,6 +36,14 @@ STEP = re.compile(r'<!-- define -->\n```tcl\n(.*?)```\n|\[`([^`]+)`\]\(run:(?: "
 BLOCK = re.compile(r"<!-- run(?:: ([^>]*?))? -->\n```tcl\n(.*?)```\n(?:\n?```text\n(.*?)```\n)?", re.S)
 
 
+def files(cwd, text):
+    """Writes the files of a page (`<!-- file: NAME -->`) in the folder."""
+    for name, body in FILE.findall(text):
+        path = pathlib.Path(cwd, name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
+
+
 def tcl_string(text):
     """A Tcl word in double quotes with the same text."""
     out = text.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("[", "\\[").replace("]", "\\]")
@@ -64,8 +72,7 @@ def lesson(runner, page, text):
     with tempfile.NamedTemporaryFile("w", suffix=".tcl", delete=False, encoding="utf-8") as f:
         f.write("\n".join(script))
     with tempfile.TemporaryDirectory() as cwd:
-        for name, body in FILE.findall(text):
-            pathlib.Path(cwd, name).write_text(body, encoding="utf-8")
+        files(cwd, text)
         r = subprocess.run([runner, *flags, f.name], capture_output=True, text=True, timeout=60, cwd=cwd)
     pathlib.Path(f.name).unlink()
     got = re.findall(r"\x1f(\d+)\x1f(.*?)\x1e", r.stdout, re.S)
@@ -110,6 +117,7 @@ def main():
                 f.write(m.group(2))
             flags = [f for f in (m.group(1) or "").split() if f != "native"]
             with tempfile.TemporaryDirectory() as cwd:
+                files(cwd, text)
                 r = subprocess.run([runner, *flags, f.name], capture_output=True, text=True, timeout=60, cwd=cwd)
             pathlib.Path(f.name).unlink()
             want = m.group(3)

@@ -85,4 +85,4 @@ These are the traps of lessons 1 to 4, in one list.
 - Add a proc `undone {i}` that sets `done` to 0.
 - Change `bump` to `upvar #0`, and call it from a proc.
 
-If you know Tcl already, [Coming from tclsh](../language.md) lists what ztcl does differently.
+Lessons 5 to 15 cover the rest of the language, one part of `jot` at a time. If you know Tcl already, [Coming from tclsh](../language.md) lists what ztcl does differently.
