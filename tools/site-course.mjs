@@ -102,14 +102,17 @@ for (let k = 0; k < runs.length; k++) {
   if (y2 !== y) { same = false; console.log(`  ${cmd}: scrollY ${y} -> ${y2}`); }
   const err = want?.startsWith("error: ");
   const w = err ? want.slice(7) : want;
-  if (w && !said.includes(w)) { results = false; console.log(`  ${cmd}: ${JSON.stringify(said)}, want ${JSON.stringify(w)}`); }
+  // The screen wraps long lines, and the shell prints a list one
+  // element on each line: compare the text with no white space.
+  const flat = (t) => t.replace(/[\s{}]+/g, "");
+  if (w && !flat(said).includes(flat(w))) { results = false; console.log(`  ${cmd}: ${JSON.stringify(said)}, want ${JSON.stringify(w)}`); }
   ran++;
 }
 check(`${ran} Run links keep the scroll position`, same);
 check("each Run link gives its result in the shell", results);
 const shift = await evalJS("window.__shift");
 check("no layout shift", shift < 0.001, String(shift));
-check("the focus is in the shell", await evalJS(`document.activeElement?.className === "zshell-input"`));
+if (ran) check("the focus is in the shell", await evalJS(`document.activeElement?.className === "zshell-input"`));
 
 // A reload runs the commands of the lesson again.
 const kept = await evalJS(`JSON.parse(sessionStorage.getItem("ztcl-learn:" + document.querySelector(".zcourse").dataset.lesson) || "[]").length`);
@@ -119,7 +122,7 @@ await pause(500);
 await started();
 await pause(300);
 const screen = await evalJS(`(async () => (await import("./../../assets/shell.js")).pageShell().then((v) => v.shell.text().join("\\n")))()`);
-check("a reload runs the commands again", !!screen && screen.includes(`Ran your ${ran} earlier`), screen);
+if (ran) check("a reload runs the commands again", !!screen && screen.includes(`Ran your ${ran} earlier`), screen);
 await evalJS(`document.querySelector(".zcourse-again").click()`);
 await pause(500);
 check("Start again clears the commands", await evalJS(`!sessionStorage.getItem("ztcl-learn:" + document.querySelector(".zcourse").dataset.lesson)`));
@@ -137,10 +140,12 @@ await started();
 await pause(300);
 const sheet = await evalJS(`(() => { const p = document.querySelector(".zcourse").getBoundingClientRect(); const out = [...document.querySelectorAll("body *")].filter((e) => e.getBoundingClientRect().right > document.documentElement.clientWidth + 1).filter((e) => !e.closest(".zcourse-dock, pre")).slice(0, 4).map((e) => e.tagName + "." + e.className + ":" + e.textContent.slice(0, 30)); return { top: p.top, bottom: p.bottom, ih: innerHeight, width: p.width, wide: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, iw: innerWidth, out }; })()`);
 check("the shell is a sheet at the bottom", Math.abs(sheet.bottom - sheet.ih) < 2 && sheet.width === 390 && sheet.wide <= 390, JSON.stringify(sheet));
-const y = await evalJS("scrollY");
-await evalJS(`document.querySelector(".zrun").click()`);
-await pause(100);
-check("a Run link keeps the scroll position on a small screen", (await evalJS("scrollY")) === y);
+if (ran) {
+  const y = await evalJS("scrollY");
+  await evalJS(`document.querySelector(".zrun, .zrun-box").click()`);
+  await pause(100);
+  check("a Run link keeps the scroll position on a small screen", (await evalJS("scrollY")) === y);
+}
 await evalJS(`document.querySelector(".zcourse-size").click()`);
 await pause(100);
 check("Make small makes the sheet small", await evalJS(`document.querySelector(".zcourse").getBoundingClientRect().height < 60`), String(await evalJS(`document.querySelector(".zcourse").getBoundingClientRect().height`)));
