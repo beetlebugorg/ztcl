@@ -2948,3 +2948,51 @@ test "ztcl::vm: the capability, the jail of its paths, and the limits" {
     // The test program has no entitlement for the framework.
     try std.testing.expectEqualStrings("ZTCL VM ENTITLEMENT", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {share /mnt}}; set ::errorCode")));
 }
+
+fn isoSpawn(_: ?*anyopaque) ?i32 {
+    var fds: [2]i32 = undefined;
+    if (@import("builtin").os.tag == .linux) {
+        const l = std.os.linux;
+        if (l.errno(l.socketpair(l.AF.UNIX, l.SOCK.STREAM, 0, &fds)) != .SUCCESS) return null;
+    } else if (std.c.socketpair(std.c.AF.UNIX, std.c.SOCK.STREAM, 0, &fds) != 0) return null;
+    const t = tcl.isoproto.Transport.init(fds[1]) catch return null;
+    const th = std.Thread.spawn(.{}, isoChild, .{t}) catch return null;
+    th.detach();
+    return fds[0];
+}
+
+fn isoChild(t: tcl.isoproto.Transport) void {
+    _ = tcl.isothread.childMain(std.heap.page_allocator, t, .{});
+}
+
+test "isolated threads: send, results, errors, exit, and names across the protocol" {
+    if (comptime !tcl.isothread.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.iso_spawn = .{ .spawn = isoSpawn };
+    try it.allow(@backingInt(tcl.interp.Capability.thread));
+    _ = try it.eval("set t [thread::create -isolation process -joinable {proc sq x {expr {$x*$x}}; thread::wait}]");
+    try std.testing.expectEqualStrings("144", try it.str(try it.eval("thread::send $t {sq 12}")));
+    try std.testing.expectEqualStrings("a {b c} 3", try it.str(try it.eval("thread::send $t {list a {b c} 3}")));
+    // The kinds cross: an integer stays an integer.
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("string is wide -strict [thread::send $t {expr {2**62}}]")));
+    try std.testing.expectEqualStrings("boom {MY CODE}", try it.str(try it.eval("catch {thread::send $t {error boom {} {MY CODE}}} m o; list $m [dict get $o -errorcode]")));
+    try std.testing.expectEqualStrings("1", try it.str(try it.eval("expr {$t in [thread::names]}")));
+    // A send of the child to the parent, and its answer.
+    try std.testing.expectEqualStrings("42", try it.str(try it.eval("thread::send $t [list thread::send [thread::id] {set ::back 42}]; set ::back")));
+    _ = try it.eval("thread::release $t");
+    try std.testing.expectEqualStrings("0", try it.str(try it.eval("thread::join $t")));
+    try std.testing.expectEqualStrings("3", try it.str(try it.eval("thread::join [thread::create -isolation process -joinable {thread::exit 3}]")));
+    try std.testing.expectEqualStrings("ZTCL ISOLATION LEVEL", try it.str(try it.eval("catch {thread::create -isolation vm {}}; set ::errorCode")));
+    try std.testing.expectEqualStrings("bad isolation level \"x\": must be interp or process", try it.str(try it.eval("catch {thread::create -isolation x {}} m; set m")));
+}
+
+test "isolated threads: no runner gives an error" {
+    if (comptime !tcl.isothread.supported or !tcl.isothread.spawns_runner) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.thread));
+    try std.testing.expectEqualStrings("ZTCL ISOLATION RUNNER", try it.str(try it.eval("catch {thread::create -isolation process {}}; set ::errorCode")));
+}

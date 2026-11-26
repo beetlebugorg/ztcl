@@ -41,6 +41,7 @@ fn noThread(it: *Interp, id: u64) Error {
 fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var joinable = false;
     var preserved = false;
+    var level: thread.Isolation = .interp;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
         const o = try it.str(argv[i]);
@@ -48,6 +49,14 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             joinable = true;
         } else if (eql(o, "-preserved")) {
             preserved = true;
+        } else if (eql(o, "-isolation") and i + 1 < argv.len) {
+            i += 1;
+            const l = try it.str(argv[i]);
+            level = std.meta.stringToEnum(thread.Isolation, l) orelse {
+                if (eql(l, "wasm") or eql(l, "vm") or eql(l, "vm-confidential"))
+                    return it.failCode("ZTCL ISOLATION LEVEL", "the isolation level {s} is not available yet", .{l});
+                return it.fail("bad isolation level \"{s}\": must be interp or process", .{l});
+            };
         } else if (eql(o, "--")) {
             i += 1;
             break;
@@ -55,7 +64,7 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     if (argv.len - i > 1) return it.wrongArgs("thread::create ?-joinable? ?script?");
     const script = if (i < argv.len) try it.str(argv[i]) else "";
-    const id = try thread.create(it, script, joinable, preserved);
+    const id = try thread.createOpts(it, script, .{ .joinable = joinable, .preserved = preserved, .isolation = level });
     return thread.idValue(it, id);
 }
 

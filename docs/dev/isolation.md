@@ -161,8 +161,8 @@ The default keeps the scripts working: the parent runs the sends of a child as t
 ## Steps
 
 1. This plan, reviewed by the sessions of each platform.
-2. `src/isoproto.zig`: the frames, the byte form (moved out of `webasync.zig`), the handshake, and the sealing, with tests over a socket pair and a fuzz test of the reader.
-3. The proxy worker in `thread.zig`, with a test transport in the same process.
+2. `src/isoproto.zig`: the frames, the byte form, the handshake, and the sealing, with tests over a socket pair and a test of random bytes into the reader (done, ztcl#223).
+3. The proxy worker in `thread.zig` and the child in `src/isothread.zig`, with a test transport in the same process, and `thread::create -isolation process` on macOS with no sandbox (done). The messages of this step: `START`, `READY`, `SEND`, `RESULT`, `CANCEL`, `RELEASE`, `OUTPUT`, `BGERROR`, `EXIT`, and `GOODBYE`.
 4. The `process` level on each platform, each with its sandbox (ztcl#209: namespaces, seccomp, and Landlock on Linux; a sandbox profile and limits on macOS; a Job Object and an AppContainer on Windows).
 5. The `vm` level on the agent of `ztcl::vm`, then `wasm`, then `vm-confidential`.
 6. The Thread package tests at each level, and `docs/isolation.md` with the numbers.

@@ -331,6 +331,16 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     host_io = io;
     const args = try init.minimal.args.toSlice(arena);
     host_preopens = init.preopens;
+    // The child process of an isolated thread (ztcl#209): `--iso-fd N`.
+    if (comptime tcl.isothread.supported) {
+        if (setup == null and args.len == 3 and std.mem.eql(u8, args[1], "--iso-fd")) {
+            const fd = std.fmt.parseInt(i32, args[2], 10) catch std.process.exit(2);
+            std.process.exit(tcl.isothread.childProcess(init.gpa, fd, .{
+                .clock = .{ .now = hostNow, .zone = hostZone },
+                .event = .{ .now = hostTicks, .sleep = hostSleep },
+            }));
+        }
+    }
     // A binary of `ztcl build` runs its payload and reads no option.
     if (builtin.os.tag != .wasi and setup == null) if (tcl.buildnative.payloadRange()) |r| return runApp(init, args, r.off, r.len);
     if (args.len > 1 and std.mem.eql(u8, args[1], "compile") and isPointCompile(args[2..])) {
@@ -360,6 +370,8 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     defer report(&it);
     it.output = .{ .ctx = out, .write = write };
     it.mem_limit = 2 << 30;
+    // The runner starts the child process of an isolated thread.
+    if (comptime tcl.isothread.supported) it.iso_runner = std.process.executablePathAlloc(io, arena) catch null;
     if (setup) |f| try f(&it);
 
     var exec_env: std.ArrayList([:0]const u8) = .empty;
