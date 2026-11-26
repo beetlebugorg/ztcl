@@ -37,7 +37,7 @@ The process tree uses the same code as `exec`: the cgroup on Linux when the embe
 | Platform | Form | State in the first PR |
 |---|---|---|
 | Linux | `/dev/ptmx` with `TIOCSPTLCK` and `TIOCGPTPEER`. The child calls `setsid`, sets the PTY as its controlling terminal with `TIOCSCTTY`, and runs `execve`. | Done (PR 2) |
-| macOS | `posix_openpt`, `grantpt`, `unlockpt`, `ptsname`, and `posix_spawn` with `POSIX_SPAWN_SETSID` (macOS 10.15 and later). `fork` is not used, as in `exec`. | Error: "ztcl::pty is not available on macOS yet" |
+| macOS | `posix_openpt`, `grantpt`, `unlockpt`, `ptsname`, and `posix_spawn` with `POSIX_SPAWN_SETSID` (macOS 10.15 and later). `fork` is not used, as in `exec`. | Done (step 3). The parent opens the other side with O_NOCTTY for the size, because macOS answers EIO to a size on the master side before that open. |
 | Windows | ConPTY: `CreatePseudoConsole` with two pipes, `ResizePseudoConsole`, and `CreateProcessW` with `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`. The channel reads and writes the pipes. | The command is absent, because `exec` has no Windows form yet. The ConPTY form comes with it. |
 | WASI, the web | No processes. | The command is absent. |
 
@@ -63,7 +63,7 @@ The tests use `/bin/sh` and small programs from the standard system (`stty`, `ca
 6. `status` gives `{exit 3}` after `sh -c {exit 3}`, and `{signal KILL}` after `kill $t KILL`.
 7. `close` of a channel with `sh -c {trap {} HUP; sleep 30}` returns in less than 2 s, and no process of the tree runs after it.
 8. The allowlist of `exec_host` stops a program that it does not list, before a process starts.
-9. On macOS and Windows: `spawn` gives the error of the table above.
+9. On a platform with `exec` and no PTY: `spawn` gives the error `ZTCL PTY UNAVAILABLE`.
 
 ## Steps
 
