@@ -237,6 +237,10 @@ fn effect(code: *const Code, pc: u32) ?Effect {
             for (t) |s| if (s >= slots) return null;
             return .{ .need = 1, .push = @intFromBool(op == .lassign) };
         },
+        .store_elem => {
+            if (i.a >= slots) return null;
+            return .{ .need = 2, .push = 1 };
+        },
         .lset, .lset_drop => {
             if (i.a >= slots or i.b >= code.sites.len) return null;
             for (0..2) |k| if (!literalWord(code, i.b, k)) return null;

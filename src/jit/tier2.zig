@@ -128,7 +128,7 @@ pub fn backOf(code: *const vm.Code, head: u32) ?u32 {
 /// The slots that an instruction reads and writes.
 fn slotsOf(code: *const vm.Code, i: vm.Ins, out: *std.ArrayList(u32), a: Allocator) Allocator.Error!void {
     switch (i.op) {
-        .load, .store, .store_pop, .incr, .incr_drop, .incr_value, .lappend, .append, .lset, .lset_drop, .dict_update, .dict_update_drop => try out.append(a, i.a),
+        .load, .store, .store_pop, .incr, .incr_drop, .incr_value, .lappend, .append, .lset, .lset_drop, .dict_update, .dict_update_drop, .store_elem => try out.append(a, i.a),
         .bin_vv, .jf_vv => {
             try out.append(a, i.a);
             try out.append(a, i.b);
@@ -323,7 +323,7 @@ const Builder = struct {
                 // that the helper writes get `any`.
                 b.calls = true;
                 switch (i.op) {
-                    .lappend, .append, .lset, .lset_drop, .dict_update, .dict_update_drop => slots[b.slotIndex(i.a)] = .any,
+                    .lappend, .append, .lset, .lset_drop, .dict_update, .dict_update_drop, .store_elem => slots[b.slotIndex(i.a)] = .any,
                     .lassign, .lassign_drop => for (code.tables[i.a]) |s| {
                         slots[b.slotIndex(s)] = .any;
                     },
@@ -374,7 +374,7 @@ pub fn plan(a: Allocator, code: *const vm.Code, info: *const verify.Info, head: 
             const u = &list.items[at];
             u.uses += 1;
             const writes = switch (i.op) {
-                .store, .store_pop, .incr, .incr_drop, .incr_value, .lappend, .append, .lset, .lset_drop, .dict_update, .dict_update_drop, .foreach_next, .lassign, .lassign_drop => k == 0 or i.op == .foreach_next or i.op == .lassign or i.op == .lassign_drop,
+                .store, .store_pop, .incr, .incr_drop, .incr_value, .lappend, .append, .lset, .lset_drop, .dict_update, .dict_update_drop, .store_elem, .foreach_next, .lassign, .lassign_drop => k == 0 or i.op == .foreach_next or i.op == .lassign or i.op == .lassign_drop,
                 else => false,
             };
             if (writes) u.written = true else u.read = true;

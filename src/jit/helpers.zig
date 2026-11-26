@@ -83,6 +83,7 @@ pub const Helper = enum(u8) {
     /// string literal of `str_eq_jump`. It has no error.
     str_bytes_eq,
     lmap_add,
+    store_elem,
 };
 
 pub const count = @typeInfo(Helper).@"enum".fields.len;
@@ -105,6 +106,7 @@ fn opOf(comptime h: Helper) @TypeOf(vm.opLoad) {
         .lassign_drop => vm.opLassignDrop,
         .lset => vm.opLset,
         .lset_drop => vm.opLsetDrop,
+        .store_elem => vm.opStoreElem,
         .to_bool => vm.opToBool,
         .invoke => vm.opInvoke,
         .eval_cmd => vm.opEvalCmd,
