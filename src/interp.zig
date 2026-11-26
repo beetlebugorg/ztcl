@@ -882,6 +882,13 @@ pub const Capability = enum(u32) {
     /// keys below them, on Windows. A key such as `Run` starts a program
     /// at the next login, so the list is the only reach.
     registry = 16384,
+    // 16384 is `registry` (ztcl#150), and 32768 is `notify` (ztcl#153).
+    /// `ztcl::mac::keychain`: the generic passwords of the login keychain,
+    /// for the services of `Interp.keychain_allow` only, on macOS.
+    keychain = 65536,
+    /// `ztcl::mac::defaults`: the user defaults of the domains of
+    /// `Interp.defaults_allow` only, on macOS.
+    defaults = 131072,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -1057,6 +1064,10 @@ pub const Interp = struct {
     /// The registry keys that `ztcl::win::registry` reaches, with the keys
     /// below them. Empty: no key.
     registry_allow: []const []const u8 = &.{},
+    /// The keychain services of `ztcl::mac::keychain`. Empty: none.
+    keychain_allow: []const []const u8 = &.{},
+    /// The defaults domains of `ztcl::mac::defaults`. Empty: none.
+    defaults_allow: []const []const u8 = &.{},
     /// The event loop that this interpreter shares with its parent.
     events: ?*@import("event.zig").State = null,
     /// The network policy of `socket`. The embedder sets it.
@@ -1436,6 +1447,8 @@ pub const Interp = struct {
         it.event_host = keep.event_host;
         it.launch_host = keep.launch_host;
         it.registry_allow = keep.registry_allow;
+        it.keychain_allow = keep.keychain_allow;
+        it.defaults_allow = keep.defaults_allow;
         it.exec_host = keep.exec_host;
         it.net = keep.net;
         it.thread_limits = keep.thread_limits;
@@ -1501,6 +1514,8 @@ pub const Interp = struct {
         if (new & @backingInt(Capability.event) != 0) try @import("event.zig").register(it);
         if (new & @backingInt(Capability.launch) != 0) try @import("launch.zig").register(it);
         if (new & @backingInt(Capability.registry) != 0) try @import("winreg.zig").register(it);
+        if (new & @backingInt(Capability.keychain) != 0) try @import("mac.zig").registerKeychain(it);
+        if (new & @backingInt(Capability.defaults) != 0) try @import("mac.zig").registerDefaults(it);
         if (comptime chan_supported) {
             if (new & @backingInt(Capability.channels) != 0) try @import("chan.zig").register(it);
         }

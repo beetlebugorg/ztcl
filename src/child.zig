@@ -123,6 +123,8 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
     child.event_host = it.event_host;
     child.launch_host = it.launch_host;
     child.registry_allow = it.registry_allow;
+    child.keychain_allow = it.keychain_allow;
+    child.defaults_allow = it.defaults_allow;
     child.exec_host = it.exec_host;
     // A child has the network policy of its parent. No command of a
     // script changes it.

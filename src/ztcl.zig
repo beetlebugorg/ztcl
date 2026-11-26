@@ -34,6 +34,7 @@ pub const regex = @import("regex.zig");
 pub const fsroot = @import("fsroot.zig");
 pub const launch = @import("launch.zig");
 pub const winreg = @import("winreg.zig");
+pub const mac = @import("mac.zig");
 pub const proc = if (@import("builtin").os.tag == .windows) @import("proc_windows.zig") else @import("proc.zig");
 pub const pty = if (@import("builtin").os.tag == .windows) @import("pty_windows.zig") else @import("pty.zig");
 pub const watch = @import("watch.zig");
