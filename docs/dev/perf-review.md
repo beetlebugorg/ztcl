@@ -32,7 +32,7 @@ The rank is the expected gain divided by the effort. A ratio above 1 means that 
 | 5 | `string map` tries each key at each byte | 26.6 ms | 16.9 ms | 1.6 | Small | Done: 15.6 ms |
 | 6 | The regex search has no literal scan | 6.05 ms | 1.00 ms | 6.0 | Medium | Done: 0.3 ms |
 | 7 | Array elements go through the name of the variable | 104.8 ms | 70.9 ms | 1.5 | Medium | Done: 55.4 ms |
-| 8 | A proc call uses about 250 instructions in `callProcFast` | 14.8 ms | 70.5 ms | 0.2 | Large | Open |
+| 8 | A proc call uses about 250 instructions in `callProcFast` | 14.8 ms | 70.5 ms | 0.2 | Large | Done on x86-64: 92.2 M instructions for `fib.tcl` |
 | 9 | `append` in JIT code goes through two helpers | 243.1 M instructions | 812.4 M | 0.3 | Medium | Done: 200.4 M |
 | 10 | `read` of a whole file | 73.5 ms | 49.9 ms | 1.5 | Not known | Done: 11.0 ms |
 
@@ -158,6 +158,7 @@ proc arr {} {for {set i 0} {$i<200000} {incr i} {set a($i) $i}; set s 0; for {se
 - Semantics: the helper calls the same functions as the general path for each part that can fail or that a script can see: `vm.step`, `takeFrame`, `checkNative`, `stackAlloc`, `runRest`, `procEnd`, and `runTail`. So the step count, the error texts, `errorInfo`, `-errorline`, the frames of `info level` and `uplevel`, the depth limit, and the memory count stay the same. A redefined proc, a `rename`, a change of the namespace, and a trace on the command change the epoch or the site, so the inline checks of the site fail and the call goes to the helper of `invoke`. A body that leaves its machine code in the middle continues in `exec` in the frame of the call, as with `jit.enter`.
 - Rejected forms, from callgrind on `fib.tcl` with `--jit`: a pair of helpers `call_enter` and `call_leave`, with the context of the callee on the native stack of the caller and the call of the body from the machine code, gave 109.2 M instructions. One helper that returned the result through an error union for each part gave 103.1 M. Main gives 106.0 M. The cost of these forms is in the copies of the result and in the saved registers of each native frame, so the chosen form has one frame and one copy.
 - arm64 (for the port on macOS): `src/jit/call.zig` has no code for one target. The arm64 change is the hit path of `invoke` in `tier1_a64.zig` and the call of `call_cached` in `tier2_a64.zig`: each one calls `.call_direct` in place of `.call_cached`, with the same three arguments. `call.zig` runs `mem.checkClosed` before the call of the body, as `jit.enter` does, for the write window of Apple silicon. The gates are the same as on x86-64, plus `src/jit/a64_golden.zig` and the macOS JIT job.
+- Done on x86-64 (2026-11-25): the design above, in `src/jit/call.zig`, for the hit path of `invoke` in tier 1 and tier 2. Callgrind counts with `--jit`: `fib.tcl` goes from 106.0 M to 92.2 M instructions (tclsh 600.9 M). 300,000 calls of a proc with two arguments go from 150.0 M to 132.3 M (tclsh 817.8 M). `bf_oo.tcl` with a short program goes from 2,018.8 M to 2,035.0 M (tclsh 5,445.9 M), because its method calls go through `callMethod`. The interpreter counts went up by 0.5 % or less. arm64 is open.
 - Build note: two clones that share one `ZIG_LOCAL_CACHE_DIR` can install the binary of the other clone. Give a baseline clone its own cache folder.
 
 ## 9. `append` in JIT code goes through two helpers
