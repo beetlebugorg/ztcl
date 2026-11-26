@@ -202,6 +202,36 @@ Speed in Node.js 26 on an x86-64 Linux machine with other load, the best of 5 ru
 
 The gain is in the bytecode of the procs. Work in the builtins, such as `binary encode base64`, runs at the same speed in both modules. The rows of `dictgrow.tcl` and `base64/test.tcl` are after the faster base64 code and the XxHash32 hash of dict keys on wasm32. Before them, `base64/test.tcl` ran in 4.54 s and `dictgrow.tcl` in 136.6 ms compiled. On wasm, `dictgrow.tcl` is still slower than `tclsh`: its time is in the hash table, the text of each key, and the `dict` command, and the native build of ztcl runs it in 73 ms against 108 ms for `tclsh`. `node tools/wasm-aot-bench.mjs --kostya bench/*.tcl` makes this table. `tools/wasm-aot.mjs`, `tools/wasm-aot-suite.mjs`, and `tools/wasm-aot-fuzz.sh` compare the compiled modules with the interpreter. [The design](dev/wasm-aot.md) has the details.
 
+## Compile a point proc
+
+`ztcl compile FILE -proc NAME -o OUT.wasm` makes a small module from one point proc: no interpreter and no imports. A host such as a slicer runs it over columns of points in its own memory.
+
+```sh
+ztcl compile tests/point/fuzzy.tcl -proc fuzzy -o fuzzy.wasm -manifest fuzzy.json
+node examples/point-wasm/run.mjs fuzzy.wasm
+```
+
+```
+fuzzy: 2000 points, 35 compute units
+offset: 0.000000 -0.007489 -0.017769 -0.031562 ...
+```
+
+| Option | What it does |
+|---|---|
+| `-simd on\|off` | `on` (the default) uses wasm SIMD, two points in each `v128`. `off` makes a module for a runtime with no SIMD. |
+| `-max-mem BYTES` | The size of the memory. The module cannot grow it, so `cap`, the most points for one call, comes from this size. The default is 16 MiB. |
+| `-features a,b,...` | The names of the feature numbers, in order. |
+| `-manifest FILE` | Writes a JSON fragment for the manifest of a host: the exports, the global of each column, the compute units, `cap`, the memory size, and an empty list of imports. |
+
+The module of ABI version 1 has these parts:
+
+- `memory`, with a fixed size.
+- The `i32` globals `abi`, `cap`, `limits`, `in_<field>` for each parameter, `feature` for the feature number of each point (one byte), and `out_<column>` for each output that the proc writes. Each is a byte offset in `memory`.
+- `run(n, seed, in_mask, out_mask, compute_limit) -> i64`. Bit k of `in_mask` marks the field k as present, in the order `x y z width height speed flow feature layer path dist`. Bit k of `out_mask` marks the output k, in the order `offset move_x move_y width flow speed skip`. The result is the count of compute units, -1 at the compute limit, or -2 when `n` is more than `cap`.
+- The custom section `ztcl.point`: JSON with the proc, its parameters and outputs, the feature names, the block size, and the compute units of the setup and of one block of points.
+
+The host writes the columns at the offsets, calls `run`, and reads the outputs. A module keeps no state between calls. The outputs of a call are equal, bit for bit, to `Program.run` of the native interpreter: `tools/point-wasm-diff.sh` checks each fixed proc of `tests/point/`. [The design](dev/wasm-compile.md) has the details, and `bench/point-wasm.tsv` has the speed against the native `Program.run`.
+
 ## Examples
 
 The examples are in [`examples/web/`](../examples/web/). To run the browser examples, build the module and serve the root of the repository:

@@ -1,5 +1,5 @@
 //! `ztcl compile FILE -proc NAME -o OUT.wasm [-simd on|off]
-//! [-max-mem BYTES] [-features a,b,...]`
+//! [-max-mem BYTES] [-features a,b,...] [-manifest FILE]`
 //!
 //! Runs FILE in an interpreter with `point proc`, checks and compiles
 //! the point proc NAME, and writes its standalone WebAssembly module
@@ -13,12 +13,13 @@ const Io = std.Io;
 const tcl = @import("ztcl");
 const point = tcl.point;
 
-const usage = "usage: ztcl compile FILE -proc NAME -o OUT.wasm ?-simd on|off? ?-max-mem BYTES? ?-features a,b,...?\n";
+const usage = "usage: ztcl compile FILE -proc NAME -o OUT.wasm ?-simd on|off? ?-max-mem BYTES? ?-features a,b,...? ?-manifest FILE?\n";
 
 pub fn run(io: Io, gpa: std.mem.Allocator, a: std.mem.Allocator, args: []const [:0]const u8, out: *Io.Writer) !u8 {
     var file: ?[]const u8 = null;
     var name: ?[]const u8 = null;
     var output: ?[]const u8 = null;
+    var manifest_out: ?[]const u8 = null;
     var opts: tcl.point_wasm.Options = .{};
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -42,6 +43,8 @@ pub fn run(io: Io, gpa: std.mem.Allocator, a: std.mem.Allocator, args: []const [
                 try out.print("bad -max-mem \"{s}\"\n", .{value.?});
                 return 2;
             };
+        } else if (std.mem.eql(u8, arg, "-manifest") and value != null) {
+            manifest_out = value;
         } else if (std.mem.eql(u8, arg, "-features") and value != null) {
             var list: std.ArrayList([]const u8) = .empty;
             var it = std.mem.splitScalar(u8, value.?, ',');
@@ -89,5 +92,12 @@ pub fn run(io: Io, gpa: std.mem.Allocator, a: std.mem.Allocator, args: []const [
         try out.print("cannot write {s}: {s}\n", .{ output.?, @errorName(e) });
         return 1;
     };
+    if (manifest_out) |path| {
+        const text_m = try tcl.point_wasm.manifest(a, prog, compiled.layout, opts);
+        Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = try std.mem.concat(a, u8, &.{ text_m, "\n" }) }) catch |e| {
+            try out.print("cannot write {s}: {s}\n", .{ path, @errorName(e) });
+            return 1;
+        };
+    }
     return 0;
 }

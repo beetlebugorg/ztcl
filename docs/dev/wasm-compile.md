@@ -66,6 +66,8 @@ A compiled point proc fits this design:
 
 `ztcl compile -manifest FILE` writes a manifest fragment with these facts. The zslice plugin runtime is not chosen yet, so ztcl tests the module in Node.js and in wasmtime. This plan does not change zslice.
 
+The fragment is JSON: `abi`, `proc`, `exports` (the names of `run`, `memory`, `cap`, and `limits`), `inputs` and `outputs` (the name and the global of each column), `features`, `block`, `setup_compute_units`, `block_compute_units`, `cap`, `memory` (in bytes), `simd`, and `imports` (an empty list). `examples/point-wasm/run.mjs` is a host that reads the custom section and runs a module.
+
 ## Decisions
 
 The user answered the questions of [the task list](wasm-compile-tasks/README.md#questions-for-the-user) on 2026-11-25:
