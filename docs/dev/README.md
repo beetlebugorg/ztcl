@@ -24,6 +24,7 @@ These files are the plans, the task lists, the reviews, and the test results of 
 | [enclave.md](enclave.md) | The plan of ztcl in enclaves and confidential VMs (ztcl#180): the Windows part with VBS enclaves, the image, the host calls, `ztcl::enclave`, attestation, and signing. |
 | [enclave-spike.md](enclave-spike.md) | The results of the spike of the VBS enclave: the build of `ztcl-enclave.dll` and each step of the host test on the Windows test machine. |
 | [vm.md](vm.md) | The plan of microVMs on the native hypervisor (`ztcl::vm`, ztcl#203): the macOS spike with Virtualization.framework, the commands, the `vm` capability, the guest agent, and the KVM and HCS parts. |
+| [isolation.md](isolation.md) | The plan of the protocol of isolated threads (ztcl#209): one protocol between a parent and a child of each level past `interp` (process, vm, wasm), with the frames, the handshake and the sealing, the messages of the Thread package, `tsv` through a broker, channel transfer, limits, and versions. |
 | [ports.md](ports.md) | The plan of the macOS and Windows ports. |
 | [linux-tasks/](linux-tasks/README.md) | The tasks of `ztcl::linux`: desktop portals and D-Bus calls (#110). |
 | [cext.md](cext.md), [cext-tasks/](cext-tasks/README.md) | The result of the spikes of Tcl packages with C modules, the choice of path, and the tasks (#1). |
