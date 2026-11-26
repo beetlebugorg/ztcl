@@ -9,6 +9,8 @@
 //!   spike warm GUESTDIR N INITRD MEMORY_MB CMDLINE
 //!       Boots one time and pauses, then times N resumes to the answer of
 //!       the agent.
+//!   spike dmesg GUESTDIR 1 INITRD MEMORY_MB CMDLINE
+//!       Boots one time and prints the kernel log of the guest.
 //!   spike snap GUESTDIR N INITRD MEMORY_MB CMDLINE
 //!       Boots one time, saves the state of the booted guest, then
 //!       restores it N times and prints the time of each phase.
@@ -254,6 +256,29 @@ fn warm(arena: std.mem.Allocator, g: Guest, n: usize) !void {
     m.stop();
 }
 
+/// Boots one guest and prints its kernel log.
+fn dmesg(arena: std.mem.Allocator, g: Guest) !void {
+    var why: []const u8 = "";
+    const vc = try g.config(arena);
+    var m = try vz.Machine.init(vc);
+    m.start(&why) catch fail("start: {s}", .{why});
+    var t: u64 = 0;
+    var tries: usize = 0;
+    _ = answer(&m, &t, &tries);
+    const conn = connectSoon(&m, 10);
+    var times: [2]u64 = undefined;
+    readAll(conn.fd, std.mem.asBytes(&times)) catch fail("vsock read", .{});
+    _ = c.write(conn.fd, "\x01", 1);
+    var buf: [4096]u8 = undefined;
+    while (true) {
+        const n = c.read(conn.fd, &buf, buf.len);
+        if (n <= 0) break;
+        _ = c.write(1, &buf, @intCast(n));
+    }
+    conn.close();
+    m.stop();
+}
+
 fn check(arena: std.mem.Allocator, dir: []const u8) !void {
     const share = try std.fmt.allocPrintSentinel(arena, "{s}/share", .{dir}, 0);
     _ = c.mkdir(share, 0o755);
@@ -299,7 +324,11 @@ pub fn main(init: std.process.Init) !void {
 
     if (args.len == 3 and std.mem.eql(u8, args[1], "check")) return check(arena, args[2]);
     if (args.len == 7) {
+        var p: [2]c.fd_t = undefined;
+        const show = c.getenv("ZTVM_CONSOLE") != null;
+        if (show and c.pipe(&p) != 0) fail("no pipe", .{});
         const g: Guest = .{
+            .console = if (show) .{ p[0], 2 } else null,
             .dir = args[2],
             .initrd = args[4],
             .memory_mb = try std.fmt.parseInt(u64, args[5], 10),
@@ -309,6 +338,7 @@ pub fn main(init: std.process.Init) !void {
         if (std.mem.eql(u8, args[1], "bench")) return bench(arena, g, n);
         if (std.mem.eql(u8, args[1], "snap")) return snap(arena, g, n);
         if (std.mem.eql(u8, args[1], "warm")) return warm(arena, g, n);
+        if (std.mem.eql(u8, args[1], "dmesg")) return dmesg(arena, g);
     }
-    fail("usage: spike check DIR | spike bench|warm|snap DIR N INITRD MEMORY_MB CMDLINE", .{});
+    fail("usage: spike check DIR | spike bench|warm|snap|dmesg DIR N INITRD MEMORY_MB CMDLINE", .{});
 }
