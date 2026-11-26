@@ -18,6 +18,7 @@ These files are the plans, the task lists, the reviews, and the test results of 
 | [wasm-aot.md](wasm-aot.md) | The design and the state of procs compiled to WebAssembly functions (`ztcl compile --wasm`). |
 | [static-build.md](static-build.md) | The plan of static binaries with embedded files, the virtual file system, and cross-compiling (`ztcl build`). |
 | [ports.md](ports.md) | The plan of the macOS and Windows ports. |
+| [linux-tasks/](linux-tasks/README.md) | The tasks of `ztcl::linux`: desktop portals and D-Bus calls (#110). |
 | [roadmap.md](roadmap.md) | The old roadmap. The issues and the milestones on GitHub replace it. |
 | [release.md](release.md), [npm.md](npm.md) | The release process and the npm package. |
 
