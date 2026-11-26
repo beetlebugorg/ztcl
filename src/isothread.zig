@@ -249,6 +249,8 @@ pub const Bridge = struct {
     pid: i32 = -1,
     /// The sandbox of the child on Windows.
     win: if (on_win) ?isow.Child else void = if (on_win) null else {},
+    /// The memory limit of the thread, for the limit of the system.
+    mem: usize = std.math.maxInt(usize),
     /// The error of a failed start, for `startError`.
     err: []const u8 = "",
     err_code: []const u8 = "ZTCL ISOLATION START",
@@ -333,15 +335,31 @@ fn spawnRunner(b: *Bridge, runner: []const u8) ?Fd {
 
 /// Starts `runner --iso-handle 0x...` in the sandbox of Windows: an
 /// AppContainer with no folder of the user and a Job Object. The child
-/// gets the network only with the capability `socket`. Gives the pipe,
-/// which the transport then owns.
+/// gets the network only with the capability `socket`, and its job ends
+/// it past `sandboxMem` of the memory limit of the thread. Gives the
+/// pipe, which the transport then owns.
 fn spawnSandbox(b: *Bridge, runner: []const u8) ?Fd {
     if (comptime !on_win) return null;
     const net = b.caps & @backingInt(interp.Capability.socket) != 0;
-    var c = isow.spawn(b.gpa, runner, .{ .args = &.{}, .net = net }) catch return null;
+    var c = isow.spawn(b.gpa, runner, .{
+        .args = &.{},
+        .net = net,
+        .limits = .{ .mem_bytes = sandboxMem(b.mem) },
+    }) catch return null;
     const h = c.takePipe();
     b.win = c;
     return h;
+}
+
+/// The memory of the runtime of a child past the limit of its thread:
+/// the runner, its stacks, and the free space of its heap.
+pub const runtime_mem: u64 = 64 << 20;
+
+/// The memory limit of the system for a child: the limit of the thread
+/// plus `runtime_mem`, or 0 (no limit) for a thread with no limit.
+pub fn sandboxMem(mem_limit: usize) u64 {
+    if (mem_limit == std.math.maxInt(usize)) return 0;
+    return std.math.add(u64, mem_limit, runtime_mem) catch 0;
 }
 
 fn closeFd(fd: Fd) void {
@@ -399,6 +417,7 @@ fn failBridge(w: *Worker, b: *Bridge, st: anytype, text: []const u8) void {
 pub fn bridgeMain(w: *Worker, b: *Bridge, st: anytype) void {
     const g = w.group;
     const a = b.gpa;
+    b.mem = st.mem_limit;
     const fd = spawnChild(b) orelse return failBridge(w, b, st, "the system could not start the child process");
     b.link = .{ .t = iso.Transport.init(fd) catch {
         closeFd(fd);

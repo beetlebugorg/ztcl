@@ -175,6 +175,7 @@ The default keeps the scripts working: the parent runs the sends of a child as t
 - An AppContainer needs the folders of the user in its environment. With only `SystemRoot`, `CreateProcessW` gives `ERROR_ENVVAR_NOT_FOUND`. The child gets `APPDATA`, `LOCALAPPDATA`, `SystemDrive`, `SystemRoot`, `TEMP`, `TMP`, and `USERPROFILE`, and Windows puts the folders of its container in their place.
 - An AppContainer cannot read the runner under the folder of a user, so the first spawn copies the runner into `%TEMP%\ztcl-iso`, a folder that each AppContainer can read and run.
 - A child with a root folder starts in it, so a relative path of a script names a file in the root.
+- The job of a child of `thread::create -isolation process` ends it past the memory limit of the thread plus 64 MiB for the runtime (`isothread.sandboxMem`). A thread with no memory limit gets a job with no memory limit.
 
 The transport (`isoproto.Transport` over the pipe) and the child side of the protocol come with steps 2 and 3. Until then the runner skips `--iso-handle`.
 

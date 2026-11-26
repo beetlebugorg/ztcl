@@ -204,3 +204,10 @@ test "isolate on Windows: thread::create -isolation process runs the runner in t
     try t.expectEqualStrings("0", try ev(&it, "thread::join $t"));
     try t.expectEqualStrings("3", try ev(&it, "thread::join [thread::create -isolation process -joinable {thread::exit 3}]"));
 }
+
+test "isolate on Windows: the job of a child gets the memory limit of the thread plus the runtime" {
+    const it = tcl.isothread;
+    try t.expectEqual(@as(u64, 0), it.sandboxMem(std.math.maxInt(usize)));
+    try t.expectEqual(@as(u64, (256 << 20) + it.runtime_mem), it.sandboxMem(256 << 20));
+    try t.expectEqual(it.runtime_mem, it.sandboxMem(0));
+}
