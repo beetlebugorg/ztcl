@@ -36,9 +36,9 @@ The process tree uses the same code as `exec`: the cgroup on Linux when the embe
 
 | Platform | Form | State in the first PR |
 |---|---|---|
-| Linux | `/dev/ptmx` with `TIOCSPTLCK` and `TIOCGPTPEER`. The child calls `setsid`, sets the PTY as its controlling terminal with `TIOCSCTTY`, and runs `execve`. | Done |
+| Linux | `/dev/ptmx` with `TIOCSPTLCK` and `TIOCGPTPEER`. The child calls `setsid`, sets the PTY as its controlling terminal with `TIOCSCTTY`, and runs `execve`. | Done (PR 2) |
 | macOS | `posix_openpt`, `grantpt`, `unlockpt`, `ptsname`, and `posix_spawn` with `POSIX_SPAWN_SETSID` (macOS 10.15 and later). `fork` is not used, as in `exec`. | Error: "ztcl::pty is not available on macOS yet" |
-| Windows | ConPTY: `CreatePseudoConsole` with two pipes, `ResizePseudoConsole`, and `CreateProcessW` with `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`. The channel reads and writes the pipes. | Error: "ztcl::pty is not available on Windows yet" |
+| Windows | ConPTY: `CreatePseudoConsole` with two pipes, `ResizePseudoConsole`, and `CreateProcessW` with `PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE`. The channel reads and writes the pipes. | The command is absent, because `exec` has no Windows form yet. The ConPTY form comes with it. |
 | WASI, the web | No processes. | The command is absent. |
 
 The platform code is in `src/pty.zig` (Linux and the shared parts), `src/pty_mac.zig`, and `src/pty_windows.zig`. Each form gives the same four calls: open with a size, resize, the child start, and the close. The command code does not change between the platforms.

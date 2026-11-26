@@ -136,6 +136,22 @@ ztcl.sys.ignorePipeSignal(); // a write to a closed peer is an error, with no si
 
 `exec` is not sandboxed. A process that a script starts has the full power of the user. Give a program list and a time limit, and turn `exec` on only for scripts that you trust. An entry of `allow` is a bare name or a full host path. The `PATH` of `env` must have only full paths. A file below the root folder runs only when `allow_root` lists it. See [the rules of `exec`](../SECURITY.md#the-rules-of-exec).
 
+### Programs on a pseudo-terminal
+
+With `exec`, a script also has `ztcl::pty`. It starts a program on a pseudo-terminal (PTY) and gives the other side as a binary channel. The program list, the environment, and the time limit of `exec_host` apply. `TERM=xterm-256color` is added when `env` has no `TERM`. The reads and writes need the `channels` capability, and `fileevent` needs the event loop.
+
+```tcl
+set t [ztcl::pty spawn -size {80 24} /bin/sh]
+fconfigure $t -blocking 0
+fileevent $t readable [list apply {{t} {puts -nonewline [read $t]}} $t]
+puts $t "echo hello"
+ztcl::pty resize $t 100 30
+ztcl::pty status $t   ;# running, {exit code}, or {signal NAME}
+close $t              ;# SIGHUP, then SIGKILL after 500 ms
+```
+
+`-cwd dir` names a folder below the root folder, and it needs `file`. `ztcl::pty kill $t ?signal?` sends a signal to the process group of the program. In this version only Linux has the PTY. On macOS, `spawn` gives the error code `ZTCL PTY UNAVAILABLE`. The plan for macOS and Windows is in `docs/dev/pty.md`.
+
 ### Threads
 
 The capability `thread` adds `thread::*`, `tsv::*`, `tpool::*`, and the mutexes and conditions. Set `Interp.thread_limits` before the call of `allow`:
