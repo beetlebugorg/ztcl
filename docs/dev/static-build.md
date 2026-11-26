@@ -50,7 +50,7 @@ The build sorts the entries and writes a fixed time in each header, so the same 
 
 ## The virtual file system
 
-`src/vfs.zig` has a table of mounts for each interpreter. A mount has a prefix (such as `//zipfs:/app/`) and a source: an archive in memory (the payload of the binary, or a zip file the program read) or, later, a script handler (tclvfs `vfs::mount`). `src/zipread.zig` reads the central directory of a zip and gives each entry by name, with stored and deflate entries. Deflate uses `std.compress.flate` of the Zig standard library.
+`src/vfs.zig` has a table of mounts for each interpreter. A mount has a prefix (such as `//zipfs:/app/`) and a source: an archive in memory (the payload of the binary, or a zip file the program read) or, later, a script handler (tclvfs `vfs::mount`). `src/zipread.zig` reads the central directory of a zip and gives each entry by name, with stored and deflate entries. `src/inflate.zig` decodes deflate. The decoder of the Zig standard library ends with an integer overflow panic on some bad input, so a new decoder checks each bound and gives an error.
 
 The table gets each path first. The jail of `fsroot.zig`, or the host in host mode, gets the paths that no mount has:
 
@@ -59,7 +59,7 @@ The table gets each path first. The jail of `fsroot.zig`, or the host in host mo
 | `open` | Read only. A write mode is the error `EROFS`. The channel has the bytes of the entry in its read buffer, so `read`, `gets`, `seek`, `tell`, and `eof` work with no file descriptor. |
 | `source` | Reads the entry. |
 | `file exists`, `isfile`, `isdirectory`, `size`, `stat`, `type`, `readable`, `mtime` | From the central directory. A folder is a prefix of entry names. |
-| `file writable`, `delete`, `mkdir`, `rename`, `copy` to a mount | The error `EROFS`. `file copy` from a mount to the real tree works. |
+| `file writable`, `delete`, `mkdir`, `rename`, `copy` to a mount | The error `EROFS`. `file copy` from a mount to the real tree is a later step. |
 | `glob` | Lists the names below a folder of the mount. |
 | `load` | Scripts only. A shared library in a mount is an error, and stays one: a binary library needs a real file. |
 
@@ -75,7 +75,7 @@ The `zipfs` command follows Tcl 9: `zipfs mount ?zipfile? ?mountpoint?`, `zipfs 
 - `file` gives the full table: the mounts and the jail. `zipfs mount` of a file needs `file`.
 - With no capability on, the commands are absent, as now. A test proves it.
 - A child interp sees the mounts of its parent only with `embedded` or `file`.
-- An entry is decompressed whole at the first open. The size of the central directory is the limit of the output, and the decompressor stops at that size. The memory limit applies before the allocation, so an entry larger than the free memory is the error "not enough memory" (a zip bomb stops there). Each 64 KiB of output costs one step, by the rule of `cmds.chargeWork`.
+- An entry is decompressed whole at the first open. The size of the central directory is the limit of the output, and the decompressor stops at that size. The memory limit applies before the allocation, so an entry larger than the free memory is the error "not enough memory" (a zip bomb stops there). Each byte of output is work by the rule of `cmds.chargeWork`.
 - A path is normalized as text before the lookup, so `..` above the mount root is an error, as in the jail.
 - A malformed archive is an error at mount time: offsets past the end, overlapping entries, names with `..` or a leading `/`, encryption, and methods other than stored and deflate. A fuzz test feeds random bytes to the reader.
 
