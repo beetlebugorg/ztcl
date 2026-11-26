@@ -103,7 +103,7 @@ A process of the same user can read the memory of the parent and take its handle
 | `RESULT` | both | stream of the send, return code, value, `-errorinfo`, `-errorcode` | The answer of a send with `reply`. |
 | `CANCEL` | parent | `unwind`, the result | `thread::cancel`: the reader of the child sets the stop flag, as today. |
 | `RELEASE` | both | the count change | `thread::preserve` and `thread::release` of the child. |
-| `TSV` | child | stream, the command, its arguments | A `tsv::*` command. The broker of the parent runs it on the arrays of the group and answers with `RESULT`. |
+| `TSV` | child | stream, the command, its arguments | A `tsv::*` command. The broker of the parent runs it on the arrays of the group and answers with a `TSV` frame on the same stream: the code, the result, and the error code. `src/isobroker.zig` has the payloads. |
 | `LOCK`, `UNLOCK` | child | stream, the array, or the mutex, rwmutex, or condition | `tsv::lock`, `thread::mutex lock`, `thread::cond wait`, and the others. The broker holds the lock for the child and frees it when the child ends. |
 | `OUTPUT` | child | the channel (`stdout` or `stderr`), the bytes | The output of the child goes to the output callback of the parent. |
 | `BGERROR` | child | `-errorinfo` | An error for `thread::errorproc` in the parent. |

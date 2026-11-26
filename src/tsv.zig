@@ -100,11 +100,11 @@ fn self(it: *Interp) Error!*Worker {
 }
 
 /// A locked array. `release` ends the use.
-const Held = struct {
+pub const Held = struct {
     arr: *Array,
     w: *Worker,
 
-    fn release(h: Held) void {
+    pub fn release(h: Held) void {
         const arr = h.arr;
         arr.lock.lock();
         arr.depth -= 1;
@@ -685,9 +685,9 @@ fn opKeyldel(it: *Interp, x: Args) Error!Value {
 
 // ---- The dispatch ----
 
-const Op = struct { name: []const u8, f: *const fn (*Interp, Args) Error!Value, usage: []const u8 };
+pub const Op = struct { name: []const u8, f: *const fn (*Interp, Args) Error!Value, usage: []const u8 };
 
-const ops = [_]Op{
+pub const ops = [_]Op{
     .{ .name = "set", .f = opSet, .usage = "?value?" },
     .{ .name = "get", .f = opGet, .usage = "?var?" },
     .{ .name = "exists", .f = opExists, .usage = "" },
@@ -881,4 +881,10 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try it.register("tsv::handlers", cmdHandlers);
     try it.register("tsv::object", cmdObject);
     _ = try it.internNs("tsv");
+}
+
+/// Locks the array `name`, made when missing, for the broker of an
+/// isolated thread (`isobroker.zig`): `tsv::lock` of a child.
+pub fn hold(it: *Interp, name: []const u8) Error!Held {
+    return (try acquire(it, name, true)).?;
 }
