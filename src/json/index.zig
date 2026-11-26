@@ -345,8 +345,8 @@ pub const Indexer = struct {
 inline fn classify(v: V) struct { u64, u64 } {
     if (comptime has_avx2) {
         const H = @Vector(32, u8);
-        const hi_table: H = [16]u8{ 1, 0, 2 | 16, 8, 0, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0 } ** 2;
-        const lo_table: H = [16]u8{ 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1 | 8, 4, 16, 1 | 4, 0, 0 } ** 2;
+        const hi_table: H = std.simd.repeat(32, [16]u8{ 1, 0, 2 | 16, 8, 0, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0 });
+        const lo_table: H = std.simd.repeat(32, [16]u8{ 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1 | 8, 4, 16, 1 | 4, 0, 0 });
         const bytes: [64]u8 = v;
         var ws: u64 = 0;
         var ops: u64 = 0;

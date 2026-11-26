@@ -137,12 +137,12 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
         }
         // A child has no `thread` capability: a thread has one
         // interpreter that gets its messages.
-        const no_thread = ~@as(u32, @intFromEnum(interp.Capability.thread));
+        const no_thread = ~@as(u32, @backingInt(interp.Capability.thread));
         try child.allow((if (child.fs_ok()) it.capabilities else it.capabilities & ~@as(u32, 8 | 16)) & no_thread);
     }
     // A safe child has the event loop of its parent. A timer reaches
     // no host data.
-    if (child.is_safe) try child.allow(it.capabilities & @intFromEnum(interp.Capability.event));
+    if (child.is_safe) try child.allow(it.capabilities & @backingInt(interp.Capability.event));
     const c = try a.create(Child);
     c.* = .{ .name = try a.dupe(u8, name), .it = child };
     try it.children.put(a, c.name, c);

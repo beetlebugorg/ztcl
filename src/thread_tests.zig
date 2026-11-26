@@ -14,7 +14,7 @@ const testing = std.testing;
 fn host(it: *tcl.Interp) !void {
     try it.init(testing.allocator);
     errdefer it.deinit();
-    try it.allow(@intFromEnum(tcl.interp.Capability.thread));
+    try it.allow(@backingInt(tcl.interp.Capability.thread));
 }
 
 test "the default interpreter has no thread commands" {
@@ -191,7 +191,7 @@ test "a later capability adds the thread commands that need it" {
     try host(&it);
     defer it.deinit();
     try testing.expect(it.findCommand("thread::transfer") == null);
-    try it.allow(@intFromEnum(tcl.interp.Capability.channels));
+    try it.allow(@backingInt(tcl.interp.Capability.channels));
     try testing.expect(it.findCommand("thread::transfer") != null);
 }
 
@@ -200,7 +200,7 @@ test "a later capability adds the thread commands that need it" {
 fn teardown(setup: []const u8) !void {
     var it: tcl.Interp = undefined;
     try host(&it);
-    try it.allow(@intFromEnum(tcl.interp.Capability.event));
+    try it.allow(@backingInt(tcl.interp.Capability.event));
     _ = try it.eval(setup);
     it.deinit();
 }

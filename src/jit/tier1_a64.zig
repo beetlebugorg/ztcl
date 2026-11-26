@@ -181,7 +181,7 @@ pub const Emitter = struct {
         try e.ctx(abi.arg0);
         try s.movImm(abi.arg1, @intCast(pc));
         try s.movImm(abi.arg2, e.info.depth[pc]);
-        try e.ldr(.x16, abi.helpers, 8 * @as(i64, @intFromEnum(h)));
+        try e.ldr(.x16, abi.helpers, 8 * @as(i64, @backingInt(h)));
         try s.blr(.x16);
     }
 
@@ -512,7 +512,7 @@ pub const Emitter = struct {
 
     fn binSlots(e: *Emitter, pc: u32) Error!void {
         const i = e.code.ins[pc];
-        const op: expr.BinOp = @enumFromInt(i.x);
+        const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
         if (!fastOp(op)) return e.plain(helperOf(i), pc);
         const d: i64 = e.info.depth[pc];
         const slow_l = try e.slow(pc);
@@ -528,7 +528,7 @@ pub const Emitter = struct {
 
     fn binary(e: *Emitter, pc: u32) Error!void {
         const i = e.code.ins[pc];
-        const op: expr.BinOp = @enumFromInt(i.x);
+        const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
         if (!fastOp(op)) return e.plain(.binary, pc);
         const d: i64 = e.info.depth[pc];
         const slow_l = try e.slow(pc);
@@ -540,7 +540,7 @@ pub const Emitter = struct {
 
     fn jfSlots(e: *Emitter, pc: u32) Error!void {
         const i = e.code.ins[pc];
-        const cond = compareCond(@enumFromInt(i.x)).?;
+        const cond = compareCond(@fromBackingInt(@intCast(i.x))).?;
         const slow_l = try e.slow(pc);
         try e.cell(i.a, r8, slow_l);
         try e.cellInt(r8, rax, slow_l);

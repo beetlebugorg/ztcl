@@ -1445,7 +1445,7 @@ pub fn awaitReply(it: *Interp, to: u64, seq: u64) Error!*Msg {
 /// the capability `event` runs only its queue.
 pub fn waitLoop(it: *Interp) Error!Value {
     const me = it.worker orelse return it.fail("threads are off", .{});
-    const events = it.capabilities & @intFromEnum(interp.Capability.event) != 0 and it.event_host != null;
+    const events = it.capabilities & @backingInt(interp.Capability.event) != 0 and it.event_host != null;
     while (true) {
         loopPass(it, me, events) catch |e| {
             if (e == error.TclError and idleCancel(it, me)) continue;
@@ -1539,7 +1539,7 @@ pub fn register(it: *Interp) Allocator.Error!void {
     try @import("tsv.zig").register(it);
     try @import("tsync.zig").register(it);
     try @import("tpool.zig").register(it);
-    if (it.capabilities & @intFromEnum(interp.Capability.event) != 0) try @import("event.zig").setSource(it);
+    if (it.capabilities & @backingInt(interp.Capability.event) != 0) try @import("event.zig").setSource(it);
     if (it.findCommand("package") != null) _ = it.eval("package provide Thread 2.8.11") catch {};
 }
 

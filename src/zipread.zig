@@ -152,7 +152,7 @@ pub const Archive = struct {
             const h: usize = @intCast(p);
             if (rd32(bytes, h) != 0x02014b50) return error.BadArchive;
             const flags = rd16(bytes, h + 8);
-            const method: Method = @enumFromInt(rd16(bytes, h + 10));
+            const method: Method = @fromBackingInt(@intCast(rd16(bytes, h + 10)));
             const time = rd16(bytes, h + 12);
             const date = rd16(bytes, h + 14);
             const crc = rd32(bytes, h + 16);
@@ -336,7 +336,7 @@ test "zipread: an archive after other bytes" {
 test "zipread: malformed archives are errors" {
     const a = std.testing.allocator;
     try std.testing.expectError(error.NotZip, Archive.parse(a, "short"));
-    try std.testing.expectError(error.NotZip, Archive.parse(a, &([_]u8{0} ** 100)));
+    try std.testing.expectError(error.NotZip, Archive.parse(a, &@as([100]u8, @splat(0))));
     const zip = fixtures[1];
     // Each truncation of the archive is an error or a smaller archive.
     var n: usize = 0;

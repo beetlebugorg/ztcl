@@ -171,7 +171,7 @@ pub inline fn isClean(it: *const Interp) bool {
 /// The roots that belong to one interpreter. Returns false for a bad
 /// stack range.
 fn markInterp(it: *const Interp, h: *Heap) bool {
-    heap_mod.markRange(h, @intFromPtr(it), @sizeOf(Interp));
+    markInterpWords(it, h);
     if (it.points) |p| heap_mod.markRange(h, @intFromPtr(p), @sizeOf(@TypeOf(p.*)));
     for (it.gc_roots.items) |r| heap_mod.markRange(h, @intFromPtr(r.ptr), r.len);
     heap_mod.markRange(h, @intFromPtr(it.held.items.ptr), it.held.items.len * @sizeOf(interp.Value));
@@ -186,6 +186,22 @@ fn markInterp(it: *const Interp, h: *Heap) bool {
         heap_mod.markStack(h, lo, hi - lo);
     }
     return true;
+}
+
+/// Marks the words of the struct `it`, except the bounds `lo` and `hi`
+/// of its own heap. The lowest block of the heap starts at `lo`, so a
+/// scan of that word keeps the block alive with no reference to it.
+fn markInterpWords(it: *const Interp, h: *Heap) void {
+    const base = @intFromPtr(it);
+    const end = base + @sizeOf(Interp);
+    const lo = @intFromPtr(&it.own_heap.lo);
+    const hi = @intFromPtr(&it.own_heap.hi);
+    const a = @min(lo, hi);
+    const b = @max(lo, hi);
+    const w = @sizeOf(usize);
+    heap_mod.markRange(h, base, a - base);
+    heap_mod.markRange(h, a + w, b - (a + w));
+    heap_mod.markRange(h, b + w, end - (b + w));
 }
 
 /// Forgets what an address names. Each cache here compares an address.

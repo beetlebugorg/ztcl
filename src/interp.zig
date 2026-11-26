@@ -457,7 +457,7 @@ pub const Var = struct {
     pub inline fn plainStore(cell: *const Var) bool {
         const Tag = std.meta.Tag(@TypeOf(cell.v));
         const tag: Tag = cell.v;
-        return @intFromEnum(tag) <= @intFromEnum(Tag.owned);
+        return @backingInt(tag) <= @backingInt(Tag.owned);
     }
 
     /// The cell at the end of the links, with a plain value.
@@ -882,7 +882,7 @@ pub const Capability = enum(u32) {
         var iter = std.mem.tokenizeScalar(u8, text, ',');
         while (iter.next()) |w| {
             const c = std.meta.stringToEnum(Capability, w) orelse return null;
-            bits |= @intFromEnum(c);
+            bits |= @backingInt(c);
         }
         return bits;
     }
@@ -1480,47 +1480,47 @@ pub const Interp = struct {
     pub fn allow(it: *Interp, bits: u32) Allocator.Error!void {
         const new = bits & ~it.capabilities;
         it.capabilities |= bits;
-        if (new & @intFromEnum(Capability.package) != 0) {
+        if (new & @backingInt(Capability.package) != 0) {
             try it.register("package", @import("pkg.zig").cmdPackage);
             _ = it.eval("package provide TclOO 1.1.0") catch {};
         }
-        if (new & @intFromEnum(Capability.interp) != 0) try it.register("interp", @import("child.zig").cmdInterp);
-        if (new & @intFromEnum(Capability.clock) != 0) try @import("clock.zig").register(it);
-        if (new & @intFromEnum(Capability.event) != 0) try @import("event.zig").register(it);
-        if (new & @intFromEnum(Capability.launch) != 0) try @import("launch.zig").register(it);
+        if (new & @backingInt(Capability.interp) != 0) try it.register("interp", @import("child.zig").cmdInterp);
+        if (new & @backingInt(Capability.clock) != 0) try @import("clock.zig").register(it);
+        if (new & @backingInt(Capability.event) != 0) try @import("event.zig").register(it);
+        if (new & @backingInt(Capability.launch) != 0) try @import("launch.zig").register(it);
         if (comptime chan_supported) {
-            if (new & @intFromEnum(Capability.channels) != 0) try @import("chan.zig").register(it);
+            if (new & @backingInt(Capability.channels) != 0) try @import("chan.zig").register(it);
         }
         if (comptime fs_supported) {
-            if (new & @intFromEnum(Capability.file) != 0) {
+            if (new & @backingInt(Capability.file) != 0) {
                 try @import("filecmd.zig").register(it);
                 try @import("watch.zig").register(it);
             }
-            const vfs_bits = @intFromEnum(Capability.embedded) | @intFromEnum(Capability.file);
+            const vfs_bits = @backingInt(Capability.embedded) | @backingInt(Capability.file);
             if (new & vfs_bits != 0) try @import("vfs.zig").register(it);
             if (comptime chan_supported) {
                 // The commands check `vfs.gate`, so a path outside a
                 // mount needs `channels` or `file`.
-                if (new & @intFromEnum(Capability.embedded) != 0) {
+                if (new & @backingInt(Capability.embedded) != 0) {
                     try @import("chan.zig").register(it);
                     try @import("filecmd.zig").register(it);
                 }
             }
         }
         if (comptime exec_supported) {
-            if (new & @intFromEnum(Capability.exec) != 0) {
+            if (new & @backingInt(Capability.exec) != 0) {
                 try @import("proc.zig").register(it);
                 try @import("pty.zig").register(it);
             }
         }
         // WASI preview 1 has no sockets.
         if (comptime chan_supported and @import("builtin").os.tag != .wasi) {
-            if (new & @intFromEnum(Capability.socket) != 0) try it.register("socket", @import("sock.zig").cmdSocket);
+            if (new & @backingInt(Capability.socket) != 0) try it.register("socket", @import("sock.zig").cmdSocket);
         }
         if (comptime thread_mod.supported) {
             // The thread commands depend on the other bits, so each new
             // bit registers them again.
-            if (new != 0 and it.capabilities & @intFromEnum(Capability.thread) != 0) try thread_mod.register(it);
+            if (new != 0 and it.capabilities & @backingInt(Capability.thread) != 0) try thread_mod.register(it);
         }
     }
 
@@ -1735,7 +1735,7 @@ pub const Interp = struct {
                 if (it.ret_code == .@"error") return error.TclError;
                 if (it.ret_code == .@"break" or it.ret_code == .@"continue")
                     return it.fail("invoked \"{s}\" outside of a loop", .{@tagName(it.ret_code)});
-                return it.fail("command returned bad code: {d}", .{@intFromEnum(it.ret_code)});
+                return it.fail("command returned bad code: {d}", .{@backingInt(it.ret_code)});
             },
             error.TclCustom => it.fail("command returned bad code: {d}", .{it.custom_code}),
             error.TclBreak => it.fail("invoked \"break\" outside of a loop", .{}),
@@ -2594,7 +2594,7 @@ pub const Interp = struct {
                     .@"break" => error.TclBreak,
                     .@"continue" => error.TclContinue,
                     _ => blk: {
-                        it.custom_code = @intFromEnum(code);
+                        it.custom_code = @backingInt(code);
                         break :blk error.TclCustom;
                     },
                 };

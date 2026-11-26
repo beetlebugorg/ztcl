@@ -577,7 +577,7 @@ fn cmdRename(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 fn codeOf(it: *Interp, v: Value) Error!interp.ReturnCode {
     const s = try it.str(v);
     if (std.meta.stringToEnum(interp.ReturnCode, s)) |c| return c;
-    if (v.asInt()) |n| if (n >= 0 and n <= std.math.maxInt(u32)) return @enumFromInt(@as(u32, @intCast(n)));
+    if (v.asInt()) |n| if (n >= 0 and n <= std.math.maxInt(u32)) return @fromBackingInt(@intCast(@as(u32, @intCast(n))));
     return it.fail("bad completion code \"{s}\": must be ok, error, return, break, continue, or an integer", .{s});
 }
 
@@ -619,7 +619,7 @@ fn cmdReturn(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     // A forged tail code must not run tail call words that a `catch`
     // stopped earlier.
-    if (@intFromEnum(code) == @import("coro.zig").tail_code) it.tail_words = null;
+    if (@backingInt(code) == @import("coro.zig").tail_code) it.tail_words = null;
     if (level == 0) {
         // The code applies to the `return` command itself.
         return switch (code) {
@@ -633,7 +633,7 @@ fn cmdReturn(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             .@"break" => error.TclBreak,
             .@"continue" => error.TclContinue,
             _ => blk: {
-                it.custom_code = @intFromEnum(code);
+                it.custom_code = @backingInt(code);
                 break :blk error.TclCustom;
             },
         };
@@ -686,7 +686,7 @@ pub const Caught = struct {
     pub fn options(c: Caught, it: *Interp) Error!Value {
         var o: [12]Value = undefined;
         o[0] = .{ .str = "-code" };
-        o[1] = .{ .int = if (c.code == 2) @intFromEnum(c.ret_code) else c.code };
+        o[1] = .{ .int = if (c.code == 2) @backingInt(c.ret_code) else c.code };
         o[2] = .{ .str = "-level" };
         o[3] = .{ .int = if (c.code == 2) c.ret_level else 0 };
         if (c.code != 1) return value.newList(it.alloc(), o[0..4]);
@@ -862,7 +862,7 @@ fn cmdTry(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
 
 fn tryCode(it: *Interp, v: Value) Error!i64 {
     const s = try it.str(v);
-    if (std.meta.stringToEnum(interp.ReturnCode, s)) |c| return @intFromEnum(c);
+    if (std.meta.stringToEnum(interp.ReturnCode, s)) |c| return @backingInt(c);
     if (v.asInt()) |n| return n;
     return it.fail("bad completion code \"{s}\": must be ok, error, return, break, continue, or an integer", .{s});
 }
@@ -1318,7 +1318,7 @@ fn cmdSplit(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     } else {
         // A bitmap of the split bytes makes the test of each byte one
         // lookup, so the work is linear in both lengths.
-        var set = std.StaticBitSet(256).initEmpty();
+        var set = std.StaticBitSet(256).empty;
         for (seps) |c| set.set(c);
         var start: usize = 0;
         for (s, 0..) |c, i| {
@@ -1569,10 +1569,10 @@ pub fn byteOf(s: []const u8, n: usize, k: usize) usize {
 fn uniquePrefix(comptime E: type, text: []const u8) ?E {
     if (text.len == 0) return null;
     var found: ?E = null;
-    inline for (@typeInfo(E).@"enum".fields) |f| {
-        if (std.mem.startsWith(u8, f.name, text)) {
+    inline for (@typeInfo(E).@"enum".field_names, @typeInfo(E).@"enum".field_values) |f_name, f_value| {
+        if (std.mem.startsWith(u8, f_name, text)) {
             if (found != null) return null;
-            found = @enumFromInt(f.value);
+            found = @fromBackingInt(@intCast(f_value));
         }
     }
     return found;
@@ -2108,7 +2108,7 @@ fn compareStrings(x: []const u8, y: []const u8, nocase: bool, limit: ?usize) std
 /// work is linear in the length of the string and of the set.
 const TrimSet = struct {
     default: bool,
-    low: std.StaticBitSet(256) = .initEmpty(),
+    low: std.StaticBitSet(256) = .empty,
     /// Each used slot holds a code point plus 1. An empty slot is 0.
     slots: []u32 = &.{},
 

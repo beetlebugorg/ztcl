@@ -55,9 +55,9 @@ fn eql(a: []const u8, b: []const u8) bool {
 /// IPv6 form.
 pub fn isLoop(n: sys.Addr) bool {
     if (!n.v6) return n.bytes[0] == 127;
-    const one = [_]u8{0} ** 15 ++ [_]u8{1};
+    const one = @as([15]u8, @splat(0)) ++ [_]u8{1};
     if (std.mem.eql(u8, &n.bytes, &one)) return true;
-    const mapped = [_]u8{0} ** 10 ++ [_]u8{ 0xff, 0xff, 127 };
+    const mapped = @as([10]u8, @splat(0)) ++ [_]u8{ 0xff, 0xff, 127 };
     return std.mem.eql(u8, n.bytes[0..13], &mapped);
 }
 
@@ -299,8 +299,8 @@ pub fn cmdSocket(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             }
             if (binds.items.len == 0) return denied(it, "address", m);
         } else if (it.net == .loopback) {
-            try binds.append(a, .{ .bytes = .{ 127, 0, 0, 1 } ++ [_]u8{0} ** 12 });
-            try binds.append(a, .{ .v6 = true, .bytes = [_]u8{0} ** 15 ++ [_]u8{1} });
+            try binds.append(a, .{ .bytes = .{ 127, 0, 0, 1 } ++ @as([12]u8, @splat(0)) });
+            try binds.append(a, .{ .v6 = true, .bytes = @as([15]u8, @splat(0)) ++ [_]u8{1} });
         } else {
             try binds.append(a, .{});
             try binds.append(a, .{ .v6 = true });

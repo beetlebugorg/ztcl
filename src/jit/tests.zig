@@ -56,7 +56,7 @@ test "a child has the JIT only when its parent has it" {
     for ([_]bool{ false, true }) |want| {
         const it = try newInterp();
         defer freeInterp(it);
-        try it.allow(@intFromEnum(tcl.interp.Capability.interp));
+        try it.allow(@backingInt(tcl.interp.Capability.interp));
         if (want and !it.enableJit(.{})) return error.SkipZigTest;
         _ = try it.eval("interp create c");
         const c = it.children.get("c").?;
@@ -107,7 +107,7 @@ test "the JIT data of a child is outside the memory count" {
         const it = try newInterp();
         defer freeInterp(it);
         it.gc_on = false;
-        try it.allow(@intFromEnum(tcl.interp.Capability.interp));
+        try it.allow(@backingInt(tcl.interp.Capability.interp));
         if (k == 1 and !it.enableJit(.{ .threshold = 0 })) return error.SkipZigTest;
         _ = try it.eval(script);
         used[k] = it.memUsed();
@@ -230,8 +230,9 @@ test "selfTest is false under PR_SET_MDWE" {
         if (linux.errno(rc) != .SUCCESS) linux.exit_group(77);
         linux.exit_group(if (mem.selfTest()) 1 else 0);
     }
-    var status: u32 = 0;
-    _ = linux.waitpid(@intCast(pid), &status, 0);
+    var raw: i32 = 0;
+    _ = linux.waitpid(@intCast(pid), &raw, 0);
+    const status: u32 = @bitCast(raw);
     // A crash gives a signal status, which is not an exit code.
     try testing.expect(linux.W.IFEXITED(status));
     const code = linux.W.EXITSTATUS(status);
@@ -253,8 +254,9 @@ fn readFaults(addr: usize) !bool {
         const b = p.*;
         linux.exit_group(@as(i32, b) & 1);
     }
-    var status: u32 = 0;
-    _ = linux.waitpid(@intCast(pid), &status, 0);
+    var raw: i32 = 0;
+    _ = linux.waitpid(@intCast(pid), &raw, 0);
+    const status: u32 = @bitCast(raw);
     return linux.W.IFSIGNALED(status) and linux.W.TERMSIG(status) == .SEGV;
 }
 
@@ -397,8 +399,8 @@ test "arm64 macOS: a jump to a free part of the region traps" {
         const sig = try childSignal(jumpFree, &r);
         // A udf word, or a page with no access.
         if (r.pages) {
-            try testing.expect(sig == @intFromEnum(std.c.SIG.BUS) or sig == @intFromEnum(std.c.SIG.SEGV));
-        } else try testing.expectEqual(@as(u32, @intFromEnum(std.c.SIG.ILL)), sig);
+            try testing.expect(sig == @backingInt(std.c.SIG.BUS) or sig == @backingInt(std.c.SIG.SEGV));
+        } else try testing.expectEqual(@as(u32, @backingInt(std.c.SIG.ILL)), sig);
     }
 }
 
@@ -411,7 +413,7 @@ test "arm64 macOS: a write to a free part of the region faults" {
         defer r.deinit();
         _ = r.append(&.{ 0x40, 0x05, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }).?;
         const sig = try childSignal(writeFree, &r);
-        try testing.expect(sig == @intFromEnum(std.c.SIG.BUS) or sig == @intFromEnum(std.c.SIG.SEGV));
+        try testing.expect(sig == @backingInt(std.c.SIG.BUS) or sig == @backingInt(std.c.SIG.SEGV));
     }
 }
 
@@ -887,7 +889,7 @@ test "the verifier fails a Code that breaks one check" {
         }.f },
         .{ .name = "jf compare", .f = struct {
             fn f(m: *Mutable, _: std.mem.Allocator) !void {
-                m.ins[m.find(.jf_vv)].x = @intFromEnum(tcl.expr.BinOp.add);
+                m.ins[m.find(.jf_vv)].x = @backingInt(tcl.expr.BinOp.add);
             }
         }.f },
         .{ .name = "dict form", .f = struct {
@@ -1113,11 +1115,11 @@ test "the helpers run the instruction functions" {
     const pc: u32 = for (code.ins, 0..) |ins, k| {
         if (ins.op == .bin_vv) break @intCast(k);
     } else return error.NoBinVv;
-    const h: helpers.Fn = @ptrCast(@alignCast(helpers.table[@intFromEnum(helpers.Helper.bin_vv)]));
+    const h: helpers.Fn = @ptrCast(@alignCast(helpers.table[@backingInt(helpers.Helper.bin_vv)]));
     try testing.expectEqual(helpers.done, h(&ctx, pc, 0));
     try testing.expectEqual(@as(i64, 41), stack[0].int);
     // load of a slot with no value: an error with the text of the interpreter.
-    const load: helpers.Fn = @ptrCast(@alignCast(helpers.table[@intFromEnum(helpers.Helper.load)]));
+    const load: helpers.Fn = @ptrCast(@alignCast(helpers.table[@backingInt(helpers.Helper.load)]));
     var bad = code.ins[pc];
     bad = .{ .op = .load, .a = 2 };
     var ins = try testing.allocator.dupe(vm.Ins, code.ins);
@@ -1169,7 +1171,7 @@ fn runModeOpts(script: []const u8, opts: ?jit.Options, limit: u64, min_compiled:
     it.output = .{ .ctx = &out, .write = collect };
     if (stress == 0) it.gc_on = false else it.setGcStress(stress);
     it.step_limit = limit;
-    if (allow_interp) try it.allow(@intFromEnum(tcl.interp.Capability.interp));
+    if (allow_interp) try it.allow(@backingInt(tcl.interp.Capability.interp));
     if (test_mem_limit) |m| it.mem_limit = m;
     if (test_native) |n| try it.register(n[0], n[1]);
     if (on and !it.enableJit(opts.?)) return error.SkipZigTest;
@@ -2611,7 +2613,7 @@ test "jit: named code of events stays in its part of the JIT memory" {
     const it = try newInterp();
     defer freeInterp(it);
     it.gc_on = false;
-    try it.allow(@intFromEnum(tcl.interp.Capability.event));
+    try it.allow(@backingInt(tcl.interp.Capability.event));
     event_ticks = 0;
     it.event_host = .{ .now = eventNow, .sleep = eventSleep };
     if (!it.enableJit(.{})) return error.SkipZigTest;
@@ -2640,7 +2642,7 @@ test "jit: an event script that comes again compiles one time" {
     if (!jit.built) return error.SkipZigTest;
     const it = try newInterp();
     defer freeInterp(it);
-    try it.allow(@intFromEnum(tcl.interp.Capability.event));
+    try it.allow(@backingInt(tcl.interp.Capability.event));
     event_ticks = 0;
     it.event_host = .{ .now = eventNow, .sleep = eventSleep };
     if (!it.enableJit(.{})) return error.SkipZigTest;

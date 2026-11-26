@@ -161,7 +161,7 @@ fn namelessFile(it: *Interp) Error!i32 {
         }
         for (0..64) |_| {
             var name: [40:0]u8 = undefined;
-            const z = std.fmt.bufPrintZ(&name, ".ztcl-{d}-{x}", .{ linux.getpid(), arc4random() }) catch unreachable;
+            const z = std.fmt.bufPrintSentinel(&name, ".ztcl-{d}-{x}", .{ linux.getpid(), arc4random() }, 0) catch unreachable;
             const rc = linux.openat(dir, z, flags, 0o600);
             const e = linux.errno(rc);
             if (e == .EXIST) continue;
@@ -180,7 +180,7 @@ fn namelessFile(it: *Interp) Error!i32 {
 fn spawnMac(path: [:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8, in_fd: i32, out_fd: i32, err_fd: i32, cwd_fd: i32, pgid: i32) usize {
     const fail = struct {
         fn of(e: linux.E) usize {
-            return @bitCast(-@as(isize, @intFromEnum(e)));
+            return @bitCast(-@as(isize, @backingInt(e)));
         }
     }.of;
     const c = std.c;
@@ -204,18 +204,18 @@ fn spawnMac(path: [:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:nul
     defer _ = c.posix_spawnattr_destroy(&attr);
     for (copies, 0..) |x, k| {
         const rc = c.posix_spawn_file_actions_adddup2(&actions, x, @intCast(k));
-        if (rc != 0) return fail(@enumFromInt(rc));
+        if (rc != 0) return fail(@fromBackingInt(@intCast(rc)));
     }
     if (cwd_fd >= 0) {
         const rc = c.posix_spawn_file_actions_addfchdir_np(&actions, cwd_fd);
-        if (rc != 0) return fail(@enumFromInt(rc));
+        if (rc != 0) return fail(@fromBackingInt(@intCast(rc)));
     }
     if (c.posix_spawnattr_setflags(&attr, @bitCast(set_pgroup | cloexec_default)) != 0) return fail(.INVAL);
     if (posix_spawnattr_setpgroup(&attr, pgid) != 0) return fail(.INVAL);
     var pid: c.pid_t = 0;
     const rc = c.posix_spawn(&pid, path.ptr, &actions, &attr, @ptrCast(argv), @ptrCast(envp));
     if (rc == 0) return @intCast(pid);
-    return fail(@enumFromInt(rc));
+    return fail(@fromBackingInt(@intCast(rc)));
 }
 
 extern "c" fn arc4random() u32;
@@ -255,7 +255,7 @@ fn openFile(it: *Interp, path: []const u8, flags: sys.OpenFlags, what: []const u
             .err => |e| posix(it, e, try std.fmt.allocPrint(a, "couldn't {s} file \"{s}\": ", .{ what, path })),
         };
     }
-    const rc = linux.open(try a.dupeZ(u8, path), fsroot.hostFlags(flags), 0o666);
+    const rc = linux.open(try a.dupeSentinel(u8, path, 0), fsroot.hostFlags(flags), 0o666);
     if (linux.errno(rc) != .SUCCESS) return posix(it, linux.errno(rc), try std.fmt.allocPrint(a, "couldn't {s} file \"{s}\": ", .{ what, path }));
     return @intCast(rc);
 }
@@ -411,7 +411,7 @@ fn canonical(a: std.mem.Allocator, path: []const u8) Error!union(enum) { ok: [:0
         const mark = out.items.len;
         try out.append(a, '/');
         try out.appendSlice(a, name);
-        const z = try a.dupeZ(u8, out.items);
+        const z = try a.dupeSentinel(u8, out.items, 0);
         var st: Id = .{};
         const e = hostStat(z, &st);
         if (e != .SUCCESS) return .{ .err = e };
@@ -433,7 +433,7 @@ fn canonical(a: std.mem.Allocator, path: []const u8) Error!union(enum) { ok: [:0
         rest = try std.mem.concat(a, u8, &.{ target, "/", rest });
     }
     if (out.items.len == 0) try out.append(a, '/');
-    return .{ .ok = try a.dupeZ(u8, out.items) };
+    return .{ .ok = try a.dupeSentinel(u8, out.items, 0) };
 }
 
 fn sameFile(x: Id, y: Id) bool {
@@ -451,7 +451,7 @@ fn belowRoot(it: *Interp, path: []const u8) Error!bool {
     var k: usize = 0;
     while (k <= path.len) : (k += 1) {
         if (k < path.len and path[k] != '/') continue;
-        const z = try it.alloc().dupeZ(u8, if (k == 0) "/" else path[0..k]);
+        const z = try it.alloc().dupeSentinel(u8, if (k == 0) "/" else path[0..k], 0);
         var st: Id = .{};
         if (hostStat(z, &st) != .SUCCESS) return true;
         if (sameFile(st, root)) return true;
@@ -598,7 +598,7 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
         try noTilde(it, word);
         progs[k] = try resolve(it, word);
         const av = try a.allocSentinel(?[*:0]const u8, c.words.items.len, null);
-        for (c.words.items, 0..) |w, j| av[j] = (try a.dupeZ(u8, w)).ptr;
+        for (c.words.items, 0..) |w, j| av[j] = (try a.dupeSentinel(u8, w, 0)).ptr;
         argvs[k] = av;
     }
     const envp = try a.allocSentinel(?[*:0]const u8, it.exec_host.env.len, null);
@@ -672,7 +672,7 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
         const rc = if (comptime on_mac) spawnMac(progs[k], argvs[k].ptr, envp.ptr, in_fd, out_fd, this_err, cwd_fd, pgid) else linux.fork();
         if (linux.errno(rc) != .SUCCESS) {
             if (comptime on_mac) {
-                spawn_err = .{ @intCast(k), @intFromEnum(linux.errno(rc)) };
+                spawn_err = .{ @intCast(k), @backingInt(linux.errno(rc)) };
             } else failure = posix(it, linux.errno(rc), "couldn't fork child process: ");
             if (next) |p| {
                 sys.close(p[0]);
@@ -686,7 +686,7 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
             if (st.tree.procs >= 0) {
                 const e = linux.errno(linux.write(st.tree.procs, "0", 1));
                 if (e != .SUCCESS) {
-                    const msg = [2]u32{ @intCast(k), @intFromEnum(e) };
+                    const msg = [2]u32{ @intCast(k), @backingInt(e) };
                     _ = linux.write(report[1], std.mem.asBytes(&msg), 8);
                     linux.exit(127);
                 }
@@ -702,7 +702,7 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
             _ = linux.dup2(err0, 2);
             if (cwd_fd >= 0) _ = linux.fchdir(cwd_fd);
             const e = linux.errno(linux.execve(progs[k].ptr, argvs[k].ptr, envp.ptr));
-            const msg = [2]u32{ @intCast(k), @intFromEnum(e) };
+            const msg = [2]u32{ @intCast(k), @backingInt(e) };
             _ = linux.write(report[1], std.mem.asBytes(&msg), 8);
             linux.exit(127);
         }
@@ -748,7 +748,7 @@ fn start(it: *Interp, plan: *Plan, want_out: bool, want_in: bool) Error!Started 
         if (got == null or g[0] < got.?[0]) got = g;
     }
     if (failure == null) if (got) |g| {
-        failure = cannotRun(it, plan.cmds.items[@min(g[0], count - 1)].words.items[0], @enumFromInt(g[1]));
+        failure = cannotRun(it, plan.cmds.items[@min(g[0], count - 1)].words.items[0], @fromBackingInt(@intCast(g[1])));
     };
     if (failure) |e| {
         const saved = it.result;
@@ -834,11 +834,11 @@ pub fn treeOpen() Tree {
         if (std.mem.startsWith(u8, l, "0::/")) break l[3..];
     } else return t;
     var pbuf: [4200:0]u8 = undefined;
-    const full = std.fmt.bufPrintZ(&pbuf, "/sys/fs/cgroup{s}", .{own}) catch return t;
+    const full = std.fmt.bufPrintSentinel(&pbuf, "/sys/fs/cgroup{s}", .{own}, 0) catch return t;
     const prc = linux.openat(linux.AT.FDCWD, full, .{ .DIRECTORY = true, .CLOEXEC = true }, 0);
     if (linux.errno(prc) != .SUCCESS) return t;
     const parent: i32 = @intCast(prc);
-    _ = std.fmt.bufPrintZ(&t.name, "ztcl-{d}-{d}", .{ linux.getpid(), tree_count.fetchAdd(1, .monotonic) }) catch unreachable;
+    _ = std.fmt.bufPrintSentinel(&t.name, "ztcl-{d}-{d}", .{ linux.getpid(), tree_count.fetchAdd(1, .monotonic) }, 0) catch unreachable;
     if (linux.errno(linux.mkdirat(parent, &t.name, 0o755)) != .SUCCESS) {
         sys.close(parent);
         return t;
@@ -961,7 +961,7 @@ fn scanChildren(pa: std.mem.Allocator, found: *std.ArrayList(i32)) void {
             if (std.mem.indexOfScalar(i32, found.items, pid) != null) continue;
             var sb: [512]u8 = undefined;
             var path: [32:0]u8 = undefined;
-            const z = std.fmt.bufPrintZ(&path, "/proc/{d}/stat", .{pid}) catch continue;
+            const z = std.fmt.bufPrintSentinel(&path, "/proc/{d}/stat", .{pid}, 0) catch continue;
             const text = readSmall(linux.AT.FDCWD, z, &sb) orelse continue;
             // The name of the program is in parentheses and can have
             // spaces, so the fields start after the last `)`.
@@ -1000,11 +1000,11 @@ fn settle(it: *Interp, tree: Tree, start_ms: i64) Error!void {
 
 /// The wait status of a process, or null while it runs.
 pub fn waitPid(pid: i32, block: bool) ?u32 {
-    var status: u32 = 0;
+    var status: i32 = 0;
     while (true) {
         const rc = linux.wait4(pid, &status, if (block) @as(u32, 0) else @as(u32, linux.W.NOHANG), null);
         switch (linux.errno(rc)) {
-            .SUCCESS => return if (rc == 0) null else status,
+            .SUCCESS => return if (rc == 0) null else @bitCast(status),
             .INTR => continue,
             else => return 0,
         }

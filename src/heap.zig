@@ -83,7 +83,7 @@ fn classOf(len: usize) usize {
 
 /// The fill of a freed block in a build with safety checks.
 pub const dead_byte: u8 = 0xDD;
-const fill_dead = builtin.mode == .Debug or builtin.mode == .ReleaseSafe;
+const fill_dead = builtin.mode == .debug or builtin.mode == .safe;
 
 pub const Span = struct {
     base: usize,
@@ -494,7 +494,7 @@ pub fn isMarked(h: *const Heap, addr: usize) bool {
 /// The bytes of a coroutine stack. A block of this size is scanned as a
 /// native stack. A list of the same size gets a wider margin, and that
 /// is safe. A test checks this number against `coro.zig`.
-pub const coro_stack_bytes: usize = if (builtin.mode == .Debug) 16 << 20 else 1 << 20;
+pub const coro_stack_bytes: usize = if (builtin.mode == .debug) 16 << 20 else 1 << 20;
 /// The bytes that a native pointer can be before the start of its block.
 /// A stack word also marks the block that holds the address 64 bytes
 /// higher: a pointer at most 64 bytes below the start of a block keeps it

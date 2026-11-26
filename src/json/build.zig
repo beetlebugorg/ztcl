@@ -66,7 +66,7 @@ const Kind = enum { build, validate };
 
 /// The bytes that end a scalar: white space and the operators.
 const ends = blk: {
-    var t = [_]bool{false} ** 256;
+    var t: [256]bool = @splat(false);
     for (" \t\r\n{}[]:,") |c| t[c] = true;
     break :blk t;
 };

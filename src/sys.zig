@@ -60,7 +60,7 @@ const darwin = struct {
 
     pub fn errno(rc: usize) E {
         const s: isize = @bitCast(rc);
-        return if (s < 0 and s > -4096) @enumFromInt(-s) else .SUCCESS;
+        return if (s < 0 and s > -4096) @fromBackingInt(@intCast(-s)) else .SUCCESS;
     }
 
     pub fn read(fd: i32, buf: [*]u8, n: usize) usize {
@@ -146,7 +146,7 @@ const darwin = struct {
         return ret(c.kill(pid, sig));
     }
 
-    pub fn wait4(pid: i32, status: *u32, options: anytype, _: ?*anyopaque) usize {
+    pub fn wait4(pid: i32, status: *i32, options: anytype, _: ?*anyopaque) usize {
         return ret(c.waitpid(pid, @ptrCast(status), @intCast(options)));
     }
 
@@ -591,8 +591,8 @@ pub fn resolve(a: std.mem.Allocator, host: []const u8, out: *std.ArrayList(Addr)
     }
     if (host.len == 0 or host.len > 253) return;
     if (std.ascii.eqlIgnoreCase(host, "localhost")) {
-        try out.append(a, .{ .bytes = .{ 127, 0, 0, 1 } ++ [_]u8{0} ** 12 });
-        try out.append(a, .{ .v6 = true, .bytes = [_]u8{0} ** 15 ++ [_]u8{1} });
+        try out.append(a, .{ .bytes = .{ 127, 0, 0, 1 } ++ @as([12]u8, @splat(0)) });
+        try out.append(a, .{ .v6 = true, .bytes = @as([15]u8, @splat(0)) ++ [_]u8{1} });
         return;
     }
     // The hosts file: an address, then names, on each line.
@@ -638,7 +638,7 @@ pub fn connectError(fd: Fd) ?Fail {
     var len: os.socklen_t = 4;
     const rc = os.getsockopt(fd, os.SOL.SOCKET, os.SO.ERROR, std.mem.asBytes(&code), &len);
     if (os.errno(rc) != .SUCCESS or code == 0) return null;
-    return failOf(@enumFromInt(code));
+    return failOf(@fromBackingInt(@intCast(code)));
 }
 
 pub const Accepted = struct { fd: Fd, peer: Addr };

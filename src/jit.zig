@@ -579,7 +579,7 @@ fn stepOne(it: *Interp, f: *Fn, code: *vm.Code, stack: [*]Value, pc: *u32, sp: *
         .counters = f.counters.ptr,
         .func = f,
     };
-    const func: helpers.Fn = @ptrCast(@alignCast(helpers.tableFor(code)[@intFromEnum(h)]));
+    const func: helpers.Fn = @ptrCast(@alignCast(helpers.tableFor(code)[@backingInt(h)]));
     const r = func(&ctx, p, sp.*);
     if (r == helpers.failed) {
         it.jit.?.err = ctx.err;

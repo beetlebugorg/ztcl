@@ -204,7 +204,7 @@ pub const Helpers = struct {
 /// `a`, `b`, and `c` in little endian.
 pub fn insBytes(i: *const vm.Ins) [16]u8 {
     var out: [16]u8 = @splat(0);
-    out[0] = @intFromEnum(i.op);
+    out[0] = @backingInt(i.op);
     out[1] = i.x;
     std.mem.writeInt(u32, out[4..8], i.a, .little);
     std.mem.writeInt(u32, out[8..12], i.b, .little);
@@ -316,7 +316,7 @@ const Gen = struct {
 
     /// Calls helper `h` of instruction `pc`. The result is on the stack.
     fn callHelper(g: *Gen, h: Helper, pc: u32, sp: u32) Error!void {
-        const f = g.h[@intFromEnum(h)];
+        const f = g.h[@backingInt(h)];
         if (f == Helpers.none) return error.MissingHelper;
         try g.b.localGet(local_ctx);
         try g.b.i32Const(@bitCast(pc));
@@ -700,7 +700,7 @@ const Gen = struct {
                 try g.closeFast(f, pc);
             },
             .bin_vv, .bin_vi => {
-                const op: expr.BinOp = @enumFromInt(i.x);
+                const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
                 if (!fastOp(op)) return false;
                 const f = try g.openFast();
                 try g.slotOperands(f, i);
@@ -709,7 +709,7 @@ const Gen = struct {
                 try g.closeFast(f, pc);
             },
             .binary => {
-                const op: expr.BinOp = @enumFromInt(i.x);
+                const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
                 if (!fastOp(op)) return false;
                 const f = try g.openFast();
                 try g.stackInt(f, sp - 2, local_x);
@@ -721,7 +721,7 @@ const Gen = struct {
                 try g.closeFast(f, pc);
             },
             .jf_vv, .jf_vi => {
-                const op: expr.BinOp = @enumFromInt(i.x);
+                const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
                 const c = compareOp(op) orelse return false;
                 const f = try g.openFast();
                 try g.slotOperands(f, i);

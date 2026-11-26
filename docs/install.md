@@ -40,7 +40,7 @@ console.log(tcl.eval("expr {6 * 7}").result); // 42
 
 ## Build from source
 
-Install [Zig 0.16.0](https://ziglang.org/download/). The build needs no other tool and no C library.
+Install [Zig 0.17.0](https://ziglang.org/download/). The build needs no other tool and no C library.
 
 ```sh
 git clone https://github.com/beetlebugorg/ztcl

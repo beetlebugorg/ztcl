@@ -296,9 +296,9 @@ fn cmdArray(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var which: ?Sub = std.meta.stringToEnum(Sub, word);
     if (which == null and word.len > 0) {
         var hits: usize = 0;
-        inline for (@typeInfo(Sub).@"enum".fields) |f| {
-            if (std.mem.startsWith(u8, f.name, word)) {
-                which = @enumFromInt(f.value);
+        inline for (@typeInfo(Sub).@"enum".field_names, @typeInfo(Sub).@"enum".field_values) |f_name, f_value| {
+            if (std.mem.startsWith(u8, f_name, word)) {
+                which = @fromBackingInt(@intCast(f_value));
                 hits += 1;
             }
         }

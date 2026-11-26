@@ -85,7 +85,7 @@ fn col(addr: u32, n: u32) ?[]f64 {
 /// five values of `point.Limits`.
 export fn rt_bound(n: u32, width: u32, outs: u32, limits: u32) void {
     var pts: point.Points = .{ .len = n };
-    pts.in[@intFromEnum(point.Field.width)] = col(width, n);
+    pts.in[@backingInt(point.Field.width)] = col(width, n);
     const addrs: [*]const u32 = @ptrFromInt(outs);
     for (&pts.out, 0..) |*o, k| o.* = col(addrs[k], n);
     const lim: *const [5]f64 = @ptrFromInt(limits);

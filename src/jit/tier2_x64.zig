@@ -656,8 +656,8 @@ const Emitter = struct {
             .jf_vv, .jf_vi => {
                 const y = if (i.op == .jf_vv) e.slotReg(i.b).? else try e.lit(i.b, .rcx);
                 try s.aluRR(.cmp, e.slotReg(i.a).?, y);
-                const c = compareCond(@enumFromInt(i.x));
-                try s.jcc(@enumFromInt(@intFromEnum(c) ^ 1), try e.target(pc, i.c));
+                const c = compareCond(@fromBackingInt(@intCast(i.x)));
+                try s.jcc(@fromBackingInt(@intCast(@backingInt(c) ^ 1)), try e.target(pc, i.c));
             },
             .incr, .incr_drop, .incr_value => {
                 const r = e.slotReg(i.a).?;
@@ -678,15 +678,15 @@ const Emitter = struct {
             },
             .bin_vv, .bin_vi => {
                 const y = if (i.op == .bin_vv) e.slotReg(i.b).? else try e.lit(i.b, .rcx);
-                const over = try e.overflowExit(@enumFromInt(i.x), pc);
+                const over = try e.overflowExit(@fromBackingInt(@intCast(i.x)), pc);
                 try s.movRR(.rax, e.slotReg(i.a).?);
-                try e.arith(@enumFromInt(i.x), over, y);
+                try e.arith(@fromBackingInt(@intCast(i.x)), over, y);
                 try e.result(pc, d);
             },
             .binary => {
-                const over = try e.overflowExit(@enumFromInt(i.x), pc);
+                const over = try e.overflowExit(@fromBackingInt(@intCast(i.x)), pc);
                 try s.movRR(.rax, e.place(d - 2));
-                try e.arith(@enumFromInt(i.x), over, e.place(d - 1));
+                try e.arith(@fromBackingInt(@intCast(i.x)), over, e.place(d - 1));
                 try e.result(pc, d - 2);
             },
             else => unreachable,
@@ -788,7 +788,7 @@ const Emitter = struct {
                     else => .{ e.placeOperand(pc, d - 2), e.placeOperand(pc, d - 1), d - 2 },
                 };
                 if (!isDouble(a) and !isDouble(b)) return false;
-                const op: expr.BinOp = @enumFromInt(i.x);
+                const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
                 if (op == .lt or op == .le or op == .gt or op == .ge or op == .eq or op == .ne) {
                     try e.settleBelow(pc, k);
                     const ax = try e.inX(a, .xmm4);
@@ -816,7 +816,7 @@ const Emitter = struct {
                 const ax = try e.inX(a, .xmm4);
                 const bx = try e.inX(b, .xmm5);
                 try s.ucomisd(ax, bx);
-                try s.jcc(@enumFromInt(@intFromEnum(ucond(@enumFromInt(i.x))) ^ 1), try e.target(pc, i.c));
+                try s.jcc(@fromBackingInt(@intCast(@backingInt(ucond(@fromBackingInt(@intCast(i.x)))) ^ 1)), try e.target(pc, i.c));
                 return true;
             },
             else => return false,
@@ -985,7 +985,7 @@ const Emitter = struct {
         try s.movRM(abi.arg0, ctxSlot());
         try s.movRI32(abi.arg1, @intCast(pc));
         try s.movRI32(abi.arg2, @intCast(e.depth(pc)));
-        try s.callM(try x64.at(abi.helpers, 8 * @as(i64, @intFromEnum(h))));
+        try s.callM(try x64.at(abi.helpers, 8 * @as(i64, @backingInt(h))));
     }
 
     /// `sync` for a call that keeps the integer slot registers: the
@@ -1425,7 +1425,7 @@ const Emitter = struct {
         s.bind(e.resume_l);
         try s.movRM(abi.arg0, ctxSlot());
         try s.movRM(abi.helpers, .{ .base = abi.arg0, .disp = @offsetOf(jit.EnterCtx, "helpers") });
-        try s.callM(try x64.at(abi.helpers, 8 * @as(i64, @intFromEnum(Helper.resume_at))));
+        try s.callM(try x64.at(abi.helpers, 8 * @as(i64, @backingInt(Helper.resume_at))));
         try s.aluRI(.cmp, .rax, 0);
         const ret = try s.newLabel();
         try s.jcc(.e, ret);

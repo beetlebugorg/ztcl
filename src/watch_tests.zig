@@ -17,11 +17,11 @@ fn ev(it: *tcl.Interp, script: []const u8) ![]const u8 {
 /// Makes a fresh root folder. The caller removes it with `rm -rf`.
 fn jail(it: *tcl.Interp, buf: *[64:0]u8) ![:0]const u8 {
     const linux = tcl.sys.os;
-    const root = try std.fmt.bufPrintZ(buf, "/tmp/ztcl-watch-{d}", .{linux.getpid()});
+    const root = try std.fmt.bufPrintSentinel(buf, "/tmp/ztcl-watch-{d}", .{linux.getpid()}, 0);
     _ = linux.mkdirat(linux.AT.FDCWD, root, 0o700);
     try it.init(std.testing.allocator);
     try tcl.fsroot.setRoot(it, root);
-    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.file));
+    try it.allow(@backingInt(cap.channels) | @backingInt(cap.file));
     return root;
 }
 
@@ -29,7 +29,7 @@ test "ztcl::watch is absent without file" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.event));
+    try it.allow(@backingInt(cap.channels) | @backingInt(cap.event));
     try std.testing.expect(it.findCommand("ztcl::watch") == null);
 }
 

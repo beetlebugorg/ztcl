@@ -122,7 +122,7 @@ fn blockedExt(base: []const u8) bool {
 
 /// The full host path of a file for the app.
 fn filePath(it: *Interp, path: []const u8) Error![]const u8 {
-    if (it.capabilities & @intFromEnum(interp.Capability.file) == 0 or !it.fs_ok())
+    if (it.capabilities & @backingInt(interp.Capability.file) == 0 or !it.fs_ok())
         return it.failCode("ZTCL OPEN NOFILE", "ztcl::open of a file needs the file capability", .{});
     const rel = try fsroot.need(it, path);
     const full = if (comptime on_win) try win.finalPath(it, rel, path) else if (it.fs.host) rel else return unavailable(it);

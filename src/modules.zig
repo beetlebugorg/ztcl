@@ -118,7 +118,7 @@ pub fn load(it: *Interp, found: Found, installed: *u64) Error!void {
     const missing = m.needs & ~it.capabilities;
     if (missing != 0) {
         const bit: u32 = @as(u32, 1) << @intCast(@ctz(missing));
-        const cap = std.enums.tagName(interp.Capability, @enumFromInt(bit)) orelse "unknown";
+        const cap = std.enums.tagName(interp.Capability, @fromBackingInt(@intCast(bit))) orelse "unknown";
         const name = if (found.alias) |a| m.aliases[a].name else m.name;
         return it.failCode(try std.fmt.allocPrint(it.alloc(), "ZT PACKAGE CAPABILITY {s}", .{cap}), "module \"{s}\" needs the capability {s}", .{ name, cap });
     }

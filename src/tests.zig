@@ -1144,7 +1144,7 @@ test "a built-in module installs once and runs with the limits" {
         \\list [package require ztcl::hello] [package require hello] $::ztcl::hello::installs [hello a]
     )));
     // The full command sees the modules too.
-    try it.allow(@intFromEnum(tcl.interp.Capability.package));
+    try it.allow(@backingInt(tcl.interp.Capability.package));
     try std.testing.expectEqualStrings("1.0 1", try it.str(try it.eval("list [package require ztcl::hello] $::ztcl::hello::installs")));
     // `package forget` hides a built-in name, as it does a script package.
     try std.testing.expectEqualStrings("0 1 1", try it.str(try it.eval("package forget ztcl::hello; list [expr {\"ztcl::hello\" in [package names]}] [expr {\"hello\" in [package names]}] [catch {package require ztcl::hello}]")));
@@ -1166,7 +1166,7 @@ test "a module that needs a capability gives an error" {
     try std.testing.expectEqualStrings("1 {module \"ztcl::hellonet\" needs the capability socket} {ZT PACKAGE CAPABILITY socket}", try it.str(try it.eval(
         \\list [catch {package require ztcl::hellonet} m o] $m [dict get $o -errorcode]
     )));
-    try it.allow(@intFromEnum(tcl.interp.Capability.interp));
+    try it.allow(@backingInt(tcl.interp.Capability.interp));
     try std.testing.expectEqualStrings("{} 1.0", try it.str(try it.eval(
         \\package require ztcl::hello; interp create c; list [c eval {info commands ztcl::hello}] [c eval {package require ztcl::hello}]
     )));
@@ -1176,7 +1176,7 @@ test "package provides Tcl at the patch level" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    try it.allow(@intFromEnum(tcl.interp.Capability.package));
+    try it.allow(@backingInt(tcl.interp.Capability.package));
     try std.testing.expectEqualStrings("1 1 1", try it.str(try it.eval(
         \\list [expr {[package require Tcl 8.6] eq $tcl_patchLevel}] [catch {package require Tcl 9}] [expr {"Tcl" in [package names]}]
     )));
@@ -1186,7 +1186,7 @@ test "a child has no more capabilities than its parent" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    try it.allow(@intFromEnum(tcl.interp.Capability.interp));
+    try it.allow(@backingInt(tcl.interp.Capability.interp));
     // The child has no full `package`: `ifneeded` needs the capability.
     try std.testing.expectEqualStrings("1 0", try it.str(try it.eval("interp create c; list [c eval {catch {package ifneeded a 1 {}}}] [interp issafe c]")));
     try std.testing.expectEqualStrings("interp", try it.str(try it.eval("c eval {info commands interp}")));
@@ -1199,7 +1199,7 @@ test "a child that deletes itself through an alias stays safe" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    try it.allow(@intFromEnum(tcl.interp.Capability.interp));
+    try it.allow(@backingInt(tcl.interp.Capability.interp));
     _ = try it.eval("interp create c; proc kill {} {interp delete c; return done}; interp alias c k {} kill");
     try std.testing.expectEqualStrings("done", try it.str(try it.eval("c eval {proc p {} {set x [k]; return $x}; p}")));
     try std.testing.expectEqualStrings("0", try it.str(try it.eval("interp exists c")));
@@ -1213,7 +1213,7 @@ test "clock reads the time only from the host callback" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    try it.allow(@intFromEnum(tcl.interp.Capability.clock));
+    try it.allow(@backingInt(tcl.interp.Capability.clock));
     _ = it.eval("clock seconds") catch {};
     try std.testing.expectEqualStrings("the embedder gave no clock", try it.str(it.result));
     it.clock_host = .{ .now = fixedClock };
@@ -1246,7 +1246,7 @@ test "file and channels cannot leave the root folder" {
         linux.openat(base, "root", .{ .DIRECTORY = true, .PATH = true, .CLOEXEC = true }, 0);
     try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(rc));
     it.fs.fd = @intCast(rc);
-    try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.file));
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
     for ([_][]const u8{
         "open ../secret",           "open /../secret",     "open sub/../../secret",      "open out",                 "open sub/up/../secret",
         "open etc/passwd",          "open out w",          "source ../secret",           "source out",               "cd ..",
@@ -1436,7 +1436,7 @@ test "the Windows jail gives an error for each escape" {
     try it.init(std.testing.allocator);
     defer it.deinit();
     try tcl.fsroot.setRoot(&it, root);
-    try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.file) | @intFromEnum(tcl.interp.Capability.interp));
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file) | @backingInt(tcl.interp.Capability.interp));
     var scripts: std.ArrayList([]const u8) = .empty;
     try scripts.appendSlice(a, &.{
         "open ../secret",                   "open /../secret",           "open sub/../../secret",         "open out",
@@ -1544,7 +1544,7 @@ test "the event loop runs timers and idle scripts in order" {
     try it.init(std.testing.allocator);
     defer it.deinit();
     const cap = tcl.interp.Capability;
-    try it.allow(@intFromEnum(cap.event) | @intFromEnum(cap.interp));
+    try it.allow(@backingInt(cap.event) | @backingInt(cap.interp));
     _ = it.eval("after 10 {set x 1}") catch {};
     try std.testing.expectEqualStrings("the embedder gave no event clock", try it.str(it.result));
     fake_ticks = 0;
@@ -1571,7 +1571,7 @@ test "socket accepts only loopback addresses by default" {
     try it.init(std.testing.allocator);
     defer it.deinit();
     const cap = tcl.interp.Capability;
-    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.event) | @intFromEnum(cap.socket));
+    try it.allow(@backingInt(cap.channels) | @backingInt(cap.event) | @backingInt(cap.socket));
     fake_ticks = 0;
     it.event_host = .{ .now = fakeNow, .sleep = fakeSleep };
     for ([_][]const u8{
@@ -1606,11 +1606,11 @@ test "exec has an allowlist and a time limit, and leaves no process" {
     defer it.deinit();
     const cap = tcl.interp.Capability;
     // `file` and channels do not turn on `exec`.
-    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.file) | @intFromEnum(cap.interp));
+    try it.allow(@backingInt(cap.channels) | @backingInt(cap.file) | @backingInt(cap.interp));
     try std.testing.expect(it.findCommand("exec") == null);
     try std.testing.expectEqualStrings("1", try it.str(try it.eval("catch {open |echo}")));
     try std.testing.expectEqualStrings("{}", try it.str(try it.eval("interp create c; list [c eval {info commands exec}]")));
-    try it.allow(@intFromEnum(cap.exec));
+    try it.allow(@backingInt(cap.exec));
     it.exec_host = .{ .allow = &.{ "echo", if (@import("builtin").os.tag == .macos) "/bin/cat" else "/usr/bin/cat", "sleep", "sh" }, .timeout_ms = 300, .env = &.{"PATH=/usr/bin:/bin"} };
     try std.testing.expectEqualStrings("a b", try it.str(try it.eval("exec echo a b")));
     try std.testing.expectEqualStrings("A", try it.str(try it.eval("exec echo A | cat")));
@@ -1630,11 +1630,11 @@ test "exec has an allowlist and a time limit, and leaves no process" {
     // A background process ends with the interpreter.
     const pid_text = try it.str(try it.eval("exec sleep 60 &"));
     const pid = try std.fmt.parseInt(i32, pid_text, 10);
-    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.kill(pid, @enumFromInt(0))));
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.kill(pid, @fromBackingInt(@intCast(0)))));
     const pipe_pid = try std.fmt.parseInt(i32, try it.str(try it.eval("set f [open {|sleep 60} r]; pid $f")), 10);
     it.deinit();
-    try std.testing.expectEqual(linux.E.SRCH, linux.errno(linux.kill(pid, @enumFromInt(0))));
-    try std.testing.expectEqual(linux.E.SRCH, linux.errno(linux.kill(pipe_pid, @enumFromInt(0))));
+    try std.testing.expectEqual(linux.E.SRCH, linux.errno(linux.kill(pid, @fromBackingInt(@intCast(0)))));
+    try std.testing.expectEqual(linux.E.SRCH, linux.errno(linux.kill(pipe_pid, @fromBackingInt(@intCast(0)))));
     try it.init(std.testing.allocator);
 }
 
@@ -1645,7 +1645,7 @@ const tmp_base = if (@import("builtin").os.tag == .macos) "/private/tmp" else "/
 /// Makes a fresh folder in /tmp for a test. The caller removes it.
 fn tmpFolder(buf: *[64:0]u8, what: []const u8) ![:0]const u8 {
     const linux = tcl.sys.os;
-    const z = try std.fmt.bufPrintZ(buf, "{s}/ztcl-{s}-{d}", .{ tmp_base, what, linux.getpid() });
+    const z = try std.fmt.bufPrintSentinel(buf, "{s}/ztcl-{s}-{d}", .{ tmp_base, what, linux.getpid() }, 0);
     try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.mkdirat(linux.AT.FDCWD, z, 0o700)));
     return z;
 }
@@ -1655,7 +1655,7 @@ fn removeFolder(path: []const u8) void {
     var it: tcl.Interp = undefined;
     it.init(std.testing.allocator) catch return;
     defer it.deinit();
-    it.allow(@intFromEnum(tcl.interp.Capability.exec)) catch return;
+    it.allow(@backingInt(tcl.interp.Capability.exec)) catch return;
     it.exec_host = .{ .allow = &.{"rm"}, .timeout_ms = 5000, .env = &.{"PATH=/usr/bin:/bin"} };
     const script = std.fmt.allocPrint(it.alloc(), "exec rm -rf -- {{{s}}}", .{path}) catch return;
     _ = it.eval(script) catch {};
@@ -1666,7 +1666,7 @@ fn execJail(it: *tcl.Interp, root: []const u8) !void {
     errdefer it.deinit();
     try tcl.fsroot.setRoot(it, root);
     const cap = tcl.interp.Capability;
-    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.file) | @intFromEnum(cap.exec));
+    try it.allow(@backingInt(cap.channels) | @backingInt(cap.file) | @backingInt(cap.exec));
 }
 
 test "the exec allowlist checks the file that runs" {
@@ -1703,7 +1703,7 @@ test "exec refuses a relative PATH entry" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    try it.allow(@intFromEnum(tcl.interp.Capability.exec));
+    try it.allow(@backingInt(tcl.interp.Capability.exec));
     for ([_][:0]const u8{ "PATH=bin:/usr/bin:/bin", "PATH=/usr/bin::/bin", "PATH=/usr/bin:/bin:", "PATH=./bin:/usr/bin" }) |pa| {
         it.exec_host = .{ .allow = &.{"true"}, .timeout_ms = 2000, .env = &.{pa} };
         try std.testing.expectEqualStrings("1 {ZTCL EXEC PATH}", try it.str(try it.eval("list [catch {exec true}] $::errorCode")));
@@ -1748,7 +1748,7 @@ fn processEnds(pid: i32) bool {
     const linux = tcl.sys.os;
     var n: usize = 0;
     while (n < 100) : (n += 1) {
-        if (linux.errno(linux.kill(pid, @enumFromInt(0))) == .SRCH) return true;
+        if (linux.errno(linux.kill(pid, @fromBackingInt(@intCast(0)))) == .SRCH) return true;
         // A poll of no descriptor waits 10 ms.
         _ = linux.poll(@ptrFromInt(8), 0, 10);
     }
@@ -1795,12 +1795,12 @@ test "the time limit of exec kills a process that calls setsid" {
 /// `file` in it.
 fn fileJail(it: *tcl.Interp, buf: *[64:0]u8, what: []const u8) ![:0]const u8 {
     const linux = tcl.sys.os;
-    const root = try std.fmt.bufPrintZ(buf, "{s}/ztcl-{s}-{d}", .{ tmp_base, what, linux.getpid() });
+    const root = try std.fmt.bufPrintSentinel(buf, "{s}/ztcl-{s}-{d}", .{ tmp_base, what, linux.getpid() }, 0);
     try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.mkdirat(linux.AT.FDCWD, root, 0o700)));
     try it.init(std.testing.allocator);
     try tcl.fsroot.setRoot(it, root);
     const cap = tcl.interp.Capability;
-    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.file));
+    try it.allow(@backingInt(cap.channels) | @backingInt(cap.file));
     return root;
 }
 
@@ -2029,7 +2029,7 @@ test "socket refuses a blocked address and closes a blocked peer" {
     try it.init(std.testing.allocator);
     defer it.deinit();
     const cap = tcl.interp.Capability;
-    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.event) | @intFromEnum(cap.socket) | @intFromEnum(cap.interp));
+    try it.allow(@backingInt(cap.channels) | @backingInt(cap.event) | @backingInt(cap.socket) | @backingInt(cap.interp));
     fake_ticks = 0;
     it.event_host = .{ .now = fakeNow, .sleep = fakeSleep };
     // macOS has no 127.0.0.2 without an alias on the loopback device.
@@ -2089,13 +2089,13 @@ fn gcSame(script: []const u8, n: u32) !void {
     try a.init(std.testing.allocator);
     defer a.deinit();
     a.step_limit = 10_000_000;
-    try a.allow(@intFromEnum(tcl.interp.Capability.interp));
+    try a.allow(@backingInt(tcl.interp.Capability.interp));
     want = try a.str(try a.eval(script));
     var b: tcl.Interp = undefined;
     try b.init(std.testing.allocator);
     defer b.deinit();
     b.step_limit = 10_000_000;
-    try b.allow(@intFromEnum(tcl.interp.Capability.interp));
+    try b.allow(@backingInt(tcl.interp.Capability.interp));
     b.setGcStress(n);
     const got = try b.str(b.eval(script) catch |e| {
         std.debug.print("script: {s}\n{s}\n", .{ script, b.str(b.result) catch "" });
@@ -2198,7 +2198,7 @@ test "a child on the shared heap stops at the memory limit of its parent" {
         var it: tcl.Interp = undefined;
         try it.init(std.testing.allocator);
         defer it.deinit();
-        try it.allow(@intFromEnum(tcl.interp.Capability.interp));
+        try it.allow(@backingInt(tcl.interp.Capability.interp));
         it.mem_limit = 8 << 20;
         it.step_limit = 50_000_000;
         it.setGcStress(stress);
@@ -2264,7 +2264,7 @@ test "a trace on an element link acts on the element, as in tclsh" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    try it.allow(@intFromEnum(tcl.interp.Capability.event));
+    try it.allow(@backingInt(tcl.interp.Capability.event));
     it.event_host = .{ .now = fakeNow, .sleep = fakeSleep };
     _ = try it.eval(
         \\proc t {args} {lappend ::log $args}
@@ -2404,7 +2404,7 @@ test "a held value survives 100 collections and an unheld value is freed" {
     try it.hold(anchor);
     _ = try it.eval("set zz 1");
     for (0..100) |_| it.collect();
-    try std.testing.expectEqualStrings("ab" ** 30, try it.str(kept));
+    try std.testing.expectEqualStrings("abababababababababababababababababababababababababababababab", try it.str(kept));
     if (std.debug.runtime_safety) {
         try std.testing.expectEqual(@as(u8, 0xDD), gone.str[0]);
     }
@@ -2421,8 +2421,8 @@ test "a range from addRoot keeps the values in it" {
     try it.addRoot(std.mem.sliceAsBytes(&slot));
     _ = try it.eval("set zz 1");
     it.collect();
-    try std.testing.expectEqualStrings("xy" ** 30, try it.str(slot[0]));
-    try std.testing.expectEqualStrings("zw" ** 30, try it.str(slot[1]));
+    try std.testing.expectEqualStrings("xyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxy", try it.str(slot[0]));
+    try std.testing.expectEqualStrings("zwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzwzw", try it.str(slot[1]));
     it.removeRoot(std.mem.sliceAsBytes(&slot));
 }
 
@@ -2655,7 +2655,7 @@ test "fsroot: host mode uses the real paths of the host, and a root ends it" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.file));
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
     try tcl.fsroot.setHost(&it);
     const v = try it.eval(
         \\set d [file join [pwd] .zig-cache ztcl-host-test]
@@ -2693,7 +2693,7 @@ test "ztcl::open gives a URL or the host path of a file to the opener" {
     try it.init(std.testing.allocator);
     defer it.deinit();
     it.launch_host = .{ .open = recordOpen };
-    try it.allow(@intFromEnum(tcl.interp.Capability.launch));
+    try it.allow(@backingInt(tcl.interp.Capability.launch));
     _ = try it.eval("ztcl::open https://example.com/a?b=1");
     try std.testing.expectEqualStrings("https://example.com/a?b=1", launched);
     _ = try it.eval("ztcl::open MAILTO:a@example.com");
@@ -2705,7 +2705,7 @@ test "ztcl::open gives a URL or the host path of a file to the opener" {
     // A file needs `file` too.
     try std.testing.expectEqualStrings("ZTCL OPEN NOFILE", try it.str(try it.eval("catch {ztcl::open a.txt}; set ::errorCode")));
     if (comptime !tcl.fsroot.supported or @import("builtin").os.tag == .wasi) return;
-    try it.allow(@intFromEnum(tcl.interp.Capability.channels) | @intFromEnum(tcl.interp.Capability.file));
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
     try tcl.fsroot.setHost(&it);
     _ = try it.eval(
         \\set d [file join [pwd] .zig-cache ztcl-open-test]

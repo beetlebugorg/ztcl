@@ -45,7 +45,7 @@ pub const Runtime = struct {
 
 fn valType(b: u8) Error!w.ValType {
     return switch (b) {
-        0x7f, 0x7e, 0x7d, 0x7c, 0x7b => @enumFromInt(b),
+        0x7f, 0x7e, 0x7d, 0x7c, 0x7b => @fromBackingInt(@intCast(b)),
         else => error.Unsupported,
     };
 }
@@ -120,7 +120,7 @@ pub fn read(a: Allocator, bytes: []const u8) Error!Runtime {
                 const n = try r.str();
                 const kind = try r.byte();
                 if (kind > 3) return error.BadModule;
-                try exports.append(a, .{ .name = n, .kind = @enumFromInt(kind), .index = try r.uleb32() });
+                try exports.append(a, .{ .name = n, .kind = @fromBackingInt(@intCast(kind)), .index = try r.uleb32() });
             },
             11 => for (0..try r.uleb32()) |_| {
                 const flags = try r.uleb32();

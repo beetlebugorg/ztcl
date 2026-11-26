@@ -135,10 +135,10 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
         .{ "~", &bitNotCmd },
     };
     inline for (ops) |o| try it.register("tcl::mathop::" ++ o[0], o[1]);
-    inline for (@typeInfo(expr.Func).@"enum".fields) |field| {
-        const tag: expr.Func = @enumFromInt(field.value);
+    inline for (@typeInfo(expr.Func).@"enum".field_names, @typeInfo(expr.Func).@"enum".field_values) |field_name, field_value| {
+        const tag: expr.Func = @fromBackingInt(@intCast(field_value));
         if (tag == .clamp or tag == .lerp or tag == .noise2 or tag == .noise3) continue;
-        try it.register("tcl::mathfunc::" ++ field.name, funcCmd(tag));
+        try it.register("tcl::mathfunc::" ++ field_name, funcCmd(tag));
     }
     _ = try it.internNs("tcl::mathop");
     _ = try it.internNs("tcl::mathfunc");

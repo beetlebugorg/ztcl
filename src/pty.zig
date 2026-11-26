@@ -88,7 +88,7 @@ fn openPair(it: *Interp) Error![2]i32 {
     const nrc = linux.ioctl(m, linux.T.IOCGPTN, @intFromPtr(&n));
     if (linux.errno(nrc) != .SUCCESS) return proc.posix(it, linux.errno(nrc), "couldn't find the pty: ");
     var buf: [32:0]u8 = undefined;
-    const path = std.fmt.bufPrintZ(&buf, "/dev/pts/{d}", .{n}) catch unreachable;
+    const path = std.fmt.bufPrintSentinel(&buf, "/dev/pts/{d}", .{n}, 0) catch unreachable;
     const src = linux.open(path, .{ .ACCMODE = .RDWR, .NOCTTY = true, .CLOEXEC = true }, 0);
     if (linux.errno(src) != .SUCCESS) return proc.posix(it, linux.errno(src), "couldn't open the pty: ");
     return .{ m, @intCast(src) };
@@ -142,7 +142,7 @@ fn spawn(it: *Interp, argv: []const Value) Error!Value {
     try proc.noTilde(it, word);
     const prog = try proc.resolve(it, word);
     const av = try a.allocSentinel(?[*:0]const u8, argv.len - i, null);
-    for (argv[i..], 0..) |v, j| av[j] = (try a.dupeZ(u8, try it.str(v))).ptr;
+    for (argv[i..], 0..) |v, j| av[j] = (try a.dupeSentinel(u8, try it.str(v), 0)).ptr;
 
     // The environment: the embedder's list, then `-env`, then TERM.
     var env: std.ArrayList([]const u8) = .empty;
@@ -150,7 +150,7 @@ fn spawn(it: *Interp, argv: []const Value) Error!Value {
     for (extra.items) |e| try env.append(a, e);
     if (!hasName(env.items, "TERM")) try env.append(a, "TERM=xterm-256color");
     const envp = try a.allocSentinel(?[*:0]const u8, env.items.len, null);
-    for (env.items, 0..) |e, j| envp[j] = (try a.dupeZ(u8, e)).ptr;
+    for (env.items, 0..) |e, j| envp[j] = (try a.dupeSentinel(u8, e, 0)).ptr;
 
     var cwd_fd: i32 = -1;
     if (it.fs_ok()) {
@@ -186,7 +186,7 @@ fn spawn(it: *Interp, argv: []const Value) Error!Value {
         if (tree.procs >= 0) {
             const e = linux.errno(linux.write(tree.procs, "0", 1));
             if (e != .SUCCESS) {
-                msg = @intFromEnum(e);
+                msg = @backingInt(e);
                 _ = linux.write(report[1], std.mem.asBytes(&msg), 4);
                 linux.exit(127);
             }
@@ -198,7 +198,7 @@ fn spawn(it: *Interp, argv: []const Value) Error!Value {
         _ = linux.dup2(s0, 1);
         _ = linux.dup2(s0, 2);
         if (cwd_fd >= 0) _ = linux.fchdir(cwd_fd);
-        msg = @intFromEnum(linux.errno(linux.execve(prog.ptr, av.ptr, envp.ptr)));
+        msg = @backingInt(linux.errno(linux.execve(prog.ptr, av.ptr, envp.ptr)));
         _ = linux.write(report[1], std.mem.asBytes(&msg), 4);
         linux.exit(127);
     }
@@ -214,7 +214,7 @@ fn spawn(it: *Interp, argv: []const Value) Error!Value {
     if (got) {
         _ = proc.waitPid(pid, true);
         proc.treeClose(&tree);
-        return proc.cannotRun(it, word, @enumFromInt(msg));
+        return proc.cannotRun(it, word, @fromBackingInt(@intCast(msg)));
     }
     const c = try chan.adopt(it, "pty", m, true, true);
     keep_m = true;
@@ -298,7 +298,7 @@ fn cmdPty(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const c = try ptyChan(it, argv[2]);
         const sig: u32 = if (argv.len == 4) try signalOf(it, argv[3]) else 1;
         poll(it, c);
-        if (c.pty_status == null and c.tree.pgid > 0) _ = linux.kill(-c.tree.pgid, @enumFromInt(sig));
+        if (c.pty_status == null and c.tree.pgid > 0) _ = linux.kill(-c.tree.pgid, @fromBackingInt(@intCast(sig)));
         return .{ .str = "" };
     }
     return it.fail("bad option \"{s}\": must be kill, resize, size, spawn, or status", .{sub});

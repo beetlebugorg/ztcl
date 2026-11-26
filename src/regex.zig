@@ -109,7 +109,7 @@ const Set = struct {
         var m = s.classes;
         var i: u4 = 0;
         while (m != 0) : (i +%= 1) {
-            if (m & 1 != 0 and classHas(@enumFromInt(i), c)) return true;
+            if (m & 1 != 0 and classHas(@fromBackingInt(@intCast(i)), c)) return true;
             m >>= 1;
         }
         return false;
@@ -129,7 +129,7 @@ const Set = struct {
     }
 
     fn addClass(s: *Set, cl: Class) void {
-        s.classes |= @as(u16, 1) << @intFromEnum(cl);
+        s.classes |= @as(u16, 1) << @backingInt(cl);
         for (0..256) |i| {
             if (classHas(cl, @intCast(i))) s.bits[i >> 6] |= @as(u64, 1) << @intCast(i & 63);
         }
@@ -353,7 +353,7 @@ const Parser = struct {
     opts: Options,
     ncap: u16 = 1,
     /// A capture group is closed when its bit is set.
-    closed: std.StaticBitSet(1024) = .initEmpty(),
+    closed: std.StaticBitSet(1024) = .empty,
     nodes: u32 = 0,
     depth: u32 = 0,
     info: u16 = 0,

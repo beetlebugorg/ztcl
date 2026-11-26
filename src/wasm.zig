@@ -177,7 +177,7 @@ fn filesOf(it: *ztcl.Interp) *wasmfiles.State {
 /// the bundle. Gives 0 on success, 1 when the memory ends, and 2 for
 /// another bit.
 fn ztcl_allow_plain(h: *Handle, bits: u32) callconv(.c) i32 {
-    const file = @intFromEnum(Capability.file);
+    const file = @backingInt(Capability.file);
     if (bits & ~file != 0) return 2;
     if (bits == 0 or h.files.on) return 0;
     h.files = .{ .payload = payload(), .on = true };
@@ -286,7 +286,7 @@ else
 /// the memory ends, and 2 for another bit.
 fn ztcl_allow(h: *Handle, bits: u32) callconv(.c) i32 {
     var ok: u32 = 0;
-    for (web_caps) |c| ok |= @intFromEnum(c);
+    for (web_caps) |c| ok |= @backingInt(c);
     if (bits & ~ok != 0) return 2;
     if (shared) {
         const wt = @import("webthread.zig");
@@ -294,7 +294,7 @@ fn ztcl_allow(h: *Handle, bits: u32) callconv(.c) i32 {
         h.it.event_host = .{ .now = wt.nowMicros, .sleep = wt.sleepMicros };
         h.it.allow(bits) catch return 1;
     } else {
-        const t = @intFromEnum(Capability.thread);
+        const t = @backingInt(Capability.thread);
         h.it.clock_host = .{ .now = webasync.nowMicros };
         h.it.allow(bits & ~t) catch return 1;
         if (bits & t != 0) webasync.register(&h.it) catch return 1;

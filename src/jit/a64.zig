@@ -103,7 +103,7 @@ pub const DReg = enum(u5) {
 pub const Cond = enum(u4) { eq, ne, hs, lo, mi, pl, vs, vc, hi, ls, ge, lt, gt, le };
 
 pub fn invert(c: Cond) Cond {
-    return @enumFromInt(@intFromEnum(c) ^ 1);
+    return @fromBackingInt(@intCast(@backingInt(c) ^ 1));
 }
 
 /// The shift of the second register of a data operation.
@@ -153,7 +153,7 @@ fn gr(r: Reg) error{Reg}!u32 {
     return switch (r) {
         .x18, .sp => error.Reg,
         .zr => 31,
-        else => @intFromEnum(r),
+        else => @backingInt(r),
     };
 }
 
@@ -162,12 +162,12 @@ fn sr(r: Reg) error{Reg}!u32 {
     return switch (r) {
         .x18, .zr => error.Reg,
         .sp => 31,
-        else => @intFromEnum(r),
+        else => @backingInt(r),
     };
 }
 
 fn dr(r: DReg) u32 {
-    return @intFromEnum(r);
+    return @backingInt(r);
 }
 
 /// A checked unsigned field.
@@ -545,7 +545,7 @@ pub const Asm = struct {
 
     /// A register form of `op` with a shift of the second register.
     pub fn opR(s: *Asm, op: Op, d: Reg, n: Reg, m: Reg, sh: Shift, amount: i64) Error!void {
-        try s.word(@intFromEnum(op) | @as(u32, @intFromEnum(sh)) << 22 | try gr(m) << 16 | try ufield(amount, 6) << 10 | try gr(n) << 5 | try gr(d));
+        try s.word(@backingInt(op) | @as(u32, @backingInt(sh)) << 22 | try gr(m) << 16 | try ufield(amount, 6) << 10 | try gr(n) << 5 | try gr(d));
     }
 
     /// `cmp xn, xm` with a shift of `xm`.
@@ -595,7 +595,7 @@ pub const Asm = struct {
 
     /// `cset xd, c`.
     pub fn cset(s: *Asm, d: Reg, c: Cond) Error!void {
-        try s.word(0x9A9F07E0 | @as(u32, @intFromEnum(invert(c))) << 12 | try gr(d));
+        try s.word(0x9A9F07E0 | @as(u32, @backingInt(invert(c))) << 12 | try gr(d));
     }
 
     // ---- Control ----
@@ -605,7 +605,7 @@ pub const Asm = struct {
     }
 
     pub fn bcond(s: *Asm, c: Cond, l: Label) Error!void {
-        try s.branchTo(0x54000000 | @as(u32, @intFromEnum(c)), .imm19, l);
+        try s.branchTo(0x54000000 | @as(u32, @backingInt(c)), .imm19, l);
     }
 
     pub fn cbz(s: *Asm, t: Reg, l: Label) Error!void {
@@ -668,7 +668,7 @@ pub const Asm = struct {
     }
 
     pub fn fop(s: *Asm, op: FOp, d: DReg, n: DReg, m: DReg) Error!void {
-        try s.word(@intFromEnum(op) | dr(m) << 16 | dr(n) << 5 | dr(d));
+        try s.word(@backingInt(op) | dr(m) << 16 | dr(n) << 5 | dr(d));
     }
 
     pub fn fcmp(s: *Asm, n: DReg, m: DReg) Error!void {
@@ -762,12 +762,12 @@ pub const fops = [_]FOp{ .fadd, .fsub, .fmul, .fdiv };
 /// Encodes one row of the golden table. A branch row goes to the next
 /// instruction, so its offset is one word.
 pub fn encodeRow(s: *Asm, row: Row) Error!void {
-    const ra: Reg = @enumFromInt(row.a);
-    const rb: Reg = @enumFromInt(row.b);
-    const rc: Reg = @enumFromInt(row.c);
-    const da: DReg = @enumFromInt(@as(u5, @truncate(row.a)));
-    const db: DReg = @enumFromInt(@as(u5, @truncate(row.b)));
-    const dc: DReg = @enumFromInt(@as(u5, @truncate(row.c)));
+    const ra: Reg = @fromBackingInt(@intCast(row.a));
+    const rb: Reg = @fromBackingInt(@intCast(row.b));
+    const rc: Reg = @fromBackingInt(@intCast(row.c));
+    const da: DReg = @fromBackingInt(@intCast(@as(u5, @truncate(row.a))));
+    const db: DReg = @fromBackingInt(@intCast(@as(u5, @truncate(row.b))));
+    const dc: DReg = @fromBackingInt(@intCast(@as(u5, @truncate(row.c))));
     // The size and the register of the load and store forms.
     const z: Size = sizes[row.k & 3];
     const t: Rt = if (z == .d) .{ .d = da } else .{ .r = ra };
@@ -797,22 +797,22 @@ pub fn encodeRow(s: *Asm, row: Row) Error!void {
         .cmp_i => try s.cmpI(ra, row.i),
         .cmp_wi => try s.cmpWI(ra, row.i),
         .cmp_wr => try s.cmpWR(ra, rb),
-        .op_r => try s.opR(ops[row.k], ra, rb, rc, @enumFromInt(@as(u2, @intCast(row.j))), row.i),
-        .cmp_r => try s.cmpR(ra, rb, @enumFromInt(@as(u2, @intCast(row.j))), row.i),
+        .op_r => try s.opR(ops[row.k], ra, rb, rc, @fromBackingInt(@intCast(@as(u2, @intCast(row.j)))), row.i),
+        .cmp_r => try s.cmpR(ra, rb, @fromBackingInt(@intCast(@as(u2, @intCast(row.j)))), row.i),
         .and_i => try s.andI(ra, rb, @bitCast(row.i)),
         .tst_i => try s.tstI(ra, @bitCast(row.i)),
         .mul => try s.mul(ra, rb, rc),
         .smulh => try s.smulh(ra, rb, rc),
         .sdiv => try s.sdiv(ra, rb, rc),
-        .msub => try s.msub(ra, rb, rc, @enumFromInt(row.j)),
+        .msub => try s.msub(ra, rb, rc, @fromBackingInt(@intCast(row.j))),
         .asr_i => try s.asrI(ra, rb, row.i),
         .lsl_i => try s.lslI(ra, rb, row.i),
-        .cset => try s.cset(ra, @enumFromInt(@as(u4, @intCast(row.k)))),
+        .cset => try s.cset(ra, @fromBackingInt(@intCast(@as(u4, @intCast(row.k))))),
         .b, .bcond, .cbz, .cbnz, .cbz_w, .cbnz_w => {
             const l = try s.newLabel();
             switch (row.f) {
                 .b => try s.b(l),
-                .bcond => try s.bcond(@enumFromInt(@as(u4, @intCast(row.k))), l),
+                .bcond => try s.bcond(@fromBackingInt(@intCast(@as(u4, @intCast(row.k)))), l),
                 .cbz => try s.cbz(ra, l),
                 .cbnz => try s.cbnz(ra, l),
                 .cbz_w => try s.cbzW(ra, l),

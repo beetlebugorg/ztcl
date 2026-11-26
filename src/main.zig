@@ -186,7 +186,7 @@ fn leave(it: *tcl.Interp, code: u8) noreturn {
 /// The part of `tclsh` that the Tcl tests use for a child process.
 fn runTclsh(it: *tcl.Interp, out: *Io.Writer, words: []const [:0]const u8, root: ?[]const u8, cwd: ?[]const u8) !void {
     exit_out = out;
-    const channels = chan_ok and it.capabilities & @intFromEnum(tcl.interp.Capability.channels) != 0;
+    const channels = chan_ok and it.capabilities & @backingInt(tcl.interp.Capability.channels) != 0;
     if (comptime chan_ok) {
         tcl.sys.ignorePipeSignal();
         if (channels) try tcl.chan.useStdio(it);
@@ -279,14 +279,14 @@ fn runApp(init: std.process.Init, args: []const [:0]const u8, off: u64, len: u64
     const z = &it.vfs.mounts.items[0].z;
     const m_entry = z.find(bn.manifest_name) orelse return error.NoManifest;
     const m = try bn.Manifest.parse(arena, try z.extract(arena, m_entry));
-    const bits = (tcl.interp.Capability.parse(m.allow) orelse 0) | @intFromEnum(tcl.interp.Capability.embedded);
+    const bits = (tcl.interp.Capability.parse(m.allow) orelse 0) | @backingInt(tcl.interp.Capability.embedded);
     it.clock_host = .{ .now = hostNow, .zone = hostZone };
     it.event_host = .{ .now = hostTicks, .sleep = hostSleep };
     if (comptime chan_ok) tcl.sys.ignorePipeSignal();
     if (comptime chan_ok) {
         if (m.root) |r| {
             try tcl.fsroot.setRoot(&it, r);
-        } else if (bits & @intFromEnum(tcl.interp.Capability.file) != 0) {
+        } else if (bits & @backingInt(tcl.interp.Capability.file) != 0) {
             // A program gets host mode (#122), as the `ztcl` runner does.
             tcl.fsroot.setHost(&it) catch {};
         }
@@ -294,7 +294,7 @@ fn runApp(init: std.process.Init, args: []const [:0]const u8, off: u64, len: u64
     try it.allow(bits);
     if (m.jit) _ = it.enableJit(.{});
     if (comptime chan_ok) {
-        if (bits & @intFromEnum(tcl.interp.Capability.channels) != 0) try tcl.chan.useStdio(&it);
+        if (bits & @backingInt(tcl.interp.Capability.channels) != 0) try tcl.chan.useStdio(&it);
     }
     try it.register("exit", cmdExit);
     const a = it.alloc();
@@ -508,7 +508,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             try it.allow(bits);
             // The files of the host, as in tclsh, unless --root came first.
             // A --root after this flag turns the jail on.
-            const fs_bits = @intFromEnum(tcl.interp.Capability.file) | @intFromEnum(tcl.interp.Capability.channels);
+            const fs_bits = @backingInt(tcl.interp.Capability.file) | @backingInt(tcl.interp.Capability.channels);
             if (root == null and bits & fs_bits != 0 and !it.fs.host) tcl.fsroot.setHost(&it) catch {};
             continue;
         }
@@ -520,7 +520,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
         if (std.mem.eql(u8, arg, "--exec-env") and i + 1 < args.len) {
             i += 1;
             if (comptime exec_ok) {
-                try exec_env.append(arena, try arena.dupeZ(u8, args[i]));
+                try exec_env.append(arena, try arena.dupeSentinel(u8, args[i], 0));
                 it.exec_host.env = exec_env.items;
             }
             continue;

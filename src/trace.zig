@@ -647,9 +647,9 @@ pub fn cmdTrace(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var which: ?Sub = std.meta.stringToEnum(Sub, sub);
     if (which == null and sub.len > 0) {
         var hits: usize = 0;
-        inline for (@typeInfo(Sub).@"enum".fields) |f| {
-            if (std.mem.startsWith(u8, f.name, sub)) {
-                which = @enumFromInt(f.value);
+        inline for (@typeInfo(Sub).@"enum".field_names, @typeInfo(Sub).@"enum".field_values) |f_name, f_value| {
+            if (std.mem.startsWith(u8, f_name, sub)) {
+                which = @fromBackingInt(@intCast(f_value));
                 hits += 1;
             }
         }
@@ -685,8 +685,8 @@ pub fn cmdTrace(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const Kind = enum { command, execution, variable };
     var kind: ?Kind = std.meta.stringToEnum(Kind, type_word);
     if (kind == null and type_word.len > 0) {
-        inline for (@typeInfo(Kind).@"enum".fields) |f| {
-            if (std.mem.startsWith(u8, f.name, type_word)) kind = @enumFromInt(f.value);
+        inline for (@typeInfo(Kind).@"enum".field_names, @typeInfo(Kind).@"enum".field_values) |f_name, f_value| {
+            if (std.mem.startsWith(u8, f_name, type_word)) kind = @fromBackingInt(@intCast(f_value));
         }
     }
     const k = kind orelse return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be execution, command, or variable", .{type_word});

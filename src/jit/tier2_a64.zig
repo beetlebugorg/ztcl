@@ -617,7 +617,7 @@ const Emitter = struct {
             .jf_vv, .jf_vi => {
                 const y = if (i.op == .jf_vv) e.slotReg(i.b).? else try e.lit(i.b, rcx);
                 try s.cmpR(e.slotReg(i.a).?, y, .lsl, 0);
-                try s.bcond(a64.invert(compareCond(@enumFromInt(i.x))), try e.target(pc, i.c));
+                try s.bcond(a64.invert(compareCond(@fromBackingInt(@intCast(i.x)))), try e.target(pc, i.c));
             },
             .incr, .incr_drop, .incr_value => {
                 const r = e.slotReg(i.a).?;
@@ -637,15 +637,15 @@ const Emitter = struct {
             },
             .bin_vv, .bin_vi => {
                 const y = if (i.op == .bin_vv) e.slotReg(i.b).? else try e.lit(i.b, rcx);
-                const over = try e.overflowExit(@enumFromInt(i.x), pc);
+                const over = try e.overflowExit(@fromBackingInt(@intCast(i.x)), pc);
                 try s.movRR(rax, e.slotReg(i.a).?);
-                try e.arith(@enumFromInt(i.x), over, y);
+                try e.arith(@fromBackingInt(@intCast(i.x)), over, y);
                 try e.result(pc, d);
             },
             .binary => {
-                const over = try e.overflowExit(@enumFromInt(i.x), pc);
+                const over = try e.overflowExit(@fromBackingInt(@intCast(i.x)), pc);
                 try s.movRR(rax, e.place(d - 2));
-                try e.arith(@enumFromInt(i.x), over, e.place(d - 1));
+                try e.arith(@fromBackingInt(@intCast(i.x)), over, e.place(d - 1));
                 try e.result(pc, d - 2);
             },
             else => unreachable,
@@ -742,7 +742,7 @@ const Emitter = struct {
                     else => .{ e.placeOperand(pc, d - 2), e.placeOperand(pc, d - 1), d - 2 },
                 };
                 if (!isDouble(a) and !isDouble(b)) return false;
-                const op: expr.BinOp = @enumFromInt(i.x);
+                const op: expr.BinOp = @fromBackingInt(@intCast(i.x));
                 if (op == .lt or op == .le or op == .gt or op == .ge or op == .eq or op == .ne) {
                     try e.settleBelow(pc, k);
                     const ax = try e.inD(a, dx0);
@@ -769,7 +769,7 @@ const Emitter = struct {
                 const ax = try e.inD(a, dx0);
                 const bx = try e.inD(b, dx1);
                 try s.fcmp(ax, bx);
-                try s.bcond(a64.invert(dcond(@enumFromInt(i.x))), try e.target(pc, i.c));
+                try s.bcond(a64.invert(dcond(@fromBackingInt(@intCast(i.x)))), try e.target(pc, i.c));
                 return true;
             },
             else => return false,
@@ -907,7 +907,7 @@ const Emitter = struct {
         try e.ctx(abi.arg0);
         try s.movImm(abi.arg1, @intCast(pc));
         try s.movImm(abi.arg2, @intCast(e.depth(pc)));
-        try e.ldr(t16, abi.helpers, 8 * @as(i64, @intFromEnum(h)));
+        try e.ldr(t16, abi.helpers, 8 * @as(i64, @backingInt(h)));
         try s.blr(t16);
     }
 
@@ -1283,7 +1283,7 @@ const Emitter = struct {
         // and the code returns status 2 with the frame of tier 1.
         s.bind(e.resume_l);
         try e.ctx(abi.arg0);
-        try e.ldr(t16, abi.helpers, 8 * @as(i64, @intFromEnum(Helper.resume_at)));
+        try e.ldr(t16, abi.helpers, 8 * @as(i64, @backingInt(Helper.resume_at)));
         try s.blr(t16);
         const ret = try s.newLabel();
         try s.cbz(abi.ret, ret);

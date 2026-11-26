@@ -19,7 +19,7 @@ fn sleep(_: ?*anyopaque, micros: i64) void {
 fn ptyInterp(it: *tcl.Interp) !void {
     try it.init(std.testing.allocator);
     errdefer it.deinit();
-    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.event) | @intFromEnum(cap.exec));
+    try it.allow(@backingInt(cap.channels) | @backingInt(cap.event) | @backingInt(cap.exec));
     it.event_host = .{ .now = now, .sleep = sleep };
     it.exec_host = .{ .allow = &.{ "sh", "cat" }, .timeout_ms = 0, .env = &.{"PATH=/usr/bin:/bin"} };
 }
@@ -63,7 +63,7 @@ test "ztcl::pty is absent without exec" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    try it.allow(@intFromEnum(cap.channels) | @intFromEnum(cap.file) | @intFromEnum(cap.event) | @intFromEnum(cap.interp));
+    try it.allow(@backingInt(cap.channels) | @backingInt(cap.file) | @backingInt(cap.event) | @backingInt(cap.interp));
     try std.testing.expect(it.findCommand("ztcl::pty") == null);
     try std.testing.expectEqualStrings("{}", try (ev(&it, "interp create c; list [c eval {info commands ztcl::pty}]")));
 }
@@ -121,11 +121,11 @@ test "ztcl::pty close ends a program that ignores SIGHUP" {
     defer it.deinit();
     _ = try ev(&it, read_until);
     const pid = try std.fmt.parseInt(i32, try (ev(&it, "set t [ztcl::pty spawn sh -c {trap {} HUP; echo READY; while :; do :; done}]; readUntil $t READY; pid $t")), 10);
-    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.kill(pid, @enumFromInt(0))));
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.kill(pid, @fromBackingInt(@intCast(0)))));
     const t0 = tcl.proc.nowMs();
     _ = try ev(&it, "close $t");
     try std.testing.expect(tcl.proc.nowMs() - t0 < 2000);
-    try std.testing.expectEqual(linux.E.SRCH, linux.errno(linux.kill(pid, @enumFromInt(0))));
+    try std.testing.expectEqual(linux.E.SRCH, linux.errno(linux.kill(pid, @fromBackingInt(@intCast(0)))));
 }
 
 test "ztcl::pty checks the program list of exec" {

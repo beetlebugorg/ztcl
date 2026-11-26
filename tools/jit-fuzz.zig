@@ -154,7 +154,7 @@ const Item = enum {
     call,
 };
 
-const n_items = @typeInfo(Item).@"enum".fields.len;
+const n_items = @typeInfo(Item).@"enum".field_names.len;
 
 const vars = [_][]const u8{ "a", "b", "c", "d", "e", "f" };
 const keys = [_][]const u8{ "k0", "k1", "k2", "{k 3}" };
@@ -1448,7 +1448,7 @@ fn asmCheckA64(a: Allocator, io: Io, path: []const u8) !void {
 const vm = tcl.jit.parts.vm;
 const verifier = tcl.jit.parts.verify;
 const Range = std.meta.Child(@FieldType(vm.Code, "ranges"));
-const n_ops = @typeInfo(vm.Op).@"enum".fields.len;
+const n_ops = @typeInfo(vm.Op).@"enum".field_names.len;
 
 const VerifyStats = struct {
     codes: u64 = 0,

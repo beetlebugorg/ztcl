@@ -90,7 +90,7 @@ pub const Helper = enum(u8) {
     call_direct,
 };
 
-pub const count = @typeInfo(Helper).@"enum".fields.len;
+pub const count = @typeInfo(Helper).@"enum".field_names.len;
 
 /// The instruction function of a helper.
 fn opOf(comptime h: Helper) @TypeOf(vm.opLoad) {
@@ -209,7 +209,7 @@ pub const table_named: [count]*const anyopaque = tableOf(true);
 
 fn tableOf(comptime named: bool) [count]*const anyopaque {
     var t: [count]*const anyopaque = undefined;
-    for (0..count) |k| t[k] = @ptrCast(wrap(@enumFromInt(k), named));
+    for (0..count) |k| t[k] = @ptrCast(wrap(@fromBackingInt(@intCast(k)), named));
     return t;
 }
 

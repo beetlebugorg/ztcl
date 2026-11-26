@@ -51,8 +51,8 @@ pub const Options = struct {
 
 pub const Error = link.Error || error{ MemoryTooSmall, InvalidBody };
 
-const field_count = @typeInfo(point.Field).@"enum".fields.len;
-const out_count = @typeInfo(point.Out).@"enum".fields.len;
+const field_count = @typeInfo(point.Field).@"enum".field_names.len;
+const out_count = @typeInfo(point.Out).@"enum".field_names.len;
 
 /// The addresses of the parts of the memory.
 pub const Layout = struct {
@@ -78,9 +78,9 @@ pub fn outputs(p: *const point.Program) [out_count]bool {
 /// The input columns: the parameters, and `width` for `bound`.
 fn inputs(p: *const point.Program) [field_count]bool {
     var f: [field_count]bool = @splat(false);
-    f[@intFromEnum(point.Field.width)] = true;
-    for (p.params) |q| f[@intFromEnum(q)] = true;
-    f[@intFromEnum(point.Field.feature)] = false;
+    f[@backingInt(point.Field.width)] = true;
+    for (p.params) |q| f[@backingInt(q)] = true;
+    f[@backingInt(point.Field.feature)] = false;
     return f;
 }
 
@@ -536,7 +536,7 @@ pub fn compile(a: Allocator, p: *const point.Program, opts: Options) Error!Compi
         try b.num(.i32_and);
         try b.i32Const(0);
         try b.num(.i32_ne);
-        if (k == @intFromEnum(point.Field.feature)) try b.localSet(g.feature_present) else try b.localSet(g.in_present[k]);
+        if (k == @backingInt(point.Field.feature)) try b.localSet(g.feature_present) else try b.localSet(g.in_present[k]);
     }
     for (0..out_count) |k| {
         try b.localGet(3);
@@ -648,9 +648,9 @@ pub fn compile(a: Allocator, p: *const point.Program, opts: Options) Error!Compi
     try b.end();
     // The limits of the outputs, for all points.
     try b.localGet(0);
-    try b.i32Const(@bitCast(l.in[@intFromEnum(point.Field.width)].?));
+    try b.i32Const(@bitCast(l.in[@backingInt(point.Field.width)].?));
     try b.i32Const(0);
-    try b.localGet(g.in_present[@intFromEnum(point.Field.width)]);
+    try b.localGet(g.in_present[@backingInt(point.Field.width)]);
     try b.select(.i32);
     try b.i32Const(@bitCast(l.outs_table));
     try b.i32Const(@bitCast(l.limits));
@@ -673,11 +673,11 @@ pub fn compile(a: Allocator, p: *const point.Program, opts: Options) Error!Compi
     try addGlobal(a, &globals, &exports, g0, "abi", abi_version);
     try addGlobal(a, &globals, &exports, g0, "cap", l.cap);
     for (l.in, 0..) |c, k| if (c) |addr| {
-        try addGlobal(a, &globals, &exports, g0, try std.fmt.allocPrint(a, "in_{s}", .{@tagName(@as(point.Field, @enumFromInt(k)))}), addr);
+        try addGlobal(a, &globals, &exports, g0, try std.fmt.allocPrint(a, "in_{s}", .{@tagName(@as(point.Field, @fromBackingInt(@intCast(k))))}), addr);
     };
     if (l.feature) |addr| try addGlobal(a, &globals, &exports, g0, "feature", addr);
     for (l.out, 0..) |c, k| if (c) |addr| {
-        try addGlobal(a, &globals, &exports, g0, try std.fmt.allocPrint(a, "out_{s}", .{@tagName(@as(point.Out, @enumFromInt(k)))}), addr);
+        try addGlobal(a, &globals, &exports, g0, try std.fmt.allocPrint(a, "out_{s}", .{@tagName(@as(point.Out, @fromBackingInt(@intCast(k))))}), addr);
     };
     try addGlobal(a, &globals, &exports, g0, "limits", l.limits);
 
@@ -705,7 +705,7 @@ pub fn metadata(a: Allocator, p: *const point.Program, l: Layout, opts: Options)
     var params: std.ArrayList([]const u8) = .empty;
     for (p.params) |q| try params.append(a, @tagName(q));
     var outs: std.ArrayList([]const u8) = .empty;
-    for (outputs(p), 0..) |b, k| if (b) try outs.append(a, @tagName(@as(point.Out, @enumFromInt(k))));
+    for (outputs(p), 0..) |b, k| if (b) try outs.append(a, @tagName(@as(point.Out, @fromBackingInt(@intCast(k)))));
     return std.json.Stringify.valueAlloc(a, .{
         .abi = abi_version,
         .proc = p.name,

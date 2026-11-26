@@ -47,7 +47,7 @@ pub fn encode(a: Allocator, entries: []const Entry) ![]u8 {
     try out.appendSlice(a, magic);
     try putU32(a, &out, entries.len);
     for (entries) |e| {
-        try out.append(a, @intFromEnum(e.kind));
+        try out.append(a, @backingInt(e.kind));
         try putU32(a, &out, e.name.len);
         try putU32(a, &out, e.data.len);
         try out.appendSlice(a, e.name);
@@ -290,7 +290,7 @@ test "the patch adds a segment, grows the memory, and fills the slot" {
     const a = std.testing.allocator;
     // A module with a memory of 2 pages and one data segment at 1024
     // that has the slot.
-    const seg = "abcd" ++ slot_marker ++ "\xff" ** 8;
+    const seg = "abcd" ++ slot_marker ++ "\xff\xff\xff\xff\xff\xff\xff\xff";
     const base = "\x00asm\x01\x00\x00\x00" ++
         "\x05\x03\x01\x00\x02" ++
         "\x0b\x1b\x01\x00\x41\x80\x08\x0b\x14" ++ seg;

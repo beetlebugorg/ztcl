@@ -577,7 +577,7 @@ fn onMount(it: *Interp, s: []const u8, args: []const Value) Error!?Value {
             const p = try it.str(v);
             if (vfs.isOurs(p)) return vfs.readOnly(it, try std.fmt.allocPrint(it.alloc(), "can't {s}", .{s}), p);
         }
-        if (it.capabilities & @intFromEnum(interp.Capability.file) == 0) return it.failCode("POSIX EACCES {permission denied}", "can't {s}: permission denied", .{s});
+        if (it.capabilities & @backingInt(interp.Capability.file) == 0) return it.failCode("POSIX EACCES {permission denied}", "can't {s}: permission denied", .{s});
         return null;
     };
     if (eql(s, "normalize") and args.len == 1) {
@@ -737,7 +737,7 @@ fn cmdGlob(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 try vfs.glob(it, whole, &results);
                 continue;
             }
-            if (it.capabilities & @intFromEnum(interp.Capability.file) == 0) return it.failCode("POSIX EACCES {permission denied}", "couldn't read directory \"{s}\": permission denied", .{whole});
+            if (it.capabilities & @backingInt(interp.Capability.file) == 0) return it.failCode("POSIX EACCES {permission denied}", "couldn't read directory \"{s}\": permission denied", .{whole});
             var words: std.ArrayList([]const u8) = .empty;
             // A drive or a share of Windows in host mode starts the walk there.
             const lead: ?[]const u8 = if (dir == null) fsroot.hostPrefix(it, pat) else null;

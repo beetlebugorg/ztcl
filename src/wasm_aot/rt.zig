@@ -113,9 +113,9 @@ fn aotStat(which: u32) callconv(.c) u32 {
 /// returns their count, or 0 when the probe fails.
 fn aotLayout(out: [*]u32) callconv(.c) u32 {
     const l = layout.probe() orelse return 0;
-    const fields = std.meta.fields(layout.Layout);
-    inline for (fields, 0..) |f, k| out[k] = @field(l, f.name);
-    return fields.len;
+    const names = comptime std.meta.fieldNames(layout.Layout);
+    inline for (names, 0..) |name, k| out[k] = @field(l, name);
+    return names.len;
 }
 
 /// The layout that the compiler reads from the module: each field of
@@ -123,12 +123,12 @@ fn aotLayout(out: [*]u32) callconv(.c) u32 {
 /// structs come from `@offsetOf`. The places in the two tagged unions
 /// come from `gen.union32`: Zig gives no way to read them at compile
 /// time, so the first lookup compares the whole layout with the probe.
-const layout_words = std.meta.fields(layout.Layout).len;
+const layout_words = std.meta.fieldNames(layout.Layout).len;
 const layout_data: [layout_words]u32 = blk: {
     @setEvalBranchQuota(10000);
     const l = staticLayout();
     var out: [layout_words]u32 = undefined;
-    for (std.meta.fields(layout.Layout), 0..) |f, k| out[k] = @field(l, f.name);
+    for (std.meta.fieldNames(layout.Layout), 0..) |name, k| out[k] = @field(l, name);
     break :blk out;
 };
 
@@ -145,10 +145,10 @@ fn staticLayout() layout.Layout {
     l.value_size = @sizeOf(Value);
     l.value_tag = u.value_tag;
     l.value_mask = (1 << @bitSizeOf(VTag)) - 1;
-    l.tag_int = @intFromEnum(VTag.int);
-    l.tag_double = @intFromEnum(VTag.double);
-    l.tag_str = @intFromEnum(VTag.str);
-    l.tag_list = @intFromEnum(VTag.list);
+    l.tag_int = @backingInt(VTag.int);
+    l.tag_double = @backingInt(VTag.double);
+    l.tag_str = @backingInt(VTag.str);
+    l.tag_list = @backingInt(VTag.list);
     l.value_payload = u.value_payload;
     l.value_len = u.value_len;
     l.list_obj = @offsetOf(List, "obj");
@@ -156,10 +156,10 @@ fn staticLayout() layout.Layout {
     l.var_tag = u.var_tag;
     l.var_mask = (1 << @bitSizeOf(CTag)) - 1;
     l.var_payload = u.var_payload;
-    l.var_undef = @intFromEnum(CTag.undef);
-    l.var_val = @intFromEnum(CTag.val);
-    l.var_owned = @intFromEnum(CTag.owned);
-    l.var_link = @intFromEnum(CTag.link);
+    l.var_undef = @backingInt(CTag.undef);
+    l.var_val = @backingInt(CTag.val);
+    l.var_owned = @backingInt(CTag.owned);
+    l.var_link = @backingInt(CTag.link);
     l.entry_size = @sizeOf(interp_.VarEntry);
     l.entry_cell = @offsetOf(interp_.VarEntry, "cell");
     const vars = @offsetOf(interp_.Frame, "vars") + @offsetOf(std.ArrayList(interp_.VarEntry), "items");
@@ -198,8 +198,8 @@ fn layoutOk() bool {
         layout_state = 2;
         if (layout.probe()) |l| {
             var same = true;
-            inline for (std.meta.fields(layout.Layout), 0..) |f, k| {
-                if (@as(u32, @field(l, f.name)) != layout_data[k]) same = false;
+            inline for (comptime std.meta.fieldNames(layout.Layout), 0..) |name, k| {
+                if (@as(u32, @field(l, name)) != layout_data[k]) same = false;
             }
             if (same) layout_state = 1;
         }
