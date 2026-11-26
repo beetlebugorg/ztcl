@@ -41,7 +41,7 @@ hog.tcl:1: the script used too much memory
 
 ## Turn on host access
 
-A script has no file, socket, clock, or process command by default. Turn on each one with `--allow`. Files stay inside the folder of `--root`.
+A script has no file, socket, clock, or process command by default. Turn on each one with `--allow`. The file commands use the real paths of the host, as in tclsh. `--root DIR` keeps them inside one folder, which a script sees as `/`.
 
 ```tcl
 set f [open data/hello.txt w]

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Adds a host mode for the file commands: `file`, `open`, `glob`, `cd`, `pwd`, and `source` use the real paths of the host and follow symlinks, as tclsh does. The runner turns it on when `--allow` gives `file` or `channels` and no `--root DIR` came before it. `--root` turns the root folder jail on. An embedder gets the jail unless it calls `fsroot.setHost`. A child interp of a host-mode parent is in host mode too. Windows has drive letters and UNC paths.
+
 - Renames the namespace of the built-in modules from `zt` to `ztcl`: `ztcl::json`, `ztcl::hello`, and `ztcl::hellonet`. The old names `zt::json`, `zt::hello`, and `zt::hellonet` are deprecated aliases until v0.4.0-beta. `package require` of an old name loads the module and makes the old namespace an ensemble of the same commands.
 - Adds `ztcl build --wasm`: a copy of `ztcl.wasm` with Tcl scripts and read-only files in it, made with no Zig toolchain. `run()` and `Interp.run()` of `ztcl.mjs` run the scripts, and `allow: ["file"]` turns on `source` and `open` for the files under `//zipfs:/app/`. See `docs/webassembly.md`.
 - Adds an interactive shell to the runner, with a line editor of its own: Emacs and vim keys, multi-line input, history in `~/.ztcl_history` with prefix and fuzzy search, completion, colors as you type, hints, bracketed paste, results in color, and `~/.ztclrc`. See `docs/shell.md`.

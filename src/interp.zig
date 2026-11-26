@@ -1515,9 +1515,9 @@ pub const Interp = struct {
         }
     }
 
-    /// True when the file capabilities have a root folder.
+    /// True when the file capabilities have a root folder or host mode.
     pub fn fs_ok(it: *const Interp) bool {
-        return it.fs.fd >= 0;
+        return it.fs.fd >= 0 or it.fs.host;
     }
 
     pub fn deinit(it: *Interp) void {

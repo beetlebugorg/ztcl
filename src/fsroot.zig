@@ -54,10 +54,123 @@ pub const State = struct {
     path: []const u8 = "",
     /// The real path of the root on Windows, for the second check.
     final: []const u16 = &.{},
+    /// Host mode: real paths of the host, with no root and no jail, as in
+    /// tclsh. `cwd` is then an absolute path of the host.
+    host: bool = false,
 };
+
+/// Turns on host mode: the file commands use the real paths of the host
+/// and follow symlinks, as tclsh does. The current folder starts as the
+/// current folder of the process. The `ztcl` and `ztk` programs call it
+/// by default, and an embedder only by choice. WASI has only the folders
+/// that the runtime opens, so it has no host mode.
+pub fn setHost(it: *Interp) !void {
+    if (comptime on_wasi or !supported) return error.BadRoot;
+    it.fs.cwd = try processCwd(it.alloc());
+    it.fs.host = true;
+}
+
+/// The current folder of the process, in the form of `normal` in host mode.
+fn processCwd(a: std.mem.Allocator) ![]const u8 {
+    if (comptime on_win) {
+        const wide = try win.currentFolder(a);
+        const text = try std.unicode.utf16LeToUtf8Alloc(a, wide);
+        return (try joinWindows(a, "C:/", text)) orelse error.BadRoot;
+    }
+    var buf: [4096]u8 = undefined;
+    if (comptime on_mac) {
+        if (std.c.getcwd(&buf, buf.len) == null) return error.BadRoot;
+    } else {
+        const n = linux.getcwd(&buf, buf.len);
+        if (linux.errno(n) != .SUCCESS) return error.BadRoot;
+    }
+    return a.dupe(u8, std.mem.sliceTo(&buf, 0));
+}
+
+/// The parts of a path between `/`, with `.` dropped and `..` taking off
+/// the last part. A `..` at the top stays at the top, as on the host.
+fn fold(a: std.mem.Allocator, parts: *std.ArrayList([]const u8), path: []const u8) !void {
+    var iter = std.mem.tokenizeScalar(u8, path, '/');
+    while (iter.next()) |w| {
+        if (std.mem.eql(u8, w, ".")) continue;
+        if (std.mem.eql(u8, w, "..")) {
+            if (parts.items.len > 0) parts.items.len -= 1;
+            continue;
+        }
+        try parts.append(a, w);
+    }
+}
+
+/// An absolute host path of POSIX for `path` from the folder `cwd`: `/`
+/// and the parts. A NUL byte gives null.
+pub fn joinPosix(a: std.mem.Allocator, cwd: []const u8, path: []const u8) !?[]const u8 {
+    if (std.mem.indexOfScalar(u8, path, 0) != null) return null;
+    var parts: std.ArrayList([]const u8) = .empty;
+    if (path.len == 0 or path[0] != '/') try fold(a, &parts, cwd);
+    try fold(a, &parts, path);
+    const body = try std.mem.join(a, "/", parts.items);
+    return try std.fmt.allocPrint(a, "/{s}", .{body});
+}
+
+/// An absolute host path of Windows for `path` from the folder `cwd`,
+/// with `/` between the parts: `C:/a/b` for a drive, `//server/share/a`
+/// for a UNC path. `\` is a separator. A path that starts with `/` is on
+/// the drive or the share of `cwd`. A drive with no `/` after it
+/// (`C:a`) counts from the top of that drive. A NUL byte gives null.
+pub fn joinWindows(a: std.mem.Allocator, cwd: []const u8, path_in: []const u8) !?[]const u8 {
+    if (std.mem.indexOfScalar(u8, path_in, 0) != null) return null;
+    const path = try a.dupe(u8, path_in);
+    for (path) |*c| {
+        if (c.* == '\\') c.* = '/';
+    }
+    var parts: std.ArrayList([]const u8) = .empty;
+    var prefix: []const u8 = undefined;
+    var rest: []const u8 = path;
+    if (prefixOf(path)) |p| {
+        prefix = p;
+        rest = path[p.len..];
+    } else {
+        const cp = prefixOf(cwd) orelse return null;
+        prefix = cp;
+        if (path.len == 0 or path[0] != '/') try fold(a, &parts, cwd[cp.len..]);
+    }
+    try fold(a, &parts, rest);
+    const body = try std.mem.join(a, "/", parts.items);
+    return try std.fmt.allocPrint(a, "{s}/{s}", .{ prefix, body });
+}
+
+/// The drive (`C:`) or the UNC share (`//server/share`) at the start of a
+/// path with `/` separators, or null.
+fn prefixOf(path: []const u8) ?[]const u8 {
+    if (path.len >= 2 and path[1] == ':' and std.ascii.isAlphabetic(path[0])) return path[0..2];
+    if (path.len > 2 and path[0] == '/' and path[1] == '/' and path[2] != '/') {
+        const server_end = std.mem.indexOfScalarPos(u8, path, 2, '/') orelse return null;
+        const share_end = std.mem.indexOfScalarPos(u8, path, server_end + 1, '/') orelse path.len;
+        if (share_end == server_end + 1) return null;
+        return path[0..share_end];
+    }
+    return null;
+}
+
+/// The drive or the share at the start of a path in host mode on
+/// Windows (`C:` of `C:/a`), or null. `glob` starts its walk there.
+pub fn hostPrefix(it: *const Interp, path: []const u8) ?[]const u8 {
+    if (!it.fs.host or !on_win) return null;
+    return prefixOf(path);
+}
+
+/// The path of a normal path for a script: in host mode the path itself,
+/// and in the jail `/` and the path below the root.
+pub fn shown(it: *Interp, rel: []const u8) Error![]const u8 {
+    if (it.fs.host) return rel;
+    return std.fmt.allocPrint(it.alloc(), "/{s}", .{rel});
+}
 
 /// Opens the root. The runner calls it. Later paths stay below it.
 pub fn setRoot(it: *Interp, path: []const u8) !void {
+    // A root ends host mode, and the current folder is the root.
+    it.fs.host = false;
+    it.fs.cwd = "";
     if (comptime on_win) return win.setRoot(it, path);
     if (comptime on_wasi) return wfs.setRoot(it, path);
     if (comptime !supported) return error.BadRoot;
@@ -93,6 +206,8 @@ pub fn posixError(it: *Interp, e: sys.Errno, what: []const u8) Error {
 /// or empty parts. Gives null for a path above the root.
 pub fn normal(it: *Interp, path: []const u8) Error!?[]const u8 {
     const a = it.alloc();
+    // In host mode the normal form is the absolute path of the host.
+    if (it.fs.host) return if (comptime on_win) try joinWindows(a, it.fs.cwd, path) else try joinPosix(a, it.fs.cwd, path);
     var parts: std.ArrayList([]const u8) = .empty;
     const absolute = path.len > 0 and path[0] == '/';
     if (!absolute and it.fs.cwd.len > 0) {
@@ -216,6 +331,7 @@ pub fn hostFlags(flags: sys.OpenFlags) linux.O {
 pub const OpenResult = union(enum) { fd: i32, err: sys.Errno };
 
 pub fn openRel(it: *Interp, rel: []const u8, flags: sys.OpenFlags, mode: u32) Error!OpenResult {
+    if (it.fs.host) return hostOpen(it, rel, flags, mode);
     if (comptime on_win) return win.openRel(it, rel, flags, mode);
     if (comptime on_wasi) return wfs.openRel(it, rel, flags, mode);
     // With no jail for this target, each open is an error.
@@ -234,12 +350,38 @@ pub fn openRel(it: *Interp, rel: []const u8, flags: sys.OpenFlags, mode: u32) Er
     return .{ .fd = @intCast(rc) };
 }
 
+/// The flags of an open in host mode, which follows symlinks.
+fn followFlags(flags: sys.OpenFlags) linux.O {
+    var f = hostFlags(flags);
+    if (comptime on_mac) f.NOFOLLOW = false;
+    return f;
+}
+
+/// Opens an absolute host path, with each symlink followed.
+fn hostOpen(it: *Interp, path: []const u8, flags: sys.OpenFlags, mode: u32) Error!OpenResult {
+    if (comptime on_win) return win.hostOpen(it, path, flags, mode);
+    if (comptime on_wasi or !supported) return it.fail("the file system is not available on this target", .{});
+    const z = try it.alloc().dupeZ(u8, path);
+    const f = followFlags(flags);
+    const rc = linux.openat(linux.AT.FDCWD, z, f, if (f.CREAT) @intCast(mode) else 0);
+    const e = linux.errno(rc);
+    if (e != .SUCCESS) return .{ .err = e };
+    return .{ .fd = @intCast(rc) };
+}
+
 pub const Parent = struct { fd: i32, base: [:0]const u8 };
 
 /// A descriptor of the parent folder and the last name of a normal path.
 pub const ParentResult = union(enum) { ok: Parent, err: sys.Errno };
 
 pub fn parentOf(it: *Interp, rel: []const u8) Error!ParentResult {
+    if (it.fs.host) {
+        if (comptime on_win) return win.hostParent(it, rel);
+        // The full path from the current folder of the process: the calls
+        // at a parent take AT_FDCWD and an absolute path as they take a
+        // descriptor and a name, and a close of AT_FDCWD has no effect.
+        return .{ .ok = .{ .fd = linux.AT.FDCWD, .base = try it.alloc().dupeZ(u8, rel) } };
+    }
     if (comptime on_win) return win.parentOf(it, rel);
     const cut = std.mem.lastIndexOfScalar(u8, rel, '/');
     const dir = if (cut) |c| rel[0..c] else "";
@@ -274,6 +416,7 @@ pub const StatResult = union(enum) { ok: Info, err: sys.Errno };
 
 /// The data of a path. A symlink is reported as a symlink.
 pub fn stat(it: *Interp, rel: []const u8) Error!StatResult {
+    if (it.fs.host and comptime on_win) return win.hostStat(it, rel);
     if (comptime on_win) return win.stat(it, rel);
     if (comptime on_wasi) return wfs.stat(it, rel);
     if (comptime on_mac) {
@@ -314,7 +457,9 @@ pub fn stat(it: *Interp, rel: []const u8) Error!StatResult {
             .err => |e| return .{ .err = e },
         };
         defer _ = linux.close(p.fd);
-        rc = linux.statx(p.fd, p.base, 0x100, statx_mask, &st);
+        // The jail follows no symlink (AT_SYMLINK_NOFOLLOW), and host mode
+        // follows them, as the stat of tclsh does.
+        rc = linux.statx(p.fd, p.base, if (it.fs.host) 0 else 0x100, statx_mask, &st);
     }
     const e = linux.errno(rc);
     if (e != .SUCCESS) return .{ .err = e };
@@ -379,6 +524,9 @@ fn nameLess(_: void, x: []const u8, y: []const u8) bool {
 
 /// Gives a child interpreter its own descriptor of the root.
 pub fn shareRoot(it: *const Interp, child: *Interp) std.mem.Allocator.Error!void {
+    // A child of a host-mode parent is in host mode too. A later setRoot of
+    // the embedder can still put it in a jail.
+    child.fs.host = it.fs.host;
     if (comptime on_win) return win.shareRoot(it, child);
     if (comptime on_wasi) return wfs.shareRoot(it, child);
     if (it.fs.fd >= 0) {
