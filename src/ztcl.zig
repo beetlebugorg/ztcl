@@ -33,6 +33,7 @@ pub const more = @import("more.zig");
 pub const regex = @import("regex.zig");
 pub const fsroot = @import("fsroot.zig");
 pub const launch = @import("launch.zig");
+pub const winreg = @import("winreg.zig");
 pub const proc = @import("proc.zig");
 pub const pty = @import("pty.zig");
 pub const watch = @import("watch.zig");

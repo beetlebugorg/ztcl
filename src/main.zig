@@ -13,6 +13,7 @@
 //! suite passes it.
 //! `--exec-timeout MS`, `--exec-env NAME=value`, and `--exec-allow a,b`
 //! set the time limit, the environment, and the program list of `exec`.
+//! `--registry-allow KEY,KEY` lists the registry keys of `registry`.
 //! `--exec-allow-root /a,/b` lists the files below the root that `exec`
 //! can run.
 //! A program of `exec` gets only the environment of `--exec-env`.
@@ -518,6 +519,14 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             // A --root after this flag turns the jail on.
             const fs_bits = @intFromEnum(tcl.interp.Capability.file) | @intFromEnum(tcl.interp.Capability.channels);
             if (root == null and bits & fs_bits != 0 and !it.fs.host) tcl.fsroot.setHost(&it) catch {};
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--registry-allow") and i + 1 < args.len) {
+            i += 1;
+            var list: std.ArrayList([]const u8) = .empty;
+            var iter = std.mem.tokenizeScalar(u8, args[i], ',');
+            while (iter.next()) |w| try list.append(arena, w);
+            it.registry_allow = list.items;
             continue;
         }
         if (std.mem.eql(u8, arg, "--exec-timeout") and i + 1 < args.len) {

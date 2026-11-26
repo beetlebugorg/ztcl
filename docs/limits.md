@@ -35,6 +35,7 @@ The default interpreter has no command that reaches the host. `puts` writes to a
 | `thread` | `thread::*`, `tsv::*`, `tpool::*` | Limits for each thread and totals for the group. See [Threads](threads.md). |
 | `exec` | `exec`, `pid`, and pipelines | A program list (`--exec-allow`), a time limit (`--exec-timeout MS`), and a fixed environment (`--exec-env`). |
 | `launch` | `ztcl::open` | A URL (`http`, `https`, or `mailto`) or a file in the default app of the host. A file also needs `file`. On Windows a file of a type that runs as code (`.exe`, `.bat`, `.lnk`, and others) is an error. The app is outside the root folder and each limit. Only Windows has a backend in this version. |
+| `registry` | `ztcl::win::registry` | The keys of a list (`--registry-allow KEY,KEY`) and the keys below them, on Windows. An empty list reaches no key. A key such as `Run` starts a program at the next login, so list only the keys of your app. |
 
 > [!WARNING]
 > `exec` is not sandboxed. A process from `exec` runs outside the root folder and outside each limit, with the full power of the user. Turn it on only for scripts that you trust.
