@@ -39,7 +39,7 @@ const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
 
-pub const supported = builtin.os.tag == .windows;
+pub const supported = pw.supported;
 
 const HANDLE = *anyopaque;
 const COORD = extern struct { x: i16, y: i16 };

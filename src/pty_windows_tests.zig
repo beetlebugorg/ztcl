@@ -8,7 +8,7 @@ const tcl = @import("ztcl.zig");
 const pw = @import("proc_windows.zig");
 const t = std.testing;
 
-const on = builtin.os.tag == .windows;
+const on = builtin.os.tag == .windows and pw.supported;
 const env = [_][:0]const u8{ "PATH=C:\\Windows\\System32", "SystemRoot=C:\\Windows" };
 
 fn setup(it: *tcl.Interp) !void {
