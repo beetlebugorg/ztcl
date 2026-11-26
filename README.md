@@ -39,6 +39,7 @@ fib.tcl:2: step limit reached
 
 - [Quick start](docs/quickstart.md) and [the language](docs/language.md)
 - [Limits and capabilities](docs/limits.md), [threads](docs/threads.md), and [the JIT](docs/jit.md)
+- [Build a program](docs/build.md): one native binary for Linux, macOS, or Windows, from any host, with `ztcl build`
 - [Embed in Zig](docs/embedding.md) and [WebAssembly](docs/webassembly.md)
 - [Performance](docs/performance.md) and the [FAQ](docs/faq.md)
 - For contributors: [docs/dev/](docs/dev/README.md) has the plans, the task lists, and the test results.

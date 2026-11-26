@@ -30,6 +30,7 @@ The default interpreter has no command that reaches the host. `puts` writes to a
 | `interp` | `interp create` and child interpreters | A child never has more capabilities than its parent. |
 | `clock` | `clock`, `time`, `timerate` | The time and the zone data come from a callback. |
 | `channels`, `file` | `open`, `read`, `gets`, `file`, `glob`, and the other channel commands | One root folder (`--root DIR`). `..` and symlinks cannot leave it. |
+| `embedded` | `open` for reading, `source`, `glob`, the queries of `file`, and `zipfs`, on the zip mounts under `//zipfs:/` only | A path outside a mount is the error "permission denied". See [Build a program](build.md). |
 | `event` | `after`, `vwait`, `update`, `fileevent` | The clock comes from a callback. |
 | `socket` | `socket` | A network policy (`--net`): `loopback` (the default), an allowlist of hosts, ranges, and ports, or `any`. |
 | `thread` | `thread::*`, `tsv::*`, `tpool::*` | Limits for each thread and totals for the group. See [Threads](threads.md). |
