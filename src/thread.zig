@@ -1163,6 +1163,13 @@ pub fn closeFd(fd: i32) void {
 
 /// Makes the wake descriptor of `w` readable. The caller holds the
 /// group lock, so the descriptor stays open.
+/// Wakes the thread of `w` from a wait in its event loop or in blocked
+/// I/O, for a cancel of `Interp.cancelEval`.
+pub fn wakeWorker(w: *Worker) void {
+    w.ev.signal();
+    poke(w);
+}
+
 fn poke(w: *Worker) void {
     if (comptime !fd_os) return;
     const fd = w.wake_fd.load(.acquire);

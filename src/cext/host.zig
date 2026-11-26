@@ -97,6 +97,13 @@ pub const Host = struct {
     var_get: *const fn (handle: u32, name: [*]const u8, len: usize, flags: c_int) callconv(.c) i32,
     var_set: *const fn (handle: u32, name: [*]const u8, len: usize, v: *const Arg, flags: c_int) callconv(.c) i32,
     pkg_provide: *const fn (handle: u32, name: [*]const u8, len: usize, version: [*]const u8, vlen: usize) callconv(.c) i32,
+    /// Cancels the script of the interp, from any thread. Text of length
+    /// 0 gives the default message. Null when the path has no cancel.
+    cancel: ?*const fn (handle: u32, unwind: c_int, text: [*]const u8, len: usize) callconv(.c) i32 = null,
+    /// Gives 1 when a cancel of the interp is pending, and 2 for an
+    /// unwind, with the message in the reply. It takes the pending
+    /// cancel. With `unwind_only`, a cancel with no unwind gives 0.
+    canceled: ?*const fn (handle: u32, unwind_only: c_int) callconv(.c) i32 = null,
 };
 
 const wasm_host = struct {
@@ -740,14 +747,31 @@ pub fn Tcl_NRSubstObj(ip: *Interp, o: *Obj, flags: c_int) callconv(.c) c_int {
     return evalWith(ip, substCmd(flags), text(o), 0);
 }
 
-/// ztcl has no cancel of a script from C code.
-pub fn Tcl_CancelEval(ip: ?*Interp, _: ?*Obj, _: ?*anyopaque, _: c_int) callconv(.c) c_int {
-    if (ip) |i| setResultText(i, "Tcl_CancelEval: ztcl has no cancel of a script from C code");
-    return ERROR;
+/// `TCL_CANCEL_UNWIND` of `tcl.h`.
+const TCL_CANCEL_UNWIND: c_int = 0x100000;
+
+/// Cancels the script of `ip`, from any thread. The text of `msg`
+/// replaces the message "eval canceled".
+pub fn Tcl_CancelEval(ip: ?*Interp, msg: ?*Obj, _: ?*anyopaque, flags: c_int) callconv(.c) c_int {
+    const i = ip orelse return ERROR;
+    const f = host.cancel orelse {
+        setResultText(i, "Tcl_CancelEval: this path has no cancel");
+        return ERROR;
+    };
+    const t: []const u8 = if (msg) |o| text(o) else "";
+    return f(i.handle, @intFromBool(flags & TCL_CANCEL_UNWIND != 0), t.ptr, t.len);
 }
 
-pub fn Tcl_Canceled(_: *Interp, _: c_int) callconv(.c) c_int {
-    return OK;
+/// ERROR when a cancel of `ip` is pending or an unwind runs, and the
+/// pending cancel is taken. With TCL_CANCEL_UNWIND, only an unwind
+/// counts. With TCL_LEAVE_ERR_MSG, the result is the message of the
+/// cancel.
+pub fn Tcl_Canceled(ip: *Interp, flags: c_int) callconv(.c) c_int {
+    const f = host.canceled orelse return OK;
+    const state = f(ip.handle, @intFromBool(flags & TCL_CANCEL_UNWIND != 0));
+    if (state == 0) return OK;
+    if (flags & TCL_LEAVE_ERR_MSG != 0) takeReply(ip);
+    return ERROR;
 }
 
 /// Runs the command of token `c` with the words `objv`.

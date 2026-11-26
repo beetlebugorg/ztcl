@@ -1209,6 +1209,29 @@ test "package provides Tcl at the patch level" {
     )));
 }
 
+test "interp cancel and the uncatchable unwind" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.interp));
+    try std.testing.expectEqualStrings("1 {eval canceled} {TCL CANCEL ICANCEL {eval canceled}}", try it.str(try it.eval("list [catch {interp cancel; while 1 {}} m o] $m [dict get $o -errorcode]")));
+    try std.testing.expectEqualStrings("0 {eval canceled}", try it.str(try it.eval("interp create c; list [catch {c eval {catch {interp cancel; while 1 {}} m; set m}} r] $r")));
+    try std.testing.expectEqualStrings("1 {eval unwound} ok", try it.str(try it.eval("list [catch {c eval {interp cancel -unwind; catch {while 1 {}}; set y not}} r] $r [c eval {set z ok}]")));
+    try std.testing.expectEqualStrings("1 {could not find interpreter \"nosuch\"}", try it.str(try it.eval("list [catch {interp cancel nosuch} r] $r")));
+    // An embedder call from another thread, as `cancelEval` allows. A
+    // cancel that comes before the script starts stops it at its first
+    // check point.
+    const S = struct {
+        fn run(x: *tcl.Interp) void {
+            x.cancelEval(false, "from a thread") catch {};
+        }
+    };
+    const th = try std.Thread.spawn(.{}, S.run, .{&it});
+    const r = try it.str(try it.eval("list [catch {while 1 {}} m] $m"));
+    th.join();
+    try std.testing.expectEqualStrings("1 {from a thread}", r);
+}
+
 test "a child has no more capabilities than its parent" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);

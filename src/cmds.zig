@@ -762,7 +762,7 @@ fn runCaughtBody(it: *Interp, script: Error!*interp.Script, argv: []const Value)
     }
     if (c.code == 1) {
         // A script cannot catch the end of its compute limit or of its memory.
-        if (it.compute_limit == 0 or it.overLimit() or coro.unwinding(it)) return error.TclError;
+        if (it.uncatchable() or coro.unwinding(it)) return error.TclError;
         c.error_line = it.proc_line;
         try it.finishError();
         c.error_code = it.error_code;
