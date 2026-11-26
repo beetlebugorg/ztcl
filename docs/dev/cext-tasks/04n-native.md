@@ -35,6 +35,10 @@ Linux on x86-64 is first. macOS uses the same `dlopen` and the same table. The p
 - `tools/cext/corpus.sh` downloads the corpus and writes the slot counts of each package.
 - `python3 -I tools/cext/coverage.py` writes the coverage table, and `--check` fails when the table is old.
 
+## Notes for step 3
+
+`src/cext/host.zig` has the slots of commands, scripts, results, variables, and the non-recursive engine for both paths. `src/cext/native.zig` gives them the interpreter through `src/cext/zside.zig`, and `src/wasm_cext.zig` uses the same functions. `tests/cext/cxcmd.c` checks them against tclsh. A value crosses as an `Arg`, so a list goes as its text. The rest of the area scripts and results is the next PR.
+
 ## Notes for step 2
 
 Step 2 is done except the 6 bignum slots of the area objects, which need the `mp_int` of libtommath. They go with the libtommath table in step 17. `src/cext/obj.zig` has the slots of both paths, and `cext.toObj` and `cext.fromObj` are the bridge of values. `tests/cext/cxobj.c` checks the area against tclsh.

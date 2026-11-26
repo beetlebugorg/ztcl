@@ -22,6 +22,7 @@ const interp_mod = @import("../interp.zig");
 const fsroot = @import("../fsroot.zig");
 const stubs = @import("stubs.zig");
 const obj = @import("obj.zig");
+const native = @import("native.zig");
 const Interp = interp_mod.Interp;
 const value = @import("../value.zig");
 const Value = value.Value;
@@ -76,6 +77,7 @@ pub fn shadowOf(it: *Interp) Error!*Shadow {
     st.* = .{};
     const sh = try gpa.create(Shadow);
     sh.* = .{ .it = it, .state = st };
+    sh.core.handle = try native.register(sh);
     it.cext = sh;
     return sh;
 }
@@ -83,6 +85,7 @@ pub fn shadowOf(it: *Interp) Error!*Shadow {
 /// Frees the shadow of `it`. `Interp.deinit` calls it.
 pub fn drop(it: *Interp) void {
     const sh: *Shadow = @ptrCast(@alignCast(it.cext orelse return));
+    native.unregister(sh.core.handle);
     freeKeys(&sh.state.loaded);
     freeKeys(&sh.state.pkg_data);
     gpa.destroy(sh.state);

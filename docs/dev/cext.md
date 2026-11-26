@@ -24,18 +24,18 @@ One package gives one list. Other packages use other slots, for example the chan
 
 ## Coverage
 
-The two paths use one implementation of each slot that has no call into ztcl. `src/cext/obj.zig` has the objects, the interp result, the dynamic strings, and `Tcl_GetIndexFromObjStruct`, and `src/cext/mem.zig` has the memory slots. `src/cext/table.zig` builds the table of each path from its list of group files: `src/cext/stubs.zig` for the native path and `src/cext/wasm_stubs.zig` for the WebAssembly path. The slots that call ztcl (scripts, variables, commands, and packages) are in the files of each path. The unit tests of `zig build test-cext` check the shared files on the native target, and the test packages of `tools/cext/check.sh` check the native path against tclsh. A row gives the slots of the group that each path has.
+The two paths use one implementation of each slot. `src/cext/obj.zig` has the objects, the interp result, the dynamic strings, and `Tcl_GetIndexFromObjStruct`. `src/cext/mem.zig` has the memory slots. `src/cext/host.zig` has the slots that call ztcl: commands, scripts, variables, and the non-recursive engine. They call ztcl through a set of functions with the handle of the interp: the imports of the module in the WebAssembly path, and the functions of `src/cext/native.zig` in the native path. Both sets call `src/cext/zside.zig` in ztcl. `src/cext/table.zig` builds the table of each path from its list of group files: `src/cext/stubs.zig` for the native path and `src/cext/wasm_stubs.zig` for the WebAssembly path. `Tcl_Panic`, `Tcl_PkgProvideEx`, and `Tcl_PkgRequireEx` have one implementation in each path: the native forms are in `src/cext/mem.zig` and `src/cext/pkgs.zig`. The unit tests of `zig build test-cext` check the shared files on the native target, and the test packages of `tools/cext/check.sh` check the native path against tclsh. A row gives the slots of the group that each path has.
 
 | Group | SQLite slots | WebAssembly | Native |
 |---|---:|---|---|
 | Memory | 2 | 2 of 2, and the other 14 slots of the area memory (shared) | 2 of 2, and the other 14 slots of the area memory (shared) |
 | Objects | 22 | 22 of 22, and the area objects except the bignum slots (shared) | 22 of 22, and the area objects except the bignum slots (shared) |
-| Results | 8 | 8 of 8, and `Tcl_AppendElement` | 7 of 8 (shared), and `Tcl_AppendElement`. `Tcl_BackgroundError` is absent. |
-| Commands | 3 | 3 of 3, and `Tcl_DeleteCommandFromToken` | 0 of 3 |
-| Scripts | 6 | 6 of 6, and `Tcl_EvalEx`, `Tcl_NRCallObjProc` | 0 of 6 |
-| Variables | 2 | 2 of 2, and 6 more get and set slots | 0 of 2 |
+| Results | 8 | 8 of 8, and `Tcl_AppendElement` (shared) | 8 of 8, and `Tcl_AppendElement` (shared) |
+| Commands | 3 | 3 of 3, and `Tcl_DeleteCommandFromToken` (shared) | 3 of 3, and `Tcl_DeleteCommandFromToken` (shared) |
+| Scripts | 6 | 6 of 6, and `Tcl_EvalEx`, `Tcl_NRCallObjProc` (shared) | 6 of 6, and `Tcl_EvalEx`, `Tcl_NRCallObjProc` (shared) |
+| Variables | 2 | 2 of 2, and 6 more get and set slots (shared) | 2 of 2, and 6 more get and set slots (shared) |
 | Dynamic strings | 4 | 4 of 4, and 5 more (shared) | 4 of 4, and 5 more (shared) |
-| Packages and helpers | 5 | 5 of 5 | 4 of 5: `Tcl_PkgProvideEx`, `Tcl_PkgRequireEx`, and the shared `Tcl_GetVersion` and `Tcl_GetIndexFromObjStruct` |
+| Packages and helpers | 5 | 5 of 5 | 5 of 5. `Tcl_TranslateFileName`, `Tcl_GetVersion`, and `Tcl_GetIndexFromObjStruct` are shared. |
 | Channels | 4 | 4 of 4 (shared): the record and the close. Scripts do not see the channel yet. | 4 of 4 (shared), as in the WebAssembly path |
 
 ## The shape of the Tcl_Obj bridge
@@ -139,20 +139,20 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | memory | 16 | 16 | 16 | none |
 | packages | 18 | 12 | 3 | `Tcl_RegisterConfig`, `Tcl_PkgRequireProc`, `Tcl_SetStartupScript`, `Tcl_GetStartupScript`, `Tcl_LoadFile`, `Tcl_FindSymbol` |
 | objects | 58 | 52 | 52 | `Tcl_NewBignumObj`, `Tcl_DbNewBignumObj`, `Tcl_SetBignumObj`, `Tcl_GetBignumFromObj`, `Tcl_TakeBignumFromObj`, `Tcl_InitBignumFromDouble` |
-| scripts and results | 58 | 7 | 16 | 51 slots |
+| scripts and results | 58 | 16 | 16 | 42 slots |
 | channels | 92 | 4 | 4 | 88 slots |
 | strings and encodings | 86 | 10 | 10 | 76 slots |
 | lists and dicts | 28 | 9 | 9 | 19 slots |
-| errors | 25 | 4 | 5 | 21 slots |
-| interps and commands | 64 | 0 | 3 | 64 slots |
+| errors | 25 | 5 | 5 | 20 slots |
+| interps and commands | 64 | 3 | 3 | 61 slots |
 | hash tables | 13 | 0 | 0 | 13 slots |
-| variables | 21 | 0 | 8 | 21 slots |
+| variables | 21 | 8 | 8 | 13 slots |
 | events | 35 | 0 | 0 | 35 slots |
 | namespaces | 25 | 0 | 0 | 25 slots |
 | threads | 15 | 0 | 0 | 15 slots |
-| filesystem | 63 | 0 | 1 | 63 slots |
+| filesystem | 63 | 1 | 1 | 62 slots |
 | zlib | 13 | 0 | 0 | 13 slots |
-| **public, all** | **630** | **114** (18%) | **127** (20%) | |
+| **public, all** | **630** | **136** (21%) | **127** (20%) | |
 | **internal** | **173** | **0** | **0** | |
 | **internal platform** | **23** | **0** | **0** | |
 | **platform** | **0** | **0** | **0** | |
