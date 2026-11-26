@@ -18,6 +18,42 @@ The result on an M1 Mac with macOS 27: the init of the guest prints its ready li
 
 Without the entitlement, `validateWithError:` fails with "The process doesn’t have the “com.apple.security.virtualization” entitlement." `ztcl::vm create` turns that into the error code `ZTCL VM ENTITLEMENT`.
 
+## Start time (macOS)
+
+The goal of ztcl#203: about 20 ms from `ztcl::vm start` to the answer of the guest agent, as an ideal. `spike bench` times each phase of a start, `spike snap` a restore of a saved state, and `spike warm` a resume of a paused guest. Each number is the best of 10 runs on the M1 Mac, with 1 CPU, 64 MB, no console device, and the agent as the first process (`rdinit=/sbin/agent quiet`) unless the row says otherwise. Each column is its own best, so a total can be less than the sum of its row.
+
+| Guest | `validateWithError:` | `initWithConfiguration:` | VZ start | start to connect | connect to answer | start to answer | guest: boot to agent |
+|---|---|---|---|---|---|---|---|
+| 250 Hz kernel, 256 MB | 0.16 | 0.06 | 86.7 | 35.4 | 0.05 | 125.9 | 29.5 |
+| 250 Hz kernel | 0.16 | 0.06 | 86.2 | 33.9 | 0.04 | 125.1 | 28.4 |
+| 250 Hz kernel, no entropy device | 0.16 | 0.07 | 85.6 | 26.5 | 0.06 | 112.2 | 20.9 |
+| 1000 Hz kernel | 0.15 | 0.06 | 85.9 | 13.3 | 0.06 | 100.9 | 9.9 |
+| 1000 Hz kernel, no entropy device | 0.15 | 0.06 | 86.6 | 12.3 | 0.06 | 99.4 | 8.5 |
+| the same, BusyBox and `init` (a shell script) start the agent | 0.15 | 0.06 | 87.5 | 22.4 | 0.05 | 110.0 | 18.9 |
+| the same, restore of a saved state, then resume | 0.15 | 0.06 | 120.1 | 0.33 | 0.07 | 120.5 | |
+| the same, resume of a booted, paused guest | | | | | | 0.24 | |
+
+The times are in ms. "VZ start" is `startWithCompletionHandler:` to its handler, or `restoreMachineStateFromURL:` and `resumeWithCompletionHandler:` for the restore. "start to connect" is the handler to the first connection that the agent accepts: the host tries again at once after each refused connection. "guest: boot to agent" is the boot clock of the guest (`CLOCK_BOOTTIME`) when `main` of the agent runs.
+
+What the numbers show:
+
+- The framework costs about 86 ms for each start, the same at 64 MB and at 1,024 MB. Each machine runs in a new process of the XPC service `com.apple.Virtualization.VirtualMachine`, and the start launches it. ztcl cannot make that part faster.
+- The kernel of `tinyconfig` runs at 250 Hz. The probe of each virtio PCI device sleeps a few ticks, and at 4 ms a tick the sleeps were 21 ms of the boot (`initcall_debug`, read over vsock with `spike dmesg`). At 1000 Hz the boot to the agent is 8.5 ms.
+- The entropy device adds 1 ms to 8 ms to the boot, for the probe of its driver. A guest that needs no random numbers at boot can leave it out, and the agent can read `/dev/hwrng` later.
+- The agent as the first process saves 10 ms over BusyBox and a shell script.
+- The memory size, the gzip of a 6 KB initramfs, and `lpj=` make no difference in the runs. The start does not grow with the memory, so the framework maps it on demand, and the kernel already skips the calibration of its delay loop (the log says "Calibrating delay loop (skipped)").
+- A restore of a saved state (2.8 MB at 64 MB) costs 120 ms, more than a fresh boot of this guest. After a restore, the first vsock connection closes at once, because the device resets its transport. The host connects again.
+- A resume of a guest that booted and paused before costs 0.24 ms to the answer of the agent. This is the only form that meets the goal of 20 ms.
+
+The levers of ztcl#203 that the framework rules out: the kernel `Image` of arm64 is already uncompressed (the framework accepts no other form), the virtio devices of the framework are on PCI only (no virtio-mmio), and the scan of the PCI bus costs 0.6 ms.
+
+The plan for the start time on macOS:
+
+1. The guest kernel at 1000 Hz, with no entropy device by default, and the agent as the first process. A fresh start is then about 100 ms, of which 86 ms is the framework.
+2. A warm guest: `create -warm 1` boots the guest at once and pauses it when the agent answers, and `start` resumes it. `start` is then under 1 ms. A paused guest keeps its process and the memory that it touched.
+3. A pool of warm guests in dockyard, for a terminal that opens at once.
+4. A benchmark in CI, when a runner can run a guest (see "Tests"), with a gate on the start to answer, as for the frame times of ztk.
+
 ## Commands
 
 ```tcl
@@ -116,3 +152,5 @@ These are the defaults of this plan. Each can change in review.
 3. The base image downloads on the first use into the cache of ztcl. Another choice is a separate download that the user runs. Default: on the first use, with a check of the signature.
 4. virtio-9p first on Linux, and virtio-fs later. Default: 9p first.
 5. The limits of `Interp.vm_host`: 4 CPUs, 2,048 MB, and 4 guests. Default as written.
+6. A warm guest (`create -warm 1`) is off by default, because a paused guest keeps a process and memory. Default: off, and dockyard turns it on.
+7. The guest has no entropy device by default, for 1 ms to 8 ms less at boot. Default: none, and `-entropy 1` adds it.
