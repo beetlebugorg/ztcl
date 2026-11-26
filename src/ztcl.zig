@@ -34,6 +34,7 @@ pub const regex = @import("regex.zig");
 pub const fsroot = @import("fsroot.zig");
 pub const proc = @import("proc.zig");
 pub const pty = @import("pty.zig");
+pub const watch = @import("watch.zig");
 pub const filecmd = @import("filecmd.zig");
 pub const sys = @import("sys.zig");
 pub const thread = @import("thread.zig");
@@ -74,6 +75,7 @@ test {
     _ = heap;
     _ = @import("tests.zig");
     _ = @import("pty_tests.zig");
+    _ = @import("watch_tests.zig");
     _ = wasmbundle;
     _ = @import("wasmfiles.zig");
     _ = @import("jit/tests.zig");
