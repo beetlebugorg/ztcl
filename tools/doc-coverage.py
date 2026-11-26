@@ -18,7 +18,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # The test modules of the module table.
 SKIP = {"ztcl::hello", "ztcl::hello::greet", "ztcl::hellonet"}
 # The commands whose pages are not written yet. Remove a name with its page.
-PENDING = {"ztcl::pty"}
+PENDING: set[str] = set()
 
 NAME = re.compile(r'(?:register\(|\.name = )"(ztcl::[a-z0-9_:]+)"')
 
