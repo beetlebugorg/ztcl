@@ -69,10 +69,10 @@ const blocked = [_][]const u8{
 /// The extensions of the files and the bundles that macOS runs as code,
 /// or that point at another program or place.
 const blocked_mac = [_][]const u8{
-    "app",    "command",   "tool",    "terminal", "workflow", "action",  "pkg",  "mpkg",
-    "scpt",   "scptd",     "applescript", "jar",  "webloc",   "inetloc", "fileloc", "prefpane",
-    "kext",   "plugin",    "bundle",  "framework", "sh",      "zsh",     "bash", "csh",
-    "py",     "pl",        "rb",      "osax",     "saver",    "mobileconfig", "dylib", "xpc",
+    "app",  "command", "tool",        "terminal",  "workflow", "action",       "pkg",     "mpkg",
+    "scpt", "scptd",   "applescript", "jar",       "webloc",   "inetloc",      "fileloc", "prefpane",
+    "kext", "plugin",  "bundle",      "framework", "sh",       "zsh",          "bash",    "csh",
+    "py",   "pl",      "rb",          "osax",      "saver",    "mobileconfig", "dylib",   "xpc",
 };
 
 fn blockedMac(full: []const u8) bool {
@@ -173,7 +173,7 @@ pub const mac = if (on_mac) struct {
 
     /// Runs `/usr/bin/open target` and gives true for an exit status of 0.
     pub fn open(a: std.mem.Allocator, target: []const u8) bool {
-        const arg = a.dupeZ(u8, target) catch return false;
+        const arg = a.dupeSentinel(u8, target, 0) catch return false;
         defer a.free(arg);
         const argv = [_:null]?[*:0]const u8{ "/usr/bin/open", arg.ptr };
         const envp = [_:null]?[*:0]const u8{};
@@ -188,7 +188,7 @@ pub const mac = if (on_mac) struct {
         if (c.posix_spawn(&pid, "/usr/bin/open", &actions, null, @ptrCast(&argv), @ptrCast(&envp)) != 0) return false;
         var status: c_int = 0;
         while (c.waitpid(pid, &status, 0) < 0) {
-            if (@as(c.E, @enumFromInt(c._errno().*)) != .INTR) return false;
+            if (@as(c.E, @fromBackingInt(@intCast(c._errno().*))) != .INTR) return false;
         }
         return status == 0;
     }
