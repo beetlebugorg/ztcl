@@ -1014,6 +1014,20 @@ pub const Interp = struct {
     /// The compute units left. Each command and each loop pass uses one
     /// compute unit. Work on large data uses one unit for each 4,096 bytes.
     compute_limit: u64 = std.math.maxInt(u64),
+    /// A pending cancel of `interp cancel` or `cancelEval`: the bits of
+    /// `cancel_bits`. A request stores zero in `mem_limit`, so the next
+    /// memory check point of the interp runs `memPoint`, and `memPoint`
+    /// gives the error of the cancel.
+    cancel_flags: std.atomic.Value(u32) = .init(0),
+    cancel_lock: std.atomic.Mutex = .unlocked,
+    /// The message of the cancel, or null for the default message. It is
+    /// in `std.heap.smp_allocator`, because another thread can set it.
+    cancel_text: ?[]u8 = null,
+    /// The value of `mem_limit` before the request.
+    cancel_mem: usize = 0,
+    /// An unwind of `interp cancel -unwind` runs: `catch` and `try` do
+    /// not stop it. The end of the outer script of the interp clears it.
+    cancel_unwinding: bool = false,
     depth: u32 = 0,
     max_depth: u32 = 600,
     /// The nesting of scripts in scripts, and its limit.
@@ -1276,6 +1290,7 @@ pub const Interp = struct {
         if (comptime thread_mod.supported) {
             if (root.worker) |w| try thread_mod.safePoint(it, w);
         }
+        if (it.cancel_flags.load(.acquire) != 0) try it.cancelPoint();
         const c = &root.counter;
         var want = c.used >= c.gc_at or it.counter.used > it.mem_limit;
         const stress = h.stress != 0;
@@ -1510,6 +1525,86 @@ pub const Interp = struct {
     /// True above the memory limit, or after the counter refused a
     /// request above the hard cap. In a top-level eval that started
     /// above the limit, only the hard cap applies.
+    pub const cancel_bits = struct {
+        pub const cancel: u32 = 1;
+        pub const unwind: u32 = 2;
+    };
+
+    /// Cancels the script that runs in `it`, from any thread. The script
+    /// gets an error at its next check point: "eval canceled" with the
+    /// error code `TCL CANCEL ICANCEL`, or with `unwind` "eval unwound"
+    /// with `TCL CANCEL IUNWIND`, which `catch` does not stop. `text` replaces
+    /// the message. A script that waits in the event loop of a thread
+    /// wakes.
+    pub fn cancelEval(it: *Interp, unwind: bool, text: ?[]const u8) Allocator.Error!void {
+        const copy: ?[]u8 = if (text) |t| try std.heap.smp_allocator.dupe(u8, t) else null;
+        while (!it.cancel_lock.tryLock()) {}
+        if (it.cancel_text) |old| std.heap.smp_allocator.free(old);
+        it.cancel_text = copy;
+        const old = it.cancel_flags.fetchOr(cancel_bits.cancel | (if (unwind) cancel_bits.unwind else 0), .acq_rel);
+        if (old == 0) {
+            it.cancel_mem = @atomicLoad(usize, &it.mem_limit, .acquire);
+            @atomicStore(usize, &it.mem_limit, 0, .release);
+        }
+        it.cancel_lock.unlock();
+        if (comptime thread_mod.supported) {
+            var root = it;
+            while (root.parent) |p| root = p;
+            if (root.worker) |w| thread_mod.wakeWorker(w);
+        }
+    }
+
+    /// Takes a pending cancel, and gives back `mem_limit`. Gives the bits.
+    fn takeCancel(it: *Interp) struct { bits: u32, text: ?[]u8 } {
+        while (!it.cancel_lock.tryLock()) {}
+        defer it.cancel_lock.unlock();
+        const bits = it.cancel_flags.swap(0, .acq_rel);
+        if (bits != 0) @atomicStore(usize, &it.mem_limit, it.cancel_mem, .release);
+        const t = it.cancel_text;
+        it.cancel_text = null;
+        return .{ .bits = bits, .text = t };
+    }
+
+    /// The error of a pending cancel, at a check point.
+    fn cancelPoint(it: *Interp) Error!void {
+        const c = it.takeCancel();
+        if (c.bits == 0) return;
+        defer if (c.text) |t| std.heap.smp_allocator.free(t);
+        const unwind = c.bits & cancel_bits.unwind != 0;
+        const msg: []const u8 = c.text orelse if (unwind) "eval unwound" else "eval canceled";
+        if (unwind) it.cancel_unwinding = true;
+        // The error code of Tcl 8.6 has the message as its last word.
+        var code: std.ArrayList(u8) = .empty;
+        try code.appendSlice(it.alloc(), if (unwind) "TCL CANCEL IUNWIND " else "TCL CANCEL ICANCEL ");
+        try value.appendElement(it.alloc(), &code, msg, false);
+        return it.failCode(code.items, "{s}", .{msg});
+    }
+
+    /// True when the error that unwinds is one that a script cannot
+    /// catch: the end of the compute limit or of the memory, or an
+    /// unwind of a cancel.
+    pub fn uncatchable(it: *const Interp) bool {
+        return it.compute_limit == 0 or it.overLimit() or it.cancel_unwinding;
+    }
+
+    /// The check of `Tcl_Canceled`: 0 with no cancel, 1 for a cancel, and
+    /// 2 for an unwind. With `unwind_only`, a cancel with no unwind gives
+    /// 0. A pending cancel that it gives is taken, as at a check point.
+    /// `it.result` and `it.error_code` get the message and the code.
+    pub fn takeCanceled(it: *Interp, unwind_only: bool) Error!u2 {
+        if (it.cancel_unwinding) {
+            _ = it.failCode("TCL CANCEL IUNWIND {eval unwound}", "eval unwound", .{}) catch {};
+            return 2;
+        }
+        const bits = it.cancel_flags.load(.acquire);
+        if (bits == 0 or (unwind_only and bits & cancel_bits.unwind == 0)) return 0;
+        it.cancelPoint() catch |e| {
+            if (e != error.TclError) return e;
+            return if (it.cancel_unwinding) 2 else 1;
+        };
+        return 0;
+    }
+
     pub fn overLimit(it: *const Interp) bool {
         if (it.counter.refused) return true;
         if (it.counter.used <= it.mem_limit or it.counter.over_start) return false;
@@ -1931,6 +2026,7 @@ pub const Interp = struct {
         if (host) it.heap.scopes = 1;
         defer if (host) {
             it.heap.scopes = 0;
+            it.cancel_unwinding = false;
         };
         try it.checkNative();
         if (s.code) |bc| return vm.run(it, bc);

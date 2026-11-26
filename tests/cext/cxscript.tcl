@@ -16,3 +16,11 @@ foreach {name arg} {
 foreach arg [list {set a b} "set a \{" {a [b "} "a \\\{" "# \{\n"] {
     puts "complete [string length $arg]: [cxscript::run complete $arg]"
 }
+proc spin {} { while 1 {} }
+puts "cancel: [catch {cxscript::run cancel -} msg] [list $msg]"
+puts "cancel spin: [catch {cxscript::run cancel mine; spin} msg o] [list $msg] [lindex [dict get $o -errorcode] 2]"
+puts "after: [set g]"
+interp create cx
+cx eval [list load $dir/cxscript.so]
+puts "child: [catch {cx eval {catch {cxscript::run cancel unwind}; set never 1}} msg] [list $msg]"
+puts "child after: [cx eval {set ok 1}]"

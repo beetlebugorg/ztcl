@@ -43,9 +43,15 @@ pub fn valueOf(it: *Interp, a: Arg) Error!Value {
     };
 }
 
+/// The error code of the command of a package that runs, when a slot
+/// such as `Tcl_Canceled` gives one. `resultOf` takes it.
+pub threadlocal var pending_code: ?Value = null;
+
 /// The value of a command of a package with code `code` and result `r`,
 /// or the error of ztcl for the code.
 pub fn resultOf(it: *Interp, code: i32, r: Value) Error!Value {
+    const pc = pending_code;
+    pending_code = null;
     return switch (code) {
         0 => r,
         2 => blk: {
@@ -56,7 +62,7 @@ pub fn resultOf(it: *Interp, code: i32, r: Value) Error!Value {
         4 => error.TclContinue,
         else => blk: {
             it.result = r;
-            it.error_code = .{ .str = "NONE" };
+            it.error_code = pc orelse .{ .str = "NONE" };
             break :blk error.TclError;
         },
     };

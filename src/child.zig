@@ -92,6 +92,41 @@ pub fn passError(from: *Interp, to: *Interp, e: Error) Error {
     return e;
 }
 
+/// `interp cancel ?-unwind? ?--? ?path? ?result?`.
+fn cancelCmd(it: *Interp, args: []const Value) Error!Value {
+    var unwind = false;
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        const o = try it.str(args[i]);
+        if (o.len == 0 or o[0] != '-') break;
+        const opts = [_][]const u8{ "-unwind", "--" };
+        var hit: ?usize = null;
+        var n: usize = 0;
+        for (opts, 0..) |name, k| {
+            if (eql(name, o)) {
+                hit = k;
+                n = 1;
+                break;
+            }
+            if (std.mem.startsWith(u8, name, o)) {
+                hit = k;
+                n += 1;
+            }
+        }
+        if (n != 1) return it.failCode(try std.fmt.allocPrint(it.alloc(), "TCL LOOKUP INDEX option {s}", .{o}), "{s} option \"{s}\": must be -unwind or --", .{ if (n > 1) "ambiguous" else "bad", o });
+        if (hit.? == 1) {
+            i += 1;
+            break;
+        }
+        unwind = true;
+    }
+    if (i + 2 < args.len) return it.wrongArgs("interp cancel ?-unwind? ?--? ?path? ?result?");
+    const target = if (i < args.len) try resolve(it, args[i]) else it;
+    const text: ?[]const u8 = if (i + 1 < args.len) try it.str(args[i + 1]) else null;
+    try target.cancelEval(unwind, text);
+    return Value.empty;
+}
+
 /// Finds an interpreter by a path relative to `it`.
 fn resolve(it: *Interp, path: Value) Error!*Interp {
     var cur = it;
@@ -448,7 +483,7 @@ pub fn cmdInterp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("interp cmd ?arg ...?");
     const a = it.alloc();
     const word = try it.str(argv[1]);
-    const names = [_][]const u8{ "alias", "aliases", "bgerror", "children", "create", "delete", "eval", "exists", "expose", "hide", "hidden", "invokehidden", "issafe", "marktrusted", "recursionlimit", "slaves", "target" };
+    const names = [_][]const u8{ "alias", "aliases", "bgerror", "cancel", "children", "create", "delete", "eval", "exists", "expose", "hide", "hidden", "invokehidden", "issafe", "marktrusted", "recursionlimit", "slaves", "target" };
     var sub: []const u8 = word;
     var hits: usize = 0;
     for (names) |n| {
@@ -462,8 +497,9 @@ pub fn cmdInterp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             hits += 1;
         }
     }
-    if (hits != 1) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, recursionlimit, slaves, or target", .{word});
+    if (hits != 1) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, recursionlimit, slaves, or target", .{word});
     const args = argv[2..];
+    if (eql(sub, "cancel")) return cancelCmd(it, args);
     if (eql(sub, "create")) {
         var safe = false;
         var path: ?Value = null;

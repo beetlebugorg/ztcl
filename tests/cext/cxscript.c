@@ -87,6 +87,13 @@ static int Run(ClientData cd, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[
     }
     if (!strcmp(n, "recordandeval")) return Tcl_RecordAndEval(interp, a, 0);
     if (!strcmp(n, "freeresult")) { Tcl_SetResult(interp, "gone", TCL_STATIC); Tcl_FreeResult(interp); return TCL_OK; }
+    if (!strcmp(n, "cancel")) {
+        int unwind = !strcmp(a, "unwind");
+        code = Tcl_CancelEval(interp, !strcmp(a, "-") || unwind ? NULL : objv[2], NULL, unwind ? TCL_CANCEL_UNWIND : 0);
+        if (code != TCL_OK) return code;
+        code = Tcl_Canceled(interp, TCL_LEAVE_ERR_MSG | (unwind ? TCL_CANCEL_UNWIND : 0));
+        return code == TCL_ERROR ? TCL_ERROR : TCL_OK;
+    }
     if (!strcmp(n, "canceled")) { Tcl_SetObjResult(interp, Tcl_NewIntObj(Tcl_Canceled(interp, 0))); return TCL_OK; }
     Tcl_SetResult(interp, "unknown check", TCL_STATIC);
     return TCL_ERROR;

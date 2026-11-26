@@ -34,6 +34,8 @@ pub fn register(sh: *cext.Shadow) Error!u32 {
         .var_get = &varGet,
         .var_set = &varSet,
         .pkg_provide = &pkgProvide,
+        .cancel = &cancel,
+        .canceled = &canceled,
     };
     grab();
     defer lock.unlock();
@@ -93,4 +95,21 @@ fn varSet(handle: u32, name: [*]const u8, len: usize, v: *const Arg, _: c_int) c
 
 fn pkgProvide(handle: u32, name: [*]const u8, len: usize, version: [*]const u8, vlen: usize) callconv(.c) i32 {
     return zside.provide(interpOf(handle), name[0..len], version[0..vlen], &host.reply);
+}
+
+fn cancel(handle: u32, unwind: c_int, text: [*]const u8, len: usize) callconv(.c) i32 {
+    interpOf(handle).cancelEval(unwind != 0, if (len == 0) null else text[0..len]) catch return 1;
+    return 0;
+}
+
+/// The message of the cancel goes to `host.reply`, and its error code
+/// to `zside.pending_code`.
+fn canceled(handle: u32, unwind_only: c_int) callconv(.c) i32 {
+    const it = interpOf(handle);
+    const state = it.takeCanceled(unwind_only != 0) catch return 0;
+    if (state != 0) {
+        zside.pending_code = it.error_code;
+        host.reply = zside.argOf(it, it.result) catch host.reply;
+    }
+    return state;
 }

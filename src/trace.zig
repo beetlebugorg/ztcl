@@ -131,7 +131,7 @@ fn runHook(it: *Interp, cmd: Value, words: []const []const u8) Error!?[]const u8
         error.OutOfMemory => return e,
         error.TclError => {
             const msg = try it.str(it.result);
-            if (it.compute_limit == 0 or it.overLimit()) return e;
+            if (it.uncatchable()) return e;
             it.result = saved;
             it.error_code = saved_code;
             return msg;
