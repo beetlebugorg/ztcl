@@ -2718,8 +2718,7 @@ test "ztcl::win::registry: set, get, type, keys, values, and delete" {
     _ = try ev(&it, "ztcl::win::registry set $k m {one {two three}} multi_sz");
     _ = try ev(&it, "ztcl::win::registry set $k b [binary format c3 {1 255 0}] binary");
     _ = try ev(&it, "ztcl::win::registry set $k/sub");
-    try std.testing.expectEqualStrings("{hello world} 42 -5 {one {two three}} sz dword multi_sz binary 3 1",
-        try ev(&it, "list [ztcl::win::registry get $k s] [ztcl::win::registry get $k n] [ztcl::win::registry get $k q] [ztcl::win::registry get $k m] [ztcl::win::registry type $k s] [ztcl::win::registry type $k n] [ztcl::win::registry type $k m] [ztcl::win::registry type $k b] [string length [ztcl::win::registry get $k b]] [string equal [ztcl::win::registry get $k b] [binary format c3 {1 255 0}]]"));
+    try std.testing.expectEqualStrings("{hello world} 42 -5 {one {two three}} sz dword multi_sz binary 3 1", try ev(&it, "list [ztcl::win::registry get $k s] [ztcl::win::registry get $k n] [ztcl::win::registry get $k q] [ztcl::win::registry get $k m] [ztcl::win::registry type $k s] [ztcl::win::registry type $k n] [ztcl::win::registry type $k m] [ztcl::win::registry type $k b] [string length [ztcl::win::registry get $k b]] [string equal [ztcl::win::registry get $k b] [binary format c3 {1 255 0}]]"));
     try std.testing.expectEqualStrings("b m n q s", try ev(&it, "lsort [ztcl::win::registry values $k]"));
     try std.testing.expectEqualStrings("sub", try ev(&it, "ztcl::win::registry keys $k"));
     try std.testing.expectEqualStrings("s", try ev(&it, "ztcl::win::registry values $k {[s]*}"));
