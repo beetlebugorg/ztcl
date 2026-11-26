@@ -49,6 +49,7 @@ pub const dbus = @import("dbus.zig");
 pub const macho = @import("macho.zig");
 pub const isoproto = @import("isoproto.zig");
 pub const isothread = @import("isothread.zig");
+pub const isolate_mac = @import("isolate_mac.zig");
 pub const filecmd = @import("filecmd.zig");
 pub const sys = @import("sys.zig");
 pub const thread = @import("thread.zig");
@@ -109,6 +110,7 @@ test {
     _ = dbus;
     _ = macho;
     _ = isoproto;
+    if (@import("builtin").os.tag == .macos) _ = isolate_mac;
     _ = wasmbundle;
     _ = @import("wasmfiles.zig");
     _ = @import("jit/tests.zig");

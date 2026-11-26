@@ -18,7 +18,8 @@
 //! length and the bytes, numbers are little-endian, and a value is the
 //! byte form of `isoproto.zig` over the shared form of `thread.zig`):
 //!
-//!   START   id u64, caps u32, compute u64, memory u64, hosts u8, script
+//!   START   id u64, caps u32, compute u64, memory u64, hosts u8, script,
+//!           root path, current folder, files u8 (1: host mode)
 //!   SEND    from u64, to u64, flags u8 (1 reply, 2 head), var name, script
 //!   RESULT  kind u8 (0 reply, 1 async result), to u64, code i64, value,
 //!           error info, error code value, var name
@@ -245,6 +246,14 @@ pub const Bridge = struct {
     spawner: ?Spawner,
     hosts: u8,
     caps: u32,
+    /// The root folder of the creator and its current folder, or host
+    /// mode, for the jail of the child.
+    root: []const u8 = "",
+    cwd: []const u8 = "",
+    host_files: bool = false,
+    /// The memory limit of the thread, for the watch of the parent.
+    mem_limit: u64 = 0,
+    mem_killed: bool = false,
     link: Link = undefined,
     pid: i32 = -1,
     /// The sandbox of the child on Windows.
@@ -286,6 +295,10 @@ pub fn prepare(it: *Interp, w: *Worker, st: anytype) Error!*Bridge {
         .spawner = root.iso_spawn,
         .hosts = (if (st.clock_host != null) hosts_clock else 0) | (if (st.event_host != null) hosts_event else 0),
         .caps = st.caps,
+        .root = st.fs_path,
+        .cwd = st.fs_cwd,
+        .host_files = root.fs.host,
+        .mem_limit = st.mem_limit,
     };
     return b;
 }
@@ -468,6 +481,9 @@ fn sendStart(b: *Bridge, st: anytype) bool {
     o.int(u64, st.mem_limit) catch return false;
     o.list.append(a, b.hosts) catch return false;
     o.str(b.w.script) catch return false;
+    o.str(b.root) catch return false;
+    o.str(b.cwd) catch return false;
+    o.list.append(a, if (b.host_files) 1 else 0) catch return false;
     return b.link.write(a, .start, 0, o.list.items);
 }
 
@@ -477,7 +493,19 @@ fn forward(w: *Worker, b: *Bridge) void {
     const a = b.gpa;
     var released_sent = false;
     var stop_at: ?i96 = null;
+    var next_watch: i96 = 0;
     while (!b.ended.load(.acquire)) {
+        if (comptime spawns_runner) {
+            if (b.pid > 0 and thread.nowNs() >= next_watch) {
+                next_watch = thread.nowNs() + 100 * std.time.ns_per_ms;
+                if (overMemory(b)) {
+                    b.mem_killed = true;
+                    killChild(b);
+                    b.link.t.cancel();
+                    break;
+                }
+            }
+        }
         w.lock.lock();
         while (w.queue.items.len == 0 and w.flags.load(.acquire) == 0 and !(w.isReleased() and !released_sent) and !b.ended.load(.acquire)) {
             w.ev.wait(&w.lock, thread.slice_ns);
@@ -514,6 +542,18 @@ fn forward(w: *Worker, b: *Bridge) void {
             break;
         };
     }
+}
+
+/// The memory of the runtime of a child, above the limit of its thread.
+const runtime_margin: u64 = 128 << 20;
+
+/// True when the child uses more memory than its thread may, with the
+/// margin of the runtime.
+fn overMemory(b: *Bridge) bool {
+    if (comptime builtin.os.tag != .macos) return false;
+    if (b.mem_limit == 0 or b.mem_limit >= std.math.maxInt(u64) - runtime_margin) return false;
+    const f = @import("isolate_mac.zig").footprint(b.pid) orelse return false;
+    return f > b.mem_limit + runtime_margin;
 }
 
 fn forwardMsg(b: *Bridge, m: *Msg) void {
@@ -642,7 +682,9 @@ fn bgReport(w: *Worker, info: []const u8) void {
 fn endBridge(w: *Worker, b: *Bridge, reader: ?std.Thread) void {
     const g = w.group;
     const a = b.gpa;
-    if (!b.exited and !w.hasFlag(thread.Flag.stop)) bgReport(w, "the child process of the isolated thread ended with no exit");
+    if (b.mem_killed) {
+        bgReport(w, "the child process of the isolated thread passed its memory limit");
+    } else if (!b.exited and !w.hasFlag(thread.Flag.stop)) bgReport(w, "the child process of the isolated thread ended with no exit");
     _ = b.link.write(a, .goodbye, 0, "");
     if (!reapChild(b, 2000)) {
         killChild(b);
@@ -672,6 +714,9 @@ fn endBridge(w: *Worker, b: *Bridge, reader: ?std.Thread) void {
 pub const Hosts = struct {
     clock: ?@import("clock.zig").Host = null,
     event: ?@import("event.zig").Host = null,
+    /// Enter the sandbox of the platform before the first script. The
+    /// runner sets it; a test child in the same process does not.
+    sandbox: bool = false,
 };
 
 const Child = struct {
@@ -762,7 +807,7 @@ fn childReader(c: *Child) void {
     g.lock.unlock();
 }
 
-const StartIn = struct { id: u64, caps: u32, compute: u64, mem: u64, hosts: u8, script: []const u8 };
+const StartIn = struct { id: u64, caps: u32, compute: u64, mem: u64, hosts: u8, script: []const u8, root: []const u8, cwd: []const u8, files: u8 };
 
 fn readStart(payload: []const u8) iso.Error!StartIn {
     var r: iso.Reader = .{ .b = payload };
@@ -773,9 +818,45 @@ fn readStart(payload: []const u8) iso.Error!StartIn {
         .mem = try r.int(u64),
         .hosts = (try r.take(1))[0],
         .script = try readStr(&r),
+        .root = try readStr(&r),
+        .cwd = try readStr(&r),
+        .files = (try r.take(1))[0],
     };
     try r.done();
     return s;
+}
+
+/// Sets the jail of the child as the creator had it, then enters the
+/// sandbox of the platform when `hosts.sandbox`.
+fn jail(a: Allocator, x: *Interp, st: StartIn, hosts: Hosts) bool {
+    const fsroot = @import("fsroot.zig");
+    const file_bits = @backingInt(interp.Capability.file) | @backingInt(interp.Capability.channels);
+    const files = st.caps & file_bits != 0;
+    var real: ?[]u8 = null;
+    defer if (real) |p| a.free(p);
+    if (files and st.files == 1) {
+        fsroot.setHost(x) catch return false;
+    } else if (files and st.root.len > 0) {
+        fsroot.setRoot(x, st.root) catch return false;
+        x.fs.cwd = x.alloc().dupe(u8, st.cwd) catch return false;
+        if (comptime builtin.os.tag == .macos) real = @import("isolate_mac.zig").realPath(a, x.fs.fd);
+    }
+    if (!hosts.sandbox) return true;
+    // On Windows the parent starts the child in its AppContainer
+    // (`isolate_windows.zig`), so the child has no step of its own.
+    if (comptime builtin.os.tag == .windows) return true;
+    if (comptime builtin.os.tag == .macos) {
+        @import("isolate_mac.zig").enter(a, .{
+            .root = real,
+            .host_files = files and st.files == 1,
+            .net = st.caps & @backingInt(interp.Capability.socket) != 0,
+            .zones = st.caps & @backingInt(interp.Capability.clock) != 0,
+        }) catch return false;
+        return true;
+    }
+    // Linux has no sandbox yet, and `prepare` refuses the level there
+    // before a child starts, with ZTCL ISOLATION LEVEL.
+    return false;
 }
 
 /// The child of an isolated thread on the transport `t`: runs the
@@ -810,6 +891,7 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     w.group.next_id = st.id + 1;
     c.w = w;
     w.group.remote = c.remote();
+    if (!jail(a, &x, st, hosts)) return 2;
     if (!link.write(a, .ready, 0, "")) return 2;
 
     const reader = std.Thread.spawn(.{}, childReader, .{&c}) catch return 2;
