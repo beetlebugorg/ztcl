@@ -151,6 +151,7 @@ class Build:
         self.md.renderer.rules["fence"] = fence
         self.anchors = {}
         self.checkpoints = {}
+        self.files_of = {}
         self.links = []
 
     def live_blocks(self, src, tokens):
@@ -192,7 +193,7 @@ class Build:
                 if text.startswith("<!-- run:"):
                     i += 3
                     continue
-                if text == "<!-- checkpoint -->":
+                if text == "<!-- checkpoint -->" or text.startswith("<!-- checkpoint: "):
                     # The state of a lesson at its start: the course shell
                     # runs it first, and the page shows it folded at the end.
                     self.checkpoint = fence.content
@@ -262,14 +263,16 @@ class Build:
 """
 
     @staticmethod
-    def course_html(page, setup):
+    def course_html(page, setup, files):
         """The shell of the Learn course: a panel at the right of a wide
         window and a sheet at the bottom of a narrow one. It is fixed in
         the window, so that a Run link never scrolls the page. shell.js
         runs the checkpoint of the lesson (setup), then the commands that
         the reader ran on this lesson in this tab."""
         banner = "ztcl in your browser. No network or clock.\\nThe state of this lesson is loaded.\\nEach command can use 10,000,000 compute units."
-        data = json.dumps({"setup": setup or "", "files": {}}).replace("</", "<\\/")
+        if files:
+            banner += "\\nRead-only files:" + "".join(f" {n}" for n in files)
+        data = json.dumps({"setup": setup or "", "files": files}).replace("</", "<\\/")
         lesson = page.split("/")[1][:2]
         return f"""<aside class="zcourse-dock" aria-label="The shell of the course">
 <div class="zshell zpage-shell zcourse" id="shell" data-rows="12" data-lesson="{lesson}" data-label="ztcl shell of the course. Type a Tcl command. Tab completes." data-banner="{html.escape(banner)}">
@@ -302,11 +305,17 @@ class Build:
         alone = re.search(r"^# shell: none$", script, re.M)
         hint = ("Its commands do not run in this page." if alone else
                 "Put in the shell puts the command on the line of the shell of this page.")
+        # A helper with the line `# toy` is an app of a lesson, with no
+        # command for the shell.
+        toy = re.search(r"^# toy$", script, re.M)
+        tag, what = ("Toy", "this window") if toy else ("Tool", "this tool")
+        if toy:
+            hint = ""
         return (f'<figure class="zhelper" id="{hid}" aria-label="Helper: {t}"{' data-shell="none"' if alone else ''}>'
-                f'<figcaption class="zhelper-bar"><span class="zhelper-tag">Tool</span><span class="zhelper-title">{t}</span>'
-                f'{f"<span class=\"zhelper-caption\">{c}</span>" if c else ""}<span class="zhelper-hint">{hint}</span></figcaption>'
-                f'<div class="zhelper-app" style="height: {height}px"><p class="zhelper-poster">The tool starts when it comes into view. It needs JavaScript and WebAssembly.</p></div>'
-                f'<details><summary>How this tool is made: {lines} lines of Tcl with the ztk GUI toolkit</summary><pre><code class="language-tcl">{html.escape(script)}</code></pre></details></figure>\n')
+                f'<figcaption class="zhelper-bar"><span class="zhelper-tag">{tag}</span><span class="zhelper-title">{t}</span>'
+                f'{f"<span class=\"zhelper-caption\">{c}</span>" if c else ""}{f'<span class="zhelper-hint">{hint}</span>' if hint else ""}</figcaption>'
+                f'<div class="zhelper-app" style="height: {height}px"><p class="zhelper-poster">It starts when it comes into view. It needs JavaScript and WebAssembly.</p></div>'
+                f'<details><summary>How {what} is made: {lines} lines of Tcl with the ztk GUI toolkit</summary><pre><code class="language-tcl">{html.escape(script)}</code></pre></details></figure>\n')
 
     def render(self, src, page):
         tokens = self.live_blocks(src, self.md.parse((ROOT / src).read_text(encoding="utf-8")))
@@ -340,6 +349,7 @@ class Build:
                         child.attrSet("href", self.link(src, page, child.attrGet("href")))
         self.anchors[page] = ids
         self.checkpoints[page] = self.checkpoint
+        self.files_of[page] = self.page_files
         body = self.md.renderer.render(tokens, self.md.options, {})
         body = body.replace("<table>", '<div class="table"><table>').replace("</table>", "</table></div>")
         return title or src, self.alerts(body)
@@ -403,7 +413,7 @@ class Build:
         course, dock = page.startswith("learn/"), ""
         if course:
             setup = self.checkpoints.get(page) or ""
-            dock = self.course_html(page, setup)
+            dock = self.course_html(page, setup, self.files_of.get(page) or {})
             if setup:
                 body += (f'<details class="zsetup"><summary>The state of the shell at the start of this lesson</summary>'
                          f'<pre><code class="language-tcl">{html.escape(setup)}</code></pre></details>\n')
