@@ -136,6 +136,18 @@ ztcl.sys.ignorePipeSignal(); // a write to a closed peer is an error, with no si
 
 `exec` is not sandboxed. A process that a script starts has the full power of the user. Give a program list and a time limit, and turn `exec` on only for scripts that you trust. An entry of `allow` is a bare name or a full host path. The `PATH` of `env` must have only full paths. A file below the root folder runs only when `allow_root` lists it. See [the rules of `exec`](../SECURITY.md#the-rules-of-exec).
 
+### File watchers
+
+With `file`, a script also has `ztcl::watch`. It reports the changes below a folder of the root folder. `changes` does not block, so an embedder with its own event loop calls it from a timer.
+
+```tcl
+set w [ztcl::watch add -recursive /src]
+ztcl::watch changes $w   ;# {created /src/a.tcl} {modified /src/b.tcl}
+ztcl::watch remove $w
+```
+
+The kinds are `created`, `modified`, `deleted`, `moved`, and `overflow` (more than 4,096 changes: read the folder again). `ztcl::watch fd $w` gives the descriptor, for a loop that waits on descriptors. In this version only Linux (inotify) has the watcher. The plan for macOS and Windows is in `docs/dev/watch.md`.
+
 ### Programs on a pseudo-terminal
 
 With `exec`, a script also has `ztcl::pty`. It starts a program on a pseudo-terminal (PTY) and gives the other side as a binary channel. The program list, the environment, and the time limit of `exec_host` apply. `TERM=xterm-256color` is added when `env` has no `TERM`. The reads and writes need the `channels` capability, and `fileevent` needs the event loop.

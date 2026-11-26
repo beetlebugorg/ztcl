@@ -21,7 +21,7 @@ ztcl::watch fd $w           ;# for an embedder loop: a descriptor that is readab
 
 | Platform | Form | First PR |
 |---|---|---|
-| Linux | inotify with `IN_CLOEXEC` and `IN_NONBLOCK`, one watch for each folder, the root folder descriptor for the path check | Done |
+| Linux | inotify with `IN_CLOEXEC` and `IN_NONBLOCK`, one watch for each folder, the root folder descriptor for the path check | Done (step 2) |
 | macOS | kqueue with `EVFILT_VNODE` on each folder and file, or FSEvents through the CoreServices framework | Error "ztcl::watch is not available on macOS yet" |
 | Windows | `ReadDirectoryChangesW` with an overlapped read on the folder handle | Error |
 | WASI, the web | No watch API | The command is absent |

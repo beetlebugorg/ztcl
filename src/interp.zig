@@ -1048,6 +1048,8 @@ pub const Interp = struct {
     execs: ProcState = .{},
     /// The root folder and the channels of the file capabilities.
     fs: FsState = .{},
+    /// The watchers of `ztcl::watch`.
+    watches: @import("watch.zig").State = .{},
     chans: ChanState = .{},
     temp_next: u32 = 0,
     /// The state of the `package` command.
@@ -1373,6 +1375,7 @@ pub const Interp = struct {
         @import("child.zig").destroyAll(it);
         @import("event.zig").forget(it);
         if (comptime chan_supported) @import("chan.zig").closeAll(it);
+        @import("watch.zig").closeAll(it);
         if (comptime exec_supported) @import("proc.zig").abandonAll(it);
         const fs_keep = it.fs;
         defer it.fs = fs_keep;
@@ -1471,7 +1474,10 @@ pub const Interp = struct {
             if (new & @intFromEnum(Capability.channels) != 0) try @import("chan.zig").register(it);
         }
         if (comptime fs_supported) {
-            if (new & @intFromEnum(Capability.file) != 0) try @import("filecmd.zig").register(it);
+            if (new & @intFromEnum(Capability.file) != 0) {
+                try @import("filecmd.zig").register(it);
+                try @import("watch.zig").register(it);
+            }
         }
         if (comptime exec_supported) {
             if (new & @intFromEnum(Capability.exec) != 0) {
@@ -1504,6 +1510,7 @@ pub const Interp = struct {
         }
         @import("child.zig").destroyAll(it);
         if (comptime chan_supported) @import("chan.zig").closeAll(it);
+        @import("watch.zig").closeAll(it);
         if (comptime exec_supported) @import("proc.zig").abandonAll(it);
         if (comptime fs_supported) {
             if (it.fs.fd >= 0) @import("sys.zig").close(it.fs.fd);
