@@ -879,7 +879,7 @@ const Emitter = struct {
             try e.ldr(tmp, abi.it, l.it_ns);
             try s.cmpR(rcx, tmp, .lsl, 0);
             try s.bcond(.ne, miss);
-            try e.helperCall(pc, .call_cached);
+            try e.helperCall(pc, .call_direct);
             try s.b(called);
             s.bind(miss);
             try e.helperCall(pc, .invoke);
