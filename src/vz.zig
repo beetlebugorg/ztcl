@@ -192,12 +192,17 @@ pub const Config = struct {
     memory_mb: u64 = 256,
     /// The ends of the console of the guest: the host writes to `console_in`
     /// and reads `console_out`.
-    console_in: c_int,
-    console_out: c_int,
+    /// No console when null.
+    console: ?struct { in: c_int, out: c_int } = null,
     /// One directory of the host for virtio-fs, with the tag that the
     /// guest mounts.
     share: ?struct { path: []const u8, tag: []const u8, read_only: bool = false } = null,
     vsock: bool = true,
+    entropy: bool = true,
+    /// The `VZGenericMachineIdentifier` of the platform. A saved state
+    /// restores only on a machine with the same identifier. Null gives a
+    /// new one.
+    machine_id: ?Id = null,
 };
 
 /// Makes and checks a `VZVirtualMachineConfiguration`. On an error,
@@ -212,21 +217,29 @@ pub fn configure(c: Config, why: *[]const u8) Error!Id {
     release(boot);
     setter(vc, "setCPUCount:", c.cpus);
     setter(vc, "setMemorySize:", c.memory_mb * 1024 * 1024);
+    const plat = try new("VZGenericPlatformConfiguration");
+    if (c.machine_id) |id| setter(plat, "setMachineIdentifier:", id);
+    setter(vc, "setPlatform:", plat);
+    release(plat);
 
-    const fh_in = call(fn (Id, Sel, c_int) callconv(.c) Id, try alloc("NSFileHandle"), "initWithFileDescriptor:", .{c.console_in});
-    const fh_out = call(fn (Id, Sel, c_int) callconv(.c) Id, try alloc("NSFileHandle"), "initWithFileDescriptor:", .{c.console_out});
-    const att = call(fn (Id, Sel, Id, Id) callconv(.c) Id, try alloc("VZFileHandleSerialPortAttachment"), "initWithFileHandleForReading:fileHandleForWriting:", .{ fh_in, fh_out });
-    release(fh_in);
-    release(fh_out);
-    const port = try new("VZVirtioConsoleDeviceSerialPortConfiguration");
-    setter(port, "setAttachment:", att);
-    release(att);
-    setter(vc, "setSerialPorts:", try array1(port));
-    release(port);
+    if (c.console) |con| {
+        const fh_in = call(fn (Id, Sel, c_int) callconv(.c) Id, try alloc("NSFileHandle"), "initWithFileDescriptor:", .{con.in});
+        const fh_out = call(fn (Id, Sel, c_int) callconv(.c) Id, try alloc("NSFileHandle"), "initWithFileDescriptor:", .{con.out});
+        const att = call(fn (Id, Sel, Id, Id) callconv(.c) Id, try alloc("VZFileHandleSerialPortAttachment"), "initWithFileHandleForReading:fileHandleForWriting:", .{ fh_in, fh_out });
+        release(fh_in);
+        release(fh_out);
+        const port = try new("VZVirtioConsoleDeviceSerialPortConfiguration");
+        setter(port, "setAttachment:", att);
+        release(att);
+        setter(vc, "setSerialPorts:", try array1(port));
+        release(port);
+    }
 
-    const rng = try new("VZVirtioEntropyDeviceConfiguration");
-    setter(vc, "setEntropyDevices:", try array1(rng));
-    release(rng);
+    if (c.entropy) {
+        const rng = try new("VZVirtioEntropyDeviceConfiguration");
+        setter(vc, "setEntropyDevices:", try array1(rng));
+        release(rng);
+    }
 
     if (c.vsock) {
         const sock = try new("VZVirtioSocketDeviceConfiguration");
@@ -266,7 +279,19 @@ pub const Machine = struct {
         return .{ .q = q, .vm = vm };
     }
 
-    const Done = struct { m: *Machine, sig: Signal, err: ?Id = null, port: u32 = 0, conn: ?Id = null };
+    pub fn deinit(m: *Machine) void {
+        release(m.vm);
+    }
+
+    const Done = struct {
+        m: *Machine,
+        sig: Signal,
+        sel: [*:0]const u8 = "",
+        url: ?Id = null,
+        err: ?Id = null,
+        port: u32 = 0,
+        conn: ?Id = null,
+    };
 
     fn errDone(b: *Block(Done), err: ?Id) callconv(.c) void {
         if (err) |e| retain(e);
@@ -274,17 +299,21 @@ pub const Machine = struct {
         b.ctx.sig.post();
     }
 
-    /// Starts the guest and waits for the framework to say that it runs.
-    pub fn start(m: *Machine, why: *[]const u8) Error!void {
-        var d: Done = .{ .m = m, .sig = Signal.init() };
-        onQueue(m.q, Done, &d, struct {
-            fn f(x: *Done) void {
-                var b = Block(Done).init(x, @ptrCast(&errDone));
-                setter(x.m.vm, "startWithCompletionHandler:", &b);
-            }
-        }.f);
-        if (!d.sig.wait(30)) {
-            why.* = "the start of the guest timed out";
+    fn sendOp(x: *Done) void {
+        var b = Block(Done).init(x, @ptrCast(&errDone));
+        if (x.url) |u|
+            call(fn (Id, Sel, Id, *Block(Done)) callconv(.c) void, x.m.vm, x.sel, .{ u, &b })
+        else
+            call(fn (Id, Sel, *Block(Done)) callconv(.c) void, x.m.vm, x.sel, .{&b});
+    }
+
+    /// Sends an operation with a completion handler of one `NSError`,
+    /// such as `startWithCompletionHandler:`, and waits for the handler.
+    fn op(m: *Machine, sel: [*:0]const u8, url: ?Id, seconds: f64, why: *[]const u8) Error!void {
+        var d: Done = .{ .m = m, .sig = Signal.init(), .sel = sel, .url = url };
+        onQueue(m.q, Done, &d, sendOp);
+        if (!d.sig.wait(seconds)) {
+            why.* = "the operation timed out";
             return error.Framework;
         }
         if (d.err) |e| {
@@ -293,16 +322,34 @@ pub const Machine = struct {
         }
     }
 
+    /// Starts the guest and waits for the framework to say that it runs.
+    pub fn start(m: *Machine, why: *[]const u8) Error!void {
+        return m.op("startWithCompletionHandler:", null, 30, why);
+    }
+
     /// Stops the guest at once, as a pull of its power cord.
     pub fn stop(m: *Machine) void {
-        var d: Done = .{ .m = m, .sig = Signal.init() };
-        onQueue(m.q, Done, &d, struct {
-            fn f(x: *Done) void {
-                var b = Block(Done).init(x, @ptrCast(&errDone));
-                setter(x.m.vm, "stopWithCompletionHandler:", &b);
-            }
-        }.f);
-        _ = d.sig.wait(10);
+        var why: []const u8 = "";
+        m.op("stopWithCompletionHandler:", null, 10, &why) catch {};
+    }
+
+    pub fn pause(m: *Machine, why: *[]const u8) Error!void {
+        return m.op("pauseWithCompletionHandler:", null, 10, why);
+    }
+
+    pub fn @"resume"(m: *Machine, why: *[]const u8) Error!void {
+        return m.op("resumeWithCompletionHandler:", null, 10, why);
+    }
+
+    /// Saves the memory and the devices of a paused guest (macOS 14).
+    pub fn save(m: *Machine, path: []const u8, why: *[]const u8) Error!void {
+        return m.op("saveMachineStateToURL:completionHandler:", try fileUrl(path), 60, why);
+    }
+
+    /// Restores a saved state into a stopped machine of the same
+    /// configuration; the guest is paused after it.
+    pub fn restore(m: *Machine, path: []const u8, why: *[]const u8) Error!void {
+        return m.op("restoreMachineStateFromURL:completionHandler:", try fileUrl(path), 60, why);
     }
 
     fn connDone(b: *Block(Done), conn: ?Id, err: ?Id) callconv(.c) void {
@@ -347,3 +394,11 @@ pub const Machine = struct {
         return error.Framework;
     }
 };
+
+/// Checks that a configuration can save and restore its state.
+pub fn checkSaveRestore(vc: Id, why: *[]const u8) bool {
+    var err: ?Id = null;
+    if (call(fn (Id, Sel, *?Id) callconv(.c) bool, vc, "validateSaveRestoreSupportWithError:", .{&err})) return true;
+    why.* = errorText(err);
+    return false;
+}

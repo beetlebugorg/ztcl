@@ -1,6 +1,12 @@
 //! The guest agent of the ztcl::vm spike (ztcl#203): a vsock server on
-//! port 1024 that sends back each byte it reads. The full agent runs
+//! port 1024. Each connection first gets 16 bytes, the boot clock of the
+//! guest in nanoseconds when `main` started and when the socket listened,
+//! and then each byte that the host sends comes back. The full agent runs
 //! `exec` for the host on the same socket.
+//!
+//! As the first process (`rdinit=/sbin/agent`), the agent mounts the
+//! virtio-fs share with the tag `share` at /mnt/share, when the guest has
+//! it, and writes a file there.
 //!
 //!   zig build-exe -target aarch64-linux-musl -O ReleaseSmall agent.zig
 //!
@@ -29,14 +35,34 @@ fn say(text: []const u8) void {
     _ = linux.write(2, text.ptr, text.len);
 }
 
+fn bootNs() u64 {
+    var ts: linux.timespec = undefined;
+    _ = linux.clock_gettime(.BOOTTIME, &ts);
+    return @as(u64, @intCast(ts.sec)) * 1_000_000_000 + @as(u64, @intCast(ts.nsec));
+}
+
+fn share() void {
+    _ = linux.mkdir("/mnt", 0o755);
+    _ = linux.mkdir("/mnt/share", 0o755);
+    _ = ok(linux.mount("share", "/mnt/share", "virtiofs", 0, 0)) orelse return;
+    const fd: i32 = @intCast(ok(linux.open("/mnt/share/from-guest.txt", .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true }, 0o644)) orelse return);
+    const text = "written by the guest\n";
+    _ = linux.write(fd, text, text.len);
+    _ = linux.close(fd);
+}
+
 pub fn main() void {
+    var times: [2]u64 = .{ bootNs(), 0 };
+    if (linux.getpid() == 1) share();
     const fd: i32 = @intCast(ok(linux.socket(AF_VSOCK, linux.SOCK.STREAM, 0)) orelse return say("agent: no vsock\n"));
     var addr: SockaddrVm = .{ .port = port, .cid = VMADDR_CID_ANY };
     _ = ok(linux.bind(fd, @ptrCast(&addr), @sizeOf(SockaddrVm))) orelse return say("agent: bind failed\n");
     _ = ok(linux.listen(fd, 4)) orelse return say("agent: listen failed\n");
-    say("agent: listening on vsock port 1024\n");
+    times[1] = bootNs();
     while (true) {
         const c: i32 = @intCast(ok(linux.accept(fd, null, null)) orelse continue);
+        const head = std.mem.asBytes(&times);
+        _ = linux.write(c, head.ptr, head.len);
         var buf: [4096]u8 = undefined;
         while (true) {
             const n = ok(linux.read(c, &buf, buf.len)) orelse break;
