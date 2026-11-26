@@ -139,6 +139,19 @@ export fn ztcl_eval(h: *Handle, ptr: [*]const u8, len: usize) i32 {
     }
 }
 
+// ---- The DOM of the page (`wasmdom.zig`, #85) ----
+
+/// Adds `dom` to the interpreter, in `ztcl-host.wasm` only. The host
+/// calls it for `allow: ["dom"]`. Gives 0, or 1 when the memory is full.
+fn ztcl_dom_allow(h: *Handle) callconv(.c) i32 {
+    @import("wasmdom.zig").Commands(gpa).register(&h.it) catch return 1;
+    return 0;
+}
+
+comptime {
+    if (host_imports) @export(&ztcl_dom_allow, .{ .name = "ztcl_dom_allow" });
+}
+
 // ---- Point procs (docs/webassembly.md, "Point procs") ----
 
 /// The point procs are in `ztcl-simd.wasm` and the other forms of

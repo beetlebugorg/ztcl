@@ -25,6 +25,10 @@ The commands go into `ztcl-host.wasm`, the module with imports of [the host API 
 
 `fetch` with an allowlist of origins stays out of these tasks. It is a separate capability for a later issue.
 
+## State
+
+- Task 01: `src/wasmdom.zig` and the import `ztcl_host.dom` of `web/ztcl.mjs`. `dom` exists only in `ztcl-host.wasm` after `allow: ["dom"]` (the export `ztcl_dom_allow`). `tools/wasm-host.mjs` checks the commands, the root check, and a handle of an element that left the root, on a small DOM of plain objects in Node.js. The tests in Chromium are task 04.
+
 ## Rules for each task
 
 1. Follow the rules of [the host API tasks](../wasm-host-tasks/README.md#rules-for-each-task).
