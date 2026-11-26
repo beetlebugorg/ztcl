@@ -5,6 +5,9 @@ CONFIG_SMP=y
 CONFIG_NR_CPUS=8
 CONFIG_PRINTK=y
 CONFIG_PRINTK_TIME=y
+# A sleep of one tick is 1 ms: the probe of each virtio PCI device
+# sleeps, and at the 250 Hz of tinyconfig the probes cost 21 ms.
+CONFIG_HZ_1000=y
 CONFIG_BUG=y
 CONFIG_MULTIUSER=y
 CONFIG_FUTEX=y

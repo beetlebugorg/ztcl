@@ -4,6 +4,8 @@
 //! and then each byte that the host sends comes back. The full agent runs
 //! `exec` for the host on the same socket.
 //!
+//! A first byte of 1 from the host asks for the kernel log instead.
+//!
 //! As the first process (`rdinit=/sbin/agent`), the agent mounts the
 //! virtio-fs share with the tag `share` at /mnt/share, when the guest has
 //! it, and writes a file there.
@@ -51,6 +53,8 @@ fn share() void {
     _ = linux.close(fd);
 }
 
+var log: [256 * 1024]u8 = undefined;
+
 pub fn main() void {
     var times: [2]u64 = .{ bootNs(), 0 };
     if (linux.getpid() == 1) share();
@@ -64,9 +68,18 @@ pub fn main() void {
         const head = std.mem.asBytes(&times);
         _ = linux.write(c, head.ptr, head.len);
         var buf: [4096]u8 = undefined;
+        var first = true;
         while (true) {
             const n = ok(linux.read(c, &buf, buf.len)) orelse break;
             if (n == 0) break;
+            if (first and buf[0] == 1) {
+                // A first byte of 1 asks for the kernel log (syslog(2),
+                // SYSLOG_ACTION_READ_ALL), for the times of the boot.
+                const len = ok(linux.syscall3(.syslog, 3, @intFromPtr(&log), log.len)) orelse 0;
+                _ = linux.write(c, &log, len);
+                break;
+            }
+            first = false;
             var off: usize = 0;
             while (off < n) off += ok(linux.write(c, buf[off..].ptr, n - off)) orelse break;
         }
