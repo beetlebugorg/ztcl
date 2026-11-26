@@ -47,6 +47,7 @@ pub const zipwrite = @import("zipwrite.zig");
 pub const buildnative = @import("buildnative.zig");
 pub const dbus = @import("dbus.zig");
 pub const macho = @import("macho.zig");
+pub const isoproto = @import("isoproto.zig");
 pub const filecmd = @import("filecmd.zig");
 pub const sys = @import("sys.zig");
 pub const thread = @import("thread.zig");
@@ -101,6 +102,7 @@ test {
     _ = buildnative;
     _ = dbus;
     _ = macho;
+    _ = isoproto;
     _ = wasmbundle;
     _ = @import("wasmfiles.zig");
     _ = @import("jit/tests.zig");
