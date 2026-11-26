@@ -870,6 +870,11 @@ pub const Capability = enum(u32) {
     /// path outside a mount is an error, so it gives no access to the
     /// host.
     embedded = 4096,
+    /// `ztcl::open`: a URL or a file in the default app of the host. A
+    /// file also needs `file`. The app is outside the root folder and
+    /// outside each limit, with the power of the user. It is not
+    /// sandboxed.
+    launch = 8192,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -1039,6 +1044,8 @@ pub const Interp = struct {
     clock: @import("clock.zig").State = .{},
     /// The clock and the sleep of the event loop, from the embedder.
     event_host: ?@import("event.zig").Host = null,
+    /// The opener of `ztcl::open`, from the embedder. Null: the system.
+    launch_host: ?@import("launch.zig").Host = null,
     /// The event loop that this interpreter shares with its parent.
     events: ?*@import("event.zig").State = null,
     /// The network policy of `socket`. The embedder sets it.
@@ -1416,6 +1423,7 @@ pub const Interp = struct {
         it.noise_seed = keep.noise_seed;
         it.clock_host = keep.clock_host;
         it.event_host = keep.event_host;
+        it.launch_host = keep.launch_host;
         it.exec_host = keep.exec_host;
         it.net = keep.net;
         it.thread_limits = keep.thread_limits;
@@ -1479,6 +1487,7 @@ pub const Interp = struct {
         if (new & @intFromEnum(Capability.interp) != 0) try it.register("interp", @import("child.zig").cmdInterp);
         if (new & @intFromEnum(Capability.clock) != 0) try @import("clock.zig").register(it);
         if (new & @intFromEnum(Capability.event) != 0) try @import("event.zig").register(it);
+        if (new & @intFromEnum(Capability.launch) != 0) try @import("launch.zig").register(it);
         if (comptime chan_supported) {
             if (new & @intFromEnum(Capability.channels) != 0) try @import("chan.zig").register(it);
         }
