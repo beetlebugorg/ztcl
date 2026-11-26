@@ -120,3 +120,11 @@ The ztcl binaries contain the Zig standard library. It has ports of code from ot
 ## Origin
 
 The authors wrote ztcl in the zslice source tree and moved it to this repository. ztcl uses no other zslice code.
+
+### The stubs tables of Tcl 8.6
+
+The headers `generic/tclDecls.h`, `generic/tclIntDecls.h`, `generic/tclPlatDecls.h`, and `generic/tclIntPlatDecls.h` of the Tcl source, tag `core-8-6-16`, and the `declare` lines of `generic/tcl.decls` and `generic/tclInt.decls`.
+
+**License:** Tcl/Tk License (BSD style)
+
+**How ztcl uses it:** the spike of `docs/dev/cext-tasks/` (`tools/cext-spike/slots.py`) reads the slot numbers and the signatures from the output of the C preprocessor on these headers at build time. The tools copy no code of Tcl. The spike also runs the Tcl binding of SQLite (`tclsqlite.c`, public domain) and the SQLite test files as data. ztcl does not build them.
