@@ -47,3 +47,21 @@ Howard Hinnant, "chrono-Compatible Low-Level Date Algorithms", the `days_from_ci
 **License:** Article. The author puts the algorithms in the public domain.
 
 **How ztcl uses it:** `dosTime` in `src/zipread.zig` turns the DOS date of a zip entry into days since 1970 with this algorithm.
+
+## Binaries
+
+### The code signature of Mach-O
+
+Apple, `osfmk/kern/cs_blobs.h` in the xnu source (the public headers of the kernel), with the constants `CSMAGIC_EMBEDDED_SIGNATURE`, `CSMAGIC_CODEDIRECTORY`, `CS_ADHOC`, `CS_HASHTYPE_SHA256`, and `CS_EXECSEG_MAIN_BINARY`, and the fields of the code directory up to version 0x20400. https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/kern/cs_blobs.h
+
+**License:** APSL 2.0. ztcl has no code of the file. It uses the layout of the structures and the values of the constants.
+
+**How ztcl uses it:** `src/macho.zig` writes a SuperBlob with one code directory: the identifier, the SHA-256 hash of each 4 KiB page, and the range of `__TEXT`.
+
+### Mach-O load commands
+
+Apple, `EXTERNAL_HEADERS/mach-o/loader.h` in the xnu source. https://github.com/apple-oss-distributions/xnu/blob/main/EXTERNAL_HEADERS/mach-o/loader.h
+
+**License:** APSL 2.0. ztcl has no code of the file.
+
+**How ztcl uses it:** `src/macho.zig` reads `mach_header_64`, `segment_command_64`, `section_64`, and `linkedit_data_command` (`LC_CODE_SIGNATURE`).
