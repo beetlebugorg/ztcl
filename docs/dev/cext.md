@@ -24,19 +24,19 @@ One package gives one list. Other packages use other slots, for example the chan
 
 ## Coverage
 
-The two paths fill the same groups. A row gives the slots of the group that each path has, and the test of the path. The WebAssembly path has the slots in `src/cext/wasm_stubs.zig`, with the unit tests of `zig build test-cext`. The native path has the slots in the group files of `src/cext/stubs.zig`, with the test packages of `tools/cext/check.sh`. [The coverage of the complete table](#coverage-of-the-complete-table) has the native count over all 630 public slots.
+The two paths use one implementation of each slot that has no call into ztcl. `src/cext/obj.zig` has the objects, the interp result, the dynamic strings, and `Tcl_GetIndexFromObjStruct`, and `src/cext/mem.zig` has the memory slots. `src/cext/table.zig` builds the table of each path from its list of group files: `src/cext/stubs.zig` for the native path and `src/cext/wasm_stubs.zig` for the WebAssembly path. The slots that call ztcl (scripts, variables, commands, and packages) are in the files of each path. The unit tests of `zig build test-cext` check the shared files on the native target, and the test packages of `tools/cext/check.sh` check the native path against tclsh. A row gives the slots of the group that each path has.
 
 | Group | SQLite slots | WebAssembly | Native |
 |---|---:|---|---|
-| Memory | 2 | 2 of 2, and `Tcl_Realloc`, `Tcl_AttemptAlloc`, `Tcl_AttemptRealloc` | 2 of 2, and the other 14 slots of the area memory |
-| Objects | 22 | 22 of 22, and 19 more setters, getters, and list slots | 0 of 22 |
-| Results | 8 | 8 of 8, and `Tcl_AppendElement` | 0 of 8 |
+| Memory | 2 | 2 of 2, and the other 14 slots of the area memory (shared) | 2 of 2, and the other 14 slots of the area memory (shared) |
+| Objects | 22 | 22 of 22, and 19 more setters, getters, and list slots (shared) | 22 of 22, and 19 more (shared) |
+| Results | 8 | 8 of 8, and `Tcl_AppendElement` | 7 of 8 (shared), and `Tcl_AppendElement`. `Tcl_BackgroundError` is absent. |
 | Commands | 3 | 3 of 3, and `Tcl_DeleteCommandFromToken` | 0 of 3 |
 | Scripts | 6 | 6 of 6, and `Tcl_EvalEx`, `Tcl_NRCallObjProc` | 0 of 6 |
 | Variables | 2 | 2 of 2, and 6 more get and set slots | 0 of 2 |
-| Dynamic strings | 4 | 4 of 4, and 5 more | 0 of 4 |
-| Packages and helpers | 5 | 5 of 5 | 3 of 5: `Tcl_PkgProvideEx`, `Tcl_PkgRequireEx`, `Tcl_GetVersion` |
-| Channels | 4 | 4 of 4: the record and the close; scripts do not see the channel yet | 0 of 4 |
+| Dynamic strings | 4 | 4 of 4, and 5 more (shared) | 4 of 4, and 5 more (shared) |
+| Packages and helpers | 5 | 5 of 5 | 4 of 5: `Tcl_PkgProvideEx`, `Tcl_PkgRequireEx`, and the shared `Tcl_GetVersion` and `Tcl_GetIndexFromObjStruct` |
+| Channels | 4 | 4 of 4 (shared): the record and the close. Scripts do not see the channel yet. | 4 of 4 (shared), as in the WebAssembly path |
 
 ## The shape of the Tcl_Obj bridge
 
@@ -131,29 +131,29 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 
 ### Coverage of the complete table
 
-`tools/cext/coverage.py` writes this table from the group files of `src/cext/stubs.zig`. A slot is done when a group has its function and a test checks it against tclsh. The internal and platform tables follow the public table.
+`tools/cext/coverage.py` writes this table from the group files of `src/cext/stubs.zig` (native) and `src/cext/wasm_stubs.zig` (WebAssembly). A slot is done in a path when a group of the path has its function. The internal and platform tables follow the public table.
 
 <!-- coverage -->
-| Area | Slots | Done | Missing |
-|---|---:|---:|---|
-| memory | 16 | 16 | none |
-| packages | 18 | 12 | `Tcl_RegisterConfig`, `Tcl_PkgRequireProc`, `Tcl_SetStartupScript`, `Tcl_GetStartupScript`, `Tcl_LoadFile`, `Tcl_FindSymbol` |
-| objects | 58 | 0 | 58 slots |
-| scripts and results | 58 | 0 | 58 slots |
-| channels | 92 | 0 | 92 slots |
-| strings and encodings | 86 | 0 | 86 slots |
-| lists and dicts | 28 | 0 | 28 slots |
-| errors | 25 | 3 | 22 slots |
-| interps and commands | 64 | 0 | 64 slots |
-| hash tables | 13 | 0 | 13 slots |
-| variables | 21 | 0 | 21 slots |
-| events | 35 | 0 | 35 slots |
-| namespaces | 25 | 0 | 25 slots |
-| threads | 15 | 0 | 15 slots |
-| filesystem | 63 | 0 | 63 slots |
-| zlib | 13 | 0 | 13 slots |
-| **public, all** | **630** | **31** | 4% |
-| **internal** | **173** | **0** | 0% |
-| **internal platform** | **23** | **0** | 0% |
-| **platform** | **0** | **0** | 100% |
+| Area | Slots | Native | WebAssembly | Missing in native |
+|---|---:|---:|---:|---|
+| memory | 16 | 16 | 16 | none |
+| packages | 18 | 12 | 3 | `Tcl_RegisterConfig`, `Tcl_PkgRequireProc`, `Tcl_SetStartupScript`, `Tcl_GetStartupScript`, `Tcl_LoadFile`, `Tcl_FindSymbol` |
+| objects | 58 | 33 | 33 | 25 slots |
+| scripts and results | 58 | 7 | 16 | 51 slots |
+| channels | 92 | 4 | 4 | 88 slots |
+| strings and encodings | 86 | 10 | 10 | 76 slots |
+| lists and dicts | 28 | 8 | 8 | 20 slots |
+| errors | 25 | 4 | 5 | 21 slots |
+| interps and commands | 64 | 0 | 3 | 64 slots |
+| hash tables | 13 | 0 | 0 | 13 slots |
+| variables | 21 | 0 | 8 | 21 slots |
+| events | 35 | 0 | 0 | 35 slots |
+| namespaces | 25 | 0 | 0 | 25 slots |
+| threads | 15 | 0 | 0 | 15 slots |
+| filesystem | 63 | 0 | 1 | 63 slots |
+| zlib | 13 | 0 | 0 | 13 slots |
+| **public, all** | **630** | **94** (14%) | **107** (16%) | |
+| **internal** | **173** | **0** | **0** | |
+| **internal platform** | **23** | **0** | **0** | |
+| **platform** | **0** | **0** | **0** | |
 <!-- /coverage -->

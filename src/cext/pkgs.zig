@@ -1,6 +1,6 @@
 //! The package slots of the stubs table: `Tcl_PkgProvideEx`,
-//! `Tcl_PkgRequireEx`, and their forms, `Tcl_GetVersion`, and the
-//! startup slots of an application.
+//! `Tcl_PkgRequireEx`, and their forms, and the startup slots of an
+//! application. `Tcl_GetVersion` is in `obj.zig`.
 //!
 //! The package `Tcl` is ztcl itself at version 8.6.16. Its client data
 //! is the public stubs table, so `Tcl_InitStubs` of a package gets the
@@ -133,14 +133,6 @@ pub const slots = struct {
 
     pub fn Tcl_PkgPresent(sh: *Shadow, name: [*:0]const u8, version: ?[*:0]const u8, exact: c_int) callconv(.c) ?[*:0]const u8 {
         return require(sh, std.mem.span(name), span(version), exact != 0, null, true);
-    }
-
-    /// `TCL_FINAL_RELEASE` is 2.
-    pub fn Tcl_GetVersion(major: ?*c_int, minor: ?*c_int, patch: ?*c_int, kind: ?*c_int) callconv(.c) void {
-        if (major) |p| p.* = tcl_parts[0];
-        if (minor) |p| p.* = tcl_parts[1];
-        if (patch) |p| p.* = tcl_parts[2];
-        if (kind) |p| p.* = 2;
     }
 
     /// ztcl has its own startup, so `Tcl_Init` has no script to run.

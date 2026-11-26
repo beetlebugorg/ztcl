@@ -21,6 +21,7 @@ const builtin = @import("builtin");
 const interp_mod = @import("../interp.zig");
 const fsroot = @import("../fsroot.zig");
 const stubs = @import("stubs.zig");
+const obj = @import("obj.zig");
 const Interp = interp_mod.Interp;
 const Value = @import("../value.zig").Value;
 const Error = interp_mod.Error;
@@ -46,11 +47,9 @@ pub const Missing = struct { kind: stubs.Kind, slot: usize };
 
 /// The `Tcl_Interp` of a C package.
 pub const Shadow = extern struct {
-    // The layout of the start of `struct Interp` of Tcl 8.6.
-    result: [*:0]const u8 = "",
-    free_proc: ?*const anyopaque = null,
-    error_line: c_int = 0,
-    stub_table: *const anyopaque = &stubs.public,
+    /// The layout of the start of `struct Interp` of Tcl 8.6, and the
+    /// result object of `obj.zig`.
+    core: obj.Interp = .{ .stub_table = &stubs.public },
     // The fields of ztcl.
     it: *Interp,
     state: *State,
@@ -125,6 +124,7 @@ pub fn callC(sh: *Shadow, comptime R: type, f: anytype, args: anytype) Error!R {
     defer current = prev;
     sh.state.missing = null;
     sh.it.result = Value.empty;
+    obj.Tcl_ResetResult(&sh.core);
     const r = @call(.auto, f, args);
     if (sh.state.missing) |m| {
         sh.state.missing = null;
@@ -245,12 +245,19 @@ fn findPkg(it: *Interp, file: []const u8, path: [:0]const u8, name: []const u8, 
 }
 
 /// The result of a call into C: the string of the `result` field when
-/// the package wrote one there, or else the result of the interpreter.
-/// The interpreter then has the empty result again.
+/// the package wrote one there, else the text of the result object of
+/// `obj.zig` when it is not empty, else the result of the interpreter. The interpreter and
+/// the shadow then have the empty result again.
 pub fn takeResult(sh: *Shadow) Error!Value {
-    const legacy = std.mem.span(sh.result);
-    const r: Value = if (legacy.len != 0) .{ .str = try sh.it.alloc().dupe(u8, legacy) } else sh.it.result;
-    sh.result = "";
+    const legacy = std.mem.span(sh.core.result_dont_use);
+    const r: Value = if (legacy.len != 0)
+        .{ .str = try sh.it.alloc().dupe(u8, legacy) }
+    else if (sh.core.result != null and obj.text(sh.core.result.?).len != 0)
+        .{ .str = try sh.it.alloc().dupe(u8, obj.text(sh.core.result.?)) }
+    else
+        sh.it.result;
+    sh.core.result_dont_use = "";
+    obj.Tcl_ResetResult(&sh.core);
     sh.it.result = Value.empty;
     return r;
 }
@@ -332,5 +339,5 @@ test "cext: a slot with no function makes the call an error" {
 test "cext: the tables have the layout of Tcl 8.6" {
     try std.testing.expectEqual(@as(usize, 16 + 8 * 691), @sizeOf(@TypeOf(stubs.public)));
     try std.testing.expectEqual(stubs.magic, stubs.public.magic);
-    try std.testing.expectEqual(@as(usize, 16), @offsetOf(Shadow, "stub_table") - 8);
+    try std.testing.expectEqual(@as(usize, 16), @offsetOf(obj.Interp, "stub_table") - 8);
 }
