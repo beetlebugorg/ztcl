@@ -228,6 +228,27 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("tools/witgen/witgen.zig"),
         .target = b.graph.host,
     }) })).step);
+    // The generator of the table of the Web IDL (#251 task 04). `zig build
+    // webidl` writes web/webidl-table.mjs, and `zig build test` checks that
+    // the file is the output of the generator.
+    const webidl_exe = b.addExecutable(.{ .name = "webidl", .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/webidl/main.zig"),
+        .target = b.graph.host,
+        .optimize = .Debug,
+    }) });
+    const webidl_run = b.addRunArtifact(webidl_exe);
+    webidl_run.setCwd(b.path("."));
+    webidl_run.addArgs(&.{ "tools/webidl/idl", "web/webidl-table.mjs" });
+    b.step("webidl", "Write web/webidl-table.mjs from tools/webidl/idl/").dependOn(&webidl_run.step);
+    const webidl_check = b.addRunArtifact(webidl_exe);
+    webidl_check.setCwd(b.path("."));
+    webidl_check.addArgs(&.{ "--check", "tools/webidl/idl", "web/webidl-table.mjs" });
+    webidl_check.has_side_effects = true;
+    test_step.dependOn(&webidl_check.step);
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/webidl/webidl.zig"),
+        .target = b.graph.host,
+    }) })).step);
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("tools/wasm-pack.zig"),
         .target = b.graph.host,

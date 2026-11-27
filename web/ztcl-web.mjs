@@ -175,7 +175,9 @@ export class Bridge {
       if (!i) break;
       const m = i[kind]?.[name];
       if (!m) continue;
-      if (!this.groups.has(i.group)) fail(`web: the group "${i.group}" is not allowed`);
+      // A member of a partial interface has the group of its own spec.
+      const g = m.group ?? i.group;
+      if (g != null && !this.groups.has(g)) fail(`web: the group "${g}" is not allowed`);
       return m;
     }
     const what = kind === "attributes" ? "attribute" : "method";
@@ -344,10 +346,11 @@ export class Bridge {
         case 1: {
           const type = this.table.roots[sa];
           if (!type) fail(`web: no root "${sa}": must be ${Object.keys(this.table.roots).sort().join(", ")}`);
+          // `navigator` and `window` have no group: each member has one.
           const group = this.table.interfaces[type]?.group;
-          if (!this.groups.has(group)) fail(`web: the group "${group}" is not allowed`);
+          if (group != null && !this.groups.has(group)) fail(`web: the group "${group}" is not allowed`);
           let obj = this.root;
-          for (const k of sa.split(".")) obj = obj?.[k];
+          for (const k of sa.split(".")) if (k !== "window") obj = obj?.[k];
           if (obj == null) fail(`web: this browser has no ${sa}`);
           this.wrap(obj, type);
           return this.ids.get(obj);

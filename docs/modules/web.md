@@ -80,9 +80,18 @@ Each script of a result has its own compute limit: the option `webComputeLimit` 
 
 Each interface of the table is in a group. The page grants a group with `allow`, for example `allow: ["web:serial"]`. A member of a group that the page did not grant gives the error `web: the group "serial" is not allowed`. The permission prompts and the user-gesture rules of the browser apply after the grant.
 
-| Group | Roots | Interfaces |
+| Group | Spec | Roots and members of `navigator` |
 |---|---|---|
-| `serial` | `navigator.serial` | `Serial`, `SerialPort` |
+| `serial` | [Web Serial API](https://serial.spec.whatwg.org/) | `navigator.serial` |
+| `usb` | [WebUSB API](https://usb.spec.whatwg.org/) | `navigator.usb` |
+| `bluetooth` | [Web Bluetooth](https://bluetooth.spec.whatwg.org/) | `navigator.bluetooth` |
+| `hid` | [WebHID API](https://hid.spec.whatwg.org/) | `navigator.hid` |
+| `midi` | [Web MIDI API](https://webaudio.github.io/web-midi-api/) | `navigator` with the method `requestMIDIAccess` |
+| `gamepad` | [Gamepad](https://w3c.github.io/gamepad/) | `navigator` with the method `getGamepads`, and `window` with the events `gamepadconnected` and `gamepaddisconnected` |
+
+The roots `navigator` and `window` have no group. Each of their members has the group of its spec, so `web::call [web::root navigator] getGamepads` needs `web:gamepad`.
+
+The table is `web/webidl-table.mjs`. The generator `tools/webidl/` writes it from the IDL blocks of the specs in `tools/webidl/idl/`, one file for each group, with the URL of the spec in the header. `zig build webidl` writes the table again, and `zig build test` checks that the file is the output of the generator. A new API needs a new file of IDL and no new code. The generator leaves out constructors, constants, static members, iterables, and callbacks, so the commands cannot call them. A `maplike` gives `size`, `get`, `has`, `keys`, and `values`, where `keys` and `values` give a list.
 
 ## Errors
 
