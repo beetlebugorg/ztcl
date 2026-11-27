@@ -71,6 +71,17 @@ const darwin = struct {
         return ret(c.write(fd, buf, @min(n, max_io)));
     }
 
+    pub const MSG = c.MSG;
+    pub const iovec_const = std.posix.iovec_const;
+
+    pub fn recvfrom(fd: i32, buf: [*]u8, n: usize, flags: u32, addr: ?*c.sockaddr, alen: ?*c.socklen_t) usize {
+        return ret(c.recvfrom(fd, buf, @min(n, max_io), flags, addr, alen));
+    }
+
+    pub fn writev(fd: i32, iov: [*]const iovec_const, count: usize) usize {
+        return ret(c.writev(fd, iov, @intCast(count)));
+    }
+
     pub fn close(fd: i32) usize {
         return ret(c.close(fd));
     }

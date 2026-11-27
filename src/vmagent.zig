@@ -49,6 +49,11 @@ pub const Conn = struct {
     fd: i32,
     timeout_ms: i32,
     last_error: AgentError = .{},
+    /// The bytes read ahead of the frame that `read` takes: one read
+    /// takes the header and the start of the payload, or several frames.
+    rbuf: [65536]u8 = undefined,
+    rpos: usize = 0,
+    rend: usize = 0,
 
     fn waitRead(c: *Conn) Error!void {
         if (comptime on_win) {
@@ -66,6 +71,61 @@ pub const Conn = struct {
     }
 
     fn readExact(c: *Conn, out: []u8) Error!void {
+        if (comptime on_win) return c.readDirect(out);
+        // From the bytes read ahead first.
+        const have = @min(c.rend - c.rpos, out.len);
+        @memcpy(out[0..have], c.rbuf[c.rpos..][0..have]);
+        c.rpos += have;
+        var off = have;
+        while (off < out.len) {
+            const want = out.len - off;
+            // A large rest goes straight to `out`, with no copy.
+            const dst = if (want >= c.rbuf.len) out[off..] else c.rbuf[0..];
+            const n = try c.readSome(dst);
+            if (want >= c.rbuf.len) {
+                off += n;
+                continue;
+            }
+            const take = @min(n, want);
+            @memcpy(out[off..][0..take], c.rbuf[0..take]);
+            off += take;
+            c.rpos = take;
+            c.rend = n;
+        }
+    }
+
+    /// One read of what the agent sent, at least one byte: a read that
+    /// does not wait first, and a poll with the timeout only when no byte
+    /// is there, so a stream of frames costs one system call each.
+    fn readSome(c: *Conn, dst: []u8) Error!usize {
+        while (true) {
+            const n = posix.recvfrom(c.fd, dst.ptr, dst.len, posix.MSG.DONTWAIT, null, null);
+            switch (posix.errno(n)) {
+                .SUCCESS => {
+                    if (n == 0) return error.Closed;
+                    return n;
+                },
+                .INTR => {},
+                .AGAIN => try c.waitRead(),
+                // Not a socket: a wait, then a read.
+                .NOTSOCK => {
+                    try c.waitRead();
+                    const r = posix.read(c.fd, dst.ptr, dst.len);
+                    switch (posix.errno(r)) {
+                        .SUCCESS => {
+                            if (r == 0) return error.Closed;
+                            return r;
+                        },
+                        .INTR, .AGAIN => {},
+                        else => return error.Io,
+                    }
+                },
+                else => return error.Io,
+            }
+        }
+    }
+
+    fn readDirect(c: *Conn, out: []u8) Error!void {
         var off: usize = 0;
         while (off < out.len) {
             try c.waitRead();
@@ -117,8 +177,24 @@ pub const Conn = struct {
         var head: [5]u8 = undefined;
         std.mem.writeInt(u32, head[0..4], @intCast(payload.len + 1), .little);
         head[4] = kind;
-        try c.writeAll(&head);
-        try c.writeAll(payload);
+        if (comptime on_win) {
+            try c.writeAll(&head);
+            return c.writeAll(payload);
+        }
+        // The header and the payload in one writev.
+        var iov = [2]std.posix.iovec_const{ .{ .base = &head, .len = 5 }, .{ .base = payload.ptr, .len = payload.len } };
+        while (true) {
+            const n = posix.writev(c.fd, &iov, 2);
+            switch (posix.errno(n)) {
+                .SUCCESS => {
+                    if (n >= 5) return c.writeAll(payload[n - 5 ..]);
+                    try c.writeAll(head[n..]);
+                    return c.writeAll(payload);
+                },
+                .INTR, .AGAIN => {},
+                else => return error.Closed,
+            }
+        }
     }
 
     fn read(c: *Conn, a: Allocator) Error!Frame {

@@ -205,12 +205,21 @@ fn writeAll(fd: i32, bytes: []const u8) void {
     while (off < bytes.len) off += ok(linux.write(fd, bytes[off..].ptr, bytes.len - off)) orelse return;
 }
 
+/// One frame in one `writev`: the header and the payload go to vsock as
+/// one packet, with no copy.
 fn send(c: i32, kind: u8, payload: []const u8) void {
     var head: [5]u8 = undefined;
     std.mem.writeInt(u32, head[0..4], @intCast(payload.len + 1), .little);
     head[4] = kind;
-    writeAll(c, &head);
-    writeAll(c, payload);
+    var iov = [2]std.posix.iovec_const{ .{ .base = &head, .len = 5 }, .{ .base = payload.ptr, .len = payload.len } };
+    const total = 5 + payload.len;
+    const n = ok(linux.writev(c, &iov, 2)) orelse return;
+    if (n == total) return;
+    // A short write: the rest, as bytes.
+    if (n < 5) {
+        writeAll(c, head[n..]);
+        writeAll(c, payload);
+    } else writeAll(c, payload[n - 5 ..]);
 }
 
 fn sendError(c: i32, err: u32, text: []const u8) void {
@@ -361,6 +370,18 @@ fn pipe() ?[2]i32 {
     return p;
 }
 
+/// A pipe of 1 MiB (F_SETPIPE_SZ, the limit of /proc/sys/fs/pipe-max-size
+/// for root), so one read takes up to a frame of 1 MiB in the place of
+/// 64 KiB: fewer frames, system calls, and switches for a large output.
+fn bigPipe() ?[2]i32 {
+    const p = pipe() orelse return null;
+    _ = linux.fcntl(p[0], 1031, 1 << 20);
+    return p;
+}
+
+/// The buffer of the output of `exec`: one frame of the largest size.
+var out_buf: [1 << 20]u8 = undefined;
+
 /// Handles the whole frames of the host in the buffer: `STDIN` and
 /// `SIGNAL`.
 fn takeFrames(in: *In, child: i32, stdin_fd: *i32) void {
@@ -395,7 +416,7 @@ fn exec(c: i32, in: *In, payload: []const u8) !void {
     const flags = r.int(u8) orelse 0;
     const prog = argv_buf[0] orelse return error.Bad;
     const pin = pipe() orelse return sendError(c, 24, "no pipe");
-    const pout = pipe() orelse return sendError(c, 24, "no pipe");
+    const pout = bigPipe() orelse return sendError(c, 24, "no pipe");
     const perr = pipe() orelse return sendError(c, 24, "no pipe");
     const pstat = pipe() orelse return sendError(c, 24, "no pipe");
     const pid = linux.fork();
@@ -437,7 +458,7 @@ fn exec(c: i32, in: *In, payload: []const u8) !void {
     var out_fd: i32 = pout[0];
     var err_fd: i32 = perr[0];
     var conn_open = true;
-    var buf: [65536]u8 = undefined;
+    const buf = &out_buf;
     // Frames that came with the request wait in the buffer already.
     takeFrames(in, child, &stdin_fd);
     while (out_fd >= 0 or err_fd >= 0) {
@@ -458,7 +479,7 @@ fn exec(c: i32, in: *In, payload: []const u8) !void {
         inline for (.{ 1, 2 }) |k| {
             if (fds[k].revents != 0) {
                 const fd = if (k == 1) out_fd else err_fd;
-                const n = ok(linux.read(fd, &buf, buf.len)) orelse 0;
+                const n = ok(linux.read(fd, buf, buf.len)) orelse 0;
                 if (n == 0) {
                     _ = linux.close(fd);
                     if (k == 1) out_fd = -1 else err_fd = -1;
