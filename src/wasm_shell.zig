@@ -89,7 +89,7 @@ export fn ztcl_shell_new(h: *Handle, cols: u16, rows: u16, compute_limit: u64) ?
     h.it.allow(@backingInt(@import("interp.zig").Capability.event)) catch return null;
     if (!h.files.on) {
         h.files.on = true;
-        wasmfiles.Commands(root.filesOf, gpa).register(&h.it) catch return null;
+        wasmfiles.Commands(root.filesOf, gpa, true).register(&h.it) catch return null;
     }
     ws.sh.term.out = .{ .ctx = ws, .write = termOut };
     ws.sh.term.cols = term.colCount();
