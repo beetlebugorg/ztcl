@@ -64,6 +64,8 @@ const vtable: ninep.Fs.VTable = .{
 const Open = struct {
     fd: i32,
     append: bool,
+    /// The names of a folder, from `listFolder`.
+    list: std.ArrayList(u8) = .empty,
 };
 
 extern "ntdll" fn NtQueryInformationFile(h: HANDLE, io: *IoStatus, buf: *anyopaque, len: u32, class: u32) callconv(.winapi) i32;
@@ -494,6 +496,7 @@ fn openOf(h: u64) *Open {
 fn close(_: *anyopaque, h: u64) void {
     const o = openOf(h);
     sys.close(o.fd);
+    o.list.deinit(a);
     a.destroy(o);
 }
 
@@ -526,10 +529,38 @@ fn write(_: *anyopaque, h: u64, off: u64, data: []const u8, n: *usize) u32 {
     return 0;
 }
 
+/// A listing of a folder: at offset 0 the backend reads each name of the
+/// folder into `Open.list`, and each offset after that is an index into
+/// it. A scan of the folder from its start at each call skips names when
+/// the guest deletes them as it reads (`rm -r`), so the list stays fixed
+/// from offset 0 to the next offset 0, as POSIX lets `readdir` be.
 fn readdir(_: *anyopaque, h: u64, off: u64, sink: ninep.DirSink) u32 {
     const o = openOf(h);
-    var buf: [16384]u8 align(8) = undefined;
+    if (off == 0 or o.list.items.len == 0) {
+        const e = listFolder(o);
+        if (e != 0) return e;
+    }
+    var at: usize = 0;
     var index: u64 = 0;
+    while (at < o.list.items.len) : (index += 1) {
+        const l = o.list.items[at..];
+        const id = std.mem.readInt(u64, l[0..8], .little);
+        const kind = l[8];
+        const nl = std.mem.readInt(u16, l[9..11], .little);
+        const name = l[11..][0..nl];
+        at += 11 + nl;
+        if (index < off) continue;
+        if (!sink.put(sink.ctx, .{ .ino = id, .next = index + 1, .kind = kind, .name = name })) return 0;
+    }
+    return 0;
+}
+
+/// Reads each name of the folder of `o` into `o.list`: the file ID (8
+/// bytes), the kind (1 byte), the length of the name (2 bytes), and the
+/// name in UTF-8.
+fn listFolder(o: *Open) u32 {
+    o.list.clearRetainingCapacity();
+    var buf: [16384]u8 align(8) = undefined;
     var first = true;
     while (true) {
         // FileIdBothDirectoryRestartInfo first, then FileIdBothDirectoryInfo.
@@ -547,18 +578,20 @@ fn readdir(_: *anyopaque, h: u64, off: u64, sink: ninep.DirSink) u32 {
             const len = std.mem.readInt(u32, buf[at + 60 ..][0..4], .little);
             const id = std.mem.readInt(u64, buf[at + 96 ..][0..8], .little);
             const units: [*]align(1) const u16 = @ptrCast(&buf[at + 104]);
-            if (index >= off) {
-                var wide: [256]u16 = undefined;
-                const count = @min(len / 2, wide.len);
-                for (0..count) |i| wide[i] = units[i];
-                var name: [1024]u8 = undefined;
-                if (std.unicode.utf16LeToUtf8(&name, wide[0..count])) |nl| {
-                    // DT_DIR 4, DT_LNK 10, DT_REG 8.
-                    const kind: u8 = if (attrs & attr_reparse != 0) 10 else if (attrs & attr_directory != 0) 4 else 8;
-                    if (!sink.put(sink.ctx, .{ .ino = id, .next = index + 1, .kind = kind, .name = name[0..nl] })) return 0;
-                } else |_| {}
-            }
-            index += 1;
+            var wide: [256]u16 = undefined;
+            const count = @min(len / 2, wide.len);
+            for (0..count) |i| wide[i] = units[i];
+            var name: [1024]u8 = undefined;
+            if (std.unicode.utf16LeToUtf8(&name, wide[0..count])) |nl| {
+                // DT_DIR 4, DT_LNK 10, DT_REG 8.
+                const kind: u8 = if (attrs & attr_reparse != 0) 10 else if (attrs & attr_directory != 0) 4 else 8;
+                var head: [11]u8 = undefined;
+                std.mem.writeInt(u64, head[0..8], id, .little);
+                head[8] = kind;
+                std.mem.writeInt(u16, head[9..11], @intCast(nl), .little);
+                o.list.appendSlice(a, &head) catch return E.NOMEM;
+                o.list.appendSlice(a, name[0..nl]) catch return E.NOMEM;
+            } else |_| {}
             if (next == 0) break;
             at += next;
         }
