@@ -88,6 +88,27 @@ test "deinit of the host ends a thread in an endless loop" {
     it.deinit();
 }
 
+test "deinit of the host ends a thread in a loop of tier 2" {
+    if (!thread.supported or comptime !tcl.jit.built) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try host(&it);
+    // The deinit ends the thread. Without a check of `mem_limit` in the
+    // steps of tier 2, it waits for the thread forever.
+    defer it.deinit();
+    // The loop passes the count of tier 2 (1,000) before it tells the
+    // host, and then runs with no call: only the step checks of tier 2
+    // can see the stop.
+    _ = it.eval("thread::create {set i 0; while 1 {incr i; if {$i == 5000} {tsv::set hot x 1}}}") catch |e| {
+        std.debug.print("tcl error: {s}\n", .{it.str(it.result) catch ""});
+        return e;
+    };
+    var k: usize = 0;
+    while (k < 10_000_000) : (k += 1) {
+        if (std.mem.eql(u8, try it.str(try it.eval("tsv::exists hot x")), "1")) break;
+    }
+    try testing.expect(k < 10_000_000);
+}
+
 test "reset of the host ends its threads and keeps the limits" {
     if (!thread.supported) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
