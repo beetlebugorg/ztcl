@@ -14,9 +14,13 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request cancels the run of its old commit. Runs
+# on main do not cancel each other: each one completes and saves the Zig
+# cache. A scheduled run has a group of its own, so a push to main does
+# not cancel the full run.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'schedule' && 'schedule' || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   ZIG_VERSION: "0.17.0"
@@ -274,6 +278,9 @@ jobs:
           tools/suite.sh -n -t core-8-6-16 | tee suite-off.txt
           awk '$1 == "total" { found = 1; ok = ($3 >= 19241) } END { exit !(found && ok) }' suite-off.txt
 
+  # The WebAssembly checks are three jobs that run at the same time. Each
+  # job builds all of its steps with one `zig build`, so that Zig
+  # compiles them in parallel.
   wasm:
     name: WebAssembly
     needs: changes
@@ -287,44 +294,70 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-      - run: zig build wasm
+      # enclave-core is the core of the VBS enclave of Windows
+      # (docs/dev/enclave.md), with no capability like ztcl.wasm. The
+      # link of the DLL needs MSVC.
+      - run: zig build wasm wasm-shell wasm-host enclave-core wasm-threads
       - run: node tools/wasm-smoke.mjs zig-out/lib/ztcl.wasm
       - run: node tools/wasm-web.mjs zig-out/lib/ztcl.wasm
-      - run: zig build wasm-shell
       - run: node tools/wasm-shell.mjs zig-out/lib/ztcl-shell.wasm
-      - run: zig build wasm-host
       - run: node tools/wasm-host.mjs zig-out/lib/ztcl.wasm zig-out/lib/ztcl-host.wasm
-      # The core of the VBS enclave of Windows (docs/dev/enclave.md), with
-      # no capability like ztcl.wasm. The link of the DLL needs MSVC.
-      - run: zig build enclave-core
+      # The threads in Node.js and in Chromium, with and without
+      # cross-origin isolation. The browser test uses the Chrome of the
+      # runner.
+      - run: node tools/wasm-threads.mjs node
+      - run: node tools/wasm-threads.mjs browser
+        env:
+          CHROME: /usr/bin/google-chrome
+
+  wasm-aot:
+    name: WebAssembly, compiled procs
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: zig build install wasm wasm-aot
       # A bundle of `ztcl build --wasm`. The native ztcl makes it.
-      - run: zig build
       - run: node tools/wasm-bundle.mjs zig-out/bin/ztcl zig-out/lib/ztcl.wasm
       # Procs compiled to wasm (docs/dev/wasm-aot.md) against the interpreter
       # of the same runtime, with a compute limit sweep and with collections.
       - name: Procs compiled to wasm
         run: |
-          zig build wasm-aot
           node tools/wasm-aot.mjs --quiet --sweep 4 tests/jit/*.tcl tests/mem/*.tcl bench/*.tcl
           node tools/wasm-aot.mjs --quiet --gc-stress 7 tests/jit/*.tcl tests/mem/*.tcl
           node tools/wasm-aot-suite.mjs
           tools/wasm-aot-fuzz.sh -n 100 -k 2
+
+  wasm-point:
+    name: WebAssembly, point procs
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      # tools/point-wasm-diff.sh runs `zig build` and `zig build point-rt`
+      # again. Both find their files in the cache of this build.
+      - run: zig build install point-rt wasm-simd
       # Point procs compiled to wasm (docs/dev/wasm-compile.md) against
       # Program.run and point.runSlow, and the random proc fuzzer.
       - name: Point procs compiled to wasm
         run: |
           tools/point-wasm-diff.sh
           zig build point-wasm-fuzz -- --count 300
-          zig build wasm-simd
           node tools/wasm-point.mjs zig-out/lib/ztcl-simd.wasm
-      # The threads in Node.js and in Chromium, with and without
-      # cross-origin isolation. The browser test uses the Chrome of the
-      # runner.
-      - run: zig build wasm-threads
-      - run: node tools/wasm-threads.mjs node
-      - run: node tools/wasm-threads.mjs browser
-        env:
-          CHROME: /usr/bin/google-chrome
 
   wasi:
     name: WASI
@@ -418,7 +451,7 @@ jobs:
   report:
     name: Report a failure of the full run
     if: failure() && github.event_name == 'schedule'
-    needs: [test, build-native, jit-macos, suite, suite-full, wasm, wasi]
+    needs: [test, build-native, jit-macos, suite, suite-full, wasm, wasm-aot, wasm-point, wasi]
     runs-on: ubuntu-latest
     permissions:
       issues: write
