@@ -23,13 +23,16 @@
 //!   macOS: `kqueue`.
 //! - `kqueue`: readiness through kqueue, then the system call
 //!   (`kqueue.zig`, macOS). The same rule of one operation on each side.
+//! - `iocp`: overlapped Winsock calls and a completion port
+//!   (`iocp.zig`, Windows). `auto` on Windows.
 //!
 //! The loop has no interpreter, so the compute limit and the memory
 //! limit of a script do not apply. Each buffer of the loop has a fixed
 //! size: the ring has `entries` slots, and epoll reads `max_events`
 //! events in each wait.
 //!
-//! Linux and macOS. IOCP (task 10) comes with the same API.
+//! Linux, macOS, and Windows. On Windows a descriptor is a SOCKET in an
+//! `i32` (`win.zig`).
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -40,11 +43,12 @@ pub const sys = @import("sys.zig");
 pub const uring = @import("uring.zig");
 pub const epoll = @import("epoll.zig");
 pub const kqueue = @import("kqueue.zig");
+pub const iocp = @import("iocp.zig");
 
 pub const fd_t = sys.fd_t;
 
 /// True on the systems with a backend.
-pub const supported = builtin.os.tag == .linux or builtin.os.tag.isDarwin();
+pub const supported = builtin.os.tag == .linux or builtin.os.tag.isDarwin() or builtin.os.tag == .windows;
 
 pub const Op = union(enum) {
     /// Gives a new connection of the listening socket `fd`.
@@ -75,9 +79,11 @@ pub const Completion = struct {
     next: ?*Completion = null,
     deadline: u64 = 0,
     ts: if (sys.is_linux) linux.kernel_timespec else void = if (sys.is_linux) .{ .sec = 0, .nsec = 0 } else {},
+    /// The OVERLAPPED and the accept socket of IOCP.
+    win: if (sys.is_windows) iocp.Extra else void = if (sys.is_windows) .{} else {},
 };
 
-pub const Backend = enum { auto, uring, epoll, kqueue };
+pub const Backend = enum { auto, uring, epoll, kqueue, iocp };
 
 pub const Options = struct {
     backend: Backend = .auto,
@@ -86,19 +92,23 @@ pub const Options = struct {
 };
 
 pub const Loop = struct {
-    impl: if (sys.is_linux) union(enum) { uring: uring.Ring, epoll: epoll.Poll } else union(enum) { kqueue: kqueue.Queue },
+    impl: if (sys.is_linux) union(enum) { uring: uring.Ring, epoll: epoll.Poll } else if (sys.is_windows) union(enum) { iocp: iocp.Port } else union(enum) { kqueue: kqueue.Queue },
     /// The count of submitted operations whose callback has not run.
     pending: usize = 0,
 
     pub fn init(gpa: std.mem.Allocator, opts: Options) !Loop {
+        if (sys.is_windows) return switch (opts.backend) {
+            .auto, .iocp => .{ .impl = .{ .iocp = try iocp.Port.init(gpa) } },
+            else => error.Unsupported,
+        };
         if (!sys.is_linux) return switch (opts.backend) {
             .auto, .kqueue => .{ .impl = .{ .kqueue = try kqueue.Queue.init(gpa) } },
-            .uring, .epoll => error.Unsupported,
+            else => error.Unsupported,
         };
         switch (opts.backend) {
             .uring => return .{ .impl = .{ .uring = try uring.Ring.init(opts.entries) } },
             .epoll => return .{ .impl = .{ .epoll = try epoll.Poll.init(gpa) } },
-            .kqueue => return error.Unsupported,
+            .kqueue, .iocp => return error.Unsupported,
             .auto => {
                 if (uring.Ring.init(opts.entries)) |r| return .{ .impl = .{ .uring = r } } else |_| {}
                 return .{ .impl = .{ .epoll = try epoll.Poll.init(gpa) } };

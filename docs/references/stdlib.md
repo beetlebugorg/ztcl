@@ -10,6 +10,11 @@ Zig 0.16.0, `lib/std`: `std.json`, `std.http`, `std.crypto` (the TLS client, `Ce
 
 **How ztcl uses it:** ztcl calls these parts as its one dependency. The sizes and the gaps in the design come from the source of 0.16.0 and from small programs that reference each part.
 
+## The aio loop
+
+- The io_uring manual pages of liburing (`io_uring_setup(2)`, `io_uring_enter(2)`), the epoll pages of the Linux man-pages project, and the `kqueue(2)` page of macOS. Read as documentation only.
+- Microsoft Learn: "I/O Completion Ports", `GetQueuedCompletionStatusEx`, `AcceptEx`, `ConnectEx`, `WSARecv`, `WSASend`, `WSAGetOverlappedResult`, `CancelIoEx`, and the GUIDs `WSAID_ACCEPTEX` and `WSAID_CONNECTEX` of `mswsock.h`. `src/aio/iocp.zig` and `src/aio/win.zig` follow these pages.
+
 ## Tcl and its packages
 
 - The core `http` package 2.9 and the `zlib` command of Tcl 8.6.16, and the core test files `http.test`, `zlib.test`, `clock.test`, `event.test`, `socket.test`, `timer.test`, `ioCmd.test`, `chanio.test`, and `coroutine.test`. https://github.com/tcltk/tcl, tag `core-8-6-16`. **License:** Tcl/Tk License (BSD style).
