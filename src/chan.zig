@@ -1398,7 +1398,7 @@ fn copyChars(it: *Interp, from: *Channel, to: *Channel, limit: ?usize) Error!Val
     return .{ .int = @intCast(total) };
 }
 
-fn cmdSource(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+pub fn cmdSource(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2 and argv.len != 4) return it.wrongArgs("source ?-encoding name? fileName");
     const a = it.alloc();
     var e_name: []const u8 = "utf-8";
@@ -1408,7 +1408,7 @@ fn cmdSource(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         e_name = try it.str(argv[2]);
     }
     const path = try it.str(argv[argv.len - 1]);
-    if (try vfs.gate(it, path, .channels, "couldn't read file")) |h| return sourceText(it, path, try sourceDecode(it, e_name, try vfs.read(it, h, "couldn't read file", path)));
+    if (try vfs.gate(it, path, .channels, "couldn't read file")) |h| return sourceText(it, argv, path, try sourceDecode(it, e_name, try vfs.read(it, h, "couldn't read file", path)));
     const rel = (try fsroot.normal(it, path)) orelse return it.failCode("POSIX EACCES {permission denied}", "couldn't read file \"{s}\": permission denied", .{path});
     const fd = switch (try fsroot.openRel(it, rel, .{}, 0)) {
         .fd => |x| x,
@@ -1427,7 +1427,7 @@ fn cmdSource(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         text.items.len += got;
         try it.checkMem();
     }
-    return sourceText(it, path, try sourceDecode(it, e_name, text.items));
+    return sourceText(it, argv, path, try sourceDecode(it, e_name, text.items));
 }
 
 /// The text of the bytes of a script file in the encoding `name`.
@@ -1445,8 +1445,11 @@ fn sourceDecode(it: *Interp, name: []const u8, raw: []const u8) Error![]const u8
     return out.items;
 }
 
-/// Runs the text of the file `path` as `source` does.
-fn sourceText(it: *Interp, path: []const u8, text: []const u8) Error!Value {
+/// Runs the text of the file `path` as `source` does. In a direct call of
+/// a precise build the script runs in the clean chain (`Interp.evalBody`):
+/// the frame keeps the text, the compiled script, and the old script name
+/// across the run, so each of them goes in the `keep` list.
+fn sourceText(it: *Interp, argv: []const Value, path: []const u8, text: []const u8) Error!Value {
     const a = it.alloc();
     // The ^Z character ends a script, and a byte order mark at the start
     // is not part of it.
@@ -1457,7 +1460,8 @@ fn sourceText(it: *Interp, path: []const u8, text: []const u8) Error!Value {
     it.script_name = try a.dupe(u8, path);
     defer it.script_name = saved;
     const script = try it.compile(body);
-    return it.evalScript(script) catch |e| {
+    const keep = [_]usize{ @intFromPtr(script), @intFromPtr(text.ptr), @intFromPtr(saved.ptr) };
+    return it.evalBody(script, argv, &keep) catch |e| {
         if (e == error.TclReturn and it.ret_level <= 1 and it.ret_code == .ok) return it.result;
         if (e == error.TclError and it.in_error) {
             it.error_info.print(a, "\n    (file \"{s}\" line {d})", .{ path, it.proc_line }) catch {};

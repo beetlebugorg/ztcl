@@ -288,8 +288,26 @@ fn joinWords(it: *Interp, args: []const Value) Error!?[]const Value {
 /// command here only after a check of its locals. A stress run of a
 /// precise build shows a missed value.
 pub fn isBodyCommand(f: interp.NativeFn) bool {
-    return f == &cmdCatch or f == &cmdTry or f == &cmdEval or f == &cmdUplevel or f == &cmdApply or
-        f == &ns.cmdNamespace or ((comptime features.on("oo")) and f == &@import("oo.zig").objCmd);
+    if (f == &cmdCatch or f == &cmdTry or f == &cmdEval or f == &cmdUplevel or f == &cmdApply or
+        f == &ns.cmdNamespace or ((comptime features.on("oo")) and f == &@import("oo.zig").objCmd)) return true;
+    if ((comptime @import("sys.zig").supported) and f == &@import("chan.zig").cmdSource) return true;
+    for (more_body) |m| if (m == f) return true;
+    return false;
+}
+
+/// The body commands of a module whose function has one copy for each
+/// build of a generic type, as `source` of `wasmfiles.zig`. The module
+/// adds its function with `addBodyCommand` when it registers the
+/// command. WebAssembly runs one thread, the one target of these.
+var more_body: [2]?interp.NativeFn = .{ null, null };
+
+pub fn addBodyCommand(f: interp.NativeFn) void {
+    for (&more_body) |*m| {
+        if (m.* == null or m.* == f) {
+            m.* = f;
+            return;
+        }
+    }
 }
 
 // ---- Control flow ----

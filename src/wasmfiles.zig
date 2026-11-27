@@ -304,6 +304,7 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
 
         pub fn register(it: *Interp) std.mem.Allocator.Error!void {
             try it.register("source", source);
+            @import("cmds.zig").addBodyCommand(source);
             try it.register("open", open);
             try it.register("read", read);
             try it.register("gets", gets);
@@ -347,8 +348,12 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             const saved = it.script_name;
             it.script_name = try a.dupe(u8, path);
             defer it.script_name = saved;
+            // In a direct call the script runs in the clean chain
+            // (`Interp.evalBody`): the frame keeps the text, the compiled
+            // script, and the old script name across the run.
             const script = try it.compile(body);
-            return it.evalScript(script) catch |e| {
+            const keep = [_]usize{ @intFromPtr(script), @intFromPtr(body.ptr), @intFromPtr(saved.ptr) };
+            return it.evalBody(script, argv, &keep) catch |e| {
                 if (e == error.TclReturn and it.ret_level <= 1 and it.ret_code == .ok) return it.result;
                 if (e == error.TclError and it.in_error) {
                     it.error_info.print(a, "\n    (file \"{s}\" line {d})", .{ path, it.proc_line }) catch {};
