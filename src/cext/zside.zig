@@ -240,6 +240,10 @@ pub fn eval(it: *Interp, text: []const u8, flags: c_int, out: *Arg) i32 {
             // U+0000 of the script comes as C0 80.
             const t1 = try fromModified(i, t0, false);
             const t = if (t1.ptr == t0.ptr and t0.len > interp_mod.text_cache_max) try i.alloc().dupe(u8, t0) else t1;
+            // A call of a program of libztcl with no script of ztcl
+            // running is a top-level eval: it sets the scan range of the
+            // collector, and an error ends there and sets errorInfo.
+            if (i.heap.scopes == 0) return i.evalTop(try i.scriptOfText(t));
             if (global) {
                 var buf: std.ArrayList(u8) = .empty;
                 try buf.appendSlice(i.alloc(), "uplevel #0 ");

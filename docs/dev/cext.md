@@ -142,14 +142,14 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | Area | Slots | Native | WebAssembly | Missing in native |
 |---|---:|---:|---:|---|
 | memory | 16 | 16 | 16 | none |
-| packages | 18 | 12 | 7 | `Tcl_RegisterConfig`, `Tcl_PkgRequireProc`, `Tcl_SetStartupScript`, `Tcl_GetStartupScript`, `Tcl_LoadFile`, `Tcl_FindSymbol` |
+| packages | 18 | 14 | 7 | `Tcl_RegisterConfig`, `Tcl_PkgRequireProc`, `Tcl_LoadFile`, `Tcl_FindSymbol` |
 | objects | 58 | 52 | 52 | `Tcl_NewBignumObj`, `Tcl_DbNewBignumObj`, `Tcl_SetBignumObj`, `Tcl_GetBignumFromObj`, `Tcl_TakeBignumFromObj`, `Tcl_InitBignumFromDouble` |
 | scripts and results | 58 | 58 | 58 | none |
 | channels | 92 | 92 | 92 | none |
 | strings and encodings | 86 | 86 | 86 | none |
 | lists and dicts | 28 | 28 | 28 | none |
 | errors | 25 | 25 | 25 | none |
-| interps and commands | 64 | 3 | 3 | 61 slots |
+| interps and commands | 64 | 10 | 3 | 54 slots |
 | hash tables | 13 | 13 | 13 | none |
 | variables | 21 | 21 | 21 | none |
 | events | 35 | 0 | 0 | 35 slots |
@@ -157,8 +157,8 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | threads | 15 | 0 | 0 | 15 slots |
 | filesystem | 63 | 1 | 1 | 62 slots |
 | zlib | 13 | 0 | 0 | 13 slots |
-| **public, all** | **630** | **407** (64%) | **402** (63%) | |
-| **internal** | **173** | **0** | **0** | |
+| **public, all** | **630** | **416** (66%) | **402** (63%) | |
+| **internal** | **173** | **2** | **0** | |
 | **internal platform** | **23** | **0** | **0** | |
 | **platform** | **0** | **0** | **0** | |
 <!-- /coverage -->

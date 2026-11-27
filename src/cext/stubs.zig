@@ -25,7 +25,7 @@ const Table = table.Table;
 
 /// The groups of the native path. Each one is a struct of C functions
 /// with the names of the slots.
-const groups = .{
+pub const groups = .{
     @import("mem.zig").slots,
     @import("pkgs.zig").slots,
     @import("obj.zig").slots,
@@ -39,6 +39,7 @@ const groups = .{
     @import("regexp.zig").slots,
     @import("lists.zig").slots,
     @import("vars.zig").slots,
+    @import("app.zig").slots,
 };
 
 /// `TclStubHooks` of `tclDecls.h`.
