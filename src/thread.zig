@@ -43,7 +43,7 @@ const Error = interp.Error;
 const Allocator = std.mem.Allocator;
 
 /// True when the channels of a group share their name counters.
-const chan_names_ok = @import("sys.zig").supported;
+pub const chan_names_ok = @import("sys.zig").supported;
 
 /// True in the WebAssembly build with one shared memory. Each thread
 /// is a worker of the host there (`webthread.zig`).

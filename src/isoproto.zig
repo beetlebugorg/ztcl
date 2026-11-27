@@ -90,9 +90,39 @@ extern "bcryptprimitives" fn ProcessPrng(data: [*]u8, len: usize) callconv(.wina
 /// `error.Canceled`.
 pub const Transport = if (on_win) WinTransport else PosixTransport;
 
+/// Descriptor passing (`SCM_RIGHTS`) on the socket pair: macOS for now.
+/// Linux gets it with its runner, and Windows moves handles in its own
+/// way (`docs/dev/isolation.md`).
+pub const passes_fds = builtin.os.tag == .macos;
+
+const Mac = struct {
+    const iovec = extern struct { base: [*]u8, len: usize };
+    const msghdr = extern struct {
+        name: ?*anyopaque = null,
+        namelen: u32 = 0,
+        iov: *iovec,
+        iovlen: c_int,
+        control: ?*anyopaque,
+        controllen: u32,
+        flags: c_int = 0,
+    };
+    const cmsg_head = 12;
+    const sol_socket: c_int = 0xffff;
+    const scm_rights: c_int = 1;
+    const msg_ctrunc: c_int = 0x20;
+    extern "c" fn sendmsg(fd: c_int, msg: *const msghdr, flags: c_int) isize;
+    extern "c" fn recvmsg(fd: c_int, msg: *msghdr, flags: c_int) isize;
+};
+
+/// The most descriptors that one frame brings.
+pub const max_fds = 4;
+
 const PosixTransport = struct {
     fd: i32,
     wake: [2]i32,
+    /// The descriptors that came with the bytes read so far, oldest first.
+    got: [16]i32 = undefined,
+    ngot: usize = 0,
 
     pub fn init(fd: i32) Error!PosixTransport {
         var w: [2]i32 = undefined;
@@ -101,6 +131,8 @@ const PosixTransport = struct {
     }
 
     pub fn deinit(t: *PosixTransport) void {
+        for (t.got[0..t.ngot]) |f| _ = posix.close(f);
+        t.ngot = 0;
         _ = posix.close(t.fd);
         _ = posix.close(t.wake[0]);
         _ = posix.close(t.wake[1]);
@@ -123,10 +155,74 @@ const PosixTransport = struct {
             if (posix.errno(rc) != .SUCCESS) return error.Io;
             if (fds[1].revents != 0) return error.Canceled;
             if (fds[0].revents == 0) continue;
+            if (comptime passes_fds) {
+                const n = t.readFds(buf);
+                switch (posix.errno(@as(usize, @bitCast(n)))) {
+                    .SUCCESS => return if (n == 0) error.Closed else @intCast(n),
+                    .INTR, .AGAIN => continue,
+                    else => return error.Io,
+                }
+            }
             const n = posix.read(t.fd, buf.ptr, buf.len);
             switch (posix.errno(n)) {
                 .SUCCESS => return if (n == 0) error.Closed else n,
                 .INTR, .AGAIN => continue,
+                else => return error.Io,
+            }
+        }
+    }
+
+    /// `recvmsg`: the bytes, and each descriptor that came with them to
+    /// `got`. A descriptor past the room of `got` closes.
+    fn readFds(t: *PosixTransport, buf: []u8) isize {
+        var iov: Mac.iovec = .{ .base = buf.ptr, .len = buf.len };
+        var ctl: [Mac.cmsg_head + 4 * max_fds]u8 align(4) = undefined;
+        var m: Mac.msghdr = .{ .iov = &iov, .iovlen = 1, .control = &ctl, .controllen = ctl.len };
+        const n = Mac.recvmsg(t.fd, &m, 0);
+        if (n < 0 or m.controllen < Mac.cmsg_head) return n;
+        const len = std.mem.readInt(u32, ctl[0..4], .little);
+        const level = std.mem.readInt(i32, ctl[4..8], .little);
+        const kind = std.mem.readInt(i32, ctl[8..12], .little);
+        if (level != Mac.sol_socket or kind != Mac.scm_rights or len < Mac.cmsg_head) return n;
+        const count = @min((len - Mac.cmsg_head) / 4, max_fds);
+        for (0..count) |k| {
+            const f = std.mem.readInt(i32, ctl[Mac.cmsg_head + 4 * k ..][0..4], .little);
+            _ = std.c.fcntl(f, std.c.F.SETFD, @as(c_int, std.c.FD_CLOEXEC));
+            if (t.ngot < t.got.len) {
+                t.got[t.ngot] = f;
+                t.ngot += 1;
+            } else _ = posix.close(f);
+        }
+        return n;
+    }
+
+    /// Takes the oldest descriptor that came with the bytes, or null.
+    pub fn takeFd(t: *PosixTransport) ?i32 {
+        if (t.ngot == 0) return null;
+        const f = t.got[0];
+        std.mem.copyForwards(i32, t.got[0 .. t.ngot - 1], t.got[1..t.ngot]);
+        t.ngot -= 1;
+        return f;
+    }
+
+    /// Writes `bytes`, with `fds` on their first byte (`SCM_RIGHTS`).
+    pub fn writeAllFds(t: *PosixTransport, bytes: []const u8, fds: []const i32) Error!void {
+        if (comptime !passes_fds) return error.Io;
+        if (fds.len == 0 or fds.len > max_fds or bytes.len == 0) return error.Protocol;
+        var ctl: [Mac.cmsg_head + 4 * max_fds]u8 align(4) = undefined;
+        const clen: u32 = @intCast(Mac.cmsg_head + 4 * fds.len);
+        std.mem.writeInt(u32, ctl[0..4], clen, .little);
+        std.mem.writeInt(i32, ctl[4..8], Mac.sol_socket, .little);
+        std.mem.writeInt(i32, ctl[8..12], Mac.scm_rights, .little);
+        for (fds, 0..) |f, k| std.mem.writeInt(i32, ctl[Mac.cmsg_head + 4 * k ..][0..4], f, .little);
+        var iov: Mac.iovec = .{ .base = @constCast(bytes.ptr), .len = bytes.len };
+        const m: Mac.msghdr = .{ .iov = &iov, .iovlen = 1, .control = &ctl, .controllen = clen };
+        while (true) {
+            const n = Mac.sendmsg(t.fd, &m, 0);
+            switch (posix.errno(@as(usize, @bitCast(n)))) {
+                .SUCCESS => return t.writeAll(bytes[@intCast(n)..]),
+                .INTR, .AGAIN => continue,
+                .PIPE => return error.Closed,
                 else => return error.Io,
             }
         }
@@ -352,6 +448,28 @@ pub const Conn = struct {
             }
             return .{ .kind = kind, .flags = h[5], .stream = std.mem.readInt(u32, h[6..10], .little), .payload = payload };
         }
+    }
+
+    /// Writes one frame with descriptors (`passes_fds`). The payload
+    /// fits in one frame.
+    pub fn writeFrameFds(c: *Conn, a: Allocator, kind: Kind, stream: u32, payload: []const u8, fds: []const i32) Error!void {
+        if (comptime !passes_fds) return error.Io;
+        if (payload.len > max_payload) return error.Protocol;
+        const sealed = c.seal != null;
+        const body: usize = 6 + payload.len + @as(usize, if (sealed) tag_len else 0);
+        const out = try a.alloc(u8, 4 + body);
+        defer a.free(out);
+        const h = header(@intCast(body), kind, 0, stream);
+        @memcpy(out[0..header_len], &h);
+        if (c.seal) |*s| {
+            var tag: [tag_len]u8 = undefined;
+            Aead.encrypt(out[header_len..][0..payload.len], &tag, payload, &h, nonce(s.send_ctr), s.send_key);
+            @memcpy(out[header_len + payload.len ..][0..tag_len], &tag);
+            s.send_ctr += 1;
+        } else {
+            @memcpy(out[header_len..][0..payload.len], payload);
+        }
+        try c.t.writeAllFds(out, fds);
     }
 
     /// Writes a message of any size as frames of at most `max_payload`
