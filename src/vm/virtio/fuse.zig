@@ -8,7 +8,13 @@
 //! LOOKUP, a CREATE, a MKDIR, an entry of READDIRPLUS) adds one, and
 //! FORGET and BATCH_FORGET take them off. A node at 0 goes. The root is
 //! node 1, with the path "". A rename moves the path of each node at and
-//! below the old path. A file handle (`fh`) is the handle of the `Fs`.
+//! below the old path.
+//!
+//! A file handle (`fh`) of the guest is an ID in the table of the
+//! server, which maps it to the handle of the `Fs` and its node. The
+//! guest never sees a handle of the `Fs`: on Windows that handle is a
+//! host pointer, and on Linux a host fd. An ID never comes back after
+//! its RELEASE, so an old ID gives EBADF.
 //!
 //! Each reply gives the guest a time to keep a name and a set of
 //! attributes (`ttl_ns`, 1 s by default). A read and a write carry up to
@@ -136,12 +142,25 @@ const attr_out_len = 16 + attr_len;
 /// The most pages of a read or a write, and their bytes.
 pub const max_pages = 256;
 pub const max_write = max_pages * 4096;
+/// The most open handles of a session.
+pub const max_handles = 4096;
+/// The `fh` of FUSE_SETUPMAPPING for a mapping with no open handle.
+const no_fh = std.math.maxInt(u64);
 
 const Node = struct {
     path: []u8,
     lookups: u64,
     /// The open handles of the guest for the node.
     opens: u32 = 0,
+};
+
+/// An open handle of the guest: the handle of the `Fs`, and its node.
+const Open = struct {
+    h: u64,
+    node: u64,
+    /// OPEN or CREATE of a file (not OPENDIR): RELEASE takes one open
+    /// off the node.
+    file: bool,
 };
 
 pub const Server = struct {
@@ -151,6 +170,10 @@ pub const Server = struct {
     /// The node of each path, so a second lookup gives the same node.
     by_path: std.StringHashMapUnmanaged(u64) = .empty,
     next_node: u64 = 2,
+    /// The open handles, by the ID that the guest got as `fh`.
+    opens: std.AutoHashMapUnmanaged(u64, Open) = .empty,
+    /// The next `fh`. It never goes back, also at a reset.
+    next_fh: u64 = 1,
     /// The time that the guest keeps a name and its attributes.
     ttl_ns: u64 = std.time.ns_per_s,
     /// The minor version of the protocol of the session, from FUSE_INIT.
@@ -173,16 +196,18 @@ pub const Server = struct {
         s.reset();
         s.nodes.deinit(s.alloc);
         s.by_path.deinit(s.alloc);
+        s.opens.deinit(s.alloc);
         s.alloc.free(s.req);
         s.alloc.free(s.rep);
         s.req = &.{};
         s.rep = &.{};
     }
 
-    /// The end of a session: each node goes. The handles of the `Fs` are
-    /// the guest's to release, and a reset of the device drops them with
-    /// the session.
+    /// The end of a session: each node and each open handle goes.
     pub fn reset(s: *Server) void {
+        var oi = s.opens.valueIterator();
+        while (oi.next()) |o| s.fs.vt.close(s.fs.ctx, o.h);
+        s.opens.clearRetainingCapacity();
         var it = s.nodes.valueIterator();
         while (it.next()) |n| s.alloc.free(n.path);
         s.nodes.clearRetainingCapacity();
@@ -226,6 +251,29 @@ pub const Server = struct {
         try s.by_path.put(s.alloc, p, id);
         s.next_node += 1;
         return id;
+    }
+
+    /// Gives the `Fs` handle `h` of `node` an ID for the guest, or closes
+    /// it when the table is full.
+    fn addOpen(s: *Server, h: u64, node: u64, file: bool) ?u64 {
+        if (s.opens.count() >= max_handles) {
+            s.fs.vt.close(s.fs.ctx, h);
+            return null;
+        }
+        const id = s.next_fh;
+        s.opens.put(s.alloc, id, .{ .h = h, .node = node, .file = file }) catch {
+            s.fs.vt.close(s.fs.ctx, h);
+            return null;
+        };
+        s.next_fh += 1;
+        return id;
+    }
+
+    /// The `Fs` handle of the guest ID `fh`, or null for an ID that the
+    /// server did not give or that was released.
+    fn fsHandle(s: *Server, fh: u64) ?u64 {
+        const o = s.opens.get(fh) orelse return null;
+        return o.h;
     }
 
     fn forgetNode(s: *Server, node: u64, count: u64) void {
@@ -482,8 +530,9 @@ pub const Server = struct {
                 var h: u64 = 0;
                 const e = vt.open(ctx, path, flags, &h);
                 if (e != 0) return e;
+                const id = s.addOpen(h, node, opcode == op.open) orelse return E.MFILE;
                 if (opcode == op.open) s.opened(node);
-                openOut(h, w);
+                openOut(id, w);
                 return 0;
             },
             op.create => {
@@ -500,13 +549,15 @@ pub const Server = struct {
                     vt.close(ctx, h);
                     return e;
                 }
-                if (s.by_path.get(p)) |id| s.opened(id);
-                openOut(h, w);
+                const nid = s.by_path.get(p) orelse 0;
+                const id = s.addOpen(h, nid, true) orelse return E.MFILE;
+                s.opened(nid);
+                openOut(id, w);
                 return 0;
             },
             op.read, op.readdir, op.readdirplus => {
                 if (body.len < 24) return E.INVAL;
-                const h = rd64(body, 0);
+                const h = s.fsHandle(rd64(body, 0)) orelse return E.BADF;
                 const off = rd64(body, 8);
                 const size: usize = rd32(body, 16);
                 const room = @min(size, w.b.len -| w.n);
@@ -523,7 +574,7 @@ pub const Server = struct {
             op.write => {
                 if (body.len < 40) return E.INVAL;
                 if (ro) return E.ROFS;
-                const h = rd64(body, 0);
+                const h = s.fsHandle(rd64(body, 0)) orelse return E.BADF;
                 const off = rd64(body, 8);
                 const size: usize = rd32(body, 16);
                 if (body.len < 40 + size) return E.INVAL;
@@ -536,14 +587,16 @@ pub const Server = struct {
             },
             op.release, op.releasedir => {
                 if (body.len < 8) return E.INVAL;
-                if (opcode == op.release) s.released(node);
-                vt.close(ctx, rd64(body, 0));
+                const kv = s.opens.fetchRemove(rd64(body, 0)) orelse return E.BADF;
+                if (kv.value.file) s.released(kv.value.node);
+                vt.close(ctx, kv.value.h);
                 return 0;
             },
             op.flush => return 0,
             op.fsync, op.fsyncdir => {
                 if (body.len < 16) return E.INVAL;
-                return vt.fsync(ctx, rd64(body, 0), rd32(body, 8) & 1 != 0);
+                const h = s.fsHandle(rd64(body, 0)) orelse return E.BADF;
+                return vt.fsync(ctx, h, rd32(body, 8) & 1 != 0);
             },
             op.statfs => {
                 var st: ninep.StatFs = .{};
@@ -674,8 +727,11 @@ pub const Server = struct {
             // The guest maps a file by its node, with no open handle (an fh
             // of all ones): the server opens the path for the setup.
             var e: u32 = 0;
-            if (fh != std.math.maxInt(u64)) {
-                e = d.setup(d.ctx, node, fh, foffset, len, write, moffset);
+            if (fh != no_fh) {
+                const o = s.opens.get(fh) orelse return E.BADF;
+                // The handle of another node maps its file under this node.
+                if (o.node != node) return E.BADF;
+                e = d.setup(d.ctx, node, o.h, foffset, len, write, moffset);
             } else {
                 var h: u64 = 0;
                 e = s.fs.vt.open(s.fs.ctx, path, if (write) ninep.O.RDWR else ninep.O.RDONLY, &h);
@@ -1159,6 +1215,90 @@ test "fuse: OPEN, READ, WRITE, and RELEASE of a file" {
     try std.testing.expectEqual(@as(u32, 0), fs.opens);
 }
 
+test "fuse: an fh that the server did not give gets EBADF" {
+    var fs: MemFs = .{};
+    var s = testServer(&fs, false);
+    defer s.deinit();
+    var out: [512]u8 = undefined;
+    try startSession(&s, &out);
+    var r = Req.init(op.lookup, 1);
+    _ = s.handle(r.name("a").done(), &out);
+    const id = rd64(&out, 16);
+
+    // 2 is the handle of the Fs for "a": a guest that names it, or any
+    // other value, gets EBADF for each operation with an fh.
+    const forged = [_]u64{ 0, 2, 3, 0x7fff_0000_1000, std.math.maxInt(u64) - 1 };
+    for (forged) |fh| {
+        r = Req.init(op.read, id);
+        var n = s.handle(r.u64_(fh).u64_(0).u32_(10).u32_(0).u64_(0).u32_(0).u32_(0).done(), &out);
+        try std.testing.expectEqual(-@as(i32, E.BADF), try replyStatus(&out, n));
+        r = Req.init(op.write, id);
+        _ = r.u64_(fh).u64_(0).u32_(1).u32_(0).u64_(0).u32_(0).u32_(0);
+        r.b[r.n] = 'x';
+        r.n += 1;
+        n = s.handle(r.done(), &out);
+        try std.testing.expectEqual(-@as(i32, E.BADF), try replyStatus(&out, n));
+        r = Req.init(op.readdir, 1);
+        n = s.handle(r.u64_(fh).u64_(0).u32_(100).u32_(0).u64_(0).u32_(0).u32_(0).done(), &out);
+        try std.testing.expectEqual(-@as(i32, E.BADF), try replyStatus(&out, n));
+        r = Req.init(op.fsync, id);
+        n = s.handle(r.u64_(fh).u32_(0).u32_(0).done(), &out);
+        try std.testing.expectEqual(-@as(i32, E.BADF), try replyStatus(&out, n));
+        r = Req.init(op.release, id);
+        n = s.handle(r.u64_(fh).u32_(0).u32_(0).u64_(0).done(), &out);
+        try std.testing.expectEqual(-@as(i32, E.BADF), try replyStatus(&out, n));
+    }
+    try std.testing.expectEqual(@as(u32, 0), fs.opens);
+
+    // The ID of a handle is not the handle of the Fs, and it is invalid
+    // after its release.
+    r = Req.init(op.open, id);
+    _ = s.handle(r.u32_(ninep.O.RDONLY).u32_(0).done(), &out);
+    const fh = rd64(&out, 16);
+    r = Req.init(op.release, id);
+    var n = s.handle(r.u64_(fh).u32_(0).u32_(0).u64_(0).done(), &out);
+    try std.testing.expectEqual(@as(i32, 0), try replyStatus(&out, n));
+    r = Req.init(op.release, id);
+    n = s.handle(r.u64_(fh).u32_(0).u32_(0).u64_(0).done(), &out);
+    try std.testing.expectEqual(-@as(i32, E.BADF), try replyStatus(&out, n));
+    r = Req.init(op.read, id);
+    n = s.handle(r.u64_(fh).u64_(0).u32_(10).u32_(0).u64_(0).u32_(0).u32_(0).done(), &out);
+    try std.testing.expectEqual(-@as(i32, E.BADF), try replyStatus(&out, n));
+    r = Req.init(op.open, id);
+    _ = s.handle(r.u32_(ninep.O.RDONLY).u32_(0).done(), &out);
+    try std.testing.expect(rd64(&out, 16) != fh);
+
+    // A new INIT closes the handles of the old session.
+    try std.testing.expectEqual(@as(u32, 1), fs.opens);
+    try startSession(&s, &out);
+    try std.testing.expectEqual(@as(u32, 0), fs.opens);
+}
+
+test "fuse: random requests with forged fh and node IDs" {
+    var fs: MemFs = .{};
+    var s = testServer(&fs, false);
+    defer s.deinit();
+    var out: [4096]u8 = undefined;
+    try startSession(&s, &out);
+    var prng = std.Random.DefaultPrng.init(0x5eca);
+    const rnd = prng.random();
+    const ops = [_]u32{ op.lookup, op.getattr, op.setattr, op.readlink, op.open, op.read, op.write, op.release, op.fsync, op.opendir, op.readdir, op.readdirplus, op.releasedir, op.forget, op.batch_forget, op.rename, op.link, op.unlink, op.create, op.setupmapping, op.removemapping };
+    var msg: [256]u8 = undefined;
+    for (0..20_000) |_| {
+        const body = rnd.uintLessThan(usize, msg.len - in_header_len);
+        rnd.bytes(&msg);
+        const len: u32 = @intCast(in_header_len + body);
+        std.mem.writeInt(u32, msg[0..4], len, .little);
+        std.mem.writeInt(u32, msg[4..8], ops[rnd.uintLessThan(usize, ops.len)], .little);
+        // Small node IDs and fh values hit the IDs that the server gave.
+        if (rnd.boolean()) std.mem.writeInt(u64, msg[16..24], rnd.uintLessThan(u64, 6), .little);
+        if (rnd.boolean()) std.mem.writeInt(u64, msg[in_header_len..][0..8], rnd.uintLessThan(u64, 8), .little);
+        _ = s.handle(msg[0..len], &out);
+        // The handles of the Fs open are the ones in the table.
+        try std.testing.expectEqual(s.opens.count(), fs.opens);
+    }
+}
+
 test "fuse: CREATE gives an entry and a handle, and a read-only share refuses it" {
     var fs: MemFs = .{};
     var s = testServer(&fs, false);
@@ -1173,7 +1313,9 @@ test "fuse: CREATE gives an entry and a handle, and a read-only share refuses it
     var n = s.handle(r.u32_(ninep.O.RDWR).u32_(0o644).u32_(0o022).u32_(0).name("n").done(), &out);
     try std.testing.expectEqual(@as(i32, 0), try replyStatus(&out, n));
     try std.testing.expectEqual(@as(usize, out_header_len + entry_out_len + 16), n);
-    try std.testing.expectEqual(@as(u64, 4), rd64(&out, out_header_len + entry_out_len));
+    // The fh is an ID of the server, not the handle 4 of the Fs.
+    const fh = rd64(&out, out_header_len + entry_out_len);
+    try std.testing.expectEqual(@as(u64, 4), s.fsHandle(fh).?);
     try std.testing.expectEqualStrings("d/n", s.pathOf(rd64(&out, 16)).?);
     try std.testing.expectEqual(@as(u32, 1), fs.opens);
 
@@ -1195,9 +1337,12 @@ test "fuse: READDIRPLUS in small pieces, with an entry for each name" {
     defer s.deinit();
     var out: [512]u8 = undefined;
     try startSession(&s, &out);
+    var r = Req.init(op.opendir, 1);
+    var n = s.handle(r.u32_(0).u32_(0).done(), &out);
+    const dh = rd64(&out, 16);
     // Room for one entry: "a", then "d" at offset 1.
-    var r = Req.init(op.readdirplus, 1);
-    var n = s.handle(r.u64_(1).u64_(0).u32_(200).u32_(0).u64_(0).u32_(0).u32_(0).done(), &out);
+    r = Req.init(op.readdirplus, 1);
+    n = s.handle(r.u64_(dh).u64_(0).u32_(200).u32_(0).u64_(0).u32_(0).u32_(0).done(), &out);
     try std.testing.expectEqual(@as(i32, 0), try replyStatus(&out, n));
     const one = std.mem.alignForward(usize, entry_out_len + 24 + 1, 8);
     try std.testing.expectEqual(@as(usize, out_header_len + one), n);
@@ -1208,13 +1353,13 @@ test "fuse: READDIRPLUS in small pieces, with an entry for each name" {
     try std.testing.expectEqualStrings("a", s.pathOf(rd64(&out, out_header_len)).?);
 
     r = Req.init(op.readdirplus, 1);
-    n = s.handle(r.u64_(1).u64_(1).u32_(200).u32_(0).u64_(0).u32_(0).u32_(0).done(), &out);
+    n = s.handle(r.u64_(dh).u64_(1).u32_(200).u32_(0).u64_(0).u32_(0).u32_(0).done(), &out);
     try std.testing.expectEqual(@as(usize, out_header_len + one), n);
     try std.testing.expectEqual(@as(u8, 'd'), out[dirent + 24]);
 
     // READDIR: both entries of 32 bytes in one reply.
     r = Req.init(op.readdir, 1);
-    n = s.handle(r.u64_(1).u64_(0).u32_(4096).u32_(0).u64_(0).u32_(0).u32_(0).done(), &out);
+    n = s.handle(r.u64_(dh).u64_(0).u32_(4096).u32_(0).u64_(0).u32_(0).u32_(0).done(), &out);
     try std.testing.expectEqual(@as(usize, out_header_len + 64), n);
 }
 
