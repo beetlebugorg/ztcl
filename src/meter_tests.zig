@@ -170,7 +170,7 @@ test "ztcl::gc stats counts a collection, and reset starts the counts again" {
     try testing.expect(try evalInt(&it, "dict get [ztcl::gc stats] freed") > 20_000_000);
     try testing.expect(try evalInt(&it, "dict get [ztcl::gc stats] gc_ns") > 0);
     try testing.expectEqualStrings("1", try evalStr(&it, "set s [ztcl::gc stats]; expr {[dict get $s pause_max_ns] >= [dict get $s pause_p99_ns] && [dict get $s pause_p99_ns] >= [dict get $s pause_p50_ns] && [dict get $s heap_peak] >= [dict get $s heap_bytes] && [dict get $s mark_ns] + [dict get $s sweep_ns] <= [dict get $s gc_ns]}"));
-    try testing.expectEqualStrings("18", try evalStr(&it, "dict size [ztcl::gc stats]"));
+    try testing.expectEqualStrings("20", try evalStr(&it, "dict size [ztcl::gc stats]"));
     _ = try evalStr(&it, "ztcl::gc reset");
     try testing.expectEqual(@as(i64, 0), try evalInt(&it, "dict get [ztcl::gc stats] collections"));
     try testing.expectEqual(@as(i64, 0), try evalInt(&it, "dict get [ztcl::gc stats] freed"));
