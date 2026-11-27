@@ -406,6 +406,12 @@ sub: package vcompare V1 V2 | -1, 0, or 1.
 sub: package vsatisfies VERSION REQ ?REQ ...? | 1 when VERSION fits a requirement such as 1.2, 1.2-, or 1.2-2.0.
 sub: package prefer ?latest|stable? | Which versions require picks.
 sub: package unknown ?CMD? | The command that runs for a missing package.
+== tclPkgUnknown tclPkgUnknown tclPkgSetup tclLog
+syn: tclPkgUnknown name ?version ...?
+== auto_load auto_load auto_load_index auto_reset auto_qualify auto_import auto_execok
+syn: auto_load command ?namespace?
+== history
+syn: history ?option? ?arg ...?
 == oo::class oo::object
 syn: oo::class create name ?definition?
 syn: oo::class new ?definition?
@@ -512,7 +518,7 @@ sub: clock clicks ?-milliseconds|-microseconds? | A counter for time spans.
 sub: clock format SECONDS ?-format FMT? ?-gmt BOOL? ?-timezone ZONE? ?-locale L? | The time as text.
 sub: clock scan TEXT ?-format FMT? ?-gmt BOOL? ?-timezone ZONE? ?-base SECONDS? | The seconds of a time in text.
 sub: clock add SECONDS ?COUNT UNIT ...? ?-gmt BOOL? ?-timezone ZONE? | The seconds after adding days, months, and other units.
-== msgcat msgcat::mc msgcat::mclocale msgcat::mcmset msgcat::mcset
+== msgcat msgcat::mc msgcat::mclocale msgcat::mcmset msgcat::mcset msgcat::mcexists msgcat::mcload msgcat::mcmax msgcat::mcpreferences
 syn: msgcat::mc src ?arg ...?
 == exec
 syn: exec ?-option ...? arg ?arg ...?
