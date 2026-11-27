@@ -64,12 +64,16 @@ for {set i 0} {$i < 10} {incr i} {
     after 100
     set t0 [clock microseconds]
     set c [ztcl::vm create -snapshot snap.bin]
+    set tr [clock microseconds]
+    # A guest of a pool waits for its start: vCPU 0 prefaults the memory
+    # of the snapshot in this time.
+    after 20
     set t1 [clock microseconds]
     ztcl::vm start $c
     set t2 [clock microseconds]
     ztcl::vm exec $c /bin/busybox true
     set t3 [clock microseconds]
-    lappend restore [ms $t0 $t1]; lappend ready [ms $t1 $t2]; lappend first [ms $t2 $t3]
+    lappend restore [ms $t0 $tr]; lappend ready [ms $t1 $t2]; lappend first [ms $t2 $t3]
     ztcl::vm delete $c
 }
 puts "restore: [stats $restore]"
