@@ -495,6 +495,75 @@ pub fn listDir(it: *Interp, rel: []const u8) Error!fsroot.ListResult {
     return .{ .ok = out.items };
 }
 
+/// How `openAt` opens a name.
+pub const OpenHow = enum { dir, read, create_new };
+
+/// Opens the name `name` relative to the folder `dir`, with no reparse
+/// point and no short name of another long name: a folder to walk and
+/// list, a file to read, or a new file to write. For a caller with its
+/// own folder of the host, such as the store of `vmstore.zig`, with no
+/// check of a jail root.
+pub fn openAt(dir: i32, name: []const u8, how: OpenHow) union(enum) { fd: i32, err: E } {
+    if (!nameOk(name)) return .{ .err = .ACCES };
+    var buf: [name_cap]u16 = undefined;
+    const wide = toWide(name, &buf) orelse return .{ .err = .ACCES };
+    var h: HANDLE = null;
+    const parent_h: HANDLE = @ptrFromInt(@as(usize, @intCast(dir)));
+    const st = switch (how) {
+        .dir => openChild(parent_h, wide, dir_access, 0, file_open, opt_directory, &h),
+        .read => openChild(parent_h, wide, read_access, 0, file_open, opt_non_directory, &h),
+        .create_new => openChild(parent_h, wide, write_access | file_write_data, attr_normal, file_create, opt_non_directory, &h),
+    };
+    if (st < 0) return .{ .err = ntError(st) };
+    if (verified(h, wide)) |e| {
+        _ = CloseHandle(h);
+        return .{ .err = e };
+    }
+    const fd = sys.win.fdOfHandle(h.?) orelse {
+        _ = CloseHandle(h);
+        return .{ .err = .ACCES };
+    };
+    return .{ .fd = fd };
+}
+
+/// The names in the open folder `fd`, with no `.` and `..`, in memory
+/// of `a`. A name that is not valid Unicode is left out.
+pub fn namesAt(a: std.mem.Allocator, fd: i32) ![][]u8 {
+    const h: HANDLE = @ptrFromInt(@as(usize, @intCast(fd)));
+    var out: std.ArrayList([]u8) = .empty;
+    errdefer {
+        for (out.items) |x| a.free(x);
+        out.deinit(a);
+    }
+    var buf: [16384]u8 align(8) = undefined;
+    var restart: u8 = 1;
+    while (true) {
+        var io: IoStatus = undefined;
+        const st = NtQueryDirectoryFile(h, null, null, null, &io, &buf, buf.len, class_names, 0, null, restart);
+        restart = 0;
+        const code: u32 = @bitCast(st);
+        if (code == status_no_more_files or code == status_no_such_file) break;
+        if (st < 0) return error.Io;
+        var off: usize = 0;
+        while (true) {
+            const next = std.mem.readInt(u32, buf[off..][0..4], .little);
+            const len = std.mem.readInt(u32, buf[off + 8 ..][0..4], .little);
+            const units: [*]align(1) const u16 = @ptrCast(&buf[off + 12]);
+            var wide: [name_cap]u16 = undefined;
+            const count = @min(len / 2, name_cap);
+            for (0..count) |i| wide[i] = units[i];
+            if (std.unicode.utf16LeToUtf8Alloc(a, wide[0..count])) |name| {
+                if (std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) a.free(name) else try out.append(a, name);
+            } else |e| switch (e) {
+                error.OutOfMemory => return error.OutOfMemory,
+                else => {},
+            }
+            if (next == 0) break;
+            off += next;
+        }
+    }
+    return out.toOwnedSlice(a);
+}
 fn parentHandle(p: fsroot.Parent) HANDLE {
     return @ptrFromInt(@as(usize, @intCast(p.fd)));
 }
@@ -563,7 +632,10 @@ pub fn renameAt(p: fsroot.Parent, q: fsroot.Parent) ?E {
     const bytes: u32 = @intCast(target.len * 2);
     std.mem.writeInt(u32, info[16..20], bytes, .little);
     @memcpy(info[20..][0..bytes], std.mem.sliceAsBytes(target));
-    const size: u32 = 20 + bytes;
+    // The size of the structure is 24 with its padding, and a shorter
+    // length, as for a name of one letter, gives
+    // STATUS_INFO_LENGTH_MISMATCH.
+    const size: u32 = @max(24, 20 + bytes);
     var io: IoStatus = undefined;
     var rc = NtSetInformationFile(h, &io, &info, size, class_rename_ex);
     if (rc < 0 and ntError(rc) == .NOSYS or rc == @as(i32, @bitCast(@as(u32, 0xC000_0003)))) {

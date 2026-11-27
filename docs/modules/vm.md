@@ -80,7 +80,7 @@ ztcl::vm exec $vm /bin/busybox uname -m
 
 - A pool of booted guests makes `create -image` and `start` fast on macOS: the program keeps guests of each image booted to the agent and paused (`Interp.vm_host.pool_size`), so `create -image` takes one and `start` resumes it, and a thread boots the next. On an M1 Mac, `create -image`, `start`, and the first answer of the agent take a median of 11 ms from the pool against 142 ms without it. The `ztcl` runner keeps 1 guest of each image that a script used (`ZTCL_VM_POOL` sets another count, 0 none); an embedder has no pool unless it sets one. A guest of the pool holds the memory that it touched, and only a `create -image` with no `-share`, no `-disk`, and no `-warm` takes one.
 
-The store is a folder of the user: `ZTCL_VM_IMAGES`, or `~/Library/Application Support/ztcl/vm-images` on macOS and `$XDG_DATA_HOME/ztcl/vm-images` (`~/.local/share/...`) on Linux. A script names an image, never a path of the store.
+The store is a folder of the user: `ZTCL_VM_IMAGES`, or `~/Library/Application Support/ztcl/vm-images` on macOS, `$XDG_DATA_HOME/ztcl/vm-images` (`~/.local/share/...`) on Linux, and `%LOCALAPPDATA%\ztcl\vm-images` on Windows. `create -image` works on macOS and on Windows. On Windows the monitor reads the kernel and the initramfs through the store into memory, and checks the SHA-256 of those bytes. A script names an image, never a path of the store.
 
 ## Limits
 

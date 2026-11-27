@@ -196,6 +196,36 @@ pub fn resolveImage(it: *Interp, name: []const u8) Error!Resolved {
     };
 }
 
+/// The current release of `name`, for a monitor that boots from memory:
+/// the kernel and the initramfs in memory of `b`, each checked against
+/// its SHA-256 on the bytes that the guest gets, and a descriptor of
+/// each disk, read-only, opened through the store. A disk with verity
+/// checks itself in the guest.
+pub const Loaded = struct { kernel: []u8, initrd: []u8, cmdline: []const u8, disks: []i32 };
+
+pub fn loadImage(it: *Interp, b: std.mem.Allocator, name: []const u8) Error!Loaded {
+    const s = try store(it);
+    defer s.close();
+    const a = it.alloc();
+    const counter = (s.current(a, name) catch |e| return storeFail(it, e)) orelse
+        return it.failCode("ZTCL VM IMAGE NAME", "no image named \"{s}\" in the store: install it with ztcl::vm image install", .{name});
+    var c = s.load(a, name, counter) catch |e| return storeFail(it, e);
+    defer c.deinit();
+    const x = c.parsed.value.archs.map.get(vmstore.host_arch) orelse return storeFail(it, error.Missing);
+    const kernel = s.readObject(b, x.kernel.sha256) catch |e| return storeFail(it, e);
+    errdefer b.free(kernel);
+    const initrd: []u8 = if (x.initrd) |f| s.readObject(b, f.sha256) catch |e| return storeFail(it, e) else &.{};
+    errdefer b.free(initrd);
+    const disks = try a.alloc(i32, x.disks.len);
+    var n: usize = 0;
+    errdefer for (disks[0..n]) |fd| sys.close(fd);
+    for (x.disks) |d| {
+        disks[n] = s.openObject(a, d.sha256) catch |e| return storeFail(it, e);
+        n += 1;
+    }
+    return .{ .kernel = kernel, .initrd = initrd, .cmdline = try a.dupe(u8, x.cmdline), .disks = disks };
+}
+
 fn imageCmd(it: *Interp, args: []const Value) Error!Value {
     const use = "ztcl::vm image install|list|verify|remove ?arg ...?";
     if (args.len < 1) return it.wrongArgs(use);
@@ -206,7 +236,7 @@ fn imageCmd(it: *Interp, args: []const Value) Error!Value {
         const force = args.len == 3 and std.mem.eql(u8, try it.str(args[2]), "-force");
         if (args.len != 2 and !force) return it.wrongArgs("ztcl::vm image install dir ?-force?");
         const dir = try jailDir(it, try it.str(args[1]));
-        defer _ = sys.os.close(dir);
+        defer sys.close(dir);
         const s = try store(it);
         defer s.close();
         const r = s.install(a, dir, vmstore.host_arch, force) catch |e| return storeFail(it, e);
@@ -1545,11 +1575,26 @@ const win = if (on_whp) struct {
         var initrd: []const u8 = "";
         var disks: std.ArrayList(struct { path: []const u8, rw: bool }) = .empty;
         var warm = false;
+        var image: ?[]const u8 = null;
+        {
+            // -image gives the kernel, the initramfs, and the command line.
+            var has_image = false;
+            var own_boot = false;
+            var k: usize = 0;
+            while (k + 1 < args.len) : (k += 2) {
+                const o = try it.str(args[k]);
+                if (std.mem.eql(u8, o, "-image")) has_image = true;
+                if (std.mem.eql(u8, o, "-kernel") or std.mem.eql(u8, o, "-initrd") or std.mem.eql(u8, o, "-cmdline")) own_boot = true;
+            }
+            if (has_image and own_boot) return it.fail("-image gives the kernel, the initramfs, and the command line: no -kernel, -initrd, or -cmdline with it", .{});
+        }
         var i: usize = 0;
         while (i < args.len) : (i += 2) {
             const opt = try it.str(args[i]);
             const v = args[i + 1];
-            if (std.mem.eql(u8, opt, "-cpus")) {
+            if (std.mem.eql(u8, opt, "-image")) {
+                image = try it.str(v);
+            } else if (std.mem.eql(u8, opt, "-cpus")) {
                 cpus = try limit(it, v, "CPU count", host.max_cpus);
                 if (cpus != 1) return it.failCode("ZTCL VM LIMIT", "a guest on Windows has one CPU in this version", .{});
             } else if (std.mem.eql(u8, opt, "-memory")) {
@@ -1571,21 +1616,47 @@ const win = if (on_whp) struct {
                 try disks.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 2 and try isRw(it, l[1]) });
             } else if (std.mem.eql(u8, opt, "-share")) {
                 return it.failCode("ZTCL VM SHARE", "a share is not available on Windows yet", .{});
-            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -initrd, -kernel, -memory, -share, or -warm", .{opt});
+            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -image, -initrd, -kernel, -memory, -share, or -warm", .{opt});
         }
-        if (kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel until the base image of the plan", .{});
+        if (kernel.len == 0 and image == null) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel or -image", .{});
 
         const g = try b.create(Guest);
         g.* = .{ .name = "", .machine = undefined, .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .disk_fds = &.{}, .console_vm = -1, .console_host = -1, .warm = warm };
         var made = false;
         errdefer if (!made) freeGuest(it, g);
-        g.kernel = try readPath(it, kernel);
-        if (initrd.len != 0) g.initrd = try readPath(it, initrd);
+        // The disks of an image come first, read-only: /dev/vda is its root.
+        var image_disks: []i32 = &.{};
+        if (image) |name| {
+            const l = try loadImage(it, b, name);
+            g.kernel = l.kernel;
+            g.initrd = l.initrd;
+            cmdline = try std.fmt.allocPrint(a, "console=hvc0 {s}", .{l.cmdline});
+            image_disks = l.disks;
+            if (image_disks.len + disks.items.len > whp.max_disks) {
+                for (image_disks) |fd| sys.close(fd);
+                return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks", .{whp.max_disks});
+            }
+        } else {
+            g.kernel = try readPath(it, kernel);
+            if (initrd.len != 0) g.initrd = try readPath(it, initrd);
+        }
         g.cmdline = try b.dupe(u8, cmdline);
-        g.disks = try b.alloc(whp.Disk, disks.items.len);
-        g.disk_fds = try b.alloc(i32, disks.items.len);
+        const n_disks = image_disks.len + disks.items.len;
+        g.disks = b.alloc(whp.Disk, n_disks) catch |e| {
+            for (image_disks) |fd| sys.close(fd);
+            return e;
+        };
+        g.disk_fds = b.alloc(i32, n_disks) catch |e| {
+            for (image_disks) |fd| sys.close(fd);
+            return e;
+        };
         for (g.disk_fds) |*f| f.* = -1;
-        for (disks.items, g.disks, g.disk_fds) |d, *out, *fd| {
+        // From here freeGuest closes each descriptor of disk_fds.
+        for (image_disks, 0..) |fd, k| {
+            g.disk_fds[k] = fd;
+            g.disks[k] = .{ .handle = @ptrFromInt(@as(usize, @intCast(fd))), .read_only = true };
+        }
+        for (disks.items, g.disks[image_disks.len..], g.disk_fds[image_disks.len..]) |d, *out, *fd| {
             fd.* = try openPath(it, d.path, d.rw);
             out.* = .{ .handle = @ptrFromInt(@as(usize, @intCast(fd.*))), .read_only = !d.rw };
         }

@@ -938,6 +938,10 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
 /// ZTCL_VM_IMAGES, or the data folder of the user.
 fn imageStore(a: std.mem.Allocator, env: anytype) ![]const u8 {
     if (env("ZTCL_VM_IMAGES")) |p| return p;
+    if (builtin.os.tag == .windows) {
+        const local = env("LOCALAPPDATA") orelse return "";
+        return std.fmt.allocPrint(a, "{s}\\ztcl\\vm-images", .{local});
+    }
     const home = env("HOME") orelse return "";
     if (builtin.os.tag == .macos) return std.fmt.allocPrint(a, "{s}/Library/Application Support/ztcl/vm-images", .{home});
     if (env("XDG_DATA_HOME")) |x| return std.fmt.allocPrint(a, "{s}/ztcl/vm-images", .{x});
