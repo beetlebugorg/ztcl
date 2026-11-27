@@ -95,6 +95,7 @@ pub const Helper = enum(u8) {
     /// probes, so no machine code calls it.
     probe,
     var_exists,
+    mathfunc,
 };
 
 pub const count = @typeInfo(Helper).@"enum".field_names.len;
@@ -128,6 +129,7 @@ fn opOf(comptime h: Helper) @TypeOf(vm.opLoad) {
         .word => vm.opWord,
         .node => vm.opNode,
         .concat => vm.opConcat,
+        .mathfunc => vm.opMathFunc,
         .binary => vm.opBinary,
         .unary => vm.opUnary,
         .number_form => vm.opNumberForm,
