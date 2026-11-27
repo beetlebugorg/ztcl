@@ -3420,6 +3420,9 @@ test "ztcl::vm image: install, list, and create -image through the store" {
         try std.testing.expectEqualStrings("ZTCL VM IMAGE MISSING", try ev(&it, "catch {ztcl::vm image install /rel}; join [lrange $::errorCode 0 3] { }"));
         try std.testing.expectEqualStrings("", try ev(&it, "ztcl::vm image list"));
     }
+    // A downgrade needs its own capability, and -force is no downgrade.
+    try std.testing.expectEqualStrings("ZTCL VM DOWNGRADE", try ev(&it, "catch {ztcl::vm image install /rel -allow-downgrade}; join [lrange $::errorCode 0 2] { }"));
+    try std.testing.expectEqualStrings("1", try ev(&it, "catch {ztcl::vm image install /rel -force}"));
     // create -image on the Windows Hypervisor Platform. KVM has no
     // -image yet.
     if (comptime @import("builtin").os.tag != .windows) return;
