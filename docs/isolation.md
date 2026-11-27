@@ -50,6 +50,8 @@ A creator in host mode, such as the `ztcl` program with no `--root`, has the fil
 
 A thread can send a script to the main thread, as in the Thread package. That script runs in the parent with all of the power of the parent. The sandbox limits the child, and a send to the parent goes past it.
 
+A thread of `thread::create -caps LIST` with no `thread` in LIST has no `thread::send`, so it cannot send a script to the parent. Use it for code that must not reach the parent.
+
 When you review the code of a parent:
 
 - Find each script that a child can send, and each proc that such a script calls.

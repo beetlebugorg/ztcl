@@ -473,8 +473,8 @@ syn: self ?subcommand?
 == next nextto oo::Helpers::next oo::Helpers::nextto
 syn: next ?arg ...?
 == thread thread::attach thread::broadcast thread::cancel thread::cond thread::configure thread::create thread::detach thread::errorproc thread::eval thread::exists thread::exit thread::id thread::join thread::mutex thread::names thread::preserve thread::release thread::rwmutex thread::send thread::transfer thread::unwind thread::wait
-syn: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?script?
-sub: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?SCRIPT? | A new thread that runs SCRIPT, and its id.
+syn: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?-caps LIST? ?script?
+sub: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?-caps LIST? ?SCRIPT? | A new thread that runs SCRIPT, and its id.
 sub: thread::send ?-async? ?-head? ID SCRIPT ?VAR? | Runs SCRIPT in the thread and gives its result.
 sub: thread::broadcast SCRIPT | Sends SCRIPT to each other thread.
 sub: thread::wait | Runs the event loop of the thread until thread::release.

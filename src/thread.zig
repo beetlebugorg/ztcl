@@ -768,6 +768,9 @@ pub const Opts = struct {
     /// `-files host`: an isolated thread of a creator in host mode gets
     /// the files of the host (`isothread.prepare`).
     host_files: bool = false,
+    /// `-caps`: the capabilities of the thread, a subset of the bits of
+    /// its creator, or null for all of them.
+    caps: ?u32 = null,
 };
 
 pub const Isolation = enum { interp, process };
@@ -784,6 +787,7 @@ pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
     reapZombies(g);
     const text = g.alloc().dupe(u8, script) catch return groupFull(it, error.GroupFull);
     var st = try startOf(it);
+    if (o.caps) |c| st.caps &= c;
     const w = g.gpa.create(Worker) catch {
         g.alloc().free(text);
         return error.OutOfMemory;
@@ -912,6 +916,23 @@ fn startOf(it: *Interp) Error!Start {
         }
     }
     return st;
+}
+
+/// Removes the commands of the capability `thread` from the child of an
+/// isolated thread that has no such capability, so the child has no
+/// `thread::send` to its parent. The broker of the group stays.
+pub fn dropThreadCommands(x: *Interp) Allocator.Error!void {
+    var gone: std.ArrayList([]const u8) = .empty;
+    defer gone.deinit(x.alloc());
+    var iter = x.commands.iterator();
+    while (iter.next()) |e| {
+        const k = std.mem.trimStart(u8, e.key_ptr.*, ":");
+        for ([_][]const u8{ "thread::", "tsv::", "tpool::" }) |p| {
+            if (std.mem.startsWith(u8, k, p)) try gone.append(x.alloc(), e.key_ptr.*);
+        }
+    }
+    for (gone.items) |k| _ = x.commands.remove(k);
+    x.epoch += 1;
 }
 
 fn setup(w: *Worker, x: *Interp, st: Start) Allocator.Error!void {

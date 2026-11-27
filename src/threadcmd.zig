@@ -43,6 +43,7 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var preserved = false;
     var level: thread.Isolation = .interp;
     var host_files = false;
+    var caps: ?u32 = null;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
         const o = try it.str(argv[i]);
@@ -66,6 +67,9 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             } else if (eql(m, "root")) {
                 host_files = false;
             } else return it.fail("bad files mode \"{s}\": must be host or root", .{m});
+        } else if (eql(o, "-caps") and i + 1 < argv.len) {
+            i += 1;
+            caps = try capsOf(it, argv[i]);
         } else if (eql(o, "--")) {
             i += 1;
             break;
@@ -76,8 +80,23 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     // The files of the host are a part of the isolation of a child: a
     // thread of the level interp has the files of its creator already.
     if (host_files and level == .interp) return it.fail("-files host needs -isolation process", .{});
-    const id = try thread.createOpts(it, script, .{ .joinable = joinable, .preserved = preserved, .isolation = level, .host_files = host_files });
+    const id = try thread.createOpts(it, script, .{ .joinable = joinable, .preserved = preserved, .isolation = level, .host_files = host_files, .caps = caps });
     return thread.idValue(it, id);
+}
+
+/// The bits of a list of capability names for `-caps`. Each one must be
+/// a capability of the creator.
+fn capsOf(it: *Interp, v: Value) Error!u32 {
+    var root = it;
+    while (root.parent) |p| root = p;
+    var bits: u32 = 0;
+    for (try it.list(v)) |w| {
+        const name = try it.str(w);
+        const c = std.meta.stringToEnum(interp.Capability, name) orelse return it.failCode("THREAD CAPS", "unknown capability \"{s}\"", .{name});
+        if (root.capabilities & @backingInt(c) == 0) return it.failCode("THREAD CAPS", "the creator has no capability \"{s}\"", .{name});
+        bits |= @backingInt(c);
+    }
+    return bits;
 }
 
 /// The worker of an optional id argument. The caller holds the group
