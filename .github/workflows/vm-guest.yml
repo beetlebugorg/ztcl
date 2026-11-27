@@ -101,18 +101,19 @@ jobs:
           KERNEL=vmlinux tools/vm-guest/test-kvm.sh tools/vm-guest/out
       # The boot test with the kernel of beetlebugorg/ztcl-guest-kernel:
       # the artifact guest-kernel-x86_64 of its workflow Build, run
-      # 45951322284, checked by the SHA-256 of the artifact and by its
-      # SHA256SUMS. The artifact expires on 2027-02-25.
+      # 45986928353 (with virtio-net, INET, and packet sockets), checked
+      # by the SHA-256 of the artifact and by its SHA256SUMS. The artifact
+      # expires on 2027-02-25.
       - if: matrix.name == 'vm-guest-x86_64'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/gk"
-          if ! gh api repos/beetlebugorg/ztcl-guest-kernel/actions/artifacts/15177680182/zip > "$RUNNER_TEMP/gk/k.zip"; then
+          if ! gh api repos/beetlebugorg/ztcl-guest-kernel/actions/artifacts/15192425798/zip > "$RUNNER_TEMP/gk/k.zip"; then
             echo "::warning::no download of the guest kernel artifact; the test with it is skipped"
             exit 0
           fi
-          echo "aa89a69a23b239a36f5e9f9a2456b3f86ba00be30ce1a0bcaf5c643c3e899043  $RUNNER_TEMP/gk/k.zip" | sha256sum -c
+          echo "150705b053b935d5579c81baf7a428848c24333ad21d82dbba5ce244f4276e11  $RUNNER_TEMP/gk/k.zip" | sha256sum -c
           (cd "$RUNNER_TEMP/gk" && unzip -q k.zip && sha256sum -c SHA256SUMS)
           cp "$RUNNER_TEMP/gk/bzImage" tools/vm-guest/out/gk-bzImage
           cp "$RUNNER_TEMP/gk/vmlinux" tools/vm-guest/out/gk-vmlinux
