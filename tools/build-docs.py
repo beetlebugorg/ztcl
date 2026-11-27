@@ -98,6 +98,7 @@ PAGES = [
     ("docs/modules/web-gamepad.md", "modules/web-gamepad/", "Modules", "web::gamepad"),
     ("docs/modules/web-midi.md", "modules/web-midi/", "Modules", "web::midi"),
     ("docs/modules/web-usb.md", "modules/web-usb/", "Modules", "web::usb"),
+    ("docs/modules/web-hid.md", "modules/web-hid/", "Modules", "web::hid"),
     ("docs/web/README.md", "web/", "Web APIs", "All Web APIs"),
     ("docs/web/serial.md", "web/serial/", "Web APIs", "Serial ports"),
     ("docs/web/usb.md", "web/usb/", "Web APIs", "USB devices"),
