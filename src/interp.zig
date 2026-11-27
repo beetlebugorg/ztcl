@@ -29,6 +29,7 @@ const thread_mod = @import("thread.zig");
 const trace = @import("trace.zig");
 const ns_mod = @import("ns.zig");
 const coro = @import("coro.zig");
+const features = @import("features.zig");
 const Heap = @import("heap.zig").Heap;
 const gc = @import("gc.zig");
 pub const Value = value.Value;
@@ -2003,7 +2004,7 @@ pub const Interp = struct {
     fn start(it: *Interp) Allocator.Error!void {
         it.frame = &it.global;
         try cmds.register(it);
-        try @import("oo.zig").register(it);
+        if (comptime features.on("oo")) try @import("oo.zig").register(it);
         try it.startVars();
     }
 
@@ -2072,18 +2073,18 @@ pub const Interp = struct {
             // auto_path, the pkgIndex.tcl search, auto_load, and history.
             _ = it.eval(@embedFile("library.tcl")) catch {};
         }
-        if (new & @backingInt(Capability.interp) != 0) try it.register("interp", @import("child.zig").cmdInterp);
-        if (new & @backingInt(Capability.clock) != 0) try @import("clock.zig").register(it);
-        if (new & @backingInt(Capability.event) != 0) try @import("event.zig").register(it);
-        if (new & @backingInt(Capability.launch) != 0) try @import("launch.zig").register(it);
-        if (new & @backingInt(Capability.registry) != 0) try @import("winreg.zig").register(it);
-        if (new & @backingInt(Capability.credential) != 0) try @import("wincred.zig").register(it);
-        if (new & @backingInt(Capability.env) != 0) try @import("winfolder.zig").register(it);
-        if (new & @backingInt(Capability.keychain) != 0) try @import("mac.zig").registerKeychain(it);
-        if (new & @backingInt(Capability.defaults) != 0) try @import("mac.zig").registerDefaults(it);
-        if (new & @backingInt(Capability.notify) != 0) try @import("notify.zig").register(it);
-        if (new & @backingInt(Capability.vm) != 0) try @import("microvm.zig").register(it);
-        if (new & @backingInt(Capability.meter) != 0) try it.register("ztcl::meter", @import("metercmd.zig").cmdMeter);
+        if ((comptime features.on("interp")) and (new & @backingInt(Capability.interp) != 0)) try it.register("interp", @import("child.zig").cmdInterp);
+        if ((comptime features.on("clock")) and (new & @backingInt(Capability.clock) != 0)) try @import("clock.zig").register(it);
+        if ((comptime features.on("event")) and (new & @backingInt(Capability.event) != 0)) try @import("event.zig").register(it);
+        if ((comptime features.on("launch")) and (new & @backingInt(Capability.launch) != 0)) try @import("launch.zig").register(it);
+        if ((comptime features.on("registry")) and (new & @backingInt(Capability.registry) != 0)) try @import("winreg.zig").register(it);
+        if ((comptime features.on("credential")) and (new & @backingInt(Capability.credential) != 0)) try @import("wincred.zig").register(it);
+        if ((comptime features.on("folder")) and (new & @backingInt(Capability.env) != 0)) try @import("winfolder.zig").register(it);
+        if ((comptime features.on("keychain")) and (new & @backingInt(Capability.keychain) != 0)) try @import("mac.zig").registerKeychain(it);
+        if ((comptime features.on("defaults")) and (new & @backingInt(Capability.defaults) != 0)) try @import("mac.zig").registerDefaults(it);
+        if ((comptime features.on("notify")) and (new & @backingInt(Capability.notify) != 0)) try @import("notify.zig").register(it);
+        if ((comptime features.on("vm")) and (new & @backingInt(Capability.vm) != 0)) try @import("microvm.zig").register(it);
+        if ((comptime features.on("meter")) and (new & @backingInt(Capability.meter) != 0)) try it.register("ztcl::meter", @import("metercmd.zig").cmdMeter);
         if (comptime cext_mod.supported) {
             if (new & @backingInt(Capability.cext) != 0) try cext_mod.register(it);
         }
@@ -2093,7 +2094,7 @@ pub const Interp = struct {
         if (comptime fs_supported) {
             if (new & @backingInt(Capability.file) != 0) {
                 try @import("filecmd.zig").register(it);
-                try @import("watch.zig").register(it);
+                if (comptime features.on("watch")) try @import("watch.zig").register(it);
             }
             const vfs_bits = @backingInt(Capability.embedded) | @backingInt(Capability.file);
             if (new & vfs_bits != 0) try @import("vfs.zig").register(it);
@@ -2106,17 +2107,17 @@ pub const Interp = struct {
                 }
             }
         }
-        if (comptime exec_supported) {
+        if (comptime exec_supported and features.on("exec")) {
             if (new & @backingInt(Capability.exec) != 0) {
                 try proc_mod.register(it);
                 try pty_mod.register(it);
             }
         }
         // WASI preview 1 has no sockets.
-        if (comptime chan_supported and @import("builtin").os.tag != .wasi) {
+        if (comptime chan_supported and @import("builtin").os.tag != .wasi and features.on("socket")) {
             if (new & @backingInt(Capability.socket) != 0) try it.register("socket", @import("sock.zig").cmdSocket);
         }
-        if (comptime thread_mod.supported) {
+        if (comptime thread_mod.supported and features.on("thread")) {
             // The thread commands depend on the other bits, so each new
             // bit registers them again.
             if (new != 0 and it.capabilities & @backingInt(Capability.thread) != 0) try thread_mod.register(it);

@@ -472,8 +472,10 @@ pub fn current(it: *Interp) Error!Value {
 }
 
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {
-    try it.register("coroutine", cmdCoroutine);
-    try it.register("yield", cmdYield);
-    try it.register("yieldto", cmdYieldTo);
+    if (comptime @import("features.zig").on("coroutine")) {
+        try it.register("coroutine", cmdCoroutine);
+        try it.register("yield", cmdYield);
+        try it.register("yieldto", cmdYieldTo);
+    }
     try it.register("tailcall", cmdTailcall);
 }

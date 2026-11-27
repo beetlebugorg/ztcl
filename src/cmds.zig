@@ -14,6 +14,7 @@ const format = @import("format.zig");
 const noise = @import("noise.zig");
 const more = @import("more.zig");
 const regex = @import("regex.zig");
+const features = @import("features.zig");
 const ns = @import("ns.zig");
 const ucd = @import("ucd.zig");
 const trace = @import("trace.zig");
@@ -40,12 +41,16 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
         .{ "format", format.cmdFormat }, .{ "info", cmdInfo },          .{ "puts", cmdPuts },
         .{ "switch", cmdSwitch },        .{ "rename", cmdRename },      .{ "apply", cmdApply },
         .{ "noise3", cmdNoise3 },        .{ "subst", cmdSubst },        .{ "lset", more.cmdLset },
-        .{ "binary", more.cmdBinary },   .{ "scan", more.cmdScan },     .{ "regexp", regex.cmdRegexp },
-        .{ "regsub", regex.cmdRegsub },  .{ "variable", cmdVariable },  .{ "namespace", ns.cmdNamespace },
+        .{ "scan", more.cmdScan },       .{ "variable", cmdVariable },  .{ "namespace", ns.cmdNamespace },
         .{ "try", cmdTry },              .{ "throw", cmdThrow },        .{ "dict", @import("dict.zig").cmdDict },
         .{ "trace", trace.cmdTrace },    .{ "unknown", ns.cmdUnknown },
     };
     inline for (table) |t| try it.register(t[0], t[1]);
+    if (comptime features.on("binary")) try it.register("binary", more.cmdBinary);
+    if (comptime features.on("regexp")) {
+        try it.register("regexp", regex.cmdRegexp);
+        try it.register("regsub", regex.cmdRegsub);
+    }
     try @import("mathns.zig").register(it);
     try @import("extra.zig").register(it);
     try coro.register(it);
@@ -274,7 +279,7 @@ fn joinWords(it: *Interp, args: []const Value) Error!?[]const Value {
 /// precise build shows a missed value.
 pub fn isBodyCommand(f: interp.NativeFn) bool {
     return f == &cmdCatch or f == &cmdTry or f == &cmdEval or f == &cmdUplevel or f == &cmdApply or
-        f == &ns.cmdNamespace or f == &@import("oo.zig").objCmd;
+        f == &ns.cmdNamespace or ((comptime features.on("oo")) and f == &@import("oo.zig").objCmd);
 }
 
 // ---- Control flow ----
@@ -525,6 +530,7 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             .glob => hit = try globSteps(it, pat, subject, nocase),
             .integer => hit = try switchInt(it, arms[k]) == subject_int,
             .regexp => {
+                if (comptime !features.on("regexp")) return features.fail(it, "regexp", "switch -regexp");
                 const re = try regex.compile(it, pat, .{ .nocase = nocase });
                 var m = try regex.Matcher.init(it, re, subject);
                 hit = try m.search(0);
@@ -682,7 +688,7 @@ fn cmdRename(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (new.len == 0) {
         try trace.commandEvent(it, kv.value, old, "", 2);
         coro.commandGone(it, kv.value);
-        @import("oo.zig").commandGone(it, kv.value);
+        if (comptime features.on("oo")) @import("oo.zig").commandGone(it, kv.value);
         // The imports of a deleted command go away.
         if (eql(kv.value.name, old)) {
             var gone: std.ArrayList([]const u8) = .empty;
@@ -1614,7 +1620,7 @@ fn cmdLsearch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         var order: std.math.Order = .eq;
         const hit = switch (match) {
             .glob => try globSteps(it, pat, try it.str(key), nocase),
-            .regexp => try regex.matches(it, pat, try it.str(key), nocase),
+            .regexp => if (comptime features.on("regexp")) try regex.matches(it, pat, try it.str(key), nocase) else return features.fail(it, "regexp", "lsearch -regexp"),
             .exact, .sorted => blk: {
                 order = switch (kind) {
                     .integer => std.math.order(try it.int(key), want_i),
@@ -2823,8 +2829,10 @@ fn cmdInfo(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         }
         return it.fail("procedure \"{s}\" doesn't have an argument \"{s}\"", .{ pattern.?, want });
     } else if (which == .object) {
+        if (comptime !features.on("oo")) return features.fail(it, "oo", "info object");
         return @import("oo.zig").infoObject(it, argv);
     } else if (which == .class) {
+        if (comptime !features.on("oo")) return features.fail(it, "oo", "info class");
         return @import("oo.zig").infoClass(it, argv);
     } else if (which == .args or which == .body) {
         if (argv.len != 3) return it.fail("wrong # args: should be \"info {s} procname\"", .{sub});

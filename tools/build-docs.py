@@ -73,6 +73,7 @@ PAGES = [
     ("docs/processes.md", "processes/", "Guide", "Run programs"),
     ("docs/jit.md", "jit/", "Guide", "The JIT"),
     ("docs/build.md", "build/", "Guide", "Build a program"),
+    ("docs/strip.md", "strip/", "Guide", "Strip a program"),
     ("docs/debugging.md", "debugging/", "Guide", "Debugging"),
     ("docs/targets.md", "targets/", "Guide", "Targets"),
     ("docs/reference/README.md", "reference/", "Reference", "Commands"),

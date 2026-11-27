@@ -45,6 +45,7 @@ fib.tcl:2: compute limit reached
 - [Quick start](docs/quickstart.md) and [the language](docs/language.md)
 - [Limits and capabilities](docs/limits.md), [threads](docs/threads.md), and [the JIT](docs/jit.md)
 - [Build a program](docs/build.md): one native binary for Linux, macOS, or Windows, from any host, with `ztcl build`
+- [Strip a program](docs/strip.md): a runtime with only the commands, capabilities, and modules that the scripts use, with `ztcl build --strip`
 - [Embed in Zig](docs/embedding.md) and [WebAssembly](docs/webassembly.md)
 - [libztcl](docs/libztcl.md): build C programs and Tcl extensions against ztcl, as libtcl8.6
 - [Performance](docs/performance.md) and the [FAQ](docs/faq.md)

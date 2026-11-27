@@ -409,7 +409,7 @@ fn cmdArray(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             if (map) |m| for (m.keys()) |k| {
                 if (pattern) |pv| {
                     const p = try it.str(pv);
-                    const hit = if (eql(mode, "-exact")) eql(p, k) else if (eql(mode, "-regexp")) try regex.matches(it, p, k, false) else try cmds.globSteps(it, p, k, false);
+                    const hit = if (eql(mode, "-exact")) eql(p, k) else if (eql(mode, "-regexp")) (if (comptime @import("features.zig").on("regexp")) try regex.matches(it, p, k, false) else return @import("features.zig").fail(it, "regexp", "array -regexp")) else try cmds.globSteps(it, p, k, false);
                     if (!hit) continue;
                 }
                 try out.append(a, .{ .str = k });

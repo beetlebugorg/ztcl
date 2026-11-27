@@ -33,6 +33,8 @@ const wb = tcl.wasmbundle;
 const usage =
     \\usage: ztcl build [--target T] [--runtime FILE] [--allow LIST] [--root PATH] [--no-jit]
     \\                  [--compress] [--embed PATH]... -o OUT script.tcl...
+    \\       ztcl build --strip [--keep LIST] [--drop-module LIST] [--trust-scan] [--check] [--profile]
+    \\                  [--test FILE]... [--strip-manifest FILE] [--src DIR] [other options] -o OUT script.tcl...
     \\       ztcl build --wasm [--base ztcl.wasm] [--embed PATH]... -o OUT.wasm script.tcl...
     \\       ztcl build --component [--base ztcl.component.wasm] [--allow LIST] [--root PATH]
     \\                  [--compress] [--embed PATH]... -o OUT.wasm script.tcl...
@@ -49,11 +51,14 @@ pub fn run(io: Io, a: std.mem.Allocator, env: anytype, args: []const [:0]const u
     var embeds: std.ArrayList([]const u8) = .empty;
     var scripts: std.ArrayList([]const u8) = .empty;
     var nat: Native = .{};
+    var strip: stripbuild.Flags = .{};
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         const arg: []const u8 = args[i];
         const has_value = i + 1 < args.len;
-        if (std.mem.eql(u8, arg, "--wasm")) {
+        if (try strip.parse(a, args, &i)) {
+            continue;
+        } else if (std.mem.eql(u8, arg, "--wasm")) {
             wasm = true;
         } else if (std.mem.eql(u8, arg, "--component")) {
             component = true;
@@ -97,7 +102,20 @@ pub fn run(io: Io, a: std.mem.Allocator, env: anytype, args: []const [:0]const u
         const dir = try std.process.executableDirPathAlloc(io, a);
         break :blk try std.fs.path.join(a, &.{ dir, "..", "lib", "ztcl.wasm" });
     };
-    const base_bytes = if (!wasm) "" else cwd.readFileAlloc(io, base_path, a, .limited(64 << 20)) catch |e| {
+    if (strip.on and component) {
+        try out.writeAll("ztcl build: --strip does not work with --component yet\n");
+        return 2;
+    }
+    if (!strip.on and (strip.check or strip.profile or strip.keep.items.len > 0 or strip.drop.items.len > 0 or strip.trust)) {
+        try out.writeAll("ztcl build: --keep, --drop-module, --trust-scan, --check, and --profile need --strip\n");
+        return 2;
+    }
+    if (strip.on and (strip.check or strip.profile) and (wasm or (nat.target != null and !std.mem.eql(u8, nat.target.?, bn.hostTarget())))) {
+        try out.writeAll("ztcl build: --check and --profile run the program, so they need the target of this computer\n");
+        return 2;
+    }
+    var base_path_s = base_path;
+    const base_bytes = if (!wasm or strip.on) "" else cwd.readFileAlloc(io, base_path, a, .limited(64 << 20)) catch |e| {
         try out.print("ztcl build: {s}: {s}. Pass --base with the path of ztcl.wasm.\n", .{ base_path, @errorName(e) });
         return 1;
     };
@@ -148,10 +166,26 @@ pub fn run(io: Io, a: std.mem.Allocator, env: anytype, args: []const [:0]const u
     }
 
     if (component) return componentApp(io, a, env, base, nat, entries.items, output.?, out);
+    var base_final = base_bytes;
+    if (strip.on) {
+        const target = nat.target orelse bn.hostTarget();
+        const full = if (wasm) base_path else (try runtimePath(io, a, env, nat, target)) orelse "";
+        const ctx: TestCtx = .{ .io = io, .a = a, .env = env, .nat = nat, .out = out };
+        const r = try stripbuild.run(stripbuild.ztcl_tool, io, a, env, &strip, .{ .target = target, .wasm = wasm, .allow = nat.allow, .jit = nat.jit, .full_runtime = full }, entries.items, ctx, TestCtx.build, out) orelse return 1;
+        if (!wasm) {
+            nat.runtime = r.runtime;
+            return native(io, a, env, nat, entries.items, output.?, out);
+        }
+        base_path_s = r.runtime;
+        base_final = cwd.readFileAlloc(io, r.runtime, a, .limited(64 << 20)) catch |e| {
+            try out.print("ztcl build: {s}: {s}\n", .{ r.runtime, @errorName(e) });
+            return 1;
+        };
+    }
     if (!wasm) return native(io, a, env, nat, entries.items, output.?, out);
     const payload = try wb.encode(a, entries.items);
-    const module = wb.patch(a, base_bytes, payload) catch |e| {
-        try out.print("ztcl build: {s}: {s}\n", .{ base_path, switch (e) {
+    const module = wb.patch(a, base_final, payload) catch |e| {
+        try out.print("ztcl build: {s}: {s}\n", .{ base_path_s, switch (e) {
             error.NotWasm, error.BadModule => "not a ztcl.wasm module",
             error.NoSlot => "no bundle slot: use the ztcl.wasm of `zig build wasm`",
             error.AlreadyBundle => "the module is a bundle already",
@@ -164,7 +198,7 @@ pub fn run(io: Io, a: std.mem.Allocator, env: anytype, args: []const [:0]const u
         try out.print("ztcl build: {s}: {s}\n", .{ output.?, @errorName(e) });
         return 1;
     };
-    try out.print("{s}: {d} bytes ({s}: {d} bytes, bundle: {d} bytes)\n", .{ output.?, module.len, std.fs.path.basename(base_path), base_bytes.len, payload.len });
+    try out.print("{s}: {d} bytes ({s}: {d} bytes, bundle: {d} bytes)\n", .{ output.?, module.len, std.fs.path.basename(base_path_s), base_final.len, payload.len });
     return 0;
 }
 
@@ -188,6 +222,43 @@ fn clean(a: std.mem.Allocator, path: []const u8) !?[]const u8 {
 }
 
 const bn = tcl.buildnative;
+const stripbuild = tcl.stripbuild;
+
+/// The runtime of `target`: `--runtime`, then ZTCL_RUNTIME_DIR, then
+/// `../lib/ztcl/runtime/` next to the program, then for the host target
+/// the program itself. Null for an unknown target.
+fn runtimePath(io: Io, a: std.mem.Allocator, env: anytype, nat: Native, target: []const u8) !?[]const u8 {
+    if (nat.runtime) |r| return r;
+    var file: ?[]const u8 = null;
+    for (bn.targets) |t| if (std.mem.eql(u8, t.name, target)) {
+        file = t.file;
+    };
+    if (file == null) return null;
+    const exe_dir = try std.process.executableDirPathAlloc(io, a);
+    if (env.get("ZTCL_RUNTIME_DIR")) |d| return try std.fs.path.join(a, &.{ d, target, file.? });
+    const shipped = try std.fs.path.join(a, &.{ exe_dir, "..", "lib", "ztcl", "runtime", target, file.? });
+    if (Io.Dir.cwd().access(io, shipped, .{})) |_| return shipped else |_| {}
+    if (std.mem.eql(u8, target, bn.hostTarget())) return try std.process.executablePathAlloc(io, a);
+    return shipped;
+}
+
+/// The binaries of `--check` and `--profile`.
+const TestCtx = struct {
+    io: Io,
+    a: std.mem.Allocator,
+    env: *const std.process.Environ.Map,
+    nat: Native,
+    out: *Io.Writer,
+
+    fn build(c: TestCtx, runtime: ?[]const u8, entries: []const wb.Entry, path: []const u8) anyerror!bool {
+        var nat = c.nat;
+        nat.runtime = runtime;
+        var discard: Io.Writer.Allocating = .init(c.a);
+        const code = try native(c.io, c.a, c.env, nat, entries, path, &discard.writer);
+        if (code != 0) try c.out.writeAll(discard.written());
+        return code == 0;
+    }
+};
 
 const Native = struct {
     target: ?[]const u8 = null,
@@ -271,14 +342,7 @@ fn native(io: Io, a: std.mem.Allocator, env: anytype, nat: Native, entries: []co
         return 2;
     }
     const cwd = Io.Dir.cwd();
-    const exe_dir = try std.process.executableDirPathAlloc(io, a);
-    const rt_path: []const u8 = nat.runtime orelse blk: {
-        if (env.get("ZTCL_RUNTIME_DIR")) |d| break :blk try std.fs.path.join(a, &.{ d, target, file.? });
-        const shipped = try std.fs.path.join(a, &.{ exe_dir, "..", "lib", "ztcl", "runtime", target, file.? });
-        if (cwd.access(io, shipped, .{})) |_| break :blk shipped else |_| {}
-        if (std.mem.eql(u8, target, bn.hostTarget())) break :blk try std.process.executablePathAlloc(io, a);
-        break :blk shipped;
-    };
+    const rt_path = (try runtimePath(io, a, env, nat, target)).?;
     const runtime = cwd.readFileAlloc(io, rt_path, a, .limited(256 << 20)) catch |e| {
         try out.print("ztcl build: the runtime of {s}: {s}: {s}. Make it with `zig build runtimes`, or pass --runtime.\n", .{ target, rt_path, @errorName(e) });
         return 1;

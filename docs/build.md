@@ -98,6 +98,10 @@ Thu Jan 01 00:00:00 GMT 1970
 | `--no-jit` | Turns the JIT off. The JIT is on by default on a target with a JIT. |
 | `--compress` | Stores each file with deflate when that is smaller. The default stores each file as it is. |
 
+## A smaller binary
+
+`--strip` builds a runtime with only the parts that the scripts use: the command groups, the capabilities of `--allow`, the modules of `package require`, and the JIT. A hello world is 1,236,273 bytes on x86-64 Linux, and 3,086,881 bytes with the full runtime. The strip mode needs the source of ztcl and Zig. [Strip a program](strip.md) has the rules, the report, `--check`, and `--profile`.
+
 ## The files of a program
 
 The mount `//zipfs:/app/` is read-only. `open` for reading, `source`, `glob`, and the queries of `file` (`exists`, `isfile`, `isdirectory`, `size`, `type`, `mtime`, `stat`, `readable`, `normalize`) work on it. A write is an error:

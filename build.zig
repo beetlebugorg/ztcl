@@ -1,5 +1,20 @@
 // SPDX-License-Identifier: BSD-2-Clause
 const std = @import("std");
+/// The features of `-Ddrop`. ztk reads them with `@import("ztcl")` in its
+/// build.zig, to split a drop list between ztcl and ztk.
+pub const features_table = @import("src/features_table.zig");
+
+/// Exits with a message when `-Ddrop` names an unknown feature.
+fn checkDrop(drop: []const u8) void {
+    var parts = std.mem.splitScalar(u8, drop, ',');
+    while (parts.next()) |p| {
+        if (p.len == 0) continue;
+        if (features_table.index(p) == null) {
+            std.debug.print("-Ddrop: no feature \"{s}\" (see src/features_table.zig)\n", .{p});
+            std.process.exit(1);
+        }
+    }
+}
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -26,7 +41,15 @@ pub fn build(b: *std.Build) void {
     gc_options.addOption(bool, "cext", cext);
     lib_options.addOption(bool, "cext", true);
     const jit_backend = (t.cpu.arch == .x86_64 and (t.os.tag == .linux or t.os.tag == .windows)) or (t.cpu.arch == .aarch64 and (t.os.tag == .linux or t.os.tag == .macos));
-    const jit_on = b.option(bool, "jit", "Build the JIT compiler") orelse jit_backend;
+    // `-Ddrop=a,b` leaves out the features of src/features_table.zig:
+    // groups of commands, capabilities, modules, and the JIT. It is the
+    // build of `ztcl build --strip` (docs/strip.md).
+    const drop = b.option([]const u8, "drop", "The features to leave out, separated by commas (src/features_table.zig)") orelse "";
+    checkDrop(drop);
+    drop_all = drop;
+    gc_options.addOption([]const u8, "drop", drop);
+    lib_options.addOption([]const u8, "drop", drop);
+    const jit_on = (b.option(bool, "jit", "Build the JIT compiler") orelse jit_backend) and !features_table.listHas(drop, "jit");
     gc_options.addOption(bool, "jit", jit_on);
     lib_options.addOption(bool, "jit", jit_on);
     // `-Djit_bug=true` plants a known bug: the `bin_vv` template of tier 1
@@ -37,7 +60,7 @@ pub fn build(b: *std.Build) void {
     // The built-in modules: `-Dbatteries` gives the preset, and
     // `-Dmod-NAME` puts one module in or leaves it out after the preset.
     const batteries = b.option(Batteries, "batteries", "The modules: core (none), std (the default), or full") orelse .std;
-    const on = moduleFlags(b, batteries);
+    const on = moduleFlags(b, batteries, drop);
     addModuleOptions(b, gc_options, on);
     addModuleOptions(b, lib_options, on);
     // `-Dsize-plant=N` adds N bytes of data to the test module hello. The
@@ -498,6 +521,41 @@ pub fn build(b: *std.Build) void {
         runtimes.dependOn(&inst.step);
     }
 
+    // `zig build app-runtime -Dapp-target=T -Ddrop=...`: the runtime of
+    // `ztcl build --strip`, in bin/. It runs only a payload, so it has no
+    // shell and no tools. ReleaseSmall and stripped, as `runtimes`.
+    {
+        const app_step = b.step("app-runtime", "Build bin/ztcl, the runtime of ztcl build --strip, with -Ddrop");
+        const app_name = b.option([]const u8, "app-target", "The target of zig build app-runtime, such as x86_64-linux (default: the host)");
+        const at = if (app_name) |n|
+            b.resolveTargetQuery(std.Target.Query.parse(.{ .arch_os_abi = n }) catch @panic("-Dapp-target: unknown target"))
+        else
+            b.resolveTargetQuery(std.Target.Query.parse(.{ .arch_os_abi = b.fmt("{s}-{s}", .{ @tagName(b.graph.host.result.cpu.arch), @tagName(b.graph.host.result.os.tag) }) }) catch unreachable);
+        const r = at.result;
+        const opts = b.addOptions();
+        opts.addOption(bool, "gc_precise", false);
+        opts.addOption(bool, "aot", false);
+        opts.addOption(bool, "jit", !features_table.listHas(drop, "jit") and ((r.cpu.arch == .x86_64 and (r.os.tag == .linux or r.os.tag == .windows)) or (r.cpu.arch == .aarch64 and (r.os.tag == .linux or r.os.tag == .macos))));
+        opts.addOption(bool, "jit_bug", false);
+        addModuleOptions(b, opts, on);
+        opts.addOption(usize, "size_plant", 0);
+        opts.addOption(bool, "tsan_plant", false);
+        opts.addOption([]const u8, "drop", drop);
+        opts.addOption(bool, "app_only", true);
+        const lib = b.createModule(.{ .root_source_file = b.path("src/ztcl.zig"), .target = at, .optimize = .small });
+        lib.addOptions("build_options", opts);
+        addVt(b, lib, at, .small);
+        const aexe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = at,
+            .optimize = .small,
+            .strip = true,
+            .imports = &.{.{ .name = "ztcl", .module = lib }},
+        }) });
+        if (r.os.tag == .macos) aexe.headerpad_size = 0x1000;
+        app_step.dependOn(&b.addInstallArtifact(aexe, .{}).step);
+    }
+
     const run = b.addRunArtifact(exe);
     run.addPassthruArgs();
     b.step("run", "Run a script: zig build run -- script.tcl").dependOn(&run.step);
@@ -727,6 +785,8 @@ fn addWasmSimd(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise:
 /// is true (docs/dev/wasm-host-tasks/README.md).
 /// The value of `-Dcext-wasm`. The bridge of C packages is off by default
 /// (docs/dev/cext-tasks/04w-wasm-bridge.md).
+/// The `-Ddrop` list, for the WebAssembly builds.
+var drop_all: []const u8 = "";
 var cext_on = false;
 
 fn addWasmForm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise: bool, size_plant: usize, on: [all_modules.len]bool, aot: bool, shell: bool, simd: bool, host: bool) *std.Build.Step.Compile {
@@ -754,6 +814,7 @@ fn addWasmForm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise:
     wasm_options.addOption(bool, "wasm_point", simd or host);
     wasm_options.addOption(bool, "wasm_host", host);
     wasm_options.addOption(bool, "cext", cext_on);
+    wasm_options.addOption([]const u8, "drop", drop_all);
     // libghostty-vt uses `std.heap.wasm_allocator`, which has no form for
     // a shared memory, so the build with shared threads has no `ztcl::vt`.
     var mods_on = on;
@@ -988,7 +1049,7 @@ fn addCrypto(b: *std.Build, m: *std.Build.Module) void {
 /// The targets of `zig build runtimes` and `ztcl build --target`.
 const runtime_targets = [_][]const u8{ "x86_64-linux", "aarch64-linux", "x86_64-macos", "aarch64-macos", "x86_64-windows", "aarch64-windows" };
 
-fn moduleFlags(b: *std.Build, batteries: Batteries) [all_modules.len]bool {
+fn moduleFlags(b: *std.Build, batteries: Batteries, drop: []const u8) [all_modules.len]bool {
     var on: [all_modules.len]bool = undefined;
     for (all_modules, 0..) |m, i| {
         on[i] = switch (batteries) {
@@ -998,6 +1059,7 @@ fn moduleFlags(b: *std.Build, batteries: Batteries) [all_modules.len]bool {
         };
         const flag = b.fmt("mod-{s}", .{m.name});
         if (b.option(bool, flag, b.fmt("Put the module {s} in the build or leave it out", .{m.name}))) |v| on[i] = v;
+        if (features_table.listHas(drop, m.name)) on[i] = false;
     }
     var changed = true;
     while (changed) {

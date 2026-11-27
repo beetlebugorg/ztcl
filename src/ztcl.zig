@@ -16,6 +16,10 @@
 const std = @import("std");
 
 pub const value = @import("value.zig");
+pub const features = @import("features.zig");
+/// True in the app runtime of `zig build app-runtime`: the binary runs
+/// only the payload of `ztcl build`.
+pub const app_only = @hasDecl(@import("build_options"), "app_only") and @import("build_options").app_only;
 pub const interp = @import("interp.zig");
 pub const expr = @import("expr.zig");
 pub const noise = @import("noise.zig");
@@ -50,6 +54,8 @@ pub const vfs = @import("vfs.zig");
 pub const zipread = @import("zipread.zig");
 pub const zipwrite = @import("zipwrite.zig");
 pub const buildnative = @import("buildnative.zig");
+pub const stripscan = @import("stripscan.zig");
+pub const stripbuild = @import("stripbuild.zig");
 pub const dbus = @import("dbus.zig");
 pub const macho = @import("macho.zig");
 pub const isoproto = @import("isoproto.zig");
@@ -144,6 +150,8 @@ test {
     _ = @import("isovm.zig");
     _ = zipwrite;
     _ = buildnative;
+    _ = stripscan;
+    _ = features;
     _ = dbus;
     _ = macho;
     _ = isoproto;
