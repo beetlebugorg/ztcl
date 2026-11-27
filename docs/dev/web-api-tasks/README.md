@@ -56,3 +56,4 @@ fetch, WebSocket, and the File System Access API go behind the HTTP client (#27)
 | 04 | done |
 | 05 | done (#418) |
 | 06 | done |
+| 07 | done |

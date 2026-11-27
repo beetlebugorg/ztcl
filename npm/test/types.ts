@@ -15,6 +15,7 @@ tcl.close();
 const bundled: EvalResult = await run("app.wasm", { computeLimit: 1000, allow: ["file"] });
 const tcl3 = await Interp.create("app.wasm", { allow: ["file"] });
 const rr: EvalResult = tcl3.run();
+const webOptions: InterpOptions = { allow: ["dom", "event", "web:serial"], web: { Bridge: class {} }, webRoot: globalThis, webComputeLimit: 1000 };
 const w = new WorkerInterp({ computeLimit: 10 });
 const wr = await w.eval("set x 1");
 const n: number | undefined = wr.memorySize;

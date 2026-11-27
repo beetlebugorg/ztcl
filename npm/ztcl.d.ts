@@ -31,9 +31,24 @@ export interface InterpOptions {
    * `open` for reading, `read`, `gets`, `eof`, and `close` on the files
    * of a bundle, under `//zipfs:/app/`. `ztcl-host.wasm` also has
    * `"event"`: `after`, `after idle`, and `update`, with the events run
-   * from `setTimeout`. The default is none.
+   * from `setTimeout`, and the groups of the Web APIs, such as
+   * `"web:serial"`, for the commands `web::` (with the option `web`).
+   * The default is none.
    */
-  allow?: ("file" | "event")[];
+  allow?: ("file" | "event" | "dom" | "dom-html" | "clock" | WebGroup)[];
+  /**
+   * The module `ztcl-web.mjs`, the bridge of the commands `web::`, for
+   * a group of `web:` in `allow`. A page imports it:
+   * `import * as web from "./ztcl-web.mjs"`.
+   */
+  web?: { Bridge: unknown } | null;
+  /** The global object of the paths of `web::root`. The default is `globalThis`. */
+  webRoot?: object;
+  /**
+   * The compute units of each script of a result of a promise or of an
+   * event of `web::on`. The default is 1,000,000.
+   */
+  webComputeLimit?: number | null;
   /**
    * The clock of the host in milliseconds, for `"event"`. The default is
    * `Date.now`.
@@ -42,6 +57,9 @@ export interface InterpOptions {
   /** Gets the result of each run of the events from the timer. */
   onEvents?: ((r: EvalResult) => void) | null;
 }
+
+/** A group of the Web APIs of the commands `web::` (ztcl-host.wasm). */
+export type WebGroup = "web:serial" | "web:usb" | "web:bluetooth" | "web:hid" | "web:midi" | "web:gamepad";
 
 /** The result of one `eval`. */
 export interface EvalResult {

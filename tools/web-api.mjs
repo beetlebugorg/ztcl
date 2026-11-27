@@ -295,6 +295,46 @@ t = await Interp.create(host, { allow: ["web:usb"], web, webRoot: { navigator: {
 check(!t.eval("web::serial::request -command x").ok, "no web::serial without web:serial");
 t.close();
 
+// Task 07: the script of the demo page docs/site/playground/serial.html
+// with a small fake DOM: a click, the port chooser, M115, and the reply.
+class FakeEl extends EventTarget {
+  constructor(id, kids = []) {
+    super();
+    Object.assign(this, { id, kids, parentNode: null, nodeType: 1, textContent: "", value: "" });
+    for (const k of kids) k.parentNode = this;
+  }
+  contains(e) {
+    for (; e; e = e.parentNode) if (e === this) return true;
+    return false;
+  }
+  querySelector(sel) {
+    for (const k of this.kids) {
+      if (`#${k.id}` === sel) return k;
+      const d = k.querySelector(sel);
+      if (d) return d;
+    }
+    return null;
+  }
+}
+const page = fs.readFileSync(new URL("../docs/site/playground/serial.html", import.meta.url), "utf8");
+const demo = /const script = `([\s\S]*?)`;/.exec(page)[1].replace(/\\\\/g, "\\");
+const out = new FakeEl("out");
+const baud = new FakeEl("baud");
+baud.value = "250000";
+const go = new FakeEl("go");
+const app = new FakeEl("app", [baud, go, out]);
+const printer2 = new FakePort();
+const serial3 = new Serial();
+serial3.requestPort = () => Promise.resolve(printer2);
+t = await Interp.create(host, { allow: ["dom", "event", "web:serial"], web, domRoot: app, webRoot: { navigator: { serial: serial3 } } });
+r = t.eval(demo);
+check(r.ok, `the demo script (got ${r.result})`);
+go.dispatchEvent(new Event("click"));
+for (let i = 0; i < 20 && !out.textContent.includes("ok"); i++) await tick();
+check(out.textContent === "> M115\nFIRMWARE_NAME:Marlin 2.1.2\nok\n", `the demo output (got ${JSON.stringify(out.textContent)})`);
+check(printer2.opened?.baudRate === 250000 && printer2.closed, "the demo opens at the baud of the page and closes the port");
+t.close();
+
 if (failed) {
   console.error(`${failed} failed`);
   process.exit(1);
