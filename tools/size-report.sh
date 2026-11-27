@@ -58,6 +58,26 @@ build() { # name, flags...
         echo "the build $n failed:" >&2; cat "$out/$n.log" >&2; exit 1; }
     size_of "$out/$n/bin/$exe"
 }
+# Start each build in the background first, ${SIZE_JOBS:-4} at a time,
+# so that the builds run in parallel. The builds below then find their
+# files in the Zig cache. A failed build fails again below, with its log.
+jobs=${SIZE_JOBS:-4}; started=0
+start() { # name, flags of zig build...
+    n=$1; shift
+    zig build "$@" >"$out/$n.log" 2>&1 &
+    started=$((started + 1))
+    if [ $((started % jobs)) -eq 0 ]; then wait; fi
+}
+start core -Dstrip=true -Dsize-plant="$plant" --prefix "$out/core" -Dbatteries=core
+start full -Dstrip=true -Dsize-plant="$plant" --prefix "$out/full" -Dbatteries=full
+for m in $mods; do
+    start "no-$m" -Dstrip=true -Dsize-plant="$plant" --prefix "$out/no-$m" -Dbatteries=full "-Dmod-$m=false"
+done
+if [ -n "$wasm" ]; then
+    start wasm wasm -Dsize-plant="$plant" --prefix "$out/wasm"
+    start wasm-core wasm -Dbatteries=core --prefix "$out/wasm-core"
+fi
+wait
 core=$(build core -Dbatteries=core) || exit 1
 full=$(build full -Dbatteries=full) || exit 1
 printf 'row\tbytes\n' > "$out/size.tsv"
