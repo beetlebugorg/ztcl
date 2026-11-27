@@ -105,6 +105,8 @@ pub const runner_fetch = @hasDecl(@import("build_options"), "vm_fetch") and @imp
 /// The release of the images by default: a GitHub release that the
 /// publisher moves to each new image (docs/dev/vm-image.md).
 pub const image_base = "https://github.com/beetlebugorg/ztcl/releases/download/";
+/// The releases of ztcl, newest first, for a fetch with no -version.
+pub const releases_api = "https://api.github.com/repos/beetlebugorg/ztcl/releases?per_page=100";
 
 /// The port of the guest agent. A warm guest pauses when a program of
 /// the guest accepts a connection on it.
@@ -323,14 +325,82 @@ fn fetchCmd(it: *Interp, args: []const Value, update: bool) Error!Value {
         } else return if (update) it.wrongArgs(use_update) else it.wrongArgs(use_fetch);
         i += 2;
     }
-    const root = if (base) |b|
-        (if (std.mem.endsWith(u8, b, "/")) b else try std.fmt.allocPrint(a, "{s}/", .{b}))
-    else
-        try std.fmt.allocPrint(a, "{s}vm-image-{s}/", .{ image_base, if (version) |v| try std.fmt.allocPrint(a, "v{s}", .{v}) else "latest" });
-    if (!std.mem.startsWith(u8, root, "https://") and !std.mem.startsWith(u8, root, "http://127.0.0.1"))
-        return it.fail("a release is fetched over https", .{});
     const s = try store(it);
     defer s.close();
+    if (base) |b| return fetchFrom(it, hook, s, a, if (std.mem.endsWith(u8, b, "/")) b else try std.fmt.allocPrint(a, "{s}/", .{b}), force);
+    if (version) |v| return fetchFrom(it, hook, s, a, try std.fmt.allocPrint(a, "{s}vm-image-v{s}/", .{ image_base, v }), force);
+    // No -version: the releases vm-image-vN of ztcl, the highest version
+    // first. A release that fails (no download, or a check of install)
+    // gives way to the next, and with none the error of the highest.
+    const list = blk: {
+        var t = s.tempDir(a) catch |e| return storeFail(it, e);
+        defer t.remove(a, s);
+        try download(it, hook, t, a, "", releases_api);
+        break :blk vmstore.readAll(a, t.fd, "releases.json", 16 << 20) catch |e| return storeFail(it, e);
+    };
+    const tags = imageTags(a, list) catch return it.failCode("ZTCL VM FETCH", "the list of releases of {s} is not JSON", .{releases_api});
+    if (tags.len == 0) return it.failCode("ZTCL VM FETCH", "ztcl has no release vm-image-vN", .{});
+    var first: ?struct { result: Value, code: Value } = null;
+    for (tags) |tag| {
+        const r = fetchFrom(it, hook, s, a, try std.fmt.allocPrint(a, "{s}{s}/", .{ image_base, tag }), force) catch |e| {
+            if (e != error.TclError) return e;
+            if (first == null) first = .{ .result = it.result, .code = it.error_code };
+            continue;
+        };
+        return r;
+    }
+    it.result = first.?.result;
+    it.error_code = first.?.code;
+    return error.TclError;
+}
+
+/// The tags `vm-image-vN` of a list of GitHub releases (JSON), with no
+/// draft, the highest version first. N is numbers with dots.
+pub fn imageTags(a: std.mem.Allocator, json: []const u8) ![]const []const u8 {
+    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, a, json, .{ .allocate = .alloc_always });
+    if (parsed != .array) return error.NotList;
+    var tags: std.ArrayList([]const u8) = .empty;
+    for (parsed.array.items) |rel| {
+        if (rel != .object) continue;
+        if (rel.object.get("draft")) |d| if (d == .bool and d.bool) continue;
+        const t = rel.object.get("tag_name") orelse continue;
+        if (t != .string or !std.mem.startsWith(u8, t.string, "vm-image-v")) continue;
+        if (versionKey(t.string["vm-image-v".len..]) == null) continue;
+        try tags.append(a, t.string);
+    }
+    const items = try tags.toOwnedSlice(a);
+    std.mem.sort([]const u8, items, {}, struct {
+        fn gt(_: void, x: []const u8, y: []const u8) bool {
+            return versionOrder(x["vm-image-v".len..], y["vm-image-v".len..]) == .gt;
+        }
+    }.gt);
+    return items;
+}
+
+/// The numbers of a version such as 1 or 1.2.3, or null.
+fn versionKey(v: []const u8) ?[4]u64 {
+    var k: [4]u64 = @splat(0);
+    var parts = std.mem.splitScalar(u8, v, '.');
+    var n: usize = 0;
+    while (parts.next()) |p| : (n += 1) {
+        if (n == k.len or p.len == 0) return null;
+        k[n] = std.fmt.parseInt(u64, p, 10) catch return null;
+    }
+    return k;
+}
+
+fn versionOrder(x: []const u8, y: []const u8) std.math.Order {
+    const kx = versionKey(x).?;
+    const ky = versionKey(y).?;
+    for (kx, ky) |p, q| if (p != q) return std.math.order(p, q);
+    return .eq;
+}
+
+/// A fetch of the release at the folder `root`: the manifest and its
+/// signature, then the files of this architecture, then `install`.
+fn fetchFrom(it: *Interp, hook: anytype, s: vmstore.Store, a: std.mem.Allocator, root: []const u8, force: bool) Error!Value {
+    if (!std.mem.startsWith(u8, root, "https://") and !std.mem.startsWith(u8, root, "http://127.0.0.1"))
+        return it.fail("a release is fetched over https", .{});
     var t = s.tempDir(a) catch |e| return storeFail(it, e);
     defer t.remove(a, s);
     for ([_][]const u8{ "manifest.json", "manifest.json.sig" }) |name| try download(it, hook, t, a, root, name);
@@ -350,8 +420,10 @@ fn fetchCmd(it: *Interp, args: []const Value, update: bool) Error!Value {
     return value.wrapList(a, try a.dupe(Value, &items));
 }
 
+/// Downloads `root` + `name` into the file `name` of `t`, or, with an
+/// empty `root`, the URL `name` into the file releases.json.
 fn download(it: *Interp, hook: anytype, t: vmstore.Temp, a: std.mem.Allocator, root: []const u8, name: []const u8) Error!void {
-    const fd = t.create(a, name) catch |e| return storeFail(it, e);
+    const fd = t.create(a, if (root.len == 0) "releases.json" else name) catch |e| return storeFail(it, e);
     defer sys.close(fd);
     const url = try std.fmt.allocPrint(a, "{s}{s}", .{ root, name });
     hook(it.vm_host.fetch_ctx, url, fd) catch |e| return it.failCode("ZTCL VM FETCH", "the download of {s} failed: {s}", .{ url, @errorName(e) });

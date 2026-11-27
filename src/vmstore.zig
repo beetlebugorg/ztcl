@@ -285,7 +285,7 @@ fn join(a: Allocator, parts: []const []const u8) Allocator.Error![]u8 {
 }
 
 /// Reads the file `path` below `dir`. A symlink on the way is an error.
-fn readAll(a: Allocator, dir: i32, path: []const u8, max: usize) Error![]u8 {
+pub fn readAll(a: Allocator, dir: i32, path: []const u8, max: usize) Error![]u8 {
     const p = try parent(a, dir, path);
     defer p.close(a);
     const fd = try fs.openRead(p.fd, p.base);

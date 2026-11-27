@@ -3584,3 +3584,20 @@ test "isolated threads: a creator in host mode with files gets an error" {
     try tcl.fsroot.setRoot(&it, ".zig-cache");
     try std.testing.expectEqualStrings("-files host needs a creator in host mode", try it.str(try it.eval("catch {thread::create -isolation process -files host {}} m; set m")));
 }
+
+test "vm: the image releases, the highest version first" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const json =
+        \\[{"tag_name":"vm-image-v2","draft":false},{"tag_name":"v0.9.0","draft":false},
+        \\ {"tag_name":"vm-image-v10","draft":false},{"tag_name":"vm-image-v11","draft":true},
+        \\ {"tag_name":"vm-image-v1.5"},{"tag_name":"vm-image-vx"},{"tag_name":"vm-image-latest"},{"name":"no tag"}]
+    ;
+    const tags = try @import("microvm.zig").imageTags(arena.allocator(), json);
+    try std.testing.expectEqual(@as(usize, 3), tags.len);
+    try std.testing.expectEqualStrings("vm-image-v10", tags[0]);
+    try std.testing.expectEqualStrings("vm-image-v2", tags[1]);
+    try std.testing.expectEqualStrings("vm-image-v1.5", tags[2]);
+    try std.testing.expectEqual(@as(usize, 0), (try @import("microvm.zig").imageTags(arena.allocator(), "[]")).len);
+    try std.testing.expectError(error.NotList, @import("microvm.zig").imageTags(arena.allocator(), "{}"));
+}
