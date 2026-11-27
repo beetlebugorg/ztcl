@@ -1,6 +1,6 @@
 # ztcl
 
-A fast, sandboxed Tcl interpreter in Zig. ztcl runs Tcl 8.6 scripts with exact compute and memory limits, a JIT compiler that is on by default, real threads, and a WebAssembly build for the browser.
+A fast, sandboxed Tcl interpreter in Zig. ztcl runs Tcl 9.1 scripts, and Tcl 8.6 scripts with `--tcl 8.6`, with exact compute and memory limits, a JIT compiler that is on by default, real threads, and a WebAssembly build for the browser.
 
 **Docs:** https://beetlebug.org/ztcl/ · **Playground:** https://beetlebug.org/ztcl/playground/
 
@@ -45,7 +45,7 @@ fib.tcl:2: compute limit reached
 - [Quick start](docs/quickstart.md) and [the language](docs/language.md)
 - [Limits and capabilities](docs/limits.md), [threads](docs/threads.md), and [the JIT](docs/jit.md)
 - [Isolated threads](docs/isolation.md), [Linux guests](docs/vm.md) with `ztcl::vm`, and [sandboxed agents](docs/agents.md)
-- [Debugging](docs/debugging.md), [Tcl 9.1](docs/tcl91.md), and [TLS 1.3](docs/tls.md)
+- [Debugging](docs/debugging.md), [Tcl 9.1 and Tcl 8.6](docs/tcl91.md), and [TLS 1.3](docs/tls.md)
 - [Build a program](docs/build.md): one native binary for Linux, macOS, or Windows, from any host, with `ztcl build`
 - [Strip a program](docs/strip.md): a runtime with only the commands, capabilities, and modules that the scripts use, with `ztcl build --strip`
 - [Embed in Zig](docs/embedding.md) and [WebAssembly](docs/webassembly.md)

@@ -13,7 +13,7 @@ Loading C extensions is a separate later project.
 
 ## Tcl 9
 
-ztcl follows Tcl 8.6.16 and makes no claim of Tcl 9 compatibility. The baseline for Tcl 9.1.0 is in [Tcl 8.6 and Tcl 9](tcl9.md).
+ztcl follows Tcl 9.1 by default and Tcl 8.6.16 with `--tcl 8.6`. The parts of 9.1 that are not done are in [Tcl 9.1 and Tcl 8.6](../tcl91.md), and the baseline for Tcl 9.1.0 is in [Tcl 8.6 and Tcl 9](tcl9.md).
 
 1. Decide on each proposed choice in that page.
 2. Add the commands of Tcl 9 that the choices accept.
