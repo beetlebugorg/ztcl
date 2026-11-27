@@ -27,6 +27,8 @@
 //! on the descriptors of the process, and the script comes from the
 //! root folder. With no file, the commands come from `stdin` with no
 //! prompt. The mode adds the command `exit`.
+//! `--library DIR` sets `tcl_library`, the folder of the `encoding`
+//! folder of Tcl.
 //! `--cwd DIR` sets the current folder to a folder below the root.
 //! `--net loopback|any|allow=LIST` sets the network policy of `socket`.
 //! The default is `loopback`. A rule of the list is a host name, an
@@ -703,6 +705,11 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
         }
         if (std.mem.eql(u8, arg, "--tclsh")) {
             tclsh = true;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--library") and i + 1 < args.len) {
+            i += 1;
+            try it.setVar("::tcl_library", .{ .str = args[i] });
             continue;
         }
         if (std.mem.eql(u8, arg, "--cwd") and i + 1 < args.len) {

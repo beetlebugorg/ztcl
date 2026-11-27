@@ -55,7 +55,7 @@ cap: channels
 
 == fconfigure
 syn: fconfigure channelId ?-option value ...?
-does: Gives or sets the options of a channel: `-blocking`, `-buffering` (`full`, `line`, or `none`), `-buffersize`, `-encoding` (`utf-8`, `binary`, `ascii`, or an encoding file of `encoding dirs`), `-translation` (`auto`, `lf`, `crlf`, or `binary`), and `-eofchar`. In Tcl 9.1 a channel also has `-profile` (`strict` by default, `replace`, or `tcl8`): with `strict`, bad UTF-8 input is an error of the read. A socket also has `-sockname` and `-peername`. `chan configure` is the same command.
+does: Gives or sets the options of a channel: `-blocking`, `-buffering` (`full`, `line`, or `none`), `-buffersize`, `-encoding` (`utf-8`, `binary`, `ascii`, `unicode`, or an encoding file of `encoding dirs`), `-translation` (`auto`, `lf`, `crlf`, or `binary`), and `-eofchar`. In Tcl 9.1 a channel also has `-profile` (`strict` by default, `replace`, or `tcl8`): with `strict`, bad UTF-8 input is an error of the read. A socket also has `-sockname` and `-peername`. `chan configure` is the same command.
 cap: channels
 
 == fblocked
@@ -88,7 +88,7 @@ diff: Windows has no `chan pipe` in this version. `chan pending`, `chan push`, a
 
 == source
 syn: source ?-encoding name? fileName
-does: Runs the script in a file, and gives the result of its last command.
+does: Runs the script in a file, and gives the result of its last command. `-encoding` names the encoding of the file. The default is `utf-8`. A byte order mark at the start of the file is not part of the script, and the character ^Z ends the script.
 cap: channels
 
 == file

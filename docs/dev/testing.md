@@ -35,7 +35,7 @@ tools/suite.sh set.test expr.test     # some files
 
 - `socket` has the `loopback` policy.
 - `exec` runs only the programs of a fixed list (`cat`, `echo`, `sh`, `sleep`, and others), with the root folder as the working folder, an environment of `PATH`, `HOME`, and `LANG` only, and a time limit of 120 seconds.
-- The `tclsh` of the tests is the script `ztclsh` in the root folder. It runs the same runner with `--tclsh`. `exec` runs it from the list `--exec-allow-root /ztclsh`, the list of files below the root.
+- The `tclsh` of the tests is the script `ztclsh` in the root folder. It runs the same runner with `--tclsh`, and with `--library /usr/lib/tcl8.6` for the encoding files. `exec` runs it from the list `--exec-allow-root /ztclsh`, the list of files below the root.
 - A test file has a time limit of 20 minutes. Some files wait on timers: `main.test` and `socket.test` use some minutes each.
 
 To make the table, run the suite with both runners:

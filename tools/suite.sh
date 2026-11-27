@@ -105,7 +105,8 @@ for f in "$@"; do
     # relative to the root folder, so `info script` names the file there.
     cp -- "$tests/$f" "$root"/
     # The encoding files of Tcl, for a file that uses an encoding.
-    # tools/tcltest.tcl sets tcl_library to /usr/lib/tcl8.6.
+    # tools/tcltest.tcl sets tcl_library to /usr/lib/tcl8.6, and
+    # `--library` sets it in a child `ztclsh`.
     enc="$tests/../library/encoding"
     if [ -n "$jail" ] && [ -d "$enc" ] && grep -qE 'encoding (convert|system|names)|-encoding [a-z]' "$tests/$f"; then
         mkdir -p "$root/usr/lib/tcl8.6" && cp -r -- "$enc" "$root/usr/lib/tcl8.6/"
@@ -119,7 +120,7 @@ for f in "$@"; do
     [ -n "$jail" ] || set_exec=
     cat > "$root/ztclsh" <<EOF
 #!/bin/sh
-exec "$tcl" $gc --compute 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --cwd "\$PWD" --tclsh "\$@"
+exec "$tcl" $gc --compute 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --library /usr/lib/tcl8.6 --cwd "\$PWD" --tclsh "\$@"
 EOF
     chmod +x "$root/ztclsh"
     raw=$(cd "$root" && limit 1200 "$tcl" $gc --compute 200000000 --mem 2147483648 --allow $caps ${jail:+--root} ${jail:+"$root"} $set_exec --keep-going $rec "$here/tcltest.tcl" "$f" "$here/tcltest-end.tcl" 2>&1)

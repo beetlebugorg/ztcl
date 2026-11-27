@@ -956,7 +956,7 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         switch (conv) {
             'c' => {
                 const n = std.unicode.utf8ByteSequenceLength(s[si]) catch 1;
-                const cp: u32 = if (si + n <= s.len) (std.unicode.utf8Decode(s[si .. si + n]) catch s[si]) else s[si];
+                const cp: u32 = if (si + n <= s.len) (std.unicode.wtf8Decode(s[si .. si + n]) catch s[si]) else s[si];
                 si += if (si + n <= s.len) n else 1;
                 v = .{ .int = cp };
             },

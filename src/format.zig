@@ -157,8 +157,9 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
             'c' => {
                 const cp = try it.int(arg);
                 var b: [4]u8 = undefined;
-                const c: u21 = if (cp < 0 or cp > 0x10ffff or (cp >= 0xd800 and cp <= 0xdfff)) 0xfffd else @intCast(cp);
-                const n = std.unicode.utf8Encode(c, &b) catch unreachable;
+                // A surrogate half has the three-byte form, as in Tcl.
+                const c: u21 = if (cp < 0 or cp > 0x10ffff) 0xfffd else @intCast(cp);
+                const n = std.unicode.wtf8Encode(c, &b) catch unreachable;
                 body = try a.dupe(u8, b[0..n]);
                 numeric = false;
             },

@@ -1,6 +1,7 @@
 //! The `encoding` command. It is part of the channel capability.
 //!
-//! A string of ztcl is UTF-8 text. A byte string is text where each
+//! A string of ztcl is UTF-8 text. A surrogate half with no pair has the
+//! three-byte form (ED A0 80 to ED BF BF), as in Tcl. A byte string is text where each
 //! character is below 256. `convertto` makes a byte string from text,
 //! and `convertfrom` makes text from a byte string. The encodings are
 //! the ones with no table: `utf-8`, `iso8859-1`, `ascii`, `binary`,
@@ -58,8 +59,9 @@ fn put(a: std.mem.Allocator, out: *std.ArrayList(u8), cp: u21) !void {
     try out.appendSlice(a, buf[0..n]);
 }
 
-/// The characters of a text. A byte that starts no valid sequence is
-/// one character with the value of the byte.
+/// The characters of a text. A surrogate half in the three-byte form is
+/// one character. A byte that starts no valid sequence is one character
+/// with the value of the byte.
 const Chars = struct {
     text: []const u8,
     at: usize = 0,
@@ -69,7 +71,7 @@ const Chars = struct {
         const b = c.text[c.at];
         const n = std.unicode.utf8ByteSequenceLength(b) catch 1;
         if (n > 1 and c.at + n <= c.text.len) {
-            if (std.unicode.utf8Decode(c.text[c.at .. c.at + n])) |cp| {
+            if (std.unicode.wtf8Decode(c.text[c.at .. c.at + n])) |cp| {
                 c.at += n;
                 return cp;
             } else |_| {}
@@ -153,8 +155,29 @@ pub fn decode(it: *Interp, name: []const u8, bytes_text: []const u8, profile: Pr
     var out: std.ArrayList(u8) = .empty;
     if (eql(name, "utf-8") or eql(name, "identity")) {
         if (profile == .tcl8) {
+            // As in Tcl 8.6: a high and a low surrogate half in a row are
+            // one character, and C0 80 is NUL.
             var bytes: Chars = .{ .text = raw.items };
-            while (bytes.next()) |cp| try put(a, &out, cp);
+            while (true) {
+                const start = bytes.at;
+                const cp = bytes.next() orelse break;
+                if (raw.items[start] == 0xC0 and bytes.at == start + 1 and bytes.at < raw.items.len and raw.items[bytes.at] == 0x80) {
+                    bytes.at += 1;
+                    try put(a, &out, 0);
+                    continue;
+                }
+                if (cp >= 0xD800 and cp < 0xDC00) {
+                    const at = bytes.at;
+                    if (bytes.next()) |lo| {
+                        if (lo >= 0xDC00 and lo < 0xE000 and bytes.at - at == 3) {
+                            try put(a, &out, 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00));
+                            continue;
+                        }
+                    }
+                    bytes.at = at;
+                }
+                try put(a, &out, cp);
+            }
             return .{ .text = out.items };
         }
         const r = raw.items;
@@ -187,7 +210,10 @@ pub fn decode(it: *Interp, name: []const u8, bytes_text: []const u8, profile: Pr
             }
             try put(a, &out, cp);
         }
-        if (raw.items.len % 2 == 1 and profile == .strict) return .{ .text = out.items, .fail = raw.items.len - 1 };
+        if (raw.items.len % 2 == 1) {
+            if (profile == .strict) return .{ .text = out.items, .fail = raw.items.len - 1 };
+            try put(a, &out, 0xFFFD);
+        }
         return .{ .text = out.items };
     }
     if (!known(name)) {
@@ -382,7 +408,8 @@ pub const Escape = struct {
     const Sub = struct { name: []const u8, seq: []const u8, table: ?*const Table = null };
 };
 
-pub const Encoding = union(enum) { table: *const Table, escape: *Escape };
+/// `utf16` is the `unicode` encoding of a channel: UTF-16, little endian.
+pub const Encoding = union(enum) { table: *const Table, escape: *Escape, utf16 };
 
 /// The state of a conversion that continues: the current table of an
 /// escape-driven encoding, and true after the output of `init`.
@@ -635,15 +662,16 @@ fn subTable(it: *Interp, x: *Escape, k: usize) Error!*const Table {
         s.table = try latinTable(it.alloc(), eql(s.name, "ascii"));
     } else if (try lookup(it, s.name)) |e| switch (e) {
         .table => |t| s.table = t,
-        .escape => {},
+        .escape, .utf16 => {},
     };
     return s.table orelse it.failCode(try std.fmt.allocPrint(it.alloc(), "TCL LOOKUP ENCODING {s}", .{s.name}), "unknown encoding \"{s}\"", .{s.name});
 }
 
 /// The encoding `name` for a channel. It is null for an encoding that
 /// a channel converts with no table: `utf-8`, `identity`, `binary`, and
-/// `iso8859-1`.
+/// `iso8859-1`. `unicode` is `utf16`.
 pub fn forChannel(it: *Interp, name: []const u8) Error!?Encoding {
+    if (eql(name, "unicode")) return .utf16;
     if (eql(name, "ascii")) {
         if (it.enc_tables.get(name)) |e| return e;
         const e: Encoding = .{ .table = try latinTable(it.alloc(), true) };
@@ -663,6 +691,26 @@ pub fn toUtf(it: *Interp, e: Encoding, st: *State, src: []const u8, end: bool, l
     var i: usize = 0;
     var n: usize = 0;
     switch (e) {
+        .utf16 => while (i + 1 < src.len and n < limit) : (n += 1) {
+            var cp: u21 = @as(u21, src[i]) | (@as(u21, src[i + 1]) << 8);
+            if (cp >= 0xD800 and cp < 0xDC00) {
+                // The second half of a pair is not here yet.
+                if (i + 3 >= src.len and !end) break;
+                if (i + 3 < src.len) {
+                    const lo: u21 = @as(u21, src[i + 2]) | (@as(u21, src[i + 3]) << 8);
+                    if (lo >= 0xDC00 and lo < 0xE000) {
+                        cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                        i += 2;
+                    }
+                }
+            }
+            try put(a, out, cp);
+            i += 2;
+        } else if (end and i < src.len and n < limit) {
+            try put(a, out, 0xFFFD);
+            i += 1;
+            n += 1;
+        },
         .table => |t| while (i < src.len and n < limit) : (n += 1) {
             const b = src[i];
             var two = false;
@@ -758,6 +806,14 @@ pub fn fromUtf(it: *Interp, e: Encoding, st: *State, text: []const u8, end: bool
     const a = it.alloc();
     var chars: Chars = .{ .text = text };
     switch (e) {
+        .utf16 => while (chars.next()) |cp| {
+            if (cp >= 0x10000) {
+                const v = cp - 0x10000;
+                const hi: u21 = 0xD800 + (v >> 10);
+                const lo: u21 = 0xDC00 + (v & 0x3ff);
+                try out.appendSlice(a, &.{ @truncate(hi), @truncate(hi >> 8), @truncate(lo), @truncate(lo >> 8) });
+            } else try out.appendSlice(a, &.{ @truncate(cp), @truncate(cp >> 8) });
+        },
         .table => |t| while (chars.next()) |cp| {
             var word = t.fromChar(cp);
             if (word == 0 and cp != 0) word = t.fallback;

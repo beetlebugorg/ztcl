@@ -861,15 +861,19 @@ fn cmdGets(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     c.blocked = false;
     var scan: usize = c.rpos;
     var end: ?usize = null;
+    // In `unicode` (UTF-16), a line end is a unit of two bytes, at an
+    // even offset from the read position.
+    const unit: usize = if (c.enc != null and c.enc.? == .utf16) 2 else 1;
     while (true) {
         var k = scan;
-        while (k < c.rbuf.items.len) : (k += 1) {
+        while (k + unit <= c.rbuf.items.len) : (k += unit) {
             const ch = c.rbuf.items[k];
+            if (unit == 2 and c.rbuf.items[k + 1] != 0) continue;
             if (ch == '\n' or (ch == '\r' and (c.input == .cr or c.input == .auto))) {
                 end = k;
                 break;
             }
-            if (ch == '\r' and c.input == .crlf and k + 1 < c.rbuf.items.len and c.rbuf.items[k + 1] == '\n') {
+            if (ch == '\r' and c.input == .crlf and k + unit < c.rbuf.items.len and c.rbuf.items[k + unit] == '\n') {
                 end = k;
                 break;
             }
@@ -882,8 +886,8 @@ fn cmdGets(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var got_any = true;
     if (end) |e| {
         line = try decode(it, c, c.rbuf.items[c.rpos..e]);
-        var next = e + 1;
-        if (c.rbuf.items[e] == '\r' and next < c.rbuf.items.len and c.rbuf.items[next] == '\n' and c.input != .cr) next += 1;
+        var next = e + unit;
+        if (c.rbuf.items[e] == '\r' and next < c.rbuf.items.len and c.rbuf.items[next] == '\n' and c.input != .cr) next += unit;
         c.rpos = next;
     } else if (c.blocked) {
         // A partial line stays in the buffer for the next call.
@@ -1312,8 +1316,14 @@ fn copyChars(it: *Interp, from: *Channel, to: *Channel, limit: ?usize) Error!Val
 fn cmdSource(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2 and argv.len != 4) return it.wrongArgs("source ?-encoding name? fileName");
     const a = it.alloc();
+    var e_name: []const u8 = "utf-8";
+    if (argv.len == 4) {
+        const o = try it.str(argv[1]);
+        if (!eql(o, "-encoding")) return it.fail("bad option \"{s}\": must be -encoding", .{o});
+        e_name = try it.str(argv[2]);
+    }
     const path = try it.str(argv[argv.len - 1]);
-    if (try vfs.gate(it, path, .channels, "couldn't read file")) |h| return sourceText(it, path, try vfs.read(it, h, "couldn't read file", path));
+    if (try vfs.gate(it, path, .channels, "couldn't read file")) |h| return sourceText(it, path, try sourceDecode(it, e_name, try vfs.read(it, h, "couldn't read file", path)));
     const rel = (try fsroot.normal(it, path)) orelse return it.failCode("POSIX EACCES {permission denied}", "couldn't read file \"{s}\": permission denied", .{path});
     const fd = switch (try fsroot.openRel(it, rel, .{}, 0)) {
         .fd => |x| x,
@@ -1332,14 +1342,31 @@ fn cmdSource(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         text.items.len += got;
         try it.checkMem();
     }
-    return sourceText(it, path, text.items);
+    return sourceText(it, path, try sourceDecode(it, e_name, text.items));
+}
+
+/// The text of the bytes of a script file in the encoding `name`.
+fn sourceDecode(it: *Interp, name: []const u8, raw: []const u8) Error![]const u8 {
+    if (eql(name, "utf-8") or eql(name, "identity")) return raw;
+    const a = it.alloc();
+    var out: std.ArrayList(u8) = .empty;
+    if (eql(name, "binary") or eql(name, "iso8859-1")) {
+        for (raw) |b| try value.appendCodepoint(a, &out, b);
+        return out.items;
+    }
+    const e = (try enc.forChannel(it, name)) orelse return it.failCode(try std.fmt.allocPrint(a, "TCL LOOKUP ENCODING {s}", .{name}), "unknown encoding \"{s}\"", .{name});
+    var st: enc.State = .{};
+    _ = try enc.toUtf(it, e, &st, raw, true, std.math.maxInt(usize), &out);
+    return out.items;
 }
 
 /// Runs the text of the file `path` as `source` does.
 fn sourceText(it: *Interp, path: []const u8, text: []const u8) Error!Value {
     const a = it.alloc();
-    // The ^Z character ends a script.
+    // The ^Z character ends a script, and a byte order mark at the start
+    // is not part of it.
     var body = text;
+    if (std.mem.startsWith(u8, body, "\xEF\xBB\xBF")) body = body[3..];
     if (std.mem.indexOfScalar(u8, body, 26)) |k| body = body[0..k];
     const saved = it.script_name;
     it.script_name = try a.dupe(u8, path);
