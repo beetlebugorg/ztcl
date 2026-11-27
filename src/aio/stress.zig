@@ -64,8 +64,14 @@ fn check(r: i32) !i32 {
 const in = std.posix.sockaddr.in;
 
 /// The count of open descriptors: the entries of /proc/self/fd on
-/// Linux, and the descriptors below 65,536 that fcntl knows elsewhere.
+/// Linux, the handles of the process on Windows, and the descriptors
+/// below 65,536 that fcntl finds open elsewhere.
 fn openFds() usize {
+    if (sys.is_windows) {
+        var n: u32 = 0;
+        if (GetProcessHandleCount(GetCurrentProcess(), &n) == 0) return 0;
+        return n;
+    }
     if (!sys.is_linux) {
         var n: usize = 0;
         for (0..65536) |fd| {
@@ -93,9 +99,15 @@ fn openFds() usize {
     return n - 1;
 }
 
-/// The resident size: /proc/self/statm on Linux, and the peak of
-/// getrusage elsewhere (bytes on macOS).
+/// The resident size: /proc/self/statm on Linux, the working set on
+/// Windows, and the peak of getrusage elsewhere (bytes on macOS).
 fn rssKiB() usize {
+    if (sys.is_windows) {
+        var m: MemoryCounters = std.mem.zeroes(MemoryCounters);
+        m.cb = @sizeOf(MemoryCounters);
+        if (K32GetProcessMemoryInfo(GetCurrentProcess(), &m, m.cb) == 0) return 0;
+        return m.working_set / 1024;
+    }
     if (!sys.is_linux) {
         var ru: std.c.rusage = undefined;
         if (std.c.getrusage(std.c.rusage.SELF, &ru) != 0) return 0;
@@ -167,6 +179,17 @@ fn stopCb(_: *Loop, c: *Completion) void {
     stop.* = true;
 }
 
+const MemoryCounters = extern struct {
+    cb: u32,
+    page_faults: u32,
+    peak_working_set: usize,
+    working_set: usize,
+    rest: [6]usize,
+};
+extern "kernel32" fn GetCurrentProcess() callconv(.winapi) *anyopaque;
+extern "kernel32" fn GetProcessHandleCount(process: *anyopaque, count: *u32) callconv(.winapi) i32;
+extern "kernel32" fn K32GetProcessMemoryInfo(process: *anyopaque, out: *MemoryCounters, size: u32) callconv(.winapi) i32;
+
 /// macOS starts a process with 256 descriptors: raise the soft limit
 /// to the hard limit, at most OPEN_MAX (10,240).
 fn raiseFdLimit() void {
@@ -186,11 +209,19 @@ pub fn main(init: std.process.Init) !void {
     while (i + 1 < args.len) : (i += 2) {
         if (std.mem.eql(u8, args[i], "--conns")) n_conns = try std.fmt.parseInt(usize, args[i + 1], 10) else if (std.mem.eql(u8, args[i], "--seconds")) seconds = try std.fmt.parseInt(u64, args[i + 1], 10) else if (std.mem.eql(u8, args[i], "--backend")) backend = std.meta.stringToEnum(aio.Backend, args[i + 1]) orelse return error.BadBackend else return error.BadOption;
     }
-    const fds_start = openFds();
+    var fds_start = openFds();
     var l = try Loop.init(init.gpa, .{ .backend = backend, .entries = 4096 });
     defer l.deinit();
+    // On Windows the count has each handle of the process, and the loop
+    // and the first socket, which starts Winsock, make handles that stay
+    // to the end. So the count starts after them.
+    if (sys.is_windows) {
+        sys.close(try check(sys.tcpSocket(std.posix.AF.INET)));
+        fds_start = openFds();
+    }
     std.debug.print("backend {t}, {d} connections, {d} s\n", .{ l.backend(), n_conns, seconds });
-    if (!sys.is_linux) raiseFdLimit();
+    // Windows has no limit of descriptors to raise.
+    if (!sys.is_linux and !sys.is_windows) raiseFdLimit();
     var addr = std.mem.zeroes(in);
     addr.family = std.posix.AF.INET;
     addr.addr = std.mem.nativeToBig(u32, 0x7f000001);
@@ -255,8 +286,9 @@ pub fn main(init: std.process.Init) !void {
     sys.close(lfd);
     const fds_end = openFds();
     std.debug.print("round trips {d}, end rss {d} KiB, fds before {d}, after {d}\n", .{ trips, end_rss, fds_start, fds_end });
-    // The loop itself has its descriptors to the deinit.
-    const loop_fds: usize = 2;
+    // The loop itself has its descriptors to the deinit. On Windows the
+    // count of the start has them.
+    const loop_fds: usize = if (sys.is_windows) 0 else 2;
     var bad = false;
     if (fds_end > fds_start + loop_fds) {
         std.debug.print("FAIL: {d} descriptors stay open\n", .{fds_end - fds_start - loop_fds});
