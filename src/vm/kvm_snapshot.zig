@@ -499,7 +499,7 @@ pub fn restore(m: *Machine, fd: i32) Fail!void {
     }
 
     errdefer m.teardown();
-    if (h.mem_size != @as(u64, m.cfg.memory_mb) << 20) {
+    if (h.mem_size != @as(u64, m.cfg.memory_mb) << 20 or h.mem_size > max_chunks * kvm.huge_page) {
         kvm.why = "the memory size of the snapshot is not the one of its header";
         return error.Setup;
     }
@@ -550,7 +550,12 @@ pub fn restore(m: *Machine, fd: i32) Fail!void {
         d.int_status = ds.int_status;
         d.driver_features = ds.driver_features;
         if (i != 1) d.config = ds.config;
-        for (&d.queues, ds.queues) |*q, o| q.* = .{ .num = o.num, .ready = o.ready != 0, .desc = o.desc, .avail = o.avail, .used = o.used, .last_avail = @truncate(o.last_avail) };
+        // A queue of the file is ready only when its rings pass the
+        // checks of a ready queue of the driver.
+        for (&d.queues, ds.queues) |*q, o| {
+            q.* = .{ .num = @min(o.num, @import("virtio/queue.zig").max_queue), .desc = o.desc, .avail = o.avail, .used = o.used, .last_avail = @truncate(o.last_avail) };
+            q.ready = o.ready != 0 and q.valid(m.mem);
+        }
     }
     m.uart = vs.uart;
     const t3 = kvm.nowNs();
@@ -558,6 +563,11 @@ pub fn restore(m: *Machine, fd: i32) Fail!void {
     const t4 = kvm.nowNs();
     for (m.vcpus) |*v| {
         var cs: VcpuState = undefined;
+        // The MSRs of the vCPUs before come between the states.
+        if (off + @sizeOf(VcpuState) > st.len) {
+            kvm.why = "the state of the snapshot is too short";
+            return error.Setup;
+        }
         @memcpy(std.mem.asBytes(&cs), st[off..][0..@sizeOf(VcpuState)]);
         off += @sizeOf(VcpuState);
         const nb = @as(usize, cs.nmsrs) * @sizeOf(MsrEntry);
