@@ -210,6 +210,13 @@ fn readPairs(it: *Interp, v: Value) Error![]const Value {
     return pairs(it, v);
 }
 
+/// The list of the pairs of `v` for `dict for`: a marked dict itself, or
+/// a new marked dict.
+pub fn forPairs(it: *Interp, v: Value) Error!Value {
+    if (isChecked(v)) return v;
+    return wrapDict(it, try pairs(it, v));
+}
+
 /// A list value of pairs with unique keys, with the mark of a dict.
 fn wrapDict(it: *Interp, items: []Value) Error!Value {
     const out = try value.wrapList(it.alloc(), items);

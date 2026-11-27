@@ -701,6 +701,8 @@ pub const Emitter = struct {
         const s = e.s;
         const l = e.l;
         const i = e.code.ins[pc];
+        // A glob pattern of `switch -glob` (`x` = 1) needs the helper.
+        if (i.x != 0) return e.branch(.str_eq_jump, pc, i.b);
         const d: i64 = e.info.depth[pc];
         const slow_l = try e.slow(pc);
         try e.stackTag(d - 1, l.tag_str, slow_l);

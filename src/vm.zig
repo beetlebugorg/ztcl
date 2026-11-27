@@ -865,6 +865,8 @@ const Compiler = struct {
             const loop = c.loops.items[c.loops.items.len - 1];
             if (c.depth != loop.body_depth) return false;
             if (name[0] == 'c' and loop.in_next) return false;
+        } else if (eql(u8, name, "dict") and n == 5 and isWord(cmd.words[1], "for")) {
+            return c.compileForeach(cmd, false, true);
         } else if (eql(u8, name, "dict")) {
             // Slots of a proc only: a named cell has no owned form.
             if (c.named or n < 4 or cmd.words[1].kind != .lit or cmd.words[1].kind.lit != .str) return false;
@@ -878,9 +880,9 @@ const Compiler = struct {
         } else if (eql(u8, name, "for")) {
             return c.compileFor(cmd);
         } else if (eql(u8, name, "foreach")) {
-            return c.compileForeach(cmd, false);
+            return c.compileForeach(cmd, false, false);
         } else if (eql(u8, name, "lmap")) {
-            return c.compileForeach(cmd, true);
+            return c.compileForeach(cmd, true, false);
         } else if (eql(u8, name, "switch")) {
             return c.compileSwitch(cmd);
         } else if (eql(u8, name, "lassign")) {
@@ -1004,17 +1006,24 @@ const Compiler = struct {
         };
     }
 
-    /// `switch ?-exact? ?--? string {pattern body ...}`, also with the
+    /// `switch ?-exact|-glob? ?--? string {pattern body ...}`, also with the
     /// patterns and bodies as separate literal words. Each pattern and
     /// each body is literal. Without `--`, the string must be a literal
     /// that does not start with "-", because the general command reads
     /// such a value as an option. The code tests each pattern with
-    /// `str_eq_jump`, and each body ends with a jump to the end.
+    /// `str_eq_jump` (with `x` = 1 for `-glob`), and each body ends with
+    /// a jump to the end.
     fn compileSwitch(c: *Compiler, cmd: *Cmd) Error!bool {
         const it = c.it;
         const w = cmd.words;
         var i: usize = 1;
-        if (i < w.len and isWord(w[i], "-exact")) i += 1;
+        var glob = false;
+        if (i < w.len and isWord(w[i], "-exact")) {
+            i += 1;
+        } else if (i < w.len and isWord(w[i], "-glob")) {
+            glob = true;
+            i += 1;
+        }
         const dashes = i < w.len and isWord(w[i], "--");
         if (dashes) i += 1;
         if (i + 1 >= w.len) return false;
@@ -1064,7 +1073,7 @@ const Compiler = struct {
                 continue;
             }
             try c.lits.append(c.a, .{ .str = arm.pat });
-            tests[k] = try c.emit(.{ .op = .str_eq_jump, .a = @intCast(c.lits.items.len - 1) });
+            tests[k] = try c.emit(.{ .op = .str_eq_jump, .x = @intFromBool(glob), .a = @intCast(c.lits.items.len - 1) });
         }
         var ends: std.ArrayList(u32) = .empty;
         var default_jump: u32 = no_target;
@@ -1259,21 +1268,25 @@ const Compiler = struct {
         return true;
     }
 
-    /// `foreach`, or `lmap` with `collect`. The list of `lmap` is on the
-    /// stack below the state of the loop, and `lmap_add` appends the
-    /// result of each pass that ends with no `continue`.
-    fn compileForeach(c: *Compiler, cmd: *Cmd, collect: bool) Error!bool {
-        if (cmd.words.len != 4 or cmd.words[1].kind != .lit or cmd.words[3].kind != .lit) return false;
+    /// `foreach`, or `lmap` with `collect`, or `dict for` with `pairs`.
+    /// The list of `lmap` is on the stack below the state of the loop,
+    /// and `lmap_add` appends the result of each pass that ends with no
+    /// `continue`. `dict for {k v} d body` is `foreach {k v}` on the pairs
+    /// of the dict (`dict.forPairs`): the same passes, compute units,
+    /// break, continue, and empty result.
+    fn compileForeach(c: *Compiler, cmd: *Cmd, collect: bool, comptime pairs: bool) Error!bool {
+        const w0: usize = if (pairs) 2 else 1;
+        if (cmd.words.len != w0 + 3 or cmd.words[w0].kind != .lit or cmd.words[w0 + 2].kind != .lit) return false;
         const it = c.it;
         const r, const code = .{ it.result, it.error_code };
-        const names = it.list(cmd.words[1].kind.lit) catch |e| {
+        const names = it.list(cmd.words[w0].kind.lit) catch |e| {
             if (e == error.OutOfMemory) return e;
             it.result, it.error_code = .{ r, code };
             return false;
         };
-        if (names.len == 0) return false;
+        if (names.len == 0 or (pairs and names.len != 2)) return false;
         for (names) |v| if (v != .str or !plain(v.str) or std.mem.eql(u8, v.str, "tcl_precision")) return false;
-        const body = try c.bodyScript(cmd, 3) orelse return false;
+        const body = try c.bodyScript(cmd, w0 + 2) orelse return false;
         const table = try c.a.alloc(u32, names.len);
         for (names, table) |v, *t| t.* = try c.slot(v.str);
         try c.tables.append(c.a, table);
@@ -1285,8 +1298,8 @@ const Compiler = struct {
             _ = try c.emit(.{ .op = .push_empty });
             c.push(1);
         }
-        try c.compileWord(&cmd.words[2]);
-        _ = try c.emit(.{ .op = .foreach_init });
+        try c.compileWord(&cmd.words[w0 + 1]);
+        _ = try c.emit(.{ .op = .foreach_init, .b = @intFromBool(pairs) });
         c.push(1);
         c.label = c.here();
         const top = try c.emit(.{ .op = .foreach_next, .a = @intCast(c.tables.items.len - 1) });
@@ -1995,9 +2008,11 @@ pub inline fn opStrEqJump(comptime named: bool, it: *Interp, f: *Frame, code: *c
     _ = .{ named, f };
     const top = stack[sp - 1];
     const lit = code.lits[i.a].str;
-    if (top == .str) return sameText(top.str, lit);
+    if (i.x == 0 and top == .str) return sameText(top.str, lit);
     var buf: [24]u8 = undefined;
     const s: []const u8 = if (top == .int) value.writeInt(&buf, top.int) else try it.str(top);
+    // `switch -glob`: the match of the command, with its compute units.
+    if (i.x != 0) return @import("cmds.zig").globSteps(it, lit, s, false);
     return sameText(s, lit);
 }
 
@@ -2280,9 +2295,14 @@ pub inline fn opAppend(comptime named: bool, it: *Interp, f: *Frame, code: *cons
 }
 
 pub inline fn opForeachInit(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
-    _ = .{ named, f, code, i };
-    const items = try it.list(stack[sp - 1]);
-    if (stack[sp - 1] != .list) stack[sp - 1] = try value.newList(it.alloc(), items);
+    _ = .{ named, f, code };
+    if (i.b != 0) {
+        // `dict for`: the pairs of the dict, each key one time.
+        stack[sp - 1] = try @import("dict.zig").forPairs(it, stack[sp - 1]);
+    } else {
+        const items = try it.list(stack[sp - 1]);
+        if (stack[sp - 1] != .list) stack[sp - 1] = try value.newList(it.alloc(), items);
+    }
     stack[sp] = .{ .int = 0 };
 }
 
