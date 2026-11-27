@@ -360,7 +360,25 @@ pub fn Tcl_InvalidateStringRep(o: *Obj) callconv(.c) void {
 
 pub fn Tcl_GetCharLength(o: *Obj) callconv(.c) c_int {
     if (o.typePtr == &bytes_type and o.bytes == null) return @intCast(byteRep(o).data.items.len);
-    return @intCast(std.unicode.utf8CountCodepoints(text(o)) catch text(o).len);
+    return @intCast(charCount(text(o)));
+}
+
+/// The count of the characters of `s`, in the modified UTF-8 of Tcl: C0
+/// 80 is one character (U+0000), and a byte that does not start a whole
+/// sequence is one character.
+pub fn charCount(s: []const u8) usize {
+    var n: usize = 0;
+    var i: usize = 0;
+    while (i < s.len) : (n += 1) {
+        const c = s[i];
+        const more: usize = if (c < 0xC0) 0 else if (c < 0xE0) 1 else if (c < 0xF0) 2 else if (c < 0xF8) 3 else 0;
+        var ok = i + more < s.len;
+        if (ok) for (s[i + 1 ..][0..more]) |b| {
+            if (b & 0xC0 != 0x80) ok = false;
+        };
+        i += if (ok) 1 + more else 1;
+    }
+    return n;
 }
 
 /// Sets the result to "expected WHAT but got "TEXT"" and gives ERROR.

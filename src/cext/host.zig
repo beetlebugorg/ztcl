@@ -65,8 +65,11 @@ pub fn Tcl_TranslateFileName(_: ?*Interp, name: [*:0]const u8, ds: *DString) cal
 // in the exchange buffer of the package (`ztcl_cext_buf`).
 
 /// A value that crosses the boundary. `kind` is 0 for text, 1 for an
-/// int, and 2 for a double. For text, `bits` is the address in the
-/// memory of the side that sends it.
+/// int, 2 for a double, and 3 for a list. For text, `bits` is the
+/// address in the memory of the side that sends it. For a list, `len` is
+/// the count of elements and `bits` the address of an array of `Arg`s
+/// in that memory. Text is in the modified UTF-8 of Tcl, where U+0000 is
+/// the two bytes C0 80.
 pub const Arg = extern struct {
     kind: u32,
     len: u32,
@@ -173,6 +176,19 @@ pub fn objOf(a: Arg) *Obj {
     return switch (a.kind) {
         1 => Tcl_NewWideIntObj(@bitCast(a.bits)),
         2 => Tcl_NewDoubleObj(@bitCast(a.bits)),
+        3 => blk: {
+            const o = obj.Tcl_NewListObj(0, null);
+            if (a.len == 0) break :blk o;
+            const p: [*]const Arg = @ptrFromInt(@as(usize, @intCast(a.bits)));
+            const l = obj.listRep(o);
+            l.items.ensureTotalCapacity(gpa, a.len) catch panicText("out of memory");
+            for (p[0..a.len]) |e| {
+                const eo = objOf(e);
+                incr(eo);
+                l.items.appendAssumeCapacity(eo);
+            }
+            break :blk o;
+        },
         else => blk: {
             const p: [*]const u8 = @ptrFromInt(@as(usize, @intCast(a.bits)));
             break :blk Tcl_NewStringObj(p, @intCast(a.len));
@@ -180,13 +196,41 @@ pub fn objOf(a: Arg) *Obj {
     };
 }
 
+/// The `Arg` arrays of the lists of the last `argOf`.
+threadlocal var list_area: std.ArrayList(Arg) = .empty;
+
 /// The value of an object for ztcl. Text stays in the memory of the
-/// package until the next call.
+/// package until the next call, and the elements of a list stay until
+/// the next `argOf`.
 pub fn argOf(o: *Obj) Arg {
+    if (o.typePtr != &obj.list_type) return leafOf(o);
+    // The area does not move while it fills, so the size comes first.
+    list_area.clearRetainingCapacity();
+    list_area.ensureTotalCapacity(gpa, @max(elementCount(o), 1)) catch panicText("out of memory");
+    return listOf(o);
+}
+
+fn leafOf(o: *Obj) Arg {
     if (o.typePtr == &obj.wide_type) return .{ .kind = 1, .len = 0, .bits = @bitCast(o.rep.wide) };
     if (o.typePtr == &obj.double_type) return .{ .kind = 2, .len = 0, .bits = @bitCast(o.rep.double) };
     const s = text(o);
     return .{ .kind = 0, .len = @intCast(s.len), .bits = @intFromPtr(s.ptr) };
+}
+
+/// The count of the elements of list `o` and of its inner lists.
+fn elementCount(o: *Obj) usize {
+    var n: usize = 0;
+    for (obj.listRep(o).items.items) |e| n += 1 + if (e.typePtr == &obj.list_type) elementCount(e) else 0;
+    return n;
+}
+
+fn listOf(o: *Obj) Arg {
+    const items = obj.listRep(o).items.items;
+    const start = list_area.items.len;
+    list_area.items.len += items.len;
+    const out = list_area.items[start..][0..items.len];
+    for (items, out) |e, *a| a.* = if (e.typePtr == &obj.list_type) listOf(e) else leafOf(e);
+    return .{ .kind = 3, .len = @intCast(items.len), .bits = @intFromPtr(out.ptr) };
 }
 
 pub const ObjCmdProc = *const fn (?*anyopaque, *Interp, c_int, [*]const *Obj) callconv(.c) c_int;

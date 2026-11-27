@@ -503,13 +503,60 @@ export class Interp {
   }
 
   // The text of argument `i` of an `Arg` array at word `w0` of `side`.
+  // A list (kind 3) gives the text of a Tcl list.
   _argText(side, w0, i) {
     const v = side.view(), w = w0 + i * 4;
     const kind = v.u32[w], len = v.u32[w + 1];
-    if (kind === 0) return decoder.decode(v.u8.subarray(v.u32[w + 2], v.u32[w + 2] + len));
+    if (kind === 0) return tclDecode(v.u8.subarray(v.u32[w + 2], v.u32[w + 2] + len));
+    if (kind === 3) {
+      const e0 = v.u32[w + 2] >>> 2, parts = [];
+      for (let j = 0; j < len; j++) {
+        const k = side.view().u32[e0 + j * 4];
+        const t = this._argText(side, e0, j);
+        parts.push(k === 1 || k === 2 ? t : tclElement(t, j === 0));
+      }
+      return parts.join(" ");
+    }
     const dv = new DataView(side.buf, (w + 2) << 2, 8);
     if (kind === 1) return String(dv.getBigInt64(0, true));
     return doubleText(dv.getFloat64(0, true));
+  }
+
+  // The bytes that `n` `Arg` records at word `w` of `side` need in the
+  // other memory: the text, and the arrays of lists with room to align.
+  _argSize(side, w, n) {
+    const u32 = side.view().u32;
+    let size = 0;
+    for (let i = 0; i < n; i++) {
+      const k = u32[w + i * 4], len = u32[w + i * 4 + 1];
+      if (k === 0) size += len;
+      else if (k === 3) size += 7 + len * 16 + this._argSize(side, u32[w + i * 4 + 2] >>> 2, len);
+    }
+    return size;
+  }
+
+  // Copies `n` `Arg` records at word `w` of `from` to word `d` of `to`.
+  // Text and the arrays of lists go to byte `off` of `to` and after.
+  // Gives the byte after the last copy.
+  _argCopy(from, w, n, to, d, off) {
+    const f = from.view(), t = to.view();
+    for (let i = 0; i < n; i++) {
+      const si = w + i * 4, di = d + i * 4;
+      const k = f.u32[si], len = f.u32[si + 1], a = f.u32[si + 2];
+      t.u32[di] = k; t.u32[di + 1] = len;
+      if (k === 0) {
+        t.u8.set(f.u8.subarray(a, a + len), off);
+        t.u32[di + 2] = off; t.u32[di + 3] = 0;
+        off += len;
+      } else if (k === 3) {
+        const at = (off + 7) & ~7;
+        t.u32[di + 2] = at; t.u32[di + 3] = 0;
+        off = this._argCopy(from, a >>> 2, len, to, at >>> 2, at + len * 16);
+      } else {
+        t.u32[di + 2] = a; t.u32[di + 3] = f.u32[si + 3];
+      }
+    }
+    return off;
   }
 
   // Runs JavaScript command `fn` with the arguments at `argv` in ztcl.
@@ -587,6 +634,11 @@ export class Interp {
   _cextReply(from, to) {
     const f = from.view().u32, r = from.reply;
     const kind = f[r], len = f[r + 1];
+    if (kind === 3) {
+      const off = to.xbuf(this._argSize(from, r, 1));
+      this._argCopy(from, r, 1, to, to.reply, off);
+      return;
+    }
     if (kind === 0) {
       const p = f[r + 2];
       const dst = to.xbuf(len);
@@ -631,16 +683,11 @@ export class Interp {
         return rc;
       },
       var_set: (h, ptr, len, arg, flags) => {
-        const ps = pkg.side.view();
+        const ps = pkg.side;
         const a = arg >>> 2;
-        const kind = ps.u32[a], vlen = ps.u32[a + 1], lo = ps.u32[a + 2], hi = ps.u32[a + 3];
-        const extra = kind === 0 ? vlen : 0;
-        const zb = this._toZtcl(ps, ptr, len, extra);
-        const zv = zs.view();
-        if (extra) zv.u8.set(ps.u8.subarray(lo, lo + vlen), zb + len);
-        const zr = zs.reply;
-        zv.u32[zr] = kind; zv.u32[zr + 1] = vlen; zv.u32[zr + 2] = kind === 0 ? zb + len : lo; zv.u32[zr + 3] = kind === 0 ? 0 : hi;
-        const rc = z.ztcl_cext_var_set(h, zb, len, zr << 2, flags);
+        const zb = this._toZtcl(ps, ptr, len, this._argSize(ps, a, 1));
+        this._argCopy(ps, a, 1, zs, zs.reply, zb + len);
+        const rc = z.ztcl_cext_var_set(h, zb, len, zs.reply << 2, flags);
         if (rc !== 0) this._cextReply(zs, ps);
         return rc;
       },
@@ -662,7 +709,11 @@ export class Interp {
     const zs = this._zside.view();
     const src = zs.u32, s0 = argv >>> 2;
     let total = 0;
-    for (let i = 0; i < argc; i++) if (src[s0 + i * 4] === 0) total += src[s0 + i * 4 + 1];
+    for (let i = 0; i < argc; i++) {
+      const k = src[s0 + i * 4];
+      if (k === 0) total += src[s0 + i * 4 + 1];
+      else if (k === 3) total += this._argSize(this._zside, s0 + i * 4, 1);
+    }
     let off = ps.xbuf(total);
     if (argc > ps.acap) {
       ps.acap = Math.max(argc, 16);
@@ -688,6 +739,8 @@ export class Interp {
     const rc = ps.x.ztcl_cext_dispatch(id, argc);
     this._cextReply(ps, this._zside);
     return rc;
+      } else if (k === 3) {
+        off = this._argCopy(this._zside, si, 1, ps, di, off);
   }
 
   _text(ptr, len) {
@@ -809,6 +862,50 @@ function doubleText(d) {
   if (!Number.isFinite(d)) return d > 0 ? "Inf" : "-Inf";
   const s = String(d);
   return /^-?\d+$/.test(s) ? s + ".0" : s;
+}
+
+// The text of the modified UTF-8 of Tcl, where U+0000 is C0 80.
+function tclDecode(bytes) {
+  if (!bytes.includes(0xc0)) return decoder.decode(bytes);
+  const out = new Uint8Array(bytes.length);
+  let n = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0xc0 && bytes[i + 1] === 0x80) {
+      out[n++] = 0;
+      i++;
+    } else out[n++] = bytes[i];
+  }
+  return decoder.decode(out.subarray(0, n));
+}
+
+// The element `s` of the text of a Tcl list, quoted by the rules of
+// value.appendElement in ztcl.
+function tclElement(s, first) {
+  if (s.length === 0) return "{}";
+  let brace = (first && s[0] === "#") || s[0] === "{" || s[0] === '"';
+  let escape = false, depth = 0, balanced = true;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "{") depth++;
+    else if (c === "}") { if (--depth < 0) balanced = false; }
+    else if (c === "\\") {
+      brace = true;
+      if (i + 1 >= s.length || s[i + 1] === "\n") balanced = false;
+      i++;
+    } else if (" \t\n\r\v\f;$[".includes(c)) brace = true;
+    else if (c === "]" || c === '"') escape = true;
+  }
+  if (depth !== 0) balanced = false;
+  if (!brace && !escape && balanced) return s;
+  if (balanced && (brace || !escape)) return "{" + s + "}";
+  const names = { "\t": "\\t", "\n": "\\n", "\r": "\\r", "\v": "\\v", "\f": "\\f" };
+  let out = "";
+  for (const c of s) {
+    if (c === "{" || c === "}") out += balanced ? c : "\\" + c;
+    else if ("\\ ;\"$[]".includes(c)) out += "\\" + c;
+    else out += names[c] ?? c;
+  }
+  return out;
 }
 
 function noWasi(pkg) {

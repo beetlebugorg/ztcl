@@ -18,12 +18,21 @@ pub const Arg = @import("host.zig").Arg;
 
 pub const TCL_EVAL_GLOBAL: c_int = 0x20000;
 
+/// The `Arg` of `v`. A list keeps its elements: `len` is the count and
+/// `bits` the address of an array of `Arg`s. Text goes out in the
+/// modified UTF-8 of Tcl, where U+0000 is the two bytes C0 80.
 pub fn argOf(it: *Interp, v: Value) Error!Arg {
     return switch (v) {
         .int => |i| .{ .kind = 1, .len = 0, .bits = @bitCast(i) },
         .double => |d| .{ .kind = 2, .len = 0, .bits = @bitCast(d) },
+        .list => |l| blk: {
+            const items = l.items();
+            const out = try it.alloc().alloc(Arg, items.len);
+            for (items, out) |e, *a| a.* = try argOf(it, e);
+            break :blk .{ .kind = 3, .len = @intCast(items.len), .bits = @intFromPtr(out.ptr) };
+        },
         else => blk: {
-            const s = try it.str(v);
+            const s = try toModified(it, try it.str(v));
             break :blk .{ .kind = 0, .len = @intCast(s.len), .bits = @intFromPtr(s.ptr) };
         },
     };
@@ -34,13 +43,57 @@ pub fn valueOf(it: *Interp, a: Arg) Error!Value {
     return switch (a.kind) {
         1 => .{ .int = @bitCast(a.bits) },
         2 => .{ .double = @bitCast(a.bits) },
+        3 => blk: {
+            if (a.len == 0) break :blk value.newList(it.alloc(), &.{});
+            const p: [*]const Arg = @ptrFromInt(@as(usize, @intCast(a.bits)));
+            const vals = try it.alloc().alloc(Value, a.len);
+            for (p[0..a.len], vals) |e, *v| v.* = try valueOf(it, e);
+            break :blk value.newList(it.alloc(), vals);
+        },
         else => blk: {
             // A copy of 0 bytes has no valid address for the host.
             if (a.len == 0) break :blk Value.empty;
             const p: [*]const u8 = @ptrFromInt(@as(usize, @intCast(a.bits)));
-            break :blk .{ .str = try it.alloc().dupe(u8, p[0..a.len]) };
+            break :blk .{ .str = try fromModified(it, p[0..a.len], true) };
         },
     };
+}
+
+/// `s` with each U+0000 as C0 80. Text with no U+0000 is not copied.
+fn toModified(it: *Interp, s: []const u8) Error![]const u8 {
+    const n = std.mem.count(u8, s, "\x00");
+    if (n == 0) return s;
+    const out = try it.alloc().alloc(u8, s.len + n);
+    var j: usize = 0;
+    for (s) |c| {
+        if (c == 0) {
+            out[j] = 0xC0;
+            out[j + 1] = 0x80;
+            j += 2;
+        } else {
+            out[j] = c;
+            j += 1;
+        }
+    }
+    return out;
+}
+
+/// `s` with each C0 80 as U+0000. With `copy`, the text is always a
+/// copy in the interp; else only text with a C0 80 is copied.
+fn fromModified(it: *Interp, s: []const u8, copy: bool) Error![]const u8 {
+    if (std.mem.indexOf(u8, s, "\xc0\x80") == null) return if (copy) try it.alloc().dupe(u8, s) else s;
+    const out = try it.alloc().alloc(u8, s.len);
+    var n: usize = 0;
+    var i: usize = 0;
+    while (i < s.len) : (i += 1) {
+        out[n] = s[i];
+        if (s[i] == 0xC0 and i + 1 < s.len and s[i + 1] == 0x80) {
+            out[n] = 0;
+            i += 1;
+        }
+        n += 1;
+    }
+    return out[0..n];
 }
 
 /// The error code of the command of a package that runs, when a slot
@@ -113,8 +166,10 @@ pub fn eval(it: *Interp, text: []const u8, flags: c_int, out: *Arg) i32 {
             // The text is in the memory of the package, and the next call
             // can write over it. The text cache keeps a copy, but a script
             // longer than the cache compiles in place, and its procs keep
-            // slices of the text. So a long script gets its own copy.
-            const t = if (t0.len > interp_mod.text_cache_max) try i.alloc().dupe(u8, t0) else t0;
+            // slices of the text. So a long script gets its own copy. A
+            // U+0000 of the script comes as C0 80.
+            const t1 = try fromModified(i, t0, false);
+            const t = if (t1.ptr == t0.ptr and t0.len > interp_mod.text_cache_max) try i.alloc().dupe(u8, t0) else t1;
             if (global) {
                 var buf: std.ArrayList(u8) = .empty;
                 try buf.appendSlice(i.alloc(), "uplevel #0 ");
