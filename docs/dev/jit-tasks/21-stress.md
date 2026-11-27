@@ -6,7 +6,7 @@ Modes that force the rare paths, and a clean run in the builds with safety check
 
 ## Files
 
-- `src/jit.zig`, `src/jit/mem.zig`, `src/main.zig` (the flag `--jit-stress N`), `tools/jit-diff.sh` (the option `--stress`).
+- `src/jit.zig`, `src/jit/mem.zig`, `src/cli/main.zig` (the flag `--jit-stress N`), `tools/jit-diff.sh` (the option `--stress`).
 
 ## The modes
 

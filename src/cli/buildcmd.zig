@@ -2,7 +2,7 @@
 //! `ztcl build --wasm [--base FILE] [--embed PATH]... -o OUT script.tcl...`
 //!
 //! The native form writes a copy of the runtime binary of the target
-//! with a zip payload (`src/buildnative.zig`): the scripts, the files,
+//! with a zip payload (`src/cli/buildnative.zig`): the scripts, the files,
 //! and the manifest. The runtime is the file of `--runtime`, or
 //! `T/ztcl` in the folder of ZTCL_RUNTIME_DIR, or in
 //! `../lib/ztcl/runtime/` next to the folder of the program, or for the

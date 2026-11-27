@@ -8,7 +8,7 @@ The collector runs by itself. A long loop holds a flat memory size.
 
 - `src/heap.zig`: the trigger.
 - `src/interp.zig`: `hold`, `release`, `addRoot`, `removeRoot`, the field `gc_on: bool`.
-- `src/main.zig`: the flag `--gc off|on`.
+- `src/cli/main.zig`: the flag `--gc off|on`.
 - `src/wasm.zig`: no collection. No new export.
 - `docs/embedding.md`, `docs/dev/design.md`, `SECURITY.md`, `README.md` (Known limits), `CHANGELOG.md`.
 

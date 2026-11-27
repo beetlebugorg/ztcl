@@ -26,7 +26,7 @@ ztcl build --wasm -o app.wasm main.tcl          # the form of today
 | `--root PATH` | Puts `file` and channels in the jail at run time, with `PATH` as the root folder. Without it, a program with `file` is in host mode (#122), as the `ztcl` runner is. |
 | `--jit` | Turns on the JIT in the program, on a target with a JIT. |
 | `--compress` | Stores each file with deflate. The default is stored entries, which the runtime reads with no copy. |
-| `--wasm` | The form of today (`src/buildcmd.zig`), with no change. |
+| `--wasm` | The form of today (`src/cli/buildcmd.zig`), with no change. |
 
 The scripts run in order, as `ztcl a.tcl b.tcl` does. Each script is also a file under the mount, so `source [file join [file dirname [info script]] util.tcl]` works. The words after the program name go to `$argv`. The binary reads no option of the runner, so a program has all of its words.
 
@@ -164,7 +164,7 @@ The binary is the runtime plus the payload. The runtime builds with `ReleaseSmal
 
 1. This plan.
 2. `src/zipread.zig` and `src/vfs.zig`: the zip reader (stored and deflate), the mount table, the hooks in `open`, `source`, `glob`, and `file`, the `embedded` capability, and the `zipfs` command. Tests: zip files from Python's `zipfile` and Info-ZIP, deflate entries, a zip bomb at the memory limit, malformed archives, and the absent commands with no capability.
-3. `ztcl build` native on Linux x86-64: the slot, the payload, the manifest, and the start path in `src/main.zig`. Then the other targets by cross-compile: the ELF of Linux arm64, the PE of Windows x86-64, and the Mach-O with the ad hoc signature of macOS x86-64 and arm64. A CI job builds each target on Linux and runs each output on a runner of its OS.
+3. `ztcl build` native on Linux x86-64: the slot, the payload, the manifest, and the start path in `src/cli/main.zig`. Then the other targets by cross-compile: the ELF of Linux arm64, the PE of Windows x86-64, and the Mach-O with the ad hoc signature of macOS x86-64 and arm64. A CI job builds each target on Linux and runs each output on a runner of its OS.
 4. The user page `docs/build.md` with examples that ran, and a line in the README.
 
 Phase 2, after step 4 ([the task list](aot-tasks/README.md)):
@@ -174,4 +174,4 @@ Phase 2, after step 4 ([the task list](aot-tasks/README.md)):
 7. arm64 Linux and macOS, then Win64 for Windows x86-64.
 8. The code generators and the build core in `ztcl.wasm`, and the build page of the docs site.
 
-The macOS and Windows parts of step 3 can go to a session on those machines. Each part is in new files (`src/buildnative.zig`, `src/macho_sign.zig`) with small hooks in `src/buildcmd.zig` and `src/main.zig`.
+The macOS and Windows parts of step 3 can go to a session on those machines. Each part is in new files (`src/cli/buildnative.zig`, `src/macho_sign.zig`) with small hooks in `src/cli/buildcmd.zig` and `src/cli/main.zig`.

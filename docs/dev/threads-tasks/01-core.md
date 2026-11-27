@@ -12,7 +12,7 @@ A host can start threads. Each thread has its own interpreter, heap, collector, 
 - `src/interp.zig`: `Capability.thread = 2048`, the fields `worker` and `thread_limits`, the call in `allow`, the call of `endGroup` at the start of `deinit` and `reset`, the copy of `thread_limits` in `reset`, and the call of `safePoint` in `memPoint`.
 - `src/child.zig`: a child gets no `thread` bit.
 - `src/event.zig`: the queue of a thread is a source of `doOne`, and `after N` in a thread sleeps with `nap`.
-- `src/main.zig`: `--threads`, `--thread-compute`, `--thread-mem`, `--threads-compute`, and `--threads-mem`.
+- `src/cli/main.zig`: `--threads`, `--thread-compute`, `--thread-mem`, `--threads-compute`, and `--threads-mem`.
 - `src/ztcl.zig`: `pub const thread`.
 
 ## Rules

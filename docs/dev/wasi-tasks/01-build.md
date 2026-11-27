@@ -10,7 +10,7 @@ Platform: shared/wasi.
 
 - `build.zig`: the WASI target builds the runner with the collector options of `zig build wasm`, the JIT off, and no thread code.
 - `src/sys.zig`, `src/fsroot.zig`, `src/proc.zig`, `src/chan.zig`, `src/filecmd.zig`, `src/child.zig`, `src/thread.zig`, `src/interp.zig`: each direct use of `std.os.linux` goes behind the `supported` constant of its file, or behind a comptime check of the target. No body changes on Linux.
-- `src/main.zig`: the parse of `--thread-mem` and `--threads-mem` checks that the number fits in `usize`. The runner reads args, the script file, and stdin through `std.process.Init` and `std.Io`.
+- `src/cli/main.zig`: the parse of `--thread-mem` and `--threads-mem` checks that the number fits in `usize`. The runner reads args, the script file, and stdin through `std.process.Init` and `std.Io`.
 
 ## Rules
 

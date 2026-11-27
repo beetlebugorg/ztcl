@@ -17,7 +17,7 @@
 //! preopened folders of `wasi:filesystem`, and the exit code of
 //! `wasi:cli/exit`. Each list or text that the host gives comes into the
 //! memory of the module through the export `cabi_realloc` of the entry
-//! file (`src/wasi/run.zig`).
+//! file (`src/cli/wasi_run.zig`).
 //!
 //! A descriptor of 3 or more is a slot of a table: the handle of a
 //! `descriptor` resource of `wasi:filesystem` and the position of the

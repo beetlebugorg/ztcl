@@ -260,11 +260,11 @@ const on_mac = builtin.os.tag == .macos;
 pub const win = @import("sys_windows.zig");
 /// The WASI form: preview 1 (`sys_wasi.zig`), or WASI 0.3.2
 /// (`sys_wasi3.zig`) when the root file of the program declares
-/// `ztcl_wasi_p3`, as `src/wasi/run.zig` does.
+/// `ztcl_wasi_p3`, as `src/cli/wasi_run.zig` does.
 const is_wasi = builtin.os.tag == .wasi;
 pub const wasi_p3 = is_wasi and @hasDecl(@import("root"), "ztcl_wasi_p3");
 const wasi = if (wasi_p3) @import("sys_wasi3.zig") else @import("sys_wasi.zig");
-/// The host part of WASI 0.3.2 for `src/wasi/run.zig`.
+/// The host part of WASI 0.3.2 for `src/cli/wasi_run.zig`.
 pub const wasi3 = if (wasi_p3) wasi else struct {};
 pub const supported = builtin.os.tag == .linux or (is_win and builtin.cpu.arch == .x86_64) or on_mac or is_wasi;
 

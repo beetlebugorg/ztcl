@@ -6,7 +6,7 @@ Check the six conditions of `docs/dev/jit.md` for one target and record the resu
 
 ## Files
 
-- `docs/dev/jit.md` (a table with the result of each condition for each target), `src/main.zig` (the default of `--jit`, only on the word of the user), `CHANGELOG.md`.
+- `docs/dev/jit.md` (a table with the result of each condition for each target), `src/cli/main.zig` (the default of `--jit`, only on the word of the user), `CHANGELOG.md`.
 
 ## The checks
 

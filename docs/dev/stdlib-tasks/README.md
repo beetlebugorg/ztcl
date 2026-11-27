@@ -55,7 +55,7 @@ Milestones 2 to 5 depend on the threads plan for the worker pool: task 13 starts
    ```
 
    The pass count of each suite file must not drop.
-5. Each module is in its own folder or file under `src/`. A change to `src/interp.zig`, `src/vm.zig`, `src/event.zig`, `src/sys.zig`, `src/main.zig`, or `src/ztcl.zig` stays inside the hunks that the task names.
+5. Each module is in its own folder or file under `src/`. A change to `src/interp.zig`, `src/vm.zig`, `src/event.zig`, `src/sys.zig`, `src/cli/main.zig`, or `src/ztcl.zig` stays inside the hunks that the task names.
 6. Each module follows the rule of "Limits and capabilities" in the design: steps for work, memory through the counter, a safe point at least each 64 KiB, a capability for host access, the network policy for each address, and the root folder for each path. Each task adds the tests that show its commands are absent without their capability, and in a safe child.
 7. Tests and benchmarks stay offline. A network test uses only loopback addresses. A test that needs an outside program (`openssl`, `curl`, `node`, `go`, `h2spec`, `wrk`) skips with a clear message when the program is absent, and CI installs each one.
 8. Each new source file starts with a `//!` comment that explains its algorithm, and an SPDX line for BSD-2-Clause.

@@ -10,7 +10,7 @@ Platform: shared/web.
 
 - `tests/point/`: the fixed procs of the tests in `src/point.zig` (`fuzzy` and the proc with branches), as `.tcl` files.
 - `src/point_wasm.zig`: the generator from a `Program` to the function `run`, the layout of the memory, the globals, and the custom section `ztcl.point`.
-- `src/main.zig`: one hunk: the subcommand `compile`. It installs `point` on its interpreter, runs FILE, and compiles NAME. Options: `-o`, `-simd on|off`, `-max-mem BYTES` (default 16 MiB), `-features a,b,...`.
+- `src/cli/main.zig`: one hunk: the subcommand `compile`. It installs `point` on its interpreter, runs FILE, and compiles NAME. Options: `-o`, `-simd on|off`, `-max-mem BYTES` (default 16 MiB), `-features a,b,...`.
 - `tools/point-wasm-diff.sh` and `tools/point-wasm-diff.mjs`: compile the fixed procs of the point tests, run each module in Node.js on random points, and compare with `Program.run` and `point.runSlow`. The native side runs through a small Zig tool that writes the outputs as hex bits.
 
 ## Rules

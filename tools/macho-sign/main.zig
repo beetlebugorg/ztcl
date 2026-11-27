@@ -1,6 +1,6 @@
 //! `macho-sign IN OUT IDENT [ENTITLEMENT ...]`: writes OUT, a copy of
 //! the Mach-O file IN with a new ad hoc signature and the entitlements,
-//! each with the value true (`src/macho.zig`). `zig build` signs the
+//! each with the value true (`src/cli/macho.zig`). `zig build` signs the
 //! macOS `ztcl` with it, so `ztcl::vm` runs with no `codesign` step.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause

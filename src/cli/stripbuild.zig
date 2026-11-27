@@ -31,10 +31,10 @@
 
 const std = @import("std");
 const Io = std.Io;
-const ft = @import("features_table.zig");
+const ft = @import("../features_table.zig");
 const scan = @import("stripscan.zig");
-const wb = @import("wasmbundle.zig");
-const Interp = @import("interp.zig").Interp;
+const wb = @import("../wasmbundle.zig");
+const Interp = @import("../interp.zig").Interp;
 
 /// The program that runs the strip mode: `ztcl build` or `ztk bundle`.
 pub const Tool = struct {

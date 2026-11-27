@@ -19,7 +19,7 @@ Measured on Zig 0.16.0, wasmtime 50.0.0, and wasm-tools 1.261.0, for the first f
 
 - `zig build -Dtarget=wasm32-wasi` fails with 2 errors. The compiler stops after these 2, so more errors can follow.
   - `src/sys.zig:127` calls `std.os.linux.poll`. `std/os/linux.zig` has no system calls for wasm32 and gives a compile error.
-  - `src/main.zig:413` puts a `u64` in `mem_limit`, a `usize`. On wasm32, `usize` has 32 bits.
+  - `src/cli/main.zig:413` puts a `u64` in `mem_limit`, a `usize`. On wasm32, `usize` has 32 bits.
 - Eight source files call `std.os.linux` directly: `sys.zig`, `fsroot.zig`, `proc.zig`, `chan.zig`, `filecmd.zig`, `child.zig`, `thread.zig`, and `interp.zig` (one call).
 - The Zig standard library has preview 1 bindings in `std/os/wasi.zig`. It has no bindings for preview 2 or WASI 0.3. Zig has one OS tag, `wasi`, for both previews.
 - `wasm-tools component new` needs the preview 1 adapter module of wasmtime for a preview 1 core module, and the adapter makes a WASI 0.2 component. The plan does not use it.

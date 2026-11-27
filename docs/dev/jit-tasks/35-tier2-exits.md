@@ -6,7 +6,7 @@ Force each exit path, and stop a loop that exits again and again.
 
 ## Files
 
-- `src/jit/tier2.zig`, `src/jit/tier2_x64.zig`, `src/jit.zig`, `src/main.zig`.
+- `src/jit/tier2.zig`, `src/jit/tier2_x64.zig`, `src/jit.zig`, `src/cli/main.zig`.
 
 ## Rules
 
