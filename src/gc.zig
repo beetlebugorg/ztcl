@@ -58,7 +58,9 @@ pub const precise = builtin.cpu.arch.isWasm() or options.gc_precise;
 
 /// True on a target with a routine that spills the registers.
 pub const native_scan = !precise and switch (builtin.cpu.arch) {
-    .x86_64, .aarch64 => builtin.os.tag == .linux or builtin.os.tag == .macos or builtin.os.tag == .windows,
+    .x86_64, .aarch64 => builtin.os.tag == .linux or builtin.os.tag == .macos or builtin.os.tag == .windows or
+        // The ztcl unikernel (ztcl#471): the System V convention.
+        (builtin.cpu.arch == .x86_64 and builtin.os.tag == .freestanding),
     else => false,
 };
 

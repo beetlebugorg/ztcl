@@ -1,4 +1,5 @@
-//! The executable region of the JIT on Linux, on Windows, and on arm64 macOS.
+//! The executable region of the JIT on Linux, on Windows, on arm64 macOS,
+//! and in the ztcl unikernel.
 //!
 //! On Linux, the region is one reservation of address space with no
 //! access, with one more page with no access before it and after it.
@@ -61,6 +62,10 @@ const c = std.c;
 const darwin = builtin.os.tag == .macos and builtin.cpu.arch == .aarch64;
 
 const on_win = builtin.os.tag == .windows;
+/// The ztcl unikernel (ztcl#471): the region is a part of the JIT window
+/// of `uk/paging.zig`, with the same three steps as on Linux.
+const on_uk = builtin.os.tag == .freestanding and builtin.cpu.arch == .x86_64;
+const uk_paging = if (on_uk) @import("../uk/paging.zig") else struct {};
 const cc = @import("../jit.zig").cc;
 
 /// The calls of the Windows form: a reservation with no access, then for
@@ -211,6 +216,12 @@ pub const Region = struct {
     pub fn init(limit: usize) ?Region {
         if (comptime darwin) return initDarwin(limit);
         if (comptime on_win) return initWindows(limit);
+        if (comptime on_uk) {
+            const page = uk_paging.page;
+            const usable = std.mem.alignForward(usize, @max(limit, page), page);
+            const at = uk_paging.reserve(usable + 2 * page) orelse return null;
+            return .{ .base = @ptrFromInt(at + page), .limit = usable, .page = page };
+        }
         if (comptime builtin.os.tag != .linux) return null;
         const page = std.heap.pageSize();
         const usable = std.mem.alignForward(usize, @max(limit, page), page);
@@ -311,6 +322,11 @@ pub const Region = struct {
     }
 
     pub fn deinit(r: *Region) void {
+        if (comptime on_uk) {
+            _ = uk_paging.protect(@intFromPtr(r.base), r.limit, .none);
+            r.* = undefined;
+            return;
+        }
         const start: [*]align(std.heap.page_size_min) u8 = @alignCast(r.base - r.page);
         if (comptime on_win) {
             r.unwind.deinit();
@@ -328,6 +344,7 @@ pub const Region = struct {
         if (r.fail_second and r.appends % 2 == 0) return null;
         if (comptime darwin) return if (r.pages) r.appendPages(code) else r.appendDarwin(code);
         if (comptime on_win) return r.appendWindows(code);
+        if (comptime on_uk) return r.appendUnikernel(code);
         const len = std.mem.alignForward(usize, code.len, r.page);
         const end = std.math.add(usize, r.used, len) catch return null;
         if (end > r.limit) return null;
@@ -342,6 +359,28 @@ pub const Region = struct {
         if (comptime builtin.cpu.arch == .aarch64) clearCache(at, at + len);
         if (linux.errno(linux.mprotect(at, len, .{ .READ = true, .EXEC = true })) != .SUCCESS) {
             _ = linux.mprotect(at, len, .{});
+            r.stopped = true;
+            return null;
+        }
+        r.used = end;
+        return at[0..code.len];
+    }
+
+    /// The three steps of Linux on the page tables of the unikernel
+    /// (`uk/paging.zig`).
+    fn appendUnikernel(r: *Region, code: []const u8) ?[]const u8 {
+        const len = std.mem.alignForward(usize, code.len, r.page);
+        const end = std.math.add(usize, r.used, len) catch return null;
+        if (end > r.limit) return null;
+        const at = r.base + r.used;
+        if (!uk_paging.protect(@intFromPtr(at), len, .read_write)) {
+            r.stopped = true;
+            return null;
+        }
+        @memcpy(at[0..code.len], code);
+        @memset(at[code.len..len], trap_byte);
+        if (!uk_paging.protect(@intFromPtr(at), len, .read_exec)) {
+            _ = uk_paging.protect(@intFromPtr(at), len, .none);
             r.stopped = true;
             return null;
         }

@@ -79,6 +79,9 @@ pub fn entropy(buf: []u8) void {
             }
         },
         .windows => _ = ProcessPrng(buf.ptr, buf.len),
+        // The ztcl unikernel: RDRAND, mixed with the bootstrap secret of
+        // the command line when RDRAND fails (`uk/transport.zig`).
+        .freestanding => @import("uk/transport.zig").entropy(buf),
         else => @compileError("no entropy for this platform"),
     }
 }
@@ -91,7 +94,8 @@ extern "bcryptprimitives" fn ProcessPrng(data: [*]u8, len: usize) callconv(.wina
 /// Linux and macOS, an overlapped named pipe on Windows. `cancel` wakes
 /// a read that blocks, from another thread, and the read gives
 /// `error.Canceled`.
-pub const Transport = if (on_win) WinTransport else PosixTransport;
+pub const Transport = if (on_win) WinTransport else if (on_uk) @import("uk/transport.zig").Transport else PosixTransport;
+const on_uk = builtin.os.tag == .freestanding;
 
 /// Descriptor passing (`SCM_RIGHTS`) on the socket pair: macOS and
 /// Linux. Windows moves handles in its own way (`docs/dev/isolation.md`).
@@ -417,6 +421,12 @@ pub const Conn = struct {
     buf: [4096]u8 = undefined,
     have: usize = 0,
     start: usize = 0,
+
+    /// True when bytes of the stream wait in the buffer of the
+    /// connection: a reader with no thread checks it before it sleeps.
+    pub fn buffered(c: *const Conn) bool {
+        return c.have > c.start;
+    }
 
     pub fn init(t: *Transport) Conn {
         return .{ .t = t };
