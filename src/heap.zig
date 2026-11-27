@@ -137,6 +137,15 @@ pub const Heap = struct {
     roots_ctx: *anyopaque = undefined,
     /// The work list of the mark. It lives outside the heap.
     work: std.ArrayList(Range) = .empty,
+    /// The threads of the pool of the process that help a mark of a large
+    /// heap (`par`), with no thread of the interpreter. 0: the mark runs on
+    /// the thread of the interpreter alone.
+    mark_threads: u32 = 3,
+    /// The live bytes of the last collection that a parallel mark needs: a
+    /// small heap marks in less time than the threads need to wake.
+    par_min_live: usize = 16 << 20,
+    /// The marks that ran on more than one thread, for the tests.
+    par_marks: u32 = 0,
     /// False when the work list could not grow: the sweep must not run.
     mark_ok: bool = true,
     live_bytes: usize = 0,
@@ -612,24 +621,53 @@ pub const Heap = struct {
 
 // ---- The mark and the sweep ----
 
+/// The state of one thread of a mark: the span of its last hit, its work
+/// list, and the allocator of the list. The mark on the thread of the
+/// interpreter uses the fields of the heap (`marker`). A thread of a
+/// parallel mark (`par`) has its own, and `shared` for the work that the
+/// other threads can steal.
+const Marker = struct {
+    h: *Heap,
+    last: ?*Span,
+    work: *std.ArrayList(Heap.Range),
+    gpa: Allocator,
+    ok: bool = true,
+    shared: ?*par.Shared = null,
+};
+
+fn marker(h: *Heap) Marker {
+    return .{ .h = h, .last = h.last, .work = &h.work, .gpa = h.backing };
+}
+
+fn sync(h: *Heap, m: Marker) void {
+    h.last = m.last;
+    if (!m.ok) h.mark_ok = false;
+}
+
 /// Marks the block that holds the word `w`, when the word is an address
 /// of a live block. The block goes on the work list, unless it holds no
 /// pointer.
 pub fn markWord(h: *Heap, w: usize) void {
     if (w < h.lo or w >= h.hi) return;
-    markHit(h, w);
+    var m = marker(h);
+    markHit(false, &m, w);
+    sync(h, m);
 }
 
 /// `markWord` for a word inside the bounds of the heap.
-fn markHit(h: *Heap, w: usize) void {
+inline fn markHit(comptime parallel: bool, m: *Marker, w: usize) void {
     // Pointers cluster, so the span of the last hit often serves.
-    const s = if (h.last) |l| (if (w -% l.base < l.len) l else h.lookup(w)) else h.lookup(w);
+    const s = if (m.last) |l| (if (w -% l.base < l.len) l else m.h.lookup(w)) else m.h.lookup(w);
     const sp = s orelse return;
-    h.last = sp;
-    return markIn(h, sp, w);
+    m.last = sp;
+    markIn(parallel, m, sp, w);
 }
 
-inline fn markIn(h: *Heap, s: *Span, w: usize) void {
+/// Sets the mark bit of the block of `w` in `s`, and puts the block on
+/// the work list when it holds pointers. In a parallel mark the bit goes
+/// in with an atomic OR, so of two threads that reach one block, only the
+/// one that set the bit scans it.
+inline fn markIn(comptime parallel: bool, m: *Marker, s: *Span, w: usize) void {
     var idx: usize = 0;
     if (!s.large) {
         idx = (w - s.base) / s.size;
@@ -637,14 +675,47 @@ inline fn markIn(h: *Heap, s: *Span, w: usize) void {
     }
     const word = idx >> 6;
     const bit = @as(u64, 1) << @intCast(idx & 63);
-    if (s.free[word] & bit != 0 or s.mark[word] & bit != 0) return;
-    s.mark[word] |= bit;
+    if (s.free[word] & bit != 0) return;
+    if (parallel) {
+        // Most hits find the bit set. A plain load first keeps those off
+        // the atomic OR, which pulls the cache line away from the other threads:
+        // with the OR alone, the mark of the live benchmark took 4 times as
+        // long on 4 threads as on one.
+        if (@atomicLoad(u64, &s.mark[word], .monotonic) & bit != 0) return;
+        if (@atomicRmw(u64, &s.mark[word], .Or, bit, .monotonic) & bit != 0) return;
+    } else {
+        if (s.mark[word] & bit != 0) return;
+        s.mark[word] |= bit;
+    }
     if (s.noscan) return;
     const start = if (s.large) s.base else s.base + idx * s.size;
     const is_stack = s.large and s.len == coro_stack_bytes;
-    h.work.append(h.backing, .{ .ptr = start, .len = if (s.large) s.len else s.size, .stack = is_stack }) catch {
-        h.mark_ok = false;
-    };
+    push(parallel, m, .{ .ptr = start, .len = if (s.large) s.len else s.size, .stack = is_stack });
+}
+
+/// Puts a range on the work list of `m`. In a parallel mark a large range
+/// goes as pieces of `par.chunk` bytes, so other threads can scan parts of
+/// one large list, and a long list gives half of its ranges to the others.
+fn push(comptime parallel: bool, m: *Marker, r: Heap.Range) void {
+    if (parallel and r.len > par.chunk) {
+        var at: usize = 0;
+        while (at < r.len) : (at += par.chunk) {
+            m.work.append(m.gpa, .{ .ptr = r.ptr + at, .len = @min(par.chunk, r.len - at), .stack = r.stack }) catch {
+                m.ok = false;
+                return;
+            };
+        }
+    } else {
+        m.work.append(m.gpa, r) catch {
+            m.ok = false;
+            return;
+        };
+    }
+    if (parallel and m.work.items.len >= par.share_at) m.shared.?.share(m);
+}
+
+fn scanRange(comptime parallel: bool, m: *Marker, r: Heap.Range) void {
+    if (r.stack) scanStack(parallel, m, r.ptr, r.len) else scan(parallel, m, r.ptr, r.len);
 }
 
 /// True when the block of `addr` has its mark bit. An address outside
@@ -685,54 +756,326 @@ const stack_margin: usize = 64;
 /// Reads each aligned word of a native stack as a possible pointer, with
 /// the margin for a pointer just outside a block.
 pub fn markStack(h: *Heap, ptr: usize, len: usize) void {
-    scanStack(h, ptr, len);
+    var m = marker(h);
+    scanStack(false, &m, ptr, len);
+    sync(h, m);
     drain(h);
 }
 
-fn scanStack(h: *Heap, ptr: usize, len: usize) void {
+fn scanStack(comptime parallel: bool, m: *Marker, ptr: usize, len: usize) void {
     const first = std.mem.alignForward(usize, ptr, @sizeOf(usize));
     const end = ptr +| len;
     if (end < first + @sizeOf(usize)) return;
+    const lo = m.h.lo;
+    const span = m.h.hi -% lo;
     var p = first;
     while (p + @sizeOf(usize) <= end) : (p += @sizeOf(usize)) {
         const w = @as(*const usize, @ptrFromInt(p)).*;
-        markWord(h, w);
-        markWord(h, w -% 1);
-        markWord(h, w +% stack_margin);
+        inline for (.{ w, w -% 1, w +% stack_margin }) |x| {
+            if (x -% lo < span) markHit(parallel, m, x);
+        }
     }
 }
 
 /// Reads each aligned word of the range as a possible pointer and marks
 /// what the words reach.
 pub fn markRange(h: *Heap, ptr: usize, len: usize) void {
-    scan(h, ptr, len);
+    var m = marker(h);
+    scan(false, &m, ptr, len);
+    sync(h, m);
     drain(h);
 }
 
-fn scan(h: *Heap, ptr: usize, len: usize) void {
+fn scan(comptime parallel: bool, m: *Marker, ptr: usize, len: usize) void {
     const first = std.mem.alignForward(usize, ptr, @sizeOf(usize));
     const end = ptr +| len;
     if (end < first + @sizeOf(usize)) return;
     // Most words are not addresses of the heap, so the bound check is
     // inline and the lookup is a call.
-    const lo = h.lo;
-    const span = h.hi -% lo;
+    const lo = m.h.lo;
+    const span = m.h.hi -% lo;
     var p = first;
     while (p + @sizeOf(usize) <= end) : (p += @sizeOf(usize)) {
         const w = @as(*const usize, @ptrFromInt(p)).*;
-        if (w -% lo < span) markHit(h, w);
+        if (w -% lo < span) markHit(parallel, m, w);
     }
 }
 
+/// Scans each range of the work list. When a range is large or the list
+/// is long, the rest of the work goes to the threads of `par`, if the
+/// pool is free.
 fn drain(h: *Heap) void {
-    while (h.work.pop()) |r| {
-        if (r.stack) scanStack(h, r.ptr, r.len) else scan(h, r.ptr, r.len);
+    var m = marker(h);
+    // The stress mode runs each mark on the threads, so its tests cover
+    // the parallel mark.
+    const stress = h.stress != 0;
+    // A target with no threads (`par.enabled`) compiles no part of the
+    // parallel mark.
+    var try_par = (comptime par.enabled) and h.mark_threads > 0 and (stress or h.live_bytes >= h.par_min_live) and par.ready.load(.acquire);
+    if (comptime !par.enabled) _ = &try_par;
+    while (m.work.pop()) |r| {
+        if (comptime par.enabled) {
+            if (try_par and (stress or r.len >= par.min_range or m.work.items.len >= par.min_items)) {
+                m.work.appendAssumeCapacity(r);
+                sync(h, m);
+                if (par.drain(h)) {
+                    h.par_marks += 1;
+                    m = marker(h);
+                    continue;
+                }
+                // The pool serves another heap: this mark goes on alone.
+                try_par = false;
+                m = marker(h);
+                continue;
+            }
+        }
+        scanRange(false, &m, r);
     }
+    sync(h, m);
 }
+
+/// The parallel mark: a pool of threads of the process that scan the work
+/// of one heap with the thread of its interpreter. Each thread has its
+/// own work list. A thread with `share_at` ranges or more gives half of
+/// them to the shared queue, and a thread with none steals from it.
+///
+/// One word (`Shared.state`) holds the count of threads in the mark, the
+/// count of those that wait, a bit for the end, and the number of the
+/// mark. The mark ends when each thread in it waits: a thread waits only
+/// when its list is empty and the queue was empty, and only a thread that
+/// does not wait can give ranges to the queue, so no range is left. A
+/// worker that wakes after the end does not join, so the thread of the
+/// interpreter does not wait for a worker that is slow to wake. A thread
+/// of an older mark finds another number in the word, and leaves.
+///
+/// A mark bit goes in with an atomic OR (`markIn`), so each block is
+/// scanned once. The set of marked blocks is the set that the roots reach,
+/// in any order of the scans, so a parallel mark keeps the blocks that a
+/// mark on one thread keeps.
+const par = struct {
+    pub const enabled = !builtin.single_threaded and !builtin.cpu.arch.isWasm();
+    /// The most threads of the pool, with no thread of an interpreter.
+    const max_workers = 7;
+    /// A range of this many bytes, or a list of this many ranges, starts a
+    /// parallel mark, once the threads run (`ready`).
+    pub const min_range: usize = 256 * 1024;
+    pub const min_items: usize = 64;
+    /// The bytes of the pieces of a large range.
+    pub const chunk: usize = 64 * 1024;
+    /// The length of a work list that gives half of it.
+    pub const share_at: usize = 64;
+
+    const ga = std.heap.smp_allocator;
+
+    // The fields of `Shared.state`.
+    const one_idle: u64 = 1;
+    const one_joined: u64 = 1 << 16;
+    const done_bit: u64 = 1 << 32;
+    const gen_shift = 33;
+
+    fn idleOf(s: u64) u64 {
+        return s & 0xffff;
+    }
+    fn joinedOf(s: u64) u64 {
+        return s >> 16 & 0xffff;
+    }
+    fn genOf(s: u64) u64 {
+        return s >> gen_shift;
+    }
+
+    pub const Shared = struct {
+        h: *Heap = undefined,
+        /// The threads that can join the mark, with the thread of the
+        /// interpreter.
+        n: u32 = 1,
+        lock: std.atomic.Mutex = .unlocked,
+        queue: std.ArrayList(Heap.Range) = .empty,
+        /// The count of ranges of `queue`, read with no lock.
+        queued: std.atomic.Value(usize) = .init(0),
+        ok: std.atomic.Value(bool) = .init(true),
+        state: std.atomic.Value(u64) = .init(0),
+
+        fn grab(sh: *Shared) void {
+            while (!sh.lock.tryLock()) std.atomic.spinLoopHint();
+        }
+
+        /// Moves the older half of the ranges of `m` to the queue, when the
+        /// queue is short.
+        pub fn share(sh: *Shared, m: *Marker) void {
+            if (sh.queued.load(.monotonic) >= share_at * sh.n) return;
+            const half = m.work.items.len / 2;
+            sh.grab();
+            defer sh.lock.unlock();
+            sh.queue.appendSlice(ga, m.work.items[0..half]) catch return;
+            sh.queued.store(sh.queue.items.len, .release);
+            const rest = m.work.items.len - half;
+            std.mem.copyForwards(Heap.Range, m.work.items[0..rest], m.work.items[half..]);
+            m.work.items.len = rest;
+        }
+
+        /// Moves a share of the ranges of the queue to `m`, at most
+        /// `share_at / 2`. False with none.
+        fn steal(sh: *Shared, m: *Marker) bool {
+            if (sh.queued.load(.acquire) == 0) return false;
+            sh.grab();
+            defer sh.lock.unlock();
+            // A share for each thread, so one thread does not get all the work
+            // of a mark that starts with few ranges.
+            const len = sh.queue.items.len;
+            if (len == 0) return false;
+            const n = std.math.clamp(len / sh.n, 1, share_at / 2);
+            const from = sh.queue.items.len - n;
+            m.work.appendSlice(m.gpa, sh.queue.items[from..]) catch {
+                // The mark fails, and the sweep frees no block: the queue
+                // goes, so no thread waits on ranges that none can steal.
+                m.ok = false;
+                sh.ok.store(false, .release);
+                sh.queue.items.len = 0;
+                sh.queued.store(0, .release);
+                return false;
+            };
+            sh.queue.items.len = from;
+            sh.queued.store(from, .release);
+            return true;
+        }
+
+        /// Adds this thread to mark `gen`. False when that mark is over.
+        fn join(sh: *Shared, gen: u64) bool {
+            var s = sh.state.load(.acquire);
+            while (true) {
+                if (genOf(s) != gen or s & done_bit != 0) return false;
+                s = sh.state.cmpxchgWeak(s, s + one_joined, .acq_rel, .acquire) orelse return true;
+            }
+        }
+    };
+
+    /// One heap at a time uses the pool, so one `Shared` serves.
+    var shared: Shared = .{};
+    var busy: std.atomic.Value(bool) = .init(false);
+    var start_lock: std.atomic.Mutex = .unlocked;
+    var started = false;
+    var nworkers: u32 = 0;
+    /// True once `start` has made its threads.
+    pub var ready: std.atomic.Value(bool) = .init(false);
+    /// A new value wakes the workers for a mark.
+    var epoch: std.atomic.Value(u32) = .init(0);
+
+    fn io() std.Io {
+        return std.Io.Threaded.global_single_threaded.io();
+    }
+
+    fn start(count: u32) void {
+        while (!start_lock.tryLock()) std.Thread.yield() catch {};
+        defer start_lock.unlock();
+        if (started) return;
+        started = true;
+        const cpus: u32 = @intCast(std.Thread.getCpuCount() catch 1);
+        const n = @min(count, @min(max_workers, cpus -| 1));
+        for (0..n) |_| {
+            // The worker gets the epoch of now: a mark that comes after the
+            // spawn has a later one, so the worker does not miss it.
+            const t = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, workerMain, .{epoch.load(.acquire)}) catch break;
+            t.detach();
+            nworkers += 1;
+        }
+        ready.store(nworkers > 0, .release);
+    }
+
+    fn workerMain(first: u32) void {
+        var seen = first;
+        while (true) {
+            const now = epoch.load(.acquire);
+            if (now == seen) {
+                io().futexWaitTimeout(u32, &epoch.raw, seen, .{ .duration = .{ .raw = .fromNanoseconds(std.time.ns_per_s), .clock = .awake } }) catch {};
+                continue;
+            }
+            seen = now;
+            const sh = &shared;
+            const gen = genOf(sh.state.load(.acquire));
+            if (sh.join(gen)) run(sh, gen);
+        }
+    }
+
+    /// Scans the work of `h` on the threads of the pool and this thread.
+    /// False when the pool has no thread or serves another heap.
+    fn drain(h: *Heap) bool {
+        if (nworkers == 0) return false;
+        if (busy.cmpxchgStrong(false, true, .acquire, .monotonic) != null) return false;
+        defer busy.store(false, .release);
+        const sh = &shared;
+        {
+            sh.grab();
+            defer sh.lock.unlock();
+            sh.queue.clearRetainingCapacity();
+            // The mark on one thread puts a large block on its list whole:
+            // it goes to the queue in pieces, for each thread to steal some.
+            for (h.work.items) |r| {
+                var at: usize = 0;
+                while (at < r.len) : (at += chunk) {
+                    sh.queue.append(ga, .{ .ptr = r.ptr + at, .len = @min(chunk, r.len - at), .stack = r.stack }) catch return false;
+                }
+            }
+            sh.queued.store(sh.queue.items.len, .release);
+        }
+        h.work.clearRetainingCapacity();
+        sh.h = h;
+        sh.n = nworkers + 1;
+        sh.ok.store(true, .monotonic);
+        // This thread is the first in the mark.
+        const gen = genOf(sh.state.load(.monotonic)) + 1;
+        sh.state.store(gen << gen_shift | one_joined, .release);
+        _ = epoch.fetchAdd(1, .release);
+        io().futexWake(u32, &epoch.raw, std.math.maxInt(u32));
+        run(sh, gen);
+        if (!sh.ok.load(.acquire)) h.mark_ok = false;
+        return true;
+    }
+
+    /// One thread of mark `gen`: its own ranges, then ranges of the queue,
+    /// until each thread in the mark waits.
+    fn run(sh: *Shared, gen: u64) void {
+        var list: std.ArrayList(Heap.Range) = .empty;
+        defer list.deinit(ga);
+        var m: Marker = .{ .h = sh.h, .last = null, .work = &list, .gpa = ga, .shared = sh };
+        outer: while (true) {
+            while (list.pop()) |r| scanRange(true, &m, r);
+            if (sh.steal(&m)) continue;
+            if (!m.ok) sh.ok.store(false, .release);
+            // A thread that does not wait is in the mark of now, so this
+            // add needs no check of the number.
+            _ = sh.state.fetchAdd(one_idle, .acq_rel);
+            var s = sh.state.load(.acquire);
+            var spins: u32 = 0;
+            while (true) {
+                if (genOf(s) != gen or s & done_bit != 0) return;
+                if (sh.queued.load(.acquire) > 0) {
+                    s = sh.state.cmpxchgWeak(s, s - one_idle, .acq_rel, .acquire) orelse continue :outer;
+                    continue;
+                }
+                if (idleOf(s) == joinedOf(s)) {
+                    s = sh.state.cmpxchgWeak(s, s | done_bit, .acq_rel, .acquire) orelse return;
+                    continue;
+                }
+                // A short spin, then a yield: a waiting thread does not keep a
+                // processor from a thread with work on a busy host.
+                spins += 1;
+                if (spins < 64) std.atomic.spinLoopHint() else std.Thread.yield() catch {};
+                s = sh.state.load(.acquire);
+            }
+        }
+    }
+};
 
 /// Runs a collection. The roots come from `roots_fn`. The sweep frees
 /// each block that no root reached. A failed mark frees no block.
 pub fn collect(h: *Heap) void {
+    collectOnce(h);
+    // The threads of the parallel mark start after the first collection
+    // that finds a large heap, so no pause pays for them.
+    if (comptime par.enabled) if (h.mark_threads > 0 and (h.stress != 0 or h.live_bytes >= h.par_min_live)) par.start(h.mark_threads);
+}
+
+fn collectOnce(h: *Heap) void {
     const roots = h.roots_fn orelse return;
     const t0 = clock();
     defer {
@@ -1004,4 +1347,67 @@ test "the page pool charges each span, and a sweep gives the free pages back" {
     // A charge that fails is an allocation that fails.
     charge.limit = charge.used;
     try std.testing.expectError(error.OutOfMemory, a.alloc(u8, 5 << 20));
+}
+
+var test_root: usize = 0;
+
+fn testRoots(_: *anyopaque, h: *Heap) bool {
+    markRange(h, @intFromPtr(&test_root), @sizeOf(usize));
+    return true;
+}
+
+/// A heap with a large array of pointers to small blocks, each of which
+/// points to a second block, and as many blocks of garbage. Gives the
+/// array.
+fn buildGraph(a: Allocator, n: usize) ![]usize {
+    const arr = try a.alloc(usize, n);
+    for (arr, 0..) |*slot, i| {
+        const b = try a.alloc(usize, 4);
+        const c = try a.alloc(usize, 2);
+        c[0] = i;
+        c[1] = 0;
+        b[0] = @intFromPtr(c.ptr);
+        b[1] = i;
+        b[2] = 0;
+        b[3] = 0;
+        slot.* = @intFromPtr(b.ptr);
+        const junk = try a.alloc(usize, 4);
+        @memset(junk, 0);
+    }
+    return arr;
+}
+
+test "a parallel mark keeps what a mark on one thread keeps" {
+    const n = 64 * 1024;
+    var results: [2]usize = undefined;
+    for ([_]u32{ 0, 3 }, 0..) |threads, k| {
+        var h = Heap.init(std.testing.allocator);
+        defer h.deinit();
+        h.mark_threads = threads;
+        h.par_min_live = 0;
+        const a = h.allocator();
+        const arr = try buildGraph(a, n);
+        test_root = @intFromPtr(arr.ptr);
+        var ctx: u8 = 0;
+        h.roots_ctx = &ctx;
+        h.roots_fn = testRoots;
+        // The first collection starts the threads, and the second uses them.
+        collect(&h);
+        collect(&h);
+        try std.testing.expect(h.mark_ok);
+        try std.testing.expectEqual(threads > 0, h.par_marks > 0);
+        // Each block of the graph is live, with its data, and the garbage
+        // is gone: the array, 2 blocks for each slot.
+        for (arr, 0..) |p, i| {
+            const b: [*]const usize = @ptrFromInt(p);
+            try std.testing.expect(!isFree(&h, p));
+            try std.testing.expectEqual(i, b[1]);
+            const c: [*]const usize = @ptrFromInt(b[0]);
+            try std.testing.expect(!isFree(&h, b[0]));
+            try std.testing.expectEqual(i, c[0]);
+        }
+        results[k] = h.live_bytes;
+        test_root = 0;
+    }
+    try std.testing.expectEqual(results[0], results[1]);
 }
