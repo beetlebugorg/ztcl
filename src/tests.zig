@@ -3184,6 +3184,46 @@ test "ztcl::vm image: install, list, and create -image through the store" {
     try std.testing.expectEqualStrings("ZTCL VM IMAGE NAME", try ev(&it, "catch {ztcl::vm create -image no-such-image}; join [lrange $::errorCode 0 3] { }"));
 }
 
+test "ztcl::vm on Windows: create -image boots the signed test release with its verity root" {
+    const builtin = @import("builtin");
+    if (comptime !(builtin.os.tag == .windows and builtin.cpu.arch == .x86_64)) return error.SkipZigTest;
+    @import("whp.zig").probe() catch return error.SkipZigTest;
+    // The release of tools/vm-guest/fetch-test-image.sh in
+    // zig-out/vm-image-test, signed with the test key that a test build
+    // trusts.
+    std.Io.Dir.cwd().access(std.testing.io, "zig-out/vm-image-test/manifest.json", .{}) catch return error.SkipZigTest;
+    const a = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const store = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path});
+    defer a.free(store);
+    var it: tcl.Interp = undefined;
+    try it.init(a);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.vm) | @backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setRoot(&it, "zig-out");
+    it.vm_host.image_store = store;
+    const ev = struct {
+        fn f(x: *tcl.Interp, s: []const u8) ![]const u8 {
+            const v = x.eval(s) catch |e| {
+                std.debug.print("tcl error: {s}\n", .{x.str(x.result) catch ""});
+                return e;
+            };
+            return x.str(v);
+        }
+    }.f;
+    try std.testing.expectEqualStrings("ztcl-guest-test", try ev(&it, "dict get [ztcl::vm image install /vm-image-test] name"));
+    _ = try ev(&it, "set v [ztcl::vm create -image ztcl-guest-test -memory 256]; ztcl::vm start $v");
+    // The agent of the image answers its probe, then runs a program of
+    // the root: a squashfs on dm-verity over the first disk.
+    _ = try ev(&it, "set ch [ztcl::vm vsock $v 1025 -timeout 15000]; read $ch 16; close $ch");
+    const mounts = try ev(&it, "dict get [ztcl::vm exec $v /bin/busybox cat /proc/mounts] stdout");
+    try std.testing.expect(std.mem.indexOf(u8, mounts, "/dev/root / squashfs ro") != null);
+    const cmdline = try ev(&it, "dict get [ztcl::vm exec $v /bin/busybox cat /proc/cmdline] stdout");
+    try std.testing.expect(std.mem.indexOf(u8, cmdline, "verity") != null);
+    _ = try ev(&it, "ztcl::vm stop $v; ztcl::vm delete $v");
+}
+
 test "ztcl::vm: the capability, the jail of its paths, and the limits" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
