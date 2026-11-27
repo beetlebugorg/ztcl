@@ -149,6 +149,12 @@ The default keeps the scripts working: the parent runs the sends of a child as t
 - `thread::create -files host` gives the child the files of the host (`files` 1 in `START`), with the other parts of the isolation in place: the crash of the child ends only the child, the limits of the system apply, and the network and the processes stay limited where the platform can. A creator with a root folder gets `ZTCL ISOLATION HOSTFILES` for `-files host`, so a thread never gets more files than its creator.
 - On Windows an AppContainer reaches no folder of the user, so a child of `-files host` runs with no AppContainer (`Spawn.host_files`). It keeps the Job Object with each of its limits, and gets a token from `CreateRestrictedToken` with `DISABLE_MAX_PRIVILEGE` and the group of the administrators for deny only. It loses the network limit of the AppContainer: the capability `socket` in the child is then the only limit of the network. It also loses the limits of an AppContainer on the objects of the session, such as named pipes and the registry of the user.
 
+## The JIT
+
+- `START` ends with `jit u8`, after `files`: 1 when the creator has the JIT on, else 0. As the JIT is on by default where it can run, a child of a creator with the default gets 1.
+- With 1, the child turns the JIT on with the default options after it enters its sandbox (`jail`), before its first script. When the platform or the sandbox refuses executable memory, the self test of the JIT fails and the child runs each script in the interpreter, with the same results.
+- Windows: an AppContainer allows executable memory, so the child of an AppContainer has the JIT. A process with Arbitrary Code Guard has none. macOS: the sandbox profile of the child must allow `MAP_JIT`. Linux: the seccomp filter must allow `mmap` and `mprotect` with the execute right.
+
 ## Limits and cancels
 
 - The child enforces the compute limit and the memory limit of the thread in its own interpreter, as a thread does today. The limits come in `START`.

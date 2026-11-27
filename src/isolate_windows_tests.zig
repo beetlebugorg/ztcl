@@ -254,3 +254,24 @@ test "isolate on Windows: -files host gives an isolated thread the files of the 
     _ = try ev(&it, "thread::release $t");
     try t.expectEqualStrings("0", try ev(&it, "thread::join $t"));
 }
+
+test "isolate on Windows: the JIT runs in an AppContainer" {
+    if (!on or comptime !tcl.jit.built) return error.SkipZigTest;
+    var f: Fixture = undefined;
+    if (!try f.init("jit")) return error.SkipZigTest;
+    defer f.deinit();
+    const script = try f.writeScript("proc sq x {expr {$x * $x}}; puts [sq 12]");
+    var c = try start(f.exe, .{
+        .args = &.{ "--jit", "--jit-threshold", "0", "--jit-stats", script },
+        .root = f.root_w,
+        .limits = .{ .mem_bytes = 512 << 20 },
+        .stdout = f.log,
+    });
+    defer c.deinit();
+    const st = c.wait(20_000) orelse return error.Timeout;
+    const log = try f.readRoot("log.txt");
+    if (st.code != 0) std.debug.print("log: {s}\n", .{log});
+    try t.expectEqual(@as(u32, 0), st.code);
+    try t.expect(std.mem.indexOf(u8, log, "144") != null);
+    try t.expect(std.mem.indexOf(u8, log, "jit compiled=1") != null);
+}
