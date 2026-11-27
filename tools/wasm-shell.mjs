@@ -88,6 +88,26 @@ const screen = (s) => s.text().join("\n");
 }
 
 {
+  const s = await shell({ files: { "notes.json": "[1]\n" } });
+  const last = (cmd) => (s.feed(cmd + "\r"), s.lastResult);
+  check("open w writes a file in memory", last("set f [open notes.json w]; puts $f {[2]}; close $f; set f [open notes.json]; set t [read $f]; close $f; set t") === "[2]\n", screen(s));
+  check("a file opened with a appends", last("set f [open log.txt a]; puts $f one; close $f; set f [open log.txt a]; puts -nonewline $f two; close $f; set f [open log.txt]; set t [read $f]; close $f; set t") === "one\ntwo", screen(s));
+  check("glob gives a written file", last("lsort [glob *]") === "log.txt notes.json", screen(s));
+  check("a path outside the mount is an error", last("catch {open /etc/x w} m; set m") === 'couldn\'t open "/etc/x": permission denied', screen(s));
+  check("after and vwait run on the virtual clock", last("set l {}; after 200 {lappend l b}; after 100 {lappend l a}; after 300 {set done 1}; vwait done; set l") === "a b", screen(s));
+  check("vwait with no event gives an error", last("catch {vwait nothing} m; set m").includes("would wait forever"), screen(s));
+  check("chan pipe gives a pair of channels", last("lassign [chan pipe] r w; fconfigure $w -buffering line; puts $w hello; gets $r") === "hello", screen(s));
+  check("a line with no end blocks", last("puts -nonewline $w hi; flush $w; list [gets $r x] [fblocked $r]") === "-1 1", screen(s));
+  check("a readable handler runs in vwait", last("fileevent $r readable {set got [gets $r]}; puts $w { there}; vwait got; set got") === "hi there", screen(s));
+  check("close of the writer gives eof", last("fileevent $r readable {}; close $w; list [gets $r] [eof $r]") === "{} 1", screen(s));
+  s.feed("proc tick {} {after 10 tick}; tick; vwait forever\r");
+  check("the compute limit stops an endless loop of timers", screen(s).includes("compute limit"), screen(s));
+  s.computeLimit = 1000;
+  s.feed("while 1 {}\r");
+  check("a new compute limit counts for the next command", s.lastCompute === 1000, String(s.lastCompute));
+}
+
+{
   const s = await shell();
   s.vi = true;
   s.feed("puts abc");

@@ -849,6 +849,17 @@ pub const Counting = struct {
     }
 };
 
+/// The channels of an embedder outside `chan.zig`. `puts` to a channel
+/// name calls `puts`, which gives false for a name that is not one of
+/// its channels. The event loop calls `ready` for each channel of
+/// `fileevent`, and `serve` for each one that is ready: `serve` runs the
+/// handlers with `event.runHandler` and gives true when one ran.
+pub const SoftChans = struct {
+    puts: *const fn (it: *Interp, name: []const u8, text: []const u8, newline: bool) Error!bool,
+    ready: *const fn (it: *Interp, name: []const u8) bool,
+    serve: *const fn (cur: *Interp, it: *Interp, name: []const u8) Error!bool,
+};
+
 /// An optional group of commands. The default interpreter has none.
 /// The embedder turns one on with `Interp.allow`.
 pub const Capability = enum(u32) {
@@ -1098,6 +1109,9 @@ pub const Interp = struct {
     clock: @import("clock.zig").State = .{},
     /// The clock and the sleep of the event loop, from the embedder.
     event_host: ?@import("event.zig").Host = null,
+    /// The channels of the embedder outside `chan.zig`, such as the
+    /// channels in memory of `wasmfiles.zig`. Null: none.
+    soft_chans: ?*const SoftChans = null,
     /// The opener of `ztcl::open`, from the embedder. Null: the system.
     launch_host: ?@import("launch.zig").Host = null,
     /// The registry keys that `ztcl::win::registry` reaches, with the keys

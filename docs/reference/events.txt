@@ -6,7 +6,7 @@ syn: after ms ?script ...?
 syn: after cancel id|script
 syn: after idle script ?script ...?
 syn: after info ?id?
-does: With a script, runs it from the event loop after ms milliseconds and gives an id. With no script, waits ms milliseconds. `after idle` runs the script when the loop has no other work. The script runs at the top level: build it with `list`.
+does: With a script, runs it from the event loop after ms milliseconds and gives an id. With no script, waits ms milliseconds. `after idle` runs the script when the loop has no other work. The script runs at the top level: build it with `list`. In the shell of the site, the loop runs on a virtual clock, so a wait ends at once.
 cap: event
 flags: --allow event
 ex: after 10 {set ::done 1}; vwait done; set done => 1

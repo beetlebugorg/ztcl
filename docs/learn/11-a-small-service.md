@@ -1,16 +1,62 @@
 # A small service
 
-`socket -server` answers connections on a port, and the event loop calls a proc for each line that comes in. This lesson makes `jot` answer on a port with a line protocol: `list`, and `add TEXT`. It is also the lesson about input that becomes code.
+A server reads lines from a channel, and the event loop calls a proc for each line that comes in. This lesson makes `jot` answer a line protocol: `list`, and `add TEXT`. It is also the lesson about input that becomes code.
 
-The shell of this page has no network and no event loop, so this lesson runs in `ztcl` on your computer. Issue [#245](https://github.com/beetlebugorg/ztcl/issues/245) adds a pair of channels in memory to the shell, for a server and a client in one page.
+The shell of this page has no network. Two pipes in memory connect a server and a client in one interpreter, and the event loop runs on a virtual clock. On your computer, the same procs answer on a socket.
 
-<!-- checkpoint -->
+<!-- checkpoint: --allow event,channels -->
 ```tcl
 ```
 
-## The server and a client
+## The server
 
-The script makes the server on a free port of the loopback address, connects a client to it, and sends four lines. Save it as `jot-server.tcl`, and run `ztcl --allow socket,event,channels jot-server.tcl`.
+`serve` gives the server an input channel and an output channel. `fileevent` calls `answer` each time a line can be read from `in`.
+
+<!-- define -->
+```tcl
+set notes [list "buy milk" "fix the bike"]
+proc serve {in out} {
+    fconfigure $out -buffering line
+    fileevent $in readable [list answer $in $out]
+}
+proc answer {in out} {
+    global notes
+    if {[gets $in line] < 0} {
+        if {[eof $in]} { close $in }
+        return
+    }
+    if {![regexp {^(\w+) ?(.*)$} $line -> cmd arg]} { set cmd "" }
+    switch -- $cmd {
+        list    { puts $out [join $notes " | "] }
+        add     { lappend notes $arg; puts $out "ok [llength $notes]" }
+        default { puts $out "unknown command" }
+    }
+}
+```
+
+## A client
+
+`chan pipe` gives two channels: the bytes that go into the second come out of the first. One pipe goes from the client to the server, and one goes back. `ask` sends a line, and `vwait` runs the loop until the answer comes.
+
+<!-- define -->
+```tcl
+lassign [chan pipe] server_in client_out
+lassign [chan pipe] client_in server_out
+serve $server_in $server_out
+fconfigure $client_out -buffering line
+fileevent $client_in readable {set ::got [gets $::client_in]}
+proc ask {line} {
+    puts $::client_out $line
+    vwait ::got
+    return $::got
+}
+```
+
+[`ask list`](run: "buy milk | fix the bike") gives the notes. [`ask {add call Ada}`](run: "ok 3") adds one. [`ask {add [exit]}`](run: "ok 4") adds a note with the text `[exit]`, and [`ask list`](run: "buy milk | fix the bike | call Ada | [exit]") shows it. [`ask hello`](run: "unknown command") is not a command of the protocol.
+
+## On a socket
+
+`socket -server` calls a proc for each connection, with one channel for both directions. This script runs the same server on a free port of the loopback address, connects a client to it, and sends four lines. Save it as `jot-server.tcl`, and run `ztcl --allow socket,event,channels jot-server.tcl` on your computer.
 
 <!-- run: --allow socket,event,channels -->
 ```tcl
@@ -26,7 +72,7 @@ proc answer {chan} {
     switch -- $cmd {
         list    { puts $chan [join $notes " | "] }
         add     { lappend notes $arg; puts $chan "ok [llength $notes]" }
-        default { puts $chan "error: unknown command" }
+        default { puts $chan "unknown command" }
     }
 }
 set server [socket -server serve -myaddr 127.0.0.1 0]

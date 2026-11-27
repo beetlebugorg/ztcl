@@ -235,9 +235,18 @@ class View {
 
   // A helper runs a command in the interpreter of the shell, with the
   // compute limit, and gets { ok, result }. The screen does not change.
-  run(script) {
-    const r = this.shell.it.eval(script);
-    return { ok: r.ok, result: r.result };
+  // A `limit` from 1 to the limit of the shell is the compute limit of
+  // this one call.
+  run(script, limit) {
+    const it = this.shell.it;
+    const saved = it.computeLimit;
+    if (Number.isInteger(limit) && limit > 0) it.computeLimit = Math.min(limit, LIMIT);
+    try {
+      const r = it.eval(script);
+      return { ok: r.ok, result: r.result };
+    } finally {
+      it.computeLimit = saved;
+    }
   }
 
   colsFor(width) {

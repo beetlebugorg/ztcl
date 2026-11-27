@@ -84,7 +84,7 @@ export class Shell {
     this.it = it;
     this.x = it.x;
     if (!this.x.ztcl_shell_new) throw new Error("the module has no shell: use ztcl-shell.wasm");
-    this.computeLimit = computeLimit;
+    this._limit = computeLimit;
     this.cols = cols;
     this.rows = rows;
     this.s = this.x.ztcl_shell_new(it.h, cols, rows, BigInt(computeLimit));
@@ -140,6 +140,17 @@ export class Shell {
     this.x.ztcl_shell_set_vi(this.s, on ? 1 : 0);
   }
 
+  /// The compute units of each command. A new value counts from the
+  /// next command on.
+  get computeLimit() {
+    return this._limit;
+  }
+
+  set computeLimit(n) {
+    this._limit = n;
+    this.x.ztcl_shell_set_limit(this.s, BigInt(n));
+  }
+
   /// The count of scrollback lines above the screen.
   get scrollback() {
     return this.x.ztcl_shell_scrollback(this.s);
@@ -150,7 +161,10 @@ export class Shell {
   get lastResult() {
     const p = this.x.ztcl_shell_last_result_ptr(this.s);
     if (!p) return null;
-    return decoder.decode(new Uint8Array(this.x.memory.buffer, p, this.x.ztcl_shell_last_result_len(this.s)));
+    const len = this.x.ztcl_shell_last_result_len(this.s);
+    // The address of an empty result is not in the memory.
+    if (len === 0) return "";
+    return decoder.decode(new Uint8Array(this.x.memory.buffer, p, len));
   }
 
   /// The compute units of the last command.
