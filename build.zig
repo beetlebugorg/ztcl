@@ -198,15 +198,15 @@ pub fn build(b: *std.Build) void {
         h2_load.addPassthruArgs();
         b.step("h2-load", "Load an h2c server: zig build h2-load -- --port N --conns C --streams S --seconds T").dependOn(&h2_load.step);
     }
-    // The I/O loop of task 06 on io_uring and epoll (Linux only). The
-    // tests run on both backends.
-    if (target.result.os.tag == .linux) {
+    // The I/O loop of task 06 on io_uring and epoll (Linux) and of task
+    // 09 on kqueue (macOS). The tests run on each backend.
+    if (target.result.os.tag == .linux or target.result.os.tag.isDarwin()) {
         const aio_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
             .root_source_file = b.path("src/aio/aio.zig"),
             .target = target,
             .optimize = optimize,
         }) }));
-        b.step("aio-test", "Run the tests of the aio loop on io_uring and epoll").dependOn(&aio_tests.step);
+        b.step("aio-test", "Run the tests of the aio loop on io_uring and epoll, or kqueue").dependOn(&aio_tests.step);
         test_step.dependOn(&aio_tests.step);
         const stress = b.addRunArtifact(b.addExecutable(.{ .name = "aio-stress", .root_module = b.createModule(.{
             .root_source_file = b.path("src/aio/stress.zig"),

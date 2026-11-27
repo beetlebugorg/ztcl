@@ -16,6 +16,7 @@
 
 const std = @import("std");
 const linux = std.os.linux;
+const sys = aio.sys;
 const aio = @import("aio.zig");
 const Loop = aio.Loop;
 const Completion = aio.Completion;
@@ -38,17 +39,27 @@ var failed: usize = 0;
 var connected: usize = 0;
 var conns: []Conn = &.{};
 
-fn check(rc: usize) !i32 {
-    const r = aio.result(rc);
+fn check(r: i32) !i32 {
     if (r < 0) return error.SystemCall;
     return r;
 }
 
+const in = std.posix.sockaddr.in;
+
+/// The count of open descriptors: the entries of /proc/self/fd on
+/// Linux, and the descriptors below 65,536 that fcntl knows elsewhere.
 fn openFds() usize {
+    if (!sys.is_linux) {
+        var n: usize = 0;
+        for (0..65536) |fd| {
+            if (std.c.fcntl(@intCast(fd), std.c.F.GETFD) != -1) n += 1;
+        }
+        return n;
+    }
     var n: usize = 0;
     const dfd = aio.result(linux.open("/proc/self/fd", .{ .DIRECTORY = true, .CLOEXEC = true }, 0));
     if (dfd < 0) return 0;
-    defer _ = linux.close(dfd);
+    defer sys.close(dfd);
     var dents: [8192]u8 align(8) = undefined;
     while (true) {
         const got = aio.result(linux.getdents64(dfd, &dents, dents.len));
@@ -65,10 +76,17 @@ fn openFds() usize {
     return n - 1;
 }
 
+/// The resident size: /proc/self/statm on Linux, and the peak of
+/// getrusage elsewhere (bytes on macOS).
 fn rssKiB() usize {
+    if (!sys.is_linux) {
+        var ru: std.c.rusage = undefined;
+        if (std.c.getrusage(std.c.rusage.SELF, &ru) != 0) return 0;
+        return @as(usize, @intCast(ru.maxrss)) / 1024;
+    }
     const fd = aio.result(linux.open("/proc/self/statm", .{ .CLOEXEC = true }, 0));
     if (fd < 0) return 0;
-    defer _ = linux.close(fd);
+    defer sys.close(fd);
     var buf: [128]u8 = undefined;
     const n = aio.result(linux.read(fd, &buf, buf.len));
     if (n <= 0) return 0;
@@ -129,6 +147,15 @@ fn stopCb(_: *Loop, c: *Completion) void {
     stop.* = true;
 }
 
+/// macOS starts a process with 256 descriptors: raise the soft limit
+/// to the hard limit, at most OPEN_MAX (10,240).
+fn raiseFdLimit() void {
+    var lim: std.c.rlimit = undefined;
+    if (std.c.getrlimit(.NOFILE, &lim) != 0) return;
+    lim.cur = @min(lim.max, 10240);
+    _ = std.c.setrlimit(.NOFILE, &lim);
+}
+
 pub fn main(init: std.process.Init) !void {
     const a = init.arena.allocator();
     const args = try init.minimal.args.toSlice(a);
@@ -143,12 +170,16 @@ pub fn main(init: std.process.Init) !void {
     var l = try Loop.init(init.gpa, .{ .backend = backend, .entries = 4096 });
     defer l.deinit();
     std.debug.print("backend {t}, {d} connections, {d} s\n", .{ l.backend(), n_conns, seconds });
-    var addr: linux.sockaddr.in = .{ .port = 0, .addr = std.mem.nativeToBig(u32, 0x7f000001) };
-    const lfd = try check(linux.socket(linux.AF.INET, linux.SOCK.STREAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, 0));
-    _ = try check(linux.bind(lfd, @ptrCast(&addr), @sizeOf(linux.sockaddr.in)));
-    _ = try check(linux.listen(lfd, 4096));
-    var len: linux.socklen_t = @sizeOf(linux.sockaddr.in);
-    _ = try check(linux.getsockname(lfd, @ptrCast(&addr), &len));
+    if (!sys.is_linux) raiseFdLimit();
+    var addr = std.mem.zeroes(in);
+    addr.family = std.posix.AF.INET;
+    addr.addr = std.mem.nativeToBig(u32, 0x7f000001);
+    if (@hasField(in, "len")) addr.len = @sizeOf(in);
+    const lfd = try check(sys.tcpSocket(std.posix.AF.INET));
+    _ = try check(sys.bind(lfd, @ptrCast(&addr), @sizeOf(in)));
+    _ = try check(sys.listen(lfd, 4096));
+    var len: sys.socklen_t = @sizeOf(in);
+    _ = try check(sys.getsockname(lfd, @ptrCast(&addr), &len));
     var stop = false;
     conns = try a.alloc(Conn, n_conns);
     var acc: Completion = .{ .op = .{ .accept = .{ .fd = lfd } }, .callback = acceptCb };
@@ -158,8 +189,8 @@ pub fn main(init: std.process.Init) !void {
         // listener.
         while (n - accepted - failed > 256) _ = try l.run(std.time.ns_per_s);
         k.* = .{ .stop = &stop };
-        k.fd = try check(linux.socket(linux.AF.INET, linux.SOCK.STREAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, 0));
-        k.c = .{ .op = .{ .connect = .{ .fd = k.fd, .addr = @ptrCast(&addr), .len = @sizeOf(linux.sockaddr.in) } }, .callback = clientCb };
+        k.fd = try check(sys.tcpSocket(std.posix.AF.INET));
+        k.c = .{ .op = .{ .connect = .{ .fd = k.fd, .addr = @ptrCast(&addr), .len = @sizeOf(in) } }, .callback = clientCb };
         try l.submit(&k.c);
     }
     while (accepted + failed < n_conns or connected + failed < n_conns) _ = try l.run(std.time.ns_per_s);
@@ -197,10 +228,10 @@ pub fn main(init: std.process.Init) !void {
     var trips: u64 = 0;
     for (conns) |*k| {
         trips += k.trips;
-        _ = linux.close(k.fd);
-        _ = linux.close(k.peer);
+        sys.close(k.fd);
+        sys.close(k.peer);
     }
-    _ = linux.close(lfd);
+    sys.close(lfd);
     const fds_end = openFds();
     std.debug.print("round trips {d}, end rss {d} KiB, fds before {d}, after {d}\n", .{ trips, end_rss, fds_start, fds_end });
     // The loop itself has its descriptors to the deinit.

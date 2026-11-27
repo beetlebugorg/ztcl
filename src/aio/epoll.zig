@@ -49,6 +49,12 @@ pub const Poll = struct {
         return .{ .gpa = gpa, .epfd = ep, .wake_fd = ev };
     }
 
+    /// Ends a wait of `run` from another thread.
+    pub fn wake(x: *Poll) void {
+        const one: u64 = 1;
+        _ = linux.write(x.wake_fd, std.mem.asBytes(&one), 8);
+    }
+
     pub fn deinit(p: *Poll) void {
         p.fds.deinit(p.gpa);
         _ = linux.close(p.wake_fd);

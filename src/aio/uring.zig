@@ -47,6 +47,12 @@ pub const Ring = struct {
         return r;
     }
 
+    /// Ends a wait of `run` from another thread.
+    pub fn wake(x: *Ring) void {
+        const one: u64 = 1;
+        _ = linux.write(x.wake_fd, std.mem.asBytes(&one), 8);
+    }
+
     pub fn deinit(r: *Ring) void {
         r.ring.deinit();
         _ = linux.close(r.wake_fd);

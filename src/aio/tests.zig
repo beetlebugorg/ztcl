@@ -1,15 +1,17 @@
-//! The tests of `aio`. Each test runs on both backends. io_uring is
-//! skipped when the kernel refuses it.
+//! The tests of `aio`. Each test runs on each backend of the system:
+//! io_uring and epoll on Linux, kqueue on macOS. io_uring is skipped
+//! when the kernel refuses it.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
-const linux = std.os.linux;
 const aio = @import("aio.zig");
+const sys = aio.sys;
 const Loop = aio.Loop;
 const Completion = aio.Completion;
+const in = std.posix.sockaddr.in;
 
-const backends = [_]aio.Backend{ .uring, .epoll };
+const backends = if (sys.is_linux) [_]aio.Backend{ .uring, .epoll } else [_]aio.Backend{.kqueue};
 
 fn open(b: aio.Backend) !?Loop {
     return Loop.init(std.testing.allocator, .{ .backend = b }) catch |e| {
@@ -18,25 +20,27 @@ fn open(b: aio.Backend) !?Loop {
     };
 }
 
-fn check(rc: usize) !i32 {
-    const r = aio.result(rc);
+fn check(r: i32) !i32 {
     if (r < 0) return error.SystemCall;
     return r;
 }
 
 /// A listening TCP socket on 127.0.0.1 with a port of the kernel.
-fn listener(addr: *linux.sockaddr.in) !aio.fd_t {
-    const fd = try check(linux.socket(linux.AF.INET, linux.SOCK.STREAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, 0));
-    addr.* = .{ .port = 0, .addr = std.mem.nativeToBig(u32, 0x7f000001) };
-    _ = try check(linux.bind(fd, @ptrCast(addr), @sizeOf(linux.sockaddr.in)));
-    _ = try check(linux.listen(fd, 128));
-    var len: linux.socklen_t = @sizeOf(linux.sockaddr.in);
-    _ = try check(linux.getsockname(fd, @ptrCast(addr), &len));
+fn listener(addr: *in) !aio.fd_t {
+    const fd = try check(sys.tcpSocket(std.posix.AF.INET));
+    addr.* = std.mem.zeroes(in);
+    addr.family = std.posix.AF.INET;
+    if (@hasField(in, "len")) addr.len = @sizeOf(in);
+    addr.addr = std.mem.nativeToBig(u32, 0x7f000001);
+    _ = try check(sys.bind(fd, @ptrCast(addr), @sizeOf(in)));
+    _ = try check(sys.listen(fd, 128));
+    var len: sys.socklen_t = @sizeOf(in);
+    _ = try check(sys.getsockname(fd, @ptrCast(addr), &len));
     return fd;
 }
 
 fn tcpSocket() !aio.fd_t {
-    return check(linux.socket(linux.AF.INET, linux.SOCK.STREAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, 0));
+    return check(sys.tcpSocket(std.posix.AF.INET));
 }
 
 const Log = struct {
@@ -62,20 +66,20 @@ test "accept, connect, write, and read on loopback" {
     for (backends) |b| {
         var l = (try open(b)) orelse continue;
         defer l.deinit();
-        var addr: linux.sockaddr.in = undefined;
+        var addr: in = undefined;
         const lfd = try listener(&addr);
-        defer _ = linux.close(lfd);
+        defer sys.close(lfd);
         const cfd = try tcpSocket();
-        defer _ = linux.close(cfd);
+        defer sys.close(cfd);
         var acc: Completion = .{ .op = .{ .accept = .{ .fd = lfd } }, .callback = noop };
-        var con: Completion = .{ .op = .{ .connect = .{ .fd = cfd, .addr = @ptrCast(&addr), .len = @sizeOf(linux.sockaddr.in) } }, .callback = noop };
+        var con: Completion = .{ .op = .{ .connect = .{ .fd = cfd, .addr = @ptrCast(&addr), .len = @sizeOf(in) } }, .callback = noop };
         try l.submit(&acc);
         try l.submit(&con);
         try l.runAll();
         try std.testing.expectEqual(@as(i32, 0), con.result);
         try std.testing.expect(acc.result >= 0);
         const sfd: aio.fd_t = acc.result;
-        defer _ = linux.close(sfd);
+        defer sys.close(sfd);
         var buf: [16]u8 = undefined;
         var rd: Completion = .{ .op = .{ .read = .{ .fd = sfd, .buf = &buf } }, .callback = noop };
         try l.submit(&rd);
@@ -85,7 +89,7 @@ test "accept, connect, write, and read on loopback" {
         try std.testing.expectEqual(@as(i32, 5), wr.result);
         try std.testing.expectEqualStrings("hello", buf[0..@intCast(rd.result)]);
         // The end of the stream reads as 0.
-        _ = linux.shutdown(cfd, linux.SHUT.WR);
+        sys.shutdownWrite(cfd);
         rd = .{ .op = .{ .read = .{ .fd = sfd, .buf = &buf } }, .callback = noop };
         try l.submit(&rd);
         try l.runAll();
@@ -97,15 +101,15 @@ test "a connect to a closed port gives ECONNREFUSED" {
     for (backends) |b| {
         var l = (try open(b)) orelse continue;
         defer l.deinit();
-        var addr: linux.sockaddr.in = undefined;
+        var addr: in = undefined;
         const lfd = try listener(&addr);
-        _ = linux.close(lfd);
+        sys.close(lfd);
         const cfd = try tcpSocket();
-        defer _ = linux.close(cfd);
-        var con: Completion = .{ .op = .{ .connect = .{ .fd = cfd, .addr = @ptrCast(&addr), .len = @sizeOf(linux.sockaddr.in) } }, .callback = noop };
+        defer sys.close(cfd);
+        var con: Completion = .{ .op = .{ .connect = .{ .fd = cfd, .addr = @ptrCast(&addr), .len = @sizeOf(in) } }, .callback = noop };
         try l.submit(&con);
         try l.runAll();
-        try std.testing.expectEqual(-@as(i32, @backingInt(linux.E.CONNREFUSED)), con.result);
+        try std.testing.expectEqual(sys.neg(.CONNREFUSED), con.result);
     }
 }
 
@@ -131,9 +135,9 @@ test "cancel ends a read and a timer with ECANCELED" {
         var l = (try open(b)) orelse continue;
         defer l.deinit();
         var fds: [2]i32 = undefined;
-        _ = try check(linux.pipe2(&fds, .{ .NONBLOCK = true, .CLOEXEC = true }));
-        defer _ = linux.close(fds[0]);
-        defer _ = linux.close(fds[1]);
+        _ = try check(sys.pipe(&fds));
+        defer sys.close(fds[0]);
+        defer sys.close(fds[1]);
         var buf: [4]u8 = undefined;
         var rd: Completion = .{ .op = .{ .read = .{ .fd = fds[0], .buf = &buf } }, .callback = noop };
         var tm: Completion = .{ .op = .{ .timer = .{ .ns = 10 * std.time.ns_per_s } }, .callback = noop };
@@ -143,7 +147,7 @@ test "cancel ends a read and a timer with ECANCELED" {
         try l.cancel(&rd);
         try l.cancel(&tm);
         try l.runAll();
-        const canceled = -@as(i32, @backingInt(linux.E.CANCELED));
+        const canceled = sys.neg(.CANCELED);
         try std.testing.expectEqual(canceled, rd.result);
         try std.testing.expectEqual(canceled, tm.result);
     }
@@ -159,8 +163,7 @@ test "a wait with a time limit ends, and wake ends a wait from another thread" {
         try std.testing.expect(took >= 15 * std.time.ns_per_ms and took < 2 * std.time.ns_per_s);
         const th = try std.Thread.spawn(.{}, struct {
             fn f(loop: *Loop) void {
-                var ts: linux.timespec = .{ .sec = 0, .nsec = 20 * std.time.ns_per_ms };
-                _ = linux.nanosleep(&ts, null);
+                sys.sleepNs(20 * std.time.ns_per_ms);
                 loop.wake();
             }
         }.f, .{&l});
@@ -191,16 +194,16 @@ test "a callback submits again on its own completion" {
         var l = (try open(b)) orelse continue;
         defer l.deinit();
         var fds: [2]i32 = undefined;
-        _ = try check(linux.pipe2(&fds, .{ .NONBLOCK = true, .CLOEXEC = true }));
-        defer _ = linux.close(fds[0]);
+        _ = try check(sys.pipe(&fds));
+        defer sys.close(fds[0]);
         var e: Echo = .{ .fd = fds[0] };
         var rd: Completion = .{ .op = .{ .read = .{ .fd = fds[0], .buf = &e.buf } }, .callback = Echo.cb, .ctx = &e };
         try l.submit(&rd);
         for (0..3) |_| {
-            _ = linux.write(fds[1], "abc", 3);
+            _ = sys.write(fds[1], "abc");
             _ = try l.run(std.time.ns_per_s);
         }
-        _ = linux.close(fds[1]);
+        sys.close(fds[1]);
         try l.runAll();
         try std.testing.expectEqual(@as(usize, 9), e.got);
     }
