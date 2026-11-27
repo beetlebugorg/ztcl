@@ -1240,6 +1240,11 @@ pub const Interp = struct {
     word_chunk: usize = chunk_size,
     /// The command of a pending `tailcall`.
     tail_words: ?[]const Value = null,
+    /// The address of the words of a call of `dict` or `lset` whose
+    /// result the bytecode drops (see `vm.dropHint`), or 0. The command
+    /// reads it with `takeDropped` and can then keep the ownership of
+    /// the cell that it writes.
+    drop_argv: usize = 0,
     /// The bits of the capabilities that are on.
     capabilities: u32 = 0,
     /// The time and zone callbacks of the `clock` capability.
@@ -1538,6 +1543,14 @@ pub const Interp = struct {
         s.runs = @max(s.runs, 1);
         it.gc_token = true;
         return it.evalScript(s);
+    }
+
+    /// True when the bytecode drops the result of this call. Clears the
+    /// hint.
+    pub fn takeDropped(it: *Interp, argv: []const Value) bool {
+        const hit = it.drop_argv == @intFromPtr(argv.ptr);
+        it.drop_argv = 0;
+        return hit;
     }
 
     /// Prepares a proc call from a body command, as `evalBody` does.
@@ -3172,8 +3185,19 @@ pub const Interp = struct {
         try it.addEntry(.{ .name = name, .cell = cell });
     }
 
-    /// Finds the cell of a name in a frame. Follows links.
+    /// Finds the cell of a name in a frame. Follows links. A cell that
+    /// owns its dict or list gets a plain value first.
     pub fn findVar(it: *Interp, frame: *Frame, name_in: []const u8, create: bool) Allocator.Error!?*Var {
+        return it.findVarIn(false, frame, name_in, create);
+    }
+
+    /// `findVar` with no `create` that keeps the ownership of the cell:
+    /// for a write in place whose result the bytecode drops.
+    pub fn findOwnedVar(it: *Interp, frame: *Frame, name: []const u8) Allocator.Error!?*Var {
+        return it.findVarIn(true, frame, name, false);
+    }
+
+    fn findVarIn(it: *Interp, comptime keep: bool, frame: *Frame, name_in: []const u8, create: bool) Allocator.Error!?*Var {
         var f = frame;
         var name = name_in;
         if (std.mem.indexOfScalar(u8, name, ':')) |colon| {
@@ -3186,19 +3210,19 @@ pub const Interp = struct {
                 f = &it.global;
                 if (it.ns.len > 0) {
                     const full = try it.qualify(name);
-                    if (it.lookup(f, full)) |c| return c;
-                    if (!it.tcl9()) if (it.lookup(f, name)) |c| return c;
+                    if (it.lookupIn(keep, f, full)) |c| return c;
+                    if (!it.tcl9()) if (it.lookupIn(keep, f, name)) |c| return c;
                     name = full;
                 }
             }
         }
-        if (it.lookup(f, name)) |c| return c;
+        if (it.lookupIn(keep, f, name)) |c| return c;
         if (f.ns) |space| {
             // A frame of `namespace eval`: the variable of the namespace,
             // then, in Tcl 8.6, the global variable.
             const full = try std.fmt.allocPrint(it.alloc(), "{s}::{s}", .{ space, name });
-            var target = it.lookup(&it.global, full);
-            if (target == null and !it.tcl9()) target = it.lookup(&it.global, name);
+            var target = it.lookupIn(keep, &it.global, full);
+            if (target == null and !it.tcl9()) target = it.lookupIn(keep, &it.global, name);
             if (target == null and !create) return null;
             if (target == null) {
                 target = try it.newCell();
@@ -3234,8 +3258,13 @@ pub const Interp = struct {
     }
 
     inline fn lookup(it: *Interp, f: *Frame, name: []const u8) ?*Var {
+        return it.lookupIn(false, f, name);
+    }
+
+    inline fn lookupIn(it: *Interp, comptime keep: bool, f: *Frame, name: []const u8) ?*Var {
         const i = f.find(it.alloc(), name) orelse return null;
-        return f.vars.items[i].cell.settle();
+        const cell = f.vars.items[i].cell;
+        return if (keep) cell.target() else cell.settle();
     }
 
     /// Makes `name` in the current frame a link to `target`.

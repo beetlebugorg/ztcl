@@ -1,0 +1,11 @@
+{a 10 b 2} {a 11 b 3} {9 2 3} {9 8 3}
+{{a 11 b 3} {9 8 3}} {a 11 b 3} {a 11 b 3 c 3} {9 8 7} 1 1
+{a 20 b 3 c 3} {a 21 b 3 c 3} {5 8 7} {6 8 7}
+{k 2 last 1} {k 4 last 3}
+k 4 last 3
+a 21 b 3 c 3 up 1 lst {a b}
+{w w} 2
+{a 21 b 3 c 3 up 1 lst {a b} t 2 r 1} {a 21 b 3 c 3 up 1 lst {a b} t 2 r 1}
+{x 1 y 2 z 3} {x 1 y 2 z 3}
+{a 21 b 3 c 3 up 1 lst {a b} t 2 r 1 loop 4} {4 8 7}
+fresh 2

@@ -412,6 +412,49 @@ pub fn sizeOf(it: *Interp, d: Value) Error!Value {
     return .{ .int = @intCast((try readPairs(it, d)).len / 2) };
 }
 
+/// The cell of a plain variable before a write of `dict` whose result
+/// the bytecode drops. After the write, the cell owns its dict when the
+/// buffer is new or was owned before, as for `vm.opDictUpdateDrop`.
+const Before = struct {
+    cell: ?*interp.Var = null,
+    old: ?*value.ListObj = null,
+    was_owned: bool = false,
+
+    fn of(it: *Interp, name: []const u8) Error!Before {
+        if (std.mem.indexOfScalar(u8, name, '(') != null) return .{};
+        const cell = (try it.findOwnedVar(it.frame, name)) orelse return .{};
+        const c = cell.target();
+        return switch (c.v) {
+            .owned => |v| .{ .cell = c, .old = v.list.obj, .was_owned = true },
+            .val => |v| .{ .cell = c, .old = if (v == .list) v.list.obj else null },
+            else => .{},
+        };
+    }
+
+    /// Writes one key in place when the cell owns its dict.
+    fn update(b: Before, it: *Interp, key: Value, by: i64, new: ?Value) Error!bool {
+        const c = b.cell orelse return false;
+        if (c.v != .owned or !isMarked(c.v.owned)) return false;
+        return updateOwned(it, c.v.owned, key, by, new);
+    }
+
+    /// The dict of the cell when the cell owns it.
+    fn ownedDict(b: Before) ?Value {
+        const c = b.cell orelse return null;
+        if (c.v != .owned or !isMarked(c.v.owned)) return null;
+        return c.v.owned;
+    }
+
+    fn own(b: Before) void {
+        const c = b.cell orelse return;
+        const now = c.target();
+        if (now.v == .val and isMarked(now.v.val) and (b.was_owned or now.v.val.list.obj != b.old)) {
+            const v = now.v.val;
+            now.v = .{ .owned = v };
+        }
+    }
+};
+
 fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
@@ -622,9 +665,16 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
         .set => {
             if (args.len < 3) return it.wrongArgs("dict set dictVarName key ?key ...? value");
             const var_name = try it.str(args[0]);
+            const dropped = it.takeDropped(argv);
+            const before: Before = if (dropped) try .of(it, var_name) else .{};
+            if (dropped and args.len == 3 and try before.update(it, args[1], 1, args[2])) return Value.empty;
             const cur = try it.getVarOpt(var_name) orelse Value.empty;
             const out = try setIn(it, cur, args[1 .. args.len - 1], args[args.len - 1]);
             try it.setVar(var_name, out);
+            if (dropped) {
+                before.own();
+                return Value.empty;
+            }
             return out;
         },
         .unset => {
@@ -683,7 +733,12 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
                 return it.failCode("TCL WRONGARGS", "wrong # args: should be \"dict {s} dictVarName key ?value ...?\"", .{name});
             }
             const var_name = try it.str(args[0]);
-            const cur = try it.getVarOpt(var_name) orelse Value.empty;
+            const dropped = it.takeDropped(argv);
+            const before: Before = if (dropped) try .of(it, var_name) else .{};
+            // An owned dict is read with no end of its ownership. The
+            // new value does not share a buffer with it.
+            const owned = before.ownedDict();
+            const cur = owned orelse try it.getVarOpt(var_name) orelse Value.empty;
             const items = try readPairs(it, cur);
             const at = try lookup(it, cur, items, args[1]);
             const old: Value = if (at) |i| items[i + 1] else Value.empty;
@@ -709,8 +764,13 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
                     new = .{ .str = text.items };
                 },
             }
+            if (owned) |d| if (try updateOwned(it, d, args[1], 0, new)) return Value.empty;
             const out = try setIn(it, cur, args[1..2], new);
             try it.setVar(var_name, out);
+            if (dropped) {
+                before.own();
+                return Value.empty;
+            }
             return out;
         },
     }

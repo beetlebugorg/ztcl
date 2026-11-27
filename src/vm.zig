@@ -336,6 +336,9 @@ const Compiler = struct {
                 return;
             }
         }
+        // The command of an `invoke` just before the pop can keep the
+        // ownership of the variable that it writes.
+        if (n > 0 and c.label != c.here() and c.ins.items[n - 1].op == .invoke) c.ins.items[n - 1].x = 1;
         _ = try c.emit(.{ .op = .pop });
     }
 
@@ -1996,9 +1999,20 @@ pub inline fn opInvoke(comptime named: bool, it: *Interp, f: *Frame, code: *cons
     // A proc call keeps its values in the frame and the word
     // stack. A native command can hold values in locals.
     if (gc.precise) it.markDirect(command, argv.ptr);
+    dropHint(it, command, argv, i);
     const called = it.call(command, argv, c);
+    it.drop_argv = 0;
     if (gc.precise) it.clearDirect();
     stack[sp - i.b] = try called;
+}
+
+/// Tells `dict` and `lset` that the bytecode drops the result of the
+/// call (`x` 1 on `invoke`). A command with traces gets no hint, because
+/// a trace runs a script before the command.
+inline fn dropHint(it: *Interp, command: *const interp.Command, argv: []const Value, i: *const Ins) void {
+    if (i.x != 1 or command.traces != null or command.impl != .native) return;
+    const f = command.impl.native;
+    if (f == &dict.cmdDict or f == &more.cmdLset) it.drop_argv = @intFromPtr(argv.ptr);
 }
 
 /// `opInvoke` for a site whose cached command is valid: the JIT checks
@@ -2013,10 +2027,13 @@ pub fn opInvokeCached(it: *Interp, code: *const Code, stack: [*]Value, sp: u32, 
     const argv = stack[sp - i.b .. sp];
     // Machine code runs at a nest above 0, so a native command needs no
     // host wrapper of `Interp.call`.
-    stack[sp - i.b] = switch (c.resolved.?.impl) {
-        .proc => |p| try it.callProcFast(p, argv),
-        .native => |f| try f(it, argv, c),
+    dropHint(it, c.resolved.?, argv, i);
+    const called = switch (c.resolved.?.impl) {
+        .proc => |p| it.callProcFast(p, argv),
+        .native => |f| f(it, argv, c),
     };
+    it.drop_argv = 0;
+    stack[sp - i.b] = try called;
 }
 
 pub inline fn opEvalCmd(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
