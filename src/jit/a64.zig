@@ -679,6 +679,16 @@ pub const Asm = struct {
         try s.word(@backingInt(op) | dr(m) << 16 | dr(n) << 5 | dr(d));
     }
 
+    /// `fabs dd, dn`.
+    pub fn fabs(s: *Asm, d: DReg, n: DReg) Error!void {
+        try s.word(0x1E60C000 | dr(n) << 5 | dr(d));
+    }
+
+    /// `fsqrt dd, dn`.
+    pub fn fsqrt(s: *Asm, d: DReg, n: DReg) Error!void {
+        try s.word(0x1E61C000 | dr(n) << 5 | dr(d));
+    }
+
     pub fn fcmp(s: *Asm, n: DReg, m: DReg) Error!void {
         try s.word(0x1E602000 | dr(m) << 16 | dr(n) << 5);
     }

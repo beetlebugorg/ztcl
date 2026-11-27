@@ -146,6 +146,28 @@ fn isCompare(op: expr.BinOp) bool {
     };
 }
 
+/// The kind of the result of the built-in function `f` of `expr` on
+/// arguments of the kinds `args`, or null when tier 2 calls the helper:
+/// `sqrt` and `double` of a number give a double, `abs` keeps the kind,
+/// and `min` and `max` of two integers give an integer. The other cases
+/// (a double in `min` or `max`, with the rules of Tcl for -0.0 and NaN,
+/// and each other function) stay in the helper.
+pub fn mathKind(f: expr.Func, args: []const Kind) ?Kind {
+    for (args) |k| if (k == .any) return null;
+    return switch (f) {
+        .sqrt, .double => if (args.len == 1) .double else null,
+        .abs => if (args.len == 1) args[0] else null,
+        .min, .max => if (args.len == 2 and args[0] == .int and args[1] == .int) .int else null,
+        else => null,
+    };
+}
+
+/// True when the inline form of `mathfunc` can leave the loop: `sqrt`
+/// of a negative value, and `abs` of the least integer.
+pub fn mathExits(f: expr.Func, args: []const Kind) bool {
+    return f == .sqrt or (f == .abs and args.len == 1 and args[0] == .int);
+}
+
 /// The kind of `x op y`, or null when the operation is a helper call.
 pub fn binKind(op: expr.BinOp, x: Kind, y: Kind) ?Kind {
     if (x == .any or y == .any) return null;
@@ -316,6 +338,15 @@ const Builder = struct {
                 };
                 pop(stack, 1);
                 stack.items[top - 2] = k;
+            },
+            .mathfunc => {
+                const n = i.a;
+                const k = mathKind(@fromBackingInt(@intCast(i.x)), stack.items[top - n .. top]) orelse blk: {
+                    b.calls = true;
+                    break :blk .any;
+                };
+                pop(stack, n - 1);
+                stack.items[top - n] = k;
             },
             else => {
                 // A helper call. Its result has the kind `any`, and a
@@ -490,6 +521,7 @@ pub fn noCall(i: vm.Ins, stack: []const Kind, slots: []const Kind, b: anytype) b
         .bin_vv => inlineOp(@fromBackingInt(@intCast(i.x)), slots[b.slotIndex(i.a)], slots[b.slotIndex(i.b)]),
         .bin_vi => inlineOp(@fromBackingInt(@intCast(i.x)), slots[b.slotIndex(i.a)], .int),
         .binary => inlineOp(@fromBackingInt(@intCast(i.x)), stack[top - 2], stack[top - 1]),
+        .mathfunc => mathKind(@fromBackingInt(@intCast(i.x)), stack[top - i.a .. top]) != null,
         else => false,
     };
 }
@@ -502,6 +534,7 @@ fn exitsAt(i: vm.Ins, stack: []const Kind, slots: []const Kind, b: *const Builde
     return switch (i.op) {
         .incr, .incr_drop, .incr_value => true,
         .bin_vv, .bin_vi, .binary => !isCompare(@fromBackingInt(@intCast(i.x))),
+        .mathfunc => mathExits(@fromBackingInt(@intCast(i.x)), stack[stack.len - i.a ..]),
         else => false,
     };
 }

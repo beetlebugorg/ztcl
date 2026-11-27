@@ -543,7 +543,7 @@ pub const Asm = struct {
         try s.reserve();
         try s.op(0x66, false, &.{ 0x0F, 0x28 }, num(dst), rmX(src), .none);
     }
-    pub const Sse = enum(u8) { addsd = 0x58, mulsd = 0x59, subsd = 0x5C, divsd = 0x5E };
+    pub const Sse = enum(u8) { sqrtsd = 0x51, addsd = 0x58, mulsd = 0x59, subsd = 0x5C, divsd = 0x5E };
     pub fn sse(s: *Asm, o: Sse, dst: Xmm, src: Xmm) Allocator.Error!void {
         try s.reserve();
         try s.op(0xF2, false, &.{ 0x0F, @backingInt(o) }, num(dst), rmX(src), .none);

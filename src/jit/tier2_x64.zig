@@ -691,6 +691,31 @@ const Emitter = struct {
                 try e.arith(@fromBackingInt(@intCast(i.x)), over, e.place(d - 1));
                 try e.result(pc, d - 2);
             },
+            .mathfunc => {
+                // `abs`, `min`, and `max` of integers. `doubles` took the
+                // other inline forms.
+                const f: expr.Func = @fromBackingInt(@intCast(i.x));
+                const done = try s.newLabel();
+                if (f == .abs) {
+                    const over = try e.guardExit(pc, e.left[pc - e.p.head]);
+                    try s.movRR(.rax, e.place(d - 1));
+                    try s.aluRI(.cmp, .rax, 0);
+                    try s.jcc(.ge, done);
+                    // The least integer has no negative in 64 bits: the
+                    // helper gives its bignum.
+                    try s.neg(.rax);
+                    try s.jcc(.o, over);
+                    s.bind(done);
+                    try e.result(pc, d - 1);
+                } else {
+                    try s.movRR(.rax, e.place(d - 2));
+                    try s.aluRR(.cmp, .rax, e.place(d - 1));
+                    try s.jcc(if (f == .min) .le else .ge, done);
+                    try s.movRR(.rax, e.place(d - 1));
+                    s.bind(done);
+                    try e.result(pc, d - 2);
+                }
+            },
             else => unreachable,
         }
         return true;
@@ -781,6 +806,47 @@ const Emitter = struct {
                     e.alias[d - 1 - e.base] = null;
                     e.known[d - 1 - e.base] = null;
                 }
+                return true;
+            },
+            .mathfunc => {
+                // `sqrt`, `double`, and `abs` with a result in a double
+                // register. The kinds said that the argument is a number.
+                if (i.a != 1 or e.kindAt(pc + 1, d - 1) != .double) return false;
+                const f: expr.Func = @fromBackingInt(@intCast(i.x));
+                const k = d - 1;
+                const a = e.placeOperand(pc, k);
+                try e.settleBelow(pc, k);
+                const ax = try e.inX(a, .xmm4);
+                const dest = e.xplace(k);
+                if (f == .double) {
+                    if (ax != dest) try s.movapd(dest, ax);
+                } else {
+                    // 0.0 in xmm5.
+                    try s.movRI32(.rcx, 0);
+                    try s.cvtsi2sd(.xmm5, .rcx);
+                    try s.ucomisd(ax, .xmm5);
+                    if (f == .sqrt) {
+                        // A negative value runs the helper, for its domain
+                        // error. -0.0 is not below 0.0, and its root is
+                        // -0.0 as in the helper.
+                        try s.jcc(.b, try e.guardExit(pc, e.left[pc - e.p.head]));
+                        try s.sse(.sqrtsd, dest, ax);
+                    } else {
+                        // abs: 0.0 - x for x <= 0, so -0.0 gives 0.0 as
+                        // in Tcl. No value in a register is a NaN.
+                        const keep = try s.newLabel();
+                        const done = try s.newLabel();
+                        try s.jcc(.a, keep);
+                        try s.sse(.subsd, .xmm5, ax);
+                        try s.movapd(dest, .xmm5);
+                        try s.jmp(done);
+                        s.bind(keep);
+                        if (ax != dest) try s.movapd(dest, ax);
+                        s.bind(done);
+                    }
+                }
+                e.alias[k - e.base] = null;
+                e.known[k - e.base] = null;
                 return true;
             },
             .bin_vv, .bin_vi, .binary => {
