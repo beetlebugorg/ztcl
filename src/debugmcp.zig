@@ -6,7 +6,8 @@
 //! notification. The tools run in one interpreter, with the capabilities
 //! and the limits of the runner options. `ztcl_run` and `ztcl_explain`
 //! reset the interpreter first, so each run starts new. `ztcl_records`
-//! and `ztcl_eval` read the state of the last run. The output of `puts`
+//! and `ztcl_eval` read the state of the last run, and `ztcl_disasm`
+//! gives the bytecode of one of its procs. The output of `puts`
 //! goes into the answer of the tool, because stdout has the protocol.
 //! Each answer stops at the byte budget of the tool (`budget`).
 //!
@@ -16,6 +17,7 @@ const std = @import("std");
 const interp = @import("interp.zig");
 const debug = @import("debug.zig");
 const probe = @import("probe.zig");
+const value = @import("value.zig");
 
 const Interp = interp.Interp;
 const Allocator = std.mem.Allocator;
@@ -44,7 +46,8 @@ const tools_json =
     \\[{"name":"ztcl_run","description":"Runs a Tcl script with probes and gives a short report: the status, the error with the stack and the locals, the probes, and the last records. Give path or script.","inputSchema":{"type":"object","properties":{"path":{"type":"string","description":"The script file."},"script":{"type":"string","description":"The script text."},"probes":{"type":"array","items":{"type":"string"},"description":"The words of `ztcl::probe add` for each probe, such as \"-proc parse -line 4 -capture {i [llength $toks]}\"."},"budget":{"type":"integer","description":"The most bytes of the answer. The default is 4000."},"detail":{"type":"string","enum":["summary","stack","changes","records","all"]},"last":{"type":"integer","description":"The count of records. The default is 10."}}}},
     \\{"name":"ztcl_explain","description":"Runs a Tcl script, and after an error runs it again with a probe on each line of the proc of the error. Gives the error, the stack with the locals, and the last changes of the variables of the failed command, with the line of each change.","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"script":{"type":"string"},"probes":{"type":"array","items":{"type":"string"}},"budget":{"type":"integer"},"detail":{"type":"string","enum":["summary","stack","changes","records","all"]}}}},
     \\{"name":"ztcl_records","description":"Gives the probe records of the last run as JSON lines, with an optional filter. A bare name in where is a field or a captured value, such as \"n > 10\".","inputSchema":{"type":"object","properties":{"where":{"type":"string"},"probe":{"type":"string","description":"A probe id such as p2."},"last":{"type":"integer"},"since":{"type":"integer"},"budget":{"type":"integer"}}}},
-    \\{"name":"ztcl_eval","description":"Evaluates Tcl code in the interpreter of the last run, for example to read a global variable or to add a probe for the next records.","inputSchema":{"type":"object","properties":{"code":{"type":"string"},"budget":{"type":"integer"}},"required":["code"]}}]
+    \\{"name":"ztcl_eval","description":"Evaluates Tcl code in the interpreter of the last run, for example to read a global variable or to add a probe for the next records.","inputSchema":{"type":"object","properties":{"code":{"type":"string"},"budget":{"type":"integer"}},"required":["code"]}},
+    \\{"name":"ztcl_disasm","description":"Gives the bytecode of a proc of the last run, or of a script, under the source line of each command, with the state of the JIT (ztcl::disasm). Give proc or script.","inputSchema":{"type":"object","properties":{"proc":{"type":"string"},"script":{"type":"string"},"budget":{"type":"integer"}}}}]
 ;
 
 /// Serves requests from `in` until the end of the input.
@@ -238,6 +241,22 @@ fn call(s: *Server, a: Allocator, name: []const u8, args: ?json.ObjectMap, faile
             return clipText(a, try std.fmt.allocPrint(a, "error: {s}\n{s}", .{ it.str(it.result) catch "", s.captured.items }), budget);
         };
         return clipText(a, try std.fmt.allocPrint(a, "{s}{s}", .{ s.captured.items, try it.str(v) }), budget);
+    }
+    if (std.mem.eql(u8, name, "ztcl_disasm")) {
+        if (comptime !@import("disasm.zig").enabled) {
+            failed.* = true;
+            return "this build has no ztcl::disasm";
+        }
+        const kind: []const u8, const arg = if (str(args, "proc")) |p| .{ "proc", p } else if (str(args, "script")) |t| .{ "script", t } else {
+            failed.* = true;
+            return "give proc or script";
+        };
+        const words = try value.listToString(a, &.{ .{ .str = "ztcl::disasm" }, .{ .str = kind }, .{ .str = arg } });
+        const v = it.eval(try std.fmt.allocPrint(a, "package require ztcl::disasm\n{s}", .{words})) catch {
+            failed.* = true;
+            return clipText(a, try std.fmt.allocPrint(a, "error: {s}", .{it.str(it.result) catch ""}), budget);
+        };
+        return clipText(a, try it.str(v), budget);
     }
     failed.* = true;
     return std.fmt.allocPrint(a, "unknown tool \"{s}\"", .{name});

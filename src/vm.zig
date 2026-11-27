@@ -139,7 +139,7 @@ pub const Ins = extern struct {
 const no_target = std.math.maxInt(u32);
 
 /// A part of the instructions that belongs to a command or a loop.
-const Range = struct {
+pub const Range = struct {
     start: u32,
     end: u32,
     /// The command for the error trace, or null for a loop body.

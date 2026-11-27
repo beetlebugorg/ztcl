@@ -7,6 +7,7 @@ The `ztcl::` modules are built into ztcl. A module loads with `package require`,
 | [ztcl::json](json.md) | Parses and writes JSON. | none | each target, and WebAssembly |
 | [ztcl::vt](vt.md) | Keeps the state of a terminal: the cells, the cursor, the modes, and the scrollback. | none | each target, and WebAssembly except `ztcl-threads.wasm` |
 | [ztcl::probe](probe.md) | Records the values of a running script at a proc, a line, a command, a variable, or an error, with no change to the script. | none | each target, and the WebAssembly shell (`ztcl-shell.wasm`) |
+| [ztcl::disasm](disasm.md) | Shows the bytecode of a proc, a lambda, or a script under the source line of each command, and gives `::tcl::unsupported::disassemble`. | none | each target, and the WebAssembly shell (`ztcl-shell.wasm`) |
 | [ztcl::pty](pty.md) | Runs a program on a pseudo-terminal, as a channel. | `exec` | Linux, macOS, x86-64 Windows |
 | [ztcl::watch](watch.md) | Gives the changes of the files below a folder. | `file` | Linux, macOS, x86-64 Windows |
 | [ztcl::open](open.md) | Opens a URL or a file in the default app of the system. | `launch` | macOS, Windows; Linux with a host callback |
