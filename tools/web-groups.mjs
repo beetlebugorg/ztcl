@@ -704,6 +704,98 @@ web::usb::control $::dev -direction out -type class -recipient interface -reques
   s2.t.close();
 }
 
+// ---- HID ----
+
+class HIDInputReportEvent extends Event {
+  constructor(type, reportId, bytes) {
+    super(type);
+    Object.assign(this, { reportId, data: new DataView(new Uint8Array(bytes).buffer) });
+  }
+}
+class HIDConnectionEvent extends Event {
+  constructor(type, device) {
+    super(type);
+    this.device = device;
+  }
+}
+class HIDDevice extends EventTarget {
+  constructor() {
+    super();
+    Object.assign(this, { opened: false, vendorId: 0x054c, productId: 0x0ce6, productName: "Fake Controller", collections: [], sent: [] });
+  }
+  open() {
+    this.opened = true;
+    return Promise.resolve();
+  }
+  close() {
+    this.opened = false;
+    return Promise.resolve();
+  }
+  sendReport(id, data) {
+    this.sent.push(["out", id, Array.from(data)]);
+    return Promise.resolve();
+  }
+  sendFeatureReport(id, data) {
+    this.sent.push(["feature", id, Array.from(data)]);
+    return Promise.resolve();
+  }
+  receiveFeatureReport(id) {
+    return Promise.resolve(new DataView(new Uint8Array([id, 7]).buffer));
+  }
+}
+class HID extends EventTarget {
+  constructor() {
+    super();
+    this.device = new HIDDevice();
+    this.asked = [];
+  }
+  requestDevice(o) {
+    this.asked.push(o);
+    return Promise.resolve([this.device]);
+  }
+  getDevices() {
+    return Promise.resolve([this.device]);
+  }
+}
+
+{
+  const hid = new HID();
+  const { t, out } = await session(["web:hid"], { navigator: { hid } });
+  const ev = (s) => t.eval(s);
+  let r = ev(`web::hid::request -vendor 0x054c -page 1 -usage 5 -command {apply {{s devs} {
+    set ::dev [lindex $devs 0]
+    web::hid::open $::dev -command {apply {{s v} {puts "open $s [web::hid::info $::dev]"}}}
+}}}`);
+  check(r.ok, `hid request (got ${r.result})`);
+  await until(() => out().includes("open"));
+  check(JSON.stringify(hid.asked[0]) === JSON.stringify({ filters: [{ vendorId: 0x054c, usagePage: 1, usage: 5 }] }), `hid filters (got ${JSON.stringify(hid.asked)})`);
+  check(out() === "open ok vendor 1356 product 3302 name {Fake Controller} opened 1\n", `hid open (got ${JSON.stringify(out())})`);
+  ev("web::hid::listen $::dev {apply {{d id bytes} {binary scan $bytes cu* n; puts \"report $id $n\"}}}");
+  hid.device.dispatchEvent(new HIDInputReportEvent("inputreport", 1, [128, 127, 0]));
+  hid.device.dispatchEvent(new HIDInputReportEvent("inputreport", 2, [9]));
+  await until(() => out().includes("report 2"));
+  check(out().endsWith("report 1 128 127 0\nreport 2 9\n"), `hid reports (got ${JSON.stringify(out())})`);
+  const objs = t._web.objs.size;
+  hid.device.dispatchEvent(new HIDInputReportEvent("inputreport", 3, [1]));
+  await until(() => out().includes("report 3"));
+  check(t._web.objs.size === objs, "hid reports release their event handles");
+  r = ev("web::hid::send $::dev 5 [binary format c2 {1 2}]; web::hid::feature $::dev 3 \\x0a; web::hid::feature $::dev 4 -command {apply {{s v} {binary scan $v cu* n; puts \"feature $s $n\"}}}");
+  check(r.ok, `hid send and feature (got ${r.result})`);
+  await until(() => out().includes("feature"));
+  check(JSON.stringify(hid.device.sent) === JSON.stringify([["out", 5, [1, 2]], ["feature", 3, [10]]]) && out().includes("feature ok 4 7"), `hid output and feature reports (got ${JSON.stringify(hid.device.sent)} ${JSON.stringify(out())})`);
+  r = ev("web::hid::feature $::dev 4");
+  check(!r.ok && /wrong # args/.test(r.result), `hid feature read with no -command (got ${r.result})`);
+  ev("web::hid::ondisconnect {apply {{d} {puts \"unplugged [dict get [web::hid::info $d] name]\"}}}");
+  hid.dispatchEvent(new HIDConnectionEvent("disconnect", hid.device));
+  await until(() => out().includes("unplugged"));
+  check(out().includes("unplugged Fake Controller"), `hid ondisconnect (got ${JSON.stringify(out())})`);
+  t.close();
+  const s2 = await session(["web:hid"], { navigator: {} });
+  r = s2.t.eval("web::hid::devices -command puts");
+  check(!r.ok && r.result === "web::hid: this browser has no WebHID", `a browser without WebHID (got ${r.result})`);
+  s2.t.close();
+}
+
 if (failed) {
   console.error(`${failed} failed`);
   process.exit(1);

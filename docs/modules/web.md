@@ -79,6 +79,7 @@ A group can have commands of its own in the namespace `web::GROUP`, with `-name 
 | `gamepad` | [`web::gamepad::`](web-gamepad.md): the state of the pads, a poll, the events of a new pad, and rumble |
 | `midi` | [`web::midi::`](web-midi.md): the ports, the messages as lists of numbers, and notes |
 | `usb` | [`web::usb::`](web-usb.md): the endpoints of a device as a channel, and control transfers |
+| `hid` | [`web::hid::`](web-hid.md): input reports to a script, output and feature reports |
 
 ## Web Serial
 

@@ -279,6 +279,7 @@ const web_libs = [_]struct { group: []const u8, script: []const u8 }{
     .{ .group = "gamepad", .script = @embedFile("web/gamepad.tcl") },
     .{ .group = "midi", .script = @embedFile("web/midi.tcl") },
     .{ .group = "usb", .script = @embedFile("web/usb.tcl") },
+    .{ .group = "hid", .script = @embedFile("web/hid.tcl") },
 };
 
 /// Runs the Tcl wrapper of the group `ptr[0..len]`, such as

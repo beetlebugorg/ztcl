@@ -24,6 +24,7 @@ The `ztcl::` modules are built into ztcl. A module loads with `package require`,
 | [web::gamepad](web-gamepad.md) | The game controllers of the Gamepad API: the state, a poll, the events of a new pad, and rumble. | `web:gamepad` in `allow` | `ztcl-host.wasm` in a browser |
 | [web::midi](web-midi.md) | The MIDI ports of Web MIDI: the inputs and outputs, the messages, and notes. | `web:midi` in `allow` | `ztcl-host.wasm` in a browser |
 | [web::usb](web-usb.md) | The USB devices of WebUSB: the endpoints as a channel, and control transfers. | `web:usb` in `allow` | `ztcl-host.wasm` in a browser |
+| [web::hid](web-hid.md) | The HID devices of WebHID: input, output, and feature reports. | `web:hid` in `allow` | `ztcl-host.wasm` in a browser |
 | [ztcl::agent](agent.md) | Runs an LLM agent loop in an isolated thread with only the data and the tools of the host. | `thread`, and `socket` and `channels` for the endpoint | each target with threads |
 | [ztcl::mac](mac.md) | The keychain and the defaults of macOS. | `keychain`, `defaults` | macOS |
 
