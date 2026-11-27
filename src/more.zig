@@ -356,7 +356,7 @@ fn isAscii(s: []const u8) bool {
 }
 
 /// The bytes of a string: each character below 256 is one byte.
-fn toBytes(it: *Interp, s: []const u8) Error![]const u8 {
+pub fn toBytes(it: *Interp, s: []const u8) Error![]const u8 {
     if (isAscii(s)) return s;
     var out: std.ArrayList(u8) = .empty;
     var i: usize = 0;
@@ -380,7 +380,7 @@ fn toBytes(it: *Interp, s: []const u8) Error![]const u8 {
 
 /// The string of bytes: a byte above 127 becomes the character with
 /// that number.
-fn fromBytes(it: *Interp, b: []const u8) Error![]const u8 {
+pub fn fromBytes(it: *Interp, b: []const u8) Error![]const u8 {
     if (isAscii(b)) return b;
     var out: std.ArrayList(u8) = .empty;
     for (b) |c| {

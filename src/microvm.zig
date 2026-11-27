@@ -53,6 +53,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
+const more = @import("more.zig");
 const chan = @import("chan.zig");
 const fsroot = @import("fsroot.zig");
 const sys = @import("sys.zig");
@@ -407,10 +408,13 @@ const ExecReq = struct {
     cwd: []const u8 = "",
     stdin: ?[]const u8 = null,
     timeout: u32 = 30000,
+    /// `-binary 1`: each character of `-stdin` is one byte (below 256),
+    /// and each byte of the output is one character.
+    binary: bool = false,
 };
 
 fn execArgs(it: *Interp, args: []const Value) Error!ExecReq {
-    const use = "ztcl::vm exec vm ?-stdin data? ?-env list? ?-cwd dir? ?-timeout ms? ?--? program ?arg ...?";
+    const use = "ztcl::vm exec vm ?-stdin data? ?-binary bool? ?-env list? ?-cwd dir? ?-timeout ms? ?--? program ?arg ...?";
     var r: ExecReq = .{ .argv = &.{} };
     var i: usize = 0;
     while (i < args.len) {
@@ -424,6 +428,8 @@ fn execArgs(it: *Interp, args: []const Value) Error!ExecReq {
         const v = args[i + 1];
         if (std.mem.eql(u8, o, "-stdin")) {
             r.stdin = try it.str(v);
+        } else if (std.mem.eql(u8, o, "-binary")) {
+            r.binary = try it.int(v) != 0;
         } else if (std.mem.eql(u8, o, "-cwd")) {
             r.cwd = try it.str(v);
         } else if (std.mem.eql(u8, o, "-timeout")) {
@@ -435,10 +441,13 @@ fn execArgs(it: *Interp, args: []const Value) Error!ExecReq {
             const e = try it.alloc().alloc([]const u8, items.len);
             for (items, e) |x, *y| y.* = try it.str(x);
             r.env = e;
-        } else return it.fail("bad option \"{s}\": must be -cwd, -env, -stdin, or -timeout", .{o});
+        } else return it.fail("bad option \"{s}\": must be -binary, -cwd, -env, -stdin, or -timeout", .{o});
         i += 2;
     }
     if (i >= args.len) return it.wrongArgs(use);
+    if (r.binary) if (r.stdin) |text| {
+        r.stdin = try more.toBytes(it, text);
+    };
     const argv = try it.alloc().alloc([]const u8, args.len - i);
     for (args[i..], argv) |x, *y| y.* = try it.str(x);
     r.argv = argv;
@@ -470,10 +479,12 @@ fn agentFail(it: *Interp, name: []const u8, a: *vmagent.Conn, e: vmagent.Error) 
 /// `stdout`, and `stderr`.
 fn agentExec(it: *Interp, name: []const u8, a: *vmagent.Conn, r: ExecReq) Error!Value {
     const res = vmagent.exec(a, it.alloc(), r.argv, r.env, r.cwd, r.stdin, 64 << 20) catch |e| return agentFail(it, name, a, e);
+    const out = if (r.binary) try more.fromBytes(it, res.stdout) else res.stdout;
+    const err = if (r.binary) try more.fromBytes(it, res.stderr) else res.stderr;
     var items = [6]Value{
         .{ .str = "exit" },   .{ .int = res.code },
-        .{ .str = "stdout" }, .{ .str = res.stdout },
-        .{ .str = "stderr" }, .{ .str = res.stderr },
+        .{ .str = "stdout" }, .{ .str = out },
+        .{ .str = "stderr" }, .{ .str = err },
     };
     return value.wrapList(it.alloc(), try it.alloc().dupe(Value, &items));
 }

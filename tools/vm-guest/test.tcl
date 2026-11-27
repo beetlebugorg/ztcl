@@ -25,6 +25,13 @@ check "exec: the exit code" [dict get $r exit] 3
 check "exec: stdout" [dict get $r stdout] "out\n"
 check "exec: stderr" [dict get $r stderr] "err\n"
 check "exec: stdin" [dict get [ztcl::vm exec $vm -stdin "a b c" /bin/busybox wc -w] stdout] "3\n"
+# Text goes as UTF-8; with -binary 1, each character is one byte.
+set od {/bin/busybox od -An -tx1}
+check "exec: UTF-8 stdin" [string trim [dict get [ztcl::vm exec $vm -stdin "h\u00e9 \u4e16" {*}$od] stdout]] "68 c3 a9 20 e4 b8 96"
+check "exec: UTF-8 stdout" [dict get [ztcl::vm exec $vm -stdin "h\u00e9 \u4e16" /bin/busybox cat] stdout] "h\u00e9 \u4e16"
+set bin [binary format H* 00ff80c3a90a7f]
+check "exec: binary stdin" [string trim [dict get [ztcl::vm exec $vm -binary 1 -stdin $bin {*}$od] stdout]] "00 ff 80 c3 a9 0a 7f"
+check "exec: binary stdin and stdout" [dict get [ztcl::vm exec $vm -binary 1 -stdin $bin /bin/busybox cat] stdout] $bin
 check "exec: a missing program" [catch {ztcl::vm exec $vm /nope}] 1
 check "exec: its error code" [lrange $::errorCode 0 2] {ZTCL VM AGENT}
 check "the share at /mnt/share" [dict get [ztcl::vm exec $vm /bin/busybox cat /mnt/share/hello.txt] stdout] "from the host"
