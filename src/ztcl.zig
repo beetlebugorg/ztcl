@@ -56,6 +56,7 @@ pub const isolate_mac = @import("isolate_mac.zig");
 pub const isobroker = @import("isobroker.zig");
 pub const vmimage = @import("vmimage.zig");
 pub const vmstore = @import("vmstore.zig");
+pub const microvm = @import("microvm.zig");
 pub const isolate_linux = @import("isolate_linux.zig");
 pub const filecmd = @import("filecmd.zig");
 pub const sys = @import("sys.zig");

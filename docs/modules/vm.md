@@ -73,7 +73,10 @@ ztcl::vm exec $vm /bin/busybox uname -m
 - `image remove NAME ?COUNTER?` removes a release, or each release of the image, and each file that no release needs. The highest counter stays, so a removal does not open the door to an older release.
 - `create -image NAME` boots the current release: its kernel, its initramfs, its command line, and its disks, read-only and first (`/dev/vda` is the root). It checks the SHA-256 of the kernel and the initramfs at each `create`; a disk with `dm-verity` checks each block when the guest reads it. It takes no `-kernel`, `-initrd`, or `-cmdline`.
 
-The store is a folder of the user: `ZTCL_VM_IMAGES`, or `~/Library/Application Support/ztcl/vm-images` on macOS and `$XDG_DATA_HOME/ztcl/vm-images` (`~/.local/share/...`) on Linux. A script names an image, never a path of the store. `image fetch` and `image update` (a download of a release of GitHub) come later.
+- `image fetch ?-version V? ?-url BASE? ?-force?` downloads a release over HTTPS and installs it as `install` does: first `manifest.json` and its signature, then, when the release is newer than the current one, the files of this architecture into a folder of the store, and then the checks of `install`. The release is the GitHub release `vm-image-vV` of ztcl, or `vm-image-latest` with no `-version`, or the folder `BASE` of a mirror. It gives a dict with `status` `installed` or `current` (the store has it already; `-force` fetches it again). It needs the capability `socket` and a program that gives `ztcl::vm` a download (the `ztcl` runner does, with std.http and its TLS).
+- `image update ?-url BASE?` is `fetch` of the latest release.
+
+The store is a folder of the user: `ZTCL_VM_IMAGES`, or `~/Library/Application Support/ztcl/vm-images` on macOS and `$XDG_DATA_HOME/ztcl/vm-images` (`~/.local/share/...`) on Linux. A script names an image, never a path of the store.
 
 ## Limits
 
@@ -121,6 +124,8 @@ A start of a guest with 1 CPU and 64 MB is about 100 ms on an M1 Mac, and 86 ms 
 | `ZTCL VM IMAGE ROLLBACK` | `the store has a newer release of the image: pass -force to install an older one` |
 | `ZTCL VM IMAGE HASH` | `a file of the image does not have the SHA-256 of its manifest` |
 | `ZTCL VM IMAGE MISSING` | `the image has no files for arm64` |
+| `ZTCL VM FETCH` | `the download of https://.../manifest.json failed: Status` |
+| `ZTCL VM NONET` | `ztcl::vm image fetch needs the socket capability` |
 | `ZTCL VM IMAGE NAME` | `no image named "x" in the store: install it with ztcl::vm image install` |
 | `ZTCL VM FRAMEWORK` | The text of the framework, such as for a kernel file that it cannot boot |
 | `POSIX EACCES` | `couldn't open "../x": permission denied`, for a path outside the root folder |

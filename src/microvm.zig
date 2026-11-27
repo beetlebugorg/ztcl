@@ -66,7 +66,20 @@ pub const Host = struct {
     /// The folder of the store of signed images (`vmstore.zig`), a path
     /// of the host. Empty: `ztcl::vm image` gives ZTCL VM STORE.
     image_store: []const u8 = "",
+    /// Downloads `url` (HTTPS) into the open file `fd`, for `ztcl::vm
+    /// image fetch` and `update`. The runner gives one on std.http; an
+    /// embedder with no network leaves it null, and fetch then gives
+    /// ZTCL VM UNAVAILABLE. A file passes the checks of the signed
+    /// manifest before it counts, so the hook needs no trust.
+    fetch: ?*const fn (ctx: ?*anyopaque, url: []const u8, fd: i32) FetchError!void = null,
+    fetch_ctx: ?*anyopaque = null,
 };
+
+pub const FetchError = error{ Network, Status, Io, OutOfMemory };
+
+/// The release of the images by default: a GitHub release that the
+/// publisher moves to each new image (docs/dev/vm-image.md).
+pub const image_base = "https://github.com/beetlebugorg/ztcl/releases/download/";
 
 /// The port of the guest agent. A warm guest pauses when a program of
 /// the guest accepts a connection on it.
@@ -181,6 +194,7 @@ fn imageCmd(it: *Interp, args: []const Value) Error!Value {
         var items = [6]Value{ .{ .str = "name" }, .{ .str = r.name }, .{ .str = "counter" }, .{ .int = @intCast(r.counter) }, .{ .str = "key" }, .{ .str = r.key } };
         return value.wrapList(a, try a.dupe(Value, &items));
     }
+    if (std.mem.eql(u8, sub, "fetch") or std.mem.eql(u8, sub, "update")) return fetchCmd(it, args, std.mem.eql(u8, sub, "update"));
     if (std.mem.eql(u8, sub, "list")) {
         if (args.len != 1) return it.wrongArgs("ztcl::vm image list");
         const s = try store(it);
@@ -218,7 +232,70 @@ fn imageCmd(it: *Interp, args: []const Value) Error!Value {
         s.remove(a, name, counter) catch |e| return storeFail(it, e);
         return .{ .str = "" };
     }
-    return it.fail("bad option \"{s}\": must be install, list, remove, or verify", .{sub});
+    return it.fail("bad option \"{s}\": must be fetch, install, list, remove, update, or verify", .{sub});
+}
+
+/// `image fetch ?-version V? ?-url BASE? ?-force?` and `image update`:
+/// the manifest and its signature first, then the files of this
+/// architecture, into a folder of tmp/ of the store, then `install`.
+fn fetchCmd(it: *Interp, args: []const Value, update: bool) Error!Value {
+    const use_update = "ztcl::vm image update ?-url base?";
+    const use_fetch = "ztcl::vm image fetch ?-version v? ?-url base? ?-force?";
+    if (it.capabilities & @backingInt(interp.Capability.socket) == 0)
+        return it.failCode("ZTCL VM NONET", "ztcl::vm image {s} needs the socket capability", .{if (update) "update" else "fetch"});
+    const hook = it.vm_host.fetch orelse return it.failCode("ZTCL VM UNAVAILABLE", "this program gives ztcl::vm no download", .{});
+    const a = it.alloc();
+    var version: ?[]const u8 = null;
+    var base: ?[]const u8 = null;
+    var force = false;
+    var i: usize = 1;
+    while (i < args.len) {
+        const o = try it.str(args[i]);
+        if (std.mem.eql(u8, o, "-force") and !update) {
+            force = true;
+            i += 1;
+            continue;
+        }
+        if (i + 1 >= args.len) return if (update) it.wrongArgs(use_update) else it.wrongArgs(use_fetch);
+        if (std.mem.eql(u8, o, "-version") and !update) {
+            version = try it.str(args[i + 1]);
+        } else if (std.mem.eql(u8, o, "-url")) {
+            base = try it.str(args[i + 1]);
+        } else return if (update) it.wrongArgs(use_update) else it.wrongArgs(use_fetch);
+        i += 2;
+    }
+    const root = if (base) |b|
+        (if (std.mem.endsWith(u8, b, "/")) b else try std.fmt.allocPrint(a, "{s}/", .{b}))
+    else
+        try std.fmt.allocPrint(a, "{s}vm-image-{s}/", .{ image_base, if (version) |v| try std.fmt.allocPrint(a, "v{s}", .{v}) else "latest" });
+    if (!std.mem.startsWith(u8, root, "https://") and !std.mem.startsWith(u8, root, "http://127.0.0.1"))
+        return it.fail("a release is fetched over https", .{});
+    const s = try store(it);
+    defer s.close();
+    var t = s.tempDir(a) catch |e| return storeFail(it, e);
+    defer t.remove(a, s);
+    for ([_][]const u8{ "manifest.json", "manifest.json.sig" }) |name| try download(it, hook, t, a, root, name);
+    // The manifest first: its signature, and whether it is new.
+    const pre = (s.peek(a, t.fd) catch |e| return storeFail(it, e));
+    const cur = s.current(a, pre.name) catch |e| return storeFail(it, e);
+    if (cur) |c| if (pre.counter <= c and !force) {
+        var items = [6]Value{ .{ .str = "name" }, .{ .str = pre.name }, .{ .str = "counter" }, .{ .int = @intCast(c) }, .{ .str = "status" }, .{ .str = "current" } };
+        return value.wrapList(a, try a.dupe(Value, &items));
+    };
+    for (pre.files) |f| {
+        if (std.mem.indexOfAny(u8, f, "/\\") != null or std.mem.startsWith(u8, f, ".")) return storeFail(it, error.BadManifest);
+        try download(it, hook, t, a, root, f);
+    }
+    const r = s.install(a, t.fd, vmstore.host_arch, force) catch |e| return storeFail(it, e);
+    var items = [8]Value{ .{ .str = "name" }, .{ .str = r.name }, .{ .str = "counter" }, .{ .int = @intCast(r.counter) }, .{ .str = "key" }, .{ .str = r.key }, .{ .str = "status" }, .{ .str = "installed" } };
+    return value.wrapList(a, try a.dupe(Value, &items));
+}
+
+fn download(it: *Interp, hook: anytype, t: vmstore.Temp, a: std.mem.Allocator, root: []const u8, name: []const u8) Error!void {
+    const fd = t.create(a, name) catch |e| return storeFail(it, e);
+    defer _ = sys.os.close(fd);
+    const url = try std.fmt.allocPrint(a, "{s}{s}", .{ root, name });
+    hook(it.vm_host.fetch_ctx, url, fd) catch |e| return it.failCode("ZTCL VM FETCH", "the download of {s} failed: {s}", .{ url, @errorName(e) });
 }
 
 /// A descriptor of a folder of the script, below the root folder,

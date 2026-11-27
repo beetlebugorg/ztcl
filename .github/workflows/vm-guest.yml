@@ -93,9 +93,11 @@ jobs:
           path: in
       - name: Lay out the release
         run: |
-          mkdir -p rel/arm64 rel/x86_64
-          cp in/vm-guest/Image in/vm-guest/root.img in/vm-guest/agent.cpio.gz rel/arm64/
-          cp in/vm-guest-x86_64/bzImage in/vm-guest-x86_64/root.img in/vm-guest-x86_64/agent.cpio.gz rel/x86_64/
+          mkdir -p rel
+          cp in/vm-guest/Image rel/arm64-Image
+          cp in/vm-guest/root.img rel/arm64-root.img
+          cp in/vm-guest-x86_64/bzImage rel/x86_64-bzImage
+          cp in/vm-guest-x86_64/root.img rel/x86_64-root.img
           tools/vm-guest/manifest.sh ztcl-guest-test "0.0.0-${GITHUB_SHA::12}" "${GITHUB_RUN_NUMBER}" 0.1.0 \
             in/vm-guest/arm64.json in/vm-guest-x86_64/x86_64.json > rel/manifest.json
       - name: Sign with the test key
@@ -129,9 +131,11 @@ jobs:
           path: in
       - name: Lay out the release
         run: |
-          mkdir -p rel/arm64 rel/x86_64
-          cp in/vm-guest/Image in/vm-guest/root.img in/vm-guest/agent.cpio.gz rel/arm64/
-          cp in/vm-guest-x86_64/bzImage in/vm-guest-x86_64/root.img in/vm-guest-x86_64/agent.cpio.gz rel/x86_64/
+          mkdir -p rel
+          cp in/vm-guest/Image rel/arm64-Image
+          cp in/vm-guest/root.img rel/arm64-root.img
+          cp in/vm-guest-x86_64/bzImage rel/x86_64-bzImage
+          cp in/vm-guest-x86_64/root.img rel/x86_64-root.img
           version=${GITHUB_REF_NAME#vm-image-v}
           [ "$GITHUB_REF_TYPE" = tag ] || version="0.0.0-${GITHUB_SHA::12}"
           tools/vm-guest/manifest.sh ztcl-guest "$version" "${GITHUB_RUN_NUMBER}" 0.1.0 \

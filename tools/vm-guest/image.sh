@@ -8,6 +8,8 @@
 #                    kernel, the disk, its verity parameters, and the
 #                    command line, with the SHA-256 of each file
 # The same inputs give the same bytes: fixed times, owners, and salt.
+# The names of the files of a release are flat (ARCH-Image,
+# ARCH-root.img), as the assets of a GitHub release are.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 out=${OUT:-$here/out}
@@ -46,7 +48,7 @@ cmdline="init=/sbin/agent root=/dev/dm-0 rootfstype=squashfs ro dm-mod.waitfor=/
 sum() { sha256sum "$1" | cut -c1-64; }
 esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 cat > "$out/$arch.json" <<JSON
-{"kernel":{"file":"$arch/$kernel","sha256":"$(sum "$out/$kernel")"},"cmdline":"$(esc "$cmdline")","disks":[{"name":"root","file":"$arch/root.img","sha256":"$(sum "$out/root.img")","size":$(stat -c %s "$out/root.img"),"read_only":true,"verity":{"root_hash":"$hash","salt":"$salt","data_block":4096,"hash_block":4096,"hash_offset":$data}}]}
+{"kernel":{"file":"$arch-$kernel","sha256":"$(sum "$out/$kernel")"},"cmdline":"$(esc "$cmdline")","disks":[{"name":"root","file":"$arch-root.img","sha256":"$(sum "$out/root.img")","size":$(stat -c %s "$out/root.img"),"read_only":true,"verity":{"root_hash":"$hash","salt":"$salt","data_block":4096,"hash_block":4096,"hash_offset":$data}}]}
 JSON
 echo "$arch: kernel $(sum "$out/$kernel")"
 echo "$arch: root.img $(sum "$out/root.img")"
