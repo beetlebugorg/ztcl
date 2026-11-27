@@ -150,6 +150,12 @@ jobs:
         run: |
           ulimit -v 6000000
           zig build tls-wycheproof -Doptimize=ReleaseSafe -- "$(tools/fetch-wycheproof.sh)"
+      - name: Run the x509-limbo cases and the fuzzer of the chain checks
+        if: runner.os == 'Linux'
+        run: |
+          ulimit -v 6000000
+          zig build tls-x509-test -Doptimize=ReleaseSafe -- "$(tools/fetch-x509-limbo.sh)"
+          zig build x509-fuzz -- --seconds 60
       # A gc-precise build uses the root rules of WebAssembly and has no JIT.
       - name: Test the gc-precise build
         if: runner.os == 'Linux'

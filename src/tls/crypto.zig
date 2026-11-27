@@ -28,6 +28,7 @@ const std = @import("std");
 const crypto = std.crypto;
 const rsa = crypto.Certificate.rsa;
 const sha2 = crypto.hash.sha2;
+const der = @import("der.zig");
 
 pub const Error = error{ BadSignature, BadKey, Unsupported };
 
@@ -68,6 +69,42 @@ pub fn verify(scheme: Scheme, key: []const u8, msg: []const u8, sig: []const u8)
     }
 }
 
+pub const Hash = enum { sha256, sha384, sha512 };
+pub const KeyKind = enum { rsa, p256, p384, ed25519 };
+pub const SigAlg = union(enum) { rsa_pkcs1: Hash, rsa_pss: Hash, ecdsa: Hash, ed25519 };
+
+/// Checks the signature of a certificate. A certificate can pair a
+/// curve with a hash in ways that `Scheme` has no code for, such as
+/// P-256 with SHA-384.
+pub fn verifyCert(alg: SigAlg, kind: KeyKind, key: []const u8, msg: []const u8, sig: []const u8) Error!void {
+    const Ec = crypto.sign.ecdsa.Ecdsa;
+    switch (alg) {
+        .ed25519 => if (kind == .ed25519) return verify(.ed25519, key, msg, sig),
+        .rsa_pkcs1, .rsa_pss => |h| if (kind == .rsa) {
+            const pad: Padding = if (alg == .rsa_pss) .pss else .pkcs1;
+            return switch (h) {
+                .sha256 => if (pad == .pss) rsaVerify(.pss, sha2.Sha256, key, msg, sig) else rsaVerify(.pkcs1, sha2.Sha256, key, msg, sig),
+                .sha384 => if (pad == .pss) rsaVerify(.pss, sha2.Sha384, key, msg, sig) else rsaVerify(.pkcs1, sha2.Sha384, key, msg, sig),
+                .sha512 => if (pad == .pss) rsaVerify(.pss, sha2.Sha512, key, msg, sig) else rsaVerify(.pkcs1, sha2.Sha512, key, msg, sig),
+            };
+        },
+        .ecdsa => |h| switch (kind) {
+            .p256 => return switch (h) {
+                .sha256 => ecdsa(Ec(crypto.ecc.P256, sha2.Sha256), key, msg, sig),
+                .sha384 => ecdsa(Ec(crypto.ecc.P256, sha2.Sha384), key, msg, sig),
+                .sha512 => ecdsa(Ec(crypto.ecc.P256, sha2.Sha512), key, msg, sig),
+            },
+            .p384 => return switch (h) {
+                .sha256 => ecdsa(Ec(crypto.ecc.P384, sha2.Sha256), key, msg, sig),
+                .sha384 => ecdsa(Ec(crypto.ecc.P384, sha2.Sha384), key, msg, sig),
+                .sha512 => ecdsa(Ec(crypto.ecc.P384, sha2.Sha512), key, msg, sig),
+            },
+            else => {},
+        },
+    }
+    return error.BadKey;
+}
+
 fn ecdsa(comptime E: type, key: []const u8, msg: []const u8, sig: []const u8) Error!void {
     const pk = E.PublicKey.fromSec1(key) catch return error.BadKey;
     const s = E.Signature.fromDer(sig) catch return error.BadSignature;
@@ -77,9 +114,18 @@ fn ecdsa(comptime E: type, key: []const u8, msg: []const u8, sig: []const u8) Er
 const Padding = enum { pss, pkcs1 };
 
 /// The modulus and the exponent of a DER `RSAPublicKey`.
-pub fn rsaKey(der: []const u8) Error!rsa.PublicKey {
-    const parts = rsa.PublicKey.parseDer(der) catch return error.BadKey;
-    return rsa.PublicKey.fromBytes(parts.exponent, parts.modulus) catch error.BadKey;
+/// `rsa.PublicKey.parseDer` of Zig 0.17.0 has no bounds checks, so the
+/// parse is the reader of `der.zig`.
+pub fn rsaKey(bytes: []const u8) Error!rsa.PublicKey {
+    var top = der.Reader.init(bytes);
+    var r = top.enter(der.tag.sequence) catch return error.BadKey;
+    if (!top.done()) return error.BadKey;
+    var n = der.integerBytes(r.next() catch return error.BadKey) catch return error.BadKey;
+    const e = der.integerBytes(r.next() catch return error.BadKey) catch return error.BadKey;
+    if (!r.done() or n[0] & 0x80 != 0 or e[0] & 0x80 != 0) return error.BadKey;
+    if (n[0] == 0) n = n[1..];
+    if (n.len > 512) return error.BadKey;
+    return rsa.PublicKey.fromBytes(e, n) catch error.BadKey;
 }
 
 /// The RSA checks have their own code: in Zig 0.17.0, the PSS check of
