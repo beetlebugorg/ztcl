@@ -75,6 +75,7 @@ pub const Poll = struct {
             .accept => |o| aio.result(linux.accept4(o.fd, null, null, linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC)),
             .read => |o| aio.result(linux.read(o.fd, o.buf.ptr, o.buf.len)),
             .write => |o| aio.result(linux.write(o.fd, o.buf.ptr, o.buf.len)),
+            .writev => |o| aio.result(linux.writev(o.fd, o.iov.ptr, o.iov.len)),
             .connect => |o| blk: {
                 if (c.deadline == 1) {
                     // The connect is in progress: its result is SO_ERROR.
@@ -124,7 +125,7 @@ pub const Poll = struct {
             else => {},
         }
         const fd = switch (c.op) {
-            inline .accept, .read, .write, .connect => |o| o.fd,
+            inline .accept, .read, .write, .writev, .connect => |o| o.fd,
             .timer => unreachable,
         };
         const read_side = c.op == .accept or c.op == .read;
@@ -156,7 +157,7 @@ pub const Poll = struct {
             return;
         }
         const fd = switch (c.op) {
-            inline .accept, .read, .write, .connect => |o| o.fd,
+            inline .accept, .read, .write, .writev, .connect => |o| o.fd,
             .timer => unreachable,
         };
         const s = p.fds.getPtr(fd) orelse return;

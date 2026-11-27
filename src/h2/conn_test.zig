@@ -109,8 +109,27 @@ fn run(cl: *Client, c: *conn.Conn, seen: *Seen) !void {
     const n = try c.feed(cl.buf.items);
     try testing.expectEqual(cl.buf.items.len, n);
     cl.buf.clearRetainingCapacity();
-    try read(cl, c.pending(), seen);
-    c.sent(c.pending().len);
+    var all: std.ArrayList(u8) = .empty;
+    defer all.deinit(gpa);
+    // Half the pieces through `pendingVecs`, half through `pending`.
+    var iov: [3]std.posix.iovec_const = undefined;
+    var turn = false;
+    while (c.pending().len > 0) : (turn = !turn) {
+        if (turn) {
+            const nv = c.pendingVecs(&iov);
+            var total: usize = 0;
+            for (iov[0..nv]) |v| {
+                try all.appendSlice(gpa, v.base[0..v.len]);
+                total += v.len;
+            }
+            c.sent(total);
+        } else {
+            const p = c.pending();
+            try all.appendSlice(gpa, p);
+            c.sent(p.len);
+        }
+    }
+    try read(cl, all.items, seen);
 }
 
 test "GET requests on three streams" {
@@ -255,4 +274,37 @@ test "an empty :path and a PRIORITY on itself get RST_STREAM (h2spec 8.1.2.3, 5.
         try testing.expect(!c.closed);
         try testing.expectEqual(@as(u16, 0), seen.status[0]);
     }
+}
+
+var ref_body: [70_000]u8 = undefined;
+
+fn bigRef(_: ?*anyopaque, c: *conn.Conn, req: *const conn.Request) void {
+    c.respondRef(req.stream, 200, &.{}, &ref_body) catch unreachable;
+}
+
+test "respondRef sends the body of the caller past the windows" {
+    for (&ref_body, 0..) |*x, i| x.* = @truncate(i *% 7);
+    var c = try conn.Conn.init(gpa, .{}, bigRef, null, clock);
+    defer c.deinit();
+    var cl = try Client.init();
+    defer cl.deinit();
+    var seen: Seen = .{};
+    defer seen.deinit();
+    try cl.start();
+    try cl.get(1, "/a", true);
+    try cl.get(3, "/b", true);
+    try run(&cl, &c, &seen);
+    // The window of the connection is 65,535 bytes for the two streams.
+    try testing.expectEqual(65_535, seen.body[0].items.len + seen.body[1].items.len);
+    var inc: [4]u8 = undefined;
+    std.mem.writeInt(u32, &inc, 1 << 20, .big);
+    try cl.raw(.window_update, 0, 0, &inc);
+    try cl.raw(.window_update, 0, 1, &inc);
+    try cl.raw(.window_update, 0, 3, &inc);
+    try run(&cl, &c, &seen);
+    try testing.expectEqualSlices(u8, &ref_body, seen.body[0].items);
+    try testing.expectEqualSlices(u8, &ref_body, seen.body[1].items);
+    try testing.expect(seen.ended[0] and seen.ended[1]);
+    try testing.expectEqual(0, c.streams.count());
+    try testing.expectEqual(0, c.pending().len);
 }

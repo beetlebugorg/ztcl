@@ -55,6 +55,9 @@ pub const Op = union(enum) {
     read: struct { fd: fd_t, buf: []u8 },
     /// Writes a part of `buf`, at least one byte.
     write: struct { fd: fd_t, buf: []const u8 },
+    /// Writes a part of the buffers of `iov` in order, at least one
+    /// byte. The caller keeps `iov` and the buffers alive.
+    writev: struct { fd: fd_t, iov: []const std.posix.iovec_const },
     /// Ends after `ns` nanoseconds with the result 0.
     timer: struct { ns: u64 },
 };

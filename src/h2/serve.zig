@@ -1,12 +1,14 @@
 //! A test server of `conn.zig` for h2c with prior knowledge, on the aio
 //! loop (Linux). Each request gets 200 and a body of `--body` bytes.
 //!
-//!   zig build h2-serve -- --port 8080 [--body 13] [--backend uring]
+//!   zig build h2-serve -- --port 8080 [--body 13] [--backend uring] [--copy on]
 //!   curl --http2-prior-knowledge http://127.0.0.1:8080/
 //!
 //! It is the peer of `zig build h2-load` and of curl. It reads into a
-//! buffer of 64 KiB for each connection and writes the bytes of
-//! `Conn.pending` with one write at a time.
+//! buffer of 64 KiB for each connection and writes the pieces of
+//! `Conn.pendingVecs` with one writev at a time. The body goes out
+//! with `respondRef`, so no copy of it is made; `--copy on` uses
+//! `respond`, which copies it.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -18,8 +20,13 @@ const conn = @import("conn.zig");
 var body_buf: [1 << 20]u8 = undefined;
 var body_len: usize = 13;
 
+var copy_body = false;
+
 fn handler(_: ?*anyopaque, c: *conn.Conn, req: *const conn.Request) void {
-    c.respond(req.stream, 200, &.{.{ .name = "content-type", .value = "text/plain" }}, body_buf[0..body_len]) catch {};
+    const h: []const conn.Field = &.{.{ .name = "content-type", .value = "text/plain" }};
+    // The body lives as long as the program, so it can go out with no
+    // copy.
+    if (copy_body) c.respond(req.stream, 200, h, body_buf[0..body_len]) catch {} else c.respondRef(req.stream, 200, h, body_buf[0..body_len]) catch {};
 }
 
 const Client = struct {
@@ -30,6 +37,7 @@ const Client = struct {
     in_len: usize = 0,
     rd: aio.Completion = undefined,
     wr: aio.Completion = undefined,
+    iov: [64]std.posix.iovec_const = undefined,
     writing: bool = false,
     reading: bool = false,
     done: bool = false,
@@ -44,7 +52,8 @@ const Client = struct {
     fn startWrite(cl: *Client, l: *aio.Loop) void {
         if (cl.writing or cl.h2.pending().len == 0) return;
         cl.writing = true;
-        cl.wr = .{ .op = .{ .write = .{ .fd = cl.fd, .buf = cl.h2.pending() } }, .callback = onWrite, .ctx = cl };
+        const n = cl.h2.pendingVecs(&cl.iov);
+        cl.wr = .{ .op = .{ .writev = .{ .fd = cl.fd, .iov = cl.iov[0..n] } }, .callback = onWrite, .ctx = cl };
         l.submit(&cl.wr) catch cl.finish(l);
     }
 
@@ -124,7 +133,7 @@ pub fn main(init: std.process.Init) !void {
     var backend: aio.Backend = .auto;
     var i: usize = 1;
     while (i + 1 < args.len) : (i += 2) {
-        if (std.mem.eql(u8, args[i], "--port")) port = try std.fmt.parseInt(u16, args[i + 1], 10) else if (std.mem.eql(u8, args[i], "--body")) body_len = try std.fmt.parseInt(usize, args[i + 1], 10) else if (std.mem.eql(u8, args[i], "--backend")) backend = std.meta.stringToEnum(aio.Backend, args[i + 1]) orelse return error.BadBackend else return error.BadOption;
+        if (std.mem.eql(u8, args[i], "--port")) port = try std.fmt.parseInt(u16, args[i + 1], 10) else if (std.mem.eql(u8, args[i], "--body")) body_len = try std.fmt.parseInt(usize, args[i + 1], 10) else if (std.mem.eql(u8, args[i], "--copy")) copy_body = std.mem.eql(u8, args[i + 1], "on") else if (std.mem.eql(u8, args[i], "--backend")) backend = std.meta.stringToEnum(aio.Backend, args[i + 1]) orelse return error.BadBackend else return error.BadOption;
     }
     if (body_len > body_buf.len) return error.BodyTooLarge;
     @memset(body_buf[0..body_len], 'x');

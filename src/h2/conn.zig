@@ -74,10 +74,16 @@ const Stream = struct {
     body: std.ArrayList(u8) = .empty,
     req: Request = .{ .stream = 0, .headers = &.{} },
     content_length: ?u64 = null,
-    /// The part of the response body that waits for the windows.
+    /// The part of the response body that waits for the windows: a copy
+    /// in `out`, or the slice of the caller in `ref` (`respondRef`).
     out: std.ArrayList(u8) = .empty,
+    ref: []const u8 = "",
     out_pos: usize = 0,
     responded: bool = false,
+
+    fn waiting(s: *const Stream) []const u8 {
+        return if (s.ref.len > 0) s.ref else s.out.items;
+    }
 
     fn deinit(s: *Stream, gpa: std.mem.Allocator) void {
         s.fields.deinit(gpa);
@@ -91,6 +97,13 @@ pub const Error = error{ OutOfMemory, Closed };
 
 const Span = struct { off: usize, name_len: usize, value_len: usize };
 
+/// The smallest piece of a `respondRef` body that goes out with no copy.
+const ref_min = 1024;
+
+/// A body slice of the caller that goes out after the first `at` bytes
+/// of `Conn.out`. It is never empty.
+const Ref = struct { at: usize, bytes: []const u8 };
+
 pub const Conn = struct {
     gpa: std.mem.Allocator,
     limits: Limits,
@@ -98,8 +111,14 @@ pub const Conn = struct {
     ctx: ?*anyopaque,
     dec: hpack.Decoder,
     enc: hpack.Encoder,
-    /// The bytes to send.
+    /// The bytes to send: `out[head..]`, with the body slices of `refs`
+    /// in their places.
     out: std.ArrayList(u8) = .empty,
+    head: usize = 0,
+    refs: std.ArrayList(Ref) = .empty,
+    /// The first ref that is not sent yet, and its bytes that are.
+    ref_start: usize = 0,
+    ref_off: usize = 0,
     streams: std.AutoHashMapUnmanaged(u31, Stream) = .empty,
     preface: bool = false,
     settings_seen: bool = false,
@@ -161,6 +180,7 @@ pub const Conn = struct {
         c.dec.deinit(c.gpa);
         c.enc.deinit(c.gpa);
         c.out.deinit(c.gpa);
+        c.refs.deinit(c.gpa);
         c.block.deinit(c.gpa);
         c.fields.deinit(c.gpa);
         c.keep.deinit(c.gpa);
@@ -168,16 +188,86 @@ pub const Conn = struct {
         c.gpa.free(c.scratch);
     }
 
-    /// The bytes to send now.
+    /// The first piece of the bytes to send now: bytes of the
+    /// connection, or a body slice of `respondRef`. It is empty only when
+    /// all bytes are out.
     pub fn pending(c: *const Conn) []const u8 {
-        return c.out.items;
+        if (c.ref_start < c.refs.items.len) {
+            const r = c.refs.items[c.ref_start];
+            if (c.head < r.at) return c.out.items[c.head..r.at];
+            return r.bytes[c.ref_off..];
+        }
+        return c.out.items[c.head..];
     }
 
-    /// Drops the first `n` bytes of `pending`, after a write.
+    /// Fills `iov` with the pieces to send now, in order, and gives
+    /// their count. A write of all of them sends no copy of a body of
+    /// `respondRef`.
+    pub fn pendingVecs(c: *const Conn, iov: []std.posix.iovec_const) usize {
+        var n: usize = 0;
+        var head = c.head;
+        var off = c.ref_off;
+        for (c.refs.items[c.ref_start..]) |r| {
+            if (n + 2 > iov.len) return n;
+            if (head < r.at) {
+                iov[n] = .{ .base = c.out.items[head..].ptr, .len = r.at - head };
+                n += 1;
+            }
+            iov[n] = .{ .base = r.bytes[off..].ptr, .len = r.bytes.len - off };
+            n += 1;
+            head = r.at;
+            off = 0;
+        }
+        if (head < c.out.items.len and n < iov.len) {
+            iov[n] = .{ .base = c.out.items[head..].ptr, .len = c.out.items.len - head };
+            n += 1;
+        }
+        return n;
+    }
+
+    /// Drops the first `n` bytes to send, after a write.
     pub fn sent(c: *Conn, n: usize) void {
-        const rest = c.out.items.len - n;
-        std.mem.copyForwards(u8, c.out.items[0..rest], c.out.items[n..]);
-        c.out.items.len = rest;
+        var left = n;
+        while (left > 0) {
+            if (c.ref_start < c.refs.items.len) {
+                const r = c.refs.items[c.ref_start];
+                if (c.head < r.at) {
+                    const k = @min(left, r.at - c.head);
+                    c.head += k;
+                    left -= k;
+                    continue;
+                }
+                const k = @min(left, r.bytes.len - c.ref_off);
+                c.ref_off += k;
+                left -= k;
+                if (c.ref_off == r.bytes.len) {
+                    c.ref_start += 1;
+                    c.ref_off = 0;
+                }
+            } else {
+                std.debug.assert(c.head + left <= c.out.items.len);
+                c.head += left;
+                left = 0;
+            }
+        }
+        if (c.ref_start == c.refs.items.len and c.head == c.out.items.len) {
+            c.out.clearRetainingCapacity();
+            c.refs.clearRetainingCapacity();
+            c.head = 0;
+            c.ref_start = 0;
+        } else if (c.head >= 1 << 16 and c.head * 2 >= c.out.items.len) {
+            // Move the rest to the start, so the buffer does not grow
+            // while a slow peer reads.
+            const rest = c.out.items.len - c.head;
+            std.mem.copyForwards(u8, c.out.items[0..rest], c.out.items[c.head..]);
+            c.out.items.len = rest;
+            const live = c.refs.items[c.ref_start..];
+            for (live) |*r| r.at -= c.head;
+            std.mem.copyForwards(Ref, c.refs.items[0..live.len], live);
+            c.refs.items.len = live.len;
+            c.head = 0;
+            c.ref_start = 0;
+        }
     }
 
     fn goaway(c: *Conn, code: Code) Error!void {
@@ -392,7 +482,7 @@ pub const Conn = struct {
             const req = s.req;
             c.handler(c.ctx, c, &req);
             // A response that went out before the end of the body.
-            if (c.streams.getPtr(h.stream)) |s2| if (s2.responded and s2.out_pos >= s2.out.items.len) c.closeStream(h.stream);
+            if (c.streams.getPtr(h.stream)) |s2| if (s2.responded and s2.out_pos >= s2.waiting().len) c.closeStream(h.stream);
         }
     }
 
@@ -512,8 +602,19 @@ pub const Conn = struct {
 
     /// Sends the response of stream `id`: the status, the fields, and
     /// the body. The body goes out as the windows allow; `respond`
-    /// copies the part that waits.
+    /// copies it.
     pub fn respond(c: *Conn, id: u31, status: u16, headers: []const Field, body: []const u8) Error!void {
+        return c.respondMode(id, status, headers, body, false);
+    }
+
+    /// `respond` with no copy of the body: the DATA frames point at
+    /// `body` (see `pendingVecs`). The caller keeps `body` valid and
+    /// unchanged until `deinit`.
+    pub fn respondRef(c: *Conn, id: u31, status: u16, headers: []const Field, body: []const u8) Error!void {
+        return c.respondMode(id, status, headers, body, true);
+    }
+
+    fn respondMode(c: *Conn, id: u31, status: u16, headers: []const Field, body: []const u8, borrowed: bool) Error!void {
         const s = c.streams.getPtr(id) orelse return error.Closed;
         if (s.responded) return error.Closed;
         s.responded = true;
@@ -556,9 +657,12 @@ pub const Conn = struct {
             return;
         }
         // DATA within the windows now, and the rest waits in the stream.
-        const now = c.sendData(id, s, body);
+        const now = c.sendData(id, s, body, borrowed);
         if (now < body.len) {
-            try s.out.appendSlice(c.gpa, body[now..]);
+            if (borrowed) {
+                s.ref = body;
+                s.out_pos = now;
+            } else try s.out.appendSlice(c.gpa, body[now..]);
         } else if (s.remote_done) {
             c.closeStream(id);
         }
@@ -566,7 +670,7 @@ pub const Conn = struct {
 
     /// Writes DATA frames of `data` within the windows. Gives the count
     /// of bytes it wrote. The last byte of the body carries END_STREAM.
-    fn sendData(c: *Conn, id: u31, s: *Stream, data: []const u8) usize {
+    fn sendData(c: *Conn, id: u31, s: *Stream, data: []const u8, borrow: bool) usize {
         var off: usize = 0;
         const total_left = data.len;
         while (off < data.len) {
@@ -574,11 +678,18 @@ pub const Conn = struct {
             if (win <= 0) break;
             const n: usize = @min(@as(usize, @intCast(win)), c.peer_max_frame, data.len - off);
             const last = off + n == total_left;
-            c.out.ensureUnusedCapacity(c.gpa, frame.header_len + n) catch break;
+            // A copy of a small piece costs less than one more iovec.
+            const borrowed = borrow and n >= ref_min;
+            c.out.ensureUnusedCapacity(c.gpa, frame.header_len + if (borrowed) 0 else n) catch break;
+            if (borrowed) c.refs.ensureUnusedCapacity(c.gpa, 1) catch break;
             var hb: [frame.header_len]u8 = undefined;
             (frame.Header{ .len = @intCast(n), .type = .data, .flags = if (last) frame.Flags.end_stream else 0, .stream = id }).write(&hb);
             c.out.appendSliceAssumeCapacity(&hb);
-            c.out.appendSliceAssumeCapacity(data[off..][0..n]);
+            if (borrowed) {
+                c.refs.appendAssumeCapacity(.{ .at = c.out.items.len, .bytes = data[off..][0..n] });
+            } else {
+                c.out.appendSliceAssumeCapacity(data[off..][0..n]);
+            }
             off += n;
             c.send_window -= @intCast(n);
             s.send_window -= @intCast(n);
@@ -589,10 +700,12 @@ pub const Conn = struct {
     /// Sends the waiting body of stream `id` within the windows.
     fn flush(c: *Conn, id: u31) Error!void {
         const s = c.streams.getPtr(id) orelse return;
-        if (s.out_pos >= s.out.items.len) return;
-        s.out_pos += c.sendData(id, s, s.out.items[s.out_pos..]);
-        if (s.out_pos == s.out.items.len) {
+        const w = s.waiting();
+        if (s.out_pos >= w.len) return;
+        s.out_pos += c.sendData(id, s, w[s.out_pos..], s.ref.len > 0);
+        if (s.out_pos == w.len) {
             s.out.clearRetainingCapacity();
+            s.ref = "";
             s.out_pos = 0;
             if (s.remote_done) c.closeStream(id);
         }
@@ -603,7 +716,7 @@ pub const Conn = struct {
         var n: usize = 0;
         var it = c.streams.iterator();
         while (it.next()) |kv| {
-            if (kv.value_ptr.out_pos < kv.value_ptr.out.items.len and n < ids.len) {
+            if (kv.value_ptr.out_pos < kv.value_ptr.waiting().len and n < ids.len) {
                 ids[n] = kv.key_ptr.*;
                 n += 1;
             }

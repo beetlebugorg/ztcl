@@ -99,6 +99,7 @@ pub const Ring = struct {
             .connect => |o| s.prep_connect(o.fd, o.addr, o.len),
             .read => |o| s.prep_read(o.fd, o.buf, std.math.maxInt(u64)),
             .write => |o| s.prep_write(o.fd, o.buf, std.math.maxInt(u64)),
+            .writev => |o| s.prep_writev(o.fd, o.iov, std.math.maxInt(u64)),
             .timer => |o| {
                 c.ts = .{ .sec = @intCast(o.ns / std.time.ns_per_s), .nsec = @intCast(o.ns % std.time.ns_per_s) };
                 s.prep_timeout(&c.ts, 0, 0);
