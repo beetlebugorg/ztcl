@@ -480,6 +480,18 @@ inline fn markIn(h: *Heap, s: *Span, w: usize) void {
 
 /// True when the block of `addr` has its mark bit. An address outside
 /// the heap counts as marked: such memory does not go away.
+/// True when the block of `addr` is free in its span, or when no span
+/// holds `addr`. A large span is live while it is in the heap. Tests
+/// read it to see the result of a sweep with no read of freed bytes.
+pub fn isFree(h: *const Heap, addr: usize) bool {
+    if (addr < h.lo or addr >= h.hi) return true;
+    const s = h.lookup(addr) orelse return true;
+    if (s.large) return false;
+    const idx = (addr - s.base) / s.size;
+    if (idx >= s.count) return true;
+    return s.free[idx >> 6] >> @intCast(idx & 63) & 1 != 0;
+}
+
 pub fn isMarked(h: *const Heap, addr: usize) bool {
     if (addr < h.lo or addr >= h.hi) return true;
     const s = h.lookup(addr) orelse return true;
