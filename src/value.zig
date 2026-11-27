@@ -587,8 +587,17 @@ pub fn formatDouble(a: Allocator, x: f64) Allocator.Error![]const u8 {
 // ---- Lists ----
 
 /// Reads one backslash sequence at `s[i]` (the backslash). Appends the
-/// result to `out` and returns the index after the sequence.
+/// result to `out` and returns the index after the sequence. A high
+/// surrogate and a `\u` escape of a low surrogate after it are one
+/// character, as in Tcl 8.6; `backslashHalves` keeps them two, as in
+/// Tcl 9.1.
 pub fn backslash(a: Allocator, s: []const u8, i: usize, out: *std.ArrayList(u8)) Allocator.Error!usize {
+    return backslashHalves(a, s, i, out, true);
+}
+
+/// `backslash`, with `join` false for the rule of Tcl 9.1: each `\u`
+/// escape of a surrogate is a character of its own.
+pub fn backslashHalves(a: Allocator, s: []const u8, i: usize, out: *std.ArrayList(u8), join: bool) Allocator.Error!usize {
     if (i + 1 >= s.len) {
         try out.append(a, '\\');
         return i + 1;
@@ -629,8 +638,8 @@ pub fn backslash(a: Allocator, s: []const u8, i: usize, out: *std.ArrayList(u8))
                 return j;
             }
             // A high surrogate and a `\u` escape of a low surrogate after
-            // it are one character, as in Tcl.
-            if (c == 'u' and v >= 0xd800 and v < 0xdc00 and j + 6 <= s.len and s[j] == '\\' and s[j + 1] == 'u') {
+            // it are one character, as in Tcl 8.6.
+            if (join and c == 'u' and v >= 0xd800 and v < 0xdc00 and j + 6 <= s.len and s[j] == '\\' and s[j + 1] == 'u') {
                 const lo = std.fmt.parseInt(u32, s[j + 2 .. j + 6], 16) catch 0;
                 if (lo >= 0xdc00 and lo < 0xe000 and std.ascii.isHex(s[j + 2])) {
                     try appendCodepoint(a, out, 0x10000 + ((v - 0xd800) << 10) + (lo - 0xdc00));

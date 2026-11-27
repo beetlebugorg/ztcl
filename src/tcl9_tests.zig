@@ -263,3 +263,16 @@ test "lsearch -stride of Tcl 9.1" {
         .{ "lsearch -stride 2 -index 2 {a 1} b", bad, "!when used with \"-stride\", the leading \"-index\" value must be within the group" },
     });
 }
+
+test "a \\u escape of each surrogate half is one character in 9.1" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    // 8.6 joins a high half and a low half after it.
+    try std.testing.expectEqualStrings("1", try run(&it, "string length \"\\uD83D\\uDE02\""));
+    try it.setTclVersion(.v9_1);
+    try std.testing.expectEqualStrings("2", try run(&it, "string length \"\\uD83D\\uDE02\""));
+    try std.testing.expectEqualStrings("1", try run(&it, "set x \\uD83D; append x \\uDE02; expr {$x eq \"\\uD83D\\uDE02\"}"));
+    try std.testing.expectEqualStrings("1", try run(&it, "expr {[string reverse \\uD83D\\uDE02] eq \"\\uDE02\\uD83D\"}"));
+    try std.testing.expectEqualStrings("2", try run(&it, "string length [subst {\\uD83D\\uDE02}]"));
+}
