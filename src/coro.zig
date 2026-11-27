@@ -33,7 +33,7 @@ const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
 
-const on_arm = builtin.cpu.arch == .aarch64 and builtin.os.tag == .macos;
+const on_arm = builtin.cpu.arch == .aarch64 and (builtin.os.tag == .macos or builtin.os.tag == .linux);
 const on_x86 = builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux;
 const on_win = builtin.cpu.arch == .x86_64 and builtin.os.tag == .windows;
 pub const supported = on_arm or on_x86 or on_win;
@@ -86,8 +86,9 @@ pub const Coro = struct {
 // on x86-64, and the function in `x20` with the value in `x19` on arm64.
 // Both are exported, so the compiler cannot inline them. The arm64 frame
 // is 160 bytes, so the stack pointer stays 16-byte aligned. It holds x19
-// to x28, x29, x30, and d8 to d15. The routines do not touch x18, which
-// macOS reserves.
+// to x28, x29, x30, and d8 to d15: the callee-saved registers of AAPCS64
+// on Linux and on macOS. The routines do not touch x18, which macOS
+// reserves.
 //
 // The Microsoft x64 frame is 248 bytes under the return address, so the
 // stack pointer is 16-byte aligned for `movaps`. It holds xmm6 to xmm15

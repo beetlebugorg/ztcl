@@ -9,7 +9,7 @@ This page lists each target of ztcl. For each target it gives what `ztcl build` 
 | Target | Runtime | JIT | `coroutine` | `exec` and `ztcl::pty` | `ztcl::watch` |
 |---|---|---|---|---|---|
 | `x86_64-linux` | 2,494,256 bytes | tier 1 and tier 2 | yes | yes | yes |
-| `aarch64-linux` | 2,014,696 bytes | tier 1 and tier 2 | no | yes | yes |
+| `aarch64-linux` | 2,014,696 bytes | tier 1 and tier 2 | yes | yes | yes |
 | `x86_64-macos` | 2,292,412 bytes | no | no | yes | no |
 | `aarch64-macos` | 2,256,584 bytes | tier 1 and tier 2 | yes | yes | no |
 | `x86_64-windows` | 2,691,584 bytes | tier 1 and tier 2 | yes | yes | yes |

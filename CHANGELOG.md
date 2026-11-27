@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Adds `coroutine` on arm64 Linux, with the stack switch of arm64 macOS. The arm64 Linux JIT job compares the output of `coroutine.tcl` and `owned_lists.tcl` with `tclsh` again.
 - Fixes the memory limit check of a growth in place: it uses the full new length, as a copy to a new block does. Before, a script stopped at a different point with the JIT on and off when the system allocator grew a block in place in one mode only. The JIT fuzzer found it on arm64 Linux (seed 662). `jit-fuzz --replay FILE` runs a found file again, `--mem-runs N` gives each program N random memory limits, and `tests/jit/replay/` has the program.
 - Adds the JIT on arm64 Linux, with tier 1 and tier 2. The region flushes the caches over the written pages with the line sizes of `CTR_EL0`. CI runs the unit tests, `tools/jit-diff.sh`, and the JIT fuzzer on an arm64 Linux runner for each pull request. `tools/jit-diff.sh` reads `JIT_DIFF_NO_OUT`.
 - `thread::transfer` moves a file or a socket to and from an isolated thread on Linux, with `SCM_RIGHTS` as on macOS.
