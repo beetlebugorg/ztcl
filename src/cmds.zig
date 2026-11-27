@@ -1309,9 +1309,9 @@ fn cmdSubst(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     while (i < s.len) {
         const c = s[i];
         if (c == '\\' and do_bs) {
-            i = try value.backslash(a, s, i, &out);
+            i = try value.backslashHalves(a, s, i, &out, it.tcl == .v8_6);
         } else if (c == '$' and do_var) {
-            var q: interp.Parser = .{ .a = a, .src = s, .pos = i };
+            var q: interp.Parser = .{ .a = a, .src = s, .pos = i, .join_halves = it.tcl == .v8_6 };
             const r = q.parseVar() catch |e| switch (e) {
                 error.OutOfMemory => return error.OutOfMemory,
                 error.TclError => return it.fail("{s}", .{q.message}),
@@ -1330,7 +1330,7 @@ fn cmdSubst(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 i += 1;
             }
         } else if (c == '[' and do_cmd) {
-            var q: interp.Parser = .{ .a = a, .src = s, .pos = i + 1 };
+            var q: interp.Parser = .{ .a = a, .src = s, .pos = i + 1, .join_halves = it.tcl == .v8_6 };
             var bad = false;
             const cmd_list: []interp.Cmd = if (q.parseScript(true)) |sc| sc.cmds else |e| blk: {
                 if (e == error.OutOfMemory) return error.OutOfMemory;
@@ -1384,11 +1384,11 @@ fn substParts(it: *Interp, s: []const u8, flags: u64) Error!?[]const interp.Part
     while (i < s.len) {
         const c = s[i];
         if (c == '\\' and flags & 1 != 0) {
-            i = try value.backslash(a, s, i, &lit);
+            i = try value.backslashHalves(a, s, i, &lit, it.tcl == .v8_6);
             continue;
         }
         if (c == '$' and flags & 4 != 0) {
-            var q: interp.Parser = .{ .a = a, .src = s, .pos = i };
+            var q: interp.Parser = .{ .a = a, .src = s, .pos = i, .join_halves = it.tcl == .v8_6 };
             const r = q.parseVar() catch |e| switch (e) {
                 error.OutOfMemory => return error.OutOfMemory,
                 error.TclError => return null,
@@ -1400,7 +1400,7 @@ fn substParts(it: *Interp, s: []const u8, flags: u64) Error!?[]const interp.Part
                 continue;
             }
         } else if (c == '[' and flags & 2 != 0) {
-            var q: interp.Parser = .{ .a = a, .src = s, .pos = i + 1 };
+            var q: interp.Parser = .{ .a = a, .src = s, .pos = i + 1, .join_halves = it.tcl == .v8_6 };
             const sc = q.parseScript(true) catch |e| switch (e) {
                 error.OutOfMemory => return error.OutOfMemory,
                 error.TclError => return null,

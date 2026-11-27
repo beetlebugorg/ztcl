@@ -487,7 +487,7 @@ fn isBoolWord(s: []const u8) bool {
 }
 
 fn parse(it: *Interp, text: []const u8) Error!*Node {
-    var e: ExprParser = .{ .it = it, .p = .{ .a = it.alloc(), .src = text } };
+    var e: ExprParser = .{ .it = it, .p = .{ .a = it.alloc(), .src = text, .join_halves = it.tcl == .v8_6 } };
     e.skip();
     if (e.p.pos >= text.len) return it.fail("empty expression\nin expression \"{s}\"", .{text});
     const n = try e.ternary();

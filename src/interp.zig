@@ -131,6 +131,9 @@ pub const Parser = struct {
     /// The nesting of command substitutions. A limit keeps the parser
     /// off the end of the native stack.
     depth: u32 = 0,
+    /// A high surrogate and a `\u` escape of a low surrogate after it
+    /// are one character: the rule of Tcl 8.6. Tcl 9.1 keeps two.
+    join_halves: bool = true,
     /// The commands before a syntax error in the outermost script.
     partial: []Cmd = &.{},
 
@@ -373,7 +376,7 @@ pub const Parser = struct {
             if (c == '\\') {
                 if (mode != .quote and mode != .all and mode != .index and p.atBsNewline()) return;
                 if (p.pos + 1 < p.src.len and p.src[p.pos + 1] == '\n') p.line += 1;
-                p.pos = try value.backslash(p.a, p.src, p.pos, &parts.buf);
+                p.pos = try value.backslashHalves(p.a, p.src, p.pos, &parts.buf, p.join_halves);
             } else if (c == '$') {
                 if (try p.parseVar()) |v| {
                     try parts.add(.{ .variable = v });
@@ -2456,7 +2459,7 @@ pub const Interp = struct {
     }
 
     pub fn compile(it: *Interp, text: []const u8) Error!*Script {
-        var p: Parser = .{ .a = it.alloc(), .src = text };
+        var p: Parser = .{ .a = it.alloc(), .src = text, .join_halves = it.tcl == .v8_6 };
         return p.parseScript(false) catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
             error.TclError => {
