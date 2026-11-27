@@ -120,4 +120,4 @@ A host name resolves through one function. It reads an address literal, the name
 
 ## Tcl 9
 
-ztcl follows Tcl 8.6 and makes no claim of Tcl 9 compatibility. On the 37 core test files of Tcl 9.1.0, ztcl passes 9,298 tests, fails 2,799, and skips 529. [The Tcl 9 notes](dev/tcl9.md) list the differences.
+ztcl follows Tcl 8.6 by default. With `--tcl 9.1` it follows Tcl 9.1 for the parts that [Tcl 9.1](tcl91.md) lists: the new list commands, strict encodings, decimal numbers with a leading zero, and variable lookup in namespaces. That page also lists the parts of 9.1 that are not done. [The Tcl 9 notes](dev/tcl9.md) have the method and the probes.

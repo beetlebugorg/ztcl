@@ -61,6 +61,7 @@ PAGES = [
     ("docs/quickstart.md", "quickstart/", "Start", "Quick start"),
     *LESSONS,
     ("docs/language.md", "language/", "Learn", "Coming from tclsh"),
+    ("docs/tcl91.md", "tcl91/", "Learn", "Tcl 9.1"),
     *ADVANCED,
     ("docs/shell.md", "shell/", "Guide", "The shell"),
     ("docs/limits.md", "limits/", "Guide", "Limits and capabilities"),

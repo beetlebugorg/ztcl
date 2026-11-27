@@ -3,6 +3,7 @@
 syn: string subcommand ?arg ...?
 sub: string length STRING | The count of characters.
 sub: string bytelength STRING | The count of bytes of the UTF-8 form.
+sub: string insert STRING INDEX TEXT | STRING with TEXT before the character at INDEX.
 sub: string index STRING INDEX | The character at INDEX, or an empty string past the end.
 sub: string range STRING FIRST LAST | The characters from FIRST to LAST.
 sub: string first NEEDLE HAYSTACK ?START? | The index of the first NEEDLE from START, or -1.
@@ -60,8 +61,10 @@ opt: -start INDEX | Starts the search at INDEX.
 syn: subst ?-nobackslashes? ?-nocommands? ?-novariables? string
 == encoding
 syn: encoding option ?arg ...?
-sub: encoding convertto ENCODING STRING | The bytes of STRING in ENCODING, as a byte string.
-sub: encoding convertfrom ENCODING BYTES | The text of BYTES in ENCODING.
+sub: encoding convertto ?-profile PROFILE? ?-failindex VAR? ENCODING STRING | The bytes of STRING in ENCODING, as a byte string.
+sub: encoding convertfrom ?-profile PROFILE? ?-failindex VAR? ENCODING BYTES | The text of BYTES in ENCODING.
+sub: encoding profiles | The profiles: replace strict tcl8.
+sub: encoding user | The encoding of the user: utf-8.
 sub: encoding names | The names of the encodings.
 sub: encoding system | The encoding of the system: utf-8.
 sub: encoding dirs | An empty list: ztcl reads no encoding files.
@@ -91,6 +94,18 @@ syn: lreplace list first last ?element ...?
 syn: lset listVar ?index? ?index ...? value
 == lassign
 syn: lassign list ?varName ...?
+== lseq
+syn: lseq count
+syn: lseq start ?to|..? end ??by? step?
+syn: lseq start count count ??by? step?
+== lpop
+syn: lpop listVar ?index ...?
+== lremove
+syn: lremove list ?index ...?
+== ledit
+syn: ledit listVar first last ?element ...?
+== lfilter
+syn: lfilter varList list ?varList list ...? command
 == lrepeat
 syn: lrepeat count ?value ...?
 == lreverse
@@ -127,6 +142,7 @@ syn: foreach varList list ?varList list ...? command
 syn: dict subcommand ?arg ...?
 sub: dict create ?KEY VALUE ...? | A new dict.
 sub: dict get DICT ?KEY ...? | The value at the path of keys.
+sub: dict getdef DICT ?KEY ...? KEY DEFAULT | The value at the path of keys, or DEFAULT when a key is missing.
 sub: dict exists DICT KEY ?KEY ...? | 1 when the path of keys exists.
 sub: dict set VAR KEY ?KEY ...? VALUE | Sets the value at the path in the dict of a variable, and gives the new dict.
 sub: dict unset VAR KEY ?KEY ...? | Removes a key in the dict of a variable.
@@ -151,6 +167,7 @@ sub: array set NAME LIST | Sets the elements from a list of names and values.
 sub: array get NAME ?PATTERN? | A list of names and values.
 sub: array names NAME ?MODE? ?PATTERN? | The element names.
 sub: array exists NAME | 1 when the variable is an array.
+sub: array for {KEYVAR VALUEVAR} NAME BODY | Runs BODY once for each element of a copy of the array.
 sub: array size NAME | The count of elements.
 sub: array unset NAME ?PATTERN? | Removes the elements, or the whole array.
 sub: array statistics NAME | Text about the hash table.

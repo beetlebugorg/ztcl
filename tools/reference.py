@@ -44,7 +44,7 @@ def parse():
             value = value.strip()
             if key in MULTI:
                 entry.setdefault(key, []).append(value)
-            elif key in ("does", "cap", "cost", "page", "flags"):
+            elif key in ("does", "cap", "cost", "page", "flags", "tcl"):
                 if key in entry:
                     raise SystemExit(f"{path}:{n}: a second `{key}`")
                 entry[key] = value
@@ -116,7 +116,7 @@ def markdown(e, link, check=False):
         out.append("")
     ex = [x for x in examples(e) if not (x[1] or "").startswith("error: ")]
     errs = [x for x in examples(e) if (x[1] or "").startswith("error: ")]
-    runnable = check or "cap" not in e
+    runnable = check or ("cap" not in e and "tcl" not in e)
     def item(cmd, want):
         code = "``" + cmd + "``" if "`" in cmd else f"`{cmd}`"
         if not runnable:
@@ -138,6 +138,8 @@ def markdown(e, link, check=False):
     else:
         facts.append("- Capability: none.")
     facts.append(f"- Compute cost: {e.get('cost', 'one compute unit for the call, and more for the commands that it runs.')}")
+    if "tcl" in e:
+        facts.append(f"- Release: Tcl {e['tcl']} only. A script has the command when ztcl follows Tcl {e['tcl']}, with `--tcl {e['tcl']}`. See [Tcl 9.1](../../tcl91.md).")
     if "page" in e:
         facts.append(f"- The full page: [{e['name']}](../../{e['page']}).")
     out += ["## Facts", "", *facts, ""]
@@ -155,7 +157,7 @@ def api(entries):
             "names": names(e),
             "subcommands": [dict(zip(("synopsis", "summary"), split_sub(s))) for s in e.get("sub", [])],
             "options": [dict(zip(("option", "summary"), split_sub(o))) for o in e.get("opt", [])],
-            "capability": e.get("cap"), "compute": e.get("cost", "1 for the call"),
+            "capability": e.get("cap"), "tcl": e.get("tcl"), "compute": e.get("cost", "1 for the call"),
             "examples": [{"command": c, "result": w} for c, w in examples(e) if not (w or "").startswith("error: ")],
             "errors": [{"command": c, "message": w[len("error: "):]} for c, w in examples(e) if (w or "").startswith("error: ")],
             "differences": e.get("diff", []),

@@ -18,5 +18,6 @@ An entry starts with `== NAME`. Each other line is `key: value`. A line that sta
 | `names` | any | Other command names that the page covers, such as `tsv::get`. |
 | `page` | at most one | The full page of a `ztcl::` module, from `docs/`. |
 | `diff` | any | A difference from Tcl 8.6. |
+| `tcl` | at most one | The one Tcl release that has the command, such as `9.1`. The examples run with `--tcl 9.1`. A subcommand of one release only says so at the end of its `sub` text. |
 
 Write each `does`, `sub`, and `opt` from the behavior of ztcl and its tests, with the rules of WRITING.md. The model of the reference is the documentation of Tcl ([docs/references/tcl.md](../references/tcl.md)), and no text comes from it.
