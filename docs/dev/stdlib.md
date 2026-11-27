@@ -743,6 +743,30 @@ The parts of a TLS stack that go wrong are the state machine, the parsers, the v
 
 2026-11-27, i7-6700K (shared), a browser request of 12 fields (360 bytes of names and values): Huffman decode 386 MB/s of text and encode 1,032 MB/s; the first block of a connection (304 bytes) decodes 605,518 times a second and a later block (12 bytes) 8,757,279 times a second; the encoder makes 621,467 first blocks and 1,391,199 later blocks a second. The `hpack-test-case` corpus is not in the checks (see questions).
 
+### The HTTP/2 connection (task 29, first part)
+
+`src/h2/conn.zig` is the server side of a connection with no transport: `feed` takes the bytes of the client and `pending` gives the bytes to send, so the same code runs `h2c` on a socket and `h2` in TLS. `src/h2/frame.zig` reads and writes the frames. There is no HTTP server of task 12 yet, so a handler gets a `Request` (the pseudo-header fields, the other fields, and the body) and answers with `Conn.respond`.
+
+- `feed` reads whole frames in place in the buffer of the caller. A header block in one HEADERS frame decodes from that buffer. The fields of a request go to the handler as slices of a buffer of the connection that keeps its capacity, so a GET needs no allocation once the buffers have grown. A request with a body keeps its fields and body in the stream until END_STREAM.
+- The response goes out as HEADERS (and CONTINUATION past the frame size of the peer) and DATA frames within the windows of the stream and the connection. The rest of a body waits in the stream for WINDOW_UPDATE.
+- The checks of RFC 9113: the preface, SETTINGS first, the frame size, the stream ids, CONTINUATION only after HEADERS, the pseudo-header fields (each one once, before the other fields, `:method`, `:scheme`, and `:path` present), no uppercase field names, no connection-specific fields, `te` only `trailers`, and `content-length` against the DATA.
+- The limits of `Limits` against the attacks of the design: a CONTINUATION flood and a header block past its size give ENHANCE_YOUR_CALM, a header list past its size resets the stream, more than `max_resets` client resets or `max_control` SETTINGS and PING frames in a second give ENHANCE_YOUR_CALM, and a stream past `max_streams` gets REFUSED_STREAM.
+
+`zig build test` runs the tests of `src/h2/conn_test.zig` with a client in memory: GETs on three streams, a POST body in two frames with a response past a window of 100 bytes, the flood and protocol cases, and a stream error that leaves the connection open.
+
+`zig build h2-serve -- --port N` runs `conn.zig` on the aio loop (Linux) for h2c with prior knowledge. `curl --http2-prior-knowledge` (curl 8.23.0 with nghttp2 1.70.0) gets its responses, with GETs on one connection and a POST of 40 KB. `zig build h2-load` is a load client in the manner of h2load: connections with a number of requests in flight on each.
+
+2026-11-27, i7-6700K (4 cores, 8 threads, shared with other jobs), `h2-serve` and `h2-load` on the same machine, one thread each, io_uring:
+
+| Connections | Streams each | Body | Requests/s | Body MB/s |
+|---:|---:|---:|---:|---:|
+| 1 | 1 | 13 bytes | 30,831 | 0.4 |
+| 4 | 32 | 13 bytes | 813,224 | 10.6 |
+| 64 | 100 | 13 bytes | 1,176,542 | 15.3 |
+| 8 | 8 | 65,536 bytes | 17,823 | 1,168.1 |
+
+The RSS of the server stayed under 3 MB. h2load, nghttpd, and h2spec are not on this machine (see questions), so the table has no reference server yet. The next parts: `h2` over `ztcl::tls` with ALPN, writes of a response body with no copy (the body slice in the write), h2spec, and the HTTP server of task 12.
+
 ## HTTP/3 and QUIC (later)
 
 HTTP/3 is its own milestone after the rest. It reuses the key schedule, the AEAD, and the handshake messages of TLS 1.3. QUIC sends the TLS handshake in CRYPTO frames and uses packet protection in place of the record layer (RFC 9001).
