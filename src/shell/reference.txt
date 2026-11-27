@@ -220,6 +220,7 @@ syn: switch ?-option ...? string ?pattern body ...? ?default body?
 opt: -exact | The pattern equals the string (the default).
 opt: -glob | A glob pattern.
 opt: -regexp | A regular expression.
+opt: -integer | Tcl 9.1 only: the pattern and the string are the same integer, such as 16 and 0x10.
 opt: -nocase | Matches letters with no case.
 opt: -- | The end of the options, for a string that starts with -.
 == case
