@@ -3060,6 +3060,42 @@ test "ztcl::notify: the texts are arguments of the script of osascript" {
     try std.testing.expect(argv[10] == null);
 }
 
+test "ztcl::vm on Windows: a guest boots, and vsock and exec reach its agent" {
+    const builtin = @import("builtin");
+    if (comptime !(builtin.os.tag == .windows and builtin.cpu.arch == .x86_64)) return error.SkipZigTest;
+    @import("whp.zig").probe() catch return error.SkipZigTest;
+    // The x86-64 guest of tools/vm-guest (the artifact vm-guest-x86_64)
+    // in zig-out/vm-guest, with the agent of docs/dev/vm-agent.md.
+    std.Io.Dir.cwd().access(std.testing.io, "zig-out/vm-guest/bzImage", .{}) catch return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.vm) | @backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setRoot(&it, "zig-out/vm-guest");
+    const ev = struct {
+        fn f(x: *tcl.Interp, s: []const u8) ![]const u8 {
+            const v = x.eval(s) catch |e| {
+                std.debug.print("tcl error: {s}\n", .{x.str(x.result) catch ""});
+                return e;
+            };
+            return x.str(v);
+        }
+    }.f;
+    try std.testing.expectEqualStrings("vm1", try ev(&it, "ztcl::vm create -kernel bzImage -initrd initramfs.cpio.gz -memory 128"));
+    _ = try ev(&it, "ztcl::vm start vm1");
+    try std.testing.expectEqualStrings("running", try ev(&it, "ztcl::vm status vm1"));
+    // The probe of the agent: 16 bytes of its boot clock, then an echo.
+    _ = try ev(&it, "set ch [ztcl::vm vsock vm1 1025 -timeout 10000]");
+    try std.testing.expectEqualStrings("16", try ev(&it, "string length [read $ch 16]"));
+    try std.testing.expectEqualStrings("ping", try ev(&it, "puts -nonewline $ch ping; flush $ch; read $ch 4"));
+    _ = try ev(&it, "close $ch");
+    // A program of the guest through the agent.
+    try std.testing.expectEqualStrings("0 {hi\n}", try ev(&it, "set r [ztcl::vm exec vm1 /bin/busybox echo hi]; list [dict get $r exit] [dict get $r stdout]"));
+    _ = try ev(&it, "ztcl::vm stop vm1");
+    try std.testing.expectEqualStrings("stopped", try ev(&it, "ztcl::vm status vm1"));
+    _ = try ev(&it, "ztcl::vm delete vm1");
+}
+
 test "ztcl::vm: the capability, the jail of its paths, and the limits" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
@@ -3072,13 +3108,21 @@ test "ztcl::vm: the capability, the jail of its paths, and the limits" {
     try std.testing.expectEqualStrings("0", try it.str(try it.eval("interp create k; k eval {llength [info commands ztcl::vm]}")));
     const builtin = @import("builtin");
     const on_kvm = builtin.os.tag == .linux and builtin.cpu.arch == .x86_64;
-    if (builtin.os.tag != .macos and !on_kvm) {
+    const on_whp = builtin.os.tag == .windows and builtin.cpu.arch == .x86_64;
+    if (builtin.os.tag != .macos and !on_kvm and !on_whp) {
         try std.testing.expectEqualStrings("ZTCL VM UNAVAILABLE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image}; set ::errorCode")));
         return;
     }
     if (on_kvm) {
         // A host without access to /dev/kvm gives the fix in the error.
         @import("kvm.zig").probe() catch {
+            try std.testing.expectEqualStrings("ZTCL VM UNAVAILABLE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image}; set ::errorCode")));
+            return;
+        };
+    }
+    if (on_whp) {
+        // A host with no hypervisor gives the fix in the error.
+        @import("whp.zig").probe() catch {
             try std.testing.expectEqualStrings("ZTCL VM UNAVAILABLE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image}; set ::errorCode")));
             return;
         };
@@ -3094,7 +3138,7 @@ test "ztcl::vm: the capability, the jail of its paths, and the limits" {
     _ = try it.eval("file mkdir .zig-cache/ztcl-vm-test/share; close [open .zig-cache/ztcl-vm-test/Image w]");
     try tcl.fsroot.setRoot(&it, ".zig-cache/ztcl-vm-test");
     try std.testing.expectEqualStrings("POSIX EACCES {permission denied}", try it.str(try it.eval("catch {ztcl::vm create -kernel ../../build.zig}; set ::errorCode")));
-    if (on_kvm) {
+    if (on_kvm or on_whp) {
         try std.testing.expectEqualStrings("ZTCL VM SHARE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {share /mnt}}; set ::errorCode")));
         try std.testing.expectEqualStrings("bad mode \"rx\": must be ro or rw", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -disk {Image rx}} m; set m")));
         // An empty kernel fails at the start, and the guest stays.

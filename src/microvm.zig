@@ -10,12 +10,17 @@
 //!   ztcl::vm console VM
 //!
 //! `exec` and `mount` speak to the guest agent on port 1024
-//! (`vmagent.zig`, `docs/dev/vm-agent.md`), on macOS and on KVM.
+//! (`vmagent.zig`, `docs/dev/vm-agent.md`): `exec` on macOS, KVM, and Windows,
+//! and `mount` on macOS and KVM, in this version.
 //!
 //! macOS has Virtualization.framework through `vz.zig`, and x86-64
-//! Linux has the KVM monitor of `kvm.zig`. On another platform each
+//! Linux has the KVM monitor of `kvm.zig`. x86-64 Windows has the monitor
+//! of `whp.zig` on the Windows Hypervisor Platform: a pump thread moves
+//! the bytes of the console and of each vsock stream between the monitor
+//! and a pair of loopback sockets, and the script gets one end of each
+//! pair as its channel. On another platform each
 //! command gives the error `ZTCL VM UNAVAILABLE`, until the arm64 KVM
-//! and HCS parts of the plan.
+//! part of the plan.
 //!
 //! The paths of `-kernel`, `-initrd`, `-disk`, and `-share` also need
 //! the `file` capability, and each is a path below the root folder of
@@ -57,6 +62,8 @@ const on_mac = builtin.os.tag == .macos;
 const vz = if (on_mac) @import("vz.zig") else struct {};
 const on_kvm = builtin.os.tag == .linux and builtin.cpu.arch == .x86_64;
 const kvm = if (on_kvm) @import("kvm.zig") else struct {};
+const on_whp = builtin.os.tag == .windows and builtin.cpu.arch == .x86_64;
+const whp = if (on_whp) @import("whp.zig") else struct {};
 
 /// The limits of the embedder for the guests of one interpreter.
 pub const Host = struct {
@@ -95,6 +102,7 @@ fn unavailable(it: *Interp) Error {
 fn cmdVm(it: *Interp, args: []const Value, _: ?*interp.Cmd) Error!Value {
     if (args.len < 2) return it.wrongArgs(usage);
     if (comptime on_kvm) return lin.run(it, args);
+    if (comptime on_whp) return win.run(it, args);
     if (comptime !on_mac) return unavailable(it);
     return mac.run(it, args);
 }
@@ -103,6 +111,7 @@ fn cmdVm(it: *Interp, args: []const Value, _: ?*interp.Cmd) Error!Value {
 pub fn closeAll(it: *Interp) void {
     if (comptime on_mac) mac.closeAll(it);
     if (comptime on_kvm) lin.closeAll(it);
+    if (comptime on_whp) win.closeAll(it);
 }
 
 fn isRw(it: *Interp, v: Value) Error!bool {
@@ -864,6 +873,575 @@ const lin = if (on_kvm) struct {
     }
 
     fn destroy(it: *Interp, g: *Guest) void {
+        g.machine.deinit();
+        freeGuest(it, g);
+    }
+
+    pub fn closeAll(it: *Interp) void {
+        const s: *State = @ptrCast(@alignCast(it.vm_state orelse return));
+        for (s.guests.items) |g| destroy(it, g);
+        s.guests.deinit(it.heap.backing);
+        it.heap.backing.destroy(s);
+        it.vm_state = null;
+    }
+} else struct {};
+
+/// x86-64 Windows: the monitor of `whp.zig` on the Windows Hypervisor
+/// Platform. The monitor has no descriptor of a vsock stream, so a pump
+/// thread of each guest moves the bytes between the monitor and one end
+/// of a pair of loopback sockets, and the script gets the other end as
+/// its channel. The console is a pair too. The callbacks of the monitor
+/// run on its vCPU thread with the lock of a device held, so they only
+/// queue the bytes for the pump.
+const win = if (on_whp) struct {
+    const vsock = @import("vm/virtio/vsock.zig");
+
+    const StreamState = enum { free, connecting, open, refused, closed };
+
+    const Stream = struct {
+        state: StreamState = .free,
+        /// The end of the pair that the pump has, or -1.
+        fd: i32 = -1,
+        /// The bytes of the guest that wait for the socket.
+        out: std.ArrayList(u8) = .empty,
+        /// The bytes of the script that wait for the credit of the guest.
+        in: std.ArrayList(u8) = .empty,
+    };
+
+    const Guest = struct {
+        name: []const u8,
+        machine: *whp,
+        kernel: []u8,
+        initrd: []u8,
+        cmdline: []u8,
+        disks: []whp.Disk,
+        disk_fds: []i32,
+        /// The end of the console pair that the pump has, and the end of
+        /// the script, until `console` gives it as a channel.
+        console_vm: i32,
+        console_host: i32,
+        console_out: std.ArrayList(u8) = .empty,
+        warm: bool,
+        lock: Lock = .{},
+        streams: [vsock.max_conns]Stream = @splat(.{}),
+        pump: ?std.Thread = null,
+        stop_pump: std.atomic.Value(bool) = .init(false),
+    };
+
+    const Lock = @import("vm/virtio/mmio.zig").Lock;
+
+    const State = struct {
+        guests: std.ArrayList(*Guest) = .empty,
+        next: u32 = 1,
+    };
+
+    extern "kernel32" fn Sleep(ms: u32) callconv(.winapi) void;
+
+    fn state(it: *Interp) Error!*State {
+        if (it.vm_state) |p| return @ptrCast(@alignCast(p));
+        const s = try it.heap.backing.create(State);
+        s.* = .{};
+        it.vm_state = s;
+        return s;
+    }
+
+    fn find(it: *Interp, v: Value) Error!*Guest {
+        const name = try it.str(v);
+        const s = try state(it);
+        for (s.guests.items) |g| if (std.mem.eql(u8, g.name, name)) return g;
+        return it.failCode("ZTCL VM NAME", "no guest named \"{s}\"", .{name});
+    }
+
+    fn failure(it: *Interp, e: whp.Fail) Error {
+        return switch (e) {
+            error.NoHypervisor => it.failCode("ZTCL VM UNAVAILABLE", "this Windows has no hypervisor for the Windows Hypervisor Platform: turn on Virtualization-based Security or the feature Windows Hypervisor Platform", .{}),
+            error.Kernel => it.failCode("ZTCL VM KERNEL", "{s}", .{whp.why}),
+            error.Memory => it.failCode("ZTCL VM MEMORY", "{s}", .{whp.why}),
+            error.OutOfMemory => error.OutOfMemory,
+            error.Setup => it.failCode("ZTCL VM WHP", "{s} failed", .{whp.why}),
+        };
+    }
+
+    pub fn run(it: *Interp, args: []const Value) Error!Value {
+        const sub = try it.str(args[1]);
+        if (std.mem.eql(u8, sub, "create")) return create(it, args[2..]);
+        if (args.len < 3) return it.wrongArgs(usage);
+        const g = try find(it, args[2]);
+        if (std.mem.eql(u8, sub, "start")) {
+            if (args.len != 3) return it.wrongArgs("ztcl::vm start vm");
+            try start(it, g);
+            return .{ .str = "" };
+        }
+        if (std.mem.eql(u8, sub, "stop")) {
+            const force = args.len == 4 and std.mem.eql(u8, try it.str(args[3]), "-force");
+            if (args.len != 3 and !force) return it.wrongArgs("ztcl::vm stop vm ?-force?");
+            g.machine.stop();
+            return .{ .str = "" };
+        }
+        if (std.mem.eql(u8, sub, "status")) {
+            if (args.len != 3) return it.wrongArgs("ztcl::vm status vm");
+            return .{ .str = status(g) };
+        }
+        if (std.mem.eql(u8, sub, "vsock")) return vsockCmd(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "exec")) return execCmd(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "mount")) return it.failCode("ZTCL VM SHARE", "a share is not available on Windows yet", .{});
+        if (std.mem.eql(u8, sub, "console")) {
+            if (args.len != 3) return it.wrongArgs("ztcl::vm console vm");
+            if (g.console_host < 0) return it.failCode("ZTCL VM CONSOLE", "the console of the guest {s} is a channel already", .{g.name});
+            const v = try binaryChannel(it, "vmcon", g.console_host);
+            g.console_host = -1;
+            return v;
+        }
+        if (std.mem.eql(u8, sub, "delete")) {
+            if (args.len != 3) return it.wrongArgs("ztcl::vm delete vm");
+            const s = try state(it);
+            for (s.guests.items, 0..) |x, i| if (x == g) {
+                _ = s.guests.orderedRemove(i);
+                break;
+            };
+            destroy(it, g);
+            return .{ .str = "" };
+        }
+        return it.fail("bad option \"{s}\": must be console, create, delete, exec, mount, start, status, stop, or vsock", .{sub});
+    }
+
+    /// Opens a path of the script below the root folder. Gives its handle
+    /// as a descriptor of `sys`.
+    fn openPath(it: *Interp, path: []const u8, write: bool) Error!i32 {
+        if (it.capabilities & @backingInt(interp.Capability.file) == 0 or !it.fs_ok())
+            return it.failCode("ZTCL VM NOFILE", "a path of ztcl::vm needs the file capability", .{});
+        const rel = try fsroot.need(it, path);
+        const r = try fsroot.openRel(it, rel, .{ .access = if (write) .read_write else .read }, 0);
+        return switch (r) {
+            .fd => |fd| fd,
+            .err => |e| fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "couldn't open \"{s}\": ", .{path})),
+        };
+    }
+
+    /// The bytes of a file of the script, for the kernel and the initramfs.
+    fn readPath(it: *Interp, path: []const u8) Error![]u8 {
+        const fd = try openPath(it, path, false);
+        defer sys.close(fd);
+        const end = switch (sys.seek(fd, 0, 2)) {
+            .at => |p| p,
+            else => return it.failCode("ZTCL VM PATH", "\"{s}\" is not a file", .{path}),
+        };
+        _ = sys.seek(fd, 0, 0);
+        const buf = try it.heap.backing.alloc(u8, @intCast(end));
+        errdefer it.heap.backing.free(buf);
+        var off: usize = 0;
+        while (off < buf.len) {
+            switch (sys.readFile(fd, buf[off..])) {
+                .n => |n| {
+                    if (n == 0) break;
+                    off += n;
+                },
+                else => return it.failCode("ZTCL VM PATH", "couldn't read \"{s}\"", .{path}),
+            }
+        }
+        return buf[0..off];
+    }
+
+    /// Two connected loopback sockets. The accepted socket must be the one
+    /// that this call connected, so no other program gets in.
+    fn pair() ?[2]i32 {
+        var lo: sys.Addr = .{ .port = 0 };
+        lo.bytes[0] = 127;
+        lo.bytes[3] = 1;
+        const l = switch (sys.listenAt(lo, false)) {
+            .fd => |fd| fd,
+            .err => return null,
+        };
+        defer sys.close(l);
+        const at = sys.sockName(l) orelse return null;
+        const a = switch (sys.connectTo(at, null, true)) {
+            .fd => |fd| fd,
+            .err => return null,
+        };
+        const mine = sys.sockName(a) orelse {
+            sys.close(a);
+            return null;
+        };
+        var tries: usize = 0;
+        while (tries < 1000) : (tries += 1) {
+            if (sys.accept(l)) |acc| {
+                if (acc.peer.port == mine.port and std.mem.eql(u8, &acc.peer.bytes, &mine.bytes)) return .{ a, acc.fd };
+                sys.close(acc.fd);
+            } else Sleep(1);
+        }
+        sys.close(a);
+        return null;
+    }
+
+    fn create(it: *Interp, args: []const Value) Error!Value {
+        const a = it.alloc();
+        const b = it.heap.backing;
+        const host = it.vm_host;
+        const s = try state(it);
+        if (s.guests.items.len >= host.max_guests)
+            return it.failCode("ZTCL VM LIMIT", "the interpreter has {d} guests, the limit", .{s.guests.items.len});
+        if (args.len % 2 != 0) return it.wrongArgs("ztcl::vm create ?-option value ...?");
+        whp.probe() catch |e| return failure(it, e);
+        var cpus: u32 = 1;
+        var memory_mb: u32 = 256;
+        var cmdline: []const u8 = "console=hvc0 quiet";
+        var entropy = false;
+        var kernel: []const u8 = "";
+        var initrd: []const u8 = "";
+        var disks: std.ArrayList(struct { path: []const u8, rw: bool }) = .empty;
+        var warm = false;
+        var i: usize = 0;
+        while (i < args.len) : (i += 2) {
+            const opt = try it.str(args[i]);
+            const v = args[i + 1];
+            if (std.mem.eql(u8, opt, "-cpus")) {
+                cpus = try limit(it, v, "CPU count", host.max_cpus);
+                if (cpus != 1) return it.failCode("ZTCL VM LIMIT", "a guest on Windows has one CPU in this version", .{});
+            } else if (std.mem.eql(u8, opt, "-memory")) {
+                memory_mb = try limit(it, v, "memory in MB", host.max_memory_mb);
+            } else if (std.mem.eql(u8, opt, "-kernel")) {
+                kernel = try it.str(v);
+            } else if (std.mem.eql(u8, opt, "-initrd")) {
+                initrd = try it.str(v);
+            } else if (std.mem.eql(u8, opt, "-cmdline")) {
+                cmdline = try it.str(v);
+            } else if (std.mem.eql(u8, opt, "-entropy")) {
+                entropy = try it.int(v) != 0;
+            } else if (std.mem.eql(u8, opt, "-warm")) {
+                warm = try it.int(v) != 0;
+            } else if (std.mem.eql(u8, opt, "-disk")) {
+                const l = try it.readList(v);
+                if (l.len < 1 or l.len > 2) return it.fail("a disk is {{file ?rw?}}", .{});
+                if (disks.items.len >= whp.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks", .{whp.max_disks});
+                try disks.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 2 and try isRw(it, l[1]) });
+            } else if (std.mem.eql(u8, opt, "-share")) {
+                return it.failCode("ZTCL VM SHARE", "a share is not available on Windows yet", .{});
+            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -initrd, -kernel, -memory, -share, or -warm", .{opt});
+        }
+        if (kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel until the base image of the plan", .{});
+
+        const g = try b.create(Guest);
+        g.* = .{ .name = "", .machine = undefined, .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .disk_fds = &.{}, .console_vm = -1, .console_host = -1, .warm = warm };
+        var made = false;
+        errdefer if (!made) freeGuest(it, g);
+        g.kernel = try readPath(it, kernel);
+        if (initrd.len != 0) g.initrd = try readPath(it, initrd);
+        g.cmdline = try b.dupe(u8, cmdline);
+        g.disks = try b.alloc(whp.Disk, disks.items.len);
+        g.disk_fds = try b.alloc(i32, disks.items.len);
+        for (g.disk_fds) |*f| f.* = -1;
+        for (disks.items, g.disks, g.disk_fds) |d, *out, *fd| {
+            fd.* = try openPath(it, d.path, d.rw);
+            out.* = .{ .handle = @ptrFromInt(@as(usize, @intCast(fd.*))), .read_only = !d.rw };
+        }
+        const con = pair() orelse return it.failCode("ZTCL VM WHP", "no socket pair for the console", .{});
+        g.console_vm = con[0];
+        g.console_host = con[1];
+        sys.setBlocking(g.console_vm, false);
+        g.machine = whp.init(b, .{
+            .cpus = cpus,
+            .memory_mb = memory_mb,
+            .kernel = g.kernel,
+            .initrd = g.initrd,
+            .cmdline = g.cmdline,
+            .disks = g.disks,
+            .entropy = entropy,
+            .console = .{ .ctx = g, .write = consoleWrite },
+            .vsock = .{ .ctx = g, .data = streamData, .event = streamEvent },
+        }) catch |e| return failure(it, e);
+        made = true;
+        g.name = try std.fmt.allocPrint(b, "vm{d}", .{s.next});
+        s.next += 1;
+        s.guests.append(b, g) catch |e| {
+            destroy(it, g);
+            return e;
+        };
+        if (warm) {
+            try start(it, g);
+            const fd = connect(g, agent_port, 10_000) orelse
+                return it.failCode("ZTCL VM AGENT", "no program of the guest accepted a connection on port {d}", .{agent_port});
+            sys.close(fd);
+            g.machine.pause();
+        }
+        return .{ .str = g.name };
+    }
+
+    fn start(it: *Interp, g: *Guest) Error!void {
+        switch (g.machine.getState()) {
+            .paused => g.machine.@"resume"(),
+            .created, .stopped, .failed => {
+                g.machine.start() catch |e| return failure(it, e);
+                if (g.pump == null) {
+                    g.stop_pump.store(false, .seq_cst);
+                    g.pump = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, pumpMain, .{g}) catch
+                        return it.failCode("ZTCL VM WHP", "no thread for the pump of the guest", .{});
+                }
+            },
+            .running => return it.failCode("ZTCL VM STATE", "the guest {s} is running", .{g.name}),
+        }
+    }
+
+    fn status(g: *Guest) []const u8 {
+        return switch (g.machine.getState()) {
+            .created => "created",
+            .running => "running",
+            .paused => "paused",
+            .stopped => "stopped",
+            .failed => "error",
+        };
+    }
+
+    // The callbacks of the monitor, on its vCPU thread.
+
+    fn guestOf(ctx: *anyopaque) *Guest {
+        return @ptrCast(@alignCast(ctx));
+    }
+
+    fn consoleWrite(ctx: *anyopaque, bytes: []const u8) void {
+        const g = guestOf(ctx);
+        g.lock.lock();
+        defer g.lock.unlock();
+        g.console_out.appendSlice(std.heap.page_allocator, bytes) catch {};
+    }
+
+    fn streamData(ctx: *anyopaque, conn: u32, bytes: []const u8) void {
+        const g = guestOf(ctx);
+        g.lock.lock();
+        defer g.lock.unlock();
+        g.streams[conn].out.appendSlice(std.heap.page_allocator, bytes) catch {};
+    }
+
+    fn streamEvent(ctx: *anyopaque, conn: u32, e: vsock.Event) void {
+        const g = guestOf(ctx);
+        g.lock.lock();
+        defer g.lock.unlock();
+        g.streams[conn].state = switch (e) {
+            .connected => .open,
+            .refused => .refused,
+            .closed => .closed,
+        };
+    }
+
+    /// The pump: the console and each stream, between the monitor and its
+    /// end of each pair, every millisecond.
+    fn pumpMain(g: *Guest) void {
+        var buf: [16 * 1024]u8 = undefined;
+        while (!g.stop_pump.load(.seq_cst)) {
+            // The output of the guest console.
+            g.lock.lock();
+            if (g.console_out.items.len > 0 and g.console_vm >= 0) {
+                switch (sys.write(g.console_vm, g.console_out.items)) {
+                    .n => |n| g.console_out.replaceRangeAssumeCapacity(0, n, &.{}),
+                    else => {},
+                }
+            }
+            g.lock.unlock();
+            // The input of the script for the console.
+            if (g.console_vm >= 0) switch (sys.read(g.console_vm, &buf)) {
+                .n => |n| if (n > 0) g.machine.consoleInput(buf[0..n]),
+                else => {},
+            };
+            for (&g.streams, 0..) |*st, k| pumpStream(g, st, @intCast(k), &buf);
+            Sleep(1);
+        }
+    }
+
+    fn pumpStream(g: *Guest, st: *Stream, conn: u32, buf: []u8) void {
+        g.lock.lock();
+        const fd = st.fd;
+        const s = st.state;
+        if (fd >= 0 and st.out.items.len > 0) {
+            switch (sys.write(fd, st.out.items)) {
+                .n => |n| st.out.replaceRangeAssumeCapacity(0, n, &.{}),
+                .again => {},
+                .err => st.out.clearRetainingCapacity(),
+            }
+        }
+        const drained = st.out.items.len == 0;
+        g.lock.unlock();
+        if (fd < 0) return;
+        if (s == .closed) {
+            // The guest ended the stream: the script reads the end once
+            // the bytes of the guest are out.
+            if (!drained) return;
+            g.lock.lock();
+            st.fd = -1;
+            st.state = .free;
+            st.in.clearRetainingCapacity();
+            g.lock.unlock();
+            sys.close(fd);
+            return;
+        }
+        if (s != .open) return;
+        // The bytes of the script, within the credit of the guest.
+        if (st.in.items.len == 0) {
+            switch (sys.read(fd, buf)) {
+                .n => |n| {
+                    if (n == 0) {
+                        // The script closed its channel.
+                        g.machine.close(conn);
+                        g.lock.lock();
+                        st.fd = -1;
+                        g.lock.unlock();
+                        sys.close(fd);
+                        return;
+                    }
+                    st.in.appendSlice(std.heap.page_allocator, buf[0..n]) catch return;
+                },
+                .again => {},
+                .err => {
+                    g.machine.close(conn);
+                    g.lock.lock();
+                    st.fd = -1;
+                    g.lock.unlock();
+                    sys.close(fd);
+                    return;
+                },
+            }
+        }
+        if (st.in.items.len > 0) {
+            const took = g.machine.send(conn, st.in.items);
+            st.in.replaceRangeAssumeCapacity(0, took, &.{});
+        }
+    }
+
+    /// Connects to a port of the guest, again after each refused
+    /// connection, until `timeout_ms` pass. Gives the end of the script
+    /// of a new pair, a blocking socket.
+    fn connect(g: *Guest, port: u32, timeout_ms: u32) ?i32 {
+        const end = whp.nowNs() / std.time.ns_per_ms + timeout_ms;
+        while (g.machine.getState() == .running) {
+            const conn = g.machine.connect(port) orelse return null;
+            const st = &g.streams[conn];
+            g.lock.lock();
+            if (st.state == .free) st.state = .connecting;
+            g.lock.unlock();
+            while (true) {
+                g.lock.lock();
+                const s = st.state;
+                g.lock.unlock();
+                if (s != .connecting) break;
+                if (whp.nowNs() / std.time.ns_per_ms >= end) {
+                    g.machine.close(conn);
+                    return null;
+                }
+                Sleep(1);
+            }
+            g.lock.lock();
+            const s = st.state;
+            if (s != .open) st.state = .free;
+            g.lock.unlock();
+            if (s == .open) {
+                const p = pair() orelse {
+                    g.machine.close(conn);
+                    return null;
+                };
+                sys.setBlocking(p[0], false);
+                g.lock.lock();
+                st.fd = p[0];
+                g.lock.unlock();
+                return p[1];
+            }
+            if (whp.nowNs() / std.time.ns_per_ms >= end) return null;
+            Sleep(50);
+        }
+        return null;
+    }
+
+    fn vsockCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        const a = try vsockArgs(it, args);
+        if (g.machine.getState() != .running) return it.failCode("ZTCL VM STATE", "the guest {s} is {s}", .{ g.name, status(g) });
+        const fd = connect(g, a.port, a.timeout) orelse
+            return it.failCode("ZTCL VM CONNECT", "no program of the guest {s} accepted a connection on port {d}", .{ g.name, a.port });
+        return binaryChannel(it, "vsock", fd);
+    }
+
+    fn agentFail(it: *Interp, g: *Guest, a: *vmagent.Conn, e: vmagent.Error) Error {
+        return switch (e) {
+            error.OutOfMemory => error.OutOfMemory,
+            error.Timeout => it.failCode("ZTCL VM TIMEOUT", "the guest {s} gave no answer in time", .{g.name}),
+            error.Version => it.failCode("ZTCL VM AGENT", "the agent of the guest {s} has another version of the protocol", .{g.name}),
+            error.Agent => it.failCode("ZTCL VM AGENT", "{s} (errno {d})", .{ a.last_error.message[0..a.last_error.len], a.last_error.errno }),
+            else => it.failCode("ZTCL VM AGENT", "the connection to the agent of the guest {s} failed: {s}", .{ g.name, @errorName(e) }),
+        };
+    }
+
+    /// `exec`: a dict of `exit`, `stdout`, and `stderr`, as on macOS.
+    fn execCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        const use = "ztcl::vm exec vm ?-stdin data? ?-env list? ?-cwd dir? ?-timeout ms? ?--? program ?arg ...?";
+        var stdin: ?[]const u8 = null;
+        var env: []const []const u8 = &.{};
+        var cwd: []const u8 = "";
+        var timeout: u32 = 30000;
+        var i: usize = 0;
+        while (i < args.len) {
+            const o = try it.str(args[i]);
+            if (std.mem.eql(u8, o, "--")) {
+                i += 1;
+                break;
+            }
+            if (o.len == 0 or o[0] != '-') break;
+            if (i + 1 >= args.len) return it.wrongArgs(use);
+            const v = args[i + 1];
+            if (std.mem.eql(u8, o, "-stdin")) {
+                stdin = try it.str(v);
+            } else if (std.mem.eql(u8, o, "-cwd")) {
+                cwd = try it.str(v);
+            } else if (std.mem.eql(u8, o, "-timeout")) {
+                const t = try it.int(v);
+                if (t < 1) return it.fail("bad timeout \"{d}\"", .{t});
+                timeout = @intCast(@min(t, std.math.maxInt(i32)));
+            } else if (std.mem.eql(u8, o, "-env")) {
+                const items = try it.list(v);
+                const e = try it.alloc().alloc([]const u8, items.len);
+                for (items, e) |x, *y| y.* = try it.str(x);
+                env = e;
+            } else return it.fail("bad option \"{s}\": must be -cwd, -env, -stdin, or -timeout", .{o});
+            i += 2;
+        }
+        if (i >= args.len) return it.wrongArgs(use);
+        const argv = try it.alloc().alloc([]const u8, args.len - i);
+        for (args[i..], argv) |x, *y| y.* = try it.str(x);
+        if (g.machine.getState() != .running) return it.failCode("ZTCL VM STATE", "the guest {s} is {s}", .{ g.name, status(g) });
+        const fd = connect(g, vmagent.port, timeout) orelse
+            return it.failCode("ZTCL VM AGENT", "the agent of the guest {s} did not answer on port {d}", .{ g.name, vmagent.port });
+        defer sys.close(fd);
+        var a: vmagent.Conn = .{ .fd = fd, .timeout_ms = @intCast(@min(timeout, std.math.maxInt(i32))) };
+        _ = a.hello(it.alloc()) catch |e| return agentFail(it, g, &a, e);
+        const r = vmagent.exec(&a, it.alloc(), argv, env, cwd, stdin, 64 << 20) catch |e| return agentFail(it, g, &a, e);
+        var items = [6]Value{
+            .{ .str = "exit" },   .{ .int = r.code },
+            .{ .str = "stdout" }, .{ .str = r.stdout },
+            .{ .str = "stderr" }, .{ .str = r.stderr },
+        };
+        return value.wrapList(it.alloc(), try it.alloc().dupe(Value, &items));
+    }
+
+    fn freeGuest(it: *Interp, g: *Guest) void {
+        const b = it.heap.backing;
+        for (g.disk_fds) |fd| if (fd >= 0) sys.close(fd);
+        b.free(g.disk_fds);
+        b.free(g.disks);
+        b.free(g.kernel);
+        b.free(g.initrd);
+        b.free(g.cmdline);
+        if (g.console_vm >= 0) sys.close(g.console_vm);
+        if (g.console_host >= 0) sys.close(g.console_host);
+        g.console_out.deinit(std.heap.page_allocator);
+        for (&g.streams) |*st| {
+            if (st.fd >= 0) sys.close(st.fd);
+            st.out.deinit(std.heap.page_allocator);
+            st.in.deinit(std.heap.page_allocator);
+        }
+        b.free(g.name);
+        b.destroy(g);
+    }
+
+    fn destroy(it: *Interp, g: *Guest) void {
+        g.machine.stop();
+        g.stop_pump.store(true, .seq_cst);
+        if (g.pump) |t| t.join();
+        g.pump = null;
         g.machine.deinit();
         freeGuest(it, g);
     }

@@ -197,7 +197,8 @@ whp-spike out/bzImage out/busybox tools/vm-guest/init 256
 - The console is an 8250 at 0x3f8 with the registers that the probe of the driver reads back, and the interrupt of its empty transmitter on IRQ 4. Without that interrupt the TTY of `ttyS0` never sends, and only the kernel log, which the console writes with no interrupt, comes out. The initramfs is a cpio archive (newc) that the spike makes, with `/dev/console` for the first process.
 - A port with no device reads as 0, except the ports of the i8042, 0x60 and 0x64, which read as 0xff, a bus with no device. With 0 there, the probe of the i8042 waits for its timeouts, about 570 ms, before "Can't read CTR". A PIC that reads as 0xff could look present, so the other ports stay at 0.
 - The results on an Intel Core i7-1165G7 with Windows 11 Home 25H2 and 256 MB, three runs each: the ready line of init 396 ms to 402 ms after the start with the full kernel log on the console (about 20,000 exits, nearly all a byte of the console), and 211 ms to 214 ms with `quiet` (about 500 exits). The first spike, with no interrupts and with 0 on the ports of the i8042, took 956 ms to 981 ms. The probe of the uncore PMU reads the MSR 0x396 and gives a warning with a trace.
-- Next: the backend of the Windows Hypervisor Platform in `src/`, with the virtio-mmio devices of the KVM part on their interface.
+- The monitor (ztcl#369): `src/whp.zig` on the shared devices, with the vsock device of `src/vm/virtio/vsock.zig` (ztcl#364) and the direct boot of `src/vm/boot.zig`. One CPU for now: the start of a second CPU through the startup IPI is not checked on the xAPIC emulation yet.
+- The commands (`src/microvm.zig`): `create`, `start`, `stop`, `status`, `vsock`, `console`, `exec`, `delete`, and `-warm`, as on Linux, and `exec` through the agent. The monitor has no descriptor of a vsock stream, so a pump thread of each guest moves the bytes of the console and of each stream between the monitor and one end of a pair of loopback sockets, and the script gets the other end as its channel. The accepted socket of a pair must be the one that ztcl connected, so no other program gets in. A share is not available yet (`ZTCL VM SHARE`).
 
 ## Tests
 
@@ -212,7 +213,7 @@ whp-spike out/bzImage out/busybox tools/vm-guest/init 256
 3. The entitlements in the Zig signer (done): `src/macho.zig` writes the requirements, the XML, and the DER blobs with their special slots. `zig build` signs the macOS `ztcl` with `tools/macho-sign`, and `ztcl build` signs an app with `vm` in `--allow`.
 4. The agent with `exec` and `mount` (done): the protocol is `docs/dev/vm-agent.md`, the host side `src/vmagent.zig`, and `ztcl::vm exec` and `mount` on macOS and KVM. The image builds for arm64 and x86-64 (`tools/vm-guest`, the artifacts `vm-guest` and `vm-guest-x86_64`). The signed image is ztcl#312.
 5. The KVM part on x86-64 (done, except the shares): `src/kvm.zig`. arm64 later.
-6. The Windows part on the Windows Hypervisor Platform: the spike (done), the interrupts, then the devices of the KVM part.
+6. The Windows part on the Windows Hypervisor Platform: the spike, the interrupts, the monitor, and the commands (done, except the shares and a second CPU).
 7. The docs page `docs/modules/vm.md` (#172).
 
 ## Questions
