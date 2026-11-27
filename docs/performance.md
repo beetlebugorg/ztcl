@@ -1,28 +1,41 @@
 # Performance
 
-All numbers on this page come from one machine: an Intel Core i7-6700K (4 cores, 8 hardware threads, 4.0 GHz, AVX2) on x86-64 Linux, with `ReleaseFast` builds. Each section gives its method and its date. The scripts are in [`bench/`](../bench). Run them yourself:
+The sections "The interpreter", "A 10-million-pass integer loop", "Threads", "JSON", and "Size" come from a GitHub `ubuntu-latest` runner (4 vCPU, AMD EPYC), the median of 3 runs of the workflow `bench.yml` with `site` set, on 2026-11-27. The three runs had three CPU models: AMD EPYC 9V45, 9V74, and 7763. Each build is `ReleaseFast` for the CPU of the runner, and `tclsh` 8.6.16 with Thread 2.8.11 is a build of the source release. The runner has no hardware counter for `perf`, so the instruction counts and the larger programs come from an Intel Core i7-6700K (4 cores, 8 hardware threads, 4.0 GHz, AVX2) on x86-64 Linux, on the date of each section. The scripts are in [`bench/`](../bench). Run them yourself:
 
 ```sh
 zig build -Doptimize=ReleaseFast
-python3 -I tools/bench.py --tclsh "$(command -v tclsh)"
+python3 -I tools/bench-site.py --tclsh "$(command -v tclsh)"
+gh workflow run bench.yml -f site=true
 ```
 
 ## The interpreter
 
-CPU milliseconds of the whole process, best of 11 runs, one thread, 2026-11-23. Lower is faster.
+CPU milliseconds of the whole process, best of 11 runs, one thread. `--no-jit` is the bytecode interpreter, and the default has the JIT. Lower is faster.
 
-| Benchmark | ztcl | tclsh 8.6.16 | tclsh 9.1.0 |
+| Benchmark | ztcl `--no-jit` | ztcl | tclsh 8.6.16 |
 |---|---|---|---|
-| `sum.tcl`: 1 million `expr` and `incr` | 20.2 | 58.3 | 57.8 |
-| `fib.tcl`: fib 25, about 250,000 calls | 14.4 | 50.8 | 49.4 |
-| `nested.tcl`: 1000 x 1000, `lappend`, `llength` | 31.8 | 73.7 | 84.7 |
-| `strbuild.tcl`: 500,000 `append` | 23.0 | 63.8 | 99.2 |
-| `foreach.tcl`: 10 passes over 100,000 items | 16.2 | 33.2 | 38.6 |
-| `dict.tcl`: 200,000 `dict incr`, 200,000 `dict get` | 22.8 | 48.6 | 58.5 |
-| `dictgrow.tcl`: 200,000 new keys, 200,000 `dict get` | 61.4 | 104.9 | 144.2 |
-| `readloop.tcl`: 200,000 `llength` and `lindex` on a string | 17.7 | 27.9 | 32.7 |
+| `sum.tcl`: 1 million `expr` and `incr` | 16.4 | 1.5 | 43.8 |
+| `fib.tcl`: fib 25, about 250,000 calls | 17.1 | 8.9 | 38.6 |
+| `nested.tcl`: 1000 x 1000, `lappend`, `llength` | 29.4 | 14.4 | 56.2 |
+| `strbuild.tcl`: 500,000 `append` | 19.4 | 15.7 | 50.3 |
+| `foreach.tcl`: 10 passes over 100,000 items | 14.8 | 5.6 | 25.5 |
+| `dict.tcl`: 200,000 `dict incr`, 200,000 `dict get` | 22.2 | 14.4 | 36.4 |
+| `dictgrow.tcl`: 200,000 new keys, 200,000 `dict get` | 75.1 | 70.9 | 90.7 |
+| `readloop.tcl`: 200,000 `llength` and `lindex` on a string | 11.8 | 9.4 | 20.2 |
+| `dsum.tcl`: 1 million `expr` on doubles | 48.1 | 1.7 | 71.4 |
 
-The two `tclsh` builds can differ in compiler flags.
+The table of 2026-11-23 on the Intel Core i7-6700K also had `tclsh` 9.1.0: 57.8, 49.4, 84.7, 99.2, 38.6, 58.5, 144.2, and 32.7 ms for the first eight rows. The runner has no build of it.
+
+### A 10-million-pass integer loop
+
+`sum` of `bench/sum.tcl` with 10,000,000 passes. Wall milliseconds of the call from `clock microseconds`, best of 5 runs.
+
+| Runner | ms |
+|---|---|
+| ztcl `--no-jit` | 156.6 |
+| ztcl `--no-jit-tier2` | 67.4 |
+| ztcl (the default, JIT tier 2) | 8.3 |
+| tclsh 8.6.16 | 413.4 |
 
 ## The JIT
 
@@ -52,7 +65,7 @@ Three programs of [kostya/benchmarks](https://github.com/kostya/benchmarks): the
 
 ## Threads
 
-Wall milliseconds, best of 5 runs, against `tclsh` 8.6.16 with Thread 2.8.11, 2026-11-24. Each script prints its own time, and the runs of ztcl and `tclsh` alternated. The machine had other load, so the times vary between runs.
+Wall milliseconds that each script prints, best of 5 runs, against `tclsh` 8.6.16 with Thread 2.8.11. The runner has 4 vCPU, and the scripts use 4 to 8 threads.
 
 ```sh
 ztcl --allow thread,event,package,clock bench/thread_pipe.tcl
@@ -61,40 +74,38 @@ tclsh bench/thread_pipe.tcl
 
 | Benchmark | ztcl | tclsh 8.6.16 |
 |---|---|---|
-| `thread_map.tcl`: 1,000,000 integers in 8 parts, a proc on each | 99 | 305 |
-| `thread_pipe.tcl`: 4 stages, 100,000 messages | 605 | 706 |
-| `thread_tsv.tcl`: 8 threads, 100,000 `tsv::incr` each, one element | 1249 | 2458 |
-| `thread_tsv.tcl`: the same, 8 elements | 1214 | 3276 |
-| `thread_tpool.tcl`: 8 workers, 100,000 jobs | 466 | 639 |
+| `thread_map.tcl`: 1,000,000 integers in 8 parts, a proc on each | 120 | 264 |
+| `thread_pipe.tcl`: 4 stages, 100,000 messages | 479 | 439 |
+| `thread_tsv.tcl`: 8 threads, 100,000 `tsv::incr` each, one element | 268 | 1,481 |
+| `thread_tsv.tcl`: the same, 8 elements | 422 | 1,803 |
+| `thread_tpool.tcl`: 8 workers, 100,000 jobs | 639 | 556 |
 
 ## JSON
 
-MB/s of the input text, best of 5 runs, from `tools/bench-stdlib.py --only json` on the three standard files of the simdjson benchmarks. Each program times its own work, so the process start and the file read are not in the number. Other builds ran on the machine during the run. Higher is faster.
+MB/s of the input text, best of 5 runs, from `tools/bench-stdlib.py` on the three standard files of the simdjson benchmarks. Each program times its own work, so the process start and the file read are not in the number. Higher is faster. The C libraries simdjson and yyjson are in the TSV file of the workflow.
 
 `parse` makes the native value of each runtime: a Tcl dict, a JS object, a Python dict, or a Go `interface{}`.
 
 | Runtime | twitter | canada | citm_catalog |
 |---|---:|---:|---:|
-| **ztcl `ztcl::json parse`** | **794** | 228 | **952** |
-| Node.js `JSON.parse` | 354 | 259 | 494 |
-| Python `orjson` | 499 | 206 | 385 |
-| Python `pysimdjson` | 263 | 224 | 302 |
-| Python `json` | 176 | 63 | 207 |
-| Go `encoding/json` | 115 | 72 | 129 |
-| tclsh with tcllib `json` | 2.9 | 1.5 | 3.5 |
+| **ztcl `ztcl::json parse`** | **1,180** | 379 | **1,348** |
+| Python `orjson` | 820 | **523** | 751 |
+| Node.js `JSON.parse` | 595 | 201 | 629 |
+| Python `pysimdjson` | 493 | 442 | 587 |
+| Python `json` | 319 | 67 | 293 |
+| Go `encoding/json` | 125 | 87 | 132 |
+| tclsh with tcllib `json` | 3.8 | 2.2 | 4.8 |
 
 `query` reads one value at a path. `ztcl::json get` walks the structural index and makes only the value at the end.
 
 | Runtime | twitter | canada | citm_catalog |
 |---|---:|---:|---:|
-| **ztcl `ztcl::json get`** | **1308** | **615** | **1664** |
-| Python `orjson` | 491 | 245 | 376 |
-| Node.js | 355 | 259 | 493 |
-| Python `pysimdjson` | 295 | 216 | 274 |
-| Python `json` | 176 | 64 | 211 |
-| Go `encoding/json` | 114 | 74 | 128 |
-
-The C and C++ libraries are faster on most files: simdjson on each file, and yyjson on twitter and canada. [PR #55](https://github.com/beetlebugorg/ztcl/pull/55) has the full table with them.
+| **ztcl `ztcl::json get`** | **2,200** | **798** | **2,489** |
+| Python `orjson` | 821 | 521 | 626 |
+| Node.js | 601 | 200 | 628 |
+| Python `pysimdjson` | 484 | 439 | 506 |
+| Python `json` | 317 | 67 | 313 |
+| Go `encoding/json` | 127 | 86 | 129 |
 
 ## Point procs
 
@@ -109,4 +120,4 @@ The two paths give the same results, bit for bit.
 
 ## Size
 
-ztcl is one static binary and links no library. A CI gate (`tools/size-report.sh --check`) keeps the stripped x86-64 Linux runner with all modules under 6 MB, and `ztcl.wasm` with its modules under 1.5 MB.
+ztcl is one static binary and links no library. A CI gate (`tools/size-report.sh --check`) keeps the stripped x86-64 Linux runner with all modules under 6 MB, and `ztcl.wasm` with its modules under 1.5 MB. On the runner, the stripped `ReleaseFast` runner is 5,180,328 bytes (2,143,942 with gzip -9), and `ztcl hi.tcl` with one `puts` starts in 0.63 ms, the median of 50 runs (`tclsh` 8.6.16: 2.17 ms). `ztcl.wasm` is 1,488,640 bytes, and 507,742 with gzip -9.
