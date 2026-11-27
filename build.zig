@@ -129,6 +129,24 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }) })).step);
     }
+    // The I/O loop of task 06 on io_uring and epoll (Linux only). The
+    // tests run on both backends.
+    if (target.result.os.tag == .linux) {
+        const aio_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path("src/aio/aio.zig"),
+            .target = target,
+            .optimize = optimize,
+        }) }));
+        b.step("aio-test", "Run the tests of the aio loop on io_uring and epoll").dependOn(&aio_tests.step);
+        test_step.dependOn(&aio_tests.step);
+        const stress = b.addRunArtifact(b.addExecutable(.{ .name = "aio-stress", .root_module = b.createModule(.{
+            .root_source_file = b.path("src/aio/stress.zig"),
+            .target = target,
+            .optimize = .safe,
+        }) }));
+        stress.addPassthruArgs();
+        b.step("aio-stress", "Run the stress test of aio: zig build aio-stress -- --conns N --seconds S").dependOn(&stress.step);
+    }
     // The tests of C packages only, for a build with `-Dcext=true`.
     const cext_tests = b.addTest(.{ .root_module = ztcl, .filters = &.{"cext:"} });
     b.step("test-cext-native", "Run the tests of the native loader of C packages").dependOn(&b.addRunArtifact(cext_tests).step);
