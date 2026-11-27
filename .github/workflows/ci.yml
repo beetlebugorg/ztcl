@@ -355,12 +355,40 @@ jobs:
             case $out in "ztcl: a WASI 0.3.2 stream"*) ;; *) echo "wrong output: $out"; exit 1;; esac
           done
 
+  # The scheduled run: all 152 files with the suite runner, without and
+  # with the JIT. tools/suite-check.py fails the job when the pass count
+  # of a file drops below docs/dev/suite-counts.tsv.
+  suite-full:
+    name: Tcl 8.6.16 suite, all files
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Run the suite
+        run: |
+          zig build -Doptimize=ReleaseSafe suite-runner
+          r=$PWD/zig-out/bin/ztcl-suite
+          tools/fetch-tcl.sh core-8-6-16 > /dev/null
+          tools/suite.sh -a -r "$r" -o files.tsv | tail -1 &
+          tools/suite.sh -a -j -r "$r" -o files-jit.tsv | tail -1 &
+          wait
+          python3 -I tools/suite-check.py files.tsv files-jit.tsv | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: suite-counts
+          path: "*.tsv"
+
   # A failure of the scheduled full run opens an issue, so it is fixed
   # in the next batch of work.
   report:
     name: Report a failure of the full run
     if: failure() && github.event_name == 'schedule'
-    needs: [test, build-native, jit-macos, suite, wasm, wasi]
+    needs: [test, build-native, jit-macos, suite, suite-full, wasm, wasi]
     runs-on: ubuntu-latest
     permissions:
       issues: write

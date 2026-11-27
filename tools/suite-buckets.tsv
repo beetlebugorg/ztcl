@@ -1,0 +1,23 @@
+# The bucket of each test of the Tcl 8.6.16 suite that does not pass.
+# tools/suite-md.py reads this file. The first rule that matches a test
+# is its bucket. Columns: kind (skip, fail, unreached, or *), a glob for
+# `file/test name`, a regular expression for the detail (the constraint
+# of a skip, the start of the result of a failure), the bucket, and the
+# reason. Buckets: bug, feature, message, internals, design, platform,
+# tcl, untriaged.
+#
+# Skips that tclsh on Linux also has.
+skip	*	^(emptyTest|knownBug|nonPortable|extensive|userInteraction|knownMsvcBug|interactive)$	tcl	tclsh skips it too
+skip	*	^(unixCrash)$	tcl	tclsh skips it too
+# Other platforms.
+skip	*	^(win|winOnly|pc|nt|mac|macOnly|macOrPc|macOrWin|winLessThan10|longIs32bit|wideIs32bit|bigEndian|ucs2|macosxFileAttr|Unix|wideBiggerThanInt)$	platform	a constraint of another platform or word size
+skip	*	^expr:!ieeeFloatingPoint$	platform	needs a machine without IEEE floats
+# The C test commands of the Tcl test binary.
+skip	*	^memory$	internals	the memory debugging of a Tcl build with TCL_MEM_DEBUG
+skip	*	^pkga\.soRequired$	internals	a C test package of the Tcl build
+skip	*	^teststaticpkg(_8\.x)?$	internals	a C test command of the Tcl test binary
+skip	*	^test[a-z0-9]+$	internals	a C test command of the Tcl test binary, with no stand-in yet
+fail	*	invalid command name "test[a-z0-9]+"	internals	a C test command of the Tcl test binary, with no stand-in yet
+# Missing commands and packages.
+skip	*	^history$	feature	the `history` command
+skip	*	^http2\.9\.[0-9]+$	feature	the `http` package
