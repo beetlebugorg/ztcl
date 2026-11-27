@@ -25,6 +25,14 @@
 //! first IPv4 name server of /etc/resolv.conf when `Config.dns` is on.
 //! A flow with no traffic for `flow_idle_ns` closes.
 //!
+//! DNS is part of the policy: a lookup through the name server of the
+//! host is a way out of the guest, even for a guest with no other route
+//! out (a tunnel in the names of the queries). So the engine reads each
+//! query to 10.0.2.3, and the query goes to the server only when
+//! `Config.dns_allow` permits its name and the query is in the rate
+//! limit. Each other query gets a REFUSED answer from the engine. Each
+//! query and each refusal is an event.
+//!
 //! SPDX-License-Identifier: BSD-2-Clause
 const std = @import("std");
 const builtin = @import("builtin");
@@ -40,6 +48,10 @@ pub const Proto = enum(u8) { tcp = 6, udp = 17 };
 
 pub const Event = struct {
     pub const Kind = enum { connect, refuse, close, dns, forward };
+    /// The `rule` of a refusal by the rate limit of DNS.
+    pub const rule_rate = -2;
+    /// The `rule` of a bad DNS query.
+    pub const rule_bad = -3;
     kind: Kind,
     proto: Proto,
     guest_port: u16,
@@ -51,6 +63,8 @@ pub const Event = struct {
     rule: i32 = -1,
     bytes_in: u64 = 0,
     bytes_out: u64 = 0,
+    /// The name of a DNS query, lower case, valid during the hook.
+    name: []const u8 = "",
 };
 
 pub const Config = struct {
@@ -59,6 +73,11 @@ pub const Config = struct {
     policy: ?*const fn (ctx: ?*anyopaque, proto: Proto, addr: Ip4, port: u16) bool = null,
     policy_ctx: ?*anyopaque = null,
     dns: bool = true,
+    /// The names that the DNS relay can look up, on the thread of the
+    /// engine, with `policy_ctx`. Null permits no name.
+    dns_allow: ?*const fn (ctx: ?*anyopaque, name: []const u8) bool = null,
+    /// The DNS queries for each second, with a burst of twice as many.
+    dns_rate: u32 = 50,
     /// The hook of `ztcl::vm netlog`, on the thread of the engine.
     event: ?*const fn (ctx: ?*anyopaque, ev: *const Event) void = null,
     event_ctx: ?*anyopaque = null,
@@ -120,6 +139,9 @@ pub const Nat = struct {
     flows: [max_flows]Flow = @splat(.{}),
     watches: [max_watch]Watch = @splat(.{}),
     dns_server: ?Ip4 = null,
+    /// The token bucket of the DNS rate limit, in 1/1000 of a query.
+    dns_tokens: u64 = 0,
+    dns_last: u64 = 0,
     stats_: Stats = .{},
     /// The frames for the guest that wait for receive buffers.
     ring: *[ring_len][nat.max_frame]u8,
@@ -161,6 +183,8 @@ pub const Nat = struct {
         errdefer os.close(n.poll);
         n.wake_fd = try os.wakeCreate(n.poll, tag_wake);
         if (cfg.dns) n.dns_server = readResolvConf();
+        n.dns_tokens = @as(u64, cfg.dns_rate) * 2000;
+        n.dns_last = now();
         return n;
     }
 
@@ -342,6 +366,7 @@ pub const Nat = struct {
 
     fn udpSend(ctx: *anyopaque, sport: u16, dst: Ip4, dport: u16, payload: []const u8) void {
         const n: *Nat = @ptrCast(@alignCast(ctx));
+        if (std.mem.eql(u8, &dst, &nat.dns_ip) and !n.dnsQuery(sport, dport, payload)) return;
         const f = n.flowFor(sport, dst, dport) orelse {
             n.stats_.dropped += 1;
             return;
@@ -390,8 +415,8 @@ pub const Nat = struct {
         else
             dst;
         const is_dns = std.mem.eql(u8, &dst, &nat.dns_ip);
-        // The DNS server of the host is the lookup of the NAT itself, as
-        // `sys.resolve` is for a script, so the policy does not apply.
+        // A flow to the DNS address carries only the queries that passed
+        // `dnsQuery`, so the policy of addresses does not apply to it.
         if (!is_dns) if (n.cfg.policy) |pol| if (!pol(n.cfg.policy_ctx, .udp, host, dport)) {
             n.event(.{ .kind = .refuse, .proto = .udp, .guest_port = sport, .addr = host, .port = dport });
             return null;
@@ -402,7 +427,7 @@ pub const Nat = struct {
             return null;
         };
         n.flows[i] = .{ .fd = fd, .sport = sport, .dst = dst, .dport = dport, .host = host, .last = now() };
-        n.event(.{ .kind = if (is_dns) .dns else .connect, .proto = .udp, .guest_port = sport, .addr = host, .port = dport });
+        if (!is_dns) n.event(.{ .kind = .connect, .proto = .udp, .guest_port = sport, .addr = host, .port = dport });
         return &n.flows[i];
     }
 
@@ -451,7 +476,65 @@ pub const Nat = struct {
         }
     }
 
-    fn event(n: *Nat, ev: Event) void {
+    /// Checks a DNS query of the guest. True: the query goes to the
+    /// server. False: the engine answered REFUSED, or dropped it.
+    fn dnsQuery(n: *Nat, sport: u16, dport: u16, q: []const u8) bool {
+        const server = n.dns_server orelse {
+            n.stats_.dropped += 1;
+            return false;
+        };
+        if (dport != 53) {
+            n.stats_.dropped += 1;
+            return false;
+        }
+        var nb: [256]u8 = undefined;
+        var e: Event = .{ .kind = .refuse, .proto = .udp, .guest_port = sport, .addr = server, .port = 53, .bytes_out = q.len };
+        const qd = parseQuery(q, &nb) orelse {
+            e.rule = Event.rule_bad;
+            n.event(e);
+            // A query with a whole header gets an answer, with no
+            // question.
+            if (q.len >= 12) n.dnsRefuse(sport, q, 12);
+            return false;
+        };
+        e.name = qd.name;
+        // The bucket fills at `dns_rate` queries each second, up to
+        // twice that.
+        const t = now();
+        const cap = @as(u64, n.cfg.dns_rate) * 2000;
+        n.dns_tokens = @min(cap, n.dns_tokens +| (t - n.dns_last) / std.time.ns_per_us * n.cfg.dns_rate / 1000);
+        n.dns_last = t;
+        if (n.dns_tokens < 1000) {
+            e.rule = Event.rule_rate;
+            n.event(e);
+            n.dnsRefuse(sport, q, qd.end);
+            return false;
+        }
+        n.dns_tokens -= 1000;
+        const ok = if (n.cfg.dns_allow) |f| f(n.cfg.policy_ctx, qd.name) else false;
+        if (!ok) {
+            n.event(e);
+            n.dnsRefuse(sport, q, qd.end);
+            return false;
+        }
+        e.kind = .dns;
+        n.event(e);
+        return true;
+    }
+
+    /// The answer REFUSED (RCODE 5, RFC 1035 4.1.1) to a query, with the
+    /// header and the question: the first `qlen` bytes of `q`.
+    fn dnsRefuse(n: *Nat, sport: u16, q: []const u8, qlen: usize) void {
+        var r: [12 + 260]u8 = undefined;
+        @memcpy(r[0..qlen], q[0..qlen]);
+        r[2] = 0x80 | (q[2] & 0x79); // QR, the opcode, RD
+        r[3] = 0x80 | 5; // RA, REFUSED
+        std.mem.writeInt(u16, r[4..6], if (qlen > 12) 1 else 0, .big);
+        @memset(r[6..12], 0);
+        n.stack.udpToGuest(nat.dns_ip, 53, sport, r[0..qlen]);
+    }
+
+    pub fn event(n: *Nat, ev: Event) void {
         if (n.cfg.event) |hook| hook(n.cfg.event_ctx, &ev);
     }
 };
@@ -460,6 +543,62 @@ fn now() u64 {
     var ts: std.posix.timespec = undefined;
     _ = std.posix.system.clock_gettime(.MONOTONIC, &ts);
     return @as(u64, @intCast(ts.sec)) * std.time.ns_per_s + @as(u64, @intCast(ts.nsec));
+}
+
+pub const Query = struct {
+    /// The name in lower case, with dots and no last dot.
+    name: []const u8,
+    /// The end of the question in the query.
+    end: usize,
+};
+
+/// Reads a standard query (RFC 1035 4.1) with one question. The name
+/// goes to `buf`. Gives null for each other message: an answer, another
+/// opcode, more than one question, a record other than one OPT of EDNS,
+/// a compression pointer, or a bad label.
+pub fn parseQuery(q: []const u8, buf: *[256]u8) ?Query {
+    if (q.len < 12 + 5) return null;
+    if (q[2] & 0xf8 != 0) return null; // QR 0, opcode 0 (QUERY)
+    const qd = std.mem.readInt(u16, q[4..6], .big);
+    const an = std.mem.readInt(u16, q[6..8], .big);
+    const ns = std.mem.readInt(u16, q[8..10], .big);
+    const ar = std.mem.readInt(u16, q[10..12], .big);
+    if (qd != 1 or an != 0 or ns != 0 or ar > 1) return null;
+    var i: usize = 12;
+    var len: usize = 0;
+    while (true) {
+        if (i >= q.len) return null;
+        const l = q[i];
+        i += 1;
+        if (l == 0) break;
+        // A name is at most 253 characters (RFC 1035 3.1).
+        if (l > 63 or i + l > q.len or len + l + 1 > 254) return null;
+        if (len > 0) {
+            buf[len] = '.';
+            len += 1;
+        }
+        for (q[i..][0..l]) |ch| {
+            // Letters, digits, '-', and '_' (of SRV and other labels).
+            if (!std.ascii.isAlphanumeric(ch) and ch != '-' and ch != '_') return null;
+            buf[len] = std.ascii.toLower(ch);
+            len += 1;
+        }
+        i += l;
+    }
+    if (len == 0 or i + 4 > q.len) return null;
+    return .{ .name = buf[0..len], .end = i + 4 };
+}
+
+/// A name matches a host of an allow list: the same name, or a pattern
+/// `*.SUFFIX` and a name below SUFFIX. Case does not matter.
+pub fn nameMatch(pattern: []const u8, name: []const u8) bool {
+    var p = pattern;
+    if (p.len > 0 and p[p.len - 1] == '.') p = p[0 .. p.len - 1];
+    if (std.mem.startsWith(u8, p, "*.")) {
+        const suf = p[1..];
+        return name.len > suf.len and std.ascii.endsWithIgnoreCase(name, suf);
+    }
+    return std.ascii.eqlIgnoreCase(p, name);
 }
 
 /// The first IPv4 `nameserver` of /etc/resolv.conf.
@@ -757,4 +896,143 @@ test "nat engine: parseIp4" {
     try std.testing.expectEqual(@as(?Ip4, .{ 10, 0, 2, 3 }), parseIp4("10.0.2.3"));
     try std.testing.expectEqual(@as(?Ip4, null), parseIp4("10.0.2"));
     try std.testing.expectEqual(@as(?Ip4, null), parseIp4("::1"));
+}
+
+fn dnsQueryMsg(buf: []u8, id: u16, name: []const u8) []u8 {
+    @memset(buf[0..12], 0);
+    std.mem.writeInt(u16, buf[0..2], id, .big);
+    buf[2] = 0x01; // RD
+    std.mem.writeInt(u16, buf[4..6], 1, .big);
+    var i: usize = 12;
+    var it = std.mem.splitScalar(u8, name, '.');
+    while (it.next()) |l| {
+        buf[i] = @intCast(l.len);
+        @memcpy(buf[i + 1 ..][0..l.len], l);
+        i += 1 + l.len;
+    }
+    buf[i] = 0;
+    std.mem.writeInt(u16, buf[i + 1 ..][0..2], 1, .big); // A
+    std.mem.writeInt(u16, buf[i + 3 ..][0..2], 1, .big); // IN
+    return buf[0 .. i + 5];
+}
+
+const DnsLog = struct {
+    var asked: u32 = 0;
+    var refused: u32 = 0;
+    var last_rule: i32 = 0;
+    var last_name: [256]u8 = undefined;
+    var last_len: usize = 0;
+    fn ev(_: ?*anyopaque, e: *const Event) void {
+        if (e.kind == .dns) asked += 1;
+        if (e.kind == .refuse) {
+            refused += 1;
+            last_rule = e.rule;
+        }
+        @memcpy(last_name[0..e.name.len], e.name);
+        last_len = e.name.len;
+    }
+    fn allow(_: ?*anyopaque, name: []const u8) bool {
+        return nameMatch("example.com", name) or nameMatch("*.ok.test", name);
+    }
+    fn reset() void {
+        asked = 0;
+        refused = 0;
+        last_rule = 0;
+    }
+};
+
+/// Sends one DNS query of the guest, and gives the RCODE of the answer
+/// of the engine, or null when the query went to the server.
+fn dnsAsk(fd: i32, id: u16, name: []const u8) !?u8 {
+    var qb: [300]u8 = undefined;
+    var fb: [nat.max_frame]u8 = undefined;
+    const before = DnsLog.asked + DnsLog.refused;
+    const refused_before = DnsLog.refused;
+    _ = linux_os.send(fd, udpFrame(&fb, nat.dns_ip, 40053, 53, dnsQueryMsg(&qb, id, name)));
+    var tries: u32 = 0;
+    while (DnsLog.asked + DnsLog.refused == before and tries < 500) : (tries += 1) {
+        var none_ = [0]linux.pollfd{};
+        _ = linux.poll(&none_, 0, 1);
+    }
+    if (DnsLog.asked + DnsLog.refused == before) return error.Timeout;
+    if (DnsLog.refused == refused_before) return null;
+    // A refusal: the answer of the engine.
+    var pfd = [_]linux.pollfd{.{ .fd = fd, .events = linux.POLL.IN, .revents = 0 }};
+    var out: [nat.max_frame]u8 = undefined;
+    while (true) {
+        if (linux.poll(&pfd, 1, 2000) != 1) return error.Timeout;
+        const k: usize = @intCast(linux_os.recv(fd, &out));
+        if (k < 42 + 12 or out[23] != 17) continue;
+        const d = out[42..k];
+        if (std.mem.readInt(u16, d[0..2], .big) != id) continue;
+        try std.testing.expect(d[2] & 0x80 != 0);
+        return d[3] & 0xf;
+    }
+}
+
+test "nat engine: DNS is part of the policy" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    inline for (.{ false, true }) |with_list| {
+        var pair: [2]i32 = undefined;
+        try std.testing.expectEqual(@as(usize, 0), linux.socketpair(linux.AF.UNIX, linux.SOCK.DGRAM | linux.SOCK.CLOEXEC, 0, &pair));
+        defer _ = linux.close(pair[1]);
+        DnsLog.reset();
+        const n = try Nat.initSocket(std.testing.allocator, .{
+            .dns = false,
+            .event = DnsLog.ev,
+            .dns_allow = if (with_list) DnsLog.allow else null,
+            .dns_rate = 3,
+        }, pair[0]);
+        defer n.deinit();
+        // A name server with no program on it: a query that passes goes
+        // there, and the test sees its event.
+        n.dns_server = .{ 127, 0, 0, 1 };
+        n.dns_tokens = 6000;
+        try n.start();
+        if (!with_list) {
+            // No allow list (the loopback policy): each name is refused.
+            try std.testing.expectEqual(@as(?u8, 5), try dnsAsk(pair[1], 1, "example.com"));
+            try std.testing.expectEqualStrings("example.com", DnsLog.last_name[0..DnsLog.last_len]);
+            try std.testing.expectEqual(@as(u32, 0), DnsLog.asked);
+        } else {
+            try std.testing.expectEqual(@as(?u8, null), try dnsAsk(pair[1], 2, "Example.COM"));
+            try std.testing.expectEqual(@as(u32, 1), DnsLog.asked);
+            try std.testing.expectEqual(@as(?u8, null), try dnsAsk(pair[1], 3, "a.ok.test"));
+            try std.testing.expectEqual(@as(?u8, 5), try dnsAsk(pair[1], 4, "evil.test"));
+            try std.testing.expectEqual(@as(i32, -1), DnsLog.last_rule);
+            // The shape of a tunnel: a long random label below a name
+            // of the list. Only the name itself is on the list.
+            try std.testing.expectEqual(@as(?u8, 5), try dnsAsk(pair[1], 5, "q2x9f0c1b7a6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6c5b4a3f2.example.com"));
+            // The bucket had 6 queries: 4 are gone, and the next 2 go
+            // through the list; then the limit refuses.
+            try std.testing.expectEqual(@as(?u8, 5), try dnsAsk(pair[1], 6, "evil.test"));
+            try std.testing.expectEqual(@as(?u8, 5), try dnsAsk(pair[1], 7, "evil.test"));
+            try std.testing.expectEqual(@as(?u8, 5), try dnsAsk(pair[1], 8, "example.com"));
+            try std.testing.expectEqual(Event.rule_rate, DnsLog.last_rule);
+        }
+    }
+}
+
+test "nat engine: a DNS query, and the match of a name" {
+    var nb: [256]u8 = undefined;
+    var qb: [300]u8 = undefined;
+    const q = dnsQueryMsg(&qb, 9, "WWW.Example.com");
+    const r = parseQuery(q, &nb).?;
+    try std.testing.expectEqualStrings("www.example.com", r.name);
+    try std.testing.expectEqual(q.len, r.end);
+    // A compression pointer, an answer, and a bad character.
+    var bad = qb;
+    bad[12] = 0xc0;
+    try std.testing.expect(parseQuery(bad[0..q.len], &nb) == null);
+    bad = qb;
+    bad[2] |= 0x80;
+    try std.testing.expect(parseQuery(bad[0..q.len], &nb) == null);
+    bad = qb;
+    bad[13] = '/';
+    try std.testing.expect(parseQuery(bad[0..q.len], &nb) == null);
+    try std.testing.expect(nameMatch("*.ok.test", "a.b.ok.test"));
+    try std.testing.expect(!nameMatch("*.ok.test", "ok.test"));
+    try std.testing.expect(!nameMatch("*.ok.test", "evilok.test"));
+    try std.testing.expect(nameMatch("example.com.", "example.com"));
+    try std.testing.expect(!nameMatch("example.com", "x.example.com"));
 }
