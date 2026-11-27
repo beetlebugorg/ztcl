@@ -387,6 +387,9 @@ fn fetchCmd(it: *Interp, args: []const Value, update: bool) Error!Value {
         } else return if (update) it.wrongArgs(use_update) else it.wrongArgs(use_fetch);
         i += 2;
     }
+    // A mirror is a host of the script: the network policy must allow
+    // it. The release host of ztcl is the default and needs no rule.
+    if (base) |b| try mirrorAllowed(it, b);
     const s = try store(it);
     defer s.close();
     if (base) |b| return fetchFrom(it, hook, s, a, if (std.mem.endsWith(u8, b, "/")) b else try std.fmt.allocPrint(a, "{s}/", .{b}), force, down);
@@ -414,6 +417,16 @@ fn fetchCmd(it: *Interp, args: []const Value, update: bool) Error!Value {
     it.result = first.?.result;
     it.error_code = first.?.code;
     return error.TclError;
+}
+
+fn mirrorAllowed(it: *Interp, url: []const u8) Error!void {
+    const u = std.Uri.parse(url) catch return it.fail("bad URL \"{s}\"", .{url});
+    const h = u.host orelse return it.fail("bad URL \"{s}\"", .{url});
+    const host = switch (h) {
+        .raw, .percent_encoded => |x| x,
+    };
+    const port: u16 = u.port orelse if (std.mem.eql(u8, u.scheme, "http")) 80 else 443;
+    try @import("sock.zig").checkHost(it, host, port);
 }
 
 /// The tags `vm-image-vN` of a list of GitHub releases (JSON), with no

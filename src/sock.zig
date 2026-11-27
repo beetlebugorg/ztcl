@@ -243,6 +243,12 @@ fn allowed(it: *Interp, host: []const u8, p: u16, what: []const u8) Error![]sys.
     return out.items;
 }
 
+/// Checks that the network policy allows a connection to `host` and
+/// `port`, for a download that a host hook makes.
+pub fn checkHost(it: *Interp, host: []const u8, port: u16) Error!void {
+    _ = try allowed(it, host, port, "host");
+}
+
 /// Adds a connection that a server accepted. Gives null and closes it
 /// when the policy does not allow the peer.
 pub fn acceptable(it: *Interp, server: *chan.Channel, conn: sys.Accepted) bool {
