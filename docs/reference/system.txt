@@ -81,10 +81,10 @@ ex: lindex [platform::patterns [platform::identify]] end => tcl
 
 == msgcat
 syn: msgcat::mc src ?arg ...?
-does: Message catalogs for text in more than one language. `mcset` adds a translation for a locale, `mclocale` sets the locale, and `mc` gives the text for the current locale, with `format` on the arguments, or calls `mcunknown`. `mcload` sources the `.msg` file of each preferred locale of a folder, `mcpreferences` gives the locale and its parents, `mcexists` tests for a translation, and `mcmax` gives the longest translation.
+does: Message catalogs for text in more than one language, as the msgcat package 1.6.1 of Tcl. Each namespace is a package with its own messages and options. `mcset` adds a translation for a locale, `mclocale` sets the locale, and `mc` gives the text for the current locale and the namespace of the caller or one of its parents, with `format` on the arguments, or calls `mcunknown`. `mcload` sources the `.msg` file of each loaded locale of a folder, `mcpreferences` gives the locale and its parents, `mcexists` tests for a translation, and `mcmax` gives the longest translation. `mcpackagelocale` gives a namespace its own locale, `mcpackageconfig` sets its folder and its callbacks, `mcloadedlocales` lists or clears the loaded locales, and `mcforgetpackage` removes the data of a namespace.
 cap: clock
 flags: --allow clock
-names: msgcat::mc msgcat::mclocale msgcat::mcmset msgcat::mcset msgcat::mcexists msgcat::mcload msgcat::mcmax msgcat::mcpreferences
+names: msgcat::mc msgcat::mclocale msgcat::mcmset msgcat::mcset msgcat::mcexists msgcat::mcload msgcat::mcmax msgcat::mcpreferences msgcat::mcflset msgcat::mcflmset msgcat::mcunknown msgcat::mcloadedlocales msgcat::mcpackagelocale msgcat::mcpackageconfig msgcat::mcforgetpackage
 ex: msgcat::mclocale fr; msgcat::mcset fr Hello Bonjour; msgcat::mc Hello => Bonjour
 
 == exec

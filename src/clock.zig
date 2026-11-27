@@ -1,4 +1,5 @@
-//! The optional `clock` command and a small `msgcat` (capability `clock`).
+//! The optional `clock` command and the `msgcat` package (capability
+//! `clock`).
 //!
 //! The time and the zone data come only from `Interp.clock_host`, a
 //! callback of the embedder. The conversions are pure: a date is a
@@ -29,7 +30,6 @@ pub const Host = struct {
 pub const State = struct {
     /// Locale name to (key to value).
     locales: std.StringHashMapUnmanaged(std.StringHashMapUnmanaged(Value)) = .empty,
-    current: []const u8 = "c",
     zones: std.StringHashMapUnmanaged(*Zone) = .empty,
 };
 
@@ -395,8 +395,7 @@ fn zoneOf(it: *Interp, spec: []const u8) Error!*const Zone {
 
 // ---- msgcat and locales ----
 
-/// The commands of msgcat in Tcl: mcload, mcpreferences, mcmax, and the
-/// export list for `namespace import`.
+/// The msgcat package in Tcl.
 const msgcat_script = @embedFile("msgcat.tcl");
 
 const root_keys = [_]struct { []const u8, []const u8 }{
@@ -458,63 +457,13 @@ fn setMsg(it: *Interp, locale: []const u8, key: Value, v: Value) Error!void {
     try gop.value_ptr.put(a, try a.dupe(u8, try it.str(key)), v);
 }
 
-fn cmdMcset(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len != 3 and argv.len != 4) return it.wrongArgs("::msgcat::mcset locale src ?translation?");
-    const v = if (argv.len == 4) argv[3] else argv[2];
-    try setMsg(it, try it.str(argv[1]), argv[2], v);
-    return v;
-}
-
-fn cmdMcmset(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len != 3) return it.wrongArgs("::msgcat::mcmset locale pairs");
-    const l = try it.list(argv[2]);
-    if (l.len % 2 != 0) return it.fail("bad translation list: should be \"locale {{src dest ...}}\"", .{});
-    var k: usize = 0;
-    while (k < l.len) : (k += 2) try setMsg(it, try it.str(argv[1]), l[k], l[k + 1]);
-    return .{ .int = @intCast(l.len / 2) };
-}
-
-/// `::msgcat::mc src ?arg ...?`: the translation of src in the locale
-/// and its parents. With no translation, `::msgcat::mcunknown` gives
-/// the text when it exists. With args, the text goes through `format`.
-fn cmdMc(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len < 2) return it.wrongArgs("::msgcat::mc src ?arg ...?");
-    const a = it.alloc();
-    const text = lookupIn(it, it.clock.current, try it.str(argv[1])) orelse {
-        if (it.findCommand("::msgcat::mcunknown") != null) {
-            var words = try a.alloc(Value, argv.len + 1);
-            words[0] = .{ .str = "::msgcat::mcunknown" };
-            words[1] = .{ .str = it.clock.current };
-            @memcpy(words[2..], argv[1..]);
-            return it.eval(try it.str(try value.newList(a, words)));
-        }
-        if (argv.len == 2) return argv[1];
-        return formatWith(it, argv[1], argv[2..]);
-    };
-    if (argv.len == 2) return text;
-    return formatWith(it, text, argv[2..]);
-}
-
-fn formatWith(it: *Interp, fmt: Value, args: []const Value) Error!Value {
-    const a = it.alloc();
-    var words = try a.alloc(Value, args.len + 2);
-    words[0] = .{ .str = "::format" };
-    words[1] = fmt;
-    @memcpy(words[2..], args);
-    return it.eval(try it.str(try value.newList(a, words)));
-}
-
-/// `::msgcat::mcexists src`: 1 when the locale or a parent has src.
-fn cmdMcexists(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len < 2) return it.wrongArgs("::msgcat::mcexists ?-exactnamespace? ?-exactlocale? src");
-    const src = try it.str(argv[argv.len - 1]);
-    return .{ .int = @intFromBool(lookupIn(it, it.clock.current, src) != null) };
-}
-
-fn cmdMclocale(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len > 2) return it.wrongArgs("::msgcat::mclocale ?newLocale?");
-    if (argv.len == 2) it.clock.current = try std.ascii.allocLowerString(it.alloc(), try it.str(argv[1]));
-    return .{ .str = it.clock.current };
+/// `::tcl::clock::SetMsg locale src translation`: the store of the
+/// clock formats. The `mcset` of msgcat.tcl calls it for the namespace
+/// `::tcl::clock`.
+fn cmdSetMsg(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len != 4) return it.wrongArgs("::tcl::clock::SetMsg locale src translation");
+    try setMsg(it, try it.str(argv[1]), argv[2], argv[3]);
+    return argv[3];
 }
 
 // ---- format ----
@@ -1376,11 +1325,7 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try it.register("clock", cmdClock);
     try it.register("time", cmdTime);
     try it.register("timerate", cmdTimerate);
-    try it.register("msgcat::mcset", cmdMcset);
-    try it.register("msgcat::mcmset", cmdMcmset);
-    try it.register("msgcat::mc", cmdMc);
-    try it.register("msgcat::mclocale", cmdMclocale);
-    try it.register("msgcat::mcexists", cmdMcexists);
+    try it.register("tcl::clock::SetMsg", cmdSetMsg);
     _ = try it.internNs("msgcat");
     _ = it.eval(msgcat_script) catch {};
     if (it.capabilities & @backingInt(interp.Capability.package) != 0) {

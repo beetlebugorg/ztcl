@@ -587,7 +587,7 @@ syn: tcl::OptProc name description body
 syn: platform::generic
 syn: platform::identify
 syn: platform::patterns identifier
-== msgcat msgcat::mc msgcat::mclocale msgcat::mcmset msgcat::mcset msgcat::mcexists msgcat::mcload msgcat::mcmax msgcat::mcpreferences
+== msgcat msgcat::mc msgcat::mclocale msgcat::mcmset msgcat::mcset msgcat::mcexists msgcat::mcload msgcat::mcmax msgcat::mcpreferences msgcat::mcflset msgcat::mcflmset msgcat::mcunknown msgcat::mcloadedlocales msgcat::mcpackagelocale msgcat::mcpackageconfig msgcat::mcforgetpackage
 syn: msgcat::mc src ?arg ...?
 == exec
 syn: exec ?-option ...? arg ?arg ...?
