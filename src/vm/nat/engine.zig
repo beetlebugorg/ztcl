@@ -38,6 +38,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const nat = @import("nat.zig");
 const tcp = @import("tcp.zig");
+pub const policy = @import("policy.zig");
 const vnet = @import("../virtio/net.zig");
 
 pub const Ip4 = nat.Ip4;
@@ -53,6 +54,9 @@ pub const Event = struct {
     pub const rule_rate = -2;
     /// The `rule` of a bad DNS query.
     pub const rule_bad = -3;
+    /// The `rule` of an address or name that no rule of `allow` matches.
+    /// A refusal by `deny` has the index of its rule, 0 or more.
+    pub const rule_not_allowed = -4;
     kind: Kind,
     proto: Proto,
     guest_port: u16,
@@ -71,7 +75,13 @@ pub const Event = struct {
 pub const Config = struct {
     /// The network policy of the embedder for each host address, before
     /// a socket opens. Null allows each address.
-    policy: ?*const fn (ctx: ?*anyopaque, proto: Proto, addr: Ip4, port: u16) bool = null,
+    /// `name` is the DNS name that the address came from, when the
+    /// engine knows it (see `policy.Policy.learn`).
+    policy: ?*const fn (ctx: ?*anyopaque, proto: Proto, addr: Ip4, port: u16, name: ?[]const u8) bool = null,
+    /// The allow and deny lists of the guest (`-allow`, `-deny`), which
+    /// narrow `policy`. The engine copies them.
+    allow: []const policy.Rule = &.{},
+    deny: []const policy.Rule = &.{},
     policy_ctx: ?*anyopaque = null,
     dns: bool = true,
     /// The names that the DNS relay can look up, on the thread of the
@@ -128,6 +138,14 @@ const Flow = struct {
     bytes_out: u64 = 0,
 };
 
+const Pending = struct {
+    sport: u16 = 0,
+    id: u16 = 0,
+    used: bool = false,
+    name: [253]u8 = undefined,
+    name_len: u8 = 0,
+};
+
 const Watch = struct {
     fd: i32 = -1,
     ctx: *anyopaque = undefined,
@@ -152,6 +170,11 @@ pub const Nat = struct {
     /// The token bucket of the DNS rate limit, in 1/1000 of a query.
     dns_tokens: u64 = 0,
     dns_last: u64 = 0,
+    pol: *policy.Policy = undefined,
+    /// The DNS queries that went to the server, for the names of the
+    /// addresses of their answers.
+    pending: [64]Pending = @splat(.{}),
+    pending_next: usize = 0,
     stats_: Stats = .{},
     /// The frames for the guest that wait for receive buffers.
     ring: *[ring_len][nat.max_frame]u8,
@@ -191,6 +214,8 @@ pub const Nat = struct {
         n.* = .{ .alloc = alloc, .cfg = cfg, .ring = ring, .stack = .{ .host = .{ .ctx = n, .emit = emit, .udpSend = udpSend } } };
         try n.tcp.init(alloc, now() ^ @intFromPtr(n));
         errdefer n.tcp.deinit(alloc);
+        n.pol = try policy.Policy.init(alloc, cfg.allow, cfg.deny);
+        errdefer n.pol.deinit();
         n.poll = try os.pollCreate();
         errdefer os.close(n.poll);
         n.wake_fd = try os.wakeCreate(n.poll, tag_wake);
@@ -205,6 +230,7 @@ pub const Nat = struct {
         n.stop();
         for (&n.flows) |*f| if (f.fd >= 0) os.close(f.fd);
         n.tcp.deinit(n.alloc);
+        n.pol.deinit();
         if (n.sock >= 0) os.close(n.sock);
         if (!on_mac and n.wake_fd >= 0) os.close(n.wake_fd);
         os.close(n.poll);
@@ -446,9 +472,19 @@ pub const Nat = struct {
         // passed `dnsQuery`. TCP to it has no relay, so no name passes
         // the check of the names there.
         if (std.mem.eql(u8, &dst, &nat.dns_ip)) return proto == .udp;
-        const pol = n.cfg.policy orelse return true;
-        if (pol(n.cfg.policy_ctx, proto, host, dport)) return true;
-        n.event(.{ .kind = .refuse, .proto = proto, .guest_port = sport, .addr = host, .port = dport });
+        const t = now();
+        const name = n.pol.nameOf(host, t);
+        var ev: Event = .{ .kind = .refuse, .proto = proto, .guest_port = sport, .addr = host, .port = dport, .name = name orelse "" };
+        if (n.cfg.policy) |pol| if (!pol(n.cfg.policy_ctx, proto, host, dport, name)) {
+            n.event(ev);
+            return false;
+        };
+        switch (n.pol.check(host, dport, t)) {
+            .allow => return true,
+            .not_allowed => ev.rule = Event.rule_not_allowed,
+            .deny => |k| ev.rule = k,
+        }
+        n.event(ev);
         return false;
     }
 
@@ -499,6 +535,7 @@ pub const Nat = struct {
             if (r < 0) return;
             f.last = now();
             f.bytes_in += @intCast(r);
+            if (std.mem.eql(u8, &f.dst, &nat.dns_ip)) n.dnsAnswer(f.sport, buf[0..@intCast(r)]);
             n.stack.udpToGuest(f.dst, f.dport, f.sport, buf[0..@intCast(r)]);
         }
     }
@@ -552,9 +589,46 @@ pub const Nat = struct {
             n.dnsRefuse(sport, q, qd.end);
             return false;
         }
+        const d = n.pol.checkName(qd.name);
+        if (d != .allow) {
+            e.rule = switch (d) {
+                .deny => |k| k,
+                else => Event.rule_not_allowed,
+            };
+            n.event(e);
+            n.dnsRefuse(sport, q, qd.end);
+            return false;
+        }
+        // The answer gives the addresses of the name.
+        const pq = &n.pending[n.pending_next];
+        n.pending_next = (n.pending_next + 1) % n.pending.len;
+        pq.* = .{ .sport = sport, .id = std.mem.readInt(u16, q[0..2], .big), .used = true, .name_len = @intCast(qd.name.len) };
+        @memcpy(pq.name[0..qd.name.len], qd.name);
         e.kind = .dns;
         n.event(e);
         return true;
+    }
+
+    /// An answer of the server: its A records become learned addresses
+    /// of the name of the query.
+    fn dnsAnswer(n: *Nat, sport: u16, m: []const u8) void {
+        if (m.len < 12) return;
+        const id = std.mem.readInt(u16, m[0..2], .big);
+        for (&n.pending) |*pq| {
+            if (!pq.used or pq.sport != sport or pq.id != id) continue;
+            pq.used = false;
+            const L = struct {
+                n: *Nat,
+                name: []const u8,
+                t: u64,
+                fn got(l: *const @This(), a: Ip4, ttl: u32) void {
+                    l.n.pol.learn(l.name, a, ttl, l.t);
+                }
+            };
+            const l: L = .{ .n = n, .name = pq.name[0..pq.name_len], .t = now() };
+            policy.answers(m, &l, L.got);
+            return;
+        }
     }
 
     /// The answer REFUSED (RCODE 5, RFC 1035 4.1.1) to a query, with the
@@ -870,17 +944,7 @@ pub fn parseQuery(q: []const u8, buf: *[256]u8) ?Query {
     return .{ .name = buf[0..len], .end = i + 4 };
 }
 
-/// A name matches a host of an allow list: the same name, or a pattern
-/// `*.SUFFIX` and a name below SUFFIX. Case does not matter.
-pub fn nameMatch(pattern: []const u8, name: []const u8) bool {
-    var p = pattern;
-    if (p.len > 0 and p[p.len - 1] == '.') p = p[0 .. p.len - 1];
-    if (std.mem.startsWith(u8, p, "*.")) {
-        const suf = p[1..];
-        return name.len > suf.len and std.ascii.endsWithIgnoreCase(name, suf);
-    }
-    return std.ascii.eqlIgnoreCase(p, name);
-}
+pub const nameMatch = policy.nameMatch;
 
 /// The first IPv4 `nameserver` of /etc/resolv.conf.
 fn readResolvConf() ?Ip4 {
@@ -1260,7 +1324,7 @@ test "nat engine: UDP to the gateway through a frame socket" {
         fn ev(_: ?*anyopaque, e: *const Event) void {
             if (e.kind == .refuse) refused += 1;
         }
-        fn pol(_: ?*anyopaque, _: Proto, a: Ip4, _: u16) bool {
+        fn pol(_: ?*anyopaque, _: Proto, a: Ip4, _: u16, _: ?[]const u8) bool {
             return a[0] == 127;
         }
     };
@@ -1559,4 +1623,36 @@ test "nat engine: a TCP connection to the gateway through a frame socket" {
     const r = try tcpRecv(pair[1], &out);
     try std.testing.expect(r.flags & T.rst != 0);
     try std.testing.expectEqual(@as(u32, 5001), r.ack);
+}
+
+test "nat engine: the allow and deny lists of a guest" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    var pair: [2]i32 = undefined;
+    try std.testing.expectEqual(@as(usize, 0), linux.socketpair(linux.AF.UNIX, linux.SOCK.DGRAM | linux.SOCK.CLOEXEC, 0, &pair));
+    defer _ = linux.close(pair[1]);
+    const L = struct {
+        var rules: [8]i32 = undefined;
+        var n: usize = 0;
+        fn ev(_: ?*anyopaque, e: *const Event) void {
+            if (e.kind == .refuse and n < rules.len) {
+                rules[n] = e.rule;
+                n += 1;
+            }
+        }
+    };
+    const n = try Nat.initSocket(std.testing.allocator, .{
+        .dns = false,
+        .event = L.ev,
+        .allow = &.{.{ .net = .{ 127, 0, 0, 1 }, .port_lo = 9000, .port_hi = 9100 }},
+        .deny = &.{.{ .net = .{ 127, 0, 0, 1 }, .port_lo = 9050, .port_hi = 9050 }},
+    }, pair[0]);
+    defer n.deinit();
+    // The gateway is 127.0.0.1 of the host: 9001 is on the list, 9050
+    // is denied, and 22 is not on the list.
+    try std.testing.expect(n.flowFor(40000, nat.gateway_ip, 9001) != null);
+    try std.testing.expect(n.flowFor(40001, nat.gateway_ip, 9050) == null);
+    try std.testing.expect(n.flowFor(40002, nat.gateway_ip, 22) == null);
+    try std.testing.expectEqual(@as(usize, 2), L.n);
+    try std.testing.expectEqual(@as(i32, 0), L.rules[0]);
+    try std.testing.expectEqual(Event.rule_not_allowed, L.rules[1]);
 }

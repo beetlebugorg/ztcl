@@ -155,6 +155,25 @@ if {[dict get $r exit] == 9} {
 }
 ztcl::vm delete $vm
 check "net: a bad network" [catch {ztcl::vm create {*}$boot -net tap}] 1
+check "net: -allow needs -net nat" [catch {ztcl::vm create {*}$boot -allow 127.0.0.1}] 1
+
+# -allow and -deny: two servers on the host loopback; the list allows
+# the first, and the second gets a reset with rule -4 in netlog.
+set srv [thread::create {
+    proc acc {ch addr port} { puts -nonewline $ch hello; close $ch }
+    thread::wait
+}]
+set q1 [thread::send $srv {lindex [fconfigure [socket -server acc -myaddr 127.0.0.1 0] -sockname] 2}]
+set q2 [thread::send $srv {lindex [fconfigure [socket -server acc -myaddr 127.0.0.1 0] -sockname] 2}]
+set vm [ztcl::vm create {*}$boot -net nat -allow [list 127.0.0.1:$q1] -deny {10.0.0.0/8}]
+ztcl::vm start $vm
+if {[dict get [ztcl::vm exec $vm /bin/busybox sh -c $dhcp] exit] != 9} {
+    check "allow: a port on the list" [dict get [ztcl::vm exec $vm /bin/busybox sh -c "/bin/busybox nc 10.0.2.2 $q1 < /dev/null"] stdout] hello
+    check "allow: a port off the list" [dict get [ztcl::vm exec $vm /bin/busybox sh -c "/bin/busybox nc 10.0.2.2 $q2 < /dev/null; echo \$?"] stdout] "1\n"
+    check "allow: the refusal in netlog" [expr {[lsearch [ztcl::vm netlog $vm] "*event refuse proto tcp*rule -4*"] >= 0}] 1
+}
+ztcl::vm delete $vm
+thread::release $srv
 
 # Shares with 9p: share0 at /mnt/share (rw), share1 read-only.
 file delete -force share ro

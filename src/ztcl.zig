@@ -154,6 +154,7 @@ test {
     _ = @import("vm/kvm_snapshot.zig");
     _ = @import("isovm.zig");
     _ = @import("vm/nat/tcp.zig");
+    _ = @import("vm/nat/policy.zig");
     _ = zipwrite;
     _ = buildnative;
     _ = stripscan;
