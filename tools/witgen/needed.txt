@@ -6,6 +6,7 @@ wasi:cli/environment@0.3.2 get-environment
 wasi:cli/environment@0.3.2 get-arguments
 wasi:cli/environment@0.3.2 get-initial-cwd
 wasi:cli/exit@0.3.2 exit
+wasi:cli/exit@0.3.2 exit-with-code
 wasi:cli/stdin@0.3.2 read-via-stream
 wasi:cli/stdout@0.3.2 write-via-stream
 wasi:cli/stderr@0.3.2 write-via-stream

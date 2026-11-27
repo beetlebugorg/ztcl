@@ -28,3 +28,11 @@ CAP tools/suite.sh -t core-8-6-16 -r 'tools/wasi-run.sh --component'
 ```
 
 Gate: each suite file passes at least the count of task 03.
+
+## Part 1: the command component on the CLI streams (2026-11-26)
+
+- `src/wasi/run.zig` is the entry of the core module. It exports `wasi:cli/run@0.3.2#run` with the synchronous lift and `cabi_realloc`. Its declaration `ztcl_wasi_p3` makes `sys.zig` use `src/sys_wasi3.zig`. Its panic handler traps, and the debug `Io` of the standard library is `std.Io.failing`. With the default debug `Io`, the module imports 28 preview 1 functions from `std.Io.Threaded`, also for a script with no capability.
+- `src/sys_wasi3.zig` writes descriptors 1 and 2 to the `stream<u8>` of `wasi:cli/stdout` and `stderr`, reads descriptor 0 from `wasi:cli/stdin`, reads the script file through `wasi:filesystem/preopens` and `open-at`, gets the arguments from `wasi:cli/environment`, and ends with `exit-with-code` of `wasi:cli/exit`.
+- `zig build wasi-component` makes `zig-out/bin/ztcl.component.wasm` with the world `ztcl:cli/command`. The component imports only these 0.3.2 interfaces: `wasi:cli/environment`, `exit`, `types`, `stdout`, `stderr`, and `wasi:filesystem/types` and `preopens`. `tools/wasi-component.sh` runs its tests under wasmtime.
+- Size: 2,318,185 bytes, 703,305 bytes with `gzip -9` (ReleaseFast, stripped). The time of a full `wasmtime run` of a script of one `puts` is 46 ms, the mean of 20 runs after one run that fills the compile cache, at a load average of 5.5.
+- Not yet in part 1: the flags of `src/main.zig` (`--allow`, `--root`, the limits), the capabilities (`file`, channels, `clock`, `random`, `env`, the event loop), and the option `-Dwasi=p1|p3`. The runner of `src/main.zig` uses `std.process.Init` and `std.Io`, and on WASI both use preview 1. Part 2 gives the runner a host layer that `run.zig` can fill with WASI 0.3.2 functions, then the suite runs under `tools/wasi-run.sh --component`.

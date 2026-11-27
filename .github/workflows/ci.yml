@@ -364,6 +364,12 @@ jobs:
           git diff --exit-code src/wasi/p3.zig
           zig build wasi-bindings
           wasm-tools validate --features component-model,cm-async zig-out/bin/wasi-bindings.component.wasm
+      # The command component of WASI 0.3.2 (docs/dev/wasi-tasks/06-native.md).
+      - name: WASI 0.3 command component
+        run: |
+          zig build wasi-component
+          wasm-tools validate --features component-model,cm-async zig-out/bin/ztcl.component.wasm
+          tools/wasi-component.sh
 
   # The scheduled run: all 152 files with the suite runner, without and
   # with the JIT. tools/suite-check.py fails the job when the pass count

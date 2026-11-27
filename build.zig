@@ -164,6 +164,35 @@ pub fn build(b: *std.Build) void {
     b.step("wasi-bindings", "Build zig-out/bin/wasi-bindings.component.wasm, the check of src/wasi/p3.zig (needs wasm-tools)")
         .dependOn(&b.addInstallBinFile(bind_component, "wasi-bindings.component.wasm").step);
 
+    // The `ztcl` command component of WASI 0.3.2 (docs/dev/wasi-tasks/06-native.md):
+    // the core module of src/wasi/run.zig imports only WASI 0.3.2
+    // functions, and `wasm-tools` makes the component (needs wasm-tools).
+    const p3_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
+    const p3_lib = b.createModule(.{ .root_source_file = b.path("src/ztcl.zig"), .target = p3_target, .optimize = .ReleaseFast });
+    p3_lib.addOptions("build_options", gc_options);
+    addVt(b, p3_lib, p3_target, .ReleaseFast);
+    const p3_core = b.addExecutable(.{ .name = "ztcl-p3", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/wasi/run.zig"),
+        .target = p3_target,
+        .optimize = .ReleaseFast,
+        .strip = true,
+        .imports = &.{.{ .name = "ztcl", .module = p3_lib }},
+    }) });
+    p3_core.entry = .disabled;
+    p3_core.stack_size = 8 << 20;
+    p3_core.root_module.export_symbol_names = &.{ "wasi:cli/run@0.3.2#run", "cabi_realloc" };
+    const p3_embed = b.addSystemCommand(&.{ "wasm-tools", "component", "embed", "--world", "ztcl:cli/command" });
+    p3_embed.addDirectoryArg(b.path("wit"));
+    p3_embed.addArtifactArg(p3_core);
+    p3_embed.addArg("-o");
+    const p3_embedded = p3_embed.addOutputFileArg("ztcl.embed.wasm");
+    const p3_new = b.addSystemCommand(&.{ "wasm-tools", "component", "new" });
+    p3_new.addFileArg(p3_embedded);
+    p3_new.addArg("-o");
+    const p3_component = p3_new.addOutputFileArg("ztcl.component.wasm");
+    b.step("wasi-component", "Build zig-out/bin/ztcl.component.wasm, the command component of WASI 0.3.2 (needs wasm-tools)")
+        .dependOn(&b.addInstallBinFile(p3_component, "ztcl.component.wasm").step);
+
     // The runner and the benchmark always build in ReleaseFast.
     const fast = b.createModule(.{
         .root_source_file = b.path("src/ztcl.zig"),

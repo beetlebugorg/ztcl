@@ -97,3 +97,35 @@ pub fn finish(set: WaitSet, waitable: u32, raw: u32) Copy {
         if (e.waitable == waitable) return Copy.of(e.payload);
     }
 }
+
+/// The state of a subtask, in the low 4 bits of the status of an
+/// `[async-lower]` call and in the payload of its `subtask` event.
+pub const SubtaskState = enum(u4) {
+    starting = 0,
+    started = 1,
+    returned = 2,
+    cancelled_before_started = 3,
+    cancelled_before_returned = 4,
+    _,
+};
+
+const subtask_abi = struct {
+    extern "$root" fn @"[subtask-drop]"(subtask: u32) void;
+};
+
+/// Waits for the end of an `[async-lower]` call that gave `status`. The
+/// callee has then written its result to the return area. Gives false
+/// for a call that was cancelled.
+pub fn call(set: WaitSet, status: u32) bool {
+    var state: SubtaskState = @fromBackingInt(@as(u4, @truncate(status)));
+    const sub = status >> 4;
+    if (sub == 0) return state == .returned;
+    set.join(sub);
+    while (state == .starting or state == .started) {
+        const e = set.wait();
+        if (e.event == .subtask and e.waitable == sub) state = @fromBackingInt(@as(u4, @truncate(e.payload)));
+    }
+    WaitSet.leave(sub);
+    subtask_abi.@"[subtask-drop]"(sub);
+    return state == .returned;
+}

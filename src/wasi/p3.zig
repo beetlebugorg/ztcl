@@ -83,6 +83,11 @@ pub const cli_exit = struct {
     pub const exit = struct {
         pub const call = @extern(*const fn (status: u32) callconv(.c) void, .{ .name = "exit", .library_name = "wasi:cli/exit@0.3.2" });
     };
+
+    /// `exit-with-code: func(status-code: u8);`
+    pub const exit_with_code = struct {
+        pub const call = @extern(*const fn (status_code: u32) callconv(.c) void, .{ .name = "exit-with-code", .library_name = "wasi:cli/exit@0.3.2" });
+    };
 };
 
 /// The interface `wasi:cli/stderr@0.3.2`.
