@@ -42,6 +42,7 @@ On `error.TclError`, `it.result` holds the message and `it.error_line` holds the
 | `collect()` | Runs a collection now. Between evaluations, only the roots keep a value. |
 | `enterHost()`, `leaveHost()` | Let the collector run during host calls of `evalCmd`, `call`, or `callWords`, and scan the frame of the calling function. With no `enterHost`, these calls run with no collection, and the memory limit stops a long script. `eval` needs neither call. |
 | `gc_on` | False turns the collector off. The memory limit is then exact. |
+| `counter.spare.max` | The most bytes of free heap pages that the interpreter keeps for its next pages (default 16 MiB). The memory count does not include them. `deinit`, `reset`, and `compact` give them back. 0 gives each free page back at once. |
 | `compact(roots, opts)` | Frees the memory of past evaluations and keeps the commands, procs, namespaces, and point programs. `.vars = .clear` also drops the variables. Each value in `roots` gets a new address. All other values from before the call are invalid. Call it between evaluations. It returns `error.InterpBusy` for an interpreter with a capability, a child, a coroutine, or a TclOO object. |
 
 ## The JIT
