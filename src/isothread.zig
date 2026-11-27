@@ -745,7 +745,8 @@ fn forwardMsg(b: *Bridge, m: *Msg) void {
                 b.pending.put(a, stream, .{ .from = m.from, .seq = m.seq }) catch {};
                 b.plock.unlock();
             }
-            const p = sendPayload(a, m.from, b.w.id, if (m.seq != 0) flag_reply else 0, m.var_name, m.text) catch return;
+            const flags: u8 = (if (m.seq != 0) flag_reply else 0) | (if (m.head) flag_head else 0);
+            const p = sendPayload(a, m.from, b.w.id, flags, m.var_name, m.text) catch return;
             defer a.free(p);
             _ = b.link.write(a, .send, stream, p);
         },
@@ -777,6 +778,9 @@ fn readerMain(b: *Bridge) void {
             },
             .result => {
                 const r = readResult(g, f.stream, f.payload) catch break;
+                // `-unwindonerror`: a script with an error ends the thread,
+                // as in `thread.zig`. The configure went to the proxy.
+                if (r.msg.code != 0 and w.unwind_on_error) w.released.store(true, .release);
                 var to = r.to;
                 if (r.msg.kind == .reply) {
                     b.plock.lock();
@@ -798,7 +802,10 @@ fn readerMain(b: *Bridge) void {
                 if (g.output) |o| o.write(o.ctx, f.payload);
                 g.out_lock.unlock();
             },
-            .bgerror => bgReport(w, f.payload),
+            .bgerror => {
+                bgReport(w, f.payload);
+                if (w.unwind_on_error) w.released.store(true, .release);
+            },
             .tsv, .lock, .unlock, .cancel => toBroker(a, f, &b.broker),
             .fd => takeChannel(g, &b.link, f.payload, true),
             .exit => {

@@ -325,6 +325,9 @@ pub const Msg = struct {
     ecode: Shared = Shared.empty,
     /// The variable of the sender that gets the result.
     var_name: []u8 = &.{},
+    /// True for a send with `-head`. The proxy of an isolated thread
+    /// passes it to the child.
+    head: bool = false,
 
     pub const Kind = enum {
         /// A script. `seq` is zero for an async send.
@@ -1133,6 +1136,7 @@ fn drainQueue(g: *Group, w: *Worker) void {
 /// Adds a message to a queue. The caller holds the group lock, so `w`
 /// stays alive.
 pub fn pushMsg(w: *Worker, m: *Msg, head: bool) void {
+    m.head = head;
     w.lock.lock();
     const ok = if (head) w.queue.insert(w.group.alloc(), 0, m) else w.queue.append(w.group.alloc(), m);
     w.lock.unlock();

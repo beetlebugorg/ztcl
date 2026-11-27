@@ -236,6 +236,24 @@ test "isolate on Linux: thread::create -isolation process: send, async, errors, 
     try t.expectEqualStrings("1", try ev(&it, "thread::join $c"));
 }
 
+test "isolate on Linux: -unwindonerror ends an isolated thread" {
+    if (!on or comptime !tcl.isothread.supported) return error.SkipZigTest;
+    var h: tcl.Interp = undefined;
+    try hostInterp(&h);
+    defer h.deinit();
+    const exe = (try runner(&h)) orelse return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(t.allocator);
+    defer it.deinit();
+    it.iso_runner = exe;
+    try it.allow(@backingInt(tcl.interp.Capability.thread));
+    // The configure goes to the proxy of the parent, and an error of the
+    // child ends the thread.
+    try skipLevel(&it, "set u [thread::create -isolation process -joinable]");
+    _ = try ev(&it, "thread::configure $u -unwindonerror 1; catch {thread::send $u {error stop}}");
+    try t.expectEqualStrings("0", try ev(&it, "thread::join $u"));
+}
+
 test "isolate on Linux: an isolated thread of a jailed creator reaches only the root folder" {
     if (!on or comptime !tcl.isothread.supported) return error.SkipZigTest;
     var h: tcl.Interp = undefined;
