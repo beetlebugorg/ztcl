@@ -630,6 +630,21 @@ fn natPolicy(ctx: ?*anyopaque, _: nat_engine.Proto, ip: nat_engine.Ip4, port: u1
     return @import("sock.zig").permits(it.net, addr, port, null);
 }
 
+/// The names that the DNS relay of the NAT can look up: each name
+/// with the `any` policy, none with `loopback`, and the host names
+/// of an `allow=` list (a name, or `*.SUFFIX`).
+fn natDnsPolicy(ctx: ?*anyopaque, name: []const u8) bool {
+    const it: *Interp = @ptrCast(@alignCast(ctx.?));
+    switch (it.net) {
+        .any => return true,
+        .loopback => return false,
+        .allow => |rules| {
+            for (rules) |r| if (r.host) |h| if (nat_engine.nameMatch(h, name)) return true;
+            return false;
+        },
+    }
+}
+
 /// `-net nat`: a network through the user-mode NAT of ztcl#461. It needs
 /// the capability `socket`, as each connection of the guest is a
 /// connection of the host under its policy. Off by default.
@@ -945,7 +960,7 @@ const mac = if (on_mac) struct {
             _ = c.close(pair[1]);
         };
         cfg.console = .{ .in = pair[0], .out = pair[0] };
-        const net: ?*Net = if (net_nat) Net.init(it.heap.backing, .{ .policy = natPolicy, .policy_ctx = it, .dns = dns }) catch return it.failCode("ZTCL VM FRAMEWORK", "no socket for the network of the guest", .{}) else null;
+        const net: ?*Net = if (net_nat) Net.init(it.heap.backing, .{ .policy = natPolicy, .dns_allow = natDnsPolicy, .policy_ctx = it, .dns = dns }) catch return it.failCode("ZTCL VM FRAMEWORK", "no socket for the network of the guest", .{}) else null;
         var keep_net = false;
         defer if (!keep_net) if (net) |n| n.close(it.heap.backing);
         if (net) |n| cfg.net_fd = n.vm_fd;
@@ -1585,7 +1600,7 @@ const lin = if (on_kvm) struct {
                 } else if (std.mem.eql(u8, kind, "nat")) {
                     if (it.capabilities & @backingInt(interp.Capability.socket) == 0)
                         return it.failCode("ZTCL VM NONET", "-net nat needs the socket capability", .{});
-                    cfg.net = .{ .policy = netPolicy, .policy_ctx = it };
+                    cfg.net = .{ .policy = netPolicy, .dns_allow = natDnsPolicy, .policy_ctx = it };
                 } else return it.fail("bad network \"{s}\": must be nat or none", .{kind});
             } else if (std.mem.eql(u8, opt, "-dns")) {
                 dns = try it.int(v) != 0;
@@ -1679,6 +1694,13 @@ const lin = if (on_kvm) struct {
         g.console_host = pair[1];
         cfg.kernel = g.kernel;
         cfg.initrd = g.initrd;
+        // The agent sets the network of the NAT from the command line,
+        // with no DHCP.
+        if (cfg.net != null) {
+            const line = try std.fmt.allocPrint(b, "{s} ztcl.net=10.0.2.15/24,10.0.2.2,10.0.2.3", .{g.cmdline});
+            b.free(g.cmdline);
+            g.cmdline = line;
+        }
         cfg.cmdline = g.cmdline;
         cfg.disks = g.disks;
         cfg.shares = g.shares;
