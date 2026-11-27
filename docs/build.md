@@ -65,7 +65,7 @@ The same input and target give the same bytes on each build.
 
 ## macOS and Windows
 
-A binary for macOS has an ad hoc code signature, which `ztcl build` writes on each host. arm64 macOS runs it with no other step. A binary for other users needs a Developer ID signature and notarization. These are the usual commands on a Mac, after the build. The CI of ztcl does not run them:
+A binary for macOS has an ad hoc code signature, which `ztcl build` writes on each host. arm64 macOS runs it with no other step. With `vm` in `--allow`, the signature has the entitlement `com.apple.security.virtualization`, which `ztcl::vm` needs. A Developer ID signature needs it too: pass `--entitlements tools/vm-guest/vz.entitlements` to `codesign`. A binary for other users needs a Developer ID signature and notarization. These are the usual commands on a Mac, after the build. The CI of ztcl does not run them:
 
 ```sh
 codesign --force --options runtime --sign "Developer ID Application: NAME" hello-mac

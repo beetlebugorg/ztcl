@@ -71,12 +71,12 @@ pub fn findSlot(bin: []const u8) Error!usize {
 }
 
 /// A copy of the runtime `bin` with `payload`. `ident` is the
-/// identifier of a Mach-O signature.
-pub fn bundle(a: Allocator, bin: []const u8, payload: []const u8, ident: []const u8) Error![]u8 {
+/// identifier of a Mach-O signature, and `ents` its entitlements.
+pub fn bundle(a: Allocator, bin: []const u8, payload: []const u8, ident: []const u8, ents: []const []const u8) Error![]u8 {
     const f = format(bin) orelse return error.UnknownFormat;
     const at = try findSlot(bin);
     if (std.mem.readInt(u64, bin[at + 24 ..][0..8], .little) != 0) return error.AlreadyBundle;
-    if (f == .macho) return @import("macho.zig").bundle(a, bin, payload, at, ident);
+    if (f == .macho) return @import("macho.zig").bundleEnts(a, bin, payload, at, ident, ents);
     const off = std.mem.alignForward(usize, bin.len, 16);
     const out = try a.alloc(u8, off + payload.len);
     @memcpy(out[0..bin.len], bin);
@@ -146,16 +146,16 @@ test "buildnative: bundle writes the slot of an ELF copy" {
     @memcpy(bin[0..4], "\x7fELF");
     const m = marker();
     @memcpy(bin[100..116], &m);
-    const out = try bundle(a, &bin, "PAYLOAD", "t");
+    const out = try bundle(a, &bin, "PAYLOAD", "t", &.{});
     defer a.free(out);
     try std.testing.expectEqual(@as(usize, 208 + 7), out.len);
     try std.testing.expectEqual(@as(u64, 208), std.mem.readInt(u64, out[116..124], .little));
     try std.testing.expectEqual(@as(u64, 7), std.mem.readInt(u64, out[124..132], .little));
     try std.testing.expectEqualStrings("PAYLOAD", out[208..]);
-    try std.testing.expectError(error.AlreadyBundle, bundle(a, out, "x", "t"));
+    try std.testing.expectError(error.AlreadyBundle, bundle(a, out, "x", "t", &.{}));
     @memcpy(bin[150..166], &m);
-    try std.testing.expectError(error.TwoSlots, bundle(a, &bin, "x", "t"));
-    try std.testing.expectError(error.UnknownFormat, bundle(a, "nope", "x", "t"));
+    try std.testing.expectError(error.TwoSlots, bundle(a, &bin, "x", "t", &.{}));
+    try std.testing.expectError(error.UnknownFormat, bundle(a, "nope", "x", "t", &.{}));
 }
 
 test "buildnative: the manifest" {

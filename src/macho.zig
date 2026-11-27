@@ -11,8 +11,13 @@
 //! the space after the load commands (the header pad of the linker).
 //!
 //! The signature is a SuperBlob with one CodeDirectory (version
-//! 0x20400): the identifier, no special slots, and the SHA-256 hash of
-//! each 4 KiB page up to the signature. The flags are `CS_ADHOC`, and
+//! 0x20400): the identifier, and the SHA-256 hash of each 4 KiB page up
+//! to the signature. With entitlements (boolean keys with the value
+//! true, such as `com.apple.security.virtualization`), three more blobs
+//! follow: empty requirements (slot 2), the entitlements as an XML
+//! plist (magic 0xfade7171, slot 5), and as DER (magic 0xfade7172, slot
+//! 7). The code directory then has 7 special slots, with the hash of
+//! the blob of slot k at 32 * k bytes before the hash of page 0. The flags are `CS_ADHOC`, and
 //! the executable segment is `__TEXT` with `CS_EXECSEG_MAIN_BINARY`.
 //! The layout follows `cs_blobs.h` of the xnu source of Apple
 //! (docs/references/static-build.md). Each number of the signature is
@@ -93,10 +98,104 @@ fn layout(bin: []const u8) Error!Layout {
     return l;
 }
 
+/// The XML plist of the entitlements `ents`, each with the value true.
+fn entsXml(a: Allocator, ents: []const []const u8) Allocator.Error![]u8 {
+    var l: std.ArrayList(u8) = .empty;
+    errdefer l.deinit(a);
+    try l.appendSlice(a,
+        \\<?xml version="1.0" encoding="UTF-8"?>
+        \\<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        \\<plist version="1.0">
+        \\<dict>
+        \\
+    );
+    for (ents) |e| {
+        try l.appendSlice(a, "\t<key>");
+        try l.appendSlice(a, e);
+        try l.appendSlice(a, "</key>\n\t<true/>\n");
+    }
+    try l.appendSlice(a, "</dict>\n</plist>\n");
+    return l.toOwnedSlice(a);
+}
+
+/// A DER tag and length.
+fn derHead(a: Allocator, l: *std.ArrayList(u8), tag: u8, len: usize) Allocator.Error!void {
+    try l.append(a, tag);
+    if (len < 0x80) return l.append(a, @intCast(len));
+    var n: usize = 0;
+    var x = len;
+    while (x > 0) : (x >>= 8) n += 1;
+    try l.append(a, @intCast(0x80 | n));
+    var k = n;
+    while (k > 0) {
+        k -= 1;
+        try l.append(a, @truncate(len >> @intCast(8 * k)));
+    }
+}
+
+/// The DER form of the entitlements: [APPLICATION 16] { INTEGER 1,
+/// [CONTEXT 16] { SEQUENCE { UTF8String key, BOOLEAN true } ... } },
+/// with the keys in byte order. `ents` must be sorted.
+fn entsDer(a: Allocator, ents: []const []const u8) Allocator.Error![]u8 {
+    var body: std.ArrayList(u8) = .empty;
+    defer body.deinit(a);
+    for (ents) |e| {
+        var pair: std.ArrayList(u8) = .empty;
+        defer pair.deinit(a);
+        try derHead(a, &pair, 0x0c, e.len);
+        try pair.appendSlice(a, e);
+        try pair.appendSlice(a, &.{ 0x01, 0x01, 0xff });
+        try derHead(a, &body, 0x30, pair.items.len);
+        try body.appendSlice(a, pair.items);
+    }
+    var inner: std.ArrayList(u8) = .empty;
+    defer inner.deinit(a);
+    try inner.appendSlice(a, &.{ 0x02, 0x01, 0x01 });
+    try derHead(a, &inner, 0xb0, body.items.len);
+    try inner.appendSlice(a, body.items);
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(a);
+    try derHead(a, &out, 0x70, inner.items.len);
+    try out.appendSlice(a, inner.items);
+    return out.toOwnedSlice(a);
+}
+
+fn lessThan(_: void, x: []const u8, y: []const u8) bool {
+    return std.mem.lessThan(u8, x, y);
+}
+
 /// A copy of the Mach-O runtime `bin` with `payload` in `__LINKEDIT`
 /// and a new ad hoc signature. `slot_at` is the offset of the slot of
 /// `buildnative.zig`, and `ident` is the identifier of the signature.
 pub fn bundle(a: Allocator, bin: []const u8, payload: []const u8, slot_at: usize, ident: []const u8) Error![]u8 {
+    return build(a, bin, payload, slot_at, ident, &.{});
+}
+
+/// `bundle` with the entitlements `ents` in the signature.
+pub fn bundleEnts(a: Allocator, bin: []const u8, payload: []const u8, slot_at: usize, ident: []const u8, ents: []const []const u8) Error![]u8 {
+    return build(a, bin, payload, slot_at, ident, ents);
+}
+
+/// A copy of the Mach-O file `bin` with a new ad hoc signature and the
+/// entitlements `ents`, and no payload.
+pub fn sign(a: Allocator, bin: []const u8, ident: []const u8, ents: []const []const u8) Error![]u8 {
+    return build(a, bin, "", null, ident, ents);
+}
+
+fn build(a: Allocator, bin: []const u8, payload: []const u8, slot: ?usize, ident: []const u8, ents_in: []const []const u8) Error![]u8 {
+    const ents = try a.dupe([]const u8, ents_in);
+    defer a.free(ents);
+    std.mem.sort([]const u8, ents, {}, lessThan);
+    const xml = try entsXml(a, ents);
+    defer a.free(xml);
+    const der = try entsDer(a, ents);
+    defer a.free(der);
+    const with_ents = ents.len > 0;
+    const n_special: usize = if (with_ents) 7 else 0;
+    const n_blobs: usize = if (with_ents) 4 else 1;
+    const req_len = 12;
+    const xml_len = 8 + xml.len;
+    const der_len = 8 + der.len;
     const l = try layout(bin);
     const le_off = rd64(bin, l.linkedit + 40);
     const le_end = le_off + rd64(bin, l.linkedit + 48);
@@ -108,13 +207,15 @@ pub fn bundle(a: Allocator, bin: []const u8, payload: []const u8, slot_at: usize
         if (@as(u64, off) + rd32(bin, s + 12) > bin.len or off < le_off) return error.BadMachO;
         cut = off;
     } else if (l.first_section < l.cmds_end + 16) return error.NoRoom;
-    if (slot_at + 32 > cut) return error.BadMachO;
+    if (slot) |slot_at| if (slot_at + 32 > cut) return error.BadMachO;
     const p_off = std.mem.alignForward(u64, cut, 16);
     const s_off = std.mem.alignForward(u64, p_off + payload.len, 16);
     const n_pages = (s_off + page - 1) / page;
     const ident_len = ident.len + 1;
-    const cd_len = 88 + ident_len + n_pages * 32;
-    const sig_len = 20 + cd_len;
+    const hash_off = 88 + ident_len + n_special * 32;
+    const cd_len = hash_off + n_pages * 32;
+    const head_len = 12 + 8 * n_blobs;
+    const sig_len = head_len + cd_len + if (with_ents) req_len + xml_len + der_len else 0;
     const total = s_off + sig_len;
     if (total > std.math.maxInt(u32)) return error.BadMachO;
 
@@ -124,8 +225,10 @@ pub fn bundle(a: Allocator, bin: []const u8, payload: []const u8, slot_at: usize
     @memcpy(out[0..@intCast(cut)], bin[0..@intCast(cut)]);
     @memcpy(out[@intCast(p_off)..][0..payload.len], payload);
     // The slot: the offset and the length of the payload.
-    wr64(out, slot_at + 16, p_off);
-    wr64(out, slot_at + 24, payload.len);
+    if (slot) |slot_at| {
+        wr64(out, slot_at + 16, p_off);
+        wr64(out, slot_at + 24, payload.len);
+    }
     // __LINKEDIT covers the payload and the signature.
     const le_size = total - le_off;
     wr64(out, l.linkedit + 48, le_size);
@@ -147,17 +250,17 @@ pub fn bundle(a: Allocator, bin: []const u8, payload: []const u8, slot_at: usize
     const be = std.builtin.Endian.big;
     std.mem.writeInt(u32, sig[0..4], 0xfade0cc0, be);
     std.mem.writeInt(u32, sig[4..8], @intCast(sig_len), be);
-    std.mem.writeInt(u32, sig[8..12], 1, be);
+    std.mem.writeInt(u32, sig[8..12], @intCast(n_blobs), be);
     std.mem.writeInt(u32, sig[12..16], 0, be); // CSSLOT_CODEDIRECTORY
-    std.mem.writeInt(u32, sig[16..20], 20, be);
-    const cd = sig[20..];
+    std.mem.writeInt(u32, sig[16..20], @intCast(head_len), be);
+    const cd = sig[head_len..][0..cd_len];
     std.mem.writeInt(u32, cd[0..4], 0xfade0c02, be);
     std.mem.writeInt(u32, cd[4..8], @intCast(cd_len), be);
     std.mem.writeInt(u32, cd[8..12], 0x20400, be);
     std.mem.writeInt(u32, cd[12..16], 0x2, be); // CS_ADHOC
-    std.mem.writeInt(u32, cd[16..20], @intCast(88 + ident_len), be); // hashOffset
+    std.mem.writeInt(u32, cd[16..20], @intCast(hash_off), be); // hashOffset
     std.mem.writeInt(u32, cd[20..24], 88, be); // identOffset
-    std.mem.writeInt(u32, cd[24..28], 0, be); // nSpecialSlots
+    std.mem.writeInt(u32, cd[24..28], @intCast(n_special), be); // nSpecialSlots
     std.mem.writeInt(u32, cd[28..32], @intCast(n_pages), be);
     std.mem.writeInt(u32, cd[32..36], @intCast(s_off), be); // codeLimit
     cd[36] = 32; // hashSize
@@ -169,7 +272,27 @@ pub fn bundle(a: Allocator, bin: []const u8, payload: []const u8, slot_at: usize
     std.mem.writeInt(u64, cd[72..80], l.text_size, be); // execSegLimit
     std.mem.writeInt(u64, cd[80..88], 1, be); // CS_EXECSEG_MAIN_BINARY
     @memcpy(cd[88..][0..ident.len], ident);
-    const hashes = cd[88 + ident_len ..];
+    if (with_ents) {
+        // The blobs after the code directory, each with its index entry
+        // and the hash of its special slot.
+        var at = head_len + cd_len;
+        const blobs = [_]struct { slot: u32, magic: u32, data: []const u8 }{
+            .{ .slot = 2, .magic = 0xfade0c01, .data = &.{ 0, 0, 0, 0 } },
+            .{ .slot = 5, .magic = 0xfade7171, .data = xml },
+            .{ .slot = 7, .magic = 0xfade7172, .data = der },
+        };
+        for (blobs, 1..) |bl, k| {
+            const blen = 8 + bl.data.len;
+            std.mem.writeInt(u32, sig[12 + 8 * k ..][0..4], bl.slot, be);
+            std.mem.writeInt(u32, sig[16 + 8 * k ..][0..4], @intCast(at), be);
+            std.mem.writeInt(u32, sig[at..][0..4], bl.magic, be);
+            std.mem.writeInt(u32, sig[at + 4 ..][0..4], @intCast(blen), be);
+            @memcpy(sig[at + 8 ..][0..bl.data.len], bl.data);
+            std.crypto.hash.sha2.Sha256.hash(sig[at..][0..blen], cd[hash_off - 32 * bl.slot ..][0..32], .{});
+            at += blen;
+        }
+    }
+    const hashes = cd[hash_off..];
     for (0..@intCast(n_pages)) |i| {
         const start = i * page;
         const end = @min(start + page, @as(usize, @intCast(s_off)));
@@ -217,4 +340,12 @@ test "macho: a payload in __LINKEDIT and a new signature" {
     std.crypto.hash.sha2.Sha256.hash(out[0x2000..s_off], &h, .{});
     try std.testing.expectEqualSlices(u8, &h, cd[88 + 4 + 64 ..][0..32]);
     try std.testing.expectError(error.BadMachO, bundle(a, "nope", "x", 0, "app"));
+}
+
+test "macho: the DER of one entitlement matches the form of codesign" {
+    const a = std.testing.allocator;
+    const der = try entsDer(a, &.{"com.apple.security.virtualization"});
+    defer a.free(der);
+    const want = [_]u8{ 0x70, 0x2d, 0x02, 0x01, 0x01, 0xb0, 0x28, 0x30, 0x26, 0x0c, 0x21 } ++ "com.apple.security.virtualization".* ++ [_]u8{ 0x01, 0x01, 0xff };
+    try std.testing.expectEqualSlices(u8, &want, der);
 }
