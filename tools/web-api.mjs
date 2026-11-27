@@ -5,6 +5,7 @@
 //
 // SPDX-License-Identifier: BSD-2-Clause
 import { compile, Interp } from "../web/ztcl.mjs";
+import * as web from "../web/ztcl-web.mjs";
 
 const [strictPath, hostPath] = process.argv.slice(2);
 let failed = 0;
@@ -52,19 +53,26 @@ check(!r.ok && /invalid command name/.test(r.result), `no web:: without a grant 
 t.close();
 let threw = "";
 try {
-  await Interp.create(strict, { allow: ["web:serial"], webRoot });
+  await Interp.create(strict, { allow: ["web:serial"], web, webRoot });
 } catch (e) {
   threw = e.message;
 }
 check(/no Web API bridge/.test(threw), `ztcl.wasm refuses web:serial (got ${threw})`);
+threw = "";
+try {
+  await Interp.create(host, { allow: ["web:serial"], webRoot });
+} catch (e) {
+  threw = e.message;
+}
+check(/give the module ztcl-web.mjs/.test(threw), `a group needs the option web (got ${threw})`);
 
 // A group that the page did not grant.
-t = await Interp.create(host, { allow: ["web:usb"], webRoot });
+t = await Interp.create(host, { allow: ["web:usb"], web, webRoot });
 r = t.eval("web::root navigator.serial");
 check(!r.ok && r.result === 'web: the group "serial" is not allowed', `an ungranted group (got ${r.result})`);
 t.close();
 
-t = await Interp.create(host, { allow: ["web:serial"], webRoot });
+t = await Interp.create(host, { allow: ["web:serial"], web, webRoot });
 const ev = (s) => t.eval(s);
 r = ev("set s [web::root navigator.serial]");
 check(r.ok && r.result === "web1", `web::root (got ${r.result})`);
