@@ -65,9 +65,9 @@ sub: encoding convertto ?-profile PROFILE? ?-failindex VAR? ENCODING STRING | Th
 sub: encoding convertfrom ?-profile PROFILE? ?-failindex VAR? ENCODING BYTES | The text of BYTES in ENCODING.
 sub: encoding profiles | The profiles: replace strict tcl8.
 sub: encoding user | The encoding of the user: utf-8.
-sub: encoding names | The names of the encodings.
+sub: encoding names | The names of the encodings: the ones with no table, and the files of the encoding folders.
 sub: encoding system | The encoding of the system: utf-8.
-sub: encoding dirs | An empty list: ztcl reads no encoding files.
+sub: encoding dirs ?LIST? | The folders of the encoding files of Tcl (koi8-r.enc, iso2022-jp.enc, ...).
 == binary
 syn: binary subcommand ?arg ...?
 sub: binary format TEMPLATE ?VALUE ...? | Gives the bytes.
