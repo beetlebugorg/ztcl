@@ -29,9 +29,18 @@ export interface InterpOptions {
   /**
    * Capabilities to turn on. `ztcl.wasm` has only `"file"`: `source`,
    * `open` for reading, `read`, `gets`, `eof`, and `close` on the files
-   * of a bundle, under `//zipfs:/app/`. The default is none.
+   * of a bundle, under `//zipfs:/app/`. `ztcl-host.wasm` also has
+   * `"event"`: `after`, `after idle`, and `update`, with the events run
+   * from `setTimeout`. The default is none.
    */
-  allow?: "file"[];
+  allow?: ("file" | "event")[];
+  /**
+   * The clock of the host in milliseconds, for `"event"`. The default is
+   * `Date.now`.
+   */
+  now?: (() => number) | null;
+  /** Gets the result of each run of the events from the timer. */
+  onEvents?: ((r: EvalResult) => void) | null;
 }
 
 /** The result of one `eval`. */
@@ -113,6 +122,15 @@ export class Interp {
    * `"name:line: message"`. Throws for a module with no bundle.
    */
   run(): EvalResult;
+
+  /**
+   * Runs the events that are due at `now` (milliseconds on the clock of
+   * the option `now`), after `allow: ["event"]`.
+   */
+  runEvents(now?: number): EvalResult;
+
+  /** Gets the result of each run of the events from the timer. */
+  onEvents: ((r: EvalResult) => void) | null;
 
   /** Frees the interpreter. Drop the object after this call. */
   close(): void;

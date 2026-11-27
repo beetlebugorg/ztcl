@@ -75,6 +75,8 @@ tcl.close();
 | `interp.memorySize` | The size of the linear memory in bytes. The memory never shrinks, so this is the peak. |
 | `interp.close()` | Frees the interpreter. |
 | `options.allow` | A list of capabilities. `ztcl.wasm` has only `"file"`, for the files of a bundle. See [Bundle a script](#bundle-a-script). |
+| `interp.runEvents(now)` | With `ztcl-host.wasm` and `allow: ["event"]`: runs the events (`after`, `after idle`) that are due at `now`, as `update` runs them. `now` is in milliseconds on the clock of `options.now` (`Date.now` by default), and it can be left out. Returns `{ ok, result, output }`. After each `eval` and each run, a timer of `setTimeout` calls it at the time of the next event. `vwait` and `after ms` with no script give an error, because a call into wasm cannot wait for the page. |
+| `options.onEvents(r)` | Gets the `{ ok, result, output }` of each run of the events from the timer. |
 | `interp.run()` | Runs the scripts of a bundle. Returns `{ ok, result, output }`. |
 | `interp.bundleSize` | The bytes of the scripts and files of a bundle, or 0. |
 | `run(source, options)` | Makes an interpreter for the bundle `source`, runs its scripts, and frees it. Returns a promise of `{ ok, result, output }`. |
@@ -104,6 +106,9 @@ One interpreter keeps its procs and variables from one `eval` to the next. Each 
 | `ztcl_bundle_size()` | The bytes of the payload of a bundle, or 0. |
 | `ztcl_bundle_run(h)` | Runs the scripts of a bundle in order. Returns 0 on success and 1 on an error. |
 | `ztcl_allow(h, bits)` | Turns on capabilities. This module has only `file` (16). Returns 0 on success, 1 when the memory ends, and 2 for another bit. |
+| `ztcl_events_allow(h)` | In `ztcl-host.wasm` only: turns on `event` with the clock of the host. Returns 0, or 1 when the memory ends. |
+| `ztcl_run_events(h, now_ms)` | In `ztcl-host.wasm` only: runs the events that are due at `now_ms` (an `f64`). Returns 0 on success and 1 on an error. |
+| `ztcl_next_event(h, now_ms)` | In `ztcl-host.wasm` only: the milliseconds from `now_ms` to the next event (an `f64`), 0 for a due event, and -1 for no event. |
 | `memory` | The linear memory. |
 
 `Interp.eval` sets the compute limit before each call. So the limit applies to each `eval`, and not to the sum of all calls.
