@@ -25,7 +25,7 @@ The target is the line rate of the host loopback for one stream, and a time per 
 - One thread for each queue pair, with no lock on the fast path. The thread owns its connections, its ring indexes, and its sockets, and it waits on one epoll set (or one io_uring) for the notify eventfd and the sockets. Batches: `recvmmsg` and `sendmmsg` for UDP, and one pass over the transmit ring for each wake.
 - Flat tables. A connection is a slot in an array, found by a hash of the 4-tuple with open addressing. The state of a TCP connection fits in two cache lines.
 - Checksums with SIMD (`@Vector` sums of 16-bit words, AVX2 and NEON from the same Zig code), and only where an offload does not remove them: IPv4 headers, and packets of the NAT itself.
-- The policy at line rate. The lists compile to a sorted table of address ranges with port masks, searched with a branch-free binary search, and host names become address entries as DNS answers arrive. A lookup is under 20 ns. A JIT of the table with the assembler of ztcl comes only if a measurement shows the table as a cost.
+- The policy once for each flow. The engine checks the lists when a flow or a connection opens, not for each packet (`src/vm/nat/policy.zig`). The address rules are sorted by their first address, a binary search finds the last rule that can hold the address, and a scan goes back while the largest end of the rules before it still reaches the address. Host names become address entries as DNS answers arrive. A JIT of the table with the assembler of ztcl comes only if a measurement shows the table as a cost, which needs a guest that opens connections faster than the host can.
 
 ## Start time
 

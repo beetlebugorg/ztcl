@@ -655,11 +655,40 @@ const nat_cmdline = "ztcl.net=10.0.2.15/24,10.0.2.2,10.0.2.3";
 /// The network policy of the interpreter for each host address of the
 /// NAT of a guest, on the thread of the NAT. The policy of an
 /// interpreter does not change after the embedder sets it.
-fn natPolicy(ctx: ?*anyopaque, _: nat_engine.Proto, ip: nat_engine.Ip4, port: u16) bool {
+fn natPolicy(ctx: ?*anyopaque, _: nat_engine.Proto, ip: nat_engine.Ip4, port: u16, name: ?[]const u8) bool {
     const it: *Interp = @ptrCast(@alignCast(ctx.?));
     var addr: sys.Addr = .{ .port = port };
     @memcpy(addr.bytes[0..4], &ip);
-    return @import("sock.zig").permits(it.net, addr, port, null);
+    // The name of an address of a DNS answer lets a host rule of the
+    // policy match the connection.
+    return @import("sock.zig").permits(it.net, addr, port, name);
+}
+
+/// The rules of `-allow` or `-deny`: a list of host names (or
+/// `*.SUFFIX`), addresses, and ranges in CIDR form, each with an
+/// optional `:port` or `:port-port`, as the rules of a network policy.
+fn natRules(it: *Interp, v: Value) Error![]nat_engine.policy.Rule {
+    const items = try it.list(v);
+    var text: std.ArrayListUnmanaged(u8) = .empty;
+    try text.appendSlice(it.alloc(), "allow=");
+    for (items, 0..) |x, i| {
+        const t = try it.str(x);
+        if (std.mem.indexOfScalar(u8, t, ',') != null) return it.fail("bad rule \"{s}\"", .{t});
+        if (i > 0) try text.append(it.alloc(), ',');
+        try text.appendSlice(it.alloc(), t);
+    }
+    const pol = (try @import("sock.zig").parsePolicy(it.alloc(), text.items)) orelse return it.fail("bad rule list \"{s}\"", .{text.items[6..]});
+    const rules = pol.allow;
+    const out = try it.alloc().alloc(nat_engine.policy.Rule, rules.len);
+    for (rules, out) |r, *o| {
+        o.* = .{ .host = r.host, .port_lo = r.port_lo, .port_hi = r.port_hi };
+        if (r.net) |a| {
+            if (a.v6) return it.fail("the NAT has no IPv6: \"{s}\"", .{text.items[6..]});
+            @memcpy(&o.net, a.bytes[0..4]);
+            o.bits = @intCast(@min(r.bits, 32));
+        }
+    }
+    return out;
 }
 
 /// The names that the DNS relay of the NAT can look up: each name
@@ -1007,6 +1036,8 @@ const mac = if (on_mac) struct {
         var warm = false;
         var net_nat = false;
         var dns = true;
+        var allow: []nat_engine.policy.Rule = &.{};
+        var deny: []nat_engine.policy.Rule = &.{};
         var image: ?[]const u8 = null;
         var image_disks: usize = 0;
         {
@@ -1045,6 +1076,10 @@ const mac = if (on_mac) struct {
                 net_nat = try netOption(it, v);
             } else if (std.mem.eql(u8, opt, "-dns")) {
                 dns = try it.int(v) != 0;
+            } else if (std.mem.eql(u8, opt, "-allow")) {
+                allow = try natRules(it, v);
+            } else if (std.mem.eql(u8, opt, "-deny")) {
+                deny = try natRules(it, v);
             } else if (std.mem.eql(u8, opt, "-disk")) {
                 const l = try it.list(v);
                 if (l.len < 1 or l.len > 2) return it.fail("a disk is {{file ?rw?}}", .{});
@@ -1054,7 +1089,7 @@ const mac = if (on_mac) struct {
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 const tag = try std.fmt.allocPrint(a, "share{d}", .{shares.items.len});
                 try shares.append(a, .{ .path = try hostPath(it, try it.str(l[0]), true), .tag = tag, .read_only = !(l.len == 3 and try isRw(it, l[2])) });
-            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -dns, -entropy, -image, -initrd, -kernel, -memory, -net, -share, or -warm", .{opt});
+            } else return it.fail("bad option \"{s}\": must be -allow, -cmdline, -cpus, -deny, -disk, -dns, -entropy, -image, -initrd, -kernel, -memory, -net, -share, or -warm", .{opt});
         }
         if (image) |name| {
             const r = try resolveImage(it, name);
@@ -1108,8 +1143,9 @@ const mac = if (on_mac) struct {
             _ = c.close(pair[1]);
         };
         cfg.console = .{ .in = pair[0], .out = pair[0] };
+        if (!net_nat and allow.len + deny.len > 0) return it.fail("-allow and -deny need -net nat", .{});
         const log: ?*NetLog = if (net_nat) try NetLog.create(it.heap.backing, it) else null;
-        const net: ?*Net = if (net_nat) Net.init(it.heap.backing, .{ .policy = natPolicy, .dns_allow = natDnsPolicy, .policy_ctx = it, .dns = dns, .event = NetLog.event, .event_ctx = log }) catch {
+        const net: ?*Net = if (net_nat) Net.init(it.heap.backing, .{ .policy = natPolicy, .dns_allow = natDnsPolicy, .policy_ctx = it, .dns = dns, .allow = allow, .deny = deny, .event = NetLog.event, .event_ctx = log }) catch {
             log.?.destroy();
             return it.failCode("ZTCL VM FRAMEWORK", "no socket for the network of the guest", .{});
         } else null;
@@ -1729,6 +1765,8 @@ const lin = if (on_kvm) struct {
         var image: ?[]const u8 = null;
         var own_boot = false;
         var dns = true;
+        var allow: []nat_engine.policy.Rule = &.{};
+        var deny: []nat_engine.policy.Rule = &.{};
         var i: usize = 0;
         while (i < args.len) : (i += 2) {
             const opt = try it.str(args[i]);
@@ -1759,10 +1797,14 @@ const lin = if (on_kvm) struct {
                 } else if (std.mem.eql(u8, kind, "nat")) {
                     if (it.capabilities & @backingInt(interp.Capability.socket) == 0)
                         return it.failCode("ZTCL VM NONET", "-net nat needs the socket capability", .{});
-                    cfg.net = .{ .policy = netPolicy, .dns_allow = natDnsPolicy, .policy_ctx = it };
+                    cfg.net = .{ .policy = natPolicy, .dns_allow = natDnsPolicy, .policy_ctx = it };
                 } else return it.fail("bad network \"{s}\": must be nat or none", .{kind});
             } else if (std.mem.eql(u8, opt, "-dns")) {
                 dns = try it.int(v) != 0;
+            } else if (std.mem.eql(u8, opt, "-allow")) {
+                allow = try natRules(it, v);
+            } else if (std.mem.eql(u8, opt, "-deny")) {
+                deny = try natRules(it, v);
             } else if (std.mem.eql(u8, opt, "-disk")) {
                 const l = try it.list(v);
                 if (l.len < 1 or l.len > 2) return it.fail("a disk is {{file ?rw?}}", .{});
@@ -1773,9 +1815,13 @@ const lin = if (on_kvm) struct {
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 if (disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{kvm.max_disks});
                 try shares.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 3 and try isRw(it, l[2]) });
-            } else return it.fail("bad option \"{s}\": must be -balloon, -cmdline, -cpus, -disk, -dns, -entropy, -image, -initrd, -kernel, -memory, -net, -share, or -warm", .{opt});
+            } else return it.fail("bad option \"{s}\": must be -allow, -balloon, -cmdline, -cpus, -deny, -disk, -dns, -entropy, -image, -initrd, -kernel, -memory, -net, -share, or -warm", .{opt});
         }
-        if (cfg.net) |*nc| nc.dns = dns;
+        if (cfg.net) |*nc| {
+            nc.dns = dns;
+            nc.allow = allow;
+            nc.deny = deny;
+        } else if (allow.len + deny.len > 0) return it.fail("-allow and -deny need -net nat", .{});
         if (cfg.net != null and disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest with -net nat has at most {d} disks and shares", .{kvm.max_disks - 1});
         if (image != null and own_boot) return it.fail("-image gives the kernel, the initramfs, and the command line: no -kernel, -initrd, or -cmdline with it", .{});
         if (image == null and kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel or -image", .{});
@@ -1888,16 +1934,6 @@ const lin = if (on_kvm) struct {
             g.machine.pause();
         }
         return .{ .str = g.name };
-    }
-
-    /// The network policy of the interpreter for each host address of
-    /// the NAT of a guest, on the thread of the NAT. The policy of an
-    /// interpreter does not change after the embedder sets it.
-    fn netPolicy(ctx: ?*anyopaque, _: nat_engine.Proto, a: nat_engine.Ip4, port: u16) bool {
-        const it: *Interp = @ptrCast(@alignCast(ctx.?));
-        var addr: sys.Addr = .{ .port = port };
-        @memcpy(addr.bytes[0..4], &a);
-        return @import("sock.zig").permits(it.net, addr, port, null);
     }
 
     fn start(it: *Interp, g: *Guest) Error!void {
