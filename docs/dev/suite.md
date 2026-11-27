@@ -1,6 +1,6 @@
 # Tcl 8.6.16 suite results
 
-`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-26 at commit `4825bb6`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
+`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-26 at commit `1b0b524`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
 
 A test is applicable when it is outside the buckets `design`, `platform`, `internals`, and `tcl`. The goal of issue 244 is a pass for each applicable test.
 
@@ -8,8 +8,8 @@ A test is applicable when it is outside the buckets `design`, `platform`, `inter
 
 | Run | Total | Pass | Fail | Skip | Unreached |
 |---|---|---|---|---|---|
-| Interpreter | 46,494 | 37,480 | 2,991 | 3,766 | 2,257 |
-| JIT (`-j`) | 46,494 | 37,479 | 2,992 | 3,766 | 2,257 |
+| Interpreter | 46,494 | 37,535 | 2,936 | 3,766 | 2,257 |
+| JIT (`-j`) | 46,494 | 37,536 | 2,935 | 3,766 | 2,257 |
 
 Unreached is the test count of `tools/suite-scope.tsv` minus the tests that ran: the file stopped before them.
 
@@ -19,16 +19,16 @@ The tests of the interpreter run that do not pass, by bucket.
 
 | Bucket | Meaning | Tests |
 |---|---|---|
-| `bug` | A bug in ztcl | 1,297 |
+| `bug` | A bug in ztcl | 1,295 |
 | `feature` | A missing feature or option | 3,324 |
-| `message` | An error message or -errorcode differs | 210 |
+| `message` | An error message or -errorcode differs | 157 |
 | `internals` | Needs Tcl internals (C test commands, memory debugging) | 2,618 |
 | `design` | Absent by design | 438 |
 | `platform` | Platform only | 736 |
 | `tcl` | Skipped by tclsh too (knownBug, emptyTest, and others) | 255 |
 | `untriaged` | Not triaged yet | 136 |
 
-Applicable tests: 42,447. Pass rate of the applicable tests: 88.3 %.
+Applicable tests: 42,447. Pass rate of the applicable tests: 88.4 %.
 
 ## JIT differences
 
@@ -36,7 +36,7 @@ Tests with a different result in the JIT run. `socket.test`, `io.test`, and `cha
 
 | File | Test | Interpreter | JIT |
 |---|---|---|---|
-| socket.test | socket_inet-13.1 | pass | fail |
+| socket.test | socket_inet-3.2 | fail | pass |
 
 ## Files
 
@@ -76,7 +76,7 @@ Tests with a different result in the JIT run. `socket.test`, `io.test`, and `cha
 | event.test | decide | 66 | 35 | 2 | 29 | 0 | 35 | 2 | 29 |
 | exec.test | decide | 100 | 87 | 4 | 9 | 0 | 87 | 4 | 9 |
 | execute.test | in | 157 | 71 | 6 | 80 | 0 | 71 | 6 | 80 |
-| expr-old.test | in | 460 | 432 | 12 | 16 | 0 | 432 | 12 | 16 |
+| expr-old.test | in | 460 | 433 | 11 | 16 | 0 | 433 | 11 | 16 |
 | expr.test | in | 14,185 | 14,124 | 27 | 34 | 0 | 14,124 | 27 | 34 |
 | fCmd.test | decide | 256 | 124 | 83 | 48 | 1 | 124 | 83 | 48 |
 | fileName.test | decide | 300 | 50 | 69 | 176 | 5 | 50 | 69 | 176 |
@@ -135,7 +135,7 @@ Tests with a different result in the JIT run. `socket.test`, `io.test`, and `cha
 | opt.test | decide | 31 | 0 | 30 | 0 | 1 | 0 | 30 | 0 |
 | package.test | decide | 402 | 357 | 45 | 0 | 0 | 357 | 45 | 0 |
 | parse.test | in | 271 | 114 | 5 | 152 | 0 | 114 | 5 | 152 |
-| parseExpr.test | in | 284 | 13 | 54 | 217 | 0 | 13 | 54 | 217 |
+| parseExpr.test | in | 284 | 67 | 0 | 217 | 0 | 67 | 0 | 217 |
 | parseOld.test | in | 158 | 154 | 1 | 3 | 0 | 154 | 1 | 3 |
 | pid.test | decide | 5 | 5 | 0 | 0 | 0 | 5 | 0 | 0 |
 | pkgMkIndex.test | decide | 27 | 0 | 25 | 2 | 0 | 0 | 25 | 2 |
@@ -156,7 +156,7 @@ Tests with a different result in the JIT run. `socket.test`, `io.test`, and `cha
 | security.test | decide | 1 | 1 | 0 | 0 | 0 | 1 | 0 | 0 |
 | set-old.test | in | 153 | 142 | 11 | 0 | 0 | 142 | 11 | 0 |
 | set.test | in | 64 | 61 | 2 | 1 | 0 | 61 | 2 | 1 |
-| socket.test | decide | 175 | 157 | 7 | 11 | 0 | 156 | 8 | 11 |
+| socket.test | decide | 175 | 157 | 7 | 11 | 0 | 158 | 6 | 11 |
 | source.test | decide | 23 | 13 | 10 | 0 | 0 | 13 | 10 | 0 |
 | split.test | in | 17 | 16 | 1 | 0 | 0 | 16 | 1 | 0 |
 | stack.test | decide | 3 | 1 | 2 | 0 | 0 | 1 | 2 | 0 |
@@ -677,11 +677,11 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | chan-io-20.5 | `message`: an error where tclsh also gives one, with another message | code 1/1:  \| want: 777 |
 | chan-io-27.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 72 \| want: 0 60 72 |
 | chan-io-27.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 72 \| want: 0 60 72 |
-| chan-io-28.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| chan-io-28.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delet... |
 | chan-io-29.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdin" \| want: channel "stdin" wasn't opened for... |
 | chan-io-29.20 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 12600 \| want: 4096 12288 12600 |
 | chan-io-29.27 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {error writing "file254": broken pipe} {posix epipe {broken pipe}} \| wan... |
-| chan-io-29.35 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| chan-io-29.35 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delet... |
 | chan-io-29.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdin" \| want: channel "stdin" wasn't opened for... |
 | chan-io-3.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: abcdefghijklmnopqrstuvwxyz   |
 | chan-io-3.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: {123456789012345 } {123456789012345  12} |
@@ -1370,7 +1370,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | expr-old-32.48 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 0.8653658439782821 \| want: * |
 | expr-old-32.50 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 550 771 304 670 611 265 48 660 808 388 456 \| want: 97 834 948 36 12 51 766... |
 | expr-old-34.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't use non-numeric string as operand of "hypot"} \| want: 1 {expected... |
-| expr-old-36.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid number "0o289" in expression "0o289" \| want: *invalid octal number* |
 | expr-old-36.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 NaN \| want: 1 {domain error: argument not in valid range} |
 | expr-old-37.18 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: empty expression in expression "" \| want: This is a result: 0.0 |
 | expr-old-37.20 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: expected floating-point number but got "10000000000000000000000000000000000... |
@@ -1535,8 +1534,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | fileName-20.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ~test \| want: ./~test |
 | fileName-20.9 | `bug`: the result differs from tclsh 8.6.16 | setup: couldn't open "~/test": no such file or directory |
 | filename-11.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "glob ?switches? name ?name ...?" \| want: no files m... |
-| filename-11.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3763082/globTest |
-| filename-11.15 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3763082/globTest |
+| filename-11.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl4048108/globTest |
+| filename-11.15 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl4048108/globTest |
 | filename-11.17.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.3 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.4 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
@@ -1591,7 +1590,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filename-13.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/{\}" \| want: unmatched open-brace in... |
 | filename-13.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/}" \| want: unmatched close-brace in ... |
 | filename-14.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
-| filename-14.17 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3763082/globTest/z1.c |
+| filename-14.17 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl4048108/globTest/z1.c |
 | filename-14.22 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "goo/*" \| want: no files matched glob patterns... |
 | filename-14.25 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
 | filename-14.26 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
@@ -1629,7 +1628,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
 | filesystem-6.14 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
 | filesystem-6.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: could not read "": no such file or directory |
-| filesystem-6.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1795743997 \| want: could not read "": no such file or directory |
+| filesystem-6.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1795745708 \| want: could not read "": no such file or directory |
 | filesystem-6.17 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/1: file mtime with a new time is not available \| want: could not read "": no su... |
 | filesystem-6.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't create directory "": no such file or directory |
 | filesystem-6.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: could not read "": no such file or directory |
@@ -1640,7 +1639,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.25 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "" to "": target file exists \| want: error renaming "": no su... |
 | filesystem-6.27 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: / \| want: unrecognised path |
 | filesystem-6.28 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 260 \| want: could not read "": no such file or directory |
-| filesystem-6.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1795743997 \| want: could not read "": no such file or directory |
+| filesystem-6.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1795745708 \| want: could not read "": no such file or directory |
 | filesystem-6.30 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: native root \| want: unrecognised path |
 | filesystem-6.32 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: directory \| want: could not read "": no such file or directory |
 | filesystem-6.33 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
@@ -2065,9 +2064,9 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | info-36.1.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
 | info-37.0 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
 | info-38.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-38.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | setup: bad option "debug": must be alias, aliases, children, create, delete, eval, exis... |
+| info-38.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | setup: bad option "debug": must be alias, aliases, cancel, children, create, delete, ev... |
 | info-38.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-38.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | setup: bad option "debug": must be alias, aliases, children, create, delete, eval, exis... |
+| info-38.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | setup: bad option "debug": must be alias, aliases, cancel, children, create, delete, ev... |
 | info-38.5 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
 | info-38.6 | `bug`: the result differs from tclsh 8.6.16 | setup: interpreter named "sub" already exists, cannot create |
 | info-38.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
@@ -2104,10 +2103,10 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| interp-1.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "frobox": must be alias, aliases, children, create, delete, eval, ... |
-| interp-1.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "hello": must be alias, aliases, children, create, delete, eval, e... |
-| interp-1.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-froboz": must be alias, aliases, children, create, delete, eval,... |
-| interp-1.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-froboz": must be alias, aliases, children, create, delete, eval,... |
+| interp-1.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "frobox": must be alias, aliases, cancel, children, create, delete... |
+| interp-1.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "hello": must be alias, aliases, cancel, children, create, delete,... |
+| interp-1.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-froboz": must be alias, aliases, cancel, children, create, delet... |
+| interp-1.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-froboz": must be alias, aliases, cancel, children, create, delet... |
 | interp-11.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: target interpreter for alias "xcommand" in path "x1 x2 x3" is not my descen... |
 | interp-13.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 \| want: 1 {wrong # args: should be "a issafe"} |
 | interp-14.11 | `bug`: the result differs from tclsh 8.6.16 | setup: bad option "-199989484": must be -safe or -- |
@@ -2116,13 +2115,13 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | interp-14.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "setx x"     invoked from within "a 1 2"     invoke... |
 | interp-14.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "setx x"     invoked from within "a 1 2" \| want: w... |
 | interp-15.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdout" \| want: 1 {can not find channel named ... |
-| interp-15.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| interp-15.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delet... |
 | interp-15.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {can not find channel named "stdout"} |
-| interp-15.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
-| interp-15.5 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
-| interp-15.6 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
-| interp-15.7 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "transfer": must be alias, aliases, children, create, delete, ev... |
-| interp-15.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "transfer": must be alias, aliases, children, create, delete, ev... |
+| interp-15.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delet... |
+| interp-15.5 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delet... |
+| interp-15.6 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delet... |
+| interp-15.7 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "transfer": must be alias, aliases, cancel, children, create, de... |
+| interp-15.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "transfer": must be alias, aliases, cancel, children, create, de... |
 | interp-17.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 a \| want: 1 {cannot define or rename alias "a": would create a loop} |
 | interp-17.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 loop \| want: 1 {cannot define or rename alias "loop": would create a loop} |
 | interp-17.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 b \| want: 1 {cannot define or rename alias "b": would create a loop} |
@@ -2205,43 +2204,43 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | interp-34.5 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, inv... |
 | interp-34.6 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, inv... |
 | interp-34.7 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, inv... |
-| interp-34.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-34.9 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
-| interp-35.1 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.10 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.11 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.12 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
-| interp-35.13 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
-| interp-35.14 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
-| interp-35.15 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.16 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.17 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.18 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.19 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.20 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.21 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.22 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
-| interp-35.23 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.24 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.3 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
-| interp-35.5 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
-| interp-35.6 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
-| interp-35.7 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
-| interp-35.9 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-34.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-34.9 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delet... |
+| interp-35.1 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.10 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.11 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.12 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delet... |
+| interp-35.13 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delet... |
+| interp-35.14 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delet... |
+| interp-35.15 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.16 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.17 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.18 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.19 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.20 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.21 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.22 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delet... |
+| interp-35.23 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.24 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.3 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delet... |
+| interp-35.5 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delet... |
+| interp-35.6 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delet... |
+| interp-35.7 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
+| interp-35.9 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete,... |
 | interp-36.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: ::tcl::Bgerror \| want: wrong # args: should be "interp bgerror path ?cmdPref... |
 | interp-36.3 | `bug`: the result differs from tclsh 8.6.16 | setup: interpreter named "child" already exists, cannot create |
 | interp-36.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: unmatched open brace in list \| want: cmdPrefix must be list of length >= 1 |
-| interp-38.1 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | setup: bad option "debug": must be alias, aliases, children, create, delete, eval, exis... |
-| interp-38.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "debug": must be alias, aliases, children, create, delete, eval,... |
-| interp-38.3 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, children, create, delete, eval, e... |
-| interp-38.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "debug": must be alias, aliases, children, create, delete, eval,... |
-| interp-38.5 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "debug": must be alias, aliases, children, create, delete, eval,... |
-| interp-38.6 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, children, create, delete, eval, e... |
-| interp-38.7 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, children, create, delete, eval, e... |
-| interp-38.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, children, create, delete, eval, e... |
+| interp-38.1 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | setup: bad option "debug": must be alias, aliases, cancel, children, create, delete, ev... |
+| interp-38.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "debug": must be alias, aliases, cancel, children, create, delet... |
+| interp-38.3 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, cancel, children, create, delete,... |
+| interp-38.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "debug": must be alias, aliases, cancel, children, create, delet... |
+| interp-38.5 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "debug": must be alias, aliases, cancel, children, create, delet... |
+| interp-38.6 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, cancel, children, create, delete,... |
+| interp-38.7 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, cancel, children, create, delete,... |
+| interp-38.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, cancel, children, create, delete,... |
 | interp-7.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: bar foo \| want: wrong # args: should be "a aliases" |
 | interp-8.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "interp alias childPath childCmd ?targetPath targetCm... |
 | interp-9.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: GLOBAL NAMESPACE \| want: GLOBAL GLOBAL |
@@ -2282,11 +2281,11 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | io-20.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: 777 |
 | io-27.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 72 \| want: 0 60 72 |
 | io-27.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 72 \| want: 0 60 72 |
-| io-28.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| io-28.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delet... |
 | io-29.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't o... |
 | io-29.20 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 12600 \| want: 4096 12288 12600 |
 | io-29.27 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {error writing "": broken pipe} {posix epipe {broken pipe}} \| want: 1 {e... |
-| io-29.35 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| io-29.35 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delet... |
 | io-29.36.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {<1 line>} {<2 line>} <> {<3 line>} {<1 line>} {<2 line>} {<3 line>} {<1 li... |
 | io-29.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't o... |
 | io-3.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: abcdefghijklmnopqrstuvwxyz   |
@@ -3250,63 +3249,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 ### parseExpr.test
 
-| Test | Bucket | Result (start) |
-|---|---|---|
-| parseExpr-21.15 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "~" in expression "0~0" \| want: missing operator at _@_ in... |
-| parseExpr-21.16 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character ")" in expression "()" \| want: empty subexpression at _@_ ... |
-| parseExpr-21.17 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing operand at _@_ in expression "(_@_" \| want: unbalanced open paren in... |
-| parseExpr-21.18 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character ")" in expression "a(0,)" \| want: missing function argumen... |
-| parseExpr-21.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "=" in expression "=" \| want: incomplete operator "=" in e... |
-| parseExpr-21.20 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character ")" in expression ")" \| want: unbalanced close paren in ex... |
-| parseExpr-21.21 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "," in expression "a(,0)" \| want: missing function argumen... |
-| parseExpr-21.22 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "\|" in expression "0&\|0" \| want: missing operand at _@_ ... |
-| parseExpr-21.23 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "^" in expression "0^^0" \| want: missing operand at _@_ in... |
-| parseExpr-21.24 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "&" in expression "0\|&0" \| want: missing operand at _@_ i... |
-| parseExpr-21.25 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "," in expression "a(1+,0)" \| want: missing operand at _@_... |
-| parseExpr-21.27 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing operator ":" in expression "0?0" \| want: missing operator ":" at _@_... |
-| parseExpr-21.28 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character ":" in expression "0:0" \| want: unexpected operator ":" wi... |
-| parseExpr-21.29 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character ")" in expression "0)" \| want: unbalanced close paren in e... |
-| parseExpr-21.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid bareword "x" in expression "x" \| want: invalid bareword "x" in expre... |
-| parseExpr-21.30 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "," in expression "0," \| want: unexpected "," outside func... |
-| parseExpr-21.31 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "," in expression "0,0" \| want: unexpected "," outside fun... |
-| parseExpr-21.32 | `message`: an error where tclsh also gives one, with another message | code 1/1: unbalanced open paren in expression "(0,0)" \| want: unexpected "," outside f... |
-| parseExpr-21.33 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close paren in expression "a(0:0,0)" \| want: unexpected operator ":"... |
-| parseExpr-21.34 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "@" in expression ""abcdefghijklmnopqrstuvwxyz"@0" \| want:... |
-| parseExpr-21.35 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "@" in expression "0@"abcdefghijklmnopqrstuvwxyz"" \| want:... |
-| parseExpr-21.36 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "@" in expression ""abcdefghijklmnopqrstuvwxyz"@"abcdefghij... |
-| parseExpr-21.37 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "@" in expression ""§§§§§§§§§§§§§§§§§§§§§§§§§" @ 0" \| want... |
-| parseExpr-21.38 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "@" in expression "0 @ "§§§§§§§§§§§§§§§§§§§§§§§§§"" \| want... |
-| parseExpr-21.39 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "@" in expression ""§§§§§§§§§§§§§§§§§§§§§§§§§" @ "§§§§§§§§§... |
-| parseExpr-21.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid bareword "abcdefghijklmnopqrstuvwxyz" in expression "abcdefghijklmnop... |
-| parseExpr-21.40 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid character "@" in expression ""abcdefghijklmnopqrstuvwxyz"@0"     wh... |
-| parseExpr-21.41 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid character "@" in expression ""§§§§§§§§§§§§§§§§§§§§§§§§§" @ 0"     w... |
-| parseExpr-21.42 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing " in expression "123456789012345678901234567890*"abcdefghijklmnopqrst... |
-| parseExpr-21.43 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace for variable name in expression "123456789012345678901234... |
-| parseExpr-21.44 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing ) in expression "123456789012345678901234567890*"foo$bar(abcdefghijkl... |
-| parseExpr-21.45 | `message`: an error where tclsh also gives one, with another message | code 1/1: extra characters after close-brace in expression "123456789012345678901234567... |
-| parseExpr-21.46 | `message`: an error where tclsh also gives one, with another message | code 1/1: extra characters after close-quote in expression "123456789012345678901234567... |
-| parseExpr-21.47 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-bracket in expression "123456789012345678901234567890*"foo$bar(... |
-| parseExpr-21.48 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace in expression "123456789012345678901234567890*"foo$bar([{... |
-| parseExpr-21.49 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace in expression "123456789012345678901234567890*{abcdefghij... |
-| parseExpr-21.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "[" in expression "[][]" \| want: missing operator at _@_ i... |
-| parseExpr-21.50 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing " in expression "123456789012345678901234567890*$foo(["abcdefghijklmn... |
-| parseExpr-21.51 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace for variable name in expression "123456789012345678901234... |
-| parseExpr-21.52 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing ) in expression "123456789012345678901234567890*$bar(abcdefghijklmnop... |
-| parseExpr-21.53 | `message`: an error where tclsh also gives one, with another message | code 1/1: extra characters after close-brace in expression "123456789012345678901234567... |
-| parseExpr-21.54 | `message`: an error where tclsh also gives one, with another message | code 1/1: extra characters after close-quote in expression "123456789012345678901234567... |
-| parseExpr-21.55 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-bracket in expression "123456789012345678901234567890*$bar([abc... |
-| parseExpr-21.56 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace in expression "123456789012345678901234567890*$bar([{abcd... |
-| parseExpr-21.57 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing " in expression "123456789012345678901234567890*["abcdefghijklmnopqrs... |
-| parseExpr-21.58 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace for variable name in expression "123456789012345678901234... |
-| parseExpr-21.59 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing ) in expression "123456789012345678901234567890*[$bar(abcdefghijklmno... |
-| parseExpr-21.6 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "0" in expression "0 0" \| want: missing operator at _@_ in... |
-| parseExpr-21.60 | `message`: an error where tclsh also gives one, with another message | code 1/1: extra characters after close-brace in expression "123456789012345678901234567... |
-| parseExpr-21.61 | `message`: an error where tclsh also gives one, with another message | code 1/1: extra characters after close-quote in expression "123456789012345678901234567... |
-| parseExpr-21.62 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-bracket in expression "123456789012345678901234567890*[abcdefgh... |
-| parseExpr-21.63 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace in expression "123456789012345678901234567890*[{abcdefghi... |
-| parseExpr-21.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid number "0o8" in expression "0o8" \| want: *invalid octal number* |
-| parseExpr-21.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid number "0o8" in expression "0o8x" \| want: *invalid octal number* |
-
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | testexprparser | 215 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
@@ -4071,7 +4013,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 38689', Got '' \| want: OK |
+| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 36579', Got '' \| want: OK |
 | unixInit-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
 | unixInit-4.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "tcl_pkgPath": no such variable \| want: unix |
 | unixInit-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0: couldn't open "/dev/null": no such file or directory \| want:  |

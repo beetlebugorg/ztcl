@@ -19,6 +19,7 @@ const Value = value.Value;
 const Interp = interp.Interp;
 const Error = interp.Error;
 const mathns = @import("mathns.zig");
+const diag = @import("expr_diag.zig");
 
 pub const UnOp = enum { neg, pos, not, bitnot };
 
@@ -372,6 +373,8 @@ const ExprParser = struct {
             if (is_int) {
                 if (value.parseIntStrict(text)) |n| return e.node(.{ .constant = .{ .int = n } });
                 if (try bigint.canonical(e.it, text)) |v| return e.node(.{ .constant = v });
+                // An integer such as 08 is a bad octal number in Tcl 8.6.
+                return e.fail("invalid number \"{s}\"", .{text});
             }
             if (value.parseDouble(text)) |d| return e.node(.{ .constant = .{ .double = d } });
             return e.fail("invalid number \"{s}\"", .{text});
@@ -436,6 +439,26 @@ fn boolWord(s: []const u8) ?bool {
 
 /// Parses an expression. The tree lives in the arena of the interpreter.
 pub fn compile(it: *Interp, text: []const u8) Error!*Node {
+    return parse(it, text) catch |e| {
+        if (e != error.TclError) return e;
+        const r = try it.str(it.result);
+        if (std.mem.startsWith(u8, r, "the expression is")) return e;
+        const d = (try diag.diagnose(it, text, isBoolWord)) orelse return e;
+        const msg = try diag.message(it, text, d);
+        const code = d.code orelse return it.fail("{s}", .{msg});
+        return it.failCode(try std.fmt.allocPrint(it.alloc(), "TCL PARSE EXPR {s}", .{code}), "{s}", .{msg});
+    };
+}
+
+/// The line that Tcl adds to the errorInfo after a syntax error of an
+/// expression.
+pub const parseInfo = diag.infoLine;
+
+fn isBoolWord(s: []const u8) bool {
+    return boolWord(s) != null;
+}
+
+fn parse(it: *Interp, text: []const u8) Error!*Node {
     var e: ExprParser = .{ .it = it, .p = .{ .a = it.alloc(), .src = text } };
     e.skip();
     if (e.p.pos >= text.len) return it.fail("empty expression\nin expression \"{s}\"", .{text});

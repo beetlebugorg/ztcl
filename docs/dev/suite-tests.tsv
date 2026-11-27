@@ -1447,7 +1447,7 @@ chanio.test	chan-io-27.4	fail	fail	bug	code 0/0,2: 0 0 72 \| want: 0 60 72
 chanio.test	chan-io-27.5	fail	fail	bug	code 0/0,2: 0 0 72 \| want: 0 60 72
 chanio.test	chan-io-27.6	skip	skip	tcl	asyncPipeChan
 chanio.test	chan-io-28.1	skip	skip	internals	testchannel
-chanio.test	chan-io-28.2	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: abcdef
+chanio.test	chan-io-28.2	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: abcdef
 chanio.test	chan-io-28.3	skip	skip	tcl	asyncPipeChan
 chanio.test	chan-io-28.4	skip	skip	internals	testchannel
 chanio.test	chan-io-28.5	skip	skip	internals	testchannel
@@ -1481,7 +1481,7 @@ chanio.test	chan-io-29.31	pass	pass
 chanio.test	chan-io-29.32	skip	skip	tcl	asyncPipeChan
 chanio.test	chan-io-29.33	pass	pass		
 chanio.test	chan-io-29.34	pass	pass		
-chanio.test	chan-io-29.35	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 
+chanio.test	chan-io-29.35	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 
 chanio.test	chan-io-29.4	skip	skip	internals	testchannel
 chanio.test	chan-io-29.5	skip	skip	internals	testchannel
 chanio.test	chan-io-29.6	skip	skip	internals	testchannel
@@ -12907,7 +12907,7 @@ expr-old.test	expr-old-34.6	pass	pass
 expr-old.test	expr-old-34.7	pass	pass		
 expr-old.test	expr-old-34.8	pass	pass		
 expr-old.test	expr-old-34.9	pass	pass		
-expr-old.test	expr-old-36.1	fail	fail	message	code 1/1: invalid number "0o289" in expression "0o289" \| want: *invalid octal number*
+expr-old.test	expr-old-36.1	pass	pass		
 expr-old.test	expr-old-36.10	pass	pass		
 expr-old.test	expr-old-36.11	pass	pass		
 expr-old.test	expr-old-36.12	pass	pass		
@@ -27509,8 +27509,8 @@ fileName.test	filename-11.1	fail	fail	message	code 1/1: wrong # args: should be 
 fileName.test	filename-11.10	skip	skip	internals	testsetplatform
 fileName.test	filename-11.11	skip	skip	internals	testsetplatform
 fileName.test	filename-11.12	skip	skip	internals	testsetplatform
-fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3763082/globTest
-fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3763082/globTest
+fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl4048108/globTest
+fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl4048108/globTest
 fileName.test	filename-11.16	pass	pass		
 fileName.test	filename-11.17	pass	pass		
 fileName.test	filename-11.17.1	skip	skip	platform	win
@@ -27559,7 +27559,7 @@ fileName.test	filename-11.41	fail	fail	bug	code 1/0,2: bad option "-dir": must b
 fileName.test	filename-11.42	fail	fail	bug	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
 fileName.test	filename-11.43	fail	fail	message	code 1/1: bad option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: ambiguous option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types, or --
 fileName.test	filename-11.44	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: "-directory" cannot be used with "-path"
-fileName.test	filename-11.45	fail	fail	bug	code 0/0,2: {} {all.tcl httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcl3763082 tcltests.tcl ztclsh} \| want: equal
+fileName.test	filename-11.45	fail	fail	bug	code 0/0,2: {} {all.tcl httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcl4048108 tcltests.tcl ztclsh} \| want: equal
 fileName.test	filename-11.46	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: bad argument to "-types": abcde
 fileName.test	filename-11.47	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde
 fileName.test	filename-11.48	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: bad argument to "-types": abcde
@@ -27607,7 +27607,7 @@ fileName.test	filename-14.1	pass	pass
 fileName.test	filename-14.11	pass	pass		
 fileName.test	filename-14.13	pass	pass		
 fileName.test	filename-14.15	fail	fail	bug	code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c \| want: globTest/a1/ globTest/a2/ globTest/a3/
-fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3763082/globTest/z1.c
+fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl4048108/globTest/z1.c
 fileName.test	filename-14.18	pass	pass		
 fileName.test	filename-14.20	pass	pass		
 fileName.test	filename-14.21	pass	pass		
@@ -27848,7 +27848,7 @@ fileSystem.test	filesystem-6.12	pass	pass
 fileSystem.test	filesystem-6.13	pass	pass		
 fileSystem.test	filesystem-6.14	fail	fail	design	code 1/1: could not link: links are not available in the root folder \| want: could not read link "": no such file or directory
 fileSystem.test	filesystem-6.15	fail	fail	bug	code 0/1:  \| want: could not read "": no such file or directory
-fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795743997 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795745708 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.17	fail	fail	feature	code 1/1: file mtime with a new time is not available \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.18	fail	fail	bug	code 0/1:  \| want: can't create directory "": no such file or directory
 fileSystem.test	filesystem-6.19	pass	pass		
@@ -27863,7 +27863,7 @@ fileSystem.test	filesystem-6.26	pass	pass
 fileSystem.test	filesystem-6.27	fail	fail	bug	code 0/1: / \| want: unrecognised path
 fileSystem.test	filesystem-6.28	fail	fail	bug	code 0/1: 260 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.29	pass	pass		
-fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795743997 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795745708 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.30	fail	fail	bug	code 0/1: native root \| want: unrecognised path
 fileSystem.test	filesystem-6.31	pass	pass		
 fileSystem.test	filesystem-6.32	fail	fail	bug	code 0/1: directory \| want: could not read "": no such file or directory
@@ -28978,9 +28978,9 @@ info.test	info-36.1.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcomm
 info.test	info-36.1.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1291 file info.tes...
 info.test	info-37.0	fail	fail	bug	cleanup: can't unset "res": no such variable
 info.test	info-38.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
-info.test	info-38.2	fail	fail	feature	setup: bad option "debug": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, recursionlimit, slaves, or target
+info.test	info-38.2	fail	fail	feature	setup: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, recursionlimit, slaves, or target
 info.test	info-38.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
-info.test	info-38.4	fail	fail	feature	setup: bad option "debug": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, recursionlimit, slaves, or target
+info.test	info-38.4	fail	fail	feature	setup: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, recursionlimit, slaves, or target
 info.test	info-38.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
 info.test	info-38.6	fail	fail	bug	setup: interpreter named "sub" already exists, cannot create
 info.test	info-38.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
@@ -29049,14 +29049,14 @@ init.test	init-1.7	fail	fail	feature	code 1/0,2: invalid command name "auto_qual
 init.test	init-1.8	fail	fail	feature	code 1/0,2: invalid command name "auto_qualify" \| want: foo
 interp.test	interp-1.1	pass	pass		
 interp.test	interp-1.10	pass	pass		
-interp.test	interp-1.2	fail	fail	message	code 1/1: bad option "frobox": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted \| want: bad option "frobox": must be alias, a...
+interp.test	interp-1.2	fail	fail	message	code 1/1: bad option "frobox": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mar \| want: bad option "frobox": must be alias, a...
 interp.test	interp-1.3	pass	pass		
 interp.test	interp-1.4	pass	pass		
 interp.test	interp-1.5	pass	pass		
 interp.test	interp-1.6	pass	pass		
-interp.test	interp-1.7	fail	fail	message	code 1/1: bad option "hello": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: bad option "hello": must be alias, al...
-interp.test	interp-1.8	fail	fail	message	code 1/1: bad option "-froboz": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktruste \| want: bad option "-froboz": must be alias, ...
-interp.test	interp-1.9	fail	fail	message	code 1/1: bad option "-froboz": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktruste \| want: bad option "-froboz": must be alias, ...
+interp.test	interp-1.7	fail	fail	message	code 1/1: bad option "hello": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: bad option "hello": must be alias, al...
+interp.test	interp-1.8	fail	fail	message	code 1/1: bad option "-froboz": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, ma \| want: bad option "-froboz": must be alias, ...
+interp.test	interp-1.9	fail	fail	message	code 1/1: bad option "-froboz": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, ma \| want: bad option "-froboz": must be alias, ...
 interp.test	interp-10.1	pass	pass		
 interp.test	interp-10.2	pass	pass		
 interp.test	interp-10.3	pass	pass		
@@ -29091,13 +29091,13 @@ interp.test	interp-14.7	fail	fail	bug	code 0/0,2: wrong # args: should be "setx 
 interp.test	interp-14.8	pass	pass		
 interp.test	interp-14.9	pass	pass		
 interp.test	interp-15.1	fail	fail	bug	code 1/0,2: can not find channel named "stdout" \| want: 1 {can not find channel named "stdout"}
-interp.test	interp-15.2	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 
+interp.test	interp-15.2	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 
 interp.test	interp-15.3	fail	fail	bug	code 0/0,2: 0 {} \| want: 1 {can not find channel named "stdout"}
-interp.test	interp-15.4	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 
-interp.test	interp-15.5	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 1 {channel "stdout" wasn't opened f...
-interp.test	interp-15.6	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 0
-interp.test	interp-15.7	fail	fail	feature	code 1/0,2: bad option "transfer": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrust \| want: 
-interp.test	interp-15.8	fail	fail	feature	code 1/0,2: bad option "transfer": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrust \| want: 0
+interp.test	interp-15.4	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 
+interp.test	interp-15.5	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 1 {channel "stdout" wasn't opened f...
+interp.test	interp-15.6	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 0
+interp.test	interp-15.7	fail	fail	feature	code 1/0,2: bad option "transfer": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, m \| want: 
+interp.test	interp-15.8	fail	fail	feature	code 1/0,2: bad option "transfer": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, m \| want: 0
 interp.test	interp-16.0	pass	pass		
 interp.test	interp-16.1	pass	pass		
 interp.test	interp-16.2	pass	pass		
@@ -29327,32 +29327,32 @@ interp.test	interp-34.4	fail	fail	feature	code 1/0,2: bad option "limit": must b
 interp.test	interp-34.5	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokehidden, issafe, marktrusted, or recursionlimit \| want: 6 4 b
 interp.test	interp-34.6	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokehidden, issafe, marktrusted, or recursionlimit \| want: 6 4 b
 interp.test	interp-34.7	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokehidden, issafe, marktrusted, or recursionlimit \| want: 4 0
-interp.test	interp-34.8	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: limit exceeded
-interp.test	interp-34.9	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 1 {time limit exceeded} OK
-interp.test	interp-35.1	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: wrong # args: should be "interp limit...
-interp.test	interp-35.10	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: expected integer but got "foobar"
-interp.test	interp-35.11	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: command limit value must be at least 0
-interp.test	interp-35.12	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: -command {} -granularity 10 -millis...
-interp.test	interp-35.13	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 10
-interp.test	interp-35.14	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 
-interp.test	interp-35.15	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: bad option "-foobar": must be -comman...
-interp.test	interp-35.16	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: expected integer but got "foobar"
-interp.test	interp-35.17	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: granularity must be at least 1
-interp.test	interp-35.18	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: expected integer but got "foobar"
-interp.test	interp-35.19	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: seconds must be at least 0
-interp.test	interp-35.2	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: wrong # args: should be "interp limit...
-interp.test	interp-35.20	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: expected integer but got "foobar"
-interp.test	interp-35.21	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: milliseconds must be at least 0
-interp.test	interp-35.22	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 2 500
-interp.test	interp-35.23	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: limits on current interpreter inacces...
-interp.test	interp-35.24	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: limits on current interpreter inacces...
-interp.test	interp-35.3	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: bad limit type "foo": must be command...
-interp.test	interp-35.4	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: -command {} -granularity 1 -value {}
-interp.test	interp-35.5	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 1
-interp.test	interp-35.6	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 
-interp.test	interp-35.7	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: bad option "-foobar": must be -comman...
-interp.test	interp-35.8	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: expected integer but got "foobar"
-interp.test	interp-35.9	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: granularity must be at least 1
+interp.test	interp-34.8	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: limit exceeded
+interp.test	interp-34.9	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 1 {time limit exceeded} OK
+interp.test	interp-35.1	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: wrong # args: should be "interp limit...
+interp.test	interp-35.10	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: expected integer but got "foobar"
+interp.test	interp-35.11	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: command limit value must be at least 0
+interp.test	interp-35.12	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: -command {} -granularity 10 -millis...
+interp.test	interp-35.13	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 10
+interp.test	interp-35.14	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 
+interp.test	interp-35.15	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: bad option "-foobar": must be -comman...
+interp.test	interp-35.16	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: expected integer but got "foobar"
+interp.test	interp-35.17	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: granularity must be at least 1
+interp.test	interp-35.18	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: expected integer but got "foobar"
+interp.test	interp-35.19	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: seconds must be at least 0
+interp.test	interp-35.2	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: wrong # args: should be "interp limit...
+interp.test	interp-35.20	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: expected integer but got "foobar"
+interp.test	interp-35.21	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: milliseconds must be at least 0
+interp.test	interp-35.22	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 2 500
+interp.test	interp-35.23	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: limits on current interpreter inacces...
+interp.test	interp-35.24	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: limits on current interpreter inacces...
+interp.test	interp-35.3	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: bad limit type "foo": must be command...
+interp.test	interp-35.4	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: -command {} -granularity 1 -value {}
+interp.test	interp-35.5	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 1
+interp.test	interp-35.6	fail	fail	feature	code 1/0,2: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 
+interp.test	interp-35.7	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: bad option "-foobar": must be -comman...
+interp.test	interp-35.8	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: expected integer but got "foobar"
+interp.test	interp-35.9	fail	fail	feature	code 1/1: bad option "limit": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: granularity must be at least 1
 interp.test	interp-36.1	fail	fail	bug	code 0/1: ::tcl::Bgerror \| want: wrong # args: should be "interp bgerror path ?cmdPrefix?"
 interp.test	interp-36.2	pass	pass		
 interp.test	interp-36.3	fail	fail	bug	setup: interpreter named "child" already exists, cannot create
@@ -29361,14 +29361,14 @@ interp.test	interp-36.5	pass	pass
 interp.test	interp-36.6	pass	pass		
 interp.test	interp-36.7	pass	pass		
 interp.test	interp-37.1	pass	pass		
-interp.test	interp-38.1	fail	fail	feature	setup: bad option "debug": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, recursionlimit, slaves, or target
-interp.test	interp-38.2	fail	fail	feature	code 1/0,2: bad option "debug": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: -frame 1
-interp.test	interp-38.3	fail	fail	feature	code 1/1: bad option "debug": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: wrong # args: should be "interp debug...
-interp.test	interp-38.4	fail	fail	feature	code 1/0,2: bad option "debug": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: -frame 0
-interp.test	interp-38.5	fail	fail	feature	code 1/0,2: bad option "debug": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 0
-interp.test	interp-38.6	fail	fail	feature	code 1/1: bad option "debug": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: could not find interpreter "-frames"
-interp.test	interp-38.7	fail	fail	feature	code 1/1: bad option "debug": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: bad debug option "-frames": must be -...
-interp.test	interp-38.8	fail	fail	feature	code 1/1: bad option "debug": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: wrong # args: should be "interp debug...
+interp.test	interp-38.1	fail	fail	feature	setup: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, recursionlimit, slaves, or target
+interp.test	interp-38.2	fail	fail	feature	code 1/0,2: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: -frame 1
+interp.test	interp-38.3	fail	fail	feature	code 1/1: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: wrong # args: should be "interp debug...
+interp.test	interp-38.4	fail	fail	feature	code 1/0,2: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: -frame 0
+interp.test	interp-38.5	fail	fail	feature	code 1/0,2: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 0
+interp.test	interp-38.6	fail	fail	feature	code 1/1: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: could not find interpreter "-frames"
+interp.test	interp-38.7	fail	fail	feature	code 1/1: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: bad debug option "-frames": must be -...
+interp.test	interp-38.8	fail	fail	feature	code 1/1: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: wrong # args: should be "interp debug...
 interp.test	interp-4.1	pass	pass		
 interp.test	interp-4.2	pass	pass		
 interp.test	interp-4.3	pass	pass		
@@ -29481,7 +29481,7 @@ io.test	io-27.4	fail	fail	bug	code 0/0,2: 0 0 72 \| want: 0 60 72
 io.test	io-27.5	fail	fail	bug	code 0/0,2: 0 0 72 \| want: 0 60 72
 io.test	io-27.6	pass	pass		
 io.test	io-28.1	skip	skip	internals	testchannel
-io.test	io-28.2	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: abcdef
+io.test	io-28.2	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: abcdef
 io.test	io-28.3	skip	skip	tcl	nonPortable
 io.test	io-28.4	skip	skip	internals	testchannel
 io.test	io-28.5	skip	skip	internals	testchannel
@@ -29514,7 +29514,7 @@ io.test	io-29.32	pass	pass
 io.test	io-29.33	pass	pass		
 io.test	io-29.33b	pass	pass		
 io.test	io-29.34	pass	pass		
-io.test	io-29.35	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: 
+io.test	io-29.35	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mark \| want: 
 io.test	io-29.36.1	pass	pass		
 io.test	io-29.36.2	fail	fail	bug	code 0/0,2: {<1 line>} {<2 line>} <> {<3 line>} {<1 line>} {<2 line>} {<3 line>} {<1 line>} {<2 line>} <> {<3 line>} {<1 line>} {<2 line>} {<3 line>} {< \| want: {<1 line>} {<2 line>} {<3 line>} {<...
 io.test	io-29.4	skip	skip	internals	testchannel
@@ -35411,62 +35411,62 @@ parseExpr.test	parseExpr-21.11	pass	pass
 parseExpr.test	parseExpr-21.12	pass	pass		
 parseExpr.test	parseExpr-21.13	pass	pass		
 parseExpr.test	parseExpr-21.14	pass	pass		
-parseExpr.test	parseExpr-21.15	fail	fail	message	code 1/1: invalid character "~" in expression "0~0" \| want: missing operator at _@_ in expression "0_@_~0"
-parseExpr.test	parseExpr-21.16	fail	fail	message	code 1/1: invalid character ")" in expression "()" \| want: empty subexpression at _@_ in expression "(_@_)"
-parseExpr.test	parseExpr-21.17	fail	fail	message	code 1/1: missing operand at _@_ in expression "(_@_" \| want: unbalanced open paren in expression "("
-parseExpr.test	parseExpr-21.18	fail	fail	message	code 1/1: invalid character ")" in expression "a(0,)" \| want: missing function argument at _@_ in expression "a(0,_@_)"
+parseExpr.test	parseExpr-21.15	pass	pass		
+parseExpr.test	parseExpr-21.16	pass	pass		
+parseExpr.test	parseExpr-21.17	pass	pass		
+parseExpr.test	parseExpr-21.18	pass	pass		
 parseExpr.test	parseExpr-21.19	pass	pass		
-parseExpr.test	parseExpr-21.2	fail	fail	message	code 1/1: invalid character "=" in expression "=" \| want: incomplete operator "=" in expression "="
-parseExpr.test	parseExpr-21.20	fail	fail	message	code 1/1: invalid character ")" in expression ")" \| want: unbalanced close paren in expression ")"
-parseExpr.test	parseExpr-21.21	fail	fail	message	code 1/1: invalid character "," in expression "a(,0)" \| want: missing function argument at _@_ in expression "a(_@_,0)"
-parseExpr.test	parseExpr-21.22	fail	fail	message	code 1/1: invalid character "\|" in expression "0&\|0" \| want: missing operand at _@_ in expression "0&_@_\|0"
-parseExpr.test	parseExpr-21.23	fail	fail	message	code 1/1: invalid character "^" in expression "0^^0" \| want: missing operand at _@_ in expression "0^_@_^0"
-parseExpr.test	parseExpr-21.24	fail	fail	message	code 1/1: invalid character "&" in expression "0\|&0" \| want: missing operand at _@_ in expression "0\|_@_&0"
-parseExpr.test	parseExpr-21.25	fail	fail	message	code 1/1: invalid character "," in expression "a(1+,0)" \| want: missing operand at _@_ in expression "a(1+_@_,0)"
+parseExpr.test	parseExpr-21.2	pass	pass		
+parseExpr.test	parseExpr-21.20	pass	pass		
+parseExpr.test	parseExpr-21.21	pass	pass		
+parseExpr.test	parseExpr-21.22	pass	pass		
+parseExpr.test	parseExpr-21.23	pass	pass		
+parseExpr.test	parseExpr-21.24	pass	pass		
+parseExpr.test	parseExpr-21.25	pass	pass		
 parseExpr.test	parseExpr-21.26	pass	pass		
-parseExpr.test	parseExpr-21.27	fail	fail	message	code 1/1: missing operator ":" in expression "0?0" \| want: missing operator ":" at _@_ in expression "0?0_@_"
-parseExpr.test	parseExpr-21.28	fail	fail	message	code 1/1: invalid character ":" in expression "0:0" \| want: unexpected operator ":" without preceding "?" in expression "0:0"
-parseExpr.test	parseExpr-21.29	fail	fail	message	code 1/1: invalid character ")" in expression "0)" \| want: unbalanced close paren in expression "0)"
-parseExpr.test	parseExpr-21.3	fail	fail	message	code 1/1: invalid bareword "x" in expression "x" \| want: invalid bareword "x" in expression "x"; should be "$x" or "{x}" or "x(...)" or ...
-parseExpr.test	parseExpr-21.30	fail	fail	message	code 1/1: invalid character "," in expression "0," \| want: unexpected "," outside function argument list in expression "0,"
-parseExpr.test	parseExpr-21.31	fail	fail	message	code 1/1: invalid character "," in expression "0,0" \| want: unexpected "," outside function argument list in expression "0,0"
-parseExpr.test	parseExpr-21.32	fail	fail	message	code 1/1: unbalanced open paren in expression "(0,0)" \| want: unexpected "," outside function argument list in expression "(0,0)"
-parseExpr.test	parseExpr-21.33	fail	fail	message	code 1/1: missing close paren in expression "a(0:0,0)" \| want: unexpected operator ":" without preceding "?" in expression "a(0:0,0)"
-parseExpr.test	parseExpr-21.34	fail	fail	message	code 1/1: invalid character "@" in expression ""abcdefghijklmnopqrstuvwxyz"@0" \| want: invalid character "@" in expression "...fghijklmnopqrstuvwxyz"@0"
-parseExpr.test	parseExpr-21.35	fail	fail	message	code 1/1: invalid character "@" in expression "0@"abcdefghijklmnopqrstuvwxyz"" \| want: invalid character "@" in expression "0@"abcdefghijklmnopqrstu..."
-parseExpr.test	parseExpr-21.36	fail	fail	message	code 1/1: invalid character "@" in expression ""abcdefghijklmnopqrstuvwxyz"@"abcdefghijklmnopqrstuvwxyz"" \| want: invalid character "@" in expression "...fghijklmnopqrstuvwxyz"@"abcdefghijklmnopqr...
-parseExpr.test	parseExpr-21.37	fail	fail	message	code 1/1: invalid character "@" in expression ""§§§§§§§§§§§§§§§§§§§§§§§§§" @ 0" \| want: invalid character "@" in expression "...§§§§§§§§§§" @ 0"
-parseExpr.test	parseExpr-21.38	fail	fail	message	code 1/1: invalid character "@" in expression "0 @ "§§§§§§§§§§§§§§§§§§§§§§§§§"" \| want: invalid character "@" in expression "0 @ "§§§§§§§§§§..."
-parseExpr.test	parseExpr-21.39	fail	fail	message	code 1/1: invalid character "@" in expression ""§§§§§§§§§§§§§§§§§§§§§§§§§" @ "§§§§§§§§§§§§§§§§§§§§§§§§§"" \| want: invalid character "@" in expression "...§§§§§§§§§§" @ "§§§§§§§§§§..."
-parseExpr.test	parseExpr-21.4	fail	fail	message	code 1/1: invalid bareword "abcdefghijklmnopqrstuvwxyz" in expression "abcdefghijklmnopqrstuvwxyz" \| want: invalid bareword "abcdefghijklmnopqrstuv..." in expression "abcdefghijklmnopqrstuv..."; s...
-parseExpr.test	parseExpr-21.40	fail	fail	bug	code 0/0,2: invalid character "@" in expression ""abcdefghijklmnopqrstuvwxyz"@0"     while executing "expr {"abcdefghijklmnopqrstuvwxyz"@0}" \| want: invalid character "@" in expression "...fghijkl...
-parseExpr.test	parseExpr-21.41	fail	fail	bug	code 0/0,2: invalid character "@" in expression ""§§§§§§§§§§§§§§§§§§§§§§§§§" @ 0"     while executing "expr [format {"%s" @ 0} [string repeat \u00a7 25] \| want: invalid character "@" in expression...
-parseExpr.test	parseExpr-21.42	fail	fail	message	code 1/1: missing " in expression "123456789012345678901234567890*"abcdefghijklmnopqrstuvwxyz" \| want: missing " in expression "...012345678901234567890*"abcdefghijklmnopqrstuv..."
-parseExpr.test	parseExpr-21.43	fail	fail	message	code 1/1: missing close-brace for variable name in expression "123456789012345678901234567890*"foobar${abcdefghijklmnopqrstuvwxyz"" \| want: missing close-brace for variable name in expression "......
-parseExpr.test	parseExpr-21.44	fail	fail	message	code 1/1: missing ) in expression "123456789012345678901234567890*"foo$bar(abcdefghijklmnopqrstuvwxyz"" \| want: missing ) in expression "...8901234567890*"foo$bar(abcdefghijklmnopqrstuv..."
-parseExpr.test	parseExpr-21.45	fail	fail	message	code 1/1: extra characters after close-brace in expression "123456789012345678901234567890*"foo$bar([{}abcdefghijklmnopqrstuvwxyz])"" \| want: extra characters after close-brace in expression "...2...
-parseExpr.test	parseExpr-21.46	fail	fail	message	code 1/1: extra characters after close-quote in expression "123456789012345678901234567890*"foo$bar([""abcdefghijklmnopqrstuvwxyz])"" \| want: extra characters after close-quote in expression "...2...
-parseExpr.test	parseExpr-21.47	fail	fail	message	code 1/1: missing close-bracket in expression "123456789012345678901234567890*"foo$bar([abcdefghijklmnopqrstuvwxyz)"" \| want: missing close-bracket in expression "...901234567890*"foo$bar([abcdefg...
-parseExpr.test	parseExpr-21.48	fail	fail	message	code 1/1: missing close-brace in expression "123456789012345678901234567890*"foo$bar([{abcdefghijklmnopqrstuvwxyz])"" \| want: missing close-brace in expression "...01234567890*"foo$bar([{abcdefghi...
-parseExpr.test	parseExpr-21.49	fail	fail	message	code 1/1: missing close-brace in expression "123456789012345678901234567890*{abcdefghijklmnopqrstuvwxyz" \| want: missing close-brace in expression "...012345678901234567890*{abcdefghijklmnopqrstuv...
-parseExpr.test	parseExpr-21.5	fail	fail	message	code 1/1: invalid character "[" in expression "[][]" \| want: missing operator at _@_ in expression "[]_@_[]"
-parseExpr.test	parseExpr-21.50	fail	fail	message	code 1/1: missing " in expression "123456789012345678901234567890*$foo(["abcdefghijklmnopqrstuvwxyz])" \| want: missing " in expression "...678901234567890*$foo(["abcdefghijklmnopqrstuv..."
-parseExpr.test	parseExpr-21.51	fail	fail	message	code 1/1: missing close-brace for variable name in expression "123456789012345678901234567890*${abcdefghijklmnopqrstuvwxyz" \| want: missing close-brace for variable name in expression "...12345678...
-parseExpr.test	parseExpr-21.52	fail	fail	message	code 1/1: missing ) in expression "123456789012345678901234567890*$bar(abcdefghijklmnopqrstuvwxyz" \| want: missing ) in expression "...45678901234567890*$bar(abcdefghijklmnopqrstuv..."
-parseExpr.test	parseExpr-21.53	fail	fail	message	code 1/1: extra characters after close-brace in expression "123456789012345678901234567890*$bar([{}abcdefghijklmnopqrstuvwxyz])"" \| want: extra characters after close-brace in expression "...89012...
-parseExpr.test	parseExpr-21.54	fail	fail	message	code 1/1: extra characters after close-quote in expression "123456789012345678901234567890*$bar([""abcdefghijklmnopqrstuvwxyz])"" \| want: extra characters after close-quote in expression "...89012...
-parseExpr.test	parseExpr-21.55	fail	fail	message	code 1/1: missing close-bracket in expression "123456789012345678901234567890*$bar([abcdefghijklmnopqrstuvwxyz)"" \| want: missing close-bracket in expression "...5678901234567890*$bar([abcdefghijk...
-parseExpr.test	parseExpr-21.56	fail	fail	message	code 1/1: missing close-brace in expression "123456789012345678901234567890*$bar([{abcdefghijklmnopqrstuvwxyz])" \| want: missing close-brace in expression "...678901234567890*$bar([{abcdefghijklmn...
-parseExpr.test	parseExpr-21.57	fail	fail	message	code 1/1: missing " in expression "123456789012345678901234567890*["abcdefghijklmnopqrstuvwxyz]" \| want: missing " in expression "...12345678901234567890*["abcdefghijklmnopqrstuv..."
-parseExpr.test	parseExpr-21.58	fail	fail	message	code 1/1: missing close-brace for variable name in expression "123456789012345678901234567890*[${abcdefghijklmnopqrstuvwxyz]" \| want: missing close-brace for variable name in expression "...234567...
-parseExpr.test	parseExpr-21.59	fail	fail	message	code 1/1: missing ) in expression "123456789012345678901234567890*[$bar(abcdefghijklmnopqrstuvwxyz]" \| want: missing ) in expression "...5678901234567890*[$bar(abcdefghijklmnopqrstuv..."
-parseExpr.test	parseExpr-21.6	fail	fail	message	code 1/1: invalid character "0" in expression "0 0" \| want: missing operator at _@_ in expression "0 _@_0"
-parseExpr.test	parseExpr-21.60	fail	fail	message	code 1/1: extra characters after close-brace in expression "123456789012345678901234567890*[{}abcdefghijklmnopqrstuvwxyz]"" \| want: extra characters after close-brace in expression "...34567890123...
-parseExpr.test	parseExpr-21.61	fail	fail	message	code 1/1: extra characters after close-quote in expression "123456789012345678901234567890*[""abcdefghijklmnopqrstuvwxyz]"" \| want: extra characters after close-quote in expression "...34567890123...
-parseExpr.test	parseExpr-21.62	fail	fail	message	code 1/1: missing close-bracket in expression "123456789012345678901234567890*[abcdefghijklmnopqrstuvwxyz"" \| want: missing close-bracket in expression "...012345678901234567890*[abcdefghijklmnopq...
-parseExpr.test	parseExpr-21.63	fail	fail	message	code 1/1: missing close-brace in expression "123456789012345678901234567890*[{abcdefghijklmnopqrstuvwxyz]" \| want: missing close-brace in expression "...12345678901234567890*[{abcdefghijklmnopqrst...
-parseExpr.test	parseExpr-21.7	fail	fail	message	code 1/1: invalid number "0o8" in expression "0o8" \| want: *invalid octal number*
-parseExpr.test	parseExpr-21.8	fail	fail	message	code 1/1: invalid number "0o8" in expression "0o8x" \| want: *invalid octal number*
+parseExpr.test	parseExpr-21.27	pass	pass		
+parseExpr.test	parseExpr-21.28	pass	pass		
+parseExpr.test	parseExpr-21.29	pass	pass		
+parseExpr.test	parseExpr-21.3	pass	pass		
+parseExpr.test	parseExpr-21.30	pass	pass		
+parseExpr.test	parseExpr-21.31	pass	pass		
+parseExpr.test	parseExpr-21.32	pass	pass		
+parseExpr.test	parseExpr-21.33	pass	pass		
+parseExpr.test	parseExpr-21.34	pass	pass		
+parseExpr.test	parseExpr-21.35	pass	pass		
+parseExpr.test	parseExpr-21.36	pass	pass		
+parseExpr.test	parseExpr-21.37	pass	pass		
+parseExpr.test	parseExpr-21.38	pass	pass		
+parseExpr.test	parseExpr-21.39	pass	pass		
+parseExpr.test	parseExpr-21.4	pass	pass		
+parseExpr.test	parseExpr-21.40	pass	pass		
+parseExpr.test	parseExpr-21.41	pass	pass		
+parseExpr.test	parseExpr-21.42	pass	pass		
+parseExpr.test	parseExpr-21.43	pass	pass		
+parseExpr.test	parseExpr-21.44	pass	pass		
+parseExpr.test	parseExpr-21.45	pass	pass		
+parseExpr.test	parseExpr-21.46	pass	pass		
+parseExpr.test	parseExpr-21.47	pass	pass		
+parseExpr.test	parseExpr-21.48	pass	pass		
+parseExpr.test	parseExpr-21.49	pass	pass		
+parseExpr.test	parseExpr-21.5	pass	pass		
+parseExpr.test	parseExpr-21.50	pass	pass		
+parseExpr.test	parseExpr-21.51	pass	pass		
+parseExpr.test	parseExpr-21.52	pass	pass		
+parseExpr.test	parseExpr-21.53	pass	pass		
+parseExpr.test	parseExpr-21.54	pass	pass		
+parseExpr.test	parseExpr-21.55	pass	pass		
+parseExpr.test	parseExpr-21.56	pass	pass		
+parseExpr.test	parseExpr-21.57	pass	pass		
+parseExpr.test	parseExpr-21.58	pass	pass		
+parseExpr.test	parseExpr-21.59	pass	pass		
+parseExpr.test	parseExpr-21.6	pass	pass		
+parseExpr.test	parseExpr-21.60	pass	pass		
+parseExpr.test	parseExpr-21.61	pass	pass		
+parseExpr.test	parseExpr-21.62	pass	pass		
+parseExpr.test	parseExpr-21.63	pass	pass		
+parseExpr.test	parseExpr-21.7	pass	pass		
+parseExpr.test	parseExpr-21.8	pass	pass		
 parseExpr.test	parseExpr-21.9	pass	pass		
 parseExpr.test	parseExpr-22.1	skip	skip	internals	testexprparser
 parseExpr.test	parseExpr-22.10	skip	skip	internals	testexprparser
@@ -38167,7 +38167,7 @@ socket.test	socket_inet-11.9	pass	pass
 socket.test	socket_inet-12.1	pass	pass		
 socket.test	socket_inet-12.2	pass	pass		
 socket.test	socket_inet-12.3	pass	pass		
-socket.test	socket_inet-13.1	pass	fail		
+socket.test	socket_inet-13.1	pass	pass		
 socket.test	socket_inet-13.2.cl1	pass	pass		
 socket.test	socket_inet-13.2.cl2	pass	pass		
 socket.test	socket_inet-13.2.tr1	pass	pass		
@@ -38186,7 +38186,7 @@ socket.test	socket_inet-2.7	pass	pass
 socket.test	socket_inet-2.8	pass	pass		
 socket.test	socket_inet-2.9	pass	pass		
 socket.test	socket_inet-3.1	pass	pass		
-socket.test	socket_inet-3.2	fail	fail	bug	code 0/0,2: ready timed_out \| want: ready done
+socket.test	socket_inet-3.2	fail	pass	bug	code 0/0,2: ready timed_out \| want: ready done
 socket.test	socket_inet-4.1	pass	pass		
 socket.test	socket_inet-4.2	pass	pass		
 socket.test	socket_inet-5.1	pass	pass		
@@ -40673,7 +40673,7 @@ unixFile.test	unixFile-1.6	skip	skip	internals	testfindexecutable
 unixFile.test	unixFile-1.7	skip	skip	internals	testfindexecutable
 unixForkEvent.test	unixforkevent-1.1	skip	skip	internals	testfork
 unixInit.test	unixInit-1.1	pass	pass		
-unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 38689', Got '' \| want: OK
+unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 36579', Got '' \| want: OK
 unixInit.test	unixInit-3.1	pass	pass		
 unixInit.test	unixInit-3.2	fail	fail	bug	code 0/0,2: 1 \| want: 0
 unixInit.test	unixInit-4.1	fail	fail	bug	code 1/0,2: can't read "tcl_pkgPath": no such variable \| want: unix

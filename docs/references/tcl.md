@@ -130,3 +130,11 @@ The headers `generic/tclDecls.h`, `generic/tclIntDecls.h`, `generic/tclPlatDecls
 **How ztcl uses it:** the spike of `docs/dev/cext-tasks/` (`tools/cext-spike/slots.py`) reads the slot numbers and the signatures from the output of the C preprocessor on these headers at build time. `src/cext/wasm_stubs.zig` has the slot numbers, the signatures, and the layouts of `Tcl_Obj`, `Tcl_ObjType`, `Tcl_DString`, the public part of `Tcl_Interp`, and `TclStubs`, from these headers and `generic/tcl.h`. It has its own code for each slot, and the error messages follow the text of Tcl 8.6. The tools copy no code of Tcl. The spike also runs the Tcl binding of SQLite (`tclsqlite.c`, public domain) and the SQLite test files as data. ztcl does not build them.
 
 `src/cext/` follows the same headers for the native path of C packages. `tools/cext/stubs.py` writes the slot numbers and the field names of the four tables to `src/cext/slots.zig`. `cext.Shadow` has the layout of the first four fields of `struct Interp` of `generic/tclInt.h`, which `Tcl_InitStubs` of `generic/tclStubLib.c` reads. The C signatures of the slot functions follow the declarations of `tclDecls.h`. The behavior of `load` follows the manual page `load.n`, the rule of `generic/tclLoad.c` that matches a file and a package name, and the messages of tclsh 8.6.16, checked by `tools/cext/check.sh`. The Zig code is new, and no code of Tcl is in it. The test packages of `tests/cext/` link the stub library of the Tcl of the host, `libtclstub8.6.a`, as each Tcl package does.
+
+### The syntax errors of expressions
+
+The function `ParseExpr` and the function `ParseLexeme` of `generic/tclCompExpr.c` of the Tcl source, tag `core-8-6-16`.
+
+**License:** Tcl/Tk License (BSD style)
+
+**How ztcl uses it:** `src/expr_diag.zig` reads an expression with a syntax error the way this parser of Tcl reads it: the same lexemes, the same precedence levels, and the same checks at each operator. So the message, the `_@_` mark, the part of the expression in the message, and the -errorcode `TCL PARSE EXPR` are the ones of Tcl 8.6.16. The Zig code is new, and no code of Tcl is in it. `parseExpr.test` checks the messages.

@@ -118,6 +118,10 @@ pub const Parser = struct {
     line: u32 = 1,
     /// What is wrong, after error.TclError.
     message: []const u8 = "",
+    /// Where the error is, after error.TclError, as the term of the Tcl
+    /// parser: the open delimiter with no close, or the byte after a
+    /// close delimiter that does not end the word.
+    term: usize = 0,
     /// The nesting of command substitutions. A limit keeps the parser
     /// off the end of the native stack.
     depth: u32 = 0,
@@ -156,6 +160,7 @@ pub const Parser = struct {
     /// a command substitution when `bracket` is true.
     pub fn parseScript(p: *Parser, bracket: bool) PError!*Script {
         if (p.depth >= max_depth) return p.fail("too many nested command substitutions");
+        const open = p.pos -| 1;
         const outermost = p.depth == 0;
         p.depth += 1;
         defer p.depth -= 1;
@@ -178,7 +183,10 @@ pub const Parser = struct {
                 } else break;
             }
             if (p.pos >= p.src.len) {
-                if (bracket) return p.fail("missing close-bracket");
+                if (bracket) {
+                    p.term = open;
+                    return p.fail("missing close-bracket");
+                }
                 break;
             }
             if (bracket and p.src[p.pos] == ']') {
@@ -248,17 +256,27 @@ pub const Parser = struct {
         if (c == '{') {
             // Rule 6: braces quote with no substitution.
             const text = try p.parseBraced();
-            if (!p.wordEnd(bracket)) return p.fail("extra characters after close-brace");
+            if (!p.wordEnd(bracket)) {
+                p.term = p.pos;
+                return p.fail("extra characters after close-brace");
+            }
             return .{ .expand = expand, .kind = .{ .lit = literal(text) } };
         }
         var parts: Parts = .{ .a = p.a };
         if (c == '"') {
             // Rule 4: double quotes group, with substitution.
+            const quote = p.pos;
             p.pos += 1;
             try p.parseParts(&parts, .quote);
-            if (p.pos >= p.src.len) return p.fail("missing \"");
+            if (p.pos >= p.src.len) {
+                p.term = quote;
+                return p.fail("missing \"");
+            }
             p.pos += 1;
-            if (!p.wordEnd(bracket)) return p.fail("extra characters after close-quote");
+            if (!p.wordEnd(bracket)) {
+                p.term = p.pos;
+                return p.fail("extra characters after close-quote");
+            }
         } else {
             try p.parseParts(&parts, if (bracket) .bare_bracket else .bare);
         }
@@ -307,6 +325,7 @@ pub const Parser = struct {
         }
         if (p.pos >= p.src.len) {
             p.pos = p.src.len;
+            p.term = start - 1;
             return p.fail("missing close-brace");
         }
         const text = p.src[start..p.pos];
@@ -373,8 +392,10 @@ pub const Parser = struct {
     pub fn parseVar(p: *Parser) PError!?VarRef {
         var i = p.pos + 1;
         if (i < p.src.len and p.src[i] == '{') {
-            const end = std.mem.indexOfScalarPos(u8, p.src, i, '}') orelse
+            const end = std.mem.indexOfScalarPos(u8, p.src, i, '}') orelse {
+                p.term = i;
                 return p.fail("missing close-brace for variable name");
+            };
             const name = p.src[i + 1 .. end];
             p.pos = end + 1;
             // ${a(i)} names an element with a literal index.
@@ -400,7 +421,10 @@ pub const Parser = struct {
             p.pos = i + 1;
             var parts: Parts = .{ .a = p.a };
             try p.parseParts(&parts, .index);
-            if (p.pos >= p.src.len) return p.fail("missing )");
+            if (p.pos >= p.src.len) {
+                p.term = i;
+                return p.fail("missing )");
+            }
             p.pos += 1;
             return .{ .name = p.src[start..i], .index = try parts.finish() };
         }
@@ -2020,7 +2044,18 @@ pub const Interp = struct {
         if (slot == null and v == .str) {
             if (it.expr_cache.get(key)) |n| return n;
         }
-        const n = try expr.compile(it, text);
+        const n = expr.compile(it, text) catch |e| {
+            // As in Tcl, the errorInfo of a syntax error starts with the
+            // message and the expression. The check of the arguments of a
+            // math function is not a syntax error in Tcl.
+            if (e == error.TclError and !it.in_error and std.mem.indexOf(u8, try it.str(it.result), "\nin expression \"") != null) {
+                it.in_error = true;
+                it.error_info = .empty;
+                try it.error_info.appendSlice(it.alloc(), try it.str(it.result));
+                try it.error_info.appendSlice(it.alloc(), try expr.parseInfo(it, text));
+            }
+            return e;
+        };
         if (slot) |s| {
             s.expr = n;
         } else if (v == .str) {
