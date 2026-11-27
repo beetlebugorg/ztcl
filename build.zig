@@ -240,6 +240,13 @@ pub fn build(b: *std.Build) void {
         }) });
         b.step("aio-test", "Run the tests of the aio loop on IOCP").dependOn(&b.addRunArtifact(aio_win).step);
         b.step("aio-test-exe", "Install the tests of the aio loop as zig-out/bin/aio-test.exe").dependOn(&b.addInstallArtifact(aio_win, .{ .dest_sub_path = "aio-test.exe" }).step);
+        const stress_win = b.addRunArtifact(b.addExecutable(.{ .name = "aio-stress", .root_module = b.createModule(.{
+            .root_source_file = b.path("src/aio/stress.zig"),
+            .target = target,
+            .optimize = .safe,
+        }) }));
+        stress_win.addPassthruArgs();
+        b.step("aio-stress", "Run the stress test of aio on IOCP: zig build aio-stress -- --conns N --seconds S").dependOn(&stress_win.step);
     }
     // The I/O loop of task 06 on io_uring and epoll (Linux) and of task
     // 09 on kqueue (macOS). The tests run on each backend.
