@@ -290,7 +290,7 @@ fn hostCall(ctx: ?*anyopaque, _: *exec.Store, a: []const u64, results: []u64) ex
                 it.heap.backing.destroy(t);
                 return error.OutOfMemory;
             };
-            zside.command(it, name, pkgCommand, t) catch |e| return pend(p, e);
+            _ = zside.command(it, name, pkgCommand, t) catch |e| return pend(p, e);
             break :blk 0;
         },
         .cmd_delete => blk: {
