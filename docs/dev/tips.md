@@ -24,7 +24,7 @@ The issue column links the issue of the missing part. One issue can cover more t
 | [750](https://core.tcl-lang.org/tips/doc/trunk/tip/750.md) | Consistent dark mode for Windows and macOS | 9.1 | Final | n/a: Tk |  |
 | [747](https://core.tcl-lang.org/tips/doc/trunk/tip/747.md) | Make the selection colors of the listbox widget fully native-conform | 9.1 | Final | n/a: Tk |  |
 | [746](https://core.tcl-lang.org/tips/doc/trunk/tip/746.md) | Remove "expr" behavior from lseq | 9.0 | Final | 9.1 |  |
-| [745](https://core.tcl-lang.org/tips/doc/trunk/tip/745.md) | Functions from C99 | 9.1 | Final | neither | #340 |
+| [745](https://core.tcl-lang.org/tips/doc/trunk/tip/745.md) | Functions from C99 | 9.1 | Final | 9.1 | #340 |
 | [744](https://core.tcl-lang.org/tips/doc/trunk/tip/744.md) | Support for long paths on Windows | 9.1 | Final | n/a: Windows paths (not checked) |  |
 | [743](https://core.tcl-lang.org/tips/doc/trunk/tip/743.md) | Add native file icons to Tk | 9.1 | Final | n/a: Tk |  |
 | [742](https://core.tcl-lang.org/tips/doc/trunk/tip/742.md) | Add Mouse Wheel Zoom Support to Tk Console | 9.1 | Final | n/a: Tk |  |
@@ -35,7 +35,7 @@ The issue column links the issue of the missing part. One issue can cover more t
 | [735](https://core.tcl-lang.org/tips/doc/trunk/tip/735.md) | Simpler List Filtering | 9.1 | Final | 9.1 |  |
 | [733](https://core.tcl-lang.org/tips/doc/trunk/tip/733.md) | Add accessibility/screen reader support to Tk | 9.1 | Final | n/a: Tk |  |
 | [732](https://core.tcl-lang.org/tips/doc/trunk/tip/732.md) | Changes to the Tcl script library search path | 9.1 | Final | n/a: no script library |  |
-| [730](https://core.tcl-lang.org/tips/doc/trunk/tip/730.md) | Switching by Integers | 9.1 | Final | neither | #348 |
+| [730](https://core.tcl-lang.org/tips/doc/trunk/tip/730.md) | Switching by Integers | 9.1 | Final | 9.1 | #348 |
 | [729](https://core.tcl-lang.org/tips/doc/trunk/tip/729.md) | Add a tk attribtable command to the core | 9.1 | Final | n/a: Tk |  |
 | [728](https://core.tcl-lang.org/tips/doc/trunk/tip/728.md) | Reliable Read and Write of Child Interpreter Variables | 9.1 | Final | neither | #351 |
 | [727](https://core.tcl-lang.org/tips/doc/trunk/tip/727.md) | Add a ttk::toggleswitch widget to the core | 9.1 | Final | n/a: Tk |  |
@@ -139,7 +139,7 @@ The issue column links the issue of the missing part. One issue can cover more t
 | [586](https://core.tcl-lang.org/tips/doc/trunk/tip/586.md) | C String Parsing Support for binary scan | 8.7 | Final | neither | #358 |
 | [585](https://core.tcl-lang.org/tips/doc/trunk/tip/585.md) | Promote the INDEX_TEMP_TABLE flag of Tcl_GetIndexFromObj*() to the public interface | 8.7 | Final | n/a: C API |  |
 | [584](https://core.tcl-lang.org/tips/doc/trunk/tip/584.md) | Better introspection for ttk | 8.7 | Final | n/a: Tk |  |
-| [582](https://core.tcl-lang.org/tips/doc/trunk/tip/582.md) | Comments in Expressions | 8.7 | Final | neither | #341 |
+| [582](https://core.tcl-lang.org/tips/doc/trunk/tip/582.md) | Comments in Expressions | 8.7 | Final | 9.1 | #341 |
 | [580](https://core.tcl-lang.org/tips/doc/trunk/tip/580.md) | Export Tk_GetDoublePixelsFromObj and 5 more | 8.7 | Final | n/a: Tk |  |
 | [579](https://core.tcl-lang.org/tips/doc/trunk/tip/579.md) | Improved auto_path for Safe Base interpreters | 8.7 | Final | n/a: no Safe Base |  |
 | [578](https://core.tcl-lang.org/tips/doc/trunk/tip/578.md) | Death to TCL_DBGX | 8.7 | Final | n/a: build or process |  |
@@ -157,7 +157,7 @@ The issue column links the issue of the missing part. One issue can cover more t
 | [558](https://core.tcl-lang.org/tips/doc/trunk/tip/558.md) | Basic Configure Support for TclOO | 8.7 | Final | neither | #356 |
 | [557](https://core.tcl-lang.org/tips/doc/trunk/tip/557.md) | C++ support for Tcl | 8.7 | Final | n/a: C API |  |
 | [552](https://core.tcl-lang.org/tips/doc/trunk/tip/552.md) | Extended treeview functionality. | 8.7 | Final | n/a: Tk |  |
-| [551](https://core.tcl-lang.org/tips/doc/trunk/tip/551.md) | Permit underscore in numerical literals in source code | 8.7 | Final | neither | #341 |
+| [551](https://core.tcl-lang.org/tips/doc/trunk/tip/551.md) | Permit underscore in numerical literals in source code | 8.7 | Final | 9.1 | #341 |
 | [548](https://core.tcl-lang.org/tips/doc/trunk/tip/548.md) | Support wchar_t conversion functions and deprecate Tcl_WinUtfToTChar() and Tcl_WinTCharToUtf() | 8.7 | Final | n/a: C API |  |
 | [547](https://core.tcl-lang.org/tips/doc/trunk/tip/547.md) | New encodings: UTF-16, UCS-2 | 8.7 | Final | neither | #353 |
 | [545](https://core.tcl-lang.org/tips/doc/trunk/tip/545.md) | image photo SVG options: remove -unit and add target height/width option | 8.7 | Final | n/a: Tk |  |
@@ -172,7 +172,7 @@ The issue column links the issue of the missing part. One issue can cover more t
 | [524](https://core.tcl-lang.org/tips/doc/trunk/tip/524.md) | Custom Definition Dialects for TclOO | 8.7 | Final | neither | #356 |
 | [523](https://core.tcl-lang.org/tips/doc/trunk/tip/523.md) | New lpop command | 8.7 | Final | 9.1 |  |
 | [522](https://core.tcl-lang.org/tips/doc/trunk/tip/522.md) | Test error codes with Tcltest | 8.7 | Final | n/a: no tcltest package |  |
-| [521](https://core.tcl-lang.org/tips/doc/trunk/tip/521.md) | Floating Point Classification Functions | 8.7 | Final | neither | #340 |
+| [521](https://core.tcl-lang.org/tips/doc/trunk/tip/521.md) | Floating Point Classification Functions | 8.7 | Final | 9.1 | #340 |
 | [519](https://core.tcl-lang.org/tips/doc/trunk/tip/519.md) | Inline export/unexport option to TclOO method definition | 8.7 | Final | neither | #356 |
 | [518](https://core.tcl-lang.org/tips/doc/trunk/tip/518.md) | Virtual Event when Last Child is not Managed any more | 8.7 | Final | n/a: Tk |  |
 | [517](https://core.tcl-lang.org/tips/doc/trunk/tip/517.md) | Add -activerelief Configuration Option to the menu widget | 8.7 | Final | n/a: Tk |  |
@@ -209,13 +209,13 @@ The issue column links the issue of the missing part. One issue can cover more t
 | [478](https://core.tcl-lang.org/tips/doc/trunk/tip/478.md) | Add Expected Class Level Behaviors to oo::class | 8.7 | Final | neither | #356 |
 | [476](https://core.tcl-lang.org/tips/doc/trunk/tip/476.md) | Scan/Printf format consistency | 8.7 | Final | 8.6 and 9.1 |  |
 | [474](https://core.tcl-lang.org/tips/doc/trunk/tip/474.md) | Treat the mouse wheel events in a uniform way | 8.7 | Final | n/a: Tk |  |
-| [472](https://core.tcl-lang.org/tips/doc/trunk/tip/472.md) | Add Support for 0d Radix Prefix to Integer Literals | 8.7 | Final | neither | #341 |
+| [472](https://core.tcl-lang.org/tips/doc/trunk/tip/472.md) | Add Support for 0d Radix Prefix to Integer Literals | 8.7 | Final | 9.1 | #341 |
 | [470](https://core.tcl-lang.org/tips/doc/trunk/tip/470.md) | Reliable Access to OO Definition Context Object | 8.7 | Final | 8.6 and 9.1 |  |
 | [468](https://core.tcl-lang.org/tips/doc/trunk/tip/468.md) | Support Passing TCP listen Backlog Size Option to TCP Socket Creation | 8.7 | Final | neither | #354 |
 | [465](https://core.tcl-lang.org/tips/doc/trunk/tip/465.md) | Change Rule 8 of the Dodekalogue to Cut Some Corner Cases | 9.0 | Final | not checked |  |
 | [463](https://core.tcl-lang.org/tips/doc/trunk/tip/463.md) | Command-Driven Substitutions for regsub | 8.7 | Final | neither | #349 |
 | [462](https://core.tcl-lang.org/tips/doc/trunk/tip/462.md) | Add New [::tcl::process] Ensemble for Subprocess Management | 8.7 | Final | neither | #345 |
-| [461](https://core.tcl-lang.org/tips/doc/trunk/tip/461.md) | Separate Numeric and String Comparison Operators | 8.7 | Final | neither | #341 |
+| [461](https://core.tcl-lang.org/tips/doc/trunk/tip/461.md) | Separate Numeric and String Comparison Operators | 8.7 | Final | 9.1 | #341 |
 | [459](https://core.tcl-lang.org/tips/doc/trunk/tip/459.md) | Tcl Package Introspection Improvements | 8.7 | Final | neither | #351 |
 | [458](https://core.tcl-lang.org/tips/doc/trunk/tip/458.md) | Add Support for epoll() and kqueue() in the Notifier | 8.7 | Final | n/a: internal |  |
 | [456](https://core.tcl-lang.org/tips/doc/trunk/tip/456.md) | Extend the C API to Support Passing Options to TCP Server Creation | 8.7 | Final | n/a: C API |  |
@@ -238,7 +238,7 @@ The issue column links the issue of the missing part. One issue can cover more t
 | [389](https://core.tcl-lang.org/tips/doc/trunk/tip/389.md) | Full support for Unicode 10.0 and later (part 1) | 8.7 | Final | 8.6 and 9.1 |  |
 | [383](https://core.tcl-lang.org/tips/doc/trunk/tip/383.md) | Injecting Code into Suspended Coroutines | 8.7 | Final | neither | #355 |
 | [367](https://core.tcl-lang.org/tips/doc/trunk/tip/367.md) | A Command to Remove Elements from a List | 8.7 | Final | 9.1 |  |
-| [351](https://core.tcl-lang.org/tips/doc/trunk/tip/351.md) | Add Striding Support to lsearch | 8.7 | Final | neither | #347 |
+| [351](https://core.tcl-lang.org/tips/doc/trunk/tip/351.md) | Add Striding Support to lsearch | 8.7 | Final | 9.1 | #347 |
 | [345](https://core.tcl-lang.org/tips/doc/trunk/tip/345.md) | Kill the 'identity' Encoding | 8.7 | Final | partial: identity is still listed | #353 |
 | [344](https://core.tcl-lang.org/tips/doc/trunk/tip/344.md) | Bring TCP_NODELAY and SO_KEEPALIVE to socket options | 8.7 | Final | neither | #354 |
 | [342](https://core.tcl-lang.org/tips/doc/trunk/tip/342.md) | Dict Get With Default | 8.7 | Final | 9.1 |  |
