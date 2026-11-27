@@ -7,8 +7,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
-const sys = if (builtin.os.tag == .windows) struct {} else @import("sys.zig");
-const posix = if (builtin.os.tag == .windows) struct {} else sys.os;
+const sys = @import("sys.zig");
+const on_win = builtin.os.tag == .windows;
+const posix = if (on_win) struct {} else sys.os;
 
 pub const port: u32 = 1024;
 pub const version: u16 = 1;
@@ -50,6 +51,13 @@ pub const Conn = struct {
     last_error: AgentError = .{},
 
     fn waitRead(c: *Conn) Error!void {
+        if (comptime on_win) {
+            // On Windows the descriptor is a socket of `sys`: its poll.
+            var w = [1]sys.Want{.{ .fd = c.fd, .read = true }};
+            sys.poll(std.heap.page_allocator, &w, c.timeout_ms);
+            if (!w[0].can_read) return error.Timeout;
+            return;
+        }
         var fds = [1]posix.pollfd{.{ .fd = c.fd, .events = posix.POLL.IN, .revents = 0 }};
         const rc = posix.poll(&fds, 1, c.timeout_ms);
         if (posix.errno(rc) == .INTR) return;
@@ -61,6 +69,17 @@ pub const Conn = struct {
         var off: usize = 0;
         while (off < out.len) {
             try c.waitRead();
+            if (comptime on_win) {
+                switch (sys.read(c.fd, out[off..])) {
+                    .n => |n| {
+                        if (n == 0) return error.Closed;
+                        off += n;
+                    },
+                    .again => {},
+                    .err => return error.Io,
+                }
+                continue;
+            }
             const n = posix.read(c.fd, out[off..].ptr, out.len - off);
             switch (posix.errno(n)) {
                 .SUCCESS => {
@@ -76,6 +95,14 @@ pub const Conn = struct {
     fn writeAll(c: *Conn, bytes: []const u8) Error!void {
         var off: usize = 0;
         while (off < bytes.len) {
+            if (comptime on_win) {
+                switch (sys.write(c.fd, bytes[off..])) {
+                    .n => |n| off += n,
+                    .again => {},
+                    .err => return error.Closed,
+                }
+                continue;
+            }
             const n = posix.write(c.fd, bytes[off..].ptr, bytes.len - off);
             switch (posix.errno(n)) {
                 .SUCCESS => off += n,

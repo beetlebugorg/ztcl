@@ -12,7 +12,7 @@ ztcl::vm delete $vm
 
 The command is not a package: it exists when the embedder turns on the capability `vm`, and it is absent otherwise. A child interp never has it, so the limits count the guests of one interpreter. The paths of a guest also need the capability `file`, and the channels of a guest need `channels`.
 
-In this version two hosts have a backend: Virtualization.framework on macOS 12 and later, and a KVM monitor of its own on x86-64 Linux. On arm64 Linux and on Windows each command gives `ZTCL VM UNAVAILABLE`. On Linux the user needs read and write access to `/dev/kvm` and `/dev/vhost-vsock` (the `kvm` group), and `-share` gives `ZTCL VM SHARE` until the 9p device of the plan. The plan for the KVM and HCS backends, the guest agent, and the base image is in `docs/dev/vm.md`.
+The backends: Virtualization.framework on macOS 12 and later, the KVM monitor of ztcl on x86-64 Linux, and the monitor of ztcl on the Windows Hypervisor Platform on x86-64 Windows. On Linux and Windows a guest has no share yet (`ZTCL VM SHARE`), and on Windows it has one CPU. Windows needs its hypervisor, which runs with Virtualization-based Security or the feature Windows Hypervisor Platform, and no elevation. On another platform each command gives `ZTCL VM UNAVAILABLE`. The plan of the backends, the guest agent, and the base image is in `docs/dev/vm.md`.
 
 ## Commands
 
@@ -86,8 +86,9 @@ A start of a guest with 1 CPU and 64 MB is about 100 ms on an M1 Mac, and 86 ms 
 
 | `-errorcode` | Message |
 |---|---|
-| `ZTCL VM UNAVAILABLE` | `ztcl::vm is not available on Windows yet` (and for arm64 Linux), `this macOS has no Virtualization.framework`, or `no access to /dev/kvm: add the user to the kvm group ...` |
-| `ZTCL VM SHARE` | `a share is not available on Linux yet` |
+| `ZTCL VM UNAVAILABLE` | `ztcl::vm is not available on this platform yet`, `this macOS has no Virtualization.framework`, the fix for a Linux with no access to `/dev/kvm`, or the fix for a Windows with no hypervisor |
+| `ZTCL VM SHARE` | `a share is not available on Windows yet` (and for Linux) |
+| `ZTCL VM WHP` | The step of the Windows Hypervisor Platform that failed, such as `WHvSetupPartition failed` |
 | `ZTCL VM ENTITLEMENT` | `ztcl::vm needs the entitlement com.apple.security.virtualization in the signature of this program` |
 | `ZTCL VM KERNEL` | `a guest needs -kernel until the base image of the plan` |
 | `ZTCL VM NOFILE` | `a path of ztcl::vm needs the file capability` |
