@@ -120,4 +120,4 @@ A host name resolves through one function. It reads an address literal, the name
 
 ## Tcl 9
 
-ztcl follows Tcl 8.6 by default. With `--tcl 9.1` it follows Tcl 9.1 for the parts that [Tcl 9.1](tcl91.md) lists: the new list commands, strict encodings, decimal numbers with a leading zero, and variable lookup in namespaces. That page also lists the parts of 9.1 that are not done. [The Tcl 9 notes](dev/tcl9.md) have the method and the probes.
+ztcl follows Tcl 9.1 by default, for the parts that [Tcl 9.1 and Tcl 8.6](tcl91.md) lists: the new list commands, strict encodings, decimal numbers with a leading zero, and variable lookup in namespaces. With `--tcl 8.6` it follows Tcl 8.6. That page also lists the parts of 9.1 that are not done. [The Tcl 9 notes](dev/tcl9.md) have the method and the probes.
