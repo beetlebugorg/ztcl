@@ -299,6 +299,20 @@ The stress gate on 2026-11-27 (x86-64 Linux, a shared machine, `--conns 10000 --
 
 Runs back to back leave the client sockets in TIME_WAIT (about 30 s on macOS), and the 16,384 ephemeral ports run out. Wait between runs: `aio-stress` reports the connects that fail with EADDRNOTAVAIL.
 
+### The aio loop on Windows (task 10)
+
+`src/aio/iocp.zig` runs each operation as an overlapped Winsock call, and its end comes back from the completion port of the loop. `src/aio/win.zig` declares the calls of `ws2_32` and `kernel32` that it needs: the Zig 0.17.0 standard library has almost none of them.
+
+- A descriptor is a SOCKET in an `i32`. Windows keeps the significant bits of a kernel handle in the low 32 bits, as `src/sys_windows.zig` notes. A socket past 31 bits is closed and gives EMFILE.
+- accept is AcceptEx, with a new socket of the family of the listener, then SO_UPDATE_ACCEPT_CONTEXT. connect is ConnectEx on a socket that `submit` binds first, then SO_UPDATE_CONNECT_CONTEXT. The pointers of the two come from `WSAIoctl` with the GUIDs of `mswsock.h`.
+- read, write, and writev are WSARecv and WSASend. Winsock copies the WSABUF array at the call, so the array is on the stack. A writev sends at most 16 buffers in one operation.
+- The OVERLAPPED is a field of the `Completion`, so an entry of the port gives the completion with no table. `WSAGetOverlappedResult` gives the byte count or the WSA error, and `win.errno` maps it to `std.posix.E`.
+- A socket joins the port at each operation, and the second join fails with ERROR_INVALID_PARAMETER, which `submit` skips. A table of joined sockets goes wrong when Windows gives the value of a closed socket to a new one. The cost is one system call for each operation; FILE_SKIP_COMPLETION_PORT_ON_SUCCESS with a join at the creation of a socket can remove it later.
+- `cancel` calls CancelIoEx, and the operation ends with ERROR_OPERATION_ABORTED, which is -ECANCELED. Timers are a list sorted by deadline, as in `epoll.zig`, and the wait of `GetQueuedCompletionStatusEx` ends at the first deadline, rounded up to a millisecond. `wake` posts an entry with its own key.
+- `sys.pipe` gives the two ends of a loopback TCP connection: Windows has no pipe with no name that IOCP can use.
+
+`zig build -Dtarget=x86_64-windows aio-test-exe` builds the same tests as on Linux and macOS into `zig-out/bin/aio-test.exe`, and `zig build aio-test` runs them on a Windows host. 2026-11-27: the program builds on Linux; it has not run on Windows yet (see questions). `aio-stress` is not ported: it counts descriptors and memory in ways of Linux and macOS.
+
 ### The event loop of an interpreter
 
 `src/event.zig` keeps its Tcl behavior: `after`, `vwait`, `update`, `fileevent`, the order of timers, and the idle scripts. Its wait changes from `poll` to the `aio` loop. The test files `event.test`, `socket.test`, `timer.test`, and `ioCmd.test` must keep their pass counts.

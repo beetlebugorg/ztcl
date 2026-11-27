@@ -230,6 +230,17 @@ pub fn build(b: *std.Build) void {
         h2_load.addPassthruArgs();
         b.step("h2-load", "Load an h2c server: zig build h2-load -- --port N --conns C --streams S --seconds T").dependOn(&h2_load.step);
     }
+    // The I/O loop of task 10 on IOCP (Windows). `aio-test-exe` installs
+    // the test program, for a cross build that runs on a Windows host.
+    if (target.result.os.tag == .windows) {
+        const aio_win = b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path("src/aio/aio.zig"),
+            .target = target,
+            .optimize = optimize,
+        }) });
+        b.step("aio-test", "Run the tests of the aio loop on IOCP").dependOn(&b.addRunArtifact(aio_win).step);
+        b.step("aio-test-exe", "Install the tests of the aio loop as zig-out/bin/aio-test.exe").dependOn(&b.addInstallArtifact(aio_win, .{ .dest_sub_path = "aio-test.exe" }).step);
+    }
     // The I/O loop of task 06 on io_uring and epoll (Linux) and of task
     // 09 on kqueue (macOS). The tests run on each backend.
     if (target.result.os.tag == .linux or target.result.os.tag.isDarwin()) {

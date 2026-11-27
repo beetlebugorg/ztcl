@@ -1,5 +1,5 @@
 //! The tests of `aio`. Each test runs on each backend of the system:
-//! io_uring and epoll on Linux, kqueue on macOS. io_uring is skipped
+//! io_uring and epoll on Linux, kqueue on macOS, IOCP on Windows. io_uring is skipped
 //! when the kernel refuses it.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
@@ -11,7 +11,7 @@ const Loop = aio.Loop;
 const Completion = aio.Completion;
 const in = std.posix.sockaddr.in;
 
-const backends = if (sys.is_linux) [_]aio.Backend{ .uring, .epoll } else [_]aio.Backend{.kqueue};
+const backends = if (sys.is_linux) [_]aio.Backend{ .uring, .epoll } else if (sys.is_windows) [_]aio.Backend{.iocp} else [_]aio.Backend{.kqueue};
 
 fn open(b: aio.Backend) !?Loop {
     return Loop.init(std.testing.allocator, .{ .backend = b }) catch |e| {
