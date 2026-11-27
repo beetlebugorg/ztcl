@@ -783,25 +783,25 @@ The order is x86-64 Linux, arm64 macOS, x86-64 macOS, x86-64 Windows, arm64 Linu
 | x86-64 Linux | System V | `mmap` read-write, then `mprotect` read-execute | no call needed | Frame pointers. No table. | Measured on this machine. |
 | arm64 macOS | AAPCS64 with the Apple rules | `mmap` with `MAP_JIT`, `pthread_jit_write_protect_np` | `sys_icache_invalidate` | Frame pointers (`x29`). No table. | Tier 1 and tier 2 measured on an Apple silicon Mac. |
 | x86-64 macOS | System V | `mmap` read-write with `MAP_JIT`, then `mprotect` read-execute | no call needed | Frame pointers. No table. | Not tested. |
-| x86-64 Windows | Microsoft x64 | `VirtualAlloc` read-write, then `VirtualProtect` to `PAGE_EXECUTE_READ` | `FlushInstructionCache` | `RtlAddFunctionTable` with one unwind record for each function | Not tested. |
+| x86-64 Windows | System V between Zig and the machine code (below) | `VirtualAlloc` read-write, then `VirtualProtect` to `PAGE_EXECUTE_READ` | `FlushInstructionCache` | A growable function table with one unwind record for all functions | Tier 1 and tier 2 tested on an Intel Core i7-1165G7 (ztcl#263). |
 | arm64 Linux | AAPCS64 | `mmap` read-write, then `mprotect` read-execute | `__clear_cache` of the Zig runtime | Frame pointers. No table. | Not tested. |
 | WebAssembly | | none | | | The interpreter only, with the collector at bytecode safe points. |
 
 ### Rules for each ABI
 
 - **System V x86-64.** Arguments are in `rdi`, `rsi`, `rdx`, `rcx`. The stack pointer is 16-byte aligned at each call. The code does not use the red zone.
-- **Microsoft x64.** Arguments are in `rcx`, `rdx`, `r8`, `r9`. Each call has 32 bytes of shadow space. `rsi`, `rdi`, and `xmm6` to `xmm15` are callee-saved. Tier 2 on Linux uses them, so the Windows port saves them or uses other registers.
+- **Microsoft x64.** Arguments are in `rcx`, `rdx`, `r8`, `r9`. Each call has 32 bytes of shadow space. `rsi`, `rdi`, and `xmm6` to `xmm15` are callee-saved. The machine code on Windows does not use this ABI: each call between Zig and the machine code (the entry, the helpers, `tierUp`, `resumeAt`, and `call.direct`) has the convention `jit.cc`, the System V ABI of x86-64 (`callconv(.{ .x86_64_sysv = .{} })`). The ABI stays inside ztcl: the machine code calls only Zig helpers, and each call of Windows goes through a helper, so no code of Windows sees the convention. Zig saves `rsi`, `rdi`, and `xmm6` to `xmm15` around each such call, and a helper needs no shadow space. So the code generator of x86-64 Linux, its templates, and its tests serve both systems, and tier 2 keeps its registers.
 - **AAPCS64.** Arguments are in `x0` to `x3`. The stack pointer is 16-byte aligned at all times. `x29` and `x30` make the frame record. The code never uses `x18`. Tier 2 uses only `d0` to `d7` and `d16` to `d31`. Plain arm64 builds have no pointer authentication.
 
 ### Stack probes
 
-A JIT frame has a fixed size below 256 bytes: the saved registers, the context pointer, and the shadow space on Windows. It is smaller than one page, so it needs no probe (`__chkstk`) on Windows and no probe on the other systems. The code has no variable stack allocation. `checkNative` in `vm.run` bounds the depth before each entry, as for `exec`.
+A JIT frame has a fixed size below 256 bytes: the saved registers and the context pointer. It is smaller than one page, so it needs no probe (`__chkstk`) on Windows and no probe on the other systems. The code has no variable stack allocation. `checkNative` in `vm.run` bounds the depth before each entry, as for `exec`.
 
 ### Unwinding
 
 ztcl has no exceptions: an error is a return value. No unwinder must cross a JIT frame for correct results. Each JIT frame keeps the frame pointer chain, so a profiler and the stack walk of a Zig panic can pass it.
 
-Windows is the exception. The system unwinder treats code with no function table entry as a leaf function, and a walk through such a frame fails. An embedder with a crash handler needs correct walks. So the Windows port registers one `RUNTIME_FUNCTION` for each compiled function with `RtlAddFunctionTable`, and removes it with `RtlDeleteFunctionTable` before the memory is free. The prologue has one fixed form, so one unwind record form serves all functions.
+Windows is the exception. The system unwinder treats code with no function table entry as a leaf function, and a walk through such a frame fails. An embedder with a crash handler needs correct walks. So the region on Windows has a growable function table (`RtlAddGrowableFunctionTable`) with one `RUNTIME_FUNCTION` for each function, and deletes it before the memory is free. The prologue has one fixed form, so one `UNWIND_INFO` in a page in front of the region serves all functions. It names the registers that the frame saves: `rbp` as the frame register 48 bytes above the context slot, the context slot, `r15` to `r12`, `rbx`, and `rbp`. The code of tier 2 runs in the frame of tier 1, so the same record holds there. A test in `src/jit/tests.zig` walks with `RtlVirtualUnwind` from a helper through a JIT frame to the callers of the test. `RtlCaptureStackBackTrace` stops at a JIT frame.
 
 ### Coroutine stacks
 
