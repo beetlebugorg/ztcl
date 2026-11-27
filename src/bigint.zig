@@ -51,6 +51,13 @@ const Parts = struct { neg: bool, base: u8, body: []const u8 };
 /// Splits integer text by the rules of `value.parseInt`, or gives null
 /// when the text is not an integer.
 fn split(text: []const u8) ?Parts {
+    if (splitRaw(text)) |p| return p;
+    // The number forms of Tcl 9.1: the parts are in the buffer of
+    // `value.tcl9Form` until its next call.
+    return splitRaw(value.tcl9Form(text) orelse return null);
+}
+
+fn splitRaw(text: []const u8) ?Parts {
     var s = value.trimSpace(text);
     if (s.len == 0) return null;
     var neg = false;

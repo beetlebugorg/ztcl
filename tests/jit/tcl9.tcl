@@ -33,6 +33,10 @@ proc math {} {
     foreach x {0.5 2 -3.7 27} {
         lappend r [expr {trunc($x) + log2(abs($x)) + cbrt($x) + signbit($x) + isnan($x)}]
     }
+    foreach {a b} {a b b a 10 9 x x} {
+        lappend r [expr {$a lt $b}][expr {$a le $b}][expr {$a gt $b}][expr {$a ge $b # order
+        }]
+    }
     lappend r [divmod -7 2] [frexp 10] [modf -2.5] [remquo 7 2] [fpclassify 1e-310]
     return $r
 }

@@ -217,6 +217,12 @@ fn lexeme(s: []const u8) struct { Lex, usize } {
         '<' => return if (two and s[1] == '<') .{ .lshift, 2 } else if (two and s[1] == '=') .{ .leq, 2 } else .{ .less, 1 },
         '>' => return if (two and s[1] == '>') .{ .rshift, 2 } else if (two and s[1] == '=') .{ .geq, 2 } else .{ .greater, 1 },
         'i' => if (two and s[1] == 'n' and after_word) return .{ .in_list, 2 },
+        // The string order operators of Tcl 9.1. `value.octal_zero` is
+        // false while an interpreter that follows 9.1 runs.
+        'l', 'g' => if (two and after_word and !@import("value.zig").octal_zero) {
+            if (s[1] == 't') return .{ if (s[0] == 'l') .less else .greater, 2 };
+            if (s[1] == 'e') return .{ if (s[0] == 'l') .leq else .geq, 2 };
+        },
         'e' => if (two and s[1] == 'q' and after_word) return .{ .streq, 2 },
         'n' => if (two and after_word) {
             if (s[1] == 'e') return .{ .strneq, 2 };

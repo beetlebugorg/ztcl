@@ -5,8 +5,9 @@
 //! adds the functions of C99 (`acosh` to `trunc`) and the commands
 //! `divmod`, `frexp`, `modf`, and `remquo`. Each function is a command in
 //! `tcl::mathfunc`, so `expr` calls it as a function that a script made.
-//! `tcl9.zig` puts these commands in the command table only while the
-//! interpreter follows 9.1.
+//! The commands `tcl::mathop::lt`, `gt`, `le`, and `ge` are the string
+//! order operators of TIP 461. `tcl9.zig` puts these commands in the
+//! command table only while the interpreter follows 9.1.
 //!
 //! The results and the error messages follow tclsh 9.1.0, with these
 //! differences, where tclsh 9.1.0 gives a wrong result:
@@ -33,6 +34,7 @@ const std = @import("std");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
 const expr = @import("expr.zig");
+const mathns = @import("mathns.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
@@ -391,6 +393,10 @@ pub const commands = [_]Entry{
     .{ .name = "tcl::mathfunc::remainder", .f = binary(remainder) },
     .{ .name = "tcl::mathfunc::signbit", .f = cmdSignbit },
     .{ .name = "tcl::mathfunc::trunc", .f = unary(trunc) },
+    .{ .name = "tcl::mathop::lt", .f = mathns.chainCmd(.strlt) },
+    .{ .name = "tcl::mathop::gt", .f = mathns.chainCmd(.strgt) },
+    .{ .name = "tcl::mathop::le", .f = mathns.chainCmd(.strle) },
+    .{ .name = "tcl::mathop::ge", .f = mathns.chainCmd(.strge) },
     .{ .name = "divmod", .f = cmdDivmod },
     .{ .name = "fpclassify", .f = cmdFpclassify },
     .{ .name = "frexp", .f = cmdFrexp },
