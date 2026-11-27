@@ -43,6 +43,7 @@ The heap of an interpreter and its children never goes above twice the memory li
 - At the limit, the script stops with the error `the script used too much memory`.
 - The collector can move the point of the error between two runs. `--gc off` (Zig: `gc_on = false`) makes it exact.
 - Runner: `--mem BYTES` (default 2 GiB). Zig: `Interp.mem_limit`. JS: `memLimit`.
+- The process can hold up to 16 MiB more than the count of the heap. These are free pages of the heap that the interpreter keeps for its next pages, so a collection does not give them to the system and map them again. The count and the limit do not include them. Zig: `Interp.counter.spare.max` (0 gives each free page back at once).
 
 Nesting limits also protect the native stack: 600 levels of calls and 2000 levels of nested scripts.
 

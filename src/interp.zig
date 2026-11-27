@@ -753,6 +753,44 @@ pub const Counting = struct {
     /// script can free the data. A collection that brings `used` below
     /// the limit clears the flag.
     over_start: bool = false,
+    /// The spans that the heap freed, kept for the next span of the same
+    /// length. See `Spare`.
+    spare: Spare = .{},
+
+    /// Free blocks of 4 KiB to 64 KiB with an alignment of 4 KiB, which
+    /// are the pages of the spans of the heap. `free` pushes a block on
+    /// the list of its length after the count goes down, and `alloc` pops
+    /// one after the count goes up. So `used` is the same as with the
+    /// child allocator, and the process does not map and clear the pages
+    /// again after each collection. The first word of a free block is the
+    /// address of the next block of its list.
+    pub const Spare = struct {
+        lists: [17]?*Node = @splat(null),
+        /// The bytes of the blocks in the lists.
+        bytes: usize = 0,
+        /// The most bytes that the lists keep. An embedder can set 0.
+        max: usize = @import("heap.zig").min_threshold,
+
+        const Node = struct { next: ?*Node };
+        const page = 4096;
+
+        fn index(len: usize, alignment: Alignment) ?usize {
+            if (alignment.toByteUnits() != page or len % page != 0 or len > 16 * page) return null;
+            return len / page;
+        }
+    };
+
+    /// Gives each block of the spare lists to the child allocator.
+    pub fn releaseSpare(c: *Counting) void {
+        for (&c.spare.lists, 0..) |*head, i| {
+            while (head.*) |n| {
+                head.* = n.next;
+                const mem: [*]u8 = @ptrCast(n);
+                c.child.rawFree(mem[0 .. i * Spare.page], .fromByteUnits(Spare.page), 0);
+            }
+        }
+        c.spare.bytes = 0;
+    }
 
     fn sync(c: *Counting) void {
         c.mem_peak = @max(c.mem_peak, c.used);
@@ -841,6 +879,15 @@ pub const Counting = struct {
     fn alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ra: usize) ?[*]u8 {
         const c: *Counting = @ptrCast(@alignCast(ctx));
         if (!c.fits(len)) return null;
+        if (Spare.index(len, alignment)) |i| {
+            if (c.spare.lists[i]) |n| {
+                c.spare.lists[i] = n.next;
+                c.spare.bytes -= len;
+                c.used += len;
+                c.sync();
+                return @ptrCast(n);
+            }
+        }
         const p = c.child.rawAlloc(len, alignment, ra) orelse return null;
         c.used += len;
         c.sync();
@@ -867,9 +914,19 @@ pub const Counting = struct {
 
     fn free(ctx: *anyopaque, memory: []u8, alignment: Alignment, ra: usize) void {
         const c: *Counting = @ptrCast(@alignCast(ctx));
-        c.child.rawFree(memory, alignment, ra);
         c.used -= memory.len;
         c.sync();
+        if (Spare.index(memory.len, alignment)) |i| {
+            if (c.spare.bytes + memory.len <= c.spare.max) {
+                if (std.debug.runtime_safety) @memset(memory[@sizeOf(Spare.Node)..], @import("heap.zig").dead_byte);
+                const n: *Spare.Node = @ptrCast(@alignCast(memory.ptr));
+                n.next = c.spare.lists[i];
+                c.spare.lists[i] = n;
+                c.spare.bytes += memory.len;
+                return;
+            }
+        }
+        c.child.rawFree(memory, alignment, ra);
     }
 };
 
@@ -1559,6 +1616,7 @@ pub const Interp = struct {
         it.freeCaches();
         it.tail_words = null;
         if (it.isRoot()) it.own_heap.reset();
+        it.counter.releaseSpare();
         const counter = it.counter;
         const own = it.own_heap;
         const heap = it.heap;
@@ -1848,6 +1906,7 @@ pub const Interp = struct {
             it.kids.deinit(it.heap.backing);
             it.own_heap.deinit();
         }
+        it.counter.releaseSpare();
         jit_mod.destroy(it);
     }
 

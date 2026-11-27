@@ -404,6 +404,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.setRoots();
     var dead = old;
     dead.deinit();
+    it.counter.releaseSpare();
 
     if (opts.vars == .clear) {
         const steps = it.compute_limit;
