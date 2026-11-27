@@ -342,7 +342,9 @@ fn makeAlias(it: *Interp, src: *Interp, src_name: []const u8, target: *Interp, w
     const copy = try target.alloc().alloc(Value, words.len);
     for (words, copy) |v, *o| o.* = try carry(it, target, v);
     const al = try a.create(Alias);
-    const name = try src.qualify(src_name);
+    // The name of an alias counts from the global namespace, as in Tcl,
+    // also when the command runs in another namespace.
+    const name = try src.qualify(if (std.mem.startsWith(u8, src_name, "::")) src_name else try std.mem.concat(a, u8, &.{ "::", src_name }));
     al.* = .{ .target = target, .words = copy, .source_name = name, .prefix = try value.newList(a, blk: {
         const tmp = try a.alloc(Value, words.len);
         for (words, tmp) |v, *o| o.* = try carry(it, src, v);
@@ -355,9 +357,11 @@ fn makeAlias(it: *Interp, src: *Interp, src_name: []const u8, target: *Interp, w
     return .{ .str = try it.alloc().dupe(u8, src_name) };
 }
 
-fn aliasInfo(it: *Interp, src: *Interp, name: []const u8) Error!Value {
-    const c = src.findCommand(name) orelse return it.fail("alias \"{s}\" not found", .{name});
-    if (c.impl != .native or c.impl.native != &aliasCall) return it.fail("alias \"{s}\" not found", .{name});
+fn aliasInfo(it: *Interp, src: *Interp, name_in: []const u8) Error!Value {
+    const name = if (std.mem.startsWith(u8, name_in, "::")) name_in else try std.mem.concat(it.alloc(), u8, &.{ "::", name_in });
+    // A name that is not an alias gives an empty list, as in Tcl 8.6.
+    const c = src.findCommand(name) orelse return Value.empty;
+    if (c.impl != .native or c.impl.native != &aliasCall) return Value.empty;
     const al: *Alias = @ptrCast(@alignCast(c.ctx.?));
     return carry(src, it, al.prefix);
 }

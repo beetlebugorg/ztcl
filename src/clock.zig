@@ -395,6 +395,10 @@ fn zoneOf(it: *Interp, spec: []const u8) Error!*const Zone {
 
 // ---- msgcat and locales ----
 
+/// The commands of msgcat in Tcl: mcload, mcpreferences, mcmax, and the
+/// export list for `namespace import`.
+const msgcat_script = @embedFile("msgcat.tcl");
+
 const root_keys = [_]struct { []const u8, []const u8 }{
     .{ "DAYS_OF_WEEK_ABBREV", "Sun Mon Tue Wed Thu Fri Sat" },
     .{ "DAYS_OF_WEEK_FULL", "Sunday Monday Tuesday Wednesday Thursday Friday Saturday" },
@@ -470,9 +474,41 @@ fn cmdMcmset(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return .{ .int = @intCast(l.len / 2) };
 }
 
+/// `::msgcat::mc src ?arg ...?`: the translation of src in the locale
+/// and its parents. With no translation, `::msgcat::mcunknown` gives
+/// the text when it exists. With args, the text goes through `format`.
 fn cmdMc(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("::msgcat::mc src ?arg ...?");
-    return lookupIn(it, it.clock.current, try it.str(argv[1])) orelse argv[1];
+    const a = it.alloc();
+    const text = lookupIn(it, it.clock.current, try it.str(argv[1])) orelse {
+        if (it.findCommand("::msgcat::mcunknown") != null) {
+            var words = try a.alloc(Value, argv.len + 1);
+            words[0] = .{ .str = "::msgcat::mcunknown" };
+            words[1] = .{ .str = it.clock.current };
+            @memcpy(words[2..], argv[1..]);
+            return it.eval(try it.str(try value.newList(a, words)));
+        }
+        if (argv.len == 2) return argv[1];
+        return formatWith(it, argv[1], argv[2..]);
+    };
+    if (argv.len == 2) return text;
+    return formatWith(it, text, argv[2..]);
+}
+
+fn formatWith(it: *Interp, fmt: Value, args: []const Value) Error!Value {
+    const a = it.alloc();
+    var words = try a.alloc(Value, args.len + 2);
+    words[0] = .{ .str = "::format" };
+    words[1] = fmt;
+    @memcpy(words[2..], args);
+    return it.eval(try it.str(try value.newList(a, words)));
+}
+
+/// `::msgcat::mcexists src`: 1 when the locale or a parent has src.
+fn cmdMcexists(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len < 2) return it.wrongArgs("::msgcat::mcexists ?-exactnamespace? ?-exactlocale? src");
+    const src = try it.str(argv[argv.len - 1]);
+    return .{ .int = @intFromBool(lookupIn(it, it.clock.current, src) != null) };
 }
 
 fn cmdMclocale(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
@@ -989,6 +1025,26 @@ fn subScan(it: *Interp, args: []const Value) Error!Value {
     const z = try zoneOf(it, o.zone);
     const base = o.base orelse @divFloor(try nowMicros(it), 1000000);
     const change = changeDate(it, o.locale);
+    // Relative items of the free form: "+1 month -1 day", "2 weeks ago",
+    // "tomorrow". They move the date of the rest of the text, or the base.
+    if (o.format == null) if (try relative(it, text)) |rel| {
+        var t: i64 = base;
+        if (rel.rest.len > 0) {
+            const again = try it.alloc().dupe(Value, args);
+            again[0] = .{ .str = rel.rest };
+            t = (try subScan(it, again)).asInt() orelse base;
+        }
+        var add: std.ArrayList(Value) = .empty;
+        try add.append(it.alloc(), .{ .int = t });
+        try add.appendSlice(it.alloc(), rel.items);
+        var k: usize = 1;
+        while (k + 1 < args.len) : (k += 2) {
+            const name = try it.str(args[k]);
+            if (eql(name, "-base") or eql(name, "-format")) continue;
+            try add.appendSlice(it.alloc(), args[k .. k + 2]);
+        }
+        return subAdd(it, add.items);
+    };
     var f: Fields = .{};
     if (o.format) |fmt| {
         var p: Scan = .{ .it = it, .s = text, .locale = o.locale };
@@ -1048,11 +1104,87 @@ fn subScan(it: *Interp, args: []const Value) Error!Value {
 }
 
 /// The common forms with no format: an ISO date, a US date, a time.
+const Relative = struct { rest: []const u8, items: []const Value };
+
+/// Splits the relative items off a free-form text: a signed count and a
+/// unit, with "ago" after it to go back, and the words tomorrow,
+/// yesterday, today, and now. Gives null when the text has none.
+fn relative(it: *Interp, text: []const u8) Error!?Relative {
+    const a = it.alloc();
+    var words: std.ArrayList([]const u8) = .empty;
+    var tok = std.mem.tokenizeAny(u8, text, " \t\n");
+    while (tok.next()) |w| try words.append(a, w);
+    const units = [_][2][]const u8{
+        .{ "year", "years" },     .{ "month", "months" }, .{ "fortnight", "fortnight" }, .{ "week", "weeks" },
+        .{ "day", "days" },       .{ "hour", "hours" },   .{ "minute", "minutes" },      .{ "min", "minutes" },
+        .{ "second", "seconds" }, .{ "sec", "seconds" },
+    };
+    var items: std.ArrayList(Value) = .empty;
+    var rest: std.ArrayList(u8) = .empty;
+    var i: usize = 0;
+    while (i < words.items.len) : (i += 1) {
+        const w = try std.ascii.allocLowerString(a, words.items[i]);
+        if (eql(w, "tomorrow") or eql(w, "yesterday")) {
+            try items.appendSlice(a, &.{ .{ .int = if (w[0] == 't') 1 else -1 }, .{ .str = "days" } });
+            continue;
+        }
+        if (eql(w, "today") or eql(w, "now")) {
+            try items.appendSlice(a, &.{ .{ .int = 0 }, .{ .str = "days" } });
+            continue;
+        }
+        // A count with a sign or a plain count, then a unit.
+        var count: ?i64 = null;
+        var unit_at = i + 1;
+        if (std.fmt.parseInt(i64, w, 10)) |n| {
+            count = n;
+        } else |_| {
+            if ((w[0] == '+' or w[0] == '-') and w.len == 1 and i + 1 < words.items.len) {
+                if (std.fmt.parseInt(i64, words.items[i + 1], 10)) |n| {
+                    count = if (w[0] == '-') -n else n;
+                    unit_at = i + 2;
+                } else |_| {}
+            }
+        }
+        if (count != null and unit_at < words.items.len) {
+            const u = try std.ascii.allocLowerString(a, words.items[unit_at]);
+            const found: ?[]const u8 = for (units) |pair| {
+                if (eql(u, pair[0]) or (u.len > pair[0].len and std.mem.startsWith(u8, u, pair[0]) and u[u.len - 1] == 's')) break pair[1];
+            } else null;
+            if (found) |unit| {
+                var n = count.?;
+                var next = unit_at + 1;
+                if (next < words.items.len and std.ascii.eqlIgnoreCase(words.items[next], "ago")) {
+                    n = -n;
+                    next += 1;
+                }
+                if (eql(unit, "fortnight")) {
+                    try items.appendSlice(a, &.{ .{ .int = n * 14 }, .{ .str = "days" } });
+                } else try items.appendSlice(a, &.{ .{ .int = n }, .{ .str = unit } });
+                i = next - 1;
+                continue;
+            }
+        }
+        if (rest.items.len > 0) try rest.append(a, ' ');
+        try rest.appendSlice(a, words.items[i]);
+    }
+    if (items.items.len == 0) return null;
+    return .{ .rest = rest.items, .items = items.items };
+}
+
 fn freeForm(it: *Interp, text: []const u8) Error!Fields {
     var f: Fields = .{};
     const t = std.mem.trim(u8, text, " \t\n");
     var p: Scan = .{ .it = it, .s = t, .locale = "c" };
-    const forms = [_][]const u8{ "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M", "%m/%d/%Y", "%H:%M:%S", "%H:%M" };
+    // The common forms of the free-form scan of Tcl: ISO dates, US
+    // dates, a day and a month name ("1 january 2004", "Jan 1, 2004"),
+    // each with an optional time, and a time alone.
+    const forms = [_][]const u8{
+        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",   "%Y-%m-%d",          "%Y-%m-%dT%H:%M:%S",
+        "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M",   "%m/%d/%Y",          "%d %b %Y %H:%M:%S",
+        "%d %b %Y %H:%M",    "%d %b %Y",         "%b %d, %Y %H:%M:%S", "%b %d, %Y %H:%M",
+        "%b %d, %Y",         "%b %d %Y %H:%M:%S", "%b %d %Y %H:%M",    "%b %d %Y",
+        "%a %b %d %H:%M:%S %Y", "%H:%M:%S",      "%H:%M",
+    };
     for (forms) |fm| {
         p = .{ .it = it, .s = t, .locale = "c" };
         if (try p.apply(fm, 0)) {
@@ -1241,7 +1373,9 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try it.register("msgcat::mcmset", cmdMcmset);
     try it.register("msgcat::mc", cmdMc);
     try it.register("msgcat::mclocale", cmdMclocale);
+    try it.register("msgcat::mcexists", cmdMcexists);
     _ = try it.internNs("msgcat");
+    _ = it.eval(msgcat_script) catch {};
     if (it.capabilities & @backingInt(interp.Capability.package) != 0) {
         _ = it.eval("package provide msgcat 1.6.1") catch {};
     }

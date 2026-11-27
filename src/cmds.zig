@@ -2427,7 +2427,7 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return it.failCode("TCL LOOKUP INDEX subcommand", "unknown or ambiguous subcommand \"{s}\": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, library, loaded, locals, nameofexecutable, patchlevel, procs, script, sharedlibextension, tclversion, or vars", .{word});
 }
 
-fn cmdPuts(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+pub fn cmdPuts(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var args = argv[1..];
     var newline = true;
     if (args.len > 0 and eql(try it.str(args[0]), "-nonewline")) {

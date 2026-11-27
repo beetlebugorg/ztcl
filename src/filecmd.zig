@@ -707,8 +707,20 @@ fn cmdGlob(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var prefix: []const u8 = "";
     var types: std.ArrayList([]const u8) = .empty;
     while (i < argv.len) : (i += 1) {
-        const o = try it.str(argv[i]);
-        if (o.len == 0 or o[0] != '-') break;
+        const given = try it.str(argv[i]);
+        if (given.len == 0 or given[0] != '-') break;
+        // A unique start of a switch names it, as in Tcl: -dir is -directory.
+        var o = given;
+        if (!eql(given, "--")) {
+            var hits: usize = 0;
+            for ([_][]const u8{ "-directory", "-join", "-nocomplain", "-path", "-tails", "-types" }) |n| {
+                if (given.len > 1 and std.mem.startsWith(u8, n, given)) {
+                    o = n;
+                    hits += 1;
+                }
+            }
+            if (hits != 1) o = given;
+        }
         if (eql(o, "--")) {
             i += 1;
             break;

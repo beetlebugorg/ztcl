@@ -168,9 +168,16 @@ fn require(it: *Interp, name: []const u8, reqs: []const Value, exact: bool) Erro
         }
         if (best) |b| {
             const script = try it.scriptOfValue(b[1], null);
+            // The script runs at the global level and in the global
+            // namespace, as in Tcl, so a `namespace eval` in it is global.
             const saved_frame = it.frame;
+            const saved_ns = it.ns;
             it.frame = &it.global;
-            defer it.frame = saved_frame;
+            it.ns = "";
+            defer {
+                it.frame = saved_frame;
+                it.ns = saved_ns;
+            }
             _ = it.evalScript(script) catch |e| switch (e) {
                 error.TclReturn => {
                     it.ret_code = .ok;

@@ -321,8 +321,10 @@ pub fn putsTo(it: *Interp, name: []const u8, text: []const u8, newline: bool) Er
     return true;
 }
 
-fn parseMode(it: *Interp, text: []const u8) Error!struct { flags: sys.OpenFlags, read: bool, write: bool, append: bool } {
+fn parseMode(it: *Interp, text: []const u8) Error!struct { flags: sys.OpenFlags, read: bool, write: bool, append: bool, binary: bool = false } {
     var f: sys.OpenFlags = .{};
+    // The flag b and BINARY give a channel with -translation binary.
+    var bin = false;
     var r = false;
     var w = false;
     var ap = false;
@@ -345,7 +347,9 @@ fn parseMode(it: *Interp, text: []const u8) Error!struct { flags: sys.OpenFlags,
                 f.exclusive = true;
             } else if (eql(m, "TRUNC")) {
                 f.truncate = true;
-            } else if (!eql(m, "NOCTTY") and !eql(m, "NONBLOCK") and !eql(m, "BINARY")) {
+            } else if (eql(m, "BINARY")) {
+                bin = true;
+            } else if (!eql(m, "NOCTTY") and !eql(m, "NONBLOCK")) {
                 return it.failCode("TCL LOOKUP INDEX flag", "invalid access mode \"{s}\": must be APPEND, BINARY, CREAT, EXCL, NOCTTY, NONBLOCK, RDONLY, RDWR, TRUNC, or WRONLY", .{m});
             }
         }
@@ -353,6 +357,7 @@ fn parseMode(it: *Interp, text: []const u8) Error!struct { flags: sys.OpenFlags,
     } else {
         var body = text;
         if (std.mem.indexOfScalar(u8, body, 'b')) |k| {
+            bin = true;
             body = try std.mem.concat(it.alloc(), u8, &.{ body[0..k], body[k + 1 ..] });
         }
         if (eql(body, "r")) {
@@ -383,7 +388,7 @@ fn parseMode(it: *Interp, text: []const u8) Error!struct { flags: sys.OpenFlags,
         } else return it.fail("illegal access mode \"{s}\"", .{text});
     }
     f.access = if (r and w) .read_write else if (w) .write else .read;
-    return .{ .flags = f, .read = r, .write = w, .append = ap };
+    return .{ .flags = f, .read = r, .write = w, .append = ap, .binary = bin };
 }
 
 fn cmdOpen(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
@@ -418,6 +423,11 @@ fn cmdOpen(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const c = try a.create(Channel);
     const name = try std.fmt.allocPrint(a, "file{d}", .{it.chans.number(false)});
     c.* = .{ .name = name, .fd = fd, .readable = m.read, .writable = m.write, .append = m.append };
+    if (m.binary) {
+        c.binary = true;
+        // Tcl reports the translation of a binary channel as lf.
+        if (c.readable) c.input = .lf;
+    }
     try it.chans.table.put(a, name, c);
     return .{ .str = name };
 }
@@ -1102,11 +1112,9 @@ fn cmdChan(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (eql(sub, "read")) return forward(it, cmdRead, argv, cmd);
     if (eql(sub, "seek")) return forward(it, cmdSeek, argv, cmd);
     if (eql(sub, "tell")) return forward(it, cmdTell, argv, cmd);
-    if (eql(sub, "puts")) {
-        const words = try it.alloc().dupe(Value, argv[1..]);
-        words[0] = .{ .str = "puts" };
-        return it.callWords(words);
-    }
+    // `chan puts` runs the built-in puts, also when a script replaced the
+    // command `puts`, as in Tcl.
+    if (eql(sub, "puts")) return forward(it, cmds.cmdPuts, argv, cmd);
     if (eql(sub, "names")) {
         var out: std.ArrayList(Value) = .empty;
         for ([_][]const u8{ "stderr", "stdin", "stdout" }) |n| {
