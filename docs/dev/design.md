@@ -127,7 +127,7 @@ The instructions:
 |---|---|
 | Stack | `push`, `push_empty`, `pop`, `concat` |
 | Reads | `access`, `lassign`, `lassign_drop` |
-| Variables | `load`, `store`, `store_pop`, `incr`, `incr_drop`, `incr_value`, `append`, `lappend`, `dict_update`, `dict_update_drop`, `lset`, `lset_drop`, `store_elem` |
+| Variables | `load`, `store`, `store_pop`, `incr`, `incr_drop`, `incr_value`, `append`, `lappend`, `dict_update`, `dict_update_drop`, `lset`, `lset_drop`, `store_elem`, `var_exists` |
 | Operators | `binary`, `unary`, `to_bool`, `number_form`, `bin_vv`, `bin_vi` |
 | Control | `guard`, `step`, `jump`, `jump_false`, `jump_true`, `jf_vv`, `jf_vi`, `str_eq_jump`, `foreach_init`, `foreach_next`, `ret` |
 | General path | `invoke`, `eval_cmd`, `word`, `node` |
@@ -139,6 +139,8 @@ A cell that holds the canonical text of an integer gets the integer when a compa
 `lassign` writes each item to a slot with the store rules of `foreach_next` and pushes the list of the items that are left. `lassign_drop` pushes nothing. `lset` and `lset_drop` call `more.lsetOwned`: the first call on a cell copies the list and the cell owns the copy, and each later call writes in place. An index outside the list, a cell that is not plain, or an error goes to the general command. A result that the script uses ends the ownership.
 
 `store_elem` is `set name(index) value` for a literal plain name. It writes the element in the map of the array with no full name. A cell with a trace, a link to an element, or a scalar value goes to `setVar` with the full name.
+
+`var_exists` is `info exists name` for a literal plain name in a proc. It tests the cell of the slot with `Var.exists`, the rule of the general command, and reads no trace. The cell keeps its ownership.
 
 The ownership rule: a list that a cell owns is never in another place. So each value that a script can see stays the same. Two forms keep the ownership:
 

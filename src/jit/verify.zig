@@ -158,6 +158,10 @@ fn effect(code: *const Code, pc: u32) ?Effect {
             if (i.a >= slots) return null;
             return .{ .need = 1, .push = 1 };
         },
+        .var_exists => {
+            if (i.a >= slots) return null;
+            return .{ .need = 0, .push = 1 };
+        },
         .access => return switch (i.x) {
             0, 2, 6 => .{ .need = 1, .push = 1 },
             1, 3, 4, 5 => .{ .need = 2, .push = 1 },

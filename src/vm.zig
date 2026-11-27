@@ -126,6 +126,9 @@ pub const Op = enum(u8) {
     /// Runs the probes of line `a` of the proc body (`probe.zig`). Line
     /// 0 is the entry. Uses no compute unit and changes no value.
     probe,
+    /// `info exists name` of slot `a`: pushes 1 when the variable is
+    /// there, 0 when it is not. Reads no trace.
+    var_exists,
 };
 
 pub const Ins = extern struct {
@@ -793,6 +796,21 @@ const Compiler = struct {
         return true;
     }
 
+    /// `info exists name` with a literal plain name in a proc: a test of
+    /// the slot. The guard runs the general command when `info` changed.
+    fn compileInfoExists(c: *Compiler, cmd: *Cmd, name: []const u8) Error!bool {
+        if (c.named or cmd.words.len != 3 or !std.mem.eql(u8, name, "info")) return false;
+        if (!isWord(cmd.words[1], "exists") or cmd.words[2].kind != .lit or cmd.words[2].kind.lit != .str) return false;
+        const v = cmd.words[2].kind.lit.str;
+        if (!plain(v)) return false;
+        const base = c.depth;
+        const g = try c.emit(.{ .op = .guard });
+        const start = c.here();
+        _ = try c.emit(.{ .op = .var_exists, .a = try c.slot(v) });
+        try c.closeGuard(cmd, base, g, start);
+        return true;
+    }
+
     /// The list or dict word `at` is one plain variable, and the word
     /// after it (the index of `lindex`, the key of `dict get` and `dict
     /// exists`) has only literal text and plain variables, such as
@@ -824,6 +842,7 @@ const Compiler = struct {
 
     fn compileInline(c: *Compiler, cmd: *Cmd, name: []const u8) Error!bool {
         if (try c.compileAccess(cmd, name)) return true;
+        if (try c.compileInfoExists(cmd, name)) return true;
         const n = cmd.words.len;
         const eql = std.mem.eql;
         if (eql(u8, name, "set")) {
@@ -1925,6 +1944,11 @@ inline fn lsetOp(comptime drop: bool, it: *Interp, f: *Frame, code: *const Code,
     }
 }
 
+pub inline fn opVarExists(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, it, code };
+    stack[sp] = .{ .int = @intFromBool(f.vars.items[i.a].cell.target().exists()) };
+}
+
 /// A write to an element of a plain array, or of an unset variable,
 /// needs no full name. Other cells go through `Interp.setVar`.
 pub inline fn opStoreElem(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
@@ -2406,6 +2430,13 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             .lset => {
                 try opLset(named, it, f, code, stack, sp, i);
                 sp -= 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
+            },
+            .var_exists => {
+                try opVarExists(named, it, f, code, stack, sp, i);
+                sp += 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;
