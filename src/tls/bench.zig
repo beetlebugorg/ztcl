@@ -36,13 +36,17 @@ pub fn main() !void {
     inline for (.{ record.Suite.aes_128_gcm_sha256, record.Suite.aes_256_gcm_sha384, record.Suite.chacha20_poly1305_sha256 }) |suite| {
         var best_seal: f64 = 0;
         var best_open: f64 = 0;
+        var best_place: f64 = 0;
         for (0..5) |_| {
             var w = record.Protection.init(suite, secret[0..suite.hashLen()]);
             var r = record.Protection.init(suite, secret[0..suite.hashLen()]);
+            var w2 = record.Protection.init(suite, secret[0..suite.hashLen()]);
+            var r2 = record.Protection.init(suite, secret[0..suite.hashLen()]);
             var n: usize = 0;
             var t_seal: u64 = 0;
             var t_open: u64 = 0;
-            while (t_seal + t_open < 500 * std.time.ns_per_ms) : (n += batch) {
+            var t_place: u64 = 0;
+            while (t_seal + t_open + t_place < 750 * std.time.ns_per_ms) : (n += batch) {
                 const a = nowNs();
                 for (&recs, &rec_buf) |*rec, *buf| rec.* = try w.seal(buf, .application_data, &plain, 0);
                 const b = nowNs();
@@ -51,14 +55,23 @@ pub fn main() !void {
                     std.mem.doNotOptimizeAway(got.data.len);
                 }
                 const c = nowNs();
+                for (&recs, &rec_buf) |*rec, *buf| rec.* = try w2.seal(buf, .application_data, &plain, 0);
+                const d = nowNs();
+                for (recs) |rec| {
+                    const got = try r2.openInPlace(rec);
+                    std.mem.doNotOptimizeAway(got.data.len);
+                }
+                const e = nowNs();
                 t_seal += b - a;
                 t_open += c - b;
+                t_place += e - d;
             }
             const bytes: f64 = @floatFromInt(n * plain.len);
             best_seal = @max(best_seal, bytes / @as(f64, @floatFromInt(t_seal)) * 1000);
             best_open = @max(best_open, bytes / @as(f64, @floatFromInt(t_open)) * 1000);
+            best_place = @max(best_place, bytes / @as(f64, @floatFromInt(t_place)) * 1000);
         }
-        std.debug.print("{t}\tseal {d:.0} MB/s\topen {d:.0} MB/s\n", .{ suite, best_seal, best_open });
+        std.debug.print("{t}\tseal {d:.0} MB/s\topen {d:.0} MB/s\topen in place {d:.0} MB/s\n", .{ suite, best_seal, best_open, best_place });
     }
     // The AEAD alone, as `openssl speed -evp` measures it: 16,384 bytes
     // in place, no record header.
