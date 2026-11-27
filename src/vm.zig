@@ -849,6 +849,8 @@ const Compiler = struct {
             return true;
         } else return false;
 
+        // A nested script in a word sets `arm_drop` again.
+        const arm_drop = c.arm_drop;
         const base = c.depth;
         const g = try c.emit(.{ .op = .guard });
         const start = c.here();
@@ -897,7 +899,9 @@ const Compiler = struct {
             'd' => {
                 const s = try c.slot(nameWord(cmd, 2).?);
                 for (cmd.words[3..]) |*w| try c.compileWord(w);
-                _ = try c.emit(.{ .op = .dict_update, .x = @intFromBool(n == 5), .a = s, .b = try c.site(cmd) });
+                // In an arm whose result is dropped, the cell can own
+                // the dict, as for a statement.
+                _ = try c.emit(.{ .op = if (arm_drop) .dict_update_drop else .dict_update, .x = @intFromBool(n == 5), .a = s, .b = try c.site(cmd) });
                 c.depth = base;
                 c.push(1);
             },
@@ -925,6 +929,7 @@ const Compiler = struct {
             else => unreachable,
         }
         try c.closeGuard(cmd, base, g, start);
+        if (name[0] == 'd' and arm_drop) try c.armDropped();
         return true;
     }
 
