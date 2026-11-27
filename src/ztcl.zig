@@ -107,6 +107,7 @@ test {
     _ = @import("zipread.zig");
     _ = @import("inflate.zig");
     _ = @import("vfs_tests.zig");
+    _ = @import("tcl9_tests.zig");
     _ = zipwrite;
     _ = buildnative;
     _ = dbus;

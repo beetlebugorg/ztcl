@@ -73,7 +73,9 @@ export class Interp {
   /// allow (a list of capabilities: only "file", for the files of a
   /// bundle), point (true adds `point proc` and the output commands), and
   /// packages (a function of a file name for the `load` command of the C
-  /// packages, in a build with `-Dcext-wasm`: see _addLoad).
+  /// packages, in a build with `-Dcext-wasm`: see _addLoad), and tcl
+  /// (the Tcl release that the commands follow: "8.6", the default, or
+  /// "9.1").
   static async create(module, options = {}) {
     if (isOptions(module)) [module, options] = [undefined, module];
     const mod = await compile(module);
@@ -99,10 +101,20 @@ export class Interp {
     return self;
   }
 
-  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null } = {}) {
+  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = "8.6" } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
+    if (tcl !== "8.6") {
+      const t = encoder.encode(String(tcl));
+      const p = this.x.ztcl_alloc(t.length || 1);
+      if (!p) throw new Error("ztcl_alloc: out of memory");
+      new Uint8Array(this.x.memory.buffer, p, t.length).set(t);
+      const rc = this.x.ztcl_set_tcl_version(this.h, p, t.length);
+      this.x.ztcl_free(p, t.length || 1);
+      if (rc === 1) throw new Error(`tcl: bad Tcl version "${tcl}": must be 8.6 or 9.1`);
+      if (rc !== 0) throw new Error("ztcl_set_tcl_version: out of memory");
+    }
     if (point && !this.x.ztcl_point_install) throw new Error("point: this module has no point procs (use ztcl-simd.wasm)");
     if (point && !this.x.ztcl_point_install(this.h)) throw new Error("ztcl_point_install: out of memory");
     this.computeLimit = computeLimit;

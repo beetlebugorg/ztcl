@@ -139,7 +139,7 @@ fn resolve(it: *Interp, path: Value) Error!*Interp {
     return cur;
 }
 
-fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
+fn create(it: *Interp, name: []const u8, safe: bool, ver: interp.TclVersion) Error!*Interp {
     const a = it.alloc();
     const raw = it.heap.backing;
     const child = raw.create(Interp) catch return error.OutOfMemory;
@@ -154,6 +154,7 @@ fn create(it: *Interp, name: []const u8, safe: bool) Error!*Interp {
     child.output = it.output;
     child.user = it.user;
     child.noise_seed = it.noise_seed;
+    try child.setTclVersion(ver);
     child.clock_host = it.clock_host;
     child.event_host = it.event_host;
     child.launch_host = it.launch_host;
@@ -502,6 +503,7 @@ pub fn cmdInterp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (eql(sub, "cancel")) return cancelCmd(it, args);
     if (eql(sub, "create")) {
         var safe = false;
+        var ver = it.tcl;
         var path: ?Value = null;
         var k: usize = 0;
         var end_opts = false;
@@ -514,6 +516,15 @@ pub fn cmdInterp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 }
                 if (eql(o, "--")) {
                     end_opts = true;
+                    continue;
+                }
+                // `-tcl 8.6|9.1` is an option of ztcl: the release that
+                // the child follows. The default is the release of the
+                // parent. The error message stays the message of Tcl.
+                if (eql(o, "-tcl") and k + 1 < args.len) {
+                    k += 1;
+                    const t = try it.str(args[k]);
+                    ver = interp.TclVersion.parse(t) orelse return it.failCode("TCL VALUE TCLVERSION", "bad Tcl version \"{s}\": must be 8.6 or 9.1", .{t});
                     continue;
                 }
                 return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -safe or --", .{o});
@@ -543,7 +554,7 @@ pub fn cmdInterp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 if (!parent.children.contains(name) and !parent.commands.contains(name)) break;
             }
         }
-        _ = try create(parent, name, safe);
+        _ = try create(parent, name, safe, ver);
         return if (i < path_args.len) path_args[i] else .{ .str = name };
     }
     if (eql(sub, "delete")) {

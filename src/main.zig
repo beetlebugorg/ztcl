@@ -28,6 +28,8 @@
 //! The default is `loopback`. A rule of the list is a host name, an
 //! address, or an address range such as `10.0.0.0/8`, with an optional
 //! `:port` or `:port-port`.
+//! `--tcl 8.6|9.1` sets the Tcl release that the commands follow. The
+//! default is 8.6.
 //! `--mem N` sets the memory limit in bytes. The default is 2 GiB.
 //! `--gc-stress N` starts a collection at each Nth allocation. `--gc off`
 //! turns the collector off.
@@ -516,6 +518,16 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
                 out.flush() catch {};
                 host.exit(2);
             }
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--tcl") and i + 1 < args.len) {
+            i += 1;
+            const v = tcl.interp.TclVersion.parse(args[i]) orelse {
+                try out.print("--tcl needs 8.6 or 9.1\n", .{});
+                out.flush() catch {};
+                std.process.exit(2);
+            };
+            try it.setTclVersion(v);
             continue;
         }
         if (std.mem.eql(u8, arg, "--no-jit")) {

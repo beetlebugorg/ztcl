@@ -158,6 +158,15 @@ export fn ztcl_set_gc_stress(h: *Handle, n: u32) void {
     h.it.setGcStress(n);
 }
 
+/// Sets the Tcl release that the commands follow: the text "8.6" or
+/// "9.1". Returns 0 on success, 1 for other text, and 2 when the memory
+/// runs out. Call it before the first script.
+export fn ztcl_set_tcl_version(h: *Handle, ptr: [*]const u8, len: usize) i32 {
+    const v = ztcl.interp.TclVersion.parse(ptr[0..len]) orelse return 1;
+    h.it.setTclVersion(v) catch return 2;
+    return 0;
+}
+
 /// Runs a script. Returns 0 on success and 1 on an error. The result
 /// or the error message stays valid until the next call.
 export fn ztcl_eval(h: *Handle, ptr: [*]const u8, len: usize) i32 {
