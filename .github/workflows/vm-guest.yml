@@ -194,6 +194,8 @@ jobs:
     if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/vm-image-v')) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     environment: vm-release
+    # A sign takes seconds: a step that waits for a passphrase fails here.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
@@ -227,10 +229,21 @@ jobs:
           work=$(mktemp -d)
           trap 'ssh-agent -k >/dev/null 2>&1 || true; shred -u "$work"/key 2>/dev/null || true; rm -rf "$work"' EXIT
           printf '%s\n' "$VM_IMAGE_SIGNING_KEY" > "$work/key"
-          printf '#!/bin/sh\nprintf "%%s\\n" "$VM_IMAGE_SIGNING_PASSPHRASE"\n' > "$work/askpass"
+          # The askpass script gives the passphrase once. ssh-add asks again
+          # after a wrong passphrase, so a second call fails, and ssh-add
+          # ends with an error in the place of a loop until the timeout.
+          printf '#!/bin/sh\n[ -e "%s/asked" ] && exit 1\n: > "%s/asked"\nprintf "%%s\\n" "$VM_IMAGE_SIGNING_PASSPHRASE"\n' "$work" "$work" > "$work/askpass"
           chmod 700 "$work/askpass"
           eval "$(ssh-agent -s)" >/dev/null
-          SSH_ASKPASS="$work/askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=none setsid -w ssh-add -q "$work/key" < /dev/null
+          if ! SSH_ASKPASS="$work/askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=none timeout 60 setsid -w ssh-add -q "$work/key" < /dev/null; then
+            echo "::error::ssh-add did not load the release key: the passphrase in VM_IMAGE_SIGNING_PASSPHRASE does not open VM_IMAGE_SIGNING_KEY, or the key is not an OpenSSH private key"
+            exit 1
+          fi
+          # The agent must hold the key of tools/vm-guest/keys/current.pub.
+          if ! ssh-add -L | grep -qF "$(cut -d' ' -f1-2 tools/vm-guest/keys/current.pub)"; then
+            echo "::error::the key in VM_IMAGE_SIGNING_KEY is not the current release key ($(ssh-keygen -lf tools/vm-guest/keys/current.pub | cut -d' ' -f2))"
+            exit 1
+          fi
           shred -u "$work/key"
           ssh-keygen -q -Y sign -f tools/vm-guest/keys/current.pub -n ztcl-vm-image rel/manifest.json
       - name: Check with the verifier of ztcl
