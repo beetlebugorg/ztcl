@@ -2485,7 +2485,7 @@ pub const Interp = struct {
             return;
         }
         if (!it.in_error) {
-            if (it.probes != null) @import("probe.zig").fireError(it, text);
+            if (@import("probe.zig").enabled and it.probes != null) @import("probe.zig").fireError(it, text);
             it.in_error = true;
             it.error_info = .empty;
             try it.error_info.appendSlice(a, try it.str(it.result));

@@ -487,7 +487,7 @@ const Compiler = struct {
         defer c.nest -= 1;
         const base = c.line_base;
         defer c.line_base = base;
-        if (c.probe_lines.len != 0) {
+        if (probe_on and c.probe_lines.len != 0) {
             if (c.bases.get(s)) |b| c.line_base = b;
         }
         if (s.cmds.len == 0) {
@@ -593,7 +593,7 @@ const Compiler = struct {
 
     fn bodyScript(c: *Compiler, cmd: *Cmd, i: usize) Error!?*interp.Script {
         const s = try c.bodyScriptOf(cmd, i) orelse return null;
-        if (c.probe_lines.len != 0) {
+        if (probe_on and c.probe_lines.len != 0) {
             const at = c.line_base + cmd.line - 1;
             try c.bases.put(@import("probe.zig").embedderAlloc(c.it), s, at + cmd.words[i].line - cmd.line);
         }
@@ -638,7 +638,7 @@ const Compiler = struct {
     fn compileCmd(c: *Compiler, cmd: *Cmd) Error!void {
         const outer = c.outer_line;
         defer c.outer_line = outer;
-        if (c.probe_lines.len != 0) {
+        if (probe_on and c.probe_lines.len != 0) {
             const line = c.line_base + cmd.line - 1;
             if (line != outer and std.mem.indexOfScalar(u32, c.probe_lines, line) != null) _ = try c.emit(.{ .op = .probe, .a = line });
             c.outer_line = line;
@@ -1261,13 +1261,16 @@ const Compiler = struct {
 };
 
 /// Compiles the body of a proc. The slots of the parameters come first.
+/// A build without the module `ztcl::probe` compiles no probe code.
+const probe_on = @import("probe.zig").enabled;
+
 pub fn compileProc(it: *Interp, p: *interp.Proc, s: *interp.Script) Error!*Code {
     const a = it.alloc();
     var c: Compiler = .{ .it = it, .a = a };
     for (p.params) |prm| try c.names.append(a, prm.name);
     if (p.has_args) try c.names.append(a, "args");
     const params: u32 = @intCast(c.names.items.len);
-    const lines = if (it.probes != null) try @import("probe.zig").linesFor(it, p) else null;
+    const lines = if (probe_on and it.probes != null) try @import("probe.zig").linesFor(it, p) else null;
     defer if (lines) |l| {
         @import("probe.zig").embedderAlloc(it).free(l);
         c.bases.deinit(@import("probe.zig").embedderAlloc(it));
@@ -1305,7 +1308,7 @@ pub fn compileNamed(it: *Interp, s: *interp.Script) Error!*Code {
     const a = it.alloc();
     var c: Compiler = .{ .it = it, .a = a, .named = true };
     // A script of a proc body with probes gets the probes of its lines.
-    const of = if (it.probes != null) @import("probe.zig").scriptOf(it, s) else null;
+    const of = if (probe_on and it.probes != null) @import("probe.zig").scriptOf(it, s) else null;
     const lines = if (of) |e| try @import("probe.zig").linesFor(it, e.proc) else null;
     defer if (lines) |l| {
         @import("probe.zig").embedderAlloc(it).free(l);
