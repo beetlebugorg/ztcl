@@ -248,7 +248,7 @@ pub fn substitute(a: std.mem.Allocator, script: []const u8, vals: []const Value)
 pub fn runEvent(it: *Interp, script: []const u8, vals: []const u8, subst: bool) Error!Value {
     var at: usize = 0;
     const list = (try readValue(it.alloc(), vals, &at)) orelse return it.fail("web: a bad event of the host", .{});
-    const items = try it.readList(list);
+    const items = try it.list(list);
     const text = if (subst) try substitute(it.alloc(), script, items) else try appendWords(it.alloc(), script, items);
     const frame = it.frame;
     const ns = it.ns;

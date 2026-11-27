@@ -251,7 +251,7 @@ fn cmdSocket(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (eql(o, "-servername")) {
             servername = try it.str(v);
         } else if (eql(o, "-alpn")) {
-            alpn = try it.readList(v);
+            alpn = try it.list(v);
         } else if (eql(o, "-cadata")) {
             cadata = try it.str(v);
         } else if (eql(o, "-verify")) {

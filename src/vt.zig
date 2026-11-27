@@ -443,7 +443,7 @@ fn cmdNew(it: *Interp, argv: []const Value) interp.Error!Value {
         if (i + 1 >= argv.len) return it.wrongArgs("ztcl::vt new ?-size {{cols rows}}? ?-scrollback lines?");
         const opt = try it.str(argv[i]);
         if (std.mem.eql(u8, opt, "-size")) {
-            const l = try it.readList(argv[i + 1]);
+            const l = try it.list(argv[i + 1]);
             if (l.len != 2) return it.failCode("ZTCL VT SIZE", "the size must be a list of cols and rows", .{});
             cols = try size16(it, l[0]);
             rows = try size16(it, l[1]);

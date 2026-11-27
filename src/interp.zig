@@ -1142,18 +1142,46 @@ const ChanState = if (chan_supported) @import("chan.zig").State else struct {};
 
 pub const ReturnCode = enum(u32) { ok = 0, @"error" = 1, @"return" = 2, @"break" = 3, @"continue" = 4, _ };
 
-const list_cache_bits = 4;
+const list_cache_bits = 8;
 const list_cache_size = 1 << list_cache_bits;
-/// A shorter string parses in about the time of a cache lookup.
-const list_cache_min = 32;
+/// The empty string parses with no allocation.
+const list_cache_min = 1;
 
-const ListCacheEntry = struct {
-    ptr: ?[*]const u8 = null,
-    len: usize = 0,
-    text: []const u8 = &.{},
-    items: ?[]const Value = null,
-    /// The count of collections at the last compare of the text.
-    gc: u64 = 0,
+/// The parse cache of the strings that a command reads as a list
+/// (`Interp.cachedList`). The hit or the miss of a string depends only
+/// on the bytes of the strings that the script read before, never on an
+/// address. So the allocations, and the memory count, are the same in
+/// each run of a script, with the JIT on and off.
+const ListCache = struct {
+    /// The entries by the hash of the text.
+    entries: [list_cache_size]Entry = @splat(.{}),
+    /// A shortcut by address to an entry: no hash and no compare of the
+    /// text. It changes only the speed of a lookup.
+    places: [list_cache_size]Place = @splat(.{}),
+    /// The count of stores to `entries`, for `Place.gen`.
+    gen: u32 = 0,
+
+    const Entry = struct {
+        hash: u64 = 0,
+        /// The copy of the text, and its items. Null items with a hash
+        /// mark a text that came one time.
+        text: []const u8 = &.{},
+        items: ?[]const Value = null,
+        gen: u32 = 0,
+    };
+
+    /// A string in a block of the heap that has the text of entry
+    /// `slot`, checked after the collection `gc`. Between two
+    /// collections no block is freed, and the bytes of a value do not
+    /// change, so the same address and length name the same text, as
+    /// for `script_cache`.
+    const Place = struct {
+        ptr: ?[*]const u8 = null,
+        len: usize = 0,
+        gc: u64 = 0,
+        slot: u16 = 0,
+        gen: u32 = 0,
+    };
 };
 
 /// The count of entries of the text cache.
@@ -1288,7 +1316,7 @@ pub const Interp = struct {
     text_cache_hand: u32 = 0,
     text_cache_used: usize = 0,
     /// The parsed form of strings that a read command sees again.
-    list_cache: [list_cache_size]ListCacheEntry = @splat(.{}),
+    list_cache: ListCache = .{},
     /// The stack of command words.
     chunks: std.ArrayList([]Value) = .empty,
     chunk: usize = 0,
@@ -2133,6 +2161,11 @@ pub const Interp = struct {
     }
 
     fn listSlow(it: *Interp, v: Value) Error![]const Value {
+        if (v == .str and v.str.len >= list_cache_min) return it.cachedList(v.str);
+        return it.parseList(v);
+    }
+
+    fn parseList(it: *Interp, v: Value) Error![]const Value {
         return v.asList(it.alloc()) catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
             error.BadList => return it.listError(v),
@@ -2150,38 +2183,36 @@ pub const Interp = struct {
         };
     }
 
-    /// The elements of `v` for a command that only reads them. A string
-    /// that comes again at the same address has a cached parse. The
-    /// entry has its own copy of the text, and a compare with that copy
-    /// guards the first hit after each collection. Between two
-    /// collections no block is freed, so the same address and length
-    /// name the same text, as for `script_cache`. The first use of a
-    /// string makes no copy.
-    pub fn readList(it: *Interp, v: Value) Error![]const Value {
-        if (v == .list) return v.list.items();
-        if (v != .str or v.str.len < list_cache_min) return it.list(v);
-        const s = v.str;
-        const h = (@as(u64, @intFromPtr(s.ptr)) >> 3 ^ s.len) *% 0x9e3779b97f4a7c15;
-        const e = &it.list_cache[@intCast(h >> (64 - list_cache_bits))];
-        if (e.ptr != s.ptr or e.len != s.len) {
-            e.* = .{ .ptr = s.ptr, .len = s.len };
-            return it.list(v);
+    /// The items of the string `s` through the parse cache
+    /// (`ListCache`). A text that comes a second time gets a copy and a
+    /// cached parse, and each later read of the same text has the items.
+    /// Each caller only reads the items. A collection empties the cache
+    /// (`gc.dropAddressCaches`), so the entries hold no block.
+    fn cachedList(it: *Interp, s: []const u8) Error![]const Value {
+        const c = &it.list_cache;
+        const where = (@as(u64, @intFromPtr(s.ptr)) >> 3 ^ s.len) *% 0x9e3779b97f4a7c15;
+        const p = &c.places[@intCast(where >> (64 - list_cache_bits))];
+        if (p.ptr == s.ptr and p.len == s.len and p.gc == it.heap.collections) {
+            const e = &c.entries[p.slot];
+            if (e.gen == p.gen) if (e.items) |items| return items;
         }
-        if (e.items) |items| {
-            if (e.gc == it.heap.collections) return items;
-            if (std.mem.eql(u8, e.text, s)) {
-                e.gc = it.heap.collections;
-                return items;
-            }
-            e.items = null;
-            return it.list(v);
+        const h = std.hash.Wyhash.hash(0, s);
+        const slot: u16 = @intCast(h >> (64 - list_cache_bits));
+        const e = &c.entries[slot];
+        if (e.hash != h or (e.items != null and !std.mem.eql(u8, e.text, s))) {
+            e.* = .{ .hash = h };
+            return it.parseList(.{ .str = s });
         }
-        const text = try it.alloc().dupe(u8, s);
-        const items = try it.list(.{ .str = text });
-        e.text = text;
-        e.items = items;
-        e.gc = it.heap.collections;
-        return items;
+        if (e.items == null) {
+            const text = try it.alloc().dupe(u8, s);
+            const items = try it.parseList(.{ .str = text });
+            c.gen +%= 1;
+            e.* = .{ .hash = h, .text = text, .items = items, .gen = c.gen };
+        }
+        if (it.heap.find(@intFromPtr(s.ptr)) != null) {
+            p.* = .{ .ptr = s.ptr, .len = s.len, .gc = it.heap.collections, .slot = slot, .gen = e.gen };
+        }
+        return e.items.?;
     }
 
     pub fn int(it: *Interp, v: Value) Error!i64 {

@@ -267,7 +267,7 @@ fn encode(it: *Interp, kind: Type, v: Value) Error![]const u8 {
         },
         .multi_sz => {
             var out: std.ArrayList(u16) = .empty;
-            for (try it.readList(v)) |e| {
+            for (try it.list(v)) |e| {
                 const w = try wide(a, try it.str(e));
                 try out.appendSlice(a, w);
                 try out.append(a, 0);

@@ -390,7 +390,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.free_vars = null;
     it.free_frames = null;
     it.freeCaches();
-    it.list_cache = @splat(.{});
+    it.list_cache = .{};
     it.chunks = .empty;
     it.chunk = 0;
     it.top = 0;
