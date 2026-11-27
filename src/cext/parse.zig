@@ -284,7 +284,7 @@ fn getUtf(s: []const u8, out: *u32) usize {
 /// `TclParseBackslash`: the bytes that the backslash at `src` reads go
 /// to `read`, and its character goes to `dst`. The return is the byte
 /// count of the character.
-fn parseBackslash(src: [*]const u8, n: usize, read: ?*usize, dst: ?*[4]u8) usize {
+pub fn parseBackslash(src: [*]const u8, n: usize, read: ?*usize, dst: ?*[4]u8) usize {
     var buf: [4]u8 = undefined;
     const d = dst orelse &buf;
     if (n == 0) {
