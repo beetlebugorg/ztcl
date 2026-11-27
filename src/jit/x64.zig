@@ -18,6 +18,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const Marks = @import("marks.zig").Marks;
 const Allocator = std.mem.Allocator;
 
 pub const Reg = enum(u4) { rax, rcx, rdx, rbx, rsp, rbp, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15 };
@@ -82,6 +83,8 @@ pub const Asm = struct {
     fixups: std.ArrayList(Fixup) = .empty,
     /// True after a branch offset did not fit in 32 bits.
     bad: bool = false,
+    /// The marks of a listing (`marks.zig`), or null in a compile for a run.
+    marks: ?*Marks = null,
 
     pub fn init(a: Allocator) Asm {
         return .{ .a = a };
@@ -95,6 +98,11 @@ pub const Asm = struct {
 
     pub fn here(s: *const Asm) u32 {
         return @intCast(s.buf.items.len);
+    }
+
+    /// The code from here on belongs to the bytecode instruction `pc`.
+    pub fn mark(s: *Asm, pc: u32) void {
+        if (s.marks) |m| m.note(s.here(), pc);
     }
 
     pub fn bytes(s: *const Asm) []const u8 {

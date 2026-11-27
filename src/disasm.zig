@@ -32,7 +32,7 @@ fn install(it: *Interp) Error!void {
     try it.register("tcl::unsupported::disassemble", cmdTcl);
 }
 
-const usage = "ztcl::disasm proc|script|lambda arg";
+const usage = "ztcl::disasm ?machine? proc|script|lambda arg";
 
 /// The longest text of a literal or a command in a listing.
 const max_text = 40;
@@ -79,11 +79,90 @@ fn procCode(it: *Interp, p: *interp.Proc) Error!*vm.Code {
 }
 
 fn cmd(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value {
+    if (argv.len >= 2 and std.mem.eql(u8, try it.str(argv[1]), "machine")) return machine(it, argv[2..]);
     if (argv.len != 3) return it.wrongArgs(usage);
     const t = try target(it, try it.str(argv[1]), argv[2], "ztcl::disasm");
     var out: std.ArrayList(u8) = .empty;
     try list(it, &out, t);
     return .{ .str = out.items };
+}
+
+// ---- The machine code of the JIT ----
+
+const jit_on = @import("build_options").jit;
+const listing = if (jit_on) @import("jit/listing.zig") else struct {};
+
+/// `ztcl::disasm machine kind arg`: the tier 1 code of the
+/// JIT under each instruction, and the tier 2 code of each loop.
+fn machine(it: *Interp, rest: []const Value) Error!Value {
+    if (comptime !jit_on) return it.fail("this build has no JIT", .{});
+    if (rest.len != 2) return it.wrongArgs(usage);
+    const arch = listing.native;
+    const t = try target(it, try it.str(rest[0]), rest[1], "ztcl::disasm machine");
+    const a = it.alloc();
+    const code = t.code;
+    var out: std.ArrayList(u8) = .empty;
+    const one = listing.tier1(a, code, arch) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.NotCompiled => return it.fail("the JIT cannot compile the body of {s}", .{t.title}),
+    };
+    try out.print(a, "{s}: tier 1, {t}, {d} bytes, jit {s}\n", .{ t.title, arch, one.len, jitState(it, code) });
+    try machineLines(it, &out, code, one.lines);
+    const hs = listing.heads(a, code) catch &.{};
+    const kinds = try a.alloc(@import("jit/tier2.zig").Kind, code.names.len);
+    @memset(kinds, .int);
+    for (hs) |h| {
+        const two = (listing.loop(a, code, h, kinds, arch) catch |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.NotCompiled => null,
+        }) orelse continue;
+        try out.print(a, "{s}: tier 2, the loop at {d}, each slot an int, {t}, {d} bytes\n", .{ t.title, h, arch, two.len });
+        try machineLines(it, &out, code, two.lines);
+    }
+    return .{ .str = out.items };
+}
+
+/// The lines of one listing: each bytecode instruction under the line of
+/// its command, and its machine code under it. A part out of line, such
+/// as a slow path or an error stub, comes later under the note of its
+/// instruction.
+fn machineLines(it: *Interp, out: *std.ArrayList(u8), code: *const vm.Code, lines: []const listing.Line) Error!void {
+    const a = it.alloc();
+    const seen = try a.alloc(bool, code.ins.len);
+    @memset(seen, false);
+    var last: u32 = std.math.maxInt(u32) - 1;
+    var buf: [16]*const vm.Range = undefined;
+    for (lines) |ln| {
+        if (ln.pc != last) {
+            last = ln.pc;
+            if (ln.pc >= code.ins.len) {
+                try out.appendSlice(a, "  # entry and exit\n");
+            } else if (!seen[ln.pc]) {
+                seen[ln.pc] = true;
+                for (rangesAt(code, ln.pc, &buf)) |r| {
+                    try out.print(a, "  # line {d}: ", .{r.cmd.?.line});
+                    try short(a, out, r.cmd.?.text);
+                    try out.append(a, '\n');
+                }
+                try out.print(a, "  {d:>4} ", .{ln.pc});
+                try instruction(it, out, code, &code.ins[ln.pc]);
+                try out.append(a, '\n');
+            } else {
+                try out.print(a, "  # out of line: {d} {s}\n", .{ ln.pc, @tagName(code.ins[ln.pc].op) });
+            }
+        }
+        try out.print(a, "        {x:0>4}  ", .{ln.at});
+        var hex: [3 * 16]u8 = undefined;
+        var n: usize = 0;
+        for (ln.bytes[0..@min(ln.bytes.len, 15)]) |b| {
+            _ = std.fmt.bufPrint(hex[n..][0..2], "{x:0>2}", .{b}) catch unreachable;
+            n += 2;
+        }
+        try out.appendSlice(a, hex[0..n]);
+        try out.appendNTimes(a, ' ', 31 -| n);
+        try out.appendSlice(a, ln.text);
+        try out.append(a, '\n');
+    }
 }
 
 /// One line for a text: the first `max_text` bytes on one line, in quotes.

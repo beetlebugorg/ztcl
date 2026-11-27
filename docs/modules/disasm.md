@@ -52,11 +52,27 @@ Gives the listing of a lambda of `apply`: a list of the parameters and the body,
 
 Gives the listing of a script that runs outside a proc, as the body of `eval` or `uplevel`. Its variables are names, so it has no slot of a local variable.
 
+### ztcl::disasm machine proc|lambda|script arg
+
+Gives the machine code of the JIT for the body, under each instruction of the bytecode. The JIT assembles the body again for the listing, into memory that never runs, so the command works also for a body that did not run yet. The listing is for the target of the host, x86-64 or arm64. The listing has these parts:
+
+- The head: the name, `tier 1`, the target, the count of bytes, and the state of the JIT, as in the bytecode listing.
+- `# entry and exit` before the code of the entry and the exit of the function.
+- Each command line and each instruction of the bytecode, as in the bytecode listing, with its machine code under it. A line of machine code has the offset, the bytes, and the instruction. A call of a helper of the JIT names the helper after `;`.
+- `# out of line: n op` before a part of instruction `n` that is out of the main path: a slow path, an error stub, or the check of a cell.
+- After the tier 1 code, the tier 2 code of each loop that tier 2 can compile, with the head `tier 2, the loop at n`. Tier 2 compiles a loop for the kinds of its variables at the entry of the loop, and the listing uses an integer in each variable.
+
+The disassembler decodes only the instruction forms that the JIT emits, and it checks each instruction: it encodes the instruction again with the assembler of the JIT and compares the bytes. A byte that is not a form of the JIT shows as `.byte` (x86-64) or `.word` (arm64). A build with no JIT, such as WebAssembly, gives an error.
+
+```tcl
+ztcl::disasm machine proc twice
+```
+
 ## ::tcl::unsupported::disassemble
 
 `::tcl::unsupported::disassemble proc|lambda|script arg` gives the same bytecode in the shape of the output of Tcl: the `ByteCode` head, `Source`, the counts, the `Proc` line with the slots, the table of `Commands` with the range of instructions and the range of bytes of the source of each command, and the instructions under each `Command n:`. The names of the instructions are the ones of ztcl, so the instructions differ from Tcl. The command exists after `package require ztcl::disasm`. Tcl has no stable form of this output either.
 
 ## Not yet
 
-- The machine code of the JIT (tier 1 and tier 2) with the source lines of each range.
+- The tier 2 code of a loop for the kinds of its variables in a run, in place of an integer in each variable.
 - `::tcl::unsupported::assemble` and `ztcl::asm`.

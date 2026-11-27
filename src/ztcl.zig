@@ -168,4 +168,6 @@ test {
     _ = wasmbundle;
     _ = @import("wasmfiles.zig");
     _ = @import("jit/tests.zig");
+    _ = @import("jit/x64_dis.zig");
+    _ = @import("jit/a64_dis.zig");
 }

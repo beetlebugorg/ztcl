@@ -23,6 +23,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const marks = @import("marks.zig");
 const vm = @import("../vm.zig");
 const x64 = @import("x64.zig");
 const abi = @import("abi.zig");
@@ -89,6 +90,10 @@ pub const Emitter = struct {
     epilogue: Label,
     a: Allocator,
     colds: std.ArrayList(Cold) = .empty,
+    /// The instruction of each cold piece, for the marks of a listing.
+    cold_pcs: std.ArrayList(u32) = .empty,
+    /// The instruction that the main loop emits now.
+    pc_now: u32 = marks.none,
     /// The slow path of each instruction, made on first use.
     slows: []?Label,
     /// True when each loop head counts its passes for tier 2.
@@ -115,6 +120,7 @@ pub const Emitter = struct {
     fn emitEpilogue(e: *Emitter) Error!void {
         const s = e.s;
         s.bind(e.epilogue);
+        s.mark(marks.none);
         try s.aluRI(.add, .rsp, 8);
         var k: usize = abi.saved.len;
         while (k > 0) {
@@ -138,6 +144,7 @@ pub const Emitter = struct {
         for (e.stubs, 0..) |maybe, pc| {
             const l = maybe orelse continue;
             s.bind(l);
+            s.mark(@intCast(pc));
             try s.movRM(.rcx, ctxSlot());
             try s.movMI32(.{ .base = .rcx, .disp = ctx_pc }, @intCast(pc));
             try s.movMI32(.{ .base = .rcx, .disp = ctx_sp }, e.info.depth[pc]);
@@ -258,7 +265,7 @@ pub const Emitter = struct {
             .foreach_next, .str_eq_jump => i.b,
             else => null,
         };
-        try e.colds.append(e.a, .{ .slow = .{ .at = l, .pc = pc, .h = helperOf(i), .target = target } });
+        try e.addCold(.{ .slow = .{ .at = l, .pc = pc, .h = helperOf(i), .target = target } });
         return l;
     }
 
@@ -289,7 +296,7 @@ pub const Emitter = struct {
         try s.cmpMI8(.{ .base = r, .disp = @intCast(l.var_tag) }, @intCast(want));
         const link = try s.newLabel();
         try s.jcc(.ne, link);
-        try e.colds.append(e.a, .{ .link = .{ .at = link, .cell = r, .check = check, .slow = slow_l } });
+        try e.addCold(.{ .link = .{ .at = link, .cell = r, .check = check, .slow = slow_l } });
     }
 
     /// The memory operand of a field of the Value of cell `r`.
@@ -374,7 +381,7 @@ pub const Emitter = struct {
     /// check.
     fn step(e: *Emitter, pc: u32, comptime h: Helper) Error!void {
         const slow_l = try e.s.newLabel();
-        try e.colds.append(e.a, .{ .slow = .{ .at = slow_l, .pc = pc, .h = h, .target = null } });
+        try e.addCold(.{ .slow = .{ .at = slow_l, .pc = pc, .h = h, .target = null } });
         return e.stepTo(slow_l);
     }
 
@@ -389,7 +396,7 @@ pub const Emitter = struct {
         try s.aluRM(.cmp, .rax, itAt(l.it_mem_limit));
         const restore = try s.newLabel();
         try s.jcc(.ae, restore);
-        try e.colds.append(e.a, .{ .restore = .{ .at = restore, .slow = slow_l } });
+        try e.addCold(.{ .restore = .{ .at = restore, .slow = slow_l } });
     }
 
     fn guard(e: *Emitter, pc: u32) Error!void {
@@ -400,7 +407,7 @@ pub const Emitter = struct {
         const recheck = try s.newLabel();
         const back = try s.newLabel();
         try s.jcc(.ne, recheck);
-        try e.colds.append(e.a, .{ .recheck = .{ .at = recheck, .pc = pc, .cold = e.code.ins[pc].a, .back = back } });
+        try e.addCold(.{ .recheck = .{ .at = recheck, .pc = pc, .cold = e.code.ins[pc].a, .back = back } });
         s.bind(back);
         try e.step(pc, .step);
     }
@@ -811,12 +818,18 @@ pub const Emitter = struct {
 
     // ---- The cold code ----
 
+    fn addCold(e: *Emitter, c: Cold) Error!void {
+        try e.colds.append(e.a, c);
+        try e.cold_pcs.append(e.a, e.pc_now);
+    }
+
     fn emitColds(e: *Emitter) Error!void {
         const s = e.s;
         // The list grows while it is read: a slow path of a cold piece
         // can add no other piece, so the index loop ends.
         var k: usize = 0;
         while (k < e.colds.items.len) : (k += 1) {
+            s.mark(e.cold_pcs.items[k]);
             switch (e.colds.items[k]) {
                 .link => |c| {
                     s.bind(c.at);
@@ -870,7 +883,7 @@ fn loopCounter(e: *Emitter, pc: u32, k: usize) Error!void {
     const back = try s.newLabel();
     try s.jcc(.e, cold);
     s.bind(back);
-    try e.colds.append(e.a, .{ .tier_up = .{ .at = cold, .pc = pc, .back = back } });
+    try e.addCold(.{ .tier_up = .{ .at = cold, .pc = pc, .back = back } });
 }
 
 pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify.Info, l: layout.Layout, entries: []u32, tier2: bool) Error!void {
@@ -890,6 +903,7 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
     if (!words_ok or l.value_tag < 16 or l.value_tag >= l.value_size) return error.Layout;
     var e: Emitter = .{ .s = s, .code = code, .info = info, .l = l, .labels = labels, .stubs = stubs, .epilogue = try s.newLabel(), .a = a, .slows = slows, .tier2 = tier2 };
     defer e.colds.deinit(a);
+    defer e.cold_pcs.deinit(a);
     try e.prologue();
     for (0..n) |pc| {
         if (!info.reachable[pc]) {
@@ -898,6 +912,8 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
         }
         s.bind(labels[pc]);
         entries[pc] = s.here();
+        s.mark(@intCast(pc));
+        e.pc_now = @intCast(pc);
         if (tier2) if (std.mem.indexOfScalar(u32, info.loop_heads, @intCast(pc))) |k| try loopCounter(&e, @intCast(pc), k);
         try e.instruction(@intCast(pc));
     }
@@ -909,6 +925,7 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
         s.bind(lb);
         trap = true;
     }
+    s.mark(marks.none);
     if (trap) try s.ud2();
     try e.emitColds();
     try e.emitStubs();

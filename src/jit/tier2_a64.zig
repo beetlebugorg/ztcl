@@ -43,6 +43,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const marks = @import("marks.zig");
 const vm = @import("../vm.zig");
 const a64 = @import("a64.zig");
 const abi = @import("abi.zig").a64;
@@ -451,6 +452,7 @@ const Emitter = struct {
     }
 
     fn entry(e: *Emitter) Error!void {
+        e.s.mark(marks.none);
         try e.loadSlots(true, e.head_exit);
         try e.epochCheck(e.head_exit);
         try e.memCheck(e.head_exit);
@@ -1227,6 +1229,7 @@ const Emitter = struct {
         while (k < e.slows.items.len) : (k += 1) {
             const x = e.slows.items[k];
             e.s.bind(x.at);
+            e.s.mark(x.pc);
             const i = e.code.ins[x.pc];
             try e.call(x.pc, tier1.Emitter.helperOf(i), tier2.runsNoScript(i), false);
         }
@@ -1235,6 +1238,7 @@ const Emitter = struct {
     fn emitFixes(e: *Emitter) Error!void {
         for (e.fixes.items) |x| {
             e.s.bind(x.at);
+            e.s.mark(x.pc);
             try e.fix(x.pc, x.to);
             try e.s.b(e.labels[x.to - e.p.head]);
         }
@@ -1244,6 +1248,7 @@ const Emitter = struct {
         const s = e.s;
         for (e.kept.items) |x| {
             s.bind(x.at);
+            s.mark(x.pc);
             try e.writeSlotsOf(true, false);
             try s.b(try e.stub(x.pc));
         }
@@ -1266,6 +1271,7 @@ const Emitter = struct {
         const l = e.l;
         for (e.exits.items) |x| {
             s.bind(x.at);
+            s.mark(x.pc);
             if (x.kept) try e.writeSlotsOf(true, false);
             if (!x.synced) {
                 const d = e.depth(x.pc);
@@ -1448,6 +1454,7 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
         if (p.seen[k] and (targets[k] or check)) try e.settle(pc);
         if (targets[k]) @memset(e.known, null);
         s.bind(labels[k]);
+        s.mark(pc);
         if (check) {
             // At least `steps` steps are left, or the exit, with no step
             // used.
