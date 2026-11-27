@@ -120,7 +120,7 @@ sub: encoding profiles | The profiles: `replace strict tcl8`. Tcl 9.1 only.
 sub: encoding user | The encoding of the user: utf-8. Tcl 9.1 only.
 sub: encoding names | The names of the encodings: the ones with no table, and the files of the encoding folders.
 sub: encoding system | The encoding of the system: utf-8.
-sub: encoding dirs ?LIST? | The folders of the encoding files of Tcl (`koi8-r.enc`, `iso2022-jp.enc`, ...). ztcl reads a file on the first use of its encoding, from these folders, then from `$tcl_library/encoding`. The binary has no tables.
+sub: encoding dirs ?LIST? | The folders of the encoding files of Tcl (`koi8-r.enc`, `iso2022-jp.enc`, ...). ztcl reads a file on the first use of its encoding, from these folders. Before a script sets the list, the folder is `$tcl_library/encoding`. The binary has no tables.
 ex: string length [encoding convertto utf-8 é] => 2
 
 == binary

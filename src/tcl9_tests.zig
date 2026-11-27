@@ -173,7 +173,7 @@ test "encoding profiles of Tcl 9.1" {
         .{ "list [encoding convertfrom -failindex i utf-8 \"a\\xffb\"] $i", "!wrong # args: should be \"encoding convertfrom ?encoding? data\"", "a 1" },
         .{ "encoding convertto ascii \"a\\u00e9\"", "a?", "!unexpected character at index 1: 'U+0000E9'" },
         .{ "list [encoding convertto -failindex j ascii \"ab\\u00e9c\"] $j", "!wrong # args: should be \"encoding convertto ?encoding? data\"", "ab 2" },
-        .{ "encoding convertfrom ascii \"a\\xe9\"", "a?", "!unexpected byte sequence starting at index 1: '\\xE9'" },
+        .{ "encoding convertfrom ascii \"a\\xe9\"", "a\u{e9}", "!unexpected byte sequence starting at index 1: '\\xE9'" },
         .{ "encoding convertfrom -profile bogus utf-8 a", "!wrong # args: should be \"encoding convertfrom ?encoding? data\"", "!bad profile name \"bogus\": must be replace, strict, or tcl8" },
         .{ "encoding profiles", "!bad option \"profiles\": must be convertfrom, convertto, dirs, names, or system", "replace strict tcl8" },
         .{ "encoding bogus", "!bad option \"bogus\": must be convertfrom, convertto, dirs, names, or system", "!unknown or ambiguous subcommand \"bogus\": must be convertfrom, convertto, dirs, names, profiles, system, or user" },
