@@ -6,13 +6,18 @@
 //   node tools/cext/wasm-check.mjs zig-out/lib/ztcl-host.wasm SCRIPT
 //
 // SPDX-License-Identifier: BSD-2-Clause
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { Interp } from "../../web/ztcl.mjs";
 
 const [lib, script] = process.argv.slice(2);
 const tcl = await Interp.create(readFileSync(lib), {
   onOutput: (t) => process.stdout.write(t),
-  packages: (file) => readFileSync(file.replace(/\.so$/, ".wasm")),
+  // A missing file gives the text of dlopen on Linux, as tclsh does.
+  packages: (file) => {
+    const wasm = file.replace(/\.so$/, ".wasm");
+    if (!existsSync(wasm)) throw new Error(`${file}: cannot open shared object file: No such file or directory`);
+    return readFileSync(wasm);
+  },
 });
 const r = tcl.eval(readFileSync(script, "utf8"));
 if (!r.ok) process.stdout.write(`${r.result}\n`);

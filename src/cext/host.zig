@@ -211,7 +211,7 @@ pub fn argOf(o: *Obj) Arg {
 }
 
 fn leafOf(o: *Obj) Arg {
-    if (o.typePtr == &obj.wide_type) return .{ .kind = 1, .len = 0, .bits = @bitCast(o.rep.wide) };
+    if (obj.isInt(o)) return .{ .kind = 1, .len = 0, .bits = @bitCast(o.rep.wide) };
     if (o.typePtr == &obj.double_type) return .{ .kind = 2, .len = 0, .bits = @bitCast(o.rep.double) };
     const s = text(o);
     return .{ .kind = 0, .len = @intCast(s.len), .bits = @intFromPtr(s.ptr) };
@@ -456,6 +456,14 @@ pub fn ztcl_cext_interp_free(ip: *Interp) callconv(.c) void {
 
 /// Puts the result of `ip` in `reply`, after the init function.
 pub fn ztcl_cext_result(ip: *Interp) callconv(.c) *Arg {
+    // A package can write the string of the `result` field, as with
+    // USE_INTERP_RESULT. That string comes first, as on the native path.
+    const legacy = std.mem.span(ip.result_dont_use);
+    if (legacy.len != 0) {
+        reply = .{ .kind = 0, .len = @intCast(legacy.len), .bits = @intFromPtr(legacy.ptr) };
+        ip.result_dont_use = "";
+        return &reply;
+    }
     reply = argOf(result(ip));
     return &reply;
 }
@@ -776,7 +784,9 @@ pub fn Tcl_NREvalObjv(ip: *Interp, objc: c_int, objv: [*]const *Obj, flags: c_in
     return Tcl_NREvalObj(ip, Tcl_NewStringObj(out.items.ptr, @intCast(out.items.len)), flags);
 }
 
-pub fn Tcl_VarEvalVA(ip: *Interp, ap: *std.builtin.VaList) callconv(.c) c_int {
+pub fn Tcl_VarEvalVA(ip: *Interp, va: obj.VaArg) callconv(.c) c_int {
+    var arg = va;
+    const ap = obj.vaList(&arg);
     var out: std.ArrayList(u8) = .empty;
     defer out.deinit(gpa);
     while (true) {

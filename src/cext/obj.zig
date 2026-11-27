@@ -21,6 +21,16 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+
+/// A `va_list` argument of a slot, as C passes it. Where `va_list` is a
+/// pointer (wasm32, Windows, macOS on arm64), C passes it by value. Where
+/// it is a struct (x86_64 and aarch64 elsewhere), C passes its address.
+pub const VaArg = if (@typeInfo(std.builtin.VaList) == .pointer) std.builtin.VaList else *std.builtin.VaList;
+
+/// The `VaList` of `ap.*`, for `@cVaArg`.
+pub inline fn vaList(ap: *VaArg) *std.builtin.VaList {
+    return if (VaArg == std.builtin.VaList) ap else ap.*;
+}
 const value = @import("../value.zig");
 
 const gpa = std.heap.c_allocator;
@@ -158,12 +168,24 @@ pub fn updateDouble(o: *Obj) callconv(.c) void {
     setText(o, value.formatDouble(fba.allocator(), o.rep.double) catch unreachable);
 }
 
-/// Ints have the type name of Tcl on a 32-bit `long`. The SQLite binding
-/// reads the name to bind a variable as a number.
-/// The name of the int type of Tcl 8.6: "int" where a long has 64 bits
-/// (LP64 Unix), and "wideInt" where it has 32 bits.
-const wide_name = if (@sizeOf(c_long) == 8) "int" else "wideInt";
-pub const wide_type: ObjType = .{ .name = wide_name, .free = null, .dup = null, .update = &updateWide, .set_from_any = null };
+/// The int types of Tcl 8.6. An int that fits a `long` has the type
+/// "int". Where a `long` has 32 bits (wasm32, Windows), a larger int has
+/// the type "wideInt". The SQLite binding reads the name to bind a
+/// variable as a number.
+pub const wide_type: ObjType = .{ .name = "int", .free = null, .dup = null, .update = &updateWide, .set_from_any = null };
+const long_is_wide = @sizeOf(c_long) == 8;
+pub const big_type: ObjType = .{ .name = "wideInt", .free = null, .dup = null, .update = &updateWide, .set_from_any = null };
+
+/// True when `o` has an int type of this file.
+pub fn isInt(o: *const Obj) bool {
+    return o.typePtr == &wide_type or (!long_is_wide and o.typePtr == &big_type);
+}
+
+/// The int type of Tcl 8.6 for the value `w`.
+fn intType(w: i64) *const ObjType {
+    if (long_is_wide or (w >= std.math.minInt(c_long) and w <= std.math.maxInt(c_long))) return &wide_type;
+    return &big_type;
+}
 pub const double_type: ObjType = .{ .name = "double", .free = null, .dup = null, .update = &updateDouble, .set_from_any = null };
 
 // A list keeps an array of objects, each with one reference of the list.
@@ -268,7 +290,7 @@ pub fn Tcl_NewStringObj(bytes: ?[*]const u8, length: c_int) callconv(.c) *Obj {
 pub fn Tcl_NewWideIntObj(w: i64) callconv(.c) *Obj {
     const o = newObj();
     o.bytes = null;
-    o.typePtr = &wide_type;
+    o.typePtr = intType(w);
     o.rep = .{ .wide = w };
     return o;
 }
@@ -404,13 +426,13 @@ pub fn shimmer(o: *Obj, t: *const ObjType, rep: Rep) void {
 }
 
 pub fn Tcl_GetWideIntFromObj(interp: ?*Interp, o: *Obj, out: *i64) callconv(.c) c_int {
-    if (o.typePtr == &wide_type) {
+    if (isInt(o)) {
         out.* = o.rep.wide;
         return OK;
     }
     if (o.typePtr == &double_type) return expected(interp, "integer", o);
     const w = value.parseInt(text(o)) orelse return expected(interp, "integer", o);
-    shimmer(o, &wide_type, .{ .wide = w });
+    shimmer(o, intType(w), .{ .wide = w });
     out.* = w;
     return OK;
 }
@@ -440,7 +462,7 @@ pub fn Tcl_GetDoubleFromObj(interp: ?*Interp, o: *Obj, out: *f64) callconv(.c) c
         out.* = o.rep.double;
         return OK;
     }
-    if (o.typePtr == &wide_type) {
+    if (isInt(o)) {
         out.* = @floatFromInt(o.rep.wide);
         return OK;
     }
@@ -474,7 +496,7 @@ pub fn parseBool(s0: []const u8) ?bool {
 }
 
 pub fn Tcl_GetBooleanFromObj(interp: ?*Interp, o: *Obj, out: *c_int) callconv(.c) c_int {
-    if (o.typePtr == &wide_type) {
+    if (isInt(o)) {
         out.* = @intFromBool(o.rep.wide != 0);
         return OK;
     }
@@ -530,7 +552,7 @@ pub fn Tcl_GetByteArrayFromObj(o: *Obj, len: ?*c_int) callconv(.c) [*]u8 {
 pub fn Tcl_SetWideIntObj(o: *Obj, w: i64) callconv(.c) void {
     freeIntRep(o);
     invalidate(o);
-    o.typePtr = &wide_type;
+    o.typePtr = intType(w);
     o.rep = .{ .wide = w };
 }
 
@@ -767,7 +789,9 @@ pub fn Tcl_AppendResult(ip: *Interp, ...) callconv(.c) void {
     }
 }
 
-pub fn Tcl_AppendResultVA(ip: *Interp, ap: *std.builtin.VaList) callconv(.c) void {
+pub fn Tcl_AppendResultVA(ip: *Interp, va: VaArg) callconv(.c) void {
+    var arg = va;
+    const ap = vaList(&arg);
     const r = ownResult(ip);
     while (true) {
         const p = @cVaArg(ap, ?[*:0]const u8) orelse break;
@@ -1103,7 +1127,9 @@ pub fn Tcl_SetByteArrayLength(o: *Obj, length: c_int) callconv(.c) [*]u8 {
     return r.data.items.ptr;
 }
 
-pub fn Tcl_AppendStringsToObjVA(o: *Obj, ap: *std.builtin.VaList) callconv(.c) void {
+pub fn Tcl_AppendStringsToObjVA(o: *Obj, va: VaArg) callconv(.c) void {
+    var arg = va;
+    const ap = vaList(&arg);
     while (true) {
         const p = @cVaArg(ap, ?[*:0]const u8) orelse break;
         appendText(o, std.mem.span(p));
@@ -1123,8 +1149,10 @@ fn lockTypes() void {
     while (!types_lock.tryLock()) {}
 }
 
-fn builtinTypes() [4]*const ObjType {
-    return .{ &wide_type, &double_type, &list_type, &bytes_type };
+const builtin_types = [_]*const ObjType{ &wide_type, &double_type, &list_type, &bytes_type, &big_type };
+
+fn builtinTypes() []const *const ObjType {
+    return if (long_is_wide) builtin_types[0..4] else &builtin_types;
 }
 
 pub fn Tcl_RegisterObjType(t: *const ObjType) callconv(.c) void {
@@ -1164,7 +1192,7 @@ pub fn Tcl_AppendAllObjTypes(ip: ?*Interp, o: *Obj) callconv(.c) c_int {
 /// no `setFromAnyProc`, so the Get slot of the type makes the form.
 pub fn Tcl_ConvertToType(ip: ?*Interp, o: *Obj, t: *const ObjType) callconv(.c) c_int {
     if (o.typePtr == t) return OK;
-    if (t == &wide_type) {
+    if (t == &wide_type or t == &big_type) {
         var w: i64 = 0;
         return Tcl_GetWideIntFromObj(ip, o, &w);
     }

@@ -161,6 +161,8 @@ pub var tclIntPlatStubsPtr: ?*const anyopaque = null;
 
 pub fn Tcl_InitStubs(ip: *Interp, version: ?[*:0]const u8, exact: c_int) callconv(.c) ?[*:0]const u8 {
     tclStubsPtr = &table;
+    // `package require Tcl` gives this table as its client data.
+    ip.stub_table = &table;
     return Tcl_PkgRequireEx(ip, "Tcl", version, exact, null);
 }
 
