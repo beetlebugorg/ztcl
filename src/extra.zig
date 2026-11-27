@@ -292,6 +292,7 @@ fn findSearch(it: *Interp, m: *interp.ArrayMap, name: []const u8, id: []const u8
 /// once for each element of a copy of the array, in the order of the
 /// array.
 fn arrayFor(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
+    it.dropElem();
     if (argv.len != 5) return it.wrongArgs("array for {{key value}} arrayName body");
     const names = try it.list(argv[2]);
     if (names.len != 2) return it.fail("must have two variable names", .{});
@@ -321,6 +322,7 @@ fn arrayFor(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
 }
 
 fn cmdArray(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
+    it.dropElem();
     if (argv.len < 2) return it.wrongArgs("array subcommand ?arg ...?");
     const a = it.alloc();
     const Sub = enum { anymore, donesearch, exists, @"for", get, names, nextelement, set, size, startsearch, statistics, unset };

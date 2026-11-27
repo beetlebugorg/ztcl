@@ -524,6 +524,42 @@ pub const ElemLink = struct {
     index: []const u8,
 };
 
+/// An array element that owns its list: only the element holds the
+/// buffer `obj`. `collections` is the count of collections when the
+/// element got the buffer: after a collection, the address of `obj` can
+/// belong to a new buffer, so the record is no longer valid.
+pub const OwnedElem = struct {
+    map: *ArrayMap,
+    obj: *value.ListObj,
+    collections: u64,
+};
+
+/// The value of an array element for a write in place whose result the
+/// bytecode drops. `cell` is a cell on the native stack with the value
+/// of the element: `.owned` when the element owns its list, `.val` in
+/// the other case. The write goes through the functions of an owned
+/// cell (`more.lsetOwned`, `dict.setOwnedPath`), and `finish` stores the
+/// value of the cell back in the element.
+pub const ElemPlace = struct {
+    map: *ArrayMap,
+    slot: *Value,
+    cell: Var,
+
+    /// Stores the value of `cell` in the element. When the cell owns a
+    /// list, the element now owns it.
+    pub fn finish(p: *ElemPlace, it: *Interp) void {
+        it.owned_elem = null;
+        switch (p.cell.v) {
+            .owned => |v| {
+                p.slot.* = v;
+                if (v == .list) it.owned_elem = .{ .map = p.map, .obj = v.list.obj, .collections = it.heap.collections };
+            },
+            .val => |v| p.slot.* = v,
+            else => unreachable,
+        }
+    }
+};
+
 pub const VarEntry = struct { name: []const u8, cell: *Var };
 
 pub const Frame = struct {
@@ -1253,6 +1289,10 @@ pub const Interp = struct {
     /// reads it with `takeDropped` and can then keep the ownership of
     /// the cell that it writes.
     drop_argv: usize = 0,
+    /// The one array element that owns its list (see `ElemPlace`), or
+    /// null. Each read and each other write of an element of any array
+    /// sets it to null (`dropElem`).
+    owned_elem: ?OwnedElem = null,
     /// The bits of the capabilities that are on.
     capabilities: u32 = 0,
     /// The time and zone callbacks of the `clock` capability.
@@ -3217,6 +3257,28 @@ pub const Interp = struct {
 
     /// `findVar` with no `create` that keeps the ownership of the cell:
     /// for a write in place whose result the bytecode drops.
+    /// Ends the ownership of the owned array element: a read or a write
+    /// of an element can give its buffer to another place.
+    pub inline fn dropElem(it: *Interp) void {
+        it.owned_elem = null;
+    }
+
+    /// The place of the element "a(i)" for a write whose result the
+    /// bytecode drops, or null when the name is not an element of an
+    /// array with no traces, or the element is not there.
+    pub fn elemPlace(it: *Interp, full: []const u8) Allocator.Error!?ElemPlace {
+        const name, const idx = splitName(full);
+        const i = idx orelse return null;
+        const cell = (try it.findOwnedVar(it.frame, name)) orelse return null;
+        const c = cell.target();
+        if (c.v != .arr) return null;
+        const m = c.v.arr;
+        const slot = m.getPtr(i) orelse return null;
+        const own = if (it.owned_elem) |o| o.map == m and o.collections == it.heap.collections and slot.* == .list and slot.list.obj == o.obj else false;
+        it.owned_elem = null;
+        return .{ .map = m, .slot = slot, .cell = .{ .v = if (own) .{ .owned = slot.* } else .{ .val = slot.* } } };
+    }
+
     pub fn findOwnedVar(it: *Interp, frame: *Frame, name: []const u8) Allocator.Error!?*Var {
         return it.findVarIn(true, frame, name, false);
     }
@@ -3319,6 +3381,7 @@ pub const Interp = struct {
 
     pub fn readRef(it: *Interp, r: *const VarRef) Error!Value {
         if (r.index) |parts| {
+            it.dropElem();
             // An index of one part needs no copy of its string.
             const idx = if (parts.len == 1 and parts[0] == .lit) parts[0].lit else if (parts.len == 1) try it.str(try it.evalPart(&parts[0])) else try it.concatParts(parts);
             // A local array goes through the slot hint, as a scalar does.
@@ -3342,6 +3405,7 @@ pub const Interp = struct {
     }
 
     fn getElem(it: *Interp, name: []const u8, idx: []const u8) Error!Value {
+        it.dropElem();
         const cell = try it.findVar(it.frame, name, false);
         if (cell) |c| switch (c.v) {
             .arr => |m| {
@@ -3377,6 +3441,7 @@ pub const Interp = struct {
 
     /// As `getVarOpt`, with no read trace.
     pub fn getVarQuiet(it: *Interp, full: []const u8) Error!?Value {
+        it.dropElem();
         const name, const idx = splitName(full);
         const cell = try it.findVar(it.frame, name, false) orelse return null;
         if (cell.v == .traced) {
@@ -3391,6 +3456,7 @@ pub const Interp = struct {
     }
 
     pub fn getVarOpt(it: *Interp, full: []const u8) Error!?Value {
+        it.dropElem();
         const name, const idx = splitName(full);
         const cell = try it.findVar(it.frame, name, false) orelse return null;
         if (idx == null and cell.v == .val) return cell.v.val;
@@ -3410,6 +3476,7 @@ pub const Interp = struct {
 
     /// Writes a variable by its full name ("a" or "a(i)").
     pub fn setVar(it: *Interp, full: []const u8, v: Value) Error!void {
+        it.dropElem();
         const name, const idx = splitName(full);
         const cell = (try it.findVar(it.frame, name, true)).?;
         if (idx == null and cell.plainStore()) {
@@ -3442,6 +3509,7 @@ pub const Interp = struct {
 
     /// Removes a variable. Returns false when there is none.
     pub fn unsetVar(it: *Interp, full: []const u8) Error!bool {
+        it.dropElem();
         const name, const idx = splitName(full);
         const cell = try it.findVar(it.frame, name, false) orelse return false;
         if (cell.v == .traced) return trace.unset(it, cell, name, idx);
@@ -3464,7 +3532,7 @@ pub const Interp = struct {
     }
 
     fn elemValue(it: *Interp, e: *ElemLink) Error!?Value {
-        _ = it;
+        it.dropElem();
         return switch (e.array.v) {
             .arr => |m| m.get(e.index),
             .traced => |t| if (t.inner == .arr) t.inner.arr.get(e.index) else null,
@@ -3473,6 +3541,7 @@ pub const Interp = struct {
     }
 
     fn readElemLink(it: *Interp, e: *ElemLink, local: []const u8) Error!Value {
+        it.dropElem();
         if (e.array.v == .traced) {
             it.trace_shown = local;
             defer it.trace_shown = null;
@@ -3486,6 +3555,7 @@ pub const Interp = struct {
     }
 
     fn writeElemLink(it: *Interp, e: *ElemLink, v: Value, local: []const u8) Error!void {
+        it.dropElem();
         const cell = e.array;
         if (cell.v == .traced) {
             it.trace_shown = local;
@@ -3505,6 +3575,7 @@ pub const Interp = struct {
 
     /// Makes a cell that links to an element of an array.
     pub fn elemCell(it: *Interp, array: *Var, name: []const u8, index: []const u8) Allocator.Error!*Var {
+        it.dropElem();
         const e = try it.alloc().create(ElemLink);
         e.* = .{ .array = array, .name = try it.alloc().dupe(u8, name), .index = try it.alloc().dupe(u8, index) };
         const c = try it.newCell();

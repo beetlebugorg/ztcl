@@ -158,6 +158,7 @@ fn runHook(it: *Interp, cmd: Value, words: []const []const u8) Error!?[]const u8
 
 /// Runs the traces of an operation, newest first.
 fn fire(it: *Interp, t: *Traced, name: []const u8, idx: ?[]const u8, op: u8) Error!?[]const u8 {
+    it.dropElem();
     // The name of an element link applies to this event only. A script
     // that the trace runs starts with no such name.
     const shown = it.trace_shown;
@@ -226,6 +227,7 @@ fn fullName(it: *Interp, name: []const u8, idx: ?[]const u8) Error![]const u8 {
 // ---- The variable operations of the interpreter ----
 
 pub fn read(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!Value {
+    it.dropElem();
     const t = cell.v.traced;
     // An element of a variable that is not an array has no trace to run.
     if (idx != null and t.inner != .arr) return peek(it, cell, name, idx);
@@ -237,6 +239,7 @@ pub fn read(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!V
 
 /// The value after the traces, with no trace run.
 fn peek(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!Value {
+    it.dropElem();
     if (cell.v != .traced) {
         if (idx) |i| {
             if (cell.v == .arr) {
@@ -267,6 +270,7 @@ fn peek(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!Value
 
 /// A read for `incr`, `append`, and `lappend`: an unset name gives null.
 pub fn readOpt(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!?Value {
+    it.dropElem();
     const t = cell.v.traced;
     if (try fire(it, t, name, idx, op_read)) |msg| {
         return it.fail("can't read \"{s}\": {s}", .{ try fullName(it, name, idx), msg });
@@ -280,6 +284,7 @@ pub fn readOpt(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Erro
 }
 
 pub fn write(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8, v: Value) Error!void {
+    it.dropElem();
     const t = cell.v.traced;
     if (idx) |i| {
         switch (t.inner) {
@@ -311,6 +316,7 @@ pub fn after(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!
 }
 
 pub fn unset(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!bool {
+    it.dropElem();
     const t = cell.v.traced;
     if (t.precision) return true;
     if (idx) |i| {

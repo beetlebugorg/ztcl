@@ -367,6 +367,33 @@ fn setOwnedPath(it: *Interp, c: *interp.Var, keys: []const Value, v: Value) Erro
     unreachable;
 }
 
+/// `dict set` on the cell of an array element (`Interp.elemPlace`). A
+/// cell with a plain dict gets an owned copy first: the copy is the one
+/// copy of the general path, and later writes go in place. Returns false
+/// before any write for a case that needs the general path.
+fn setElem(it: *Interp, c: *interp.Var, keys: []const Value, v: Value) Error!bool {
+    if (c.v == .val) {
+        const d = c.v.val;
+        if (!isChecked(d)) return false;
+        const r = try wrapDict(it, try it.alloc().dupe(Value, d.list.items()));
+        try copyIndex(it, d, r.list.obj);
+        r.list.obj.own_stamp = value.newOwnStamp();
+        c.v = .{ .owned = r };
+    }
+    const d = c.v.owned;
+    if (!isChecked(d)) return false;
+    if (keys.len > 1) return setOwnedPath(it, c, keys, v);
+    const items = @constCast(d.list.items());
+    if (try lookup(it, d, items, keys[0])) |at| {
+        items[at + 1] = v;
+        return true;
+    }
+    const out = try appendPair(it, d, items, keys[0], v);
+    if (out.list.obj != d.list.obj) out.list.obj.own_stamp = d.list.obj.own_stamp;
+    c.v = .{ .owned = out };
+    return true;
+}
+
 /// A set or an unset of one key, for `applyEdits`. A null value is an
 /// unset.
 const Edit = struct { key: Value, v: ?Value };
@@ -729,6 +756,12 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
             if (dropped and args.len == 3 and try before.update(it, args[1], 1, args[2])) return Value.empty;
             if (args.len > 3) if (before.ownedDict() != null) {
                 if (try setOwnedPath(it, before.cell.?, args[1 .. args.len - 1], args[args.len - 1])) return Value.empty;
+            };
+            if (dropped) if (try it.elemPlace(var_name)) |p| {
+                var ep = p;
+                const done = try setElem(it, &ep.cell, args[1 .. args.len - 1], args[args.len - 1]);
+                ep.finish(it);
+                if (done) return Value.empty;
             };
             const cur = try it.getVarOpt(var_name) orelse Value.empty;
             const out = try setIn(it, cur, args[1 .. args.len - 1], args[args.len - 1]);
