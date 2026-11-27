@@ -102,6 +102,8 @@ pub const Span = struct {
     alignment: Alignment = .@"16",
     /// True for a span of the page pool of the heap.
     pooled: bool = false,
+    /// True for a span of the pool with the watch of writes (`wpool`).
+    watched: bool = false,
     next: ?*Span = null,
     /// A set bit: the block is free.
     free: []u64,
@@ -146,7 +148,25 @@ pub const Heap = struct {
     /// The pages of the spans, from the system (`pagepool.zig`), when the
     /// embedder gave `charge` (`usePool`). Null: the backing allocator.
     pool: ?pagepool.Pool = null,
+    /// The pool of the pages of pointers in the generational mode, with the
+    /// watch of writes. `pool` then has the pages of the other spans.
+    wpool: ?pagepool.Pool = null,
     charge: ?Charge = null,
+    /// Generational collection with sticky mark bits: a minor collection
+    /// keeps the marks of the old blocks, and marks only the new blocks that
+    /// the roots and the old blocks on pages written since the last
+    /// collection reach (`collectKind`). On where the page pool can watch
+    /// its pages for writes.
+    gen: bool = false,
+    /// The minor collections since the last major one, and the live bytes
+    /// after that major one.
+    minors: u32 = 0,
+    live_major: usize = 0,
+    /// The next collection must be major: the marks or the watch of the
+    /// writes are not whole.
+    need_major: bool = true,
+    /// True while the sweep of a minor collection runs.
+    sweep_minor: bool = false,
     /// The bytes in use after the last sweep or `resetStats`: the base of
     /// the count of allocated bytes.
     alloc_base: usize = 0,
@@ -190,6 +210,9 @@ pub const Heap = struct {
         /// percentiles.
         pauses: [pause_ring]u32 = @splat(0),
         npauses: u64 = 0,
+        /// The major collections of the generational mode. Without it each
+        /// collection is major.
+        majors: u64 = 0,
         /// The bytes that the program allocated up to the last
         /// collection, and the bytes that the sweeps freed.
         allocated: u64 = 0,
@@ -266,7 +289,9 @@ pub const Heap = struct {
         if (comptime !pagepool.supported) return;
         std.debug.assert(h.spans.items.len == 0);
         h.pool = pagepool.Pool.init(h.backing);
+        if (pagepool.dirty_supported) h.wpool = pagepool.Pool.initWatched(h.backing);
         h.charge = c;
+        h.gen = pagepool.dirty_supported;
     }
 
     /// The bytes of free pages that the pool keeps after a sweep: the pages
@@ -282,6 +307,8 @@ pub const Heap = struct {
     pub fn deinit(h: *Heap) void {
         h.reset();
         if (h.pool) |*p| p.deinit();
+        if (h.wpool) |*p| p.deinit();
+        h.wpool = null;
         h.pool = null;
         h.spans.deinit(h.backing);
         h.work.deinit(h.backing);
@@ -296,6 +323,7 @@ pub const Heap = struct {
     pub fn reset(h: *Heap) void {
         for (h.spans.items) |s| h.freeSpan(s);
         if (h.pool) |*p| _ = p.trim(4 << 20);
+        if (h.wpool) |*p| _ = p.trim(4 << 20);
         h.spans.clearRetainingCapacity();
         h.cur = @splat(null);
         h.partial = @splat(null);
@@ -306,6 +334,9 @@ pub const Heap = struct {
         h.live_bytes = 0;
         h.threshold = min_threshold;
         h.alloc_base = 0;
+        h.need_major = true;
+        h.minors = 0;
+        h.live_major = 0;
         h.counts = @splat(.{});
     }
 
@@ -349,34 +380,45 @@ pub const Heap = struct {
     }
 
     fn freeSpan(h: *Heap, s: *Span) void {
-        h.spanFree(@ptrFromInt(s.base), s.len, s.alignment, s.pooled);
+        h.spanFree(@ptrFromInt(s.base), s.len, s.alignment, s.pooled, s.watched);
         h.freeMeta(s);
     }
 
-    const SpanMem = struct { mem: [*]u8, pooled: bool };
+    const SpanMem = struct { mem: [*]u8, pooled: bool, watched: bool };
 
     /// The memory of a span of `len` bytes: from the page pool when the
     /// heap has one and the alignment is at most a page, else from the
     /// backing allocator. The pool rounds the run up to whole pages, and
     /// the span and the counter keep `len`, so the threshold and the memory
     /// limit see the same bytes as with the allocator of the embedder.
-    fn spanMem(h: *Heap, len: usize, a: Alignment) ?SpanMem {
-        if (h.pool) |*pool| if (a.toByteUnits() <= pagepool.page) {
+    fn spanMem(h: *Heap, len: usize, a: Alignment, noscan: bool) ?SpanMem {
+        if (h.pool != null and a.toByteUnits() <= pagepool.page) {
+            // The pages of pointers come from the pool with the watch of
+            // writes, and the others from the pool with none, so the read
+            // of the written pages covers only the pages that a minor
+            // collection scans.
+            const watched = h.wpool != null and !noscan;
+            const pool = if (watched) &h.wpool.? else &h.pool.?;
             const c = h.charge.?;
             if (!c.func(c.ctx, len, true)) return null;
             const mem = pool.alloc(std.mem.alignForward(usize, len, pagepool.page)) orelse {
                 _ = c.func(c.ctx, len, false);
                 return null;
             };
-            return .{ .mem = mem, .pooled = true };
-        };
+            // A span of pointers on pages that held a span before starts at
+            // zero: a scan of a block reads its bytes past its own data, and
+            // the old pointers there would keep their blocks.
+            if (!noscan and pool.last_reused) @memset(mem[0..len], 0);
+            return .{ .mem = mem, .pooled = true, .watched = watched };
+        }
         const mem = h.backing.rawAlloc(len, a, 0) orelse return null;
-        return .{ .mem = mem, .pooled = false };
+        return .{ .mem = mem, .pooled = false, .watched = false };
     }
 
-    fn spanFree(h: *Heap, mem: [*]u8, len: usize, a: Alignment, pooled: bool) void {
+    fn spanFree(h: *Heap, mem: [*]u8, len: usize, a: Alignment, pooled: bool, watched: bool) void {
         if (pooled) {
-            h.pool.?.free(mem, std.mem.alignForward(usize, len, pagepool.page));
+            const pool = if (watched) &h.wpool.? else &h.pool.?;
+            pool.free(mem, std.mem.alignForward(usize, len, pagepool.page));
             const c = h.charge.?;
             _ = c.func(c.ctx, len, false);
             return;
@@ -464,12 +506,13 @@ pub const Heap = struct {
         const size = class_size[class];
         const page = pageBytes(size, h.bytes);
         const count: usize = page / size;
-        const got = h.spanMem(page, span_align) orelse return null;
+        const got = h.spanMem(page, span_align, index >= class_count) orelse return null;
         const mem = got.mem;
         const s = h.makeSpan((count + 63) / 64, .{
             .base = @intFromPtr(mem),
             .len = page,
             .pooled = got.pooled,
+            .watched = got.watched,
             .size = size,
             .count = @intCast(count),
             .nwords = 0,
@@ -480,7 +523,7 @@ pub const Heap = struct {
             .free = &.{},
             .mark = &.{},
         }) orelse {
-            h.spanFree(mem, page, span_align, got.pooled);
+            h.spanFree(mem, page, span_align, got.pooled, got.watched);
             return null;
         };
         var i: usize = 0;
@@ -495,12 +538,13 @@ pub const Heap = struct {
     fn allocLarge(h: *Heap, len: usize, alignment: Alignment) ?[*]u8 {
         const a = alignment.max(span_align);
         const size = std.mem.alignForward(usize, len, 16);
-        const got = h.spanMem(size, a) orelse return null;
+        const got = h.spanMem(size, a, alignment.toByteUnits() < @sizeOf(usize)) orelse return null;
         const mem = got.mem;
         const s = h.makeSpan(1, .{
             .base = @intFromPtr(mem),
             .len = size,
             .pooled = got.pooled,
+            .watched = got.watched,
             .size = @intCast(@min(size, std.math.maxInt(u32))),
             .count = 1,
             .nwords = 0,
@@ -511,7 +555,7 @@ pub const Heap = struct {
             .free = &.{},
             .mark = &.{},
         }) orelse {
-            h.spanFree(mem, size, a, got.pooled);
+            h.spanFree(mem, size, a, got.pooled, got.watched);
             return null;
         };
         h.insert(s) catch {
@@ -711,8 +755,37 @@ fn drain(h: *Heap) void {
 }
 
 /// Runs a collection. The roots come from `roots_fn`. The sweep frees
-/// each block that no root reached. A failed mark frees no block.
+/// each block that no root reached. A failed mark frees no block. In the
+/// generational mode it can be a minor collection (`collectKind`).
 pub fn collect(h: *Heap) void {
+    collectKind(h, false);
+    clearStack();
+}
+
+/// Runs a major collection: each block that no root reaches goes, old or
+/// new. For an explicit collection and at the memory limit.
+pub fn collectMajor(h: *Heap) void {
+    collectKind(h, true);
+    clearStack();
+}
+
+/// The most minor collections in a row.
+const max_minors = 8;
+
+/// A collection. With `gen` it is minor unless `major`, `need_major`,
+/// `max_minors` minor ones in a row, or a live set that doubled since the
+/// last major one.
+///
+/// The invariant of the sticky marks: after each collection, each block
+/// that a marked block points to is marked. A major collection clears
+/// each mark and marks from the roots, so it holds. A minor one keeps the
+/// marks: a marked (old) block is not marked again, so the mark of a
+/// root that reaches it stops there. A store into an old block after the
+/// last collection is on a page that the pool reports as written
+/// (`Pool.dirty`), so the minor collection scans each marked block of
+/// each such page as a root, and the invariant holds again. A block that
+/// lost its last reference while old stays until the next major one.
+noinline fn collectKind(h: *Heap, major_asked: bool) void {
     const roots = h.roots_fn orelse return;
     const t0 = clock();
     defer {
@@ -720,24 +793,106 @@ pub fn collect(h: *Heap) void {
         h.stats.gc_ns += t2 -| t0;
         h.stats.pause(t2 -| t0);
     }
+    const major = !h.gen or major_asked or h.need_major or h.minors >= max_minors or
+        h.live_bytes > 2 * @max(h.live_major, min_threshold / 2);
     h.mark_ok = true;
     h.work.clearRetainingCapacity();
     h.buildTable();
     defer h.table_on = false;
+    if (h.gen) {
+        if (major) {
+            for (h.spans.items) |s| @memset(s.mark, 0);
+            if (h.wpool) |*p| p.resetDirty();
+        } else markOld(h);
+    }
     if (!roots(h.roots_ctx, h)) {
-        // A mark that stopped early leaves mark bits.
+        // A mark that stopped early leaves mark bits. With the marks of
+        // the old blocks gone, the next collection must be major.
         h.mark_ok = false;
+        h.need_major = true;
         h.work.clearRetainingCapacity();
         for (h.spans.items) |s| @memset(s.mark, 0);
         return;
     }
     drain(h);
     h.work.clearRetainingCapacity();
+    if (!h.mark_ok) h.need_major = true;
     if (h.mark_ok) h.collections += 1;
     const t1 = clock();
     h.stats.mark_ns += t1 -| t0;
+    h.sweep_minor = h.gen and !major;
     sweep(h);
+    h.sweep_minor = false;
     h.stats.sweep_ns += clock() -| t1;
+    if (h.gen and h.mark_ok) {
+        if (major) {
+            h.live_major = h.live_bytes;
+            h.minors = 0;
+            h.need_major = false;
+            h.stats.majors += 1;
+        } else h.minors += 1;
+    }
+}
+
+/// Writes zeros to the stack below the frame of the caller, where the
+/// frames of the collection were. Those frames held the addresses of old
+/// blocks (`markOld`). A later call can leave such a slot as it is, and
+/// the scan of the stack of the next collection would read it as a
+/// pointer: a stale address of a large list kept its old copies, 35 MB,
+/// through each major collection. `collectKind` is noinline, so its frame
+/// is below the caller of this, with the frames of the mark.
+noinline fn clearStack() void {
+    var buf: [32 * 1024]u8 = undefined;
+    const v: *volatile [32 * 1024]u8 = &buf;
+    @memset(v, 0);
+}
+
+/// The roots of a minor collection: each marked block on a page written
+/// since the last collection, and each marked block of a span outside
+/// the pool, which has no watch.
+fn markOld(h: *Heap) void {
+    if (h.wpool) |*p| p.dirty(h, dirtyPage);
+    for (h.spans.items) |s| {
+        if (!s.pooled and !s.noscan) scanOld(h, s, s.base, s.base + s.len);
+    }
+}
+
+fn dirtyPage(ctx: *anyopaque, addr: usize) void {
+    const h: *Heap = @ptrCast(@alignCast(ctx));
+    const s = h.lookup(addr) orelse return;
+    if (s.noscan) return;
+    scanOld(h, s, addr, addr + pagepool.page);
+}
+
+/// Scans the marked blocks of `s` in [lo, hi): of a large block, only the
+/// written range, and of a span of a class, each marked block that the
+/// range touches.
+fn scanOld(h: *Heap, s: *Span, lo: usize, hi: usize) void {
+    if (s.large) {
+        if (s.mark[0] & 1 == 0) return;
+        const a = @max(lo, s.base);
+        const b = @min(hi, s.base + s.len);
+        if (b <= a) return;
+        if (s.len == coro_stack_bytes) scanStack(h, a, b - a) else scan(h, a, b - a);
+        return;
+    }
+    const a = @max(lo, s.base);
+    const b = @min(hi, s.base + @as(usize, s.count) * s.size);
+    if (b <= a) return;
+    const first = (a - s.base) / s.size;
+    const last = (b - 1 - s.base) / s.size;
+    // The set bits of the mark words of the range: a page of new blocks
+    // has none, and costs a few loads.
+    var w = first >> 6;
+    while (w <= last >> 6) : (w += 1) {
+        var m = s.mark[w];
+        if (w == first >> 6) m &= ~@as(u64, 0) << @intCast(first & 63);
+        if (w == last >> 6 and last & 63 != 63) m &= (@as(u64, 1) << @intCast((last & 63) + 1)) - 1;
+        while (m != 0) : (m &= m - 1) {
+            const i = w * 64 + @ctz(m);
+            scan(h, s.base + i * s.size, s.size);
+        }
+    }
 }
 
 fn clock() u64 {
@@ -771,7 +926,8 @@ fn sweep(h: *Heap) void {
                 h.freeSpan(s);
                 continue;
             }
-            s.mark[0] = 0;
+            // The generational mode keeps the marks: the block is old.
+            if (!h.gen) s.mark[0] = 0;
             live_bytes += s.len;
             items[keep] = s;
             keep += 1;
@@ -786,15 +942,18 @@ fn sweep(h: *Heap) void {
             const m = s.mark[w];
             const new_free = ~m & valid;
             used_before += @as(usize, @popCount(~s.free[w] & valid)) * s.size;
-            if (poison) {
+            // A dead block of pointers goes to zero, so its next owner does not
+            // keep its old pointers in the bytes past its own data.
+            if (poison or !s.noscan) {
                 var dead = new_free & ~s.free[w];
+                const fill: u8 = if (poison) dead_byte else 0;
                 while (dead != 0) : (dead &= dead - 1) {
                     const i = w * 64 + @ctz(dead);
-                    @memset(@as([*]u8, @ptrFromInt(s.base + i * s.size))[0..s.size], dead_byte);
+                    @memset(@as([*]u8, @ptrFromInt(s.base + i * s.size))[0..s.size], fill);
                 }
             }
             s.free[w] = new_free;
-            s.mark[w] = 0;
+            if (!h.gen) s.mark[w] = 0;
             live += @popCount(m);
             if (new_free != 0) any_free = true;
         }
@@ -805,7 +964,11 @@ fn sweep(h: *Heap) void {
         }
         live_bytes += live * s.size;
         s.cursor = 0;
-        if (any_free) {
+        // After a minor collection a span with old blocks and pointers serves
+        // no new block until the next major one: a new block on its page
+        // would mark the page as written, and the next minor collection
+        // would scan each old block of the page.
+        if (any_free and (s.noscan or !h.sweep_minor)) {
             const index = @as(usize, @intFromBool(s.noscan)) * class_count + s.class;
             s.next = h.partial[index];
             h.partial[index] = s;
@@ -826,6 +989,7 @@ fn sweep(h: *Heap) void {
     // The free pages above what the heap fills before its next collection
     // go back to the system.
     if (h.pool) |*p| _ = p.trim(h.keepFree());
+    if (h.wpool) |*p| _ = p.trim(h.keepFree());
     // The bounds may be wider than the spans. That is safe.
 }
 
@@ -983,4 +1147,55 @@ test "the page pool charges each span, and a sweep gives the free pages back" {
     // A charge that fails is an allocation that fails.
     charge.limit = charge.used;
     try std.testing.expectError(error.OutOfMemory, a.alloc(u8, 5 << 20));
+}
+
+var test_root: usize = 0;
+
+fn testRoots(_: *anyopaque, h: *Heap) bool {
+    markRange(h, @intFromPtr(&test_root), @sizeOf(usize));
+    return true;
+}
+
+test "a minor collection keeps a new block that an old block points to" {
+    if (!pagepool.dirty_supported) return error.SkipZigTest;
+    var h = Heap.init(std.testing.allocator);
+    defer h.deinit();
+    var charge: TestCharge = .{};
+    h.usePool(.{ .ctx = &charge, .func = TestCharge.func });
+    try std.testing.expect(h.gen);
+    const al = h.allocator();
+    var ctx: u8 = 0;
+    h.roots_ctx = &ctx;
+    h.roots_fn = testRoots;
+    // An old block A, from the root.
+    const a = try al.alloc(usize, 4);
+    @memset(a, 0);
+    test_root = @intFromPtr(a.ptr);
+    collect(&h);
+    try std.testing.expectEqual(@as(u64, 1), h.stats.majors);
+    // A new block B, reached only from a store into A: the page of A is
+    // written, so the minor collection scans A.
+    const b = try al.alloc(usize, 4);
+    @memset(b, 7);
+    a[0] = @intFromPtr(b.ptr);
+    collect(&h);
+    try std.testing.expectEqual(@as(u64, 1), h.stats.majors);
+    try std.testing.expectEqual(@as(u32, 1), h.minors);
+    try std.testing.expect(!isFree(&h, @intFromPtr(b.ptr)));
+    try std.testing.expectEqual(@as(usize, 7), b[3]);
+    // A new block C that nothing reaches goes in a minor collection.
+    const c = try al.alloc(usize, 4);
+    @memset(c, 9);
+    const c_addr = @intFromPtr(c.ptr);
+    collect(&h);
+    try std.testing.expect(isFree(&h, c_addr));
+    // B is old now: after its pointer goes, it stays until a major
+    // collection.
+    a[0] = 0;
+    collect(&h);
+    try std.testing.expect(!isFree(&h, @intFromPtr(b.ptr)));
+    collectMajor(&h);
+    try std.testing.expect(isFree(&h, @intFromPtr(b.ptr)));
+    try std.testing.expect(!isFree(&h, @intFromPtr(a.ptr)));
+    test_root = 0;
 }

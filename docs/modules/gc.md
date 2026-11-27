@@ -27,6 +27,7 @@ ztcl::gc reset
 | Key | What it counts |
 |---|---|
 | `collections` | The collections since the start of the counts. |
+| `majors` | The major collections. On Windows a minor collection keeps the marks of the old blocks and marks only the new blocks that the roots and the written pages reach; a major one marks each live block. Elsewhere each collection is major. |
 | `gc_ns`, `mark_ns`, `sweep_ns` | The time of the collections, of their marks, and of their sweeps, in ns. |
 | `pause_p50_ns`, `pause_p99_ns`, `pause_max_ns` | The median, the 99th percentile, and the longest pause, in ns. The percentiles come from the last 1,024 collections. |
 | `heap_bytes`, `heap_peak` | The bytes of the pages of the heap now, and their peak. |

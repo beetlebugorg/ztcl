@@ -11,6 +11,8 @@
 //! go back. The pause percentiles come from the last 1,024 collections.
 //!
 //! - collections: the collections since the start of the counts.
+//! - majors: the major collections. Where the heap has the generational
+//!   mode, a minor collection marks only the new blocks.
 //! - gc_ns, mark_ns, sweep_ns: the time of the collections, of their marks,
 //!   and of their sweeps.
 //! - pause_p50_ns, pause_p99_ns, pause_max_ns: the pauses of the
@@ -73,6 +75,7 @@ pub fn cmdGc(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const pm = procmem.counts();
     const kv = [_]struct { []const u8, u64 }{
         .{ "collections", st.npauses },
+        .{ "majors", if (h.gen) st.majors else st.npauses },
         .{ "gc_ns", st.gc_ns },
         .{ "mark_ns", st.mark_ns },
         .{ "sweep_ns", st.sweep_ns },
@@ -90,8 +93,8 @@ pub fn cmdGc(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         .{ "uptime_ns", up },
         .{ "rss", pm.rss },
         .{ "rss_peak", pm.peak },
-        .{ "returned", if (h.pool) |p| p.returned else 0 },
-        .{ "retained", if (h.pool) |p| p.free_committed else 0 },
+        .{ "returned", (if (h.pool) |p| p.returned else 0) + (if (h.wpool) |p| p.returned else 0) },
+        .{ "retained", (if (h.pool) |p| p.free_committed else 0) + (if (h.wpool) |p| p.free_committed else 0) },
     };
     const a = it.alloc();
     const out = try a.alloc(Value, kv.len * 2);

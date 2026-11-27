@@ -62,12 +62,12 @@ does: Gives the counts of the collector of the heap of the interpreter tree: the
 cap: meter
 flags: --allow meter
 page: modules/gc.md
-sub: ztcl::gc stats | A dict of the counts: `collections`, `gc_ns`, `mark_ns`, `sweep_ns`, `pause_p50_ns`, `pause_p99_ns`, `pause_max_ns`, `heap_bytes`, `heap_peak`, `live_bytes`, `used_bytes`, `threshold`, `allocated`, `freed`, `alloc_rate`, `uptime_ns`, `rss`, `rss_peak`, `returned`, and `retained`.
+sub: ztcl::gc stats | A dict of the counts: `collections`, `majors`, `gc_ns`, `mark_ns`, `sweep_ns`, `pause_p50_ns`, `pause_p99_ns`, `pause_max_ns`, `heap_bytes`, `heap_peak`, `live_bytes`, `used_bytes`, `threshold`, `allocated`, `freed`, `alloc_rate`, `uptime_ns`, `rss`, `rss_peak`, `returned`, and `retained`.
 sub: ztcl::gc collect | Runs a collection now, where the build can collect.
 sub: ztcl::gc reset | Starts the counts again.
 ex: ztcl::gc reset
 ex: dict get [ztcl::gc stats] collections => 0
-ex: dict size [ztcl::gc stats] => 20
+ex: dict size [ztcl::gc stats] => 21
 err: ztcl::gc nope | bad option "nope": must be collect, reset, or stats
 
 == ztcl::meter

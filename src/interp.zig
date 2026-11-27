@@ -1634,7 +1634,8 @@ pub const Interp = struct {
         it.gc_manual = true;
         defer it.gc_manual = false;
         it.heap.roots_ctx = it;
-        if (gc.allowed(it)) @import("heap.zig").collect(it.heap);
+        // An explicit collection is major: each dead block goes.
+        if (gc.allowed(it)) @import("heap.zig").collectMajor(it.heap);
     }
 
     /// The limit check of a safe point. `trip` is at or above the limit:
@@ -1664,7 +1665,8 @@ pub const Interp = struct {
             defer it.gc_vm_point = false;
             h.roots_ctx = it;
             if (gc.allowed(it)) {
-                heap_mod.collect(h);
+                // At the memory limit each dead block goes, old or new.
+                if (it.counter.used > it.mem_limit) heap_mod.collectMajor(h) else heap_mod.collect(h);
                 collected = h.mark_ok;
                 if (collected) next = @max(h.threshold, c.used +| (1 << 20));
                 if (collected and c.used <= root.mem_limit) c.over_start = false;

@@ -38,6 +38,12 @@ pub const supported = switch (builtin.os.tag) {
     else => false,
 };
 
+/// True where the system gives the pages written since the last read
+/// (`dirty`), for the minor collections of the heap: Windows, with the
+/// write watch of a region (`MEM_WRITE_WATCH` and `GetWriteWatch`). The
+/// other systems keep full collections until they get a backend.
+pub const dirty_supported = builtin.os.tag == .windows;
+
 pub const page: usize = 4096;
 const arena_pages = 1024;
 pub const arena_bytes: usize = arena_pages * page;
@@ -49,6 +55,8 @@ const Arena = struct {
     base: usize,
     used: [words]u64 = @splat(0),
     committed: [words]u64 = @splat(0),
+    /// The pages that a span had since the arena came from the system.
+    touched: [words]u64 = @splat(0),
     nused: u32 = 0,
 
     fn bit(bits: *const [words]u64, i: usize) bool {
@@ -92,9 +100,51 @@ pub const Pool = struct {
     big_bytes: usize = 0,
     /// The bytes that `trim` gave back to the system, for the counts.
     returned: u64 = 0,
+    /// True when the last run of `alloc` has a page that held a span before,
+    /// with its old bytes: a span of pointers clears it.
+    last_reused: bool = false,
+    /// The pages of the pool have a write watch (`dirty`).
+    watch: bool = false,
+    /// The mappings of their own, with a watch, as (base, length).
+    bigs: std.ArrayList([2]usize) = .empty,
+    /// The addresses that the system gives for `dirty`, in memory of `gpa`:
+    /// a collection scans the native stack, and a stale page address there
+    /// would keep the blocks of that page.
+    watch_buf: []usize = &.{},
 
     pub fn init(gpa: Allocator) Pool {
         return .{ .gpa = gpa };
+    }
+
+    /// A pool whose pages report the writes to them (`dirty`), where the
+    /// system can.
+    pub fn initWatched(gpa: Allocator) Pool {
+        return .{ .gpa = gpa, .watch = dirty_supported };
+    }
+
+    /// Calls `cb` with the address of each page of the pool written since
+    /// the last call (or `resetDirty`), and starts the watch again. A
+    /// page that the system does not report has no write since then.
+    pub fn dirty(p: *Pool, ctx: *anyopaque, cb: *const fn (ctx: *anyopaque, addr: usize) void) void {
+        if (!p.watch) return;
+        if (p.watch_buf.len == 0) {
+            p.watch_buf = p.gpa.alloc(usize, 512) catch {
+                // With no buffer the watch cannot say which pages: each
+                // page of the pool counts as written.
+                for (p.arenas.items) |a| everyPage(a.base, arena_bytes, ctx, cb);
+                for (p.bigs.items) |b| everyPage(b[0], b[1], ctx, cb);
+                return;
+            };
+        }
+        for (p.arenas.items) |a| os.dirtyPages(a.base, arena_bytes, p.watch_buf, ctx, cb);
+        for (p.bigs.items) |b| os.dirtyPages(b[0], b[1], p.watch_buf, ctx, cb);
+    }
+
+    /// Starts the watch of each page again, with no page written.
+    pub fn resetDirty(p: *Pool) void {
+        if (!p.watch) return;
+        for (p.arenas.items) |a| os.resetWatch(a.base, arena_bytes);
+        for (p.bigs.items) |b| os.resetWatch(b[0], b[1]);
     }
 
     /// Gives each arena back to the system. Each span must be free, or
@@ -106,6 +156,10 @@ pub const Pool = struct {
         }
         p.arenas.deinit(p.gpa);
         p.arenas = .empty;
+        p.bigs.deinit(p.gpa);
+        p.bigs = .empty;
+        p.gpa.free(p.watch_buf);
+        p.watch_buf = &.{};
         p.free_committed = 0;
     }
 
@@ -114,8 +168,13 @@ pub const Pool = struct {
     pub fn alloc(p: *Pool, len: usize) ?[*]u8 {
         std.debug.assert(len % page == 0 and len > 0);
         const n = len / page;
+        p.last_reused = false;
         if (n > max_run) {
-            const mem = os.map(len) orelse return null;
+            const mem = os.map(len, p.watch) orelse return null;
+            if (p.watch) p.bigs.append(p.gpa, .{ mem, len }) catch {
+                os.release(mem, len);
+                return null;
+            };
             p.big_bytes += len;
             return @ptrFromInt(mem);
         }
@@ -136,11 +195,16 @@ pub const Pool = struct {
         var had: usize = 0;
         for (at..at + n) |i| {
             if (Arena.bit(&a.committed, i)) had += 1 else need = true;
+            // A committed page that held a span keeps its bytes. A page that
+            // got the advice reads as zeros on Windows and Linux, and can
+            // keep its bytes on macOS until the system takes it.
+            if (Arena.bit(&a.touched, i) and (Arena.bit(&a.committed, i) or builtin.os.tag == .macos)) p.last_reused = true;
         }
         if (need and !os.commit(a.base + at * page, n * page)) return false;
         for (at..at + n) |i| {
             Arena.set(&a.used, i, true);
             Arena.set(&a.committed, i, true);
+            Arena.set(&a.touched, i, true);
         }
         a.nused += @intCast(n);
         p.free_committed -= had * page;
@@ -148,7 +212,7 @@ pub const Pool = struct {
     }
 
     fn newArena(p: *Pool) ?*Arena {
-        const base = os.reserve(arena_bytes) orelse return null;
+        const base = os.reserve(arena_bytes, p.watch) orelse return null;
         const a = p.gpa.create(Arena) catch {
             os.release(base, arena_bytes);
             return null;
@@ -185,6 +249,10 @@ pub const Pool = struct {
         const n = len / page;
         const addr = @intFromPtr(ptr);
         if (n > max_run) {
+            if (p.watch) for (p.bigs.items, 0..) |b, i| if (b[0] == addr) {
+                _ = p.bigs.swapRemove(i);
+                break;
+            };
             os.release(addr, len);
             p.big_bytes -= len;
             p.returned += len;
@@ -325,6 +393,13 @@ const releaser = struct {
     }
 };
 
+/// Calls `cb` with each page of [base, base + len): the answer of a watch
+/// that cannot tell which pages have writes.
+fn everyPage(base: usize, len: usize, ctx: *anyopaque, cb: *const fn (ctx: *anyopaque, addr: usize) void) void {
+    var a = base;
+    while (a < base + len) : (a += page) cb(ctx, a);
+}
+
 /// The calls of the system for pages.
 const os = struct {
     const windows = builtin.os.tag == .windows;
@@ -332,6 +407,8 @@ const os = struct {
     const mem_reserve: u32 = 0x2000;
     const mem_decommit: u32 = 0x4000;
     const mem_release: u32 = 0x8000;
+    const mem_write_watch: u32 = 0x00200000;
+    const write_watch_flag_reset: u32 = 1;
     const page_readwrite: u32 = 0x04;
     const page_noaccess: u32 = 0x01;
 
@@ -340,18 +417,18 @@ const os = struct {
 
     /// Addresses with no memory yet: on Windows reserved, elsewhere a
     /// mapping that the system fills on the first write.
-    fn reserve(len: usize) ?usize {
+    fn reserve(len: usize, watch: bool) ?usize {
         if (windows) {
-            const p = VirtualAlloc(null, len, mem_reserve, page_noaccess) orelse return null;
+            const p = VirtualAlloc(null, len, mem_reserve | (if (watch) mem_write_watch else 0), page_noaccess) orelse return null;
             return @intFromPtr(p);
         }
         return posixMap(len);
     }
 
     /// A mapping of `len` bytes that can hold memory now.
-    fn map(len: usize) ?usize {
+    fn map(len: usize, watch: bool) ?usize {
         if (windows) {
-            const p = VirtualAlloc(null, len, mem_reserve | mem_commit, page_readwrite) orelse return null;
+            const p = VirtualAlloc(null, len, mem_reserve | mem_commit | (if (watch) mem_write_watch else 0), page_readwrite) orelse return null;
             return @intFromPtr(p);
         }
         return posixMap(len);
@@ -388,6 +465,33 @@ const os = struct {
 
     fn pageSize() usize {
         return std.heap.pageSize();
+    }
+
+    extern "kernel32" fn GetWriteWatch(flags: u32, base: *anyopaque, size: usize, addrs: [*]usize, count: *usize, granularity: *u32) callconv(.winapi) u32;
+    extern "kernel32" fn ResetWriteWatch(base: *anyopaque, size: usize) callconv(.winapi) u32;
+
+    /// Calls `cb` with each page of [base, base + len) written since the
+    /// last reset of its watch, and resets it. The system gives at most a
+    /// batch of addresses for each call, so a full batch asks again.
+    fn dirtyPages(base: usize, len: usize, addrs: []usize, ctx: *anyopaque, cb: *const fn (ctx: *anyopaque, addr: usize) void) void {
+        if (!windows) return;
+        while (true) {
+            var count: usize = addrs.len;
+            var gran: u32 = 0;
+            if (GetWriteWatch(write_watch_flag_reset, @ptrFromInt(base), len, addrs.ptr, &count, &gran) != 0) {
+                // A failed read says nothing of the pages: each counts as
+                // written.
+                everyPage(base, len, ctx, cb);
+                return;
+            }
+            for (addrs[0..count]) |a| cb(ctx, a);
+            if (count < addrs.len) return;
+        }
+    }
+
+    fn resetWatch(base: usize, len: usize) void {
+        if (!windows) return;
+        _ = ResetWriteWatch(@ptrFromInt(base), len);
     }
 };
 
@@ -440,4 +544,34 @@ test "pagepool: a large run is a mapping of its own, and arenas go back" {
     try std.testing.expectEqual(8 * max_run * page, back);
     // The lowest arena stays for the next spans.
     try std.testing.expectEqual(@as(usize, 1), p.arenas.items.len);
+}
+
+fn testDirty(ctx: *anyopaque, addr: usize) void {
+    const l: *std.ArrayList(usize) = @ptrCast(@alignCast(ctx));
+    l.append(std.testing.allocator, addr) catch {};
+}
+
+test "pagepool: the write watch gives the written pages, once" {
+    if (!dirty_supported) return error.SkipZigTest;
+    var p = Pool.initWatched(std.testing.allocator);
+    defer p.deinit();
+    const a = p.alloc(8 * page).?;
+    const big = p.alloc(2 << 20).?;
+    p.resetDirty();
+    a[3 * page + 10] = 1;
+    big[(1 << 20) + 5] = 2;
+    var got: std.ArrayList(usize) = .empty;
+    defer got.deinit(std.testing.allocator);
+    p.dirty(&got, testDirty);
+    std.mem.sort(usize, got.items, {}, std.sort.asc(usize));
+    try std.testing.expectEqual(@as(usize, 2), got.items.len);
+    const want = [2]usize{ @intFromPtr(a) + 3 * page, @intFromPtr(big) + (1 << 20) };
+    std.mem.sort(usize, @constCast(&want), {}, std.sort.asc(usize));
+    try std.testing.expectEqualSlices(usize, &want, got.items);
+    // The read reset the watch.
+    got.clearRetainingCapacity();
+    p.dirty(&got, testDirty);
+    try std.testing.expectEqual(@as(usize, 0), got.items.len);
+    p.free(big, 2 << 20);
+    p.free(a, 8 * page);
 }
