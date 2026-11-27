@@ -173,7 +173,10 @@ const Ring = struct {
     }
 };
 
-const State = enum(u8) { free, connecting, syn_rcvd, open };
+/// `connecting`: the guest sent a SYN, and the host socket connects.
+/// `syn_rcvd`: the engine sent its SYN-ACK. `syn_sent`: a connection of
+/// `-forward`, from the host to the guest; the engine sent its SYN.
+const State = enum(u8) { free, connecting, syn_rcvd, syn_sent, open };
 
 pub const Conn = struct {
     state: State = .free,
@@ -254,6 +257,8 @@ pub const Tcp = struct {
     nblocked: usize = 0,
     timers: usize = 0,
     secret: u64 = 0,
+    /// The last port of the gateway for a connection of `-forward`.
+    fwd_port: u16 = 0,
     /// The headers of a frame to the guest; `frame` holds a whole frame
     /// when the payload needs a copy (socket mode, or no checksum
     /// offload).
@@ -404,8 +409,8 @@ fn open(n: *Nat, s: *const Seg) void {
 }
 
 /// The connect of the host socket ended well: SYN-ACK to the guest.
-fn connected_(n: *Nat, ci: u16) void {
-    const c = &tcpOf(n).conns[ci];
+/// The buffers toward the guest: peek mode, or the `in` ring.
+fn setupIn(n: *Nat, c: *Conn) bool {
     if (n.canFill()) {
         c.peek = true;
         os.setPeekOff(c.fd, 0);
@@ -413,7 +418,78 @@ fn connected_(n: *Nat, ci: u16) void {
         // receive buffer must hold them and still give the sender a
         // window: the default size of the system is too small for that.
         os.setRcvBuf(c.fd, peek_rcvbuf);
-    } else c.in.buf = n.alloc.alloc(u8, in_cap) catch return abort(n, ci, true);
+        return true;
+    }
+    c.in.buf = n.alloc.alloc(u8, in_cap) catch return false;
+    return true;
+}
+
+/// A connection of `-forward`: the host socket `fd` (accepted on the
+/// host port) goes to `guest_port` of the guest, from the gateway
+/// 10.0.2.2 and a port of the engine.
+pub fn forward(n: *Nat, fd: i32, guest_port: u16, host_port: u16) void {
+    const t = tcpOf(n);
+    if (t.nfree == 0) return os.close(fd);
+    // A port of the gateway that no connection of this guest port has.
+    var port: u16 = 0;
+    for (0..16384) |_| {
+        t.fwd_port = if (t.fwd_port < 49152 or t.fwd_port == 65535) 49152 else t.fwd_port + 1;
+        if (t.find(guest_port, nat.gateway_ip, t.fwd_port) == null) {
+            port = t.fwd_port;
+            break;
+        }
+    }
+    if (port == 0) return os.close(fd);
+    t.nfree -= 1;
+    const ci = t.free_list[t.nfree];
+    const c = &t.conns[ci];
+    const h = (@as(u64, guest_port) << 16 | port) ^ t.secret;
+    c.* = .{
+        .state = .syn_sent,
+        .fd = fd,
+        .sport = guest_port,
+        .dst = nat.gateway_ip,
+        .dport = port,
+        .host = .{ 127, 0, 0, 1 },
+        .iss = @truncate((engine.now() >> 12) +% (h *% 0x9e3779b97f4a7c15 >> 32)),
+        .sack_ok = true,
+        .ws_ours = our_ws,
+    };
+    c.snd_una = c.iss;
+    c.snd_nxt = c.iss +% 1;
+    c.snd_max = c.snd_nxt;
+    if (!setupIn(n, c)) {
+        os.close(fd);
+        c.* = .{};
+        t.free_list[t.nfree] = ci;
+        t.nfree += 1;
+        return;
+    }
+    os.addConn(n.poll, fd, engine.tag_conn | ci) catch {
+        freeBufs(c, n.alloc);
+        os.close(fd);
+        c.* = .{};
+        t.free_list[t.nfree] = ci;
+        t.nfree += 1;
+        return;
+    };
+    t.insert(ci);
+    sendSyn(n, c);
+    setTimer(n, c, engine.now() + c.rto);
+    n.event(.{ .kind = .forward, .proto = .tcp, .guest_port = guest_port, .addr = c.host, .port = host_port });
+}
+
+/// The SYN of a connection of `-forward`, with MSS, window scale, and
+/// SACK-permitted.
+fn sendSyn(n: *Nat, c: *Conn) void {
+    var o = [12]u8{ 2, 4, 0, 0, 1, 3, 3, our_ws, 1, 1, 4, 2 };
+    std.mem.writeInt(u16, o[2..4], our_mss, .big);
+    sendRaw(n, c.dst, c.dport, c.sport, c.iss, 0, syn, @intCast(@min(c.rwnd(), 65535)), &o);
+}
+
+fn connected_(n: *Nat, ci: u16) void {
+    const c = &tcpOf(n).conns[ci];
+    if (!setupIn(n, c)) return abort(n, ci, true);
     c.state = .syn_rcvd;
     c.snd_una = c.iss;
     c.snd_nxt = c.iss +% 1;
@@ -447,13 +523,35 @@ fn segment(n: *Nat, ci: u16, s: *const Seg, payload: []const []const u8) void {
     if (s.flags & rst != 0) {
         // A RST in the window ends the connection (RFC 5961 style: only
         // an exact sequence number, to resist a blind reset).
-        if (s.seq == c.rcv_nxt or c.state == .connecting) abort(n, ci, false);
+        if (s.seq == c.rcv_nxt or c.state == .connecting or
+            (c.state == .syn_sent and s.flags & ack != 0 and s.ack == c.iss +% 1)) abort(n, ci, false);
         return;
     }
     switch (c.state) {
         .free => return,
         // The SYN again, before the host answered: no answer yet.
         .connecting => return,
+        .syn_sent => {
+            // The SYN-ACK of the guest (RFC 9293 3.10.7.3).
+            if (s.flags & (syn | ack) != syn | ack) return;
+            if (s.ack != c.iss +% 1) return reset(n, s);
+            c.rcv_nxt = s.seq +% 1;
+            c.mss = @max(@min(s.mss, our_mss), 64);
+            c.sack_ok = s.sack_ok;
+            if (s.ws) |ws| c.ws_guest = ws else c.ws_ours = 0;
+            c.state = .open;
+            c.snd_una = s.ack;
+            c.snd_wnd = s.wnd;
+            c.snd_wl1 = s.seq;
+            c.snd_wl2 = s.ack;
+            clearTimer(n, c);
+            c.backoff = 0;
+            dueAck(n, ci);
+            readHost(n, ci);
+            if (c.state == .free) return;
+            push(n, ci);
+            return;
+        },
         .syn_rcvd => {
             if (s.flags & syn != 0) return sendSynAck(n, c);
             if (s.flags & ack == 0) return;
@@ -634,7 +732,8 @@ pub fn hostReady(n: *Nat, ci: u16, in: bool, out: bool) void {
             }
             return connected_(n, ci);
         },
-        .syn_rcvd => return,
+        // The bytes of the host wait until the guest is connected.
+        .syn_rcvd, .syn_sent => return,
         .open => {},
     }
     if (out and c.out.len > 0) {
@@ -914,6 +1013,7 @@ pub fn tick(n: *Nat, now_ns: u64) void {
         c.timing = false;
         switch (c.state) {
             .syn_rcvd => sendSynAck(n, c),
+            .syn_sent => sendSyn(n, c),
             .open => {
                 if (c.peek and c.snd_una == c.snd_max and !c.host_eof) {
                     // A probe of a zero window, in peek mode.
@@ -935,7 +1035,7 @@ pub fn tick(n: *Nat, now_ns: u64) void {
             },
             else => {},
         }
-        if (c.state != .free and c.timer == 0 and (c.state == .syn_rcvd or c.snd_una != c.snd_max)) setTimer(n, c, now_ns + c.rto);
+        if (c.state != .free and c.timer == 0 and (c.state == .syn_rcvd or c.state == .syn_sent or c.snd_una != c.snd_max)) setTimer(n, c, now_ns + c.rto);
     }
 }
 

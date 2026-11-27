@@ -82,6 +82,10 @@ pub const Config = struct {
     /// narrow `policy`. The engine copies them.
     allow: []const policy.Rule = &.{},
     deny: []const policy.Rule = &.{},
+    /// `-forward`: each pair is a port of the host loopback and a port
+    /// of the guest. The engine listens on 127.0.0.1 of each host port,
+    /// and each connection there goes to the guest port.
+    forward: []const [2]u16 = &.{},
     policy_ctx: ?*anyopaque = null,
     dns: bool = true,
     /// The names that the DNS relay can look up, on the thread of the
@@ -123,6 +127,8 @@ const tag_watch: u64 = 1 << 32;
 const tag_flow: u64 = 2 << 32;
 const tag_sock: u64 = 3 << 32;
 pub const tag_conn: u64 = 4 << 32;
+const tag_listen: u64 = 5 << 32;
+pub const max_forward = 16;
 /// The period of the TCP timers while one is set.
 const tick_ns: u64 = 5 * std.time.ns_per_ms;
 
@@ -146,6 +152,12 @@ const Pending = struct {
     name_len: u8 = 0,
 };
 
+const Listener = struct {
+    fd: i32 = -1,
+    host_port: u16 = 0,
+    guest_port: u16 = 0,
+};
+
 const Watch = struct {
     fd: i32 = -1,
     ctx: *anyopaque = undefined,
@@ -165,6 +177,7 @@ pub const Nat = struct {
     rx_wanted: std.atomic.Value(bool) = .init(false),
     flows: [max_flows]Flow = @splat(.{}),
     tcp: tcp.Tcp = undefined,
+    listeners: [max_forward]Listener = @splat(.{}),
     watches: [max_watch]Watch = @splat(.{}),
     dns_server: ?Ip4 = null,
     /// The token bucket of the DNS rate limit, in 1/1000 of a query.
@@ -219,6 +232,14 @@ pub const Nat = struct {
         n.poll = try os.pollCreate();
         errdefer os.close(n.poll);
         n.wake_fd = try os.wakeCreate(n.poll, tag_wake);
+        errdefer if (!on_mac) os.close(n.wake_fd);
+        if (cfg.forward.len > max_forward) return error.TooManyForwards;
+        errdefer for (n.listeners) |l| if (l.fd >= 0) os.close(l.fd);
+        for (cfg.forward, 0..) |f, i| {
+            const fd = os.tcpListen(f[0]) orelse return error.ForwardPort;
+            n.listeners[i] = .{ .fd = fd, .host_port = f[0], .guest_port = f[1] };
+            try os.add(n.poll, fd, tag_listen | i);
+        }
         if (cfg.dns) n.dns_server = readResolvConf();
         n.dns_tokens = @as(u64, cfg.dns_rate) * 2000;
         n.dns_last = now();
@@ -231,6 +252,7 @@ pub const Nat = struct {
         for (&n.flows) |*f| if (f.fd >= 0) os.close(f.fd);
         n.tcp.deinit(n.alloc);
         n.pol.deinit();
+        for (n.listeners) |l| if (l.fd >= 0) os.close(l.fd);
         if (n.sock >= 0) os.close(n.sock);
         if (!on_mac and n.wake_fd >= 0) os.close(n.wake_fd);
         os.close(n.poll);
@@ -334,6 +356,13 @@ pub const Nat = struct {
                 if (n.ring_n == 0) tcp.resumeAll(n);
             },
             tag_conn => tcp.hostReady(n, @intCast(i), os.isIn(e), os.isOut(e)),
+            tag_listen => {
+                const l = n.listeners[i];
+                for (0..16) |_| {
+                    const fd = os.tcpAccept(l.fd) orelse break;
+                    tcp.forward(n, fd, l.guest_port, l.host_port);
+                }
+            },
             tag_watch => {
                 const w = &n.watches[i];
                 os.drain(w.fd);
@@ -1086,6 +1115,30 @@ const linux_os = struct {
     pub fn recvv(fd: i32, iov: []const IovMut) isize {
         return sres(linux.readv(fd, iov.ptr, iov.len));
     }
+    /// A listening socket on 127.0.0.1 of `port`, with no wait.
+    pub fn tcpListen(port: u16) ?i32 {
+        const rc = linux.socket(linux.AF.INET, linux.SOCK.STREAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, 0);
+        if (linux.errno(rc) != .SUCCESS) return null;
+        const fd: i32 = @intCast(rc);
+        const one: c_int = 1;
+        _ = setsockopt(fd, linux.SOL.SOCKET, linux.SO.REUSEADDR, std.mem.asBytes(&one));
+        var sa: linux.sockaddr.in = .{ .port = std.mem.nativeToBig(u16, port), .addr = @bitCast([4]u8{ 127, 0, 0, 1 }) };
+        if (linux.errno(linux.bind(fd, @ptrCast(&sa), @sizeOf(linux.sockaddr.in))) != .SUCCESS or
+            linux.errno(linux.listen(fd, 64)) != .SUCCESS)
+        {
+            close(fd);
+            return null;
+        }
+        return fd;
+    }
+    pub fn tcpAccept(lfd: i32) ?i32 {
+        const rc = linux.accept4(lfd, null, null, linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC);
+        if (linux.errno(rc) != .SUCCESS) return null;
+        const fd: i32 = @intCast(rc);
+        const one: c_int = 1;
+        _ = setsockopt(fd, linux.IPPROTO.TCP, linux.TCP.NODELAY, std.mem.asBytes(&one));
+        return fd;
+    }
     pub const has_peek = true;
     /// Reads at the peek offset of the socket, and leaves the bytes in it.
     pub fn recvPeek(fd: i32, iov: []const std.posix.iovec) isize {
@@ -1247,6 +1300,36 @@ const mac_os = struct {
     }
     pub fn recvv(fd: i32, iov: []const IovMut) isize {
         return res(c.readv(fd, iov.ptr, @intCast(iov.len)));
+    }
+    pub fn tcpListen(port: u16) ?i32 {
+        const fd = c.socket(c.AF.INET, c.SOCK.STREAM, 0);
+        if (fd < 0) return null;
+        _ = c.fcntl(fd, c.F.SETFD, @as(c_int, c.FD_CLOEXEC));
+        const one: c_int = 1;
+        _ = setsockopt(fd, c.SOL.SOCKET, c.SO.REUSEADDR, std.mem.asBytes(&one));
+        var sa: c.sockaddr.in = .{ .port = std.mem.nativeToBig(u16, port), .addr = @bitCast([4]u8{ 127, 0, 0, 1 }) };
+        nonblock(fd) catch {
+            close(fd);
+            return null;
+        };
+        if (c.bind(fd, @ptrCast(&sa), @sizeOf(c.sockaddr.in)) != 0 or c.listen(fd, 64) != 0) {
+            close(fd);
+            return null;
+        }
+        return fd;
+    }
+    pub fn tcpAccept(lfd: i32) ?i32 {
+        const fd = c.accept(lfd, null, null);
+        if (fd < 0) return null;
+        _ = c.fcntl(fd, c.F.SETFD, @as(c_int, c.FD_CLOEXEC));
+        const one: c_int = 1;
+        _ = setsockopt(fd, c.IPPROTO.TCP, c.TCP.NODELAY, std.mem.asBytes(&one));
+        _ = setsockopt(fd, c.SOL.SOCKET, c.SO.NOSIGPIPE, std.mem.asBytes(&one));
+        nonblock(fd) catch {
+            close(fd);
+            return null;
+        };
+        return fd;
     }
     pub const has_peek = false;
     pub fn recvPeek(_: i32, _: []const std.posix.iovec) isize {
@@ -1655,4 +1738,44 @@ test "nat engine: the allow and deny lists of a guest" {
     try std.testing.expectEqual(@as(usize, 2), L.n);
     try std.testing.expectEqual(@as(i32, 0), L.rules[0]);
     try std.testing.expectEqual(Event.rule_not_allowed, L.rules[1]);
+}
+
+test "nat engine: a connection of -forward from the host to the guest" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    const T = tcp;
+    var pair: [2]i32 = undefined;
+    try std.testing.expectEqual(@as(usize, 0), linux.socketpair(linux.AF.UNIX, linux.SOCK.DGRAM | linux.SOCK.CLOEXEC, 0, &pair));
+    defer _ = linux.close(pair[1]);
+    // A free port of the host loopback.
+    const probe: i32 = @intCast(linux.socket(linux.AF.INET, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0));
+    var sa: linux.sockaddr.in = .{ .port = 0, .addr = @bitCast([4]u8{ 127, 0, 0, 1 }) };
+    _ = linux.bind(probe, @ptrCast(&sa), @sizeOf(linux.sockaddr.in));
+    var sl: linux.socklen_t = @sizeOf(linux.sockaddr.in);
+    _ = linux.getsockname(probe, @ptrCast(&sa), &sl);
+    _ = linux.close(probe);
+    const hport = std.mem.bigToNative(u16, sa.port);
+    const n = try Nat.initSocket(std.testing.allocator, .{ .dns = false, .forward = &.{.{ hport, 41000 }} }, pair[0]);
+    defer n.deinit();
+    try n.start();
+    const cl: i32 = @intCast(linux.socket(linux.AF.INET, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0));
+    defer _ = linux.close(cl);
+    try std.testing.expectEqual(@as(usize, 0), linux.connect(cl, @ptrCast(&sa), @sizeOf(linux.sockaddr.in)));
+    var out: [nat.max_frame]u8 = undefined;
+    var fb: [nat.max_frame]u8 = undefined;
+    // The SYN of the engine to guest port 41000, from the gateway.
+    const sy = try tcpRecv(pair[1], &out);
+    try std.testing.expectEqual(T.syn, sy.flags);
+    const eport = std.mem.readInt(u16, out[34..36], .big);
+    try std.testing.expect(eport >= 49152);
+    _ = linux_os.send(pair[1], tcpGuestFrame(&fb, eport, 7000, sy.seq +% 1, T.syn | T.ack, &.{ 2, 4, 5, 0xb4 }, ""));
+    const a1 = try tcpRecv(pair[1], &out);
+    try std.testing.expectEqual(@as(u32, 7001), a1.ack);
+    // Data both ways.
+    _ = linux.write(cl, "hi", 2);
+    const d = try tcpRecv(pair[1], &out);
+    try std.testing.expectEqualStrings("hi", d.data);
+    _ = linux_os.send(pair[1], tcpGuestFrame(&fb, eport, 7001, d.seq +% 2, T.ack, "", "yo"));
+    var got: [8]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 2), linux.read(cl, &got, got.len));
+    try std.testing.expectEqualStrings("yo", got[0..2]);
 }
