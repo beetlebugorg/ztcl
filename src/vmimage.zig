@@ -221,7 +221,7 @@ pub const Checked = struct {
 /// unless `allow_rollback`.
 pub fn verify(a: Allocator, manifest: []const u8, sig_text: []const u8, seen: u64, allow_rollback: bool) Error!Checked {
     const key = try verifySignature(a, manifest, sig_text);
-    const p = std.json.parseFromSlice(Manifest, a, manifest, .{ .ignore_unknown_fields = true }) catch |e| switch (e) {
+    const p = std.json.parseFromSlice(Manifest, a, manifest, .{ .ignore_unknown_fields = true, .allocate = .alloc_always }) catch |e| switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.BadManifest,
     };

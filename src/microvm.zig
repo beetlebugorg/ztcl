@@ -63,6 +63,9 @@ pub const Host = struct {
     max_cpus: u32 = 4,
     max_memory_mb: u32 = 2048,
     max_guests: u32 = 4,
+    /// The folder of the store of signed images (`vmstore.zig`), a path
+    /// of the host. Empty: `ztcl::vm image` gives ZTCL VM STORE.
+    image_store: []const u8 = "",
 };
 
 /// The port of the guest agent. A warm guest pauses when a program of
@@ -76,7 +79,6 @@ var warned = std.atomic.Value(bool).init(false);
 
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     // A build that trusts the test key of the images says so, once.
-    const vmimage = @import("vmimage.zig");
     if (comptime vmimage.trusts_test_key and !builtin.is_test) {
         if (!warned.swap(true, .monotonic)) std.debug.print("{s}\n", .{vmimage.test_key_warning});
     }
@@ -94,6 +96,7 @@ fn unavailable(it: *Interp) Error {
 
 fn cmdVm(it: *Interp, args: []const Value, _: ?*interp.Cmd) Error!Value {
     if (args.len < 2) return it.wrongArgs(usage);
+    if (std.mem.eql(u8, try it.str(args[1]), "image")) return imageCmd(it, args[2..]);
     if (comptime on_kvm) return lin.run(it, args);
     if (comptime !on_mac) return unavailable(it);
     return mac.run(it, args);
@@ -103,6 +106,134 @@ fn cmdVm(it: *Interp, args: []const Value, _: ?*interp.Cmd) Error!Value {
 pub fn closeAll(it: *Interp) void {
     if (comptime on_mac) mac.closeAll(it);
     if (comptime on_kvm) lin.closeAll(it);
+}
+
+// ---- ztcl::vm image: the store of signed images (vmstore.zig) ----
+
+const vmstore = @import("vmstore.zig");
+const vmimage = @import("vmimage.zig");
+
+fn store(it: *Interp) Error!vmstore.Store {
+    if (comptime !vmstore.supported) return it.failCode("ZTCL VM UNAVAILABLE", "the store of images is not available on this platform", .{});
+    return vmstore.Store.open(it.alloc(), it.vm_host.image_store) catch |e| switch (e) {
+        error.OutOfMemory => error.OutOfMemory,
+        else => it.failCode("ZTCL VM STORE", "no store of images: {s}", .{if (it.vm_host.image_store.len == 0) "the embedder gives no folder" else @errorName(e)}),
+    };
+}
+
+fn storeFail(it: *Interp, e: vmstore.Error) Error {
+    return switch (e) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.BadSignature => it.failCode("ZTCL VM IMAGE SIGNATURE", "the signature of the manifest is not good", .{}),
+        error.Untrusted => it.failCode("ZTCL VM IMAGE SIGNATURE", "the manifest is not signed by a key that this ztcl trusts", .{}),
+        error.Namespace => it.failCode("ZTCL VM IMAGE SIGNATURE", "the signature is not for ztcl-vm-image", .{}),
+        error.Rollback => it.failCode("ZTCL VM IMAGE ROLLBACK", "the store has a newer release of the image: pass -force to install an older one", .{}),
+        error.Hash => it.failCode("ZTCL VM IMAGE HASH", "a file of the image does not have the SHA-256 of its manifest", .{}),
+        error.BadManifest => it.failCode("ZTCL VM IMAGE MANIFEST", "the manifest of the image is not valid", .{}),
+        error.Missing => it.failCode("ZTCL VM IMAGE MISSING", "the image has no files for {s}", .{vmstore.host_arch}),
+        error.NotFound => it.failCode("ZTCL VM IMAGE NAME", "no such image or release", .{}),
+        else => it.failCode("ZTCL VM STORE", "the store of images failed: {s}", .{@errorName(e)}),
+    };
+}
+
+/// The current release of `name`, checked, for `create -image`.
+pub const Resolved = struct { kernel: []u8, initrd: ?[]u8, cmdline: []const u8, disks: [][]u8 };
+
+pub fn resolveImage(it: *Interp, name: []const u8) Error!Resolved {
+    const s = try store(it);
+    const a = it.alloc();
+    const counter = (s.current(a, name) catch |e| return storeFail(it, e)) orelse
+        return it.failCode("ZTCL VM IMAGE NAME", "no image named \"{s}\" in the store: install it with ztcl::vm image install", .{name});
+    // The kernel and the initramfs get a check of their hash at each use;
+    // a disk with verity checks itself on each read in the guest.
+    _ = s.verifyRelease(a, name, counter, vmstore.host_arch) catch |e| return storeFail(it, e);
+    var c = s.load(a, name, counter) catch |e| return storeFail(it, e);
+    defer c.deinit();
+    const x = c.parsed.value.archs.map.get(vmstore.host_arch) orelse return storeFail(it, error.Missing);
+    const disks = try a.alloc([]u8, x.disks.len);
+    for (x.disks, disks) |d, *p| p.* = try s.objectPath(a, d.sha256);
+    return .{
+        .kernel = try s.objectPath(a, x.kernel.sha256),
+        .initrd = if (x.initrd) |f| try s.objectPath(a, f.sha256) else null,
+        .cmdline = try a.dupe(u8, x.cmdline),
+        .disks = disks,
+    };
+}
+
+fn imageCmd(it: *Interp, args: []const Value) Error!Value {
+    const use = "ztcl::vm image install|list|verify|remove ?arg ...?";
+    if (args.len < 1) return it.wrongArgs(use);
+    const sub = try it.str(args[0]);
+    const a = it.alloc();
+    if (std.mem.eql(u8, sub, "install")) {
+        // ztcl::vm image install DIR ?-force?: a folder of the file jail.
+        const force = args.len == 3 and std.mem.eql(u8, try it.str(args[2]), "-force");
+        if (args.len != 2 and !force) return it.wrongArgs("ztcl::vm image install dir ?-force?");
+        const dir = try jailPath(it, try it.str(args[1]));
+        const s = try store(it);
+        const r = s.install(a, dir, vmstore.host_arch, force) catch |e| return storeFail(it, e);
+        var items = [6]Value{ .{ .str = "name" }, .{ .str = r.name }, .{ .str = "counter" }, .{ .int = @intCast(r.counter) }, .{ .str = "key" }, .{ .str = r.key } };
+        return value.wrapList(a, try a.dupe(Value, &items));
+    }
+    if (std.mem.eql(u8, sub, "list")) {
+        if (args.len != 1) return it.wrongArgs("ztcl::vm image list");
+        const s = try store(it);
+        const entries = s.list(a) catch |e| return storeFail(it, e);
+        var out: std.ArrayList(Value) = .empty;
+        for (entries) |e| {
+            var cs: std.ArrayList(Value) = .empty;
+            for (e.counters) |c| try cs.append(a, .{ .int = @intCast(c) });
+            var items = [6]Value{ .{ .str = "name" }, .{ .str = e.name }, .{ .str = "releases" }, try value.wrapList(a, cs.items), .{ .str = "current" }, if (e.current) |c| .{ .int = @intCast(c) } else .{ .str = "" } };
+            try out.append(a, try value.wrapList(a, try a.dupe(Value, &items)));
+        }
+        return value.wrapList(a, out.items);
+    }
+    if (std.mem.eql(u8, sub, "verify")) {
+        if (args.len != 2) return it.wrongArgs("ztcl::vm image verify name");
+        const name = try it.str(args[1]);
+        const s = try store(it);
+        const counter = (s.current(a, name) catch |e| return storeFail(it, e)) orelse return storeFail(it, error.NotFound);
+        var c = s.load(a, name, counter) catch |e| return storeFail(it, e);
+        const key = c.key.name;
+        c.deinit();
+        const n = s.verifyRelease(a, name, counter, vmstore.host_arch) catch |e| return storeFail(it, e);
+        if (vmimage.trusts_test_key) std.debug.print("{s}\n", .{vmimage.test_key_warning});
+        var items = [8]Value{ .{ .str = "name" }, .{ .str = name }, .{ .str = "counter" }, .{ .int = @intCast(counter) }, .{ .str = "key" }, .{ .str = key }, .{ .str = "files" }, .{ .int = @intCast(n) } };
+        return value.wrapList(a, try a.dupe(Value, &items));
+    }
+    if (std.mem.eql(u8, sub, "remove")) {
+        if (args.len != 2 and args.len != 3) return it.wrongArgs("ztcl::vm image remove name ?counter?");
+        const name = try it.str(args[1]);
+        const counter: ?u64 = if (args.len == 3) @intCast(@max(0, try it.int(args[2]))) else null;
+        const s = try store(it);
+        s.remove(a, name, counter) catch |e| return storeFail(it, e);
+        return .{ .str = "" };
+    }
+    return it.fail("bad option \"{s}\": must be install, list, remove, or verify", .{sub});
+}
+
+/// The host path of a folder of the script, below the root folder.
+fn jailPath(it: *Interp, path: []const u8) Error![]const u8 {
+    if (it.capabilities & @backingInt(interp.Capability.file) == 0 or !it.fs_ok())
+        return it.failCode("ZTCL VM NOFILE", "a path of ztcl::vm needs the file capability", .{});
+    const rel = try fsroot.need(it, path);
+    const fd = switch (try fsroot.openRel(it, rel, .{ .directory = true }, 0)) {
+        .fd => |f| f,
+        .err => |e| return fsroot.posixError(it, e, "couldn't open the folder: "),
+    };
+    defer _ = sys.os.close(fd);
+    if (comptime builtin.os.tag == .macos) {
+        var buf: [1024]u8 = @splat(0);
+        if (std.c.fcntl(fd, std.c.F.GETPATH, &buf) < 0) return it.fail("couldn't open the folder: no path", .{});
+        return it.alloc().dupe(u8, std.mem.sliceTo(&buf, 0));
+    }
+    // /proc/self/fd/N names the folder that the jail opened.
+    var link: [32]u8 = undefined;
+    const lp = std.fmt.bufPrintSentinel(&link, "/proc/self/fd/{d}", .{fd}, 0) catch unreachable;
+    var buf: [4096]u8 = undefined;
+    const n = std.os.linux.readlink(lp, &buf, buf.len);
+    if (std.os.linux.errno(n) != .SUCCESS) return it.fail("couldn't open the folder: no path", .{});
+    return it.alloc().dupe(u8, buf[0..n]);
 }
 
 fn isRw(it: *Interp, v: Value) Error!bool {
@@ -258,11 +389,26 @@ const mac = if (on_mac) struct {
         var shares: std.ArrayList(vz.Share) = .empty;
         var disks: std.ArrayList(vz.Disk) = .empty;
         var warm = false;
+        var image: ?[]const u8 = null;
+        {
+            // -image gives the kernel, the initramfs, and the command line.
+            var has_image = false;
+            var own_boot = false;
+            var k: usize = 0;
+            while (k + 1 < args.len) : (k += 2) {
+                const o = try it.str(args[k]);
+                if (std.mem.eql(u8, o, "-image")) has_image = true;
+                if (std.mem.eql(u8, o, "-kernel") or std.mem.eql(u8, o, "-initrd") or std.mem.eql(u8, o, "-cmdline")) own_boot = true;
+            }
+            if (has_image and own_boot) return it.fail("-image gives the kernel, the initramfs, and the command line: no -kernel, -initrd, or -cmdline with it", .{});
+        }
         var i: usize = 0;
         while (i < args.len) : (i += 2) {
             const opt = try it.str(args[i]);
             const v = args[i + 1];
-            if (std.mem.eql(u8, opt, "-cpus")) {
+            if (std.mem.eql(u8, opt, "-image")) {
+                image = try it.str(v);
+            } else if (std.mem.eql(u8, opt, "-cpus")) {
                 cfg.cpus = try limit(it, v, "CPU count", host.max_cpus);
             } else if (std.mem.eql(u8, opt, "-memory")) {
                 cfg.memory_mb = try limit(it, v, "memory in MB", host.max_memory_mb);
@@ -285,9 +431,20 @@ const mac = if (on_mac) struct {
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 const tag = try std.fmt.allocPrint(a, "share{d}", .{shares.items.len});
                 try shares.append(a, .{ .path = try hostPath(it, try it.str(l[0]), true), .tag = tag, .read_only = !(l.len == 3 and try isRw(it, l[2])) });
-            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -initrd, -kernel, -memory, -share, or -warm", .{opt});
+            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -image, -initrd, -kernel, -memory, -share, or -warm", .{opt});
         }
-        if (cfg.kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel until the base image of the plan", .{});
+        if (image) |name| {
+            const r = try resolveImage(it, name);
+            cfg.kernel = r.kernel;
+            cfg.initrd = r.initrd;
+            cfg.cmdline = try std.fmt.allocPrint(a, "console=hvc0 {s}", .{r.cmdline});
+            // The disks of the image come first: /dev/vda is its root.
+            var all: std.ArrayList(vz.Disk) = .empty;
+            for (r.disks) |p| try all.append(a, .{ .path = p, .read_only = true });
+            try all.appendSlice(a, disks.items);
+            disks = all;
+        }
+        if (cfg.kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel or -image", .{});
         cfg.shares = shares.items;
         cfg.disks = disks.items;
 
