@@ -85,6 +85,7 @@ PAGES = [
     ("docs/modules/vm.md", "modules/vm/", "Modules", "ztcl::vm"),
     ("docs/modules/win.md", "modules/win/", "Modules", "ztcl::win"),
     ("docs/modules/mac.md", "modules/mac/", "Modules", "ztcl::mac"),
+    ("docs/modules/web.md", "modules/web/", "Modules", "web"),
     ("docs/embedding.md", "embedding/", "Embed", "Embed in Zig"),
     ("docs/webassembly.md", "webassembly/", "Embed", "WebAssembly"),
     ("docs/dom.md", "dom/", "Embed", "Tcl in a web page"),
@@ -111,7 +112,7 @@ PAGE_OF = {src: page for src, page, _, _ in PAGES}
 SITE_DIR = ROOT / "docs" / "site"
 PLAYGROUND = SITE_DIR / "playground"
 # The files of the playground from web/ and zig-out/lib/.
-WEB_FILES = ["ztcl.mjs", "ztcl-worker.mjs", "ztcl-threads.mjs", "ztcl-thread-worker.mjs", "ztcl-shell.mjs"]
+WEB_FILES = ["ztcl.mjs", "ztcl-worker.mjs", "ztcl-threads.mjs", "ztcl-thread-worker.mjs", "ztcl-shell.mjs", "ztcl-web.mjs", "webidl-table.mjs"]
 WASM_FILES = ["ztcl.wasm", "ztcl-threads.wasm", "ztcl-async.wasm", "ztcl-shell.wasm", "ztcl-host.wasm"]
 # The HTML pages of docs/site and the page folder of each.
 HTML_PAGES = [(SITE_DIR / "index.html", ""), (PLAYGROUND / "index.html", "playground/"), (SITE_DIR / "try" / "index.html", "try/")]
