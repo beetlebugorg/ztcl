@@ -34,7 +34,7 @@ The two paths use one implementation of each slot. `src/cext/obj.zig` has the ob
 | Results | 8 | 8 of 8, and `Tcl_AppendElement` (shared) | 8 of 8, and `Tcl_AppendElement` (shared) |
 | Commands | 3 | 3 of 3, and `Tcl_DeleteCommandFromToken` (shared) | 3 of 3, and `Tcl_DeleteCommandFromToken` (shared) |
 | Scripts | 6 | 6 of 6, and the rest of the area scripts and results (shared) | 6 of 6, and the rest of the area scripts and results (shared) |
-| Variables | 2 | 2 of 2, and 6 more get and set slots (shared) | 2 of 2, and 6 more get and set slots (shared) |
+| Variables | 2 | 2 of 2, and the rest of the area variables (shared, `src/cext/vars.zig`). Unset and upvar evaluate `::unset` and `::upvar` in the frame of the command. A trace of C is a hidden command `::tcl::cext::traceN` and a `trace add variable` with it. A linked variable is a global variable with a trace that reads and writes the C memory. | as in the WebAssembly path |
 | Dynamic strings | 4 | 4 of 4, and 5 more (shared) | 4 of 4, and 5 more (shared) |
 | Packages and helpers | 5 | 5 of 5, and `Tcl_PkgProvide`, `Tcl_PkgRequire`, `Tcl_PkgPresentEx`, `Tcl_PkgPresent` (shared) | as in the WebAssembly path, and the startup slots of `pkgs.zig` |
 | Hash tables | 0 | the area hash tables (shared). `close()` of `web/ztcl.mjs` frees the interp of each package, so the delete procs of its assoc data run. | the area hash tables (shared) |
@@ -151,13 +151,13 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | errors | 25 | 25 | 25 | none |
 | interps and commands | 64 | 3 | 3 | 61 slots |
 | hash tables | 13 | 13 | 13 | none |
-| variables | 21 | 8 | 8 | 13 slots |
+| variables | 21 | 21 | 21 | none |
 | events | 35 | 0 | 0 | 35 slots |
 | namespaces | 25 | 0 | 0 | 25 slots |
 | threads | 15 | 0 | 0 | 15 slots |
 | filesystem | 63 | 1 | 1 | 62 slots |
 | zlib | 13 | 0 | 0 | 13 slots |
-| **public, all** | **630** | **394** (62%) | **389** (61%) | |
+| **public, all** | **630** | **407** (64%) | **402** (63%) | |
 | **internal** | **173** | **0** | **0** | |
 | **internal platform** | **23** | **0** | **0** | |
 | **platform** | **0** | **0** | **0** | |

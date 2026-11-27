@@ -98,7 +98,7 @@ fn fullPattern(a: std.mem.Allocator, pat: []const u8, flags: c_int) []const u8 {
 /// Evaluates the words `list` and frees them. The interp result is the
 /// same after the call, unless the command fails. `out` gets the
 /// result of a success.
-fn run(ip: *Interp, list: *std.ArrayList(*Obj), out: *?*Obj) c_int {
+pub fn run(ip: *Interp, list: *std.ArrayList(*Obj), out: *?*Obj) c_int {
     defer {
         for (list.items) |o| obj.decr(o);
         list.deinit(gpa);
