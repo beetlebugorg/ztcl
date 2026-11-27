@@ -6,7 +6,7 @@ Not yet. ztcl passes 37,413 of the 46,494 tests of the Tcl 8.6.16 suite. Most sc
 
 ## Does it support Tcl 9?
 
-No. ztcl follows Tcl 8.6. [The language](language.md#tcl-9) has the details.
+Yes, on request. ztcl follows Tcl 8.6 by default, and `ztcl --tcl 9.1` follows Tcl 9.1: the new list commands, strict encodings, decimal numbers with a leading zero, and variable lookup in namespaces. [Tcl 9.1](tcl91.md) has the parts that are done and the parts that are not done yet.
 
 ## Why is `open` an invalid command?
 
