@@ -1,4 +1,4 @@
-//! The executable region of the JIT on Linux and on arm64 macOS.
+//! The executable region of the JIT on Linux, on Windows, and on arm64 macOS.
 //!
 //! On Linux, the region is one reservation of address space with no
 //! access, with one more page with no access before it and after it.
@@ -36,6 +36,13 @@
 //! executable. macOS accepts `mprotect` on a `MAP_JIT` mapping that
 //! started without the execute right.
 //!
+//! On Windows, the region is one reservation with no access
+//! (`VirtualAlloc` with `MEM_RESERVE`), with one more page in front for
+//! the unwind info. `append` has the three steps of Linux: a commit with
+//! read and write, the copy, and `VirtualProtect` to read and execute,
+//! then `FlushInstructionCache`. Each function also gets an entry in the
+//! growable function table of the region (`win.Unwind`).
+//!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
@@ -44,6 +51,95 @@ const linux = std.os.linux;
 const c = std.c;
 
 const darwin = builtin.os.tag == .macos and builtin.cpu.arch == .aarch64;
+
+const on_win = builtin.os.tag == .windows;
+const cc = @import("../jit.zig").cc;
+
+/// The calls of the Windows form: a reservation with no access, then for
+/// each function a commit with read and write, the copy, a protection
+/// change to read and execute, and a flush of the instruction cache.
+const win = struct {
+    const mem_commit: u32 = 0x1000;
+    const mem_reserve: u32 = 0x2000;
+    const mem_release: u32 = 0x8000;
+    const page_noaccess: u32 = 0x01;
+    const page_readwrite: u32 = 0x04;
+    const page_execute_read: u32 = 0x20;
+    extern "kernel32" fn VirtualAlloc(at: ?*anyopaque, size: usize, kind: u32, protect: u32) callconv(.winapi) ?*anyopaque;
+    extern "kernel32" fn VirtualProtect(at: *anyopaque, size: usize, protect: u32, old: *u32) callconv(.winapi) i32;
+    extern "kernel32" fn VirtualFree(at: *anyopaque, size: usize, kind: u32) callconv(.winapi) i32;
+    extern "kernel32" fn FlushInstructionCache(process: *anyopaque, at: *const anyopaque, size: usize) callconv(.winapi) i32;
+    extern "kernel32" fn GetCurrentProcess() callconv(.winapi) *anyopaque;
+    extern "ntdll" fn RtlAddGrowableFunctionTable(table: *?*anyopaque, entries: [*]RuntimeFunction, count: u32, max: u32, base: usize, end: usize) callconv(.winapi) i32;
+    extern "ntdll" fn RtlGrowFunctionTable(table: *anyopaque, count: u32) callconv(.winapi) void;
+    extern "ntdll" fn RtlDeleteGrowableFunctionTable(table: *anyopaque) callconv(.winapi) void;
+    const page_readonly: u32 = 0x02;
+
+    const RuntimeFunction = extern struct { begin: u32, end: u32, unwind: u32 };
+
+    /// The offset of the unwind info in the unwind page.
+    const info_at = 16;
+
+    /// The unwind info of each function of the region: the frame of the
+    /// prologue of tier 1 (`push rbp`, `mov rbp, rsp`, the pushes of
+    /// `abi.saved`, and the context slot), which the code of tier 2
+    /// shares. `rbp` is the frame register at 48 bytes above the context
+    /// slot, so the unwinder finds `rsp` from `rbp` at each point of the
+    /// body, also while a helper call has pushed registers. The codes
+    /// undo the context slot, then pop `r15` to `rbx` and `rbp`. The
+    /// prologue has size 0: the prologue makes no call and cannot fault
+    /// past its pushes, so each point where an unwind starts is past it.
+    /// A function with no frame, as in the tests, gets the same info,
+    /// and no unwind starts in one.
+    const info = [_]u8{
+        0x01, 0x00, 0x08, 0x35, // version 1, no prologue, 8 codes, rbp at offset 3 * 16
+        0x00, 0x03, // UWOP_SET_FPREG
+        0x00, 0x02, // UWOP_ALLOC_SMALL 8: the context slot
+        0x00, 0xF0, 0x00, 0xE0, 0x00, 0xD0, 0x00, 0xC0, // UWOP_PUSH_NONVOL r15, r14, r13, r12
+        0x00, 0x30, 0x00, 0x50, // UWOP_PUSH_NONVOL rbx, rbp
+    };
+
+    /// The growable function table of a region, so exceptions, stack
+    /// traces, and debuggers walk through JIT frames.
+    const Unwind = struct {
+        table: *anyopaque,
+        entries: [*]RuntimeFunction,
+        count: u32 = 0,
+        max: u32,
+
+        fn init(start: [*]u8, total: usize, max_fns: usize) ?Unwind {
+            const page = std.heap.pageSize();
+            if (VirtualAlloc(start, page, mem_commit, page_readwrite) == null) return null;
+            @memcpy(start[info_at..][0..info.len], &info);
+            var old: u32 = 0;
+            if (VirtualProtect(start, page, page_readonly, &old) == 0) return null;
+            const max: u32 = @intCast(max_fns);
+            const raw = VirtualAlloc(null, @as(usize, max) * @sizeOf(RuntimeFunction), mem_commit | mem_reserve, page_readwrite) orelse return null;
+            const entries: [*]RuntimeFunction = @ptrCast(@alignCast(raw));
+            var table: ?*anyopaque = null;
+            if (RtlAddGrowableFunctionTable(&table, entries, 0, max, @intFromPtr(start), @intFromPtr(start) + total) != 0 or table == null) {
+                _ = VirtualFree(raw, 0, mem_release);
+                return null;
+            }
+            return .{ .table = table.?, .entries = entries, .max = max };
+        }
+
+        /// Adds the function at `at`. The functions come in the order of
+        /// their addresses, as the table needs.
+        fn add(u: *Unwind, start: [*]u8, at: [*]u8, len: usize) void {
+            if (u.count == u.max) return;
+            const off: u32 = @intCast(at - start);
+            u.entries[u.count] = .{ .begin = off, .end = off + @as(u32, @intCast(len)), .unwind = info_at };
+            u.count += 1;
+            RtlGrowFunctionTable(u.table, u.count);
+        }
+
+        fn deinit(u: *Unwind) void {
+            RtlDeleteGrowableFunctionTable(u.table);
+            _ = VirtualFree(u.entries, 0, mem_release);
+        }
+    };
+};
 
 /// The fill byte: `int3` on x86-64, and the zero word of `udf` on arm64.
 pub const trap_byte: u8 = if (builtin.cpu.arch == .aarch64) 0x00 else 0xCC;
@@ -99,11 +195,14 @@ pub const Region = struct {
     /// True for the page form on arm64 macOS: one function on its own
     /// pages, with `mprotect` for each one.
     pages: bool = false,
+    /// The function table of the region on Windows.
+    unwind: if (on_win) win.Unwind else void = if (on_win) undefined else {},
 
     /// Reserves `limit` bytes of address space with no access, plus one
     /// page with no access before and after. Null when the system refuses.
     pub fn init(limit: usize) ?Region {
         if (comptime darwin) return initDarwin(limit);
+        if (comptime on_win) return initWindows(limit);
         if (comptime builtin.os.tag != .linux) return null;
         const page = std.heap.pageSize();
         const usable = std.mem.alignForward(usize, @max(limit, page), page);
@@ -112,6 +211,52 @@ pub const Region = struct {
         if (linux.errno(rc) != .SUCCESS) return null;
         const start: [*]u8 = @ptrFromInt(rc);
         return .{ .base = start + page, .limit = usable, .page = page };
+    }
+
+    /// A reservation with no access: a page for the unwind info, the
+    /// guard page, the usable pages, and the guard page. The guard pages
+    /// and the free pages stay reserved and never get a commit. The
+    /// unwind page is read-only after its write, and the function table
+    /// of the region (`win.Unwind`) names each function that `append`
+    /// adds.
+    fn initWindows(limit: usize) ?Region {
+        const page = std.heap.pageSize();
+        const usable = std.mem.alignForward(usize, @max(limit, page), page);
+        const total = std.math.add(usize, usable, 3 * page) catch return null;
+        if (total > std.math.maxInt(u32)) return null; // The table holds 32-bit offsets.
+        const p = win.VirtualAlloc(null, total, win.mem_reserve, win.page_noaccess) orelse return null;
+        const start: [*]u8 = @ptrCast(p);
+        var r: Region = .{ .base = start + 2 * page, .limit = usable, .page = page };
+        r.unwind = win.Unwind.init(start, total, usable / page) orelse {
+            _ = win.VirtualFree(start, 0, win.mem_release);
+            return null;
+        };
+        return r;
+    }
+
+    /// The three steps on Windows: a commit with read and write, the copy,
+    /// and read and execute, with the flush of the instruction cache.
+    fn appendWindows(r: *Region, code: []const u8) ?[]const u8 {
+        const len = std.mem.alignForward(usize, code.len, r.page);
+        const end = std.math.add(usize, r.used, len) catch return null;
+        if (end > r.limit) return null;
+        const at = r.base + r.used;
+        if (win.VirtualAlloc(at, len, win.mem_commit, win.page_readwrite) == null) {
+            r.stopped = true;
+            return null;
+        }
+        @memcpy(at[0..code.len], code);
+        @memset(at[code.len..len], trap_byte);
+        var old: u32 = 0;
+        if (win.VirtualProtect(at, len, win.page_execute_read, &old) == 0) {
+            _ = win.VirtualProtect(at, len, win.page_noaccess, &old);
+            r.stopped = true;
+            return null;
+        }
+        _ = win.FlushInstructionCache(win.GetCurrentProcess(), at, len);
+        r.unwind.add(r.base - 2 * r.page, at, code.len);
+        r.used = end;
+        return at[0..code.len];
     }
 
     fn initDarwin(limit: usize) ?Region {
@@ -159,7 +304,10 @@ pub const Region = struct {
 
     pub fn deinit(r: *Region) void {
         const start: [*]align(std.heap.page_size_min) u8 = @alignCast(r.base - r.page);
-        if (comptime darwin) _ = c.munmap(start, r.limit + 2 * r.page) else _ = linux.munmap(start, r.limit + 2 * r.page);
+        if (comptime on_win) {
+            r.unwind.deinit();
+            _ = win.VirtualFree(r.base - 2 * r.page, 0, win.mem_release);
+        } else if (comptime darwin) _ = c.munmap(start, r.limit + 2 * r.page) else _ = linux.munmap(start, r.limit + 2 * r.page);
         r.* = undefined;
     }
 
@@ -171,6 +319,7 @@ pub const Region = struct {
         r.appends += 1;
         if (r.fail_second and r.appends % 2 == 0) return null;
         if (comptime darwin) return if (r.pages) r.appendPages(code) else r.appendDarwin(code);
+        if (comptime on_win) return r.appendWindows(code);
         const len = std.mem.alignForward(usize, code.len, r.page);
         const end = std.math.add(usize, r.used, len) catch return null;
         if (end > r.limit) return null;
@@ -259,7 +408,7 @@ pub fn runConst(code: []const u8, want: u32) bool {
     var r = Region.init(std.heap.pageSize()) orelse return false;
     defer r.deinit();
     const f = r.append(code) orelse return false;
-    const func: *const fn () callconv(.c) u32 = @ptrCast(@alignCast(f.ptr));
+    const func: *const fn () callconv(cc) u32 = @ptrCast(@alignCast(f.ptr));
     checkClosed();
     return func() == want;
 }

@@ -67,10 +67,18 @@ pub const EnterCtx = extern struct {
     func: *anyopaque,
 };
 
-/// True when this target has a backend: x86-64 Linux and arm64 macOS.
-/// Each backend has tier 1 and tier 2.
+/// True when this target has a backend: x86-64 Linux and Windows, and
+/// arm64 macOS. Each backend has tier 1 and tier 2.
 pub const backend = (builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux) or
+    (builtin.cpu.arch == .x86_64 and builtin.os.tag == .windows) or
     (builtin.cpu.arch == .aarch64 and builtin.os.tag == .macos);
+
+/// The calling convention of each call between Zig and the machine code:
+/// the entry, the helpers, and the tier changes. On Windows it is the
+/// System V ABI of x86-64 too, so the machine code has one convention.
+/// Zig saves `rsi`, `rdi`, and `xmm6` to `xmm15` around such a call,
+/// which the Microsoft ABI keeps and System V does not.
+pub const cc: std.builtin.CallingConvention = if (builtin.os.tag == .windows) .{ .x86_64_sysv = .{} } else .c;
 const t2_arm = builtin.cpu.arch == .aarch64;
 const tier2_be = if (t2_arm) @import("jit/tier2_a64.zig") else tier2_x64;
 
@@ -551,7 +559,7 @@ inline fn call(it: *Interp, f: *Fn, code: *vm.Code, frame: *interp.Frame, stack:
         .counters = f.counters.ptr,
         .func = f,
     };
-    const func: *const fn (*EnterCtx) callconv(.c) u32 = @ptrCast(@alignCast(f.base));
+    const func: *const fn (*EnterCtx) callconv(cc) u32 = @ptrCast(@alignCast(f.base));
     mem.checkClosed();
     const status = func(&ctx);
     pc.* = ctx.pc;
@@ -625,7 +633,7 @@ const verify = @import("jit/verify.zig");
 /// tier 2 code, or 0. The address comes from the record of the loop in
 /// the function of the context, so it is the entry of a tier 2 function
 /// of this loop.
-pub fn tierUp(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) usize {
+pub fn tierUp(ctx: *EnterCtx, pc: u32, sp: u32) callconv(cc) usize {
     _ = sp;
     const s = ctx.it.jit orelse return 0;
     const f: *Fn = @ptrCast(@alignCast(ctx.func));
@@ -686,7 +694,7 @@ pub const min_passes = 16;
 /// not force, the loop is dropped: tier 1 no longer counts its passes.
 /// After an exit at a loop head, tier 1 runs one pass of that loop
 /// before it calls `tier_up` again.
-pub fn resumeAt(ctx: *EnterCtx, pc: u32, sp: u32, kind: u32) callconv(.c) usize {
+pub fn resumeAt(ctx: *EnterCtx, pc: u32, sp: u32, kind: u32) callconv(cc) usize {
     const f: *Fn = @ptrCast(@alignCast(ctx.func));
     const k = kind & 0xFFFF;
     if (kind & (tier2_x64.exit_guard | tier2_x64.exit_forced) != 0) {

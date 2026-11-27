@@ -275,3 +275,69 @@ test "isolate on Windows: the JIT runs in an AppContainer" {
     try t.expect(std.mem.indexOf(u8, log, "144") != null);
     try t.expect(std.mem.indexOf(u8, log, "jit compiled=1") != null);
 }
+
+const StartupInfo = extern struct {
+    cb: u32 = @sizeOf(StartupInfoEx),
+    reserved: ?*anyopaque = null,
+    desktop: ?*anyopaque = null,
+    title: ?*anyopaque = null,
+    x: u32 = 0,
+    y: u32 = 0,
+    w: u32 = 0,
+    h: u32 = 0,
+    cols: u32 = 0,
+    rows: u32 = 0,
+    fill: u32 = 0,
+    flags: u32 = 0,
+    show: u16 = 0,
+    reserved2: u16 = 0,
+    reserved3: ?*anyopaque = null,
+    stdin: ?*anyopaque = null,
+    stdout: ?*anyopaque = null,
+    stderr: ?*anyopaque = null,
+};
+const StartupInfoEx = extern struct { info: StartupInfo = .{}, attrs: ?*anyopaque = null };
+const ProcessInfo = extern struct { process: *anyopaque, thread: *anyopaque, pid: u32, tid: u32 };
+extern "kernel32" fn CreateProcessW(app: ?[*:0]const u16, cmd: ?[*:0]u16, pa: ?*anyopaque, ta: ?*anyopaque, inherit: i32, flags: u32, env: ?*anyopaque, cwd: ?[*:0]const u16, si: *StartupInfoEx, pi: *ProcessInfo) callconv(.winapi) i32;
+extern "kernel32" fn InitializeProcThreadAttributeList(list: ?*anyopaque, count: u32, flags: u32, size: *usize) callconv(.winapi) i32;
+extern "kernel32" fn UpdateProcThreadAttribute(list: *anyopaque, flags: u32, attr: usize, value: *const anyopaque, size: usize, prev: ?*anyopaque, ret: ?*usize) callconv(.winapi) i32;
+extern "kernel32" fn DeleteProcThreadAttributeList(list: *anyopaque) callconv(.winapi) void;
+extern "kernel32" fn WaitForSingleObject(h: *anyopaque, ms: u32) callconv(.winapi) u32;
+extern "kernel32" fn GetExitCodeProcess(h: *anyopaque, code: *u32) callconv(.winapi) i32;
+
+test "the JIT falls back to the interpreter under Arbitrary Code Guard" {
+    if (!on or comptime !tcl.jit.built) return error.SkipZigTest;
+    var f: Fixture = undefined;
+    if (!try f.init("jit-acg")) return error.SkipZigTest;
+    defer f.deinit();
+    const a = f.it.alloc();
+    // The runner, with the policy of Windows that refuses each page of
+    // new code (PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON).
+    const policy: u64 = 1 << 36;
+    var size: usize = 0;
+    _ = InitializeProcThreadAttributeList(null, 1, 0, &size);
+    const attrs = try a.alignedAlloc(u8, .of(usize), size);
+    try t.expect(InitializeProcThreadAttributeList(attrs.ptr, 1, 0, &size) != 0);
+    defer DeleteProcThreadAttributeList(attrs.ptr);
+    try t.expect(UpdateProcThreadAttribute(attrs.ptr, 0, 0x20007, &policy, @sizeOf(u64), null, null) != 0);
+    const script = try ev(&f.it, "file normalize bench/fib.tcl");
+    const line = try std.fmt.allocPrint(a, "\"{s}\" --jit --jit-threshold 0 --jit-stats \"{s}\"", .{ f.exe, script });
+    const line_w = try std.unicode.wtf8ToWtf16LeAllocZ(a, line);
+    var si: StartupInfoEx = .{ .attrs = attrs.ptr };
+    si.info.flags = 0x100; // STARTF_USESTDHANDLES
+    si.info.stdout = f.log;
+    si.info.stderr = f.log;
+    var pi: ProcessInfo = undefined;
+    // EXTENDED_STARTUPINFO_PRESENT and CREATE_NO_WINDOW.
+    try t.expect(CreateProcessW(null, line_w.ptr, null, null, 1, 0x00080000 | 0x08000000, null, null, &si, &pi) != 0);
+    defer _ = CloseHandle(pi.process);
+    defer _ = CloseHandle(pi.thread);
+    try t.expectEqual(@as(u32, 0), WaitForSingleObject(pi.process, 60_000));
+    var code: u32 = 1;
+    _ = GetExitCodeProcess(pi.process, &code);
+    try t.expectEqual(@as(u32, 0), code);
+    // The script runs in the interpreter, and no function compiles.
+    const out = try f.readRoot("log.txt");
+    try t.expect(std.mem.indexOf(u8, out, "75025") != null);
+    try t.expect(std.mem.indexOf(u8, out, "jit compiled=1") == null);
+}
