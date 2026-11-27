@@ -247,18 +247,46 @@ pub const Regex = struct {
     info: u16,
     /// The characters that can start a match, or null.
     start: ?*const Start = null,
-    /// True when the program has no assert and no lookahead, so the
-    /// simulation can use a DFA (`Dfa`).
+    /// True when the program has no lookahead and only the asserts of
+    /// the start and the end of the text, so the simulation can use a
+    /// DFA (`Dfa`).
     dfa: bool = false,
+    /// True when the program has an assert of the end of the text. Then
+    /// the step on the last character has its own transitions.
+    dfa_end: bool = false,
+    /// True when the pattern can match the empty string (`canBeEmpty`).
+    empty: bool = true,
+    /// The states of the lazy DFA, made on the first search. They stay
+    /// with the pattern, so each later search uses them again. A state
+    /// depends on its thread list alone, and a transition keeps its
+    /// ticks, so a search counts the same ticks with a new DFA and with
+    /// a kept one.
+    states: ?*Dfa = null,
 };
 
-/// True when no instruction of the program depends on the position.
+/// True when no instruction of the program depends on the position,
+/// other than the asserts of the start and the end of the text. After
+/// the first position of a search, the asserts of the start are false,
+/// and the asserts of the end are true only after the last character.
 fn dfaOk(prog: []const Inst) bool {
     for (prog) |i| switch (i) {
-        .assert, .look => return false,
+        .assert => |a| switch (a) {
+            .bol, .eol, .text_start, .text_end => {},
+            else => return false,
+        },
+        .look => return false,
         else => {},
     };
     return true;
+}
+
+/// True when the program has an assert of the end of the text.
+fn hasEndAssert(prog: []const Inst) bool {
+    for (prog) |i| switch (i) {
+        .assert => |a| if (a == .eol or a == .text_end) return true,
+        else => {},
+    };
+    return false;
 }
 
 /// The first step of a match. The threads from instruction 0 do not
@@ -1159,7 +1187,7 @@ fn compileNew(it: *Interp, pat: []const u8, opts: Options) Error!*Regex {
     if (root.pref == .lazy) info |= Info.shortest;
     if (canBeEmpty(root)) info |= Info.emptymatch;
     const re = try it.alloc().create(Regex);
-    re.* = .{ .prog = e.prog.items, .root = root, .ncap = p.ncap, .nodes = p.nodes, .opts = p.opts, .shortest = root.pref == .lazy, .has_backref = p.has_backref, .info = info, .start = try startOf(it.alloc(), e.prog.items), .dfa = dfaOk(e.prog.items) };
+    re.* = .{ .prog = e.prog.items, .root = root, .ncap = p.ncap, .nodes = p.nodes, .opts = p.opts, .shortest = root.pref == .lazy, .has_backref = p.has_backref, .info = info, .start = try startOf(it.alloc(), e.prog.items), .dfa = dfaOk(e.prog.items), .dfa_end = hasEndAssert(e.prog.items), .empty = canBeEmpty(root) };
     return re;
 }
 
@@ -1182,7 +1210,11 @@ const Dfa = struct {
     /// The state of each list, by the bytes of its instructions and ranks.
     index: std.StringHashMapUnmanaged(u32) = .empty,
     /// For each state, 256 transitions by character, `none`, or `matches`.
+    /// A program with an assert of the end has 256 more for the step on
+    /// the last character of the text.
     next: std.ArrayList(u32) = .empty,
+    /// The count of transitions of each state: 256 or 512.
+    stride: u32 = 256,
     trans: std.ArrayList(Trans) = .empty,
     /// The start position of each rank, for the current and the next state.
     starts: [2][]u32,
@@ -1204,7 +1236,7 @@ const Dfa = struct {
 /// or null. `spans` has the same positions in characters.
 pub const Matcher = struct {
     it: *Interp,
-    re: *const Regex,
+    re: *Regex,
     s: []const u8,
     /// The characters of a text that is not ASCII. Null for ASCII.
     text: ?[]const u21,
@@ -1225,12 +1257,9 @@ pub const Matcher = struct {
     frames: std.ArrayList(RepFrame) = .empty,
     /// The position where the current search started.
     from: usize = 0,
-    /// The states of the lazy DFA, made on the first search.
-    dfa: ?*Dfa = null,
-
     const RepFrame = struct { pos: usize, next: usize };
 
-    pub fn init(it: *Interp, re: *const Regex, s: []const u8) Error!Matcher {
+    pub fn init(it: *Interp, re: *Regex, s: []const u8) Error!Matcher {
         const a = it.alloc();
         var ascii = true;
         for (s) |c| {
@@ -1391,7 +1420,8 @@ pub const Matcher = struct {
     }
 
     /// `addThread`. With `dry`, the ticks go to `visits` and not to the
-    /// compute limit. A program of the DFA has no assert and no lookahead.
+    /// compute limit. A program of the DFA has no lookahead, and its
+    /// asserts depend only on the position (see `dfaOk`).
     inline fn addThreadAs(m: *Matcher, comptime dry: bool, list: []Thread, count: *usize, pc0: u32, start: u32, pos: usize, visits: *u32) Error!bool {
         var matched = false;
         m.work.clearRetainingCapacity();
@@ -1407,7 +1437,7 @@ pub const Matcher = struct {
                     try m.work.append(a, sp.second);
                     try m.work.append(a, sp.first);
                 },
-                .assert => |as| if (dry) unreachable else if (m.assertOk(as, pos)) try m.work.append(a, pc + 1),
+                .assert => |as| if (m.assertOk(as, pos)) try m.work.append(a, pc + 1),
                 .look => |l| if (dry) unreachable else if ((try m.lookRun(l.start, pos)) != l.negate) try m.work.append(a, pc + 2),
                 .match => matched = true,
                 else => {
@@ -1446,9 +1476,14 @@ pub const Matcher = struct {
         const a = m.it.alloc();
         const own = try a.dupe(u32, key);
         const id: u32 = @intCast(d.states.items.len);
-        try d.states.append(a, .{ .pcs = own[0..list.len], .ranks = own[list.len..], .nranks = nr });
-        try d.index.put(a, std.mem.sliceAsBytes(own), id);
-        try d.next.appendNTimes(a, Dfa.none, 256);
+        // The DFA stays with the pattern, so an error of the memory must
+        // leave it whole: each allocation comes before the first change.
+        try d.states.ensureUnusedCapacity(a, 1);
+        try d.next.ensureUnusedCapacity(a, d.stride);
+        try d.index.ensureUnusedCapacity(a, 1);
+        d.states.appendAssumeCapacity(.{ .pcs = own[0..list.len], .ranks = own[list.len..], .nranks = nr });
+        d.index.putAssumeCapacityNoClobber(std.mem.sliceAsBytes(own), id);
+        d.next.appendNTimesAssumeCapacity(Dfa.none, d.stride);
         return id;
     }
 
@@ -1458,38 +1493,46 @@ pub const Matcher = struct {
     /// Gives null when the text ends with no match. Else `m.cur` has the
     /// threads of the returned position, with the threads of the new
     /// start, and the simulation goes on from there. The caller makes
-    /// sure that the program has a `Start`, so the threads of a new start
-    /// do not reach `match`.
+    /// sure that the threads of a new start do not reach `match`: the
+    /// program has a `Start`, or the pattern cannot match the empty
+    /// string.
     fn runDfa(m: *Matcher, from: usize) Error!?Hand {
         const a = m.it.alloc();
-        const d = m.dfa orelse blk: {
+        const d = m.re.states orelse blk: {
             const size = m.re.prog.len + 1;
             const nd = try a.create(Dfa);
-            nd.* = .{ .starts = .{ try a.alloc(u32, size), try a.alloc(u32, size) }, .buf = try a.alloc(u32, 2 * size) };
-            m.dfa = nd;
+            nd.* = .{ .starts = .{ try a.alloc(u32, size), try a.alloc(u32, size) }, .buf = try a.alloc(u32, 2 * size), .stride = if (m.re.dfa_end) 512 else 256 };
+            m.re.states = nd;
             break :blk nd;
         };
-        const st = m.re.start.?;
+        // With a `Start`, state 0 is the list of a new start alone, and
+        // a search skips to the next start candidate from it. With no
+        // `Start`, the first list depends on the asserts at `from`, so it
+        // gets its state by its threads.
+        const start = m.re.start;
         var i = from;
         m.nextGen();
         // The first threads, as in `simulate`.
-        const k0 = m.nextStart(st, i);
-        if (k0 > i) {
-            try m.ticks(@as(u64, k0 - i) * st.cost);
-            i = k0;
-            m.nextGen();
+        if (start) |st| {
+            const k0 = m.nextStart(st, i);
+            if (k0 > i) {
+                try m.ticks(@as(u64, k0 - i) * st.cost);
+                i = k0;
+                m.nextGen();
+            }
         }
         var n: usize = 0;
         _ = try m.addThread(m.cur, &n, 0, @intCast(i), i);
         var starts = d.starts[0];
         var nstarts = d.starts[1];
-        // The first state of each DFA is the list of a new start alone.
         var s: u32 = 0;
-        if (d.states.items.len == 0) {
+        if (start == null) {
+            s = (try m.intern(d, m.cur[0..n], starts)) orelse return .{ .i = i, .n = n };
+        } else if (d.states.items.len == 0) {
             _ = (try m.intern(d, m.cur[0..n], starts)) orelse return .{ .i = i, .n = n };
         } else starts[0] = @intCast(i);
         while (true) {
-            if (s == 0) {
+            if (s == 0) if (start) |st| {
                 // The threads of one start alone: each position up to the
                 // next start candidate adds `st.cost` ticks, as in `simulate`.
                 const k = m.nextStart(st, i);
@@ -1498,11 +1541,14 @@ pub const Matcher = struct {
                     i = k;
                     starts[0] = @intCast(k);
                 }
-            }
+            };
             if (i >= m.n) return null;
             const c = m.ch(i);
+            // The step on the last character has its own transitions when
+            // an assert of the end can be true after it.
+            const at: usize = if (m.re.dfa_end and i + 1 == m.n) 256 else 0;
             if (c < 256) {
-                const t = d.next.items[s * 256 + c];
+                const t = d.next.items[s * d.stride + at + c];
                 if (t == Dfa.matches) {
                     const state = d.states.items[s];
                     for (state.pcs, state.ranks, m.cur[0..state.pcs.len]) |pc, r, *th| th.* = .{ .pc = pc, .start = starts[r] };
@@ -1534,11 +1580,16 @@ pub const Matcher = struct {
                 };
                 if (!ok) continue;
                 if (try m.addThreadAs(true, m.nxt, &nn, t.pc + 1, t.start, i + 1, &visits)) {
-                    if (c < 256) d.next.items[s * 256 + c] = Dfa.matches;
+                    if (c < 256) d.next.items[s * d.stride + at + c] = Dfa.matches;
                     return .{ .i = i, .n = ncur };
                 }
             }
-            _ = try m.addThreadAs(true, m.nxt, &nn, 0, @intCast(i + 1), i + 1, &visits);
+            if (try m.addThreadAs(true, m.nxt, &nn, 0, @intCast(i + 1), i + 1, &visits)) {
+                // Only a pattern that can match the empty string gets
+                // here, and `simulate` gives it no DFA. The simulation
+                // makes the same step again.
+                return .{ .i = i, .n = ncur };
+            }
             try m.ticks(visits);
             const ns = (try m.intern(d, m.nxt[0..nn], nstarts)) orelse {
                 std.mem.swap([]Thread, &m.cur, &m.nxt);
@@ -1549,8 +1600,9 @@ pub const Matcher = struct {
                 for (from_ranks, nstarts[0..from_ranks.len]) |*f, v| {
                     f.* = if (v == i + 1) Dfa.fresh else @intCast(std.mem.indexOfScalar(u32, starts[0..state.nranks], v).?);
                 }
-                try d.trans.append(a, .{ .to = ns, .ticks = visits, .from = from_ranks });
-                d.next.items[s * 256 + c] = @intCast(d.trans.items.len - 1);
+                try d.trans.ensureUnusedCapacity(a, 1);
+                d.trans.appendAssumeCapacity(.{ .to = ns, .ticks = visits, .from = from_ranks });
+                d.next.items[s * d.stride + at + c] = @intCast(d.trans.items.len - 1);
             }
             std.mem.swap([]u32, &starts, &nstarts);
             s = ns;
@@ -1566,7 +1618,7 @@ pub const Matcher = struct {
         var i = from;
         // True when `cur` has the threads of the new start at `i`.
         var added = false;
-        if (m.re.dfa and m.re.start != null) {
+        if (m.re.dfa and (m.re.start != null or !m.re.empty)) {
             const h = (try m.runDfa(from)) orelse return null;
             i = h.i;
             ncur = h.n;
