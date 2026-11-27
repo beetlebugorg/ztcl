@@ -356,7 +356,7 @@ fn ztcl_allow_plain(h: *Handle, bits: u32) callconv(.c) i32 {
     if (bits & ~file != 0) return 2;
     if (bits == 0 or h.files.on) return 0;
     h.files = .{ .payload = payload(), .on = true };
-    wasmfiles.Commands(filesOf, gpa).register(&h.it) catch return 1;
+    wasmfiles.Commands(filesOf, gpa, false).register(&h.it) catch return 1;
     return 0;
 }
 

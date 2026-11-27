@@ -26,8 +26,12 @@
 //!
 //! A folder is each prefix of a name that ends at a slash. `glob` matches
 //! each part of a name with `string match`, so `*` stops at a slash.
-//! The host turns the commands on with the `file` capability. The full
-//! virtual file system of issue #40 replaces this table.
+//! The host turns the commands on with the `file` capability. With
+//! `writable` false, as in ztcl.wasm, the files are read-only, as the
+//! mount of a native program of `ztcl build` is: `open` for writing
+//! gives `read-only file system`, and the commands for writes and pipes
+//! are absent. The shell of the site sets `writable`. The full virtual
+//! file system of issue #40 replaces this table.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -179,7 +183,7 @@ fn parseAccess(m: []const u8) ?Access {
 }
 
 /// The commands for the state that `stateOf` gives for an interpreter.
-pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.Allocator) type {
+pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.Allocator, comptime writable: bool) type {
     return struct {
         const soft: interp.SoftChans = .{ .puts = putsTo, .ready = ready, .serve = serve };
 
@@ -191,6 +195,7 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             try it.register("eof", eof);
             try it.register("close", close);
             try it.register("glob", glob);
+            if (comptime !writable) return;
             try it.register("flush", flush);
             try it.register("fblocked", fblocked);
             try it.register("fconfigure", fconfigure);
@@ -257,13 +262,16 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             const path = try it.str(argv[1]);
             const mode = if (argv.len >= 3) try it.str(argv[2]) else "r";
             const acc = parseAccess(mode) orelse return it.fail("illegal access mode \"{s}\"", .{mode});
+            if (comptime !writable) {
+                if (acc.write) return it.failCode("POSIX EROFS {read-only file system}", "couldn't open \"{s}\": read-only file system", .{path});
+            }
             const s = stateOf(it);
             var buf: [1024]u8 = undefined;
             const name = normalize(path, &buf) orelse {
                 if (!acc.write) return notFound(it, "open", path);
                 return it.failCode("POSIX EACCES {permission denied}", "couldn't open \"{s}\": permission denied", .{path});
             };
-            if (!acc.write) {
+            if (!writable or !acc.write) {
                 if (s.files.get(name)) |f| {
                     return .{ .str = try newChan(it, "file", .{ .name = "", .file = f }) };
                 }
@@ -640,7 +648,7 @@ test "glob gives the files and the folders of the bundle" {
     var st: State = .{ .payload = p, .on = true };
     defer st.deinit(a);
     test_state = &st;
-    try Commands(testState, a).register(&it);
+    try Commands(testState, a, true).register(&it);
     const cases = [_][2][]const u8{
         .{ "glob -nocomplain *", "app.tcl data" },
         .{ "glob -nocomplain -types d -- d*", "data" },
