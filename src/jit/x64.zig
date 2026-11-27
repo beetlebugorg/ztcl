@@ -452,6 +452,52 @@ pub const Asm = struct {
         try s.reserve();
         try s.op(null, false, &.{0xFF}, 2, rmR(dst), .none);
     }
+    // ---- Generic forms for the wasm JIT (src/wasmrt/jit_x64.zig) ----
+
+    /// An instruction with a register in the ModRM field: an optional
+    /// prefix, REX.W, the opcode bytes, and the `reg` field.
+    pub fn insR(s: *Asm, prefix: ?u8, w: bool, opcode: []const u8, reg: u4, rm: Reg) Allocator.Error!void {
+        try s.reserve();
+        try s.op(prefix, w, opcode, reg, rmR(rm), .none);
+    }
+
+    /// The same with a memory operand.
+    pub fn insM(s: *Asm, prefix: ?u8, w: bool, opcode: []const u8, reg: u4, m: Mem) Allocator.Error!void {
+        try s.reserve();
+        try s.op(prefix, w, opcode, reg, rmM(m), .none);
+    }
+
+    /// Bytes as they are.
+    pub fn raw(s: *Asm, b: []const u8) Allocator.Error!void {
+        try s.reserve();
+        try s.put(b);
+    }
+
+    /// `call rel32` to a label.
+    pub fn callL(s: *Asm, l: Label) Allocator.Error!void {
+        try s.reserve();
+        try s.byte(0xE8);
+        try s.rel32(l);
+    }
+
+    /// `lea dst, [rip + l]`.
+    pub fn leaRip(s: *Asm, dst: Reg, l: Label) Allocator.Error!void {
+        try s.reserve();
+        try s.rex(true, num(dst), .{ .reg = 0 }, .none);
+        try s.put(&.{ 0x8D, 0x05 | (@as(u8, num(dst)) & 7) << 3 });
+        try s.rel32(l);
+    }
+
+    /// `mov dst, imm64`.
+    pub fn movRI64(s: *Asm, dst: Reg, v: u64) Allocator.Error!void {
+        try s.reserve();
+        try s.rex(true, 0, .{ .reg = num(dst) }, .none);
+        try s.byte(0xB8 + (@as(u8, num(dst)) & 7));
+        var b: [8]u8 = undefined;
+        std.mem.writeInt(u64, &b, v, .little);
+        try s.put(&b);
+    }
+
     pub fn ret(s: *Asm) Allocator.Error!void {
         try s.reserve();
         try s.byte(0xC3);

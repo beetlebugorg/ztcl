@@ -18,7 +18,25 @@ The module is in the native builds only: `src/modules.zig` leaves it out of each
 ## Engine tiers
 
 1. The interpreter. The internal code is an array of instructions of 16 bytes: an opcode, a 32-bit immediate, and a 64-bit immediate. A branch has the index of its target and the height and the arity of its label, so a branch moves its values with no search. `block`, `loop`, and `end` give no instruction. The values of all frames are on one stack of 64-bit slots, and a call of a wasm function puts no frame on the native stack.
-2. The JIT tier (next). Hot functions go through the code generators of `src/jit/` for x86-64 and arm64. A function is hot after a count of calls and loop passes. The tier keeps the compute units and the traps of the interpreter exactly, and `docs/dev/jit-review.md` is the review of it. The speed goal is a number against wasmtime on the same programs.
+2. The JIT tier (`src/wasmrt/jit_x64.zig`, x86-64 System V). See [The JIT](#the-jit).
+3. Later: an optimizing tier for hot functions, when the numbers of the baseline call for it. A function is hot after a count of calls and loop passes. The tier keeps the compute units and the traps of the interpreter exactly, and `docs/dev/jit-review.md` is its review.
+
+## The JIT
+
+The baseline compiler reads the internal code of a module once and writes one buffer of machine code for all its functions into the executable region of `src/jit/mem.zig` (W^X), with the assembler of `src/jit/x64.zig`. It keeps the frame layout of the interpreter: `module.zig` records the height of the stack before each instruction, so the JIT addresses the same slots. A call to a function of the same instance is a native `call`; `call_indirect` checks the table and the type in a helper and then calls the code directly. The integer, memory, local, global, select, branch, and `f64` arithmetic instructions are inline. Each other instruction calls `exec.simple`, the same code that the interpreter inlines, so the two tiers give the same values and NaN bits. Traps restore the native stack of the entry and return a code.
+
+The limits stay exact: one compute unit at the entry of a function (the interpreter counts it at the call) and one at each loop start, the same depth of 20,000 frames checked at the same point, and an explicit bounds check before each access of memory. Two cases nest runs of the store and can differ from the interpreter at their limits: a recursion through another instance or a host function (100 nested runs), and the native stack of nested runs, which share one limit of 1 MiB.
+
+Checks: the spec suite of 2.0 runs with and without the JIT (27,412 commands, 0 failures each). `zig build wasm-fuzz` writes random valid modules (integer and float arithmetic, traps, loops, loads and stores at the end of memory, `memory.grow`, calls) and compares the results, the traps, the compute units left, and the bytes of memory: seeds 1 to 5 gave 52,024 calls, 19,511 traps, and 0 differences. The WASI programs and the C packages run with the JIT.
+
+Numbers on 2026-11-27, x86-64 Linux under a load average of 16 (medians of 3 runs, whole process):
+
+| Program | Native | wasmtime (Cranelift) | wasmtime (Winch) | ztcl interpreter | ztcl JIT |
+|---|---:|---:|---:|---:|---:|
+| fib(35) and a sieve of 2,000,000 (C) | 0.057 s | 0.094 s | 0.186 s | 3.811 s | 0.420 s |
+| SQLite package: 20,000 inserts in one transaction | | | | 2,173 ms | 234 ms |
+
+The JIT is 9 times faster than the interpreter and 2.3 times the time of the Winch baseline, above the goal of 1.5 times. Next: keep the top of the value stack in registers, inline the `f32` and the compare instructions, and reserve 4 GiB plus a guard for each memory, so that loads and stores need no bounds check. Then arm64 (`src/jit/a64.zig`), the Windows ABI, and SIMD.
 
 ## Memory model
 
@@ -49,7 +67,8 @@ WASI 0.2 and 0.3 (the component model) come after the JIT tier. The canonical AB
 | 3. Tcl API and the module page | Done: `ztcl::wasm`, `docs/modules/wasm.md`. |
 | 4. WASI preview 1 | Done: programs of C (`zig cc`), Zig, and TinyGo run with the same output as wasmtime. Rust: no `wasm32-wasip1` target in the local toolchain. |
 | 5. C packages | Done: `ztcl::wasm package FILE ?prefix?` (`src/wasmrt/cext.zig`). The 12 test packages of `tests/cext` that `tools/cext/wasm-check.sh` runs give the output of tclsh (`tools/cext/engine-check.sh`). The SQLite package of the spike loads and runs: 20,000 inserts in one transaction took 2,397 ms with the interpreter. Next: `load FILE.wasm` in the `package` capability calls the same code. |
-| 6. JIT tier, component model, WASI 0.3 | Later. |
+| 6. JIT tier | The baseline JIT on x86-64 Linux and macOS, on by default. Next: register caching, guard pages, arm64, Windows, SIMD. |
+| 7. Component model, WASI 0.3 | Later. |
 
 ## Spec tests
 

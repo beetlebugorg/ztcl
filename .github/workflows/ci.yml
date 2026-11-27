@@ -840,6 +840,9 @@ jobs:
           for f in test/core/*.wast; do n=$(basename "$f" .wast); mkdir -p "json/$n"
             wasm-tools json-from-wast "$f" -o "json/$n/$n.json" --wasm-dir "json/$n" > /dev/null; done
           cd .. && zig build wasm-spec -- spec/json/*/*.json
+          zig build wasm-spec -- -nojit spec/json/*/*.json
+      - name: The JIT against the interpreter on random modules
+        run: zig build wasm-fuzz -- -seed "$GITHUB_RUN_NUMBER" -count 300
       - name: WASI programs
         run: zig build && tests/wasm/run.sh
       - name: Install tclsh and the Tcl headers

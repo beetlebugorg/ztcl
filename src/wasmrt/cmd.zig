@@ -134,7 +134,7 @@ fn freeRec(gpa: std.mem.Allocator, r: *Rec) void {
     gpa.destroy(r);
 }
 
-const usage = "ztcl::wasm call|delete|exports|global|imports|info|instantiate|load|memory|new|package|run ?arg ...?";
+const usage = "ztcl::wasm call|delete|exports|global|imports|info|instantiate|jit|load|memory|new|package|run ?arg ...?";
 
 fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
@@ -155,7 +155,8 @@ fn cmd(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value {
     if (eql(sub, "run")) return cmdRun(it, argv);
     if (eql(sub, "delete")) return cmdDelete(it, argv);
     if (eql(sub, "package")) return cmdPackage(it, argv);
-    return it.failCode("TCL LOOKUP INDEX subcommand", "unknown subcommand \"{s}\": must be call, delete, exports, global, imports, info, instantiate, load, memory, new, package, or run", .{sub});
+    if (eql(sub, "jit")) return cmdJit(it, argv);
+    return it.failCode("TCL LOOKUP INDEX subcommand", "unknown subcommand \"{s}\": must be call, delete, exports, global, imports, info, instantiate, jit, load, memory, new, package, or run", .{sub});
 }
 
 // ---- Modules ----
@@ -943,3 +944,16 @@ const InitCtx = struct {
         return cext.init(c.p, c.name);
     }
 };
+
+/// `jit ?boolean?`: reads or sets the use of the JIT tier for the calls
+/// of this interpreter. The JIT is on by default where it is supported.
+fn cmdJit(it: *Interp, argv: []const Value) Error!Value {
+    if (argv.len != 2 and argv.len != 3) return it.wrongArgs("ztcl::wasm jit ?boolean?");
+    const st = try state(it);
+    if (argv.len == 3) {
+        const s = try it.str(argv[2]);
+        const on = if (eql(s, "1") or eql(s, "true") or eql(s, "on") or eql(s, "yes")) true else if (eql(s, "0") or eql(s, "false") or eql(s, "off") or eql(s, "no")) false else return it.fail("expected boolean value but got \"{s}\"", .{s});
+        st.store.jit_on = on and @import("jit_x64.zig").supported;
+    }
+    return .{ .int = @intFromBool(st.store.jit_on) };
+}

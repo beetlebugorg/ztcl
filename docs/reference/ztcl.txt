@@ -29,6 +29,7 @@ sub: exports module|instance | A list of name, kind, and type for each export.
 sub: imports module | A list of module, name, kind, and type for each import.
 sub: info module | A dict of the counts and the features of a module.
 sub: delete handle ?handle ...? | Deletes modules and instances.
+sub: jit ?boolean? | Reads or sets the use of the JIT tier for the calls of the interpreter. Gives 1 when the JIT is on. The JIT is on by default on x86-64 Linux and macOS, and the interpreter runs elsewhere.
 cost: one compute unit for each call and each loop pass of the wasm code
 page: modules/wasm.md
 == ztcl::text

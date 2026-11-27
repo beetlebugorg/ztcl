@@ -8,7 +8,7 @@
 //! engine reads only the binary format. The module `spectest` has the
 //! imports that the tests expect.
 //!
-//! Usage: wasm-spec FILE.json...
+//! Usage: wasm-spec ?-v? ?-nojit? FILE.json... (-nojit runs the interpreter only)
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -264,9 +264,14 @@ pub fn main(init: std.process.Init) !u8 {
     var total_pass: usize = 0;
     var total_fail: usize = 0;
     var verbose = false;
+    var jit_on = true;
     for (args[1..]) |path| {
         if (std.mem.eql(u8, path, "-v")) {
             verbose = true;
+            continue;
+        }
+        if (std.mem.eql(u8, path, "-nojit")) {
+            jit_on = false;
             continue;
         }
         var arena = std.heap.ArenaAllocator.init(a);
@@ -278,6 +283,7 @@ pub fn main(init: std.process.Init) !u8 {
         const text = try Io.Dir.cwd().readFileAlloc(io, path, aa, .limited(256 << 20));
         var store = exec.Store.init(a);
         store.fixUnits();
+        store.jit_on = jit_on and store.jit_on;
         defer store.deinit();
         var r: Runner = .{ .a = aa, .io = io, .dir = dir, .store = &store, .verbose = verbose, .file = std.fs.path.basename(path) };
         try setupSpectest(&r);
