@@ -1377,6 +1377,8 @@ pub const Interp = struct {
     /// The probes and their records (`probe.zig`), or null with no
     /// probe. The state lives in the allocator of the embedder.
     probes: ?*@import("probe.zig").State = null,
+    /// The tape of a record or a replay (`tape.zig`), or null.
+    tape: ?*@import("tape.zig").Tape = null,
     /// The thread of this interpreter when the capability `thread` is
     /// on. Only the top interpreter of a thread has it.
     worker: ?*thread_mod.Worker = null,

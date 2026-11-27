@@ -110,7 +110,7 @@ fn state(it: *Interp) Error!*State {
 
 fn now(it: *Interp) Error!i64 {
     const h = it.event_host orelse return it.fail("the embedder gave no event clock", .{});
-    return h.now(h.ctx);
+    return @import("tape.zig").time(it, .ticks, h.ctx, h.now);
 }
 
 /// Removes the events of an interpreter that ends.
@@ -372,7 +372,7 @@ pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
                 var ms: i32 = if (timeout < 0) -1 else @intCast(@min(@divFloor(timeout + 999, 1000), 3_600_000));
                 // The queue of a thread needs a check between polls.
                 if (src != null and (ms < 0 or ms > 10)) ms = 10;
-                sys.poll(a, wants.items, ms);
+                try @import("tape.zig").poll(it, a, wants.items, ms);
                 for (wants.items, ready_now) |*w, r| w.can_read = w.can_read or r;
                 if (wake >= 0) {
                     _ = wants.pop();
@@ -383,7 +383,7 @@ pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
                     try thread.block(x, @intCast(@min(timeout, 1 << 40) * 1000));
                 } else {
                     const h = it.event_host.?;
-                    h.sleep(h.ctx, timeout);
+                    if (!@import("tape.zig").skipSleep(it)) h.sleep(h.ctx, timeout);
                 }
             }
             t_now = try now(it);
@@ -490,7 +490,7 @@ fn cmdAfter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 const part = @min(left, 1_000_000);
                 if (thread.supported and it.worker != null and !it.worker.?.is_main) {
                     try thread.nap(it, @intCast(part * 1000));
-                } else h.sleep(h.ctx, part);
+                } else if (!@import("tape.zig").skipSleep(it)) h.sleep(h.ctx, part);
                 left -= part;
                 if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
                 it.compute_limit -= 1;
@@ -498,7 +498,7 @@ fn cmdAfter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             return Value.empty;
         }
         const t = try s.a.create(Timer);
-        t.* = .{ .id = s.next_id, .it = it, .script = try a.dupe(u8, try joined(it, argv[2..])), .at = h.now(h.ctx) + @as(i64, @min(ms, 1 << 40)) * 1000 };
+        t.* = .{ .id = s.next_id, .it = it, .script = try a.dupe(u8, try joined(it, argv[2..])), .at = try now(it) + @as(i64, @min(ms, 1 << 40)) * 1000 };
         s.next_id += 1;
         try s.timers.append(s.a, t);
         return .{ .str = try idText(a, t.id) };
