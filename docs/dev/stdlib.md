@@ -97,7 +97,7 @@ A module that another module needs is put in with it, and the build prints the r
 
 `tools/size-report.sh` builds the runner once with `-Dbatteries=core`, once with `full`, and once with `full` and each module off. It strips each binary and writes a table: the size of each module (the full size minus the size without it), the full size, and the change from `main`. CI runs it on x86-64 Linux, arm64 macOS, and x86-64 Windows, and fails when:
 
-- the full build of x86-64 Linux passes 6 000 000 bytes after `strip`, or
+- the full build of x86-64 Linux passes 6,500,000 bytes after `strip` (6,000,000 before `ztcl::tls`), or
 - a module grows more than 10 % above its budget in the table below without a change of the table in the same PR.
 
 The WebAssembly build has its own row and gate (see "WebAssembly").

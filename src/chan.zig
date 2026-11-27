@@ -28,6 +28,19 @@ const event = @import("event.zig");
 
 pub const Translation = enum { auto, lf, cr, crlf, binary };
 
+/// A layer between the buffers of a channel and its descriptor, such as
+/// TLS (`src/tls/cmd.zig`). A channel with a filter blocks. `read` fills
+/// `buf` with data for the channel and gives 0 at the end. `write`
+/// gives all of `data` to the layer. `closeWrite` ends the output of
+/// the layer, and `deinit` frees the layer before the descriptor
+/// closes.
+pub const Filter = struct {
+    read: *const fn (f: *Filter, it: *Interp, fd: i32, buf: []u8) Error!usize,
+    write: *const fn (f: *Filter, it: *Interp, fd: i32, data: []const u8) Error!void,
+    closeWrite: *const fn (f: *Filter, it: *Interp, fd: i32) void,
+    deinit: *const fn (f: *Filter, it: *Interp) void,
+};
+
 pub const Channel = struct {
     name: []const u8,
     fd: i32,
@@ -105,6 +118,7 @@ pub const Channel = struct {
     /// The channel of a C package (`cext/chan.zig`), or null. The
     /// commands of a script on it go to `ext_op`.
     ext: ?*anyopaque = null,
+    filter: ?*Filter = null,
 };
 
 /// Runs the command `op` of a script on a channel of a C package, with
@@ -208,6 +222,10 @@ fn flushOut(it: *Interp, c: *Channel) Error!void {
         c.wbuf.clearRetainingCapacity();
         return sysError(it, .{ .name = "ENOTCONN", .text = "socket is not connected" }, try std.fmt.allocPrint(it.alloc(), "error writing \"{s}\": ", .{c.name}));
     }
+    if (c.filter) |f| {
+        defer c.wbuf.clearRetainingCapacity();
+        return f.write(f, it, outFd(c), c.wbuf.items);
+    }
     var at: usize = 0;
     while (at < c.wbuf.items.len) {
         switch (sys.write(outFd(c), c.wbuf.items[at..])) {
@@ -253,7 +271,8 @@ fn fillMore(it: *Interp, c: *Channel) Error!Fill {
     if (c.fail != null) return sysError(it, .{ .name = "ENOTCONN", .text = "socket is not connected" }, try std.fmt.allocPrint(it.alloc(), "error reading \"{s}\": ", .{c.name}));
     try c.rbuf.ensureUnusedCapacity(it.alloc(), 16384);
     const room = c.rbuf.unusedCapacitySlice();
-    switch (try @import("tape.zig").read(it, c.fd, room)) {
+    const got: sys.IoResult = if (c.filter) |f| .{ .n = try f.read(f, it, c.fd, room) } else try @import("tape.zig").read(it, c.fd, room);
+    switch (got) {
         .n => |n| {
             if (n == 0) {
                 c.hit_eof = true;
@@ -564,13 +583,18 @@ fn cmdOpen(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return .{ .str = name };
 }
 
-fn closeFds(c: *Channel) void {
+fn closeFds(it: *Interp, c: *Channel) void {
+    if (c.filter) |f| {
+        if (!c.write_closed) f.closeWrite(f, it, outFd(c));
+        f.deinit(f, it);
+        c.filter = null;
+    }
     if (c.mem) return;
     if (!c.read_closed or c.wfd < 0) sys.close(c.fd);
     if (c.wfd >= 0 and !c.write_closed) sys.close(c.wfd);
 }
 
-fn closeChan(it: *Interp, c: *Channel) Error!void {
+pub fn closeChan(it: *Interp, c: *Channel) Error!void {
     if (c.writable and !c.draining) try endEncoding(it, c);
     if (c.writable and c.eof_out != 0 and !c.draining) {
         try c.wbuf.append(it.alloc(), c.eof_out);
@@ -591,7 +615,7 @@ fn closeChan(it: *Interp, c: *Channel) Error!void {
         try event.watch(it, c.name);
         return;
     }
-    closeFds(c);
+    closeFds(it, c);
     event.unwatch(it, c.name);
     _ = it.chans.table.orderedRemove(c.name);
     var next_sib = c.sibling;
@@ -614,7 +638,7 @@ fn closeChan(it: *Interp, c: *Channel) Error!void {
 pub fn closeAll(it: *Interp) void {
     for (it.chans.table.values()) |c| {
         flushOut(it, c) catch {};
-        closeFds(c);
+        closeFds(it, c);
         if (comptime proc_ok) {
             if (c.pids.len > 0) proc_mod.abandon(c);
         }
@@ -822,6 +846,7 @@ fn cmdClose(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 if (c.kind == .socket) sys.shutdown(c.fd, 0) else if (c.wfd >= 0) sys.close(c.fd);
             } else {
                 try flushOut(it, c);
+                if (c.filter) |f| f.closeWrite(f, it, outFd(c));
                 c.writable = false;
                 c.write_closed = true;
                 c.on_write = null;
@@ -1138,7 +1163,9 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const o = try full(it, opts[i], if (it.tcl9()) &.{ "-blocking", "-buffering", "-buffersize", "-encoding", "-eofchar", "-translation", "-profile" } else names[0..6]);
         const v = opts[i + 1];
         if (eql(o, "-blocking")) {
-            c.blocking = try @import("expr.zig").truthy(it, v);
+            const b = try @import("expr.zig").truthy(it, v);
+            if (!b and c.filter != null) return it.fail("-blocking 0 is not supported on a TLS channel", .{});
+            c.blocking = b;
             if (!c.connecting) {
                 sys.setBlocking(c.fd, c.blocking);
                 if (c.wfd >= 0) sys.setBlocking(c.wfd, c.blocking);

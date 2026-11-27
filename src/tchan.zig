@@ -99,6 +99,7 @@ fn check(it: *Interp, name: []const u8) Error!*Channel {
     const c = chan.lookup(it, name) orelse return notFound(it, name);
     if (c.kind == .server) return it.fail("cannot move server socket \"{s}\"", .{name});
     if (c.pids.len > 0) return it.fail("cannot move command pipeline \"{s}\"", .{name});
+    if (c.filter != null) return it.fail("cannot move TLS channel \"{s}\"", .{name});
     if (c.kind == .pipe) return it.fail("channel is shared", .{});
     if (c.draining) return notFound(it, name);
     try chan.flushChannel(it, c);

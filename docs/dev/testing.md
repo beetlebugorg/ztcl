@@ -144,7 +144,7 @@ CAP tools/size-report.sh            # writes zig-out/size/size.md and size.tsv
 CAP tools/size-report.sh --check    # fails above the budget
 ```
 
-`--check` compares the numbers with `tools/size-budget.tsv`, the rows of the size table of [the plan](stdlib.md#the-size-budget). It fails when the full runner of x86-64 Linux is above 6 000 000 bytes, when a module is more than 10 % above its row, when `ztcl.wasm` with modules is above 1 500 000 bytes, or when the wasm build with no module is above 1 000 000 bytes. A PR that makes a module larger changes its row and gives the reason. `--plant BYTES` adds data to the test module `hello`, and the size workflow uses it to show that the check fails.
+`--check` compares the numbers with `tools/size-budget.tsv`, the rows of the size table of [the plan](stdlib.md#the-size-budget). It fails when the full runner of x86-64 Linux is above 6,500,000 bytes, when a module is more than 10 % above its row, when `ztcl.wasm` with modules is above 1 500 000 bytes, or when the wasm build with no module is above 1 000 000 bytes. A PR that makes a module larger changes its row and gives the reason. `--plant BYTES` adds data to the test module `hello`, and the size workflow uses it to show that the check fails.
 
 The workflow `size.yml` runs the report on x86-64 Linux, arm64 macOS, and x86-64 Windows and puts the table in the summary of the job. The gate of the full size applies to x86-64 Linux only.
 
