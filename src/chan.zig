@@ -71,6 +71,13 @@ pub const Channel = struct {
     tree: ProcTree = .{},
     /// True for the master side of a PTY of `ztcl::pty`.
     pty: bool = false,
+    /// The end-of-file characters of `-eofchar`, or 0 for none. Input
+    /// stops at `eof_in`, and `close` writes `eof_out`.
+    eof_in: u8 = 0,
+    eof_out: u8 = 0,
+    /// The count of read bytes after `eof_in` that the read buffer
+    /// dropped, for `tell` and `seek`.
+    eof_drop: usize = 0,
     /// The wait status of the program of a PTY after it ended.
     pty_status: ?u32 = null,
     /// True for a closed channel that still has output to write. The
@@ -204,7 +211,10 @@ fn fillMore(it: *Interp, c: *Channel) Error!Fill {
                 c.hit_eof = true;
                 return .eof;
             }
+            const old = c.rbuf.items.len;
             c.rbuf.items.len += n;
+            cutAtEof(c, old);
+            if (c.rbuf.items.len == old) return .eof;
             return .data;
         },
         .again => return .again,
@@ -218,6 +228,16 @@ fn fillMore(it: *Interp, c: *Channel) Error!Fill {
             return sysError(it, f, try std.fmt.allocPrint(it.alloc(), "error reading \"{s}\": ", .{c.name}));
         },
     }
+}
+
+/// Ends the input at the first `eof_in` character at or after `from`
+/// in the read buffer.
+fn cutAtEof(c: *Channel, from: usize) void {
+    if (c.eof_in == 0 or c.mem or from >= c.rbuf.items.len) return;
+    const k = std.mem.indexOfScalarPos(u8, c.rbuf.items, from, c.eof_in) orelse return;
+    c.eof_drop += c.rbuf.items.len - k;
+    c.rbuf.items.len = k;
+    c.hit_eof = true;
 }
 
 /// Reads more bytes. Gives false at the end of the file and when a
@@ -409,6 +429,10 @@ fn closeFds(c: *Channel) void {
 }
 
 fn closeChan(it: *Interp, c: *Channel) Error!void {
+    if (c.writable and c.eof_out != 0 and !c.draining) {
+        try c.wbuf.append(it.alloc(), c.eof_out);
+        c.eof_out = 0;
+    }
     const r = flushOut(it, c);
     if (c.wbuf.items.len > 0 and !c.blocking and !c.draining) {
         // The channel leaves the table of the script under a name that
@@ -796,7 +820,7 @@ fn cmdSeek(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const o = try it.str(argv[3]);
         if (eql(o, "current")) {
             whence = 1;
-            adjust = -@as(i64, @intCast(c.rbuf.items.len - c.rpos));
+            adjust = -@as(i64, @intCast(c.rbuf.items.len - c.rpos + c.eof_drop));
         } else if (eql(o, "end")) {
             whence = 2;
         } else if (!eql(o, "start")) {
@@ -813,6 +837,7 @@ fn cmdSeek(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     c.rpos = 0;
     c.at_eof = false;
     c.hit_eof = false;
+    c.eof_drop = 0;
     return Value.empty;
 }
 
@@ -839,7 +864,7 @@ fn cmdTell(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         .at => |x| x,
         .err => return .{ .int = -1 },
     };
-    return .{ .int = at - @as(i64, @intCast(c.rbuf.items.len - c.rpos)) + @as(i64, @intCast(c.wbuf.items.len)) };
+    return .{ .int = at - @as(i64, @intCast(c.rbuf.items.len - c.rpos + c.eof_drop)) + @as(i64, @intCast(c.wbuf.items.len)) };
 }
 
 fn parseTranslation(it: *Interp, v: Value) Error!Translation {
@@ -860,7 +885,12 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (eql(o, "-buffering")) return .{ .str = ch.buffering };
             if (eql(o, "-buffersize")) return .{ .int = ch.buffersize };
             if (eql(o, "-encoding")) return .{ .str = if (ch.binary) "binary" else "utf-8" };
-            if (eql(o, "-eofchar")) return Value.empty;
+            if (eql(o, "-eofchar")) {
+                const in: Value = .{ .str = if (ch.eof_in == 0) "" else try x.alloc().dupe(u8, &.{ch.eof_in}) };
+                const out: Value = .{ .str = if (ch.eof_out == 0) "" else try x.alloc().dupe(u8, &.{ch.eof_out}) };
+                if (ch.readable and ch.writable) return try value.newList(x.alloc(), &.{ in, out });
+                return if (ch.readable) in else out;
+            }
             if (ch.kind != .file and ch.kind != .pipe) {
                 if (try @import("sock.zig").option(x, ch, o)) |v| return v;
             }
@@ -941,8 +971,25 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             const y = if (l.len == 2) try parseTranslation(it, l[1]) else x;
             if (c.readable) c.input = x;
             if (c.writable) c.output = if (y == .auto) .lf else y;
-            if (x == .binary) c.binary = true;
-        } else if (!eql(o, "-eofchar")) {
+            if (x == .binary) {
+                c.binary = true;
+                c.eof_in = 0;
+                c.eof_out = 0;
+            }
+        } else if (eql(o, "-eofchar")) {
+            const l = try it.list(v);
+            if (l.len > 2) return it.fail("bad value for -eofchar: should be a list of zero, one, or two elements", .{});
+            var ch = [2]u8{ 0, 0 };
+            for (l, 0..) |e, k| {
+                const t = try it.str(e);
+                if (t.len > 0 and (t[0] == 0 or t[0] >= 0x80)) return it.fail("bad value for -eofchar: must be non-NUL ASCII character", .{});
+                ch[k] = if (t.len > 0) t[0] else 0;
+            }
+            if (l.len == 1) ch[1] = ch[0];
+            c.eof_in = ch[0];
+            c.eof_out = ch[1];
+            cutAtEof(c, c.rpos);
+        } else {
             return it.fail("bad option \"{s}\": should be one of {s}", .{ o, known });
         }
     }

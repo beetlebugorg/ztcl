@@ -1339,8 +1339,8 @@ chan.test	chan-11.1	fail	fail	message	code 1/1: wrong # args: should be "puts ?-
 chan.test	chan-12.1	fail	fail	message	code 1/1: wrong # args: should be "read channelId ?numChars?" or "read ?-nonewline? channelId" \| want: wrong # args: should be "chan read channelId ?numChars?" or "chan read ?-nonewline? channelId"
 chan.test	chan-13.1	fail	fail	message	code 1/1: wrong # args: should be "seek channelId offset ?origin?" \| want: wrong # args: should be "chan seek channelId offset ?origin?"
 chan.test	chan-14.1	fail	fail	message	code 1/1: wrong # args: should be "tell channelId" \| want: wrong # args: should be "chan tell channelId"
-chan.test	chan-15.1	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "truncate": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: wrong # args: should be "chan truncate channelId ?l...
-chan.test	chan-15.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "truncate": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: 12
+chan.test	chan-15.1	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "truncate": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "chan truncate channe...
+chan.test	chan-15.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "truncate": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 12
 chan.test	chan-16.1	pass	pass		
 chan.test	chan-16.10	fail	fail	bug	code 1/0,2: can not find channel named "stdin" \| want: -1
 chan.test	chan-16.11	fail	fail	bug	code 1/0,2: can not find channel named "stdout" \| want: 0
@@ -1354,10 +1354,10 @@ chan.test	chan-16.6	fail	fail	bug	code 1/0,2: can not find channel named "stdin"
 chan.test	chan-16.7	pass	pass		
 chan.test	chan-16.8	pass	pass		
 chan.test	chan-16.9	pass	pass		
-chan.test	chan-17.1	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "pipe": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: wrong # args: should be "chan pipe "
-chan.test	chan-17.2	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "pipe": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: wrong # args: should be "chan pipe "
-chan.test	chan-17.3	fail	fail	bug	cleanup: can't read "pw": no such variable
-chan.test	chan-17.4	fail	fail	bug	cleanup: can't read "::pw": no such variable
+chan.test	chan-17.1	fail	fail	message	code 1/1: wrong # args: should be "chan pipe" \| want: wrong # args: should be "chan pipe "
+chan.test	chan-17.2	fail	fail	message	code 1/1: wrong # args: should be "chan pipe" \| want: wrong # args: should be "chan pipe "
+chan.test	chan-17.3	pass	pass		
+chan.test	chan-17.4	pass	pass		
 chan.test	chan-2.1	fail	fail	message	code 1/1: wrong # args: should be "fblocked channelId" \| want: wrong # args: should be "chan blocked channelId"
 chan.test	chan-3.1	fail	fail	message	code 1/1: wrong # args: should be "close channelId ?direction?" \| want: wrong # args: should be "chan close channelId ?direction?"
 chan.test	chan-3.2	pass	pass		
@@ -1386,7 +1386,7 @@ chanio.test	chan-io-10.5	pass	pass
 chanio.test	chan-io-11.1	pass	pass		
 chanio.test	chan-io-11.2	pass	pass		
 chanio.test	chan-io-11.3	pass	pass		
-chanio.test	chan-io-11.4	fail	fail	bug	code 0/0,2: {abcdefghijklmnopqrstuvwxyz } 1 {} 1 \| want: abcdefghijkl 1 {} 1
+chanio.test	chan-io-11.4	pass	pass		
 chanio.test	chan-io-12.1	pass	pass		
 chanio.test	chan-io-12.2	pass	pass		
 chanio.test	chan-io-12.3	pass	pass		
@@ -1394,8 +1394,8 @@ chanio.test	chan-io-12.4	skip	skip	internals	testchannel
 chanio.test	chan-io-12.5	pass	pass		
 chanio.test	chan-io-13.1	pass	pass		
 chanio.test	chan-io-13.10	pass	pass		
-chanio.test	chan-io-13.11	fail	fail	bug	code 0/0,2: abcd defgh \| want: abcd d
-chanio.test	chan-io-13.12	fail	fail	bug	code 0/0,2:    ab  def    \| want:    ab  d
+chanio.test	chan-io-13.11	pass	pass		
+chanio.test	chan-io-13.12	pass	pass		
 chanio.test	chan-io-13.2	pass	pass		
 chanio.test	chan-io-13.3	pass	pass		
 chanio.test	chan-io-13.4	pass	pass		
@@ -1431,7 +1431,7 @@ chanio.test	chan-io-2.3	pass	pass
 chanio.test	chan-io-2.4	fail	fail	bug	code 0/0,2: {abcdefg hijklmnopqrstuvwxyz} {abcdefg hijklmnopqrstuvwxyz} \| want: {abcdefg hijklmno} {abcdefg hijklmnopqrstuvwxyz}
 chanio.test	chan-io-20.1	fail	fail	bug	code 0/0,2: utf-8 \| want: ascii
 chanio.test	chan-io-20.2	skip	skip	platform	win
-chanio.test	chan-io-20.3	fail	fail	bug	code 0/0,2: {} {auto lf} \| want: {{} {}} {auto lf}
+chanio.test	chan-io-20.3	pass	pass		
 chanio.test	chan-io-20.5	fail	fail	message	code 1/1:  \| want: 777
 chanio.test	chan-io-21.1	skip	skip	tcl	emptyTest
 chanio.test	chan-io-22.1	skip	skip	tcl	emptyTest
@@ -1503,20 +1503,20 @@ chanio.test	chan-io-30.12	pass	pass
 chanio.test	chan-io-30.13	pass	pass		
 chanio.test	chan-io-30.14	pass	pass		
 chanio.test	chan-io-30.15	pass	pass		
-chanio.test	chan-io-30.16	fail	fail	bug	code 0/0,2: hello there and here  \| want: hello there and here 
+chanio.test	chan-io-30.16	pass	pass		
 chanio.test	chan-io-30.17	skip	skip	platform	win
-chanio.test	chan-io-30.18	fail	fail	bug	code 0/0,2: abc def 0 ghi 0 qrs 0 \| want: abc def 0 {} 1 {} 1
-chanio.test	chan-io-30.19	fail	fail	bug	code 0/0,2: abc def 0 ghi 0 qrs 0 \| want: abc def 0 {} 1 {} 1
+chanio.test	chan-io-30.18	pass	pass		
+chanio.test	chan-io-30.19	pass	pass		
 chanio.test	chan-io-30.2	pass	pass		
 chanio.test	chan-io-30.20	pass	pass		
 chanio.test	chan-io-30.21	fail	fail	bug	code 0/0,2: 0 0 def 0 \| want: 1 1 {} 1
 chanio.test	chan-io-30.22	fail	fail	bug	code 0/0,2: 0 0 def 0 \| want: 1 1 {} 1
-chanio.test	chan-io-30.23	fail	fail	bug	code 0/0,2: 17 1 \| want: 8 1
-chanio.test	chan-io-30.24	fail	fail	bug	code 0/0,2: 17 1 \| want: 8 1
-chanio.test	chan-io-30.25	fail	fail	bug	code 0/0,2: 17 1 \| want: 8 1
-chanio.test	chan-io-30.26	fail	fail	bug	code 0/0,2: 17 1 \| want: 8 1
-chanio.test	chan-io-30.27	fail	fail	bug	code 0/0,2: 17 1 \| want: 8 1
-chanio.test	chan-io-30.28	fail	fail	bug	code 0/0,2: 17 1 \| want: 8 1
+chanio.test	chan-io-30.23	pass	pass		
+chanio.test	chan-io-30.24	pass	pass		
+chanio.test	chan-io-30.25	pass	pass		
+chanio.test	chan-io-30.26	pass	pass		
+chanio.test	chan-io-30.27	pass	pass		
+chanio.test	chan-io-30.28	pass	pass		
 chanio.test	chan-io-30.3	pass	pass		
 chanio.test	chan-io-30.4	pass	pass		
 chanio.test	chan-io-30.5	pass	pass		
@@ -1533,21 +1533,21 @@ chanio.test	chan-io-31.14	pass	pass
 chanio.test	chan-io-31.15	pass	pass		
 chanio.test	chan-io-31.16	pass	pass		
 chanio.test	chan-io-31.17	pass	pass		
-chanio.test	chan-io-31.18	fail	fail	bug	code 0/0,2: hello there and here 0  0 \| want: hello there and here 0 {} 1
+chanio.test	chan-io-31.18	pass	pass		
 chanio.test	chan-io-31.19	pass	pass		
 chanio.test	chan-io-31.2	pass	pass		
-chanio.test	chan-io-31.20	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
-chanio.test	chan-io-31.21	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
+chanio.test	chan-io-31.20	pass	pass		
+chanio.test	chan-io-31.21	pass	pass		
 chanio.test	chan-io-31.22	pass	pass		
 chanio.test	chan-io-31.23	pass	pass		
 chanio.test	chan-io-31.24	pass	pass		
-chanio.test	chan-io-31.25	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
-chanio.test	chan-io-31.26	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
-chanio.test	chan-io-31.27	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
-chanio.test	chan-io-31.28	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
-chanio.test	chan-io-31.29	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
+chanio.test	chan-io-31.25	pass	pass		
+chanio.test	chan-io-31.26	pass	pass		
+chanio.test	chan-io-31.27	pass	pass		
+chanio.test	chan-io-31.28	pass	pass		
+chanio.test	chan-io-31.29	pass	pass		
 chanio.test	chan-io-31.3	pass	pass		
-chanio.test	chan-io-31.30	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
+chanio.test	chan-io-31.30	pass	pass		
 chanio.test	chan-io-31.31	pass	pass		
 chanio.test	chan-io-31.32	pass	pass		
 chanio.test	chan-io-31.4	pass	pass		
@@ -1604,22 +1604,22 @@ chanio.test	chan-io-34.7	pass	pass
 chanio.test	chan-io-34.8	fail	fail	message	code 1/1: error during seek on "file433": input/output error \| want: error during seek on "*": invalid argument
 chanio.test	chan-io-34.9	pass	pass		
 chanio.test	chan-io-35.1	pass	pass		
-chanio.test	chan-io-35.10	fail	fail	bug	code 0/0,2: 10 8 1 \| want: 11 8 1
-chanio.test	chan-io-35.11	fail	fail	bug	code 0/0,2: 10 8 1 \| want: 11 8 1
-chanio.test	chan-io-35.12	fail	fail	bug	code 0/0,2: 17 17 1 \| want: 17 8 1
-chanio.test	chan-io-35.13	fail	fail	bug	code 0/0,2: 17 17 1 \| want: 17 8 1
-chanio.test	chan-io-35.14	fail	fail	bug	code 0/0,2: 17 17 1 \| want: 17 8 1
-chanio.test	chan-io-35.15	fail	fail	bug	code 0/0,2: 17 17 1 \| want: 17 8 1
-chanio.test	chan-io-35.16	fail	fail	bug	code 0/0,2: 21 17 1 \| want: 21 8 1
-chanio.test	chan-io-35.17	fail	fail	bug	code 0/0,2: 21 17 1 \| want: 21 8 1
+chanio.test	chan-io-35.10	pass	pass		
+chanio.test	chan-io-35.11	pass	pass		
+chanio.test	chan-io-35.12	pass	pass		
+chanio.test	chan-io-35.13	pass	pass		
+chanio.test	chan-io-35.14	pass	pass		
+chanio.test	chan-io-35.15	pass	pass		
+chanio.test	chan-io-35.16	pass	pass		
+chanio.test	chan-io-35.17	pass	pass		
 chanio.test	chan-io-35.2	pass	pass		
 chanio.test	chan-io-35.3	pass	pass		
 chanio.test	chan-io-35.4	pass	pass		
 chanio.test	chan-io-35.5	pass	pass		
-chanio.test	chan-io-35.6	fail	fail	bug	code 0/0,2: 8 8 1 \| want: 9 8 1
-chanio.test	chan-io-35.7	fail	fail	bug	code 0/0,2: 8 8 1 \| want: 9 8 1
-chanio.test	chan-io-35.8	fail	fail	bug	code 0/0,2: 8 8 1 \| want: 9 8 1
-chanio.test	chan-io-35.9	fail	fail	bug	code 0/0,2: 8 8 1 \| want: 9 8 1
+chanio.test	chan-io-35.6	pass	pass		
+chanio.test	chan-io-35.7	pass	pass		
+chanio.test	chan-io-35.8	pass	pass		
+chanio.test	chan-io-35.9	pass	pass		
 chanio.test	chan-io-36.1	pass	pass		
 chanio.test	chan-io-36.2	pass	pass		
 chanio.test	chan-io-36.3	pass	pass		
@@ -1630,7 +1630,7 @@ chanio.test	chan-io-37.1	skip	skip	internals	testchannel
 chanio.test	chan-io-37.2	skip	skip	internals	testchannel
 chanio.test	chan-io-38.1	pass	pass		
 chanio.test	chan-io-38.2	pass	pass		
-chanio.test	chan-io-38.3	fail	fail	bug	code 1/0,2: error reading "file503": illegal operation on a directory \| want: 
+chanio.test	chan-io-38.3	pass	pass		
 chanio.test	chan-io-39.1	pass	pass		
 chanio.test	chan-io-39.10	pass	pass		
 chanio.test	chan-io-39.11	pass	pass		
@@ -1645,10 +1645,10 @@ chanio.test	chan-io-39.19	pass	pass
 chanio.test	chan-io-39.2	pass	pass		
 chanio.test	chan-io-39.20	pass	pass		
 chanio.test	chan-io-39.21	fail	fail	bug	code 0/0,2: auto lf \| want: auto crlf
-chanio.test	chan-io-39.22	fail	fail	bug	code 0/0,2: {} {} {} \| want: {{} {}} {O G} {D D}
-chanio.test	chan-io-39.22a	fail	fail	bug	code 0/0,2: {} {} {0 {}} \| want: {O G} {D D} {1 {bad value for -eofchar: should be a list of zero, one, or two elements}}
+chanio.test	chan-io-39.22	pass	pass		
+chanio.test	chan-io-39.22a	pass	pass		
 chanio.test	chan-io-39.23	fail	fail	bug	code 0/0,2: {} lf \| want: {{}} auto
-chanio.test	chan-io-39.24	fail	fail	bug	code 0/0,2: {} lf \| want: {{}} auto
+chanio.test	chan-io-39.24	fail	fail	bug	code 0/0,2: D lf \| want: {{}} auto
 chanio.test	chan-io-39.3	pass	pass		
 chanio.test	chan-io-39.4	pass	pass		
 chanio.test	chan-io-39.5	pass	pass		
@@ -1706,20 +1706,20 @@ chanio.test	chan-io-47.4	skip	skip	internals	testfevent
 chanio.test	chan-io-47.5	skip	skip	internals	testfevent
 chanio.test	chan-io-47.6	skip	skip	internals	testfevent
 chanio.test	chan-io-48.1	pass	pass		
-chanio.test	chan-io-48.10	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
-chanio.test	chan-io-48.11	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
-chanio.test	chan-io-48.12	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
-chanio.test	chan-io-48.13	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
-chanio.test	chan-io-48.14	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
-chanio.test	chan-io-48.15	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
+chanio.test	chan-io-48.10	pass	pass		
+chanio.test	chan-io-48.11	pass	pass		
+chanio.test	chan-io-48.12	pass	pass		
+chanio.test	chan-io-48.13	pass	pass		
+chanio.test	chan-io-48.14	pass	pass		
+chanio.test	chan-io-48.15	pass	pass		
 chanio.test	chan-io-48.2	pass	pass		
 chanio.test	chan-io-48.3	pass	pass		
-chanio.test	chan-io-48.4	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
-chanio.test	chan-io-48.5	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
-chanio.test	chan-io-48.6	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
-chanio.test	chan-io-48.7	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
-chanio.test	chan-io-48.8	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
-chanio.test	chan-io-48.9	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
+chanio.test	chan-io-48.4	pass	pass		
+chanio.test	chan-io-48.5	pass	pass		
+chanio.test	chan-io-48.6	pass	pass		
+chanio.test	chan-io-48.7	pass	pass		
+chanio.test	chan-io-48.8	pass	pass		
+chanio.test	chan-io-48.9	pass	pass		
 chanio.test	chan-io-49.1	fail	fail	bug	code 0/0,2: 7 a 1 { } 2 b 3 { } 4 c 5 { } 6 0 { } 0 \| want: 7 a 1 { } 2 b 3 { } 4 c 5 { } 7 0 {} 1
 chanio.test	chan-io-49.2	fail	fail	bug	code 0/0,2: 7 {a } 2 {b } 4 {c } 6 0 { } 7 1 \| want: 7 {a } 2 {b } 4 {c } 7 0 {} 7 1
 chanio.test	chan-io-49.3	fail	fail	bug	code 0/0,2: 7 {a b} 3 { c } 6 0 { } 7 1 \| want: 7 {a b} 3 { c } 7 0 {} 7 1
@@ -1739,14 +1739,14 @@ chanio.test	chan-io-50.6	skip	skip	internals	testchannelevent
 chanio.test	chan-io-51.1	pass	pass		
 chanio.test	chan-io-52.1	fail	fail	message	code 1/1: fcopy -command is not available \| want: channel "*" is busy
 chanio.test	chan-io-52.2	fail	fail	message	code 1/1: fcopy -command is not available \| want: channel "*" is busy
-chanio.test	chan-io-52.3	fail	fail	bug	code 1/0,2: error reading "file621": illegal operation on a directory \| want: 0 0 ok
-chanio.test	chan-io-52.4	fail	fail	bug	code 1/0,2: error reading "file623": illegal operation on a directory \| want: 0 0 40
-chanio.test	chan-io-52.5	fail	fail	bug	code 1/0,2: error reading "file625": illegal operation on a directory \| want: 0 0 ok
-chanio.test	chan-io-52.5a	fail	fail	bug	code 1/0,2: error reading "file627": illegal operation on a directory \| want: 0 0 ok
-chanio.test	chan-io-52.5b	fail	fail	bug	code 1/0,2: error reading "file629": illegal operation on a directory \| want: 0 0 ok
-chanio.test	chan-io-52.6	fail	fail	bug	code 1/0,2: error reading "file631": illegal operation on a directory \| want: 0 0 ok
-chanio.test	chan-io-52.7	fail	fail	bug	code 1/0,2: error reading "file633": illegal operation on a directory \| want: 0 0 ok
-chanio.test	chan-io-52.8	fail	fail	bug	code 0/0,2: 0 0 \| want: 40 40
+chanio.test	chan-io-52.3	pass	pass		
+chanio.test	chan-io-52.4	pass	pass		
+chanio.test	chan-io-52.5	pass	pass		
+chanio.test	chan-io-52.5a	pass	pass		
+chanio.test	chan-io-52.5b	pass	pass		
+chanio.test	chan-io-52.6	pass	pass		
+chanio.test	chan-io-52.7	fail	fail	bug	code 2/0,2: 0 0 \| want: 0 0 ok
+chanio.test	chan-io-52.8	pass	pass		
 chanio.test	chan-io-6.1	pass	pass		
 chanio.test	chan-io-6.10	pass	pass		
 chanio.test	chan-io-6.11	pass	pass		
@@ -1801,8 +1801,8 @@ chanio.test	chan-io-6.55	fail	fail	feature	code 1/0,2: unknown encoding "iso2022
 chanio.test	chan-io-6.56	pass	pass		
 chanio.test	chan-io-6.6	pass	pass		
 chanio.test	chan-io-6.7	pass	pass		
-chanio.test	chan-io-6.8	fail	fail	bug	code 0/0,2: 12 abcdefghijk 6 wombat \| want: 6 abcdef -1 {}
-chanio.test	chan-io-6.9	fail	fail	bug	code 0/0,2: 11 abcdefghijk 7 wombat \| want: 11 abcdefghijk 3 wom
+chanio.test	chan-io-6.8	pass	pass		
+chanio.test	chan-io-6.9	pass	pass		
 chanio.test	chan-io-7.1	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 1234567890123０１２３４
 chanio.test	chan-io-7.2	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 10 1234567890 0
 chanio.test	chan-io-7.3	skip	skip	internals	testchannel
@@ -11367,15 +11367,15 @@ concat.test	concat-3.1	pass	pass
 concat.test	concat-4.1	pass	pass		
 concat.test	concat-4.2	pass	pass		
 concat.test	concat-4.3	pass	pass		
-config.test	pkgconfig-1.1	fail	fail	bug	code 1/0,2: invalid command name "::tcl::pkgconfig" \| want: 64bit bindir,install bindir,runtime compile_debug compile_stats debug docdir,install docdir,runtime includedir,install includedir,runtim...
-config.test	pkgconfig-1.2	fail	fail	bug	code 1/0,2: invalid command name "::tcl::pkgconfig" \| want: 0
-config.test	pkgconfig-1.3	fail	fail	bug	code 1/0,2: invalid command name "::tcl::pkgconfig" \| want: 0
-config.test	pkgconfig-2.0	fail	fail	bug	code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: wrong # args: should be "::tcl::pkgconfig subcommand ?arg?"
-config.test	pkgconfig-2.1	fail	fail	bug	code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: bad subcommand "foo": must be get or list
-config.test	pkgconfig-2.2	fail	fail	bug	code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: wrong # args: should be "::tcl::pkgconfig list"
-config.test	pkgconfig-2.3	fail	fail	bug	code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: wrong # args: should be "::tcl::pkgconfig get key"
-config.test	pkgconfig-2.4	fail	fail	bug	code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: key not known
-config.test	pkgconfig-2.5	fail	fail	bug	code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: wrong # args: should be "::tcl::pkgconfig subcommand ?arg?"
+config.test	pkgconfig-1.1	fail	fail	feature	code 1/0,2: invalid command name "::tcl::pkgconfig" \| want: 64bit bindir,install bindir,runtime compile_debug compile_stats debug docdir,install docdir,runtime includedir,install includedir,runtim...
+config.test	pkgconfig-1.2	fail	fail	feature	code 1/0,2: invalid command name "::tcl::pkgconfig" \| want: 0
+config.test	pkgconfig-1.3	fail	fail	feature	code 1/0,2: invalid command name "::tcl::pkgconfig" \| want: 0
+config.test	pkgconfig-2.0	fail	fail	feature	code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: wrong # args: should be "::tcl::pkgconfig subcommand ?arg?"
+config.test	pkgconfig-2.1	fail	fail	feature	code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: bad subcommand "foo": must be get or list
+config.test	pkgconfig-2.2	fail	fail	feature	code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: wrong # args: should be "::tcl::pkgconfig list"
+config.test	pkgconfig-2.3	fail	fail	feature	code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: wrong # args: should be "::tcl::pkgconfig get key"
+config.test	pkgconfig-2.4	fail	fail	feature	code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: key not known
+config.test	pkgconfig-2.5	fail	fail	feature	code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: wrong # args: should be "::tcl::pkgconfig subcommand ?arg?"
 coroutine.test	coroutine-1.1	pass	pass		
 coroutine.test	coroutine-1.10	pass	pass		
 coroutine.test	coroutine-1.11	pass	pass		
@@ -11443,10 +11443,10 @@ dcall.test	dcall-1.5	skip	skip	internals	testdcall
 dcall.test	dcall-1.6	skip	skip	internals	testdcall
 dict.test	dict-1.1	pass	pass		
 dict.test	dict-1.2	pass	pass		
-dict.test	dict-10.1	fail	fail	bug	code 1/0,2: unknown or ambiguous subcommand "info": must be append, create, exists, filter, for, get, incr, info, keys, lappend, map, merge, remove, rep \| want: *
-dict.test	dict-10.2	fail	fail	message	code 1/1: unknown or ambiguous subcommand "info": must be append, create, exists, filter, for, get, incr, info, keys, lappend, map, merge, remove, rep \| want: wrong # args: should be "dict info di...
-dict.test	dict-10.3	fail	fail	message	code 1/1: unknown or ambiguous subcommand "info": must be append, create, exists, filter, for, get, incr, info, keys, lappend, map, merge, remove, rep \| want: wrong # args: should be "dict info di...
-dict.test	dict-10.4	fail	fail	message	code 1/1: unknown or ambiguous subcommand "info": must be append, create, exists, filter, for, get, incr, info, keys, lappend, map, merge, remove, rep \| want: missing value to go with key
+dict.test	dict-10.1	pass	pass		
+dict.test	dict-10.2	pass	pass		
+dict.test	dict-10.3	pass	pass		
+dict.test	dict-10.4	pass	pass		
 dict.test	dict-11.1	pass	pass		
 dict.test	dict-11.10	pass	pass		
 dict.test	dict-11.11	pass	pass		
@@ -27509,8 +27509,8 @@ fileName.test	filename-11.1	fail	fail	message	code 1/1: wrong # args: should be 
 fileName.test	filename-11.10	skip	skip	internals	testsetplatform
 fileName.test	filename-11.11	skip	skip	internals	testsetplatform
 fileName.test	filename-11.12	skip	skip	internals	testsetplatform
-fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl4048108/globTest
-fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl4048108/globTest
+fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl178121/globTest
+fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl178121/globTest
 fileName.test	filename-11.16	pass	pass		
 fileName.test	filename-11.17	pass	pass		
 fileName.test	filename-11.17.1	skip	skip	platform	win
@@ -27526,19 +27526,19 @@ fileName.test	filename-11.18.1	skip	skip	platform	win
 fileName.test	filename-11.19	fail	fail	bug	code 0/0,2: globTest globTest \| want: globTest/a1 globTest/a2 globTest/a3 {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c
 fileName.test	filename-11.19.1	skip	skip	platform	win
 fileName.test	filename-11.2	pass	pass		
-fileName.test	filename-11.20	fail	fail	bug	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: globTest/a1 globTest/a2 globTest/a3
-fileName.test	filename-11.21	fail	fail	bug	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: globTest
+fileName.test	filename-11.20	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: globTest/a1 globTest/a2 globTest/a3
+fileName.test	filename-11.21	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: globTest
 fileName.test	filename-11.21.1	fail	fail	bug	code 1/0,2: no files matched glob pattern "*" \| want: {[tcl].testremains}
-fileName.test	filename-11.22	fail	fail	bug	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/weird\ name.c glob\[\{Test/...
+fileName.test	filename-11.22	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/weird\ name.c glob\[\{Test/...
 fileName.test	filename-11.22.1	skip	skip	platform	win
 fileName.test	filename-11.23	fail	fail	bug	code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/weird\ name.c glob\[\{Test/x,z1.c glob\[\{Test/x1.c glob\[\{Test/y1.c glob\[\{T
 fileName.test	filename-11.23.1	skip	skip	platform	win
 fileName.test	filename-11.24	fail	fail	bug	code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/weird\ name.c glob\[\{Test/x,z1.c glob\[\{Test/x1.c glob\[\{Test/y1.c glob\[\{T
 fileName.test	filename-11.24.1	skip	skip	platform	win
-fileName.test	filename-11.25	fail	fail	bug	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3
-fileName.test	filename-11.25.1	fail	fail	bug	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3
-fileName.test	filename-11.25.2	fail	fail	bug	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3
-fileName.test	filename-11.26	fail	fail	bug	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test
+fileName.test	filename-11.25	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3
+fileName.test	filename-11.25.1	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3
+fileName.test	filename-11.25.2	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3
+fileName.test	filename-11.26	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test
 fileName.test	filename-11.27	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde
 fileName.test	filename-11.28	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": z
 fileName.test	filename-11.29	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: only one MacOS type or creator argument to "-types" allowed
@@ -27550,21 +27550,21 @@ fileName.test	filename-11.33	pass	pass
 fileName.test	filename-11.34	fail	fail	message	code 1/1: bad option "-direct": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: missing argument to "-directory"
 fileName.test	filename-11.35	pass	pass		
 fileName.test	filename-11.36	fail	fail	bug	code 0/1: glob\[\{Test ~test.txt \| want: "-tails" must be used with either "-directory" or "-path"
-fileName.test	filename-11.37	fail	fail	bug	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test
+fileName.test	filename-11.37	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test
 fileName.test	filename-11.38	fail	fail	bug	code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test
 fileName.test	filename-11.39	fail	fail	bug	code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test
 fileName.test	filename-11.4	fail	fail	bug	code 1/0,2: wrong # args: should be "glob ?switches? name ?name ...?" \| want: 
-fileName.test	filename-11.40	fail	fail	bug	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
-fileName.test	filename-11.41	fail	fail	bug	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: not equal
-fileName.test	filename-11.42	fail	fail	bug	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
+fileName.test	filename-11.40	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
+fileName.test	filename-11.41	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: not equal
+fileName.test	filename-11.42	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
 fileName.test	filename-11.43	fail	fail	message	code 1/1: bad option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: ambiguous option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types, or --
 fileName.test	filename-11.44	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: "-directory" cannot be used with "-path"
-fileName.test	filename-11.45	fail	fail	bug	code 0/0,2: {} {all.tcl httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcl4048108 tcltests.tcl ztclsh} \| want: equal
+fileName.test	filename-11.45	fail	fail	bug	code 0/0,2: {} {all.tcl fileName.test httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcl178121 tcltests.tcl ztc \| want: equal
 fileName.test	filename-11.46	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: bad argument to "-types": abcde
 fileName.test	filename-11.47	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde
 fileName.test	filename-11.48	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: bad argument to "-types": abcde
 fileName.test	filename-11.49	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde
-fileName.test	filename-11.5	fail	fail	bug	code 0/1: all.tcl httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcltests.tcl ztclsh \| want: user "xyqrszzz" doesn't exist
+fileName.test	filename-11.5	fail	fail	bug	code 0/1: all.tcl fileName.test httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcltests.tcl ztclsh \| want: user "xyqrszzz" doesn't exist
 fileName.test	filename-11.50	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: "-path" may only be used once
 fileName.test	filename-11.51	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: "-directory" may only be used once
 fileName.test	filename-11.6	fail	fail	message	code 1/1: no files matched glob pattern "~xyqrszzz" \| want: user "xyqrszzz" doesn't exist
@@ -27584,7 +27584,7 @@ fileName.test	filename-12.4	pass	pass
 fileName.test	filename-12.5	fail	fail	bug	code 1/0,2: no files matched glob pattern "globTest\/x1.c" \| want: globTest/x1.c
 fileName.test	filename-12.6	fail	fail	bug	code 1/0,2: no files matched glob pattern "globTest\/\x1.c" \| want: globTest/x1.c
 fileName.test	filename-12.7	pass	pass		
-fileName.test	filename-12.8	fail	fail	bug	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
+fileName.test	filename-12.8	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
 fileName.test	filename-12.9	skip	skip	platform	win
 fileName.test	filename-13.1	fail	fail	bug	code 0/0,2: globTest \| want: globTest/
 fileName.test	filename-13.10	pass	pass		
@@ -27607,7 +27607,7 @@ fileName.test	filename-14.1	pass	pass
 fileName.test	filename-14.11	pass	pass		
 fileName.test	filename-14.13	pass	pass		
 fileName.test	filename-14.15	fail	fail	bug	code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c \| want: globTest/a1/ globTest/a2/ globTest/a3/
-fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl4048108/globTest/z1.c
+fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl178121/globTest/z1.c
 fileName.test	filename-14.18	pass	pass		
 fileName.test	filename-14.20	pass	pass		
 fileName.test	filename-14.21	pass	pass		
@@ -27615,9 +27615,9 @@ fileName.test	filename-14.22	fail	fail	message	code 1/1: no files matched glob p
 fileName.test	filename-14.23	pass	pass		
 fileName.test	filename-14.23.2	skip	skip	platform	win
 fileName.test	filename-14.24	skip	skip	platform	win
-fileName.test	filename-14.25	fail	fail	bug	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c
+fileName.test	filename-14.25	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c
 fileName.test	filename-14.25.1	skip	skip	platform	win
-fileName.test	filename-14.26	fail	fail	bug	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: 
+fileName.test	filename-14.26	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: 
 fileName.test	filename-14.27	pass	pass		
 fileName.test	filename-14.28	pass	pass		
 fileName.test	filename-14.29	pass	pass		
@@ -27848,7 +27848,7 @@ fileSystem.test	filesystem-6.12	pass	pass
 fileSystem.test	filesystem-6.13	pass	pass		
 fileSystem.test	filesystem-6.14	fail	fail	design	code 1/1: could not link: links are not available in the root folder \| want: could not read link "": no such file or directory
 fileSystem.test	filesystem-6.15	fail	fail	bug	code 0/1:  \| want: could not read "": no such file or directory
-fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795745708 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795748338 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.17	fail	fail	feature	code 1/1: file mtime with a new time is not available \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.18	fail	fail	bug	code 0/1:  \| want: can't create directory "": no such file or directory
 fileSystem.test	filesystem-6.19	pass	pass		
@@ -27861,9 +27861,9 @@ fileSystem.test	filesystem-6.24	fail	fail	design	code 1/1: could not readlink: l
 fileSystem.test	filesystem-6.25	fail	fail	message	code 1/1: error renaming "" to "": target file exists \| want: error renaming "": no such file or directory
 fileSystem.test	filesystem-6.26	pass	pass		
 fileSystem.test	filesystem-6.27	fail	fail	bug	code 0/1: / \| want: unrecognised path
-fileSystem.test	filesystem-6.28	fail	fail	bug	code 0/1: 260 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.28	fail	fail	bug	code 0/1: 280 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.29	pass	pass		
-fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795745708 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795748338 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.30	fail	fail	bug	code 0/1: native root \| want: unrecognised path
 fileSystem.test	filesystem-6.31	pass	pass		
 fileSystem.test	filesystem-6.32	fail	fail	bug	code 0/1: directory \| want: could not read "": no such file or directory
@@ -28803,13 +28803,13 @@ info.test	info-15.6	pass	pass
 info.test	info-15.7	pass	pass		
 info.test	info-15.8	skip	skip	tcl	knownBug
 info.test	info-16.1	pass	pass		
-info.test	info-16.2	fail	fail	bug	code 0/0,2:  \| want: info.test
-info.test	info-16.3	fail	fail	bug	code 0/0,2: /gorp.info {} \| want: /gorp.info info.test
-info.test	info-16.4	fail	fail	bug	code 0/0,2:  \| want: info.test
-info.test	info-16.5	fail	fail	bug	code 0/0,2:  \| want: info.test
-info.test	info-16.6	fail	fail	bug	code 0/0,2: {} newname.txt {} \| want: info.test newname.txt info.test
-info.test	info-16.7	fail	fail	bug	code 0/0,2: /gorp.info newname.txt {} \| want: /gorp.info newname.txt info.test
-info.test	info-16.8	fail	fail	bug	code 0/0,2: {/gorp.info foo.bar} {} \| want: {/gorp.info foo.bar} info.test
+info.test	info-16.2	pass	pass		
+info.test	info-16.3	pass	pass		
+info.test	info-16.4	pass	pass		
+info.test	info-16.5	pass	pass		
+info.test	info-16.6	pass	pass		
+info.test	info-16.7	pass	pass		
+info.test	info-16.8	pass	pass		
 info.test	info-17.1	pass	pass		
 info.test	info-18.1	pass	pass		
 info.test	info-18.2	pass	pass		
@@ -28843,7 +28843,7 @@ info.test	info-22.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcomman
 info.test	info-22.1	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: bad level "-8"
 info.test	info-22.2	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: bad level "9"
 info.test	info-22.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 750 file */info.te...
-info.test	info-22.4	fail	fail	bug	cleanup: can't unset "res": no such variable
+info.test	info-22.4	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-22.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 756 file info.test...
 info.test	info-22.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 758 file info.test...
 info.test	info-22.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 761 file info.test...
@@ -28873,12 +28873,12 @@ info.test	info-3.1	fail	fail	bug	code 0/0,2: 3 \| want: 4
 info.test	info-3.2	fail	fail	bug	code 0/0,2: 3 \| want: 4
 info.test	info-3.3	fail	fail	bug	code 0/0,2: 3 \| want: 4
 info.test	info-3.4	pass	pass		
-info.test	info-30.0	fail	fail	bug	cleanup: can't unset "res": no such variable
+info.test	info-30.0	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-30.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1446 file info.tes...
-info.test	info-30.10	fail	fail	bug	cleanup: can't unset "res": no such variable
-info.test	info-30.11	fail	fail	bug	cleanup: can't unset "res": no such variable
-info.test	info-30.12	fail	fail	bug	cleanup: can't unset "res": no such variable
-info.test	info-30.13	fail	fail	bug	cleanup: can't unset "res": no such variable
+info.test	info-30.10	fail	fail	feature	cleanup: can't unset "res": no such variable
+info.test	info-30.11	fail	fail	feature	cleanup: can't unset "res": no such variable
+info.test	info-30.12	fail	fail	feature	cleanup: can't unset "res": no such variable
+info.test	info-30.13	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-30.14	fail	fail	bug	code 1/0,2: interpreter named "sub" already exists, cannot create \| want:  type source line 1562 file info.test cmd {info frame 0} proc ::abra
 info.test	info-30.15	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1574 file info.tes...
 info.test	info-30.16	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1587 file info.te...
@@ -28907,7 +28907,7 @@ info.test	info-30.36	fail	fail	feature	code 1/0,2: unknown or ambiguous subcomma
 info.test	info-30.37	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:   type source line 1765 file info.t...
 info.test	info-30.38	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1771 file info.te...
 info.test	info-30.39	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:   type source line 1776 file info.t...
-info.test	info-30.4	fail	fail	bug	cleanup: can't unset "res": no such variable
+info.test	info-30.4	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-30.40	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1782 file info.tes...
 info.test	info-30.41	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1791 file info.te...
 info.test	info-30.42	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1800 file info.te...
@@ -28917,18 +28917,18 @@ info.test	info-30.45	fail	fail	feature	code 1/0,2: unknown or ambiguous subcomma
 info.test	info-30.46	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: YES
 info.test	info-30.47	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: YES
 info.test	info-30.48	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type eval line 2 cmd {info frame 0}...
-info.test	info-30.5	fail	fail	bug	cleanup: can't unset "res": no such variable
-info.test	info-30.6	fail	fail	bug	cleanup: can't unset "res": no such variable
+info.test	info-30.5	fail	fail	feature	cleanup: can't unset "res": no such variable
+info.test	info-30.6	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-30.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1495 file info.te...
-info.test	info-30.8	fail	fail	bug	cleanup: can't unset "res": no such variable
-info.test	info-30.9	fail	fail	bug	cleanup: can't unset "res": no such variable
+info.test	info-30.8	fail	fail	feature	cleanup: can't unset "res": no such variable
+info.test	info-30.9	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-31.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type eval line 3 cmd {info frame 0}...
-info.test	info-31.1	fail	fail	bug	cleanup: can't unset "res": no such variable
-info.test	info-31.1a	fail	fail	bug	cleanup: can't unset "res": no such variable
-info.test	info-31.2	fail	fail	bug	cleanup: can't unset "res": no such variable
-info.test	info-31.4	fail	fail	bug	cleanup: can't unset "res": no such variable
-info.test	info-31.5	fail	fail	bug	cleanup: can't unset "res": no such variable
-info.test	info-31.6	fail	fail	bug	cleanup: can't unset "res": no such variable
+info.test	info-31.1	fail	fail	feature	cleanup: can't unset "res": no such variable
+info.test	info-31.1a	fail	fail	feature	cleanup: can't unset "res": no such variable
+info.test	info-31.2	fail	fail	feature	cleanup: can't unset "res": no such variable
+info.test	info-31.4	fail	fail	feature	cleanup: can't unset "res": no such variable
+info.test	info-31.5	fail	fail	feature	cleanup: can't unset "res": no such variable
+info.test	info-31.6	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-31.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type proc line 1 cmd {info frame 0}...
 info.test	info-32.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type proc line 1 cmd {info frame 0}...
 info.test	info-33.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1115 file info.tes...
@@ -28976,7 +28976,7 @@ info.test	info-35.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcomman
 info.test	info-36.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1259 file info.tes...
 info.test	info-36.1.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1275 file info.tes...
 info.test	info-36.1.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1291 file info.tes...
-info.test	info-37.0	fail	fail	bug	cleanup: can't unset "res": no such variable
+info.test	info-37.0	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-38.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
 info.test	info-38.2	fail	fail	feature	setup: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, recursionlimit, slaves, or target
 info.test	info-38.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
@@ -28984,7 +28984,7 @@ info.test	info-38.4	fail	fail	feature	setup: bad option "debug": must be alias, 
 info.test	info-38.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
 info.test	info-38.6	fail	fail	bug	setup: interpreter named "sub" already exists, cannot create
 info.test	info-38.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
-info.test	info-39.0	fail	fail	bug	cleanup: can't unset "res": no such variable
+info.test	info-39.0	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-39.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1854 file info.tes...
 info.test	info-39.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 3
 info.test	info-4.1	pass	pass		
@@ -29022,7 +29022,7 @@ info.test	info-7.9	pass	pass
 info.test	info-8.1	pass	pass		
 info.test	info-8.2	pass	pass		
 info.test	info-8.3	pass	pass		
-info.test	info-8.4	fail	fail	bug	code 0/0,2: x {} {} {} {} \| want: x {} x x x
+info.test	info-8.4	pass	pass		
 info.test	info-8.5	pass	pass		
 info.test	info-9.1	pass	pass		
 info.test	info-9.10	pass	pass		
@@ -29412,21 +29412,21 @@ io.test	io-10.5	pass	pass
 io.test	io-11.1	pass	pass		
 io.test	io-11.2	pass	pass		
 io.test	io-11.3	pass	pass		
-io.test	io-11.4	fail	fail	bug	code 0/0,2: {abcdefghijklmnopqrstuvwxyz } 1 {} 1 \| want: abcdefghijkl 1 {} 1
+io.test	io-11.4	pass	pass		
 io.test	io-12.1	pass	pass		
 io.test	io-12.10	pass	pass		
 io.test	io-12.2	pass	pass		
 io.test	io-12.3	pass	pass		
 io.test	io-12.4	skip	skip	internals	testchannel
 io.test	io-12.5	pass	pass		
-io.test	io-12.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: 
-io.test	io-12.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: 
+io.test	io-12.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 
+io.test	io-12.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 
 io.test	io-12.8	pass	pass		
 io.test	io-12.9	pass	pass		
 io.test	io-13.1	pass	pass		
 io.test	io-13.10	pass	pass		
-io.test	io-13.11	fail	fail	bug	code 0/0,2: abcd defgh \| want: abcd d
-io.test	io-13.12	fail	fail	bug	code 0/0,2:    ab  def    \| want:    ab  d
+io.test	io-13.11	pass	pass		
+io.test	io-13.12	pass	pass		
 io.test	io-13.2	pass	pass		
 io.test	io-13.3	pass	pass		
 io.test	io-13.4	pass	pass		
@@ -29465,7 +29465,7 @@ io.test	io-2.3	pass	pass
 io.test	io-2.4	fail	fail	bug	code 0/0,2: {abcdefg hijklmnopqrstuvwxyz} {abcdefg hijklmnopqrstuvwxyz} \| want: {abcdefg hijklmno} {abcdefg hijklmnopqrstuvwxyz}
 io.test	io-20.1	fail	fail	bug	code 0/0,2: utf-8 \| want: ascii
 io.test	io-20.2	skip	skip	platform	win
-io.test	io-20.3	fail	fail	bug	code 0/0,2: {} {auto lf} \| want: {{} {}} {auto lf}
+io.test	io-20.3	pass	pass		
 io.test	io-20.5	fail	fail	bug	code 0/0,2:  \| want: 777
 io.test	io-21.1	skip	skip	tcl	emptyTest
 io.test	io-22.1	skip	skip	tcl	emptyTest
@@ -29539,20 +29539,20 @@ io.test	io-30.12	pass	pass
 io.test	io-30.13	pass	pass		
 io.test	io-30.14	pass	pass		
 io.test	io-30.15	pass	pass		
-io.test	io-30.16	fail	fail	bug	code 0/0,2: hello there and here  \| want: hello there and here 
+io.test	io-30.16	pass	pass		
 io.test	io-30.17	skip	skip	platform	win
-io.test	io-30.18	fail	fail	bug	code 0/0,2: abc def 0 ghi 0 qrs 0 \| want: abc def 0 {} 1 {} 1
-io.test	io-30.19	fail	fail	bug	code 0/0,2: abc def 0 ghi 0 qrs 0 \| want: abc def 0 {} 1 {} 1
+io.test	io-30.18	pass	pass		
+io.test	io-30.19	pass	pass		
 io.test	io-30.2	pass	pass		
 io.test	io-30.20	pass	pass		
 io.test	io-30.21	fail	fail	bug	code 0/0,2: -1 0 def 0 \| want: 0 1 {} 1
 io.test	io-30.22	fail	fail	bug	code 0/0,2: -1 0 def 0 \| want: 0 1 {} 1
-io.test	io-30.23	fail	fail	bug	code 0/0,2: 17 1 \| want: 8 1
-io.test	io-30.24	fail	fail	bug	code 0/0,2: 17 1 \| want: 8 1
-io.test	io-30.25	fail	fail	bug	code 0/0,2: 17 1 \| want: 8 1
-io.test	io-30.26	fail	fail	bug	code 0/0,2: 17 1 \| want: 8 1
-io.test	io-30.27	fail	fail	bug	code 0/0,2: 17 1 \| want: 8 1
-io.test	io-30.28	fail	fail	bug	code 0/0,2: 17 1 \| want: 8 1
+io.test	io-30.23	pass	pass		
+io.test	io-30.24	pass	pass		
+io.test	io-30.25	pass	pass		
+io.test	io-30.26	pass	pass		
+io.test	io-30.27	pass	pass		
+io.test	io-30.28	pass	pass		
 io.test	io-30.3	pass	pass		
 io.test	io-30.4	pass	pass		
 io.test	io-30.5	pass	pass		
@@ -29569,21 +29569,21 @@ io.test	io-31.14	pass	pass
 io.test	io-31.15	pass	pass		
 io.test	io-31.16	pass	pass		
 io.test	io-31.17	pass	pass		
-io.test	io-31.18	fail	fail	bug	code 0/0,2: hello there and here 0  0 \| want: hello there and here 0 {} 1
+io.test	io-31.18	pass	pass		
 io.test	io-31.19	pass	pass		
 io.test	io-31.2	pass	pass		
-io.test	io-31.20	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
-io.test	io-31.21	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
+io.test	io-31.20	pass	pass		
+io.test	io-31.21	pass	pass		
 io.test	io-31.22	pass	pass		
 io.test	io-31.23	pass	pass		
 io.test	io-31.24	pass	pass		
-io.test	io-31.25	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
-io.test	io-31.26	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
-io.test	io-31.27	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
-io.test	io-31.28	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
-io.test	io-31.29	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
+io.test	io-31.25	pass	pass		
+io.test	io-31.26	pass	pass		
+io.test	io-31.27	pass	pass		
+io.test	io-31.28	pass	pass		
+io.test	io-31.29	pass	pass		
 io.test	io-31.3	pass	pass		
-io.test	io-31.30	fail	fail	bug	code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1
+io.test	io-31.30	pass	pass		
 io.test	io-31.31	pass	pass		
 io.test	io-31.32	pass	pass		
 io.test	io-31.4	pass	pass		
@@ -29645,28 +29645,28 @@ io.test	io-34.7	pass	pass
 io.test	io-34.8	fail	fail	bug	code 0/0,2: 1 {error during seek on "": input/output error} \| want: 1 {error during seek on "": invalid argument}
 io.test	io-34.9	pass	pass		
 io.test	io-35.1	pass	pass		
-io.test	io-35.10	fail	fail	bug	code 0/0,2: 10 8 1 \| want: 11 8 1
-io.test	io-35.11	fail	fail	bug	code 0/0,2: 10 8 1 \| want: 11 8 1
-io.test	io-35.12	fail	fail	bug	code 0/0,2: 17 17 1 \| want: 17 8 1
-io.test	io-35.13	fail	fail	bug	code 0/0,2: 17 17 1 \| want: 17 8 1
-io.test	io-35.14	fail	fail	bug	code 0/0,2: 17 17 1 \| want: 17 8 1
-io.test	io-35.15	fail	fail	bug	code 0/0,2: 17 17 1 \| want: 17 8 1
-io.test	io-35.16	fail	fail	bug	code 0/0,2: 21 17 1 \| want: 21 8 1
-io.test	io-35.17	fail	fail	bug	code 0/0,2: 21 17 1 \| want: 21 8 1
+io.test	io-35.10	pass	pass		
+io.test	io-35.11	pass	pass		
+io.test	io-35.12	pass	pass		
+io.test	io-35.13	pass	pass		
+io.test	io-35.14	pass	pass		
+io.test	io-35.15	pass	pass		
+io.test	io-35.16	pass	pass		
+io.test	io-35.17	pass	pass		
 io.test	io-35.18	pass	pass		
-io.test	io-35.18a	fail	fail	bug	code 0/0,2: 8 8 1 13 \| want: 9 8 1 13
-io.test	io-35.18b	fail	fail	bug	code 0/0,2: 1 1 1 13 \| want: 2 1 1 13
+io.test	io-35.18a	pass	pass		
+io.test	io-35.18b	pass	pass		
 io.test	io-35.18c	pass	pass		
-io.test	io-35.19	fail	fail	bug	code 0/0,2: 17 17 1 13 \| want: 17 8 1 13
+io.test	io-35.19	pass	pass		
 io.test	io-35.2	pass	pass		
-io.test	io-35.20	fail	fail	bug	code 0/0,2: 9 9 1 13 \| want: 9 1 1 13
+io.test	io-35.20	pass	pass		
 io.test	io-35.3	pass	pass		
 io.test	io-35.4	pass	pass		
 io.test	io-35.5	pass	pass		
-io.test	io-35.6	fail	fail	bug	code 0/0,2: 8 8 1 \| want: 9 8 1
-io.test	io-35.7	fail	fail	bug	code 0/0,2: 8 8 1 \| want: 9 8 1
-io.test	io-35.8	fail	fail	bug	code 0/0,2: 8 8 1 \| want: 9 8 1
-io.test	io-35.9	fail	fail	bug	code 0/0,2: 8 8 1 \| want: 9 8 1
+io.test	io-35.6	pass	pass		
+io.test	io-35.7	pass	pass		
+io.test	io-35.8	pass	pass		
+io.test	io-35.9	pass	pass		
 io.test	io-36.1	pass	pass		
 io.test	io-36.1.1	pass	pass		
 io.test	io-36.2	pass	pass		
@@ -29678,7 +29678,7 @@ io.test	io-37.1	skip	skip	internals	testchannel
 io.test	io-37.2	skip	skip	internals	testchannel
 io.test	io-38.1	pass	pass		
 io.test	io-38.2	pass	pass		
-io.test	io-38.3	fail	fail	bug	code 1/0,2: error reading "file541": illegal operation on a directory \| want: 
+io.test	io-38.3	pass	pass		
 io.test	io-39.1	pass	pass		
 io.test	io-39.10	pass	pass		
 io.test	io-39.11	pass	pass		
@@ -29694,10 +29694,10 @@ io.test	io-39.19	pass	pass
 io.test	io-39.2	pass	pass		
 io.test	io-39.20	pass	pass		
 io.test	io-39.21	fail	fail	bug	code 0/0,2: auto lf \| want: auto crlf
-io.test	io-39.22	fail	fail	bug	code 0/0,2: {} {} {} \| want: {{} {}} {O G} {D D}
-io.test	io-39.22a	fail	fail	bug	code 0/0,2: {} {} {0 {}} \| want: {O G} {D D} {1 {bad value for -eofchar: should be a list of zero, one, or two elements}}
+io.test	io-39.22	pass	pass		
+io.test	io-39.22a	pass	pass		
 io.test	io-39.23	fail	fail	bug	code 0/0,2: {} lf \| want: {{}} auto
-io.test	io-39.24	fail	fail	bug	code 0/0,2: {} lf \| want: {{}} auto
+io.test	io-39.24	fail	fail	bug	code 0/0,2: D lf \| want: {{}} auto
 io.test	io-39.3	pass	pass		
 io.test	io-39.4	pass	pass		
 io.test	io-39.5	pass	pass		
@@ -29755,20 +29755,20 @@ io.test	io-47.4	skip	skip	internals	testfevent
 io.test	io-47.5	skip	skip	internals	testfevent
 io.test	io-47.6	skip	skip	internals	testfevent
 io.test	io-48.1	pass	pass		
-io.test	io-48.10	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
-io.test	io-48.11	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
-io.test	io-48.12	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
-io.test	io-48.13	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
-io.test	io-48.14	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
-io.test	io-48.15	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
+io.test	io-48.10	pass	pass		
+io.test	io-48.11	pass	pass		
+io.test	io-48.12	pass	pass		
+io.test	io-48.13	pass	pass		
+io.test	io-48.14	pass	pass		
+io.test	io-48.15	pass	pass		
 io.test	io-48.2	pass	pass		
 io.test	io-48.3	pass	pass		
-io.test	io-48.4	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
-io.test	io-48.5	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
-io.test	io-48.6	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
-io.test	io-48.7	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
-io.test	io-48.8	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
-io.test	io-48.9	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
+io.test	io-48.4	pass	pass		
+io.test	io-48.5	pass	pass		
+io.test	io-48.6	pass	pass		
+io.test	io-48.7	pass	pass		
+io.test	io-48.8	pass	pass		
+io.test	io-48.9	pass	pass		
 io.test	io-49.1	fail	fail	bug	code 0/0,2: 7 a 1 { } 2 b 3 { } 4 c 5 { } 6 0 { } 0 \| want: 7 a 1 { } 2 b 3 { } 4 c 5 { } 7 0 {} 1
 io.test	io-49.2	fail	fail	bug	code 0/0,2: 7 {a } 2 {b } 4 {c } 6 0 { } 7 1 \| want: 7 {a } 2 {b } 4 {c } 7 0 {} 7 1
 io.test	io-49.3	fail	fail	bug	code 0/0,2: 7 {a b} 3 { c } 6 0 { } 7 1 \| want: 7 {a b} 3 { c } 7 0 {} 7 1
@@ -29788,15 +29788,15 @@ io.test	io-50.6	skip	skip	internals	testchannelevent
 io.test	io-51.1	pass	pass		
 io.test	io-52.1	fail	fail	bug	code 1/0,2: fcopy -command is not available \| want: 0
 io.test	io-52.2	fail	fail	bug	code 1/0,2: fcopy -command is not available \| want: 0
-io.test	io-52.3	fail	fail	bug	code 1/0,2: error reading "file660": illegal operation on a directory \| want: 0 0 ok
-io.test	io-52.4	fail	fail	bug	code 1/0,2: error reading "file662": illegal operation on a directory \| want: 0 0 0 40
-io.test	io-52.4.1	fail	fail	bug	code 1/0,2: error reading "file664": illegal operation on a directory \| want: 0 0 0 40
-io.test	io-52.5	fail	fail	bug	code 1/0,2: error reading "file666": illegal operation on a directory \| want: 0 0 ok
-io.test	io-52.5a	fail	fail	bug	code 1/0,2: error reading "file668": illegal operation on a directory \| want: 0 0 ok
-io.test	io-52.5b	fail	fail	bug	code 1/0,2: error reading "file670": illegal operation on a directory \| want: 0 0 ok
-io.test	io-52.6	fail	fail	bug	code 1/0,2: error reading "file672": illegal operation on a directory \| want: 0 0 ok
-io.test	io-52.7	fail	fail	bug	code 1/0,2: error reading "file674": illegal operation on a directory \| want: 0 0 ok
-io.test	io-52.8	fail	fail	bug	code 0/0,2: 0 0 \| want: 40 40
+io.test	io-52.3	pass	pass		
+io.test	io-52.4	pass	pass		
+io.test	io-52.4.1	pass	pass		
+io.test	io-52.5	pass	pass		
+io.test	io-52.5a	pass	pass		
+io.test	io-52.5b	pass	pass		
+io.test	io-52.6	pass	pass		
+io.test	io-52.7	fail	fail	bug	code 0/0,2: 0 0 \| want: 0 0 ok
+io.test	io-52.8	pass	pass		
 io.test	io-6.1	pass	pass		
 io.test	io-6.10	pass	pass		
 io.test	io-6.11	pass	pass		
@@ -29851,8 +29851,8 @@ io.test	io-6.55	fail	fail	feature	code 1/0,2: unknown encoding "iso2022-jp" \| w
 io.test	io-6.56	pass	pass		
 io.test	io-6.6	pass	pass		
 io.test	io-6.7	pass	pass		
-io.test	io-6.8	fail	fail	bug	code 0/0,2: 12 abcdefghijk 6 wombat \| want: 6 abcdef -1 {}
-io.test	io-6.9	fail	fail	bug	code 0/0,2: 11 abcdefghijk 7 wombat \| want: 11 abcdefghijk 3 wom
+io.test	io-6.8	pass	pass		
+io.test	io-6.9	pass	pass		
 io.test	io-7.1	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 1234567890123０１２３４
 io.test	io-7.2	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 10 1234567890 0
 io.test	io-7.3	skip	skip	internals	testchannel
@@ -29933,143 +29933,143 @@ ioCmd.test	iocmd-2.3	pass	pass
 ioCmd.test	iocmd-2.4	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't opened for writing}
 ioCmd.test	iocmd-20.0	pass	pass		
 ioCmd.test	iocmd-20.1	pass	pass		
-ioCmd.test	iocmd-21.0	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: wrong # args: should be "chan create mode cmdprefix"
-ioCmd.test	iocmd-21.1	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: wrong # args: should be "chan create mode cmdprefix"
-ioCmd.test	iocmd-21.10	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *all required methods*
-ioCmd.test	iocmd-21.11	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *bad method "1": must be *
-ioCmd.test	iocmd-21.12	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *bad method "c": must be *
-ioCmd.test	iocmd-21.13	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *all required methods*
-ioCmd.test	iocmd-21.14	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *lacks a "write" method
-ioCmd.test	iocmd-21.15	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *lacks a "read" method
-ioCmd.test	iocmd-21.16	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *supports "cget" but not "cgetall"
-ioCmd.test	iocmd-21.17	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *supports "cgetall" but not "cget"
-ioCmd.test	iocmd-21.18	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {} {initialize rc* {read write}} rc* {finalize rc*}...
-ioCmd.test	iocmd-21.19	fail	fail	feature	code 0/0,2: {file18 file19} 1 {unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or t \| want: {} {initialize rc* {read write}} 1 ...
-ioCmd.test	iocmd-21.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: 
-ioCmd.test	iocmd-21.20	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell
-ioCmd.test	iocmd-21.21	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell
-ioCmd.test	iocmd-21.22	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell
-ioCmd.test	iocmd-21.23	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell
-ioCmd.test	iocmd-21.24	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell
-ioCmd.test	iocmd-21.3	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: bad mode "c": must be read or write
-ioCmd.test	iocmd-21.4	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: unmatched open brace in list
-ioCmd.test	iocmd-21.5	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: invalid command name "foo"
-ioCmd.test	iocmd-21.6	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: wrong # args: should be "foo"
-ioCmd.test	iocmd-21.7	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: wrong # args: should be "::foo"
-ioCmd.test	iocmd-21.8	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell     while execu \| want: chan handler "foo initialize" retur...
-ioCmd.test	iocmd-21.9	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: chan handler "foo initialize" returned non-list: *
-ioCmd.test	iocmd-22.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* rc* 1 {invalid co...
-ioCmd.test	iocmd-22.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize rc*} {}...
-ioCmd.test	iocmd-22.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize rc*} 1 ...
-ioCmd.test	iocmd-22.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize rc*} 1 ...
-ioCmd.test	iocmd-22.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize rc*} 0 {}
-ioCmd.test	iocmd-22.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize rc*} 1 ...
-ioCmd.test	iocmd-22.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize rc*} 1 ...
-ioCmd.test	iocmd-22.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize rc*} 1 ...
-ioCmd.test	iocmd-22.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize rc*} 1 ...
-ioCmd.test	iocmd-23.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rc* 4096} {read rc* 4096} snarfsnarf
-ioCmd.test	iocmd-23.10	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell
-ioCmd.test	iocmd-23.11	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rc* 4096} {}
-ioCmd.test	iocmd-23.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rc* 4096} 1 {read delivered more than requested}
-ioCmd.test	iocmd-23.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: 1 {channel "rc*" wasn't opened for reading}
-ioCmd.test	iocmd-23.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rc* 4096} 1 BOOM!
-ioCmd.test	iocmd-23.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rc* 4096} 1 *bad code*
-ioCmd.test	iocmd-23.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rc* 4096} 1 *bad code*
-ioCmd.test	iocmd-23.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rc* 4096} 1 *bad code*
-ioCmd.test	iocmd-23.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rc* 4096} 1 *bad code* {-code 1 -level 0 -err...
-ioCmd.test	iocmd-23.9	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell
-ioCmd.test	iocmd-24.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rc* snarf} 5
-ioCmd.test	iocmd-24.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 *bad code*
-ioCmd.test	iocmd-24.11	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 *bad code*
-ioCmd.test	iocmd-24.12	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 {expected integer but...
-ioCmd.test	iocmd-24.13	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 *bad code* {-code 1 -...
-ioCmd.test	iocmd-24.14	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell
-ioCmd.test	iocmd-24.15	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell
-ioCmd.test	iocmd-24.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 7 {write rc* arfsnarf} 8
-ioCmd.test	iocmd-24.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} -1
-ioCmd.test	iocmd-24.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: 1 {channel "rc*" wasn't opened for writing}
-ioCmd.test	iocmd-24.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rc* snarf} 1 {write wrote more than requested}
-ioCmd.test	iocmd-24.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rc* snarf} 1 {write wrote nothing}
-ioCmd.test	iocmd-24.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 BOOM!
-ioCmd.test	iocmd-24.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 BOOM!
-ioCmd.test	iocmd-24.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 *bad code*
-ioCmd.test	iocmd-25.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {-blocking 1 -buffering full -buffersize 4096 -enco...
-ioCmd.test	iocmd-25.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cgetall rc*} 1 *bad code* {-code 1 -level 0 -error...
-ioCmd.test	iocmd-25.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cgetall rc*} {-blocking 1 -buffering full -buffers...
-ioCmd.test	iocmd-25.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cgetall rc*} {-blocking 1 -buffering full -buffers...
-ioCmd.test	iocmd-25.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cgetall rc*} 1 {Expected list with even number of ...
-ioCmd.test	iocmd-25.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cgetall rc*} 1 {unmatched open brace in list}
-ioCmd.test	iocmd-25.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cgetall rc*} 1 BOOM!
-ioCmd.test	iocmd-25.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cgetall rc*} 1 *bad code*
-ioCmd.test	iocmd-25.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cgetall rc*} 1 *bad code*
-ioCmd.test	iocmd-25.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cgetall rc*} 1 *bad code*
-ioCmd.test	iocmd-26.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {}
-ioCmd.test	iocmd-26.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {configure rc* -rc-foo bar} 1 BOOM!
-ioCmd.test	iocmd-26.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {configure rc* -rc-foo bar} {}
-ioCmd.test	iocmd-26.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {configure rc* -rc-foo bar} 1 *bad code*
-ioCmd.test	iocmd-26.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {configure rc* -rc-foo bar} 1 *bad code*
-ioCmd.test	iocmd-26.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {configure rc* -rc-foo bar} 1 *bad code*
-ioCmd.test	iocmd-26.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {configure rc* -rc-foo bar} 1 *bad code* {-code 1 -...
-ioCmd.test	iocmd-27.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cget rc* -rc-foo} foo
-ioCmd.test	iocmd-27.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cget rc* -rc-foo} 1 BOOM!
-ioCmd.test	iocmd-27.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cget rc* -rc-foo} 1 BOOM!
-ioCmd.test	iocmd-27.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cget rc* -rc-foo} 1 *bad code*
-ioCmd.test	iocmd-27.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cget rc* -rc-foo} 1 *bad code*
-ioCmd.test	iocmd-27.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {cget rc* -rc-foo} 1 *bad code* {-code 1 -level 0 -...
-ioCmd.test	iocmd-28.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: -1
-ioCmd.test	iocmd-28.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: 1 {error during seek on "rc*": invalid argument}
-ioCmd.test	iocmd-28.11	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 BOOM!
-ioCmd.test	iocmd-28.12	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 *bad code*
-ioCmd.test	iocmd-28.13	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 *bad code*
-ioCmd.test	iocmd-28.14	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 *bad code*
-ioCmd.test	iocmd-28.15	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 *bad code* {-code 1 -level 0 -...
-ioCmd.test	iocmd-28.16	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 {Tried to seek before origin}
-ioCmd.test	iocmd-28.17	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 {expected integer but got "BOG...
-ioCmd.test	iocmd-28.18	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 current} {}
-ioCmd.test	iocmd-28.19.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 start} {}
-ioCmd.test	iocmd-28.19.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 current} {}
-ioCmd.test	iocmd-28.19.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 end} {}
-ioCmd.test	iocmd-28.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 BOOM!
-ioCmd.test	iocmd-28.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 *bad code*
-ioCmd.test	iocmd-28.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 *bad code*
-ioCmd.test	iocmd-28.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 *bad code*
-ioCmd.test	iocmd-28.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 *bad code* {-code 1 -level 0...
-ioCmd.test	iocmd-28.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 current} 88
-ioCmd.test	iocmd-28.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 {Tried to seek before origin}
-ioCmd.test	iocmd-28.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 {expected integer but got "B...
-ioCmd.test	iocmd-29.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: 1
-ioCmd.test	iocmd-29.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {blocking rc* 0} 1 *bad code* {-code 1 -level 0 -er...
-ioCmd.test	iocmd-29.11	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {blocking rc* 0} 0 {}
-ioCmd.test	iocmd-29.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {} 0
-ioCmd.test	iocmd-29.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: 1
-ioCmd.test	iocmd-29.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {blocking rc* 0} {} 0
-ioCmd.test	iocmd-29.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {blocking rc* 1} {} 1
-ioCmd.test	iocmd-29.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {blocking rc* 0} 1 BOOM!
-ioCmd.test	iocmd-29.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {blocking rc* 0} 1 *bad code*
-ioCmd.test	iocmd-29.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {blocking rc* 0} 1 *bad code*
-ioCmd.test	iocmd-29.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {blocking rc* 0} 1 *bad code*
+ioCmd.test	iocmd-21.0	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "chan create mode cmd...
+ioCmd.test	iocmd-21.1	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "chan create mode cmd...
+ioCmd.test	iocmd-21.10	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *all required methods*
+ioCmd.test	iocmd-21.11	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *bad method "1": must be *
+ioCmd.test	iocmd-21.12	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *bad method "c": must be *
+ioCmd.test	iocmd-21.13	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *all required methods*
+ioCmd.test	iocmd-21.14	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *lacks a "write" method
+ioCmd.test	iocmd-21.15	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *lacks a "read" method
+ioCmd.test	iocmd-21.16	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *supports "cget" but not "cgetall"
+ioCmd.test	iocmd-21.17	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *supports "cgetall" but not "cget"
+ioCmd.test	iocmd-21.18	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {} {initialize rc* {read write}} rc* {finaliz...
+ioCmd.test	iocmd-21.19	fail	fail	feature	code 0/0,2: {file18 file19} 1 {unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek \| want: {} {initialize rc* {read write}} 1 ...
+ioCmd.test	iocmd-21.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 
+ioCmd.test	iocmd-21.20	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
+ioCmd.test	iocmd-21.21	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
+ioCmd.test	iocmd-21.22	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
+ioCmd.test	iocmd-21.23	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
+ioCmd.test	iocmd-21.24	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
+ioCmd.test	iocmd-21.3	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: bad mode "c": must be read or write
+ioCmd.test	iocmd-21.4	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: unmatched open brace in list
+ioCmd.test	iocmd-21.5	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: invalid command name "foo"
+ioCmd.test	iocmd-21.6	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "foo"
+ioCmd.test	iocmd-21.7	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "::foo"
+ioCmd.test	iocmd-21.8	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell     while \| want: chan handler "foo initialize" retur...
+ioCmd.test	iocmd-21.9	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: chan handler "foo initialize" returned non-li...
+ioCmd.test	iocmd-22.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* rc* 1 {inva...
+ioCmd.test	iocmd-22.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize r...
+ioCmd.test	iocmd-22.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize r...
+ioCmd.test	iocmd-22.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize r...
+ioCmd.test	iocmd-22.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize r...
+ioCmd.test	iocmd-22.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize r...
+ioCmd.test	iocmd-22.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize r...
+ioCmd.test	iocmd-22.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize r...
+ioCmd.test	iocmd-22.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rc* {read write}} rc* {finalize r...
+ioCmd.test	iocmd-23.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rc* 4096} {read rc* 4096} snarfsnarf
+ioCmd.test	iocmd-23.10	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
+ioCmd.test	iocmd-23.11	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rc* 4096} {}
+ioCmd.test	iocmd-23.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rc* 4096} 1 {read delivered more than r...
+ioCmd.test	iocmd-23.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 1 {channel "rc*" wasn't opened for reading}
+ioCmd.test	iocmd-23.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rc* 4096} 1 BOOM!
+ioCmd.test	iocmd-23.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rc* 4096} 1 *bad code*
+ioCmd.test	iocmd-23.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rc* 4096} 1 *bad code*
+ioCmd.test	iocmd-23.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rc* 4096} 1 *bad code*
+ioCmd.test	iocmd-23.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rc* 4096} 1 *bad code* {-code 1 -level ...
+ioCmd.test	iocmd-23.9	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
+ioCmd.test	iocmd-24.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rc* snarf} 5
+ioCmd.test	iocmd-24.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 *bad code*
+ioCmd.test	iocmd-24.11	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 *bad code*
+ioCmd.test	iocmd-24.12	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 {expected integ...
+ioCmd.test	iocmd-24.13	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 *bad code* {-co...
+ioCmd.test	iocmd-24.14	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
+ioCmd.test	iocmd-24.15	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
+ioCmd.test	iocmd-24.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 7 {write rc* arfs...
+ioCmd.test	iocmd-24.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} -1
+ioCmd.test	iocmd-24.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 1 {channel "rc*" wasn't opened for writing}
+ioCmd.test	iocmd-24.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rc* snarf} 1 {write wrote more than re...
+ioCmd.test	iocmd-24.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rc* snarf} 1 {write wrote nothing}
+ioCmd.test	iocmd-24.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 BOOM!
+ioCmd.test	iocmd-24.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 BOOM!
+ioCmd.test	iocmd-24.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rc* snarfsnarfsnarf} 1 *bad code*
+ioCmd.test	iocmd-25.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {-blocking 1 -buffering full -buffersize 4096...
+ioCmd.test	iocmd-25.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cgetall rc*} 1 *bad code* {-code 1 -level 0 ...
+ioCmd.test	iocmd-25.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cgetall rc*} {-blocking 1 -buffering full -b...
+ioCmd.test	iocmd-25.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cgetall rc*} {-blocking 1 -buffering full -b...
+ioCmd.test	iocmd-25.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cgetall rc*} 1 {Expected list with even numb...
+ioCmd.test	iocmd-25.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cgetall rc*} 1 {unmatched open brace in list}
+ioCmd.test	iocmd-25.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cgetall rc*} 1 BOOM!
+ioCmd.test	iocmd-25.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cgetall rc*} 1 *bad code*
+ioCmd.test	iocmd-25.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cgetall rc*} 1 *bad code*
+ioCmd.test	iocmd-25.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cgetall rc*} 1 *bad code*
+ioCmd.test	iocmd-26.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {}
+ioCmd.test	iocmd-26.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {configure rc* -rc-foo bar} 1 BOOM!
+ioCmd.test	iocmd-26.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {configure rc* -rc-foo bar} {}
+ioCmd.test	iocmd-26.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {configure rc* -rc-foo bar} 1 *bad code*
+ioCmd.test	iocmd-26.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {configure rc* -rc-foo bar} 1 *bad code*
+ioCmd.test	iocmd-26.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {configure rc* -rc-foo bar} 1 *bad code*
+ioCmd.test	iocmd-26.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {configure rc* -rc-foo bar} 1 *bad code* {-co...
+ioCmd.test	iocmd-27.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cget rc* -rc-foo} foo
+ioCmd.test	iocmd-27.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cget rc* -rc-foo} 1 BOOM!
+ioCmd.test	iocmd-27.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cget rc* -rc-foo} 1 BOOM!
+ioCmd.test	iocmd-27.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cget rc* -rc-foo} 1 *bad code*
+ioCmd.test	iocmd-27.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cget rc* -rc-foo} 1 *bad code*
+ioCmd.test	iocmd-27.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {cget rc* -rc-foo} 1 *bad code* {-code 1 -lev...
+ioCmd.test	iocmd-28.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: -1
+ioCmd.test	iocmd-28.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 1 {error during seek on "rc*": invalid argument}
+ioCmd.test	iocmd-28.11	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 BOOM!
+ioCmd.test	iocmd-28.12	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 *bad code*
+ioCmd.test	iocmd-28.13	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 *bad code*
+ioCmd.test	iocmd-28.14	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 *bad code*
+ioCmd.test	iocmd-28.15	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 *bad code* {-code 1 -lev...
+ioCmd.test	iocmd-28.16	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 {Tried to seek before or...
+ioCmd.test	iocmd-28.17	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 start} 1 {expected integer but go...
+ioCmd.test	iocmd-28.18	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 current} {}
+ioCmd.test	iocmd-28.19.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 start} {}
+ioCmd.test	iocmd-28.19.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 current} {}
+ioCmd.test	iocmd-28.19.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 end} {}
+ioCmd.test	iocmd-28.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 BOOM!
+ioCmd.test	iocmd-28.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 *bad code*
+ioCmd.test	iocmd-28.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 *bad code*
+ioCmd.test	iocmd-28.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 *bad code*
+ioCmd.test	iocmd-28.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 *bad code* {-code 1 -l...
+ioCmd.test	iocmd-28.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 current} 88
+ioCmd.test	iocmd-28.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 {Tried to seek before ...
+ioCmd.test	iocmd-28.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {seek rc* 0 current} 1 {expected integer but ...
+ioCmd.test	iocmd-29.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 1
+ioCmd.test	iocmd-29.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {blocking rc* 0} 1 *bad code* {-code 1 -level...
+ioCmd.test	iocmd-29.11	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {blocking rc* 0} 0 {}
+ioCmd.test	iocmd-29.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {} 0
+ioCmd.test	iocmd-29.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 1
+ioCmd.test	iocmd-29.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {blocking rc* 0} {} 0
+ioCmd.test	iocmd-29.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {blocking rc* 1} {} 1
+ioCmd.test	iocmd-29.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {blocking rc* 0} 1 BOOM!
+ioCmd.test	iocmd-29.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {blocking rc* 0} 1 *bad code*
+ioCmd.test	iocmd-29.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {blocking rc* 0} 1 *bad code*
+ioCmd.test	iocmd-29.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {blocking rc* 0} 1 *bad code*
 ioCmd.test	iocmd-3.1	pass	pass		
 ioCmd.test	iocmd-3.2	pass	pass		
 ioCmd.test	iocmd-3.3	pass	pass		
 ioCmd.test	iocmd-3.4	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't opened for reading}
 ioCmd.test	iocmd-3.5	pass	pass		
-ioCmd.test	iocmd-30.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {watch rc* read} {} {watch rc* {}}
-ioCmd.test	iocmd-30.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {watch rc* write} {} {watch rc* {}} {}
-ioCmd.test	iocmd-30.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {watch rc* write} {} {watch rc* {read write}} {} {w...
-ioCmd.test	iocmd-30.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {watch rc* write} {} {watch rc* {read write}} {} {}...
-ioCmd.test	iocmd-31.1	fail	fail	bug	code 0/0,2: unknown or ambiguous subcommand "postevent": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: can not find reflected channel named "file*"
-ioCmd.test	iocmd-31.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {tried to post events channel "rc*" is not interest...
-ioCmd.test	iocmd-31.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {bad event list: is empty}
-ioCmd.test	iocmd-31.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {bad event "goo": must be read or write}
-ioCmd.test	iocmd-31.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {unmatched open brace in list}
-ioCmd.test	iocmd-31.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {watch rc* read} {} TOCK {} {watch rc* {}}
-ioCmd.test	iocmd-31.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {watch rc* write} {} TOCK {} {watch rc* {}}
-ioCmd.test	iocmd-31.8	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell
+ioCmd.test	iocmd-30.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {watch rc* read} {} {watch rc* {}}
+ioCmd.test	iocmd-30.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {watch rc* write} {} {watch rc* {}} {}
+ioCmd.test	iocmd-30.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {watch rc* write} {} {watch rc* {read write}}...
+ioCmd.test	iocmd-30.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {watch rc* write} {} {watch rc* {read write}}...
+ioCmd.test	iocmd-31.1	fail	fail	bug	code 0/0,2: unknown or ambiguous subcommand "postevent": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: can not find reflected channel named "file*"
+ioCmd.test	iocmd-31.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {tried to post events channel "rc*" is not in...
+ioCmd.test	iocmd-31.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {bad event list: is empty}
+ioCmd.test	iocmd-31.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {bad event "goo": must be read or write}
+ioCmd.test	iocmd-31.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {unmatched open brace in list}
+ioCmd.test	iocmd-31.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {watch rc* read} {} TOCK {} {watch rc* {}}
+ioCmd.test	iocmd-31.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {watch rc* write} {} TOCK {} {watch rc* {}}
+ioCmd.test	iocmd-31.8	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
 ioCmd.test	iocmd-32.0	skip	skip	internals	testchannel
 ioCmd.test	iocmd-32.1	skip	skip	internals	testchannel
-ioCmd.test	iocmd-32.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: 
-ioCmd.test	iocmd-32.3.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: initialize read write finalize done
-ioCmd.test	iocmd-32.3.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: initialize read write finalize done
+ioCmd.test	iocmd-32.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 
+ioCmd.test	iocmd-32.3.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: initialize read write finalize done
+ioCmd.test	iocmd-32.3.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: initialize read write finalize done
 ioCmd.test	iocmd-4.1	pass	pass		
 ioCmd.test	iocmd-4.10	pass	pass		
 ioCmd.test	iocmd-4.11	pass	pass		
@@ -30218,35 +30218,35 @@ ioTrans.test	iortrans-1.1	pass	pass
 ioTrans.test	iortrans-11.0	skip	skip	internals	testchannel
 ioTrans.test	iortrans-11.1	skip	skip	internals	testchannel
 ioTrans.test	iortrans-11.2	skip	skip	internals	testchannel
-ioTrans.test	iortrans-2.0	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: wrong # args: should be "chan push channel cmdprefix"
-ioTrans.test	iortrans-2.1	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: wrong # args: should be "chan push channel cmdprefix"
-ioTrans.test	iortrans-2.10	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *bad method "1": must be *
-ioTrans.test	iortrans-2.11	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *bad method "c": must be *
-ioTrans.test	iortrans-2.12	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *all required methods*
-ioTrans.test	iortrans-2.13	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *returned bad method "BOGUS": must be clear, drain, fin...
-ioTrans.test	iortrans-2.14	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *makes the channel inaccessible
-ioTrans.test	iortrans-2.17	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *supports "drain" but not "read"
-ioTrans.test	iortrans-2.18	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *supports "flush" but not "write"
-ioTrans.test	iortrans-2.19	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {} {initialize rt* {read write}} file* {drain rt*} {f...
-ioTrans.test	iortrans-2.2	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: can not find channel named ""
-ioTrans.test	iortrans-2.20	fail	fail	feature	code 0/0,2: {} 1 {unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell} file35 \| want: {} {initialize rt* {read write}} 1 {*al...
-ioTrans.test	iortrans-2.3	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: unmatched open brace in list
-ioTrans.test	iortrans-2.4	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: invalid command name "foo"
-ioTrans.test	iortrans-2.5	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: wrong # args: should be "foo"
-ioTrans.test	iortrans-2.6	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: wrong # args: should be "::foo"
-ioTrans.test	iortrans-2.7	fail	fail	feature	code 2/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell     while executi \| want: chan handler "foo initialize" retur...
-ioTrans.test	iortrans-2.8	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: chan handler "foo initialize" returned non-list: *
-ioTrans.test	iortrans-2.9	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: *all required methods*
-ioTrans.test	iortrans-3.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* file* {} 1 {inval...
-ioTrans.test	iortrans-3.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize rt*} {}...
-ioTrans.test	iortrans-3.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize rt*} 1 ...
-ioTrans.test	iortrans-3.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize rt*} 1 ...
-ioTrans.test	iortrans-3.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize rt*} 0 {}
-ioTrans.test	iortrans-3.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize rt*} 1 ...
-ioTrans.test	iortrans-3.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize rt*} 1 ...
-ioTrans.test	iortrans-3.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize rt*} 1 ...
-ioTrans.test	iortrans-3.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize rt*} 1 ...
-ioTrans.test	iortrans-4.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rt* {test data }} snarf
+ioTrans.test	iortrans-2.0	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "chan push channel cmdpre...
+ioTrans.test	iortrans-2.1	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "chan push channel cmdpre...
+ioTrans.test	iortrans-2.10	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *bad method "1": must be *
+ioTrans.test	iortrans-2.11	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *bad method "c": must be *
+ioTrans.test	iortrans-2.12	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *all required methods*
+ioTrans.test	iortrans-2.13	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *returned bad method "BOGUS": must be clear, drai...
+ioTrans.test	iortrans-2.14	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *makes the channel inaccessible
+ioTrans.test	iortrans-2.17	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *supports "drain" but not "read"
+ioTrans.test	iortrans-2.18	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *supports "flush" but not "write"
+ioTrans.test	iortrans-2.19	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {} {initialize rt* {read write}} file* {drain r...
+ioTrans.test	iortrans-2.2	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: can not find channel named ""
+ioTrans.test	iortrans-2.20	fail	fail	feature	code 0/0,2: {} 1 {unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell} file \| want: {} {initialize rt* {read write}} 1 ...
+ioTrans.test	iortrans-2.3	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: unmatched open brace in list
+ioTrans.test	iortrans-2.4	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: invalid command name "foo"
+ioTrans.test	iortrans-2.5	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "foo"
+ioTrans.test	iortrans-2.6	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "::foo"
+ioTrans.test	iortrans-2.7	fail	fail	feature	code 2/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell     while e \| want: chan handler "foo initialize" retur...
+ioTrans.test	iortrans-2.8	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: chan handler "foo initialize" returned non-list: *
+ioTrans.test	iortrans-2.9	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *all required methods*
+ioTrans.test	iortrans-3.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* file* {} 1 ...
+ioTrans.test	iortrans-3.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize r...
+ioTrans.test	iortrans-3.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize r...
+ioTrans.test	iortrans-3.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize r...
+ioTrans.test	iortrans-3.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize r...
+ioTrans.test	iortrans-3.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize r...
+ioTrans.test	iortrans-3.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize r...
+ioTrans.test	iortrans-3.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize r...
+ioTrans.test	iortrans-3.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {initialize rt* {read write}} file* {finalize r...
+ioTrans.test	iortrans-4.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rt* {test data }} snarf
 ioTrans.test	iortrans-4.10	fail	fail	bug	cleanup: can't read "chan": no such variable
 ioTrans.test	iortrans-4.10.1	fail	fail	bug	cleanup: can't read "chan": no such variable
 ioTrans.test	iortrans-4.10.2	fail	fail	bug	cleanup: can't read "chan": no such variable
@@ -30254,36 +30254,36 @@ ioTrans.test	iortrans-4.11	fail	fail	bug	cleanup: can't read "chan": no such var
 ioTrans.test	iortrans-4.11.1	fail	fail	bug	cleanup: can't read "chan": no such variable
 ioTrans.test	iortrans-4.11.2	fail	fail	bug	cleanup: can't read "chan": no such variable
 ioTrans.test	iortrans-4.12	fail	fail	bug	cleanup: can't read "chan": no such variable
-ioTrans.test	iortrans-4.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: 1 {channel "file*" wasn't opened for reading}
-ioTrans.test	iortrans-4.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rt* {test data }} 1 BOOM!
-ioTrans.test	iortrans-4.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rt* {test data }} 1 *bad code*
-ioTrans.test	iortrans-4.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rt* {test data }} 1 *bad code*
-ioTrans.test	iortrans-4.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rt* {test data }} 1 *bad code*
-ioTrans.test	iortrans-4.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rt* {test data }} 1 *bad code* {-code 1 -level ...
-ioTrans.test	iortrans-4.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rt* {test data }} {}
-ioTrans.test	iortrans-4.8.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rt* te} {read rt* st} {read rt* { d}} {read rt*...
-ioTrans.test	iortrans-4.8.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rt* t} {read rt* e} {read rt* s} {read rt* t} {...
-ioTrans.test	iortrans-4.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rt* {test data }} {}
-ioTrans.test	iortrans-5.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rt* snarf} transformresult
-ioTrans.test	iortrans-5.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 *bad code* {-code 1 -le...
-ioTrans.test	iortrans-5.11	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {} {write rt* abcdef} {write rt* abcdef} {}
-ioTrans.test	iortrans-5.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} {test data}
-ioTrans.test	iortrans-5.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 FAIL!
+ioTrans.test	iortrans-4.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 1 {channel "file*" wasn't opened for reading}
+ioTrans.test	iortrans-4.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rt* {test data }} 1 BOOM!
+ioTrans.test	iortrans-4.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rt* {test data }} 1 *bad code*
+ioTrans.test	iortrans-4.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rt* {test data }} 1 *bad code*
+ioTrans.test	iortrans-4.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rt* {test data }} 1 *bad code*
+ioTrans.test	iortrans-4.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rt* {test data }} 1 *bad code* {-code 1 -...
+ioTrans.test	iortrans-4.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rt* {test data }} {}
+ioTrans.test	iortrans-4.8.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rt* te} {read rt* st} {read rt* { d}} {re...
+ioTrans.test	iortrans-4.8.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rt* t} {read rt* e} {read rt* s} {read rt...
+ioTrans.test	iortrans-4.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rt* {test data }} {}
+ioTrans.test	iortrans-5.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rt* snarf} transformresult
+ioTrans.test	iortrans-5.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 *bad code* {-code...
+ioTrans.test	iortrans-5.11	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {} {write rt* abcdef} {write rt* abcdef} {}
+ioTrans.test	iortrans-5.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} {test data}
+ioTrans.test	iortrans-5.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 FAIL!
 ioTrans.test	iortrans-5.4	fail	fail	bug	cleanup: can not find channel named "file75"
-ioTrans.test	iortrans-5.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 BOOM!
-ioTrans.test	iortrans-5.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 BOOM!
-ioTrans.test	iortrans-5.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 *bad code*
-ioTrans.test	iortrans-5.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 *bad code*
-ioTrans.test	iortrans-5.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 *bad code*
-ioTrans.test	iortrans-6.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {limit? rt*} {read rt* {test d}} {limit? rt*} {read r...
-ioTrans.test	iortrans-6.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {read rt* {test data }} {drain rt*} @<> {}
-ioTrans.test	iortrans-7.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {clear rt*} {write rt* snarf}
-ioTrans.test	iortrans-7.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {clear rt*}
-ioTrans.test	iortrans-7.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {clear rt*}
-ioTrans.test	iortrans-7.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {clear rt*}
-ioTrans.test	iortrans-8.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {flush rt*} \| {flush rt*} {} \| {teXt data}
-ioTrans.test	iortrans-8.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {flush rt*} {finalize rt*} .flushed.
-ioTrans.test	iortrans-8.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell \| want: {flush rt*}
+ioTrans.test	iortrans-5.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 BOOM!
+ioTrans.test	iortrans-5.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 BOOM!
+ioTrans.test	iortrans-5.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 *bad code*
+ioTrans.test	iortrans-5.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 *bad code*
+ioTrans.test	iortrans-5.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {write rt* snarfsnarfsnarf} 1 *bad code*
+ioTrans.test	iortrans-6.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {limit? rt*} {read rt* {test d}} {limit? rt*} {...
+ioTrans.test	iortrans-6.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {read rt* {test data }} {drain rt*} @<> {}
+ioTrans.test	iortrans-7.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {clear rt*} {write rt* snarf}
+ioTrans.test	iortrans-7.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {clear rt*}
+ioTrans.test	iortrans-7.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {clear rt*}
+ioTrans.test	iortrans-7.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {clear rt*}
+ioTrans.test	iortrans-8.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {flush rt*} \| {flush rt*} {} \| {teXt data}
+ioTrans.test	iortrans-8.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {flush rt*} {finalize rt*} .flushed.
+ioTrans.test	iortrans-8.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {flush rt*}
 ioTrans.test	iortrans-ea69b0258a9833cb	fail	fail	bug	cleanup: can't read "chan": no such variable
 ioTrans.test	iortrans.tf-11.0	skip	skip	internals	testchannel
 ioTrans.test	iortrans.tf-11.1	skip	skip	internals	testchannel
@@ -32820,7 +32820,7 @@ main.test	Tcl_Main-5.11	skip	skip	internals	Tcltest
 main.test	Tcl_Main-5.12	skip	skip	internals	Tcltest
 main.test	Tcl_Main-5.13	pass	pass		
 main.test	Tcl_Main-5.2	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 SUCCESS
-main.test	Tcl_Main-5.3	fail	fail	bug	code 0/0,2: timeout \| want: child exit
+main.test	Tcl_Main-5.3	pass	pass		
 main.test	Tcl_Main-5.4	pass	pass		
 main.test	Tcl_Main-5.5	pass	pass		
 main.test	Tcl_Main-5.6	pass	pass		
@@ -34215,7 +34215,7 @@ oo.test	oo-1.18.5	pass	pass
 oo.test	oo-1.19	pass	pass		
 oo.test	oo-1.2	pass	pass		
 oo.test	oo-1.20	pass	pass		
-oo.test	oo-1.21	fail	fail	bug	code 1/0,2: ::oo::Slot does not refer to an object \| want: {} {::oo::Slot ::oo::class ::oo::object} {::oo::define::filter ::oo::define::mixin ::oo::define::superclass ::oo::define::variable ::oo::obj
+oo.test	oo-1.21	fail	fail	feature	code 1/0,2: ::oo::Slot does not refer to an object \| want: {} {::oo::Slot ::oo::class ::oo::object} {::oo::define::filter ::oo::define::mixin ::oo::define::superclass ::oo::define::variable ::oo::obj
 oo.test	oo-1.22	pass	pass		
 oo.test	oo-1.23	skip	skip	tcl	knownBug
 oo.test	oo-1.24	skip	skip	tcl	knownBug
@@ -34422,17 +34422,17 @@ oo.test	oo-30.1	pass	pass
 oo.test	oo-30.2	pass	pass		
 oo.test	oo-31.1	skip	skip	internals	memory
 oo.test	oo-31.2	skip	skip	internals	memory
-oo.test	oo-32.1	fail	fail	bug	setup: class "oo::Slot" does not exist
-oo.test	oo-32.2	fail	fail	bug	setup: class "oo::Slot" does not exist
-oo.test	oo-32.3	fail	fail	bug	setup: class "oo::Slot" does not exist
-oo.test	oo-32.4	fail	fail	bug	setup: class "oo::Slot" does not exist
-oo.test	oo-32.5	fail	fail	bug	setup: class "oo::Slot" does not exist
-oo.test	oo-33.1	fail	fail	bug	setup: class "oo::Slot" does not exist
-oo.test	oo-33.2	fail	fail	bug	setup: class "oo::Slot" does not exist
-oo.test	oo-33.3	fail	fail	bug	setup: class "oo::Slot" does not exist
-oo.test	oo-33.4	fail	fail	bug	setup: class "oo::Slot" does not exist
-oo.test	oo-34.1	fail	fail	bug	code 1/0,2: filter does not refer to an object \| want: ::oo::Slot ::oo::Slot ::oo::Slot ::oo::Slot ::oo::Slot ::oo::Slot ::oo::Slot
-oo.test	oo-34.2	fail	fail	bug	code 1/0,2: oo::Slot does not refer to an object \| want: ::oo::define::filter ::oo::define::mixin ::oo::define::superclass ::oo::define::variable ::oo::objdefine::filter ::oo::objdefine::mixin ::oo
+oo.test	oo-32.1	fail	fail	feature	setup: class "oo::Slot" does not exist
+oo.test	oo-32.2	fail	fail	feature	setup: class "oo::Slot" does not exist
+oo.test	oo-32.3	fail	fail	feature	setup: class "oo::Slot" does not exist
+oo.test	oo-32.4	fail	fail	feature	setup: class "oo::Slot" does not exist
+oo.test	oo-32.5	fail	fail	feature	setup: class "oo::Slot" does not exist
+oo.test	oo-33.1	fail	fail	feature	setup: class "oo::Slot" does not exist
+oo.test	oo-33.2	fail	fail	feature	setup: class "oo::Slot" does not exist
+oo.test	oo-33.3	fail	fail	feature	setup: class "oo::Slot" does not exist
+oo.test	oo-33.4	fail	fail	feature	setup: class "oo::Slot" does not exist
+oo.test	oo-34.1	fail	fail	feature	code 1/0,2: filter does not refer to an object \| want: ::oo::Slot ::oo::Slot ::oo::Slot ::oo::Slot ::oo::Slot ::oo::Slot ::oo::Slot
+oo.test	oo-34.2	fail	fail	feature	code 1/0,2: oo::Slot does not refer to an object \| want: ::oo::define::filter ::oo::define::mixin ::oo::define::superclass ::oo::define::variable ::oo::objdefine::filter ::oo::objdefine::mixin ::oo
 oo.test	oo-34.3	fail	fail	bug	code 1/0,2: oo::define::filter does not refer to an object \| want: {-append -clear -set} {Get Set}
 oo.test	oo-34.4	fail	fail	bug	code 1/0,2: oo::define::mixin does not refer to an object \| want: {-append -clear -set} {--default-operation Get Set}
 oo.test	oo-34.5	fail	fail	bug	code 1/0,2: oo::define::superclass does not refer to an object \| want: {-append -clear -set} {--default-operation Get Set}
@@ -35886,7 +35886,7 @@ reg.test	reg-10.13 BRE.compile	pass	pass
 reg.test	reg-10.13 BRE.execute	pass	pass		
 reg.test	reg-10.14.compile	pass	pass		
 reg.test	reg-10.14.execute	pass	pass		
-reg.test	reg-10.15.compile	fail	fail	bug	code 0/0,2: 0 REG_UEMPTYMATCH \| want: 0 {}
+reg.test	reg-10.15.compile	fail	fail	feature	code 0/0,2: 0 REG_UEMPTYMATCH \| want: 0 {}
 reg.test	reg-10.15.execute	fail	fail	bug	code 0/0,2: 1 {} \| want: 1 ^
 reg.test	reg-10.16.compile	pass	pass		
 reg.test	reg-10.16.execute	pass	pass		
@@ -35956,9 +35956,9 @@ reg.test	reg-10.9 ARE.compile	pass	pass
 reg.test	reg-10.9 ARE.execute	pass	pass		
 reg.test	reg-10.9 BRE.compile	pass	pass		
 reg.test	reg-10.9 BRE.execute	pass	pass		
-reg.test	reg-11.1 ARE.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-11.1 ARE.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-11.1 ARE.execute	pass	pass		
-reg.test	reg-11.1 BRE.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-11.1 BRE.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-11.1 BRE.execute	pass	pass		
 reg.test	reg-11.10.compile	pass	pass		
 reg.test	reg-11.10.execute	pass	pass		
@@ -35980,9 +35980,9 @@ reg.test	reg-11.18.compile	pass	pass
 reg.test	reg-11.18.execute	pass	pass		
 reg.test	reg-11.19.compile	pass	pass		
 reg.test	reg-11.19.execute	pass	pass		
-reg.test	reg-11.2 ARE.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-11.2 ARE.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-11.2 ARE.execute	pass	pass		
-reg.test	reg-11.2 BRE.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-11.2 BRE.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-11.2 BRE.execute	pass	pass		
 reg.test	reg-11.20.compile	pass	pass		
 reg.test	reg-11.20.execute	pass	pass		
@@ -35998,9 +35998,9 @@ reg.test	reg-11.28.compile	pass	pass
 reg.test	reg-11.28.execute	pass	pass		
 reg.test	reg-11.29.compile	pass	pass		
 reg.test	reg-11.29.execute	pass	pass		
-reg.test	reg-11.3 ARE.compile	fail	fail	bug	code 0/0,2: REG_UNONPOSIX \| want: {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-11.3 ARE.compile	fail	fail	feature	code 0/0,2: REG_UNONPOSIX \| want: {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-11.3 ARE.execute	pass	pass		
-reg.test	reg-11.3 BRE.compile	fail	fail	bug	code 0/0,2: REG_UNONPOSIX \| want: {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-11.3 BRE.compile	fail	fail	feature	code 0/0,2: REG_UNONPOSIX \| want: {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-11.3 BRE.execute	pass	pass		
 reg.test	reg-11.30.compile	pass	pass		
 reg.test	reg-11.30.execute	pass	pass		
@@ -36008,17 +36008,17 @@ reg.test	reg-11.31.compile	pass	pass
 reg.test	reg-11.31.execute	pass	pass		
 reg.test	reg-11.32.compile	pass	pass		
 reg.test	reg-11.32.execute	pass	pass		
-reg.test	reg-11.4 ARE.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-11.4 ARE.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-11.4 ARE.execute	pass	pass		
-reg.test	reg-11.4 BRE.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-11.4 BRE.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-11.4 BRE.execute	pass	pass		
-reg.test	reg-11.5 ARE.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-11.5 ARE.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-11.5 ARE.execute	pass	pass		
-reg.test	reg-11.5 BRE.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-11.5 BRE.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-11.5 BRE.execute	pass	pass		
-reg.test	reg-11.6 ARE.compile	fail	fail	bug	code 0/0,2: REG_UNONPOSIX \| want: {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-11.6 ARE.compile	fail	fail	feature	code 0/0,2: REG_UNONPOSIX \| want: {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-11.6 ARE.execute	pass	pass		
-reg.test	reg-11.6 BRE.compile	fail	fail	bug	code 0/0,2: REG_UNONPOSIX \| want: {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-11.6 BRE.compile	fail	fail	feature	code 0/0,2: REG_UNONPOSIX \| want: {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-11.6 BRE.execute	pass	pass		
 reg.test	reg-11.7.compile	pass	pass		
 reg.test	reg-11.7.execute	pass	pass		
@@ -36121,7 +36121,7 @@ reg.test	reg-13.4.compile	pass	pass
 reg.test	reg-13.4.execute	pass	pass		
 reg.test	reg-13.5.compile	pass	pass		
 reg.test	reg-13.5.execute	pass	pass		
-reg.test	reg-13.6.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-13.6.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-13.6.execute	pass	pass		
 reg.test	reg-13.7.compile	pass	pass		
 reg.test	reg-13.7.execute	pass	pass		
@@ -36212,7 +36212,7 @@ reg.test	reg-16.1.compile	pass	pass
 reg.test	reg-16.1.execute	pass	pass		
 reg.test	reg-16.2.compile	pass	pass		
 reg.test	reg-16.2.execute	pass	pass		
-reg.test	reg-16.3.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {}
+reg.test	reg-16.3.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {}
 reg.test	reg-16.3.execute	pass	pass		
 reg.test	reg-16.4.compile	pass	pass		
 reg.test	reg-16.4.execute	pass	pass		
@@ -36224,9 +36224,9 @@ reg.test	reg-16.7.compile	pass	pass
 reg.test	reg-16.7.execute	pass	pass		
 reg.test	reg-16.8.compile	pass	pass		
 reg.test	reg-16.8.execute	pass	pass		
-reg.test	reg-16.9.compile	fail	fail	bug	code 0/0,2: 0 {REG_UBRACES REG_UNONPOSIX REG_UUNSPEC} \| want: 0 {REG_UBOUNDS REG_UNONPOSIX}
+reg.test	reg-16.9.compile	fail	fail	feature	code 0/0,2: 0 {REG_UBRACES REG_UNONPOSIX REG_UUNSPEC} \| want: 0 {REG_UBOUNDS REG_UNONPOSIX}
 reg.test	reg-16.9.execute	fail	fail	bug	code 0/0,2: 0 {} \| want: 1 abc
-reg.test	reg-17.1.compile	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 0 REG_UNONPOSIX
+reg.test	reg-17.1.compile	fail	fail	feature	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 0 REG_UNONPOSIX
 reg.test	reg-17.1.execute	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 1 ab
 reg.test	reg-18.1.compile	pass	pass		
 reg.test	reg-18.1.execute	pass	pass		
@@ -36242,13 +36242,13 @@ reg.test	reg-19.3 ARE.compile	pass	pass
 reg.test	reg-19.3 ARE.execute	pass	pass		
 reg.test	reg-19.3 BRE.compile	pass	pass		
 reg.test	reg-19.3 BRE.execute	pass	pass		
-reg.test	reg-19.4 ARE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
+reg.test	reg-19.4 ARE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
 reg.test	reg-19.4 ARE.execute	pass	pass		
-reg.test	reg-19.4 BRE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
+reg.test	reg-19.4 BRE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
 reg.test	reg-19.4 BRE.execute	pass	pass		
-reg.test	reg-19.5 ARE.compile	fail	fail	bug	code 0/0,2: {} \| want: REG_UUNPORT
+reg.test	reg-19.5 ARE.compile	fail	fail	feature	code 0/0,2: {} \| want: REG_UUNPORT
 reg.test	reg-19.5 ARE.execute	pass	pass		
-reg.test	reg-19.5 BRE.compile	fail	fail	bug	code 0/0,2: {} \| want: REG_UUNPORT
+reg.test	reg-19.5 BRE.compile	fail	fail	feature	code 0/0,2: {} \| want: REG_UUNPORT
 reg.test	reg-19.5 BRE.execute	pass	pass		
 reg.test	reg-2.1.error	fail	fail	bug	code 0/0,2: 0 REG_BADRPT \| want: 1 REG_INVARG
 reg.test	reg-2.2.error	fail	fail	bug	code 0/0,2: 0 REG_BADRPT \| want: 1 REG_INVARG
@@ -36297,9 +36297,9 @@ reg.test	reg-20.27.execute	pass	pass
 reg.test	reg-20.28.error	pass	pass		
 reg.test	reg-20.29.compile	pass	pass		
 reg.test	reg-20.29.execute	pass	pass		
-reg.test	reg-20.3 ARE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UNONPOSIX
+reg.test	reg-20.3 ARE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UNONPOSIX
 reg.test	reg-20.3 ARE.execute	pass	pass		
-reg.test	reg-20.3 BRE.compile	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 0 REG_UNONPOSIX
+reg.test	reg-20.3 BRE.compile	fail	fail	feature	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 0 REG_UNONPOSIX
 reg.test	reg-20.3 BRE.execute	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 1 a*b
 reg.test	reg-20.30.error	pass	pass		
 reg.test	reg-20.31.compile	pass	pass		
@@ -36314,15 +36314,15 @@ reg.test	reg-20.35.compile	pass	pass
 reg.test	reg-20.35.execute	pass	pass		
 reg.test	reg-20.4.compile	pass	pass		
 reg.test	reg-20.4.execute	pass	pass		
-reg.test	reg-20.5.compile	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-20.5.compile	fail	fail	feature	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-20.5.execute	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 1 ab
-reg.test	reg-20.6.compile	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-20.6.compile	fail	fail	feature	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-20.6.execute	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 1 ab
 reg.test	reg-20.7 ARE.error	pass	pass		
 reg.test	reg-20.7 BRE.error	pass	pass		
 reg.test	reg-20.8 ARE.compile	pass	pass		
 reg.test	reg-20.8 ARE.execute	pass	pass		
-reg.test	reg-20.8 BRE.compile	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 0 REG_UNONPOSIX
+reg.test	reg-20.8 BRE.compile	fail	fail	feature	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 0 REG_UNONPOSIX
 reg.test	reg-20.8 BRE.execute	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| want: 1 a+b
 reg.test	reg-20.9.compile	pass	pass		
 reg.test	reg-20.9.execute	pass	pass		
@@ -36382,7 +36382,7 @@ reg.test	reg-21.33.compile	pass	pass
 reg.test	reg-21.33.execute	pass	pass		
 reg.test	reg-21.34.compile	pass	pass		
 reg.test	reg-21.34.execute	pass	pass		
-reg.test	reg-21.35.compile	fail	fail	bug	code 0/0,2: 3 {} \| want: 3 REG_UUNPORT
+reg.test	reg-21.35.compile	fail	fail	feature	code 0/0,2: 3 {} \| want: 3 REG_UUNPORT
 reg.test	reg-21.35.execute	fail	fail	bug	code 0/0,2: 1 { TO foo} foo foo {} \| want: 1 { TO foo} foo o {}
 reg.test	reg-21.4.compile	pass	pass		
 reg.test	reg-21.4.execute	pass	pass		
@@ -36638,9 +36638,9 @@ reg.test	reg-30.5 ARE.compile	pass	pass
 reg.test	reg-30.5 ARE.execute	pass	pass		
 reg.test	reg-30.5 BRE.compile	pass	pass		
 reg.test	reg-30.5 BRE.execute	pass	pass		
-reg.test	reg-30.6 ARE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
+reg.test	reg-30.6 ARE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
 reg.test	reg-30.6 ARE.execute	pass	pass		
-reg.test	reg-30.6 BRE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
+reg.test	reg-30.6 BRE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
 reg.test	reg-30.6 BRE.execute	pass	pass		
 reg.test	reg-30.7.compile	pass	pass		
 reg.test	reg-30.7.execute	pass	pass		
@@ -36871,25 +36871,25 @@ reg.test	reg-9.1 BRE.compile	pass	pass
 reg.test	reg-9.1 BRE.execute	pass	pass		
 reg.test	reg-9.10 ARE.error	fail	fail	bug	code 0/0,2: 0 REG_ECOLLATE \| want: 1 REG_ERANGE
 reg.test	reg-9.10 BRE.error	fail	fail	bug	code 0/0,2: 0 REG_ECOLLATE \| want: 1 REG_ERANGE
-reg.test	reg-9.11 ARE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_ULOCALE
+reg.test	reg-9.11 ARE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_ULOCALE
 reg.test	reg-9.11 ARE.execute	pass	pass		
-reg.test	reg-9.11 BRE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_ULOCALE
+reg.test	reg-9.11 BRE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_ULOCALE
 reg.test	reg-9.11 BRE.execute	pass	pass		
 reg.test	reg-9.12 ARE.error	pass	pass		
 reg.test	reg-9.12 BRE.error	pass	pass		
-reg.test	reg-9.13 ARE.compile	fail	fail	bug	code 0/0,2: {} \| want: REG_ULOCALE
+reg.test	reg-9.13 ARE.compile	fail	fail	feature	code 0/0,2: {} \| want: REG_ULOCALE
 reg.test	reg-9.13 ARE.execute	pass	pass		
-reg.test	reg-9.13 BRE.compile	fail	fail	bug	code 0/0,2: {} \| want: REG_ULOCALE
+reg.test	reg-9.13 BRE.compile	fail	fail	feature	code 0/0,2: {} \| want: REG_ULOCALE
 reg.test	reg-9.13 BRE.execute	pass	pass		
 reg.test	reg-9.14 ARE.error	fail	fail	bug	code 0/0,2: 0 REG_ECTYPE \| want: 1 REG_ERANGE
 reg.test	reg-9.14 BRE.error	fail	fail	bug	code 0/0,2: 0 REG_ECTYPE \| want: 1 REG_ERANGE
-reg.test	reg-9.15 ARE.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-9.15 ARE.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-9.15 ARE.execute	pass	pass		
-reg.test	reg-9.15 BRE.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-9.15 BRE.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-9.15 BRE.execute	pass	pass		
-reg.test	reg-9.16 ARE.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-9.16 ARE.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-9.16 ARE.execute	pass	pass		
-reg.test	reg-9.16 BRE.compile	fail	fail	bug	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
+reg.test	reg-9.16 BRE.compile	fail	fail	feature	code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE}
 reg.test	reg-9.16 BRE.execute	pass	pass		
 reg.test	reg-9.17 ARE.error	pass	pass		
 reg.test	reg-9.17 BRE.error	pass	pass		
@@ -36915,17 +36915,17 @@ reg.test	reg-9.25 ARE.error	pass	pass
 reg.test	reg-9.25 BRE.error	pass	pass		
 reg.test	reg-9.26 ARE.error	pass	pass		
 reg.test	reg-9.26 BRE.error	pass	pass		
-reg.test	reg-9.27 ARE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
+reg.test	reg-9.27 ARE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
 reg.test	reg-9.27 ARE.execute	pass	pass		
-reg.test	reg-9.27 BRE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
+reg.test	reg-9.27 BRE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
 reg.test	reg-9.27 BRE.execute	pass	pass		
 reg.test	reg-9.28 ARE.compile	pass	pass		
 reg.test	reg-9.28 ARE.execute	pass	pass		
 reg.test	reg-9.28 BRE.compile	pass	pass		
 reg.test	reg-9.28 BRE.execute	pass	pass		
-reg.test	reg-9.29 ARE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
+reg.test	reg-9.29 ARE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
 reg.test	reg-9.29 ARE.execute	pass	pass		
-reg.test	reg-9.29 BRE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
+reg.test	reg-9.29 BRE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
 reg.test	reg-9.29 BRE.execute	pass	pass		
 reg.test	reg-9.3 ARE.compile	pass	pass		
 reg.test	reg-9.3 ARE.execute	pass	pass		
@@ -36935,9 +36935,9 @@ reg.test	reg-9.30 ARE.error	pass	pass
 reg.test	reg-9.30 BRE.error	pass	pass		
 reg.test	reg-9.31 ARE.error	fail	fail	bug	code 0/0,2: 0 REG_ERANGE \| want: 1 REG_ERANGE
 reg.test	reg-9.31 BRE.error	fail	fail	bug	code 0/0,2: 0 REG_ERANGE \| want: 1 REG_ERANGE
-reg.test	reg-9.32 ARE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
+reg.test	reg-9.32 ARE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
 reg.test	reg-9.32 ARE.execute	pass	pass		
-reg.test	reg-9.32 BRE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
+reg.test	reg-9.32 BRE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
 reg.test	reg-9.32 BRE.execute	pass	pass		
 reg.test	reg-9.33 ARE.compile	pass	pass		
 reg.test	reg-9.33 ARE.execute	pass	pass		
@@ -36957,9 +36957,9 @@ reg.test	reg-9.38.compile	pass	pass
 reg.test	reg-9.38.execute	pass	pass		
 reg.test	reg-9.39.compile	pass	pass		
 reg.test	reg-9.39.execute	pass	pass		
-reg.test	reg-9.4 ARE.compile	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| want: 0 REG_ULOCALE
+reg.test	reg-9.4 ARE.compile	fail	fail	feature	code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| want: 0 REG_ULOCALE
 reg.test	reg-9.4 ARE.execute	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| want: 1 a0
-reg.test	reg-9.4 BRE.compile	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| want: 0 REG_ULOCALE
+reg.test	reg-9.4 BRE.compile	fail	fail	feature	code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| want: 0 REG_ULOCALE
 reg.test	reg-9.4 BRE.execute	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| want: 1 a0
 reg.test	reg-9.40.compile	pass	pass		
 reg.test	reg-9.40.execute	pass	pass		
@@ -36970,15 +36970,15 @@ reg.test	reg-9.43 ARE.compile	pass	pass
 reg.test	reg-9.43 ARE.execute	pass	pass		
 reg.test	reg-9.43 BRE.compile	pass	pass		
 reg.test	reg-9.43 BRE.execute	pass	pass		
-reg.test	reg-9.44.compile	fail	fail	bug	code 0/0,2: 0 {REG_UBBS REG_UNONPOSIX} \| want: 0 {REG_UBBS REG_UNONPOSIX REG_UUNPORT}
+reg.test	reg-9.44.compile	fail	fail	feature	code 0/0,2: 0 {REG_UBBS REG_UNONPOSIX} \| want: 0 {REG_UBBS REG_UNONPOSIX REG_UUNPORT}
 reg.test	reg-9.44.execute	pass	pass		
-reg.test	reg-9.5 ARE.compile	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| want: 0 {REG_UUNPORT REG_ULOCALE}
+reg.test	reg-9.5 ARE.compile	fail	fail	feature	code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| want: 0 {REG_UUNPORT REG_ULOCALE}
 reg.test	reg-9.5 ARE.execute	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| want: 1 a2
-reg.test	reg-9.5 BRE.compile	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| want: 0 {REG_UUNPORT REG_ULOCALE}
+reg.test	reg-9.5 BRE.compile	fail	fail	feature	code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| want: 0 {REG_UUNPORT REG_ULOCALE}
 reg.test	reg-9.5 BRE.execute	fail	fail	bug	code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| want: 1 a2
-reg.test	reg-9.6 ARE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
+reg.test	reg-9.6 ARE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
 reg.test	reg-9.6 ARE.execute	pass	pass		
-reg.test	reg-9.6 BRE.compile	fail	fail	bug	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
+reg.test	reg-9.6 BRE.compile	fail	fail	feature	code 0/0,2: 0 {} \| want: 0 REG_UUNPORT
 reg.test	reg-9.6 BRE.execute	pass	pass		
 reg.test	reg-9.7 ARE.compile	skip	skip	tcl	localeRegexp
 reg.test	reg-9.7 ARE.execute	skip	skip	tcl	localeRegexp
@@ -38133,7 +38133,7 @@ socket.test	socket-15.1.2	pass	pass
 socket.test	socket-15.1.3	pass	pass		
 socket.test	socket-15.1.4	pass	pass		
 socket.test	socket-15.1.5	pass	pass		
-socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2842 \| want: couldn't open socket: connection refused
+socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2843 \| want: couldn't open socket: connection refused
 socket.test	socket-15.1.7	pass	pass		
 socket.test	socket-15.1.8	pass	pass		
 socket.test	socket_inet-1.1	pass	pass		
@@ -38186,7 +38186,7 @@ socket.test	socket_inet-2.7	pass	pass
 socket.test	socket_inet-2.8	pass	pass		
 socket.test	socket_inet-2.9	pass	pass		
 socket.test	socket_inet-3.1	pass	pass		
-socket.test	socket_inet-3.2	fail	pass	bug	code 0/0,2: ready timed_out \| want: ready done
+socket.test	socket_inet-3.2	fail	fail	bug	code 0/0,2: ready timed_out \| want: ready done
 socket.test	socket_inet-4.1	pass	pass		
 socket.test	socket_inet-4.2	pass	pass		
 socket.test	socket_inet-5.1	pass	pass		
@@ -40673,7 +40673,7 @@ unixFile.test	unixFile-1.6	skip	skip	internals	testfindexecutable
 unixFile.test	unixFile-1.7	skip	skip	internals	testfindexecutable
 unixForkEvent.test	unixforkevent-1.1	skip	skip	internals	testfork
 unixInit.test	unixInit-1.1	pass	pass		
-unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 36579', Got '' \| want: OK
+unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 42001', Got '' \| want: OK
 unixInit.test	unixInit-3.1	pass	pass		
 unixInit.test	unixInit-3.2	fail	fail	bug	code 0/0,2: 1 \| want: 0
 unixInit.test	unixInit-4.1	fail	fail	bug	code 1/0,2: can't read "tcl_pkgPath": no such variable \| want: unix

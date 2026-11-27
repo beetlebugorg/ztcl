@@ -10,8 +10,8 @@ autoMkindex.test	1	1
 basic.test	100	100
 binary.test	602	602
 case.test	15	15
-chan.test	15	15
-chanio.test	239	239
+chan.test	17	17
+chanio.test	297	297
 clock.test	8390	8390
 cmdAH.test	93	93
 cmdIL.test	137	137
@@ -24,7 +24,7 @@ concat.test	9	9
 config.test	0	0
 coroutine.test	37	37
 dcall.test	0	0
-dict.test	313	313
+dict.test	317	317
 dstring.test	0	0
 encoding.test	11	11
 env.test	8	8
@@ -54,10 +54,10 @@ if.test	73	73
 incr-old.test	12	12
 incr.test	62	62
 indexObj.test	0	0
-info.test	98	98
+info.test	106	106
 init.test	0	0
 interp.test	198	198
-io.test	249	249
+io.test	312	312
 ioCmd.test	78	78
 ioTrans.test	2	2
 iogt.test	0	0
@@ -78,7 +78,7 @@ lset.test	83	83
 lsetComp.test	19	19
 macOSXFCmd.test	0	0
 macOSXLoad.test	0	0
-main.test	12	12
+main.test	13	13
 mathop.test	347	347
 misc.test	1	1
 msgcat.test	3	3
@@ -113,7 +113,7 @@ scan.test	162	162
 security.test	1	1
 set-old.test	142	142
 set.test	61	61
-socket.test	157	158
+socket.test	157	157
 source.test	13	13
 split.test	16	16
 stack.test	1	1
@@ -151,4 +151,4 @@ winPipe.test	0	0
 winTime.test	0	0
 word.test	45	45
 zlib.test	0	0
-total	37535	37536
+total	37671	37671

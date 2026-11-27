@@ -317,6 +317,9 @@ pub fn parseDouble(text: []const u8) ?f64 {
         else => return null,
     };
     if (!digits) return null;
+    // Digits alone with a leading zero are an octal integer, as in Tcl:
+    // "08" is an invalid octal number and not the double 8.0.
+    if (t.len > 1 and t[0] == '0' and std.mem.indexOfAny(u8, t, ".eE") == null) return null;
     if (s[0] == '+') s = s[1..];
     return std.fmt.parseFloat(f64, s) catch null;
 }

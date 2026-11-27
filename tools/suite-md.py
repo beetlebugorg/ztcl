@@ -126,6 +126,7 @@ def main():
     tot = dict(total=0, pass_=0, fail=0, skip=0, unreached=0)
     jtot = dict(pass_=0, fail=0, skip=0)
     btot = {b: 0 for b, _ in BUCKETS}
+    reasons = {}
     fails, skips, diffs = {}, {}, []
     for fname in names:
         sc, count, why = scope.get(fname, ("in", 0, ""))
@@ -140,6 +141,7 @@ def main():
         if unreached:
             b, bw = bucket_of(rules, "unreached", f"{fname}/*", f"status {rc}")
             btot[b] += unreached
+            reasons[(b, bw)] = reasons.get((b, bw), 0) + unreached
             skips.setdefault(fname, []).append((f"(file stopped early, status {rc})", unreached, b, bw))
         sk = {}
         for name, (kind, detail) in sorted(per.get(fname, [])):
@@ -151,6 +153,7 @@ def main():
                 continue
             b, bw = bucket_of(rules, kind, f"{fname}/{name}", detail)
             btot[b] += 1
+            reasons[(b, bw)] = reasons.get((b, bw), 0) + 1
             tsv.append((fname, name, kind, jk, b, detail))
             if kind == "fail":
                 fails.setdefault(fname, []).append((name, b, bw, detail))
@@ -192,6 +195,16 @@ def main():
     rate = 100.0 * tot["pass_"] / applicable if applicable else 0.0
     w("")
     w(f"Applicable tests: {fmt(applicable)}. Pass rate of the applicable tests: {rate:.1f} %.")
+    w("")
+    w("## Reasons")
+    w("")
+    w("The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the reason of their rule in `tools/suite-buckets.tsv`.")
+    w("")
+    w("| Bucket | Reason | Tests |")
+    w("|---|---|---|")
+    for (b, bw), n in sorted(reasons.items(), key=lambda t: (t[0][0], -t[1], t[0][1])):
+        if b in ("bug", "feature", "message", "untriaged"):
+            w(f"| `{b}` | {cell(bw or '(no rule)')} | {fmt(n)} |")
     w("")
     w("## JIT differences")
     w("")
