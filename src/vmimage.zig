@@ -241,16 +241,26 @@ pub fn verifyWith(a: Allocator, extra: []const Key, manifest: []const u8, sig_te
     // A test key signs only a test image.
     if (key.test_only and !std.mem.endsWith(u8, p.value.name, test_suffix)) return error.Untrusted;
     if (p.value.counter < seen and !allow_rollback) return error.Rollback;
-    for (p.value.archs.map.values()) |arch| {
-        try checkHex(arch.kernel.sha256, 64);
-        if (arch.initrd) |f| try checkHex(f.sha256, 64);
-        for (arch.disks) |d| {
-            try checkHex(d.sha256, 64);
-            if (d.verity) |v| try checkHex(v.root_hash, 64);
-            if (!d.read_only and d.verity != null) return error.BadManifest;
+    for (p.value.archs.map.values()) |arch| try checkArch(arch);
+    return .{ .parsed = p, .key = key };
+}
+
+/// The checks of the files of one architecture. The kernel gets the root
+/// hash of a disk with verity from the command line only, so the command
+/// line must have the table entry `sha256 ROOT_HASH` of each such disk.
+fn checkArch(arch: Arch) Error!void {
+    try checkHex(arch.kernel.sha256, 64);
+    if (arch.initrd) |f| try checkHex(f.sha256, 64);
+    for (arch.disks) |d| {
+        try checkHex(d.sha256, 64);
+        if (!d.read_only and d.verity != null) return error.BadManifest;
+        if (d.verity) |v| {
+            try checkHex(v.root_hash, 64);
+            var want: [7 + 64]u8 = undefined;
+            const entry = std.fmt.bufPrint(&want, "sha256 {s}", .{v.root_hash}) catch unreachable;
+            if (std.mem.indexOf(u8, arch.cmdline, entry) == null) return error.BadManifest;
         }
     }
-    return .{ .parsed = p, .key = key };
 }
 
 fn checkHex(s: []const u8, n: usize) Error!void {
@@ -337,6 +347,16 @@ test "vmimage: rollback" {
     c.deinit();
     var d = try verify(a, fixtures.manifest, fixtures.good, 3, false);
     d.deinit();
+}
+
+test "vmimage: the root hash of a disk with verity is on the command line" {
+    const h = "abababababababababababababababababababababababababababababababab";
+    const other = "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd";
+    const disk: Disk = .{ .name = "root", .file = "root.img", .sha256 = h, .verity = .{ .root_hash = h } };
+    const k: File = .{ .file = "Image", .sha256 = h };
+    try checkArch(.{ .kernel = k, .cmdline = "dm-mod.create=\"root,,,ro,0 8 verity 1 /dev/vda /dev/vda 4096 4096 1 1 sha256 " ++ h ++ " -\"", .disks = &.{disk} });
+    try std.testing.expectError(error.BadManifest, checkArch(.{ .kernel = k, .cmdline = "root=/dev/vda ro", .disks = &.{disk} }));
+    try std.testing.expectError(error.BadManifest, checkArch(.{ .kernel = k, .cmdline = "verity sha256 " ++ other, .disks = &.{disk} }));
 }
 
 test "vmimage: a changed disk" {
