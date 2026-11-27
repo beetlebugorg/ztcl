@@ -74,6 +74,20 @@ does: Shows a notification of the system.
 cap: notify
 page: modules/notify.md
 
+== ztcl::gc
+syn: ztcl::gc subcommand
+does: Gives the counts of the collector of the heap of the interpreter tree: the pauses, the time of the marks and the sweeps, the bytes of the heap, the bytes that the program allocated, and the resident set of the process. The counts of time depend on the host.
+cap: meter
+flags: --allow meter
+page: modules/gc.md
+sub: ztcl::gc stats | A dict of the counts: `collections`, `gc_ns`, `mark_ns`, `sweep_ns`, `pause_p50_ns`, `pause_p99_ns`, `pause_max_ns`, `heap_bytes`, `heap_peak`, `live_bytes`, `used_bytes`, `threshold`, `allocated`, `freed`, `alloc_rate`, `uptime_ns`, `rss`, and `rss_peak`.
+sub: ztcl::gc collect | Runs a collection now, where the build can collect.
+sub: ztcl::gc reset | Starts the counts again.
+ex: ztcl::gc reset
+ex: dict get [ztcl::gc stats] collections => 0
+ex: dict size [ztcl::gc stats] => 18
+err: ztcl::gc nope | bad option "nope": must be collect, reset, or stats
+
 == ztcl::meter
 syn: ztcl::meter subcommand ?arg ...?
 does: Counts the compute units, the time, the memory, and the I/O of threads and child interpreters, for a host that bills its customers. A compute unit is the same on each machine and with the JIT on or off. A record is a line of JSON in a hash chain, with an optional Ed25519 signature.

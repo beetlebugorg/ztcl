@@ -2088,6 +2088,7 @@ pub const Interp = struct {
         if ((comptime features.on("notify")) and (new & @backingInt(Capability.notify) != 0)) try @import("notify.zig").register(it);
         if ((comptime features.on("vm")) and (new & @backingInt(Capability.vm) != 0)) try @import("microvm.zig").register(it);
         if ((comptime features.on("meter")) and (new & @backingInt(Capability.meter) != 0)) try it.register("ztcl::meter", @import("metercmd.zig").cmdMeter);
+        if ((comptime features.on("meter")) and (new & @backingInt(Capability.meter) != 0)) try it.register("ztcl::gc", @import("gccmd.zig").cmdGc);
         if (comptime cext_mod.supported) {
             if (new & @backingInt(Capability.cext) != 0) try cext_mod.register(it);
         }
