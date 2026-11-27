@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: BSD-2-Clause
-# Counts the user instructions, in millions, of ztcl, of ztcl with both
-# JIT tiers, and of tclsh.
+# Counts the user instructions, in millions, of ztcl with no JIT, of
+# ztcl with both JIT tiers (the default of the runner), and of tclsh.
 #
 #   count.sh FILE.tcl          counts one script
 #   count.sh -p PROC           counts one proc of micro.tcl
@@ -31,6 +31,6 @@ case $1 in
     cp "$1" "$work/s.tcl" ;;
 esac
 printf '%-40s interp %8s  jit %8s  tclsh %8s\n' "$name" \
+    "$(count "$runner" --allow clock --no-jit "$work/s.tcl")" \
     "$(count "$runner" --allow clock "$work/s.tcl")" \
-    "$(count "$runner" --allow clock --jit --jit-tier2 "$work/s.tcl")" \
     "$(count "$tclsh" "$work/s.tcl")"

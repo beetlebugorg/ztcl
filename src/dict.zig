@@ -311,6 +311,62 @@ fn setIn(it: *Interp, d: Value, keys: []const Value, v: Value) Error!Value {
     return appendPair(it, d, items, keys[0], inner);
 }
 
+/// Writes `v` at the path `keys` (two or more keys) of the dict that the
+/// cell `c` owns. An inner dict goes in place when it and each dict
+/// above it on the path have the stamp of the outer dict, as in
+/// `more.lsetOwnedPath`. Each other inner dict on the path gets a copy
+/// with that stamp, and each dict below a copy gets a copy too. A key
+/// that is not there gets a new pair with the dict of the rest of the
+/// path. Returns false before any write for a case that needs the
+/// general path, such as a value on the path that is not a dict.
+fn setOwnedPath(it: *Interp, c: *interp.Var, keys: []const Value, v: Value) Error!bool {
+    // Each check comes before the first write.
+    var cur = c.v.owned;
+    for (keys, 0..) |k, j| {
+        const items = readPairs(it, cur) catch |e| {
+            if (e == error.TclError) return false;
+            return e;
+        };
+        if (j + 1 == keys.len) break;
+        const at = try lookup(it, cur, items, k) orelse break;
+        cur = items[at + 1];
+    }
+    const stamp = c.v.owned.list.obj.own_stamp;
+    var copied = stamp == 0;
+    // The place of the dict of this level: the cell or a value of the
+    // dict above. Each dict on the path has only this place as holder.
+    var slot: *Value = &c.v.owned;
+    for (keys, 0..) |k, j| {
+        const d = slot.*;
+        const items = @constCast(d.list.items());
+        const found = try lookup(it, d, items, k);
+        if (j + 1 == keys.len or found == null) {
+            const inner = if (j + 1 == keys.len) v else try setIn(it, Value.empty, keys[j + 1 ..], v);
+            if (found) |at| {
+                items[at + 1] = inner;
+                return true;
+            }
+            const out = try appendPair(it, d, items, k, inner);
+            if (out.list.obj != d.list.obj) out.list.obj.own_stamp = stamp;
+            slot.* = out;
+            return true;
+        }
+        const at = found.?;
+        const child = items[at + 1];
+        if (!copied and isChecked(child) and child.list.obj.own_stamp == stamp) {
+            slot = &items[at + 1];
+            continue;
+        }
+        const r = try wrapDict(it, try it.alloc().dupe(Value, try readPairs(it, child)));
+        try copyIndex(it, child, r.list.obj);
+        r.list.obj.own_stamp = stamp;
+        items[at + 1] = r;
+        copied = true;
+        slot = &items[at + 1];
+    }
+    unreachable;
+}
+
 /// A set or an unset of one key, for `applyEdits`. A null value is an
 /// unset.
 const Edit = struct { key: Value, v: ?Value };
@@ -671,6 +727,9 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
             const dropped = it.takeDropped(argv);
             const before: Before = if (dropped) try .of(it, var_name) else .{};
             if (dropped and args.len == 3 and try before.update(it, args[1], 1, args[2])) return Value.empty;
+            if (args.len > 3) if (before.ownedDict() != null) {
+                if (try setOwnedPath(it, before.cell.?, args[1 .. args.len - 1], args[args.len - 1])) return Value.empty;
+            };
             const cur = try it.getVarOpt(var_name) orelse Value.empty;
             const out = try setIn(it, cur, args[1 .. args.len - 1], args[args.len - 1]);
             try it.setVar(var_name, out);
