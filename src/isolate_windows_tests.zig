@@ -262,7 +262,7 @@ test "isolate on Windows: the JIT runs in an AppContainer" {
     defer f.deinit();
     const script = try f.writeScript("proc sq x {expr {$x * $x}}; puts [sq 12]");
     var c = try start(f.exe, .{
-        .args = &.{ "--jit", "--jit-threshold", "0", "--jit-stats", script },
+        .args = &.{ "--jit-threshold", "0", "--jit-stats", script },
         .root = f.root_w,
         .limits = .{ .mem_bytes = 512 << 20 },
         .stdout = f.log,
@@ -321,7 +321,7 @@ test "the JIT falls back to the interpreter under Arbitrary Code Guard" {
     defer DeleteProcThreadAttributeList(attrs.ptr);
     try t.expect(UpdateProcThreadAttribute(attrs.ptr, 0, 0x20007, &policy, @sizeOf(u64), null, null) != 0);
     const script = try ev(&f.it, "file normalize bench/fib.tcl");
-    const line = try std.fmt.allocPrint(a, "\"{s}\" --jit --jit-threshold 0 --jit-stats \"{s}\"", .{ f.exe, script });
+    const line = try std.fmt.allocPrint(a, "\"{s}\" --jit-threshold 0 --jit-stats \"{s}\"", .{ f.exe, script });
     const line_w = try std.unicode.wtf8ToWtf16LeAllocZ(a, line);
     var si: StartupInfoEx = .{ .attrs = attrs.ptr };
     si.info.flags = 0x100; // STARTF_USESTDHANDLES
