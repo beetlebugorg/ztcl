@@ -98,6 +98,10 @@ pub fn write(fd: fd_t, buf: []const u8) i32 {
     return if (is_linux) lin(linux.write(fd, buf.ptr, buf.len)) else lib(c.write(fd, buf.ptr, buf.len));
 }
 
+pub fn writev(fd: fd_t, iov: []const std.posix.iovec_const) i32 {
+    return if (is_linux) lin(linux.writev(fd, iov.ptr, iov.len)) else lib(c.writev(fd, iov.ptr, @intCast(iov.len)));
+}
+
 pub fn close(fd: fd_t) void {
     if (is_linux) _ = linux.close(fd) else _ = c.close(fd);
 }

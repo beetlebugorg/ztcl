@@ -102,6 +102,7 @@ pub const Queue = struct {
             .accept => |o| sys.accept(o.fd),
             .read => |o| sys.read(o.fd, o.buf),
             .write => |o| sys.write(o.fd, o.buf),
+            .writev => |o| sys.writev(o.fd, o.iov),
             .connect => |o| blk: {
                 // deadline 1: the connect is in progress, and its result
                 // is SO_ERROR.
@@ -121,7 +122,7 @@ pub const Queue = struct {
 
     fn fdOf(comp: *const Completion) aio.fd_t {
         return switch (comp.op) {
-            inline .accept, .read, .write, .connect => |o| o.fd,
+            inline .accept, .read, .write, .writev, .connect => |o| o.fd,
             .timer => unreachable,
         };
     }
