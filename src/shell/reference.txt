@@ -455,6 +455,11 @@ sub: package unknown ?CMD? | The command that runs for a missing package.
 syn: safe::interpCreate ?child? ?-accessPath LIST? ?-statics BOOL? ?-noStatics? ?-nested BOOL? ?-nestedLoadOk? ?-deleteHook SCRIPT?
 == tclPkgUnknown tclPkgUnknown tclPkgSetup tclLog
 syn: tclPkgUnknown name ?version ...?
+== tcl::tm::path tcl::tm::roots tcl::tm::UnknownHandler
+syn: tcl::tm::path add ?path ...?
+syn: tcl::tm::path remove ?path ...?
+syn: tcl::tm::path list
+syn: tcl::tm::roots paths
 == auto_load auto_load auto_load_index auto_reset auto_qualify auto_import auto_execok
 syn: auto_load command ?namespace?
 == history
