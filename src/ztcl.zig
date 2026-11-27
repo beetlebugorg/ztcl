@@ -153,6 +153,7 @@ test {
     _ = @import("vm/virtio/balloon.zig");
     _ = @import("vm/kvm_snapshot.zig");
     _ = @import("isovm.zig");
+    _ = @import("vm/nat/tcp.zig");
     _ = zipwrite;
     _ = buildnative;
     _ = stripscan;

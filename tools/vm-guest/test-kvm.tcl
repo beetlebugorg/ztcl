@@ -113,6 +113,36 @@ if {[dict get $r exit] == 9} {
     # The loopback policy permits no name: the NAT answers REFUSED, and
     # no query goes to the name server of the host.
     check "net: DNS refused by the policy" [string match "*REFUSED*" [dict get [ztcl::vm exec $vm /bin/busybox sh -c {/bin/busybox nslookup example.com 10.0.2.3 2>&1}] stdout]] 1
+    # TCP to a server on the host loopback, in a thread: the guest gets
+    # 16 MB, then sends 16 MB, and the server counts it.
+    set srv [thread::create {
+        proc acc {mode ch addr port} {
+            fconfigure $ch -translation binary
+            if {$mode eq "source"} {
+                set blk [string repeat x 65536]
+                for {set i 0} {$i < 256} {incr i} { puts -nonewline $ch $blk }
+                close $ch
+            } else {
+                fconfigure $ch -blocking 0
+                set ::n 0
+                fileevent $ch readable [list rd $ch]
+            }
+        }
+        proc rd ch {
+            incr ::n [string length [read $ch]]
+            if {[eof $ch]} { tsv::set net sink $::n; close $ch }
+        }
+        thread::wait
+    }]
+    set p1 [thread::send $srv {lindex [fconfigure [socket -server {acc source} -myaddr 127.0.0.1 0] -sockname] 2}]
+    set p2 [thread::send $srv {lindex [fconfigure [socket -server {acc sink} -myaddr 127.0.0.1 0] -sockname] 2}]
+    check "net: TCP from the host" [dict get [ztcl::vm exec $vm -timeout 30000 /bin/busybox sh -c "/bin/busybox nc 10.0.2.2 $p1 | /bin/busybox wc -c"] stdout] "16777216\n"
+    ztcl::vm exec $vm -timeout 30000 /bin/busybox sh -c "/bin/busybox dd if=/dev/zero bs=64k count=256 2>/dev/null | /bin/busybox nc 10.0.2.2 $p2"
+    set waited 0
+    while {![tsv::exists net sink] && $waited < 100} { after 20; incr waited }
+    check "net: TCP to the host" [expr {[tsv::exists net sink] ? [tsv::get net sink] : -1}] 16777216
+    check "net: a refused port" [dict get [ztcl::vm exec $vm /bin/busybox sh -c {/bin/busybox nc 10.0.2.2 1 < /dev/null; echo $?}] stdout] "1\n"
+    thread::release $srv
 }
 ztcl::vm delete $vm
 check "net: a bad network" [catch {ztcl::vm create {*}$boot -net tap}] 1

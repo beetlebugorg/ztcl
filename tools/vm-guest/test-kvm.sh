@@ -17,6 +17,6 @@ cd "$dir"
 # The runner gives a script no environment, so the name of the kernel
 # goes in a file.
 printf %s "${KERNEL:-bzImage}" > kernel.name
-"$here/../../zig-out/bin/ztcl" --root . --allow vm,file,channels,clock,event,socket "$here/test-kvm.tcl"
+"$here/../../zig-out/bin/ztcl" --root . --allow vm,file,channels,clock,event,socket,thread "$here/test-kvm.tcl"
 # The snapshots, restores, and clones (ztcl#468).
 exec "$here/../../zig-out/bin/ztcl" --root . --allow vm,file,channels,clock,event "$here/test-kvm-snapshot.tcl"
