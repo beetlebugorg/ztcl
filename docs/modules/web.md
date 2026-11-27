@@ -78,6 +78,7 @@ A group can have commands of its own in the namespace `web::GROUP`, with `-name 
 | `bluetooth` | [`web::bluetooth::`](web-bluetooth.md): devices, GATT services, reads, writes, and notifications |
 | `gamepad` | [`web::gamepad::`](web-gamepad.md): the state of the pads, a poll, the events of a new pad, and rumble |
 | `midi` | [`web::midi::`](web-midi.md): the ports, the messages as lists of numbers, and notes |
+| `usb` | [`web::usb::`](web-usb.md): the endpoints of a device as a channel, and control transfers |
 
 ## Web Serial
 

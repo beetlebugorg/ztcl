@@ -82,6 +82,7 @@ pub const Op = enum(u32) {
     serial_ttycontrol = 14,
     serial_ports = 15,
     gamepads = 16,
+    usb_stream = 17,
 };
 
 /// The names of the substitutions of `web::on`, in the order of the
@@ -249,6 +250,19 @@ pub fn Commands(comptime gpa: std.mem.Allocator) type {
         fn cmdGamepads(it: *Interp, argv: []const Value, _: ?*ztcl.interp.Cmd) Error!Value {
             if (argv.len != 1) return it.wrongArgs("web::gamepad::Snapshot");
             return (try call(it, gpa, .gamepads, 0, "", "")).value;
+        }
+
+        /// `web::usb::Stream device in out packet`: a channel `webusbN`
+        /// of the bulk or interrupt endpoints `in` and `out` (0 for
+        /// none) of an open device, for `src/web/usb.tcl`.
+        fn cmdUsbStream(it: *Interp, argv: []const Value, _: ?*ztcl.interp.Cmd) Error!Value {
+            if (argv.len != 5) return it.wrongArgs("web::usb::Stream device in out packet");
+            return (try call(it, gpa, .usb_stream, try handleOf(it, argv[1]), "", try words(it, argv[2..]))).value;
+        }
+
+        /// Adds `web::usb::Stream`.
+        pub fn registerUsb(it: *Interp) std.mem.Allocator.Error!void {
+            try it.register("web::usb::Stream", cmdUsbStream);
         }
 
         /// The calls of the channels of the ports to the host.

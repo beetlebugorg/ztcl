@@ -278,6 +278,7 @@ const web_libs = [_]struct { group: []const u8, script: []const u8 }{
     .{ .group = "bluetooth", .script = @embedFile("web/bluetooth.tcl") },
     .{ .group = "gamepad", .script = @embedFile("web/gamepad.tcl") },
     .{ .group = "midi", .script = @embedFile("web/midi.tcl") },
+    .{ .group = "usb", .script = @embedFile("web/usb.tcl") },
 };
 
 /// Runs the Tcl wrapper of the group `ptr[0..len]`, such as
@@ -296,6 +297,27 @@ fn ztcl_web_lib(h: *Handle, ptr: [*]const u8, len: usize) callconv(.c) i32 {
         return 0;
     }
     return 2;
+}
+
+/// Adds the channels of WebUSB: the stream commands of `wasmfiles.zig`
+/// and `web::usb::Stream`. The host calls it for `allow: ["web:usb"]`,
+/// after `ztcl_web_allow`. Gives 0, or 1 when the memory is full.
+fn ztcl_web_usb_allow(h: *Handle) callconv(.c) i32 {
+    const web = @import("wasmweb.zig").Commands(gpa);
+    h.files.stream_host = &web.stream_host;
+    h.files.on = true;
+    wasmfiles.Commands(filesOf, gpa, false).registerStreams(&h.it) catch return 1;
+    web.registerUsb(&h.it) catch return 1;
+    return 0;
+}
+
+/// Adds the channel `webusbN` for the stream `id` of the host. Gives 0,
+/// or 1 when the memory is full.
+fn ztcl_web_usb_port(h: *Handle, id: u32) callconv(.c) i32 {
+    var buf: [24]u8 = undefined;
+    const name = std.fmt.bufPrint(&buf, "webusb{d}", .{id}) catch unreachable;
+    h.files.addPort(gpa, name, id) catch return 1;
+    return 0;
 }
 
 /// Adds the port `webserialN` for the port `id` of the host. Gives 0, or
@@ -342,6 +364,8 @@ comptime {
         @export(&ztcl_web_split, .{ .name = "ztcl_web_split" });
         @export(&ztcl_web_serial_allow, .{ .name = "ztcl_web_serial_allow" });
         @export(&ztcl_web_lib, .{ .name = "ztcl_web_lib" });
+        @export(&ztcl_web_usb_allow, .{ .name = "ztcl_web_usb_allow" });
+        @export(&ztcl_web_usb_port, .{ .name = "ztcl_web_usb_port" });
         @export(&ztcl_web_serial_port, .{ .name = "ztcl_web_serial_port" });
         @export(&ztcl_web_serial_data, .{ .name = "ztcl_web_serial_data" });
         @export(&ztcl_dom_event, .{ .name = "ztcl_dom_event" });
