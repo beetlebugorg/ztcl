@@ -163,7 +163,28 @@ tcl.close();
 
 `node tools/wasm-bundle.mjs zig-out/bin/ztcl zig-out/lib/ztcl.wasm` checks that the output of each bundle equals the output of `ztcl`, the limits, and the files. The npm package tests run a bundle in Node.js and in headless Chromium.
 
-The bundle is level 1 of [issue #3](https://github.com/beetlebugorg/ztcl/issues/3) in a short form, for a browser and Node.js. The full level 1 is a WASI component and follows [#2](https://github.com/beetlebugorg/ztcl/issues/2). The virtual file system of [#40](https://github.com/beetlebugorg/ztcl/issues/40), with `glob`, `file`, and zip archives, replaces the file table of the bundle.
+The bundle is level 1 of [issue #3](https://github.com/beetlebugorg/ztcl/issues/3) in a short form, for a browser and Node.js. The WASI component of the next section is the full level 1. The virtual file system of [#40](https://github.com/beetlebugorg/ztcl/issues/40), with `glob`, `file`, and zip archives, replaces the file table of the bundle.
+
+## Bundle a script as a WASI component
+
+`ztcl build --component` writes a copy of the command component of WASI 0.3.2 (`zig build wasi-component`) with the scripts and the files in it. The payload is the payload of a native app of `ztcl build`: a zip archive of the scripts, the files of `--embed`, and a manifest. The command patches the core module of the component and needs no Zig toolchain and no `wasm-tools`.
+
+```sh
+zig build wasi-component
+ztcl build --component --base zig-out/bin/ztcl.component.wasm --embed data.txt -o app.wasm app.tcl
+wasmtime run app.wasm one two
+```
+
+```
+app.wasm: 2888538 bytes (ztcl.component.wasm: 2888052 bytes, payload: 477 bytes)
+```
+
+- The component runs the scripts in order, as the native app of `ztcl build` does. The words after the program name are `$argv`, and `exit` sets the exit code. The scripts and the files are under `//zipfs:/app/`.
+- `--allow LIST` and `--root PATH` go in the manifest. `--root` names a preopen of the runtime, such as `/` for `wasmtime run --dir .::/`. With no capability in the list, the app has only the read-only files of the bundle.
+- `--base FILE` is the component to copy. With no `--base`, the command uses the environment variable `ZTCL_COMPONENT`, then `../lib/ztcl.component.wasm` from the folder of the `ztcl` program.
+- A component with no payload is the `ztcl` runner itself: `wasmtime run --dir .::/ ztcl.component.wasm --allow file,channels --root / /script.tcl` reads the flags of `ztcl`.
+
+`tools/wasi-component.sh` checks that a bundle gives the output and the exit code of the native app of the same scripts. The tests run under wasmtime only. A second component runtime is task 09 of [the WASI tasks](dev/wasi-tasks/README.md).
 
 ## Compile procs to WebAssembly
 

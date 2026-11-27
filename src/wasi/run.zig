@@ -15,6 +15,12 @@
 //! the WASI 0.3.2 forms of `sys.zig` and `fsroot.zig`. With no flag, no
 //! capability is on.
 //!
+//! `ztcl build --component` writes the address and the length of a zip
+//! payload into `bundle_slot` (src/wasmbundle.zig). With a payload,
+//! `run` gives it to `runPayload`, as a native app of `ztcl build` does:
+//! the scripts of the manifest run with its capabilities, and the
+//! arguments are `$argv`.
+//!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
@@ -33,6 +39,18 @@ pub const std_options_debug_threaded_io: ?*std.Io.Threaded = null;
 pub const std_options_debug_io: std.Io = std.Io.failing;
 
 const gpa = std.heap.wasm_allocator;
+
+/// The slot of a bundle. The patch finds it by its first two words, in
+/// the data of the module, so it needs no export.
+var bundle_slot: [4]u32 = tcl.wasmbundle.slot_words;
+
+/// The payload of the bundle, or an empty slice.
+fn payload() []const u8 {
+    const slot: *volatile [4]u32 = &bundle_slot;
+    const ptr = slot[2];
+    if (ptr == 0xffffffff) return &.{};
+    return @as([*]const u8, @ptrFromInt(ptr))[0..slot[3]];
+}
 
 /// The writer of standard output: each drain writes to descriptor 1.
 fn drainOut(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.Io.Writer.Error!usize {
@@ -118,7 +136,9 @@ fn run() callconv(.c) u32 {
         .clock = .{ .now = clockNow, .zone = zone },
         .event = .{ .now = ticks, .sleep = sleep },
     };
-    runner.runHost(&h, null) catch {
+    const app = payload();
+    const ran = if (app.len > 0) runner.runPayload(&h, if (h.args.len > 0) h.args[0] else "app", app) else runner.runHost(&h, null);
+    ran catch {
         out.flush() catch {};
         host.flush();
         return 1;

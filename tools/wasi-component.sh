@@ -81,4 +81,22 @@ check "files and channels below --root" "abcd 20002 d/y.txt 20002 0 1 1" "$(run 
 check "no file outside the root" "0" "$(ls out.txt 2>/dev/null | wc -l)"
 printf 'set t [clock milliseconds]\nafter 100 {set ::done 1}\nvwait done\nputs [expr {[clock milliseconds] - $t >= 100}]\nputs [expr {[clock seconds] > 1700000000}]\n' > ev.tcl
 check "clock and the event loop" "1 1" "$(run --allow clock,event ev.tcl | tr '\n' ' ' | sed 's/ $//')"
+# A bundle of `ztcl build --component` (#3 level 1) gives the output of
+# the native app of `ztcl build`. It needs the native zig-out/bin/ztcl.
+z=${ZTCL:-$here/../zig-out/bin/ztcl}
+if [ -x "$z" ]; then
+    mkdir app
+    printf 'puts "$argc $argv"\nputs [lsort [glob -directory //zipfs:/app *]]\nset f [open //zipfs:/app/data.txt]\nputs [read -nonewline $f]\nclose $f\nputs [info commands file]|[info commands clock]\nexit 4\n' > app/app.tcl
+    echo hello > app/data.txt
+    (cd app && "$z" build --component --base "$c" --embed data.txt -o ../app.wasm app.tcl >/dev/null && "$z" build --embed data.txt -o ../app.bin app.tcl >/dev/null)
+    want=$(./app.bin one two; echo "exit $?")
+    got=$(timeout 20 "${WASMTIME:-wasmtime}" run -W max-wasm-stack=8388608 app.wasm one two; echo "exit $?")
+    check "a bundle gives the output of the native app" "$want" "$got"
+    printf 'puts [clock seconds]\n' > app/c.tcl
+    (cd app && "$z" build --component --base "$c" --allow clock -o ../clock.wasm c.tcl >/dev/null)
+    check "the capabilities of a bundle" 1 "$(timeout 20 "${WASMTIME:-wasmtime}" run clock.wasm | awk '{ print ($1 > 1700000000) }')"
+    check "a bundle of a bundle" 1 "$("$z" build --component --base app.wasm -o x.wasm app/app.tcl >/dev/null; echo $?)"
+else
+    echo "skip the bundle tests: no $z"
+fi
 [ "$fails" -eq 0 ] || { echo "$fails failed"; exit 1; }

@@ -17,6 +17,12 @@
 //! variable ZTCL_WASM, or `../lib/ztcl.wasm` next to the folder of the
 //! program. The command needs no Zig toolchain.
 //!
+//! `ztcl build --component [--base FILE] [--allow LIST] [--root PATH] -o OUT.wasm
+//! script.tcl...` writes a copy of the command component of WASI 0.3.2
+//! with the payload of the native form in its core module. The base is
+//! the file of `--base`, of ZTCL_COMPONENT, or
+//! `../lib/ztcl.component.wasm` next to the folder of the program.
+//!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
@@ -28,6 +34,8 @@ const usage =
     \\usage: ztcl build [--target T] [--runtime FILE] [--allow LIST] [--root PATH] [--no-jit]
     \\                  [--compress] [--embed PATH]... -o OUT script.tcl...
     \\       ztcl build --wasm [--base ztcl.wasm] [--embed PATH]... -o OUT.wasm script.tcl...
+    \\       ztcl build --component [--base ztcl.component.wasm] [--allow LIST] [--root PATH]
+    \\                  [--compress] [--embed PATH]... -o OUT.wasm script.tcl...
     \\
 ;
 
@@ -35,6 +43,7 @@ const usage =
 /// code.
 pub fn run(io: Io, a: std.mem.Allocator, env: anytype, args: []const [:0]const u8, out: *Io.Writer) !u8 {
     var wasm = false;
+    var component = false;
     var base: ?[]const u8 = null;
     var output: ?[]const u8 = null;
     var embeds: std.ArrayList([]const u8) = .empty;
@@ -46,6 +55,8 @@ pub fn run(io: Io, a: std.mem.Allocator, env: anytype, args: []const [:0]const u
         const has_value = i + 1 < args.len;
         if (std.mem.eql(u8, arg, "--wasm")) {
             wasm = true;
+        } else if (std.mem.eql(u8, arg, "--component")) {
+            component = true;
         } else if (std.mem.eql(u8, arg, "--base") and has_value) {
             i += 1;
             base = args[i];
@@ -136,6 +147,7 @@ pub fn run(io: Io, a: std.mem.Allocator, env: anytype, args: []const [:0]const u
         }
     }
 
+    if (component) return componentApp(io, a, env, base, nat, entries.items, output.?, out);
     if (!wasm) return native(io, a, env, nat, entries.items, output.?, out);
     const payload = try wb.encode(a, entries.items);
     const module = wb.patch(a, base_bytes, payload) catch |e| {
@@ -186,6 +198,62 @@ const Native = struct {
     compress: bool = false,
 };
 
+/// The zip archive of the entries and the manifest. Gives null after a
+/// message.
+fn appPayload(a: std.mem.Allocator, nat: Native, entries: []const wb.Entry, out: *Io.Writer) !?[]u8 {
+    var zips: std.ArrayList(tcl.zipwrite.Entry) = .empty;
+    var names: std.ArrayList([]const u8) = .empty;
+    for (entries) |e| {
+        for (zips.items) |z| if (std.mem.eql(u8, z.name, e.name)) {
+            try out.print("ztcl build: {s} is in the input twice\n", .{e.name});
+            return null;
+        };
+        try zips.append(a, .{ .name = e.name, .data = e.data });
+        if (e.kind == .script) try names.append(a, e.name);
+    }
+    const manifest: bn.Manifest = .{ .scripts = names.items, .allow = nat.allow, .root = nat.root, .jit = nat.jit };
+    try zips.append(a, .{ .name = bn.manifest_name, .data = try manifest.write(a) });
+    const payload = tcl.zipwrite.write(a, zips.items, nat.compress) catch |e| {
+        try out.print("ztcl build: the payload: {s}\n", .{@errorName(e)});
+        return null;
+    };
+    return payload;
+}
+
+/// Writes the command component of WASI 0.3.2 with the app payload.
+fn componentApp(io: Io, a: std.mem.Allocator, env: anytype, base: ?[]const u8, nat: Native, entries: []const wb.Entry, output: []const u8, out: *Io.Writer) !u8 {
+    if (nat.allow.len > 0 and tcl.interp.Capability.parse(nat.allow) == null) {
+        try out.print("ztcl build: unknown capability in \"{s}\"\n", .{nat.allow});
+        return 2;
+    }
+    const cwd = Io.Dir.cwd();
+    const base_path = base orelse env.get("ZTCL_COMPONENT") orelse blk: {
+        const dir = try std.process.executableDirPathAlloc(io, a);
+        break :blk try std.fs.path.join(a, &.{ dir, "..", "lib", "ztcl.component.wasm" });
+    };
+    const base_bytes = cwd.readFileAlloc(io, base_path, a, .limited(256 << 20)) catch |e| {
+        try out.print("ztcl build: {s}: {s}. Pass --base with the path of ztcl.component.wasm.\n", .{ base_path, @errorName(e) });
+        return 1;
+    };
+    const payload = try appPayload(a, nat, entries, out) orelse return 1;
+    const bin = wb.patchComponent(a, base_bytes, payload) catch |e| {
+        try out.print("ztcl build: {s}: {s}\n", .{ base_path, switch (e) {
+            error.NotWasm, error.BadModule => "not a component of `zig build wasi-component`",
+            error.NoSlot => "no bundle slot: use the ztcl.component.wasm of this version of ztcl",
+            error.AlreadyBundle => "the component is a bundle already",
+            error.TooLarge => "the bundle is too large",
+            error.OutOfMemory => "out of memory",
+        } });
+        return 1;
+    };
+    cwd.writeFile(io, .{ .sub_path = output, .data = bin }) catch |e| {
+        try out.print("ztcl build: {s}: {s}\n", .{ output, @errorName(e) });
+        return 1;
+    };
+    try out.print("{s}: {d} bytes ({s}: {d} bytes, payload: {d} bytes)\n", .{ output, bin.len, std.fs.path.basename(base_path), base_bytes.len, payload.len });
+    return 0;
+}
+
 fn native(io: Io, a: std.mem.Allocator, env: anytype, nat: Native, entries: []const wb.Entry, output: []const u8, out: *Io.Writer) !u8 {
     const target = nat.target orelse bn.hostTarget();
     var file: ?[]const u8 = null;
@@ -215,22 +283,7 @@ fn native(io: Io, a: std.mem.Allocator, env: anytype, nat: Native, entries: []co
         try out.print("ztcl build: the runtime of {s}: {s}: {s}. Make it with `zig build runtimes`, or pass --runtime.\n", .{ target, rt_path, @errorName(e) });
         return 1;
     };
-    var zips: std.ArrayList(tcl.zipwrite.Entry) = .empty;
-    var names: std.ArrayList([]const u8) = .empty;
-    for (entries) |e| {
-        for (zips.items) |z| if (std.mem.eql(u8, z.name, e.name)) {
-            try out.print("ztcl build: {s} is in the input twice\n", .{e.name});
-            return 1;
-        };
-        try zips.append(a, .{ .name = e.name, .data = e.data });
-        if (e.kind == .script) try names.append(a, e.name);
-    }
-    const manifest: bn.Manifest = .{ .scripts = names.items, .allow = nat.allow, .root = nat.root, .jit = nat.jit };
-    try zips.append(a, .{ .name = bn.manifest_name, .data = try manifest.write(a) });
-    const payload = tcl.zipwrite.write(a, zips.items, nat.compress) catch |e| {
-        try out.print("ztcl build: the payload: {s}\n", .{@errorName(e)});
-        return 1;
-    };
+    const payload = try appPayload(a, nat, entries, out) orelse return 1;
     // The Mach-O signature of an app has the entitlement of the JIT, which
     // a signature with the hardened runtime needs for MAP_JIT, and with
     // `vm` the entitlement of Virtualization.framework. ELF and PE files
