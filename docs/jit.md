@@ -65,6 +65,16 @@ x86-64 Windows, the same 10-million-pass loop, `ReleaseFast`, wall time of the w
 | ztcl `--no-jit-tier2` | 96 ms |
 | ztcl (the default, tier 1 and tier 2) | 59 ms |
 
+Wall time of the whole process, the best of 5 runs, on the `ubuntu-24.04-arm` runner of GitHub Actions (arm64 Linux), `ReleaseFast`, 2026-11-26:
+
+| Script | `--no-jit` | `--no-jit-tier2` | default |
+|---|---|---|---|
+| `sum.tcl` | 18 ms | 10 ms | 3 ms |
+| `dsum.tcl` | 47 ms | 43 ms | 3 ms |
+| `nested.tcl` | 34 ms | 25 ms | 17 ms |
+| `foreach.tcl` | 17 ms | 11 ms | 8 ms |
+| `fib.tcl` | 15 ms | 11 ms | 10 ms |
+
 [Performance](performance.md#the-jit) has all scripts and the larger programs.
 
 ## Safety
