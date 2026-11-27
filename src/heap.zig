@@ -138,6 +138,11 @@ pub const Heap = struct {
     mark_ok: bool = true,
     live_bytes: usize = 0,
     collections: u64 = 0,
+    /// The counts of the collections, for `ztcl::gc stats`.
+    stats: Stats = .{},
+    /// The bytes in use after the last sweep or `resetStats`: the base of
+    /// the count of allocated bytes.
+    alloc_base: usize = 0,
     /// Above zero, each safe point of this count starts a collection.
     /// The count grows by its own value for each 16 MiB of heap.
     stress: u32 = 0,
@@ -162,6 +167,76 @@ pub const Heap = struct {
     next_count: u8 = 0,
 
     pub const Count = struct { ptr: usize = 0, len: usize = 0, n: usize = 0 };
+
+    /// The counts of the collections. The times come from a clock that
+    /// does not go back (`meter.monoNs`), read only at the start, the end
+    /// of the mark, and the end of the sweep, so an allocation costs no
+    /// more. The bytes that the program allocated are counted at each
+    /// collection: the blocks in use before the sweep, less the live
+    /// bytes after the last one.
+    pub const Stats = struct {
+        gc_ns: u64 = 0,
+        mark_ns: u64 = 0,
+        sweep_ns: u64 = 0,
+        max_pause_ns: u64 = 0,
+        /// The pauses of the last `pause_ring` collections, in ns, for the
+        /// percentiles.
+        pauses: [pause_ring]u32 = @splat(0),
+        npauses: u64 = 0,
+        /// The bytes that the program allocated up to the last
+        /// collection, and the bytes that the sweeps freed.
+        allocated: u64 = 0,
+        freed: u64 = 0,
+        peak_bytes: usize = 0,
+        /// The clock at the start of the counts.
+        start_ns: u64 = 0,
+
+        pub const pause_ring = 1024;
+
+        fn pause(st: *Stats, ns: u64) void {
+            st.pauses[@intCast(st.npauses % pause_ring)] = @intCast(@min(ns, std.math.maxInt(u32)));
+            st.npauses += 1;
+            st.max_pause_ns = @max(st.max_pause_ns, ns);
+        }
+
+        /// The pause at fraction `q` (0.5 for the median) of the pauses in
+        /// the ring, in ns. 0 with no collection.
+        pub fn percentile(st: *const Stats, q: f64, scratch: *[pause_ring]u32) u64 {
+            const n: usize = @intCast(@min(st.npauses, pause_ring));
+            if (n == 0) return 0;
+            @memcpy(scratch[0..n], st.pauses[0..n]);
+            std.mem.sort(u32, scratch[0..n], {}, std.sort.asc(u32));
+            const at: usize = @intFromFloat(@floor(q * @as(f64, @floatFromInt(n - 1)) + 0.5));
+            return scratch[@min(at, n - 1)];
+        }
+    };
+
+    /// The bytes of the blocks in use: each block of a size class with a
+    /// clear free bit, and each large block.
+    pub fn usedBytes(h: *const Heap) usize {
+        var used: usize = 0;
+        for (h.spans.items) |s| {
+            if (s.large) {
+                used += s.len;
+                continue;
+            }
+            var nfree: usize = 0;
+            for (s.free[0..s.nwords]) |w| nfree += @popCount(w);
+            used += (s.count - nfree) * s.size;
+        }
+        return used;
+    }
+
+    /// The bytes that the program allocated since the start of the counts.
+    pub fn allocatedBytes(h: *const Heap) u64 {
+        return h.stats.allocated + (h.usedBytes() -| h.alloc_base);
+    }
+
+    /// Starts the counts again, as at a new heap.
+    pub fn resetStats(h: *Heap, now_ns: u64) void {
+        h.stats = .{ .start_ns = now_ns, .peak_bytes = h.bytes, .allocated = 0 };
+        h.alloc_base = h.usedBytes();
+    }
 
     pub const Range = struct { ptr: usize, len: usize, stack: bool = false };
 
@@ -193,6 +268,7 @@ pub const Heap = struct {
         h.bytes = 0;
         h.live_bytes = 0;
         h.threshold = min_threshold;
+        h.alloc_base = 0;
         h.counts = @splat(.{});
     }
 
@@ -312,6 +388,8 @@ pub const Heap = struct {
         h.lo = @min(h.lo, s.base);
         h.hi = @max(h.hi, s.base + s.len);
         h.bytes += s.len;
+        h.stats.peak_bytes = @max(h.stats.peak_bytes, h.bytes);
+        if (h.stats.start_ns == 0) h.stats.start_ns = @max(1, clock());
     }
 
     fn newPage(h: *Heap, index: usize) ?*Span {
@@ -565,6 +643,12 @@ fn drain(h: *Heap) void {
 /// each block that no root reached. A failed mark frees no block.
 pub fn collect(h: *Heap) void {
     const roots = h.roots_fn orelse return;
+    const t0 = clock();
+    defer {
+        const t2 = clock();
+        h.stats.gc_ns += t2 -| t0;
+        h.stats.pause(t2 -| t0);
+    }
     h.mark_ok = true;
     h.work.clearRetainingCapacity();
     h.buildTable();
@@ -579,7 +663,14 @@ pub fn collect(h: *Heap) void {
     drain(h);
     h.work.clearRetainingCapacity();
     if (h.mark_ok) h.collections += 1;
+    const t1 = clock();
+    h.stats.mark_ns += t1 -| t0;
     sweep(h);
+    h.stats.sweep_ns += clock() -| t1;
+}
+
+fn clock() u64 {
+    return @import("meter.zig").monoNs();
 }
 
 fn sweep(h: *Heap) void {
@@ -596,10 +687,13 @@ fn sweep(h: *Heap) void {
     const poison = fill_dead or h.stress != 0;
     const before = h.bytes;
     var live_bytes: usize = 0;
+    // The bytes of the blocks in use before the sweep: live and dead.
+    var used_before: usize = 0;
     var keep: usize = 0;
     const items = h.spans.items;
     for (items) |s| {
         if (s.large) {
+            used_before += s.len;
             if (s.mark[0] == 0) {
                 if (poison) @memset(@as([*]u8, @ptrFromInt(s.base))[0..s.len], dead_byte);
                 h.bytes -= s.len;
@@ -620,6 +714,7 @@ fn sweep(h: *Heap) void {
             if (rest < 64) valid = (@as(u64, 1) << @intCast(rest)) - 1;
             const m = s.mark[w];
             const new_free = ~m & valid;
+            used_before += @as(usize, @popCount(~s.free[w] & valid)) * s.size;
             if (poison) {
                 var dead = new_free & ~s.free[w];
                 while (dead != 0) : (dead &= dead - 1) {
@@ -653,6 +748,9 @@ fn sweep(h: *Heap) void {
     // live bytes, so the mark cost of a growing structure stays low.
     const grew = live_bytes * 2 > before;
     h.live_bytes = live_bytes;
+    h.stats.allocated += used_before -| h.alloc_base;
+    h.stats.freed += used_before -| live_bytes;
+    h.alloc_base = live_bytes;
     h.threshold = @max(min_threshold, (if (grew) @as(usize, 4) else 2) *| live_bytes);
     // The bounds may be wider than the spans. That is safe.
 }

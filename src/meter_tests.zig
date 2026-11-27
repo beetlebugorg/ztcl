@@ -148,3 +148,32 @@ test "a signed record verifies, and a changed one does not" {
     // A host key signs with -sign, and the script never sees the key.
     try testing.expectError(error.TclError, it.eval("ztcl::meter record r -sign"));
 }
+
+test "the default interpreter has no ztcl::gc" {
+    var it: tcl.Interp = undefined;
+    try it.init(testing.allocator);
+    defer it.deinit();
+    try testing.expect(it.findCommand("ztcl::gc") == null);
+}
+
+test "ztcl::gc stats counts a collection, and reset starts the counts again" {
+    if (!tcl.gc.supported) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try host(&it, false);
+    defer it.deinit();
+    // 60 MB of garbage: collections at the safe points of the bytecode,
+    // also in a precise build, where `ztcl::gc collect` in a native
+    // command runs none.
+    _ = try evalStr(&it, "for {set i 0} {$i < 300000} {incr i} {set s [string repeat x 200]}; ztcl::gc collect");
+    try testing.expect(try evalInt(&it, "dict get [ztcl::gc stats] collections") >= 1);
+    try testing.expect(try evalInt(&it, "dict get [ztcl::gc stats] allocated") > 40_000_000);
+    try testing.expect(try evalInt(&it, "dict get [ztcl::gc stats] freed") > 20_000_000);
+    try testing.expect(try evalInt(&it, "dict get [ztcl::gc stats] gc_ns") > 0);
+    try testing.expectEqualStrings("1", try evalStr(&it, "set s [ztcl::gc stats]; expr {[dict get $s pause_max_ns] >= [dict get $s pause_p99_ns] && [dict get $s pause_p99_ns] >= [dict get $s pause_p50_ns] && [dict get $s heap_peak] >= [dict get $s heap_bytes] && [dict get $s mark_ns] + [dict get $s sweep_ns] <= [dict get $s gc_ns]}"));
+    try testing.expectEqualStrings("18", try evalStr(&it, "dict size [ztcl::gc stats]"));
+    _ = try evalStr(&it, "ztcl::gc reset");
+    try testing.expectEqual(@as(i64, 0), try evalInt(&it, "dict get [ztcl::gc stats] collections"));
+    try testing.expectEqual(@as(i64, 0), try evalInt(&it, "dict get [ztcl::gc stats] freed"));
+    try testing.expectEqualStrings("wrong # args: should be \"ztcl::gc stats|collect|reset\"", try evalStr(&it, "catch {ztcl::gc} m; set m"));
+    try testing.expectEqualStrings("bad option \"x\": must be collect, reset, or stats", try evalStr(&it, "catch {ztcl::gc x} m; set m"));
+}

@@ -54,7 +54,7 @@ pub const table = [_]Feature{
     .{ .name = "socket", .kind = .capability, .capability = "socket", .commands = &.{"socket"} },
     .{ .name = "thread", .kind = .capability, .capability = "thread", .commands = &.{ "thread::", "tsv::", "tpool::" } },
     .{ .name = "vm", .kind = .capability, .capability = "vm", .commands = &.{"ztcl::vm"} },
-    .{ .name = "meter", .kind = .capability, .capability = "meter", .commands = &.{"ztcl::meter"} },
+    .{ .name = "meter", .kind = .capability, .capability = "meter", .commands = &.{ "ztcl::meter", "ztcl::gc" } },
     .{ .name = "notify", .kind = .capability, .capability = "notify", .commands = &.{"ztcl::notify"} },
     .{ .name = "watch", .kind = .capability, .capability = "file", .commands = &.{"ztcl::watch"} },
     .{ .name = "registry", .kind = .capability, .capability = "registry", .commands = &.{"ztcl::win::registry"} },
