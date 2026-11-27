@@ -508,7 +508,7 @@ basic.test	basic-46.1	fail	fail	bug	code 0/0,2: 1 { DONE } \| want: 1 {invoked "
 basic.test	basic-46.2	fail	fail	message	code 1/1: hello invoked "break" outside of a loop \| want: hello invoked "break" outside of a loop     while executing "break"     (file "*BREAKtest" line 3)
 basic.test	basic-46.3	fail	fail	message	code 1/1: invoked "break" outside of a loop \| want: invoked "break" outside of a loop     while executing "break"     (file "*BREAKtest" line 4)
 basic.test	basic-46.4	fail	fail	message	code 1/1: invoked "break" outside of a loop \| want: invoked "break" outside of a loop     while executing* "foo \[set a 1] \[break]"     (file "*BREAKtest" line 2)
-basic.test	basic-46.5	fail	fail	message	code 1/1: command returned bad code: 2 \| want: command returned bad code: 2     while executing "return -code return"     (file "*BREAKtest" line 2)
+basic.test	basic-46.5	fail	fail	bug	code 0/1:  \| want: command returned bad code: 2     while executing "return -code return"     (file "*BREAKtest" line 2)
 basic.test	basic-47.1	pass	pass		
 basic.test	basic-47.10.0	pass	pass		
 basic.test	basic-47.10.1	pass	pass		
@@ -1334,11 +1334,11 @@ case.test	case-3.2	pass	pass
 case.test	case-3.3	pass	pass		
 chan.test	chan-1.1	pass	pass		
 chan.test	chan-1.2	pass	pass		
-chan.test	chan-10.1	fail	fail	bug	code 0/1: stdin stdout stderr \| want: wrong # args: should be "chan names ?pattern?"
-chan.test	chan-11.1	fail	fail	message	code 1/1: wrong # args: should be "puts ?-nonewline? ?channelId? string" \| want: wrong # args: should be "chan puts ?-nonewline? ?channelId? string"
-chan.test	chan-12.1	fail	fail	message	code 1/1: wrong # args: should be "read channelId ?numChars?" or "read ?-nonewline? channelId" \| want: wrong # args: should be "chan read channelId ?numChars?" or "chan read ?-nonewline? channelId"
-chan.test	chan-13.1	fail	fail	message	code 1/1: wrong # args: should be "seek channelId offset ?origin?" \| want: wrong # args: should be "chan seek channelId offset ?origin?"
-chan.test	chan-14.1	fail	fail	message	code 1/1: wrong # args: should be "tell channelId" \| want: wrong # args: should be "chan tell channelId"
+chan.test	chan-10.1	pass	pass		
+chan.test	chan-11.1	pass	pass		
+chan.test	chan-12.1	pass	pass		
+chan.test	chan-13.1	pass	pass		
+chan.test	chan-14.1	pass	pass		
 chan.test	chan-15.1	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "truncate": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "chan truncate channe...
 chan.test	chan-15.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "truncate": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 12
 chan.test	chan-16.1	pass	pass		
@@ -1354,25 +1354,25 @@ chan.test	chan-16.6	pass	pass
 chan.test	chan-16.7	pass	pass		
 chan.test	chan-16.8	pass	pass		
 chan.test	chan-16.9	pass	pass		
-chan.test	chan-17.1	fail	fail	message	code 1/1: wrong # args: should be "chan pipe" \| want: wrong # args: should be "chan pipe "
-chan.test	chan-17.2	fail	fail	message	code 1/1: wrong # args: should be "chan pipe" \| want: wrong # args: should be "chan pipe "
+chan.test	chan-17.1	pass	pass		
+chan.test	chan-17.2	pass	pass		
 chan.test	chan-17.3	pass	pass		
 chan.test	chan-17.4	pass	pass		
-chan.test	chan-2.1	fail	fail	message	code 1/1: wrong # args: should be "fblocked channelId" \| want: wrong # args: should be "chan blocked channelId"
-chan.test	chan-3.1	fail	fail	message	code 1/1: wrong # args: should be "close channelId ?direction?" \| want: wrong # args: should be "chan close channelId ?direction?"
+chan.test	chan-2.1	pass	pass		
+chan.test	chan-3.1	pass	pass		
 chan.test	chan-3.2	pass	pass		
 chan.test	chan-3.3	pass	pass		
-chan.test	chan-4.1	fail	fail	message	code 1/1: wrong # args: should be "fconfigure channelId ?-option value ...?" \| want: wrong # args: should be "chan configure channelId ?-option value ...?"
+chan.test	chan-4.1	pass	pass		
 chan.test	chan-4.2	pass	pass		
 chan.test	chan-4.3	pass	pass		
 chan.test	chan-4.4	pass	pass		
 chan.test	chan-4.5	pass	pass		
 chan.test	chan-4.6	pass	pass		
-chan.test	chan-5.1	fail	fail	message	code 1/1: wrong # args: should be "fcopy input output ?-size size? ?-command callback?" \| want: wrong # args: should be "chan copy input output ?-size size? ?-command callback?"
-chan.test	chan-6.1	fail	fail	message	code 1/1: wrong # args: should be "eof channelId" \| want: wrong # args: should be "chan eof channelId"
+chan.test	chan-5.1	pass	pass		
+chan.test	chan-6.1	pass	pass		
 chan.test	chan-7.1	pass	pass		
-chan.test	chan-8.1	fail	fail	message	code 1/1: wrong # args: should be "flush channelId" \| want: wrong # args: should be "chan flush channelId"
-chan.test	chan-9.1	fail	fail	message	code 1/1: wrong # args: should be "gets channelId ?varName?" \| want: wrong # args: should be "chan gets channelId ?varName?"
+chan.test	chan-8.1	pass	pass		
+chan.test	chan-9.1	pass	pass		
 chanio.test	chan-io-1.5	skip	skip	tcl	emptyTest
 chanio.test	chan-io-1.6	fail	fail	bug	code 0/0,2: a9 \| want: aM
 chanio.test	chan-io-1.7	pass	pass		
@@ -1620,7 +1620,7 @@ chanio.test	chan-io-35.6	pass	pass
 chanio.test	chan-io-35.7	pass	pass		
 chanio.test	chan-io-35.8	pass	pass		
 chanio.test	chan-io-35.9	pass	pass		
-chanio.test	chan-io-36.1	pass	pass		
+chanio.test	chan-io-36.1	pass	fail		
 chanio.test	chan-io-36.2	pass	pass		
 chanio.test	chan-io-36.3	pass	pass		
 chanio.test	chan-io-36.4	pass	pass		
@@ -9822,7 +9822,7 @@ clock.test	clock-56.4	fail	fail	internals	setup: can't read "::tcl::clock::Zonei
 clock.test	clock-57.1	pass	pass		
 clock.test	clock-57.2	pass	pass		
 clock.test	clock-57.3	pass	pass		
-clock.test	clock-58.1	fail	fail	bug	code 0/0,2:  1872-12-31 converts to 12/31/1872 and should be \u00e8\u00a5\u00bf\u00e6\u009a\u00a61872\u00e5\u00b9\u00b412\u00e6\u009c\u008831\u00e6\u009 \| want: 
+clock.test	clock-58.1	fail	fail	bug	code 0/0,2:  1872-12-31 converts to 12/31/1872 and should be \u897f\u66a61872\u5e7412\u670831\u65e5 1873-01-01 converts to 01/01/1873 and should be \u66 \| want: 
 clock.test	clock-59.1	fail	fail	feature	code 0/0,2: pzone Z ps2 is {unable to convert date-time string "20000101 000000 Z": syntax error} mzone Z ms2 is {unable to convert date-time string "20 \| want: 
 clock.test	clock-59.2	fail	fail	bug	code 1/0,2: time zone "Etc/GMT-2" not found \| want: 1 1 1 1 1 1 1 1 1 1 1 1
 clock.test	clock-6.0	fail	fail	bug	code 0/0,2: -9223372036854775807 \| want: -9223372036854775808
@@ -11176,7 +11176,7 @@ cmdMZ.test	cmdMZ-4.1	pass	pass
 cmdMZ.test	cmdMZ-4.10	pass	pass		
 cmdMZ.test	cmdMZ-4.11	pass	pass		
 cmdMZ.test	cmdMZ-4.12	pass	pass		
-cmdMZ.test	cmdMZ-4.13	fail	fail	bug	code 0/0,2: a {} {} b qw� {} N wq \| want: a b qw幎N wq
+cmdMZ.test	cmdMZ-4.13	pass	pass		
 cmdMZ.test	cmdMZ-4.2	pass	pass		
 cmdMZ.test	cmdMZ-4.3	pass	pass		
 cmdMZ.test	cmdMZ-4.4	pass	pass		
@@ -11218,7 +11218,7 @@ cmdMZ.test	cmdMZ-return-1.3	pass	pass
 cmdMZ.test	cmdMZ-return-1.4	pass	pass		
 cmdMZ.test	cmdMZ-return-1.5	pass	pass		
 cmdMZ.test	cmdMZ-return-2.0	pass	pass		
-cmdMZ.test	cmdMZ-return-2.1	fail	fail	bug	code 0/0,2: 2 {-code 0 -level 1} \| want: 2 {-bar soom -code 0 -level 1}
+cmdMZ.test	cmdMZ-return-2.1	pass	pass		
 cmdMZ.test	cmdMZ-return-2.10	fail	fail	bug	code 0/0,2: 1 {-code 1 -errorcode NONE -errorinfo {     while executing "return -level 0 -code error"} -errorline 1 -level 0} \| want: 1 {-code 1 -errorcode NONE -errorinfo {     while executing "r...
 cmdMZ.test	cmdMZ-return-2.11	pass	pass		
 cmdMZ.test	cmdMZ-return-2.12	pass	pass		
@@ -11228,8 +11228,8 @@ cmdMZ.test	cmdMZ-return-2.15	pass	pass
 cmdMZ.test	cmdMZ-return-2.16	pass	pass		
 cmdMZ.test	cmdMZ-return-2.17	pass	pass		
 cmdMZ.test	cmdMZ-return-2.18	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level,  \| want: 2 {-code 1 -errorcode NONE -errorst...
-cmdMZ.test	cmdMZ-return-2.2	fail	fail	bug	code 0/0,2: 2 {-code 2 -level 1} \| want: 2 {-code 0 -level 2}
-cmdMZ.test	cmdMZ-return-2.3	fail	fail	bug	code 0/0,2: 2 {-code 2 -level 10} \| want: 2 {-code 0 -level 11}
+cmdMZ.test	cmdMZ-return-2.2	pass	pass		
+cmdMZ.test	cmdMZ-return-2.3	pass	pass		
 cmdMZ.test	cmdMZ-return-2.4	pass	pass		
 cmdMZ.test	cmdMZ-return-2.5	pass	pass		
 cmdMZ.test	cmdMZ-return-2.6	pass	pass		
@@ -12937,7 +12937,7 @@ execute.test	execute-8.1	pass	pass
 execute.test	execute-8.2	pass	pass		
 execute.test	execute-8.3	pass	pass		
 execute.test	execute-8.4	fail	fail	bug	code 0/0,2: These differ: bar     while executing "error bar"     (procedure "foo" line 2)     invoked from within "foo" bar     while executing "error  \| want: 
-execute.test	execute-8.5	fail	fail	bug	code 0/0,2: -code 1 -level 0 -errorcode NONE -errorinfo {FOO     while executing "error FOO"} -errorline 1 \| want: -code 1 -level 0 -errorstack * -errorcode NONE -errorinfo {FOO     while executin...
+execute.test	execute-8.5	fail	fail	bug	code 0/0,2: -code 1 -level 0 -errorcode NONE -errorinfo {FOO     while executing "error FOO"     invoked from within "catch [list error FOO] m o"} -erro \| want: -code 1 -level 0 -errorstack * -err...
 execute.test	execute-8.6	fail	fail	bug	setup: can't find package tcltest 2.5
 execute.test	execute-8.7	fail	fail	bug	setup: can't find package tcltest 2.5
 execute.test	execute-9.1	pass	pass		
@@ -27882,8 +27882,8 @@ fileName.test	filename-11.1	fail	fail	message	code 1/1: wrong # args: should be 
 fileName.test	filename-11.10	skip	skip	internals	testsetplatform
 fileName.test	filename-11.11	skip	skip	internals	testsetplatform
 fileName.test	filename-11.12	skip	skip	internals	testsetplatform
-fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3101497/globTest
-fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3101497/globTest
+fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3842262/globTest
+fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3842262/globTest
 fileName.test	filename-11.16	pass	pass		
 fileName.test	filename-11.17	pass	pass		
 fileName.test	filename-11.17.1	skip	skip	platform	win
@@ -27980,7 +27980,7 @@ fileName.test	filename-14.1	pass	pass
 fileName.test	filename-14.11	pass	pass		
 fileName.test	filename-14.13	pass	pass		
 fileName.test	filename-14.15	fail	fail	bug	code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c \| want: globTest/a1/ globTest/a2/ globTest/a3/
-fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3101497/globTest/z1.c
+fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3842262/globTest/z1.c
 fileName.test	filename-14.18	pass	pass		
 fileName.test	filename-14.20	pass	pass		
 fileName.test	filename-14.21	pass	pass		
@@ -28221,7 +28221,7 @@ fileSystem.test	filesystem-6.12	pass	pass
 fileSystem.test	filesystem-6.13	pass	pass		
 fileSystem.test	filesystem-6.14	fail	fail	design	code 1/1: could not link: links are not available in the root folder \| want: could not read link "": no such file or directory
 fileSystem.test	filesystem-6.15	fail	fail	bug	code 0/1:  \| want: could not read "": no such file or directory
-fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795770627 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795775940 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.17	fail	fail	feature	code 1/1: file mtime with a new time is not available \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.18	fail	fail	bug	code 0/1:  \| want: can't create directory "": no such file or directory
 fileSystem.test	filesystem-6.19	pass	pass		
@@ -28236,7 +28236,7 @@ fileSystem.test	filesystem-6.26	pass	pass
 fileSystem.test	filesystem-6.27	fail	fail	bug	code 0/1: / \| want: unrecognised path
 fileSystem.test	filesystem-6.28	fail	fail	bug	code 0/1: 280 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.29	pass	pass		
-fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795770627 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795775940 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.30	fail	fail	bug	code 0/1: native root \| want: unrecognised path
 fileSystem.test	filesystem-6.31	pass	pass		
 fileSystem.test	filesystem-6.32	fail	fail	bug	code 0/1: directory \| want: could not read "": no such file or directory
@@ -29166,7 +29166,7 @@ info.test	info-12.7	pass	pass
 info.test	info-13.1	pass	pass		
 info.test	info-14.1	pass	pass		
 info.test	info-14.2	pass	pass		
-info.test	info-14.3	fail	fail	message	code 1/1: can't read "::tcl_patchLevel": no such variable \| want: can't read "tcl_patchLevel": no such variable
+info.test	info-14.3	pass	pass		
 info.test	info-15.1	pass	pass		
 info.test	info-15.2	pass	pass		
 info.test	info-15.3	pass	pass		
@@ -29186,16 +29186,16 @@ info.test	info-16.8	pass	pass
 info.test	info-17.1	pass	pass		
 info.test	info-18.1	pass	pass		
 info.test	info-18.2	pass	pass		
-info.test	info-18.3	fail	fail	message	code 1/1: can't read "::tcl_version": no such variable \| want: can't read "tcl_version": no such variable
+info.test	info-18.3	pass	pass		
 info.test	info-19.1	pass	pass		
 info.test	info-19.2	pass	pass		
 info.test	info-19.3	pass	pass		
 info.test	info-19.4	pass	pass		
 info.test	info-19.5	pass	pass		
 info.test	info-19.6	pass	pass		
-info.test	info-19.7	fail	fail	bug	code 0/0,2: 0 \| want: 1
-info.test	info-19.8	fail	fail	bug	code 0/0,2:  \| want: tcl_platform
-info.test	info-19.9	fail	fail	bug	code 0/0,2:  \| want: ::tcl_platform
+info.test	info-19.7	pass	pass		
+info.test	info-19.8	pass	pass		
+info.test	info-19.9	pass	pass		
 info.test	info-2.1	pass	pass		
 info.test	info-2.2	pass	pass		
 info.test	info-2.3	pass	pass		
@@ -29625,11 +29625,11 @@ interp.test	interp-24.7	pass	pass
 interp.test	interp-24.8	pass	pass		
 interp.test	interp-24.9	pass	pass		
 interp.test	interp-25.1	pass	pass		
-interp.test	interp-26.1	fail	fail	bug	code 0/0,2: 1 0 1 1 1 1 1 \| want: -1 0 1 2 3 4 5
+interp.test	interp-26.1	fail	fail	bug	code 0/0,2: 1 0 1 0 1 1 1 \| want: -1 0 1 2 3 4 5
 interp.test	interp-26.2	fail	fail	bug	code 0/0,2: 1 {bad completion code "-1": must be ok, error, return, break, continue, or an integer} 0 ret0 1 ret1 0 ret2 1 {invoked "break" outside of a \| want: -1 ret-1 0 ret0 1 ret1 0 ret2 3 ret...
 interp.test	interp-26.3	fail	fail	bug	code 0/0,2: 1 0 1 2 3 4 5 \| want: -1 0 1 2 3 4 5
 interp.test	interp-26.4	skip	skip	tcl	knownBug
-interp.test	interp-26.5	fail	fail	bug	code 2/0,2: 1 {bad completion code "-1": must be ok, error, return, break, continue, or an integer} 0 ret0 1 ret1 2 ret2 3 {} 4 {} 5 ret5 \| want: -1 ret-1 0 ret0 1 ret1 2 ret2 3 ret3 4 ret4 5 ret5
+interp.test	interp-26.5	fail	fail	bug	code 2/0,2: 1 {bad completion code "-1": must be ok, error, return, break, continue, or an integer} 0 ret0 1 ret1 2 ret2 3 ret3 4 ret4 5 ret5 \| want: -1 ret-1 0 ret0 1 ret1 2 ret2 3 ret3 4 ret4 5 ...
 interp.test	interp-26.6	skip	skip	tcl	knownBug
 interp.test	interp-26.7	pass	pass		
 interp.test	interp-26.8	skip	skip	tcl	knownBug
@@ -34377,12 +34377,12 @@ msgcat.test	msgcat-9.4	fail	fail	feature	setup: invalid command name "mcforgetpa
 msgcat.test	msgcat-9.5	fail	fail	feature	setup: invalid command name "mcforgetpackage"
 namespace-old.test	namespace-old-1.1	pass	pass		
 namespace-old.test	namespace-old-1.10	pass	pass		
-namespace-old.test	namespace-old-1.11	fail	fail	bug	code 0/0,2:  \| want: ::test_ns_simple::test_ns_x
+namespace-old.test	namespace-old-1.11	pass	pass		
 namespace-old.test	namespace-old-1.12	pass	pass		
 namespace-old.test	namespace-old-1.13	pass	pass		
 namespace-old.test	namespace-old-1.14	pass	pass		
-namespace-old.test	namespace-old-1.15	fail	fail	bug	code 0/0,2:  \| want: ::test_ns_simple::test_ns_x ::test_ns_simple::test_ns_y
-namespace-old.test	namespace-old-1.16	fail	fail	bug	code 0/0,2: test_ns_simple::test_ns_x test_ns_simple::test_ns_y \| want: ::test_ns_simple::test_ns_x ::test_ns_simple::test_ns_y
+namespace-old.test	namespace-old-1.15	pass	pass		
+namespace-old.test	namespace-old-1.16	pass	pass		
 namespace-old.test	namespace-old-1.17	pass	pass		
 namespace-old.test	namespace-old-1.18	pass	pass		
 namespace-old.test	namespace-old-1.19	pass	pass		
@@ -34412,8 +34412,8 @@ namespace-old.test	namespace-old-10.7	pass	pass
 namespace-old.test	namespace-old-10.8	pass	pass		
 namespace-old.test	namespace-old-2.1	pass	pass		
 namespace-old.test	namespace-old-2.2	pass	pass		
-namespace-old.test	namespace-old-2.3	fail	fail	bug	code 0/0,2: test_ns_simple::test_ns_x test_ns_simple::test_ns_y \| want: ::test_ns_simple::test_ns_x ::test_ns_simple::test_ns_y
-namespace-old.test	namespace-old-2.4	fail	fail	bug	code 0/0,2:  \| want: ::test_ns_simple::test_ns_x ::test_ns_simple::test_ns_y
+namespace-old.test	namespace-old-2.3	pass	pass		
+namespace-old.test	namespace-old-2.4	pass	pass		
 namespace-old.test	namespace-old-2.5	pass	pass		
 namespace-old.test	namespace-old-2.6	pass	pass		
 namespace-old.test	namespace-old-2.7	pass	pass		
@@ -34474,10 +34474,10 @@ namespace-old.test	namespace-old-7.1	pass	pass
 namespace-old.test	namespace-old-7.10	pass	pass		
 namespace-old.test	namespace-old-7.11	pass	pass		
 namespace-old.test	namespace-old-7.12	pass	pass		
-namespace-old.test	namespace-old-7.2	fail	fail	bug	code 0/0,2: 0 0 \| want: 1 1
+namespace-old.test	namespace-old-7.2	pass	pass		
 namespace-old.test	namespace-old-7.3	pass	pass		
 namespace-old.test	namespace-old-7.4	pass	pass		
-namespace-old.test	namespace-old-7.5	fail	fail	bug	code 0/0,2: 0 0 \| want: 1 1
+namespace-old.test	namespace-old-7.5	pass	pass		
 namespace-old.test	namespace-old-7.6	pass	pass		
 namespace-old.test	namespace-old-7.7	pass	pass		
 namespace-old.test	namespace-old-7.8	pass	pass		
@@ -35168,7 +35168,7 @@ oo.test	oo-27.23	pass	pass
 oo.test	oo-27.3	pass	pass		
 oo.test	oo-27.4	pass	pass		
 oo.test	oo-27.5	pass	pass		
-oo.test	oo-27.6	fail	fail	bug	code 0/0,2: {3 2 y! {}} {x! y!} {} \| want: {3 2 y! {}} {x! y!} {x! y!}
+oo.test	oo-27.6	pass	pass		
 oo.test	oo-27.7	pass	pass		
 oo.test	oo-27.8	pass	pass		
 oo.test	oo-27.9	pass	pass		
@@ -36572,8 +36572,8 @@ proc-old.test	proc-old-7.14	fail	fail	bug	code 1/0,2: invalid command name "norm
 proc-old.test	proc-old-7.15	pass	pass		
 proc-old.test	proc-old-7.2	pass	pass		
 proc-old.test	proc-old-7.3	pass	pass		
-proc-old.test	proc-old-7.4	fail	fail	bug	code 0/0,2: 3 {} \| want: 3 abc
-proc-old.test	proc-old-7.5	fail	fail	bug	code 0/0,2: 4 {} \| want: 4 abc
+proc-old.test	proc-old-7.4	pass	pass		
+proc-old.test	proc-old-7.5	pass	pass		
 proc-old.test	proc-old-7.6	fail	fail	bug	code 0/0,2: 1 {bad completion code "-14": must be ok, error, return, break, continue, or an integer} \| want: -14 abc
 proc-old.test	proc-old-7.7	pass	pass		
 proc-old.test	proc-old-7.8	pass	pass		
@@ -38903,7 +38903,7 @@ socket.test	socket-15.1.2	pass	pass
 socket.test	socket-15.1.3	pass	pass		
 socket.test	socket-15.1.4	pass	pass		
 socket.test	socket-15.1.5	pass	pass		
-socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2842 \| want: couldn't open socket: connection refused
+socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2843 \| want: couldn't open socket: connection refused
 socket.test	socket-15.1.7	pass	pass		
 socket.test	socket-15.1.8	pass	pass		
 socket.test	socket_inet-1.1	pass	pass		
@@ -38937,7 +38937,7 @@ socket.test	socket_inet-11.9	pass	pass
 socket.test	socket_inet-12.1	pass	pass		
 socket.test	socket_inet-12.2	pass	pass		
 socket.test	socket_inet-12.3	pass	pass		
-socket.test	socket_inet-13.1	pass	pass		
+socket.test	socket_inet-13.1	pass	fail		
 socket.test	socket_inet-13.2.cl1	pass	pass		
 socket.test	socket_inet-13.2.cl2	pass	pass		
 socket.test	socket_inet-13.2.tr1	pass	pass		
@@ -38956,7 +38956,7 @@ socket.test	socket_inet-2.7	pass	pass
 socket.test	socket_inet-2.8	pass	pass		
 socket.test	socket_inet-2.9	pass	pass		
 socket.test	socket_inet-3.1	pass	pass		
-socket.test	socket_inet-3.2	fail	fail	bug	code 0/0,2: ready timed_out \| want: ready done
+socket.test	socket_inet-3.2	fail	pass	bug	code 0/0,2: ready timed_out \| want: ready done
 socket.test	socket_inet-4.1	pass	pass		
 socket.test	socket_inet-4.2	pass	pass		
 socket.test	socket_inet-5.1	pass	pass		
@@ -39073,7 +39073,7 @@ split.test	split-1.11	pass	pass
 split.test	split-1.12	pass	pass		
 split.test	split-1.13	pass	pass		
 split.test	split-1.14	pass	pass		
-split.test	split-1.15	fail	fail	bug	code 0/0,2: a � � � \| want: a 💩 b
+split.test	split-1.15	fail	fail	bug	code 0/0,2: a � \| want: a 💩 b
 split.test	split-1.2	pass	pass		
 split.test	split-1.3	pass	pass		
 split.test	split-1.4	pass	pass		
@@ -41443,7 +41443,7 @@ unixFile.test	unixFile-1.6	skip	skip	internals	testfindexecutable
 unixFile.test	unixFile-1.7	skip	skip	internals	testfindexecutable
 unixForkEvent.test	unixforkevent-1.1	skip	skip	internals	testfork
 unixInit.test	unixInit-1.1	pass	pass		
-unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 40005', Got '' \| want: OK
+unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 38441', Got '' \| want: OK
 unixInit.test	unixInit-3.1	pass	pass		
 unixInit.test	unixInit-3.2	fail	fail	bug	code 0/0,2: 1 \| want: 0
 unixInit.test	unixInit-4.1	pass	pass		
@@ -44477,7 +44477,7 @@ var.test	var-6.3	pass	pass
 var.test	var-6.4	pass	pass		
 var.test	var-6.5	pass	pass		
 var.test	var-6.6	pass	pass		
-var.test	var-7.1	fail	fail	bug	code 0/0,2: test_ns_var::one 1 \| want: ::test_ns_var::one 1
+var.test	var-7.1	pass	pass		
 var.test	var-7.10	pass	pass		
 var.test	var-7.11	pass	pass		
 var.test	var-7.12	pass	pass		
@@ -44487,13 +44487,13 @@ var.test	var-7.15	fail	fail	bug	code 0/1:  \| want: can't define "arrayvar(1)": 
 var.test	var-7.16	fail	fail	bug	code 1/0,2: wrong # args: should be "variable ?name value...? name ?value?" \| want: 
 var.test	var-7.17	fail	fail	bug	code 1/0,2: wrong # args: should be "variable ?name value...? name ?value?" \| want: 
 var.test	var-7.2	pass	pass		
-var.test	var-7.3	fail	fail	bug	code 0/0,2: {test_ns_var::one test_ns_var::two} 2 \| want: {::test_ns_var::one ::test_ns_var::two} 2
-var.test	var-7.4	fail	fail	bug	code 0/0,2: {test_ns_var::four test_ns_var::one test_ns_var::three test_ns_var::two} 7 \| want: {::test_ns_var::four ::test_ns_var::one ::test_ns_var::three ::test_ns_var::two} 7
+var.test	var-7.3	pass	pass		
+var.test	var-7.4	pass	pass		
 var.test	var-7.5	pass	pass		
 var.test	var-7.6	pass	pass		
 var.test	var-7.7	fail	fail	bug	code 0/1:  \| want: can't define "sev:::en": parent namespace doesn't exist
 var.test	var-7.8	pass	pass		
-var.test	var-7.9	fail	fail	bug	code 0/0,2: test_ns_var2::x 1 0 0 {1 {can't read "test_ns_var2::y": no such variable}} test_ns_var2::x 0 0 hello 1 0 {0 {}} test_ns_var2::x 0 0 {1 {can' \| want: {::test_ns_var2::x ::test_ns_var2::...
+var.test	var-7.9	fail	fail	bug	code 0/0,2: ::test_ns_var2::x 1 0 0 {1 {can't read "test_ns_var2::y": no such variable}} ::test_ns_var2::x 0 0 hello 1 0 {0 {}} ::test_ns_var2::x 0 0 {1 \| want: {::test_ns_var2::x ::test_ns_var2::...
 var.test	var-8.1	pass	pass		
 var.test	var-8.2	fail	fail	bug	code 0/0,2: {} {} \| want: {} {::test_ns_var::v {} unset}
 var.test	var-8.3	skip	skip	internals	memory

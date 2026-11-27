@@ -10,13 +10,13 @@ autoMkindex.test	1	1
 basic.test	100	100
 binary.test	604	604
 case.test	15	15
-chan.test	25	25
-chanio.test	330	330
+chan.test	39	39
+chanio.test	330	329
 clock.test	8402	8402
 cmdAH.test	99	99
 cmdIL.test	137	137
 cmdInfo.test	0	0
-cmdMZ.test	82	82
+cmdMZ.test	86	86
 compExpr-old.test	183	183
 compExpr.test	76	76
 compile.test	96	96
@@ -54,7 +54,7 @@ if.test	73	73
 incr-old.test	12	12
 incr.test	62	62
 indexObj.test	0	0
-info.test	106	106
+info.test	111	111
 init.test	17	17
 interp.test	198	198
 io.test	364	364
@@ -82,12 +82,12 @@ main.test	13	13
 mathop.test	347	347
 misc.test	1	1
 msgcat.test	49	49
-namespace-old.test	114	114
+namespace-old.test	121	121
 namespace.test	235	235
 notify.test	0	0
 nre.test	4	4
 obj.test	3	3
-oo.test	216	216
+oo.test	217	217
 ooNext2.test	50	50
 opt.test	0	0
 package.test	357	357
@@ -97,7 +97,7 @@ parseOld.test	154	154
 pid.test	5	5
 pkgMkIndex.test	0	0
 platform.test	1	1
-proc-old.test	64	64
+proc-old.test	66	66
 proc.test	26	26
 pwd.test	3	3
 reg.test	925	925
@@ -139,7 +139,7 @@ uplevel.test	49	49
 upvar.test	43	43
 utf.test	126	126
 util.test	2124	2124
-var.test	66	66
+var.test	69	69
 while-old.test	14	14
 while.test	45	45
 winConsole.test	0	0
@@ -151,4 +151,4 @@ winPipe.test	0	0
 winTime.test	0	0
 word.test	45	45
 zlib.test	0	0
-total	38000	38000
+total	38036	38035

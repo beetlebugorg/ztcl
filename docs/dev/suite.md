@@ -1,6 +1,6 @@
 # Tcl 8.6.16 suite results
 
-`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-27 at commit `97e76ee`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
+`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-27 at commit `776a777`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
 
 A test is applicable when it is outside the buckets `design`, `platform`, `internals`, and `tcl`. The goal of issue 244 is a pass for each applicable test.
 
@@ -8,8 +8,8 @@ A test is applicable when it is outside the buckets `design`, `platform`, `inter
 
 | Run | Total | Pass | Fail | Skip | Unreached |
 |---|---|---|---|---|---|
-| Interpreter | 47,133 | 38,000 | 2,670 | 4,337 | 2,126 |
-| JIT (`-j`) | 47,133 | 38,000 | 2,670 | 4,337 | 2,126 |
+| Interpreter | 47,133 | 38,036 | 2,634 | 4,337 | 2,126 |
+| JIT (`-j`) | 47,133 | 38,035 | 2,635 | 4,337 | 2,126 |
 
 Unreached is the test count of `tools/suite-scope.tsv` minus the tests that ran: the file stopped before them.
 
@@ -28,16 +28,16 @@ The tests of the interpreter run that do not pass, by bucket.
 
 | Bucket | Meaning | Tests |
 |---|---|---|
-| `bug` | A bug in ztcl | 1,069 |
+| `bug` | A bug in ztcl | 1,049 |
 | `feature` | A missing feature or option | 3,233 |
-| `message` | An error message or -errorcode differs | 147 |
+| `message` | An error message or -errorcode differs | 131 |
 | `internals` | Needs Tcl internals (C test commands, memory debugging) | 3,254 |
 | `design` | Absent by design | 439 |
 | `platform` | Platform only | 736 |
 | `tcl` | Skipped by tclsh too (knownBug, emptyTest, and others) | 255 |
 | `untriaged` | Not triaged yet | 0 |
 
-Applicable tests: 42,449. Pass rate of the applicable tests: 89.5 %.
+Applicable tests: 42,449. Pass rate of the applicable tests: 89.6 %.
 
 ## Reasons
 
@@ -45,14 +45,14 @@ The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the re
 
 | Bucket | Reason | Tests |
 |---|---|---|
-| `bug` | the result differs from tclsh 8.6.16 | 342 |
-| `bug` | channels: the result differs | 144 |
-| `bug` | namespaces: the result differs | 79 |
+| `bug` | the result differs from tclsh 8.6.16 | 334 |
+| `bug` | channels: the result differs | 143 |
+| `bug` | namespaces: the result differs | 72 |
 | `bug` | file names and 'glob': the result differs | 71 |
 | `bug` | 'trace': the result differs | 66 |
 | `bug` | 'clock': the result differs | 63 |
 | `bug` | 'interp': the result differs | 58 |
-| `bug` | TclOO: the result differs | 49 |
+| `bug` | TclOO: the result differs | 48 |
 | `bug` | 'expr': the result differs | 38 |
 | `bug` | 'binary': the result differs | 31 |
 | `bug` | encodings: the result differs | 19 |
@@ -63,8 +63,8 @@ The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the re
 | `bug` | regular expressions: a valid pattern that ztcl does not compile | 11 |
 | `bug` | the recursion limit and its message | 11 |
 | `bug` | coroutines: the result differs | 10 |
-| `bug` | 'info': the result differs | 9 |
 | `bug` | the standard channels are not in the channel table | 8 |
+| `bug` | 'info': the result differs | 6 |
 | `feature` | the 'http' package | 2,063 |
 | `feature` | a library package of Tcl: safe, msgcat, http, the package index, tcl::tm, or opt | 283 |
 | `feature` | 'chan create', 'chan push', 'chan pop', 'chan pipe', 'chan truncate' | 196 |
@@ -85,12 +85,18 @@ The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the re
 | `feature` | 'info hostname', and '~' with no 'env(HOME)' | 5 |
 | `feature` | 'info errorstack' | 3 |
 | `feature` | the 'platform' package | 2 |
-| `message` | an error where tclsh also gives one, with another message | 146 |
+| `message` | an error where tclsh also gives one, with another message | 130 |
 | `message` | the -errorcode differs | 1 |
 
 ## JIT differences
 
-Each test has the same result in the two runs.
+Tests with a different result in the JIT run. `socket.test`, `io.test`, and `chanio.test` have timing tests that can change between two runs of one mode.
+
+| File | Test | Interpreter | JIT |
+|---|---|---|---|
+| chanio.test | chan-io-36.1 | pass | fail |
+| socket.test | socket_inet-13.1 | pass | fail |
+| socket.test | socket_inet-3.2 | fail | pass |
 
 ## Files
 
@@ -107,13 +113,13 @@ Each test has the same result in the two runs.
 | basic.test | in | 146 | 100 | 12 | 34 | 0 | 100 | 12 | 34 |
 | binary.test | in | 717 | 604 | 34 | 79 | 0 | 604 | 34 | 79 |
 | case.test | in | 15 | 15 | 0 | 0 | 0 | 15 | 0 | 0 |
-| chan.test | decide | 41 | 25 | 16 | 0 | 0 | 25 | 16 | 0 |
-| chanio.test | decide | 777 | 330 | 59 | 388 | 0 | 330 | 59 | 388 |
+| chan.test | decide | 41 | 39 | 2 | 0 | 0 | 39 | 2 | 0 |
+| chanio.test | decide | 777 | 330 | 59 | 388 | 0 | 329 | 60 | 388 |
 | clock.test | decide | 8,532 | 8,402 | 120 | 7 | 3 | 8,402 | 120 | 7 |
 | cmdAH.test | decide | 323 | 99 | 42 | 182 | 0 | 99 | 42 | 182 |
 | cmdIL.test | in | 146 | 137 | 3 | 6 | 0 | 137 | 3 | 6 |
 | cmdInfo.test | na | 12 | 0 | 0 | 12 | 0 | 0 | 0 | 12 |
-| cmdMZ.test | in | 92 | 82 | 9 | 1 | 0 | 82 | 9 | 1 |
+| cmdMZ.test | in | 92 | 86 | 5 | 1 | 0 | 86 | 5 | 1 |
 | compExpr-old.test | in | 190 | 183 | 0 | 7 | 0 | 183 | 0 | 7 |
 | compExpr.test | in | 80 | 76 | 0 | 4 | 0 | 76 | 0 | 4 |
 | compile.test | in | 171 | 96 | 64 | 11 | 0 | 96 | 64 | 11 |
@@ -151,7 +157,7 @@ Each test has the same result in the two runs.
 | incr-old.test | in | 14 | 12 | 2 | 0 | 0 | 12 | 2 | 0 |
 | incr.test | in | 66 | 62 | 4 | 0 | 0 | 62 | 4 | 0 |
 | indexObj.test | na | 45 | 0 | 0 | 45 | 0 | 0 | 0 | 45 |
-| info.test | in | 266 | 106 | 157 | 3 | 0 | 106 | 157 | 3 |
+| info.test | in | 266 | 111 | 152 | 3 | 0 | 111 | 152 | 3 |
 | init.test | decide | 36 | 17 | 19 | 0 | 0 | 17 | 19 | 0 |
 | interp.test | decide | 352 | 198 | 141 | 13 | 0 | 198 | 141 | 13 |
 | io.test | decide | 830 | 364 | 79 | 387 | 0 | 364 | 79 | 387 |
@@ -179,12 +185,12 @@ Each test has the same result in the two runs.
 | mathop.test | in | 349 | 347 | 2 | 0 | 0 | 347 | 2 | 0 |
 | misc.test | in | 301 | 1 | 1 | 299 | 0 | 1 | 1 | 299 |
 | msgcat.test | decide | 109 | 49 | 60 | 0 | 0 | 49 | 60 | 0 |
-| namespace-old.test | in | 126 | 114 | 12 | 0 | 0 | 114 | 12 | 0 |
+| namespace-old.test | in | 126 | 121 | 5 | 0 | 0 | 121 | 5 | 0 |
 | namespace.test | in | 313 | 235 | 75 | 3 | 0 | 235 | 75 | 3 |
 | notify.test | na | 23 | 0 | 0 | 23 | 0 | 0 | 0 | 23 |
 | nre.test | in | 28 | 4 | 1 | 23 | 0 | 4 | 1 | 23 |
 | obj.test | na | 92 | 3 | 0 | 89 | 0 | 3 | 0 | 89 |
-| oo.test | in | 306 | 216 | 73 | 17 | 0 | 216 | 73 | 17 |
+| oo.test | in | 306 | 217 | 72 | 17 | 0 | 217 | 72 | 17 |
 | ooNext2.test | in | 62 | 50 | 7 | 5 | 0 | 50 | 7 | 5 |
 | opt.test | decide | 31 | 0 | 30 | 0 | 1 | 0 | 30 | 0 |
 | package.test | decide | 402 | 357 | 45 | 0 | 0 | 357 | 45 | 0 |
@@ -194,7 +200,7 @@ Each test has the same result in the two runs.
 | pid.test | decide | 5 | 5 | 0 | 0 | 0 | 5 | 0 | 0 |
 | pkgMkIndex.test | decide | 27 | 0 | 25 | 2 | 0 | 0 | 25 | 2 |
 | platform.test | decide | 6 | 1 | 2 | 1 | 2 | 1 | 2 | 1 |
-| proc-old.test | in | 74 | 64 | 10 | 0 | 0 | 64 | 10 | 0 |
+| proc-old.test | in | 74 | 66 | 8 | 0 | 0 | 66 | 8 | 0 |
 | proc.test | in | 38 | 26 | 3 | 9 | 0 | 26 | 3 | 9 |
 | pwd.test | decide | 3 | 3 | 0 | 0 | 0 | 3 | 0 | 0 |
 | reg.test | in | 1,141 | 925 | 106 | 110 | 0 | 925 | 106 | 110 |
@@ -236,7 +242,7 @@ Each test has the same result in the two runs.
 | upvar.test | in | 65 | 43 | 14 | 8 | 0 | 43 | 14 | 8 |
 | utf.test | in | 498 | 126 | 18 | 354 | 0 | 126 | 18 | 354 |
 | util.test | in | 2,291 | 2,124 | 23 | 144 | 0 | 2,124 | 23 | 144 |
-| var.test | in | 110 | 66 | 24 | 20 | 0 | 66 | 24 | 20 |
+| var.test | in | 110 | 69 | 21 | 20 | 0 | 69 | 21 | 20 |
 | while-old.test | in | 15 | 14 | 1 | 0 | 0 | 14 | 1 | 0 |
 | while.test | in | 46 | 45 | 1 | 0 | 0 | 45 | 1 | 0 |
 | winConsole.test | na | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 1 |
@@ -617,7 +623,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | basic-46.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: hello invoked "break" outside of a loop \| want: hello invoked "break" outsid... |
 | basic-46.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: invoked "break" outside of a loop \| want: invoked "break" outside of a loop ... |
 | basic-46.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: invoked "break" outside of a loop \| want: invoked "break" outside of a loop ... |
-| basic-46.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: command returned bad code: 2 \| want: command returned bad code: 2     while ... |
+| basic-46.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: command returned bad code: 2     while executing "return -code retu... |
 | basic-50.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {} \| want: 0 {} |
 
 | Skipped by | Tests | Bucket |
@@ -676,22 +682,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| chan-10.1 | `bug`: channels: the result differs | code 0/1: stdin stdout stderr \| want: wrong # args: should be "chan names ?pattern?" |
-| chan-11.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "puts ?-nonewline? ?channelId? string" \| want: wrong... |
-| chan-12.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "read channelId ?numChars?" or "read ?-nonewline? cha... |
-| chan-13.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "seek channelId offset ?origin?" \| want: wrong # arg... |
-| chan-14.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "tell channelId" \| want: wrong # args: should be "ch... |
 | chan-15.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "truncate": must be close, configure, copy, e... |
 | chan-15.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "truncate": must be close, configure, copy,... |
-| chan-17.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "chan pipe" \| want: wrong # args: should be "chan pi... |
-| chan-17.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "chan pipe" \| want: wrong # args: should be "chan pi... |
-| chan-2.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fblocked channelId" \| want: wrong # args: should be... |
-| chan-3.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "close channelId ?direction?" \| want: wrong # args: ... |
-| chan-4.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fconfigure channelId ?-option value ...?" \| want: w... |
-| chan-5.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fcopy input output ?-size size? ?-command callback?"... |
-| chan-6.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "eof channelId" \| want: wrong # args: should be "cha... |
-| chan-8.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "flush channelId" \| want: wrong # args: should be "c... |
-| chan-9.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "gets channelId ?varName?" \| want: wrong # args: sho... |
 
 ### chanio.test
 
@@ -879,7 +871,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | clock-56.2 | `internals`: a variable inside the clock library of Tcl | setup: can't read "::tcl::clock::ZoneinfoPaths": no such variable |
 | clock-56.3 | `internals`: a variable inside the clock library of Tcl | setup: can't read "::tcl::clock::ZoneinfoPaths": no such variable |
 | clock-56.4 | `internals`: a variable inside the clock library of Tcl | setup: can't read "::tcl::clock::ZoneinfoPaths": no such variable |
-| clock-58.1 | `bug`: 'clock': the result differs | code 0/0,2:  1872-12-31 converts to 12/31/1872 and should be \u00e8\u00a5\u00bf\u00e6\u... |
+| clock-58.1 | `bug`: 'clock': the result differs | code 0/0,2:  1872-12-31 converts to 12/31/1872 and should be \u897f\u66a61872\u5e7412\u... |
 | clock-59.1 | `feature`: a form of 'clock scan' that ztcl does not parse | code 0/0,2: pzone Z ps2 is {unable to convert date-time string "20000101 000000 Z": syn... |
 | clock-59.2 | `bug`: 'clock': the result differs | code 1/0,2: time zone "Etc/GMT-2" not found \| want: 1 1 1 1 1 1 1 1 1 1 1 1 |
 | clock-6.0 | `bug`: 'clock': the result differs | code 0/0,2: -9223372036854775807 \| want: -9223372036854775808 |
@@ -982,14 +974,10 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| cmdMZ-4.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a {} {} b qw� {} N wq \| want: a b qw幎N wq |
 | cmdMZ-return-1.0 | `bug`: the result differs from tclsh 8.6.16 | code 2/1:  \| want: bad -options value:* |
-| cmdMZ-return-2.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {-code 0 -level 1} \| want: 2 {-bar soom -code 0 -level 1} |
 | cmdMZ-return-2.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {-code 1 -errorcode NONE -errorinfo {     while executing "return -level ... |
 | cmdMZ-return-2.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/3: bad completion code "foo": must be ok, error, return, break, continue, or an ... |
 | cmdMZ-return-2.18 | `feature`: 'info errorstack' | code 1/0,2: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount,... |
-| cmdMZ-return-2.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {-code 2 -level 1} \| want: 2 {-code 0 -level 2} |
-| cmdMZ-return-2.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {-code 2 -level 10} \| want: 2 {-code 0 -level 11} |
 | cmdMZ-return-2.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/-1: bad completion code "-1": must be ok, error, return, break, continue, or an ... |
 
 | Skipped by | Tests | Bucket |
@@ -1447,8 +1435,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | fileName-20.8 | `bug`: file names and 'glob': the result differs | code 0/0,2: ~test \| want: ./~test |
 | fileName-20.9 | `bug`: file names and 'glob': the result differs | setup: couldn't open "~/test": no such file or directory |
 | filename-11.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "glob ?switches? name ?name ...?" \| want: no files m... |
-| filename-11.14 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3101497/globTest |
-| filename-11.15 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3101497/globTest |
+| filename-11.14 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3842262/globTest |
+| filename-11.15 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3842262/globTest |
 | filename-11.17.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.3 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.4 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
@@ -1496,7 +1484,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filename-13.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/{\}" \| want: unmatched open-brace in... |
 | filename-13.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/}" \| want: unmatched close-brace in ... |
 | filename-14.15 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
-| filename-14.17 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3101497/globTest/z1.c |
+| filename-14.17 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3842262/globTest/z1.c |
 | filename-14.22 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "goo/*" \| want: no files matched glob patterns... |
 | filename-14.26 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
 | filename-14.30 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 \| want: globTest/a1/ |
@@ -1532,7 +1520,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.11 | `bug`: file names and 'glob': the result differs | code 0/0,2: 1 \| want: 0 |
 | filesystem-6.14 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
 | filesystem-6.15 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: could not read "": no such file or directory |
-| filesystem-6.16 | `bug`: file names and 'glob': the result differs | code 0/1: 1795770627 \| want: could not read "": no such file or directory |
+| filesystem-6.16 | `bug`: file names and 'glob': the result differs | code 0/1: 1795775940 \| want: could not read "": no such file or directory |
 | filesystem-6.17 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/1: file mtime with a new time is not available \| want: could not read "": no su... |
 | filesystem-6.18 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: can't create directory "": no such file or directory |
 | filesystem-6.2 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: could not read "": no such file or directory |
@@ -1543,7 +1531,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.25 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "" to "": target file exists \| want: error renaming "": no su... |
 | filesystem-6.27 | `bug`: file names and 'glob': the result differs | code 0/1: / \| want: unrecognised path |
 | filesystem-6.28 | `bug`: file names and 'glob': the result differs | code 0/1: 280 \| want: could not read "": no such file or directory |
-| filesystem-6.3 | `bug`: file names and 'glob': the result differs | code 0/1: 1795770627 \| want: could not read "": no such file or directory |
+| filesystem-6.3 | `bug`: file names and 'glob': the result differs | code 0/1: 1795775940 \| want: could not read "": no such file or directory |
 | filesystem-6.30 | `bug`: file names and 'glob': the result differs | code 0/1: native root \| want: unrecognised path |
 | filesystem-6.32 | `bug`: file names and 'glob': the result differs | code 0/1: directory \| want: could not read "": no such file or directory |
 | filesystem-6.33 | `bug`: file names and 'glob': the result differs | code 0/0,2: 1 \| want: 0 |
@@ -1858,11 +1846,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| info-14.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't read "::tcl_patchLevel": no such variable \| want: can't read "tcl_patc... |
-| info-18.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't read "::tcl_version": no such variable \| want: can't read "tcl_version... |
-| info-19.7 | `bug`: 'info': the result differs | code 0/0,2: 0 \| want: 1 |
-| info-19.8 | `bug`: 'info': the result differs | code 0/0,2:  \| want: tcl_platform |
-| info-19.9 | `bug`: 'info': the result differs | code 0/0,2:  \| want: ::tcl_platform |
 | info-21.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "gorp": must be args, body, cmdcount, command... |
 | info-21.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "c": must be args, body, cmdcount, commands, ... |
 | info-21.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "l": must be args, body, cmdcount, commands, ... |
@@ -2107,7 +2090,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | interp-23.2 | `bug`: 'interp': the result differs | code 0/0,2: {} bar {} {} bar {} bar \| want: {cd encoding exec exit fconfigure file glo... |
 | interp-24.10 | `bug`: safe interpreters: hidden commands and their messages | code 0/0,2: 1 {invalid command name "interp"} 1 {invalid command name "interp"} \| want... |
 | interp-24.12 | `bug`: safe interpreters: hidden commands and their messages | code 0/0,2: 1 {invalid command name "interp"} 1 {invalid command name "interp"} \| want... |
-| interp-26.1 | `bug`: 'interp': the result differs | code 0/0,2: 1 0 1 1 1 1 1 \| want: -1 0 1 2 3 4 5 |
+| interp-26.1 | `bug`: 'interp': the result differs | code 0/0,2: 1 0 1 0 1 1 1 \| want: -1 0 1 2 3 4 5 |
 | interp-26.2 | `bug`: 'interp': the result differs | code 0/0,2: 1 {bad completion code "-1": must be ok, error, return, break, continue, or... |
 | interp-26.3 | `bug`: 'interp': the result differs | code 0/0,2: 1 0 1 2 3 4 5 \| want: -1 0 1 2 3 4 5 |
 | interp-26.5 | `bug`: 'interp': the result differs | code 2/0,2: 1 {bad completion code "-1": must be ok, error, return, break, continue, or... |
@@ -2731,15 +2714,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| namespace-old-1.11 | `bug`: namespaces: the result differs | code 0/0,2:  \| want: ::test_ns_simple::test_ns_x |
-| namespace-old-1.15 | `bug`: namespaces: the result differs | code 0/0,2:  \| want: ::test_ns_simple::test_ns_x ::test_ns_simple::test_ns_y |
-| namespace-old-1.16 | `bug`: namespaces: the result differs | code 0/0,2: test_ns_simple::test_ns_x test_ns_simple::test_ns_y \| want: ::test_ns_simp... |
-| namespace-old-2.3 | `bug`: namespaces: the result differs | code 0/0,2: test_ns_simple::test_ns_x test_ns_simple::test_ns_y \| want: ::test_ns_simp... |
-| namespace-old-2.4 | `bug`: namespaces: the result differs | code 0/0,2:  \| want: ::test_ns_simple::test_ns_x ::test_ns_simple::test_ns_y |
 | namespace-old-5.10 | `bug`: namespaces: the result differs | code 0/1:  \| want: namespace "xyzzy" not found in "::" |
 | namespace-old-6.14 | `bug`: namespaces: the result differs | code 1/0,2: can't read "test_ns_cache_var": no such variable \| want: {cache1 version} ... |
-| namespace-old-7.2 | `bug`: namespaces: the result differs | code 0/0,2: 0 0 \| want: 1 1 |
-| namespace-old-7.5 | `bug`: namespaces: the result differs | code 0/0,2: 0 0 \| want: 1 1 |
 | namespace-old-9.14 | `bug`: namespaces: the result differs | code 0/0,2: cmd2 1 {invalid command name "cmd1"} \| want: {} 1 {invalid command name "c... |
 | namespace-old-9.18 | `bug`: namespaces: the result differs | code 0/0,2: cmd1 ::test_ns_import_use::cmd1 \| want: {} {} |
 | namespace-old-9.19 | `bug`: namespaces: the result differs | code 0/0,2: {cmd1 cmd2} {ncmd ncmd1 ncmd2} {::test_ns_import_use::cmd1 ::test_ns_import... |
@@ -2893,7 +2869,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | oo-24.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown method "foo": must be destroy or dummy \| want: unknown method "foo":... |
 | oo-24.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown method "foo": must be destroy, dummy or dummy2 \| want: unknown metho... |
 | oo-27.18 | `bug`: TclOO: the result differs | code 0/1: 1,1 2,2 \| want: unknown method "-?": must be * |
-| oo-27.6 | `bug`: TclOO: the result differs | code 0/0,2: {3 2 y! {}} {x! y!} {} \| want: {3 2 y! {}} {x! y!} {x! y!} |
 | oo-3.4 | `bug`: TclOO: the result differs | code 0/0,2: 0 ok ::oo::Obj66::state ::oo::Obj66::localcmdexists {} \| want: 0 ok *::sta... |
 | oo-3.4a | `bug`: TclOO: the result differs | code 0/0,2: 0 ok ::oo::Obj68::state ::oo::Obj68::localcmdexists {} \| want: 0 ok *::sta... |
 | oo-3.5 | `bug`: TclOO: the result differs | code 0/0,2: 0 ok ::oo::Obj70::state ::oo::Obj70::localcmdexists {} \| want: 0 ok *::sta... |
@@ -3137,8 +3112,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | proc-old-7.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "normalizeMsg" \| want: 1 {couldn't open "_bad_file_na... |
 | proc-old-7.13 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "normalizeMsg" \| want: 1 {couldn't open "_bad_file_na... |
 | proc-old-7.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "normalizeMsg" \| want: 1 {couldn't open "_bad_file_na... |
-| proc-old-7.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {} \| want: 3 abc |
-| proc-old-7.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 {} \| want: 4 abc |
 | proc-old-7.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {bad completion code "-14": must be ok, error, return, break, continue, o... |
 
 ### proc.test
@@ -3476,7 +3449,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | socket-14.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: couldn't open socket: the network policy does not allow the address "192.0.2.... |
 | socket-14.8.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ok |
 | socket-14.8.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {connection refused} {} \| want: {error reading "sock*": socket is not c... |
-| socket-15.1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: sock2842 \| want: couldn't open socket: connection refused |
+| socket-15.1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: sock2843 \| want: couldn't open socket: connection refused |
 | socket_inet-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ready timed_out \| want: ready done |
 | socket_inet6-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ready timed_out \| want: ready done |
 
@@ -3500,7 +3473,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| split-1.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a � � � \| want: a 💩 b |
+| split-1.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a � \| want: a 💩 b |
 
 ### stack.test
 
@@ -3795,7 +3768,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 40005', Got '' \| want: OK |
+| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 38441', Got '' \| want: OK |
 | unixInit-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
 | unixInit-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0: couldn't open "/dev/null": no such file or directory \| want:  |
 
@@ -3953,15 +3926,12 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | var-3.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 1 \| want: 1 1 |
 | var-3.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: bad variable name "foo(bar)": can't create a scalar variable that l... |
 | var-3.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't create "test_ns_fred::lnk": parent namespace doesn't exist |
-| var-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: test_ns_var::one 1 \| want: ::test_ns_var::one 1 |
 | var-7.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't define "arrayvar(1)": name refers to an element in an array |
 | var-7.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't define "arrayvar(1)": name refers to an element in an array |
 | var-7.16 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args: should be "variable ?name value...? name ?value?" \| want:  |
 | var-7.17 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args: should be "variable ?name value...? name ?value?" \| want:  |
-| var-7.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {test_ns_var::one test_ns_var::two} 2 \| want: {::test_ns_var::one ::test_n... |
-| var-7.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {test_ns_var::four test_ns_var::one test_ns_var::three test_ns_var::two} 7 ... |
 | var-7.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't define "sev:::en": parent namespace doesn't exist |
-| var-7.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: test_ns_var2::x 1 0 0 {1 {can't read "test_ns_var2::y": no such variable}} ... |
+| var-7.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ::test_ns_var2::x 1 0 0 {1 {can't read "test_ns_var2::y": no such variable}... |
 | var-8.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {} \| want: {} {::test_ns_var::v {} unset} |
 
 | Skipped by | Tests | Bucket |
