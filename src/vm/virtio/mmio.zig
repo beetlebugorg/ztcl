@@ -103,11 +103,14 @@ pub const Backend = union(enum) {
     /// The virtio-fs device (`fuse.zig`): a share of a folder of the host
     /// through FUSE.
     fs: *fuse_mod.Server,
+    /// The virtio-net device (`net.zig`).
+    net: *net_mod.Net,
 };
 
 const vsock_mod = @import("vsock.zig");
 const ninep_mod = @import("ninep.zig");
 const fuse_mod = @import("fuse.zig");
+const net_mod = @import("net.zig");
 
 /// A spin lock for the registers of a device: the vCPU threads and the
 /// console thread of the backend take it for a short time.
@@ -176,6 +179,14 @@ pub const Device = struct {
         return d;
     }
 
+    /// The virtio-net device, with its MAC address and status in the
+    /// configuration.
+    pub fn net(irq: u32, n: *net_mod.Net) Device {
+        var d: Device = .{ .backend = .{ .net = n }, .irq = irq, .features = n.features(), .nqueues = 2 };
+        d.config_len = n.config(&d.config);
+        return d;
+    }
+
     /// An external device with `features` (with VIRTIO_F_VERSION_1),
     /// `nqueues` queues, and the bytes of its configuration.
     pub fn external(irq: u32, e: External, features: u64, nqueues: u8, config: []const u8) Device {
@@ -193,6 +204,7 @@ pub const Device = struct {
             .vsock => vsock_mod.id,
             .ninep => ninep_mod.id,
             .fs => 26,
+            .net => net_mod.id,
         };
     }
 
@@ -264,6 +276,7 @@ pub const Device = struct {
                     .external => |e| if (!e.driverOk(e.ctx, d)) {
                         d.status |= status_needs_reset;
                     },
+                    .net => |n| n.start(d),
                     else => {},
                 };
             },
@@ -302,6 +315,7 @@ pub const Device = struct {
             .ninep => |srv| if (qi == 0 and srv.run(&d.queues[0], host.mem)) d.raise(host),
             // The high priority queue 0 and the request queue 1.
             .fs => |srv| if (qi < 2 and srv.run(&d.queues[qi], host.mem)) d.raise(host),
+            .net => |n| n.kick(n.ctx, qi),
         }
     }
 

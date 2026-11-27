@@ -27,6 +27,13 @@ The target is the line rate of the host loopback for one stream, and a time per 
 - Checksums with SIMD (`@Vector` sums of 16-bit words, AVX2 and NEON from the same Zig code), and only where an offload does not remove them: IPv4 headers, and packets of the NAT itself.
 - The policy at line rate. The lists compile to a sorted table of address ranges with port masks, searched with a branch-free binary search, and host names become address entries as DNS answers arrive. A lookup is under 20 ns. A JIT of the table with the assembler of ztcl comes only if a measurement shows the table as a cost.
 
+## Start time
+
+On macOS (#490), the network adds 0.53 ms before the agent listens, and about 0.4 ms of it is the open of the virtio-net driver, which fills its receive ring. Two changes on the host side cut this, with no change to the kernel:
+
+- The queue size. The monitor gives QueueNumMax, and the driver fills each entry of the receive queue at open. With mergeable receive buffers, one entry is one buffer, so a smaller ring has the same largest frame but fewer buffers in flight. The plan: a QueueNumMax for each device in `mmio.zig` (256 now, for each device), then the boot cost and the throughput of TCP at 64, 128, and 256 entries. The default is the smallest size that keeps the throughput of 256 for one stream and for 8 streams. This measurement needs TCP (step 3).
+- The pool. A guest with `-net nat` comes from no pool today. The design: a guest of the pool boots with the device and with no engine. The driver opens the device and fills its receive ring in the pool. At the take, `create` makes the engine of the guest with its own configuration (the policy, `-allow`, `-deny`, `-forward`, `-dns`), attaches it to the device, and the agent runs DHCP after the resume. On KVM, the attach registers the two ioeventfds of the device with the engine and starts its thread. Before the attach, a notify of the guest only sets the eventfd, and the engine reads the transmit queue at its start. The key of the pool gets a bit for `-net`, so a guest with no network never gets a device. A frame of the guest before the take (such as a DHCP DISCOVER of the agent) waits in the transmit queue and gets its answer after the take.
+
 ## Measurements
 
 Each step publishes its numbers in this file. Each number is measured on the same host as the references, with no source of them read:
@@ -35,6 +42,10 @@ Each step publishes its numbers in this file. Each number is measured on the sam
 - The time of a round trip (TCP request and answer of 1 byte), and connections per second.
 - CPU time per gigabit.
 - The references: QEMU with passt and with slirp, and gVisor netstack, as programs under test only.
+
+### Results
+
+- Step 2, KVM, 2026-11-27, x86-64 host with a load average of 12: `ping -c 200 -i 0.01 10.0.2.2` in the guest gives a round trip of 0.114 ms at best and 0.194 ms on average. The engine answers the echo itself, so this is the time of the device and the interrupt path. No reference program ran yet.
 
 ## Steps
 

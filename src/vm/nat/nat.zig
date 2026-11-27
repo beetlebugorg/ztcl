@@ -52,7 +52,7 @@ pub const Host = struct {
     udpSend: *const fn (ctx: *anyopaque, sport: u16, dst: Ip4, dport: u16, payload: []const u8) void,
 };
 
-pub const Nat = struct {
+pub const Stack = struct {
     host: Host,
     /// The counts of the frames that the NAT dropped: bad, or of a kind
     /// that it does not handle.
@@ -60,7 +60,7 @@ pub const Nat = struct {
     buf: [max_frame]u8 = undefined,
 
     /// A frame of the guest, from the transmit queue of its device.
-    pub fn fromGuest(n: *Nat, f: []const u8) void {
+    pub fn fromGuest(n: *Stack, f: []const u8) void {
         if (f.len < eth_len) return n.drop();
         switch (be16(f[12..14])) {
             eth_arp => n.arp(f[eth_len..]),
@@ -71,16 +71,16 @@ pub const Nat = struct {
 
     /// A UDP datagram of the host for the guest port `dport`, from
     /// `src:sport`.
-    pub fn udpToGuest(n: *Nat, src: Ip4, sport: u16, dport: u16, payload: []const u8) void {
+    pub fn udpToGuest(n: *Stack, src: Ip4, sport: u16, dport: u16, payload: []const u8) void {
         if (payload.len > max_frame - eth_len - ip_len - udp_len) return n.drop();
         n.sendUdp(src, sport, guest_ip, guest_mac, dport, payload);
     }
 
-    fn drop(n: *Nat) void {
+    fn drop(n: *Stack) void {
         n.dropped += 1;
     }
 
-    fn arp(n: *Nat, a: []const u8) void {
+    fn arp(n: *Stack, a: []const u8) void {
         if (a.len < 28) return n.drop();
         if (be16(a[0..2]) != 1 or be16(a[2..4]) != eth_ip4 or a[4] != 6 or a[5] != 4) return n.drop();
         if (be16(a[6..8]) != 1) return; // only requests need an answer
@@ -102,7 +102,7 @@ pub const Nat = struct {
         n.host.emit(n.host.ctx, o[0 .. eth_len + 28]);
     }
 
-    fn ip4(n: *Nat, f: []const u8) void {
+    fn ip4(n: *Stack, f: []const u8) void {
         const p = f[eth_len..];
         if (p.len < ip_len or p[0] >> 4 != 4) return n.drop();
         const ihl = @as(usize, p[0] & 0xf) * 4;
@@ -120,7 +120,7 @@ pub const Nat = struct {
         }
     }
 
-    fn icmp(n: *Nat, mac: Mac, src: Ip4, dst: Ip4, b: []const u8) void {
+    fn icmp(n: *Stack, mac: Mac, src: Ip4, dst: Ip4, b: []const u8) void {
         if (b.len < 8 or b[0] != 8) return n.drop();
         if (!std.mem.eql(u8, &dst, &gateway_ip) and !std.mem.eql(u8, &dst, &dns_ip)) return n.drop();
         if (b.len > max_frame - eth_len - ip_len) return n.drop();
@@ -133,7 +133,7 @@ pub const Nat = struct {
         n.sendIp(dst, src, mac, proto_icmp, b.len);
     }
 
-    fn udp(n: *Nat, mac: Mac, src: Ip4, dst: Ip4, b: []const u8) void {
+    fn udp(n: *Stack, mac: Mac, src: Ip4, dst: Ip4, b: []const u8) void {
         if (b.len < udp_len) return n.drop();
         const len = be16(b[4..6]);
         if (len < udp_len or len > b.len) return n.drop();
@@ -150,7 +150,7 @@ pub const Nat = struct {
     }
 
     /// DHCP: an offer for a DISCOVER, an ack for a REQUEST.
-    fn dhcp(n: *Nat, mac: Mac, d: []const u8) void {
+    fn dhcp(n: *Stack, mac: Mac, d: []const u8) void {
         if (d.len < 240 or d[0] != 1 or be32(d[236..240]) != 0x63825363) return n.drop();
         var kind: u8 = 0;
         var i: usize = 240;
@@ -197,7 +197,7 @@ pub const Nat = struct {
         n.sendUdp(gateway_ip, 67, .{ 255, 255, 255, 255 }, if (be16(d[10..12]) & 0x8000 != 0) broadcast_mac else mac, 68, r[0..300]);
     }
 
-    fn sendUdp(n: *Nat, src: Ip4, sport: u16, dst: Ip4, mac: Mac, dport: u16, payload: []const u8) void {
+    fn sendUdp(n: *Stack, src: Ip4, sport: u16, dst: Ip4, mac: Mac, dport: u16, payload: []const u8) void {
         const u = n.buf[eth_len + ip_len ..];
         const len = udp_len + payload.len;
         put16(u[0..2], sport);
@@ -213,7 +213,7 @@ pub const Nat = struct {
 
     /// Writes the Ethernet and IPv4 headers in front of `len` bytes at
     /// `buf[34..]`, and gives the frame to the host.
-    fn sendIp(n: *Nat, src: Ip4, dst: Ip4, mac: Mac, proto: u8, len: usize) void {
+    fn sendIp(n: *Stack, src: Ip4, dst: Ip4, mac: Mac, proto: u8, len: usize) void {
         const o = &n.buf;
         @memcpy(o[0..6], &mac);
         @memcpy(o[6..12], &gateway_mac);
@@ -307,7 +307,7 @@ const Fake = struct {
         @memcpy(x.udp_data[0..p.len], p);
         x.udp_len = p.len;
     }
-    fn nat(x: *Fake) Nat {
+    fn nat(x: *Fake) Stack {
         return .{ .host = .{ .ctx = x, .emit = emit, .udpSend = udpSend } };
     }
     fn last(x: *Fake) []const u8 {

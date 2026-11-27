@@ -212,10 +212,11 @@ The engine has two attachments. A guest uses one of them:
 
 The in-process calls:
 
-- `Nat.fromGuest(hdr: NetHdr, parts: []const []const u8) void`: one frame, as the slices of its descriptors in guest memory. It runs on the thread that ran the transmit notify (a vCPU thread, or the thread of the device). It does not block: it copies what it keeps before it returns, so the device can put the chain in the used ring at once. A frame that the engine cannot take counts in `Nat.stats().dropped`.
+- `Nat.fromGuest(hdr: Hdr, parts: []const []const u8) void`: one frame, as the slices of its descriptors in guest memory. It runs on the thread of the engine: the backend gives the notify eventfd of each queue to `Nat.watch(fd, ctx, call)`, and its `call` for the transmit queue runs `Net.tx` of `src/vm/virtio/net.zig` with `Nat.sink()`. On KVM, that eventfd is an ioeventfd, so a notify of the guest costs no exit to user space. On WHP, the notify write of the vCPU goes to `Net.kick`, which writes the eventfd. It does not block: it copies what it keeps before it returns, so the device can put the chain in the used ring at once. A frame that the engine cannot take counts in `Nat.stats().dropped`.
 - `Port.deliver(ctx, hdr: NetHdr, parts: []const []const u8) bool`: one frame for the guest, on the thread of the engine. The device copies it into receive buffers (more than one with `MRG_RXBUF`), puts them in the used ring, and raises the interrupt (with event index, only when the driver asks for it). It gives false when the receive queue has no room. The engine then keeps the frame and its later frames in order, and calls `deliver` again after the device calls `Nat.rxSpace()`.
 - `Nat.rxSpace() void`: the driver added receive buffers. The device calls it from the notify of the receive queue. It only wakes the engine.
-- `Port.features: u64`: the offloads that the driver accepted, given by the device at DRIVER_OK. The engine sends large segments and frames with no checksum only when they are in it.
+- `Port.flush(ctx)`: the end of a batch of `deliver`. The device raises the interrupt of the receive queue there, when the driver asked for one with event index.
+- The engine sets VIRTIO_NET_HDR_F_DATA_VALID on each frame that it builds, and the device clears each flag of the header that the driver did not accept (here, VIRTIO_NET_F_GUEST_CSUM). The offloads of TCP (GSO and TSO) come with TCP, with the same rule.
 
 The configuration, `nat.Config`:
 
@@ -233,7 +234,7 @@ Threading and life:
 - `Nat.stop()` closes each host socket and joins the thread. `Nat.deinit()` frees the engine. A guest that stops and starts again gets a new engine, so it has no connections of the old boot.
 - The engine never calls into the monitor except through `Port.deliver` and the `event` hook.
 
-The first code is `src/vm/nat/nat.zig`, with ARP, DHCP, ICMP echo, UDP, and the checksum. Its internal calls change to this interface in the next step.
+The engine is `src/vm/nat/engine.zig`: the thread, the UDP flows, and the two attachments. The protocol code is the `Stack` of `src/vm/nat/nat.zig`, with ARP, DHCP, ICMP echo, UDP, and the checksum. `Config` has `policy`, `dns`, and `event` in this version. `allow`, `deny`, and `forwards` come with TCP. The frame socket (`initSocket`) builds for macOS (kqueue, and an EVFILT_USER event for the wake), and its test runs on Linux.
 
 ## Windows: the Windows Hypervisor Platform
 

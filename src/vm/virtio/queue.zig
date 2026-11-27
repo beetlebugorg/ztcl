@@ -42,6 +42,15 @@ pub const Queue = struct {
     avail: u64 = 0,
     used: u64 = 0,
     last_avail: u16 = 0,
+    /// VIRTIO_F_RING_EVENT_IDX (section 2.7.10): the driver asks for an
+    /// interrupt with `used_event` at the end of the available ring, and
+    /// the device asks for a notify with `avail_event` at the end of the
+    /// used ring.
+    event_idx: bool = false,
+    /// The used entries that `addUsed` wrote and `publish` did not.
+    pending: u16 = 0,
+    /// The used index at the last interrupt of `needIrq`.
+    signaled: u16 = 0,
 
     const Desc = extern struct { addr: u64, len: u32, flags: u16, next: u16 };
 
@@ -74,6 +83,72 @@ pub const Queue = struct {
         m.put(u32, elem, head);
         m.put(u32, elem + 4, len);
         @atomicStore(u16, idx, cur +% 1, .release);
+    }
+
+    fn usedIdx(q: *Queue, m: Mem) ?*u16 {
+        const p = m.ptr(u16, q.used + 2) orelse return null;
+        return @ptrCast(@alignCast(p));
+    }
+
+    /// Writes a used entry after the ones that `addUsed` wrote, with no
+    /// change to the used index. The driver sees the entries at
+    /// `publish`, so a frame in several buffers appears all at once.
+    pub fn addUsed(q: *Queue, m: Mem, head: u16, len: u32) void {
+        const idx = q.usedIdx(m) orelse return;
+        const elem = q.used + 4 + 8 * @as(u64, (idx.* +% q.pending) % q.num);
+        if (m.slice(elem, 8) == null) return;
+        m.put(u32, elem, head);
+        m.put(u32, elem + 4, len);
+        q.pending +%= 1;
+    }
+
+    /// Makes the entries of `addUsed` visible to the driver.
+    pub fn publish(q: *Queue, m: Mem) void {
+        if (q.pending == 0) return;
+        const idx = q.usedIdx(m) orelse return;
+        @atomicStore(u16, idx, idx.* +% q.pending, .release);
+        q.pending = 0;
+    }
+
+    /// Whether the driver wants an interrupt for the used entries since
+    /// the last call: with event index, when the used index went past
+    /// `used_event`; with no event index, when the driver did not set
+    /// VIRTQ_AVAIL_F_NO_INTERRUPT.
+    pub fn needIrq(q: *Queue, m: Mem) bool {
+        const idx = q.usedIdx(m) orelse return false;
+        // The driver writes used_event before it reads the used index,
+        // so the device reads it after it wrote the used index.
+        _ = @atomicRmw(u16, idx, .Add, 0, .seq_cst);
+        const new = idx.*;
+        const old = q.signaled;
+        q.signaled = new;
+        if (new == old) return false;
+        if (!q.event_idx) {
+            const flags = (m.ptr(u16, q.avail) orelse return true).*;
+            return flags & 1 == 0;
+        }
+        const ev = (m.ptr(u16, q.avail + 4 + 2 * @as(u64, q.num)) orelse return true).*;
+        return new -% ev -% 1 < new -% old;
+    }
+
+    /// With event index, asks the driver for a notify at the next chain
+    /// after the ones that the device read, and gives true when the
+    /// driver made a chain available in the meantime. The device then
+    /// reads the ring again, so no notify is lost.
+    pub fn arm(q: *Queue, m: Mem) bool {
+        if (q.event_idx) {
+            const at = q.used + 4 + 8 * @as(u64, q.num);
+            const p = m.ptr(u16, at) orelse return false;
+            @atomicStore(u16, @as(*u16, @ptrCast(@alignCast(p))), q.last_avail, .seq_cst);
+        }
+        const ip = m.ptr(u16, q.avail + 2) orelse return false;
+        return @atomicLoad(u16, @as(*u16, @ptrCast(@alignCast(ip))), .seq_cst) != q.last_avail;
+    }
+
+    /// Gives back the last `k` chains of `next`, for a device that read
+    /// chains and then found them too few.
+    pub fn unget(q: *Queue, k: u16) void {
+        q.last_avail -%= k;
     }
 
     /// Checks that the rings fit in the guest memory, when the driver
