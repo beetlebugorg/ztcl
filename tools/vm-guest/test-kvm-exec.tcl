@@ -86,6 +86,49 @@ for {set i 0} {$i < 20} {incr i} {
     if {$d < $best} { set best $d }
 }
 puts "exec -vm true: best of 20: $best us"
+
+# -isolation vm: a new guest for each call, deleted after it.
+set boot [list -kernel $kernel -initrd agent.cpio -cmdline "rdinit=/sbin/agent quiet" -memory 64]
+# The name of the next guest: the guests are vm1, vm2, and so on.
+proc nextName {} {
+    set g [ztcl::vm create {*}$::boot]
+    ztcl::vm delete $g
+    return vm[expr {[string range $g 2 end] + 1}]
+}
+proc gone {name} { catch {ztcl::vm status $name} }
+set n [nextName]
+check "-isolation vm: a new guest" [exec -isolation vm {*}$boot $bb echo fresh] fresh
+check "-isolation vm: the guest is gone after the call" [gone $n] 1
+exec -isolation vm {*}$boot $bb sh -c {echo x > /tmp/mark}
+check "-isolation vm: no state from the last call" [catch {exec -isolation vm {*}$boot $bb cat /tmp/mark}] 1
+check "-isolation vm: a pipeline" [exec -isolation vm {*}$boot $bb seq 1 5 | $bb wc -l] 5
+set n [nextName]
+check "-isolation vm: an error deletes the guest" [catch {exec -isolation vm {*}$boot /nope}] 1
+check "-isolation vm: no guest after the error" [gone $n] 1
+set n [nextName]
+set ch [open "|-isolation vm $boot $bb cat" r+]
+puts $ch "fresh channel"; flush $ch
+check "-isolation vm: a channel" [gets $ch] "fresh channel"
+close $ch
+check "-isolation vm: the channel guest is gone" [gone $n] 1
+check "-isolation vm with -vm" [catch {exec -isolation vm -vm $vm $bb true} msg] 1
+check "-memory with no -isolation vm" [catch {exec -memory 64 $bb true} msg] 1
+
+# From a snapshot: a clone for each call.
+ztcl::vm snapshot $vm ready.snap
+check "-isolation vm -snapshot" [exec -isolation vm -snapshot ready.snap $bb echo clone] clone
+set best 1e9
+for {set i 0} {$i < 10} {incr i} {
+    set t [clock microseconds]
+    exec -isolation vm -snapshot ready.snap $bb true
+    set d [expr {[clock microseconds] - $t}]
+    if {$d < $best} { set best $d }
+}
+puts "exec -isolation vm -snapshot true: best of 10: $best us"
+set t [clock microseconds]
+exec -isolation vm {*}$boot $bb true
+puts "exec -isolation vm (cold boot) true: [expr {[clock microseconds] - $t}] us"
+file delete ready.snap
 ztcl::vm stop $vm -force
 ztcl::vm delete $vm
 puts "all ok"

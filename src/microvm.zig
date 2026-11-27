@@ -142,7 +142,10 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
         if (!warned.swap(true, .monotonic)) std.debug.print("{s}\n", .{vmimage.test_key_warning});
     }
     try it.register("ztcl::vm", cmdVm);
-    if (comptime remote_exec) it.execs.remote = remoteStart;
+    if (comptime remote_exec) {
+        it.execs.remote = remoteStart;
+        it.execs.fresh = freshStart;
+    }
 }
 
 /// `exec -vm` runs on the hosts of `proc.zig` that have a monitor.
@@ -157,6 +160,48 @@ fn agentConnect(it: *Interp, vm: []const u8, timeout: u32) Error!vmagent.Conn {
 
 fn remoteStart(it: *Interp, vm: []const u8, r: *const @import("proc.zig").Remote) Error!@import("proc.zig").Job {
     return @import("vmexec.zig").start(it, agentConnect, vm, r);
+}
+
+/// The image of `exec -isolation vm` with no `-image` and no `-kernel`.
+pub const default_image = "ztcl-guest";
+
+/// Deletes the guest of `exec -isolation vm`. The result and the error
+/// code of the interpreter stay as they were.
+fn dropGuest(it: *Interp, name: []const u8) void {
+    const saved = it.result;
+    const saved_code = it.error_code;
+    var args = [3]Value{ .{ .str = "ztcl::vm" }, .{ .str = "delete" }, .{ .str = name } };
+    _ = cmdVm(it, &args, null) catch {};
+    it.result = saved;
+    it.error_code = saved_code;
+}
+
+/// `exec -isolation vm`: a new guest from the options of `create`, from
+/// the pool when the options allow it, for one pipeline.
+fn freshStart(it: *Interp, create: []const Value, r: *const @import("proc.zig").Remote) Error!@import("proc.zig").Job {
+    const a = it.alloc();
+    var own_boot = false;
+    for (create, 0..) |v, k| {
+        if (k % 2 != 0) continue;
+        const o = try it.str(v);
+        if (std.mem.eql(u8, o, "-image") or std.mem.eql(u8, o, "-kernel") or std.mem.eql(u8, o, "-snapshot")) own_boot = true;
+    }
+    var args: std.ArrayList(Value) = .empty;
+    try args.appendSlice(a, &.{ .{ .str = "ztcl::vm" }, .{ .str = "create" } });
+    if (!own_boot) try args.appendSlice(a, &.{ .{ .str = "-image" }, .{ .str = default_image } });
+    try args.appendSlice(a, create);
+    const name_v = try cmdVm(it, args.items, null);
+    const name = try std.heap.page_allocator.dupe(u8, try it.str(name_v));
+    var owned = true;
+    errdefer if (owned) {
+        dropGuest(it, name);
+        std.heap.page_allocator.free(name);
+    };
+    var start_args = [3]Value{ .{ .str = "ztcl::vm" }, .{ .str = "start" }, .{ .str = name } };
+    _ = try cmdVm(it, &start_args, null);
+    const job = try @import("vmexec.zig").startFresh(it, agentConnect, name, r, .{ .it = it, .name = name, .drop = dropGuest });
+    owned = false;
+    return job;
 }
 
 fn unavailable(it: *Interp) Error {
@@ -1199,7 +1244,7 @@ const mac = if (on_mac) struct {
                 };
                 s.next += 1;
                 try s.guests.append(it.heap.backing, g);
-                return .{ .str = g.name };
+                return .{ .str = try it.alloc().dupe(u8, g.name) };
             }
         }
 
@@ -1246,7 +1291,7 @@ const mac = if (on_mac) struct {
             conn.close();
             g.machine.pause(&why) catch return framework(it, "the pause of the guest", why);
         }
-        return .{ .str = g.name };
+        return .{ .str = try it.alloc().dupe(u8, g.name) };
     }
 
     fn start(it: *Interp, g: *Guest) Error!void {
@@ -1972,7 +2017,7 @@ const lin = if (on_kvm) struct {
                     destroy(it, g);
                     return e;
                 };
-                return .{ .str = g.name };
+                return .{ .str = try it.alloc().dupe(u8, g.name) };
             }
         }
 
@@ -2055,7 +2100,7 @@ const lin = if (on_kvm) struct {
             _ = linux.close(fd);
             g.machine.pause();
         }
-        return .{ .str = g.name };
+        return .{ .str = try it.alloc().dupe(u8, g.name) };
     }
 
     fn start(it: *Interp, g: *Guest) Error!void {
@@ -2224,7 +2269,7 @@ const lin = if (on_kvm) struct {
                     destroy(it, g);
                     return e;
                 };
-                try names.append(it.alloc(), .{ .str = g.name });
+                try names.append(it.alloc(), .{ .str = try it.alloc().dupe(u8, g.name) });
                 continue;
             }
             const g = try b.create(Guest);
@@ -2261,7 +2306,7 @@ const lin = if (on_kvm) struct {
                 destroy(it, g);
                 return e;
             };
-            try names.append(it.alloc(), .{ .str = g.name });
+            try names.append(it.alloc(), .{ .str = try it.alloc().dupe(u8, g.name) });
         }
         if (!list) return names.items[0];
         return value.wrapList(it.alloc(), names.items);
@@ -3565,7 +3610,7 @@ const win = if (on_whp) struct {
             sys.close(fd);
             g.machine.pause();
         }
-        return .{ .str = g.name };
+        return .{ .str = try it.alloc().dupe(u8, g.name) };
     }
 
     fn start(it: *Interp, g: *Guest) Error!void {

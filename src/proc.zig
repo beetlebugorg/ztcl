@@ -88,6 +88,9 @@ pub const State = struct {
     /// The start of a pipeline in a guest of `ztcl::vm` (`-vm`), which
     /// `microvm.zig` sets when the interpreter has the `vm` capability.
     remote: ?RemoteFn = null,
+    /// The start of a pipeline in a new guest (`-isolation vm`): the
+    /// options of `ztcl::vm create`, then the pipeline.
+    fresh: ?FreshFn = null,
     /// The pipelines of `-vm` in the background that can still run.
     jobs: std.ArrayList(Job) = .empty,
 };
@@ -145,6 +148,56 @@ pub const Job = struct {
 };
 
 pub const RemoteFn = *const fn (it: *Interp, vm: []const u8, r: *const Remote) Error!Job;
+pub const FreshFn = *const fn (it: *Interp, create: []const Value, r: *const Remote) Error!Job;
+
+/// The options of `exec` that go to `ztcl::vm create` for `-isolation vm`.
+const vm_options = [_][]const u8{ "-image", "-snapshot", "-memory", "-cpus", "-net", "-share", "-kernel", "-initrd", "-cmdline" };
+
+/// Where a pipeline runs: `-vm VM`, or `-isolation none|vm`.
+const Where = struct {
+    vm: ?[]const u8 = null,
+    fresh: bool = false,
+    /// The options for `ztcl::vm create`.
+    create: std.ArrayList(Value) = .empty,
+
+    fn isolated(w: *const Where) bool {
+        return w.vm != null or w.fresh;
+    }
+};
+
+/// Reads one option of ztcl of `exec` and `open "|..."` at `words[i]`.
+/// Gives the count of words that it used, or 0 for no such option.
+fn whereOption(it: *Interp, w: *Where, words: []const Value, i: usize) Error!usize {
+    const o = try it.str(words[i]);
+    var is_vm_opt = false;
+    for (vm_options) |v| {
+        if (eql(o, v)) is_vm_opt = true;
+    }
+    if (!eql(o, "-vm") and !eql(o, "-isolation") and !is_vm_opt) return 0;
+    if (i + 1 >= words.len) return it.fail("option \"{s}\" needs a value", .{o});
+    const v = words[i + 1];
+    if (eql(o, "-vm")) {
+        w.vm = try it.str(v);
+    } else if (eql(o, "-isolation")) {
+        const level = try it.str(v);
+        if (eql(level, "none")) {
+            w.fresh = false;
+        } else if (eql(level, "vm")) {
+            w.fresh = true;
+        } else return it.failCode("TCL LOOKUP INDEX isolation", "bad isolation \"{s}\": must be none or vm", .{level});
+    } else {
+        try w.create.append(it.alloc(), words[i]);
+        try w.create.append(it.alloc(), v);
+    }
+    return 2;
+}
+
+fn checkWhere(it: *Interp, w: *const Where) Error!void {
+    if (w.vm != null and w.fresh) return it.fail("-vm and -isolation vm do not go together", .{});
+    if (w.create.items.len > 0 and !w.fresh) return it.fail("option \"{s}\" needs -isolation vm", .{try it.str(w.create.items[0])});
+    if (w.vm != null and it.execs.remote == null) return noVm(it);
+    if (w.fresh and it.execs.fresh == null) return noVm(it);
+}
 
 const Group = struct { tree: Tree, pids: []const i32, start: i64 };
 
@@ -1165,7 +1218,7 @@ fn stripNewline(text: []const u8) []const u8 {
 }
 
 fn noVm(it: *Interp) Error {
-    return it.failCode("ZTCL EXEC NOVM", "exec -vm needs the vm capability", .{});
+    return it.failCode("ZTCL EXEC NOVM", "exec -vm and -isolation vm need the vm capability", .{});
 }
 
 fn targetFd(t: Target) i32 {
@@ -1236,12 +1289,16 @@ fn pidList(it: *Interp, pids: []const i32) Error!Value {
     return value.wrapList(it.alloc(), out.items);
 }
 
-/// `exec -vm VM`: the pipeline in the guest VM.
-fn runRemote(it: *Interp, vm: []const u8, plan: *Plan) Error!Value {
+/// `exec -vm VM` and `exec -isolation vm`: the pipeline in a guest.
+fn startJob(it: *Interp, where: *const Where, r: *const Remote) Error!Job {
+    if (where.vm) |name| return (it.execs.remote orelse return noVm(it))(it, name, r);
+    return (it.execs.fresh orelse return noVm(it))(it, where.create.items, r);
+}
+
+fn runRemote(it: *Interp, where: *const Where, plan: *Plan) Error!Value {
     const a = it.alloc();
-    const f = it.execs.remote orelse return noVm(it);
     const r = try remotePlan(it, plan, -1, -1);
-    const job = try f(it, vm, &r);
+    const job = try startJob(it, where, &r);
     closePlan(plan);
     if (plan.background) {
         if (!job.vt.detach(job.ctx)) {
@@ -1270,7 +1327,7 @@ fn cmdExec(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const a = it.alloc();
     sweep(it);
     var plan: Plan = .{};
-    var vm: ?[]const u8 = null;
+    var where: Where = .{};
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
         const o = try it.str(argv[i]);
@@ -1279,26 +1336,26 @@ fn cmdExec(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             plan.ignore_err = true;
         } else if (eql(o, "-keepnewline")) {
             plan.keep_newline = true;
-        } else if (eql(o, "-vm")) {
-            i += 1;
-            if (i >= argv.len) return it.wrongArgs("exec ?-option ...? arg ?arg ...?");
-            vm = try it.str(argv[i]);
         } else if (eql(o, "--")) {
             i += 1;
             break;
-        } else return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -ignorestderr, -keepnewline, -vm, or --", .{o});
+        } else {
+            const used = try whereOption(it, &where, argv, i);
+            if (used == 0) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -ignorestderr, -isolation, -keepnewline, -vm, or --", .{o});
+            i += used - 1;
+        }
     }
     if (i >= argv.len) return it.wrongArgs("exec ?-option ...? arg ?arg ...?");
     const words = try a.alloc([]const u8, argv.len - i);
     for (argv[i..], words) |v, *w| w.* = try it.str(v);
-    plan.isolated = vm != null;
-    if (vm != null and it.execs.remote == null) return noVm(it);
+    plan.isolated = where.isolated();
+    try checkWhere(it, &where);
     parse(it, words, &plan) catch |e| {
         closePlan(&plan);
         return e;
     };
     errdefer closePlan(&plan);
-    if (vm) |name| return runRemote(it, name, &plan);
+    if (where.isolated()) return runRemote(it, &where, &plan);
     if (plan.background) {
         const st = try start(it, &plan, false, false);
         try it.execs.groups.append(a, .{ .tree = st.tree, .pids = st.pids, .start = st.start });
@@ -1355,24 +1412,23 @@ pub fn openPipeline(it: *Interp, command: []const u8, readable: bool, writable: 
     sweep(it);
     const list = try it.list(.{ .str = command });
     if (list.len == 0) return it.fail("illegal use of | or |& in command", .{});
-    var all = try a.alloc([]const u8, list.len);
-    for (list, all) |v, *w| w.* = try it.str(v);
-    // The options of ztcl before the words: `-vm VM`, and `--`.
-    var vm: ?[]const u8 = null;
-    while (all.len > 0) {
-        if (eql(all[0], "-vm")) {
-            if (all.len < 3) return it.fail("can't specify \"-vm\" with no guest and program", .{});
-            vm = all[1];
-            all = all[2..];
-        } else if (eql(all[0], "--")) {
-            all = all[1..];
+    // The options of ztcl before the words, as for `exec`, and `--`.
+    var where: Where = .{};
+    var first: usize = 0;
+    while (first < list.len) {
+        if (eql(try it.str(list[first]), "--")) {
+            first += 1;
             break;
-        } else break;
+        }
+        const used = try whereOption(it, &where, list, first);
+        if (used == 0) break;
+        first += used;
     }
-    if (all.len == 0) return it.fail("illegal use of | or |& in command", .{});
-    const words = all;
-    var plan: Plan = .{ .isolated = vm != null };
-    if (vm != null and it.execs.remote == null) return noVm(it);
+    if (first >= list.len) return it.fail("illegal use of | or |& in command", .{});
+    const words = try a.alloc([]const u8, list.len - first);
+    for (list[first..], words) |v, *w| w.* = try it.str(v);
+    var plan: Plan = .{ .isolated = where.isolated() };
+    try checkWhere(it, &where);
     parse(it, words, &plan) catch |e| {
         closePlan(&plan);
         return e;
@@ -1381,7 +1437,7 @@ pub fn openPipeline(it: *Interp, command: []const u8, readable: bool, writable: 
     if (plan.background) return it.fail("illegal use of & in a command pipeline", .{});
     if (readable and plan.out != .none) return it.fail("can't read output from command: standard output was redirected", .{});
     if (writable and plan.in != .none) return it.fail("can't write input to command: standard input was redirected", .{});
-    if (vm) |name| return openRemote(it, name, &plan, readable, writable);
+    if (where.isolated()) return openRemote(it, &where, &plan, readable, writable);
     const st = try start(it, &plan, readable, writable);
     const c = try chan.adopt(it, "file", if (readable) st.out else st.in, readable, writable);
     c.kind = .pipe;
@@ -1396,8 +1452,7 @@ pub fn openPipeline(it: *Interp, command: []const u8, readable: bool, writable: 
 /// `open "|-vm VM ..."`: a channel on a pipeline in a guest. The
 /// channel has the host end of a pipe, and the thread of the job copies
 /// between the other end and the programs.
-fn openRemote(it: *Interp, vm: []const u8, plan: *Plan, readable: bool, writable: bool) Error!Value {
-    const f = it.execs.remote orelse return noVm(it);
+fn openRemote(it: *Interp, where: *const Where, plan: *Plan, readable: bool, writable: bool) Error!Value {
     var out_p: [2]i32 = .{ -1, -1 };
     var in_p: [2]i32 = .{ -1, -1 };
     if (readable) out_p = try pipe(it);
@@ -1405,7 +1460,7 @@ fn openRemote(it: *Interp, vm: []const u8, plan: *Plan, readable: bool, writable
     if (writable) in_p = try pipe(it);
     errdefer for (in_p) |x| if (x >= 0) sys.close(x);
     const r = try remotePlan(it, plan, in_p[0], out_p[1]);
-    const job = try f(it, vm, &r);
+    const job = try startJob(it, where, &r);
     closePlan(plan);
     // The job has its own copies of the ends of the programs.
     if (out_p[1] >= 0) sys.close(out_p[1]);
