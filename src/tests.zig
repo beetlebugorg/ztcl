@@ -3791,3 +3791,19 @@ test "format: the fast %f gives the digits of the exact path" {
     // Most values take the fast path.
     try std.testing.expect(fast > 150_000);
 }
+
+test "exec -vm needs the vm capability, and open |-vm too" {
+    if (!tcl.proc.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const cap = tcl.interp.Capability;
+    try it.allow(@backingInt(cap.exec) | @backingInt(cap.channels));
+    try std.testing.expectError(error.TclError, it.eval("exec -vm vm1 /bin/true"));
+    try std.testing.expectEqualStrings("exec -vm needs the vm capability", try it.str(it.result));
+    try std.testing.expectError(error.TclError, it.eval("open {|-vm vm1 /bin/true}"));
+    try std.testing.expectEqualStrings("exec -vm needs the vm capability", try it.str(it.result));
+    try std.testing.expectError(error.TclError, it.eval("exec -vm"));
+    try std.testing.expectError(error.TclError, it.eval("exec -bogus true"));
+    try std.testing.expectEqualStrings("bad option \"-bogus\": must be -ignorestderr, -keepnewline, -vm, or --", try it.str(it.result));
+}

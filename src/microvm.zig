@@ -142,6 +142,21 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
         if (!warned.swap(true, .monotonic)) std.debug.print("{s}\n", .{vmimage.test_key_warning});
     }
     try it.register("ztcl::vm", cmdVm);
+    if (comptime remote_exec) it.execs.remote = remoteStart;
+}
+
+/// `exec -vm` runs on the hosts of `proc.zig` that have a monitor.
+const remote_exec = on_kvm or on_mac;
+
+/// A connection to the agent of the guest `vm`, after its `HELLO`.
+fn agentConnect(it: *Interp, vm: []const u8, timeout: u32) Error!vmagent.Conn {
+    if (comptime on_kvm) return lin.agent(it, try lin.find(it, .{ .str = vm }), timeout);
+    if (comptime on_mac) return mac.agent(it, try mac.find(it, .{ .str = vm }), timeout);
+    return unavailable(it);
+}
+
+fn remoteStart(it: *Interp, vm: []const u8, r: *const @import("proc.zig").Remote) Error!@import("proc.zig").Job {
+    return @import("vmexec.zig").start(it, agentConnect, vm, r);
 }
 
 fn unavailable(it: *Interp) Error {

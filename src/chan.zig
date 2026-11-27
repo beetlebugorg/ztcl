@@ -26,6 +26,7 @@ const serial = @import("serial.zig");
 const builtin = @import("builtin");
 const proc_ok = proc_mod.supported;
 const ProcTree = if (proc_ok) proc_mod.Tree else struct {};
+const ProcJob = if (proc_ok and @hasDecl(proc_mod, "Job")) proc_mod.Job else void;
 const event = @import("event.zig");
 
 pub const Translation = enum { auto, lf, cr, crlf, binary };
@@ -99,6 +100,8 @@ pub const Channel = struct {
     started: i64 = 0,
     /// The process tree of the pipeline.
     tree: ProcTree = .{},
+    /// The job of a pipeline outside the host (`open "|-vm ..."`).
+    job: ?ProcJob = null,
     /// True for the master side of a PTY of `ztcl::pty`.
     pty: bool = false,
     /// The end-of-file characters of `-eofchar`, or 0 for none. Input

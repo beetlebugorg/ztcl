@@ -18,5 +18,7 @@ cd "$dir"
 # goes in a file.
 printf %s "${KERNEL:-bzImage}" > kernel.name
 "$here/../../zig-out/bin/ztcl" --root . --allow vm,file,channels,clock,event,socket,thread "$here/test-kvm.tcl"
+# exec -vm and open "|-vm ..." (ztcl#577).
+"$here/../../zig-out/bin/ztcl" --root . --allow vm,file,channels,clock,event,exec "$here/test-kvm-exec.tcl"
 # The snapshots, restores, and clones (ztcl#468).
 exec "$here/../../zig-out/bin/ztcl" --root . --allow vm,file,channels,clock,event "$here/test-kvm-snapshot.tcl"
