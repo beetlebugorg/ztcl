@@ -159,6 +159,19 @@ Two cuts of the host (2026-11-27): the guest memory starts on a 2 MB boundary wi
 
 The cuts halve the time to the answer for the bzImage, whose decompression in the guest writes the full kernel to new memory. The `vmlinux` has no decompression, and its time does not change.
 
+Exits of the devices (2026-11-27, the 6.12.119 bzImage, a host with a load average of 5 to 10). A trace of each access of the guest to a device window gave these counts for one start to the answer:
+
+- The accesses come about 8 us apart during a probe, so one exit to this process and back costs about 8 us.
+- The console has 44 accesses from the first one to DRIVER_OK, in about 0.9 ms. vsock has 57, in about 1.7 ms. The rest of each probe is work in the guest.
+- After DRIVER_OK, vsock has one read of InterruptStatus and one write of InterruptACK for each interrupt: about 16 interrupts for each guest of `test-kvm.tcl`.
+
+The write to InterruptACK of vsock now goes to an ioeventfd with no reader, since the register of an external device has no state. This cut the exits of vsock from a mean of 89 to 73 for each guest. The read of InterruptStatus stays an exit: KVM has no ioeventfd for a read. The change in the time to the answer is less than the noise of this host.
+
+Two other changes were measured and left out. The medians of 6 runs of a bench in the guest (a read of a 32 MB disk with `dd`, a `cat` of a 32 MB file of a share, and an `ls -lR` of 500 files of a share):
+
+- An ioeventfd on QueueNotify of the console, the disks, and the entropy device, with an I/O thread that runs the requests. The disk reads did not change (29.6 and 30.4 ms with `bs=4k`). With 9p on the I/O thread too, the `cat` and the `ls -lR` were 25 to 47% slower in each of 3 runs. Each request of 9p waits for its answer, and the wake of the I/O thread costs more than the exit to the vCPU thread.
+- An irqfd in place of `KVM_IRQ_LINE` for these devices. The `cat` and the `ls -lR` were 11 to 18% slower, and in one run of 6 the agent did not answer. These tests did not find the cause. A possible cause is a wake of a kernel thread for each interrupt on an ISA line.
+
 ## The shared virtio devices
 
 The monitors that give the guest its devices on virtio-mmio (KVM, and the Windows Hypervisor Platform) share the transport and the devices that run in ztcl. They are in `src/vm/virtio/`, with no system calls:
