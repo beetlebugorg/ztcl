@@ -71,6 +71,50 @@ class El {
     for (; e; e = e.parent) if (e === this) return true;
     return false;
   }
+  get parentNode() {
+    return this.parent;
+  }
+  get isConnected() {
+    let top = this;
+    while (top.parent) top = top.parent;
+    return top === page;
+  }
+  get ownerDocument() {
+    return { createElement: (tag) => new El(tag) };
+  }
+  get classList() {
+    const list = () => (this.attrs.class ?? "").split(" ").filter((c) => c);
+    const put = (l) => (this.attrs.class = l.join(" "));
+    return {
+      add: (c) => list().includes(c) || put([...list(), c]),
+      remove: (c) => put(list().filter((x) => x !== c)),
+      toggle: (c) => (list().includes(c) ? (put(list().filter((x) => x !== c)), false) : (put([...list(), c]), true)),
+      contains: (c) => list().includes(c),
+    };
+  }
+  get style() {
+    this.css ??= {};
+    return { getPropertyValue: (p) => this.css[p] ?? "", setProperty: (p, v) => (this.css[p] = v) };
+  }
+  focus() {
+    focused = this;
+  }
+  appendChild(k) {
+    if (k.parent) k.remove();
+    return this.add(k);
+  }
+  remove() {
+    if (!this.parent) return;
+    this.parent.kids = this.parent.kids.filter((k) => k !== this);
+    this.parent = null;
+  }
+  get innerHTML() {
+    return this.kids.map((k) => `<${k.tag}>${k.textContent}</${k.tag}>`).join("") || this.own;
+  }
+  set innerHTML(h) {
+    this.own = h;
+    this.kids = [];
+  }
   matches(sel) {
     if (sel[0] === "#") return this.attrs.id === sel.slice(1);
     if (sel[0] === ".") return (this.attrs.class ?? "").split(" ").includes(sel.slice(1));
@@ -88,6 +132,8 @@ class El {
 }
 const root = new El("div").add(new El("p", { id: "msg", class: "note" }, "hello"), new El("p", { class: "note" }, "second"));
 const outside = new El("div").add(new El("p", { id: "secret" }, "outside"));
+const page = new El("body").add(root, outside);
+let focused = null;
 void outside;
 
 const plain = await Interp.create(host);
@@ -117,7 +163,49 @@ root.kids.pop().parent = null;
 const r2 = ev(`dom text ${second}`);
 check(!r2.ok && r2.result === `invalid DOM handle "${second}"`, `a handle outside the root is an error (got ${r2.result})`);
 check(!ev("dom text dom99").ok, "an unknown handle is an error");
+
+// #85 task 02: classes, styles, form values, focus, new elements, and HTML.
+ev("set m [dom query #msg]");
+check(ev("dom class $m add big; dom class $m has big").result === "1", "dom class add and has");
+check(ev("dom class $m toggle big").result === "0" && ev("dom class $m has big").result === "0", "dom class toggle");
+ev("dom class $m remove note");
+check(root.kids[0].attrs.class === "", "dom class remove");
+check(!ev("dom class $m paint x").ok, "dom class with a bad action is an error");
+ev("dom style $m color red");
+check(ev("dom style $m color").result === "red", "dom style");
+const input = new El("input", { id: "in" });
+input.value = "typed";
+const box = new El("input", { id: "box" });
+box.type = "checkbox";
+root.add(input, box);
+check(ev("dom value [dom query #in]").result === "typed", "dom value of an input");
+ev("dom value [dom query #in] new; dom value [dom query #box] 1");
+check(input.value === "new" && box.checked === true, "dom value sets an input and a checkbox");
+check(ev("dom value [dom query #box]").result === "1", "dom value of a checkbox");
+ev("dom focus [dom query #in]");
+check(focused === input, "dom focus");
+const made = ev("set li [dom create li]; set b [dom create b]; dom text $b bold; dom append $li $b; dom text $li");
+check(made.ok && made.result === "bold", `a new tree is in scope before dom append (got ${made.result})`);
+const ul = new El("ul", { id: "list" });
+root.add(ul);
+ev("dom append [dom query #list] $li");
+check(ul.kids[0]?.tag === "li" && ev("dom text [dom query li]").result === "bold", "dom append puts the tree below the root");
+check(!ev("dom append $li {}").ok, "an element cannot go below itself");
+for (const tag of ["script", "iframe", "object", "SCRIPT", "bad tag"]) check(!ev(`dom create {${tag}}`).ok, `dom create ${tag} is an error`);
+for (const [n, v] of [["onclick", "x()"], ["ONload", "x()"], ["href", "javascript:x()"], ["href", " java\tscript:x()"], ["srcdoc", "<b>"]]) {
+  check(!ev(`dom attr $m {${n}} {${v}}`).ok, `dom attr ${n}=${v} is an error`);
+}
+check(ev("dom attr $m href https://example.org").ok, "a plain href is allowed");
+check(ev("dom html $li").result === "<b>bold</b>", "dom html reads the HTML");
+check(!ev("dom html $li {<i>x</i>}").ok, "dom html set needs the grant dom-html");
+ev("dom remove $li");
+check(ul.kids.length === 0, "dom remove takes the element out");
+check(!ev("dom text $li").ok && !ev("dom text $b").ok, "the handles of a removed tree are invalid");
 d.close();
+const dh = await Interp.create(host, { allow: ["dom", "dom-html"], domRoot: root });
+const r3 = dh.eval("set e [dom create div]; dom html $e {<i>x</i>}; dom html $e");
+check(r3.ok && r3.result === "<i>x</i>", `dom html with the grant dom-html (got ${r3.result})`);
+dh.close();
 
 // #26 task 03: `clock` follows the clock of the host.
 const noClock = await Interp.create(host);

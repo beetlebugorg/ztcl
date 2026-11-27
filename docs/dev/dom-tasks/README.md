@@ -34,3 +34,12 @@ The commands go into `ztcl-host.wasm`, the module with imports of [the host API 
 1. Follow the rules of [the host API tasks](../wasm-host-tasks/README.md#rules-for-each-task).
 2. A command of `dom` uses one compute unit, and a text or a list that it returns counts in the memory limit.
 3. The same commands work for an interpreted script and for a bundle of `ztcl build --wasm`. Code compiled by #3 level 3 calls the same imports.
+
+## State
+
+| Task | State |
+|---|---|
+| 01 | merged |
+| 02 | in a PR |
+
+Task 02 also closes a gap of task 01: `dom attr el onclick SCRIPT` set an event attribute, so a click ran JavaScript. Now the host gives an error for each attribute whose name starts with `on`, for `srcdoc` and `is`, and for a value that starts with `javascript:` or `vbscript:` after the removal of white space and control characters. `dom create` gives an error for `script`, `iframe`, `frame`, `frameset`, `object`, `embed`, `base`, `link`, `meta`, and `template`, and for a tag name that is not letters, digits, and `-`. `dom append` has no form for the root as the parent: a script appends to an element below the root.
