@@ -94,3 +94,99 @@ proc joined {n} {
     list $s [dict size $d] [lindex [list a b c] $y-1]
 }
 puts [joined 4]
+# A `dict set` with two or more keys writes the inner dicts in place
+# when the cell owns the outer dict. Each read form of an inner dict
+# below gives a copy that a later write must not change.
+proc nest {n} {
+    set d {}
+    for {set i 0} {$i < $n} {incr i} {
+        dict set d [expr {$i % 5}] [expr {$i % 3}] $i
+    }
+    return $d
+}
+puts [nest 40]
+proc nestreads {} {
+    set d {}
+    set keep {}
+    for {set i 0} {$i < 30} {incr i} {
+        dict set d a b c $i
+        dict set d a x $i
+        switch [expr {$i % 10}] {
+            0 { lappend keep [dict get $d a] }
+            1 { lappend keep [dict get $d a b] }
+            2 { set c $d; lappend keep $c }
+            3 { foreach {k v} $d { lappend keep $v } }
+            4 { dict for {k v} $d { lappend keep $v } }
+            5 { lappend keep [lindex $d 1] [lindex $d 1 1] }
+            6 { dict update d a e {}; lappend keep $e }
+            7 { lappend keep [lrange $d 1 1] [lassign $d k] }
+            8 { lappend keep [dict get [dict get $d a] b] [dict values $d] }
+            9 { set m [dict merge $d]; lappend keep $m }
+        }
+        dict set d a b c [expr {$i * 100}]
+        dict set d a b y $i
+    }
+    list $d $keep
+}
+puts [nestreads]
+proc keep {v} { lappend ::held $v }
+set held {}
+proc nestpass {} {
+    set d {}
+    for {set i 0} {$i < 20} {incr i} {
+        dict set d p q $i
+        if {$i % 4 == 0} { keep [dict get $d p] }
+        if {$i % 4 == 1} { keep $d }
+        if {$i % 4 == 2} { upvar 0 d e; keep [dict get $e p] }
+        dict set d p q -$i
+    }
+    return $d
+}
+puts [list [nestpass] $held]
+proc nestedge {} {
+    set d {a {x}}
+    set r [list [catch {dict set d a b 1} m] $m $d]
+    set d {}
+    dict set d a 1
+    lappend r [catch {dict set d a b c 2} m] $m $d
+    set d {}
+    for {set i 0} {$i < 6} {incr i} { dict set d k$i m n $i }
+    dict set d k2 m z 7
+    dict set d k9 m n 9
+    lappend r $d [dict size $d]
+    set d {a {b 1 b 2}}
+    dict set d a c 3
+    lappend r $d
+    set d {}
+    dict set d a b 1
+    lset d 1 1 X
+    dict set d a c 2
+    lappend r $d
+    set l {}
+    for {set i 0} {$i < 3} {incr i} { lappend l [dict create k $i] }
+    set d [dict create l $l]
+    dict set d l 1
+    dict set d n o $i
+    lappend r $d
+}
+puts [nestedge]
+proc nesttrace {} {
+    set d {}
+    set ::fired 0
+    trace add variable d write {apply {args { incr ::fired }}}
+    for {set i 0} {$i < 5} {incr i} { dict set d a b $i }
+    list $d $::fired
+}
+puts [nesttrace]
+proc nestlist {} {
+    set d {}
+    set keep {}
+    for {set i 0} {$i < 12} {incr i} {
+        dict set d r [expr {$i % 3}] [list $i]
+        dict lappend d s $i
+        dict append d t $i
+        if {$i % 3 == 0} { lappend keep [dict get $d r] [dict get $d s] }
+    }
+    list $d $keep
+}
+puts [nestlist]
