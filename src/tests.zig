@@ -3620,3 +3620,25 @@ test "vm: the image releases, the highest version first" {
     try std.testing.expectEqual(@as(usize, 0), (try @import("microvm.zig").imageTags(arena.allocator(), "[]")).len);
     try std.testing.expectError(error.NotList, @import("microvm.zig").imageTags(arena.allocator(), "{}"));
 }
+
+test "a long source collects, also with the precise roots" {
+    // The file makes 200 MB of garbage under a limit of 16 MB. A precise
+    // build collects only in a clean chain of frames, and `source` keeps
+    // its script in that chain, so the run ends with no memory error.
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setRoot(&it, ".");
+    _ = try it.eval(
+        \\file mkdir .zig-cache/ztcl-source-gc
+        \\set f [open .zig-cache/ztcl-source-gc/churn.tcl w]
+        \\puts $f {for {set i 0} {$i < 2000} {incr i} { set s [string repeat x 100000] }; set done 1}
+        \\close $f
+    );
+    it.mem_limit = it.memUsed() + (16 << 20);
+    _ = try it.eval("source .zig-cache/ztcl-source-gc/churn.tcl");
+    try std.testing.expectEqual(@as(?i64, 1), (try it.eval("set done")).asInt());
+    it.mem_limit = std.math.maxInt(usize);
+    _ = try it.eval("file delete -force .zig-cache/ztcl-source-gc");
+}
