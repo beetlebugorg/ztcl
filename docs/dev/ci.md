@@ -101,4 +101,76 @@ Measured over the 278 CI runs of 2026-11-25 to 2026-11-27: a pull request run to
 
 The JIT job on arm64 also skips the times of the JIT on pull requests: that step checks nothing.
 
-The job `Linux ok` needs each job of the run. It passes when each job passed or was skipped, and it fails when a job failed or was cancelled. Merge tools look at this one check.
+The job `Linux ok` needs each job of the run. It passes when each job passed or was skipped, and it fails when a job failed or was cancelled.
+
+## Pull requests: the quick check and QA (2026-11-27)
+
+The gate of a pull request is the commit status `qa/linux` (required), and `qa/macos` and `qa/windows` when the change touches their code. The QA agents test the head commit of each pull request on our machines and post these statuses. The release agent merges on them. The process is in the workflow pipeline of the project specs.
+
+GitHub CI on a pull request is advisory. It runs only:
+
+- `changes`. Its log shows the jobs that the changed files pick (`tools/ci-changes.sh` with the table above), so that QA runs the same set.
+- `Quick check`: `zig fmt --check build.zig src`, `zig build`, and one script.
+- `Linux ok`.
+
+Each push to main runs the full Linux set, and the scheduled run every 6 hours runs the full matrix of each OS. Both are the same as before. When main goes red, the release agent stops the merges and opens a fix.
+
+## Our own runners (2026-11-27)
+
+The account can run a fixed number of jobs on the runners of GitHub at one time, and the runs of all the repositories wait for these slots. Our own runner adds a slot. It runs the Linux x64 jobs of a push to main that run in a container: the C packages, the suite, the wasm compile jobs, WASI, the wasm engine, and the Linux ztcl build. The Test job needs user namespaces and a cgroup of its own, the WebAssembly job needs Chrome, and the docs job needs the Python of setup-python, so these jobs stay on GitHub.
+
+### Routing
+
+The variable `CI_SELF_HOSTED` of the repository picks where the jobs of a push to main run: `main` for our runner, `off` or no value for GitHub. Pull requests, the scheduled full run, runs by hand, `ci-image.yml`, `release.yml`, `npm.yml`, the VM image release, and the environment `vm-release` always run on GitHub. A push that changes `ci/runner/` also runs on GitHub, because the image of its Dockerfile is not published yet.
+
+GitHub has no fallback from a busy or offline runner to its own runners, and the `GITHUB_TOKEN` of a job cannot read the state of the runners. When our runner is offline, set the variable to `off`:
+
+```sh
+gh variable set CI_SELF_HOSTED -R beetlebugorg/ztcl -b off
+```
+
+The 6-hourly full run always runs on GitHub, so it also checks main when our runner is offline.
+
+### The image
+
+`ci/runner/Dockerfile` builds the image: Ubuntu 24.04 (pinned by digest), Zig 0.17.0 and Node.js 22 (each pinned by SHA-256), Tcl 8.6 with its headers, qemu-user, Python 3, git, and curl. `ci-image.yml` builds it for x86-64 and arm64 on a push to main that changes `ci/runner/`, and publishes `ghcr.io/beetlebugorg/ztcl-ci:<tag>`. The tag is the first 16 digits of the SHA-256 of the Dockerfile, and `ci.yml` computes the same tag.
+
+### Threat model
+
+- The repositories are public. A pull request can have any code, so no pull request runs on our runner: only pushes to main do, and only collaborators can push to main. The workflows of a fork need an approval.
+- Each job runs in a new container of the image. The container drops each capability, has `no-new-privileges`, and runs as the user `ci` (uid 1000, the uid of the runner, in no other group). It has a limit of 4 CPUs, 8 GB of memory, and 4,096 processes, and a CPU share of 256.
+- The runner of GitHub mounts the socket of Docker into each job container. The socket on the host is `root:docker`, mode 660, and the user `ci` is not in that group, so a job cannot open it. The runner refuses a job with no `container:` (`ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER=true`).
+- The Zig cache is the volume `ztcl-zig-main`. Only pushes to main write it. The QA agents keep their caches of pull requests apart from it.
+- No job on our runners has a secret: release, signing, npm, and the VM image release run on GitHub.
+- No job gets `/dev/kvm` or a privileged container. The KVM tests stay in `vm-guest.yml` on GitHub.
+
+### Set up a runner on a Linux host
+
+Run these commands as the user that owns the runner (not root). The user must be in the group `docker`. Get the token from Settings, Actions, Runners, New self-hosted runner, of the repository. Do not keep the token in a file.
+
+```sh
+repo=ztcl   # also ztk and dockyard
+v=2.329.0   # the version that the settings page shows
+mkdir -p ~/.local/share/gh-runners/$repo && cd ~/.local/share/gh-runners/$repo
+curl -sSfLO https://github.com/actions/runner/releases/download/v$v/actions-runner-linux-x64-$v.tar.gz
+tar -xzf actions-runner-linux-x64-$v.tar.gz
+./config.sh --url https://github.com/beetlebugorg/$repo --name linux-x64-1 \
+  --labels docker,trusted --unattended --token <TOKEN>
+echo ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER=true >> .env
+systemctl --user enable --now gh-runner@$repo
+loginctl enable-linger "$USER"
+```
+
+The unit `~/.config/systemd/user/gh-runner@.service` runs `run.sh` with `Nice=10`, `CPUWeight=20`, `IOWeight=20`, and `MemoryMax=6G`. The containers are children of dockerd, so their limits come from the options of the job.
+
+Then turn on the runner for the repository:
+
+```sh
+gh variable set CI_SELF_HOSTED -R beetlebugorg/ztcl -b main
+```
+
+The package `ztcl-ci` on GitHub must be public, so that a runner pulls it with no token: Packages, ztcl-ci, Package settings, Change visibility, Public.
+
+### Set up a runner on a Mac
+
+The runner of GitHub runs job containers only on Linux. On a Mac, the runner runs in a Linux arm64 container of Docker Desktop, and it starts the job containers next to it through the socket of Docker Desktop. The work directory must have the same path in the runner container and in the VM of Docker Desktop. The labels are `self-hosted`, `Linux`, `ARM64`, `docker`, and `trusted`. No job of `ci.yml` uses the label `ARM64` yet: the JIT job on arm64 moves there in a later change.
