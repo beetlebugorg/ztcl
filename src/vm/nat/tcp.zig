@@ -49,6 +49,8 @@ const none: u16 = 0xffff;
 pub const in_cap = 256 * 1024;
 /// The bytes of the guest that the host socket did not take yet.
 pub const out_cap = 256 * 1024;
+/// The receive buffer of a host socket in peek mode.
+const peek_rcvbuf = 4 << 20;
 /// The window scale that the engine sends: windows of up to 1 MB.
 const our_ws: u5 = 4;
 /// The MSS that the engine sends: the MTU of the device is 1,500.
@@ -195,6 +197,15 @@ pub const Conn = struct {
     snd_wl1: u32 = 0,
     snd_wl2: u32 = 0,
     in: Ring = .{},
+    /// Peek mode (Linux, in process): the bytes of the host stay in the
+    /// socket until the guest acknowledges them, and each segment is a
+    /// `recvmsg` with MSG_PEEK straight into the receive buffers of the
+    /// guest. `peek_off` is the peek offset of the socket, from
+    /// `snd_una`. `in` is not used.
+    peek: bool = false,
+    peek_off: u32 = 0,
+    /// The end of the bytes of the host, once `host_eof`, in peek mode.
+    eof_end: u32 = 0,
     host_eof: bool = false,
     fin_acked: bool = false,
     mss: u16 = 536,
@@ -223,6 +234,7 @@ pub const Conn = struct {
     bytes_out: u64 = 0,
 
     fn dataEnd(c: *const Conn) u32 {
+        if (c.peek) return if (c.host_eof) c.eof_end else c.snd_max;
         return c.snd_una +% @as(u32, @intCast(c.in.len));
     }
 
@@ -394,7 +406,14 @@ fn open(n: *Nat, s: *const Seg) void {
 /// The connect of the host socket ended well: SYN-ACK to the guest.
 fn connected_(n: *Nat, ci: u16) void {
     const c = &tcpOf(n).conns[ci];
-    c.in.buf = n.alloc.alloc(u8, in_cap) catch return abort(n, ci, true);
+    if (n.canFill()) {
+        c.peek = true;
+        os.setPeekOff(c.fd, 0);
+        // The bytes in flight to the guest stay in the socket, so its
+        // receive buffer must hold them and still give the sender a
+        // window: the default size of the system is too small for that.
+        os.setRcvBuf(c.fd, peek_rcvbuf);
+    } else c.in.buf = n.alloc.alloc(u8, in_cap) catch return abort(n, ci, true);
     c.state = .syn_rcvd;
     c.snd_una = c.iss;
     c.snd_nxt = c.iss +% 1;
@@ -476,7 +495,11 @@ fn onAck(n: *Nat, ci: u16, s: *const Seg) void {
             c.fin_acked = true;
             acked -= 1;
         }
-        c.in.consume(acked);
+        if (c.peek) {
+            if (acked > 0 and os.discard(c.fd, acked) != @as(isize, acked)) return abort(n, ci, true);
+            c.peek_off -|= acked;
+            c.bytes_in += acked;
+        } else c.in.consume(acked);
         c.snd_una = s.ack;
         if (lt(c.snd_nxt, c.snd_una)) c.snd_nxt = c.snd_una;
         if (c.timing and le(c.rtt_seq, s.ack)) {
@@ -642,7 +665,7 @@ fn flushOut(n: *Nat, ci: u16) void {
 
 fn readHost(n: *Nat, ci: u16) void {
     const c = &tcpOf(n).conns[ci];
-    if (c.state != .open or c.host_eof) return;
+    if (c.state != .open or c.host_eof or c.peek) return;
     while (c.in.free() > 0) {
         const sp = c.in.space();
         const iov = [2]os.IovMut{ .{ .base = sp[0].ptr, .len = sp[0].len }, .{ .base = sp[1].ptr, .len = sp[1].len } };
@@ -668,6 +691,7 @@ fn readHost(n: *Nat, ci: u16) void {
 fn push(n: *Nat, ci: u16) void {
     const c = &tcpOf(n).conns[ci];
     if (c.state != .open or c.blocked) return;
+    if (c.peek) return pushPeek(n, ci);
     const end = c.dataEnd();
     while (true) {
         const off: u32 = c.snd_nxt -% c.snd_una;
@@ -695,6 +719,78 @@ fn push(n: *Nat, ci: u16) void {
     }
 }
 
+/// `push` in peek mode: the socket holds the bytes, so each segment is
+/// a peek, and EOF shows as a peek of 0 bytes at the end.
+fn pushPeek(n: *Nat, ci: u16) void {
+    const c = &tcpOf(n).conns[ci];
+    while (true) {
+        if (c.host_eof and !lt(c.snd_nxt, c.eof_end)) {
+            if (c.snd_nxt != c.eof_end or c.fin_acked) return;
+            if (!sendData(n, ci, c.eof_end, 0, true)) return;
+            c.snd_nxt +%= 1;
+        } else {
+            const room: i32 = @bitCast(c.snd_una +% c.snd_wnd -% c.snd_nxt);
+            if (room <= 0) {
+                if (c.timer == 0) setTimer(n, c, engine.now() + c.rto);
+                return;
+            }
+            var max: u32 = @min(@as(u32, @intCast(room)), segMax(n, c));
+            if (c.host_eof) max = @min(max, c.eof_end -% c.snd_nxt);
+            const seq = c.snd_nxt;
+            switch (sendPeek(n, ci, seq, max)) {
+                .sent => |k| {
+                    if (!c.timing and c.snd_nxt == c.snd_max) {
+                        c.timing = true;
+                        c.rtt_seq = seq +% @as(u32, @intCast(k));
+                        c.rtt_t = engine.now();
+                    }
+                    c.snd_nxt +%= @intCast(k);
+                },
+                .no_room => return,
+                .fill => |e| {
+                    if (e == 0) {
+                        // A peek at the end of a closed stream.
+                        c.host_eof = true;
+                        c.eof_end = c.snd_nxt;
+                        continue;
+                    }
+                    if (e == -@as(isize, @backingInt(std.posix.E.AGAIN))) return;
+                    return abort(n, ci, true);
+                },
+            }
+        }
+        if (lt(c.snd_max, c.snd_nxt)) c.snd_max = c.snd_nxt;
+        if (c.timer == 0) setTimer(n, c, engine.now() + c.rto);
+    }
+}
+
+/// One segment of up to `max` bytes from `seq`, peeked from the socket
+/// into the receive buffers of the guest.
+fn sendPeek(n: *Nat, ci: u16, seq: u32, max: u32) vnet.Net.Filled {
+    const t = tcpOf(n);
+    const c = &t.conns[ci];
+    const off = seq -% c.snd_una;
+    if (off != c.peek_off) {
+        os.setPeekOff(c.fd, @intCast(off));
+        c.peek_off = off;
+    }
+    const f: Nat.SegFill = .{ .fd = c.fd, .src = c.dst, .sport = c.dport, .dport = c.sport, .seq = seq, .ackn = c.rcv_nxt, .wnd = @intCast(@min(c.rwnd() >> c.ws_ours, 65535)), .mss = c.mss };
+    const r = n.sendFill(&f, max);
+    switch (r) {
+        .sent => |k| {
+            c.peek_off +%= @intCast(k);
+            c.ack_due = false;
+        },
+        .no_room => if (!c.blocked) {
+            c.blocked = true;
+            t.blocked[t.nblocked] = ci;
+            t.nblocked += 1;
+        },
+        .fill => {},
+    }
+    return r;
+}
+
 fn segMax(n: *Nat, c: *const Conn) u32 {
     if (n.guestTso()) return gso_max / c.mss * c.mss;
     return c.mss;
@@ -705,6 +801,16 @@ fn segMax(n: *Nat, c: *const Conn) u32 {
 fn retransmitOne(n: *Nat, ci: u16) void {
     const c = &tcpOf(n).conns[ci];
     c.timing = false;
+    if (c.peek) {
+        var max = @min(c.dataEnd() -% c.snd_una, segMax(n, c));
+        if (c.has_sack) max = @min(max, c.sack_left -% c.snd_una);
+        if (max == 0) {
+            if (c.host_eof and !c.fin_acked) _ = sendData(n, ci, c.eof_end, 0, true);
+            return;
+        }
+        _ = sendPeek(n, ci, c.snd_una, max);
+        return;
+    }
     var len: u32 = @intCast(@min(c.in.len, segMax(n, c)));
     if (c.has_sack) len = @min(len, c.sack_left -% c.snd_una);
     if (len == 0) {
@@ -724,7 +830,7 @@ fn sendData(n: *Nat, ci: u16, seq: u32, len: u32, f: bool) bool {
     if (f) flags |= fin;
     if (len > 0) flags |= psh;
     const wnd = c.rwnd() >> c.ws_ours;
-    const sl = c.in.slices(seq -% c.snd_una, len);
+    const sl: [2][]const u8 = if (len == 0) .{ &.{}, &.{} } else c.in.slices(seq -% c.snd_una, len);
     if (!n.sendSeg(c.dst, c.dport, c.sport, seq, c.rcv_nxt, flags, @intCast(@min(wnd, 65535)), &.{}, &sl, c.mss)) {
         if (!c.blocked) {
             c.blocked = true;
@@ -809,7 +915,15 @@ pub fn tick(n: *Nat, now_ns: u64) void {
         switch (c.state) {
             .syn_rcvd => sendSynAck(n, c),
             .open => {
-                if (c.snd_una == c.snd_max and c.in.len > 0) {
+                if (c.peek and c.snd_una == c.snd_max and !c.host_eof) {
+                    // A probe of a zero window, in peek mode.
+                    switch (sendPeek(n, ci, c.snd_una, 1)) {
+                        .sent => if (c.snd_max == c.snd_una) {
+                            c.snd_max +%= 1;
+                        },
+                        else => {},
+                    }
+                } else if (!c.peek and c.snd_una == c.snd_max and c.in.len > 0) {
                     // A probe of a zero window: one byte past it.
                     _ = sendData(n, ci, c.snd_una, 1, false);
                     if (c.snd_max == c.snd_una) c.snd_max +%= 1;

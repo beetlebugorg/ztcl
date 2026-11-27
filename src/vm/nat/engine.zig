@@ -94,6 +94,8 @@ pub const Port = struct {
     /// The features that the driver accepted, for the offloads to the
     /// guest (`vnet.f_guest_csum`, `vnet.f_guest_tso4`).
     features: ?*const fn (ctx: *anyopaque) u64 = null,
+    /// One frame with its payload written in place (`vnet.Net.deliverFill`).
+    deliverFill: ?*const fn (ctx: *anyopaque, head: []u8, max: usize, min: usize, f: vnet.Net.Fill) vnet.Net.Filled = null,
 };
 
 pub const Stats = struct {
@@ -662,8 +664,10 @@ pub const Nat = struct {
     /// payload goes through `emit`; a segment with payload gives false
     /// when the guest has no room, and then nothing went out. A payload
     /// longer than `mss` goes as one GSO frame.
-    pub fn sendSeg(n: *Nat, src: Ip4, sport: u16, dport: u16, seq: u32, ackn: u32, flags: u8, wnd: u16, opts: []const u8, pl: *const [2][]const u8, mss: u16) bool {
-        const len = pl[0].len + pl[1].len;
+    /// Writes the Ethernet, IPv4, and TCP headers of a segment to the
+    /// guest in `n.tcp.hdr`, for `len` bytes of payload, with the IPv4
+    /// checksum and a zero TCP checksum.
+    fn segHead(n: *Nat, src: Ip4, sport: u16, dport: u16, seq: u32, ackn: u32, flags: u8, wnd: u16, opts: []const u8, len: usize) []u8 {
         const th_len = 20 + opts.len;
         const hl = 34 + th_len;
         const o = &n.tcp.hdr;
@@ -692,6 +696,80 @@ pub const Nat = struct {
         std.mem.writeInt(u16, th[14..16], wnd, .big);
         std.mem.writeInt(u32, th[16..20], 0, .big);
         @memcpy(th[20..], opts);
+        return o[0..hl];
+    }
+
+    /// The fields of a data segment that `sendFill` sends.
+    pub const SegFill = struct {
+        fd: i32,
+        src: Ip4,
+        sport: u16,
+        dport: u16,
+        seq: u32,
+        ackn: u32,
+        wnd: u16,
+        mss: u16,
+    };
+
+    /// A data segment whose payload the host socket `f.fd` writes
+    /// straight into the receive buffers of the guest, with `MSG_PEEK`:
+    /// the bytes stay in the socket until the guest acknowledges them.
+    /// At most `max` bytes, and at least one MSS when the queue has
+    /// room for less than `max`.
+    pub fn sendFill(n: *Nat, f: *const SegFill, max: usize) vnet.Net.Filled {
+        const p = n.port orelse return .no_room;
+        const df = p.deliverFill orelse return .no_room;
+        if (n.ring_n > 0) n.flushRing();
+        if (n.ring_n > 0) return .no_room;
+        const head = n.segHead(f.src, f.sport, f.dport, f.seq, f.ackn, tcp.ack | tcp.psh, f.wnd, &.{}, max);
+        const r = df(p.ctx, head, max, @min(max, f.mss), .{ .ctx = @constCast(f), .fill = fillPeek, .fix = fixSeg });
+        switch (r) {
+            .sent => {
+                n.delivered = true;
+                n.stats_.to_guest += 1;
+            },
+            .no_room => n.rx_wanted.store(true, .release),
+            .fill => {},
+        }
+        return r;
+    }
+
+    fn fillPeek(ctx: *anyopaque, iov: []const std.posix.iovec) isize {
+        const f: *const SegFill = @ptrCast(@alignCast(ctx));
+        return os.recvPeek(f.fd, iov);
+    }
+
+    /// The headers for the count that the peek gave: the lengths, the
+    /// IPv4 checksum, and the partial TCP checksum.
+    fn fixSeg(ctx: *anyopaque, head: []u8, got: usize) Hdr {
+        const f: *const SegFill = @ptrCast(@alignCast(ctx));
+        const ip = head[14..34];
+        std.mem.writeInt(u16, ip[2..4], @intCast(40 + got), .big);
+        std.mem.writeInt(u16, ip[10..12], 0, .big);
+        std.mem.writeInt(u16, ip[10..12], nat.checksum(ip, 0), .big);
+        const ps = nat.pseudo(f.src, nat.guest_ip, 6, 20 + got);
+        std.mem.writeInt(u16, head[50..52], ~nat.checksum(&.{}, ps), .big);
+        var h: Hdr = .{ .flags = vnet.hdr_needs_csum, .csum_start = 34, .csum_offset = 16, .hdr_len = 54 };
+        if (got > f.mss) {
+            h.gso_type = vnet.gso_tcpv4;
+            h.gso_size = f.mss;
+        }
+        return h;
+    }
+
+    /// The path of `sendFill`: in process, with the partial checksum of
+    /// the guest, and on Linux (`SO_PEEK_OFF`).
+    pub fn canFill(n: *const Nat) bool {
+        const p = n.port orelse return false;
+        return os.has_peek and p.deliverFill != null and n.features() & vnet.f_guest_csum != 0;
+    }
+
+    pub fn sendSeg(n: *Nat, src: Ip4, sport: u16, dport: u16, seq: u32, ackn: u32, flags: u8, wnd: u16, opts: []const u8, pl: *const [2][]const u8, mss: u16) bool {
+        const len = pl[0].len + pl[1].len;
+        const th_len = 20 + opts.len;
+        const hl = 34 + th_len;
+        const o = n.segHead(src, sport, dport, seq, ackn, flags, wnd, opts, len);
+        const th = o[34..hl];
         const ps = nat.pseudo(src, nat.guest_ip, 6, th_len + len);
         if (len == 0) {
             std.mem.writeInt(u16, th[16..18], nat.checksum(th, ps), .big);
@@ -944,6 +1022,25 @@ const linux_os = struct {
     pub fn recvv(fd: i32, iov: []const IovMut) isize {
         return sres(linux.readv(fd, iov.ptr, iov.len));
     }
+    pub const has_peek = true;
+    /// Reads at the peek offset of the socket, and leaves the bytes in it.
+    pub fn recvPeek(fd: i32, iov: []const std.posix.iovec) isize {
+        var m: linux.msghdr = .{ .name = null, .namelen = 0, .iov = @constCast(iov.ptr), .iovlen = iov.len, .control = null, .controllen = 0, .flags = 0 };
+        return sres(linux.recvmsg(fd, &m, linux.MSG.PEEK | linux.MSG.DONTWAIT));
+    }
+    /// Drops the first `len` bytes of the socket (TCP with MSG_TRUNC).
+    pub fn discard(fd: i32, len: usize) isize {
+        // With MSG_TRUNC, TCP drops the bytes and writes none to the
+        // buffer.
+        var none: [1]u8 = undefined;
+        return sres(linux.recvfrom(fd, &none, len, linux.MSG.TRUNC | linux.MSG.DONTWAIT, null, null));
+    }
+    pub fn setPeekOff(fd: i32, off: i32) void {
+        _ = setsockopt(fd, linux.SOL.SOCKET, linux.SO.PEEK_OFF, std.mem.asBytes(&off));
+    }
+    pub fn setRcvBuf(fd: i32, size: c_int) void {
+        _ = setsockopt(fd, linux.SOL.SOCKET, linux.SO.RCVBUF, std.mem.asBytes(&size));
+    }
     pub fn sockError(fd: i32) i32 {
         var v: i32 = 0;
         var l: linux.socklen_t = 4;
@@ -1087,6 +1184,15 @@ const mac_os = struct {
     pub fn recvv(fd: i32, iov: []const IovMut) isize {
         return res(c.readv(fd, iov.ptr, @intCast(iov.len)));
     }
+    pub const has_peek = false;
+    pub fn recvPeek(_: i32, _: []const std.posix.iovec) isize {
+        return -1;
+    }
+    pub fn discard(_: i32, _: usize) isize {
+        return -1;
+    }
+    pub fn setPeekOff(_: i32, _: i32) void {}
+    pub fn setRcvBuf(_: i32, _: c_int) void {}
     pub fn sockError(fd: i32) i32 {
         var v: i32 = 0;
         var l: c.socklen_t = 4;

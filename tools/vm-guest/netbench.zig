@@ -81,7 +81,13 @@ fn readSome(fd: i32, b: []u8) usize {
     return if (ok(r)) r else 0;
 }
 
-var big: [buf_len]u8 = @splat('x');
+/// The bytes of the source: the byte at offset i of a stream is i mod
+/// 251, so that the reader finds bytes out of place.
+var big: [buf_len * 2]u8 = undefined;
+
+fn fillBig() void {
+    for (&big, 0..) |*b, i| b.* = @intCast(i % 251);
+}
 
 fn sinkConn(fd: i32) void {
     var b: [buf_len]u8 = undefined;
@@ -94,7 +100,11 @@ fn sourceConn(fd: i32) void {
     var m: [4]u8 = undefined;
     if (readSome(fd, &m) != 4) return;
     const mb = std.mem.readInt(u32, &m, .little);
-    for (0..mb) |_| if (!writeAll(fd, &big)) break;
+    var off: usize = 0;
+    for (0..mb) |_| {
+        if (!writeAll(fd, big[off % 251 ..][0..buf_len])) break;
+        off += buf_len;
+    }
     _ = linux.close(fd);
 }
 
@@ -140,11 +150,12 @@ fn stream(j: Job) void {
         while (true) {
             const k = readSome(fd, &b);
             if (k == 0) break;
+            if (!std.mem.eql(u8, b[0..k], big[@intCast(got % 251)..][0..k])) die("bytes out of place");
             got += k;
         }
         if (got != @as(u64, j.mb) << 20) die("short read");
     } else {
-        for (0..j.mb) |_| if (!writeAll(fd, &big)) die("write");
+        for (0..j.mb) |_| if (!writeAll(fd, big[0..buf_len])) die("write");
         _ = linux.shutdown(fd, linux.SHUT.WR);
         var b: [16]u8 = undefined;
         _ = readSome(fd, &b);
@@ -192,6 +203,7 @@ fn crr(ip: [4]u8, port: u16, count: usize) void {
 }
 
 pub fn main(init: std.process.Init.Minimal) void {
+    fillBig();
     var it = init.args.iterate();
     _ = it.next();
     const cmd = it.next() orelse die("usage: netbench serve|send|recv|rr|crr ...");
