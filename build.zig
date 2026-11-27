@@ -175,8 +175,10 @@ pub fn build(b: *std.Build) void {
         .optimize = .fast,
     })) })).step);
     b.step("tls-x509-test", "Run the x509-limbo cases of the chain checks: zig build tls-x509-test -- limbo.json").dependOn(&limbo.step);
+    const tls_test = b.step("tls-test", "Run the unit tests of the TLS code");
+    test_step.dependOn(tls_test);
     inline for (.{ "src/tls/aead.zig", "src/tls/record.zig", "src/tls/der.zig", "src/tls/x509.zig", "src/tls/pem.zig", "src/tls/chain.zig", "src/tls/roots.zig", "src/tls/messages.zig", "src/tls/client_vectors.zig", "src/tls/server_vectors.zig" }) |f| {
-        test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = withCrypto(b, b.createModule(.{
+        tls_test.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = withCrypto(b, b.createModule(.{
             .root_source_file = b.path(f),
             .target = target,
             .optimize = optimize,

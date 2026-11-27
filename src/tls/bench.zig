@@ -103,4 +103,23 @@ pub fn main() !void {
         }
         std.debug.print("AES-{d}-GCM alone\tseal {d:.0} MB/s\topen {d:.0} MB/s\n", .{ kl * 8, best_seal, best_open });
     }
+    // ChaCha20-Poly1305 alone for small and large messages: a small one
+    // shows the fixed cost of a message (the key of Poly1305, the tail).
+    const cc = aead.ChaCha.init(&@as([32]u8, @splat(9)));
+    inline for (.{ 64, 256, 1350, 16384 }) |len| {
+        var m: [len]u8 = @splat(7);
+        var tag: [16]u8 = undefined;
+        const nonce: [12]u8 = @splat(1);
+        var best: u64 = std.math.maxInt(u64);
+        for (0..5) |_| {
+            const reps = 4_000_000 / len + 100;
+            const a = nowNs();
+            for (0..reps) |_| {
+                cc.seal(&m, &tag, &m, "", &nonce);
+                std.mem.doNotOptimizeAway(&tag);
+            }
+            best = @min(best, (nowNs() - a) / reps);
+        }
+        std.debug.print("ChaCha20-Poly1305 alone, {d} bytes\tseal {d} ns\t{d:.0} MB/s\n", .{ len, best, @as(f64, len) * 1000 / @as(f64, @floatFromInt(@max(best, 1))) });
+    }
 }
