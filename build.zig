@@ -46,6 +46,17 @@ pub fn build(b: *std.Build) void {
     const tsan = b.option(bool, "tsan", "Build with ThreadSanitizer") orelse false;
     // `-Dtsan-plant=true` plants a race for the check of `tools/tsan.sh`:
     // each `tsv::incr` adds 1 to one global word with no lock.
+    // The test key of the signed guest images (src/vmimage.zig) in a build
+    // that is not a test: for the check of a signature of the test key in
+    // the CI of the image.
+    const vm_test_key = b.option(bool, "vm-test-key", "Trust the test key of the VM images (Debug builds only)") orelse false;
+    // Anyone can sign with the test key, which is in the repository, so a
+    // release build never trusts it.
+    if (vm_test_key and optimize != .debug) {
+        std.debug.print("-Dvm-test-key needs -Doptimize=Debug: a release build never trusts the test key of the VM images\n", .{});
+        std.process.exit(1);
+    }
+    gc_options.addOption(bool, "vm_test_key", vm_test_key);
     gc_options.addOption(bool, "tsan_plant", b.option(bool, "tsan-plant", "Plant a race for the ThreadSanitizer check") orelse false);
     const libc: ?bool = if (tsan or cext) true else null;
 

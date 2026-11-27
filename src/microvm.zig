@@ -66,7 +66,14 @@ pub const agent_port: u32 = 1024;
 
 const usage = "ztcl::vm create|start|stop|status|vsock|console|delete ?arg ...?";
 
+var warned = std.atomic.Value(bool).init(false);
+
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {
+    // A build that trusts the test key of the images says so, once.
+    const vmimage = @import("vmimage.zig");
+    if (comptime vmimage.trusts_test_key and !builtin.is_test) {
+        if (!warned.swap(true, .monotonic)) std.debug.print("{s}\n", .{vmimage.test_key_warning});
+    }
     try it.register("ztcl::vm", cmdVm);
 }
 
