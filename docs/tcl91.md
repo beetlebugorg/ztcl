@@ -30,7 +30,7 @@ These commands and subcommands exist only in Tcl 9.1. In 8.6 they are absent, as
 - The option `-integer` of `switch`.
 - The math functions of TIP 521 and TIP 745, such as `trunc()`, `log2()`, `isnan()`, and `signbit()`, and the commands `divmod`, `fpclassify`, `frexp`, `modf`, and `remquo`. The last digit of a function result can differ from tclsh 9.1.0, and the [reference](reference/README.md) lists the other differences.
 - The option `-stride` of `lsearch`.
-- `string insert`, the class `dict` of `string is`, `dict getdef` and `dict getwithdefault`, and `array for`.
+- `string insert`, the class `dict` of `string is`, `dict getdef` and `dict getwithdefault`, `array for`, and `array default`.
 - `encoding profiles`, `encoding user`, and the options `-profile` and `-failindex` of `encoding convertfrom` and `encoding convertto`.
 - The channel option `-profile`.
 
@@ -108,7 +108,7 @@ A name with a namespace, such as `a::v`, also resolves only from the current nam
 These parts of Tcl 9.1 are not in ztcl yet. A script that uses them gets an error, or the behavior of 8.6. [The TIP survey](dev/tips.md) lists each TIP and its issue.
 
 - The commands `const`, `timer`, `unicode`, `tcl::process`, `coroinject`, and `coroprobe`.
-- `array default`, `info cmdtype`, `info constant`, `info consts`, `interp set`, `chan isbinary`, `file home`, `file tildeexpand`, `file tempdir`, `clock monotonic`, and `package files`.
+- `info cmdtype`, `info constant`, `info consts`, `interp set`, `chan isbinary`, `file home`, `file tildeexpand`, `file tempdir`, `clock monotonic`, and `package files`.
 - The options `-backslashes`, `-commands`, and `-variables` of `subst`.
 - The removal of the old forms of `trace` (`variable`, `vdelete`, `vinfo`).
 - The changes of `format` for 64-bit values, such as `format %x -1`, and integers above 64 bits in `string is integer`.

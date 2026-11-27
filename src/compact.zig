@@ -91,6 +91,19 @@ pub const Copier = struct {
         return obj;
     }
 
+    /// A copy of the array `m` in a new box, with its default.
+    fn array(c: *Copier, m: *interp.ArrayMap) Allocator.Error!*interp.ArrayMap {
+        const map = try interp.newArray(c.a);
+        try map.ensureTotalCapacity(c.a, m.count());
+        for (m.keys(), m.values()) |k, v| map.putAssumeCapacity(k, v);
+        for (map.keys()) |*k| try c.text(k);
+        for (map.values()) |*v| try c.val(v);
+        const d = interp.arrayDefault(map);
+        d.* = interp.arrayDefault(m).*;
+        if (d.*) |*v| try c.val(v);
+        return map;
+    }
+
     fn cell(c: *Copier, old: *Var) Allocator.Error!*Var {
         const gop = try c.cells.getOrPut(c.temp, old);
         if (gop.found_existing) return gop.value_ptr.*;
@@ -143,22 +156,12 @@ pub const Copier = struct {
                     try c.val(&job.new.v.val);
                 },
                 .arr => |m| {
-                    const map = try c.a.create(interp.ArrayMap);
-                    map.* = .empty;
-                    try map.ensureTotalCapacity(c.a, m.count());
-                    for (m.keys(), m.values()) |k, v| map.putAssumeCapacity(k, v);
-                    for (map.keys()) |*k| try c.text(k);
-                    for (map.values()) |*v| try c.val(v);
+                    const map = try c.array(m);
                     job.new.v = .{ .arr = map };
                 },
             },
             .arr => |m| {
-                const map = try c.a.create(interp.ArrayMap);
-                map.* = .empty;
-                try map.ensureTotalCapacity(c.a, m.count());
-                for (m.keys(), m.values()) |k, v| map.putAssumeCapacity(k, v);
-                for (map.keys()) |*k| try c.text(k);
-                for (map.values()) |*v| try c.val(v);
+                const map = try c.array(m);
                 job.new.v = .{ .arr = map };
             },
         }

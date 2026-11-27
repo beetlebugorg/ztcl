@@ -169,6 +169,7 @@ sub: array get NAME ?PATTERN? | A list of names and values.
 sub: array names NAME ?MODE? ?PATTERN? | The element names.
 sub: array exists NAME | 1 when the variable is an array.
 sub: array for {KEYVAR VALUEVAR} NAME BODY | Runs BODY once for each element of a copy of the array.
+sub: array default get|set|exists|unset NAME ?VALUE? | The value that a read of a missing element gives.
 sub: array size NAME | The count of elements.
 sub: array unset NAME ?PATTERN? | Removes the elements, or the whole array.
 sub: array statistics NAME | Text about the hash table.

@@ -182,7 +182,7 @@ The issue column links the issue of the missing part. One issue can cover more t
 | [512](https://core.tcl-lang.org/tips/doc/trunk/tip/512.md) | No stub for Tcl_SetExitProc() | 8.7 | Final | n/a: C API |  |
 | [511](https://core.tcl-lang.org/tips/doc/trunk/tip/511.md) | Implement Tcl_AsyncMarkFromSignal() | 8.7 | Final | n/a: C API |  |
 | [509](https://core.tcl-lang.org/tips/doc/trunk/tip/509.md) | Implement reentrant mutexes on all platforms | 8.7 | Final | n/a: C API |  |
-| [508](https://core.tcl-lang.org/tips/doc/trunk/tip/508.md) | New subcommand [array default] | 8.7 | Final | neither | #346 |
+| [508](https://core.tcl-lang.org/tips/doc/trunk/tip/508.md) | New subcommand [array default] | 8.7 | Final | 9.1 | #346 |
 | [507](https://core.tcl-lang.org/tips/doc/trunk/tip/507.md) | Include simple SVG support with nanosvg | 8.7 | Final | n/a: Tk |  |
 | [506](https://core.tcl-lang.org/tips/doc/trunk/tip/506.md) | Purge RefCount Macros | 8.7 | Final | n/a: C API |  |
 | [504](https://core.tcl-lang.org/tips/doc/trunk/tip/504.md) | New subcommand [string insert] | 8.7 | Final | 9.1 |  |

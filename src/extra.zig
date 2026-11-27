@@ -321,17 +321,92 @@ fn arrayFor(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     return Value.empty;
 }
 
+/// array default option arrayName ?value? (Tcl 9.1, TIP 508): the value
+/// that a read of a missing element gives. The default is in the block
+/// of the array (`interp.ArrayBox`), so it goes when the array goes.
+/// `info exists`, `array get`, and `array names` do not see it.
+fn arrayDefault(it: *Interp, argv: []const Value) Error!Value {
+    const usage = "array default option arrayName ?value?";
+    if (argv.len != 4 and argv.len != 5) return it.wrongArgs(usage);
+    const Opt = enum { get, set, exists, unset };
+    const word = try it.str(argv[2]);
+    var opt: ?Opt = null;
+    var hits: usize = 0;
+    for (std.meta.fieldNames(Opt), 0..) |n, i| {
+        if (eql(n, word)) {
+            opt = @fromBackingInt(@intCast(i));
+            hits = 1;
+            break;
+        }
+        if (std.mem.startsWith(u8, n, word)) {
+            opt = @fromBackingInt(@intCast(i));
+            hits += 1;
+        }
+    }
+    if (hits != 1) {
+        const kind = if (hits > 1) "ambiguous" else "bad";
+        return it.failCode("TCL LOOKUP INDEX option", "{s} option \"{s}\": must be get, set, exists, or unset", .{ kind, word });
+    }
+    const want: usize = if (opt.? == .set) 5 else 4;
+    if (argv.len != want) return switch (opt.?) {
+        .get => it.wrongArgs("::tcl::array::default get arrayName"),
+        .set => it.wrongArgs("::tcl::array::default set arrayName value"),
+        .exists => it.wrongArgs("::tcl::array::default exists arrayName"),
+        .unset => it.wrongArgs("::tcl::array::default unset arrayName"),
+    };
+    const name = try it.str(argv[3]);
+    const cell = try it.findVar(it.frame, name, opt.? == .set);
+    var map: ?*interp.ArrayMap = null;
+    var known = false;
+    if (cell) |c| switch (c.v) {
+        .arr => |m| map = m,
+        .traced => |t| switch (t.inner) {
+            .arr => |m| map = m,
+            .val => known = true,
+            .undef => {},
+        },
+        .undef => {},
+        else => known = true,
+    };
+    if (map == null and known) {
+        if (opt.? == .set) return it.fail("can't array default set \"{s}\": variable isn't array", .{name});
+        return notArray(it, name);
+    }
+    switch (opt.?) {
+        .get => {
+            const m = map orelse return notArray(it, name);
+            return interp.arrayDefault(m).* orelse it.fail("array has no default value", .{});
+        },
+        .exists => return .{ .int = @intFromBool(map != null and interp.arrayDefault(map.?).* != null) },
+        .unset => {
+            if (map) |m| interp.arrayDefault(m).* = null;
+            return Value.empty;
+        },
+        .set => {
+            const m = map orelse blk: {
+                const c = cell.?;
+                const m = try interp.newArray(it.alloc());
+                if (c.v == .traced) c.v.traced.inner = .{ .arr = m } else c.v = .{ .arr = m };
+                break :blk m;
+            };
+            interp.arrayDefault(m).* = argv[4];
+            return Value.empty;
+        },
+    }
+}
+
 fn cmdArray(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     it.dropElem();
     if (argv.len < 2) return it.wrongArgs("array subcommand ?arg ...?");
     const a = it.alloc();
-    const Sub = enum { anymore, donesearch, exists, @"for", get, names, nextelement, set, size, startsearch, statistics, unset };
+    const Sub = enum { anymore, default, donesearch, exists, @"for", get, names, nextelement, set, size, startsearch, statistics, unset };
     const word = try it.str(argv[1]);
-    const sub = try @import("tcl9.zig").pick(it, Sub, word, .{ .v9_1 = &.{.@"for"}, .code = "TCL LOOKUP INDEX subcommand" });
+    const sub = try @import("tcl9.zig").pick(it, Sub, word, .{ .v9_1 = &.{ .@"for", .default }, .code = "TCL LOOKUP INDEX subcommand" });
     if (sub == .@"for") return arrayFor(it, argv, cmd);
+    if (sub == .default) return arrayDefault(it, argv);
     if (argv.len < 3) {
         return switch (sub) {
-            .@"for" => unreachable,
+            .@"for", .default => unreachable,
             .anymore => it.wrongArgs("array anymore arrayName searchId"),
             .donesearch => it.wrongArgs("array donesearch arrayName searchId"),
             .exists => it.wrongArgs("array exists arrayName"),
@@ -351,7 +426,7 @@ fn cmdArray(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     var map: ?*interp.ArrayMap = if (cell != null and cell.?.v == .arr) cell.?.v.arr else null;
     if (cell != null and cell.?.v == .traced and cell.?.v.traced.inner == .arr) map = cell.?.v.traced.inner.arr;
     switch (sub) {
-        .@"for" => unreachable,
+        .@"for", .default => unreachable,
         .exists => {
             if (argv.len != 3) return it.wrongArgs("array exists arrayName");
             return .{ .int = @intFromBool(map != null) };
@@ -369,8 +444,7 @@ fn cmdArray(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
                 if (c.v == .traced) {
                     if (c.v.traced.inner == .val) return it.fail("can't array set \"{s}\": variable isn't array", .{name});
                 } else if (c.v != .undef) return it.fail("can't array set \"{s}\": variable isn't array", .{name});
-                const m = try a.create(interp.ArrayMap);
-                m.* = .empty;
+                const m = try interp.newArray(a);
                 if (c.v == .traced) {
                     c.v.traced.inner = .{ .arr = m };
                 } else c.v = .{ .arr = m };

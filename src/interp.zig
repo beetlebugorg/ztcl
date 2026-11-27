@@ -468,6 +468,35 @@ pub const Parts = struct {
 
 pub const ArrayMap = std.StringArrayHashMapUnmanaged(Value);
 
+/// The block of an array: the elements, and the value of `array default`
+/// (Tcl 9.1, TIP 508). Each `*ArrayMap` of a cell points at `map` of a
+/// box, so the default is in the same block and the collector frees the
+/// two together. Make each array with `newArray`.
+pub const ArrayBox = struct {
+    map: ArrayMap = .empty,
+    default: ?Value = null,
+};
+
+/// A new empty array in a box.
+pub fn newArray(a: Allocator) error{OutOfMemory}!*ArrayMap {
+    const b = try a.create(ArrayBox);
+    b.* = .{};
+    return &b.map;
+}
+
+/// The default of the array `m`. Null when the array has none.
+pub fn arrayDefault(m: *ArrayMap) *?Value {
+    // `newArray` makes each map as a field of a box, so the box has its
+    // own alignment.
+    const b: *ArrayBox = @alignCast(@fieldParentPtr("map", m));
+    return &b.default;
+}
+
+/// The element `key` of `m`, or the default of the array.
+pub fn elemOrDefault(m: *ArrayMap, key: []const u8) ?Value {
+    return m.get(key) orelse arrayDefault(m).*;
+}
+
 pub const Var = struct {
     v: union(enum) {
         undef,
@@ -3531,7 +3560,7 @@ pub const Interp = struct {
         const cell = try it.findVar(it.frame, name, false);
         if (cell) |c| switch (c.v) {
             .arr => |m| {
-                if (m.get(idx)) |v| return v;
+                if (elemOrDefault(m, idx)) |v| return v;
                 return it.fail("can't read \"{s}({s})\": no such element in array", .{ name, idx });
             },
             .val => return it.fail("can't read \"{s}({s})\": variable isn't array", .{ name, idx }),
@@ -3569,7 +3598,7 @@ pub const Interp = struct {
         if (cell.v == .traced) {
             return switch (cell.v.traced.inner) {
                 .val => |v| if (idx == null) v else null,
-                .arr => |m| if (idx) |i| m.get(i) else null,
+                .arr => |m| if (idx) |i| elemOrDefault(m, i) else null,
                 .undef => null,
             };
         }
@@ -3592,7 +3621,7 @@ pub const Interp = struct {
             }
             return it.elemValue(e);
         }
-        if (idx) |i| return if (cell.v == .arr) cell.v.arr.get(i) else null;
+        if (idx) |i| return if (cell.v == .arr) elemOrDefault(cell.v.arr, i) else null;
         return if (cell.v == .val) cell.v.val else null;
     }
 
@@ -3613,8 +3642,7 @@ pub const Interp = struct {
         if (idx) |i| {
             switch (cell.v) {
                 .undef => {
-                    const m = try it.alloc().create(ArrayMap);
-                    m.* = .empty;
+                    const m = try newArray(it.alloc());
                     cell.v = .{ .arr = m };
                 },
                 .arr => {},
@@ -3656,8 +3684,8 @@ pub const Interp = struct {
     fn elemValue(it: *Interp, e: *ElemLink) Error!?Value {
         it.dropElem();
         return switch (e.array.v) {
-            .arr => |m| m.get(e.index),
-            .traced => |t| if (t.inner == .arr) t.inner.arr.get(e.index) else null,
+            .arr => |m| elemOrDefault(m, e.index),
+            .traced => |t| if (t.inner == .arr) elemOrDefault(t.inner.arr, e.index) else null,
             else => null,
         };
     }
@@ -3670,7 +3698,7 @@ pub const Interp = struct {
             return trace.read(it, e.array, e.name, e.index);
         }
         if (e.array.v == .arr) {
-            if (e.array.v.arr.get(e.index)) |v| return v;
+            if (elemOrDefault(e.array.v.arr, e.index)) |v| return v;
             return it.fail("can't read \"{s}({s})\": no such element in array", .{ e.name, e.index });
         }
         return it.fail("can't read \"{s}({s})\": no such variable", .{ e.name, e.index });
@@ -3685,8 +3713,7 @@ pub const Interp = struct {
             return trace.write(it, cell, e.name, e.index, v);
         }
         if (cell.v == .undef) {
-            const m = try it.alloc().create(ArrayMap);
-            m.* = .empty;
+            const m = try newArray(it.alloc());
             cell.v = .{ .arr = m };
         }
         if (cell.v != .arr) return it.fail("can't set \"{s}({s})\": variable isn't array", .{ e.name, e.index });
