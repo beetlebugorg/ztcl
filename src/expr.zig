@@ -488,7 +488,7 @@ pub fn truthy(it: *Interp, v: Value) Error!bool {
 
 /// The number of a value: an `int`, a `double`, or big integer text.
 /// Null when the value is not a number.
-fn numberOf(it: *Interp, v: Value) Error!?Value {
+pub fn numberOf(it: *Interp, v: Value) Error!?Value {
     var cur = v;
     while (cur == .list) {
         if (cur.list.len != 1) return null;

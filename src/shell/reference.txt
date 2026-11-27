@@ -181,6 +181,18 @@ syn: expr arg ?arg ...?
 syn: incr varName ?increment?
 == tcl::mathfunc tcl::mathfunc::abs tcl::mathfunc::acos tcl::mathfunc::asin tcl::mathfunc::atan tcl::mathfunc::atan2 tcl::mathfunc::bool tcl::mathfunc::ceil tcl::mathfunc::cos tcl::mathfunc::cosh tcl::mathfunc::double tcl::mathfunc::entier tcl::mathfunc::exp tcl::mathfunc::floor tcl::mathfunc::fmod tcl::mathfunc::hypot tcl::mathfunc::int tcl::mathfunc::isqrt tcl::mathfunc::log tcl::mathfunc::log10 tcl::mathfunc::max tcl::mathfunc::min tcl::mathfunc::pow tcl::mathfunc::rand tcl::mathfunc::round tcl::mathfunc::sin tcl::mathfunc::sinh tcl::mathfunc::sqrt tcl::mathfunc::srand tcl::mathfunc::tan tcl::mathfunc::tanh tcl::mathfunc::wide
 syn: tcl::mathfunc::NAME ?arg ...?
+== tcl::mathfunc::trunc tcl::mathfunc::acosh tcl::mathfunc::asinh tcl::mathfunc::atanh tcl::mathfunc::cbrt tcl::mathfunc::copysign tcl::mathfunc::dim tcl::mathfunc::erf tcl::mathfunc::erfc tcl::mathfunc::exp2 tcl::mathfunc::expm1 tcl::mathfunc::fma tcl::mathfunc::gamma tcl::mathfunc::isfinite tcl::mathfunc::isinf tcl::mathfunc::isnan tcl::mathfunc::isnormal tcl::mathfunc::issubnormal tcl::mathfunc::isunordered tcl::mathfunc::ldexp tcl::mathfunc::lgamma tcl::mathfunc::log1p tcl::mathfunc::log2 tcl::mathfunc::logb tcl::mathfunc::nextafter tcl::mathfunc::remainder tcl::mathfunc::signbit
+syn: tcl::mathfunc::NAME arg ?arg ...?
+== divmod
+syn: divmod dividend divisor
+== fpclassify
+syn: fpclassify floatValue
+== frexp
+syn: frexp floatValue
+== modf
+syn: modf floatValue
+== remquo
+syn: remquo dividend divisor
 == tcl::mathop tcl::mathop::! tcl::mathop::!= tcl::mathop::% tcl::mathop::& tcl::mathop::* tcl::mathop::** tcl::mathop::+ tcl::mathop::- tcl::mathop::/ tcl::mathop::< tcl::mathop::<< tcl::mathop::<= tcl::mathop::== tcl::mathop::> tcl::mathop::>= tcl::mathop::>> tcl::mathop::^ tcl::mathop::eq tcl::mathop::in tcl::mathop::ne tcl::mathop::ni tcl::mathop::| tcl::mathop::~
 syn: tcl::mathop::OP ?arg ...?
 == noise3

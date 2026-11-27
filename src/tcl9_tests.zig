@@ -194,3 +194,22 @@ test "switch -integer of Tcl 9.1" {
         .{ "switch -i 1 1 {set r a}", "!-indexvar option requires -regexp option", "!ambiguous option \"-i\": must be -exact, -glob, -indexvar, -integer, -matchvar, -nocase, -regexp, or --" },
     });
 }
+
+test "the math functions and commands of Tcl 9.1" {
+    try check(0, &.{
+        .{ "expr {trunc(-2.5)}", "!invalid command name \"tcl::mathfunc::trunc\"", "-2.0" },
+        .{ "expr {log2(8) + cbrt(8) + exp2(3)}", "!invalid command name \"tcl::mathfunc::log2\"", "13.0" },
+        .{ "expr {gamma(27)}", "!invalid command name \"tcl::mathfunc::gamma\"", "4.0329146112660565e+26" },
+        .{ "expr {erf(1)}", "!invalid command name \"tcl::mathfunc::erf\"", "0.8427007929497149" },
+        .{ "expr {ldexp(1, 2**31)}", "!invalid command name \"tcl::mathfunc::ldexp\"", "0.0" },
+        .{ "expr {ldexp(1, 1.5)}", "!invalid command name \"tcl::mathfunc::ldexp\"", "!expected integer but got \"1.5\"" },
+        .{ "expr {isnan(NaN) + isinf(10**400) + signbit(-(10**30))}", "!invalid command name \"tcl::mathfunc::isnan\"", "3" },
+        .{ "expr {trunc(NaN)}", "!invalid command name \"tcl::mathfunc::trunc\"", "!floating point value is Not a Number" },
+        .{ "expr {log2(-1)}", "!invalid command name \"tcl::mathfunc::log2\"", "!domain error: argument not in valid range" },
+        .{ "expr {fma(1, 2)}", "!invalid command name \"tcl::mathfunc::fma\"", "!not enough arguments for math function \"fma\"" },
+        .{ "divmod -7 2", "!invalid command name \"divmod\"", "-4 1" },
+        .{ "divmod 1000000000000000000000000000000 7", "!invalid command name \"divmod\"", "142857142857142857142857142857 1" },
+        .{ "divmod 7 2.0", "!invalid command name \"divmod\"", "!divisor must be an integer" },
+        .{ "list [frexp 10] [modf -2.5] [remquo 6 4] [fpclassify 1e-310]", "!invalid command name \"frexp\"", "{0.625 4} {-2.0 -0.5} {-2.0 2} subnormal" },
+    });
+}

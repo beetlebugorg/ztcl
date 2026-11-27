@@ -28,8 +28,16 @@ proc names {} {
     dict getdef {a {b 2}} a b 0
     return $acc
 }
+proc math {} {
+    set r {}
+    foreach x {0.5 2 -3.7 27} {
+        lappend r [expr {trunc($x) + log2(abs($x)) + cbrt($x) + signbit($x) + isnan($x)}]
+    }
+    lappend r [divmod -7 2] [frexp 10] [modf -2.5] [remquo 7 2] [fpclassify 1e-310]
+    return $r
+}
 for {set k 0} {$k < 20} {incr k} {
-    sum 100; evens [lseq 50]; pops {a b c d}; octal; edit; names
+    sum 100; evens [lseq 50]; pops {a b c d}; octal; edit; names; math
 }
 puts [sum 100]
 puts [evens [lseq 20]]
@@ -37,6 +45,7 @@ puts [pops {a b c d}]
 puts [octal]
 puts [edit]
 puts [names]
+puts [math]
 puts [lseq 0 1 0.1]
 catch {encoding convertfrom utf-8 "a\xffb"} m; puts $m
 namespace eval q { puts [catch {set tcl_version} m] }

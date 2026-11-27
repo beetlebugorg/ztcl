@@ -1,9 +1,10 @@
 //! The commands and subcommands that exist in one Tcl release only.
 //!
 //! An interpreter follows Tcl 8.6 or Tcl 9.1 (`Interp.tcl`). A command
-//! of 9.1 only (`lseq`, `lpop`, `lremove`, `ledit`, `lfilter`) is in the
-//! command table only while the interpreter follows 9.1: `apply` adds or
-//! removes it at each change of the release. An ensemble command with a
+//! of 9.1 only (`lseq`, `lpop`, `lremove`, `ledit`, `lfilter`, and the
+//! math functions and commands of `math9.zig`) is in the command table
+//! only while the interpreter follows 9.1: `apply` adds or removes it at
+//! each change of the release. An ensemble command with a
 //! subcommand of one release only calls `pick`, which matches a name or
 //! a unique prefix among the subcommands of the release of the
 //! interpreter, and gives the error message of Tcl with the names of that
@@ -97,14 +98,14 @@ fn pickName(it: *Interp, names: []const [:0]const u8, absent: u64, text: []const
 }
 
 /// The commands of Tcl 9.1 that Tcl 8.6 does not have.
-const Entry = struct { name: []const u8, f: interp.NativeFn };
+const Entry = @import("math9.zig").Entry;
 const commands = [_]Entry{
     .{ .name = "lseq", .f = cmdLseq },
     .{ .name = "lpop", .f = cmdLpop },
     .{ .name = "lremove", .f = cmdLremove },
     .{ .name = "ledit", .f = cmdLedit },
     .{ .name = "lfilter", .f = cmds.cmdLfilter },
-};
+} ++ @import("math9.zig").commands;
 
 /// Adds the commands of the release of `it` and removes the commands of
 /// the other release. A command that a script made with the same name
