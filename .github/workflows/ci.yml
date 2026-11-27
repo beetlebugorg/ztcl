@@ -417,8 +417,11 @@ jobs:
           zig build wasi-bindings
           wasm-tools validate --features component-model,cm-async zig-out/bin/wasi-bindings.component.wasm
       # The command component of WASI 0.3.2 (docs/dev/wasi-tasks/06-native.md).
+      # The bundle tests of tools/wasi-component.sh run `ztcl build` of
+      # the native zig-out/bin/ztcl.
       - name: WASI 0.3 command component
         run: |
+          zig build
           zig build wasi-component
           wasm-tools validate --features component-model,cm-async zig-out/bin/ztcl.component.wasm
           tools/wasi-component.sh
