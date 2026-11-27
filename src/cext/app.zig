@@ -139,6 +139,20 @@ fn free(it: *Interp) void {
     gpa.destroy(it);
 }
 
+/// The interp of the channel slots in a thread with no interp, such as a
+/// server that reads its config file with Tcl_OpenFileChannel before it
+/// makes an interp. A channel of Tcl is not part of an interp, and a
+/// channel of ztcl is, so this hidden interp has those channels.
+threadlocal var spare_interp: ?*obj.Interp = null;
+
+pub fn spare() ?*obj.Interp {
+    if (spare_interp) |ip| return ip;
+    const it = newInterp() catch return null;
+    const sh = cext.shadowOf(it) catch return null;
+    spare_interp = &sh.core;
+    return spare_interp;
+}
+
 pub const slots = struct {
     pub fn Tcl_CreateInterp() callconv(.c) ?*Shadow {
         const it = newInterp() catch return null;

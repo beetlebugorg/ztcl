@@ -30,8 +30,16 @@ pub const slots = struct {
         if (sh) |s| s.state.loaded.put(cext.gpa, cext.gpa.dupe(u8, prefix) catch return, {}) catch {};
     }
 
+    /// Keeps the absolute path of the program, as Tcl does: a name with a
+    /// `/` is taken from the current folder, and a name with none is
+    /// looked up in `PATH`.
     pub fn Tcl_FindExecutable(argv0: ?[*:0]const u8) callconv(.c) void {
-        exe_name = if (argv0) |a| (cext.keep(std.mem.span(a)) catch null) else null;
+        const a = std.mem.span(argv0 orelse {
+            exe_name = null;
+            return;
+        });
+        var buf: [4096]u8 = undefined;
+        exe_name = cext.keep(findExe(a, &buf) orelse a) catch null;
     }
 
     pub fn Tcl_GetNameOfExecutable() callconv(.c) ?[*:0]const u8 {
@@ -40,3 +48,25 @@ pub const slots = struct {
 };
 
 pub var exe_name: ?[*:0]const u8 = null;
+
+fn findExe(a: []const u8, buf: *[4096]u8) ?[]const u8 {
+    if (a.len == 0) return null;
+    if (std.mem.indexOfScalar(u8, a, '/') != null) {
+        var z: [4096]u8 = undefined;
+        if (a.len >= z.len) return null;
+        @memcpy(z[0..a.len], a);
+        z[a.len] = 0;
+        const r = std.c.realpath(@ptrCast(&z), buf) orelse return null;
+        return std.mem.span(@as([*:0]u8, @ptrCast(r)));
+    }
+    var dirs = std.mem.tokenizeScalar(u8, std.mem.span(std.c.getenv("PATH") orelse return null), ':');
+    while (dirs.next()) |d| {
+        var z: [4096]u8 = undefined;
+        const p = std.fmt.bufPrintSentinel(&z, "{s}/{s}", .{ d, a }, 0) catch continue;
+        if (std.c.access(p.ptr, 1) == 0) {
+            const r = std.c.realpath(p.ptr, buf) orelse continue;
+            return std.mem.span(@as([*:0]u8, @ptrCast(r)));
+        }
+    }
+    return null;
+}

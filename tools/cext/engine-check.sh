@@ -24,7 +24,8 @@ out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 # The same skips as wasm-check.sh: cxchild needs the command interp, cxfile the channels of a
 # package, and cxpanic and cxscript stop the process or run threads.
-skip=" cxchild cxfile cxpanic cxscript "
+# cxthr uses the thread and command info slots of the native path.
+skip=" cxchild cxfile cxpanic cxscript cxthr "
 names=${*:-$(cd "$root/tests/cext" && ls *.tcl | sed 's/\.tcl$//')}
 mkdir "$out/inc"
 for h in tcl.h tclDecls.h tclPlatDecls.h; do

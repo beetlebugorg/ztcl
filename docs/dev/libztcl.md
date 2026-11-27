@@ -46,6 +46,16 @@ A call of `Tcl_Eval` (and the other script slots) with no script of ztcl running
 
 `Tcl_MainEx` follows the manual page of `Tcl_Main`. The first word of `argv` that does not start with `-` is the script, and `-encoding name fileName` gives the script with an encoding. The function sets `argv0`, `argv`, `argc`, and `tcl_interactive`, and calls the init function of the application. Then it runs the script, or the commands of the standard input one complete command at a time. In a terminal, it sources `tcl_rcFileName` first, shows each result, and shows the prompt `% `. An error of the script writes `errorInfo` to the standard error and ends the process with code 1.
 
+## Threads, commands, and files
+
+`src/cext/threads.zig` has the thread slots: `Tcl_MutexLock`, `Tcl_MutexUnlock`, `Tcl_ConditionWait` (with a time limit), `Tcl_ConditionNotify`, their finalize slots, `Tcl_GetThreadData`, `Tcl_CreateThread`, `Tcl_JoinThread`, `Tcl_ExitThread`, the exit handlers of a thread, `Tcl_GetTime`, `Tcl_Sleep`, the async slots, and `Tcl_InitNotifier`. A mutex and a condition are pthread objects. The first use makes them under one global lock.
+
+`src/cext/cmds.zig` has `Tcl_CreateCommand` (a command with a string function), `Tcl_GetCommandInfo`, `Tcl_SetCommandInfo`, their forms with a token, and `TclRenameCommand`. The info of a command of ztcl has an object function that runs a copy of the command under a hidden name, so a new command with the old name (Expect does this for `close`) does not change what the saved function runs.
+
+`src/cext/fs.zig` has the filesystem slots of the native filesystem: the path functions, the file functions over the C library, `Tcl_FSMatchInDirectory` over `glob`, and `Tcl_FSLoadFile` over `dlopen`. `Tcl_FSGetTranslatedStringPath` gives a copy that the caller frees, as its manual page says. A normalized path is its own normalized path.
+
+A slot with no interp argument, such as `Tcl_OpenFileChannel(NULL, ...)` or `Tcl_GetStdChannel`, uses the interp of the last command. With no such interp, as in a server that reads its config before it makes an interp, libztcl gives the slot a hidden interp of the thread (`spareInterp` of `src/libztcl.zig`). The runner of ztcl has no hidden interp. `Tcl_FindExecutable` keeps the absolute path of the program.
+
 ## Tests
 
 | Command | What it checks |
@@ -67,20 +77,21 @@ The results of 2026-11-27 on x86-64 Linux. A subject runs; its source is not rea
 | tclsh of Tcl 8.6.16 (`unix/tclAppInit.c`) | `cc` against the Tcl 8.6 headers | 5 | 0 | `tclsh-basic.tcl` (namespaces, regexp, clock, files, glob, `exec`, a socket on loopback, `vwait`, `exit`) and the standard input give the output of libtcl8.6. |
 | `/usr/bin/tclsh8.6` of Arch Linux, unchanged | the package `tcl` 8.6 | 5 | 0 | With `LD_LIBRARY_PATH`, `tclsh-basic.tcl` gives the output of libtcl8.6. |
 | tclsh of SQLite 3.54.1 (`tclsqlite3.c` with `-DTCLSH=1`) | `cc` | 71 | 0 | A script with a transaction, a function of Tcl, an array row, a blob, and an error gives the output of libtcl8.6. |
-| `/usr/lib/whiptcl.so` of newt (a Tcl package that links libtcl8.6) | the package `libnewt` | 8 | 1 | Not run. |
+| `/usr/lib/whiptcl.so` of newt (a Tcl package that links libtcl8.6) | the package `libnewt` | 8 | 0 | Not run. |
+| `expect` 5.45.4 of Arch Linux, unchanged | the package `expect`, extracted to a folder | 5 (and the stubs table) | | Loads `Expect`, and stops at the async slots and `Tcl_GetGlobalNamespace` (the stubs agent has the namespace slots). |
+| NaviServer 5.0.3, unchanged | `./configure --with-tcl=KIT/lib` against the kit of [libztcl.md](../libztcl.md), and against the Tcl 8.6 of the host | 238 | 0 | The build of the host serves pages. On libztcl, `nsd` reads its config and loads its `init.tcl`, and stops with a segmentation fault in a lookup of an `nsv` array. |
 
 ## Missing functions by programs blocked
 
 From `tools/libztcl/needs.py` on the subjects above. This list goes to the agent of the stubs tables (#1).
 
-| Function | Programs blocked |
-|---|---|
-| `Tcl_CreateCommand` | whiptcl.so |
+None of the subjects above imports a missing function now. The slots that Expect and NaviServer reach through the stubs table are in the table of the subjects.
 
 ## Not done
 
 - The tommath stubs table (`TclBN_*`) and the Unix helpers outside the four tables.
-- The thread model of Tcl for servers: `Tcl_Mutex`, `Tcl_Condition`, thread data, and `Tcl_ThreadQueueEvent` on ztcl threads. AOLserver and NaviServer need it.
+- `Tcl_ThreadQueueEvent` and `Tcl_ThreadAlert`: they need the event queue of the C API.
+- ztcl does not call `Tcl_AsyncInvoke` between commands yet.
 - The legacy fields of `Tcl_Interp` other than the first four: `result` is an empty string, and a program that reads `interp->result` gets no text.
 - The Windows build (`Tcl_MainExW`, the platform table of Windows), and a run on macOS. The macOS library builds (`-Dtarget=aarch64-macos`) and is not run yet.
 - libztk, the library of Tk 8.6 for Python's `_tkinter` (ztk #223).

@@ -289,6 +289,9 @@ pub const Command = struct {
     nre: ?ObjCmdProc,
     cd: ?*anyopaque,
     delete: ?DeleteProc,
+    /// The argument of `delete`. Tcl_SetCommandInfo can make it differ
+    /// from `cd`.
+    delete_data: ?*anyopaque = null,
     interp: *Interp,
     name: []u8,
     live: bool = true,
@@ -299,7 +302,7 @@ pub threadlocal var commands: std.ArrayList(*Command) = .empty;
 pub fn createCommand(ip: *Interp, name: [*:0]const u8, proc: ?ObjCmdProc, nre: ?ObjCmdProc, cd: ?*anyopaque, delete: ?DeleteProc) *Command {
     const c = gpa.create(Command) catch panicText("out of memory");
     const n = std.mem.span(name);
-    c.* = .{ .proc = proc, .nre = nre, .cd = cd, .delete = delete, .interp = ip, .name = gpa.dupe(u8, n) catch panicText("out of memory") };
+    c.* = .{ .proc = proc, .nre = nre, .cd = cd, .delete = delete, .delete_data = cd, .interp = ip, .name = gpa.dupeSentinel(u8, n, 0) catch panicText("out of memory") };
     const id: u32 = @intCast(commands.items.len);
     commands.append(gpa, c) catch panicText("out of memory");
     if (host.cmd_create(ip.handle, id, n.ptr, n.len) != 0) panicText("Tcl_CreateObjCommand: ztcl gave an error");
@@ -318,7 +321,7 @@ pub fn Tcl_NRCreateCommand(ip: *Interp, name: [*:0]const u8, proc: ?ObjCmdProc, 
 pub fn forget(c: *Command) void {
     if (!c.live) return;
     c.live = false;
-    if (c.delete) |d| d(c.cd);
+    if (c.delete) |d| d(c.delete_data);
 }
 
 pub fn Tcl_DeleteCommand(ip: *Interp, name: [*:0]const u8) callconv(.c) c_int {
