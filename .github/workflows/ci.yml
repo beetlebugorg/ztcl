@@ -210,6 +210,8 @@ jobs:
           zig build libztcl
           TCLSH=tclsh8.6 tools/libztcl/check.sh
           TCLSH=tclsh8.6 tools/libztcl/tclsh.sh
+          zig build libztcl --prefix "$RUNNER_TEMP/kit"
+          TCLSH=tclsh8.6 tools/libztcl/kit.sh "$RUNNER_TEMP/kit" zig-out/bin/ztcl
 
   # C packages in WebAssembly: the test packages of tests/cext built for
   # wasm32-wasi and run on ztcl-host.wasm in Node.js, each one compared

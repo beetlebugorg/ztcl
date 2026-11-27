@@ -73,6 +73,14 @@ jobs:
                 ;;
             esac
           done
+          # The kit of libztcl (docs/libztcl.md): Linux on glibc and macOS.
+          for t in x86_64-linux-gnu x86_64-macos aarch64-macos; do
+            name="libztcl-$v-$t"
+            zig build libztcl -Dtarget="$t" -Doptimize=ReleaseFast --prefix "pkg/$name"
+            cp LICENSE "pkg/$name/"
+            cp -r licenses "pkg/$name/"
+            tar -C pkg -czf "dist/$name.tar.gz" "$name"
+          done
           zig build wasm
           node tools/wasm-smoke.mjs zig-out/lib/ztcl.wasm
           name="ztcl-$v-wasm"
@@ -85,6 +93,7 @@ jobs:
           set -eu
           tar -xzf "dist/ztcl-${TAG#v}-x86_64-linux-musl.tar.gz" -C "$RUNNER_TEMP"
           test "$("$RUNNER_TEMP/ztcl-${TAG#v}-x86_64-linux-musl/ztcl" bench/sum.tcl)" = 499999500000
+          sh tools/libztcl/kit.sh "pkg/libztcl-${TAG#v}-x86_64-linux-gnu"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist

@@ -139,6 +139,14 @@ The headers `generic/tclDecls.h`, `generic/tclIntDecls.h`, `generic/tclPlatDecls
 
 `src/cext/` follows the same headers for the native path of C packages. `tools/cext/stubs.py` writes the slot numbers and the field names of the four tables to `src/cext/slots.zig`. `cext.Shadow` has the layout of the first four fields of `struct Interp` of `generic/tclInt.h`, which `Tcl_InitStubs` of `generic/tclStubLib.c` reads. The C signatures of the slot functions follow the declarations of `tclDecls.h`. The behavior of `load` follows the manual page `load.n`, the rule of `generic/tclLoad.c` that matches a file and a package name, and the messages of tclsh 8.6.16, checked by `tools/cext/check.sh`. The Zig code is new, and no code of Tcl is in it. The test packages of `tests/cext/` link the stub library of the Tcl of the host, `libtclstub8.6.a`, as each Tcl package does.
 
+### The headers of Tcl 8.6 in the kit of libztcl
+
+The headers `generic/tcl.h`, `generic/tclDecls.h`, `generic/tclPlatDecls.h`, `generic/tclTomMath.h`, and `generic/tclTomMathDecls.h` of the Tcl source, tag `core-8-6-16`.
+
+**License:** Tcl/Tk License (BSD style). The terms are in [`licenses/tcl-license.txt`](../../licenses/tcl-license.txt), and the kit installs them in `share/doc/libztcl/tcl-license.txt`.
+
+**How ztcl uses it:** `packaging/libztcl/include/` has the five files with no change, at the request of the maintainer, so that C programs and extensions compile against libztcl (issue #246, [docs/libztcl.md](../libztcl.md)). `zig build libztcl` installs them in `include/tcl8.6`. They are the one copy of Tcl files in the repository. No ztcl code includes them. The stub library `src/tclstub.zig` is new code: it follows the manual page `Tcl_InitStubs.3` and the layouts of these headers, and it has no code of `generic/tclStubLib.c`. `lib/tclConfig.sh` and the `.pc` files of the kit have the variable names of the files that Tcl installs, with new values.
+
 ### The syntax errors of expressions
 
 The function `ParseExpr` and the function `ParseLexeme` of `generic/tclCompExpr.c` of the Tcl source, tag `core-8-6-16`.

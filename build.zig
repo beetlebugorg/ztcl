@@ -229,6 +229,7 @@ pub fn build(b: *std.Build) void {
         lib_step.dependOn(&b.addFail("libztcl does not build for Windows yet: the C package code has no Windows port, and Zig 0.17 has no VaList with LLVM on x86-64 Windows").step);
     } else {
         lib_step.dependOn(&b.addInstallArtifact(libztcl, .{}).step);
+        addKit(b, lib_step, target);
     }
     // The interactive shell of the runner.
     const shell_tests = b.addTest(.{ .root_module = b.createModule(.{
@@ -795,6 +796,128 @@ fn addCextStubs(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     });
     return m;
 }
+
+/// The development kit of libztcl (docs/libztcl.md): the headers of Tcl
+/// 8.6.16 in include and include/tcl8.6, the stub library
+/// lib/libtclstub8.6.a, lib/tclConfig.sh for TEA, and
+/// lib/pkgconfig/tcl.pc and ztcl.pc. tclConfig.sh finds the prefix from
+/// TCL_BIN_DIR, else uses `-Dkit-prefix`. The .pc files find the prefix
+/// from their own folder.
+fn addKit(b: *std.Build, step: *std.Build.Step, target: std.Build.ResolvedTarget) void {
+    const os = target.result.os.tag;
+    const stub = b.addLibrary(.{ .name = "tclstub8.6", .linkage = .static, .root_module = b.createModule(.{
+        .root_source_file = b.path("src/tclstub.zig"),
+        .target = target,
+        .optimize = .ReleaseSmall,
+        .pic = true,
+        .strip = true,
+    }) });
+    step.dependOn(&b.addInstallArtifact(stub, .{}).step);
+    // Debian and Homebrew put the headers in include/tcl8.6, and Arch and
+    // the build of Tcl in include. A configure script of TEA looks in
+    // both, so the kit has both.
+    for ([_][]const u8{ "tcl8.6", "" }) |sub| {
+        step.dependOn(&b.addInstallDirectory(.{
+            .source_dir = b.path("packaging/libztcl/include"),
+            .install_dir = .header,
+            .install_subdir = sub,
+        }).step);
+    }
+    step.dependOn(&b.addInstallFileWithDir(b.path("licenses/tcl-license.txt"), .prefix, "share/doc/libztcl/tcl-license.txt").step);
+
+    const prefix = b.option([]const u8, "kit-prefix", "The prefix of libztcl that lib/tclConfig.sh names when TCL_BIN_DIR is not set (default /usr/local)") orelse "/usr/local";
+    const mac = os == .macos;
+    const so = if (mac) ".dylib" else ".so";
+    const cfg = b.fmt(
+        \\# tclConfig.sh of libztcl: ztcl {[ztcl]s} with the C API of Tcl 8.6.
+        \\# The build of ztcl writes this file (build.zig, addKit). TEA sets
+        \\# TCL_BIN_DIR to the folder of the file before it sources it, so the
+        \\# prefix is the parent of that folder. Else it is {[p]s}.
+        \\if [ -n "${{TCL_BIN_DIR:-}}" ] && [ -f "${{TCL_BIN_DIR}}/tclConfig.sh" ]; then
+        \\    ztcl_prefix=$(cd "${{TCL_BIN_DIR}}/.." && pwd)
+        \\else
+        \\    ztcl_prefix='{[p]s}'
+        \\fi
+        \\TCL_VERSION='8.6'
+        \\TCL_MAJOR_VERSION='8'
+        \\TCL_MINOR_VERSION='6'
+        \\TCL_PATCH_LEVEL='.16'
+        \\TCL_CC='cc'
+        \\TCL_DEFS='-DTCL_THREADS=1'
+        \\TCL_DBGX=
+        \\TCL_CFLAGS_DEBUG='-g'
+        \\TCL_CFLAGS_OPTIMIZE='-O2'
+        \\TCL_LDFLAGS_DEBUG=''
+        \\TCL_LDFLAGS_OPTIMIZE=''
+        \\TCL_SHARED_BUILD=1
+        \\TCL_LIB_FILE='libtcl8.6{[so]s}'
+        \\TCL_LIBS='{[libs]s}'
+        \\TCL_PREFIX="${{ztcl_prefix}}"
+        \\TCL_EXEC_PREFIX="${{ztcl_prefix}}"
+        \\TCL_SHLIB_CFLAGS='-fPIC'
+        \\TCL_CFLAGS_WARNING='-Wall'
+        \\TCL_EXTRA_CFLAGS=''
+        \\TCL_SHLIB_LD='{[shlib_ld]s}'
+        \\TCL_STLIB_LD='${{AR}} cr'
+        \\TCL_SHLIB_LD_LIBS='${{LIBS}}'
+        \\TCL_SHLIB_SUFFIX='{[so]s}'
+        \\TCL_DL_LIBS=''
+        \\TCL_LD_FLAGS=''
+        \\TCL_CC_SEARCH_FLAGS='{[search]s}'
+        \\TCL_LD_SEARCH_FLAGS='{[search]s}'
+        \\TCL_COMPAT_OBJS=''
+        \\TCL_RANLIB='ranlib'
+        \\TCL_LIB_FLAG='-ltcl8.6'
+        \\TCL_BUILD_LIB_SPEC="-L${{ztcl_prefix}}/lib -ltcl8.6"
+        \\TCL_LIB_SPEC="-L${{ztcl_prefix}}/lib -ltcl8.6"
+        \\TCL_INCLUDE_SPEC="-I${{ztcl_prefix}}/include/tcl8.6"
+        \\TCL_LIB_VERSIONS_OK='ok'
+        \\TCL_SHARED_LIB_SUFFIX='${{VERSION}}{[so]s}'
+        \\TCL_UNSHARED_LIB_SUFFIX='${{VERSION}}.a'
+        \\TCL_SRC_DIR="${{ztcl_prefix}}/include/tcl8.6"
+        \\TCL_PACKAGE_PATH="${{ztcl_prefix}}/lib"
+        \\TCL_SUPPORTS_STUBS=1
+        \\TCL_STUB_LIB_FILE='libtclstub8.6.a'
+        \\TCL_STUB_LIB_FLAG='-ltclstub8.6'
+        \\TCL_BUILD_STUB_LIB_SPEC="-L${{ztcl_prefix}}/lib -ltclstub8.6"
+        \\TCL_STUB_LIB_SPEC="-L${{ztcl_prefix}}/lib -ltclstub8.6"
+        \\TCL_BUILD_STUB_LIB_PATH="${{ztcl_prefix}}/lib/libtclstub8.6.a"
+        \\TCL_STUB_LIB_PATH="${{ztcl_prefix}}/lib/libtclstub8.6.a"
+        \\TCL_THREADS=1
+        \\TCL_BIN_DIR="${{ztcl_prefix}}/lib"
+        \\
+    , .{
+        .ztcl = ztcl_version,
+        .so = so,
+        .p = prefix,
+        .libs = if (mac) "" else "-lpthread -lm",
+        .shlib_ld = if (mac) "${CC} -dynamiclib ${CFLAGS} ${LDFLAGS} -Wl,-single_module" else "${CC} ${CFLAGS} ${LDFLAGS} -shared",
+        .search = if (mac) "" else "\"-Wl,-rpath,${LIB_RUNTIME_DIR}\"",
+    });
+    const wf = b.addWriteFiles();
+    step.dependOn(&b.addInstallFileWithDir(wf.add("tclConfig.sh", cfg), .lib, "tclConfig.sh").step);
+    for ([_][2][]const u8{ .{ "tcl", "Tool Command Language, as ztcl" }, .{ "ztcl", "ztcl with the C API of Tcl 8.6" } }) |pc| {
+        const text = b.fmt(
+            \\prefix=${{pcfiledir}}/../..
+            \\exec_prefix=${{prefix}}
+            \\libdir=${{prefix}}/lib
+            \\includedir=${{prefix}}/include/tcl8.6
+            \\libfile=libtcl8.6{[so]s}
+            \\
+            \\Name: {[name]s}
+            \\Description: {[desc]s}
+            \\URL: https://github.com/beetlebugorg/ztcl
+            \\Version: {[v]s}
+            \\Libs: -L${{libdir}} -ltcl8.6 -ltclstub8.6
+            \\Cflags: -I${{includedir}}
+            \\
+        , .{ .so = so, .name = pc[0], .desc = pc[1], .v = if (std.mem.eql(u8, pc[0], "tcl")) "8.6.16" else ztcl_version });
+        step.dependOn(&b.addInstallFileWithDir(wf.add(b.fmt("{s}.pc", .{pc[0]}), text), .lib, b.fmt("pkgconfig/{s}.pc", .{pc[0]})).step);
+    }
+}
+
+/// The version of ztcl in build.zig.zon.
+const ztcl_version = @import("build.zig.zon").version;
 
 /// Gives a module of the interpreter the VT module and the modules of
 /// src/crypto (addCrypto), so each module that can reach src/tls has

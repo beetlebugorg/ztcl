@@ -22,7 +22,7 @@ A program built for libztcl links it as libtcl8.6:
 cc $TCL_INCLUDE_SPEC app.c -Lzig-out/lib -ltcl8.6 -Wl,-rpath,zig-out/lib
 ```
 
-The headers are the headers of Tcl 8.6. libztcl has no headers of its own.
+The step also installs the development kit of [docs/libztcl.md](../libztcl.md): the headers of Tcl 8.6.16 in `include/tcl8.6` (from `packaging/libztcl/include`, with no change), the stub library `lib/libtclstub8.6.a` (`src/tclstub.zig`), `lib/tclConfig.sh`, and `lib/pkgconfig/tcl.pc` and `ztcl.pc` (`addKit` in build.zig).
 
 ## What the library exports
 
@@ -52,6 +52,7 @@ A call of `Tcl_Eval` (and the other script slots) with no script of ztcl running
 |---|---|
 | `tools/libztcl/check.sh` | Builds `tests/libztcl/embed.c` against the libtcl8.6 of the host and against libztcl, and compares the output and the exit code of 7 cases: `Tcl_Main` with a script, `exit`, a script error, the commands of the standard input, and `Tcl_CreateInterp` and `Tcl_Eval` with no `Tcl_Main`. |
 | `tools/libztcl/tclsh.sh` | Builds the tclsh of `unix/tclAppInit.c` of Tcl 8.6.16 against both libraries and compares `tests/libztcl/tclsh-*.tcl` and the commands of the standard input. |
+| `tools/libztcl/kit.sh PREFIX [ZTCL]` | Builds `tests/libztcl/kit/kitext.c` with the variables of `PREFIX/lib/tclConfig.sh` and the stub library, as TEA does, and `kitembed.c` with `pkg-config --cflags --libs tcl`. It runs `kit.tcl` in `kitembed` on libztcl, in the runner `ZTCL`, and in the tclsh of the host, and compares each output with `kit.want`. |
 | `python3 -I tools/libztcl/needs.py FILE...` | Lists the Tcl functions that a program or a library imports and that libztcl does not have, and ranks them by the count of files that need them. |
 
 `embed.c` is a test program of ztcl. It uses the public API only: `Tcl_FindExecutable`, `Tcl_Main`, `Tcl_CreateInterp`, `Tcl_Init`, `Tcl_CreateObjCommand`, `Tcl_Eval`, the result slots, the variable slots, the list and number slots, and `Tcl_DeleteInterp`.

@@ -48,7 +48,7 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 4. With no capability on, scripts are deterministic. Output depends only on the script, the seed, and the embedder inputs.
 5. Keep the limits: the compute limit (in compute units), memory, nesting, and native stack. A script must not crash the host.
 6. Keep the fast path and the slow path of a point proc equal, bit for bit.
-7. Add no dependency. The one approved dependency is libghostty-vt at the tag of `build.zig.zon`, built with `-Dsimd=false` and linked statically. Copy no code from Tcl or from a project with a copyleft license. Credit each source in `docs/references/`.
+7. Add no dependency. The one approved dependency is libghostty-vt at the tag of `build.zig.zon`, built with `-Dsimd=false` and linked statically. Copy no code from Tcl or from a project with a copyleft license. The one exception is the public headers of Tcl 8.6.16 in `packaging/libztcl/include/`, which the kit of libztcl installs with no change. Credit each source in `docs/references/`.
 8. Start each source file with a `//!` comment that explains its algorithm, and an SPDX line for BSD-2-Clause.
 9. Stop only your own processes, by PID.
 10. The JIT and the interpreter must agree: the same output, errors, compute units, and memory count for each script. Run `tools/jit-diff.sh` and `tools/suite.sh -j` after a change to `src/vm.zig` or `src/jit/`.
