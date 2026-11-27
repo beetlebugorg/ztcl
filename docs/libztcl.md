@@ -66,6 +66,10 @@ cc -shared -fPIC -DUSE_TCL_STUBS -I"$HOME/ztcl/include/tcl8.6" ext.c -o ext.so -
 
 A TEA extension reads `lib/tclConfig.sh`: give `./configure --with-tcl="$HOME/ztcl/lib"`. The test `tools/libztcl/kit.sh` builds an extension with the variables of that file, as TEA does. The extension loads with `load` in a program on libztcl, in the `ztcl` runner (with the capability `cext`), and in the tclsh of Tcl 8.6. The stub library of the kit works with the libtcl8.6 of Tcl too.
 
+## Results with a real server
+
+NaviServer 5.0.3, the maintained fork of AOLserver, builds against the kit with no change to its source and runs on libztcl. It serves static files and ADP pages with the same output as on Tcl 8.6.16. On a page that does Tcl work (lists, dicts, strings, and a JSON text of 200 records), it serves 2 to 6 times the requests per second of the same server on Tcl. On static files and small pages, the two are close. The server on libztcl uses about 9 times the memory. [docs/dev/libztcl.md](dev/libztcl.md#the-page-load-benchmark) has the numbers and the steps.
+
 ## What is different
 
 The headers of Tcl describe the ABI of libztcl, with these differences:
@@ -73,7 +77,7 @@ The headers of Tcl describe the ABI of libztcl, with these differences:
 - The fields `result` and `freeProc` of `Tcl_Interp` are legacy fields. libztcl sets `result` to an empty string. Use `Tcl_GetStringResult`.
 - The bignum functions of `tclTomMath.h` (`TclBN_*`) are not in libztcl yet, and `Tcl_TomMath_InitStubs` gives an error.
 - The functions of TclOO (`tclOO.h`) and the private headers (`tclInt.h`, `tclPort.h`) are not in the kit.
-- `Tcl_Mutex`, `Tcl_Condition`, and the thread data of Tcl for servers are not complete yet.
+- `Tcl_ThreadQueueEvent` and `Tcl_ThreadAlert` are not in libztcl yet.
 - There is no Windows build yet, and no arm64 Linux build: Zig 0.17 has no `VaList` with LLVM on those targets.
 
 [docs/dev/libztcl.md](dev/libztcl.md) has the internals, the list of missing functions, and the programs that were tested.

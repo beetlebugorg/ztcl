@@ -229,7 +229,10 @@ fn createEntry(t: *Table, key_c: ?*const anyopaque, new: ?*c_int) callconv(.c) ?
             return x;
         }
     }
-    if (new) |n| n.* = 1;
+    // With no flag pointer, the create proc only finds, as in Tcl 8.6:
+    // a program can call it in place of the find proc.
+    const n = new orelse return null;
+    n.* = 1;
     const x: *Entry = if (t.type.alloc_entry) |f| f(t, key).? else blk: {
         const y = newEntry(t, @sizeOf(Entry));
         y.key = .{ .one_word = key };
@@ -507,13 +510,14 @@ test "one-word keys and keys of two words" {
     var t: Table = undefined;
     Tcl_InitHashTable(&t, one_word_keys);
     var x: u8 = 0;
-    _ = Tcl_CreateHashEntry(&t, &x, null);
+    var is_new: c_int = 0;
+    _ = Tcl_CreateHashEntry(&t, &x, &is_new);
     try std.testing.expect(t.find(&t, &x).?.key.one_word == @as(*anyopaque, &x));
     Tcl_DeleteHashTable(&t);
     Tcl_InitHashTable(&t, 2);
     const a = [2]c_int{ 1, 2 };
     const b = [2]c_int{ 1, 2 };
-    _ = Tcl_CreateHashEntry(&t, &a, null);
+    _ = Tcl_CreateHashEntry(&t, &a, &is_new);
     try std.testing.expect(t.find(&t, &b) != null);
     try std.testing.expect(t.find(&t, &[2]c_int{ 2, 1 }) == null);
     Tcl_DeleteHashTable(&t);
