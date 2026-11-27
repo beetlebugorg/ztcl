@@ -530,6 +530,7 @@ fn symlinkAt(a: Allocator, target: []const u8, dir: i32, path: []const u8) !void
 }
 
 test "vmstore: install, list, check, rollback, and remove" {
+    if (comptime !supported) return error.SkipZigTest;
     const a = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -585,6 +586,7 @@ test "vmstore: install, list, check, rollback, and remove" {
 }
 
 test "vmstore: a symlink in the release or in the store is refused" {
+    if (comptime !supported) return error.SkipZigTest;
     const a = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
