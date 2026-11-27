@@ -1,6 +1,6 @@
 # Tcl 8.6.16 suite results
 
-`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-27 at commit `b650fe3`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
+`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-27 at commit `68b97f3`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
 
 A test is applicable when it is outside the buckets `design`, `platform`, `internals`, and `tcl`. The goal of issue 244 is a pass for each applicable test.
 
@@ -8,8 +8,8 @@ A test is applicable when it is outside the buckets `design`, `platform`, `inter
 
 | Run | Total | Pass | Fail | Skip | Unreached |
 |---|---|---|---|---|---|
-| Interpreter | 47,133 | 38,054 | 2,616 | 4,337 | 2,126 |
-| JIT (`-j`) | 47,133 | 38,052 | 2,618 | 4,337 | 2,126 |
+| Interpreter | 47,133 | 38,097 | 2,657 | 4,255 | 2,124 |
+| JIT (`-j`) | 47,133 | 38,101 | 2,653 | 4,255 | 2,124 |
 
 Unreached is the test count of `tools/suite-scope.tsv` minus the tests that ran: the file stopped before them.
 
@@ -28,16 +28,16 @@ The tests of the interpreter run that do not pass, by bucket.
 
 | Bucket | Meaning | Tests |
 |---|---|---|
-| `bug` | A bug in ztcl | 1,042 |
-| `feature` | A missing feature or option | 3,233 |
-| `message` | An error message or -errorcode differs | 120 |
-| `internals` | Needs Tcl internals (C test commands, memory debugging) | 3,254 |
-| `design` | Absent by design | 439 |
-| `platform` | Platform only | 736 |
+| `bug` | A bug in ztcl | 1,171 |
+| `feature` | A missing feature or option | 3,081 |
+| `message` | An error message or -errorcode differs | 116 |
+| `internals` | Needs Tcl internals (C test commands, memory debugging) | 3,171 |
+| `design` | Absent by design | 504 |
+| `platform` | Platform only | 738 |
 | `tcl` | Skipped by tclsh too (knownBug, emptyTest, and others) | 255 |
 | `untriaged` | Not triaged yet | 0 |
 
-Applicable tests: 42,449. Pass rate of the applicable tests: 89.6 %.
+Applicable tests: 42,465. Pass rate of the applicable tests: 89.7 %.
 
 ## Reasons
 
@@ -45,30 +45,29 @@ The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the re
 
 | Bucket | Reason | Tests |
 |---|---|---|
-| `bug` | the result differs from tclsh 8.6.16 | 327 |
+| `bug` | the result differs from tclsh 8.6.16 | 330 |
 | `bug` | channels: the result differs | 143 |
+| `bug` | 'info': the result differs | 127 |
 | `bug` | namespaces: the result differs | 72 |
 | `bug` | file names and 'glob': the result differs | 71 |
 | `bug` | 'trace': the result differs | 66 |
 | `bug` | 'clock': the result differs | 63 |
 | `bug` | 'interp': the result differs | 58 |
-| `bug` | TclOO: the result differs | 48 |
+| `bug` | TclOO: the result differs | 51 |
 | `bug` | 'expr': the result differs | 38 |
 | `bug` | 'binary': the result differs | 31 |
-| `bug` | encodings: the result differs | 19 |
+| `bug` | encodings: the result differs | 18 |
 | `bug` | the setup or the cleanup of the test fails | 17 |
 | `bug` | regular expressions: the match differs | 16 |
 | `bug` | safe interpreters: hidden commands and their messages | 14 |
+| `bug` | coroutines: the result differs | 13 |
 | `bug` | regular expressions: the error class of a bad pattern | 13 |
 | `bug` | regular expressions: a valid pattern that ztcl does not compile | 11 |
 | `bug` | the recursion limit and its message | 11 |
-| `bug` | coroutines: the result differs | 10 |
 | `bug` | the standard channels are not in the channel table | 8 |
-| `bug` | 'info': the result differs | 6 |
 | `feature` | the 'http' package | 2,063 |
 | `feature` | a library package of Tcl: safe, msgcat, http, the package index, tcl::tm, or opt | 283 |
 | `feature` | 'chan create', 'chan push', 'chan pop', 'chan pipe', 'chan truncate' | 196 |
-| `feature` | 'info frame' | 166 |
 | `feature` | the real 'tcltest' package; the suite runs a stand-in | 157 |
 | `feature` | the 'zlib' command | 71 |
 | `feature` | the 'interp' subcommands bgerror, cancel, debug, limit, share, and transfer | 59 |
@@ -76,26 +75,78 @@ The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the re
 | `feature` | the REG_U flags of 'regexp -about' | 50 |
 | `feature` | 'file attributes' | 43 |
 | `feature` | the 'msgcat' package | 21 |
+| `feature` | 'info frame' | 19 |
 | `feature` | the 'safe' package | 15 |
 | `feature` | the 'opt' package | 14 |
 | `feature` | the slot classes of TclOO ('oo::Slot') | 12 |
 | `feature` | 'tcl::pkgconfig' | 9 |
 | `feature` | 'file mtime' and 'file atime' with a new time | 6 |
 | `feature` | 'tcl::unsupported::inject' and 'corotype' | 6 |
-| `feature` | 'info hostname', and '~' with no 'env(HOME)' | 5 |
-| `feature` | 'info errorstack' | 3 |
+| `feature` | 'info hostname', and '~' with no 'env(HOME)' | 3 |
 | `feature` | the 'platform' package | 2 |
-| `message` | an error where tclsh also gives one, with another message | 119 |
+| `message` | an error where tclsh also gives one, with another message | 115 |
 | `message` | the -errorcode differs | 1 |
+
+## Internals by test command
+
+The tests of the bucket `internals`, by the command of the Tcl test binary that blocks them (issue 480). The path is from `tools/suite-internals.tsv`: `C package` is Tcl's own test command, built as a C package on the stubs of ztcl; `runner` is a stand-in in `tools/suite_cmds.zig`; `design` tests check the internal layout of Tcl. The other commands are in one line, and a test with no command name is in the line of its file.
+
+| Command | Tests | Path | What the tests check |
+|---|---|---|---|
+| `testchannel` | 861 | C package | The state of the channel layer: buffered bytes, queued output, reference counts, and the cut and splice of a channel between threads. |
+| `testhashsystemhash` | 299 | C package | Hash tables of the C API with a custom key type. |
+| `testsetplatform` | 282 | runner | The file name rules of Windows on Unix: 'file join', 'file split', and 'glob' of another platform. |
+| `testobj` | 243 | C package | Tcl_Obj types, reference counts, and shimmering through the C API. |
+| `testexprparser` | 217 | C package | The token tree of Tcl_ParseExpr. |
+| `testutfnext` | 152 | C package | Tcl_UtfNext on bytes that are not valid UTF-8. |
+| `testdoubledigits` | 126 | C package | The digit generation of TclDoubleDigits, an internal stub. |
+| `testparser` | 117 | C package | The token tree of Tcl_ParseCommand. |
+| `testutfprev` | 103 | C package | Tcl_UtfPrev on bytes that are not valid UTF-8. |
+| `testdstring` | 54 | C package | Tcl_DString of the C API. |
+| `testbytestring` | 45 | C package | Byte arrays with bytes that are not valid UTF-8. |
+| `Tcltest` | 36 | C package | A test that needs any command of the Tcl test binary. |
+| `testindexobj` | 35 | C package | Tcl_GetIndexFromObj and its cache in the Tcl_Obj. |
+| `drainEventQueue` | 34 | C package | The event queue of the main thread, through 'testthread event' of the Tcl test binary. |
+| `testnrelevels` | 33 | design | The depth of the native C stack of Tcl's non-recursive engine (NRE). ztcl has no NRE. |
+| `testlink` | 29 | C package | Tcl_LinkVar of C variables. |
+| `testevent` | 25 | C package | Tcl_QueueEvent at the head, the tail, or a mark of the queue. |
+| `testchmod` | 24 | runner | A change of the permission bits of a file, for the setup of a test. |
+| `testfilehandler` | 22 | C package | Tcl_CreateFileHandler on pipes. |
+| `testmathfunctions` | 21 | C package | Math functions that C code makes with Tcl_CreateMathFunc. |
+| `pkgua.soRequired` | 20 | C package | The C test package pkgua for 'load' and 'unload'. |
+| `testfevent` | 18 | C package | Events that run in a second interpreter. |
+| `testregexp` | 16 | runner | 'testregexp' exists in tools/suite_cmds.zig. The flag REG_EXPECT, the place where a partial match ends, has no stand-in. |
+| other, clock.test | 4 | C package | Tests of the C API in a file of the bucket. |
+| other, result.test | 3 | C package | Tests of the C API in a file of the bucket. |
+| other, utf.test | 1 | C package | Tests of the C API in a file of the bucket. |
+| 57 other commands | 348 | C package | Other functions of the C API, one command for each. |
 
 ## JIT differences
 
-Tests with a different result in the JIT run. `socket.test`, `io.test`, and `chanio.test` have timing tests that can change between two runs of one mode.
+Tests with a different result in the JIT run. `socket.test`, `io.test`, and `chanio.test` have timing tests that can change between two runs of one mode. `tools/suite.sh` runs `socket.test`, and `chanio.test` after a failure of `chan-io-36.1`, one more time and keeps the run with more passes. The leak tests of `memory` read the live bytes of the heap, and these change between two runs.
 
 | File | Test | Interpreter | JIT |
 |---|---|---|---|
-| socket.test | socket_inet-13.1 | pass | fail |
-| socket.test | socket_inet6-13.1 | pass | fail |
+| apply.test | apply-9.3 | fail | pass |
+| chanio.test | chan-io-36.1 | pass | fail |
+| dict.test | dict-19.2 | fail | pass |
+| dict.test | dict-19.3 | fail | pass |
+| for.test | for-7.10 | pass | fail |
+| for.test | for-7.13 | fail | pass |
+| for.test | for-7.15 | fail | pass |
+| for.test | for-7.16 | fail | pass |
+| for.test | for-7.20 | pass | fail |
+| for.test | for-7.21 | fail | pass |
+| for.test | for-7.5 | fail | pass |
+| for.test | for-7.7 | pass | fail |
+| for.test | for-7.8 | pass | fail |
+| for.test | for-7.9 | pass | fail |
+| io.test | io-36.1.1 | pass | fail |
+| oo.test | oo-1.18.1 | fail | pass |
+| oo.test | oo-11.6.3 | fail | pass |
+| socket.test | socket_inet-3.2 | pass | fail |
+| socket.test | socket_inet6-13.1 | fail | pass |
+| trace.test | trace-13.4 | fail | pass |
 
 ## Files
 
@@ -104,46 +155,46 @@ Tests with a different result in the JIT run. `socket.test`, `io.test`, and `cha
 | aaa_exit.test | decide | 2 | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | append.test | in | 45 | 44 | 1 | 0 | 0 | 44 | 1 | 0 |
 | appendComp.test | in | 48 | 42 | 1 | 5 | 0 | 42 | 1 | 5 |
-| apply.test | in | 42 | 35 | 3 | 4 | 0 | 35 | 3 | 4 |
-| assemble.test | na | 284 | 0 | 280 | 4 | 0 | 0 | 280 | 4 |
+| apply.test | in | 42 | 35 | 6 | 1 | 0 | 36 | 5 | 1 |
+| assemble.test | na | 284 | 0 | 284 | 0 | 0 | 0 | 284 | 0 |
 | assocd.test | na | 11 | 0 | 0 | 11 | 0 | 0 | 0 | 11 |
 | async.test | na | 12 | 0 | 0 | 12 | 0 | 0 | 0 | 12 |
 | autoMkindex.test | decide | 11 | 1 | 9 | 1 | 0 | 1 | 9 | 1 |
-| basic.test | in | 146 | 100 | 12 | 34 | 0 | 100 | 12 | 34 |
+| basic.test | in | 146 | 100 | 14 | 32 | 0 | 100 | 14 | 32 |
 | binary.test | in | 717 | 604 | 34 | 79 | 0 | 604 | 34 | 79 |
 | case.test | in | 15 | 15 | 0 | 0 | 0 | 15 | 0 | 0 |
 | chan.test | decide | 41 | 39 | 2 | 0 | 0 | 39 | 2 | 0 |
-| chanio.test | decide | 777 | 330 | 59 | 388 | 0 | 330 | 59 | 388 |
+| chanio.test | decide | 777 | 330 | 59 | 388 | 0 | 329 | 60 | 388 |
 | clock.test | decide | 8,532 | 8,402 | 120 | 7 | 3 | 8,402 | 120 | 7 |
-| cmdAH.test | decide | 323 | 99 | 42 | 182 | 0 | 99 | 42 | 182 |
-| cmdIL.test | in | 146 | 137 | 3 | 6 | 0 | 137 | 3 | 6 |
+| cmdAH.test | decide | 323 | 101 | 40 | 182 | 0 | 101 | 40 | 182 |
+| cmdIL.test | in | 146 | 137 | 5 | 4 | 0 | 137 | 5 | 4 |
 | cmdInfo.test | na | 12 | 0 | 0 | 12 | 0 | 0 | 0 | 12 |
-| cmdMZ.test | in | 92 | 86 | 5 | 1 | 0 | 86 | 5 | 1 |
+| cmdMZ.test | in | 92 | 82 | 9 | 1 | 0 | 82 | 9 | 1 |
 | compExpr-old.test | in | 190 | 183 | 0 | 7 | 0 | 183 | 0 | 7 |
-| compExpr.test | in | 80 | 76 | 0 | 4 | 0 | 76 | 0 | 4 |
-| compile.test | in | 171 | 96 | 64 | 11 | 0 | 96 | 64 | 11 |
+| compExpr.test | in | 80 | 76 | 2 | 2 | 0 | 76 | 2 | 2 |
+| compile.test | in | 171 | 97 | 65 | 9 | 0 | 97 | 65 | 9 |
 | concat.test | in | 9 | 9 | 0 | 0 | 0 | 9 | 0 | 0 |
 | config.test | decide | 9 | 0 | 9 | 0 | 0 | 0 | 9 | 0 |
-| coroutine.test | in | 59 | 37 | 19 | 3 | 0 | 37 | 19 | 3 |
+| coroutine.test | in | 59 | 37 | 20 | 2 | 0 | 37 | 20 | 2 |
 | dcall.test | na | 6 | 0 | 0 | 6 | 0 | 0 | 0 | 6 |
-| dict.test | in | 342 | 317 | 23 | 2 | 0 | 317 | 23 | 2 |
+| dict.test | in | 342 | 320 | 22 | 0 | 0 | 322 | 20 | 0 |
 | dstring.test | na | 44 | 0 | 0 | 44 | 0 | 0 | 0 | 44 |
-| encoding.test | decide | 101 | 82 | 1 | 18 | 0 | 82 | 1 | 18 |
+| encoding.test | decide | 101 | 83 | 0 | 18 | 0 | 83 | 0 | 18 |
 | env.test | decide | 26 | 8 | 14 | 4 | 0 | 8 | 14 | 4 |
-| error.test | in | 317 | 300 | 9 | 8 | 0 | 300 | 9 | 8 |
-| eval.test | in | 12 | 11 | 1 | 0 | 0 | 11 | 1 | 0 |
+| error.test | in | 317 | 305 | 12 | 0 | 0 | 305 | 12 | 0 |
+| eval.test | in | 12 | 12 | 0 | 0 | 0 | 12 | 0 | 0 |
 | event.test | decide | 66 | 35 | 2 | 29 | 0 | 35 | 2 | 29 |
 | exec.test | decide | 100 | 87 | 4 | 9 | 0 | 87 | 4 | 9 |
-| execute.test | in | 157 | 71 | 6 | 80 | 0 | 71 | 6 | 80 |
+| execute.test | in | 157 | 72 | 5 | 80 | 0 | 72 | 5 | 80 |
 | expr-old.test | in | 460 | 433 | 11 | 16 | 0 | 433 | 11 | 16 |
 | expr.test | in | 14,185 | 14,124 | 27 | 34 | 0 | 14,124 | 27 | 34 |
 | fCmd.test | decide | 256 | 124 | 83 | 48 | 1 | 124 | 83 | 48 |
-| fileName.test | decide | 300 | 58 | 61 | 176 | 5 | 58 | 61 | 176 |
+| fileName.test | decide | 300 | 58 | 61 | 178 | 3 | 58 | 61 | 178 |
 | fileSystem.test | decide | 137 | 38 | 40 | 59 | 0 | 38 | 40 | 59 |
 | fileSystemEncoding.test | decide | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 0 |
 | for-old.test | in | 9 | 9 | 0 | 0 | 0 | 9 | 0 | 0 |
-| for.test | in | 88 | 61 | 3 | 24 | 0 | 61 | 3 | 24 |
-| foreach.test | in | 43 | 41 | 2 | 0 | 0 | 41 | 2 | 0 |
+| for.test | in | 88 | 77 | 11 | 0 | 0 | 77 | 11 | 0 |
+| foreach.test | in | 43 | 42 | 1 | 0 | 0 | 42 | 1 | 0 |
 | format.test | in | 266 | 255 | 2 | 9 | 0 | 255 | 2 | 9 |
 | get.test | in | 22 | 5 | 1 | 16 | 0 | 5 | 1 | 16 |
 | history.test | decide | 62 | 17 | 45 | 0 | 0 | 17 | 45 | 0 |
@@ -153,13 +204,13 @@ Tests with a different result in the JIT run. `socket.test`, `io.test`, and `cha
 | httpold.test | decide | 32 | 3 | 28 | 0 | 1 | 3 | 28 | 0 |
 | if-old.test | in | 33 | 33 | 0 | 0 | 0 | 33 | 0 | 0 |
 | if.test | in | 73 | 73 | 0 | 0 | 0 | 73 | 0 | 0 |
-| incr-old.test | in | 14 | 12 | 2 | 0 | 0 | 12 | 2 | 0 |
-| incr.test | in | 66 | 62 | 4 | 0 | 0 | 62 | 4 | 0 |
+| incr-old.test | in | 14 | 13 | 1 | 0 | 0 | 13 | 1 | 0 |
+| incr.test | in | 66 | 64 | 2 | 0 | 0 | 64 | 2 | 0 |
 | indexObj.test | na | 45 | 0 | 0 | 45 | 0 | 0 | 0 | 45 |
-| info.test | in | 266 | 111 | 152 | 3 | 0 | 111 | 152 | 3 |
+| info.test | in | 266 | 115 | 148 | 3 | 0 | 115 | 148 | 3 |
 | init.test | decide | 36 | 17 | 19 | 0 | 0 | 17 | 19 | 0 |
 | interp.test | decide | 352 | 198 | 141 | 13 | 0 | 198 | 141 | 13 |
-| io.test | decide | 830 | 364 | 79 | 387 | 0 | 364 | 79 | 387 |
+| io.test | decide | 830 | 364 | 79 | 387 | 0 | 363 | 80 | 387 |
 | ioCmd.test | decide | 348 | 98 | 148 | 102 | 0 | 98 | 148 | 102 |
 | ioTrans.test | decide | 106 | 2 | 67 | 37 | 0 | 2 | 67 | 37 |
 | iogt.test | decide | 17 | 0 | 0 | 17 | 0 | 0 | 0 | 17 |
@@ -170,7 +221,7 @@ Tests with a different result in the JIT run. `socket.test`, `io.test`, and `cha
 | list.test | in | 78 | 77 | 1 | 0 | 0 | 77 | 1 | 0 |
 | listObj.test | in | 47 | 42 | 0 | 5 | 0 | 42 | 0 | 5 |
 | llength.test | in | 6 | 6 | 0 | 0 | 0 | 6 | 0 | 0 |
-| lmap.test | in | 66 | 65 | 1 | 0 | 0 | 65 | 1 | 0 |
+| lmap.test | in | 66 | 66 | 0 | 0 | 0 | 66 | 0 | 0 |
 | load.test | decide | 30 | 0 | 8 | 22 | 0 | 0 | 8 | 22 |
 | lrange.test | in | 34 | 32 | 0 | 2 | 0 | 32 | 0 | 2 |
 | lrepeat.test | in | 12 | 12 | 0 | 0 | 0 | 12 | 0 | 0 |
@@ -185,21 +236,21 @@ Tests with a different result in the JIT run. `socket.test`, `io.test`, and `cha
 | misc.test | in | 301 | 1 | 1 | 299 | 0 | 1 | 1 | 299 |
 | msgcat.test | decide | 109 | 49 | 60 | 0 | 0 | 49 | 60 | 0 |
 | namespace-old.test | in | 126 | 121 | 5 | 0 | 0 | 121 | 5 | 0 |
-| namespace.test | in | 313 | 235 | 75 | 3 | 0 | 235 | 75 | 3 |
+| namespace.test | in | 313 | 235 | 76 | 2 | 0 | 235 | 76 | 2 |
 | notify.test | na | 23 | 0 | 0 | 23 | 0 | 0 | 0 | 23 |
 | nre.test | in | 28 | 4 | 1 | 23 | 0 | 4 | 1 | 23 |
 | obj.test | na | 92 | 3 | 0 | 89 | 0 | 3 | 0 | 89 |
-| oo.test | in | 306 | 217 | 72 | 17 | 0 | 217 | 72 | 17 |
-| ooNext2.test | in | 62 | 50 | 7 | 5 | 0 | 50 | 7 | 5 |
+| oo.test | in | 306 | 218 | 85 | 3 | 0 | 220 | 83 | 3 |
+| ooNext2.test | in | 62 | 50 | 12 | 0 | 0 | 50 | 12 | 0 |
 | opt.test | decide | 31 | 0 | 30 | 0 | 1 | 0 | 30 | 0 |
 | package.test | decide | 402 | 375 | 27 | 0 | 0 | 375 | 27 | 0 |
-| parse.test | in | 271 | 114 | 5 | 152 | 0 | 114 | 5 | 152 |
+| parse.test | in | 271 | 114 | 6 | 151 | 0 | 114 | 6 | 151 |
 | parseExpr.test | in | 284 | 67 | 0 | 217 | 0 | 67 | 0 | 217 |
 | parseOld.test | in | 158 | 154 | 1 | 3 | 0 | 154 | 1 | 3 |
 | pid.test | decide | 5 | 5 | 0 | 0 | 0 | 5 | 0 | 0 |
 | pkgMkIndex.test | decide | 27 | 0 | 25 | 2 | 0 | 0 | 25 | 2 |
 | platform.test | decide | 6 | 1 | 2 | 1 | 2 | 1 | 2 | 1 |
-| proc-old.test | in | 74 | 66 | 8 | 0 | 0 | 66 | 8 | 0 |
+| proc-old.test | in | 74 | 67 | 7 | 0 | 0 | 67 | 7 | 0 |
 | proc.test | in | 38 | 26 | 3 | 9 | 0 | 26 | 3 | 9 |
 | pwd.test | decide | 3 | 3 | 0 | 0 | 0 | 3 | 0 | 0 |
 | reg.test | in | 1,141 | 925 | 106 | 110 | 0 | 925 | 106 | 110 |
@@ -215,21 +266,21 @@ Tests with a different result in the JIT run. `socket.test`, `io.test`, and `cha
 | security.test | decide | 1 | 1 | 0 | 0 | 0 | 1 | 0 | 0 |
 | set-old.test | in | 153 | 142 | 11 | 0 | 0 | 142 | 11 | 0 |
 | set.test | in | 64 | 61 | 2 | 1 | 0 | 61 | 2 | 1 |
-| socket.test | decide | 175 | 157 | 7 | 11 | 0 | 155 | 9 | 11 |
+| socket.test | decide | 175 | 157 | 7 | 11 | 0 | 157 | 7 | 11 |
 | source.test | decide | 23 | 18 | 5 | 0 | 0 | 18 | 5 | 0 |
 | split.test | in | 17 | 16 | 1 | 0 | 0 | 16 | 1 | 0 |
 | stack.test | decide | 3 | 1 | 2 | 0 | 0 | 1 | 2 | 0 |
-| string.test | in | 1,266 | 1,246 | 2 | 18 | 0 | 1,246 | 2 | 18 |
-| stringComp.test | in | 279 | 278 | 0 | 1 | 0 | 278 | 0 | 1 |
+| string.test | in | 1,266 | 1,246 | 8 | 12 | 0 | 1,246 | 8 | 12 |
+| stringComp.test | in | 279 | 278 | 1 | 0 | 0 | 278 | 1 | 0 |
 | stringObj.test | na | 75 | 0 | 0 | 75 | 0 | 0 | 0 | 75 |
 | subst.test | in | 63 | 60 | 2 | 1 | 0 | 60 | 2 | 1 |
-| switch.test | in | 113 | 109 | 4 | 0 | 0 | 109 | 4 | 0 |
+| switch.test | in | 113 | 111 | 2 | 0 | 0 | 111 | 2 | 0 |
 | tailcall.test | in | 37 | 20 | 9 | 8 | 0 | 20 | 9 | 8 |
 | tcltest.test | decide | 159 | 2 | 40 | 1 | 116 | 2 | 40 | 1 |
 | thread.test | decide | 52 | 18 | 0 | 34 | 0 | 18 | 0 | 34 |
 | timer.test | decide | 54 | 53 | 1 | 0 | 0 | 53 | 1 | 0 |
 | tm.test | decide | 21 | 0 | 21 | 0 | 0 | 0 | 21 | 0 |
-| trace.test | in | 295 | 212 | 66 | 17 | 0 | 212 | 66 | 17 |
+| trace.test | in | 295 | 212 | 69 | 14 | 0 | 213 | 68 | 14 |
 | unixFCmd.test | decide | 49 | 2 | 28 | 19 | 0 | 2 | 28 | 19 |
 | unixFile.test | decide | 7 | 0 | 0 | 7 | 0 | 0 | 0 | 7 |
 | unixForkEvent.test | na | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 1 |
@@ -241,9 +292,9 @@ Tests with a different result in the JIT run. `socket.test`, `io.test`, and `cha
 | upvar.test | in | 65 | 43 | 14 | 8 | 0 | 43 | 14 | 8 |
 | utf.test | in | 498 | 126 | 18 | 354 | 0 | 126 | 18 | 354 |
 | util.test | in | 2,291 | 2,124 | 23 | 144 | 0 | 2,124 | 23 | 144 |
-| var.test | in | 110 | 69 | 21 | 20 | 0 | 69 | 21 | 20 |
-| while-old.test | in | 15 | 14 | 1 | 0 | 0 | 14 | 1 | 0 |
-| while.test | in | 46 | 45 | 1 | 0 | 0 | 45 | 1 | 0 |
+| var.test | in | 110 | 71 | 22 | 17 | 0 | 71 | 22 | 17 |
+| while-old.test | in | 15 | 15 | 0 | 0 | 0 | 15 | 0 | 0 |
+| while.test | in | 46 | 46 | 0 | 0 | 0 | 46 | 0 | 0 |
 | winConsole.test | na | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 1 |
 | winDde.test | na | 50 | 0 | 0 | 50 | 0 | 0 | 0 | 50 |
 | winFCmd.test | na | 178 | 0 | 0 | 178 | 0 | 0 | 0 | 178 |
@@ -281,10 +332,12 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | apply-4.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::apply lambdaExpr x" \| want: wrong # args: should ... |
 | apply-4.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::apply lambdaExpr x" \| want: wrong # args: should ... |
 | apply-4.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::apply lambdaExpr self x" \| want: wrong # args: sh... |
+| apply-9.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 32 \| want: 0 |
+| apply-9.2 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -448 \| want: 0 |
+| apply-9.3 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -96 \| want: 0 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| memory | 3 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 | applylambda | 1 | `internals`: a C test command or package of the Tcl test binary |
 
 ### assemble.test
@@ -488,6 +541,10 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | assemble-5.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
 | assemble-5.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello world |
 | assemble-50.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 2 16 4 16 16 52 8 52 16 52 16 40... |
+| assemble-51.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 |
+| assemble-51.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 |
+| assemble-51.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 |
+| assemble-51.4 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 544 \| want: 0 |
 | assemble-52.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "::tcl::unsupported::assemble" \| want:  |
 | assemble-6.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
 | assemble-6.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
@@ -572,10 +629,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | assemble-9.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello |
 | assemble-9.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
 
-| Skipped by | Tests | Bucket |
-|---|---|---|
-| memory | 4 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
-
 ### assocd.test
 
 | Skipped by | Tests | Bucket |
@@ -623,13 +676,14 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | basic-46.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: invoked "break" outside of a loop \| want: invoked "break" outside of a loop ... |
 | basic-46.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: invoked "break" outside of a loop \| want: invoked "break" outside of a loop ... |
 | basic-46.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: command returned bad code: 2     while executing "return -code retu... |
+| basic-48.16.0 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 32 \| want: 0 |
+| basic-48.16.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -9200 \| want: 0 |
 | basic-50.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {} \| want: 0 {} |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | emptyTest | 27 | `tcl`: tclsh skips it too |
 | testcmdtoken | 3 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| memory | 2 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 | testcreatecommand | 2 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 
 ### binary.test
@@ -896,8 +950,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| cmdAH-1.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
-| cmdAH-1.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
 | cmdAH-19.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: ~nOsUcHuSeR \| want: * |
 | cmdAH-19.11 | `feature`: 'file attributes' | cleanup: file attributes is not available |
 | cmdAH-2.3 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "env(HOME)": no such variable |
@@ -953,12 +1005,13 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 |---|---|---|
 | cmdIL-3.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {comparison error} {comparison error     while executing "error "comparis... |
 | cmdIL-4.36 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 256 32 257 \| want: 257 32 256 |
+| cmdIL-6.12 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -160 \| want: 0 |
+| cmdIL-6.24 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -208 \| want: 0 |
 | info-20.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | hasIsoLocale | 2 | `internals`: a C test command or package of the Tcl test binary |
-| memory | 2 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 | testWithLimit | 1 | `internals`: a C test command or package of the Tcl test binary |
 | testobj | 1 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 
@@ -974,10 +1027,14 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | Test | Bucket | Result (start) |
 |---|---|---|
 | cmdMZ-return-1.0 | `bug`: the result differs from tclsh 8.6.16 | code 2/1:  \| want: bad -options value:* |
-| cmdMZ-return-2.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {-code 1 -errorcode NONE -errorinfo {     while executing "return -level ... |
 | cmdMZ-return-2.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/3: bad completion code "foo": must be ok, error, return, break, continue, or an ... |
-| cmdMZ-return-2.18 | `feature`: 'info errorstack' | code 1/0,2: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount,... |
+| cmdMZ-return-2.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {-code 1 -errorstack {CALL a CALL b} -level 1} {CALL a CALL b} \| want: 2... |
 | cmdMZ-return-2.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/-1: bad completion code "-1": must be ok, error, return, break, continue, or an ... |
+| cmdMZ-return-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| cmdMZ-return-3.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| cmdMZ-return-3.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| cmdMZ-return-3.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| cmdMZ-return-3.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -993,15 +1050,20 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 ### compExpr.test
 
+| Test | Bucket | Result (start) |
+|---|---|---|
+| compExpr-7.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 399024 \| want: 0 |
+| compExpr-7.2 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 320 \| want: 0 |
+
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| memory | 2 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 | testmathfunctions | 2 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 
 ### compile.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
+| compile-12.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 405424 \| want: 0 |
 | compile-13.2 | `bug`: the recursion limit and its message | setup: the recursion limit of this interpreter is 600 |
 | compile-13.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 1 1 1 \| want:  |
 | compile-18.1 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: wrong # args: s... |
@@ -1070,7 +1132,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | knownBug | 9 | `tcl`: tclsh skips it too |
-| memory | 2 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 
 ### config.test
 
@@ -1090,12 +1151,13 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| coroutine-10.1 | `bug`: coroutines: the result differs | code 1/0,2: namespace "tcl::unsupported" not found in "::" \| want: ok ok {abc ::cbody1... |
-| coroutine-3.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| coroutine-10.1 | `bug`: coroutines: the result differs | code 1/0,2: invalid command name "corotype" \| want: ok ok {abc ::cbody1} {{1 2 3} ::cb... |
+| coroutine-3.2 | `bug`: coroutines: the result differs | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
 | coroutine-3.5 | `bug`: coroutines: the result differs | code 0/0,2: ::foo \| want:  |
-| coroutine-3.6 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| coroutine-3.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| coroutine-3.6 | `bug`: coroutines: the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  |
+| coroutine-3.7 | `bug`: coroutines: the result differs | code 1/0,2: info frame: not supported by ztcl \| want: coroutine X coroutine Y info fra... |
 | coroutine-4.4 | `bug`: coroutines: the result differs | code 0/0,2: global \| want: local |
+| coroutine-4.5 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 1077360 \| want: 0 |
 | coroutine-7.10 | `bug`: coroutines: the result differs | code 2/1: a OUT b 123 c \| want: yieldto called in deleted namespace |
 | coroutine-7.11 | `bug`: coroutines: the result differs | code 2/1: a OUT b 123 c \| want: yieldto called in deleted namespace |
 | coroutine-7.4 | `bug`: coroutines: the result differs | code 0/0,2:  \| want: b a |
@@ -1113,7 +1175,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | testnrelevels | 2 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| memory | 1 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 
 ### dcall.test
 
@@ -1125,33 +1186,28 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| dict-14.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 test 1 {test     while executing "error test"     invoked from within "di... |
-| dict-17.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 x {x     while executing "error x"     invoked from within "dict filter {... |
+| dict-19.2 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 480 \| want: 0 |
+| dict-19.3 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 480 \| want: 0 |
 | dict-20.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a b c d \| want:  a b c d  |
 | dict-20.22 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a b c d \| want:  a b c d  |
 | dict-22.10 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: key "b" not known in dictionary \| want: 0 {} |
-| dict-23.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| dict-23.10 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| dict-23.11 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| dict-23.12 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| dict-23.13 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| dict-23.14 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| dict-23.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 5 |
+| dict-23.10 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
+| dict-23.11 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
+| dict-23.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
+| dict-23.13 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
+| dict-23.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
+| dict-23.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 5 |
 | dict-23.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "tcl::dict::lappend" \| want: bar baz |
-| dict-23.4 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
 | dict-23.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "tcl::dict::incr" \| want: bar 1 |
-| dict-23.6 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| dict-23.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| dict-23.8 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| dict-23.9 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| dict-24.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 test 1 {test     while executing "error test"     invoked from within "di... |
-| dict-24.20.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| dict-24.21 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
+| dict-23.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 2 |
+| dict-23.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
+| dict-23.9 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
+| dict-24.20.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 5 |
+| dict-24.21 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 5 |
 | dict-4.13a | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: NONE \| want: TCL VALUE DICTIONARY |
-
-| Skipped by | Tests | Bucket |
-|---|---|---|
-| memory | 2 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 
 ### dstring.test
 
@@ -1160,10 +1216,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | testdstring | 44 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 
 ### encoding.test
-
-| Test | Bucket | Result (start) |
-|---|---|---|
-| encoding-24.3 | `bug`: encodings: the result differs | code 0/0,2: 9 { (\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000)} \| want: 3 {乎... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1200,25 +1252,18 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| error-1.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "string index string charIndex"     while executing... |
 | error-19.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args to on clause: must be "... on code variableList script" \| wan... |
-| error-2.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: glorp2     while executing "error glorp2"     invoked from within "format [... |
 | error-20.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: a b c \| want: bad completion code "34985723094872345": must be ok, error, re... |
-| error-4.6 | `feature`: 'info errorstack' | code 1/0,2: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount,... |
-| error-4.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: key "-errorstack" not known in dictionary \| want: INNER * CALL {g 1212} CA... |
-| error-4.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: key "-errorstack" not known in dictionary \| want: INNER {error bar} CALL g... |
-| error-6.10 | `feature`: 'info errorstack' | code 1/0,2: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount,... |
+| error-21.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 976 \| want: 0 |
+| error-21.2 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 784 \| want: 0 |
+| error-21.3 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 656 \| want: 0 |
+| error-21.4 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 960 \| want: 0 |
+| error-21.5 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 640 \| want: 0 |
+| error-21.6 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 960 \| want: 0 |
+| error-21.7 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 640 \| want: 0 |
+| error-21.8 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 672 \| want: 0 |
+| error-4.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: INNER foo CALL goo UP 1 \| want: INNER {error bar} CALL goo UP 1 |
 | error-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: namespace \| want: *BadProc* |
-
-| Skipped by | Tests | Bucket |
-|---|---|---|
-| memory | 8 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
-
-### eval.test
-
-| Test | Bucket | Result (start) |
-|---|---|---|
-| eval-2.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: test error     while executing "error "test error""     invoked from within... |
 
 ### event.test
 
@@ -1253,8 +1298,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 |---|---|---|
 | execute-10.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 4 |
 | execute-6.11 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "load" \| want: {This is a result: 1} {This is a resul... |
-| execute-8.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: These differ: bar     while executing "error bar"     (procedure "foo" line... |
-| execute-8.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -code 1 -level 0 -errorcode NONE -errorinfo {FOO     while executing "error... |
+| execute-8.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -code 1 -level 0 -errorstack {INNER {error FOO}} -errorcode NONE -errorinfo... |
 | execute-8.6 | `bug`: the setup or the cleanup of the test fails | setup: can't find package tcltest 2.5 |
 | execute-8.7 | `bug`: the setup or the cleanup of the test fails | setup: can't find package tcltest 2.5 |
 
@@ -1434,8 +1478,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | fileName-20.8 | `bug`: file names and 'glob': the result differs | code 0/0,2: ~test \| want: ./~test |
 | fileName-20.9 | `bug`: file names and 'glob': the result differs | setup: couldn't open "~/test": no such file or directory |
 | filename-11.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "glob ?switches? name ?name ...?" \| want: no files m... |
-| filename-11.14 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl4160309/globTest |
-| filename-11.15 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl4160309/globTest |
+| filename-11.14 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl1468248/globTest |
+| filename-11.15 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl1468248/globTest |
 | filename-11.17.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.3 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.4 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
@@ -1483,7 +1527,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filename-13.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/{\}" \| want: unmatched open-brace in... |
 | filename-13.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/}" \| want: unmatched close-brace in ... |
 | filename-14.15 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
-| filename-14.17 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl4160309/globTest/z1.c |
+| filename-14.17 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl1468248/globTest/z1.c |
 | filename-14.22 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "goo/*" \| want: no files matched glob patterns... |
 | filename-14.26 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
 | filename-14.30 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 \| want: globTest/a1/ |
@@ -1493,9 +1537,9 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| (file stopped early, status 0) | 5 | `feature`: 'info hostname', and '~' with no 'env(HOME)' |
+| (file stopped early, status 0) | 3 | `feature`: 'info hostname', and '~' with no 'env(HOME)' |
 | testsetplatform | 133 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| win | 35 | `platform`: a constraint of another platform or word size |
+| win | 37 | `platform`: a constraint of another platform or word size |
 | nonPortable | 7 | `tcl`: tclsh skips it too |
 | testtranslatefilename | 1 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 
@@ -1519,7 +1563,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.11 | `bug`: file names and 'glob': the result differs | code 0/0,2: 1 \| want: 0 |
 | filesystem-6.14 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
 | filesystem-6.15 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: could not read "": no such file or directory |
-| filesystem-6.16 | `bug`: file names and 'glob': the result differs | code 0/1: 1795777729 \| want: could not read "": no such file or directory |
+| filesystem-6.16 | `bug`: file names and 'glob': the result differs | code 0/1: 1795789363 \| want: could not read "": no such file or directory |
 | filesystem-6.17 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/1: file mtime with a new time is not available \| want: could not read "": no su... |
 | filesystem-6.18 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: can't create directory "": no such file or directory |
 | filesystem-6.2 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: could not read "": no such file or directory |
@@ -1529,8 +1573,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.24 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not readlink: links are not available in the root folder \| want: could... |
 | filesystem-6.25 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "" to "": target file exists \| want: error renaming "": no su... |
 | filesystem-6.27 | `bug`: file names and 'glob': the result differs | code 0/1: / \| want: unrecognised path |
-| filesystem-6.28 | `bug`: file names and 'glob': the result differs | code 0/1: 280 \| want: could not read "": no such file or directory |
-| filesystem-6.3 | `bug`: file names and 'glob': the result differs | code 0/1: 1795777729 \| want: could not read "": no such file or directory |
+| filesystem-6.28 | `bug`: file names and 'glob': the result differs | code 0/1: 260 \| want: could not read "": no such file or directory |
+| filesystem-6.3 | `bug`: file names and 'glob': the result differs | code 0/1: 1795789363 \| want: could not read "": no such file or directory |
 | filesystem-6.30 | `bug`: file names and 'glob': the result differs | code 0/1: native root \| want: unrecognised path |
 | filesystem-6.32 | `bug`: file names and 'glob': the result differs | code 0/1: directory \| want: could not read "": no such file or directory |
 | filesystem-6.33 | `bug`: file names and 'glob': the result differs | code 0/0,2: 1 \| want: 0 |
@@ -1562,20 +1606,23 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| for-6.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "set varName ?newValue?"     while executing "set" ... |
-| for-6.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {wrong # args: should be "set varName ?newValue?"} {wrong # args: should ... |
-| for-6.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "set varName ?newValue?"     while executing "set" ... |
-
-| Skipped by | Tests | Bucket |
-|---|---|---|
-| memory | 24 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
+| for-7.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -384 \| want: 0 |
+| for-7.11 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 160 \| want: 0 |
+| for-7.13 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 6144 \| want: 0 |
+| for-7.15 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 160 \| want: 0 |
+| for-7.16 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 160 \| want: 0 |
+| for-7.17 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 320 \| want: 0 |
+| for-7.18 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -960 \| want: 0 |
+| for-7.2 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -384 \| want: 0 |
+| for-7.21 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 6144 \| want: 0 |
+| for-7.3 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -160 \| want: 0 |
+| for-7.5 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 6144 \| want: 0 |
 
 ### foreach.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| foreach-1.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "a": variable is array} {can't set "a": variable is array     ... |
-| foreach-9.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| foreach-9.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
 
 ### format.test
 
@@ -1822,7 +1869,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| incr-old-2.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {expected integer but got "1a"} {expected integer but got "1a"     while ... |
 | incr-old-2.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-o... |
 
 ### incr.test
@@ -1831,8 +1877,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 |---|---|---|
 | incr-1.28 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-o... |
 | incr-2.28 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-o... |
-| incr-2.30 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {expected integer but got "1a"} {expected integer but got "1a"     while ... |
-| incr-2.31 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {expected integer but got "1a"} {expected integer but got "1a"     while ... |
 
 ### indexObj.test
 
@@ -1845,158 +1889,154 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| info-21.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "gorp": must be args, body, cmdcount, command... |
-| info-21.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "c": must be args, body, cmdcount, commands, ... |
-| info-21.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "l": must be args, body, cmdcount, commands, ... |
-| info-21.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "s": must be args, body, cmdcount, commands, ... |
-| info-22.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-22.1 | `feature`: 'info frame' | code 0/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-22.2 | `feature`: 'info frame' | code 0/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-22.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-22.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: 7 |
+| info-22.1 | `bug`: 'info': the result differs | code 0/0,2: info frame: not supported by ztcl \| want: bad level "-8" |
+| info-22.2 | `bug`: 'info': the result differs | code 0/0,2: info frame: not supported by ztcl \| want: bad level "9" |
+| info-22.3 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 750 file */info... |
 | info-22.4 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
-| info-22.5 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-22.6 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-22.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-22.8 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-23.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-23.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-23.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-23.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-23.4 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-23.5 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-23.6 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-24.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-24.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-24.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-24.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-24.4 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-24.5 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-24.6.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-24.6.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-24.6.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-24.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-24.8 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-24.9 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-25.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-25.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-22.5 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 756 file info.t... |
+| info-22.6 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 758 file info.t... |
+| info-22.7 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 761 file info.t... |
+| info-22.8 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: * {type source line 730 file inf... |
+| info-23.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: 1 2 |
+| info-23.1 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: 2 |
+| info-23.2 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: 2 |
+| info-23.3 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 793 file * cmd ... |
+| info-23.4 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type eval line 1 cmd {info frame... |
+| info-23.5 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type eval line 1 cmd {info frame... |
+| info-23.6 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: * {type source line 730 file inf... |
+| info-24.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 825 file info.t... |
+| info-24.1 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 839 file info.t... |
+| info-24.2 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 853 file info.t... |
+| info-24.3 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 867 file info.t... |
+| info-24.4 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 880 file info.t... |
+| info-24.5 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 894 file info.t... |
+| info-24.6.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 910 file info.t... |
+| info-24.6.1 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 926 file info.t... |
+| info-24.6.2 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type proc line 1 cmd {info frame... |
+| info-24.7 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 955 file info.t... |
+| info-24.8 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 969 file info.t... |
+| info-24.9 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 983 file info.t... |
+| info-25.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 997 file info.t... |
+| info-25.1 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1005 file info.... |
 | info-3.1 | `bug`: 'info': the result differs | code 0/0,2: 3 \| want: 4 |
 | info-3.2 | `bug`: 'info': the result differs | code 0/0,2: 3 \| want: 4 |
 | info-3.3 | `bug`: 'info': the result differs | code 0/0,2: 3 \| want: 4 |
 | info-30.0 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
-| info-30.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.1 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1446 file info.... |
 | info-30.10 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
 | info-30.11 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
 | info-30.12 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
 | info-30.13 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
 | info-30.14 | `bug`: 'info': the result differs | code 1/0,2: interpreter named "sub" already exists, cannot create \| want:  type source... |
-| info-30.15 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.16 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.17 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.18 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.19 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.20 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.21 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.22 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.23 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.24 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.25 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.26 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.27 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.28 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.29 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.30 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.31 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.32 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.33 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.34 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.35 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.36 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.37 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.38 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.39 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.15 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1574 file info.... |
+| info-30.16 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1587 file info... |
+| info-30.17 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1601 file info.... |
+| info-30.18 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type eval line 3 cmd {info fram... |
+| info-30.19 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1624 file info... |
+| info-30.2 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1457 file info.... |
+| info-30.20 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1643 file info.... |
+| info-30.21 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1652 file info... |
+| info-30.22 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1668 file info... |
+| info-30.23 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1680 file info... |
+| info-30.24 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1696 file info... |
+| info-30.25 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1712 file info.... |
+| info-30.26 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1716 file info.... |
+| info-30.27 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1720 file info... |
+| info-30.28 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1725 file info... |
+| info-30.29 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: foo type source line 1729 file i... |
+| info-30.3 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1464 file info.... |
+| info-30.30 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: foo type source line 1733 file i... |
+| info-30.31 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1737 file info.... |
+| info-30.32 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1741 file info.... |
+| info-30.33 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1745 file info.... |
+| info-30.34 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1749 file info.... |
+| info-30.35 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1754 file info... |
+| info-30.36 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1759 file info... |
+| info-30.37 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:   type source line 1765 file inf... |
+| info-30.38 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1771 file info... |
+| info-30.39 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:   type source line 1776 file inf... |
 | info-30.4 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
-| info-30.40 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.41 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.42 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.43 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.44 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.45 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.46 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.47 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-30.48 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.40 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1782 file info.... |
+| info-30.41 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1791 file info... |
+| info-30.42 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1800 file info... |
+| info-30.43 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1808 file info.... |
+| info-30.44 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1814 file info.... |
+| info-30.45 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1820 file info.... |
+| info-30.46 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: YES |
+| info-30.47 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: YES |
+| info-30.48 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type eval line 2 cmd {info frame... |
 | info-30.5 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
 | info-30.6 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
-| info-30.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.7 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1495 file info... |
 | info-30.8 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
 | info-30.9 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
-| info-31.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-31.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type eval line 3 cmd {info frame... |
 | info-31.1 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
 | info-31.1a | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
 | info-31.2 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
 | info-31.4 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
 | info-31.5 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
 | info-31.6 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
-| info-31.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-32.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.10 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.11 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.12 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.13 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.14 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.15 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.16 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.17 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.18 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.19 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.20 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.21 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.22 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.23 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.24 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.25 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.26 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.27 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.28 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.29 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.2a | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.30 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.31 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.32 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.33 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.34 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.35 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.3a | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.4 | `bug`: 'info': the result differs | code 1/0,2: dict element in quotes followed by ":" instead of space \| want: type sourc... |
-| info-33.5 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.6 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.8 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-33.9 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-34.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-34.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-35.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-35.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-36.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-36.1.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-36.1.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-31.7 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type proc line 1 cmd {info frame... |
+| info-32.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type proc line 1 cmd {info frame... |
+| info-33.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1115 file info.... |
+| info-33.1 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1130 file info.... |
+| info-33.10 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2058 file info.... |
+| info-33.11 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2073 file info.... |
+| info-33.12 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2088 file info.... |
+| info-33.13 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2101 file info.... |
+| info-33.14 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2115 file info.... |
+| info-33.15 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2130 file info.... |
+| info-33.16 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2144 file info.... |
+| info-33.17 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2156 file info.... |
+| info-33.18 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2168 file info.... |
+| info-33.19 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2181 file info.... |
+| info-33.2 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1144 file info.... |
+| info-33.20 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2193 file info.... |
+| info-33.21 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2205 file info.... |
+| info-33.22 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2218 file info.... |
+| info-33.23 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2231 file info.... |
+| info-33.24 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2245 file info.... |
+| info-33.25 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2259 file info.... |
+| info-33.26 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2273 file info.... |
+| info-33.27 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2287 file info.... |
+| info-33.28 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2300 file info.... |
+| info-33.29 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2313 file info.... |
+| info-33.2a | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type proc line 1 cmd {info frame... |
+| info-33.3 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1169 file info.... |
+| info-33.30 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2326 file info.... |
+| info-33.31 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2339 file info.... |
+| info-33.32 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2352 file info.... |
+| info-33.33 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2365 file info.... |
+| info-33.34 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2377 file info.... |
+| info-33.35 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2389 file info.... |
+| info-33.3a | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type eval line 1 cmd {info frame... |
+| info-33.4 | `bug`: 'info': the result differs | code 1/0,2: key "cmd" not known in dictionary \| want: type source line 1968 file info.... |
+| info-33.5 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1983 file info.... |
+| info-33.6 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1998 file info.... |
+| info-33.7 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2013 file info.... |
+| info-33.8 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2027 file info.... |
+| info-33.9 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 2043 file info.... |
+| info-34.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type proc line 2 cmd {info frame... |
+| info-34.1 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type eval line 1 cmd {info frame... |
+| info-35.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1231 file info.... |
+| info-35.1 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type proc line 1 cmd {info frame... |
+| info-36.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1259 file info.... |
+| info-36.1.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1275 file info.... |
+| info-36.1.1 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1291 file info.... |
 | info-37.0 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
-| info-38.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-38.1 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: * {type source line 730 file inf... |
 | info-38.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | setup: bad option "debug": must be alias, aliases, cancel, children, create, delete, ev... |
-| info-38.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-38.3 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: * {type source line 730 file inf... |
 | info-38.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | setup: bad option "debug": must be alias, aliases, cancel, children, create, delete, ev... |
-| info-38.5 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-38.5 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: * {type source line 730 file inf... |
 | info-38.6 | `bug`: 'info': the result differs | setup: interpreter named "sub" already exists, cannot create |
-| info-38.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-38.7 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: * {type source line 730 file inf... |
 | info-39.0 | `feature`: 'info frame' | cleanup: can't unset "res": no such variable |
-| info-39.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-39.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| info-41.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-39.1 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: type source line 1854 file info.... |
+| info-39.2 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: 3 |
+| info-41.0 | `bug`: 'info': the result differs | code 1/0,2: info frame: not supported by ztcl \| want: 1 {type precompiled} {type preco... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -2024,7 +2064,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | init-2.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "setLogCmd" \| want:  |
 | init-2.8 | `bug`: the setup or the cleanup of the test fails | cleanup: can't delete "tcl::HistAdd": command doesn't exist |
 | init-3.0 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "foo:::bar::blah" \| want: 1 |
-| init-5.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 xxx {-code 1 -level 0 -errorcode NONE -errorinfo {xxx     while executing... |
+| init-5.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 xxx {-code 1 -level 0 -errorstack {INNER ::xxx UP 1} -errorcode NONE -err... |
 
 ### interp.test
 
@@ -2542,12 +2582,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | testobj | 4 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | emptyTest | 1 | `tcl`: tclsh skips it too |
 
-### lmap.test
-
-| Test | Bucket | Result (start) |
-|---|---|---|
-| lmap-1.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "a": variable is array} {can't set "a": variable is array     ... |
-
 ### load.test
 
 | Test | Bucket | Result (start) |
@@ -2788,6 +2822,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | namespace-53.7 | `bug`: namespaces: the result differs | code 0/0,2: 1 {wrong # args: should be "ns p1 subcommand ?arg ...?"} 1 {wrong # args: s... |
 | namespace-53.8 | `bug`: namespaces: the result differs | code 0/0,2: 0 {1 x2} {} 1 {unknown or ambiguous subcommand "x2": must be Magic, or x1} ... |
 | namespace-53.9 | `bug`: namespaces: the result differs | code 0/0,2: 0 {1 x2} {} 1 {unknown or ambiguous subcommand "x2": must be Magic, or x1} ... |
+| namespace-54.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 256 \| want: 0 |
 | namespace-55.2 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "::tcl::unsupported::disassemble" \| want: 1 1 1 * |
 | namespace-56.6 | `bug`: namespaces: the result differs | code 2/0,2: 0 \| want: 2 |
 | namespace-6.2 | `bug`: namespaces: the result differs | code 0/0,2: ::test_ns_1::::foo ::test_ns_2:::::foo \| want: ::test_ns_1::foo ::test_ns_... |
@@ -2802,7 +2837,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | knownBug | 1 | `tcl`: tclsh skips it too |
-| memory | 1 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 | testevalobjv | 1 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 
 ### notify.test
@@ -2833,9 +2867,19 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | Test | Bucket | Result (start) |
 |---|---|---|
 | oo-0.2 | `bug`: TclOO: the result differs | code 1/0,2: unknown namespace "::" in namespace delete command \| want:  |
+| oo-0.3 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 960 \| want: 0 |
+| oo-0.4 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 1664 \| want: 0 |
+| oo-0.5.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -512 \| want: 0 |
+| oo-0.5.2 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 394928 \| want: 0 |
+| oo-0.8 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 656 \| want: 0 |
 | oo-0.9 | `bug`: TclOO: the result differs | code 0/0,2: TclOO 1.1.0 0 \| want: TclOO 1.1.0 1 |
+| oo-1.18.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -224 \| want: 0 |
+| oo-1.18.2 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 5760 \| want: 0 |
 | oo-1.21 | `feature`: the slot classes of TclOO ('oo::Slot') | code 1/0,2: ::oo::Slot does not refer to an object \| want: {} {::oo::Slot ::oo::class ... |
 | oo-1.25 | `bug`: TclOO: the result differs | code 0/0,2: D D D \| want: D D D D D D |
+| oo-11.6.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 320 \| want: 0 |
+| oo-11.6.2 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -544 \| want: 0 |
+| oo-11.6.3 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 411616 \| want: 0 |
 | oo-14.2 | `bug`: TclOO: the result differs | code 0/0,2: 1 {unknown method "?": must be bar, boo or destroy} 0 {::fooTest in bar} 0 ... |
 | oo-14.3 | `bug`: TclOO: the result differs | cleanup: mixin deletion failed to destroy dependent instance |
 | oo-14.4 | `bug`: TclOO: the result differs | setup: can't create object "c": command already exists with that name |
@@ -2847,7 +2891,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | oo-18.11 | `bug`: TclOO: the result differs | code 0/0,2: foobar     while executing "error foobar"     (in namespace eval "::oo::obj... |
 | oo-18.12 | `bug`: TclOO: the result differs | code 1/0,2: self may only be called from inside a method \| want: ::foo |
 | oo-18.2 | `bug`: TclOO: the result differs | code 0/0,2: 1 foo {foo     while executing "error foo"     (in namespace eval "::oo::de... |
-| oo-18.3b | `bug`: TclOO: the result differs | code 0/0,2: 1 bar {bar     while executing "error bar"     invoked from within "eval er... |
 | oo-18.5 | `bug`: TclOO: the result differs | code 0/0,2: 1 foo {foo     while executing "error foo"     (in "my eval" script line 1)... |
 | oo-18.6 | `bug`: TclOO: the result differs | code 0/0,2: foo     while executing "::error foo"     (in definition script for class "... |
 | oo-18.7 | `bug`: TclOO: the result differs | code 0/0,2: 1 foo {foo     while executing "error foo"     (in definition script for ob... |
@@ -2856,22 +2899,26 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | oo-19.4 | `bug`: TclOO: the result differs | code 0/0,2: {} 0 {} \| want: ::testoo19_4::foo 0 ::testoo19_4::foo |
 | oo-2.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::k::s create X j" \| want: wrong # args: should be ... |
 | oo-2.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::k::t create X j" \| want: wrong # args: should be ... |
+| oo-20.16 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 1344 \| want: 0 |
 | oo-20.3 | `bug`: TclOO: the result differs | code 0/1:  \| want: can't define "a(b)": name refers to an element in an array |
 | oo-20.4 | `bug`: TclOO: the result differs | code 0/1:  \| want: can't define "a(b)": name refers to an element in an array |
-| oo-22.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| oo-22.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| oo-22.1 | `bug`: TclOO: the result differs | code 1/0,2: info frame: not supported by ztcl \| want: 1 {{* cmd {info frame 0} method ... |
+| oo-22.2 | `bug`: TclOO: the result differs | code 1/0,2: info frame: not supported by ztcl \| want: * cmd {info frame 0} method test... |
 | oo-22.3 | `bug`: TclOO: the result differs | code 1/0,2: invalid command name "my" \| want: {* method Work class ::A *} {* method Wo... |
 | oo-22.4 | `bug`: TclOO: the result differs | code 1/0,2: invalid command name "my" \| want: {* method Work class ::B *} {* method Wo... |
 | oo-22.5 | `bug`: TclOO: the result differs | code 1/0,2: invalid command name "my" \| want: {* method Work class ::B *} {* method Wo... |
 | oo-22.6 | `bug`: TclOO: the result differs | code 1/0,2: invalid command name "my" \| want: {* method Work class ::A *} {* method Wo... |
-| oo-23.1 | `bug`: TclOO: the result differs | code 1/0,2: ::oo::Obj461 does not refer to an object \| want: 1 1,2 1,2,3 1,2,3,4 1,x,3,4 |
+| oo-23.1 | `bug`: TclOO: the result differs | code 1/0,2: ::oo::Obj493 does not refer to an object \| want: 1 1,2 1,2,3 1,2,3,4 1,x,3,4 |
 | oo-24.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown method "foo": must be destroy or dummy \| want: unknown method "foo":... |
 | oo-24.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown method "foo": must be destroy, dummy or dummy2 \| want: unknown metho... |
+| oo-27.12 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 992 \| want: 0 |
 | oo-27.18 | `bug`: TclOO: the result differs | code 0/1: 1,1 2,2 \| want: unknown method "-?": must be * |
-| oo-3.4 | `bug`: TclOO: the result differs | code 0/0,2: 0 ok ::oo::Obj66::state ::oo::Obj66::localcmdexists {} \| want: 0 ok *::sta... |
-| oo-3.4a | `bug`: TclOO: the result differs | code 0/0,2: 0 ok ::oo::Obj68::state ::oo::Obj68::localcmdexists {} \| want: 0 ok *::sta... |
-| oo-3.5 | `bug`: TclOO: the result differs | code 0/0,2: 0 ok ::oo::Obj70::state ::oo::Obj70::localcmdexists {} \| want: 0 ok *::sta... |
+| oo-3.4 | `bug`: TclOO: the result differs | code 0/0,2: 0 ok ::oo::Obj91::state ::oo::Obj91::localcmdexists {} \| want: 0 ok *::sta... |
+| oo-3.4a | `bug`: TclOO: the result differs | code 0/0,2: 0 ok ::oo::Obj93::state ::oo::Obj93::localcmdexists {} \| want: 0 ok *::sta... |
+| oo-3.5 | `bug`: TclOO: the result differs | code 0/0,2: 0 ok ::oo::Obj95::state ::oo::Obj95::localcmdexists {} \| want: 0 ok *::sta... |
 | oo-3.5a | `bug`: TclOO: the result differs | code 1/0,2: can't read "result": no such variable \| want: ::obj ok localcmdexists ::ob... |
+| oo-31.1 | `bug`: TclOO: the result differs | code 1/0,2: invalid command name "my" \| want: 0 {} |
+| oo-31.2 | `bug`: TclOO: the result differs | code 1/0,2: invalid command name "my" \| want: 0 {} |
 | oo-32.1 | `feature`: the slot classes of TclOO ('oo::Slot') | setup: class "oo::Slot" does not exist |
 | oo-32.2 | `feature`: the slot classes of TclOO ('oo::Slot') | setup: class "oo::Slot" does not exist |
 | oo-32.3 | `feature`: the slot classes of TclOO ('oo::Slot') | setup: class "oo::Slot" does not exist |
@@ -2892,8 +2939,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | oo-34.9 | `bug`: TclOO: the result differs | code 1/0,2: oo::objdefine::variable does not refer to an object \| want: {-append -clea... |
 | oo-35.2 | `bug`: TclOO: the result differs | code 1/0,2: unknown method "create": must be destroy or eat \| want: ::appleClass ::ora... |
 | oo-35.5 | `bug`: TclOO: the result differs | code 1/0,2: can't create object "D": command already exists with that name \| want: {c ... |
-| oo-35.7.1 | `bug`: TclOO: the result differs | code 0/0,2: can't delete "o": command doesn't exist invalid command name "::oo::Obj563"... |
-| oo-35.7.2 | `bug`: TclOO: the result differs | code 0/0,2: Destroyed invalid command name "::oo::Obj568" \| want: Destroyed impossible... |
+| oo-35.7.1 | `bug`: TclOO: the result differs | code 0/0,2: can't delete "o": command doesn't exist can't delete "coro": command doesn'... |
+| oo-35.7.2 | `bug`: TclOO: the result differs | code 0/0,2: Destroyed invalid command name "::oo::Obj608" \| want: Destroyed impossible... |
 | oo-6.10 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "my handler a b c" \| want: wrong # args: should be "... |
 | oo-6.11 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "my handler a b c" \| want: wrong # args: should be "... |
 | oo-6.13 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "my handler a b c" \| want: wrong # args: should be "... |
@@ -2907,24 +2954,24 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| memory | 14 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 | knownBug | 3 | `tcl`: tclsh skips it too |
 
 ### ooNext2.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
+| oo-call-1.18 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 592 \| want: 0 |
+| oo-call-1.19 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 976 \| want: 0 |
 | oo-call-2.10 | `message`: an error where tclsh also gives one, with another message | code 1/1: a does not refer to an object \| want: wrong # args: should be "info class ca... |
+| oo-call-2.13 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 1856 \| want: 0 |
+| oo-call-2.14 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -1024 \| want: 0 |
 | oo-call-2.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "info class subcommand ?arg ...?" \| want: wrong # ar... |
 | oo-call-2.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: a does not refer to an object \| want: wrong # args: should be "info class ca... |
+| oo-call-3.2 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 2496 \| want: 0 |
 | oo-call-3.3 | `bug`: TclOO: the result differs | code 2/0,2: {{{method <constructor> object method} {method <constructor> object method}... |
 | oo-call-3.4 | `bug`: TclOO: the result differs | code 2/0,2: {{{method <destructor> object method} {method <destructor> object method}} ... |
 | oo-nextto-2.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::oo::Obj44 x y" \| want: wrong # args: should be "n... |
 | oo-nextto-2.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: method implementation by "B" not reachable from here \| want: method has no n... |
-
-| Skipped by | Tests | Bucket |
-|---|---|---|
-| memory | 5 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 
 ### opt.test
 
@@ -2993,7 +3040,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | package-11.99 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
 | package-13.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: stable \| want: latest |
 | package-15.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: cannot change the preference to stable \| want: stable latest latest |
-| package-3.26 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {ifneeded test} {EI     invoked from within "foreach x 1 {error "ifneeded... |
+| package-3.26 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {ifneeded test} {EI     ("foreach" body line 3)     invoked from within "... |
 | package-9.24 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
 | package-9.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
 
@@ -3001,11 +3048,12 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
+| parse-13.6 | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: invalid command name "testparsevar" \| want: 0 |
 | parse-18.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 abc, \| want: 1 {extra characters after close-brace} |
 | parse-19.1 | `bug`: the setup or the cleanup of the test fails | setup: invalid command name "load" |
 | parse-19.2 | `bug`: the setup or the cleanup of the test fails | setup: invalid command name "load" |
 | parse-8.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ns \| want: global |
-| parse-9.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read "x": no such variable     while executing "set x"     invoked... |
+| parse-9.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read "x": no such variable     while executing "set x"} \| want: 1... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3016,7 +3064,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | testbytestring | 3 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | emptyTest | 2 | `tcl`: tclsh skips it too |
 | testevent | 2 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| memory | 1 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 
 ### parseExpr.test
 
@@ -3088,7 +3135,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 |---|---|---|
 | proc-old-5.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invoked "break" outside of a loop     while executing "tproc" \| want: invo... |
 | proc-old-5.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invoked "continue" outside of a loop     while executing "tproc" \| want: i... |
-| proc-old-5.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {Nested error} {Nested error     while executing "error "Nested error""  ... |
 | proc-old-7.11 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "normalizeMsg" \| want: 1 {couldn't open "_bad_file_na... |
 | proc-old-7.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "normalizeMsg" \| want: 1 {couldn't open "_bad_file_na... |
 | proc-old-7.13 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "normalizeMsg" \| want: 1 {couldn't open "_bad_file_na... |
@@ -3268,7 +3314,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | Test | Bucket | Result (start) |
 |---|---|---|
 | result-6.3 | `internals`: the C API of Tcl | code 0/0,2: eek \| want: bad -errorcode value: expected a list but got "{}a" |
-| result-6.4 | `internals`: the C API of Tcl | code 1/0,2: key "-errorcode" not known in dictionary \| want: {bad -errorstack value: e... |
+| result-6.4 | `internals`: the C API of Tcl | code 0/0,2: {list element in braces followed by "a" instead of space} {TCL VALUE LIST J... |
 | result-6.5 | `internals`: the C API of Tcl | code 1/0,2: key "-errorcode" not known in dictionary \| want: {forbidden odd-sized list... |
 
 | Skipped by | Tests | Bucket |
@@ -3430,8 +3476,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | socket-14.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: couldn't open socket: the network policy does not allow the address "192.0.2.... |
 | socket-14.8.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ok |
 | socket-14.8.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {connection refused} {} \| want: {error reading "sock*": socket is not c... |
-| socket-15.1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: sock2842 \| want: couldn't open socket: connection refused |
-| socket_inet-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ready timed_out \| want: ready done |
+| socket-15.1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: sock2843 \| want: couldn't open socket: connection refused |
+| socket_inet6-13.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: thread "tid0x7" does not exist \| want: hello 1 |
 | socket_inet6-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ready timed_out \| want: ready done |
 
 | Skipped by | Tests | Bucket |
@@ -3448,7 +3494,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | source-3.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {Simulated error} {couldn't read file "/_non_existent_": no such file or ... |
 | source-3.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {} {couldn't read file "/_non_existent_": no such file or directory     w... |
 | source-3.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {} {couldn't read file "/_non_existent_": no such file or directory     w... |
-| source-4.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| source-4.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: source: 3 4 5 |
 
 ### split.test
 
@@ -3469,19 +3515,24 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 |---|---|---|
 | string-24.15.0 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "tcl::string::reverse" \| want: 030201 |
 | string-24.15.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "tcl::string::reverse" \| want: 030201 |
+| string-26.11.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -176 -480 5376 \| want: 0 0 0 |
+| string-26.11.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 304 6048 2384 \| want: 0 0 0 |
+| string-26.12.0 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -16 \| want: 0 |
+| string-26.12.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -10896 \| want: 0 |
+| string-26.13.0 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 1248 \| want: 0 |
+| string-26.13.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 7216 \| want: 0 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | testbytestring | 8 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| memory | 6 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 | testindexobj | 2 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | utf16 | 2 | `design`: ztcl strings hold full code points, as in Tcl 9; Tcl 8.6 uses UTF-16 surrogates |
 
 ### stringComp.test
 
-| Skipped by | Tests | Bucket |
+| Test | Bucket | Result (start) |
 |---|---|---|
-| memory | 1 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
+| stringComp-14.2 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 960 \| want: 0 |
 
 ### stringObj.test
 
@@ -3506,8 +3557,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 |---|---|---|
 | switch-13.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 - a {can't set "x(x)": variable isn't array} \| want: 1 - - {can't set "x... |
 | switch-13.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 - - {can't set "y(y)": variable isn't array} \| want: 1 {{0 0}} - {can't ... |
-| switch-4.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {Just a test} {Just a test     while executing "error "Just a test""     ... |
-| switch-4.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 switch2 {switch2     while executing "error switch2"     invoked from wit... |
 
 ### tailcall.test
 
@@ -3627,6 +3676,9 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | trace-12.1 | `bug`: 'trace': the result differs | code 0/0,2: 0 22 \| want: 1 {can't set "x": variable is array} |
 | trace-12.2 | `bug`: 'trace': the result differs | code 0/0,2: 1 {can't read "x(0)": no such variable} \| want: 1 {can't read "x(0)": no s... |
 | trace-12.8 | `bug`: 'trace': the result differs | code 0/0,2: 0 {} \| want: 1 {can't trace "x(0)": variable isn't array} |
+| trace-13.2 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 1296 \| want: 0 |
+| trace-13.3 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 1232 \| want: 0 |
+| trace-13.4 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -576 \| want: 0 |
 | trace-16.10 | `bug`: 'trace': the result differs | code 0/0,2: 0 {} 1 {can't read "x": no such variable} 1 {can't read "y(0)": no such var... |
 | trace-16.13 | `bug`: 'trace': the result differs | code 0/0,2: 0 {} 0 xyzzy 0 xyzzy 0 xyzzy \| want: 0 {} 1 {can't set "y": upvar refers t... |
 | trace-16.14 | `bug`: 'trace': the result differs | code 0/0,2: 0 {} 0 xyzzy 0 xyzzy 0 xyzzy \| want: 0 {} 0 xyzzy 0 {} 0 xyzzy |
@@ -3689,7 +3741,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | testcmdtrace | 11 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| memory | 3 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 | testevalobjv | 2 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | emptyTest | 1 | `tcl`: tclsh skips it too |
 
@@ -3749,7 +3800,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 34993', Got '' \| want: OK |
+| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 38573', Got '' \| want: OK |
 | unixInit-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
 | unixInit-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0: couldn't open "/dev/null": no such file or directory \| want:  |
 
@@ -3796,7 +3847,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| upvar-10.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| upvar-10.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
 | upvar-5.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {x1 {} unset} {} \| want: {x1 {} unset} x1 |
 | upvar-8.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: * |
 | upvar-8.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't upvar from variable to itself |
@@ -3807,9 +3858,9 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | upvar-NS-1.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't read "w": no such variable \| want: namespace "test_ns_0" not found in ... |
 | upvar-NS-1.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't read "w": no such variable \| want: namespace "test_ns_0" not found in ... |
 | upvar-NS-1.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't read "w": no such variable \| want: namespace "test_ns_0" not found in ... |
-| upvar-NS-3.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| upvar-NS-3.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| upvar-NS-3.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| upvar-NS-3.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
+| upvar-NS-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
+| upvar-NS-3.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3893,8 +3944,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| var-1.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 314159 \| want: can't set "::test_ns_var::foo::bar": parent namespace doesn't... |
-| var-1.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1997 \| want: can't set "::test_ns_var::foo::": parent namespace doesn't exist |
 | var-1.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 2 0 3 1 {can't set "foo(3)": variable isn't array} \| want: 0 2 1 {can't ... |
 | var-1.16 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "result": no such variable \| want: 0 2 1 {can't set "foo": upva... |
 | var-1.17 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "result": no such variable \| want: 0 2 1 {can't set "foo": upva... |
@@ -3903,7 +3952,9 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | var-10.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't set "arr(x)": variable isn't array |
 | var-11.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dict": must be -ascii, -command, -decreasing, -dictionary, -in... |
 | var-20.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: * |
-| var-21.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| var-21.0 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: info frame: not supported by ztcl \| want: 1 |
+| var-22.0 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: 176 \| want: 0 |
+| var-22.1 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -160 \| want: 0 |
 | var-3.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 1 \| want: 1 1 |
 | var-3.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: bad variable name "foo(bar)": can't create a scalar variable that l... |
 | var-3.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't create "test_ns_fred::lnk": parent namespace doesn't exist |
@@ -3914,25 +3965,13 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | var-7.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't define "sev:::en": parent namespace doesn't exist |
 | var-7.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ::test_ns_var2::x 1 0 0 {1 {can't read "test_ns_var2::y": no such variable}... |
 | var-8.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {} \| want: {} {::test_ns_var::v {} unset} |
+| var-8.3 | `design`: a leak test: the live bytes of the ztcl heap after a coll... | code 0/0,2: -4416 \| want: 0 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | testsetnoerr | 12 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| memory | 3 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 | testgetvarfullname | 3 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | testupvar | 2 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-
-### while-old.test
-
-| Test | Bucket | Result (start) |
-|---|---|---|
-| while-old-4.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {loop aborted} {loop aborted     while executing "error "loop aborted""  ... |
-
-### while.test
-
-| Test | Bucket | Result (start) |
-|---|---|---|
-| while-4.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "set varName ?newValue?"     while executing "set" ... |
 
 ### winConsole.test
 

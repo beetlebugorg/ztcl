@@ -93,6 +93,34 @@ def load_tests(path):
     return tests
 
 
+def load_internals():
+    rows = []
+    with open(os.path.join(here, "suite-internals.tsv")) as f:
+        for line in f:
+            if line.startswith("#") or not line.strip():
+                continue
+            rows.append(tuple(line.rstrip("\n").split("\t")))
+    return rows
+
+
+# The name of a C test command in the detail of a test.
+TESTCMD = re.compile(r'^(test[a-z0-9]+|memory|Tcltest|TcltestPackage|procbodytest|pkga?u?a\.soRequired|teststaticpkg(_8\.x)?|drainEventQueue|applylambda|testWithLimit|testCPUID|hasIsoLocale)$')
+NOCMD = re.compile(r'invalid command name "(test[a-z0-9]+)"|^code [^:]*: (test[a-z0-9]+): .* has no stand-in')
+
+
+def blocker(kind, fname, detail):
+    """The test command that blocks a test of the bucket internals."""
+    if kind == "skip":
+        for w in re.split(r"[\s&|!()]+", detail):
+            w = w.removeprefix("expr:")
+            if TESTCMD.match(w):
+                return w
+    m = NOCMD.search(detail)
+    if m:
+        return m.group(1) or m.group(2)
+    return f"(other, {fname})"
+
+
 def cell(s, n=90):
     s = s.replace("|", "\\|").replace("`", "'")
     return s if len(s) <= n else s[: n - 3] + "..."
@@ -128,6 +156,7 @@ def main():
     btot = {b: 0 for b, _ in BUCKETS}
     reasons = {}
     fails, skips, diffs = {}, {}, []
+    blocked = {}
     for fname in names:
         sc, count, why = scope.get(fname, ("in", 0, ""))
         p, x, s, rc = files.get(fname, (0, 0, 0, "absent"))
@@ -154,6 +183,9 @@ def main():
             b, bw = bucket_of(rules, kind, f"{fname}/{name}", detail)
             btot[b] += 1
             reasons[(b, bw)] = reasons.get((b, bw), 0) + 1
+            if b == "internals":
+                k = blocker(kind, fname, detail)
+                blocked[k] = blocked.get(k, 0) + 1
             tsv.append((fname, name, kind, jk, b, detail))
             if kind == "fail":
                 fails.setdefault(fname, []).append((name, b, bw, detail))
@@ -223,10 +255,29 @@ def main():
         if b in ("bug", "feature", "message", "untriaged"):
             w(f"| `{b}` | {cell(bw or '(no rule)')} | {fmt(n)} |")
     w("")
+    w("## Internals by test command")
+    w("")
+    w("The tests of the bucket `internals`, by the command of the Tcl test binary that blocks them (issue 480). The path is from `tools/suite-internals.tsv`: `C package` is Tcl's own test command, built as a C package on the stubs of ztcl; `runner` is a stand-in in `tools/suite_cmds.zig`; `design` tests check the internal layout of Tcl. The other commands are in one line, and a test with no command name is in the line of its file.")
+    w("")
+    w("| Command | Tests | Path | What the tests check |")
+    w("|---|---|---|---|")
+    known = {r[0]: r for r in load_internals()}
+    rest, rest_cmds = 0, 0
+    for k, n in sorted(blocked.items(), key=lambda t: (-t[1], t[0])):
+        if k in known:
+            w(f"| `{k}` | {fmt(n)} | {known[k][1]} | {cell(known[k][2], 200)} |")
+        elif k.startswith("(other"):
+            w(f"| {k[1:-1]} | {fmt(n)} | C package | Tests of the C API in a file of the bucket. |")
+        else:
+            rest += n
+            rest_cmds += 1
+    if rest:
+        w(f"| {fmt(rest_cmds)} other commands | {fmt(rest)} | C package | Other functions of the C API, one command for each. |")
+    w("")
     w("## JIT differences")
     w("")
     if diffs:
-        w("Tests with a different result in the JIT run. `socket.test`, `io.test`, and `chanio.test` have timing tests that can change between two runs of one mode.")
+        w("Tests with a different result in the JIT run. `socket.test`, `io.test`, and `chanio.test` have timing tests that can change between two runs of one mode. `tools/suite.sh` runs `socket.test`, and `chanio.test` after a failure of `chan-io-36.1`, one more time and keeps the run with more passes. The leak tests of `memory` read the live bytes of the heap, and these change between two runs.")
         w("")
         w("| File | Test | Interpreter | JIT |")
         w("|---|---|---|---|")

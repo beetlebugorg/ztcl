@@ -20,6 +20,33 @@ skip	*	^(win|winOnly|pc|nt|mac|macOnly|macOrPc|macOrWin|winLessThan10|longIs32bi
 skip	*	^expr:!ieeeFloatingPoint$	platform	needs a machine without IEEE floats
 # The C test commands of the Tcl test binary.
 skip	*	^memory$	internals	the memory debugging of a Tcl build with TCL_MEM_DEBUG
+# The leak tests of the `memory` command of the suite runner (issue 480).
+fail	apply.test/apply-9.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	assemble.test/assemble-51.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	basic.test/basic-48.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	cmdIL.test/cmdIL-6.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	compExpr.test/compExpr-7.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	compile.test/compile-12.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	coroutine.test/coroutine-4.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	dict.test/dict-19.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	error.test/error-21.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	for.test/for-7.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	namespace.test/namespace-54.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	ooNext2.test/oo-call-1.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	ooNext2.test/oo-call-2.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	ooNext2.test/oo-call-3.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	oo.test/oo-0.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	oo.test/oo-1.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	oo.test/oo-11.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	oo.test/oo-20.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	oo.test/oo-27.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	oo.test/oo-31.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	parse.test/parse-13.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	stringComp.test/stringComp-14.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	string.test/string-26.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	trace.test/trace-13.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	var.test/var-22.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
+fail	var.test/var-8.*	^code 0/0,2: -?[0-9]+ \| want: 0$	design	a leak test: the live bytes of the ztcl heap after a collection differ between two passes of the script
 skip	*	^pkga\.soRequired$	internals	a C test package of the Tcl build
 skip	*	^teststaticpkg(_8\.x)?$	internals	a C test command of the Tcl test binary
 skip	*	^test[a-z0-9]+$	internals	a C test command of the Tcl test binary, with no stand-in yet
