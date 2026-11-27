@@ -6,6 +6,7 @@ const std = @import("std");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
 const cmds = @import("cmds.zig");
+const bigint = @import("bigint.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
@@ -874,7 +875,14 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (c != '%' or (fi + 1 < f.len and f[fi + 1] == '%')) {
             if (c == '%') fi += 1;
             if (!stopped) {
-                if (si < s.len and s[si] == c) si += 1 else stopped = true;
+                if (si < s.len and s[si] == c) {
+                    si += 1;
+                } else {
+                    // The end of the input before any conversion is an
+                    // underflow.
+                    if (si >= s.len and out.items.len == 0) under = true;
+                    stopped = true;
+                }
             }
             fi += 1;
             continue;
@@ -892,7 +900,8 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (suppress) return it.fail("bad scan conversion character \"$\"", .{});
             if (saw_seq) return it.fail("cannot mix \"%\" and \"%n$\" conversion specifiers", .{});
             saw_xpg = true;
-            if (width == 0 or width > (if (vars.len > 0) vars.len else conversions)) return it.fail("\"%n$\" argument index out of range", .{});
+            // With no variables, the index sets the length of the result.
+            if (width == 0 or width > (if (vars.len > 0) vars.len else @max(conversions, 1 << 16))) return it.fail("\"%n$\" argument index out of range", .{});
             target = width - 1;
             fi += 1;
             width = 0;
@@ -903,13 +912,20 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (saw_xpg) return it.fail("cannot mix \"%\" and \"%n$\" conversion specifiers", .{});
             saw_seq = true;
         }
-        while (fi < f.len and (f[fi] == 'h' or f[fi] == 'l' or f[fi] == 'L')) fi += 1;
+        // `ll` makes an integer of any size. `h`, `l`, and `L` change
+        // nothing.
+        var longs: usize = 0;
+        while (fi < f.len and (f[fi] == 'h' or f[fi] == 'l' or f[fi] == 'L')) : (fi += 1) {
+            if (f[fi] == 'l') longs += 1;
+        }
+        const big = longs >= 2;
         if (fi >= f.len) return it.fail("format string ended in middle of field specifier", .{});
         var conv = f[fi];
         fi += 1;
         if (conv == 'E' or conv == 'G') conv = 'e';
         if (conv == 'X') conv = 'x';
         if (conv == 'c' and width != 0) return it.fail("field width may not be specified in %c conversion", .{});
+        if (conv == 'u' and big) return it.fail("unsigned bignum scans are invalid", .{});
         // The set of `%[...]`.
         var set: [32]u8 = @splat(0);
         if (conv == '[') {
@@ -951,7 +967,14 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             stopped = true;
             continue;
         }
-        const limit = if (width == 0) s.len else @min(s.len, si + width);
+        // The width counts characters.
+        var limit = s.len;
+        if (width != 0) {
+            limit = si;
+            var k: usize = 0;
+            while (k < width and limit < s.len) : (k += 1) limit += std.unicode.utf8ByteSequenceLength(s[limit]) catch 1;
+            limit = @min(limit, s.len);
+        }
         var v: Value = undefined;
         switch (conv) {
             'c' => {
@@ -977,6 +1000,13 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             'f', 'e', 'g' => {
                 const start = si;
                 if (si < limit and (s[si] == '-' or s[si] == '+')) si += 1;
+                if (si + 3 <= limit and std.ascii.eqlIgnoreCase(s[si .. si + 3], "inf")) {
+                    const neg = s[start] == '-';
+                    si += if (si + 8 <= limit and std.ascii.eqlIgnoreCase(s[si .. si + 8], "infinity")) 8 else 3;
+                    if (!suppress) try place(a, &out, target, .{ .double = if (neg) -std.math.inf(f64) else std.math.inf(f64) });
+                    continue;
+                }
+                const after_sign = si;
                 while (si < limit and std.ascii.isDigit(s[si])) si += 1;
                 if (si < limit and s[si] == '.') {
                     si += 1;
@@ -991,6 +1021,7 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                     }
                 }
                 const d = std.fmt.parseFloat(f64, s[start..si]) catch {
+                    if (after_sign >= s.len and out.items.len == 0) under = true;
                     si = start;
                     stopped = true;
                     continue;
@@ -1010,31 +1041,57 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                     'b' => 2,
                     else => 10,
                 };
+                // The prefix of the base: 0x for `%i` and `%x`, 0b for
+                // `%b`. A prefix with no digit after it is the digit 0.
+                var prefix = false;
                 if (conv == 'i' and si < limit and s[si] == '0') {
                     base = 8;
                     if (si + 1 < limit and (s[si + 1] == 'x' or s[si + 1] == 'X')) {
                         base = 16;
                         si += 2;
-                    } else if (si + 1 < limit and (s[si + 1] == 'b' or s[si + 1] == 'B')) {
-                        base = 2;
-                        si += 2;
+                        prefix = true;
                     }
-                } else if (conv == 'x' and si + 1 < limit and s[si] == '0' and (s[si + 1] == 'x' or s[si + 1] == 'X')) {
+                } else if (si + 1 < limit and s[si] == '0' and ((conv == 'x' and (s[si + 1] == 'x' or s[si + 1] == 'X')) or (conv == 'b' and (s[si + 1] == 'b' or s[si + 1] == 'B')))) {
                     si += 2;
+                    prefix = true;
                 }
+                if (prefix and (si >= limit or (std.fmt.charToDigit(s[si], base) catch null) == null)) si -= 1;
                 const digits = si;
                 var n: u64 = 0;
+                var over = false;
                 while (si < limit) : (si += 1) {
                     const d = std.fmt.charToDigit(s[si], base) catch break;
-                    n = n *% base +% d;
+                    const m = @mulWithOverflow(n, @as(u64, base));
+                    const sum = @addWithOverflow(m[0], @as(u64, d));
+                    if (m[1] != 0 or sum[1] != 0) over = true;
+                    n = sum[0];
                 }
                 if (si == digits and !(conv == 'i' and base != 10)) {
+                    if (si >= s.len and out.items.len == 0) under = true;
                     si = start;
                     stopped = true;
                     continue;
                 }
-                const signed: i64 = @bitCast(n);
-                v = .{ .int = if (neg) 0 -% signed else signed };
+                if (big and (over or n > std.math.maxInt(i64))) {
+                    // The text with its sign and base, as bigint reads it.
+                    const pre: []const u8 = switch (base) {
+                        16 => "0x",
+                        8 => "0o",
+                        2 => "0b",
+                        else => "",
+                    };
+                    const text = try std.fmt.allocPrint(a, "{s}{s}{s}", .{ if (neg) "-" else "", pre, s[digits..si] });
+                    v = (try bigint.canonical(it, text)) orelse return it.fail("integer value too large to represent", .{});
+                } else if (over) {
+                    // Above 64 bits: the largest or the smallest integer.
+                    v = .{ .int = if (neg) std.math.minInt(i64) else std.math.maxInt(i64) };
+                } else {
+                    const signed: i64 = @bitCast(n);
+                    const x = if (neg) 0 -% signed else signed;
+                    // `%u` gives a negative integer as the unsigned
+                    // integer of the same 64 bits.
+                    v = if (conv == 'u' and x < 0) .{ .str = try std.fmt.allocPrint(a, "{d}", .{@as(u64, @bitCast(x))}) } else .{ .int = x };
+                }
             },
         }
         if (!suppress) try place(a, &out, target, v);
@@ -1055,10 +1112,15 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }
         if (used.items.len < vars.len) return it.fail("variable is not assigned by any conversion specifiers", .{});
         var n: i64 = 0;
+        var failed: ?Value = null;
         for (out.items, 0..) |v, i| {
             if (isMark(v)) continue;
-            try it.setVar(try it.str(vars[i]), v);
+            try setEach(it, vars[i], v, &failed);
             n += 1;
+        }
+        if (failed) |m| {
+            it.result = m;
+            return error.TclError;
         }
         return .{ .int = if (under) -1 else n };
     }
@@ -1069,6 +1131,20 @@ pub fn cmdScan(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     if (wanted > vars.len) return it.fail("different numbers of variable names and field specifiers", .{});
     if (wanted < vars.len) return it.fail("variable is not assigned by any conversion specifiers", .{});
-    for (out.items, 0..) |v, i| try it.setVar(try it.str(vars[i]), v);
+    var failed: ?Value = null;
+    for (out.items, 0..) |v, i| try setEach(it, vars[i], v, &failed);
+    if (failed) |m| {
+        it.result = m;
+        return error.TclError;
+    }
     return .{ .int = if (under) -1 else @intCast(out.items.len) };
+}
+
+/// Sets one variable of `scan`. After an error the other variables are
+/// still set, as in Tcl, and `failed` keeps the first message.
+fn setEach(it: *Interp, name: Value, v: Value, failed: *?Value) Error!void {
+    it.setVar(try it.str(name), v) catch |e| {
+        if (e != error.TclError) return e;
+        if (failed.* == null) failed.* = it.result;
+    };
 }
