@@ -1359,12 +1359,29 @@ pub fn waitRoom(it: *Interp, id: u64) Error!void {
     }
 }
 
-/// Takes the reply with the number `seq`.
-pub fn takeReply(w: *Worker, seq: u64) ?*Msg {
-    for (w.queue.items, 0..) |m, i| {
-        if (m.kind == .reply and m.seq == seq) return w.queue.orderedRemove(i);
+/// Takes the reply `seq` from the queue of the thread of `it`. The
+/// async results that came before the reply run first, so a sync send
+/// after an async send to the same thread sees the variable of the async
+/// send set.
+fn takeReplyInOrder(it: *Interp, w: *Worker, seq: u64) Error!?*Msg {
+    while (true) {
+        w.lock.lock();
+        var early: ?*Msg = null;
+        const at = for (w.queue.items, 0..) |m, i| {
+            if (m.kind == .reply and m.seq == seq) break i;
+        } else null;
+        if (at) |end| {
+            for (w.queue.items[0..end], 0..) |m, i| if (m.kind == .var_result) {
+                early = w.queue.orderedRemove(i);
+                break;
+            };
+        }
+        const r = if (at != null and early == null) w.queue.orderedRemove(at.?) else null;
+        w.lock.unlock();
+        const m = early orelse return r;
+        w.group.space_ev.signal();
+        try runMsg(w, it, m);
     }
-    return null;
 }
 
 /// Runs the scripts of the queue of `it`, at most `max` of them. Gives
@@ -1512,12 +1529,7 @@ pub fn awaitReply(it: *Interp, to: u64, seq: u64) Error!*Msg {
     const w = it.worker.?;
     const g = w.group;
     while (true) {
-        w.lock.lock();
-        if (takeReply(w, seq)) |r| {
-            w.lock.unlock();
-            return r;
-        }
-        w.lock.unlock();
+        if (try takeReplyInOrder(it, w, seq)) |r| return r;
         // A thread pushes its reply before it leaves the registry. So a
         // check of the queue after the end of `to` finds each reply.
         g.lock.lock();
@@ -1529,9 +1541,7 @@ pub fn awaitReply(it: *Interp, to: u64, seq: u64) Error!*Msg {
         // A thread of the parent of a child process answers through the
         // remote, and an error comes back when it ended.
         if (!live and g.remote == null) {
-            w.lock.lock();
-            const r = takeReply(w, seq);
-            w.lock.unlock();
+            const r = try takeReplyInOrder(it, w, seq);
             return r orelse it.failCode("THREAD DIED", "target thread died", .{});
         }
         if (!try serve(it, 1)) {
