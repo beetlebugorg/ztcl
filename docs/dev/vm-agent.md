@@ -40,7 +40,7 @@ Numbers are little endian. `len` counts the type byte and the payload, and is at
 2. The host sends one request: `EXEC`, `MOUNT`, `LOG`, `PING`, or `RESUME`.
 
 With `keepalive` (bit 5), the connection takes another request after the answer of one ends, until the host closes it: the agent reads the next request where the last one ended, and drops an `STDIN` or `SIGNAL` frame that comes before it (input for a program that ended). The host keeps the connection of a request that ended well for the next request of the guest, and checks first that the idle connection has no byte to read (an ended one is readable); a guest that stops or goes closes it. On Virtualization.framework this saves the connect of vsock and the HELLO, about 110 us of each `exec`. A host that closes after one request works with the agent as before.
-3. The agent answers as below, and closes the connection after its last frame. A new request takes a new connection.
+3. The agent answers as below, then waits for the next request on the same connection until the host closes it (`keepalive`). A host without it closes after the answer, and a new request takes a new connection.
 
 | Type | Value | From | Payload |
 |---|---|---|---|
