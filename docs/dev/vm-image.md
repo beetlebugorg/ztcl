@@ -74,7 +74,17 @@ The private half of the test key is in the repository, so anyone can sign with i
 
 ## Signing in CI
 
-The workflow of the image (`.github/workflows/vm-guest.yml`) builds each architecture on a runner of its own (`build.sh`, `pack.sh`, `image.sh`), then signs the manifest of both (`manifest.sh`) with the test key, under the name `ztcl-guest-test`, on each pull request that changes the guest. On a tag `vm-image-vVERSION`, or a run by hand from `main`, the job `manifest-release` in the environment `vm-release` signs the manifest under the name `ztcl-guest` with the current key (`tools/vm-guest/keys/current.pub`): it writes the key to a file of mode 0600, adds it to an `ssh-agent` of the job with an askpass script that gives the passphrase from the environment, signs through the agent, then ends the agent and erases the files. It checks the signature with ztcl itself before it uploads `manifest.json.sig`. The first run with the current key waits on the owner.
+The workflow of the image (`.github/workflows/vm-guest.yml`) builds each architecture on a runner of its own (`build.sh`, `pack.sh`, `image.sh`), then signs the manifest of both (`manifest.sh`) with the test key, under the name `ztcl-guest-test`, on each pull request that changes the guest. On a tag `vm-image-vVERSION`, or a run by hand from `main` of the workflow `VM image release` (`vm-image-release.yml`, which calls the workflow of the guest), the job `manifest-release` in the environment `vm-release` signs the manifest under the name `ztcl-guest` with the current key (`tools/vm-guest/keys/current.pub`): it writes the key to a file of mode 0600, adds it to an `ssh-agent` of the job with an askpass script that gives the passphrase from the environment, signs through the agent, then ends the agent and erases the files. It checks the signature with ztcl itself before it uploads `manifest.json.sig`. The first run with the current key waits on the owner.
+
+## The test release
+
+Each build of the workflow `VM guest` on a push to main (and on each pull request that changes the guest) keeps the artifact `vm-image-test`: a release signed with the test key under the name `ztcl-guest-test`, with `arm64-Image`, `arm64-root.img`, `x86_64-bzImage`, and `x86_64-root.img`. A test of a backend (Virtualization.framework, KVM, WHP) gets it with:
+
+```sh
+tools/vm-guest/fetch-test-image.sh DIR     # the latest build of main; BRANCH=... for another
+```
+
+which downloads it with `gh` and checks it with `zig build vm-image-verify -Dvm-test-key`. A build with `-Dvm-test-key` installs it with `ztcl::vm image install DIR` and boots it with `ztcl::vm create -image ztcl-guest-test`.
 
 ## The build
 

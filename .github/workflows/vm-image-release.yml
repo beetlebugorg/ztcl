@@ -1,0 +1,19 @@
+name: VM image release
+
+# The signed guest image release (ztcl#312, docs/dev/vm-image.md): on a
+# tag vm-image-v*, or a run by hand from main, the workflow of the guest
+# builds the image and its job manifest-release signs it with the current
+# release key in the environment vm-release. A push of the tag or a run
+# by hand waits for the owner.
+on:
+  push:
+    tags: ["vm-image-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    uses: ./.github/workflows/vm-guest.yml
+    secrets: inherit
