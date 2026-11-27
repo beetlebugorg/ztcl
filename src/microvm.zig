@@ -2178,6 +2178,10 @@ const win = if (on_whp) struct {
         out: std.ArrayList(u8) = .empty,
         /// The bytes of the script that wait for the credit of the guest.
         in: std.ArrayList(u8) = .empty,
+        /// The guest sends no more (`eof`), and the pump ended the writes of
+        /// its end of the pair.
+        eof: bool = false,
+        eof_sent: bool = false,
     };
 
     const Guest = struct {
@@ -2203,7 +2207,17 @@ const win = if (on_whp) struct {
         streams: [vsock.max_conns]Stream = @splat(.{}),
         pump: ?std.Thread = null,
         stop_pump: std.atomic.Value(bool) = .init(false),
+        /// The listeners of `listen`, and the streams of the guest that the
+        /// device took for them, as (stream, port), which wait for the pump.
+        /// Both under `lock`.
+        listens: std.ArrayList(Listen) = .empty,
+        accepted: std.ArrayList([2]u32) = .empty,
     };
+
+    /// A listener of `listen`: the end of the pump of its pair of notices,
+    /// the name of the channel of the other end, and the ends of the
+    /// script of its connections that wait for `accept`.
+    const Listen = struct { port: u32, notify: i32, chan: []const u8, waiting: std.ArrayList(i32) = .empty };
 
     const Lock = @import("vm/virtio/mmio.zig").Lock;
 
@@ -2260,6 +2274,9 @@ const win = if (on_whp) struct {
         if (std.mem.eql(u8, sub, "vsock")) return vsockCmd(it, g, args[3..]);
         if (std.mem.eql(u8, sub, "exec")) return execCmd(it, g, args[3..]);
         if (std.mem.eql(u8, sub, "mount")) return mountCmd(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "listen")) return listenCmd(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "unlisten")) return unlistenCmd(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "accept")) return acceptCmd(it, g, args[3..]);
         if (std.mem.eql(u8, sub, "console")) {
             if (args.len != 3) return it.wrongArgs("ztcl::vm console vm");
             if (g.console_host < 0) return it.failCode("ZTCL VM CONSOLE", "the console of the guest {s} is a channel already", .{g.name});
@@ -2568,11 +2585,13 @@ const win = if (on_whp) struct {
         const g = guestOf(ctx);
         g.lock.lock();
         defer g.lock.unlock();
-        g.streams[conn].state = switch (e) {
-            .connected => .open,
-            .refused => .refused,
-            .closed => .closed,
-        };
+        const st = &g.streams[conn];
+        switch (e) {
+            .connected => st.state = .open,
+            .refused => st.state = .refused,
+            .closed => st.state = .closed,
+            .eof => st.eof = true,
+        }
     }
 
     /// The pump: the console and each stream, between the monitor and its
@@ -2594,6 +2613,7 @@ const win = if (on_whp) struct {
                 .n => |n| if (n > 0) g.machine.consoleInput(buf[0..n]),
                 else => {},
             };
+            pumpAccepted(g);
             for (&g.streams, 0..) |*st, k| pumpStream(g, st, @intCast(k), &buf);
             whp.sleepUs(1000);
         }
@@ -2611,8 +2631,13 @@ const win = if (on_whp) struct {
             }
         }
         const drained = st.out.items.len == 0;
+        // The end of the bytes of the guest, once they are out: the script
+        // reads the end, and can still write.
+        const half = fd >= 0 and drained and st.eof and !st.eof_sent;
+        if (half) st.eof_sent = true;
         g.lock.unlock();
         if (fd < 0) return;
+        if (half) sys.shutdown(fd, 1);
         if (s == .closed) {
             // The guest ended the stream: the script reads the end once
             // the bytes of the guest are out.
@@ -2620,6 +2645,8 @@ const win = if (on_whp) struct {
             g.lock.lock();
             st.fd = -1;
             st.state = .free;
+            st.eof = false;
+            st.eof_sent = false;
             st.in.clearRetainingCapacity();
             g.lock.unlock();
             sys.close(fd);
@@ -2709,6 +2736,148 @@ const win = if (on_whp) struct {
         return binaryChannel(it, "vsock", fd);
     }
 
+    /// A REQUEST of the guest to `port` of the host, on the vCPU thread:
+    /// a stream for a listener, which waits for the pump.
+    fn streamAccept(ctx: *anyopaque, conn: u32, port: u32) bool {
+        const g = guestOf(ctx);
+        g.lock.lock();
+        defer g.lock.unlock();
+        // The pump still drains the last stream of this slot: RST.
+        if (g.streams[conn].fd >= 0) return false;
+        for (g.listens.items) |l| {
+            if (l.port != port) continue;
+            g.accepted.append(ga, .{ conn, port }) catch return false;
+            g.streams[conn] = .{ .state = .open, .out = g.streams[conn].out, .in = g.streams[conn].in };
+            g.streams[conn].out.clearRetainingCapacity();
+            g.streams[conn].in.clearRetainingCapacity();
+            return true;
+        }
+        return false;
+    }
+
+    /// The streams of the guest that the device took: a pair for each, the
+    /// end of the pump in the stream, and the end of the script as 4 bytes
+    /// on the pair of notices of its listener, for `accept`.
+    fn pumpAccepted(g: *Guest) void {
+        while (true) {
+            g.lock.lock();
+            if (g.accepted.items.len == 0) {
+                g.lock.unlock();
+                return;
+            }
+            const conn, const port = g.accepted.orderedRemove(0);
+            g.lock.unlock();
+            const p = pair() orelse {
+                g.machine.close(conn);
+                continue;
+            };
+            sys.setBlocking(p[0], false);
+            g.lock.lock();
+            var notify: i32 = -1;
+            for (g.listens.items) |*l| if (l.port == port) {
+                l.waiting.append(ga, p[1]) catch break;
+                notify = l.notify;
+                break;
+            };
+            if (notify >= 0) g.streams[conn].fd = p[0];
+            g.lock.unlock();
+            if (notify < 0) {
+                // The script removed the listener.
+                sys.close(p[0]);
+                sys.close(p[1]);
+                g.machine.close(conn);
+                continue;
+            }
+            var b: [4]u8 = undefined;
+            std.mem.writeInt(i32, &b, p[1], .little);
+            _ = sys.write(notify, &b);
+        }
+    }
+
+    fn findListen(g: *Guest, port: u32) ?usize {
+        for (g.listens.items, 0..) |x, i| if (x.port == port) return i;
+        return null;
+    }
+
+    /// Closes the channel of a listener and the ends of its connections
+    /// that no `accept` took.
+    fn dropListen(it: *Interp, x: Listen) void {
+        sys.close(x.notify);
+        for (x.waiting.items) |fd| sys.close(fd);
+        var w = x.waiting;
+        w.deinit(ga);
+        const script = std.fmt.allocPrint(it.alloc(), "catch {{close {{{s}}}}}", .{x.chan}) catch return;
+        _ = it.eval(script) catch {};
+        it.heap.backing.free(x.chan);
+    }
+
+    /// `listen VM PORT -command SCRIPT`, as on macOS and Linux: the device
+    /// of the monitor gets each connection of the guest to the port.
+    fn listenCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        const use = "ztcl::vm listen vm port -command script";
+        if (args.len != 3 or !std.mem.eql(u8, try it.str(args[1]), "-command")) return it.wrongArgs(use);
+        const port = try it.int(args[0]);
+        if (port < 1 or port > std.math.maxInt(u32) - 1) return it.fail("bad port \"{d}\"", .{port});
+        if (it.findCommand("fileevent") == null) return it.failCode("ZTCL VM NOEVENT", "ztcl::vm listen needs the event capability", .{});
+        g.lock.lock();
+        const had = findListen(g, @intCast(port)) != null;
+        g.lock.unlock();
+        if (had) return it.failCode("ZTCL VM LISTEN", "the guest {s} has a listener on port {d} already", .{ g.name, port });
+        const p = pair() orelse return it.failCode("ZTCL VM WHP", "no pair of sockets for the listener", .{});
+        sys.setBlocking(p[0], false);
+        const ch = binaryChannel(it, "vmlisten", p[1]) catch |e| {
+            sys.close(p[0]);
+            sys.close(p[1]);
+            return e;
+        };
+        const name = try it.heap.backing.dupe(u8, try it.str(ch));
+        g.lock.lock();
+        g.listens.append(ga, .{ .port = @intCast(port), .notify = p[0], .chan = name }) catch {
+            g.lock.unlock();
+            dropListen(it, .{ .port = @intCast(port), .notify = p[0], .chan = name });
+            return error.OutOfMemory;
+        };
+        g.lock.unlock();
+        if (it.findCommand("::ztcl::vmpriv::accept") == null) _ = try it.eval(listen_glue);
+        var words = [_]Value{ .{ .str = "::ztcl::vmpriv::accept" }, .{ .str = g.name }, .{ .int = port }, ch, args[2] };
+        const handler = try value.wrapList(it.alloc(), try it.alloc().dupe(Value, &words));
+        var fe = [_]Value{ .{ .str = "fileevent" }, ch, .{ .str = "readable" }, handler };
+        _ = try it.evalWords(&fe);
+        return .{ .str = "" };
+    }
+
+    fn unlistenCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        if (args.len != 1) return it.wrongArgs("ztcl::vm unlisten vm port");
+        const port = try it.int(args[0]);
+        g.lock.lock();
+        const i = if (port >= 0 and port <= std.math.maxInt(u32)) findListen(g, @intCast(port)) else null;
+        const x: ?Listen = if (i) |k| g.listens.swapRemove(k) else null;
+        g.lock.unlock();
+        dropListen(it, x orelse return it.failCode("ZTCL VM LISTEN", "the guest {s} has no listener on port {d}", .{ g.name, port }));
+        return .{ .str = "" };
+    }
+
+    /// `accept VM PORT FD`, from the glue of `listen`: the channel of a
+    /// connection that waits on the port.
+    fn acceptCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        if (args.len != 2) return it.wrongArgs("ztcl::vm accept vm port fd");
+        const port = try it.int(args[0]);
+        const fd = try it.int(args[1]);
+        g.lock.lock();
+        var took = false;
+        if (port >= 0 and port <= std.math.maxInt(u32)) if (findListen(g, @intCast(port))) |i| {
+            const w = &g.listens.items[i].waiting;
+            for (w.items, 0..) |x, k| if (x == fd) {
+                _ = w.swapRemove(k);
+                took = true;
+                break;
+            };
+        };
+        g.lock.unlock();
+        if (!took) return it.failCode("ZTCL VM LISTEN", "no connection {d} waits on port {d}", .{ fd, port });
+        return binaryChannel(it, "vsock", @intCast(fd));
+    }
+
     /// `exec` through the agent: a dict of `exit`, `stdout`, and `stderr`.
     fn execCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
         const r = try execArgs(it, args);
@@ -2759,7 +2928,7 @@ const win = if (on_whp) struct {
             .virtiofs = g.virtiofs,
             .entropy = entropy,
             .console = .{ .ctx = g, .write = consoleWrite },
-            .vsock = .{ .ctx = g, .data = streamData, .event = streamEvent },
+            .vsock = .{ .ctx = g, .data = streamData, .event = streamEvent, .accept = streamAccept },
         });
     }
 
@@ -2951,8 +3120,15 @@ const win = if (on_whp) struct {
     }
 
     fn destroy(it: *Interp, g: *Guest) void {
-        _ = it;
+        g.lock.lock();
+        const ls = g.listens;
+        g.listens = .empty;
+        g.lock.unlock();
+        for (ls.items) |l| dropListen(it, l);
+        var copy = ls;
+        copy.deinit(ga);
         destroyRaw(g);
+        g.accepted.deinit(ga);
     }
 
     fn destroyRaw(g: *Guest) void {

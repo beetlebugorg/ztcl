@@ -17,13 +17,22 @@
 //!    `Sink.data` at once, so its own `fwd_cnt` counts each byte that it
 //!    gets, and it sends CREDIT_UPDATE when half its `buf_alloc` went by
 //!    and on CREDIT_REQUEST.
-//! 3. SHUTDOWN of the guest, or `close` of the host, ends the stream with
-//!    RST.
+//! 3. SHUTDOWN of the guest of its sending side alone gives `eof`, and
+//!    the host can still send; SHUTDOWN of both sides ends the stream
+//!    with RST. A `close` of the host sends the bytes that wait, then
+//!    SHUTDOWN of both directions, so the guest reads them and then the
+//!    end of the stream; the RST of the guest frees the stream. A stream
+//!    that the guest has not accepted gets RST at once.
+//!
+//! A stream from the guest to a port of the host: the REQUEST of the
+//! guest goes to `Sink.accept`, when the host has one. A port with a
+//! listener of the host opens the stream at once, and the device answers
+//! RESPONSE; another port gets RST.
 //!
 //! A packet that the device cannot send waits in its stream until the
-//! driver gives receive buffers (`rxReady`). A REQUEST of the guest gets
-//! RST: the host listens on no port yet. The guest is not trusted: each
-//! header goes through the checks of `Chain` and the size of the data.
+//! driver gives receive buffers (`rxReady`). The guest is not trusted:
+//! each header goes through the checks of `Chain` and the size of the
+//! data.
 //!
 //! The backend calls each function with `Device.lock` held.
 //!
@@ -51,13 +60,24 @@ pub const tx_max = 256 * 1024;
 pub const Op = enum(u16) { invalid = 0, request = 1, response = 2, rst = 3, shutdown = 4, rw = 5, credit_update = 6, credit_request = 7, _ };
 
 /// What the device tells the host of a stream.
-pub const Event = enum { connected, refused, closed };
+pub const Event = enum {
+    connected,
+    refused,
+    closed,
+    /// The guest sends no more bytes on the stream (SHUTDOWN with the flag
+    /// SEND alone), and still reads what the host sends.
+    eof,
+};
 
 /// The host side of the streams: the bytes of the guest, and the events.
 pub const Sink = struct {
     ctx: *anyopaque,
     data: *const fn (ctx: *anyopaque, conn: u32, bytes: []const u8) void,
     event: *const fn (ctx: *anyopaque, conn: u32, e: Event) void,
+    /// A REQUEST of the guest to `port` of the host, as stream `conn`: true
+    /// when the host accepts it, and the stream is then open. With no
+    /// `accept`, each REQUEST of the guest gets RST.
+    accept: ?*const fn (ctx: *anyopaque, conn: u32, port: u32) bool = null,
 };
 
 const State = enum { free, connecting, open, closing };
@@ -78,6 +98,8 @@ const Conn = struct {
     fwd_sent: u32 = 0,
     /// The control packet that waits for a receive buffer.
     pending: ?Op = null,
+    /// The host closed the stream: SHUTDOWN goes once its bytes are out.
+    shut: bool = false,
 
     fn credit(c: *const Conn) u32 {
         const in_flight = c.tx_cnt -% c.peer_fwd_cnt;
@@ -132,13 +154,17 @@ pub const Vsock = struct {
         return k;
     }
 
-    /// Ends stream `conn` from the host side with RST.
+    /// Ends stream `conn` from the host side: SHUTDOWN after the bytes that
+    /// wait, or RST for a stream that the guest has not accepted.
     pub fn close(v: *Vsock, d: *Device, host: *const Host, conn: u32) void {
         const c = &v.conns[conn];
-        if (c.state == .free) return;
-        if (c.state == .connecting or c.state == .open) {
+        if (c.state == .connecting) {
             c.state = .closing;
             c.pending = .rst;
+            v.flush(d, host);
+        } else if (c.state == .open) {
+            c.state = .closing;
+            c.shut = true;
             v.flush(d, host);
         }
     }
@@ -185,6 +211,24 @@ pub const Vsock = struct {
         return null;
     }
 
+    /// A REQUEST of the guest to `host_port`: a free stream, open with a
+    /// RESPONSE that waits, when `Sink.accept` gives true. False for a port
+    /// with no listener, or no free stream.
+    fn acceptRequest(v: *Vsock, host_port: u32, guest_port: u32, peer_buf: u32, peer_fwd: u32) bool {
+        const accept = v.sink.accept orelse return false;
+        for (&v.conns, 0..) |*c, k| {
+            if (c.state != .free) continue;
+            c.tx.clearRetainingCapacity();
+            const kept = c.tx;
+            c.* = .{ .state = .open, .host_port = host_port, .guest_port = guest_port, .tx = kept, .pending = .response, .peer_buf_alloc = peer_buf, .peer_fwd_cnt = peer_fwd };
+            if (accept(v.sink.ctx, @intCast(k), host_port)) return true;
+            c.state = .free;
+            c.pending = null;
+            return false;
+        }
+        return false;
+    }
+
     /// One packet of the driver: its header, then its data, which can
     /// span the next readable buffers.
     fn packet(v: *Vsock, d: *Device, host: *const Host, ch: *const Chain) void {
@@ -211,9 +255,11 @@ pub const Vsock = struct {
         const kind = std.mem.readInt(u16, hdr[28..30], .little);
         const op: Op = @fromBackingInt(@intCast(std.mem.readInt(u16, hdr[30..32], .little)));
         const peer_buf = std.mem.readInt(u32, hdr[36..40], .little);
+        const flags = std.mem.readInt(u32, hdr[32..36], .little);
         const peer_fwd = std.mem.readInt(u32, hdr[40..44], .little);
         if (src_cid != v.guest_cid or dst_cid != host_cid or kind != type_stream) return;
         const k = v.find(dst_port, src_port) orelse {
+            if (op == .request and v.acceptRequest(dst_port, src_port, peer_buf, peer_fwd)) return;
             // A packet of no stream: RST, unless it is RST.
             if (op != .rst) v.refusals.append(v.gpa, .{ dst_port, src_port }) catch {};
             return;
@@ -234,8 +280,14 @@ pub const Vsock = struct {
                 v.sink.event(v.sink.ctx, k, if (was == .connecting) .refused else .closed);
             },
             // The RST that ends the stream gives the event `closed`.
-            .shutdown => {
+            // SHUTDOWN of the sending side alone, VIRTIO_VSOCK_SHUTDOWN_SEND:
+            // the end of the bytes of the guest, and the host can answer. Of
+            // both sides, or after the close of the host: RST.
+            .shutdown => if (flags == 2 and c.state == .open) {
+                v.sink.event(v.sink.ctx, k, .eof);
+            } else {
                 c.state = .closing;
+                c.shut = false;
                 c.pending = .rst;
             },
             .rw => if (c.state == .open) {
@@ -291,17 +343,25 @@ pub const Vsock = struct {
                     continue;
                 }
             }
-            while (c.state == .open and c.tx.items.len > 0) {
+            while ((c.state == .open or c.shut) and c.tx.items.len > 0) {
                 const room = @min(c.credit(), @as(u32, @intCast(c.tx.items.len)));
                 if (room == 0) break;
                 const n = v.putData(q, host.mem, c, room) orelse return;
                 any = true;
                 c.tx.replaceRangeAssumeCapacity(0, n, &.{});
             }
+            if (c.shut and c.tx.items.len == 0) {
+                var h = v.header(c, .shutdown, 0);
+                // VIRTIO_VSOCK_SHUTDOWN_RCV and VIRTIO_VSOCK_SHUTDOWN_SEND.
+                h.flags = 3;
+                if (!v.put(q, host.mem, h, &.{})) return;
+                any = true;
+                c.shut = false;
+            }
         }
     }
 
-    const Header = struct { src_port: u32, dst_port: u32, op: Op, len: u32 = 0, buf_alloc: u32 = buf_alloc, fwd_cnt: u32 = 0 };
+    const Header = struct { src_port: u32, dst_port: u32, op: Op, len: u32 = 0, flags: u32 = 0, buf_alloc: u32 = buf_alloc, fwd_cnt: u32 = 0 };
 
     fn header(v: *const Vsock, c: *const Conn, op: Op, len: u32) Header {
         _ = v;
@@ -317,6 +377,7 @@ pub const Vsock = struct {
         std.mem.writeInt(u32, out[24..28], h.len, .little);
         std.mem.writeInt(u16, out[28..30], type_stream, .little);
         std.mem.writeInt(u16, out[30..32], @backingInt(h.op), .little);
+        std.mem.writeInt(u32, out[32..36], h.flags, .little);
         std.mem.writeInt(u32, out[36..40], h.buf_alloc, .little);
         std.mem.writeInt(u32, out[40..44], h.fwd_cnt, .little);
     }
@@ -404,6 +465,9 @@ const Fake = struct {
     desc: [2]u16 = .{ 0, 0 },
     /// The count of used entries of the receive queue that the driver read.
     seen: u16 = 0,
+    /// The port of the host with a listener, and the stream it took.
+    listen_port: u32 = 0,
+    accepted: ?u32 = null,
 
     const rings = [2][3]u64{ .{ 0x1000, 0x1800, 0x1c00 }, .{ 0x2000, 0x2800, 0x2c00 } };
 
@@ -429,6 +493,15 @@ const Fake = struct {
     }
     fn sink(f: *Fake) Sink {
         return .{ .ctx = f, .data = data, .event = event };
+    }
+    fn accept(ctx: *anyopaque, conn: u32, port: u32) bool {
+        const f: *Fake = @ptrCast(@alignCast(ctx));
+        if (port != f.listen_port) return false;
+        f.accepted = conn;
+        return true;
+    }
+    fn listenSink(f: *Fake) Sink {
+        return .{ .ctx = f, .data = data, .event = event, .accept = accept };
     }
 
     fn reg(d: *Device, h: *const Host, off: u64, v: u32) void {
@@ -470,7 +543,7 @@ const Fake = struct {
         reg(d, h, 0x050, 0);
     }
 
-    const Got = struct { op: Op, src_port: u32, dst_port: u32, dst_cid: u64, buf_alloc: u32, data: []const u8 };
+    const Got = struct { op: Op, src_port: u32, dst_port: u32, dst_cid: u64, flags: u32, buf_alloc: u32, data: []const u8 };
 
     /// The header and the data of the next used receive buffer.
     fn rxNext(f: *Fake) ?Got {
@@ -488,6 +561,7 @@ const Fake = struct {
             .src_port = std.mem.readInt(u32, p[16..20], .little),
             .dst_port = std.mem.readInt(u32, p[20..24], .little),
             .op = @fromBackingInt(@intCast(std.mem.readInt(u16, p[30..32], .little))),
+            .flags = std.mem.readInt(u32, p[32..36], .little),
             .buf_alloc = std.mem.readInt(u32, p[36..40], .little),
             .data = p[hdr_len..],
         };
@@ -597,4 +671,51 @@ test "vsock: the host sends no more than the credit of the guest" {
     f.txPacket(&d, &h, 0x6000, .{ .src_port = 1024, .dst_port = req.src_port, .op = .credit_update, .buf_alloc = 4, .fwd_cnt = 4 });
     try std.testing.expectEqualStrings("efgh", f.rxNext().?.data);
     try std.testing.expectEqual(@as(usize, 0), v.queued(conn));
+}
+
+test "vsock: a stream from the guest to a port of the host with a listener" {
+    var f: Fake = .{ .listen_port = 7000 };
+    const h = f.host();
+    var v = Vsock.init(std.testing.allocator, 3, f.listenSink());
+    defer v.deinit();
+    var d = Device.vsock(7, &v);
+    Fake.start(&d, &h);
+    // The REQUEST of the guest to port 7000: the host accepts it, and the
+    // guest gets RESPONSE from that port.
+    f.rxBuffer(&d, &h, 0x8000);
+    f.txPacket(&d, &h, 0x6000, .{ .src_port = 5000, .dst_port = 7000, .op = .request });
+    const conn = f.accepted.?;
+    const resp = f.rxNext().?;
+    try std.testing.expectEqual(Op.response, resp.op);
+    try std.testing.expectEqual(@as(u32, 7000), resp.src_port);
+    try std.testing.expectEqual(@as(u32, 5000), resp.dst_port);
+    // The data goes both ways in the credit of the guest.
+    f.txPacket(&d, &h, 0x6000, .{ .src_port = 5000, .dst_port = 7000, .op = .rw, .data = "from the guest" });
+    try std.testing.expectEqualStrings("from the guest", f.got[0..f.got_len]);
+    try std.testing.expectEqual(@as(usize, 4), v.send(&d, &h, conn, "back"));
+    f.rxBuffer(&d, &h, 0x9000);
+    const rw = f.rxNext().?;
+    try std.testing.expectEqual(Op.rw, rw.op);
+    try std.testing.expectEqualStrings("back", rw.data);
+    // A REQUEST to a port with no listener gets RST.
+    f.txPacket(&d, &h, 0x6000, .{ .src_port = 5001, .dst_port = 7001, .op = .request });
+    f.rxBuffer(&d, &h, 0xa000);
+    const rst = f.rxNext().?;
+    try std.testing.expectEqual(Op.rst, rst.op);
+    try std.testing.expectEqual(@as(u32, 5001), rst.dst_port);
+    try std.testing.expectEqual(conn, f.accepted.?);
+    // The host sends a last line and closes the stream: the guest gets the
+    // line, then SHUTDOWN of both directions, and its RST frees the stream.
+    _ = v.send(&d, &h, conn, "bye");
+    v.close(&d, &h, conn);
+    f.rxBuffer(&d, &h, 0xb000);
+    f.rxBuffer(&d, &h, 0xc000);
+    try std.testing.expectEqualStrings("bye", f.rxNext().?.data);
+    const shut = f.rxNext().?;
+    try std.testing.expectEqual(Op.shutdown, shut.op);
+    try std.testing.expectEqual(@as(u32, 3), shut.flags);
+    const before = f.nevents;
+    f.txPacket(&d, &h, 0x6000, .{ .src_port = 5000, .dst_port = 7000, .op = .rst });
+    try std.testing.expectEqual(before + 1, f.nevents);
+    try std.testing.expectEqual(Event.closed, f.events[f.nevents - 1]);
 }
