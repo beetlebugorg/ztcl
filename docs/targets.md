@@ -12,19 +12,31 @@ This page lists each target of ztcl. For each target it gives what `ztcl build` 
 | `aarch64-linux` | 2,014,696 bytes | no | no | yes | yes |
 | `x86_64-macos` | 2,292,412 bytes | no | no | yes | no |
 | `aarch64-macos` | 2,256,584 bytes | tier 1 and tier 2 | yes | yes | no |
-| `x86_64-windows` | 2,691,584 bytes | no | yes | yes | no |
+| `x86_64-windows` | 2,691,584 bytes | no | yes | yes | yes |
 | `aarch64-windows` | 2,144,256 bytes | no | no | no | no |
 
-- **JIT**: tier 1 compiles the bytecode of a proc, and tier 2 compiles a hot loop. [The JIT](jit.md) has the details. On a target with no JIT, `--jit` has no effect, and `enableJit` returns false. A binary of `ztcl build` has no machine code compiled at build time yet.
+- **JIT**: tier 1 compiles the bytecode of a proc, and tier 2 compiles a hot loop. [The JIT](jit.md) has the details. On a target with no JIT, `--jit` has no effect, and `enableJit` returns false. A binary of `ztcl build` has no machine code compiled at build time yet. See "Code compiled ahead of time" below.
 - **`coroutine`**: on a target with no coroutines, `coroutine` gives the error `coroutine is not available on this target`.
 - **`exec` and `ztcl::pty`**: [Run programs](processes.md) and [ztcl::pty](modules/pty.md) list the differences of Linux, macOS, and Windows.
-- **`ztcl::watch`**: on macOS and Windows, `add` gives the error `ZTCL WATCH UNAVAILABLE`.
+- **`ztcl::watch`**: Linux has inotify and x86-64 Windows has `ReadDirectoryChangesW`. On macOS, `add` gives the error `ZTCL WATCH UNAVAILABLE`. [ztcl::watch](modules/watch.md#platforms) has the details.
+- **Isolated threads**: the level `process` of `thread::create -isolation` runs on Linux, macOS, and Windows. [Isolated threads](isolation.md) has the sandbox of each system.
 - **`ztcl::open` and `ztcl::notify`**: these modules use the system on macOS and Windows, and on Linux they need a host callback. [ztcl::open](modules/open.md) and [ztcl::notify](modules/notify.md) have the tables.
 - **arm64 Windows**: the system layer of ztcl (`src/sys.zig`) has no port to arm64 Windows yet, so `exec` and `ztcl::pty` are absent there.
 
 ### Signing
 
 A binary for macOS has an ad hoc code signature from `ztcl build`. A binary for Windows has no signature. [Build a program](build.md#macos-and-windows) has the commands for a release signature.
+
+## Code compiled ahead of time
+
+| Target | State | Limits |
+|---|---|---|
+| `wasm32` | `ztcl compile --wasm` compiles the procs of a script into a module. [WebAssembly](webassembly.md#compile-procs-to-webassembly) tells how. | A proc that a script makes from a computed string runs in the interpreter. Coroutines are not in the WebAssembly build. |
+| `x86_64-linux` | Planned: tier 1 code in the binary of `ztcl build --aot` (issue [#40](https://github.com/beetlebugorg/ztcl/issues/40)) | |
+| `aarch64-linux`, `aarch64-macos`, `x86_64-windows` | Planned after `x86_64-linux` | |
+| `avr` (ATmega2560), then Cortex-M and 32-bit RISC-V | Planned: `ztcl aot` for firmware (issue [#9](https://github.com/beetlebugorg/ztcl/issues/9)) | The ATmega2560 has 8 KB of RAM and no FPU, so the plan has small ints and soft floats. A board has no `exec`, files, or sockets unless the firmware gives them. |
+
+The output, the errors, and the count of compute units of compiled code are the same as in the interpreter.
 
 ## WebAssembly
 

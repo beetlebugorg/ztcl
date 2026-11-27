@@ -65,6 +65,7 @@ PAGES = [
     ("docs/shell.md", "shell/", "Guide", "The shell"),
     ("docs/limits.md", "limits/", "Guide", "Limits and capabilities"),
     ("docs/threads.md", "threads/", "Guide", "Threads"),
+    ("docs/isolation.md", "isolation/", "Guide", "Isolated threads"),
     ("docs/processes.md", "processes/", "Guide", "Run programs"),
     ("docs/jit.md", "jit/", "Guide", "The JIT"),
     ("docs/build.md", "build/", "Guide", "Build a program"),

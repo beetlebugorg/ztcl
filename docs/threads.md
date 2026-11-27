@@ -134,7 +134,7 @@ A thread checks a stop flag at its safe points. Another thread sets the flag and
 
 ## Isolated threads
 
-`thread::create -isolation process` runs the thread in a child process (ztcl#209). The child is the ztcl runner with one interpreter, and it talks to the parent over the protocol of `docs/dev/isolation.md`: sealed frames on a socket pair. A crash, a memory error, or a bad C package in the child ends only the child.
+[Isolated threads](isolation.md) compares the levels and the sandbox of each system, with a review list for the code of a parent. `thread::create -isolation process` runs the thread in a child process (ztcl#209). The child is the ztcl runner with one interpreter, and it talks to the parent over the protocol of `docs/dev/isolation.md`: sealed frames on a socket pair. A crash, a memory error, or a bad C package in the child ends only the child.
 
 ```tcl
 set t [thread::create -isolation process {proc sq x {expr {$x * $x}}; thread::wait}]
