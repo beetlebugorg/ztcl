@@ -179,3 +179,18 @@ test "encoding profiles of Tcl 9.1" {
         .{ "encoding bogus", "!bad option \"bogus\": must be convertfrom, convertto, dirs, names, or system", "!unknown or ambiguous subcommand \"bogus\": must be convertfrom, convertto, dirs, names, profiles, system, or user" },
     });
 }
+
+test "switch -integer of Tcl 9.1" {
+    try check(0, &.{
+        .{ "switch -integer 0x10 16 {set r a} default {set r b}", "!bad option \"-integer\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", "a" },
+        .{ "switch -integer 10 010 {set r a} default {set r b}", "!bad option \"-integer\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", "a" },
+        .{ "switch -integer -- 2 {1 {set r a} 2 {set r b}}", "!bad option \"-integer\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", "b" },
+        .{ "switch -integer abc default {set r d}", "!bad option \"-integer\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", "!expected integer but got \"abc\"" },
+        .{ "switch -integer 5 abc {set r a} 5 {set r b}", "!bad option \"-integer\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", "!expected integer but got \"abc\"" },
+        .{ "switch -integer 1 1 {set r a} abc {set r b}", "!bad option \"-integer\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", "a" },
+        .{ "switch -integer 9223372036854775808 1 {}", "!bad option \"-integer\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", "!integer value too large to represent" },
+        .{ "switch -integer -nocase 1 1 {set r a}", "!bad option \"-integer\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", "!-nocase option cannot be used with -integer option" },
+        .{ "switch -integer -exact 1 1 {set r a}", "!bad option \"-integer\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", "!bad option \"-exact\": -integer option already found" },
+        .{ "switch -i 1 1 {set r a}", "!-indexvar option requires -regexp option", "!ambiguous option \"-i\": must be -exact, -glob, -indexvar, -integer, -matchvar, -nocase, -regexp, or --" },
+    });
+}

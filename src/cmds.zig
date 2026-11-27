@@ -8,6 +8,7 @@
 const std = @import("std");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
+const bigint = @import("bigint.zig");
 const expr = @import("expr.zig");
 const format = @import("format.zig");
 const noise = @import("noise.zig");
@@ -426,9 +427,19 @@ fn cmdContinue(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return error.TclContinue;
 }
 
+/// A value of `switch -integer` as a 64-bit integer, as Tcl 9.1 reads it.
+fn switchInt(it: *Interp, v: Value) Error!i64 {
+    if (v == .int) return v.int;
+    const s = try it.str(v);
+    if (value.parseIntStrict(s)) |n| return n;
+    if (bigint.isIntegerText(s)) return it.failCode("ARITH IOVERFLOW {integer value too large to represent}", "integer value too large to represent", .{});
+    return it.failCode("TCL VALUE NUMBER", "expected integer but got \"{s}\"", .{s});
+}
+
 fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     var i: usize = 1;
-    const Match = enum { exact, glob, regexp };
+    const Match = enum { exact, glob, regexp, integer };
+    const t9 = it.tcl9();
     var match: Match = .exact;
     var nocase = false;
     var match_var: ?Value = null;
@@ -445,17 +456,30 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         }
         var opt: []const u8 = s;
         var hits: usize = 0;
-        for ([_][]const u8{ "-exact", "-glob", "-indexvar", "-matchvar", "-nocase", "-regexp" }) |n| {
+        // Tcl 9.1 adds -integer (TIP 730).
+        const names8 = [_][]const u8{ "-exact", "-glob", "-indexvar", "-matchvar", "-nocase", "-regexp" };
+        const names9 = [_][]const u8{ "-exact", "-glob", "-indexvar", "-integer", "-matchvar", "-nocase", "-regexp" };
+        const names: []const []const u8 = if (t9) &names9 else &names8;
+        for (names) |n| {
             if (s.len > 1 and std.mem.startsWith(u8, n, s)) {
                 opt = n;
                 hits += 1;
             }
+            if (eql(n, s)) {
+                opt = n;
+                hits = 1;
+                break;
+            }
         }
-        if (hits != 1) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", .{s});
-        if (eql(opt, "-glob") or eql(opt, "-exact") or eql(opt, "-regexp")) {
-            if (mode_word) |prev| return it.fail("bad option \"{s}\": {s} option already found", .{ s, prev });
+        if (hits != 1) {
+            const head = if (hits > 1) "ambiguous" else "bad";
+            if (t9) return it.failCode("TCL LOOKUP INDEX option", "{s} option \"{s}\": must be -exact, -glob, -indexvar, -integer, -matchvar, -nocase, -regexp, or --", .{ head, s });
+            return it.failCode("TCL LOOKUP INDEX option", "{s} option \"{s}\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --", .{ head, s });
+        }
+        if (eql(opt, "-glob") or eql(opt, "-exact") or eql(opt, "-regexp") or eql(opt, "-integer")) {
+            if (mode_word) |prev| return it.failCode("TCL OPERATION SWITCH DOUBLEOPT", "bad option \"{s}\": {s} option already found", .{ s, prev });
             mode_word = opt;
-            match = if (eql(opt, "-glob")) .glob else if (eql(opt, "-exact")) .exact else .regexp;
+            match = if (eql(opt, "-glob")) .glob else if (eql(opt, "-exact")) .exact else if (eql(opt, "-integer")) .integer else .regexp;
         } else if (eql(opt, "-nocase")) {
             nocase = true;
         } else {
@@ -464,10 +488,12 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             if (eql(opt, "-matchvar")) match_var = argv[i] else index_var = argv[i];
         }
     }
+    if (match == .integer and nocase) return it.failCode("TCL OPERATION SWITCH MODERESTRICTION", "-nocase option cannot be used with -integer option", .{});
     if (match != .regexp and match_var != null) return it.fail("-matchvar option requires -regexp option", .{});
     if (match != .regexp and index_var != null) return it.fail("-indexvar option requires -regexp option", .{});
     if (i + 1 >= argv.len) return it.wrongArgs("switch ?-option ...? string ?pattern body ...? ?default body?");
     const subject = try it.str(argv[i]);
+    const subject_int: i64 = if (match == .integer) try switchInt(it, argv[i]) else 0;
     i += 1;
     var arms = argv[i..];
     const one_list = arms.len == 1;
@@ -495,6 +521,7 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         } else switch (match) {
             .exact => hit = if (nocase) std.ascii.eqlIgnoreCase(pat, subject) else eql(pat, subject),
             .glob => hit = try globSteps(it, pat, subject, nocase),
+            .integer => hit = try switchInt(it, arms[k]) == subject_int,
             .regexp => {
                 const re = try regex.compile(it, pat, .{ .nocase = nocase });
                 var m = try regex.Matcher.init(it, re, subject);

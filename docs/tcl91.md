@@ -27,6 +27,7 @@ list [info tclversion] [info patchlevel]
 These commands and subcommands exist only in Tcl 9.1. In 8.6 they are absent, as in tclsh 8.6.
 
 - `lseq`, `lpop`, `lremove`, `ledit`, and `lfilter`.
+- The option `-integer` of `switch`.
 - `string insert`, the class `dict` of `string is`, `dict getdef` and `dict getwithdefault`, and `array for`.
 - `encoding profiles`, `encoding user`, and the options `-profile` and `-failindex` of `encoding convertfrom` and `encoding convertto`.
 - The channel option `-profile`.
@@ -85,7 +86,7 @@ These parts of Tcl 9.1 are not in ztcl yet. A script that uses them gets an erro
 
 - The commands `const`, `timer`, `unicode`, `tcl::process`, `coroinject`, `coroprobe`, `divmod`, `fpclassify`, `frexp`, `modf`, and `remquo`.
 - `array default`, `info cmdtype`, `info constant`, `info consts`, `interp set`, `chan isbinary`, `file home`, `file tildeexpand`, `file tempdir`, `clock monotonic`, and `package files`.
-- The options `lsearch -stride`, `switch -integer`, and `subst -backslashes`, `-commands`, and `-variables`.
+- The option `-stride` of `lsearch`, and the options `-backslashes`, `-commands`, and `-variables` of `subst`.
 - The new math functions of 9.1, such as `trunc()` and `log2()`.
 - The operators `lt`, `le`, `gt`, and `ge` of `expr`, and the number forms `0d10` and `1_000`.
 - The removal of the old forms of `trace` (`variable`, `vdelete`, `vinfo`).

@@ -32,6 +32,7 @@ does: Runs the body of the first pattern that matches the string. A body of `-` 
 opt: -exact | The pattern equals the string (the default).
 opt: -glob | A glob pattern.
 opt: -regexp | A regular expression.
+opt: -integer | Tcl 9.1 only: the pattern and the string are the same integer, such as 16 and 0x10. A value that is not an integer is an error.
 opt: -nocase | Matches letters with no case.
 opt: -- | The end of the options, for a string that starts with `-`.
 ex: switch -glob -- milk {m* {set r m} default {set r other}} => m
