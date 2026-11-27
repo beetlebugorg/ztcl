@@ -109,6 +109,54 @@ inline fn blocks8(s: *const State, out: *[512]u8) void {
     }
 }
 
+const R = @Vector(4, u32);
+
+inline fn rotl4(x: R, comptime n: u5) R {
+    return (x << @splat(n)) | (x >> @splat(@as(u5, @intCast(32 - @as(u6, n)))));
+}
+
+inline fn round4(a: *R, b: *R, c: *R, d: *R) void {
+    a.* +%= b.*;
+    d.* = rotl4(d.* ^ a.*, 16);
+    c.* +%= d.*;
+    b.* = rotl4(b.* ^ c.*, 12);
+    a.* +%= b.*;
+    d.* = rotl4(d.* ^ a.*, 8);
+    c.* +%= d.*;
+    b.* = rotl4(b.* ^ c.*, 7);
+}
+
+/// One block of key stream for block `count`, with the four rows of the
+/// state in four vectors of 4 lanes: a quarter of the work of `blocks8`.
+/// The diagonal rounds turn rows b, c, and d by one, two, and three
+/// lanes, and turn them back after.
+fn block1(s: *const State, count: u32) [64]u8 {
+    const a0: R = s[0..4].*;
+    const b0: R = s[4..8].*;
+    const c0: R = s[8..12].*;
+    const d0: R = .{ count, s[13], s[14], s[15] };
+    var a = a0;
+    var b = b0;
+    var c = c0;
+    var d = d0;
+    inline for (0..10) |_| {
+        round4(&a, &b, &c, &d);
+        b = @shuffle(u32, b, undefined, [4]i32{ 1, 2, 3, 0 });
+        c = @shuffle(u32, c, undefined, [4]i32{ 2, 3, 0, 1 });
+        d = @shuffle(u32, d, undefined, [4]i32{ 3, 0, 1, 2 });
+        round4(&a, &b, &c, &d);
+        b = @shuffle(u32, b, undefined, [4]i32{ 3, 0, 1, 2 });
+        c = @shuffle(u32, c, undefined, [4]i32{ 2, 3, 0, 1 });
+        d = @shuffle(u32, d, undefined, [4]i32{ 1, 2, 3, 0 });
+    }
+    var out: [64]u8 = undefined;
+    out[0..16].* = @bitCast(a +% a0);
+    out[16..32].* = @bitCast(b +% b0);
+    out[32..48].* = @bitCast(c +% c0);
+    out[48..64].* = @bitCast(d +% d0);
+    return out;
+}
+
 /// XORs the key stream of 8 blocks into 512 bytes.
 inline fn xor8(s: *const State, dst: *[512]u8, src: *const [512]u8) void {
     var ks: [512]u8 align(32) = undefined;
@@ -371,10 +419,10 @@ const PolyV = struct {
     }
 };
 
+/// The key of Poly1305: the first 32 bytes of block 0.
 fn polyKey(key: *const [32]u8, nonce: *const [12]u8) Poly {
     const s = initState(key, nonce, 0);
-    var ks: [512]u8 = undefined;
-    blocks8(&s, &ks);
+    var ks = block1(&s, 0);
     const p = Poly.init(ks[0..32]);
     std.crypto.secureZero(u8, &ks);
     return p;
@@ -382,6 +430,18 @@ fn polyKey(key: *const [32]u8, nonce: *const [12]u8) Poly {
 
 /// XORs the key stream from block `s[12]` into fewer than 512 bytes.
 fn xorTail(s: *const State, dst: []u8, src: []const u8) void {
+    if (src.len <= 128) {
+        // One or two blocks: `block1` costs a quarter of `blocks8`.
+        var off: usize = 0;
+        var n: u32 = 0;
+        while (off < src.len) : (n += 1) {
+            const ks = block1(s, s[12] +% n);
+            const k = @min(64, src.len - off);
+            for (dst[off..][0..k], src[off..][0..k], ks[0..k]) |*d, a, b| d.* = a ^ b;
+            off += k;
+        }
+        return;
+    }
     var ks: [512]u8 = undefined;
     blocks8(s, &ks);
     for (dst, src, ks[0..src.len]) |*d, a, k| d.* = a ^ k;
