@@ -26,7 +26,7 @@ spec.loader.exec_module(ref)
 
 ALLOW = "package,interp,clock,channels,file,event,socket,exec,thread,launch,notify"
 # Commands of the internals of a module.
-SKIP = re.compile(r"^(ztcl::json::_|oo::Obj\d+::my$|oo::Link$|oo::UnknownDefinition$|tcl::SourceIndex$|tcl::UnknownBuiltin$|tcl::LibraryIndex$|tcl::tm::(Add|Defaults)$|tcl::history::)")
+SKIP = re.compile(r"^(ztcl::json::_|oo::Obj\d+::my$|oo::Link$|oo::UnknownDefinition$|tcl::SourceIndex$|tcl::UnknownBuiltin$|tcl::LibraryIndex$|tcl::tm::(Add|Defaults)$|auto_mkindex_parser::([A-Z]|mkindex$)|tcl::history::)")
 SCRIPT = r"""
 proc walk_ns {ns} {
     set out [info commands ${ns}::*]

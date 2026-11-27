@@ -462,6 +462,8 @@ syn: tcl::tm::path list
 syn: tcl::tm::roots paths
 == pkg_mkIndex pkg::create tcl::Pkg::CompareExtension tcl::Pkg::Index
 syn: pkg_mkIndex ?-direct? ?-lazy? ?-load PATTERN? ?-verbose? ?--? dir ?pattern ...?
+== auto_mkindex auto_mkindex_parser::command auto_mkindex_parser::fullname auto_mkindex_parser::slavehook
+syn: auto_mkindex dir ?pattern ...?
 == auto_load auto_load auto_load_index auto_reset auto_qualify auto_import auto_execok
 syn: auto_load command ?namespace?
 == history
