@@ -1657,11 +1657,14 @@ const lin = if (on_kvm) struct {
         /// the image.
         image_tag: []u8 = &.{},
         image_disks: usize = 0,
-        /// A guest of a snapshot before its first start: the start
-        /// sends the agent the time and new entropy.
         /// The mapping of the boot bytes of a guest of the pool
         /// (`Pooled.boot_map`), or empty.
         boot_map: []align(std.heap.page_size_min) u8 = &.{},
+        /// The connection to the agent that the last request left open
+        /// (keepalive), for the next request.
+        idle: ?vmagent.Conn = null,
+        /// A guest of a snapshot before its first start: the start
+        /// sends the agent the time and new entropy.
         restored: bool = false,
     };
 
@@ -1715,6 +1718,7 @@ const lin = if (on_kvm) struct {
         if (std.mem.eql(u8, sub, "stop")) {
             const force = args.len == 4 and std.mem.eql(u8, try it.str(args[3]), "-force");
             if (args.len != 3 and !force) return it.wrongArgs("ztcl::vm stop vm ?-force?");
+            dropIdle(g);
             g.machine.stop();
             return .{ .str = "" };
         }
@@ -1738,14 +1742,22 @@ const lin = if (on_kvm) struct {
         if (std.mem.eql(u8, sub, "exec")) {
             const r = try execArgs(it, args[3..]);
             var a = try agent(it, g, r.timeout);
-            defer _ = linux.close(a.fd);
-            return agentExec(it, g.name, &a, r);
+            const v = agentExec(it, g.name, &a, r) catch |e| {
+                _ = linux.close(a.fd);
+                return e;
+            };
+            keepConn(g, &a);
+            return v;
         }
         if (std.mem.eql(u8, sub, "mount")) {
             const r = try mountArgs(it, args[3..]);
             var a = try agent(it, g, 5000);
-            defer _ = linux.close(a.fd);
-            return agentMount(it, g.name, &a, r, .nine_p);
+            const v = agentMount(it, g.name, &a, r, .nine_p) catch |e| {
+                _ = linux.close(a.fd);
+                return e;
+            };
+            keepConn(g, &a);
+            return v;
         }
         if (std.mem.eql(u8, sub, "console")) {
             if (args.len != 3) return it.wrongArgs("ztcl::vm console vm");
@@ -2010,7 +2022,10 @@ const lin = if (on_kvm) struct {
     fn start(it: *Interp, g: *Guest) Error!void {
         switch (g.machine.getState()) {
             .paused => g.machine.@"resume"(),
-            .created, .stopped, .failed => g.machine.start() catch |e| return failure(it, e),
+            .created, .stopped, .failed => {
+                dropIdle(g);
+                g.machine.start() catch |e| return failure(it, e);
+            },
             .running => return it.failCode("ZTCL VM STATE", "the guest {s} is running", .{g.name}),
         }
         if (g.restored) {
@@ -2283,6 +2298,17 @@ const lin = if (on_kvm) struct {
     /// A connection to the agent on port 1024, after its `HELLO`.
     fn agent(it: *Interp, g: *Guest, timeout: u32) Error!vmagent.Conn {
         if (g.machine.getState() != .running) return it.failCode("ZTCL VM STATE", "the guest {s} is {s}", .{ g.name, status(g) });
+        // The connection of the last request, when the agent keeps it: no
+        // vsock connect and no HELLO.
+        if (g.idle) |*kept| {
+            var a = kept.*;
+            g.idle = null;
+            if (a.idleOpen()) {
+                a.timeout_ms = @intCast(@min(timeout, std.math.maxInt(i32)));
+                return a;
+            }
+            _ = linux.close(a.fd);
+        }
         const fd = connect(g.machine, vmagent.port, timeout) orelse
             return it.failCode("ZTCL VM AGENT", "the agent of the guest {s} did not answer on port {d}", .{ g.name, vmagent.port });
         var a: vmagent.Conn = .{ .fd = fd, .timeout_ms = @intCast(@min(timeout, std.math.maxInt(i32))) };
@@ -2291,6 +2317,19 @@ const lin = if (on_kvm) struct {
             return agentFail(it, g.name, &a, e);
         };
         return a;
+    }
+
+    /// Keeps the connection of a request that ended well for the next
+    /// request, when the agent serves more on it; else closes it.
+    fn keepConn(g: *Guest, a: *vmagent.Conn) void {
+        dropIdle(g);
+        if (a.reusable()) g.idle = a.* else _ = linux.close(a.fd);
+    }
+
+    /// Closes the kept connection: the guest stops, restarts, or goes.
+    fn dropIdle(g: *Guest) void {
+        if (g.idle) |old| _ = linux.close(old.fd);
+        g.idle = null;
     }
 
     fn freeGuest(it: *Interp, g: *Guest) void {
@@ -2695,6 +2734,7 @@ const lin = if (on_kvm) struct {
     }
 
     fn destroy(it: *Interp, g: *Guest) void {
+        dropIdle(g);
         for (g.listens.items) |x| dropListen(it, x);
         g.listens.deinit(it.heap.backing);
         g.machine.deinit();
