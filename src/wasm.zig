@@ -277,6 +277,7 @@ fn ztcl_web_serial_allow(h: *Handle) callconv(.c) i32 {
 const web_libs = [_]struct { group: []const u8, script: []const u8 }{
     .{ .group = "bluetooth", .script = @embedFile("web/bluetooth.tcl") },
     .{ .group = "gamepad", .script = @embedFile("web/gamepad.tcl") },
+    .{ .group = "midi", .script = @embedFile("web/midi.tcl") },
 };
 
 /// Runs the Tcl wrapper of the group `ptr[0..len]`, such as

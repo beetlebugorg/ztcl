@@ -77,6 +77,7 @@ A group can have commands of its own in the namespace `web::GROUP`, with `-name 
 | `serial` | [`web::serial::`](#web-serial): the ports as channels |
 | `bluetooth` | [`web::bluetooth::`](web-bluetooth.md): devices, GATT services, reads, writes, and notifications |
 | `gamepad` | [`web::gamepad::`](web-gamepad.md): the state of the pads, a poll, the events of a new pad, and rumble |
+| `midi` | [`web::midi::`](web-midi.md): the ports, the messages as lists of numbers, and notes |
 
 ## Web Serial
 

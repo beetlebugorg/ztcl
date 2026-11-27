@@ -413,6 +413,165 @@ function padRoot() {
   t.close();
 }
 
+// ---- MIDI ----
+
+class MIDIInputMap extends Map {}
+class MIDIOutputMap extends Map {}
+class MIDIInput extends EventTarget {
+  constructor(id, name) {
+    super();
+    Object.assign(this, { id, name, manufacturer: "Fake", type: "input", version: "1.0", state: "connected", connection: "closed" });
+  }
+  open() {
+    this.connection = "open";
+    return Promise.resolve(this);
+  }
+  // A message of the device.
+  play(bytes) {
+    const e = new MIDIMessageEvent("midimessage", new Uint8Array(bytes));
+    this.dispatchEvent(e);
+  }
+}
+class MIDIOutput extends EventTarget {
+  constructor(id, name) {
+    super();
+    Object.assign(this, { id, name, manufacturer: "Fake", type: "output", version: "1.0", state: "connected", connection: "closed", sent: [] });
+  }
+  send(data, at) {
+    this.sent.push(at === undefined ? Array.from(data) : [Array.from(data), at]);
+  }
+}
+class MIDIMessageEvent extends Event {
+  constructor(type, data) {
+    super(type);
+    this.data = data;
+  }
+}
+class MIDIConnectionEvent extends Event {
+  constructor(type, port) {
+    super(type);
+    this.port = port;
+  }
+}
+class MIDIAccess extends EventTarget {
+  constructor() {
+    super();
+    this.inputs = new MIDIInputMap([["in1", new MIDIInput("in1", "Keys")]]);
+    this.outputs = new MIDIOutputMap([["out1", new MIDIOutput("out1", "Synth")]]);
+    this.sysexEnabled = false;
+  }
+}
+function midiRoot(deny = false) {
+  const access = new MIDIAccess();
+  const asked = [];
+  return {
+    access,
+    asked,
+    root: { navigator: { requestMIDIAccess: (o) => (asked.push(o), deny ? Promise.reject(domError("NotAllowedError", "Permission denied.")) : Promise.resolve(access)) } },
+  };
+}
+
+{
+  const m = midiRoot();
+  const { t, out } = await session(["web:midi"], m.root);
+  const ev = (s) => t.eval(s);
+  let r = ev("web::midi::inputs");
+  check(!r.ok && r.result === "web::midi: no MIDI access: call web::midi::request first", `inputs before request (got ${r.result})`);
+  r = ev("web::midi::request -sysex 1 -command {apply {{s v} {puts \"request $s {$v}\"}}}");
+  check(r.ok, `request (got ${r.result})`);
+  await until(() => out().includes("request"));
+  check(out() === "request ok {}\n" && JSON.stringify(m.asked[0]) === JSON.stringify({ sysex: true, software: false }), `request result (got ${JSON.stringify(out())} ${JSON.stringify(m.asked)})`);
+  check(ev("web::midi::inputs").result === "in1" && ev("web::midi::outputs").result === "out1", "inputs and outputs");
+  r = ev("web::midi::info in1");
+  check(r.result === "id in1 name Keys manufacturer Fake type input state connected connection closed version 1.0", `info (got ${r.result})`);
+  r = ev("web::midi::info nope");
+  check(!r.ok && r.result === 'web::midi: no port "nope"', `info of an unknown port (got ${r.result})`);
+
+  r = ev("web::midi::listen in1 {apply {{id m} {puts \"$id $m\"}}}");
+  check(r.ok, `listen (got ${r.result})`);
+  const input = m.access.inputs.get("in1");
+  await until(() => input.connection === "open");
+  check(input.connection === "open", "listen opens the port");
+  input.play([0x90, 60, 100]);
+  input.play([0x80, 60, 0]);
+  await until(() => out().includes("128"));
+  check(out().endsWith("in1 144 60 100\nin1 128 60 0\n"), `messages (got ${JSON.stringify(out())})`);
+  r = ev("web::midi::listen out1 puts");
+  check(!r.ok && r.result === 'web::midi: the port "out1" is not an input', `listen to an output (got ${r.result})`);
+  ev("web::midi::listen in1 {}");
+  input.play([0x90, 61, 1]);
+  await tick();
+  check(!out().includes("61"), "listen with an empty script ends it");
+
+  const output = m.access.outputs.get("out1");
+  r = ev("web::midi::send out1 {0x90 64 127}; web::midi::send out1 {128 64 0} -at 1500.5; web::midi::note out1 67 -velocity 90 -channel 10; web::midi::note out1 67 -off 1");
+  check(r.ok, `send (got ${r.result})`);
+  check(JSON.stringify(output.sent) === JSON.stringify([[144, 64, 127], [[128, 64, 0], 1500.5], [153, 67, 90], [128, 67, 0]]), `the sent bytes (got ${JSON.stringify(output.sent)})`);
+  r = ev("web::midi::send out1 {144 300 1}");
+  check(!r.ok && /expected a byte from 0 to 255 but got "300"/.test(r.result), `a bad byte (got ${r.result})`);
+  r = ev("web::midi::note out1 128");
+  check(!r.ok && /expected a key from 0 to 127/.test(r.result), `a bad key (got ${r.result})`);
+  r = ev("web::midi::send in1 {144 1 1}");
+  check(!r.ok && /is not an output/.test(r.result), `send to an input (got ${r.result})`);
+
+  ev("web::midi::onchange {apply {{id state} {puts \"change $id $state\"}}}");
+  const p2 = new MIDIInput("in2", "Pads");
+  m.access.inputs.set("in2", p2);
+  m.access.dispatchEvent(new MIDIConnectionEvent("statechange", p2));
+  await until(() => out().includes("change"));
+  check(out().endsWith("change in2 connected\n"), `onchange (got ${JSON.stringify(out())})`);
+  t.close();
+}
+
+// A denied permission and a browser without Web MIDI.
+{
+  const m = midiRoot(true);
+  const { t, out } = await session(["web:midi"], m.root);
+  t.eval("web::midi::request -command {apply {{s v} {puts \"$s $v\"}}}");
+  await until(() => out().includes("error"));
+  check(out() === "error web: NotAllowedError: Permission denied.\n", `a denied permission (got ${JSON.stringify(out())})`);
+  t.close();
+  const s = await session(["web:midi"], { navigator: {} });
+  const r = s.t.eval("web::midi::request -command puts");
+  check(!r.ok && r.result === "web::midi: this browser has no Web MIDI", `a browser without Web MIDI (got ${r.result})`);
+  s.t.close();
+}
+
+// The keys demo of the playground.
+{
+  const m = midiRoot();
+  const keys = [];
+  for (let n = 60; n <= 72; n++) {
+    const k = new FakeEl(`k${n}`);
+    k.classList = Object.assign(new Set(), { contains(x) { return this.has(x); }, remove(x) { this.delete(x); } });
+    k.className = "key";
+    k.getAttribute = (a) => (a === "id" ? k.id : null);
+    keys.push(k);
+  }
+  const els = Object.fromEntries(["go", "out"].map((id) => [id, new FakeEl(id)]));
+  const app = new FakeEl("app", [...Object.values(els), ...keys]);
+  app.querySelectorAll = (sel) => (sel === ".key" ? keys : []);
+  const { t, out } = await session(["dom", "web:midi"], m.root, { domRoot: app });
+  const r = t.eval(playground("midi.tcl"));
+  check(r.ok, `the MIDI demo script (got ${r.result} ${out()})`);
+  check(m.asked.length === 0, "the MIDI demo asks for no access before a click");
+  els.go.dispatchEvent(new Event("click"));
+  await until(() => els.out.textContent.includes("play to"));
+  check(els.out.textContent === "inputs: 1, outputs: 1\nlisten: Keys\nplay to: Synth\n", `the demo output (got ${JSON.stringify(els.out.textContent)} ${out()})`);
+  keys[4].dispatchEvent(new Event("pointerdown"));
+  keys[4].dispatchEvent(new Event("pointerup"));
+  await tick();
+  const sent = m.access.outputs.get("out1").sent;
+  check(JSON.stringify(sent.slice(0, 2)) === JSON.stringify([[144, 64, 100], [128, 64, 0]]), `a key of the page plays a note (got ${JSON.stringify(sent)})`);
+  m.access.inputs.get("in1").play([0x90, 67, 80]);
+  await until(() => keys[7].classList.has("on"));
+  check(keys[7].classList.has("on"), `a note of the keyboard lights its key (got ${[...keys[7].classList]} ${out()})`);
+  m.access.inputs.get("in1").play([0x90, 67, 0]);
+  await until(() => !keys[7].classList.has("on"));
+  check(!keys[7].classList.has("on"), "a note on with velocity 0 ends the light");
+  t.close();
+}
+
 if (failed) {
   console.error(`${failed} failed`);
   process.exit(1);

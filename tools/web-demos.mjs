@@ -203,4 +203,41 @@ const fakePad = `(() => {
   check("gamepad: no page errors", pageErrors.length === 0, pageErrors.join("; "));
 }
 
+// ---- MIDI: a fake keyboard and synthesizer ----
+
+const fakeMidi = `(() => {
+  class MIDIInputMap extends Map {}
+  class MIDIOutputMap extends Map {}
+  class MIDIInput extends EventTarget {
+    constructor() { super(); Object.assign(this, { id: "in1", name: "Fake Keys", manufacturer: "Fake", type: "input", version: "1", state: "connected", connection: "closed" }); }
+    open() { this.connection = "open"; return Promise.resolve(this); }
+  }
+  class MIDIOutput extends EventTarget {
+    constructor() { super(); Object.assign(this, { id: "out1", name: "Fake Synth", manufacturer: "Fake", type: "output", version: "1", state: "connected", connection: "closed" }); window.__sent = []; }
+    send(d) { window.__sent.push(Array.from(d)); }
+  }
+  class MIDIAccess extends EventTarget {
+    constructor() { super(); this.inputs = new MIDIInputMap([["in1", new MIDIInput()]]); this.outputs = new MIDIOutputMap([["out1", new MIDIOutput()]]); this.sysexEnabled = false; }
+  }
+  const MME = window.MIDIMessageEvent ?? class MIDIMessageEvent extends Event { constructor(t, i) { super(t); this.data = i.data; } };
+  window.__play = (bytes) => { const e = new MME("midimessage", { data: new Uint8Array(bytes) }); window.__access.inputs.get("in1").dispatchEvent(e); };
+  Navigator.prototype.requestMIDIAccess = function () { window.__asked = (window.__asked || 0) + 1; return Promise.resolve(window.__access ??= new MIDIAccess()); };
+})();`;
+
+{
+  const say = await open("midi.html", fakeMidi);
+  check("midi: the page is ready", /^Ready\./.test(say), say);
+  check("midi: no request before a click", !(await evalJS("window.__asked")));
+  await evalJS(`document.getElementById("go").click()`);
+  await waitJS(`document.getElementById("out").textContent.includes("play to")`);
+  check("midi: the ports", (await text("out")) === "inputs: 1, outputs: 1\nlisten: Fake Keys\nplay to: Fake Synth\n", JSON.stringify(await text("out")));
+  await evalJS(`for (const t of ["pointerdown", "pointerup"]) document.getElementById("k64").dispatchEvent(new PointerEvent(t))`);
+  await waitJS(`window.__sent.length >= 2`);
+  check("midi: a key of the page plays a note", JSON.stringify(await evalJS("window.__sent.slice(0, 2)")) === "[[144,64,100],[128,64,0]]", JSON.stringify(await evalJS("window.__sent")));
+  await evalJS(`window.__play([0x90, 67, 80])`);
+  const lit = await waitJS(`document.getElementById("k67").classList.contains("on")`);
+  check("midi: a note of the keyboard lights its key", lit);
+  check("midi: no page errors", pageErrors.length === 0, pageErrors.join("; "));
+}
+
 done(failed ? 1 : 0);

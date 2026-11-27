@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Web MIDI · ztcl</title>
+<meta name="description" content="A Tcl script in the page plays notes to a MIDI output and lights the keys of the notes of a MIDI keyboard with web::midi.">
+<link rel="canonical" href="https://beetlebug.org/ztcl/playground/midi.html">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="demo.css">
+<style>
+.keys { display: flex; gap: 4px; margin: 8px 0 16px; user-select: none; touch-action: none; }
+.key { flex: 1; height: 120px; min-width: 0; border: 1px solid var(--line-strong); border-radius: 0 0 8px 8px; background: var(--surface); color: var(--text-3); font: 12px var(--sans); display: flex; align-items: end; justify-content: center; padding-bottom: 6px; cursor: pointer; }
+.key.black { background: var(--text); height: 80px; }
+.key.on { background: var(--accent); color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<main class="wrap demo">
+<h1>Web MIDI: keys</h1>
+<p>A Tcl script in this page asks for the MIDI ports of the computer with <code>web::midi::request</code>. A press of a key of the page sends a note to the first MIDI output, such as a synthesizer, and each note from a MIDI keyboard lights its key. The script runs in <code>ztcl-host.wasm</code> with the grants <code>dom</code>, <code>event</code>, and <code>web:midi</code>.</p>
+<p id="support" class="note"></p>
+<div id="app">
+  <div class="row">
+    <button id="go" type="button">Connect MIDI</button>
+  </div>
+  <div class="keys">
+    <button id="k60" class="key" type="button" aria-label="C4">C</button>
+    <button id="k61" class="key black" type="button" aria-label="C#4"></button>
+    <button id="k62" class="key" type="button" aria-label="D4">D</button>
+    <button id="k63" class="key black" type="button" aria-label="D#4"></button>
+    <button id="k64" class="key" type="button" aria-label="E4">E</button>
+    <button id="k65" class="key" type="button" aria-label="F4">F</button>
+    <button id="k66" class="key black" type="button" aria-label="F#4"></button>
+    <button id="k67" class="key" type="button" aria-label="G4">G</button>
+    <button id="k68" class="key black" type="button" aria-label="G#4"></button>
+    <button id="k69" class="key" type="button" aria-label="A4">A</button>
+    <button id="k70" class="key black" type="button" aria-label="A#4"></button>
+    <button id="k71" class="key" type="button" aria-label="B4">B</button>
+    <button id="k72" class="key" type="button" aria-label="C5">C</button>
+  </div>
+  <pre id="out"></pre>
+</div>
+<p class="note">The browser asks for the MIDI access after the click. The script is below, and the <a href="../web/midi/">guide to Web MIDI</a> tells how it works.</p>
+<pre id="src"></pre>
+</main>
+<script type="module">
+import { runDemo } from "./demo.mjs";
+await runDemo({
+  script: "midi.tcl",
+  allow: ["web:midi"],
+  supported: () => typeof navigator.requestMIDIAccess === "function",
+  missing: "This browser has no Web MIDI. Chrome, Edge, and Firefox 108 or later have it.",
+  ready: "Ready. Connect a MIDI device, then press the button.",
+});
+</script>
+</body>
+</html>
