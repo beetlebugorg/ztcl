@@ -54,10 +54,12 @@ const on_win = builtin.os.tag == .windows;
 
 pub const supported = thread.supported and !thread.web and (builtin.os.tag == .linux or builtin.os.tag == .macos or (on_win and isow.supported));
 /// The platforms where the bridge starts the runner itself. On Windows
-/// the runner starts in the sandbox of `isolate_windows.zig`. The Linux
-/// sandbox (`isolate_linux.zig`) brings its own start.
-pub const spawns_runner = builtin.os.tag == .macos or on_win;
+/// the runner starts in the sandbox of `isolate_windows.zig`, and on
+/// Linux in the namespaces of `isolate_linux.zig`.
+pub const spawns_runner = builtin.os.tag == .macos or on_win or (on_linux and isol.supported);
 const isow = @import("isolate_windows.zig");
+const isol = @import("isolate_linux.zig");
+const on_linux = builtin.os.tag == .linux;
 
 /// The parent end of a transport: a descriptor, or a pipe handle on
 /// Windows.
@@ -261,6 +263,10 @@ pub const Bridge = struct {
     pid: i32 = -1,
     /// The sandbox of the child on Windows.
     win: if (on_win) ?isow.Child else void = if (on_win) null else {},
+    /// The sandbox of the child on Linux, and the real path of the root
+    /// folder that `bridgeMain` allocates.
+    lin: if (on_linux) ?isol.Child else void = if (on_linux) null else {},
+    real_root: ?[]u8 = null,
     /// The memory limit of the thread, for the limit of the system.
     mem: usize = std.math.maxInt(usize),
     /// The error of a failed start, for `startError`.
@@ -328,6 +334,7 @@ pub fn prepare(it: *Interp, w: *Worker, st: anytype, host_files: bool) Error!*Br
 }
 
 pub fn unprepare(b: *Bridge) void {
+    if (b.real_root) |r| b.gpa.free(r);
     b.gpa.destroy(b);
 }
 
@@ -348,6 +355,7 @@ fn spawnChild(b: *Bridge) ?Fd {
 fn spawnRunner(b: *Bridge, runner: []const u8) ?Fd {
     if (comptime !spawns_runner) return null;
     if (comptime on_win) return spawnSandbox(b, runner);
+    if (comptime on_linux) return spawnLinux(b, runner);
     const c = std.c;
     var fds: [2]c.fd_t = undefined;
     if (c.socketpair(c.AF.UNIX, c.SOCK.STREAM, 0, &fds) != 0) return null;
@@ -395,6 +403,30 @@ fn spawnSandbox(b: *Bridge, runner: []const u8) ?Fd {
     return h;
 }
 
+/// Starts `runner --iso-fd 3` in the namespaces, the cgroup, and the
+/// new root of `isolate_linux.zig`. A kernel with no such feature gives
+/// ZTCL ISOLATION LEVEL with the name of the feature.
+fn spawnLinux(b: *Bridge, runner: []const u8) ?Fd {
+    if (comptime !on_linux) return null;
+    const file_bits = @backingInt(interp.Capability.file) | @backingInt(interp.Capability.channels);
+    const files = b.caps & file_bits != 0;
+    var c = isol.spawn(b.gpa, runner, .{
+        .root = if (files and !b.host_files) b.real_root else null,
+        .host_files = files and b.host_files,
+        .net = b.caps & @backingInt(interp.Capability.socket) != 0,
+        .zones = b.caps & @backingInt(interp.Capability.clock) != 0,
+        .limits = .{ .mem_bytes = sandboxMem(b.mem) },
+    }) catch |e| {
+        b.err = isol.message(e);
+        if (e != error.OutOfMemory and e != error.SpawnFailed) b.err_code = "ZTCL ISOLATION LEVEL";
+        return null;
+    };
+    b.pid = c.pid;
+    const fd = c.takeFd();
+    b.lin = c;
+    return fd;
+}
+
 /// The memory of the runtime of a child past the limit of its thread:
 /// the runner, its stacks, and the free space of its heap.
 pub const runtime_mem: u64 = 64 << 20;
@@ -404,6 +436,18 @@ pub const runtime_mem: u64 = 64 << 20;
 pub fn sandboxMem(mem_limit: usize) u64 {
     if (mem_limit == std.math.maxInt(usize)) return 0;
     return std.math.add(u64, mem_limit, runtime_mem) catch 0;
+}
+
+/// The real path of the open folder `fd` (`/proc/self/fd`), or null.
+fn realPathFd(a: Allocator, fd: i32) ?[]u8 {
+    if (comptime !on_linux) return null;
+    const linux = std.os.linux;
+    var name: [32]u8 = undefined;
+    const p = std.fmt.bufPrintSentinel(&name, "/proc/self/fd/{d}", .{fd}, 0) catch return null;
+    var buf: [4096]u8 = undefined;
+    const r = linux.readlinkat(linux.AT.FDCWD, p.ptr, &buf, buf.len);
+    if (linux.errno(r) != .SUCCESS or r == 0 or r >= buf.len or buf[0] != '/') return null;
+    return a.dupe(u8, buf[0..r]) catch null;
 }
 
 fn closeFd(fd: Fd) void {
@@ -419,6 +463,10 @@ fn killChild(b: *Bridge) void {
         if (b.win) |*c| c.kill();
         return;
     }
+    if (comptime on_linux) {
+        if (b.lin) |*c| c.kill();
+        return;
+    }
     if (b.pid > 0) _ = std.c.kill(b.pid, std.c.SIG.KILL);
 }
 
@@ -430,6 +478,14 @@ fn reapChild(b: *Bridge, ms: u32) bool {
         if (c.wait(ms) == null) return false;
         c.deinit();
         b.win = null;
+        return true;
+    }
+    if (comptime on_linux) {
+        const c = if (b.lin) |*c| c else return true;
+        if (c.wait(ms) == null) return false;
+        c.deinit();
+        b.lin = null;
+        b.pid = -1;
         return true;
     }
     if (b.pid <= 0) return true;
@@ -462,7 +518,13 @@ pub fn bridgeMain(w: *Worker, b: *Bridge, st: anytype) void {
     const g = w.group;
     const a = b.gpa;
     b.mem = st.mem_limit;
-    const fd = spawnChild(b) orelse return failBridge(w, b, st, "the system could not start the child process");
+    if (comptime on_linux) {
+        // The child sees the root folder at its real path.
+        if (st.fs_fd >= 0) b.real_root = realPathFd(a, st.fs_fd);
+        if (b.real_root == null and b.root.len > 0) b.real_root = std.fs.path.resolve(a, &.{b.root}) catch null;
+        if (b.real_root) |r| b.root = r;
+    }
+    const fd = spawnChild(b) orelse return failBridge(w, b, st, if (b.err.len > 0) b.err else "the system could not start the child process");
     b.link = .{ .t = iso.Transport.init(fd) catch {
         closeFd(fd);
         return failBridge(w, b, st, "no transport for the child process");
@@ -738,6 +800,7 @@ fn endBridge(w: *Worker, b: *Bridge, reader: ?std.Thread) void {
     var it = b.pending.iterator();
     while (it.next()) |e| thread.replyFailed(g, e.value_ptr.from, e.value_ptr.seq);
     b.pending.deinit(a);
+    if (b.real_root) |r| a.free(r);
     a.destroy(b);
     thread.retire(w, 0);
 }
@@ -900,8 +963,17 @@ fn jail(a: Allocator, x: *Interp, st: StartIn, hosts: Hosts) bool {
         }) catch return false;
         return true;
     }
-    // Linux has no sandbox yet, and `prepare` refuses the level there
-    // before a child starts, with ZTCL ISOLATION LEVEL.
+    if (comptime on_linux and isol.supported) {
+        // The parent started the child in its namespaces and its new
+        // root (`isolate_linux.zig`). Landlock and seccomp follow here.
+        isol.enter(.{
+            .root = if (files and st.files != 1 and st.root.len > 0) st.root else null,
+            .host_files = files and st.files == 1,
+            .net = st.caps & @backingInt(interp.Capability.socket) != 0,
+            .zones = st.caps & @backingInt(interp.Capability.clock) != 0,
+        }) catch return false;
+        return true;
+    }
     return false;
 }
 
