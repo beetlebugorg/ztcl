@@ -234,6 +234,33 @@ test "isolate on Windows: an isolated thread opens the root folder of its creato
     try t.expectEqualStrings("0", try ev(&it, "thread::join $t"));
 }
 
+test "isolate on Windows: thread::transfer moves a channel into the sandbox and back" {
+    if (!on or comptime !tcl.isothread.supported) return error.SkipZigTest;
+    var f: Fixture = undefined;
+    if (!try f.init("thread-transfer")) return error.SkipZigTest;
+    defer f.deinit();
+    var it: tcl.Interp = undefined;
+    try it.init(t.allocator);
+    defer it.deinit();
+    it.iso_runner = f.exe;
+    try it.allow(@backingInt(tcl.interp.Capability.thread) | @backingInt(tcl.interp.Capability.file) | @backingInt(tcl.interp.Capability.channels));
+    try tcl.fsroot.setRoot(&it, f.root_w);
+    _ = try ev(&it, "set w [open /lines.txt w]; puts $w one\\ntwo\\nthree; close $w");
+    _ = try ev(&it, "set t [thread::create -isolation process -joinable {thread::wait}]; set fh [open /lines.txt]; gets $fh");
+    // The parent duplicates the handle into the child, with the buffered
+    // input of the channel.
+    try t.expectEqualStrings("0 two", try ev(&it, "thread::transfer $t $fh; list [expr {$fh in [file channels]}] [thread::send $t \"gets $fh\"]"));
+    // The child sends it back: the parent takes the handle out of the child.
+    try t.expectEqualStrings("three", try ev(&it, "thread::send $t \"thread::transfer [thread::id] $fh\"; gets $fh"));
+    // A socket waits for WSADuplicateSocketW, and stays.
+    try it.allow(@backingInt(tcl.interp.Capability.socket));
+    _ = try ev(&it, "set srv [socket -server {apply {{c a p} {}}} -myaddr 127.0.0.1 0]; set cs [socket 127.0.0.1 [lindex [fconfigure $srv -sockname] 2]]");
+    try t.expectEqualStrings("ZTCL ISOLATION TRANSFER 1", try ev(&it, "catch {thread::transfer $t $cs}; list {*}$::errorCode [expr {$cs in [file channels]}]"));
+    _ = try ev(&it, "close $cs; close $srv");
+    _ = try ev(&it, "close $fh; thread::release $t");
+    try t.expectEqualStrings("0", try ev(&it, "thread::join $t"));
+}
+
 test "isolate on Windows: -files host gives an isolated thread the files of the host" {
     if (!on or comptime !tcl.isothread.supported) return error.SkipZigTest;
     var f: Fixture = undefined;

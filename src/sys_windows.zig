@@ -157,6 +157,20 @@ fn fdOfSocket(s: SOCKET) ?Fd {
     return @as(Fd, @intCast(s)) + sock_tag;
 }
 
+/// The kind (0 a file handle, 1 a socket) and the value of the kernel
+/// handle of `fd`, for a move of the handle to another process.
+pub fn handleOfFd(fd: Fd) struct { kind: u8, value: usize } {
+    if (isSocket(fd)) return .{ .kind = 1, .value = socketOf(fd) };
+    return .{ .kind = 0, .value = @intFromPtr(handleOf(fd)) };
+}
+
+/// The `Fd` of a kernel handle of the kind of `handleOfFd`, or null for
+/// a value outside the range.
+pub fn fdOfKind(kind: u8, value: usize) ?Fd {
+    if (kind == 1) return fdOfSocket(value);
+    return fdOfHandle(@ptrFromInt(value));
+}
+
 /// A host error. The names are the POSIX names that `fsroot.posixError`
 /// reads, and the values are Win32 codes. Another code stays as it is.
 pub const E = enum(u32) {

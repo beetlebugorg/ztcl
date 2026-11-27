@@ -241,10 +241,151 @@ fn fdPayload(a: Allocator, to: u64, n: usize, bytes: []const u8) ?[]u8 {
     return p;
 }
 
+/// True where a channel moves between the processes of isolated
+/// threads: descriptors with `SCM_RIGHTS` on Linux and macOS, and
+/// handles that the parent duplicates on Windows.
+pub const moves_channels = iso.passes_fds or on_win;
+
+const winh = struct {
+    const HANDLE = *anyopaque;
+    extern "kernel32" fn DuplicateHandle(src_proc: HANDLE, src: HANDLE, dst_proc: HANDLE, dst: *?HANDLE, access: u32, inherit: i32, opts: u32) callconv(.winapi) i32;
+    extern "kernel32" fn GetCurrentProcess() callconv(.winapi) HANDLE;
+    extern "kernel32" fn GetFileType(h: HANDLE) callconv(.winapi) u32;
+    extern "ws2_32" fn getsockopt(s: usize, level: i32, opt: i32, value: [*]u8, len: *i32) callconv(.winapi) i32;
+    const close_source: u32 = 1;
+
+    /// True when the handle `h` from a child is of `kind`: a file, a pipe,
+    /// or a character device for a file (0), and a stream socket for a
+    /// socket (1). Each other object, such as a process or a thread, has
+    /// no file type.
+    fn kindOk(h: HANDLE, kind: u8) bool {
+        const file_type = GetFileType(h);
+        if (kind == 0) return file_type >= 1 and file_type <= 3; // disk, char, pipe
+        if (kind != 1) return false;
+        var t: i32 = 0;
+        var len: i32 = @sizeOf(i32);
+        // SOL_SOCKET, SO_TYPE: SOCK_STREAM.
+        return getsockopt(@intFromPtr(h), 0xffff, 0x1008, std.mem.asBytes(&t), &len) == 0 and t == 1;
+    }
+    const same_access: u32 = 2;
+    const sysw = @import("sys_windows.zig");
+
+    /// The process of the child of a bridge, or this process for a child
+    /// of the spawner of a test, which is a thread here.
+    fn childOf(b: *const Bridge) HANDLE {
+        if (b.win) |c| return c.process;
+        return GetCurrentProcess();
+    }
+
+    /// The payload of `FD` on Windows: to u64, the count u8, then for each
+    /// handle its kind u8 (0 a file, 1 a socket) and its value u64 in the
+    /// process `target`, then the record of `tchan.shipOut`. The handles
+    /// of `fds` stay open here.
+    fn payload(a: Allocator, to: u64, fds: []const i32, target: HANDLE, bytes: []const u8) ?[]u8 {
+        const p = a.alloc(u8, 9 + 9 * fds.len + bytes.len) catch return null;
+        std.mem.writeInt(u64, p[0..8], to, .little);
+        p[8] = @intCast(fds.len);
+        for (fds, 0..) |fd, k| {
+            const h = sysw.handleOfFd(fd);
+            var out: ?HANDLE = null;
+            if (DuplicateHandle(GetCurrentProcess(), @ptrFromInt(h.value), target, &out, 0, 0, same_access) == 0 or out == null) {
+                a.free(p);
+                return null;
+            }
+            const at = 9 + 9 * k;
+            p[at] = h.kind;
+            std.mem.writeInt(u64, p[at + 1 ..][0..8], @intFromPtr(out.?), .little);
+        }
+        @memcpy(p[9 + 9 * fds.len ..], bytes);
+        return p;
+    }
+
+    fn send(g: *Group, to: u64, bytes: []const u8, fds: []const i32) bool {
+        const a = g.gpa;
+        g.lock.lock();
+        defer g.lock.unlock();
+        if (g.find(to)) |t| {
+            const b: *Bridge = @ptrCast(@alignCast(t.bridge orelse return false));
+            const p = payload(a, to, fds, childOf(b), bytes) orelse return false;
+            defer a.free(p);
+            return b.link.write(a, .fd, 0, p);
+        }
+        // From a child to the parent: copies in this process, which the
+        // parent takes with DUPLICATE_CLOSE_SOURCE. A child in an
+        // AppContainer cannot open its parent.
+        const r = g.remote orelse return false;
+        if (r.send != Child.rSend) return false;
+        const c: *Child = @ptrCast(@alignCast(r.ctx));
+        const p = payload(c.a, to, fds, GetCurrentProcess(), bytes) orelse return false;
+        defer c.a.free(p);
+        return c.link.write(c.a, .fd, 0, p);
+    }
+
+    /// Takes an `FD` frame of Windows. `from` is the process of the child
+    /// that sent it, or null in a child, where the parent made each handle
+    /// already.
+    fn take(g: *Group, payload_: []const u8, from: ?HANDLE) void {
+        if (payload_.len < 9) return;
+        const to = std.mem.readInt(u64, payload_[0..8], .little);
+        const n: usize = payload_[8];
+        if (n > iso.max_fds or payload_.len < 9 + 9 * n) return;
+        var fds: [iso.max_fds]i32 = undefined;
+        var k: usize = 0;
+        var good = true;
+        while (k < n) : (k += 1) {
+            const at = 9 + 9 * k;
+            const kind = payload_[at];
+            var v: usize = @intCast(std.mem.readInt(u64, payload_[at + 1 ..][0..8], .little));
+            if (from) |src| {
+                var out: ?HANDLE = null;
+                if (DuplicateHandle(src, @ptrFromInt(v), GetCurrentProcess(), &out, 0, 0, same_access | close_source) == 0 or out == null) {
+                    good = false;
+                    break;
+                }
+                v = @intFromPtr(out.?);
+                // A child can name each handle of its own table: the
+                // object must be of the kind that the frame says.
+                if (!kindOk(out.?, kind)) {
+                    _ = CloseHandle(out.?);
+                    good = false;
+                    break;
+                }
+            }
+            fds[k] = sysw.fdOfKind(kind, v) orelse {
+                good = false;
+                break;
+            };
+        }
+        if (!good) {
+            for (fds[0..k]) |f| @import("sys.zig").close(f);
+            return;
+        }
+        const bytes = payload_[9 + 9 * n ..];
+        if (from != null) {
+            // From one isolated thread to another: on to its child.
+            g.lock.lock();
+            const other = if (g.find(to)) |t| t.bridge else null;
+            if (other) |ob| {
+                const b: *Bridge = @ptrCast(@alignCast(ob));
+                if (payload(g.gpa, to, fds[0..k], childOf(b), bytes)) |p| {
+                    _ = b.link.write(g.gpa, .fd, 0, p);
+                    g.gpa.free(p);
+                }
+                g.lock.unlock();
+                for (fds[0..k]) |f| @import("sys.zig").close(f);
+                return;
+            }
+            g.lock.unlock();
+        }
+        _ = @import("tchan.zig").shipIn(g, bytes, fds[0..k]);
+    }
+};
+
 /// Sends a channel of `tchan.shipOut` toward the thread `to`: to its
 /// child when `to` is an isolated thread, or to the parent from a child.
 /// The descriptors stay open here.
 pub fn sendChannel(g: *Group, to: u64, bytes: []const u8, fds: []const i32) bool {
+    if (comptime on_win) return winh.send(g, to, bytes, fds);
     if (comptime !iso.passes_fds) return false;
     const a = g.gpa;
     const p = fdPayload(a, to, fds.len, bytes) orelse return false;
@@ -807,7 +948,7 @@ fn readerMain(b: *Bridge) void {
                 if (w.unwind_on_error) w.released.store(true, .release);
             },
             .tsv, .lock, .unlock, .cancel => toBroker(a, f, &b.broker),
-            .fd => takeChannel(g, &b.link, f.payload, true),
+            .fd => if (comptime on_win) winh.take(g, f.payload, winh.childOf(b)) else takeChannel(g, &b.link, f.payload, true),
             .exit => {
                 var r: iso.Reader = .{ .b = f.payload };
                 b.status = r.int(i64) catch 1;
@@ -995,7 +1136,7 @@ fn childReader(c: *Child) void {
                 const p = c.a.dupe(u8, f.payload) catch continue;
                 c.caller.deliver(f.stream, p);
             },
-            .fd => takeChannel(g, c.link, f.payload, false),
+            .fd => if (comptime on_win) winh.take(g, f.payload, null) else takeChannel(g, c.link, f.payload, false),
             .goodbye => break,
             else => {},
         }

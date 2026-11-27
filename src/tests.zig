@@ -3188,7 +3188,7 @@ test "isolated threads: thread::transfer moves a channel across the processes" {
     try tcl.fsroot.setRoot(&it, root);
     _ = try it.eval("set w [open d.txt w]; puts $w one\\ntwo\\nthree; close $w");
     _ = try it.eval("set t [thread::create -isolation process -joinable {thread::wait}]; set f [open d.txt]; gets $f");
-    if (comptime !tcl.isoproto.passes_fds) {
+    if (comptime !tcl.isothread.moves_channels) {
         try std.testing.expectEqualStrings("ZTCL ISOLATION TRANSFER", try it.str(try it.eval("catch {thread::transfer $t $f}; set ::errorCode")));
         try std.testing.expectEqualStrings("two", try it.str(try it.eval("gets $f")));
         return;
