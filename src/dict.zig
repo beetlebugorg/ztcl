@@ -406,6 +406,13 @@ fn step(it: *Interp) Error!void {
 fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cmd) Error!?Value {
     const a = it.alloc();
     const args = argv[2..];
+    if (eql(name, "info")) {
+        // Tcl gives the statistics of its hash table. The text is for
+        // people, so ztcl gives the count of entries.
+        if (args.len != 1) return it.wrongArgs("dict info dictionary");
+        const items = try pairs(it, args[0]);
+        return .{ .str = try std.fmt.allocPrint(a, "{d} entries in table", .{items.len / 2}) };
+    }
     if (eql(name, "remove")) {
         if (args.len < 1) return it.wrongArgs("dict remove dictionary ?key ...?");
         const items = try pairs(it, args[0]);

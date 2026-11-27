@@ -2391,7 +2391,12 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (it.frame == &it.global) return Value.empty;
         return namesList(it, it.frame, pattern, false);
     } else if (eql(sub, "globals")) {
-        return namesList(it, &it.global, pattern, true);
+        // A pattern can name the global namespace: "::x" and ":::x" are "x".
+        var pat = pattern;
+        if (pat) |q| {
+            if (std.mem.startsWith(u8, q, "::")) pat = std.mem.trimStart(u8, q[2..], ":");
+        }
+        return namesList(it, &it.global, pat, true);
     } else if (eql(sub, "complete")) {
         if (argv.len != 3) return it.wrongArgs("info complete command");
         // A backslash and a newline at the end continue the command.

@@ -144,7 +144,7 @@ sub: dict append VAR KEY ?STRING ...? | Adds text to a value in the dict of a va
 sub: dict lappend VAR KEY ?VALUE ...? | Adds elements to a list value in the dict of a variable.
 sub: dict update VAR KEY VARNAME ?KEY VARNAME ...? BODY | Links variables to keys while BODY runs, and writes them back after it.
 sub: dict with VAR ?KEY ...? BODY | Makes a variable of each key while BODY runs, and writes them back after it.
-sub: dict info DICT | Text about the hash table of the dict.
+sub: dict info DICT | Text for people with the count of entries of the dict.
 == array
 syn: array subcommand ?arg ...?
 sub: array set NAME LIST | Sets the elements from a list of names and values.

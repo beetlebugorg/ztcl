@@ -624,6 +624,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             std.process.exit(2);
         };
         it.error_line = 0;
+        it.script_name = arg;
         if (keep_going) {
             // Run each command of the file; an error does not stop the file.
             const script = it.compile(text) catch {

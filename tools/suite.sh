@@ -97,6 +97,9 @@ for f in "$@"; do
     root=$(mktemp -d "${TMPDIR:-/tmp}/ztcl-suite.XXXXXX") || exit 1
     # The support scripts of the Tcl tests, as a copy in the root.
     cp -- "$tests"/*.tcl "$tests"/httpd "$root"/ 2>/dev/null
+    # The test file is in the root folder too, and it runs by a name
+    # relative to the root folder, so `info script` names the file there.
+    cp -- "$tests/$f" "$root"/
     # `exec` runs only for the test files, in the root folder, with a
     # program list, a time limit, and an environment with no data of
     # the caller. `ztclsh` is the `tclsh` of the tests: this runner.
@@ -109,7 +112,7 @@ for f in "$@"; do
 exec "$tcl" $gc --compute 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --cwd "\$PWD" --tclsh "\$@"
 EOF
     chmod +x "$root/ztclsh"
-    raw=$(limit 1200 "$tcl" $gc --compute 200000000 --mem 2147483648 --allow $caps ${jail:+--root} ${jail:+"$root"} $set_exec --keep-going $rec "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
+    raw=$(cd "$root" && limit 1200 "$tcl" $gc --compute 200000000 --mem 2147483648 --allow $caps ${jail:+--root} ${jail:+"$root"} $set_exec --keep-going $rec "$here/tcltest.tcl" "$f" "$here/tcltest-end.tcl" 2>&1)
     rc=$?
     rm -rf -- "$root"
     out=$(printf '%s\n' "$raw" | grep -aE '^pass [0-9]+ fail' | tail -1)

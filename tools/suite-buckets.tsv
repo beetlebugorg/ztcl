@@ -77,4 +77,46 @@ fail	*	::tcl::clock::[A-Za-z]+": no such variable	internals	a variable inside th
 # other failure.
 fail	*	^code 1/1: 	message	an error where tclsh also gives one, with another message
 fail	*	^errorcode: 	message	the -errorcode differs
+# Tests after an error outside a test: the file does not reach them.
+unreached	encoding.test/*		feature	an encoding that ztcl does not have (iso2022-jp) stops the file early
+unreached	io.test/*		feature	an encoding that ztcl does not have (koi8-r) stops the file early
+unreached	chanio.test/*		feature	an encoding that ztcl does not have (koi8-r) stops the file early
+unreached	init.test/*		feature	`auto_reset` and the index of the auto-load library
+unreached	platform.test/*		feature	the `platform` package
+unreached	fileName.test/*		feature	`info hostname`, and `~` with no `env(HOME)`
+unreached	fCmd.test/*		design	the suite runs without the `env` capability, so `env(HOME)` is not set
+unreached	clock.test/*		internals	a variable or a command inside the clock library of Tcl
+unreached	oo.test/*		feature	the variable `::oo::patchlevel`
+# The bug bucket, split by cause. The rules match failures that the
+# message rules above did not match.
+fail	reg.test/*	REG_(U[A-Z]+)	feature	the REG_U flags of `regexp -about`
+fail	reg.test/*.error	REG_[A-Z]+	bug	regular expressions: the error class of a bad pattern
+fail	reg.test/*	couldn't compile regular expression pattern	bug	regular expressions: a valid pattern that ztcl does not compile
+fail	reg.test/*		bug	regular expressions: the match differs
+fail	*	can not find channel named "std(in|out|err)"	bug	the standard channels are not in the channel table
+fail	info.test/info-[23][0-9]*	cleanup: can't unset "res"	feature	`info frame`
+fail	*	class "oo::Slot" does not exist|oo::Slot	feature	the slot classes of TclOO (`oo::Slot`)
+fail	*	recursion limit of this interpreter|too many nested evaluations	bug	the recursion limit and its message
+fail	interp.test/*	invalid command name "interp"|permission denied: safe	bug	safe interpreters: hidden commands and their messages
+fail	fileName.test/*	bad option "-(type|dir)"	feature	`glob -type` and the short form of its options
+fail	*	invalid command name "(::)?tcl::pkgconfig"	feature	`tcl::pkgconfig`
+fail	clock.test/*		bug	`clock`: the result differs
+fail	io.test/*		bug	channels: the result differs
+fail	chanio.test/*		bug	channels: the result differs
+fail	ioCmd.test/*		bug	channels: the result differs
+fail	chan.test/*		bug	channels: the result differs
+fail	ioTrans.test/*		bug	channels: the result differs
+fail	interp.test/*		bug	`interp`: the result differs
+fail	namespace*.test/*		bug	namespaces: the result differs
+fail	trace.test/*		bug	`trace`: the result differs
+fail	oo*.test/*		bug	TclOO: the result differs
+fail	fileName.test/*		bug	file names and `glob`: the result differs
+fail	fileSystem.test/*		bug	file names and `glob`: the result differs
+fail	info.test/*		bug	`info`: the result differs
+fail	binary.test/*		bug	`binary`: the result differs
+fail	expr*.test/*		bug	`expr`: the result differs
+fail	encoding.test/*		bug	encodings: the result differs
+fail	utf.test/*		bug	encodings: the result differs
+fail	coroutine.test/*		bug	coroutines: the result differs
+fail	*	^(setup|cleanup): 	bug	the setup or the cleanup of the test fails
 fail	*		bug	the result differs from tclsh 8.6.16
