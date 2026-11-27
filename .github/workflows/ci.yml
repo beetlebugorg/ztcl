@@ -235,6 +235,11 @@ jobs:
           python3 -I tools/ref-coverage.py zig-out/bin/ztcl
           python3 -I tools/reference.py shell-table | diff - src/shell/reference.txt
           python3 -I tools/doc-coverage.py
+      - name: Check the PDF output of ztcl::pdf and the book
+        if: runner.os == 'Linux'
+        run: |
+          python3 -I tools/doc-examples.py zig-out/bin/ztcl docs/modules/typeset.md
+          tests/typeset.sh zig-out/bin/ztcl
       - name: Check the format
         if: runner.os == 'Linux'
         run: zig fmt --check build.zig src

@@ -545,6 +545,19 @@ pub fn build(b: *std.Build) void {
         b.getInstallStep().dependOn(&p3_install.step);
     } else b.installArtifact(exe);
 
+    // `zig build book`: the PDF of the book, from book/ with the commands
+    // ztcl::pdf and ztcl::typeset of this runner. The build runs each
+    // example with the flag `run` and fails when its output differs.
+    {
+        const book = b.addRunArtifact(exe);
+        book.addArgs(&.{ "--allow", "channels,file,exec", "--exec-allow", "sh", "--tclsh" });
+        book.addFileArg(b.path("book/build.tcl"));
+        book.addArtifactArg(exe);
+        const pdf_out = book.addOutputFileArg("ztcl-book.pdf");
+        book.has_side_effects = true;
+        b.step("book", "Build zig-out/book/ztcl-book.pdf from book/ and check its examples").dependOn(&b.addInstallFileWithDir(pdf_out, .{ .custom = "book" }, "ztcl-book.pdf").step);
+    }
+
     // `zig build runtimes`: the runner of each target of `ztcl build`,
     // in ReleaseSmall and stripped, in lib/ztcl/runtime/TARGET/.
     const runtimes = b.step("runtimes", "Build the runtime binary of each target of ztcl build");
@@ -944,6 +957,7 @@ const all_modules = [_]Mod{
     .{ .name = "agent", .std = true },
     .{ .name = "wasmrt", .std = true },
     .{ .name = "text", .std = true },
+    .{ .name = "typeset", .std = true },
 };
 
 /// The flag of each module after the preset, the flags, and the rule

@@ -55,6 +55,8 @@ pub const table: []const Module = blk: {
     // its `package require ztcl::json` fails, and the size rows of the
     // two stay apart.
     if (options.mod_agent) list = list ++ @import("agent.zig").modules;
+    // The typesetter is for native builds: it stays out of ztcl.wasm.
+    if (options.mod_typeset and !@import("builtin").cpu.arch.isWasm()) list = list ++ @import("typeset/cmd.zig").modules;
     // The wasm engine is for native builds: it stays out of ztcl.wasm. Its
     // WASI host needs the files of `fsroot.zig` (not on aarch64 Windows).
     if (options.mod_wasmrt and @import("fsroot.zig").supported and !@import("builtin").cpu.arch.isWasm()) list = list ++ @import("wasmrt/cmd.zig").modules;

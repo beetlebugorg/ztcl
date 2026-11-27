@@ -73,6 +73,8 @@ PAGES = [
     ("docs/processes.md", "processes/", "Guide", "Run programs"),
     ("docs/jit.md", "jit/", "Guide", "The JIT"),
     ("docs/build.md", "build/", "Guide", "Build a program"),
+    ("docs/typesetting.md", "typesetting/", "Guide", "Typesetting in Tcl"),
+    ("docs/pdf.md", "pdf/", "Guide", "PDF documents"),
     ("docs/strip.md", "strip/", "Guide", "Strip a program"),
     ("docs/debugging.md", "debugging/", "Guide", "Debugging"),
     ("docs/targets.md", "targets/", "Guide", "Targets"),
@@ -80,6 +82,8 @@ PAGES = [
     ("docs/modules/README.md", "modules/", "Modules", "All modules"),
     ("docs/modules/json.md", "modules/json/", "Modules", "ztcl::json"),
     ("docs/modules/vt.md", "modules/vt/", "Modules", "ztcl::vt"),
+    ("docs/modules/pdf.md", "modules/pdf/", "Modules", "ztcl::pdf"),
+    ("docs/modules/typeset.md", "modules/typeset/", "Modules", "ztcl::typeset"),
     ("docs/modules/wasm.md", "modules/wasm/", "Modules", "ztcl::wasm"),
     ("docs/modules/text.md", "modules/text/", "Modules", "ztcl::text"),
     ("docs/modules/probe.md", "modules/probe/", "Modules", "ztcl::probe"),
@@ -400,6 +404,11 @@ class Build:
                         kids[k + 2].type, kids[k + 2].content = "html_inline", "</span>"
                     elif child.type == "link_open":
                         child.attrSet("href", self.link(src, page, child.attrGet("href")))
+                    elif child.type == "image" and child.attrGet("src").startswith("images/"):
+                        # docs/images/ goes to images/ of the site.
+                        if not (ROOT / "docs" / child.attrGet("src")).exists():
+                            raise SystemExit(f"{src}: a missing image: {child.attrGet('src')}")
+                        child.attrSet("src", rel(page, "images/") + child.attrGet("src")[len("images/"):])
                     elif (page.startswith("learn/") and child.type == "code_inline" and child.content in self.ref_names
                           and child.content not in linked and not (k > 0 and kids[k - 1].type in ("link_open", "html_inline"))):
                         # The first mention of a command in a lesson links
@@ -615,6 +624,8 @@ class Build:
         (out / "assets").mkdir()
         for name in ("site.css", "favicon.svg", "live.js", "shell.js", "helper.js"):
             shutil.copy(SITE_DIR / name, out / "assets" / name)
+        if (ROOT / "docs" / "images").is_dir():
+            shutil.copytree(ROOT / "docs" / "images", out / "images")
         (out / "try").mkdir()
         shutil.copy(SITE_DIR / "try" / "index.html", out / "try" / "index.html")
         (out / "playground").mkdir()

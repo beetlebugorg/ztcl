@@ -649,3 +649,33 @@ sub: ztcl::agent describe NAME | The spec of the command NAME as a tool: name, t
 sub: ztcl::agent check SCHEMA VALUE | VALUE when it matches the result schema SCHEMA, else the error ZTCL AGENT RESULT.
 sub: ztcl::agent schema SCHEMA | The JSON schema of a result schema.
 sub: ztcl::agent post URL HEADERS BODY | One HTTP/1.1 POST of a JSON body.
+== ztcl::pdf
+syn: ztcl::pdf subcommand ?arg ...?
+sub: create ?-compress bool? | Makes a document and gives its handle.
+sub: font doc bytes | Adds a TrueType font and gives its number.
+sub: page doc ?width height? | Adds a page and gives its number.
+sub: text doc page font size x y string ?-color rgb? ?-ligatures bool? | Shows text and gives its width.
+sub: measure doc font size string | Gives the width of a string in points.
+sub: rect doc page x y width height ?-fill rgb? | Fills a rectangle.
+sub: line doc page x0 y0 x1 y1 ?-width w? ?-color rgb? | Strokes a line.
+sub: image doc bytes | Adds a PNG or JPEG image and gives {number width height}.
+sub: place doc page image x y width height | Shows an image in a rectangle.
+sub: link doc page x0 y0 x1 y1 -uri url|-dest name | Makes a rectangle a link.
+sub: dest doc name page x y | Names a place for a link.
+sub: outline doc title level page y | Adds an entry to the outline.
+sub: info doc key value | Sets the Title, Author, Subject, or Keywords.
+sub: bytes doc | Gives the bytes of the PDF file.
+sub: pages doc | Gives the count of pages.
+sub: delete doc | Frees the document.
+== ztcl::typeset
+syn: ztcl::typeset subcommand ?arg ...?
+sub: break text -width w ?options? | Gives the lines of a paragraph, with the x position of each word.
+sub: justify text -width columns ?options? | Gives justified lines of characters, for a terminal.
+sub: svg text -width w -font font ?options? | Gives an SVG image of a paragraph.
+sub: hyphenate word ?-lang en-us? | Gives the word with a hyphen at each place where it can break.
+sub: pages counts -lines n ?-columns c? ?-gap g? | Places paragraphs in columns and pages with no widow or orphan line.
+sub: font load bytes | Loads a TrueType font and gives its handle.
+sub: font metrics font size | Gives the metrics of a font at a size.
+sub: font measure font size string | Gives the width of a string in points.
+sub: markdown doc text -fonts dict ?-style dict? ?-run prefix? | Lays out Markdown into new pages of a document.
+sub: book doc chapters -fonts dict ?-style dict? ?-run prefix? | Lays out a list of Markdown chapters into new pages of a document.
