@@ -144,7 +144,21 @@ pub fn build(b: *std.Build) void {
     // in the WebAssembly library.
     if (t.os.tag == .wasi) exe.stack_size = 8 << 20;
     if (t.os.tag == .macos) exe.headerpad_size = 0x1000;
-    b.installArtifact(exe);
+    if (t.os.tag == .macos) {
+        // The macOS ztcl gets a new ad hoc signature with the entitlement
+        // of `ztcl::vm`, from the signer of `ztcl build` (src/macho.zig).
+        const signer = b.addExecutable(.{ .name = "macho-sign", .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/macho-sign/main.zig"),
+            .target = b.graph.host,
+            .optimize = .ReleaseSafe,
+            .imports = &.{.{ .name = "macho", .module = b.createModule(.{ .root_source_file = b.path("src/macho.zig"), .target = b.graph.host }) }},
+        }) });
+        const run = b.addRunArtifact(signer);
+        run.addArtifactArg(exe);
+        const signed = run.addOutputFileArg("ztcl");
+        run.addArgs(&.{ "ztcl", "com.apple.security.virtualization" });
+        b.getInstallStep().dependOn(&b.addInstallBinFile(signed, "ztcl").step);
+    } else b.installArtifact(exe);
 
     // `zig build runtimes`: the runner of each target of `ztcl build`,
     // in ReleaseSmall and stripped, in lib/ztcl/runtime/TARGET/.

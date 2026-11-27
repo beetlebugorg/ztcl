@@ -139,7 +139,7 @@ The spike builds its own guest. The proper image is the tiny kernel and BusyBox 
 
 1. The spike (this PR).
 2. `vz.zig` as the core of `src/microvm.zig` with `create`, `start`, `stop`, `status`, `console`, `vsock`, `delete`, `-warm`, and the capability, on macOS (done). `vm.zig` is the name of the bytecode file, so the new file is `src/microvm.zig`, and the command stays `ztcl::vm`. A child interp has no `vm`, so the limits count the guests of one interpreter. `tools/vm-guest/test.sh` runs the boot test on a Mac with the hypervisor.
-3. The entitlements in the Zig signer.
+3. The entitlements in the Zig signer (done): `src/macho.zig` writes the requirements, the XML, and the DER blobs with their special slots. `zig build` signs the macOS `ztcl` with `tools/macho-sign`, and `ztcl build` signs an app with `vm` in `--allow`.
 4. The agent with `exec` and `mount`, and the guest image from dockyard#13.
 5. The KVM part.
 6. The HCS part.

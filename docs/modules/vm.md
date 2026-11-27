@@ -69,7 +69,7 @@ The memory of a guest is outside the memory limit of the interpreter, as the mem
 
 ## Signing on macOS
 
-The program needs the entitlement `com.apple.security.virtualization` in its signature. An ad hoc signature works:
+The program needs the entitlement `com.apple.security.virtualization` in its signature. `zig build` signs the macOS `ztcl` ad hoc with it, and `ztcl build --allow vm` signs an app with it, so neither needs a step with `codesign`. A program that you sign again yourself, for example with a Developer ID, needs the entitlement in that signature:
 
 ```sh
 codesign --force --sign - --entitlements tools/vm-guest/vz.entitlements zig-out/bin/ztcl
