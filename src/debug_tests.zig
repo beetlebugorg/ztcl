@@ -430,6 +430,165 @@ test "the DAP server stops in a loop body of the top level, at an error, and at 
     try has(out2.written(), "\"event\":\"exited\",\"body\":{\"exitCode\":0}");
 }
 
+const dap_uncaught_script =
+    \\catch {error boom}
+    \\try {error trapped} trap {} {} {}
+    \\proc f {} {error real}
+    \\f
+;
+
+fn dapReadUncaught(_: ?*anyopaque, _: []const u8, a: std.mem.Allocator) anyerror![]u8 {
+    return a.dupe(u8, dap_uncaught_script);
+}
+
+test "the DAP server stops only at an uncaught error with the filter uncaught" {
+    if (!options.mod_probe) return error.SkipZigTest;
+    const a = std.testing.allocator;
+    var it: tcl.Interp = undefined;
+    try it.init(a);
+    defer it.deinit();
+    var in: std.ArrayList(u8) = .empty;
+    defer in.deinit(a);
+    const reqs = [_][]const u8{
+        \\{"seq":1,"type":"request","command":"launch","arguments":{"program":"/w/u.tcl"}}
+        ,
+        \\{"seq":2,"type":"request","command":"setExceptionBreakpoints","arguments":{"filters":["uncaught"]}}
+        ,
+        \\{"seq":3,"type":"request","command":"configurationDone"}
+        ,
+        \\{"seq":4,"type":"request","command":"stackTrace","arguments":{"threadId":1}}
+        ,
+        \\{"seq":5,"type":"request","command":"continue","arguments":{"threadId":1}}
+        ,
+    };
+    for (reqs) |r| try frame(a, &in, r);
+    var reader: std.Io.Reader = .fixed(in.items);
+    var out: std.Io.Writer.Allocating = .init(a);
+    defer out.deinit();
+    var server: tcl.dap.Server = .{ .it = &it, .gpa = a, .in = &reader, .out = &out.writer, .read = dapReadUncaught };
+    try tcl.dap.serve(&server);
+    const text = out.written();
+    try has(text, "\"reason\":\"exception\",\"threadId\":1,\"allThreadsStopped\":true,\"description\":\"real\"");
+    try has(text, "{\"id\":0,\"name\":\"f\",\"line\":3");
+    try std.testing.expect(std.mem.indexOf(u8, text, "\"description\":\"boom\"") == null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "\"description\":\"trapped\"") == null);
+    try has(text, "\"event\":\"exited\",\"body\":{\"exitCode\":1}");
+}
+
+const dap_thread_script =
+    \\set t [thread::create -joinable {
+    \\    proc inner {n} {
+    \\        set k [expr {$n * 3}]
+    \\        return $k
+    \\    }
+    \\    puts "k [inner 4]"
+    \\}]
+    \\thread::join $t
+    \\puts done
+;
+
+fn dapReadThread(_: ?*anyopaque, _: []const u8, a: std.mem.Allocator) anyerror![]u8 {
+    return a.dupe(u8, dap_thread_script);
+}
+
+/// A client of the DAP server in a test: the messages of the server.
+const Client = struct {
+    lock: tcl.thread.Lock = .{},
+    ev: tcl.thread.Event = .{},
+    buf: std.ArrayList(u8) = .empty,
+
+    fn write(ctx: ?*anyopaque, body: []const u8) bool {
+        const c: *Client = @ptrCast(@alignCast(ctx.?));
+        c.lock.lock();
+        defer c.lock.unlock();
+        c.buf.appendSlice(std.testing.allocator, body) catch return false;
+        c.buf.append(std.testing.allocator, '\n') catch return false;
+        c.ev.signal();
+        return true;
+    }
+
+    /// Waits at most 20 seconds for `part` after byte `from`, and gives
+    /// the end of the match.
+    fn waitFor(c: *Client, part: []const u8, from: usize) !usize {
+        c.lock.lock();
+        defer c.lock.unlock();
+        var waited: u32 = 0;
+        while (waited < 400) : (waited += 1) {
+            if (std.mem.indexOfPos(u8, c.buf.items, from, part)) |at| return at + part.len;
+            c.ev.wait(&c.lock, 50 * std.time.ns_per_ms);
+        }
+        std.debug.print("missing: {s}\nin:\n{s}\n", .{ part, c.buf.items });
+        return error.TestExpectedEqual;
+    }
+};
+
+fn send(s: *tcl.dap.Server, body: []const u8) !void {
+    tcl.dap.deliver(s, try std.testing.allocator.dupe(u8, body));
+}
+
+/// Runs the script of threads under the DAP server, with `-isolation
+/// level` on `thread::create` when `level` is not empty.
+fn dapThreads(level: []const u8) !void {
+    const a = std.testing.allocator;
+    var it: tcl.Interp = undefined;
+    try it.init(a);
+    defer it.deinit();
+    if (level.len > 0) {
+        // The runner of the child, from a host interpreter with files.
+        var h: tcl.Interp = undefined;
+        try h.init(a);
+        defer h.deinit();
+        try h.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+        try tcl.fsroot.setHost(&h);
+        const v = try h.str(try h.eval("expr {[info exists ::env(ZTCL_RUNNER)] ? $::env(ZTCL_RUNNER) : [file normalize zig-out/bin/ztcl]}"));
+        it.iso_runner = try it.alloc().dupe(u8, v);
+        if (!std.mem.eql(u8, try h.str(try h.eval(try std.fmt.allocPrint(it.alloc(), "file exists {{{s}}}", .{v}))), "1")) return error.SkipZigTest;
+        // A host with no sandbox for the level (no delegated cgroup, for
+        // one) skips the test. The check runs in `h`, so the thread ids
+        // of `it` stay as the test expects.
+        h.iso_runner = v;
+        try h.allow(@backingInt(tcl.interp.Capability.thread));
+        const check = try std.fmt.allocPrint(it.alloc(), "catch {{thread::join [thread::create -joinable -isolation {s} {{set x 1}}]}}", .{level});
+        if (!std.mem.eql(u8, try h.str(try h.eval(check)), "0")) return error.SkipZigTest;
+    }
+    try it.allow(@backingInt(tcl.interp.Capability.thread));
+    const script = if (level.len == 0) dap_thread_script else try std.mem.replaceOwned(u8, it.alloc(), dap_thread_script, "-joinable", try std.fmt.allocPrint(it.alloc(), "-joinable -isolation {s}", .{level}));
+    var c: Client = .{};
+    defer c.buf.deinit(a);
+    var server: tcl.dap.Server = .{ .it = &it, .gpa = a, .read = dapReadThread, .program = "/w/th.tcl", .text = script, .reader = true, .sink = .{ .ctx = &c, .write = Client.write } };
+    const runner = try std.Thread.spawn(.{}, tcl.dap.serve, .{&server});
+    defer runner.join();
+    errdefer send(&server, "{\"seq\":99,\"type\":\"request\",\"command\":\"disconnect\"}") catch {};
+    try send(&server, "{\"seq\":1,\"type\":\"request\",\"command\":\"initialize\"}");
+    try send(&server, "{\"seq\":2,\"type\":\"request\",\"command\":\"setBreakpoints\",\"arguments\":{\"source\":{\"path\":\"/w/th.tcl\"},\"breakpoints\":[{\"line\":3}]}}");
+    try send(&server, "{\"seq\":3,\"type\":\"request\",\"command\":\"configurationDone\"}");
+    // The thread stops at line 3 of the file, in its own proc, while the
+    // main thread waits in `thread::join`.
+    var at = try c.waitFor("\"event\":\"thread\",\"body\":{\"reason\":\"started\",\"threadId\":2}", 0);
+    at = try c.waitFor("\"reason\":\"breakpoint\",\"threadId\":2,\"allThreadsStopped\":false", at);
+    try send(&server, "{\"seq\":4,\"type\":\"request\",\"command\":\"threads\"}");
+    at = try c.waitFor("{\"id\":1,\"name\":\"main\"},{\"id\":2,\"name\":\"tid0x2\"}", at);
+    try send(&server, "{\"seq\":5,\"type\":\"request\",\"command\":\"stackTrace\",\"arguments\":{\"threadId\":2}}");
+    at = try c.waitFor("{\"id\":4096,\"name\":\"inner 4\",\"line\":3,\"column\":1,\"source\":{\"name\":\"th.tcl\"", at);
+    try send(&server, "{\"seq\":6,\"type\":\"request\",\"command\":\"variables\",\"arguments\":{\"variablesReference\":8193}}");
+    at = try c.waitFor("{\"name\":\"n\",\"value\":\"4\"", at);
+    try send(&server, "{\"seq\":7,\"type\":\"request\",\"command\":\"continue\",\"arguments\":{\"threadId\":2}}");
+    at = try c.waitFor("\"output\":\"k 12\\n\"", at);
+    at = try c.waitFor("\"output\":\"done\\n\"", at);
+    _ = try c.waitFor("\"event\":\"exited\",\"body\":{\"exitCode\":0}", at);
+    try send(&server, "{\"seq\":8,\"type\":\"request\",\"command\":\"disconnect\"}");
+}
+
+test "the DAP server stops a thread of the level interp" {
+    if (!options.mod_probe or comptime !tcl.thread.supported) return error.SkipZigTest;
+    try dapThreads("");
+}
+
+test "the DAP server stops an isolated thread over DEBUG frames" {
+    if (!options.mod_probe or comptime !tcl.isothread.supported) return error.SkipZigTest;
+    try dapThreads("process");
+}
+
 test "ztcl::disasm lists the bytecode under the line of each command" {
     if (!options.mod_disasm) return error.SkipZigTest;
     const a = std.testing.allocator;

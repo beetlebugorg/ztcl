@@ -33,6 +33,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const probe = @import("probe.zig");
 const builtin = @import("builtin");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
@@ -1015,10 +1016,12 @@ fn threadMain(w: *Worker, st: Start) void {
     g.lock.unlock();
     g.ev.signal();
 
+    // The debugger (`dap.zig`) gets each new interpreter.
+    if (comptime probe.enabled) if (probe.threads) |h| h.start(h.ctx, x, w.id, w.script);
     if (w.pool_main != null) {
         topScope(x, runPool, .{ w, x });
     } else {
-        const r = if (w.script.len > 0) x.eval(w.script) else topScope(x, waitLoop, .{x});
+        const r = if (w.script.len > 0) probe.evalDebug(x, w.script) else topScope(x, waitLoop, .{x});
         if (r) |_| {} else |e| endError(w, x, e);
     }
     finish(w, x);
@@ -1137,6 +1140,7 @@ fn finish(w: *Worker, x: *Interp) void {
     if (g.sync) |_| @import("tsync.zig").releaseOwned(g, w.id);
     if (g.tsv) |_| @import("tsv.zig").releaseOwned(g, w.id);
     const left = x.compute_limit;
+    if (comptime probe.enabled) if (probe.threads) |h| h.end(h.ctx, x);
     g.lock.lock();
     w.it = null;
     g.lock.unlock();

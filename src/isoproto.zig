@@ -58,6 +58,9 @@ pub const Kind = enum(u8) {
     usage,
     exit,
     goodbye,
+    /// DAP JSON between the debugger of the parent and the child. It
+    /// always has the flag `skip`, so a child with no debugger drops it.
+    debug,
     _,
 };
 
@@ -488,7 +491,7 @@ pub const Conn = struct {
                 s.recv_ctr += 1;
             }
             const kind: Kind = @fromBackingInt(h[4]);
-            const known = @backingInt(kind) >= @backingInt(Kind.hello) and @backingInt(kind) <= @backingInt(Kind.goodbye);
+            const known = @backingInt(kind) >= @backingInt(Kind.hello) and @backingInt(kind) <= @backingInt(Kind.debug);
             if (!known) {
                 if (h[5] & flag_skip == 0) return error.Protocol;
                 a.free(payload);
@@ -527,7 +530,8 @@ pub const Conn = struct {
         while (true) {
             const n = @min(payload.len - off, max_payload);
             const last = off + n == payload.len;
-            try c.writeFrame(a, kind, if (last) 0 else flag_more, stream, payload[off..][0..n]);
+            const skip: u8 = if (kind == .debug) flag_skip else 0;
+            try c.writeFrame(a, kind, skip | (if (last) 0 else flag_more), stream, payload[off..][0..n]);
             off += n;
             if (last) return;
         }
