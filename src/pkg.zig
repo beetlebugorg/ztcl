@@ -24,6 +24,8 @@ pub const Pkg = struct {
     version: ?[]const u8 = null,
     /// Pairs of a version and a script, in the order of definition.
     needed: std.ArrayList([2]Value) = .empty,
+    /// The version whose `ifneeded` script runs now, if one does.
+    loading: ?[]const u8 = null,
 };
 
 pub const State = struct {
@@ -96,9 +98,11 @@ fn isStable(v: []const i64) bool {
 fn meets(it: *Interp, ver: []const i64, req: []const u8) Error!bool {
     const a = it.alloc();
     if (std.mem.indexOfScalar(u8, req, '-')) |d| {
-        const lo = (try parseVersion(a, req[0..d])) orelse return badReq(it, req);
+        // A bad part of a range names the part, as in Tcl.
+        if (std.mem.indexOfScalarPos(u8, req, d + 1, '-') != null) return badReq(it, req);
+        const lo = (try parseVersion(a, req[0..d])) orelse return badReq(it, req[0..d]);
         if (d + 1 == req.len) return compare(ver, lo) >= 0;
-        const hi = (try parseVersion(a, req[d + 1 ..])) orelse return badReq(it, req);
+        const hi = (try parseVersion(a, req[d + 1 ..])) orelse return badReq(it, req[d + 1 ..]);
         if (compare(lo, hi) == 0) return compare(ver, lo) == 0;
         return compare(ver, lo) >= 0 and compare(ver, hi) < 0;
     }
@@ -109,7 +113,7 @@ fn meets(it: *Interp, ver: []const i64, req: []const u8) Error!bool {
 
 fn badReq(it: *Interp, req: []const u8) Error {
     if (std.mem.indexOfScalar(u8, req, '-') != null) {
-        return it.failCode("TCL VALUE VERSION", "expected versionMin-versionMax but got \"{s}\"", .{req});
+        return it.failCode("TCL VALUE VERSIONRANGE", "expected versionMin-versionMax but got \"{s}\"", .{req});
     }
     return it.failCode("TCL VALUE VERSION", "expected version number but got \"{s}\"", .{req});
 }
@@ -148,6 +152,14 @@ fn require(it: *Interp, name: []const u8, reqs: []const Value, exact: bool) Erro
     var tried_unknown = false;
     while (true) {
         const p = try entry(it, name);
+        // A script that provides the package requires it again.
+        if (p.version == null and !it.tcl9()) if (p.loading) |ver| {
+            var want: std.ArrayList(u8) = .empty;
+            if (exact) {
+                try want.print(a, " exactly {s}", .{try it.str(reqs[0])});
+            } else for (reqs) |r| try want.print(a, " {s}", .{try it.str(r)});
+            return it.failCode("TCL PACKAGE CIRCULARITY", "circular package dependency: attempt to provide {s} {s} requires {s}{s}", .{ name, ver, name, want.items });
+        };
         if (p.version) |have| {
             if (try meetsAny(it, try version(it, .{ .str = have }), words)) return .{ .str = have };
             return it.failCode("TCL PACKAGE VERSIONCONFLICT", "version conflict for package \"{s}\": have {s}, need {s}{s}", .{ name, have, if (exact) "exactly " else "", try it.str(try value.newList(a, reqs)) });
@@ -174,21 +186,40 @@ fn require(it: *Interp, name: []const u8, reqs: []const Value, exact: bool) Erro
             const saved_ns = it.ns;
             it.frame = &it.global;
             it.ns = "";
+            const saved_loading = p.loading;
+            p.loading = try it.str(b[0]);
             defer {
                 it.frame = saved_frame;
                 it.ns = saved_ns;
+                p.loading = saved_loading;
             }
+            const had = p.version != null;
             _ = it.evalScript(script) catch |e| switch (e) {
-                error.TclReturn => {
+                // In Tcl 8.6, `return` in the script is a bad code.
+                error.TclReturn => if (it.tcl9()) {
                     it.ret_code = .ok;
                     it.ret_level = 1;
                     it.ret_opts = &.{};
+                } else {
+                    it.ret_code = .ok;
+                    it.ret_level = 1;
+                    it.ret_opts = &.{};
+                    return it.failCode("TCL PACKAGE BADRESULT", "attempt to provide package {s} {s} failed: bad return code: 2", .{ name, try it.str(b[0]) });
                 },
                 error.TclError => {
+                    // In Tcl 8.6 the error of the script stays as it is,
+                    // and the trace names the script.
+                    if (!it.tcl9()) {
+                        // A version that the script provided before its
+                        // error is not provided.
+                        if (!had) p.version = null;
+                        if (it.in_error) it.error_info.print(a, "\n    (\"package ifneeded {s} {s}\" script)", .{ name, try it.str(b[0]) }) catch {};
+                        return e;
+                    }
                     it.result = .{ .str = try std.fmt.allocPrint(a, "attempt to provide package {s} {s} failed: {s}", .{ name, try it.str(b[0]), try it.str(it.result) }) };
                     return e;
                 },
-                error.TclBreak, error.TclContinue, error.TclCustom => return it.failCode("TCL PACKAGE", "attempt to provide package {s} {s} failed: bad return code: {d}", .{ name, try it.str(b[0]), @as(u32, switch (e) {
+                error.TclBreak, error.TclContinue, error.TclCustom => return it.failCode("TCL PACKAGE BADRESULT", "attempt to provide package {s} {s} failed: bad return code: {d}", .{ name, try it.str(b[0]), @as(u32, switch (e) {
                     error.TclBreak => 3,
                     error.TclContinue => 4,
                     else => it.custom_code,
@@ -212,16 +243,59 @@ fn require(it: *Interp, name: []const u8, reqs: []const Value, exact: bool) Erro
         }
         if (it.pkg.unknown != null and !tried_unknown) {
             tried_unknown = true;
-            var cmd: std.ArrayList(Value) = .empty;
-            try cmd.appendSlice(a, try it.list(it.pkg.unknown.?));
-            try cmd.append(a, .{ .str = name });
-            try cmd.appendSlice(a, words);
-            _ = try it.callWords(cmd.items);
+            if (it.tcl9()) {
+                var cmd: std.ArrayList(Value) = .empty;
+                try cmd.appendSlice(a, try it.list(it.pkg.unknown.?));
+                try cmd.append(a, .{ .str = name });
+                try cmd.appendSlice(a, words);
+                _ = try it.callWords(cmd.items);
+                continue;
+            }
+            try runUnknown(it, name, if (words.len == 0) &.{.{ .str = "0-" }} else words);
             continue;
         }
         if (reqs.len == 0) return it.failCode("TCL PACKAGE UNFOUND", "can't find package {s}", .{name});
         return it.failCode("TCL PACKAGE UNFOUND", "can't find package {s} {s}{s}", .{ name, if (exact) "exactly " else "", try it.str(try value.newList(a, reqs)) });
     }
+}
+
+/// Runs the `package unknown` script as Tcl 8.6 does: the script, then
+/// the name and the requirements as list words, as one script at the
+/// global level. A code other than ok and error is an error.
+fn runUnknown(it: *Interp, name: []const u8, words: []const Value) Error!void {
+    const a = it.alloc();
+    var text: std.ArrayList(u8) = .empty;
+    try text.appendSlice(a, try it.str(it.pkg.unknown.?));
+    var args: std.ArrayList(Value) = .empty;
+    try args.append(a, .{ .str = name });
+    try args.appendSlice(a, words);
+    try text.print(a, " {s}", .{try it.str(try value.newList(a, args.items))});
+    const script = try it.compile(text.items);
+    const saved_frame = it.frame;
+    const saved_ns = it.ns;
+    it.frame = &it.global;
+    it.ns = "";
+    defer {
+        it.frame = saved_frame;
+        it.ns = saved_ns;
+    }
+    _ = it.evalScript(script) catch |e| {
+        const code: u32 = switch (e) {
+            error.TclError => {
+                if (it.in_error) it.error_info.appendSlice(a, "\n    (\"package unknown\" script)") catch {};
+                return e;
+            },
+            error.TclReturn => 2,
+            error.TclBreak => 3,
+            error.TclContinue => 4,
+            error.TclCustom => it.custom_code,
+            else => return e,
+        };
+        it.ret_code = .ok;
+        it.ret_level = 1;
+        it.ret_opts = &.{};
+        return it.failCode("TCL PACKAGE BADRESULT", "bad return code: {d}", .{code});
+    };
 }
 
 /// Provides the package `Tcl` once, at the patch level of the interpreter.
