@@ -6,8 +6,12 @@ The commands `web::` give a script in the browser the Web APIs of the page throu
 > `web::` is on `main` and comes in the next release. [Build from source](../install.md#build-from-source) to use it now.
 
 ```tcl
+proc ports {status value} {
+    if {$status eq "error"} {puts $value; return}
+    foreach port $value {puts [web::call $port getInfo]}
+}
 set serial [web::root navigator.serial]
-web::release $serial
+web::call $serial getPorts -command ports
 ```
 
 ```js
@@ -22,7 +26,7 @@ const tcl = await Interp.create("ztcl-host.wasm", { allow: ["web:serial"], web }
 web::root name
 web::get obj attr
 web::set obj attr value
-web::call obj method ?arg ...?
+web::call obj method ?arg ...? ?-command script?
 web::release obj
 ```
 
@@ -32,9 +36,16 @@ web::release obj
 | `web::get obj attr` | The value of an attribute. |
 | `web::set obj attr value` | Sets an attribute and gives an empty string. |
 | `web::call obj method ?arg ...?` | Calls a method and gives its value. |
+| `web::call obj method ?arg ...? -command script` | Calls a method that gives a promise, and gives an empty string. The script gets the result later. |
 | `web::release obj` | Ends the handle. |
 
 An object of the page is a handle `webN`. The same object gives the same handle. A handle stays until `web::release` or the end of the interpreter.
+
+## Promises
+
+A call into wasm cannot wait for a promise, so a method that gives a promise needs `-command script`. When the promise ends, the result goes into a queue. `runEvents` of the page runs the script at the global level with two words appended: `ok` and the value, or `error` and the message. A timer of `setTimeout` calls `runEvents` for each result, and `onEvents` gets the result of each run. An error of a bad argument comes at the time of the call.
+
+Each script of a result has its own compute limit: the option `webComputeLimit` of `Interp.create` (1,000,000 compute units by default).
 
 ## Values
 
@@ -61,7 +72,7 @@ Each interface of the table is in a group. The page grants a group with `allow`,
 
 - A member out of the table: `web: the interface "Serial" has no method "eval"`.
 - An error of the browser, such as a `DOMException`: `web: NotFoundError: No port selected by the user.`
-- A method that gives a promise: `web: the method "getPorts" gives a promise: use -command`. A call into wasm cannot wait for a promise.
+- A method that gives a promise, with no `-command`: `web: the method "getPorts" gives a promise: use -command`.
 - An attribute of an event handler, such as `onconnect`, gives an error for `web::get` and `web::set`.
 
 ## Capability

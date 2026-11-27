@@ -75,6 +75,8 @@ export class Interp {
   /// APIs, for example "web:serial", with ztcl-host.wasm), webRoot (the
   /// global object of `web::root`, globalThis by default), web (the
   /// module web/ztcl-web.mjs, which a page imports for a group of `web:`),
+  /// webComputeLimit (the compute units of each script of a result or
+  /// an event of `web::`),
   /// onEvents (a function that gets the result of each run of the
   /// events of a timer), point (true adds `point proc` and the output commands), and
   /// packages (a function of a file name for the `load` command of the C
@@ -107,7 +109,7 @@ export class Interp {
     return self;
   }
 
-  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = "8.6", onEvents = null, domComputeLimit = 1000000, webRoot = globalThis, web = null } = {}) {
+  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = "8.6", onEvents = null, domComputeLimit = 1000000, webComputeLimit = 1000000, webRoot = globalThis, web = null } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
@@ -141,6 +143,7 @@ export class Interp {
     // the { ok, result, output } of each run.
     this.onEvents = onEvents;
     this._timer = null;
+    this._kickTimer = null;
     if (allow.includes("event")) {
       if (!this.x.ztcl_events_allow) throw new Error("event: this module has no event loop (use ztcl-host.wasm)");
       if (this.x.ztcl_events_allow(this.h) !== 0) throw new Error("ztcl_events_allow: out of memory");
@@ -163,7 +166,6 @@ export class Interp {
       // wait for runEvents. Each script has its own compute limit.
       this._listeners = new Map();
       this._domQueue = [];
-      this._kickTimer = null;
       this.domComputeLimit = domComputeLimit;
       allow = allow.filter((c) => c !== "dom-html");
       if (this.x.ztcl_dom_allow(this.h) !== 0) throw new Error("ztcl_dom_allow: out of memory");
@@ -173,6 +175,8 @@ export class Interp {
     if (groups.length) {
       if (!this.x.ztcl_web_allow) throw new Error(`${groups[0]}: this module has no Web API bridge (use ztcl-host.wasm)`);
       if (!web?.Bridge) throw new Error(`${groups[0]}: give the module ztcl-web.mjs as the option web`);
+      this._webBridge = web;
+      this.webComputeLimit = webComputeLimit;
       this._web = new web.Bridge(this, { groups: groups.map((c) => c.slice(4)), root: webRoot });
       if (this.x.ztcl_web_allow(this.h) !== 0) throw new Error("ztcl_web_allow: out of memory");
       allow = allow.filter((c) => !c.startsWith("web:"));
@@ -241,7 +245,7 @@ export class Interp {
   /// output }. A timer of setTimeout calls it for each due event, so a
   /// page calls it only to run the events at a time of its own.
   runEvents(now = this._now()) {
-    if (!this._events && !this._listeners) throw new Error('runEvents: no allow: ["event"] or ["dom"]');
+    if (!this._events && !this._listeners && !this._web) throw new Error('runEvents: no allow: ["event"], ["dom"], or a group of "web:"');
     const r = { ok: true, result: "", output: "" };
     const add = (one) => {
       if (!one.ok && r.ok) [r.ok, r.result] = [false, one.result];
@@ -252,6 +256,8 @@ export class Interp {
     const queue = this._domQueue ?? [];
     if (queue.length) this._domQueue = [];
     for (const ev of queue) add(this._domEvent(ev));
+    // The results of the promises of `web::call -command`.
+    for (const ev of this._web?.take() ?? []) add(this._webEvent(ev));
     if (this._events) {
       add(this._call(() => this.x.ztcl_run_events(this.h, now)));
       this._schedule();
@@ -275,6 +281,24 @@ export class Interp {
       x.ztcl_free(vp, v.length || 1);
       return rc;
     }, this.domComputeLimit);
+  }
+
+  // Runs the script of one event of `web::` with its own compute limit.
+  _webEvent({ script, vals }) {
+    const x = this.x;
+    return this._call(() => {
+      const s = encoder.encode(script);
+      const v = this._webBridge.encodeReply(vals);
+      const sp = x.ztcl_alloc(s.length || 1);
+      const vp = x.ztcl_alloc(v.length);
+      if (!sp || !vp) throw new Error("ztcl_alloc: out of memory");
+      new Uint8Array(x.memory.buffer, sp, s.length).set(s);
+      new Uint8Array(x.memory.buffer, vp, v.length).set(v);
+      const rc = x.ztcl_web_event(this.h, sp, s.length, vp, v.length);
+      x.ztcl_free(sp, s.length || 1);
+      x.ztcl_free(vp, v.length);
+      return rc;
+    }, this.webComputeLimit);
   }
 
   // Runs the queue of DOM events from a timer of setTimeout.

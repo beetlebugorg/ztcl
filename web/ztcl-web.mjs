@@ -68,7 +68,7 @@ function tclBool(s) {
 }
 
 // Puts a reply of words and lists (see src/wasmweb.zig) into bytes.
-function encodeReply(node) {
+export function encodeReply(node) {
   const parts = [];
   let size = 0;
   const put = (n) => {
@@ -124,6 +124,22 @@ export class Bridge {
     this.objs = new Map(); // id -> { obj, type }
     this.ids = new Map(); // obj -> id
     this.next = 1;
+    // The results of the promises of `-command`, for runEvents.
+    this.queue = [];
+  }
+
+  // Puts the script of a result into the queue and asks the Interp for
+  // a run of the events.
+  push(script, vals) {
+    this.queue.push({ script, vals });
+    this.interp._kick();
+  }
+
+  // Gives the queue and empties it.
+  take() {
+    const q = this.queue;
+    this.queue = [];
+    return q;
   }
 
   get x() {
@@ -353,6 +369,28 @@ export class Bridge {
         case 5:
           this.release(h);
           return 0;
+        case 6: {
+          // A call with -command: the first word is the script.
+          const o = this.obj(h);
+          const m = this.member(o.type, "operations", sa);
+          const ret = parseType(m.returns);
+          if (ret.kind !== "promise") fail(`web: the method "${sa}" gives no promise: leave out -command`);
+          const script = args[0];
+          const p = o.obj[sa](...this.args(o.type, sa, m, args.slice(1)));
+          Promise.resolve(p).then(
+            (v) => {
+              let word;
+              try {
+                word = this.fromJS(ret.of, v);
+              } catch (e) {
+                return this.push(script, ["error", e instanceof WebError ? e.message : errorText(e)]);
+              }
+              this.push(script, ["ok", word]);
+            },
+            (e) => this.push(script, ["error", errorText(e)]),
+          );
+          return 0;
+        }
       }
       return fail(`web: unknown operation ${op}`);
     } catch (e) {
