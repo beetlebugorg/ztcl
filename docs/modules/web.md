@@ -65,6 +65,7 @@ Each script of a result has its own compute limit: the option `webComputeLimit` 
 | `%detail` | The `detail` of a `CustomEvent` when it is a string or a number, or an empty string. |
 | `%value` | The attribute `value` of the event, or else the attribute `value` of the target, such as the bytes of a `BluetoothRemoteGATTCharacteristic`. The bridge reads it at the time of the event, so a later event does not change it. It is an empty string when neither interface of the table has the attribute. |
 | `%data` | The attribute `data` of the event, such as the bytes of a `MIDIMessageEvent`, or an empty string. |
+| `%event` | A handle of the event, such as a `GamepadEvent`, for `web::get`. The handle stays until `web::release`, so a script that uses `%event` releases it. |
 | `%%` | One `%`. |
 
 ## Wrappers
@@ -75,6 +76,7 @@ A group can have commands of its own in the namespace `web::GROUP`, with `-name 
 |---|---|
 | `serial` | [`web::serial::`](#web-serial): the ports as channels |
 | `bluetooth` | [`web::bluetooth::`](web-bluetooth.md): devices, GATT services, reads, writes, and notifications |
+| `gamepad` | [`web::gamepad::`](web-gamepad.md): the state of the pads, a poll, the events of a new pad, and rumble |
 
 ## Web Serial
 

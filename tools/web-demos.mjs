@@ -179,4 +179,28 @@ const fakeBluetooth = `(() => {
   check("bluetooth: the buttons are off without the API", await evalJS(`document.getElementById("go").disabled`));
 }
 
+// ---- Gamepad: a fake pad with the left stick to the right ----
+
+const fakePad = `(() => {
+  const pad = () => ({ id: "Fake Pad (STANDARD GAMEPAD)", index: 0, connected: true, timestamp: performance.now(), mapping: "standard",
+    axes: [1, 0, 0, 0], buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: i === 0, touched: i === 0, value: i === 0 ? 1 : 0 })), touches: [] });
+  Navigator.prototype.getGamepads = function () { window.__reads = (window.__reads || 0) + 1; return [pad(), null, null, null]; };
+})();`;
+
+{
+  const say = await open("gamepad.html", fakePad);
+  check("gamepad: the page is ready", /^Ready\./.test(say), say);
+  check("gamepad: no poll before a click", !(await evalJS("window.__reads")));
+  await evalJS(`document.getElementById("go").click()`);
+  const moved = await waitJS(`parseFloat(document.getElementById("ball").style.left) >= 80`);
+  check("gamepad: the stick moves the ball", moved, await evalJS(`document.getElementById("ball").style.left`));
+  check("gamepad: the buttons", (await text("buttons")) === "0", await text("buttons"));
+  await evalJS(`document.getElementById("stop").click()`);
+  await pause(100);
+  const reads = await evalJS("window.__reads");
+  await pause(200);
+  check("gamepad: stop ends the poll", (await evalJS("window.__reads")) === reads);
+  check("gamepad: no page errors", pageErrors.length === 0, pageErrors.join("; "));
+}
+
 done(failed ? 1 : 0);

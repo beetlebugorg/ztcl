@@ -96,6 +96,7 @@ PAGES = [
     ("docs/modules/mac.md", "modules/mac/", "Modules", "ztcl::mac"),
     ("docs/modules/web.md", "modules/web/", "Modules", "web"),
     ("docs/modules/web-bluetooth.md", "modules/web-bluetooth/", "Modules", "web::bluetooth"),
+    ("docs/modules/web-gamepad.md", "modules/web-gamepad/", "Modules", "web::gamepad"),
     ("docs/web/README.md", "web/", "Web APIs", "All Web APIs"),
     ("docs/web/serial.md", "web/serial/", "Web APIs", "Serial ports"),
     ("docs/web/usb.md", "web/usb/", "Web APIs", "USB devices"),

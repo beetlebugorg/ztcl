@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gamepad · ztcl</title>
+<meta name="description" content="A Tcl script in the page reads a game controller with web::gamepad and moves a ball with the left stick.">
+<link rel="canonical" href="https://beetlebug.org/ztcl/playground/gamepad.html">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="demo.css">
+<style>
+.arena { position: relative; height: 260px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+#ball { position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; margin: -12px 0 0 -12px; border-radius: 50%; background: var(--accent); transition: scale .1s; }
+</style>
+</head>
+<body>
+<main class="wrap demo">
+<h1>Gamepad: move the ball</h1>
+<p>A Tcl script in this page reads the game controllers with <code>web::gamepad::poll</code> about 60 times a second. The left stick moves the ball, and the first button makes it big. The script runs in <code>ztcl-host.wasm</code> with the grants <code>dom</code>, <code>event</code>, and <code>web:gamepad</code>.</p>
+<p id="support" class="note"></p>
+<div id="app">
+  <div class="row">
+    <button id="go" type="button">Start</button>
+    <button id="stop" class="second" type="button">Stop</button>
+  </div>
+  <div class="arena"><div id="ball"></div></div>
+  <p class="note">Buttons down: <span id="buttons">none</span></p>
+  <pre id="out"></pre>
+</div>
+<p class="note">A browser shows a controller to the page only after a press of a button on it. The script is below, and the <a href="../web/gamepad/">guide to gamepads</a> tells how it works.</p>
+<pre id="src"></pre>
+</main>
+<script type="module">
+import { runDemo } from "./demo.mjs";
+await runDemo({
+  script: "gamepad.tcl",
+  allow: ["web:gamepad"],
+  supported: () => typeof navigator.getGamepads === "function",
+  missing: "This browser has no Gamepad API.",
+  ready: "Ready. Connect a controller, then press Start.",
+});
+</script>
+</body>
+</html>
