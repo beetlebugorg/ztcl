@@ -128,6 +128,13 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }) })).step);
+    // The speed of the record layer (tools/tls-bench.sh). Always
+    // ReleaseFast; -Dcpu picks the CPU features.
+    b.step("tls-bench", "Print the speed of the TLS record layer for each suite").dependOn(&b.addRunArtifact(b.addExecutable(.{ .name = "tls-bench", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/tls/bench.zig"),
+        .target = target,
+        .optimize = .fast,
+    }) })).step);
     b.step("tls-x509-test", "Run the x509-limbo cases of the chain checks: zig build tls-x509-test -- limbo.json").dependOn(&limbo.step);
     inline for (.{ "src/tls/der.zig", "src/tls/x509.zig", "src/tls/pem.zig", "src/tls/chain.zig", "src/tls/roots.zig", "src/tls/messages.zig", "src/tls/client_vectors.zig", "src/tls/server_vectors.zig" }) |f| {
         test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{

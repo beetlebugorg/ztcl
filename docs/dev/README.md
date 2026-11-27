@@ -15,6 +15,7 @@ These files are the plans, the task lists, the reviews, and the test results of 
 | [wasm-size.md](wasm-size.md) | The bytes of `ztcl.wasm` for each group of functions, and 8 ranked changes that make the download smaller. |
 | [interp-spike.md](interp-spike.md) | The profile of the bytecode loop, and the measures of two superinstruction experiments (#130). |
 | [stdlib.md](stdlib.md), [stdlib-tasks/](stdlib-tasks/README.md) | The plan of the built-in modules, and the tasks. |
+| [tls-speed.md](tls-speed.md) | The speed of the TLS record layer against OpenSSL, and the plan for the fast paths. |
 | [zig-std-findings.md](zig-std-findings.md), [zig-std/](zig-std/) | Two problems in `std.crypto.Certificate` of Zig 0.17.0, the RSA-PSS padding check and the DER reader, with reproducers. |
 | [threads-tasks/](threads-tasks/README.md), [threads-notes.md](threads-notes.md) | The tasks of threads, the state of each part, and the decisions. |
 | [values.md](values.md), [values-tasks/](values-tasks/README.md) | The plan of faster values, and the tasks. |
