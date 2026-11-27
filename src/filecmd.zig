@@ -708,7 +708,8 @@ fn typeOk(mode: u32, types: []const []const u8) bool {
 fn cmdGlob(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const a = it.alloc();
     var i: usize = 1;
-    var nocomplain = false;
+    // In Tcl 9.1 a pattern with no match gives an empty list.
+    var nocomplain = it.tcl9();
     var tails = false;
     var dir: ?[]const u8 = null;
     var prefix: []const u8 = "";

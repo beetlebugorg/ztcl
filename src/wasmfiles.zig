@@ -543,7 +543,7 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
 
         fn glob(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             const usage = "glob ?-nocomplain? ?-types d|f? ?--? pattern ?pattern ...?";
-            var nocomplain = false;
+            var nocomplain = it.tcl9();
             var types: u8 = 0;
             var k: usize = 1;
             while (k < argv.len) : (k += 1) {

@@ -135,3 +135,47 @@ test "a change of the release adds and removes the commands of 9.1" {
     try it.setTclVersion(.v8_6);
     try std.testing.expectEqualStrings("", try run(&it, "info commands lseq"));
 }
+
+test "variable names in namespace eval" {
+    try check(0, &.{
+        .{ "set g 1; namespace eval q {set g}", "1", "!can't read \"g\": no such variable" },
+        .{ "set g 1; namespace eval q {set g 2}; list $g [info exists q::g]", "2 0", "1 1" },
+        .{ "namespace eval a {}; set a::v 5; namespace eval q {set a::v}", "5", "!can't read \"a::v\": no such variable" },
+        .{ "namespace eval q {incr h}; list [info exists ::h] [info exists q::h]", "0 1", "0 1" },
+        .{ "set g 1; proc p {} {set ::g}; p", "1", "1" },
+    });
+}
+
+test "numbers with a leading zero" {
+    try check(0, &.{
+        .{ "expr {010}", "8", "10" },
+        .{ "expr {0o10}", "8", "8" },
+        .{ "expr {08 + 1}", "!invalid bareword \"08\"\nin expression \"08 + 1\";\nshould be \"$08\" or \"{08}\" or \"08(...)\" or ... (invalid octal number?)", "9" },
+        .{ "string is integer 08", "0", "1" },
+        .{ "incr x 010", "8", "10" },
+        .{ "lindex {a b c d e f g h i j k} 010", "i", "k" },
+    });
+}
+
+test "tcl_precision is absent in Tcl 9.1" {
+    try check(0, &.{
+        .{ "set tcl_precision", "0", "!can't read \"tcl_precision\": no such variable" },
+        .{ "info exists tcl_precision", "1", "0" },
+    });
+}
+
+test "encoding profiles of Tcl 9.1" {
+    const caps = @backingInt(cap.channels);
+    try check(caps, &.{
+        .{ "string length [encoding convertfrom utf-8 \"a\\xffb\"]", "3", "!unexpected byte sequence starting at index 1: '\\xFF'" },
+        .{ "catch {encoding convertfrom utf-8 \"a\\xffb\"} m o; dict get $o -errorcode", "!key \"-errorcode\" not known in dictionary", "TCL ENCODING ILLEGALSEQUENCE 1" },
+        .{ "encoding convertfrom -profile replace utf-8 \"a\\xffb\"", "!wrong # args: should be \"encoding convertfrom ?encoding? data\"", "a\u{FFFD}b" },
+        .{ "list [encoding convertfrom -failindex i utf-8 \"a\\xffb\"] $i", "!wrong # args: should be \"encoding convertfrom ?encoding? data\"", "a 1" },
+        .{ "encoding convertto ascii \"a\\u00e9\"", "a?", "!unexpected character at index 1: 'U+0000E9'" },
+        .{ "list [encoding convertto -failindex j ascii \"ab\\u00e9c\"] $j", "!wrong # args: should be \"encoding convertto ?encoding? data\"", "ab 2" },
+        .{ "encoding convertfrom ascii \"a\\xe9\"", "a?", "!unexpected byte sequence starting at index 1: '\\xE9'" },
+        .{ "encoding convertfrom -profile bogus utf-8 a", "!wrong # args: should be \"encoding convertfrom ?encoding? data\"", "!bad profile name \"bogus\": must be replace, strict, or tcl8" },
+        .{ "encoding profiles", "!bad option \"profiles\": must be convertfrom, convertto, dirs, names, or system", "replace strict tcl8" },
+        .{ "encoding bogus", "!bad option \"bogus\": must be convertfrom, convertto, dirs, names, or system", "!unknown or ambiguous subcommand \"bogus\": must be convertfrom, convertto, dirs, names, profiles, system, or user" },
+    });
+}

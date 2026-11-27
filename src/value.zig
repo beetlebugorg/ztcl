@@ -239,8 +239,14 @@ pub fn trimSpace(s: []const u8) []const u8 {
     return s[b..e];
 }
 
+/// True while an interpreter that follows Tcl 8.6 runs: a leading zero
+/// makes an integer octal. In Tcl 9.1 an integer with a leading zero is
+/// decimal, and only 0o is octal. `Interp.evalTop` sets it.
+pub threadlocal var octal_zero: bool = true;
+
 /// An integer in the forms of Tcl 8.6: decimal, 0x, 0o, 0b, and a
-/// leading 0 for octal. Spaces around it are allowed.
+/// leading 0 for octal (decimal in Tcl 9.1, see `octal_zero`). Spaces
+/// around it are allowed.
 pub fn parseInt(text: []const u8) ?i64 {
     return parseIntMode(text, true);
 }
@@ -271,7 +277,7 @@ fn parseIntMode(text: []const u8, wrap: bool) ?i64 {
         if (base != 10) {
             s = s[2..];
             if (s.len == 0) return null;
-        } else {
+        } else if (octal_zero) {
             // A leading zero means octal when all digits are octal.
             base = 8;
             s = s[1..];

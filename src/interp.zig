@@ -1823,6 +1823,16 @@ pub const Interp = struct {
     pub fn setTclVersion(it: *Interp, v: TclVersion) Allocator.Error!void {
         it.tcl = v;
         try it.setVersionVars();
+        // Tcl 9.1 has no `tcl_precision`: a double has the shortest form.
+        const prec = it.lookup(&it.global, "tcl_precision");
+        if (v == .v9_1) {
+            if (prec) |c| if (c.v == .traced and c.v.traced.precision) {
+                c.v = .undef;
+            };
+            it.precision = 0;
+        } else if (prec == null or prec.?.v == .undef) {
+            trace.installPrecision(it) catch return error.OutOfMemory;
+        }
         try @import("tcl9.zig").apply(it);
         @import("pkg.zig").retagTcl(it) catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
@@ -2067,6 +2077,11 @@ pub const Interp = struct {
     /// Runs a script at the top level: a `return` ends it with a value.
     pub fn evalTop(it: *Interp, s: *Script) Error!Value {
         value.precision = it.precision;
+        // A child of the other release can run inside this call, so the
+        // number form of the caller comes back at the end.
+        const octal_zero = value.octal_zero;
+        value.octal_zero = !it.tcl9();
+        defer value.octal_zero = octal_zero;
         // Inside any other entry of the tree, the frames above this one
         // can hold values. This call then adds no scan range.
         const outer = it.heap.scopes == 0;
@@ -3157,12 +3172,12 @@ pub const Interp = struct {
                 name = std.mem.trimStart(u8, name, ":");
             } else if (colon + 1 < name.len and name[colon + 1] == ':' and colon < (std.mem.indexOfScalar(u8, name, '(') orelse name.len)) {
                 // A relative name with a namespace: first the current
-                // namespace, then the global namespace.
+                // namespace, then, in Tcl 8.6, the global namespace.
                 f = &it.global;
                 if (it.ns.len > 0) {
                     const full = try it.qualify(name);
                     if (it.lookup(f, full)) |c| return c;
-                    if (it.lookup(f, name)) |c| return c;
+                    if (!it.tcl9()) if (it.lookup(f, name)) |c| return c;
                     name = full;
                 }
             }
@@ -3170,10 +3185,10 @@ pub const Interp = struct {
         if (it.lookup(f, name)) |c| return c;
         if (f.ns) |space| {
             // A frame of `namespace eval`: the variable of the namespace,
-            // then the global variable.
+            // then, in Tcl 8.6, the global variable.
             const full = try std.fmt.allocPrint(it.alloc(), "{s}::{s}", .{ space, name });
             var target = it.lookup(&it.global, full);
-            if (target == null) target = it.lookup(&it.global, name);
+            if (target == null and !it.tcl9()) target = it.lookup(&it.global, name);
             if (target == null and !create) return null;
             if (target == null) {
                 target = try it.newCell();
