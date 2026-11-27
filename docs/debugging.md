@@ -95,7 +95,7 @@ The second run of `--explain` is equal to the first run when the script has no c
 
 ## Record and replay
 
-With no capability, a script is deterministic: each run gives the same output and uses the same compute units. A script with capabilities reads inputs from the host: the clock, the event loop, files, sockets, and pipes. `--record FILE` writes these inputs to a tape, and `--replay FILE` runs the script again with the inputs of the tape. A replay can add probes, because a probe uses no compute units, so the run reads each input at the same compute unit.
+With no capability, a script is deterministic: each run gives the same output and uses the same compute units. A script with capabilities reads inputs from the host: the clock, the event loop, files, folders, sockets, pipes, and programs. `--record FILE` writes these inputs to a tape, and `--replay FILE` runs the script again with the inputs of the tape. A replay can add probes, because a probe uses no compute units, so the run reads each input at the same compute unit.
 
 ```sh
 ztcl debug --record run.tape --allow clock,channels,file job.tcl
@@ -110,6 +110,10 @@ The tape has these inputs:
 | `ticks` | The clock of the event loop: `after`, `vwait`, and `update`. A replay does not sleep. |
 | `poll` | The channels that the event loop found ready. |
 | `read` | The bytes of each read of a channel: a file, a socket, or a pipe. |
+| `stat` | The data of a path: `file exists`, `file mtime`, `file size`, `file stat`, and the other queries of a path. |
+| `list` | The names in a folder, for `glob`. |
+| `command` | The result or the error of `exec` and `pid`. A replay does not run the programs of `exec`. |
+| `random`, `env` | Bytes of entropy from the system, and a read of an environment variable. No command of the core reads them now. The commands of the Batteries milestone use these entries. |
 
 A replay opens the same files and sockets as the run, and their data comes from the tape. When the script asks for an input in another order or at another compute unit, the replay stops with the error code `ZTCL TAPE DIVERGED`, and the report has a `tape` line that names the entry. With `--explain`, the second run replays the inputs of the first run, so the changes are exact also for a script with capabilities.
 

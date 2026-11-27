@@ -1224,6 +1224,6 @@ fn cmdPid(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 }
 
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {
-    try it.register("exec", cmdExec);
-    try it.register("pid", cmdPid);
+    try it.register("exec", @import("tape.zig").command(cmdExec));
+    try it.register("pid", @import("tape.zig").command(cmdPid));
 }

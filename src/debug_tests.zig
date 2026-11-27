@@ -194,3 +194,79 @@ test "who set a variable, when it got a value, and the first error" {
     try has(rep.answers[1], "stack: {step 2}");
     try has(rep.first_error, "early (at error early, unit ");
 }
+
+/// Runs `script` with files in `.zig-cache/ztcl-tape-test`, `exec` of
+/// `echo`, and the tape `t`.
+fn runFiles(t: *tcl.tape.Tape, pre: []const u8, script: []const u8, buf: *std.ArrayList(u8)) !debug.Report {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.file) | @backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.exec));
+    it.exec_host = .{ .allow = &.{"echo"}, .timeout_ms = 5000, .env = &.{"PATH=/usr/bin:/bin"} };
+    try tcl.fsroot.setRoot(&it, ".");
+    _ = it.eval(pre) catch |e| {
+        std.debug.print("setup: {s}\n", .{try it.str(it.result)});
+        return e;
+    };
+    try tcl.fsroot.setRoot(&it, ".zig-cache/ztcl-tape-test");
+    it.output = .{ .ctx = buf, .write = outText };
+    return debug.run(&it, script, .{ .tape = t });
+}
+
+test "a replay gives the recorded file data and exec results" {
+    if (!options.mod_probe) return error.SkipZigTest;
+    if (@import("builtin").os.tag == .windows) return error.SkipZigTest;
+    const make = "set d .zig-cache/ztcl-tape-test; file delete -force $d; file mkdir $d; set f [open $d/a.txt w]; puts -nonewline $f abc; close $f";
+    const script = "puts [file exists a.txt],[file size a.txt],[glob -nocomplain *.txt],[exec echo hi],[catch {exec echo-none}]";
+    var rec: tcl.tape.Tape = .{ .gpa = std.testing.allocator, .mode = .record };
+    defer rec.deinit();
+    var out1: std.ArrayList(u8) = .empty;
+    defer out1.deinit(std.testing.allocator);
+    var r1 = try runFiles(&rec, make, script, &out1);
+    defer r1.deinit();
+    try std.testing.expectEqualStrings("1,3,a.txt,hi,1\n", out1.items);
+    var file: std.ArrayList(u8) = .empty;
+    defer file.deinit(std.testing.allocator);
+    try tcl.tape.write(&rec, std.testing.allocator, &file);
+    // The file goes away, and the replay still gives the old data.
+    var rep: tcl.tape.Tape = .{ .gpa = std.testing.allocator, .mode = .replay };
+    defer rep.deinit();
+    try tcl.tape.parse(&rep, file.items);
+    var out2: std.ArrayList(u8) = .empty;
+    defer out2.deinit(std.testing.allocator);
+    var r2 = try runFiles(&rep, "file delete -force .zig-cache/ztcl-tape-test/a.txt", script, &out2);
+    defer r2.deinit();
+    try std.testing.expectEqualStrings(out1.items, out2.items);
+    try std.testing.expect(r2.ok);
+}
+
+fn fillHi(_: ?*anyopaque, a: std.mem.Allocator) std.mem.Allocator.Error!?[]const u8 {
+    return try a.dupe(u8, "hi");
+}
+
+fn fillNone(_: ?*anyopaque, _: std.mem.Allocator) std.mem.Allocator.Error!?[]const u8 {
+    return null;
+}
+
+test "a replay gives the recorded entropy and environment" {
+    if (!options.mod_probe) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    var rec: tcl.tape.Tape = .{ .gpa = std.testing.allocator, .mode = .record };
+    defer rec.deinit();
+    tcl.tape.start(&it, &rec);
+    try std.testing.expectEqualStrings("hi", (try tcl.tape.bytes(&it, .random, null, fillHi)).?);
+    try std.testing.expect(try tcl.tape.bytes(&it, .env, null, fillNone) == null);
+    tcl.tape.stop(&it);
+    var rep: tcl.tape.Tape = .{ .gpa = std.testing.allocator, .mode = .replay };
+    defer rep.deinit();
+    var file: std.ArrayList(u8) = .empty;
+    defer file.deinit(std.testing.allocator);
+    try tcl.tape.write(&rec, std.testing.allocator, &file);
+    try tcl.tape.parse(&rep, file.items);
+    tcl.tape.start(&it, &rep);
+    defer tcl.tape.stop(&it);
+    try std.testing.expectEqualStrings("hi", (try tcl.tape.bytes(&it, .random, null, fillNone)).?);
+    try std.testing.expect(try tcl.tape.bytes(&it, .env, null, fillHi) == null);
+}
