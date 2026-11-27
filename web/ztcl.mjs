@@ -462,6 +462,7 @@ export class Interp {
     else pkg.x._initialize?.();
     this._pkgs.push(pkg);
     const ip = pkg.x.ztcl_cext_interp(this.h);
+    pkg.ip = ip;
     const rc = pkg.x[init](ip);
     if (rc !== 0) {
       const r = new Uint32Array(pkg.x.memory.buffer, pkg.x.ztcl_cext_result(ip), 4);
@@ -548,6 +549,10 @@ export class Interp {
 
   /// Frees the interpreter. Drop the Interp after this call.
   close() {
+    // The interp of each package goes first, so the delete procs of its
+    // assoc data run.
+    for (const pkg of this._pkgs ?? []) if (pkg.ip) pkg.x.ztcl_cext_interp_free(pkg.ip);
+    this._pkgs = [];
     if (this.h) this.x.ztcl_delete(this.h);
     this.h = 0;
   }

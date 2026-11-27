@@ -62,8 +62,6 @@ pub const State = struct {
     missing: ?Missing = null,
     /// The packages of `load` in this interpreter, by init name.
     loaded: std.StringHashMapUnmanaged(void) = .empty,
-    /// The client data of `Tcl_PkgProvideEx`, by package name.
-    pkg_data: std.StringHashMapUnmanaged(?*anyopaque) = .empty,
 };
 
 /// The shadow of the interpreter during a call into C code. A slot reads
@@ -86,9 +84,9 @@ pub fn shadowOf(it: *Interp) Error!*Shadow {
 pub fn drop(it: *Interp) void {
     const sh: *Shadow = @ptrCast(@alignCast(it.cext orelse return));
     @import("hash.zig").dropAssoc(&sh.core);
+    @import("host.zig").dropPkgs(&sh.core);
     native.unregister(sh.core.handle);
     freeKeys(&sh.state.loaded);
-    freeKeys(&sh.state.pkg_data);
     gpa.destroy(sh.state);
     gpa.destroy(sh);
     it.cext = null;

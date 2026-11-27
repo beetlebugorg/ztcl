@@ -72,6 +72,8 @@ pub const Interp = extern struct {
     handle: u32 = 0,
     /// The assoc data of the interp: a list of `hash.Assoc`.
     assoc: ?*anyopaque = null,
+    /// The client data of the packages: a list of `host.PkgData`.
+    pkgs: ?*anyopaque = null,
 };
 
 pub const OK: c_int = 0;

@@ -114,3 +114,10 @@ foreach a {
     puts [list argsrest $a [catch {cxparse argsrest {*}$a} msg] $msg]
 }
 puts [list argsrest [catch {cxparse argsrest x -count 2 y} msg] $msg]
+# The text of a double in C follows tcl_precision.
+puts [cxparse words {x [expr 1/3.0]}]
+set tcl_precision 3
+puts [cxparse words {x [expr 1/3.0]}]
+proc p {} { cxparse words {x [expr 2/3.0]} }
+puts [p]
+set tcl_precision 0
