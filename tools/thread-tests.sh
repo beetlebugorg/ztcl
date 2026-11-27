@@ -4,7 +4,7 @@
 #   tools/thread-tests.sh [-r runner] [-x flags] [-n runs] [file.tcl ...]
 #
 #   -r  The ztcl binary. The default is zig-out/bin/ztcl.
-#   -x  Extra flags for the runner, for example "--jit --jit-threshold 0".
+#   -x  Extra flags for the runner, for example "--jit-threshold 0" or "--no-jit".
 #   -n  Runs each file this many times in a row. The default is 1.
 #
 # Each file runs after tests/thread/lib.tcl in one interpreter with the

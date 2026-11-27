@@ -19,9 +19,9 @@ puts [sum 10000000]
 ```
 
 ```sh
-$ ztcl sum.tcl
+$ ztcl sum.tcl                       # with the JIT
 49999995000000
-$ ztcl --jit --jit-tier2 sum.tcl     # the same result, about 10 times as fast
+$ ztcl --no-jit sum.tcl              # the same result, about 10 times as slow
 49999995000000
 ```
 

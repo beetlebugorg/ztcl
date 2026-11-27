@@ -6,9 +6,9 @@
 # For each script of tests/jit/, tests/mem/, and bench/, the tool runs
 # the runner with `--report --gc off` in three modes:
 #
-#   1. no flag (the reference)
-#   2. --jit --jit-threshold 0
-#   3. --jit (the default threshold)
+#   1. --no-jit (the reference)
+#   2. --jit-threshold 0 --no-jit-tier2
+#   3. --no-jit-tier2 (the default threshold)
 #
 # It compares stdout, stderr without the `jit` and `report` lines, the
 # exit code, and the `compute` and `mem` fields of the report. When a
@@ -26,7 +26,7 @@
 # most 3000), modes 1 and 2 give the same output, exit code, compute units, and
 # memory count.
 #
-# `-t` adds `--jit-tier2 --jit-tier2-count 2` to each JIT mode.
+# `-t` replaces `--no-jit-tier2` with `--jit-tier2-count 2` in each JIT mode.
 #
 # `--stress` runs modes 2 and 3 again with each stress mode of the JIT
 # alone (`--jit-stress` 1, 2, 4, 8, 16) and all together (31). The
@@ -61,8 +61,8 @@ exec python3 -I - "$here/.." "$runner" "$extra" "$stress" "$tier2" "$@" <<'PY'
 import os, re, subprocess, sys
 root, runner, extra, stress = sys.argv[1], sys.argv[2], sys.argv[3].split(), sys.argv[4] == "1"
 only = sys.argv[6:]
-t2 = ["--jit-tier2", "--jit-tier2-count", "2"] if sys.argv[5] == "1" else []
-modes = [[], ["--jit", "--jit-threshold", "0"] + t2, ["--jit"] + t2]
+t2 = ["--jit-tier2-count", "2"] if sys.argv[5] == "1" else ["--no-jit-tier2"]
+modes = [["--no-jit"], ["--jit-threshold", "0"] + t2, t2]
 sweep_mode = modes[1]
 if stress:
     jit_modes = []
@@ -74,7 +74,7 @@ if stress:
     for k in (2, 3, 5):
         jit_modes.append(modes[1] + ["--jit-stress", "1", "--jit-stress-alloc", str(k)])
     modes = [modes[0]] + jit_modes
-    sweep_mode = ["--jit", "--jit-threshold", "0"] + t2 + ["--jit-stress", "31"]
+    sweep_mode = ["--jit-threshold", "0"] + t2 + ["--jit-stress", "31"]
 base = ["--report", "--gc", "off", "--compute", "1000000000"] + extra
 compare_mem = not extra
 
@@ -163,7 +163,7 @@ suite = os.path.join(os.path.dirname(runner), "ztcl-suite")
 if not only and os.path.exists(suite):
     path = "tests/jit/stack/depth.tcl"
     got = []
-    for m in ([], ["--jit", "--jit-threshold", "0"]):
+    for m in (["--no-jit"], ["--jit-threshold", "0", "--no-jit-tier2"]):
         p = subprocess.run([suite] + m + [path], cwd=root, capture_output=True, timeout=120)
         got.append(int(p.stdout.split()[-1]) if p.returncode == 0 and p.stdout.split() else -1)
     ok = got[0] > 0 and 0 < got[1] <= got[0]

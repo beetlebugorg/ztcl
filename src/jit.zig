@@ -82,7 +82,7 @@ pub const Options = struct {
     threshold: u32 = 2,
     /// The most bytes for the executable region and all JIT data.
     mem_limit: usize = 16 << 20,
-    tier2: bool = false,
+    tier2: bool = true,
     /// The passes of a loop in tier 1 before tier 2 compiles it.
     tier2_count: u32 = 1000,
     /// A set of the `stress_` bits.
@@ -239,6 +239,28 @@ fn newGen() u64 {
 /// the build has no JIT, the layout probe fails, or the system has no
 /// executable memory. A build with the precise roots of WebAssembly
 /// (`-Dgc-precise`) has no JIT.
+/// Why an interpreter runs with no JIT, for `--jit-stats` and the
+/// embedder. A script cannot read it.
+pub const Availability = enum {
+    on,
+    /// The target has no backend, or the build has `-Djit=false` or
+    /// `-Dgc-precise`.
+    not_built,
+    /// The system refused executable memory, or the layout probe failed:
+    /// for example SELinux `deny_execmem`, `PR_SET_MDWE`, or a hardened
+    /// macOS runtime with no `allow-jit` entitlement.
+    refused,
+    /// The embedder or the user turned it off.
+    off,
+};
+
+pub fn availability(it: *const Interp) Availability {
+    if (!built or gc.precise) return .not_built;
+    if (it.jit != null) return .on;
+    if (usable_state.load(.acquire) == 2 or layout_mod.probe() == null) return .refused;
+    return .off;
+}
+
 pub fn enable(it: *Interp, opts: Options) bool {
     // The counter of a child wraps the counted allocator of its root. So
     // the JIT data of each interpreter comes from the allocator of the
@@ -264,7 +286,7 @@ fn enableWith(it: *Interp, opts: Options, a: Allocator) bool {
 /// Turns the JIT on for a new child when its parent has it.
 pub fn inherit(child: *Interp, parent: *const Interp) void {
     if (!built) return;
-    const p = parent.jit orelse return;
+    const p = parent.jit orelse return destroy(child);
     if (!enable(child, p.options)) return;
     child.jit.?.parent = p;
 }
@@ -760,7 +782,7 @@ fn fallback(it: *Interp) Status {
 /// Writes the counts to stderr in the form of `--jit-stats`.
 pub fn printStats(it: *const Interp) void {
     const st: Stats = if (it.jit) |s| s.stats else .{};
-    std.debug.print("jit compiled={d} failed={d} code_bytes={d} data_bytes={d} fallbacks={d} tier2={d} exits={d} named_bytes={d} named_stops={d}\n", .{
-        st.compiled, st.failed, st.code_bytes, st.data_bytes, st.fallbacks, st.tier2, st.exits, st.named_bytes, st.named_stops,
+    std.debug.print("jit compiled={d} failed={d} code_bytes={d} data_bytes={d} fallbacks={d} tier2={d} exits={d} named_bytes={d} named_stops={d} state={t}\n", .{
+        st.compiled, st.failed, st.code_bytes, st.data_bytes, st.fallbacks, st.tier2, st.exits, st.named_bytes, st.named_stops, availability(it),
     });
 }

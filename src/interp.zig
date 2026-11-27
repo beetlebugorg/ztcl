@@ -1239,6 +1239,9 @@ pub const Interp = struct {
         it.heap = &it.own_heap;
         it.setRoots();
         try it.start();
+        // The JIT is on by default where the build and the system have it.
+        // `disableJit` turns it off.
+        _ = jit_mod.enable(it, .{});
     }
 
     /// Makes a child interpreter that uses the heap of `parent`.
@@ -1743,6 +1746,18 @@ pub const Interp = struct {
     /// no JIT. Only the embedder calls it: a script cannot turn it on.
     pub fn enableJit(it: *Interp, options: jit_mod.Options) bool {
         return jit_mod.enable(it, options);
+    }
+
+    /// Turns the JIT off and frees its code. Call it before a script runs,
+    /// or when no script of `it` runs. A child made after the call has no
+    /// JIT.
+    pub fn disableJit(it: *Interp) void {
+        jit_mod.destroy(it);
+    }
+
+    /// The state of the JIT, and why it is off.
+    pub fn jitState(it: *const Interp) jit_mod.Availability {
+        return jit_mod.availability(it);
     }
 
     pub fn alloc(it: *Interp) Allocator {

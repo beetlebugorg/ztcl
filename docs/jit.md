@@ -1,32 +1,33 @@
 # The JIT
 
-ztcl has an optional compiler from bytecode to machine code for x86-64 Linux and arm64 macOS. It is off by default. [Targets](targets.md) lists the JIT of each target. A script gives the same output, the same counts of compute units, and the same memory count with the JIT on and off.
+ztcl has a compiler from bytecode to machine code for x86-64 Linux and arm64 macOS. It is on by default where the build and the system have it. [Targets](targets.md) lists the JIT of each target. A script gives the same output, the same counts of compute units, and the same memory count with the JIT on and off.
 
-## Turn it on
+## Turn it off
 
 ```sh
-ztcl --jit script.tcl                  # tier 1
-ztcl --jit --jit-tier2 script.tcl      # tier 1 and tier 2
-ztcl --jit --jit-tier2 --jit-stats script.tcl
+ztcl script.tcl                        # tier 1 and tier 2
+ztcl --no-jit-tier2 script.tcl         # tier 1
+ztcl --no-jit script.tcl               # the interpreter
+ZTCL_JIT=off ztcl script.tcl           # the interpreter
+ztcl --jit-stats script.tcl            # the counts and the state of the JIT
 ```
 
-In Zig:
+In Zig, `Interp.init` turns the JIT on:
 
 ```zig
-if (!it.enableJit(.{})) {
-    // No JIT in this build or on this system. The interpreter runs each script.
-}
+try it.init(gpa);
+it.disableJit(); // the interpreter only
 ```
 
-`enableJit` returns false on WebAssembly, on other targets, in a build with `-Djit=false`, and on a system that refuses executable memory. On arm64 macOS, an app with the hardened runtime needs the entitlement `com.apple.security.cs.allow-jit`. [Embed in Zig](embedding.md#the-jit) has the options.
+When the system refuses executable memory, the interpreter runs each script with no error. Examples are SELinux `deny_execmem`, `PR_SET_MDWE`, a seccomp filter, and a hardened macOS runtime with no entitlement `com.apple.security.cs.allow-jit`. WebAssembly, other targets, and a build with `-Djit=false` have no JIT. `Interp.jitState` and the `state` field of `--jit-stats` give the reason: `on`, `not_built`, `refused`, or `off`. [Embed in Zig](embedding.md#the-jit) has the options.
 
 | Flag | Use |
 |---|---|
-| `--jit` | Turns on tier 1. |
+| `--no-jit` | Turns the JIT off. |
 | `--jit-threshold N` | The calls of a proc before it compiles (default 2). A body with a loop compiles at its first call. |
-| `--jit-tier2` | Turns on tier 2 for hot loops. |
+| `--no-jit-tier2` | Turns tier 2 off. |
 | `--jit-tier2-count N` | The passes of a loop before tier 2 compiles it (default 1000). |
-| `--jit-stats` | Prints what compiled. |
+| `--jit-stats` | Prints what compiled, and the state of the JIT. |
 
 ## What it speeds up
 
@@ -42,13 +43,13 @@ A 10-million-pass integer loop in a proc (`sum.tcl` of the [quick start](quickst
 | Run | Time |
 |---|---|
 | `tclsh` 8.6.16 | 413 ms |
-| ztcl, interpreter | 157 ms |
-| ztcl `--jit` | 64 ms |
-| ztcl `--jit --jit-tier2` | 15 ms |
+| ztcl `--no-jit` | 157 ms |
+| ztcl `--no-jit-tier2` | 64 ms |
+| ztcl (the default, tier 1 and tier 2) | 15 ms |
 
 User CPU instructions of the whole process, in millions, from `perf stat -e instructions:u`, x86-64 Linux, `ReleaseFast`, 2026-11-24:
 
-| Script | Interpreter | `--jit` | `--jit --jit-tier2` | tclsh 8.6.16 |
+| Script | `--no-jit` | `--no-jit-tier2` | default | tclsh 8.6.16 |
 |---|---|---|---|---|
 | `sum.tcl` | 283.8 | 90.9 | 15.0 | 684.3 |
 | `dsum.tcl` | 688.8 | 555.9 | 16.6 | 1212.5 |
@@ -64,6 +65,6 @@ User CPU instructions of the whole process, in millions, from `perf stat -e inst
 - A verifier checks each bytecode before it compiles.
 - No value from a script goes into the machine code as a constant.
 - The compute limit and the memory limit hold in machine code, exactly as in the interpreter.
-- A script cannot turn the JIT on or detect it.
+- A script cannot turn the JIT on or off, or detect it.
 
 The tests compare the JIT with the interpreter on the whole Tcl test suite, on random programs from a differential fuzzer (`zig build jit-fuzz`), and in stress modes that force the rare paths. One difference stays: an endless recursion can go deeper before the nesting error, because a JIT call uses less native stack.

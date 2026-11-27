@@ -1005,6 +1005,9 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     var x: Interp = undefined;
     x.init(a) catch return 2;
     defer x.deinit();
+    // `Interp.init` turns the JIT on. The jit byte of START turns it on
+    // again after the sandbox.
+    x.disableJit();
     x.compute_limit = st.compute;
     x.mem_limit = @intCast(@min(st.mem, std.math.maxInt(usize)));
     x.output = .{ .ctx = &c, .write = Child.outWrite };

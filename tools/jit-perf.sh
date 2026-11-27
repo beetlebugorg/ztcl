@@ -3,11 +3,11 @@
 # script of bench/, and compares the counts with a baseline or the gates.
 #
 #   tools/jit-perf.sh --record          writes bench/jit-baseline.tsv
-#   tools/jit-perf.sh --check off       no flag: each count at most 1 %
+#   tools/jit-perf.sh --check off       `--no-jit`: each count at most 1 %
 #                                       above the baseline
-#   tools/jit-perf.sh --check jit       `--jit`: each count at most its
+#   tools/jit-perf.sh --check jit       `--no-jit-tier2`: each count at most its
 #                                       gate in bench/jit-gates.tsv
-#   tools/jit-perf.sh --check jit2      `--jit --jit-tier2`: each count at
+#   tools/jit-perf.sh --check jit2      no flag: each count at
 #                                       most its gate in
 #                                       bench/jit-gates2.tsv
 #   tools/jit-perf.sh --show [flags]    prints the counts with the flags
@@ -56,7 +56,7 @@ status=0
 case $mode in
 record)
     : > "$base"
-    for f in $scripts; do printf '%s\t%s\n' "$(name "$f")" "$(count "$f")" >> "$base"; done
+    for f in $scripts; do printf '%s\t%s\n' "$(name "$f")" "$(count "$f" --no-jit)" >> "$base"; done
     cat "$base"
     ;;
 show)
@@ -64,9 +64,9 @@ show)
     ;;
 check)
     case $what in
-    off) flags= ; table=$base ;;
-    jit) flags=--jit; table=$gates ;;
-    jit2) flags="--jit --jit-tier2"; table="$root/bench/jit-gates2.tsv" ;;
+    off) flags=--no-jit; table=$base ;;
+    jit) flags=--no-jit-tier2; table=$gates ;;
+    jit2) flags=; table="$root/bench/jit-gates2.tsv" ;;
     *) echo "--check needs off, jit, or jit2" >&2; exit 2 ;;
     esac
     [ -f "$table" ] || { echo "no table $table"; exit 0; }

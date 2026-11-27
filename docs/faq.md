@@ -22,7 +22,7 @@ Linux and macOS on x86-64 and arm64, Windows on x86-64, and WebAssembly in brows
 
 ## Is the JIT on by default?
 
-No. Turn it on with `--jit` or `Interp.enableJit`. See [The JIT](jit.md).
+Yes, where the build and the system have it. Turn it off with `--no-jit`, `ZTCL_JIT=off`, or `Interp.disableJit`. See [The JIT](jit.md).
 
 ## Can I load C extensions?
 

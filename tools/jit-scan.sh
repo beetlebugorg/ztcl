@@ -73,10 +73,10 @@ puts [a 1]; puts [b 2]; puts [c 3]; puts [d 4]
 """
 # The second run adds tier 2 at a loop count of 1, so the loops of `b`
 # and `d` also compile to tier 2. The dump then has the tier 2 code.
-for tier, flags in (("tier 1", []), ("tier 2", ["--jit-tier2", "--jit-tier2-count", "1"])):
+for tier, flags in (("tier 1", ["--no-jit-tier2"]), ("tier 2", ["--jit-tier2-count", "1"])):
     dump = os.path.join(work, "dump" + str(len(flags)))
     os.mkdir(dump)
-    out, rc, st = run(["--jit", "--jit-threshold", "0", "--jit-stats", "--jit-dump", dump] + flags, script)
+    out, rc, st = run(["--jit-threshold", "0", "--jit-stats", "--jit-dump", dump] + flags, script)
     files = sorted(os.listdir(dump))
     hits = []
     for f in files:
@@ -94,8 +94,8 @@ many = "proc many {} {\n" + "".join("set v%d %d\n" % (k, k) for k in range(2049)
 long = "proc long {} {\n set a 0\n" + "incr a\n" * 17000 + "return $a\n}\n"
 wide = "proc wide {} {\n set a x\n return [string length \"" + "$a" * 2049 + "\"]\n}\n"
 script = many + long + wide + "puts [many]; puts [long]; puts [wide]\n"
-ref, rc0, _ = run([], script)
-out, rc1, st = run(["--jit", "--jit-threshold", "0", "--jit-stats"], script)
+ref, rc0, _ = run(["--no-jit"], script)
+out, rc1, st = run(["--jit-threshold", "0", "--no-jit-tier2", "--jit-stats"], script)
 check("bounds: the three procs stay in the interpreter", rc0 == 0 and out == ref and rc1 == 0 and st.get("failed", 0) >= 3,
       "failed=%s, output %s" % (st.get("failed"), "equal" if out == ref else "differs"))
 
@@ -108,8 +108,8 @@ set t 0
 for {set r 0} {$r < 2} {incr r} { for {set i 0} {$i < 100000} {incr i} { incr t [p$i 1] } }
 puts $t
 """
-ref, rc0, _ = run(["--mem", "2147483648"], script)
-out, rc1, st = run(["--jit", "--mem", "2147483648", "--jit-stats"], script)
+ref, rc0, _ = run(["--no-jit", "--mem", "2147483648"], script)
+out, rc1, st = run(["--no-jit-tier2", "--mem", "2147483648", "--jit-stats"], script)
 used = st.get("code_bytes", 0) + st.get("data_bytes", 0)
 check("limits: 100 000 procs", rc0 == 0 and rc1 == 0 and out == ref and used <= limit and st.get("compiled", 0) > 0,
       "compiled=%s failed=%s code_bytes+data_bytes=%d limit=%d" % (st.get("compiled"), st.get("failed"), used, limit))
@@ -123,7 +123,7 @@ else:
     end = os.path.join(work, "end.tcl")
     with open(end, "w") as f:
         f.write('puts "jit-wx [testjitmaps]"\n')
-    p = subprocess.run([suite, "--jit", "--jit-threshold", "0", "--jit-stats", "--compute", "200000000", "--mem", "2147483648",
+    p = subprocess.run([suite, "--jit-threshold", "0", "--no-jit-tier2", "--jit-stats", "--compute", "200000000", "--mem", "2147483648",
                         "--allow", "package,interp,clock,channels,file,event", "--root", r, "--keep-going",
                         os.path.join(root, "tools/tcltest.tcl"), os.path.join(tests, "expr.test"),
                         os.path.join(root, "tools/tcltest-end.tcl"), end], capture_output=True, timeout=1200)

@@ -33,11 +33,13 @@
 //! turns the collector off.
 //! `--report` writes one line to stderr at the end: the compute units used, the
 //! bytes held now, and the highest number of bytes held.
-//! `--jit` turns the JIT on, when the build and the system have it.
+//! The JIT is on when the build and the system have it. `--no-jit`, or
+//! the environment variable `ZTCL_JIT=off`, turns it off.
 //! `--jit-threshold N` sets the calls of a proc before it compiles.
-//! `--jit-tier2` turns on tier 2, and `--jit-tier2-count N` sets the
+//! `--no-jit-tier2` turns tier 2 off, and `--jit-tier2-count N` sets the
 //! passes of a loop before tier 2 compiles it (1000 by default).
-//! `--jit-stats` writes the counts of the JIT to stderr at the end.
+//! `--jit-stats` writes the counts and the state of the JIT to stderr at
+//! the end.
 //! `--jit-stress N` sets the stress modes of the JIT, a set of bits (see
 //! `src/jit.zig`). Bits 1 to 16 test tier 1 and the region. Bit 32
 //! fails each guard of tier 2 on a schedule. Only the tests use them.
@@ -296,7 +298,7 @@ fn runApp(init: std.process.Init, args: []const [:0]const u8, off: u64, len: u64
         }
     }
     try it.allow(bits);
-    if (m.jit) _ = it.enableJit(.{});
+    if (!m.jit) it.disableJit();
     if (comptime chan_ok) {
         if (bits & @backingInt(tcl.interp.Capability.channels) != 0) try tcl.chan.useStdio(&it);
     }
@@ -379,6 +381,9 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     // The runner starts the child process of an isolated thread.
     if (comptime tcl.isothread.supported) it.iso_runner = std.process.executablePathAlloc(io, arena) catch null;
     if (setup) |f| try f(&it);
+    if (init.environ_map.get("ZTCL_JIT")) |v| {
+        if (std.mem.eql(u8, v, "off")) it.disableJit();
+    }
 
     var exec_env: std.ArrayList([:0]const u8) = .empty;
     var tclsh = false;
@@ -433,8 +438,8 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             }
             continue;
         }
-        if (std.mem.eql(u8, arg, "--jit")) {
-            _ = it.enableJit(jit_opts);
+        if (std.mem.eql(u8, arg, "--no-jit")) {
+            it.disableJit();
             continue;
         }
         if (std.mem.eql(u8, arg, "--jit-threshold") and i + 1 < args.len) {
@@ -456,8 +461,8 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             if (it.jit) |s| s.options = jit_opts;
             continue;
         }
-        if (std.mem.eql(u8, arg, "--jit-tier2")) {
-            jit_opts.tier2 = true;
+        if (std.mem.eql(u8, arg, "--no-jit-tier2")) {
+            jit_opts.tier2 = false;
             if (it.jit) |s| s.options = jit_opts;
             continue;
         }

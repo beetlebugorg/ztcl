@@ -46,23 +46,24 @@ On `error.TclError`, `it.result` holds the message and `it.error_line` holds the
 
 ## The JIT
 
-On x86-64 Linux and arm64 macOS, the default build has a compiler from bytecode to machine code. It is off until the embedder turns it on:
+On x86-64 Linux and arm64 macOS, the default build has a compiler from bytecode to machine code. `Interp.init` turns it on with the default options. `enableJit` sets other options, and `disableJit` turns it off:
 
 ```zig
-if (!it.enableJit(.{})) {
-    // The build or the system has no JIT. The interpreter runs each script.
-}
+try it.init(gpa);
+_ = it.enableJit(.{ .threshold = 0 }); // false: no JIT in the build or the system
+it.disableJit();                       // the interpreter only
 ```
 
 | Option | Use |
 |---|---|
+| `tier2` | Tier 2 for hot loops (default true). |
 | `threshold` | The calls of a proc before it compiles (default 2). 0 compiles before the first run. A body with a loop compiles at its first call. |
 | `mem_limit` | The most bytes of executable memory and JIT data of the interpreter and its children (default 16 MiB). It is outside the `mem_limit` of the interpreter. |
 
-- A script cannot turn the JIT on or see it. With the JIT on, a script gives the same output, the same compute units, and the same memory count.
-- `enableJit` returns false when the build has `-Djit=false`, the target has no backend, the layout probe fails, or the system refuses executable memory (for example SELinux `execmem` rules, a seccomp filter, or `PR_SET_MDWE`). A build with `-Dgc-precise=true` has no JIT.
-- A child interpreter gets the JIT only when its parent has it.
-- On arm64 macOS, an app with the hardened runtime needs the entitlement `com.apple.security.cs.allow-jit`. Without it, `enableJit` returns false and the interpreter runs each script. ztcl never needs `com.apple.security.cs.allow-unsigned-executable-memory` or `com.apple.security.cs.disable-executable-page-protection`. Do not add them for ztcl. The JIT compiles on the thread of the interpreter.
+- A script cannot turn the JIT on or off, or see it. With the JIT on, a script gives the same output, the same compute units, and the same memory count.
+- `jitState` gives `on`, `not_built`, `refused`, or `off`. `enableJit` returns false, and `jitState` gives `refused` or `not_built`, when the build has `-Djit=false`, the target has no backend, the layout probe fails, or the system refuses executable memory (for example SELinux `execmem` rules, a seccomp filter, or `PR_SET_MDWE`). A build with `-Dgc-precise=true` has no JIT.
+- A child interpreter and a thread get the JIT only when the parent has it, with the options of the parent. Call `disableJit` before a script makes a child or a thread.
+- On arm64 macOS, an app with the hardened runtime needs the entitlement `com.apple.security.cs.allow-jit`. Without it, the JIT is off and the interpreter runs each script. ztcl never needs `com.apple.security.cs.allow-unsigned-executable-memory` or `com.apple.security.cs.disable-executable-page-protection`. Do not add them for ztcl. The JIT compiles on the thread of the interpreter.
 - `reset`, `compact`, and `deinit` free the machine code.
 - The JIT is not a capability, so `compact` accepts an interpreter with the JIT on.
 
