@@ -561,6 +561,9 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
     it.output = .{ .ctx = out, .write = write };
     it.mem_limit = 2 << 30;
     it.vm_host.image_store = imageStore(h.gpa, h.env) catch "";
+    // One booted guest of each image waits for `create -image`, unless
+    // ZTCL_VM_POOL says another count (0: none).
+    it.vm_host.pool_size = if (h.env("ZTCL_VM_POOL")) |v| std.fmt.parseInt(u32, v, 10) catch 1 else 1;
     if (comptime tcl.microvm.runner_fetch) {
         if (h.io != null) {
             it.vm_host.fetch = vmFetch;

@@ -73,6 +73,12 @@ pub const Host = struct {
     /// The folder of the store of signed images (`vmstore.zig`), a path
     /// of the host. Empty: `ztcl::vm image` gives ZTCL VM STORE.
     image_store: []const u8 = "",
+    /// The guests of each image that wait, booted to the agent and
+    /// paused, for `create -image` (macOS). Virtualization.framework
+    /// starts each guest in a new process, about 86 ms; a guest of the
+    /// pool resumes in under 1 ms. 0 turns the pool off. Each guest of
+    /// the pool holds the memory that it touched.
+    pool_size: u32 = 0,
     /// Downloads `url` (HTTPS) into the open file `fd`, for `ztcl::vm
     /// image fetch` and `update`. The runner gives one on std.http; an
     /// embedder with no network leaves it null, and fetch then gives
@@ -560,6 +566,7 @@ const mac = if (on_mac) struct {
         var disks: std.ArrayList(vz.Disk) = .empty;
         var warm = false;
         var image: ?[]const u8 = null;
+        var image_disks: usize = 0;
         {
             // -image gives the kernel, the initramfs, and the command line.
             var has_image = false;
@@ -611,12 +618,35 @@ const mac = if (on_mac) struct {
             // The disks of the image come first: /dev/vda is its root.
             var all: std.ArrayList(vz.Disk) = .empty;
             for (r.disks) |p| try all.append(a, .{ .path = p, .read_only = true });
+            image_disks = r.disks.len;
             try all.appendSlice(a, disks.items);
             disks = all;
         }
         if (cfg.kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel or -image", .{});
         cfg.shares = shares.items;
         cfg.disks = disks.items;
+        // A guest of the image from the pool: no share and no disk of its
+        // own, so its configuration is the one of the pool.
+        if (image != null and it.vm_host.pool_size > 0 and shares.items.len == 0 and disks.items.len == image_disks and !warm) {
+            const fp = try fingerprint(a, cfg);
+            const got = take(fp);
+            refill(fp, cfg, it.vm_host.pool_size);
+            if (got) |p| {
+                const g = try it.heap.backing.create(Guest);
+                g.* = .{
+                    .name = try std.fmt.allocPrint(it.heap.backing, "vm{d}", .{s.next}),
+                    .config = p.config,
+                    .machine = p.machine,
+                    .console_vm = p.console_vm,
+                    .console_host = p.console_host,
+                    .warm = true,
+                    .started = true,
+                };
+                s.next += 1;
+                try s.guests.append(it.heap.backing, g);
+                return .{ .str = g.name };
+            }
+        }
 
         var pair: [2]c.fd_t = undefined;
         if (c.socketpair(c.AF.UNIX, c.SOCK.STREAM, 0, &pair) != 0) return it.failCode("ZTCL VM FRAMEWORK", "no socket for the console", .{});
@@ -719,6 +749,170 @@ const mac = if (on_mac) struct {
                 continue;
             };
         }
+    }
+
+    // ---- The pool of booted guests (Host.pool_size) ----
+
+    /// A guest of the pool: booted to the agent, then paused.
+    const Pooled = struct { config: vz.Id, machine: vz.Machine, console_vm: c_int, console_host: c_int };
+
+    const Pool = struct {
+        lock: thread_lock = .{},
+        /// The guests that wait, by the fingerprint of their configuration.
+        ready: std.StringHashMapUnmanaged(std.ArrayList(Pooled)) = .empty,
+        /// The fingerprints with a refill that runs.
+        filling: std.StringHashMapUnmanaged(void) = .empty,
+    };
+    const thread_lock = @import("thread.zig").Lock;
+    var the_pool: Pool = .{};
+    const pa = std.heap.c_allocator;
+
+    /// The fingerprint of a configuration of the pool.
+    fn fingerprint(a: std.mem.Allocator, cfg: vz.Config) ![]u8 {
+        var l: std.ArrayList(u8) = .empty;
+        try l.print(a, "{s}|{s}|{s}|{d}|{d}", .{ cfg.kernel, cfg.initrd orelse "", cfg.cmdline, cfg.memory_mb, cfg.cpus });
+        for (cfg.disks) |d| try l.print(a, "|{s}", .{d.path});
+        return l.toOwnedSlice(a);
+    }
+
+    /// Boots one guest of `cfg` to the agent and pauses it.
+    fn warmOne(cfg_in: vz.Config) ?Pooled {
+        const ap = vz.new("NSAutoreleasePool") catch return null;
+        defer vz.release(ap);
+        var pair: [2]c.fd_t = undefined;
+        if (c.socketpair(c.AF.UNIX, c.SOCK.STREAM, 0, &pair) != 0) return null;
+        var cfg = cfg_in;
+        cfg.console = .{ .in = pair[0], .out = pair[0] };
+        var why: []const u8 = "";
+        const vc = vz.configure(cfg, &why) catch {
+            _ = c.close(pair[0]);
+            _ = c.close(pair[1]);
+            return null;
+        };
+        var m = vz.Machine.init(vc) catch {
+            vz.release(vc);
+            _ = c.close(pair[0]);
+            _ = c.close(pair[1]);
+            return null;
+        };
+        const good = blk: {
+            m.start(&why) catch break :blk false;
+            const conn = connect(&m, agent_port, 10_000) orelse break :blk false;
+            conn.close();
+            m.pause(&why) catch break :blk false;
+            break :blk true;
+        };
+        if (!good) {
+            m.deinit();
+            vz.release(vc);
+            _ = c.close(pair[0]);
+            _ = c.close(pair[1]);
+            return null;
+        }
+        return .{ .config = vc, .machine = m, .console_vm = pair[0], .console_host = pair[1] };
+    }
+
+    /// The copy of a configuration that a refill thread owns.
+    const Owned = struct {
+        fp: []u8,
+        cfg: vz.Config,
+        want: u32,
+
+        fn make(fp: []const u8, cfg: vz.Config, want: u32) !*Owned {
+            const o = try pa.create(Owned);
+            const disks = try pa.alloc(vz.Disk, cfg.disks.len);
+            for (cfg.disks, disks) |d, *x| x.* = .{ .path = try pa.dupe(u8, d.path), .read_only = d.read_only };
+            o.* = .{ .fp = try pa.dupe(u8, fp), .want = want, .cfg = .{
+                .kernel = try pa.dupe(u8, cfg.kernel),
+                .initrd = if (cfg.initrd) |x| try pa.dupe(u8, x) else null,
+                .cmdline = try pa.dupe(u8, cfg.cmdline),
+                .cpus = cfg.cpus,
+                .memory_mb = cfg.memory_mb,
+                .disks = disks,
+                .entropy = cfg.entropy,
+            } };
+            return o;
+        }
+
+        fn free(o: *Owned) void {
+            for (o.cfg.disks) |d| pa.free(d.path);
+            pa.free(o.cfg.disks);
+            pa.free(o.cfg.kernel);
+            if (o.cfg.initrd) |x| pa.free(x);
+            pa.free(o.cfg.cmdline);
+            pa.free(o.fp);
+            pa.destroy(o);
+        }
+    };
+
+    fn countReady(fp: []const u8) usize {
+        return if (the_pool.ready.getPtr(fp)) |l| l.items.len else 0;
+    }
+
+    fn endFill(fp: []const u8) void {
+        the_pool.lock.lock();
+        if (the_pool.filling.fetchRemove(fp)) |kv| pa.free(kv.key);
+        the_pool.lock.unlock();
+    }
+
+    fn refillMain(o: *Owned) void {
+        defer o.free();
+        while (true) {
+            the_pool.lock.lock();
+            const have = countReady(o.fp);
+            the_pool.lock.unlock();
+            if (have >= o.want) return endFill(o.fp);
+            const g = warmOne(o.cfg) orelse return endFill(o.fp);
+            the_pool.lock.lock();
+            const gop = the_pool.ready.getOrPut(pa, o.fp) catch {
+                the_pool.lock.unlock();
+                return endFill(o.fp);
+            };
+            if (!gop.found_existing) {
+                gop.key_ptr.* = pa.dupe(u8, o.fp) catch {
+                    the_pool.ready.removeByPtr(gop.key_ptr);
+                    the_pool.lock.unlock();
+                    return endFill(o.fp);
+                };
+                gop.value_ptr.* = .empty;
+            }
+            gop.value_ptr.append(pa, g) catch {};
+            the_pool.lock.unlock();
+        }
+    }
+
+    /// Starts a refill of the pool of `cfg` to `size` guests, when none
+    /// runs.
+    fn refill(fp: []const u8, cfg: vz.Config, size: u32) void {
+        the_pool.lock.lock();
+        if (the_pool.filling.contains(fp) or countReady(fp) >= size) {
+            the_pool.lock.unlock();
+            return;
+        }
+        const key = pa.dupe(u8, fp) catch {
+            the_pool.lock.unlock();
+            return;
+        };
+        the_pool.filling.put(pa, key, {}) catch {
+            pa.free(key);
+            the_pool.lock.unlock();
+            return;
+        };
+        the_pool.lock.unlock();
+        const o = Owned.make(fp, cfg, size) catch return endFill(fp);
+        const t = std.Thread.spawn(.{}, refillMain, .{o}) catch {
+            o.free();
+            return endFill(fp);
+        };
+        t.detach();
+    }
+
+    /// A guest of the pool for `fp`, or null.
+    fn take(fp: []const u8) ?Pooled {
+        the_pool.lock.lock();
+        defer the_pool.lock.unlock();
+        const l = the_pool.ready.getPtr(fp) orelse return null;
+        return l.pop();
     }
 
     fn vsock(it: *Interp, g: *Guest, args: []const Value) Error!Value {
