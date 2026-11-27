@@ -201,10 +201,17 @@ pub fn attach(it: *Interp, name: []const u8) Error!Value {
 /// and closes at the end of the group.
 fn transferAcross(it: *Interp, id: u64, name: []const u8) Error!Value {
     const iso = @import("isothread.zig");
-    if (comptime !@import("isoproto.zig").passes_fds)
+    if (comptime !@import("isothread.zig").moves_channels)
         return it.failCode("ZTCL ISOLATION TRANSFER", "a channel cannot move to an isolated thread on this platform yet", .{});
     const me = it.worker.?;
     const a = me.group.gpa;
+    // On Windows a socket waits for `WSADuplicateSocketW`: a file, a
+    // pipe, or a console moves with `DuplicateHandle`.
+    if (comptime @import("builtin").os.tag == .windows) {
+        const c = try check(it, name);
+        if (c.kind == .socket)
+            return it.failCode("ZTCL ISOLATION TRANSFER", "a socket cannot move to an isolated thread on Windows yet", .{});
+    }
     const s = try shipOut(it, a, name);
     defer a.free(s.bytes);
     if (!iso.sendChannel(me.group, id, s.bytes, s.fds[0..s.nfds])) {
