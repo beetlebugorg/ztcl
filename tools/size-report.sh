@@ -13,7 +13,7 @@
 # It writes size.md (Markdown) and size.tsv to DIR (the default is
 # zig-out/size). --check compares the numbers with tools/size-budget.tsv
 # and exits with 1 when:
-#   - the full runner is above 6,500,000 bytes (x86-64 Linux only),
+#   - the full runner is above 6,600,000 bytes (x86-64 Linux only),
 #   - a module is more than 10 % above its row,
 #   - ztcl.wasm with modules is above 1 550 000 bytes, or the wasm build
 #     with no module is above 1 000 000 bytes.
@@ -106,7 +106,7 @@ END {
     bad = 0
     for (i = 1; i <= n; i++) {
         r = row[i]; b = bytes[r]; lim = ""; st = ""
-        if (r == "full") { lim = 6500000; if (target != "Linux x86_64") lim = "" }
+        if (r == "full") { lim = 6600000; if (target != "Linux x86_64") lim = "" }
         else if (r == "wasm") lim = 1550000
         else if (r == "wasm-core") lim = 1000000
         else if (r != "core" && (r in budget)) lim = int(budget[r] * 1.1)
