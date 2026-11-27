@@ -1737,8 +1737,4 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try it.register("oo::define", cmdDefine);
     try it.register("oo::objdefine", cmdDefine);
     try it.register("oo::copy", cmdCopy);
-    // The version variables of TclOO 1.1.0, the version of Tcl 8.6.16.
-    _ = try it.internNs("oo");
-    it.setVar("::oo::patchlevel", .{ .str = "1.1.0" }) catch {};
-    it.setVar("::oo::version", .{ .str = "1.1.0" }) catch {};
 }

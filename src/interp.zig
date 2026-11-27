@@ -1884,7 +1884,8 @@ pub const Interp = struct {
         it.capabilities |= bits;
         if (new & @backingInt(Capability.package) != 0) {
             try it.register("package", @import("pkg.zig").cmdPackage);
-            _ = it.eval("package provide TclOO 1.1.0") catch {};
+            // TclOO 1.1.0 of Tcl 8.6.16, and its version variables.
+            _ = it.eval("package provide TclOO 1.1.0; namespace eval ::oo {variable patchlevel 1.1.0 version 1.1.0}") catch {};
             // auto_path, the pkgIndex.tcl search, auto_load, and history.
             _ = it.eval(@embedFile("library.tcl")) catch {};
         }
