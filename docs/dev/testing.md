@@ -48,6 +48,21 @@ python3 -I tools/suite-table.py full.tsv plain.tsv > docs/dev/compatibility.md
 
 [Compatibility](compatibility.md) has the table for all 152 files. A test that did not run counts as blocked. It does not count as a pass.
 
+### The results of each test
+
+`tools/suite.sh -p file` writes one line for each test: the file, pass, fail, or skip, the name, and a detail. The detail of a skip is its constraint. The detail of a failure is the start of the result. `tools/suite-run.sh` runs all files with the suite runner, without and with the JIT, and `tools/suite-md.py` makes three files from the logs:
+
+- [docs/dev/suite.md](suite.md): the totals, the buckets, the counts of each file, and each test that does not pass.
+- `docs/dev/suite-tests.tsv`: one line for each test.
+- `docs/dev/suite-counts.tsv`: the pass counts of each file. The scheduled CI job `suite-full` fails when a count drops below this file (`tools/suite-check.py`).
+
+`tools/suite-buckets.tsv` puts each test that does not pass in one bucket: a bug in ztcl, a missing feature, a different message or -errorcode, Tcl internals, absent by design, another platform, or skipped by tclsh too. Regenerate the files in each PR that changes a count:
+
+```sh
+zig build -Doptimize=ReleaseSafe suite-runner
+tools/suite-run.sh
+```
+
 ### Results with Tcl 8.6.16 (`core-8-6-16`), the 37 core files
 
 With the same stand-in, the commit before this work has 19 291 pass, 1 013 fail, and 525 skip.

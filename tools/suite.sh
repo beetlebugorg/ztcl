@@ -1,7 +1,8 @@
 #!/bin/sh
 # Runs test files of the Tcl source on ztcl and prints the counts.
 #
-#   tools/suite.sh [-a] [-j] [-g N] [-o file] [-r runner] [-t tag | -s tests-dir]
+#   tools/suite.sh [-a] [-j] [-g N] [-o file] [-p file] [-r runner]
+#                  [-t tag | -s tests-dir]
 #                  [file.test ...]
 #
 #   -r  The ztcl binary. The default is zig-out/bin/ztcl.
@@ -14,14 +15,18 @@
 #   -o  Writes one line for each file and skip reason to this file:
 #       `file<TAB>pass<TAB>fail<TAB>skip<TAB>status`, then
 #       `file<TAB>skipped<TAB>reason<TAB>count`.
+#   -p  Writes one line for each test to this file:
+#       `file<TAB>kind<TAB>name<TAB>detail`. The kind is pass, fail, or
+#       skip. The detail is the constraint of a skip, or the start of
+#       the result of a failure.
 #
 # Prints one line for each file (the counts of the tests that pass,
 # fail, and are skipped), then the totals. The compute limit stops a test that loops.
 # The memory limit (2 GiB) stops a test that allocates without end.
 # SPDX-License-Identifier: BSD-2-Clause
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-tcl="$here/../zig-out/bin/ztcl"; tag=core-8-6-16; tests=; all=; log=; gc=
-while getopts ajJr:t:s:o:g: o; do
+tcl="$here/../zig-out/bin/ztcl"; tag=core-8-6-16; tests=; all=; log=; plog=; gc=
+while getopts ajJr:t:s:o:p:g: o; do
     case $o in
     r) tcl=$OPTARG ;;
     t) tag=$OPTARG ;;
@@ -31,6 +36,7 @@ while getopts ajJr:t:s:o:g: o; do
     j) gc="$gc --jit --jit-threshold 0" ;;
     J) gc="$gc --jit --jit-threshold 0 --jit-tier2 --jit-tier2-count 2" ;;
     o) log=$OPTARG; : > "$log" ;;
+    p) plog=$OPTARG; : > "$plog" ;;
     *) exit 2 ;;
     esac
 done
@@ -74,6 +80,12 @@ probe=$(mktemp -d "${TMPDIR:-/tmp}/ztcl-suite.XXXXXX") || exit 1
 "$tcl" --root "$probe" "$probe/probe.tcl" >/dev/null 2>&1 || jail=
 rm -rf -- "$probe"
 [ -n "$jail" ] || caps=package,interp,clock,channels,event,socket
+# The script that turns on the records of tools/tcltest.tcl.
+rec=
+if [ -n "$plog" ]; then
+    rec=$(mktemp "${TMPDIR:-/tmp}/ztcl-suite-rec.XXXXXX") || exit 1
+    echo 'set tt_record 1' > "$rec"
+fi
 tp=0; tf=0; ts=0
 for f in "$@"; do
     # A fresh root folder for each file, outside the repository.
@@ -92,7 +104,7 @@ for f in "$@"; do
 exec "$tcl" $gc --compute 200000000 --mem 2147483648 --allow $caps --root "$root" $set_exec --cwd "\$PWD" --tclsh "\$@"
 EOF
     chmod +x "$root/ztclsh"
-    raw=$(limit 1200 "$tcl" $gc --compute 200000000 --mem 2147483648 --allow $caps ${jail:+--root} ${jail:+"$root"} $set_exec --keep-going "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
+    raw=$(limit 1200 "$tcl" $gc --compute 200000000 --mem 2147483648 --allow $caps ${jail:+--root} ${jail:+"$root"} $set_exec --keep-going $rec "$here/tcltest.tcl" "$tests/$f" "$here/tcltest-end.tcl" 2>&1)
     rc=$?
     rm -rf -- "$root"
     out=$(printf '%s\n' "$raw" | grep -aE '^pass [0-9]+ fail' | tail -1)
@@ -108,5 +120,9 @@ EOF
         printf '%s\t%s\t%s\t%s\t%s\n' "$f" "$p" "$x" "$y" "$rc" >> "$log"
         printf '%s\n' "$raw" | grep -a '^skipped	' | sed "s|^skipped|$f	skipped|" >> "$log"
     fi
+    if [ -n "$plog" ]; then
+        printf '%s\n' "$raw" | grep -a '^tt	' | sed "s|^tt|$f|" >> "$plog"
+    fi
 done
+[ -n "$rec" ] && rm -f -- "$rec"
 printf '%-16s pass %d fail %d skip %d\n' total "$tp" "$tf" "$ts"

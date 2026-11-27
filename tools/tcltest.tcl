@@ -18,8 +18,17 @@ set tt_pass 0
 set tt_fail 0
 set tt_skip 0
 if {![info exists tt_verbose]} { set tt_verbose 0 }
-proc tt_note {kind {why {}}} {
-    global tt_pass tt_fail tt_skip tt_why
+# With tt_record set, each test also prints one line:
+# `tt<TAB>kind<TAB>name<TAB>detail`. The detail of a skip is the
+# constraint. The detail of a failure is the start of the result.
+if {![info exists tt_record]} { set tt_record 0 }
+proc tt_note {kind {why {}} {name {}} {detail {}}} {
+    global tt_pass tt_fail tt_skip tt_why tt_record
+    if {$tt_record} {
+        if {$kind eq "skip"} { set detail $why }
+        set detail [string range [string map {\t { } \n { } \r { }} $detail] 0 299]
+        catch {tt_puts stdout "tt\t$kind\t$name\t$detail"}
+    }
     switch -- $kind {
         pass { incr tt_pass }
         fail { incr tt_fail }
@@ -103,7 +112,7 @@ proc tt_blocked {constraints} {
     return {}
 }
 
-proc tt_skip {why} { tt_note skip $why }
+proc tt_skip {why {name {}}} { tt_note skip $why $name }
 
 # The match modes. `customMatch` adds a mode.
 array set tt_match {exact {string equal} glob {string match} regexp {regexp --}}
@@ -169,8 +178,8 @@ proc tcltest::test {name desc args} {
         lassign $args body result
     }
     set why [tt_blocked $constraints]
-    if {$why ne ""} { tt_skip $why; return }
-    if {![info exists tt_match($match)]} { tt_skip "match:$match"; return }
+    if {$why ne ""} { tt_skip $why $name; return }
+    if {![info exists tt_match($match)]} { tt_skip "match:$match" $name; return }
     if {$tt_verbose > 1} { puts "RUN $name" }
     set tt_out {}
     set tt_err {}
@@ -179,7 +188,7 @@ proc tcltest::test {name desc args} {
     set setup_code [catch {uplevel 1 $setup} setup_msg]
     if {$setup_code == 1} {
         set tt_capture 0
-        tt_note fail
+        tt_note fail {} $name "setup: $setup_msg"
         if {$tt_verbose} { puts "FAIL $name: setup: $setup_msg" }
         catch {uplevel 1 $cleanup}
         return
@@ -208,9 +217,16 @@ proc tcltest::test {name desc args} {
         set err_ok 0
     }
     if {$code_ok && $same && $out_ok && $err_ok && $clean_code != 1} {
-        tt_note pass
+        tt_note pass {} $name
     } else {
-        tt_note fail
+        if {$clean_code == 1} {
+            set detail "cleanup: $clean_msg"
+        } elseif {!$code_ok || !$same} {
+            set detail "code $code: $actual"
+        } else {
+            set detail "output: $tt_out$tt_err"
+        }
+        tt_note fail {} $name $detail
         if {$tt_verbose} {
             puts "FAIL $name: code $code"
             puts "  got:  $actual"
