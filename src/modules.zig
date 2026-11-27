@@ -135,6 +135,7 @@ fn runScript(it: *Interp, text: []const u8) Error!void {
         error.TclReturn => {
             it.ret_code = .ok;
             it.ret_level = 1;
+            it.ret_opts = &.{};
         },
         else => return e,
     };

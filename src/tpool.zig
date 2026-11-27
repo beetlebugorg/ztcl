@@ -617,8 +617,14 @@ fn cmdGet(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             }
             return error.TclError;
         },
-        3 => return error.TclBreak,
-        4 => return error.TclContinue,
+        3 => {
+            it.result = v;
+            return error.TclBreak;
+        },
+        4 => {
+            it.result = v;
+            return error.TclContinue;
+        },
         else => {
             it.result = v;
             it.custom_code = @intCast(@min(j.code, std.math.maxInt(u32)));

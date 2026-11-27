@@ -1147,6 +1147,10 @@ pub const Interp = struct {
     /// The code and the level of a pending `return`.
     ret_code: ReturnCode = .ok,
     ret_level: u32 = 1,
+    /// The other options of the last `return` with a level of 1 or
+    /// more, as pairs in their order: `catch` puts them in its options
+    /// dict before `-code` and `-level`.
+    ret_opts: []const Value = &.{},
     /// The code of error.TclCustom: a return code above 4.
     custom_code: u32 = 5,
     /// The line of the command that failed last.
@@ -2610,7 +2614,7 @@ pub const Interp = struct {
     }
 
     /// Adds one command to the trace of the current error.
-    fn addErrorInfo(it: *Interp, c: *Cmd) Allocator.Error!void {
+    pub fn addErrorInfo(it: *Interp, c: *Cmd) Allocator.Error!void {
         return it.addErrorText(c.text);
     }
 
@@ -3047,6 +3051,7 @@ pub const Interp = struct {
                 }
                 const code = it.ret_code;
                 it.ret_code = .ok;
+                it.ret_opts = &.{};
                 return switch (code) {
                     .ok => it.result,
                     .@"error" => error.TclError,

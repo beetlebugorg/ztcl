@@ -182,6 +182,7 @@ fn require(it: *Interp, name: []const u8, reqs: []const Value, exact: bool) Erro
                 error.TclReturn => {
                     it.ret_code = .ok;
                     it.ret_level = 1;
+                    it.ret_opts = &.{};
                 },
                 error.TclError => {
                     it.result = .{ .str = try std.fmt.allocPrint(a, "attempt to provide package {s} {s} failed: {s}", .{ name, try it.str(b[0]), try it.str(it.result) }) };

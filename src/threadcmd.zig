@@ -325,10 +325,17 @@ fn finishOwn(it: *Interp, c: @import("cmds.zig").Caught) Error!Value {
             it.result = c.res;
             it.ret_code = .ok;
             it.ret_level = 1;
+            it.ret_opts = &.{};
             return error.TclReturn;
         },
-        3 => return error.TclBreak,
-        4 => return error.TclContinue,
+        3 => {
+            it.result = c.res;
+            return error.TclBreak;
+        },
+        4 => {
+            it.result = c.res;
+            return error.TclContinue;
+        },
         else => {
             it.result = c.res;
             it.custom_code = @intCast(@min(c.code, std.math.maxInt(u32)));

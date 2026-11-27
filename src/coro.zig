@@ -244,6 +244,7 @@ fn entry(c: *Coro) callconv(.c) noreturn {
     } else |e| {
         if (e == error.TclReturn and it.ret_code == .ok) {
             it.ret_level = 1;
+            it.ret_opts = &.{};
             c.transfer = it.result;
         } else {
             c.failure = e;
@@ -459,6 +460,7 @@ fn cmdTailcall(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     it.tail_words = words;
     it.ret_code = @fromBackingInt(@intCast(tail_code));
     it.ret_level = 1;
+    it.ret_opts = &.{};
     it.result = Value.empty;
     return error.TclReturn;
 }
