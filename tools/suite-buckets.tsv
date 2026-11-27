@@ -9,7 +9,7 @@
 # Skips that tclsh on Linux also has.
 skip	*	^(emptyTest|knownBug|nonPortable|extensive|userInteraction|knownMsvcBug|interactive)$	tcl	tclsh skips it too
 skip	*	^(unixCrash)$	tcl	tclsh skips it too
-skip	*	^(localeRegexp|notNetworkFilesystem|asyncPipeChan|pre388|unthreaded|expr:bug-3057639)$	tcl	the test file sets the constraint false, or it is false in tclsh 8.6 on Linux
+skip	*	^(localeRegexp|notNetworkFilesystem|asyncPipeChan|pre388|unthreaded|expr:bug-3057639|serverNeeded)$	tcl	the test file sets the constraint false, or it is false in tclsh 8.6 on Linux
 skip	*	^(Tcltest|TcltestPackage|procbodytest|pkgua\.soRequired|applylambda|pairsTo4bytes|testWithLimit|testCPUID|hasIsoLocale|drainEventQueue|expr:testexprparser.*)$	internals	a C test command or package of the Tcl test binary
 skip	*	^zlib$	feature	the `zlib` command
 skip	*	^utf16$	design	ztcl strings hold full code points, as in Tcl 9; Tcl 8.6 uses UTF-16 surrogates

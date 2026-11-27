@@ -19,6 +19,7 @@ const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
 const modules = @import("modules.zig");
+const tcllib = @import("tcllib.zig");
 
 pub const Pkg = struct {
     version: ?[]const u8 = null,
@@ -150,6 +151,7 @@ fn require(it: *Interp, name: []const u8, reqs: []const Value, exact: bool) Erro
         words = try a.dupe(Value, &.{.{ .str = try std.fmt.allocPrint(a, "{s}-{s}", .{ r, r }) }});
     }
     var tried_unknown = false;
+    var tried_lib = false;
     while (true) {
         const p = try entry(it, name);
         // A script that provides the package requires it again.
@@ -232,6 +234,24 @@ fn require(it: *Interp, name: []const u8, reqs: []const Value, exact: bool) Erro
                 return it.failCode("TCL PACKAGE WRONGVERSION", "attempt to provide package {s} {s} failed: package {s} {s} provided instead", .{ name, try it.str(b[0]), name, now });
             }
             return .{ .str = now };
+        }
+        // The library packages of `tcllib.zig` go in as `ifneeded`
+        // scripts, once for each call.
+        if (!tried_lib and it.capabilities & @backingInt(interp.Capability.package) != 0) {
+            tried_lib = true;
+            var added = false;
+            for (tcllib.table) |lib| {
+                if (!eql(lib.name, name)) continue;
+                const v = try version(it, .{ .str = lib.version });
+                var have = false;
+                for (p.needed.items) |pair| {
+                    if (compare(try version(it, pair[0]), v) == 0) have = true;
+                }
+                if (have) continue;
+                try p.needed.append(a, .{ .{ .str = lib.version }, .{ .str = lib.script } });
+                added = true;
+            }
+            if (added) continue;
         }
         if (builtin(it, name)) |f| {
             const have = f.version();
