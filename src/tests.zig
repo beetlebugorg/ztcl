@@ -3227,6 +3227,23 @@ test "ztcl::vm on Windows: create -image boots the signed test release with its 
     const cmdline = try ev(&it, "dict get [ztcl::vm exec $v /bin/busybox cat /proc/cmdline] stdout");
     try std.testing.expect(std.mem.indexOf(u8, cmdline, "verity") != null);
     _ = try ev(&it, "ztcl::vm stop $v; ztcl::vm delete $v");
+    // The pool: a guest of the pool is paused at its create, booted to the
+    // agent, and the refill of the first create boots it.
+    it.vm_host.pool_size = 1;
+    var from_pool = false;
+    var k: usize = 0;
+    while (k < 100 and !from_pool) : (k += 1) {
+        _ = try ev(&it, "set v [ztcl::vm create -image ztcl-guest-test -memory 256]");
+        from_pool = std.mem.eql(u8, try ev(&it, "ztcl::vm status $v"), "paused");
+        if (!from_pool) {
+            _ = try ev(&it, "ztcl::vm delete $v");
+            tcl.proc.sleepMs(100);
+        }
+    }
+    try std.testing.expect(from_pool);
+    _ = try ev(&it, "ztcl::vm start $v; set ch [ztcl::vm vsock $v 1025 -timeout 15000]; read $ch 16; close $ch");
+    try std.testing.expectEqualStrings("0", try ev(&it, "dict get [ztcl::vm exec $v /bin/busybox true] exit"));
+    _ = try ev(&it, "ztcl::vm stop $v; ztcl::vm delete $v");
 }
 
 test "ztcl::vm: the capability, the jail of its paths, and the limits" {
