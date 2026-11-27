@@ -949,7 +949,9 @@ fn vmFetch(ctx: ?*anyopaque, url: []const u8, fd: i32) tcl.microvm.FetchError!vo
     var client: std.http.Client = .{ .allocator = h.gpa, .io = io };
     defer client.deinit();
     var buf: [65536]u8 = undefined;
-    const file: std.Io.File = .{ .handle = fd, .flags = .{ .nonblocking = false } };
+    // A descriptor of ztcl on Windows is the value of its handle.
+    const handle = if (builtin.os.tag == .windows) @as(std.os.windows.HANDLE, @ptrFromInt(@as(usize, @intCast(fd)))) else fd;
+    const file: std.Io.File = .{ .handle = handle, .flags = .{ .nonblocking = false } };
     var w = file.writerStreaming(io, &buf);
     const r = client.fetch(.{ .location = .{ .url = url }, .response_writer = &w.interface }) catch return error.Network;
     w.interface.flush() catch return error.Io;
