@@ -440,10 +440,31 @@ fn versionOrder(x: []const u8, y: []const u8) std.math.Order {
     return .eq;
 }
 
+/// True for a URL of plain HTTP with the host 127.0.0.1 and no user
+/// part. `http://127.0.0.1.example.com/` and
+/// `http://127.0.0.1:1@example.com/` are false.
+fn isLoopbackHttp(url: []const u8) bool {
+    const u = std.Uri.parse(url) catch return false;
+    if (!std.mem.eql(u8, u.scheme, "http") or u.user != null or u.password != null) return false;
+    const h = u.host orelse return false;
+    return switch (h) {
+        .raw, .percent_encoded => |s| std.mem.eql(u8, s, "127.0.0.1"),
+    };
+}
+
+test "a release over plain HTTP comes from 127.0.0.1 only" {
+    try std.testing.expect(isLoopbackHttp("http://127.0.0.1/"));
+    try std.testing.expect(isLoopbackHttp("http://127.0.0.1:8080/rel/"));
+    try std.testing.expect(!isLoopbackHttp("http://127.0.0.1.example.com/"));
+    try std.testing.expect(!isLoopbackHttp("http://127.0.0.1:1@example.com/"));
+    try std.testing.expect(!isLoopbackHttp("http://127.0.0.1@example.com/"));
+    try std.testing.expect(!isLoopbackHttp("https://127.0.0.1/"));
+}
+
 /// A fetch of the release at the folder `root`: the manifest and its
 /// signature, then the files of this architecture, then `install`.
 fn fetchFrom(it: *Interp, hook: anytype, s: vmstore.Store, a: std.mem.Allocator, root: []const u8, force: bool) Error!Value {
-    if (!std.mem.startsWith(u8, root, "https://") and !std.mem.startsWith(u8, root, "http://127.0.0.1"))
+    if (!std.mem.startsWith(u8, root, "https://") and !isLoopbackHttp(root))
         return it.fail("a release is fetched over https", .{});
     var t = s.tempDir(a) catch |e| return storeFail(it, e);
     defer t.remove(a, s);
