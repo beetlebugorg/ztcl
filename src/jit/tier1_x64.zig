@@ -230,7 +230,10 @@ pub const Emitter = struct {
             0 => .llength,
             1 => .lindex,
             2 => .string_length,
-            else => .string_index,
+            3 => .string_index,
+            4 => .dict_get,
+            5 => .dict_exists,
+            else => .dict_size,
         };
     }
 

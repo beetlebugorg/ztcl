@@ -159,8 +159,8 @@ fn effect(code: *const Code, pc: u32) ?Effect {
             return .{ .need = 1, .push = 1 };
         },
         .access => return switch (i.x) {
-            0, 2 => .{ .need = 1, .push = 1 },
-            1, 3 => .{ .need = 2, .push = 1 },
+            0, 2, 6 => .{ .need = 1, .push = 1 },
+            1, 3, 4, 5 => .{ .need = 2, .push = 1 },
             else => null,
         },
         .binary => {
