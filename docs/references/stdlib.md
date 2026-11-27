@@ -43,6 +43,7 @@ The JSON parser of ztcl implements the simdjson algorithm in Zig. The code in `s
 ## TLS
 
 - RFC 8446 (TLS 1.3), RFC 8448 (example handshake traces), RFC 5869 (HKDF), RFC 5280 (X.509), RFC 6125 (host names), RFC 6066 (SNI), RFC 7748 (X25519), RFC 8032 (Ed25519), RFC 8017 (RSA), RFC 8439 (ChaCha20-Poly1305).
+- `src/tls/testdata/rfc8448.txt` has the values of the five traces of RFC 8448. `tools/rfc8448-vectors.py` makes it from the text of the RFC.
 - Project Wycheproof, https://github.com/C2SP/wycheproof. Test sets for the primitives.
 - x509-limbo, https://github.com/C2SP/x509-limbo. The chain validation cases.
 - tlsfuzzer, https://github.com/tlsfuzzer/tlsfuzzer. It runs as an outside program. ztcl reads no source of it. Task 21 records its license.

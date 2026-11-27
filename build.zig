@@ -74,6 +74,15 @@ pub fn build(b: *std.Build) void {
     const tests = b.addTest(.{ .root_module = ztcl });
     const test_step = b.step("test", "Run the tests of the interpreter and the shell");
     test_step.dependOn(&b.addRunArtifact(tests).step);
+    // The TLS record layer and key schedule against RFC 8448, RFC 5869,
+    // and RFC 8439. `zig build test` runs them too.
+    const tls_run = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/tls/vectors.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) }));
+    b.step("tls-vectors", "Check the TLS record layer and key schedule with the RFC vectors").dependOn(&tls_run.step);
+    test_step.dependOn(&tls_run.step);
     // The tests of C packages only, for a build with `-Dcext=true`.
     const cext_tests = b.addTest(.{ .root_module = ztcl, .filters = &.{"cext:"} });
     b.step("test-cext-native", "Run the tests of the native loader of C packages").dependOn(&b.addRunArtifact(cext_tests).step);
