@@ -229,7 +229,7 @@ fn runTclsh(it: *tcl.Interp, out: *Io.Writer, words: []const []const u8, root: ?
     const channels = chan_ok and it.capabilities & @backingInt(tcl.interp.Capability.channels) != 0;
     if (comptime chan_ok) {
         tcl.sys.ignorePipeSignal();
-        if (channels) try tcl.chan.useStdio(it);
+        if (channels and it.chans.table.get("stdin") == null) try tcl.chan.useStdio(it);
         if (root != null and cwd != null and std.mem.startsWith(u8, cwd.?, root.?)) {
             it.fs.cwd = std.mem.trim(u8, cwd.?[root.?.len..], "/");
         }
@@ -654,6 +654,11 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
             // script. It must not end the runner.
             if (comptime chan_ok) tcl.sys.ignorePipeSignal();
             try it.allow(bits);
+            // The channels capability gives stdin, stdout, and stderr, as
+            // in tclsh.
+            if (comptime chan_ok) {
+                if (bits & @backingInt(tcl.interp.Capability.channels) != 0 and it.chans.table.get("stdin") == null) try tcl.chan.useStdio(&it);
+            }
             // The files of the host, as in tclsh, unless --root came first.
             // A --root after this flag turns the jail on.
             const fs_bits = @backingInt(tcl.interp.Capability.file) | @backingInt(tcl.interp.Capability.channels);

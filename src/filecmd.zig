@@ -483,8 +483,15 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (eql(s, "volumes")) return .{ .str = "/" };
     if (eql(s, "system")) return value.newList(a, &.{ .{ .str = "native" }, .{ .str = "root" } });
     if (eql(s, "channels")) {
+        if (args.len > 1) return it.wrongArgs("file channels ?pattern?");
+        const pat: ?[]const u8 = if (args.len == 1) try it.str(args[0]) else null;
         var out: std.ArrayList(Value) = .empty;
-        for (it.chans.table.keys()) |k| try out.append(a, .{ .str = k });
+        for (it.chans.table.keys()) |k| {
+            // A name with a leading zero byte is a channel that no script can name.
+            if (k.len > 0 and k[0] == 0) continue;
+            if (pat) |q| if (!@import("cmds.zig").globMatch(q, k, false)) continue;
+            try out.append(a, .{ .str = k });
+        }
         return value.wrapList(a, out.items);
     }
     if (try onMount(it, s, args)) |v| return v;

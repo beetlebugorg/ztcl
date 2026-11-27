@@ -10,10 +10,10 @@ autoMkindex.test	1	1
 basic.test	100	100
 binary.test	602	602
 case.test	15	15
-chan.test	17	17
-chanio.test	297	297
+chan.test	25	25
+chanio.test	302	302
 clock.test	8390	8390
-cmdAH.test	93	93
+cmdAH.test	95	95
 cmdIL.test	137	137
 cmdInfo.test	0	0
 cmdMZ.test	82	82
@@ -57,8 +57,8 @@ indexObj.test	0	0
 info.test	106	106
 init.test	0	0
 interp.test	198	198
-io.test	312	312
-ioCmd.test	78	78
+io.test	317	317
+ioCmd.test	94	94
 ioTrans.test	2	2
 iogt.test	0	0
 join.test	10	10
@@ -151,4 +151,4 @@ winPipe.test	0	0
 winTime.test	0	0
 word.test	45	45
 zlib.test	0	0
-total	37671	37671
+total	37707	37707

@@ -83,7 +83,7 @@ In the default interpreter, `open`, `socket`, `exec`, `file`, `clock`, `source`,
 
 ## Optional commands
 
-`package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, and `exec` are capabilities. The default interpreter does not have them. An embedder turns them on with `Interp.allow`, and the runner with `--allow package,interp,clock,channels,file,event,socket,exec --root DIR`. A child interpreter has at most the capabilities of its parent. A safe child has only the event loop of its parent.
+`package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, and `exec` are capabilities. The default interpreter does not have them. An embedder turns them on with `Interp.allow`, and the runner with `--allow package,interp,clock,channels,file,event,socket,exec --root DIR`. A child interpreter has at most the capabilities of its parent. A safe child has only the event loop of its parent. With `--allow channels`, the runner makes `stdin`, `stdout`, and `stderr` channels on the descriptors 0, 1, and 2, as tclsh does. Without that capability, `puts` writes to the output callback of the embedder.
 
 `clock` reads the time and the zone data only through `Interp.clock_host`, a callback of the embedder. Named zones are TZif data from that callback.
 

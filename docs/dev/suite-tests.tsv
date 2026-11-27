@@ -1334,7 +1334,7 @@ case.test	case-3.2	pass	pass
 case.test	case-3.3	pass	pass		
 chan.test	chan-1.1	pass	pass		
 chan.test	chan-1.2	pass	pass		
-chan.test	chan-10.1	fail	fail	bug	code 0/1: stderr stdin stdout \| want: wrong # args: should be "chan names ?pattern?"
+chan.test	chan-10.1	fail	fail	bug	code 0/1: stdin stdout stderr \| want: wrong # args: should be "chan names ?pattern?"
 chan.test	chan-11.1	fail	fail	message	code 1/1: wrong # args: should be "puts ?-nonewline? ?channelId? string" \| want: wrong # args: should be "chan puts ?-nonewline? ?channelId? string"
 chan.test	chan-12.1	fail	fail	message	code 1/1: wrong # args: should be "read channelId ?numChars?" or "read ?-nonewline? channelId" \| want: wrong # args: should be "chan read channelId ?numChars?" or "chan read ?-nonewline? channelId"
 chan.test	chan-13.1	fail	fail	message	code 1/1: wrong # args: should be "seek channelId offset ?origin?" \| want: wrong # args: should be "chan seek channelId offset ?origin?"
@@ -1342,15 +1342,15 @@ chan.test	chan-14.1	fail	fail	message	code 1/1: wrong # args: should be "tell ch
 chan.test	chan-15.1	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "truncate": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "chan truncate channe...
 chan.test	chan-15.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "truncate": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 12
 chan.test	chan-16.1	pass	pass		
-chan.test	chan-16.10	fail	fail	bug	code 1/0,2: can not find channel named "stdin" \| want: -1
-chan.test	chan-16.11	fail	fail	bug	code 1/0,2: can not find channel named "stdout" \| want: 0
+chan.test	chan-16.10	pass	pass		
+chan.test	chan-16.11	pass	pass		
 chan.test	chan-16.12	pass	pass		
 chan.test	chan-16.13	pass	pass		
 chan.test	chan-16.2	pass	pass		
 chan.test	chan-16.3	pass	pass		
-chan.test	chan-16.4	fail	fail	message	code 1/1: can not find channel named "stdout" \| want: bad mode "input output": must be input or output
-chan.test	chan-16.5	fail	fail	bug	code 1/0,2: can not find channel named "stdout" \| want: -1
-chan.test	chan-16.6	fail	fail	bug	code 1/0,2: can not find channel named "stdin" \| want: 0
+chan.test	chan-16.4	pass	pass		
+chan.test	chan-16.5	pass	pass		
+chan.test	chan-16.6	pass	pass		
 chan.test	chan-16.7	pass	pass		
 chan.test	chan-16.8	pass	pass		
 chan.test	chan-16.9	pass	pass		
@@ -1363,10 +1363,10 @@ chan.test	chan-3.1	fail	fail	message	code 1/1: wrong # args: should be "close ch
 chan.test	chan-3.2	pass	pass		
 chan.test	chan-3.3	pass	pass		
 chan.test	chan-4.1	fail	fail	message	code 1/1: wrong # args: should be "fconfigure channelId ?-option value ...?" \| want: wrong # args: should be "chan configure channelId ?-option value ...?"
-chan.test	chan-4.2	fail	fail	bug	code 0/1:  \| want: bad value*
-chan.test	chan-4.3	fail	fail	bug	code 0/1:  \| want: bad value*
+chan.test	chan-4.2	pass	pass		
+chan.test	chan-4.3	pass	pass		
 chan.test	chan-4.4	pass	pass		
-chan.test	chan-4.5	fail	fail	bug	code 0/1:  \| want: bad value for -eofchar:*
+chan.test	chan-4.5	pass	pass		
 chan.test	chan-4.6	pass	pass		
 chan.test	chan-5.1	fail	fail	message	code 1/1: wrong # args: should be "fcopy input output ?-size size? ?-command callback?" \| want: wrong # args: should be "chan copy input output ?-size size? ?-command callback?"
 chan.test	chan-6.1	fail	fail	message	code 1/1: wrong # args: should be "eof channelId" \| want: wrong # args: should be "chan eof channelId"
@@ -1408,9 +1408,9 @@ chanio.test	chan-io-14.1	skip	skip	internals	testchannel
 chanio.test	chan-io-14.2	fail	fail	bug	code 0/0,2: {} {} {} \| want: line line none
 chanio.test	chan-io-14.3	fail	fail	bug	cleanup: can not find channel named "file193"
 chanio.test	chan-io-14.4	fail	fail	bug	cleanup: can not find channel named "file194"
-chanio.test	chan-io-14.5	fail	fail	bug	code 1/0,2: can not find channel named "stdin" \| want: {channel "stdin" wasn't opened for writing} {} {can not find channel named "stdin"}
-chanio.test	chan-io-14.6	fail	fail	bug	code 1/0,2: can not find channel named "stdout" \| want: {} {} {can not find channel named "stdout"}
-chanio.test	chan-io-14.7	fail	fail	bug	code 1/0,2: can not find channel named "stderr" \| want: {} {} {can not find channel named "stderr"}
+chanio.test	chan-io-14.5	fail	fail	bug	code 0/0,2: {can not find channel named "stdin"} {can not find channel named "stdin"} {can not find channel named "stdin"} \| want: {channel "stdin" wasn't opened for writing} {} {can not find chan...
+chanio.test	chan-io-14.6	fail	fail	bug	code 0/0,2: {} {can not find channel named "stdout"} {} \| want: {} {} {can not find channel named "stdout"}
+chanio.test	chan-io-14.7	fail	fail	bug	code 0/0,2: {} {can not find channel named "stderr"} {} \| want: {} {} {can not find channel named "stderr"}
 chanio.test	chan-io-14.8	fail	fail	bug	code 0/0,2:  \| want: hello
 chanio.test	chan-io-14.9	pass	pass		
 chanio.test	chan-io-15.1	skip	skip	tcl	emptyTest
@@ -1421,7 +1421,7 @@ chanio.test	chan-io-17.3	skip	skip	internals	testchannel
 chanio.test	chan-io-18.1	skip	skip	internals	testchannel
 chanio.test	chan-io-18.2	skip	skip	internals	testchannel
 chanio.test	chan-io-18.3	skip	skip	internals	testchannel
-chanio.test	chan-io-19.1	fail	fail	bug	code 1/0,2: can not find channel named "stdin" \| want: 0
+chanio.test	chan-io-19.1	pass	pass		
 chanio.test	chan-io-19.2	pass	pass		
 chanio.test	chan-io-19.3	pass	pass		
 chanio.test	chan-io-19.4	skip	skip	internals	testchannel
@@ -1453,7 +1453,7 @@ chanio.test	chan-io-28.4	skip	skip	internals	testchannel
 chanio.test	chan-io-28.5	skip	skip	internals	testchannel
 chanio.test	chan-io-28.6	pass	pass		
 chanio.test	chan-io-28.7	pass	pass		
-chanio.test	chan-io-29.1	fail	fail	message	code 1/1: can not find channel named "stdin" \| want: channel "stdin" wasn't opened for writing
+chanio.test	chan-io-29.1	pass	pass		
 chanio.test	chan-io-29.10	pass	pass		
 chanio.test	chan-io-29.11	pass	pass		
 chanio.test	chan-io-29.12	pass	pass		
@@ -1487,7 +1487,7 @@ chanio.test	chan-io-29.5	skip	skip	internals	testchannel
 chanio.test	chan-io-29.6	skip	skip	internals	testchannel
 chanio.test	chan-io-29.7	skip	skip	internals	testchannel
 chanio.test	chan-io-29.8	skip	skip	internals	testchannel
-chanio.test	chan-io-29.9	fail	fail	message	code 1/1: can not find channel named "stdin" \| want: channel "stdin" wasn't opened for writing
+chanio.test	chan-io-29.9	pass	pass		
 chanio.test	chan-io-3.1	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want: abcdefghijklmnopqrstuvwxyz  
 chanio.test	chan-io-3.2	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want: {123456789012345 } {123456789012345  12}
 chanio.test	chan-io-3.3	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want:   12
@@ -1556,7 +1556,7 @@ chanio.test	chan-io-31.6	fail	fail	bug	code 0/0,2: 5 6 crlf 0 there 12 crlf 0 \|
 chanio.test	chan-io-31.7	pass	pass		
 chanio.test	chan-io-31.8	pass	pass		
 chanio.test	chan-io-31.9	pass	pass		
-chanio.test	chan-io-32.1	fail	fail	message	code 1/1: can not find channel named "stdout" \| want: channel "stdout" wasn't opened for reading
+chanio.test	chan-io-32.1	pass	pass		
 chanio.test	chan-io-32.10	pass	pass		
 chanio.test	chan-io-32.11	pass	pass		
 chanio.test	chan-io-32.12	pass	pass		
@@ -1564,7 +1564,7 @@ chanio.test	chan-io-32.13	pass	pass
 chanio.test	chan-io-32.14	pass	pass		
 chanio.test	chan-io-32.15	pass	pass		
 chanio.test	chan-io-32.16	pass	pass		
-chanio.test	chan-io-32.2	fail	fail	bug	code 1/0,2: can not find channel named "stdin" \| want: 
+chanio.test	chan-io-32.2	pass	pass		
 chanio.test	chan-io-32.3	pass	pass		
 chanio.test	chan-io-32.4	pass	pass		
 chanio.test	chan-io-32.5	pass	pass		
@@ -10562,14 +10562,14 @@ cmdAH.test	cmdAH-30.5	pass	pass
 cmdAH.test	cmdAH-30.6	pass	pass		
 cmdAH.test	cmdAH-30.7	pass	pass		
 cmdAH.test	cmdAH-30.8	fail	fail	bug	code 0/1: . \| want: user "woohgy" doesn't exist
-cmdAH.test	cmdAH-31.1	fail	fail	bug	code 0/1:  \| want: wrong # args: should be "file channels ?pattern?"
+cmdAH.test	cmdAH-31.1	pass	pass		
 cmdAH.test	cmdAH-31.10	fail	fail	bug	code 1/0,2: can not find channel named "file25" \| want: 
 cmdAH.test	cmdAH-31.11	fail	fail	bug	code 1/0,2: invalid command name "file" \| want: {} file25
 cmdAH.test	cmdAH-31.12	fail	fail	bug	code 1/0,2: invalid command name "file" \| want: file25 stdout
 cmdAH.test	cmdAH-31.13	fail	fail	bug	code 1/0,2: invalid command name "close" \| want: stdout
 cmdAH.test	cmdAH-31.2	fail	fail	bug	code 0/0,2:  \| want: stderr stdin stdout
 cmdAH.test	cmdAH-31.3	pass	pass		
-cmdAH.test	cmdAH-31.4	fail	fail	bug	code 0/0,2:  \| want: stderr stdin stdout
+cmdAH.test	cmdAH-31.4	pass	pass		
 cmdAH.test	cmdAH-31.5	pass	pass		
 cmdAH.test	cmdAH-31.6	fail	fail	bug	code 1/0,2: invalid command name "file" \| want: 
 cmdAH.test	cmdAH-31.7	pass	pass		
@@ -11879,7 +11879,7 @@ encoding.test	encoding-21.1	pass	pass
 encoding.test	encoding-22.1	pass	pass		
 encoding.test	encoding-28.0	fail	fail	bug	code 2/0,2: 6 \| want: 85
 encoding.test	encoding-3.1	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: shiftjis
-encoding.test	encoding-3.2	fail	fail	bug	code 0/0,2:  \| want: jis0208
+encoding.test	encoding-3.2	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: jis0208
 encoding.test	encoding-4.1	skip	skip	internals	testencoding
 encoding.test	encoding-5.1	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 8C
 encoding.test	encoding-5.2	pass	pass		
@@ -27509,8 +27509,8 @@ fileName.test	filename-11.1	fail	fail	message	code 1/1: wrong # args: should be 
 fileName.test	filename-11.10	skip	skip	internals	testsetplatform
 fileName.test	filename-11.11	skip	skip	internals	testsetplatform
 fileName.test	filename-11.12	skip	skip	internals	testsetplatform
-fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl178121/globTest
-fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl178121/globTest
+fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl424824/globTest
+fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl424824/globTest
 fileName.test	filename-11.16	pass	pass		
 fileName.test	filename-11.17	pass	pass		
 fileName.test	filename-11.17.1	skip	skip	platform	win
@@ -27559,7 +27559,7 @@ fileName.test	filename-11.41	fail	fail	feature	code 1/0,2: bad option "-dir": mu
 fileName.test	filename-11.42	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
 fileName.test	filename-11.43	fail	fail	message	code 1/1: bad option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: ambiguous option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types, or --
 fileName.test	filename-11.44	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: "-directory" cannot be used with "-path"
-fileName.test	filename-11.45	fail	fail	bug	code 0/0,2: {} {all.tcl fileName.test httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcl178121 tcltests.tcl ztc \| want: equal
+fileName.test	filename-11.45	fail	fail	bug	code 0/0,2: {} {all.tcl fileName.test httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcl424824 tcltests.tcl ztc \| want: equal
 fileName.test	filename-11.46	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: bad argument to "-types": abcde
 fileName.test	filename-11.47	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde
 fileName.test	filename-11.48	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: bad argument to "-types": abcde
@@ -27607,7 +27607,7 @@ fileName.test	filename-14.1	pass	pass
 fileName.test	filename-14.11	pass	pass		
 fileName.test	filename-14.13	pass	pass		
 fileName.test	filename-14.15	fail	fail	bug	code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c \| want: globTest/a1/ globTest/a2/ globTest/a3/
-fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl178121/globTest/z1.c
+fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl424824/globTest/z1.c
 fileName.test	filename-14.18	pass	pass		
 fileName.test	filename-14.20	pass	pass		
 fileName.test	filename-14.21	pass	pass		
@@ -27848,7 +27848,7 @@ fileSystem.test	filesystem-6.12	pass	pass
 fileSystem.test	filesystem-6.13	pass	pass		
 fileSystem.test	filesystem-6.14	fail	fail	design	code 1/1: could not link: links are not available in the root folder \| want: could not read link "": no such file or directory
 fileSystem.test	filesystem-6.15	fail	fail	bug	code 0/1:  \| want: could not read "": no such file or directory
-fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795748338 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795750350 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.17	fail	fail	feature	code 1/1: file mtime with a new time is not available \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.18	fail	fail	bug	code 0/1:  \| want: can't create directory "": no such file or directory
 fileSystem.test	filesystem-6.19	pass	pass		
@@ -27863,7 +27863,7 @@ fileSystem.test	filesystem-6.26	pass	pass
 fileSystem.test	filesystem-6.27	fail	fail	bug	code 0/1: / \| want: unrecognised path
 fileSystem.test	filesystem-6.28	fail	fail	bug	code 0/1: 280 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.29	pass	pass		
-fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795748338 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795750350 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.30	fail	fail	bug	code 0/1: native root \| want: unrecognised path
 fileSystem.test	filesystem-6.31	pass	pass		
 fileSystem.test	filesystem-6.32	fail	fail	bug	code 0/1: directory \| want: could not read "": no such file or directory
@@ -29442,9 +29442,9 @@ io.test	io-14.1	skip	skip	internals	testchannel
 io.test	io-14.2	fail	fail	bug	code 0/0,2: {} {} {} \| want: line line none
 io.test	io-14.3	fail	fail	bug	code 1/0,2: child process exited abnormally \| want: { out } {err }
 io.test	io-14.4	fail	fail	bug	code 1/0,2: child process exited abnormally \| want: { close stdin stdout } {stderr }
-io.test	io-14.5	fail	fail	bug	code 1/0,2: can not find channel named "stdin" \| want: {channel "stdin" wasn't opened for writing} {} {can not find channel named "stdin"}
-io.test	io-14.6	fail	fail	bug	code 1/0,2: interpreter named "z" already exists, cannot create \| want: {} {} {can not find channel named "stdout"}
-io.test	io-14.7	fail	fail	bug	code 1/0,2: interpreter named "z" already exists, cannot create \| want: {} {} {can not find channel named "stderr"}
+io.test	io-14.5	fail	fail	bug	code 0/0,2: {can not find channel named "stdin"} {can not find channel named "stdin"} {can not find channel named "stdin"} \| want: {channel "stdin" wasn't opened for writing} {} {can not find chan...
+io.test	io-14.6	fail	fail	bug	code 0/0,2: {} {can not find channel named "stdout"} {} \| want: {} {} {can not find channel named "stdout"}
+io.test	io-14.7	fail	fail	bug	code 0/0,2: {} {can not find channel named "stderr"} {} \| want: {} {} {can not find channel named "stderr"}
 io.test	io-14.8	fail	fail	bug	code 0/0,2:  \| want: hello
 io.test	io-14.9	pass	pass		
 io.test	io-15.1	skip	skip	tcl	emptyTest
@@ -29455,7 +29455,7 @@ io.test	io-17.3	skip	skip	internals	testchannel
 io.test	io-18.1	skip	skip	internals	testchannel
 io.test	io-18.2	skip	skip	internals	testchannel
 io.test	io-18.3	skip	skip	internals	testchannel
-io.test	io-19.1	fail	fail	bug	code 1/0,2: can not find channel named "stdin" \| want: 0
+io.test	io-19.1	pass	pass		
 io.test	io-19.2	pass	pass		
 io.test	io-19.3	pass	pass		
 io.test	io-19.4	skip	skip	internals	testchannel
@@ -29485,7 +29485,7 @@ io.test	io-28.2	fail	fail	feature	code 1/0,2: bad option "share": must be alias,
 io.test	io-28.3	skip	skip	tcl	nonPortable
 io.test	io-28.4	skip	skip	internals	testchannel
 io.test	io-28.5	skip	skip	internals	testchannel
-io.test	io-29.1	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't opened for writing}
+io.test	io-29.1	pass	pass		
 io.test	io-29.10	pass	pass		
 io.test	io-29.11	pass	pass		
 io.test	io-29.12	pass	pass		
@@ -29522,7 +29522,7 @@ io.test	io-29.5	skip	skip	internals	testchannel
 io.test	io-29.6	skip	skip	internals	testchannel
 io.test	io-29.7	skip	skip	internals	testchannel
 io.test	io-29.8	skip	skip	internals	testchannel
-io.test	io-29.9	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't opened for writing}
+io.test	io-29.9	pass	pass		
 io.test	io-3.1	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want: abcdefghijklmnopqrstuvwxyz  
 io.test	io-3.2	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want: {123456789012345 } {123456789012345  12}
 io.test	io-3.3	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want:   12
@@ -29592,7 +29592,7 @@ io.test	io-31.6	fail	fail	bug	code 0/0,2: 5 6 crlf 0 there 12 crlf 0 \| want: 21
 io.test	io-31.7	pass	pass		
 io.test	io-31.8	pass	pass		
 io.test	io-31.9	pass	pass		
-io.test	io-32.1	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't opened for reading}
+io.test	io-32.1	pass	pass		
 io.test	io-32.10	pass	pass		
 io.test	io-32.11	pass	pass		
 io.test	io-32.11.1	fail	fail	bug	code 0/0,2: {hello } { hello } \| want: {hello } {hello }
@@ -29602,7 +29602,7 @@ io.test	io-32.13	pass	pass
 io.test	io-32.14	pass	pass		
 io.test	io-32.15	pass	pass		
 io.test	io-32.16	pass	pass		
-io.test	io-32.2	fail	fail	bug	code 1/0,2: can not find channel named "stdin" \| want: 
+io.test	io-32.2	pass	pass		
 io.test	io-32.3	pass	pass		
 io.test	io-32.4	pass	pass		
 io.test	io-32.5	pass	pass		
@@ -29870,15 +29870,15 @@ ioCmd.test	iocmd-1.1	pass	pass
 ioCmd.test	iocmd-1.2	pass	pass		
 ioCmd.test	iocmd-1.3	pass	pass		
 ioCmd.test	iocmd-1.4	pass	pass		
-ioCmd.test	iocmd-1.5	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't opened for writing}
+ioCmd.test	iocmd-1.5	pass	pass		
 ioCmd.test	iocmd-1.6	pass	pass		
 ioCmd.test	iocmd-1.7	pass	pass		
 ioCmd.test	iocmd-1.8	pass	pass		
 ioCmd.test	iocmd-10.1	pass	pass		
 ioCmd.test	iocmd-10.2	pass	pass		
 ioCmd.test	iocmd-10.3	pass	pass		
-ioCmd.test	iocmd-10.4	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't opened for reading}
-ioCmd.test	iocmd-10.5	fail	fail	bug	code 1/0,2: can not find channel named "stdin" \| want: 0
+ioCmd.test	iocmd-10.4	pass	pass		
+ioCmd.test	iocmd-10.5	pass	pass		
 ioCmd.test	iocmd-11.1	fail	fail	bug	code 0/0,2: 1 {can't write input to command: standard input was redirected} NONE \| want: 1 {can't write input to command: standard input was redirected} {TCL OPERATION EXEC BADREDIRECT}
 ioCmd.test	iocmd-11.2	fail	fail	bug	code 0/0,2: 1 {can't read output from command: standard output was redirected} NONE \| want: 1 {can't read output from command: standard output was redirected} {TCL OPERATION EXEC BADREDIRECT}
 ioCmd.test	iocmd-11.3	fail	fail	bug	code 0/0,2: 1 {can't read output from command: standard output was redirected} NONE \| want: 1 {can't read output from command: standard output was redirected} {TCL OPERATION EXEC BADREDIRECT}
@@ -29910,10 +29910,10 @@ ioCmd.test	iocmd-14.10	pass	pass
 ioCmd.test	iocmd-14.2	pass	pass		
 ioCmd.test	iocmd-14.3	pass	pass		
 ioCmd.test	iocmd-14.4	pass	pass		
-ioCmd.test	iocmd-14.5	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdout"} \| want: 0 0
-ioCmd.test	iocmd-14.6	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdin"} \| want: 0 0
-ioCmd.test	iocmd-14.7	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdout"} \| want: 0 0
-ioCmd.test	iocmd-14.8	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stderr"} \| want: 0 0
+ioCmd.test	iocmd-14.5	pass	pass		
+ioCmd.test	iocmd-14.6	pass	pass		
+ioCmd.test	iocmd-14.7	pass	pass		
+ioCmd.test	iocmd-14.8	pass	pass		
 ioCmd.test	iocmd-14.9	pass	pass		
 ioCmd.test	iocmd-15.1	pass	pass		
 ioCmd.test	iocmd-15.10	fail	fail	bug	code 0/0,2: 1 {fcopy -command is not available} \| want: 1 {bad option "foo": must be -size or -command}
@@ -29930,7 +29930,7 @@ ioCmd.test	iocmd-15.9	fail	fail	bug	code 0/0,2: 0 0 \| want: 1 {channel "file69"
 ioCmd.test	iocmd-2.1	pass	pass		
 ioCmd.test	iocmd-2.2	pass	pass		
 ioCmd.test	iocmd-2.3	pass	pass		
-ioCmd.test	iocmd-2.4	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't opened for writing}
+ioCmd.test	iocmd-2.4	pass	pass		
 ioCmd.test	iocmd-20.0	pass	pass		
 ioCmd.test	iocmd-20.1	pass	pass		
 ioCmd.test	iocmd-21.0	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "chan create mode cmd...
@@ -29944,7 +29944,7 @@ ioCmd.test	iocmd-21.15	fail	fail	feature	code 0/0,2: unknown or ambiguous subcom
 ioCmd.test	iocmd-21.16	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *supports "cget" but not "cgetall"
 ioCmd.test	iocmd-21.17	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *supports "cgetall" but not "cget"
 ioCmd.test	iocmd-21.18	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {} {initialize rc* {read write}} rc* {finaliz...
-ioCmd.test	iocmd-21.19	fail	fail	feature	code 0/0,2: {file18 file19} 1 {unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek \| want: {} {initialize rc* {read write}} 1 ...
+ioCmd.test	iocmd-21.19	fail	fail	feature	code 0/0,2: {stdin stdout stderr file18 file19} 1 {unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pi \| want: {} {initialize rc* {read write}} 1 ...
 ioCmd.test	iocmd-21.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 
 ioCmd.test	iocmd-21.20	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
 ioCmd.test	iocmd-21.21	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
@@ -30051,7 +30051,7 @@ ioCmd.test	iocmd-29.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcomm
 ioCmd.test	iocmd-3.1	pass	pass		
 ioCmd.test	iocmd-3.2	pass	pass		
 ioCmd.test	iocmd-3.3	pass	pass		
-ioCmd.test	iocmd-3.4	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't opened for reading}
+ioCmd.test	iocmd-3.4	pass	pass		
 ioCmd.test	iocmd-3.5	pass	pass		
 ioCmd.test	iocmd-30.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {watch rc* read} {} {watch rc* {}}
 ioCmd.test	iocmd-30.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {watch rc* write} {} {watch rc* {}} {}
@@ -30078,14 +30078,14 @@ ioCmd.test	iocmd-4.2	pass	pass
 ioCmd.test	iocmd-4.3	pass	pass		
 ioCmd.test	iocmd-4.4	pass	pass		
 ioCmd.test	iocmd-4.5	pass	pass		
-ioCmd.test	iocmd-4.6	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't opened for reading}
-ioCmd.test	iocmd-4.7	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't opened for reading}
+ioCmd.test	iocmd-4.6	pass	pass		
+ioCmd.test	iocmd-4.7	pass	pass		
 ioCmd.test	iocmd-4.8	pass	pass		
-ioCmd.test	iocmd-4.9	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdin"} {TCL LOOKUP CHANNEL stdin} \| want: 1 {expected non-negative integer but got "foo"} {TCL VALUE NUMBER}
+ioCmd.test	iocmd-4.9	fail	fail	bug	code 0/0,2: 1 {expected non-negative integer but got "foo"} NONE \| want: 1 {expected non-negative integer but got "foo"} {TCL VALUE NUMBER}
 ioCmd.test	iocmd-5.1	pass	pass		
 ioCmd.test	iocmd-5.2	pass	pass		
-ioCmd.test	iocmd-5.3	fail	fail	message	code 1/1: can not find channel named "stdin" \| want: expected integer but got "gugu"
-ioCmd.test	iocmd-5.4	fail	fail	message	code 1/1: can not find channel named "stdin" \| want: bad origin "gugu": must be start, current, or end
+ioCmd.test	iocmd-5.3	pass	pass		
+ioCmd.test	iocmd-5.4	pass	pass		
 ioCmd.test	iocmd-6.1	pass	pass		
 ioCmd.test	iocmd-6.2	pass	pass		
 ioCmd.test	iocmd-6.3	pass	pass		
@@ -30099,7 +30099,7 @@ ioCmd.test	iocmd-8.10	pass	pass
 ioCmd.test	iocmd-8.11	pass	pass		
 ioCmd.test	iocmd-8.12	pass	pass		
 ioCmd.test	iocmd-8.13	pass	pass		
-ioCmd.test	iocmd-8.14	fail	fail	bug	code 0/0,2:  \| want: 4096
+ioCmd.test	iocmd-8.14	pass	pass		
 ioCmd.test	iocmd-8.15.1	fail	fail	message	code 1/1: bad option "-blah": should be one of -blocking, -buffering, -buffersize, -encoding, -eofchar, or -translation \| want: bad option "-blah": should be one of -blocking, -buffering, -buffers...
 ioCmd.test	iocmd-8.16	pass	pass		
 ioCmd.test	iocmd-8.17	skip	skip	tcl	nonPortable
@@ -30108,8 +30108,8 @@ ioCmd.test	iocmd-8.19	skip	skip	tcl	nonPortable
 ioCmd.test	iocmd-8.2	fail	fail	bug	code 0/0,2: 1 {can not find channel named "a"} \| want: 1 {wrong # args: should be "fconfigure channelId ?-option value ...?"}
 ioCmd.test	iocmd-8.3	pass	pass		
 ioCmd.test	iocmd-8.4	pass	pass		
-ioCmd.test	iocmd-8.5	fail	fail	bug	code 0/0,2: 0 {} \| want: 1 {bad value for -buffering: must be one of full, line, or none}
-ioCmd.test	iocmd-8.6	fail	fail	bug	code 0/0,2: 0 {} \| want: 1 {bad value for -translation: must be one of auto, binary, cr, lf, crlf, or platform}
+ioCmd.test	iocmd-8.5	pass	pass		
+ioCmd.test	iocmd-8.6	pass	pass		
 ioCmd.test	iocmd-8.7	fail	fail	feature	code 1/0,2: unknown encoding "unicode" \| want: -blocking 1 -buffering full -buffersize 4096 -encoding unicode -eofchar {} -translation lf
 ioCmd.test	iocmd-8.8	fail	fail	feature	code 1/0,2: unknown encoding "unicode" \| want: line {-blocking 1 -buffering line -buffersize 3030 -encoding unicode -eofchar {} -translation lf}
 ioCmd.test	iocmd-8.9	fail	fail	bug	code 0/0,2: -blocking 1 -buffering none -buffersize 4040 -encoding binary -eofchar {} -translation binary \| want: -blocking 1 -buffering none -buffersize 4040 -encoding binary -eofchar {} -transla...
@@ -30229,7 +30229,7 @@ ioTrans.test	iortrans-2.17	fail	fail	feature	code 1/1: unknown or ambiguous subc
 ioTrans.test	iortrans-2.18	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *supports "flush" but not "write"
 ioTrans.test	iortrans-2.19	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {} {initialize rt* {read write}} file* {drain r...
 ioTrans.test	iortrans-2.2	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: can not find channel named ""
-ioTrans.test	iortrans-2.20	fail	fail	feature	code 0/0,2: {} 1 {unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell} file \| want: {} {initialize rt* {read write}} 1 ...
+ioTrans.test	iortrans-2.20	fail	fail	feature	code 0/0,2: {stdin stdout stderr} 1 {unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read,  \| want: {} {initialize rt* {read write}} 1 ...
 ioTrans.test	iortrans-2.3	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: unmatched open brace in list
 ioTrans.test	iortrans-2.4	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: invalid command name "foo"
 ioTrans.test	iortrans-2.5	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "foo"
@@ -38133,7 +38133,7 @@ socket.test	socket-15.1.2	pass	pass
 socket.test	socket-15.1.3	pass	pass		
 socket.test	socket-15.1.4	pass	pass		
 socket.test	socket-15.1.5	pass	pass		
-socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2843 \| want: couldn't open socket: connection refused
+socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2842 \| want: couldn't open socket: connection refused
 socket.test	socket-15.1.7	pass	pass		
 socket.test	socket-15.1.8	pass	pass		
 socket.test	socket_inet-1.1	pass	pass		
@@ -40673,7 +40673,7 @@ unixFile.test	unixFile-1.6	skip	skip	internals	testfindexecutable
 unixFile.test	unixFile-1.7	skip	skip	internals	testfindexecutable
 unixForkEvent.test	unixforkevent-1.1	skip	skip	internals	testfork
 unixInit.test	unixInit-1.1	pass	pass		
-unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 42001', Got '' \| want: OK
+unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 38505', Got '' \| want: OK
 unixInit.test	unixInit-3.1	pass	pass		
 unixInit.test	unixInit-3.2	fail	fail	bug	code 0/0,2: 1 \| want: 0
 unixInit.test	unixInit-4.1	fail	fail	bug	code 1/0,2: can't read "tcl_pkgPath": no such variable \| want: unix
