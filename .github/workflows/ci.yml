@@ -532,12 +532,40 @@ jobs:
           name: suite-counts
           path: "*.tsv"
 
+  # The scheduled run of the 37 core files of Tcl 9.1.0 with --tcl 9.1,
+  # without and with the JIT. tools/suite-check.py fails the job when the
+  # pass count of a file drops below docs/dev/suite-counts-9.tsv.
+  suite-9:
+    name: Tcl 9.1.0 suite
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Run the suite
+        run: |
+          ulimit -v 6000000
+          zig build
+          tools/fetch-tcl.sh core-9-1-0 > /dev/null
+          tools/suite.sh -t core-9-1-0 -o files-9.tsv | tail -1 &
+          tools/suite.sh -j -t core-9-1-0 -o files-9-jit.tsv | tail -1 &
+          wait
+          python3 -I tools/suite-check.py files-9.tsv files-9-jit.tsv docs/dev/suite-counts-9.tsv | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: suite-counts-9
+          path: "*.tsv"
+
   # A failure of the scheduled full run opens an issue, so it is fixed
   # in the next batch of work.
   report:
     name: Report a failure of the full run
     if: failure() && github.event_name == 'schedule'
-    needs: [test, build-native, jit-macos, jit-arm64-linux, suite, suite-full, wasm, wasm-aot, wasm-point, wasi]
+    needs: [test, build-native, jit-macos, jit-arm64-linux, suite, suite-full, suite-9, wasm, wasm-aot, wasm-point, wasi]
     runs-on: ubuntu-latest
     permissions:
       issues: write

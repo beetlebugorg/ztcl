@@ -7,7 +7,8 @@
 #
 #   -r  The ztcl binary. The default is zig-out/bin/ztcl.
 #   -t  A Tcl release tag. The script fetches it. The default is
-#       core-8-6-16.
+#       core-8-6-16. With a tag of Tcl 9, such as core-9-1-0, the runner
+#       gets --tcl 9.1.
 #   -s  A folder of Tcl test files. It replaces -t.
 #   -a  Runs each .test file of the folder.
 #   -g  A count N: the runner starts a collection at each Nth allocation.
@@ -46,6 +47,9 @@ while getopts ajJnr:t:s:o:p:g: o; do
     esac
 done
 shift $((OPTIND - 1))
+case $tag in
+core-9-*) gc="$gc --tcl 9.1" ;;
+esac
 if [ -z "$tests" ]; then
     src=$("$here/fetch-tcl.sh" "$tag") || exit 1
     tests="$src/tests"

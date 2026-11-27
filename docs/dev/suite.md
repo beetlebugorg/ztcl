@@ -13,6 +13,15 @@ A test is applicable when it is outside the buckets `design`, `platform`, `inter
 
 Unreached is the test count of `tools/suite-scope.tsv` minus the tests that ran: the file stopped before them.
 
+## Tcl 9.1.0
+
+`tools/suite.sh -t core-9-1-0` runs the 37 core test files of Tcl 9.1.0 with `--tcl 9.1`. `docs/dev/suite-counts-9.tsv` has the pass count of each file, and the scheduled CI run checks them. The counts do not compare with the counts of 8.6.16: the files differ.
+
+| Run | Pass |
+|---|---|
+| Interpreter | 11,165 |
+| JIT (`-j`) | 11,165 |
+
 ## Buckets
 
 The tests of the interpreter run that do not pass, by bucket.

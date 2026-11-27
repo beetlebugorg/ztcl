@@ -183,6 +183,23 @@ def main():
     w("")
     w("Unreached is the test count of `tools/suite-scope.tsv` minus the tests that ran: the file stopped before them.")
     w("")
+    w9 = os.path.join(top, "docs/dev/suite-counts-9.tsv")
+    if os.path.exists(w9):
+        c9 = {}
+        with open(w9) as f:
+            for line in f:
+                if not line.startswith("#") and line.strip():
+                    n, p, jp = line.rstrip("\n").split("\t")
+                    c9[n] = (int(p), int(jp))
+        w("## Tcl 9.1.0")
+        w("")
+        w(f"`tools/suite.sh -t core-9-1-0` runs the {len(c9) - 1} core test files of Tcl 9.1.0 with `--tcl 9.1`. `docs/dev/suite-counts-9.tsv` has the pass count of each file, and the scheduled CI run checks them. The counts do not compare with the counts of 8.6.16: the files differ.")
+        w("")
+        w("| Run | Pass |")
+        w("|---|---|")
+        w(f"| Interpreter | {fmt(c9['total'][0])} |")
+        w(f"| JIT (`-j`) | {fmt(c9['total'][1])} |")
+        w("")
     w("## Buckets")
     w("")
     w("The tests of the interpreter run that do not pass, by bucket.")
