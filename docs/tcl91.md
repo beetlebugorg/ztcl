@@ -111,6 +111,7 @@ A name with a namespace, such as `a::v`, also resolves only from the current nam
 - `glob` with no match gives an empty list in 9.1. In 8.6 it is an error unless `-nocomplain`.
 - `tcl_precision` is absent in 9.1. A double has the shortest form that reads back as the same value.
 - `string bytelength` is absent in 9.1.
+- 9.1 has no tilde expansion. A path that starts with `~`, such as `~/notes.txt`, names a file in a folder `~`, not in `$env(HOME)`. Use `[file join $env(HOME) notes.txt]`.
 
 ## What is not done
 
@@ -120,7 +121,6 @@ These parts of Tcl 9.1 are not in ztcl yet. A script that uses them gets an erro
 - `info cmdtype`, `info constant`, `info consts`, `interp set`, `chan isbinary`, `file home`, `file tildeexpand`, `file tempdir`, `clock monotonic`, and `package files`.
 - The options `-backslashes`, `-commands`, and `-variables` of `subst`.
 - The removal of the old forms of `trace` (`variable`, `vdelete`, `vinfo`).
-- The removal of tilde expansion: in 9.1, as in 8.6, a path that starts with `~` names a file in `$env(HOME)`.
 - The changes of `format` for 64-bit values, such as `format %x -1`, and integers above 64 bits in `string is integer`.
 - The zipfs subcommands that 9.1 adds to the ones that ztcl has.
 - C modules for Tcl 9. The stubs table of Tcl 9 differs from the table of 8.6, and the loader of C modules supports only 8.6. A C module for 8.6 loads in both releases: the loader gives it the table of 8.6.
