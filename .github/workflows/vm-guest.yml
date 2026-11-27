@@ -76,14 +76,14 @@ jobs:
       # The initramfs with the agent and BusyBox, for each architecture.
       - run: TARGET=$(uname -m)-linux-musl tools/vm-guest/pack.sh
       # The kernel of the image: Linux 7.3.6 of beetlebugorg/ztcl-guest-kernel,
-      # its run 46020516028 of main (fc4ec87), in the place of the kernel of build.sh.
+      # its run 46040938500 of main (c303719, with the generation ID device), in the place of the kernel of build.sh.
       # The artifact is checked by its SHA-256 and by its SHA256SUMS, and
       # expires on 2027-02-25; a release keeps its own copy of the kernel.
       - name: Take the kernel of ztcl-guest-kernel
         env:
           GH_TOKEN: ${{ github.token }}
-          ARTIFACT: ${{ matrix.name == 'vm-guest' && '15207254636' || '15206899576' }}
-          ZIP_SHA: ${{ matrix.name == 'vm-guest' && '891fb1dca58bce4076131ac47218b0fc545bb5c04ba33c78ab48565a13722bff' || '43b5552e07712196e5a8f392543d810bd2cad1efdb43dacc2cb6124f82da25d5' }}
+          ARTIFACT: ${{ matrix.name == 'vm-guest' && '15220376578' || '15220665875' }}
+          ZIP_SHA: ${{ matrix.name == 'vm-guest' && 'f4a03a312e313efbf6609d5147c982878e351f77e24754069130abe8e27fb984' || '11c18c8c7025c5ecfcfc2d2261a37e186bda43c4445622b3858143881bab4285' }}
         run: |
           set -eu
           d="$RUNNER_TEMP/rk"
@@ -122,7 +122,7 @@ jobs:
           KERNEL=vmlinux tools/vm-guest/test-kvm.sh tools/vm-guest/out
       # The boot test with the kernel of beetlebugorg/ztcl-guest-kernel:
       # the artifact guest-kernel-x86_64 of its workflow Build, run
-      # 45986928353 (with virtio-net, INET, and packet sockets), checked
+      # 46040938500 (c303719: virtio-net, the boot page reports, and the generation ID device), checked
       # by the SHA-256 of the artifact and by its SHA256SUMS. The artifact
       # expires on 2027-02-25.
       - if: matrix.name == 'vm-guest-x86_64'
@@ -130,11 +130,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/gk"
-          if ! gh api repos/beetlebugorg/ztcl-guest-kernel/actions/artifacts/15192425798/zip > "$RUNNER_TEMP/gk/k.zip"; then
+          if ! gh api repos/beetlebugorg/ztcl-guest-kernel/actions/artifacts/15220665875/zip > "$RUNNER_TEMP/gk/k.zip"; then
             echo "::warning::no download of the guest kernel artifact; the test with it is skipped"
             exit 0
           fi
-          echo "150705b053b935d5579c81baf7a428848c24333ad21d82dbba5ce244f4276e11  $RUNNER_TEMP/gk/k.zip" | sha256sum -c
+          echo "11c18c8c7025c5ecfcfc2d2261a37e186bda43c4445622b3858143881bab4285  $RUNNER_TEMP/gk/k.zip" | sha256sum -c
           (cd "$RUNNER_TEMP/gk" && unzip -q k.zip && sha256sum -c SHA256SUMS)
           cp "$RUNNER_TEMP/gk/bzImage" tools/vm-guest/out/gk-bzImage
           cp "$RUNNER_TEMP/gk/vmlinux" tools/vm-guest/out/gk-vmlinux

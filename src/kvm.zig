@@ -43,6 +43,13 @@
 //! to an ioeventfd with no reader, and each vsock interrupt has one exit
 //! to this process less.
 //!
+//! The generation ID device (`vmgenid.device=` of the guest kernel of
+//! ztcl-guest-kernel): a 4 KB window at `vmgenid_base` with a random
+//! 16-byte ID at offset 0, and ISA interrupt 3. A restore writes a new
+//! ID and gives an edge on the interrupt, so the guest kernel reseeds
+//! its RNG and steps its clock. A kernel without the device ignores the
+//! option and has no handler on line 3.
+//!
 //! An 8250 UART at port 0x3f8 writes the output of the guest kernel
 //! (`console=ttyS0`) to the console descriptor too. A write of 0xfe to
 //! port 0x64 (the reset of the keyboard controller, `reboot=k`) or a
@@ -211,6 +218,11 @@ const mmio_size: u64 = 0x1000;
 /// serial ports, 8 is the clock, and 13 is the FPU.
 pub const irqs = [_]u8{ 5, 6, 7, 9, 10, 11, 12, 14, 15 };
 pub const max_disks = irqs.len - 3;
+/// The generation ID device: its window, after the 16 windows of the
+/// virtio devices, and its ISA interrupt (3, the second serial port; the
+/// guest has one UART).
+pub const vmgenid_base: u64 = mmio_base + 0x10000;
+pub const vmgenid_irq: u8 = 3;
 
 /// The signal that kicks a vCPU thread out of `KVM_RUN`. Its handler
 /// is empty.
@@ -402,6 +414,11 @@ pf_next: u64 = 0,
 pf_go: std.atomic.Value(bool) = .init(false),
 /// The bytes of the free page reports of the guest.
 reported: std.atomic.Value(u64) = .init(0),
+/// The generation ID of the guest: new at each boot and each restore.
+genid: [16]u8 = @splat(0),
+/// True after the guest read the generation ID: its kernel has the
+/// device. A snapshot keeps this.
+genid_read: std.atomic.Value(bool) = .init(false),
 /// The text of a failure of a vCPU.
 fail_text: []const u8 = "",
 /// The guest address of the 64-bit entry point of the kernel.
@@ -573,6 +590,8 @@ pub fn setupVm(m: *Machine) Fail!void {
 
 fn setup(m: *Machine) Fail!void {
     try m.setupVm();
+    _ = fillRandom(&m.genid);
+    m.genid_read.store(false, .monotonic);
     const size: u64 = @as(u64, m.cfg.memory_mb) << 20;
     // The guest memory starts on a 2 MB boundary and asks for
     // transparent huge pages, so the first write to each 2 MB of the
@@ -607,6 +626,7 @@ fn cmdline(m: *Machine) []const u8 {
     const head = if (cut) |c| m.cfg.cmdline[0..c] else m.cfg.cmdline;
     w.print("{s} reboot=k panic=-1 nomodule", .{head}) catch return S.buf[0..0];
     for (0..m.deviceCount()) |i| w.print(" virtio_mmio.device=4K@0x{x}:{d}", .{ mmio_base + mmio_size * i, irqs[i] }) catch return w.buffered();
+    w.print(" vmgenid.device=4K@0x{x}:{d}", .{ vmgenid_base, vmgenid_irq }) catch return w.buffered();
     if (cut) |c| w.print("{s}", .{m.cfg.cmdline[c..]}) catch return w.buffered();
     return w.buffered();
 }
@@ -1081,6 +1101,14 @@ pub fn vcpuMain(v: *Vcpu) void {
     }
 }
 
+/// A new generation ID and an edge on its interrupt, for a restore or a
+/// clone. The guest gets the interrupt when its vCPU runs, so the call
+/// goes after the state of the interrupt controllers is set.
+pub fn newGeneration(m: *Machine) void {
+    _ = fillRandom(&m.genid);
+    irqEdge(m, vmgenid_irq);
+}
+
 /// Starts the prefault of the chunks of `chunks` (a bitmap of 2 MB
 /// chunks) on vCPU 0 while the machine is paused. A resume stops it.
 pub fn prefaultStart(m: *Machine, chunks: []const u8) void {
@@ -1196,6 +1224,14 @@ fn mmio(m: *Machine, v: *Vcpu) void {
     const write = u[20] != 0;
     const data = u[8..16];
     if (len > 8) return;
+    if (addr >= vmgenid_base and addr < vmgenid_base + mmio_size) {
+        // The ID is read only. A read past it gives zeros.
+        if (write) return;
+        const off: usize = @intCast(addr - vmgenid_base);
+        for (data[0..len], 0..) |*b, i| b.* = if (off + i < m.genid.len) m.genid[off + i] else 0;
+        m.genid_read.store(true, .monotonic);
+        return;
+    }
     if (addr < mmio_base or addr >= mmio_base + mmio_size * m.devices.len) {
         if (!write) @memset(data[0..len], 0xff);
         return;
@@ -1212,7 +1248,7 @@ test "kvm: the arguments of the first process stay last" {
     if (comptime !supported) return;
     var m: Machine = .{ .alloc = std.testing.allocator, .cfg = .{ .kernel = "", .cmdline = "quiet rdinit=/sbin/ztcl -- --iso-vsock 1026", .console = -1, .balloon = false } };
     try std.testing.expectEqualStrings(
-        "quiet rdinit=/sbin/ztcl reboot=k panic=-1 nomodule virtio_mmio.device=4K@0xd0000000:5 virtio_mmio.device=4K@0xd0001000:6 -- --iso-vsock 1026",
+        "quiet rdinit=/sbin/ztcl reboot=k panic=-1 nomodule virtio_mmio.device=4K@0xd0000000:5 virtio_mmio.device=4K@0xd0001000:6 vmgenid.device=4K@0xd0010000:3 -- --iso-vsock 1026",
         m.cmdline(),
     );
 }
@@ -1221,7 +1257,7 @@ test "kvm: the command line" {
     if (comptime !supported) return;
     var m: Machine = .{ .alloc = std.testing.allocator, .cfg = .{ .kernel = "", .cmdline = "console=hvc0", .console = -1, .cpus = 2, .disks = &.{.{ .fd = -1, .read_only = true }} } };
     try std.testing.expectEqualStrings(
-        "console=hvc0 reboot=k panic=-1 nomodule virtio_mmio.device=4K@0xd0000000:5 virtio_mmio.device=4K@0xd0001000:6 virtio_mmio.device=4K@0xd0002000:7 virtio_mmio.device=4K@0xd0003000:9",
+        "console=hvc0 reboot=k panic=-1 nomodule virtio_mmio.device=4K@0xd0000000:5 virtio_mmio.device=4K@0xd0001000:6 virtio_mmio.device=4K@0xd0002000:7 virtio_mmio.device=4K@0xd0003000:9 vmgenid.device=4K@0xd0010000:3",
         m.cmdline(),
     );
 }

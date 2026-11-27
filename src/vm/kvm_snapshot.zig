@@ -117,6 +117,10 @@ pub const Header = extern struct {
     /// A bit for each 2 MB chunk of the memory: 1 when the chunk has a
     /// page that is not all zero.
     chunks: [max_chunks / 8]u8 = @splat(0),
+    /// 1 when the guest kernel read the generation ID device, so a
+    /// restore needs no reseed and no clock set by the agent. 0 in the
+    /// files of a ztcl before the device.
+    genid: u32 = 0,
 };
 
 /// The 2 MB chunks of the most memory of a snapshot: 8 GB.
@@ -385,6 +389,7 @@ pub fn save(m: *Machine, fd: i32, tag: []const u8) Fail!u64 {
         .mem_off = std.mem.alignForward(u64, header_size + st.items.len, kvm.huge_page),
         .mem_size = size,
         .mem_written = 0,
+        .genid = @intFromBool(m.genid_read.load(.monotonic)),
     };
     @memcpy(h.tag[0..tag.len], tag);
     if (linux.errno(linux.ftruncate(fd, 0)) != .SUCCESS or linux.errno(linux.ftruncate(fd, @intCast(h.mem_off + size))) != .SUCCESS) {
@@ -598,6 +603,10 @@ pub fn restore(m: *Machine, fd: i32) Fail!void {
     // The guest learns that it was paused, so its watchdog of soft
     // lockups does not count the time of the snapshot.
     for (m.vcpus) |*v| _ = ioctl(v.fd, KVM_KVMCLOCK_CTRL, 0);
+    // A new generation ID: the guest kernel reseeds its RNG and steps
+    // its clock at the interrupt.
+    m.genid_read.store(h.genid != 0, .monotonic);
+    m.newGeneration();
 
     // vsock: vhost goes on from the saved indices, and the driver gets
     // the transport reset event.

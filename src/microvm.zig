@@ -2010,9 +2010,16 @@ const lin = if (on_kvm) struct {
     /// clock of the guest to the time of the host and adds new entropy
     /// to the random pool of the guest, so the clones of one snapshot
     /// have different random numbers. An agent without the request
-    /// `RESUME` (feature bit 3) gets nothing.
+    /// `RESUME` (feature bit 3) gets nothing. A guest kernel that read
+    /// the generation ID device gets no request on a host with the TSC
+    /// clocksource: the new ID of the restore does both.
     fn resumeAgent(it: *Interp, g: *Guest) void {
         _ = kvm.snapshot.waitReset(g.machine, 100_000);
+        // A guest kernel with the generation ID device reseeds its RNG
+        // at the interrupt of the restore, and steps its clock with
+        // KVM_HC_CLOCK_PAIRING, which KVM answers only on a host with
+        // the TSC clocksource.
+        if (g.machine.genid_read.load(.monotonic) and hostTsc()) return;
         var rnd: [32]u8 = undefined;
         if (linux.getrandom(&rnd, rnd.len, 0) != rnd.len) return;
         // Port 1027 of the agent: the prelude of `isovm.zig`, served with
@@ -2033,6 +2040,26 @@ const lin = if (on_kvm) struct {
         const h = a.hello(it.alloc()) catch return;
         if (h.features & vmagent.f_resume == 0) return;
         vmagent.resumeGuest(&a, it.alloc(), realtimeNs(), &rnd) catch {};
+    }
+
+    /// True when the clocksource of the host is the TSC.
+    fn hostTsc() bool {
+        const S = struct {
+            var v: std.atomic.Value(u8) = .init(0);
+        };
+        const k = S.v.load(.monotonic);
+        if (k != 0) return k == 1;
+        var buf: [16]u8 = undefined;
+        var yes = false;
+        const rc = linux.open("/sys/devices/system/clocksource/clocksource0/current_clocksource", .{ .CLOEXEC = true }, 0);
+        if (linux.errno(rc) == .SUCCESS) {
+            const fd: i32 = @intCast(rc);
+            const n = linux.read(fd, &buf, buf.len);
+            if (linux.errno(n) == .SUCCESS) yes = std.mem.eql(u8, std.mem.trimEnd(u8, buf[0..n], "\n"), "tsc");
+            _ = linux.close(fd);
+        }
+        S.v.store(if (yes) 1 else 2, .monotonic);
+        return yes;
     }
 
     /// The port of the agent for the resume prelude.
@@ -2470,6 +2497,7 @@ const lin = if (on_kvm) struct {
                 _ = vmagent.exec(&conn, arena.allocator(), &.{ "/bin/busybox", "true" }, &.{}, "/", null, 4096) catch {};
             } else |_| {}
             _ = linux.close(fd);
+            if (t.snap_fd < 0) settle();
             p.machine.pause();
             if (t.snap_fd < 0) snapTemplate(t, p.machine);
             break :blk true;
@@ -2478,6 +2506,14 @@ const lin = if (on_kvm) struct {
         if (made) p.machine.deinit();
         dropBytes(p);
         return null;
+    }
+
+    /// The wait before the snapshot of a pool: the guest kernel reports
+    /// the free pages of its boot to the balloon in this time (50 ms
+    /// after a free), so the snapshot has fewer pages.
+    fn settle() void {
+        var ts: linux.timespec = .{ .sec = 0, .nsec = 100 * std.time.ns_per_ms };
+        _ = linux.nanosleep(&ts, null);
     }
 
     /// Writes the snapshot of the pool from its first guest, paused, to a
@@ -2961,6 +2997,7 @@ const lin = if (on_kvm) struct {
         // A probe: a connection with no prelude, which the runner closes.
         const fd = connect(l.machine, isovm.port, 10_000) orelse return false;
         sys.close(fd);
+        settle();
         l.machine.pause();
         const rc = linux.memfd_create("ztcl-vm-iso", linux.MFD.CLOEXEC);
         if (linux.errno(rc) == .SUCCESS) {
