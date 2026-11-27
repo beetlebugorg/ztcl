@@ -42,3 +42,12 @@ Facts from the logs of these runs:
 ## Changes
 
 1. The WebAssembly job is three jobs that run at the same time: the libraries (`wasm`), the compiled procs (`wasm-aot`), and the point procs (`wasm-point`). Each job builds all of its steps with one `zig build`. A run on main or a scheduled run is no longer cancelled by a later push.
+2. The Test, C packages, and ztcl build jobs each build with one `zig build` (`zig build install test`, `zig build install runtimes`).
+
+## After
+
+| Change | Pull request | Slowest job | Run wall time |
+|---|---|---|---|
+| 1 (three WebAssembly jobs) | #303 (CI files) | ztcl build, 6.5 | 7.8 |
+
+In the #303 run, the WebAssembly jobs took 1.8, 6.0, and 5.8 minutes.

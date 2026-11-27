@@ -101,8 +101,7 @@ jobs:
             echo $$ | sudo tee /sys/fs/cgroup/ztcl-ci/leaf/cgroup.procs
             ulimit -v 6000000
           fi
-          zig build
-          zig build test
+          zig build install test
       - name: Run a script
         run: |
           if [ "$RUNNER_OS" = Linux ]; then ulimit -v 6000000; fi
@@ -155,8 +154,7 @@ jobs:
       - name: Build and test with -Dcext
         run: |
           ulimit -v 6000000
-          zig build -Dcext=true
-          zig build test-cext-native -Dcext=true
+          zig build install test-cext-native -Dcext=true
       - name: Compare the test packages with tclsh
         run: TCLSH=tclsh8.6 tools/cext/check.sh zig-out/bin/ztcl
       - name: Check the coverage table
@@ -185,10 +183,11 @@ jobs:
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: ${{ env.ZIG_VERSION }}
+      # One zig build for ztcl and the six runtimes, so that Zig compiles
+      # them in parallel.
       - name: Build the runtimes
         run: |
-          zig build
-          zig build runtimes
+          zig build install runtimes
           ls -l zig-out/lib/ztcl/runtime/*/
       - name: Build and run a binary
         run: |
