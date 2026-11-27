@@ -2401,6 +2401,9 @@ fn cmdPuts(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (comptime @import("sys.zig").supported) {
                 if (try @import("chan.zig").putsTo(it, chan, try it.str(args[1]), newline)) return Value.empty;
             }
+            if (it.soft_chans) |sc| {
+                if (try sc.puts(it, chan, try it.str(args[1]), newline)) return Value.empty;
+            }
             return it.fail("can not find channel named \"{s}\"", .{chan});
         }
         if (eql(chan, "stderr")) std_name = "stderr";

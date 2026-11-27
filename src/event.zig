@@ -335,6 +335,13 @@ pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
                     try owners.append(a, w);
                 }
             }
+            // The channels of the embedder that have a handler to run.
+            var soft_ready: std.ArrayList(Watch) = .empty;
+            for (s.watches.items) |w| {
+                const sc = w.it.soft_chans orelse continue;
+                if (sc.ready(w.it, w.name)) try soft_ready.append(a, w);
+            }
+            if (soft_ready.items.len > 0) timeout = 0;
             if (wait and timeout < 0 and wants.items.len == 0) {
                 // A thread waits for a message while another thread can
                 // send one.
@@ -396,6 +403,15 @@ pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
                     if (!live) continue;
                     if (try chan.serve(it, o.it, o.name, w.can_read, w.can_write)) ran = true;
                 }
+            }
+            for (soft_ready.items) |o| {
+                // An earlier handler can close the channel.
+                var live = false;
+                for (s.watches.items) |x| {
+                    if (x.it == o.it and eql(x.name, o.name)) live = true;
+                }
+                if (!live) continue;
+                if (try o.it.soft_chans.?.serve(it, o.it, o.name)) ran = true;
             }
         }
         if (!ran and s.idles.items.len > 0) {

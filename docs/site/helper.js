@@ -9,7 +9,8 @@
 //
 // The helper and the page talk with lines of `puts` that start with the
 // byte 0x1e. "E id script" runs a script in the interpreter of the shell,
-// and the page calls `helper::reply id ok result` in the helper. "S text"
+// and the page calls `helper::reply id ok result` in the helper. "C id
+// limit script" runs a script with a compute limit of its own. "S text"
 // puts the text on the line of the shell. The reader runs it with Enter.
 // A helper changes the shell only when the reader clicks its button.
 //
@@ -39,6 +40,13 @@ proc helper::run {script cb} {
     incr n
     dict set done $n $cb
     send E "$n $script"
+}
+proc helper::limited {limit script cb} {
+    variable n
+    variable done
+    incr n
+    dict set done $n $cb
+    send C "$n $limit $script"
 }
 proc helper::reply {id ok result} {
     variable done
@@ -130,9 +138,16 @@ async function start(fig) {
   const handle = (msg) => {
     const body = unescape(msg.slice(2));
     if (msg[0] === "S") view?.put(body);
-    if (msg[0] === "E") {
+    if (msg[0] === "E" || msg[0] === "C") {
       const sp = body.indexOf(" ");
-      const r = view ? view.run(body.slice(sp + 1)) : { ok: false, result: "this page has no shell" };
+      let script = body.slice(sp + 1);
+      let limit;
+      if (msg[0] === "C") {
+        const k = script.indexOf(" ");
+        limit = Number(script.slice(0, k));
+        script = script.slice(k + 1);
+      }
+      const r = view ? view.run(script, limit) : { ok: false, result: "this page has no shell" };
       replies.push(`helper::reply ${body.slice(0, sp)} ${r.ok ? 1 : 0} ${tclWord(r.result)}`);
       setTimeout(flush, 0);
     }

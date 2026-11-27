@@ -1037,6 +1037,15 @@ fn cmdChan(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         if (eql(mode, "output")) return .{ .int = if (c.writable) @intCast(c.wbuf.items.len) else -1 };
         return it.failCode("TCL LOOKUP INDEX mode", "bad mode \"{s}\": must be input or output", .{mode});
     }
+    if (eql(sub, "pipe")) {
+        if (argv.len != 2) return it.wrongArgs("chan pipe");
+        const fds = sys.pipe() orelse return it.fail("couldn't create pipe: chan pipe is not available on this system", .{});
+        const r = try adopt(it, "file", fds[0], true, false);
+        r.kind = .pipe;
+        const w = try adopt(it, "file", fds[1], false, true);
+        w.kind = .pipe;
+        return value.newList(it.alloc(), &.{ .{ .str = r.name }, .{ .str = w.name } });
+    }
     if (eql(sub, "flush")) return forward(it, cmdFlush, argv, cmd);
     if (eql(sub, "gets")) return forward(it, cmdGets, argv, cmd);
     if (eql(sub, "read")) return forward(it, cmdRead, argv, cmd);
@@ -1059,7 +1068,7 @@ fn cmdChan(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         }
         return value.wrapList(it.alloc(), out.items);
     }
-    return it.failCode("TCL LOOKUP INDEX subcommand", "unknown or ambiguous subcommand \"{s}\": must be close, configure, copy, eof, flush, gets, names, puts, read, seek, or tell", .{sub});
+    return it.failCode("TCL LOOKUP INDEX subcommand", "unknown or ambiguous subcommand \"{s}\": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell", .{sub});
 }
 
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {

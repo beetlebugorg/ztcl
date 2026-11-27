@@ -297,6 +297,7 @@ sub: chan eof CHAN | As eof.
 sub: chan flush CHAN | As flush.
 sub: chan gets CHAN ?VAR? | As gets.
 sub: chan names ?PATTERN? | The names of the open channels.
+sub: chan pipe | Makes a pipe and gives two channels: the bytes that go into the second come out of the first.
 sub: chan puts ?-nonewline? ?CHAN? STRING | As puts.
 sub: chan read ?-nonewline? CHAN ?N? | As read.
 sub: chan seek CHAN OFFSET ?ORIGIN? | As seek.

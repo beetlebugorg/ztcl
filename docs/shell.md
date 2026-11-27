@@ -5,7 +5,7 @@
 
 `ztcl` with no file starts an interactive shell when standard input and standard output are a terminal. With a pipe, a file, or `TERM=dumb`, the runner reads one command for each line, with no editor. The line editor is code of ztcl. It uses no readline, libedit, or ncurses, and it talks to the terminal with termios and ANSI escape sequences.
 
-The [shell page](https://beetlebug.org/ztcl/try/) of the site runs the same shell in your browser. There, ztcl-shell.wasm has the line editor and a terminal of `ztcl::vt`, and the page renders the cells of the terminal on a canvas. That shell has no capability. Its files are a few read-only files of the page, and each command can use 10,000,000 compute units. `web/ztcl-shell.mjs` is its JavaScript interface.
+The [shell page](https://beetlebug.org/ztcl/try/) of the site runs the same shell in your browser. There, ztcl-shell.wasm has the line editor and a terminal of `ztcl::vt`, and the page renders the cells of the terminal on a canvas. That shell has no capability that reaches your computer. It has a few files of the page, and a script can write files there. These files are in memory, and they go away with the tab. `chan pipe` makes a pair of channels in memory. The event loop (`after`, `vwait`, `update`, and `fileevent`) runs on a virtual clock: a wait moves the clock to the next timer at once. Each command can use 10,000,000 compute units. `web/ztcl-shell.mjs` is its JavaScript interface.
 
 ## Keys
 

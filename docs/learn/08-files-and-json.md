@@ -2,7 +2,7 @@
 
 `open` gives a channel, and `gets`, `read`, `puts`, and `close` work on it. `ztcl::json` reads and writes JSON. This lesson keeps the notes of `jot` in `notes.json`.
 
-The shell of this page has the file `notes.json`, and it is read-only. The example that writes a file runs in `ztcl` on your computer.
+The shell of this page has the file `notes.json`. A file that you write in the shell is in memory, and it goes away when you close the tab.
 
 <!-- checkpoint: --root . --allow file,channels -->
 ```tcl
@@ -28,23 +28,9 @@ Bad JSON is an error with its line and column: [`ztcl::json parse {[1,}`](run: "
 
 A Tcl value has no visible type: `0` is a number, a string, and a boolean. `encode` needs a schema for the types. [`ztcl::json encode -schema {list {object {text string done bool}}} $notes`](run: "[{\"text\":\"buy milk\",\"done\":true},{\"text\":\"fix the bike #home\",\"done\":false}]") gives the JSON of the notes. A guess with `-auto` makes a number of the canonical text of a number. `0` becomes a number, and `007` stays a string: [`ztcl::json encode -auto {text 007 done 0}`](run: "{\"text\":\"007\",\"done\":0}").
 
-This script saves the notes and reads them again. Run it in `ztcl` on your computer.
+Now save the notes. [`set f [open notes.json w]`](run:) opens the file for writing and makes it empty. [`puts $f [ztcl::json encode -schema {list {object {text string done bool}}} $notes]`](run: "") writes one line. The channel keeps the text in a buffer, and [`close $f`](run: "") writes it to the file. Read the file again to check: [`set f [open notes.json]; set saved [read -nonewline $f]; close $f; set saved`](run: "[{\"text\":\"buy milk\",\"done\":true},{\"text\":\"fix the bike #home\",\"done\":false}]").
 
-<!-- run: --root . --allow file,channels -->
-```tcl
-package require ztcl::json
-set notes [list [dict create text "buy milk" done 1]]
-set f [open notes.json w]
-puts $f [ztcl::json encode -schema {list {object {text string done bool}}} $notes]
-close $f
-set f [open notes.json]
-puts [ztcl::json parse [read $f]]
-close $f
-```
-
-```text
-{text {buy milk} done true}
-```
+`open` with `a` adds to the end of a file, and `r+` reads and writes. `glob *` gives the names of the files.
 
 ## Files are a capability
 

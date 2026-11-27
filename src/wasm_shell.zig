@@ -14,12 +14,16 @@
 //! foreground and the background. A color is 0 for the default,
 //! 0x1000000 + index for the palette, and 0x2000000 + 0xRRGGBB for RGB.
 //!
-//! The shell has no capability of ztcl. `ztcl_shell_files` gives it a
-//! bundle payload (`src/wasmbundle.zig`) of read-only files, with the
-//! commands of `src/wasmfiles.zig`, so Tab completes the names of those
-//! files. Each command gets the compute limit of `ztcl_shell_new`, and
-//! each question of the shell for a completion gets 1,000,000 compute
-//! units.
+//! The shell has no capability of ztcl that reaches the host. It has
+//! the files and the channels in memory of `src/wasmfiles.zig`, and the
+//! event loop of `src/event.zig` on a virtual clock: a wait of the loop
+//! moves the clock to the next timer at once, so `after 5000` and a
+//! `vwait` for a timer end at once. A timer runs only in `vwait` or
+//! `update`. `ztcl_shell_files` gives the shell a bundle payload
+//! (`src/wasmbundle.zig`) of files, so Tab completes the names of
+//! those files. Each command gets the compute limit of `ztcl_shell_new` or of
+//! `ztcl_shell_set_limit`, and each question of the shell for a
+//! completion gets 1,000,000 compute units.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -37,7 +41,19 @@ const WebShell = struct {
     term: *vt.Term,
     cells: std.ArrayList(u32) = .empty,
     row: std.ArrayList(vt.Cell) = .empty,
+    /// The virtual clock of the event loop, in microseconds.
+    clock: i64 = 0,
 };
+
+fn clockNow(ctx: ?*anyopaque) i64 {
+    const ws: *WebShell = @ptrCast(@alignCast(ctx.?));
+    return ws.clock;
+}
+
+fn clockSleep(ctx: ?*anyopaque, micros: i64) void {
+    const ws: *WebShell = @ptrCast(@alignCast(ctx.?));
+    ws.clock += @max(micros, 0);
+}
 
 fn termOut(ctx: *anyopaque, bytes: []const u8) void {
     const ws: *WebShell = @ptrCast(@alignCast(ctx));
@@ -69,6 +85,12 @@ export fn ztcl_shell_new(h: *Handle, cols: u16, rows: u16, compute_limit: u64) ?
         .term = term,
         .sh = Shell.init(gpa, &h.it, .{ .io = std.Io.failing, .compute_limit = compute_limit, .probe_limit = 1_000_000, .puts_to_term = true }),
     };
+    h.it.event_host = .{ .ctx = ws, .now = clockNow, .sleep = clockSleep };
+    h.it.allow(@backingInt(@import("interp.zig").Capability.event)) catch return null;
+    if (!h.files.on) {
+        h.files.on = true;
+        wasmfiles.Commands(root.filesOf, gpa).register(&h.it) catch return null;
+    }
     ws.sh.term.out = .{ .ctx = ws, .write = termOut };
     ws.sh.term.cols = term.colCount();
     ws.sh.term.rows = term.rowCount();
@@ -76,14 +98,17 @@ export fn ztcl_shell_new(h: *Handle, cols: u16, rows: u16, compute_limit: u64) ?
     return ws;
 }
 
-/// Gives the shell the read-only files of a bundle payload. The memory
-/// at `ptr` stays valid while the shell lives.
+/// Gives the shell the files of a bundle payload. The memory at `ptr`
+/// stays valid while the shell lives. A script can write over a file of
+/// the bundle in memory. Gives 0.
 export fn ztcl_shell_files(ws: *WebShell, ptr: [*]const u8, len: usize) i32 {
-    const h = ws.h;
-    if (h.files.on) return 0;
-    h.files = .{ .payload = ptr[0..len], .on = true };
-    wasmfiles.Commands(root.filesOf, gpa).register(&h.it) catch return 1;
+    ws.h.files.payload = ptr[0..len];
     return 0;
+}
+
+/// Sets the compute units of each command from the next command on.
+export fn ztcl_shell_set_limit(ws: *WebShell, compute_limit: u64) void {
+    ws.sh.opts.compute_limit = compute_limit;
 }
 
 /// Writes text to the terminal, for a line of the page above the prompt.

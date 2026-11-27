@@ -15,7 +15,7 @@ proc count_to {n} {
 
 A command of a capability that is off does not exist. [`info commands exec`](run: "") is empty, and [`catch {exec ls} msg`](run: "1") gives an error. [`set msg`](run: "invalid command name \"exec\"") has the message. A script cannot turn a capability on: only the host can.
 
-The shell of this page has read-only files in memory and no other capability. The `ztcl` program on your computer also starts with no capability. `--allow` turns capabilities on, `--root` keeps the paths in one folder, and `--compute` sets the limit:
+The shell of this page has files and channels in memory, and the event loop on a virtual clock. It has no other capability. The `ztcl` program on your computer also starts with no capability. `--allow` turns capabilities on, `--root` keeps the paths in one folder, and `--compute` sets the limit:
 
 ```sh
 ztcl --allow file,channels --root ./notes --compute 50000000 jot.tcl
@@ -28,6 +28,40 @@ That `jot` reads and writes files in `./notes` and nowhere else, has no network 
 One compute unit is about one Tcl command. Each command of this shell can use 10,000,000 compute units, and the bar under the shell shows the units of the last command. [`count_to 1000`](run: "1000") uses a few thousand. [`count_to 100000000`](run: "error: compute limit reached") stops at the limit.
 
 `catch` and `try` cannot stop the error of the limit, so a script cannot keep a loop going past it: [`catch {while 1 {}}`](run: "error: compute limit reached"). The count uses no clock, so a slow machine stops a script at the same point as a fast one.
+
+Use the tool to set a lower limit for one run of an endless loop. The loop counts in a variable, and the tool reads the count after the stop.
+
+<!-- helper: Stop a loop | Move the slider to set the compute limit of one run, and see where an endless loop stops. -->
+```tcl
+# height: 196
+helper::form
+helper::row Limit [ttk::scale .f.s -from 3 -to 6 -variable exp]
+helper::row "" [ttk::label .f.v -textvariable shown]
+helper::footer 2
+set exp 4
+proc commas {n} {
+    set out ""
+    while {[string length $n] > 3} {
+        set out ",[string range $n end-2 end]$out"
+        set n [string range $n 0 end-3]
+    }
+    return $n$out
+}
+proc build {} {
+    set limit [expr {int(round(10 ** $::exp / 100.0) * 100)}]
+    set ::shown "[commas $limit] compute units"
+    set helper::cmd {while 1 {incr ::helper::count}}
+    helper::limited $limit "namespace eval ::helper {variable count 0}; $helper::cmd" [list stopped $limit]
+}
+proc stopped {limit ok r} {
+    helper::run {set ::helper::count} [list counted $limit $r]
+}
+proc counted {limit why ok n} {
+    set per [expr {$n ? $limit / double($n) : 0}]
+    helper::result 1 "$why after [commas $n] loops\nabout [format %.1f $per] compute units for each loop"
+}
+helper::watch build exp
+```
 
 Deep recursion stops at the nesting limit with an error: [`proc down {n} {down [incr n]}; down 0`](run: "error: too many nested evaluations (infinite loop?)"). The host does not crash.
 
