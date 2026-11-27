@@ -8,6 +8,7 @@ These files are the plans, the task lists, the reviews, and the test results of 
 | [testing.md](testing.md) | The test commands, the Tcl suite, the size report, and the benchmark commands. |
 | [compatibility.md](compatibility.md) | The result of each test file of Tcl 8.6.16. `tools/suite-table.py` writes it. |
 | [tcl9.md](tcl9.md) | The Tcl 9.1.0 baseline and the proposed choices. |
+| [tips.md](tips.md) | Each TIP of Tcl 8.7, 9.0, and 9.1, and its status in ztcl. |
 | [jit.md](jit.md), [jit-review.md](jit-review.md), [jit-tasks/](jit-tasks/README.md) | The JIT plan, its results, the review checklist, and the tasks. |
 | [perf-review.md](perf-review.md) | A performance review: the slow paths, with a measure and a proposed change for each one. |
 | [perf-ideas.md](perf-ideas.md) | 12 ranked performance ideas with their measures, designs, risks, and checks. The scripts are in `bench/ideas/`. |
