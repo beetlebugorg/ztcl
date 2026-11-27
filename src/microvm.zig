@@ -98,6 +98,14 @@ pub const Host = struct {
     image_keys: []const @import("vmimage.zig").Key = &.{},
 };
 
+/// The stack of the pool, listener, and pump threads. With glibc, the
+/// stack of a new thread also holds the static TLS of the program, and
+/// pthread_create gives EINVAL when the TLS does not fit. An embedder
+/// with a large TLS (dockyard: 266 KB) needs more than 256 KB, as for the
+/// threads of kvm.zig. The pages that a thread does not touch take no
+/// memory.
+const thread_stack = 2 * 1024 * 1024;
+
 pub const FetchError = error{ Network, Status, Io, OutOfMemory };
 
 /// The runner gives the download of `image fetch` (`zig build -Dvm-fetch`).
@@ -1807,7 +1815,7 @@ const lin = if (on_kvm) struct {
         }
         t.filling = true;
         pool_lock.unlock();
-        const th = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, refillMain, .{t}) catch {
+        const th = std.Thread.spawn(.{ .stack_size = thread_stack }, refillMain, .{t}) catch {
             pool_lock.lock();
             t.filling = false;
             pool_lock.unlock();
@@ -1938,7 +1946,7 @@ const lin = if (on_kvm) struct {
                 return error.Fail;
             };
             x.* = .{ .port = port, .fd = fd, .stop = @intCast(ev) };
-            x.thread = std.Thread.spawn(.{ .stack_size = 64 * 1024 }, acceptMain, .{x}) catch {
+            x.thread = std.Thread.spawn(.{ .stack_size = thread_stack }, acceptMain, .{x}) catch {
                 _ = linux.close(fd);
                 _ = linux.close(x.stop);
                 lpa.destroy(x);
@@ -2434,7 +2442,7 @@ const win = if (on_whp) struct {
                 try g.machine.start();
                 if (g.pump == null) {
                     g.stop_pump.store(false, .seq_cst);
-                    g.pump = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, pumpMain, .{g}) catch return error.Thread;
+                    g.pump = std.Thread.spawn(.{ .stack_size = thread_stack }, pumpMain, .{g}) catch return error.Thread;
                 }
             },
             .running => {},
