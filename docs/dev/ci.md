@@ -44,6 +44,7 @@ Facts from the logs of these runs:
 1. The WebAssembly job is three jobs that run at the same time: the libraries (`wasm`), the compiled procs (`wasm-aot`), and the point procs (`wasm-point`). Each job builds all of its steps with one `zig build`. A run on main or a scheduled run is no longer cancelled by a later push.
 2. The Test, C packages, and ztcl build jobs each build with one `zig build` (`zig build install test`, `zig build install runtimes`).
 3. The changes job has a `wasm` output. The three WebAssembly jobs and the WASI job run only when a pull request changes a file that they build or run (`src/`, the build files, `wit/`, `web/`, `npm/`, `enclave/`, `bench/`, and the tests and tools of WebAssembly). Pushes and the scheduled run run them always.
+4. The Test job on Linux saves the Zig cache only on a push to main, with `actions/cache` and a key of the Zig version, the build files, and the commit. A pull request restores the newest cache of main. The other jobs keep the cache of `mlugg/setup-zig`.
 
 ## After
 
@@ -52,4 +53,17 @@ Facts from the logs of these runs:
 | 1 (three WebAssembly jobs) | #303 (CI files) | ztcl build, 6.5 | 7.8 |
 | 2 (one `zig build` for each job) | #305 (CI files) | WebAssembly, point procs, 8.9 | 11.4 (the Size workflow) |
 
-In the #303 run, the WebAssembly jobs took 1.8, 6.0, and 5.8 minutes. In the #305 run, the ztcl build job took 4.7 minutes (6.5 in #303) and the Test job 5.2 minutes. Many pull requests of other agents ran at the same time, so the times of single jobs change by 2 or 3 minutes from run to run. The Size workflow (`size.yml`) ran seven builds in sequence and took 11.4 minutes; #306 runs them in parallel.
+In the #303 run, the WebAssembly jobs took 1.8, 6.0, and 5.8 minutes. In the #305 run, the ztcl build job took 4.7 minutes (6.5 in #303) and the Test job 5.2 minutes. Many pull requests of other agents ran at the same time, so the times of single jobs change by 2 or 3 minutes from run to run. The Size workflow (`size.yml`) ran seven builds in sequence and took 11.4 minutes. #306 starts them in parallel, but the job took 11.4 minutes after it too (report 6.7 and plant check 4.7, against 5.8 and 5.4 before). Each `zig build` already uses the 4 cores of the runner.
+
+## Incremental compilation (not used)
+
+Zig 0.17.0 has `-fincremental`. It is a flag of the build runner, so it applies to each compile step of the build, also to the steps that use LLVM: the ReleaseFast ztcl of `install` and the generators of the ghostty package (`-fllvm`). Times of `zig build install test -fincremental -j2` on a development machine with other builds at the same time, in seconds:
+
+| Build | Time | Result |
+|---|---|---|
+| Empty cache | 396 | pass |
+| One function changed (`coreFn` in src/cmds.zig) | 324 | pass |
+| No change | 129 | fail: `ld.lld: props-unigen_zcu.o: section header string table index 1 does not exist` |
+| No change, again | 378 | pass |
+
+The incremental state gave a broken object file on a build with no change, and the builds after a change were not much faster than a build from an empty cache. A fallback to a full build after a failure would add a full build to each such run. The CI jobs do not use `-fincremental`. Check it again with the next version of Zig.

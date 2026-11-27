@@ -73,6 +73,24 @@ jobs:
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: ${{ env.ZIG_VERSION }}
+          use-cache: ${{ runner.os != 'Linux' }}
+      # On Linux, only pushes to main save the Zig cache, and pull
+      # requests restore the cache of main. The caches of pull requests
+      # then do not push the cache of main out of the 10 GB of the
+      # repository (docs/dev/ci.md).
+      - name: Put the Zig cache in the workspace
+        if: runner.os == 'Linux'
+        run: |
+          echo "ZIG_GLOBAL_CACHE_DIR=$GITHUB_WORKSPACE/.zig-cache" >> "$GITHUB_ENV"
+          echo "ZIG_LOCAL_CACHE_DIR=$GITHUB_WORKSPACE/.zig-cache" >> "$GITHUB_ENV"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: runner.os == 'Linux'
+        with:
+          path: .zig-cache
+          key: zig-test-${{ runner.os }}-${{ env.ZIG_VERSION }}-${{ hashFiles('build.zig', 'build.zig.zon') }}-${{ github.sha }}
+          restore-keys: |
+            zig-test-${{ runner.os }}-${{ env.ZIG_VERSION }}-${{ hashFiles('build.zig', 'build.zig.zon') }}-
+            zig-test-${{ runner.os }}-${{ env.ZIG_VERSION }}-
       # ulimit -v is enforced on Linux only. On macOS and Windows, the
       # memory limit of the interpreter is the only cap.
       # The JIT memory of the runner, for the log: a virtual Mac has no
@@ -142,6 +160,11 @@ jobs:
           echo $$ | sudo tee /sys/fs/cgroup/ztcl-ci/leaf/cgroup.procs
           ulimit -v 6000000
           zig build test -Djit=false
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: runner.os == 'Linux' && github.event_name == 'push'
+        with:
+          path: .zig-cache
+          key: zig-test-${{ runner.os }}-${{ env.ZIG_VERSION }}-${{ hashFiles('build.zig', 'build.zig.zon') }}-${{ github.sha }}
 
   # C packages: the build with -Dcext, its unit tests, and the test
   # packages of tests/cext, each one compared with tclsh.
