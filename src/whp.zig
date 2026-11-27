@@ -858,6 +858,12 @@ fn ioCallback(ctx: ?*anyopaque, io: *IoAccess) callconv(.winapi) HRESULT {
     return 0;
 }
 
+/// True when the `len` bytes at the guest address `gpa` are in the RAM of
+/// `size` bytes, with no wrap of the sum for an address near the top.
+fn inRam(gpa: u64, len: u64, size: u64) bool {
+    return len <= size and gpa <= size - len;
+}
+
 fn memoryCallback(ctx: ?*anyopaque, acc: *MemoryAccess) callconv(.winapi) HRESULT {
     const v = vcpuOf(ctx);
     const m = v.machine;
@@ -883,7 +889,7 @@ fn memoryCallback(ctx: ?*anyopaque, acc: *MemoryAccess) callconv(.winapi) HRESUL
     }
     // The RAM of the guest: the other side of an emulated `movs` with one
     // side in a device or a window.
-    if (acc.gpa + len <= m.mem.size) {
+    if (inRam(acc.gpa, len, m.mem.size)) {
         const at: usize = @intCast(acc.gpa);
         if (write) @memcpy(m.mem.base[at..][0..len], acc.data[0..len]) else @memcpy(acc.data[0..len], m.mem.base[at..][0..len]);
         return 0;
@@ -1223,4 +1229,16 @@ test "whp: the guest boots and its agent answers on vsock" {
     m.close(conn);
     m.stop();
     try std.testing.expectEqual(State.stopped, m.getState());
+}
+
+test "whp: a guest access is in the RAM only inside its bytes, with no wrap" {
+    const size: u64 = 256 << 20;
+    try std.testing.expect(inRam(0, 8, size));
+    try std.testing.expect(inRam(size - 8, 8, size));
+    try std.testing.expect(!inRam(size - 4, 8, size));
+    try std.testing.expect(!inRam(size, 1, size));
+    // A sum that wraps: an address near the top of the 64 bits.
+    try std.testing.expect(!inRam(std.math.maxInt(u64) - 3, 8, size));
+    try std.testing.expect(!inRam(std.math.maxInt(u64), 8, size));
+    try std.testing.expect(!inRam(0, size + 1, size));
 }
