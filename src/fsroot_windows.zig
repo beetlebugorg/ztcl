@@ -496,7 +496,7 @@ pub fn listDir(it: *Interp, rel: []const u8) Error!fsroot.ListResult {
 }
 
 /// How `openAt` opens a name.
-pub const OpenHow = enum { dir, read, create_new };
+pub const OpenHow = enum { dir, read, create_new, any, read_write, write, open_new, create_rw };
 
 /// Opens the name `name` relative to the folder `dir`, with no reparse
 /// point and no short name of another long name: a folder to walk and
@@ -513,6 +513,13 @@ pub fn openAt(dir: i32, name: []const u8, how: OpenHow) union(enum) { fd: i32, e
         .dir => openChild(parent_h, wide, dir_access, 0, file_open, opt_directory, &h),
         .read => openChild(parent_h, wide, read_access, 0, file_open, opt_non_directory, &h),
         .create_new => openChild(parent_h, wide, write_access | file_write_data, attr_normal, file_create, opt_non_directory, &h),
+        // The attributes of a file or a folder, for a stat.
+        .any => openChild(parent_h, wide, file_read_attributes | read_control | synchronize, 0, file_open, 0, &h),
+        .read_write => openChild(parent_h, wide, read_access | write_access | file_write_data | file_append_data, 0, file_open, opt_non_directory, &h),
+        .write => openChild(parent_h, wide, write_access | file_write_data | file_append_data, 0, file_open, opt_non_directory, &h),
+        // A new file, or the file that exists, for read and write.
+        .open_new => openChild(parent_h, wide, read_access | write_access | file_write_data | file_append_data, attr_normal, file_open_if, opt_non_directory, &h),
+        .create_rw => openChild(parent_h, wide, read_access | write_access | file_write_data | file_append_data, attr_normal, file_create, opt_non_directory, &h),
     };
     if (st < 0) return .{ .err = ntError(st) };
     if (verified(h, wide)) |e| {

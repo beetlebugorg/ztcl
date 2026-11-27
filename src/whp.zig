@@ -44,6 +44,9 @@ const virtio = @import("vm/virtio/mmio.zig");
 const vsock = @import("vm/virtio/vsock.zig");
 const Mem = virtio.Mem;
 const Device = virtio.Device;
+const ninep = @import("vm/virtio/ninep.zig");
+const share_windows = @import("vm/share_windows.zig");
+const NinepState = struct { share: share_windows.Share, server: ninep.Server };
 
 pub const supported = builtin.os.tag == .windows and builtin.cpu.arch == .x86_64;
 
@@ -65,6 +68,13 @@ pub const Disk = struct {
     read_only: bool,
 };
 
+/// A 9p share: the descriptor of ztcl of its root folder. Share n has the
+/// tag `share<n>`.
+pub const Share = struct {
+    fd: i32,
+    read_only: bool,
+};
+
 /// The output of the guest console: the virtio console and the UART.
 pub const ConsoleOut = struct {
     ctx: *anyopaque,
@@ -79,7 +89,9 @@ pub const Config = struct {
     initrd: []const u8 = "",
     cmdline: []const u8,
     disks: []const Disk = &.{},
-    /// A virtio entropy device, after the disks.
+    /// The 9p shares, after the disks.
+    shares: []const Share = &.{},
+    /// A virtio entropy device, after the disks and the shares.
     entropy: bool = false,
     console: ConsoleOut,
     /// The host side of the vsock streams.
@@ -111,6 +123,8 @@ part: ?Partition = null,
 mem: Mem = .{ .base = undefined, .size = 0 },
 vcpus: []Vcpu = &.{},
 devices: []Device = &.{},
+/// The 9p servers of the shares, made with the devices.
+ninep_state: []NinepState = &.{},
 vs: vsock.Vsock,
 want: std.atomic.Value(u32) = .init(want_run),
 parked: std.atomic.Value(u32) = .init(0),
@@ -281,8 +295,8 @@ extern "kernel32" fn Sleep(ms: u32) callconv(.winapi) void;
 /// `cfg` with no copy, so the caller keeps them until `deinit`.
 pub fn init(alloc: std.mem.Allocator, cfg: Config) Fail!*Machine {
     try probe();
-    if (cfg.disks.len > max_disks) {
-        why = "too many disks";
+    if (cfg.disks.len + cfg.shares.len > max_disks) {
+        why = "too many disks and shares";
         return error.Setup;
     }
     if (cfg.cpus != 1) {
@@ -381,6 +395,9 @@ fn teardown(m: *Machine) void {
         m.alloc.free(m.devices);
     }
     m.devices = &.{};
+    for (m.ninep_state) |*n| n.server.deinit();
+    if (m.ninep_state.len != 0) m.alloc.free(m.ninep_state);
+    m.ninep_state = &.{};
     if (m.part) |p| _ = WHvDeletePartition(p);
     m.part = null;
     if (m.mem.size != 0) _ = VirtualFree(m.mem.base, 0, 0x8000);
@@ -497,7 +514,7 @@ fn makeVcpus(m: *Machine) Fail!void {
 // The devices
 
 fn deviceCount(m: *const Machine) usize {
-    return 2 + m.cfg.disks.len + @intFromBool(m.cfg.entropy);
+    return 2 + m.cfg.disks.len + m.cfg.shares.len + @intFromBool(m.cfg.entropy);
 }
 
 fn makeDevices(m: *Machine) Fail!void {
@@ -512,6 +529,17 @@ fn makeDevices(m: *Machine) Fail!void {
             return error.Setup;
         }
         m.devices[2 + i] = Device.blk(irqs[2 + i], .{ .ctx = @constCast(d), .size = @intCast(size), .read_only = d.read_only, .read = diskRead, .write = diskWrite, .flush = diskFlush });
+    }
+    // The 9p servers run on the vCPU thread, so they use an allocator
+    // that is safe across threads.
+    m.ninep_state = try m.alloc.alloc(NinepState, m.cfg.shares.len);
+    for (m.cfg.shares, m.ninep_state, 0..) |sh, *st, i| {
+        st.share = .{ .root = sh.fd, .read_only = sh.read_only };
+        st.server = ninep.Server.init(std.heap.smp_allocator, st.share.fs());
+        var tag_buf: [16]u8 = undefined;
+        const tag = std.fmt.bufPrint(&tag_buf, "share{d}", .{i}) catch unreachable;
+        const k = 2 + m.cfg.disks.len + i;
+        m.devices[k] = Device.ninep(irqs[k], &st.server, tag);
     }
     if (m.cfg.entropy) m.devices[n - 1] = Device.rng(irqs[n - 1], fillRandom);
 }
