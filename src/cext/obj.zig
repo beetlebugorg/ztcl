@@ -927,14 +927,15 @@ pub fn Tcl_DStringAppend(ds: *DString, bytes: [*]const u8, length: c_int) callco
     return ds.string;
 }
 
-pub fn Tcl_DStringAppendElement(ds: *DString, s: [*:0]const u8) callconv(.c) [*]u8 {
+pub fn Tcl_DStringAppendElement(ds: *DString, s: ?[*:0]const u8) callconv(.c) [*]u8 {
     var out: std.ArrayList(u8) = .empty;
     defer out.deinit(gpa);
     // A separator goes in after text that does not end a sublist.
     const len: usize = @intCast(ds.length);
     const first = len == 0 or ds.string[len - 1] == '{';
     if (!first) out.append(gpa, ' ') catch panicText("out of memory");
-    value.appendElement(gpa, &out, std.mem.span(s), first) catch panicText("out of memory");
+    // A null element is an empty element, as in Tcl 8.6.
+    value.appendElement(gpa, &out, if (s) |p| std.mem.span(p) else "", first) catch panicText("out of memory");
     dsAppend(ds, out.items);
     return ds.string;
 }

@@ -79,7 +79,32 @@ The results of 2026-11-27 on x86-64 Linux. A subject runs; its source is not rea
 | tclsh of SQLite 3.54.1 (`tclsqlite3.c` with `-DTCLSH=1`) | `cc` | 71 | 0 | A script with a transaction, a function of Tcl, an array row, a blob, and an error gives the output of libtcl8.6. |
 | `/usr/lib/whiptcl.so` of newt (a Tcl package that links libtcl8.6) | the package `libnewt` | 8 | 0 | Not run. |
 | `expect` 5.45.4 of Arch Linux, unchanged | the package `expect`, extracted to a folder | 5 (and the stubs table) | | Loads `Expect`, and stops at the async slots and `Tcl_GetGlobalNamespace` (the stubs agent has the namespace slots). |
-| NaviServer 5.0.3, unchanged | `./configure --with-tcl=KIT/lib` against the kit of [libztcl.md](../libztcl.md), and against the Tcl 8.6 of the host | 238 | 0 | The build of the host serves pages. On libztcl, `nsd` reads its config and loads its `init.tcl`, and stops with a segmentation fault in a lookup of an `nsv` array. |
+| NaviServer 5.0.3, unchanged | `./configure --with-tcl=KIT/lib` against the kit of [libztcl.md](../libztcl.md), and against the Tcl 8.6 of the host | 238 | 0 | Serves the static file, the ADP pages, and its index page on libztcl with the bodies and the log warnings of the build on Tcl. [The benchmark](#the-page-load-benchmark) has the numbers. |
+| AOLserver 4.5.1, unchanged | `./configure --with-tcl=/usr/lib` and `make` | | | Does not build with GCC 15 against the Tcl of the host: `nsthread/pthread.c` has an implicit declaration of `pthread_getattr_np`, an error in GCC 15. So NaviServer, its maintained fork, is the subject. |
+
+## The page-load benchmark
+
+`tools/libztcl/naviserver.sh build TARBALL KIT OUT` builds NaviServer twice from its release tarball with no change: against the kit of `zig build libztcl --prefix KIT` and against the Tcl of the host. `tools/libztcl/naviserver.sh bench KIT OUT` runs `tools/libztcl/httpload.zig`, a small load generator in Zig (the host has no `wrk` or `ab`), on four cases with keep-alive connections. The config is `simple-config.tcl` of NaviServer with a new port.
+
+To run on libztcl, NaviServer needed these changes in libztcl (PR #502):
+
+- The filesystem slots (`fs.zig`) and `Tcl_FindExecutable` with the absolute path. `nsd` finds its home folder from the path of the program.
+- `Tcl_FSGetTranslatedStringPath` gives a copy that the caller frees, as its manual page says. A normalized path is its own normalized path.
+- A channel slot with no interp (`Tcl_OpenFileChannel(NULL, ...)` for the config file) uses a hidden interp of the thread. `chan.last` no longer points to the shadow of a deleted interp.
+- The create proc of a hash table with a null flag pointer only finds, as in Tcl 8.6. The `nsv` commands call it so.
+- `Tcl_DStringAppendElement` with a null element appends an empty element, as in Tcl 8.6.
+- The thread slots (`threads.zig`).
+
+Results of 2026-11-27 on x86-64 Linux (8 cores, with other builds on the host, so the load average was 14). NaviServer 5.0.3 with its default 10 connection threads, libztcl in ReleaseFast. The ranges are of 3 rounds.
+
+| Case | Connections | Tcl 8.6.16: requests/s | p50 ms | p99 ms | libztcl: requests/s | p50 ms | p99 ms |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Static file, 4 KB | 20 | 6,054 to 9,566 | 2.08 to 2.60 | 4.32 to 16.62 | 7,618 to 8,618 | 2.38 to 2.65 | 4.40 to 4.73 |
+| Small ADP page | 20 | 5,567 to 10,396 | 2.08 to 2.87 | 4.59 to 19.75 | 6,303 to 8,836 | 2.30 to 3.22 | 4.60 to 6.44 |
+| ADP page with Tcl work | 8 | 358 to 1,062 | 6.89 to 19.15 | 18.02 to 64.33 | 2,060 to 2,317 | 2.81 to 3.35 | 11.94 to 14.00 |
+| Small ADP page | 200 | 8,034 to 8,511 | 20.95 to 21.91 | 29.49 to 42.83 | 6,419 to 7,706 | 20.12 to 26.65 | 31.48 to 49.12 |
+
+The resident memory of `nsd` after a round is 27 MB to 28 MB on Tcl and 248 MB to 255 MB on libztcl. Each connection thread of NaviServer has its own interp, and an interp of ztcl takes more memory than an interp of Tcl. This is the next item for servers.
 
 ## Missing functions by programs blocked
 
@@ -92,6 +117,7 @@ None of the subjects above imports a missing function now. The slots that Expect
 - The tommath stubs table (`TclBN_*`) and the Unix helpers outside the four tables.
 - `Tcl_ThreadQueueEvent` and `Tcl_ThreadAlert`: they need the event queue of the C API.
 - ztcl does not call `Tcl_AsyncInvoke` between commands yet.
+- The memory of an interp: NaviServer on libztcl uses 9 times the memory of NaviServer on Tcl.
 - The legacy fields of `Tcl_Interp` other than the first four: `result` is an empty string, and a program that reads `interp->result` gets no text.
 - The Windows build (`Tcl_MainExW`, the platform table of Windows), and a run on macOS. The macOS library builds (`-Dtarget=aarch64-macos`) and is not run yet.
 - libztk, the library of Tk 8.6 for Python's `_tkinter` (ztk #223).

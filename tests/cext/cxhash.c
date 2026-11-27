@@ -160,8 +160,24 @@ static int Assoc(Tcl_Interp *interp) {
     return TCL_OK;
 }
 
+/* The create proc with no flag pointer finds and does not add, as in
+ * Tcl 8.6. NaviServer calls it so. */
+static int Lookup(Tcl_Interp *interp) {
+    Tcl_HashTable t;
+    Tcl_HashEntry *a, *b, *c;
+    int isNew;
+    Tcl_InitHashTable(&t, TCL_STRING_KEYS);
+    a = (*t.createProc)(&t, "absent", NULL);
+    b = Tcl_CreateHashEntry(&t, "here", &isNew);
+    Tcl_SetHashValue(b, (ClientData) "v");
+    c = (*t.createProc)(&t, "here", NULL);
+    Tcl_SetObjResult(interp, Tcl_ObjPrintf("%d %d %d %s", a == NULL, t.numEntries, c == b, (char *) Tcl_GetHashValue(c)));
+    Tcl_DeleteHashTable(&t);
+    return TCL_OK;
+}
+
 static int Cmd(ClientData cd, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
-    static const char *const names[] = {"strings", "words", "objs", "custom", "assoc", NULL};
+    static const char *const names[] = {"strings", "words", "objs", "custom", "assoc", "lookup", NULL};
     int i;
     (void)cd;
     if (objc != 2) {
@@ -174,7 +190,8 @@ static int Cmd(ClientData cd, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[
     case 1: return Words(interp);
     case 2: return Objs(interp);
     case 3: return Custom(interp);
-    default: return Assoc(interp);
+    case 4: return Assoc(interp);
+    default: return Lookup(interp);
     }
 }
 
