@@ -1,0 +1,7 @@
+1.0
+1
+46
+a {b c} d
+1
+expected integer but got "x"
+2
