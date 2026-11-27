@@ -280,6 +280,9 @@ pub fn delete(it: *Interp, name: []const u8, out: *Arg) i32 {
     buf.appendSlice(it.alloc(), "rename ") catch |e| return codeOf(it, e, out);
     value.appendElement(it.alloc(), &buf, name, false) catch |e| return codeOf(it, e, out);
     buf.appendSlice(it.alloc(), " {}") catch |e| return codeOf(it, e, out);
+    // A delete of the C API runs no execution trace.
+    it.exec_quiet += 1;
+    defer it.exec_quiet -= 1;
     _ = it.eval(buf.items) catch |e| return codeOf(it, e, out);
     return 0;
 }
@@ -394,6 +397,20 @@ fn interpRun(it: *Interp, op: u32, a: *const Arg, comptime H: type) Error!Value 
             return .{ .int = old };
         },
         .active => return .{ .int = @intFromBool(it.active > 0 or it.depth > 0) },
+        .exec_hook => {
+            const trace = @import("../trace.zig");
+            try need(it, args, 2);
+            const name = try it.str(args[1]);
+            if (std.mem.eql(u8, try it.str(args[0]), "remove")) return .{ .int = @intFromBool(trace.removeExecHook(it, name)) };
+            try need(it, args, 4);
+            const level = try it.int(args[2]);
+            // The namespace of the hidden command, with no trace.
+            it.exec_quiet += 1;
+            defer it.exec_quiet -= 1;
+            _ = try it.eval("namespace eval ::tcl::cext {}");
+            try trace.addExecHook(it, name, @intCast(std.math.clamp(level, 0, std.math.maxInt(u32))), try it.int(args[3]) != 0);
+            return Value.empty;
+        },
         _ => return it.fail("unknown interp operation {d}", .{op}),
     }
 }

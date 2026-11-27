@@ -664,7 +664,10 @@ pub fn eval(it: *Interp, n: *const Node) Error!Value {
             }
             return it.readRef(r);
         },
-        .script => |s| return it.evalScript(s),
+        .script => |s| {
+            if (it.exec_hooks.items.len != 0) return @import("trace.zig").evalSubst(it, s);
+            return it.evalScript(s);
+        },
         .parts => |parts| return .{ .str = try it.concatParts(parts) },
         .unary => |*u| {
             return unaryOp(it, u.op, try eval(it, u.a));

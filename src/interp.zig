@@ -1539,6 +1539,21 @@ pub const Interp = struct {
     /// The count of variables with traces. Above zero, the inline
     /// forms of the bytecode and the direct forms are off.
     var_traces: u32 = 0,
+    /// The execution hooks (`trace.ExecHook`), oldest first. While one
+    /// exists, the command sites keep no cache, and each call goes
+    /// through `hooked`.
+    exec_hooks: std.ArrayList(*trace.ExecHook) = .empty,
+    /// The count of strict hooks. Above zero, the inline forms are off.
+    exec_strict: u32 = 0,
+    /// Above zero, the hooks do not run: the bridge of the C packages
+    /// runs a script for a call of the C API, and Tcl traces no command
+    /// of such a call.
+    exec_quiet: u32 = 0,
+    /// The count of the command substitutions that run while a hook
+    /// exists (`trace.evalSubst`).
+    exec_subst: u32 = 0,
+    /// The command that `resolve` gives while a hook exists.
+    hooked: Command = .{ .name = "", .impl = .{ .native = trace.hookedCall } },
     /// The local name of an element link while its trace runs. A trace
     /// callback gets this name with an empty index, as in Tcl.
     trace_shown: ?[]const u8 = null,
@@ -2603,6 +2618,7 @@ pub const Interp = struct {
         }
         const name = try it.str(argv[0]);
         const command = it.findCommand(name) orelse return &it.missing;
+        if (it.exec_hooks.items.len != 0) return &it.hooked;
         if (c.words[0].kind == .lit and !c.has_expand) {
             c.resolved = command;
             c.epoch = it.epoch;
@@ -2940,6 +2956,7 @@ pub const Interp = struct {
         it.compute_limit -= 1;
         const name = try it.str(argv[0]);
         const command = it.findCommand(name) orelse &it.missing;
+        if (it.exec_hooks.items.len != 0) return trace.callHooked(it, command, argv, null);
         return it.call(command, argv, null);
     }
 
@@ -2967,6 +2984,7 @@ pub const Interp = struct {
         @memcpy(argv, items);
         const name = it.str(argv[0]) catch |e| return it.noteWords(argv, e);
         const command = it.findCommand(name) orelse &it.missing;
+        if (it.exec_hooks.items.len != 0) return trace.callHooked(it, command, argv, null) catch |e| it.noteWords(argv, e);
         return it.call(command, argv, null) catch |e| it.noteWords(argv, e);
     }
 
@@ -3137,7 +3155,7 @@ pub const Interp = struct {
             it.compute_limit -= 1;
             const name = try it.str(words[0]);
             const command = it.findCommand(name) orelse &it.missing;
-            const r = switch (command.impl) {
+            const r = if (it.exec_hooks.items.len != 0) trace.callHooked(it, command, words, null) else switch (command.impl) {
                 .proc => |p| it.runProc(p, words, words[1..], null),
                 .native => it.call(command, words, null),
             };
@@ -3291,7 +3309,10 @@ pub const Interp = struct {
         switch (p.*) {
             .lit => |s| return .{ .str = s },
             .variable => |*v| return it.readRef(v),
-            .script => |s| return it.evalScript(s),
+            .script => |s| {
+                if (it.exec_hooks.items.len != 0) return trace.evalSubst(it, s);
+                return it.evalScript(s);
+            },
         }
     }
 
