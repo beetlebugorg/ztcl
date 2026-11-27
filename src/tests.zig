@@ -3137,6 +3137,53 @@ test "ztcl::vm on Windows: a guest boots, and vsock and exec reach its agent" {
     _ = try ev(&it, "ztcl::vm delete vm1");
 }
 
+test "ztcl::vm image: install, list, and create -image through the store" {
+    if (comptime !@import("vmstore.zig").supported) return error.SkipZigTest;
+    const a = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    // A release folder in the jail: the signed manifest of the fixtures
+    // and its arm64 kernel, the 4 bytes "test".
+    try tmp.dir.createDirPath(std.testing.io, "jail/rel");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "jail/rel/manifest.json", .data = @embedFile("vmimage_fixtures/manifest.json") });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "jail/rel/manifest.json.sig", .data = @embedFile("vmimage_fixtures/manifest.json.sig.good") });
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "jail/rel/Image", .data = "test" });
+    const jail = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/jail", .{tmp.sub_path});
+    defer a.free(jail);
+    const store = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/store", .{tmp.sub_path});
+    defer a.free(store);
+    var it: tcl.Interp = undefined;
+    try it.init(a);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.vm) | @backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setRoot(&it, jail);
+    it.vm_host.image_store = store;
+    const ev = struct {
+        fn f(x: *tcl.Interp, s: []const u8) ![]const u8 {
+            const v = x.eval(s) catch |e| {
+                std.debug.print("tcl error: {s}\n", .{x.str(x.result) catch ""});
+                return e;
+            };
+            return x.str(v);
+        }
+    }.f;
+    // The fixture has files for arm64 only, and install needs the files
+    // of the host.
+    if (comptime std.mem.eql(u8, @import("vmstore.zig").host_arch, "arm64")) {
+        try std.testing.expectEqualStrings("ztcl-guest-test 3", try ev(&it, "set r [ztcl::vm image install /rel]; list [dict get $r name] [dict get $r counter]"));
+        try std.testing.expect(std.mem.indexOf(u8, try ev(&it, "ztcl::vm image list"), "ztcl-guest-test") != null);
+    } else {
+        try std.testing.expectEqualStrings("ZTCL VM IMAGE MISSING", try ev(&it, "catch {ztcl::vm image install /rel}; join [lrange $::errorCode 0 3] { }"));
+        try std.testing.expectEqualStrings("", try ev(&it, "ztcl::vm image list"));
+    }
+    // create -image on the Windows Hypervisor Platform. KVM has no
+    // -image yet.
+    if (comptime @import("builtin").os.tag != .windows) return;
+    @import("whp.zig").probe() catch return;
+    try std.testing.expectEqualStrings("-image gives the kernel, the initramfs, and the command line: no -kernel, -initrd, or -cmdline with it", try ev(&it, "catch {ztcl::vm create -image ztcl-guest-test -kernel /rel/Image} m; set m"));
+    try std.testing.expectEqualStrings("ZTCL VM IMAGE NAME", try ev(&it, "catch {ztcl::vm create -image no-such-image}; join [lrange $::errorCode 0 3] { }"));
+}
+
 test "ztcl::vm: the capability, the jail of its paths, and the limits" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);

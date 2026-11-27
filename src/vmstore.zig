@@ -29,8 +29,10 @@ const Allocator = std.mem.Allocator;
 
 pub const Error = error{ NoStore, Io, NotFound, Missing } || vmimage.Error;
 
-/// The platforms of the store: the hosts of `ztcl::vm`.
-pub const supported = builtin.os.tag == .macos or builtin.os.tag == .linux;
+/// The platforms of the store: the hosts of `ztcl::vm`. On Windows the
+/// guest of the store runs on the Windows Hypervisor Platform.
+pub const supported = builtin.os.tag == .macos or builtin.os.tag == .linux or on_win;
+const on_win = builtin.os.tag == .windows;
 
 /// The architecture of the host in a manifest.
 pub const host_arch = switch (builtin.cpu.arch) {
@@ -39,15 +41,190 @@ pub const host_arch = switch (builtin.cpu.arch) {
     else => "other",
 };
 
-fn ok(rc: usize) bool {
-    return os.errno(rc) == .SUCCESS;
-}
-
 fn z(a: Allocator, s: []const u8) Allocator.Error![:0]u8 {
     return a.dupeSentinel(u8, s, 0);
 }
 
-const nofollow_dir: os.O = .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .NOFOLLOW = true, .CLOEXEC = true };
+/// The calls of the store on a descriptor of a folder: each opens one
+/// name relative to the folder, with no symlink. POSIX has `openat` with
+/// `O_NOFOLLOW`. Windows has `NtCreateFile` relative to the handle of the
+/// folder, with FILE_OPEN_REPARSE_POINT, and a reparse point (a symlink,
+/// a junction, or a mount point) is an error (`fsroot_windows.openAt`).
+const fs = if (on_win) struct {
+    const fw = @import("fsroot_windows.zig");
+
+    fn openDir(dir: i32, name: [:0]const u8) Error!i32 {
+        return switch (fw.openAt(dir, name, .dir)) {
+            .fd => |f| f,
+            .err => |e| if (e == .NOENT) error.NotFound else error.Io,
+        };
+    }
+    fn openRead(dir: i32, name: [:0]const u8) Error!i32 {
+        return switch (fw.openAt(dir, name, .read)) {
+            .fd => |f| f,
+            .err => |e| if (e == .NOENT) error.NotFound else error.Io,
+        };
+    }
+    fn createNew(dir: i32, name: [:0]const u8) Error!i32 {
+        return switch (fw.openAt(dir, name, .create_new)) {
+            .fd => |f| f,
+            .err => error.Io,
+        };
+    }
+    /// A folder that exists already is no error.
+    fn mkdir(dir: i32, name: [:0]const u8) Error!void {
+        if (fw.mkdirAt(.{ .fd = dir, .base = name })) |e| if (e != .EXIST) return error.Io;
+    }
+    fn rename(fd: i32, from: [:0]const u8, td: i32, to: [:0]const u8) bool {
+        return fw.renameAt(.{ .fd = fd, .base = from }, .{ .fd = td, .base = to }) == null;
+    }
+    fn unlink(dir: i32, name: [:0]const u8, is_dir: bool) void {
+        _ = fw.removeAt(.{ .fd = dir, .base = name }, is_dir);
+    }
+    fn read(fd: i32, buf: []u8) ?usize {
+        return switch (sys.read(fd, buf)) {
+            .n => |n| n,
+            else => null,
+        };
+    }
+    fn write(fd: i32, buf: []const u8) ?usize {
+        return switch (sys.write(fd, buf)) {
+            .n => |n| n,
+            else => null,
+        };
+    }
+    fn close(fd: i32) void {
+        sys.close(fd);
+    }
+    /// Closes `fd`.
+    fn names(a: Allocator, fd: i32) Error![][]u8 {
+        defer sys.close(fd);
+        return fw.namesAt(a, fd) catch |e| if (e == error.OutOfMemory) error.OutOfMemory else error.Io;
+    }
+    /// Makes the folder `path` of the host and its parents, and opens it.
+    /// The path of the store comes from the embedder, and the system
+    /// follows a reparse point in it.
+    fn openRoot(a: Allocator, path: []const u8) ?i32 {
+        const w = std.unicode.utf8ToUtf16LeAllocZ(a, path) catch return null;
+        defer a.free(w);
+        // Each parent, then the folder. A folder that exists is no error.
+        for (w, 0..) |c, k| if (k > 0 and (c == '/' or c == '\\') and w[k - 1] != ':') {
+            w[k] = 0;
+            _ = CreateDirectoryW(w.ptr, null);
+            w[k] = c;
+        };
+        _ = CreateDirectoryW(w.ptr, null);
+        // FILE_LIST_DIRECTORY | FILE_TRAVERSE | FILE_READ_ATTRIBUTES |
+        // SYNCHRONIZE, all sharing, OPEN_EXISTING, BACKUP_SEMANTICS for a
+        // folder.
+        const h = CreateFileW(w.ptr, 0x0010_00a1, 7, null, 3, 0x0200_0000, null);
+        if (@intFromPtr(h) == ~@as(usize, 0)) return null;
+        return sys.win.fdOfHandle(h.?) orelse {
+            _ = CloseHandle(h);
+            return null;
+        };
+    }
+    extern "kernel32" fn CreateFileW(name: [*:0]const u16, access: u32, share: u32, security: ?*anyopaque, disposition: u32, flags: u32, template: ?*anyopaque) callconv(.winapi) ?*anyopaque;
+    extern "kernel32" fn CloseHandle(h: ?*anyopaque) callconv(.winapi) i32;
+    extern "kernel32" fn CreateDirectoryW(name: [*:0]const u16, security: ?*anyopaque) callconv(.winapi) i32;
+} else struct {
+    const nofollow_dir: os.O = .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .NOFOLLOW = true, .CLOEXEC = true };
+
+    fn ok(rc: usize) bool {
+        return os.errno(rc) == .SUCCESS;
+    }
+    fn openDir(dir: i32, name: [:0]const u8) Error!i32 {
+        const rc = os.openat(dir, name, nofollow_dir, 0);
+        if (!ok(rc)) return if (os.errno(rc) == .NOENT) error.NotFound else error.Io;
+        return @intCast(rc);
+    }
+    fn openRead(dir: i32, name: [:0]const u8) Error!i32 {
+        const rc = os.openat(dir, name, .{ .ACCMODE = .RDONLY, .NOFOLLOW = true, .CLOEXEC = true }, 0);
+        if (!ok(rc)) return if (os.errno(rc) == .NOENT) error.NotFound else error.Io;
+        return @intCast(rc);
+    }
+    fn createNew(dir: i32, name: [:0]const u8) Error!i32 {
+        const rc = os.openat(dir, name, .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true, .NOFOLLOW = true, .CLOEXEC = true }, 0o644);
+        if (!ok(rc)) return error.Io;
+        return @intCast(rc);
+    }
+    fn mkdir(dir: i32, name: [:0]const u8) Error!void {
+        const rc = os.mkdirat(dir, name, 0o755);
+        if (!ok(rc) and os.errno(rc) != .EXIST) return error.Io;
+    }
+    fn rename(fd: i32, from: [:0]const u8, td: i32, to: [:0]const u8) bool {
+        return ok(os.renameat(fd, from, td, to));
+    }
+    fn unlink(dir: i32, name: [:0]const u8, is_dir: bool) void {
+        _ = os.unlinkat(dir, name, if (is_dir) os.AT.REMOVEDIR else 0);
+    }
+    fn read(fd: i32, buf: []u8) ?usize {
+        const n = os.read(fd, buf.ptr, buf.len);
+        return if (ok(n)) n else null;
+    }
+    fn write(fd: i32, buf: []const u8) ?usize {
+        const n = os.write(fd, buf.ptr, buf.len);
+        return if (ok(n)) n else null;
+    }
+    fn close(fd: i32) void {
+        _ = os.close(fd);
+    }
+    /// Closes `fd`.
+    fn names(a: Allocator, fd: i32) Error![][]u8 {
+        var out: std.ArrayList([]u8) = .empty;
+        errdefer {
+            for (out.items) |x| a.free(x);
+            out.deinit(a);
+        }
+        if (comptime builtin.os.tag == .macos) {
+            // `closedir` closes the descriptor.
+            const d = os.openDir(fd) orelse {
+                _ = os.close(fd);
+                return error.Io;
+            };
+            defer _ = std.c.closedir(d);
+            while (os.nextName(d)) |name| {
+                if (std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) continue;
+                try out.append(a, try a.dupe(u8, name));
+            }
+            return out.toOwnedSlice(a);
+        }
+        defer _ = os.close(fd);
+        var buf: [8192]u8 align(8) = undefined;
+        while (true) {
+            const n = os.getdents64(fd, &buf, buf.len);
+            if (!ok(n)) return error.Io;
+            if (n == 0) break;
+            var off: usize = 0;
+            while (off < n) {
+                const reclen = std.mem.readInt(u16, buf[off + 16 ..][0..2], .little);
+                const name = std.mem.sliceTo(@as([*:0]const u8, @ptrCast(&buf[off + 19])), 0);
+                if (!std.mem.eql(u8, name, ".") and !std.mem.eql(u8, name, "..")) try out.append(a, try a.dupe(u8, name));
+                off += reclen;
+            }
+        }
+        return out.toOwnedSlice(a);
+    }
+    /// Makes the folder `path` of the host and its parents, and opens it.
+    /// The path of the store comes from the embedder and may have
+    /// symlinks (/var on macOS); the names below it may not.
+    fn openRoot(a: Allocator, root: []const u8) ?i32 {
+        var k: usize = if (root[0] == '/') 1 else 0;
+        while (k <= root.len) : (k += 1) {
+            if (k == 0) continue;
+            if (k == root.len or root[k] == '/') {
+                const pz = z(a, root[0..k]) catch return null;
+                defer a.free(pz);
+                _ = os.mkdirat(os.AT.FDCWD, pz, 0o755);
+            }
+        }
+        const rz = z(a, root) catch return null;
+        defer a.free(rz);
+        const rc = os.open(rz, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
+        if (!ok(rc)) return null;
+        return @intCast(rc);
+    }
+};
 
 /// The parent folder of `path` below `dir`, opened one name at a time
 /// with no symlink, and the last name. Close `fd` when it is not `dir`.
@@ -57,32 +234,35 @@ const Parent = struct {
     base: [:0]u8,
 
     fn close(p: Parent, a: Allocator) void {
-        if (p.own) _ = os.close(p.fd);
+        if (p.own) fs.close(p.fd);
         a.free(p.base);
     }
 };
+
+fn badName(name: []const u8) bool {
+    if (name.len == 0 or std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return true;
+    // A separator or a stream of Windows in a name.
+    return on_win and std.mem.indexOfAny(u8, name, "\\:") != null;
+}
 
 fn parent(a: Allocator, dir: i32, path: []const u8) Error!Parent {
     if (path.len == 0 or path[0] == '/') return error.Io;
     var cur = dir;
     var own = false;
-    errdefer if (own) {
-        _ = os.close(cur);
-    };
+    errdefer if (own) fs.close(cur);
     var it = std.mem.splitScalar(u8, path, '/');
     var name = it.next().?;
     while (it.next()) |next| {
-        if (name.len == 0 or std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return error.Io;
+        if (badName(name)) return error.Io;
         const nz = try z(a, name);
         defer a.free(nz);
-        const rc = os.openat(cur, nz, nofollow_dir, 0);
-        if (!ok(rc)) return if (os.errno(rc) == .NOENT) error.NotFound else error.Io;
-        if (own) _ = os.close(cur);
-        cur = @intCast(rc);
+        const fd = try fs.openDir(cur, nz);
+        if (own) fs.close(cur);
+        cur = fd;
         own = true;
         name = next;
     }
-    if (name.len == 0 or std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return error.Io;
+    if (badName(name)) return error.Io;
     return .{ .fd = cur, .own = own, .base = try z(a, name) };
 }
 
@@ -93,12 +273,9 @@ fn mkdirs(a: Allocator, dir: i32, path: []const u8) Error!void {
         if (k == path.len or path[k] == '/') {
             const p = try parent(a, dir, path[0..k]);
             defer p.close(a);
-            const rc = os.mkdirat(p.fd, p.base, 0o755);
-            if (!ok(rc) and os.errno(rc) != .EXIST) return error.Io;
+            try fs.mkdir(p.fd, p.base);
             // A name that exists must be a folder, not a symlink.
-            const fd = os.openat(p.fd, p.base, nofollow_dir, 0);
-            if (!ok(fd)) return error.Io;
-            _ = os.close(@intCast(fd));
+            fs.close(try fs.openDir(p.fd, p.base));
         }
     }
 }
@@ -111,16 +288,13 @@ fn join(a: Allocator, parts: []const []const u8) Allocator.Error![]u8 {
 fn readAll(a: Allocator, dir: i32, path: []const u8, max: usize) Error![]u8 {
     const p = try parent(a, dir, path);
     defer p.close(a);
-    const rc = os.openat(p.fd, p.base, .{ .ACCMODE = .RDONLY, .NOFOLLOW = true, .CLOEXEC = true }, 0);
-    if (!ok(rc)) return if (os.errno(rc) == .NOENT) error.NotFound else error.Io;
-    const fd: i32 = @intCast(rc);
-    defer _ = os.close(fd);
+    const fd = try fs.openRead(p.fd, p.base);
+    defer fs.close(fd);
     var out: std.ArrayList(u8) = .empty;
     errdefer out.deinit(a);
     var buf: [65536]u8 = undefined;
     while (true) {
-        const n = os.read(fd, &buf, buf.len);
-        if (!ok(n)) return error.Io;
+        const n = fs.read(fd, &buf) orelse return error.Io;
         if (n == 0) break;
         if (out.items.len + n > max) return error.Io;
         try out.appendSlice(a, buf[0..n]);
@@ -139,14 +313,12 @@ fn writeAtomic(a: Allocator, s: Store, path: []const u8, data: []const u8) Error
 fn writeNew(a: Allocator, dir: i32, path: []const u8, data: []const u8) Error!void {
     const p = try parent(a, dir, path);
     defer p.close(a);
-    const rc = os.openat(p.fd, p.base, .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true, .NOFOLLOW = true, .CLOEXEC = true }, 0o644);
-    if (!ok(rc)) return error.Io;
-    const fd: i32 = @intCast(rc);
-    defer _ = os.close(fd);
+    const fd = try fs.createNew(p.fd, p.base);
+    defer fs.close(fd);
     var off: usize = 0;
     while (off < data.len) {
-        const n = os.write(fd, data[off..].ptr, data.len - off);
-        if (!ok(n) or n == 0) return error.Io;
+        const n = fs.write(fd, data[off..]) orelse return error.Io;
+        if (n == 0) return error.Io;
         off += n;
     }
 }
@@ -156,64 +328,30 @@ fn rename(a: Allocator, dir: i32, from: []const u8, to: []const u8) Error!void {
     defer f.close(a);
     const t = try parent(a, dir, to);
     defer t.close(a);
-    if (!ok(os.renameat(f.fd, f.base, t.fd, t.base))) return error.Io;
+    if (!fs.rename(f.fd, f.base, t.fd, t.base)) return error.Io;
 }
 
 fn exists(a: Allocator, dir: i32, path: []const u8) bool {
     const p = parent(a, dir, path) catch return false;
     defer p.close(a);
-    const rc = os.openat(p.fd, p.base, .{ .ACCMODE = .RDONLY, .NOFOLLOW = true, .CLOEXEC = true }, 0);
-    if (!ok(rc)) return false;
-    _ = os.close(@intCast(rc));
+    // A folder or a file.
+    const fd = fs.openRead(p.fd, p.base) catch fs.openDir(p.fd, p.base) catch return false;
+    fs.close(fd);
     return true;
 }
 
 fn unlink(a: Allocator, dir: i32, path: []const u8, is_dir: bool) void {
     const p = parent(a, dir, path) catch return;
     defer p.close(a);
-    _ = os.unlinkat(p.fd, p.base, if (is_dir) os.AT.REMOVEDIR else 0);
+    fs.unlink(p.fd, p.base, is_dir);
 }
 
 /// The names in the folder `path` below `dir`, with no `.` and `..`.
 fn listDir(a: Allocator, dir: i32, path: []const u8) Error![][]u8 {
     const p = parent(a, dir, path) catch |e| return if (e == error.NotFound) &.{} else e;
     defer p.close(a);
-    const rc = os.openat(p.fd, p.base, nofollow_dir, 0);
-    if (!ok(rc)) return if (os.errno(rc) == .NOENT) &.{} else error.Io;
-    const fd: i32 = @intCast(rc);
-    var out: std.ArrayList([]u8) = .empty;
-    errdefer {
-        for (out.items) |x| a.free(x);
-        out.deinit(a);
-    }
-    if (comptime builtin.os.tag == .macos) {
-        // `closedir` closes the descriptor.
-        const d = os.openDir(fd) orelse {
-            _ = os.close(fd);
-            return error.Io;
-        };
-        defer _ = std.c.closedir(d);
-        while (os.nextName(d)) |name| {
-            if (std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) continue;
-            try out.append(a, try a.dupe(u8, name));
-        }
-        return out.toOwnedSlice(a);
-    }
-    defer _ = os.close(fd);
-    var buf: [8192]u8 align(8) = undefined;
-    while (true) {
-        const n = os.getdents64(fd, &buf, buf.len);
-        if (!ok(n)) return error.Io;
-        if (n == 0) break;
-        var off: usize = 0;
-        while (off < n) {
-            const reclen = std.mem.readInt(u16, buf[off + 16 ..][0..2], .little);
-            const name = std.mem.sliceTo(@as([*:0]const u8, @ptrCast(&buf[off + 19])), 0);
-            if (!std.mem.eql(u8, name, ".") and !std.mem.eql(u8, name, "..")) try out.append(a, try a.dupe(u8, name));
-            off += reclen;
-        }
-    }
-    return out.toOwnedSlice(a);
+    const fd = fs.openDir(p.fd, p.base) catch |e| return if (e == error.NotFound) &.{} else e;
+    return fs.names(a, fd);
 }
 
 fn freeList(a: Allocator, l: [][]u8) void {
@@ -233,29 +371,15 @@ pub const Store = struct {
     /// Opens the store at `root`, and makes its folders. Call `close`.
     pub fn open(a: Allocator, root: []const u8) Error!Store {
         if (root.len == 0) return error.NoStore;
-        // The path of the store itself comes from the embedder and may
-        // have symlinks (/var on macOS); the names below it may not.
-        var k: usize = if (root[0] == '/') 1 else 0;
-        while (k <= root.len) : (k += 1) {
-            if (k == 0) continue;
-            if (k == root.len or root[k] == '/') {
-                const pz = try z(a, root[0..k]);
-                defer a.free(pz);
-                _ = os.mkdirat(os.AT.FDCWD, pz, 0o755);
-            }
-        }
-        const rz = try z(a, root);
-        defer a.free(rz);
-        const rc = os.open(rz, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
-        if (!ok(rc)) return error.NoStore;
-        const s: Store = .{ .root = root, .fd = @intCast(rc) };
+        const fd = fs.openRoot(a, root) orelse return error.NoStore;
+        const s: Store = .{ .root = root, .fd = fd };
         errdefer s.close();
         for ([_][]const u8{ "objects", "releases", "tmp" }) |sub| try mkdirs(a, s.fd, sub);
         return s;
     }
 
     pub fn close(s: Store) void {
-        _ = os.close(s.fd);
+        fs.close(s.fd);
     }
 
     fn tmpName(_: Store, a: Allocator) Allocator.Error![]u8 {
@@ -272,6 +396,29 @@ pub const Store = struct {
 
     fn objectRel(a: Allocator, sha: []const u8) Allocator.Error![]u8 {
         return join(a, &.{ "objects", sha });
+    }
+
+    /// The bytes of an object, read through the descriptor of the store
+    /// and checked against their SHA-256, for a monitor that boots from
+    /// memory: the check is on the bytes that the guest gets.
+    pub fn readObject(s: Store, a: Allocator, sha: []const u8) Error![]u8 {
+        const p = try objectRel(a, sha);
+        defer a.free(p);
+        const data = readAll(a, s.fd, p, 8 << 30) catch |e| return if (e == error.NotFound) error.Missing else e;
+        errdefer a.free(data);
+        try vmimage.checkHash(data, sha);
+        return data;
+    }
+
+    /// A descriptor of an object to read, opened through the descriptor
+    /// of the store, for a disk. A disk with verity checks itself in the
+    /// guest.
+    pub fn openObject(s: Store, a: Allocator, sha: []const u8) Error!i32 {
+        const p = try objectRel(a, sha);
+        defer a.free(p);
+        const par = try parent(a, s.fd, p);
+        defer par.close(a);
+        return fs.openRead(par.fd, par.base) catch |e| if (e == error.NotFound) error.Missing else e;
     }
 
     fn counterFile(s: Store, a: Allocator, name: []const u8, which: []const u8) Error!?u64 {
@@ -575,19 +722,83 @@ pub fn freeEntries(a: Allocator, entries: []Store.Entry) void {
 }
 
 fn openDirFd(a: Allocator, path: []const u8) !i32 {
-    const pz = try z(a, path);
-    defer a.free(pz);
-    const rc = os.open(pz, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
-    if (!ok(rc)) return error.Io;
-    return @intCast(rc);
+    return fs.openRoot(a, path) orelse error.Io;
 }
 
+/// A symlink at `path` below `dir` to `target`, relative to the folder
+/// of the link. On Windows a symlink needs a right of the user or the
+/// developer mode, so the test makes a junction, a reparse point of a
+/// mount point, which needs neither: the store refuses each reparse point.
 fn symlinkAt(a: Allocator, target: []const u8, dir: i32, path: []const u8) !void {
+    if (comptime on_win) return junctionAt(a, target, dir, path);
     const t = try z(a, target);
     defer a.free(t);
     const pz = try z(a, path);
     defer a.free(pz);
-    if (!ok(os.symlinkat(t, dir, pz))) return error.Io;
+    if (!fs.ok(os.symlinkat(t, dir, pz))) return error.Io;
+}
+
+/// Removes the link of `symlinkAt`. The store refuses to remove a reparse
+/// point, so on Windows the test removes its junction by its path.
+fn unlinkLink(a: Allocator, dir: i32, path: []const u8) !void {
+    if (comptime !on_win) return unlink(a, dir, path, false);
+    const W = struct {
+        extern "kernel32" fn GetFinalPathNameByHandleW(h: ?*anyopaque, buf: [*]u16, size: u32, flags: u32) callconv(.winapi) u32;
+        extern "kernel32" fn RemoveDirectoryW(name: [*:0]const u16) callconv(.winapi) i32;
+    };
+    var wbuf: [1024]u16 = undefined;
+    const n = W.GetFinalPathNameByHandleW(@ptrFromInt(@as(usize, @intCast(dir))), &wbuf, wbuf.len, 0);
+    if (n == 0 or n >= wbuf.len) return error.Io;
+    const dos = try std.unicode.utf16LeToUtf8Alloc(a, wbuf[4..n]);
+    defer a.free(dos);
+    const link = try std.fs.path.resolve(a, &.{ dos, path });
+    defer a.free(link);
+    const lw = try std.unicode.utf8ToUtf16LeAllocZ(a, link);
+    defer a.free(lw);
+    if (W.RemoveDirectoryW(lw.ptr) == 0) return error.Io;
+}
+
+fn junctionAt(a: Allocator, target: []const u8, dir: i32, path: []const u8) !void {
+    const W = struct {
+        extern "kernel32" fn GetFinalPathNameByHandleW(h: ?*anyopaque, buf: [*]u16, size: u32, flags: u32) callconv(.winapi) u32;
+        extern "kernel32" fn CreateFileW(name: [*:0]const u16, access: u32, share: u32, security: ?*anyopaque, disposition: u32, flags: u32, template: ?*anyopaque) callconv(.winapi) ?*anyopaque;
+        extern "kernel32" fn DeviceIoControl(h: ?*anyopaque, code: u32, in: ?*const anyopaque, in_len: u32, out: ?*anyopaque, out_len: u32, got: *u32, ov: ?*anyopaque) callconv(.winapi) i32;
+        extern "kernel32" fn CloseHandle(h: ?*anyopaque) callconv(.winapi) i32;
+    };
+    // The real path of the folder, as \\?\C:\...
+    var wbuf: [1024]u16 = undefined;
+    const n = W.GetFinalPathNameByHandleW(@ptrFromInt(@as(usize, @intCast(dir))), &wbuf, wbuf.len, 0);
+    if (n == 0 or n >= wbuf.len) return error.Io;
+    const dos = try std.unicode.utf16LeToUtf8Alloc(a, wbuf[4..n]);
+    defer a.free(dos);
+    const link = try std.fs.path.resolve(a, &.{ dos, path });
+    defer a.free(link);
+    const to = try std.fs.path.resolve(a, &.{ std.fs.path.dirname(link).?, target });
+    defer a.free(to);
+    try mkdirs(a, dir, path);
+    const lw = try std.unicode.utf8ToUtf16LeAllocZ(a, link);
+    defer a.free(lw);
+    // GENERIC_WRITE, OPEN_EXISTING, BACKUP_SEMANTICS | OPEN_REPARSE_POINT.
+    const h = W.CreateFileW(lw.ptr, 0x4000_0000, 0, null, 3, 0x0200_0000 | 0x0020_0000, null);
+    if (@intFromPtr(h) == ~@as(usize, 0)) return error.Io;
+    defer _ = W.CloseHandle(h);
+    // REPARSE_DATA_BUFFER of IO_REPARSE_TAG_MOUNT_POINT: the substitute
+    // name \??\C:\... and an empty print name, each with its zero.
+    const subst = try std.fmt.allocPrint(a, "\\??\\{s}", .{to});
+    defer a.free(subst);
+    const sw = try std.unicode.utf8ToUtf16LeAlloc(a, subst);
+    defer a.free(sw);
+    const sub_bytes: u16 = @intCast(sw.len * 2);
+    const data_len: u16 = 8 + sub_bytes + 2 + 2;
+    var buf: [2048]u8 align(4) = @splat(0);
+    std.mem.writeInt(u32, buf[0..4], 0xA000_0003, .little);
+    std.mem.writeInt(u16, buf[4..6], data_len, .little);
+    std.mem.writeInt(u16, buf[10..12], sub_bytes, .little); // the substitute name at 0
+    std.mem.writeInt(u16, buf[12..14], sub_bytes + 2, .little); // the print name after it
+    @memcpy(buf[16..][0..sub_bytes], std.mem.sliceAsBytes(sw));
+    var got: u32 = 0;
+    // FSCTL_SET_REPARSE_POINT.
+    if (W.DeviceIoControl(h, 0x0009_00A4, &buf, 8 + @as(u32, data_len), null, 0, &got, null) == 0) return error.Io;
 }
 
 test "vmstore: install, list, check, rollback, and remove" {
@@ -598,7 +809,7 @@ test "vmstore: install, list, check, rollback, and remove" {
     const base = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path});
     defer a.free(base);
     const bfd = try openDirFd(a, base);
-    defer _ = os.close(bfd);
+    defer fs.close(bfd);
     // A release folder: the signed manifest of the fixtures, and its
     // kernel, the 4 bytes "test".
     try mkdirs(a, bfd, "src");
@@ -612,7 +823,7 @@ test "vmstore: install, list, check, rollback, and remove" {
     const src = try join(a, &.{ base, "src" });
     defer a.free(src);
     const sfd = try openDirFd(a, src);
-    defer _ = os.close(sfd);
+    defer fs.close(sfd);
     const root = try join(a, &.{ base, "store" });
     defer a.free(root);
     const s = try Store.open(a, root);
@@ -654,7 +865,7 @@ test "vmstore: a symlink in the release or in the store is refused" {
     const base = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path});
     defer a.free(base);
     const bfd = try openDirFd(a, base);
-    defer _ = os.close(bfd);
+    defer fs.close(bfd);
     try mkdirs(a, bfd, "src");
     try writeNew(a, bfd, "src/manifest.json", @embedFile("vmimage_fixtures/manifest.json"));
     try writeNew(a, bfd, "src/manifest.json.sig", @embedFile("vmimage_fixtures/manifest.json.sig.good"));
@@ -665,14 +876,14 @@ test "vmstore: a symlink in the release or in the store is refused" {
     const src = try join(a, &.{ base, "src" });
     defer a.free(src);
     const sfd = try openDirFd(a, src);
-    defer _ = os.close(sfd);
+    defer fs.close(sfd);
     const root = try join(a, &.{ base, "store" });
     defer a.free(root);
     const s = try Store.open(a, root);
     defer s.close();
     try std.testing.expectError(error.Io, s.install(a, sfd, "arm64", false));
     // The file itself, then objects/ of the store swapped for a symlink.
-    unlink(a, bfd, "src/Image", false);
+    try unlinkLink(a, bfd, "src/Image");
     try writeNew(a, bfd, "src/Image", "test");
     try mkdirs(a, bfd, "elsewhere");
     unlink(a, s.fd, "objects", true);
