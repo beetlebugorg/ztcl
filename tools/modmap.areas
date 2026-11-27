@@ -1,0 +1,200 @@
+# The areas of src/ for tools/modmap.zig (ztcl#537).
+#
+# Each area is a folder of the target layout of docs/dev/architecture.md.
+# An `area` line names the areas that its files may import. A file may
+# always import a file of its own area. Test files and test blocks may
+# import any file. See the top of tools/modmap.zig for the format.
+
+area stdlib
+area sys stdlib
+area core stdlib
+area point core stdlib
+area cmds core point stdlib
+area meter core stdlib
+area os core cmds meter sys stdlib
+area thread core cmds os meter sys stdlib
+area isolate core cmds os thread meter sys stdlib
+area stdcmd core cmds os thread sys stdlib
+area vm core cmds os stdcmd thread isolate meter sys stdlib
+area wasm core cmds os stdcmd point thread meter sys stdlib
+area cext core cmds os thread sys stdlib
+area debug core cmds os thread meter sys stdlib
+area registry *
+area cli *
+area api *
+area tests *
+
+dupwords base64 utf8 hex path uleb sleb crc escape quote trim
+
+# stdlib: libraries with no Tcl in them: protocols, formats, codecs.
+src/aio/ stdlib
+src/crypto/ stdlib
+src/h2/ stdlib
+src/tls/ stdlib
+src/inflate.zig stdlib
+src/zipread.zig stdlib
+src/zipwrite.zig stdlib
+src/wasm_out.zig stdlib
+src/wasm_link.zig stdlib
+# stdcmd: the commands of the batteries, on stdlib.
+src/json/ stdcmd
+src/tls/cmd.zig stdcmd
+src/vt.zig stdcmd
+
+# Folders.
+src/jit/ core
+src/shell/ cli
+src/cext/ cext
+src/vm/ vm
+src/wasi/ wasm
+src/wasm_aot/ wasm
+src/wasmrt/ wasm
+src/wasi/run.zig cli
+
+# sys: the platform interface, one file for each OS.
+src/sys*.zig sys
+src/wasi/p3.zig sys
+src/wasi/async.zig sys
+
+# core: the parser, the interpreter, values, bytecode, the JIT, memory.
+src/interp.zig core
+src/value.zig core
+src/expr.zig core
+src/expr_diag.zig core
+src/vm.zig core
+src/jit.zig core
+src/heap.zig core
+src/gc.zig core
+src/compact.zig core
+src/features.zig core
+src/features_table.zig core
+src/bigint.zig core
+src/ucd.zig core
+src/ns.zig core
+src/trace.zig core
+src/coro.zig core
+src/noise.zig core
+src/mathns.zig core
+
+# point: point procs and their compilers.
+src/point.zig point
+src/point_rt.zig point
+src/point_wasm.zig point
+src/point_fuzz.zig point
+
+# cmds: the commands of the language, by family.
+src/cmds.zig cmds
+src/dict.zig cmds
+src/more.zig cmds
+src/extra.zig cmds
+src/format.zig cmds
+src/regex.zig cmds
+src/math9.zig cmds
+src/oo.zig cmds
+src/pkg.zig cmds
+src/tcl9.zig cmds
+src/hello.zig cmds
+src/disasm.zig cmds
+src/agent.zig cmds
+src/child.zig cmds
+
+# meter: meters of compute units, time, memory, and I/O.
+src/meter.zig meter
+src/metercmd.zig meter
+
+# os: channels, files, processes, sockets, serial, events, host APIs.
+src/chan.zig os
+src/enc.zig os
+src/filecmd.zig os
+src/fsroot*.zig os
+src/proc.zig os
+src/proc_windows.zig os
+src/pty.zig os
+src/pty_mac.zig os
+src/pty_windows.zig os
+src/sock.zig os
+src/serial.zig os
+src/event.zig os
+src/clock.zig os
+src/launch.zig os
+src/notify*.zig os
+src/watch.zig os
+src/watch_macos.zig os
+src/watch_windows.zig os
+src/mac.zig os
+src/winreg.zig os
+src/wincred.zig os
+src/winfolder.zig os
+src/dbus.zig os
+src/vfs.zig os
+
+# thread: the capability `thread`.
+src/thread.zig thread
+src/threadcmd.zig thread
+src/tpool.zig thread
+src/tsv.zig thread
+src/tsync.zig thread
+src/tchan.zig thread
+
+# isolate: isolated threads and the sandbox of each OS.
+src/iso*.zig isolate
+src/isolate_linux.zig isolate
+src/isolate_mac.zig isolate
+src/isolate_windows.zig isolate
+
+# vm: `ztcl::vm` guests.
+src/microvm.zig vm
+src/kvm.zig vm
+src/whp.zig vm
+src/vz.zig vm
+src/vmagent.zig vm
+src/vmimage.zig vm
+src/vmstore.zig vm
+
+# wasm: the WebAssembly library, its host, and the wasm writers.
+src/wasm_shell.zig wasm
+src/wasmdom.zig wasm
+src/wasmfiles.zig wasm
+src/wasmweb.zig wasm
+src/wasmbundle.zig wasm
+src/webasync.zig wasm
+src/webthread.zig wasm
+
+# cext: C packages and libztcl.
+src/cext_stubs.zig cext
+src/wasm_cext.zig cext
+src/libtcl.zig cext
+src/libztcl.zig cext
+src/tclstub.zig cext
+
+# debug: probes, record and replay, the debugger, DAP, MCP.
+src/debug.zig debug
+src/debugmcp.zig debug
+src/dap.zig debug
+src/probe.zig debug
+src/tape.zig debug
+
+# cli: the runner and `ztcl build` and `ztcl compile`.
+src/main.zig cli
+src/buildcmd.zig cli
+src/buildnative.zig cli
+src/stripbuild.zig cli
+src/stripscan.zig cli
+src/macho.zig cli
+src/compile.zig cli
+src/compilecmd.zig cli
+
+# registry: the table of built-in modules.
+src/modules.zig registry
+
+# api: the roots that embedders import.
+src/ztcl.zig api
+src/wasm.zig api
+src/enclave_core.zig api
+
+# tests.
+src/tests.zig tests
+src/*_tests.zig tests
+src/*/tests.zig tests
+src/*/*_test.zig tests
+src/*/*_tests.zig tests

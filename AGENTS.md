@@ -3,6 +3,7 @@
 ztcl is an experimental, sandboxed Tcl interpreter in Zig. It is built for zslice and has no dependency on it. It uses the Zig standard library and libghostty-vt, which the build compiles from source for `ztcl::vt`.
 
 Read [WRITING.md](WRITING.md) before you write code comments, commits, or PRs. Read [docs/dev/design.md](docs/dev/design.md) before you change the interpreter.
+Read [docs/dev/architecture.md](docs/dev/architecture.md) before you add or move a file in `src/`. It has the areas, the rules of the layers, and the folder of each kind of feature.
 
 Put plans, task lists, reviews, and results in `docs/dev/`. The docs site publishes only the user pages that `tools/build-docs.py` lists.
 
@@ -39,6 +40,7 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 | `node tools/wasm-point.mjs zig-out/lib/ztcl-simd.wasm` | Compares the point procs of the wasm library with the native `Program.run`. Build with `zig build wasm-simd point-rt` first. |
 | `node tools/point-wasm-bench.mjs --check` | Compares the speed of compiled point procs with the native `Program.run`. Build with `zig build point-rt` first. |
 | `tools/jit-perf.sh --check off` | Checks that the interpreter did not slow down. |
+| `zig run tools/modmap.zig` | Prints the module map of `src/`: the imports, the importers, and the tests of each file, the cycles, and the layering breaks (`docs/dev/architecture.md`). |
 
 ## Rules
 

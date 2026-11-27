@@ -5,6 +5,7 @@ These files are the plans, the task lists, the reviews, and the test results of 
 | File | What it has |
 |---|---|
 | [design.md](design.md) | The design of the interpreter: values, bytecode, the evaluator, and the capabilities. Read it before you change the interpreter. |
+| [architecture.md](architecture.md) | The module map of `src/` by area, the target layout by folder, the rules of the layers, file sizes, names, and the folder of a new feature (#537). |
 | [testing.md](testing.md) | The test commands, the Tcl suite, the size report, and the benchmark commands. |
 | [compatibility.md](compatibility.md) | The result of each test file of Tcl 8.6.16. `tools/suite-table.py` writes it. |
 | [tcl9.md](tcl9.md) | The Tcl 9.1.0 baseline and the proposed choices. |
