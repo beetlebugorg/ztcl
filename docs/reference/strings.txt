@@ -118,9 +118,9 @@ sub: encoding convertto ?-profile PROFILE? ?-failindex VAR? ENCODING STRING | Th
 sub: encoding convertfrom ?-profile PROFILE? ?-failindex VAR? ENCODING BYTES | The text of BYTES in ENCODING. In Tcl 9.1 the default profile `strict` makes a bad byte an error, and `-failindex VAR` gives the text before it and puts its index in VAR. The profile `replace` puts U+FFFD for a bad byte, and `tcl8` keeps the behavior of Tcl 8.6. The options are in Tcl 9.1 only.
 sub: encoding profiles | The profiles: `replace strict tcl8`. Tcl 9.1 only.
 sub: encoding user | The encoding of the user: utf-8. Tcl 9.1 only.
-sub: encoding names | The names of the encodings.
+sub: encoding names | The names of the encodings: the ones with no table, and the files of the encoding folders.
 sub: encoding system | The encoding of the system: utf-8.
-sub: encoding dirs | An empty list: ztcl reads no encoding files.
+sub: encoding dirs ?LIST? | The folders of the encoding files of Tcl (`koi8-r.enc`, `iso2022-jp.enc`, ...). ztcl reads a file on the first use of its encoding, from these folders, then from `$tcl_library/encoding`. The binary has no tables.
 ex: string length [encoding convertto utf-8 é] => 2
 
 == binary

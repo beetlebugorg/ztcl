@@ -65,7 +65,20 @@ const Timer = struct {
     idle: bool = false,
     /// A pending background error. It is an idle entry with no script.
     bg: ?BgError = null,
+    /// A step of a task of `chan.zig` in place of a script, such as a
+    /// background `fcopy`. `after info` does not list it.
+    step: ?*const fn (it: *Interp, ctx: *anyopaque) Error!void = null,
+    ctx: *anyopaque = undefined,
 };
+
+/// Runs `step` with `ctx` after `ms` milliseconds.
+pub fn later(it: *Interp, ms: i64, step: *const fn (it: *Interp, ctx: *anyopaque) Error!void, ctx: *anyopaque) Error!void {
+    const s = try state(it);
+    const t = try s.a.create(Timer);
+    t.* = .{ .id = s.next_id, .it = it, .script = "", .at = try now(it) + ms * 1000, .step = step, .ctx = ctx };
+    s.next_id += 1;
+    try s.timers.append(s.a, t);
+}
 
 /// A channel with a handler: the interpreter and the channel name.
 pub const Watch = struct { it: *Interp, name: []const u8 };
@@ -209,7 +222,7 @@ pub fn background(x: *Interp, c: cmds.Caught) Error!void {
     try s.idles.append(s.a, t);
 }
 
-fn runEvent(cur: *Interp, x: *Interp, text: []const u8) Error!void {
+pub fn runEvent(cur: *Interp, x: *Interp, text: []const u8) Error!void {
     var c = (try runGlobal(cur, x, text)) orelse return;
     if (c.code == 1) c.error_info = .{ .str = try std.fmt.allocPrint(x.alloc(), "{s}\n    (\"after\" script)", .{try x.str(c.error_info)}) };
     if (c.code != 0) try background(x, c);
@@ -416,7 +429,7 @@ pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
                 const k = has(s.timers.items, t) orelse continue;
                 _ = s.timers.orderedRemove(k);
                 ran = true;
-                try runEvent(it, t.it, t.script);
+                if (t.step) |f| try f(t.it, t.ctx) else try runEvent(it, t.it, t.script);
             }
             if (comptime chan_ok) {
                 const chan = @import("chan.zig");
@@ -473,7 +486,7 @@ fn findById(s: *State, it: *Interp, text: []const u8) ?*Timer {
     const id = std.fmt.parseInt(u64, text[6..], 10) catch return null;
     inline for (.{ &s.timers, &s.idles }) |l| {
         for (l.items) |t| {
-            if (t.it == it and t.bg == null and t.id == id) return t;
+            if (t.it == it and t.bg == null and t.step == null and t.id == id) return t;
         }
     }
     return null;
@@ -543,7 +556,7 @@ fn cmdAfter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         // The script form matches first, as in Tcl.
         inline for (.{ &s.timers, &s.idles }) |l| {
             for (l.items) |t| {
-                if (hit == null and t.it == it and t.bg == null and eql(t.script, text)) hit = t;
+                if (hit == null and t.it == it and t.bg == null and t.step == null and eql(t.script, text)) hit = t;
             }
         }
         if (hit == null) hit = findById(s, it, text);
@@ -558,7 +571,7 @@ fn cmdAfter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             while (k > 0) {
                 k -= 1;
                 const t = l.items[k];
-                if (t.it == it and t.bg == null) try out.append(a, .{ .str = try idText(a, t.id) });
+                if (t.it == it and t.bg == null and t.step == null) try out.append(a, .{ .str = try idText(a, t.id) });
             }
         }
         return value.wrapList(a, out.items);
