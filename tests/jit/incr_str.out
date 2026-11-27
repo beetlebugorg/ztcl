@@ -1,0 +1,11 @@
+15
+32
+1 {expected integer but got "abc"} 0
+1 {expected integer but got "1.5"} 0
+1 {expected integer but got ""} 0
+0 12 12
+3 6
+9223372036854775808
+9223372036854775808
+7 3
+12
