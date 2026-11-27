@@ -123,6 +123,8 @@ test {
     _ = @import("tcl9_tests.zig");
     _ = @import("math9.zig");
     _ = @import("wasmweb.zig");
+    _ = @import("serial.zig");
+    _ = @import("serial_tests.zig");
     if (@import("builtin").os.tag == .linux) _ = @import("kvm.zig");
     if (@import("builtin").os.tag == .linux) _ = @import("vm/share_linux.zig");
     _ = @import("vm/virtio/mmio.zig");

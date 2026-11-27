@@ -136,7 +136,7 @@ fn socketOf(fd: Fd) SOCKET {
     return @intCast(fd - sock_tag);
 }
 
-fn handleOf(fd: Fd) HANDLE {
+pub fn handleOf(fd: Fd) HANDLE {
     if (fd >= 0 and fd <= 2) return GetStdHandle(@bitCast(-10 - fd));
     return @ptrFromInt(@as(usize, @intCast(fd)));
 }

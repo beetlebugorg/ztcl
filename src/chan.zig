@@ -22,6 +22,8 @@ const Interp = interp.Interp;
 const Cmd = interp.Cmd;
 const Error = interp.Error;
 const sys = @import("sys.zig");
+const serial = @import("serial.zig");
+const builtin = @import("builtin");
 const proc_ok = proc_mod.supported;
 const ProcTree = if (proc_ok) proc_mod.Tree else struct {};
 const event = @import("event.zig");
@@ -582,11 +584,21 @@ fn cmdOpen(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     var perm: u32 = 0o666;
     if (argv.len == 4) perm = @intCast((try it.int(argv[3])) & 0o777);
-    const rel = (try fsroot.normal(it, path)) orelse return it.failCode("POSIX EACCES {permission denied}", "couldn't open \"{s}\": permission denied", .{path});
-    const fd = switch (try fsroot.openRel(it, rel, m.flags, perm)) {
-        .fd => |x| x,
-        .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(a, "couldn't open \"{s}\": ", .{path})),
+    // A Windows serial port, `COM3`, is a device of the system, so it
+    // needs host mode.
+    const win_port = if (comptime builtin.os.tag == .windows) serial.winPortPath(path) else null;
+    if (win_port != null and !it.fs.host) return it.failCode("POSIX EACCES {permission denied}", "couldn't open \"{s}\": permission denied", .{path});
+    const fd = if (win_port) |p| try serial.openWin(it, p, m.read, m.write) else blk: {
+        const rel = (try fsroot.normal(it, path)) orelse return it.failCode("POSIX EACCES {permission denied}", "couldn't open \"{s}\": permission denied", .{path});
+        break :blk switch (try fsroot.openRel(it, rel, m.flags, perm)) {
+            .fd => |x| x,
+            .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(a, "couldn't open \"{s}\": ", .{path})),
+        };
     };
+    // A serial port goes into raw mode, as in Tcl.
+    if (comptime serial.supported) {
+        if (win_port == null and serial.isPort(fd)) serial.init(fd);
+    }
     const c = try a.create(Channel);
     const name = try std.fmt.allocPrint(a, "file{d}", .{it.chans.number(false)});
     c.* = .{ .name = name, .fd = fd, .readable = m.read, .writable = m.write, .append = m.append };
@@ -1123,6 +1135,9 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 return if (ch.readable) in else out;
             }
             if (x.tcl9() and eql(o, "-profile")) return .{ .str = @tagName(ch.profile orelse enc.defaultProfile(x)) };
+            if (ch.kind == .file and !ch.mem) {
+                if (try serial.get(x, ch.fd, o)) |v| return v;
+            }
             if (ch.kind != .file and ch.kind != .pipe) {
                 if (try @import("sock.zig").option(x, ch, o)) |v| return v;
             }
@@ -1142,6 +1157,7 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             try out.append(a, (try get(it, c, o)).?);
         }
         if (c.kind == .socket or c.kind == .server) try @import("sock.zig").options(it, c, &out);
+        if (c.kind == .file and !c.mem) try serial.options(it, c.fd, &out);
         // The list is in the order of Tcl: -translation is last.
         const n = out.items.len;
         const t = 2 * (base.len - 1);
@@ -1184,6 +1200,7 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             c.blocking = b;
             if (!c.connecting) {
                 sys.setBlocking(c.fd, c.blocking);
+                if (c.kind == .file and !c.mem) serial.setBlocking(c.fd, c.blocking);
                 if (c.wfd >= 0) sys.setBlocking(c.wfd, c.blocking);
             }
         } else if (eql(o, "-buffering")) {
@@ -1238,6 +1255,8 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             cutAtEof(c, c.rpos);
         } else if (it.tcl9() and eql(o, "-profile")) {
             c.profile = try enc.parseProfile(it, v);
+        } else if (c.kind == .file and !c.mem and try serial.set(it, c.fd, o, v)) {
+            // An option of a serial port.
         } else {
             return it.fail("bad option \"{s}\": should be one of {s}", .{ o, known });
         }

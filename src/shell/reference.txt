@@ -317,6 +317,12 @@ syn: seek channelId offset ?origin?
 syn: tell channelId
 == fconfigure
 syn: fconfigure channelId ?-option value ...?
+opt: -mode baud,parity,data,stop | A serial port: the baud, the parity (n, o, e, m, or s), the data bits (5 to 8), and the stop bits (1 or 2), for example 115200,n,8,1.
+opt: -handshake type | A serial port: none, rtscts, xonxoff, or dtrdsr (Windows only).
+opt: -xchar {xon xoff} | A serial port: the two characters of xonxoff.
+opt: -ttycontrol {signal value ...} | A serial port: sets the lines RTS, DTR, and BREAK, for example {DTR 0 RTS 1}.
+opt: -ttystatus | A serial port, read only: a dict of the lines CTS, DSR, RING, and DCD.
+opt: -queue | A serial port, read only: the counts of bytes in the input queue and the output queue of the system.
 == fblocked
 syn: fblocked channelId
 == fcopy
