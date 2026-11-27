@@ -259,6 +259,120 @@ pub const Net = struct {
         return true;
     }
 
+    /// The result of `deliverFill`.
+    pub const Filled = union(enum) {
+        /// The payload bytes of the frame that went to the guest.
+        sent: usize,
+        /// The receive queue has too few buffers: nothing went in.
+        no_room,
+        /// The fill gave this value (0, or a negative errno): nothing
+        /// went in.
+        fill: isize,
+    };
+
+    /// The calls of `deliverFill`. `fill` writes the payload into the
+    /// receive buffers (for example `recvmsg` of a socket) and gives its
+    /// count. `fix` then writes the headers in `head` for that count,
+    /// and gives the virtio header.
+    pub const Fill = struct {
+        ctx: *anyopaque,
+        fill: *const fn (ctx: *anyopaque, iov: []const std.posix.iovec) isize,
+        fix: *const fn (ctx: *anyopaque, head: []u8, got: usize) Hdr,
+    };
+
+    /// One frame for the guest with its payload written in place: the
+    /// headers `head` and up to `max` bytes from `f.fill`, straight into
+    /// the receive buffers, with no copy in between. With fewer buffers
+    /// than the whole frame needs, the frame is smaller, but at least
+    /// `min` bytes of payload.
+    pub fn deliverFill(n: *Net, d: *Device, host: *const Host, head: []u8, max: usize, min: usize, f: Fill) Filled {
+        const q = &d.queues[rx_queue];
+        const m = host.mem;
+        if (!q.ready) return .no_room;
+        const mrg = d.driver_features & f_mrg_rxbuf != 0;
+        const pre = hdr_len + head.len;
+        var heads: [max_bufs]u16 = undefined;
+        var room: [max_bufs]usize = undefined;
+        var taken: u16 = 0;
+        var total: usize = 0;
+        while (total < pre + max and taken < max_bufs and (mrg or taken == 0)) {
+            const hd = q.next(m) orelse break;
+            const c = Chain.read(q, m, hd) orelse {
+                q.addUsed(m, hd, 0);
+                n.drop();
+                continue;
+            };
+            var r: usize = 0;
+            for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| {
+                if (w) r += b.len;
+            }
+            heads[taken] = hd;
+            room[taken] = r;
+            taken += 1;
+            total += r;
+        }
+        if (total < pre + min) {
+            q.unget(taken);
+            n.rx_short = taken;
+            return .no_room;
+        }
+        // The iovec of the payload: the writable buffers after `pre`.
+        var iov: [max_bufs * 4]std.posix.iovec = undefined;
+        var ni: usize = 0;
+        var skip = pre;
+        var want = @min(max, total - pre);
+        for (heads[0..taken]) |hd| {
+            if (want == 0) break;
+            const c = Chain.read(q, m, hd).?;
+            for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| {
+                if (!w or want == 0) continue;
+                if (skip >= b.len) {
+                    skip -= b.len;
+                    continue;
+                }
+                const k = @min(b.len - skip, want);
+                if (ni == iov.len) break;
+                iov[ni] = .{ .base = b[skip..].ptr, .len = k };
+                ni += 1;
+                want -= k;
+                skip = 0;
+            }
+        }
+        const r = f.fill(f.ctx, iov[0..ni]);
+        if (r <= 0) {
+            q.unget(taken);
+            return .{ .fill = r };
+        }
+        const got: usize = @intCast(r);
+        var hdr = f.fix(f.ctx, head, got);
+        if (d.driver_features & f_guest_csum == 0) hdr.flags = 0;
+        // The chains that the frame fills; the rest go back.
+        var used: u16 = 0;
+        var need = pre + got;
+        var lens: [max_bufs]u32 = undefined;
+        while (need > 0) : (used += 1) {
+            const k = @min(need, room[used]);
+            lens[used] = @intCast(k);
+            need -= k;
+        }
+        q.unget(taken - used);
+        hdr.num_buffers = if (mrg) used else 0;
+        const hb = hdr.encode();
+        var src: Gather = .{ .parts = &.{ &hb, head } };
+        var put: usize = 0;
+        for (heads[0..used]) |hd| {
+            if (put == pre) break;
+            const c = Chain.read(q, m, hd).?;
+            for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| {
+                if (!w or put == pre) continue;
+                put += src.copy(b[0..@min(b.len, pre - put)]);
+            }
+        }
+        for (heads[0..used], lens[0..used]) |hd, l| q.addUsed(m, hd, l);
+        q.publish(m);
+        return .{ .sent = got };
+    }
+
     /// Raises the interrupt of the receive queue after a batch of
     /// `deliver`, when the driver asked for one.
     pub fn rxDone(_: *Net, d: *Device, host: *const Host) void {
