@@ -103,6 +103,7 @@ The world imports `host-command: async func(name, list<string>) -> result<string
 ## Tests and CI
 
 - `tools/wasi-run.sh` runs `zig-out/bin/ztcl.wasm` under wasmtime with the root folder as a preopen. `tools/suite.sh -r tools/wasi-run.sh` runs the Tcl suite under WASI.
+- `tools/wasi-run-component.sh` runs the command component of WASI 0.3.2, `zig-out/bin/ztcl.component.wasm`, in the same way. `tools/suite.sh -r tools/wasi-run-component.sh` runs the Tcl suite under the component.
 - A CI job installs a pinned wasmtime release with a SHA-256 check, builds with `-Dtarget=wasm32-wasi`, runs the smoke tests, and runs the core suite.
 - The last task runs the suite under a second component runtime and publishes both counts.
 

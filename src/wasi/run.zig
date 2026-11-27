@@ -5,18 +5,22 @@
 //! `sys_wasi3.zig`, and the panic handler and the debug `Io` of the
 //! standard library use no preview 1 function.
 //!
-//! `run` reads the script file of the first argument through the
-//! preopened folders, sets `argv`, `argc`, and `argv0` as tclsh does, and
-//! evaluates the script. `puts` writes to the `stdout` stream. An error
-//! writes `errorInfo` to the `stderr` stream and gives the exit code 1.
-//! The command `exit` ends the program with its code through
-//! `wasi:cli/exit`. No capability is on.
+//! `run` gives the arguments of `wasi:cli/environment` to `runHost` of
+//! `src/main.zig`, the runner of the native `ztcl`, with a `Host` of
+//! WASI 0.3.2 functions: the output and the input on the streams of
+//! `wasi:cli`, script files through the preopened folders, the clocks of
+//! `wasi:clocks`, and the exit code through `wasi:cli/exit`. So the
+//! component reads the flags of `ztcl` (`--allow`, `--root`, the limits,
+//! `--tclsh`), and `file`, channels, `clock`, and the event loop work on
+//! the WASI 0.3.2 forms of `sys.zig` and `fsroot.zig`. With no flag, no
+//! capability is on.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
 const tcl = @import("ztcl");
 const host = tcl.sys.wasi3;
+const runner = @import("runner");
 
 pub const ztcl_wasi_p3 = true;
 
@@ -30,62 +34,98 @@ pub const std_options_debug_io: std.Io = std.Io.failing;
 
 const gpa = std.heap.wasm_allocator;
 
-fn out(_: ?*anyopaque, bytes: []const u8) void {
-    _ = tcl.sys.write(1, bytes);
-}
-
-fn err(bytes: []const u8) void {
-    _ = tcl.sys.write(2, bytes);
-}
-
-fn cmdExit(it: *tcl.Interp, argv: []const tcl.Value, _: ?*tcl.interp.Cmd) tcl.Error!tcl.Value {
-    if (argv.len > 2) return it.wrongArgs("exit ?returnCode?");
-    var code: i64 = 0;
-    if (argv.len == 2) code = argv[1].asInt() orelse return it.fail("expected integer but got \"{s}\"", .{try it.str(argv[1])});
-    host.exit(@truncate(@as(u64, @bitCast(code))));
-}
-
-fn start(it: *tcl.Interp, args: []const []const u8) !u8 {
-    if (args.len < 2) {
-        err("usage: ztcl.component.wasm script.tcl ?arg ...?\n");
-        return 2;
+/// The writer of standard output: each drain writes to descriptor 1.
+fn drainOut(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.Io.Writer.Error!usize {
+    if (w.end > 0) {
+        _ = tcl.sys.write(1, w.buffer[0..w.end]);
+        w.end = 0;
     }
-    const text = host.readScript(gpa, args[1]) catch {
-        err("ztcl: cannot read ");
-        err(args[1]);
-        err("\n");
-        return 1;
+    var n: usize = 0;
+    for (data[0 .. data.len - 1]) |d| {
+        _ = tcl.sys.write(1, d);
+        n += d.len;
+    }
+    const last = data[data.len - 1];
+    for (0..splat) |_| _ = tcl.sys.write(1, last);
+    return n + last.len * splat;
+}
+
+/// The reader of standard input: each fill reads descriptor 0.
+fn streamIn(_: *std.Io.Reader, w: *std.Io.Writer, limit: std.Io.Limit) std.Io.Reader.StreamError!usize {
+    const room = limit.slice(try w.writableSliceGreedy(1));
+    const n = switch (tcl.sys.read(0, room)) {
+        .n => |n| n,
+        else => 0,
     };
-    try it.register("exit", cmdExit);
-    const a = it.alloc();
-    var list: std.ArrayList(tcl.Value) = .empty;
-    for (args[2..]) |w| try list.append(a, .{ .str = w });
-    try it.setVar("argv", try tcl.value.wrapList(a, list.items));
-    try it.setVar("argc", .{ .int = @intCast(list.items.len) });
-    try it.setVar("argv0", .{ .str = args[1] });
-    try it.setVar("tcl_interactive", .{ .int = 0 });
-    it.script_name = args[1];
-    _ = it.eval(text) catch |e| {
-        if (e != error.TclError) return 1;
-        it.finishError() catch {};
-        const info = it.getVarPlain("::errorInfo") catch it.result;
-        err(it.str(info) catch "error");
-        err("\n");
-        return 1;
-    };
-    return 0;
+    if (n == 0) return error.EndOfStream;
+    w.advance(n);
+    return n;
+}
+
+fn noEnv(_: []const u8) ?[]const u8 {
+    // The component has no JIT, the variable `ZTCL_JIT` of the runner.
+    return null;
+}
+
+fn readFile(path: []const u8, a: std.mem.Allocator) anyerror![]u8 {
+    return host.readScript(a, path);
+}
+
+fn exitWith(code: u8) noreturn {
+    host.exit(code);
+}
+
+fn nanos() i96 {
+    return host.monoNanos();
+}
+
+fn clockNow(_: ?*anyopaque) i64 {
+    return host.wallMicros();
+}
+
+fn ticks(_: ?*anyopaque) i64 {
+    return @intCast(host.monoNanos() / 1000);
+}
+
+fn sleep(_: ?*anyopaque, micros: i64) void {
+    if (micros > 0) host.sleepNanos(@as(u64, @intCast(micros)) * 1000);
+}
+
+/// The TZif file of a zone, through the preopened folders.
+fn zone(_: ?*anyopaque, name: []const u8, a: std.mem.Allocator) ?[]const u8 {
+    const path = std.fmt.allocPrint(a, "/usr/share/zoneinfo/{s}", .{name}) catch return null;
+    return host.readScript(a, path) catch null;
 }
 
 /// Gives 0 for `ok` and 1 for `err` of the `result` of `run`.
 fn run() callconv(.c) u32 {
-    var it: tcl.Interp = undefined;
-    it.init(gpa) catch return 1;
-    it.output = .{ .write = out };
-    const code = start(&it, host.args()) catch 1;
-    it.deinit();
-    if (code > 1) host.exit(code);
+    var arena: std.heap.ArenaAllocator = .init(gpa);
+    var out_buf: [1 << 16]u8 = undefined;
+    var out: std.Io.Writer = .{ .vtable = &.{ .drain = drainOut }, .buffer = &out_buf };
+    var in_buf: [1 << 16]u8 = undefined;
+    var in: std.Io.Reader = .{ .vtable = &.{ .stream = streamIn }, .buffer = &in_buf, .seek = 0, .end = 0 };
+    const h: runner.Host = .{
+        .io = null,
+        .gpa = gpa,
+        .arena = arena.allocator(),
+        .args = host.args(),
+        .out = &out,
+        .in = &in,
+        .env = noEnv,
+        .read = readFile,
+        .exit = exitWith,
+        .nanos = nanos,
+        .clock = .{ .now = clockNow, .zone = zone },
+        .event = .{ .now = ticks, .sleep = sleep },
+    };
+    runner.runHost(&h, null) catch {
+        out.flush() catch {};
+        host.flush();
+        return 1;
+    };
+    out.flush() catch {};
     host.flush();
-    return code;
+    return 0;
 }
 
 /// The allocator of the canonical ABI: the host calls it to put lists and

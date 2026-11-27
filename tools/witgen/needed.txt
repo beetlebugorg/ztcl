@@ -31,6 +31,7 @@ wasi:filesystem/types@0.3.2 [method]descriptor.sync
 wasi:filesystem/types@0.3.2 [method]descriptor.create-directory-at
 wasi:filesystem/types@0.3.2 [method]descriptor.stat
 wasi:filesystem/types@0.3.2 [method]descriptor.stat-at
+wasi:filesystem/types@0.3.2 [method]descriptor.metadata-hash-at
 wasi:filesystem/types@0.3.2 [method]descriptor.open-at
 wasi:filesystem/types@0.3.2 [method]descriptor.readlink-at
 wasi:filesystem/types@0.3.2 [method]descriptor.remove-directory-at
