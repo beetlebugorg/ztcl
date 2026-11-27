@@ -13,7 +13,7 @@ case.test	15	15
 chan.test	14	14
 chanio.test	229	229
 clock.test	8390	8390
-cmdAH.test	91	91
+cmdAH.test	93	93
 cmdIL.test	128	128
 cmdInfo.test	0	0
 cmdMZ.test	82	82
@@ -54,7 +54,7 @@ if.test	73	73
 incr-old.test	12	12
 incr.test	62	62
 indexObj.test	0	0
-info.test	97	97
+info.test	98	98
 init.test	0	0
 interp.test	198	198
 io.test	239	239
@@ -71,7 +71,7 @@ llength.test	6	6
 lmap.test	62	62
 load.test	0	0
 lrange.test	32	32
-lrepeat.test	5	5
+lrepeat.test	12	12
 lreplace.test	1787	1787
 lsearch.test	111	111
 lset.test	83	83
@@ -151,4 +151,4 @@ winPipe.test	0	0
 winTime.test	0	0
 word.test	45	45
 zlib.test	0	0
-total	37416	37416
+total	37426	37426

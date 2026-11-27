@@ -50,7 +50,7 @@ python3 -I tools/suite-table.py full.tsv plain.tsv > docs/dev/compatibility.md
 
 ### The results of each test
 
-`tools/suite.sh -p file` writes one line for each test: the file, pass, fail, or skip, the name, and a detail. The detail of a skip is its constraint. The detail of a failure is the start of the result. `tools/suite-run.sh` runs all files with the suite runner, without and with the JIT, and `tools/suite-md.py` makes three files from the logs:
+`tools/suite.sh -p file` writes one line for each test: the file, pass, fail, or skip, the name, and a detail. The detail of a skip is its constraint. The detail of a failure is `code G/W: got | want: result`, with G the return code of the body and W the expected codes, or the error of the setup or the cleanup. `tools/suite-run.sh` runs all files with the suite runner, without and with the JIT, and `tools/suite-md.py` makes three files from the logs:
 
 - [docs/dev/suite.md](suite.md): the totals, the buckets, the counts of each file, and each test that does not pass.
 - `docs/dev/suite-tests.tsv`: one line for each test.

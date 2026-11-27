@@ -237,7 +237,7 @@ def main():
     with open(os.path.join(top, "docs/dev/suite-tests.tsv"), "w") as f:
         f.write("# file\ttest\tinterpreter\tjit\tbucket\tdetail\n")
         for r in tsv:
-            f.write("\t".join(r[:5]) + "\t" + cell(r[5], 120) + "\n")
+            f.write("\t".join(r[:5]) + "\t" + cell(r[5], 200) + "\n")
     # The counts that the scheduled CI run compares.
     with open(os.path.join(top, "docs/dev/suite-counts.tsv"), "w") as f:
         f.write("# file\tpass\tjit pass\n")
