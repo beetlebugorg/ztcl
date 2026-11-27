@@ -428,6 +428,10 @@ pub const StatResult = union(enum) { ok: Info, err: sys.Errno };
 
 /// The data of a path. A symlink is reported as a symlink.
 pub fn stat(it: *Interp, rel: []const u8) Error!StatResult {
+    return @import("tape.zig").stat(it, rel, statHost);
+}
+
+fn statHost(it: *Interp, rel: []const u8) Error!StatResult {
     if (it.fs.host and comptime on_win) return win.hostStat(it, rel);
     if (comptime on_win) return win.stat(it, rel);
     if (comptime on_wasi) return wfs.stat(it, rel);
@@ -490,6 +494,10 @@ pub const ListResult = union(enum) { ok: []const []const u8, err: sys.Errno };
 
 /// The names in a folder, with no `.` or `..`.
 pub fn listDir(it: *Interp, rel: []const u8) Error!ListResult {
+    return @import("tape.zig").list(it, rel, listHost);
+}
+
+fn listHost(it: *Interp, rel: []const u8) Error!ListResult {
     if (comptime on_win) return win.listDir(it, rel);
     if (comptime on_wasi) return wfs.listDir(it, rel);
     const fd = switch (try openRel(it, rel, .{ .directory = true }, 0)) {
