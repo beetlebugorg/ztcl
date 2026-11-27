@@ -3461,6 +3461,29 @@ test "ztcl::vm image: install, list, and create -image through the store" {
     try std.testing.expectEqualStrings("ZTCL VM IMAGE NAME", try ev(&it, "catch {ztcl::vm create -image no-such-image}; join [lrange $::errorCode 0 3] { }"));
 }
 
+fn failedFetch(_: ?*anyopaque, _: []const u8, _: i32, _: u64) tcl.microvm.FetchError!void {
+    return error.Network;
+}
+
+test "ztcl::vm image fetch -url needs a host of the network policy" {
+    if (comptime !@import("vmstore.zig").supported) return error.SkipZigTest;
+    const a = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const store = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/store", .{tmp.sub_path});
+    defer a.free(store);
+    var it: tcl.Interp = undefined;
+    try it.init(a);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.vm) | @backingInt(tcl.interp.Capability.socket));
+    it.vm_host.image_store = store;
+    it.vm_host.fetch = failedFetch;
+    // The default policy allows loopback only: the hook never sees the
+    // other host.
+    try std.testing.expectEqualStrings("ZTCL NET DENIED", try it.str(try it.eval("catch {ztcl::vm image fetch -url https://192.0.2.1/rel/}; join [lrange $::errorCode 0 2] { }")));
+    try std.testing.expectEqualStrings("ZTCL VM FETCH", try it.str(try it.eval("catch {ztcl::vm image fetch -url http://127.0.0.1:1/rel/}; join [lrange $::errorCode 0 2] { }")));
+}
+
 test "ztcl::vm on Windows: create -image boots the signed test release with its verity root" {
     const builtin = @import("builtin");
     if (comptime !(builtin.os.tag == .windows and builtin.cpu.arch == .x86_64)) return error.SkipZigTest;
