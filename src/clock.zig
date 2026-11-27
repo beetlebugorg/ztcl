@@ -1179,11 +1179,11 @@ fn freeForm(it: *Interp, text: []const u8) Error!Fields {
     // dates, a day and a month name ("1 january 2004", "Jan 1, 2004"),
     // each with an optional time, and a time alone.
     const forms = [_][]const u8{
-        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",   "%Y-%m-%d",          "%Y-%m-%dT%H:%M:%S",
-        "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M",   "%m/%d/%Y",          "%d %b %Y %H:%M:%S",
-        "%d %b %Y %H:%M",    "%d %b %Y",         "%b %d, %Y %H:%M:%S", "%b %d, %Y %H:%M",
-        "%b %d, %Y",         "%b %d %Y %H:%M:%S", "%b %d %Y %H:%M",    "%b %d %Y",
-        "%a %b %d %H:%M:%S %Y", "%H:%M:%S",      "%H:%M",
+        "%Y-%m-%d %H:%M:%S",    "%Y-%m-%d %H:%M",    "%Y-%m-%d",           "%Y-%m-%dT%H:%M:%S",
+        "%m/%d/%Y %H:%M:%S",    "%m/%d/%Y %H:%M",    "%m/%d/%Y",           "%d %b %Y %H:%M:%S",
+        "%d %b %Y %H:%M",       "%d %b %Y",          "%b %d, %Y %H:%M:%S", "%b %d, %Y %H:%M",
+        "%b %d, %Y",            "%b %d %Y %H:%M:%S", "%b %d %Y %H:%M",     "%b %d %Y",
+        "%a %b %d %H:%M:%S %Y", "%H:%M:%S",          "%H:%M",
     };
     for (forms) |fm| {
         p = .{ .it = it, .s = t, .locale = "c" };
