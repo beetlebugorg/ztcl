@@ -117,7 +117,7 @@ Each idea states how it keeps these rules. The words below are the short names.
 - **Same output and count:** the output and the count of compute units are equal with the JIT on and off (`tools/jit-diff.sh`, also with `--stress`).
 - **Deterministic units:** the count of compute units is a function of the script alone. No count reads a clock, an address, or the state of a cache.
 - **Tcl 8.6 semantics:** the string form of each value, the traces, and the reference semantics stay exact. A copy of a value never changes.
-- **Size:** the WebAssembly library stays under its budget of 504 KB gzip.
+- **Size:** the budget of the WebAssembly library is 504 KB gzip. On commit `ccb35f9` (2026-11-27), `ztcl.wasm` has 506,014 bytes with `gzip -9`.
 - **Review list:** [jit-review.md](jit-review.md) applies to each change of `src/jit/`.
 
 The checks that each change runs, in this order: `zig build test`, `zig build test -Djit=false`, `tools/jit-diff.sh`, `tools/jit-diff.sh --stress`, `tools/suite.sh` and `tools/suite.sh -j`, `python3 -I tools/gc-fuzz.py` for a change of the heap or of ownership, `zig build jit-fuzz` for a change of the bytecode, `tools/jit-perf.sh --check off`, and `tools/size-report.sh --check`.
