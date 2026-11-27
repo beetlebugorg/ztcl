@@ -137,6 +137,7 @@ ztcl.sys.ignorePipeSignal(); // a write to a closed peer is an error, with no si
 | `exec` | `Interp.exec_host`: the program list, the list of files below the root, the time limit, and the environment. |
 | `launch` | `Interp.launch_host`: an opener for `ztcl::open` in place of the system. It gets the URL or the full host path of the file. |
 | `registry` | `Interp.registry_allow`: the registry keys that a script reaches, with the keys below them. |
+| `credential` | `Interp.credential_allow`: the services of the credentials that a script reaches. |
 | `keychain` | `Interp.keychain_allow`: the keychain services that `ztcl::mac::keychain` reaches. |
 | `defaults` | `Interp.defaults_allow`: the defaults domains that `ztcl::mac::defaults` reaches. |
 | `notify` | `Interp.notify_host`: a notifier for `ztcl::notify` in place of the system. It gets the title, the subtitle, and the body. An app in a macOS bundle can show them with `UNUserNotificationCenter`. |

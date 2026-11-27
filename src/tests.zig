@@ -1190,7 +1190,7 @@ test "the optional commands are absent by default" {
     defer it.deinit();
     // A build with modules has the small `package` by default.
     try std.testing.expect((it.findCommand("package") == null) == (modules.table.len == 0));
-    for ([_][]const u8{ "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror", "ztcl::open", "ztcl::notify", "ztcl::mac::keychain", "ztcl::mac::defaults", "ztcl::win::registry" }) |name| {
+    for ([_][]const u8{ "interp", "clock", "file", "open", "socket", "exec", "pid", "time", "timerate", "chan", "encoding", "source", "load", "cd", "pwd", "glob", "after", "vwait", "update", "fileevent", "fblocked", "tcl::Bgerror", "ztcl::open", "ztcl::notify", "ztcl::mac::keychain", "ztcl::mac::defaults", "ztcl::win::registry", "ztcl::win::credential", "ztcl::win::folder" }) |name| {
         try std.testing.expect(it.findCommand(name) == null);
     }
 }
@@ -3032,6 +3032,70 @@ test "ztcl::win::registry: set, get, type, keys, values, and delete" {
 test "ztcl::open: the open program of macOS fails on a missing file" {
     if (@import("builtin").os.tag != .macos) return error.SkipZigTest;
     try std.testing.expect(!tcl.launch.mac.open(std.testing.allocator, "/ztcl-no-such-folder/none.txt"));
+}
+
+test "ztcl::win::credential: the allow list, the arguments, and the structure of an item" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.credential));
+    try std.testing.expectEqualStrings("ZTCL WIN DENIED", try it.str(try it.eval("catch {ztcl::win::credential get org.example.app me}; set ::errorCode")));
+    const list = [_][]const u8{"org.example.app"};
+    it.credential_allow = &list;
+    try std.testing.expectEqualStrings("a service is a name with no \"/\"", try it.str(try it.eval("catch {ztcl::win::credential get a/b me} m; set m")));
+    try std.testing.expectEqualStrings("bad option \"read\": must be delete, get, or set", try it.str(try it.eval("catch {ztcl::win::credential read org.example.app me} m; set m")));
+    try std.testing.expectEqualStrings("ZTCL WIN LENGTH", try it.str(try it.eval("catch {ztcl::win::credential set org.example.app me [string repeat x 3000]}; set ::errorCode")));
+    if (@import("builtin").os.tag != .windows) {
+        try std.testing.expectEqualStrings("ZTCL WIN UNAVAILABLE", try it.str(try it.eval("catch {ztcl::win::credential get org.example.app me}; set ::errorCode")));
+        return;
+    }
+    const wc = @import("wincred.zig");
+    try std.testing.expectEqual(@as(usize, 80), @sizeOf(wc.CREDENTIALW));
+    const target = try wc.targetName(std.testing.allocator, "org.example.app", "me");
+    defer std.testing.allocator.free(target);
+    try std.testing.expectEqualSlices(u16, std.unicode.utf8ToUtf16LeStringLiteral("org.example.app/me"), target);
+    const c = wc.credentialOf(target.ptr, target.ptr, "s3cret");
+    try std.testing.expectEqual(@as(u32, 6), c.CredentialBlobSize);
+    try std.testing.expectEqual(@as(u32, 1), c.Type);
+    // A missing item: a read of the store, with no write.
+    try std.testing.expectEqualStrings("ZTCL WIN NOTFOUND", try it.str(try it.eval("catch {ztcl::win::credential get org.example.app no-such-account-of-the-tests} m; set ::errorCode")));
+}
+
+test "ztcl::win::credential writes, reads, and deletes an item with ZTCL_TEST_CREDENTIAL=1" {
+    // A write changes the credential store of the user, so it runs only
+    // when the environment asks for it.
+    if (@import("builtin").os.tag != .windows) return error.SkipZigTest;
+    const W = struct {
+        extern "kernel32" fn GetEnvironmentVariableW(name: [*:0]const u16, buf: [*]u16, size: u32) callconv(.winapi) u32;
+    };
+    var buf: [8]u16 = undefined;
+    if (W.GetEnvironmentVariableW(std.unicode.utf8ToUtf16LeStringLiteral("ZTCL_TEST_CREDENTIAL"), &buf, buf.len) == 0) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.credential));
+    const list = [_][]const u8{"org.ztcl.test"};
+    it.credential_allow = &list;
+    _ = try it.eval("ztcl::win::credential set org.ztcl.test me {a secret}");
+    try std.testing.expectEqualStrings("a secret", try it.str(try it.eval("ztcl::win::credential get org.ztcl.test me")));
+    _ = try it.eval("ztcl::win::credential delete org.ztcl.test me");
+    try std.testing.expectEqualStrings("ZTCL WIN NOTFOUND", try it.str(try it.eval("catch {ztcl::win::credential get org.ztcl.test me}; set ::errorCode")));
+}
+
+test "ztcl::win::folder gives the known folders of the user" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.env));
+    try std.testing.expect(std.mem.startsWith(u8, try it.str(try it.eval("catch {ztcl::win::folder trash} m; set m")), "bad folder \"trash\": must be appdata, desktop,"));
+    if (@import("builtin").os.tag != .windows) {
+        try std.testing.expectEqualStrings("ZTCL WIN UNAVAILABLE", try it.str(try it.eval("catch {ztcl::win::folder documents}; set ::errorCode")));
+        return;
+    }
+    const local = try it.str(try it.eval("ztcl::win::folder localappdata"));
+    try std.testing.expect(std.mem.indexOf(u8, local, "/AppData/Local") != null);
+    try std.testing.expect(std.mem.indexOfScalar(u8, local, '\\') == null);
+    try std.testing.expect((try it.str(try it.eval("ztcl::win::folder programfiles"))).len > 3);
 }
 
 test "ztcl::mac: the allow lists of the keychain and of the defaults" {

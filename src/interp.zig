@@ -1050,6 +1050,10 @@ pub const Capability = enum(u32) {
     /// package runs with the rights of the process, outside the root
     /// folder and outside each limit. It is not sandboxed.
     cext = 524288,
+    /// `ztcl::win::credential`: the generic credentials of the Credential
+    /// Manager, for the services of `Interp.credential_allow` only, on
+    /// Windows.
+    credential = 1048576,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -1260,6 +1264,8 @@ pub const Interp = struct {
     /// The registry keys that `ztcl::win::registry` reaches, with the keys
     /// below them. Empty: no key.
     registry_allow: []const []const u8 = &.{},
+    /// The services of `ztcl::win::credential`. Empty: none.
+    credential_allow: []const []const u8 = &.{},
     /// The keychain services of `ztcl::mac::keychain`. Empty: none.
     keychain_allow: []const []const u8 = &.{},
     /// The defaults domains of `ztcl::mac::defaults`. Empty: none.
@@ -1689,6 +1695,7 @@ pub const Interp = struct {
         it.event_host = keep.event_host;
         it.launch_host = keep.launch_host;
         it.registry_allow = keep.registry_allow;
+        it.credential_allow = keep.credential_allow;
         it.keychain_allow = keep.keychain_allow;
         it.defaults_allow = keep.defaults_allow;
         it.notify_host = keep.notify_host;
@@ -1894,6 +1901,8 @@ pub const Interp = struct {
         if (new & @backingInt(Capability.event) != 0) try @import("event.zig").register(it);
         if (new & @backingInt(Capability.launch) != 0) try @import("launch.zig").register(it);
         if (new & @backingInt(Capability.registry) != 0) try @import("winreg.zig").register(it);
+        if (new & @backingInt(Capability.credential) != 0) try @import("wincred.zig").register(it);
+        if (new & @backingInt(Capability.env) != 0) try @import("winfolder.zig").register(it);
         if (new & @backingInt(Capability.keychain) != 0) try @import("mac.zig").registerKeychain(it);
         if (new & @backingInt(Capability.defaults) != 0) try @import("mac.zig").registerDefaults(it);
         if (new & @backingInt(Capability.notify) != 0) try @import("notify.zig").register(it);

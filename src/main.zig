@@ -12,7 +12,7 @@
 //! line at a time. The runner reads the files itself; a script has no
 //! command that reads a file.
 //!
-//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, `exec`, `random`, `env`, `sqlite`, `thread`, `vm`, and the others of `interp.Capability`). `--keychain-allow S,S` and `--defaults-allow D,D` list the keychain services and the defaults domains of `ztcl::mac`. `--root DIR` is
+//! `--allow a,b` turns on capabilities (`package`, `interp`, `clock`, `channels`, `file`, `event`, `socket`, `exec`, `random`, `env`, `sqlite`, `thread`, `vm`, and the others of `interp.Capability`). `--keychain-allow S,S` and `--defaults-allow D,D` list the keychain services and the defaults domains of `ztcl::mac`, and `--credential-allow S,S` the credential services of `ztcl::win::credential`. `--root DIR` is
 //! the one folder of `file` and channels. Only the
 //! suite passes it.
 //! `--exec-timeout MS`, `--exec-env NAME=value`, and `--exec-allow a,b`
@@ -786,6 +786,14 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
             var parts = std.mem.tokenizeScalar(u8, args[i], ',');
             while (parts.next()) |part| try list.append(arena, part);
             if (arg[2] == 'k') it.keychain_allow = list.items else it.defaults_allow = list.items;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "--credential-allow") and i + 1 < args.len) {
+            i += 1;
+            var list: std.ArrayList([]const u8) = .empty;
+            var parts = std.mem.tokenizeScalar(u8, args[i], ',');
+            while (parts.next()) |part| try list.append(arena, part);
+            it.credential_allow = list.items;
             continue;
         }
         if (std.mem.eql(u8, arg, "--exec-timeout") and i + 1 < args.len) {

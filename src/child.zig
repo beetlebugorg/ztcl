@@ -159,6 +159,7 @@ fn create(it: *Interp, name: []const u8, safe: bool, ver: interp.TclVersion) Err
     child.event_host = it.event_host;
     child.launch_host = it.launch_host;
     child.registry_allow = it.registry_allow;
+    child.credential_allow = it.credential_allow;
     child.keychain_allow = it.keychain_allow;
     child.vm_host = it.vm_host;
     child.defaults_allow = it.defaults_allow;
