@@ -493,6 +493,12 @@ fn openOf(h: u64) *Open {
     return @ptrFromInt(@as(usize, @intCast(h)));
 }
 
+/// The file handle of the open `h` of this backend, for a view of the
+/// file in the DAX window of virtio-fs.
+pub fn fileOf(h: u64) HANDLE {
+    return handleOf(openOf(h).fd);
+}
+
 fn close(_: *anyopaque, h: u64) void {
     const o = openOf(h);
     sys.close(o.fd);
