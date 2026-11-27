@@ -1,6 +1,6 @@
 # Module ztcl::win
 
-`ztcl::win` has the commands of Windows that need no window. This version has one: `ztcl::win::registry`, the registry of Windows. The commands exist only on Windows, and each needs a capability that the embedder grants.
+`ztcl::win` has the commands of Windows that need no window. This version has `ztcl::win::registry`, the registry of Windows, `ztcl::win::credential`, the generic credentials of the Credential Manager, and `ztcl::win::folder`, the known folders. The commands exist only on Windows, and each needs a capability that the embedder grants.
 
 > [!NOTE]
 > `ztcl::win::registry` is on `main` and comes in the next release. [Build from source](../install.md#build-from-source) to use it now.
@@ -158,3 +158,30 @@ Each command is one compute unit, like a core command. `keys` and `values` read 
 - Without the allow list the command reaches no key. There is no form that allows the whole registry.
 - `HKEY_LOCAL_MACHINE` and the keys of other users need the rights of an administrator, and Windows refuses them for a normal user with `ZTCL REGISTRY ACCES`.
 - `delete` of a key removes each key below it, with no undo.
+
+## credential
+
+```tcl
+ztcl::win::credential get SERVICE ACCOUNT
+ztcl::win::credential set SERVICE ACCOUNT SECRET
+ztcl::win::credential delete SERVICE ACCOUNT
+```
+
+```sh
+ztcl --allow credential --credential-allow org.example.notes notes.tcl
+```
+
+The peer of `ztcl::mac::keychain` (capability `credential`, list `Interp.credential_allow` or `--credential-allow S,S`). An item is a generic credential of the user (`CRED_TYPE_GENERIC`) with the target name `SERVICE/ACCOUNT` and the user name `ACCOUNT`, kept on this computer (`CRED_PERSIST_LOCAL_MACHINE`). The Credential Manager of the control panel shows it under "Windows Credentials".
+
+- `get` gives the secret, and a missing item gives `ZTCL WIN NOTFOUND`.
+- `set` stores the UTF-8 of `SECRET`, at most 2,560 bytes, and replaces an item that exists. It gives an empty string.
+- `delete` removes the item and gives an empty string. A missing item is no error.
+- A service is a name with no `/`. A service outside the list gives `ZTCL WIN DENIED`, a longer secret `ZTCL WIN LENGTH`, and an error of the store `ZTCL WIN CREDENTIAL code`. On another platform the command checks its arguments and its list, then gives `ZTCL WIN UNAVAILABLE`.
+
+## folder
+
+```tcl
+ztcl::win::folder documents   ;# C:/Users/me/Documents
+```
+
+`ztcl::win::folder NAME` (capability `env`) gives the path of a known folder from `SHGetKnownFolderPath`, with `/` between the parts, so a folder that the user moved gives its new place. The names are `appdata` (the roaming one), `desktop`, `documents`, `downloads`, `localappdata`, `music`, `pictures`, `profile`, `programdata`, `programfiles`, and `videos`. The command reads the path and makes no change. A folder that this user lacks gives `ZTCL WIN FOLDER`. On another platform the command gives `ZTCL WIN UNAVAILABLE`.

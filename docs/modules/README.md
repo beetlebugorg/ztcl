@@ -14,7 +14,7 @@ The `ztcl::` modules are built into ztcl. A module loads with `package require`,
 | [ztcl::open](open.md) | Opens a URL or a file in the default app of the system. | `launch` | macOS, Windows; Linux with a host callback |
 | [ztcl::notify](notify.md) | Shows a notification of the system. | `notify` | macOS; the others with a host callback |
 | [ztcl::vm](vm.md) | Starts a small Linux guest on the hypervisor of the host. | `vm` | macOS |
-| [ztcl::win](win.md) | The registry of Windows. | `registry` | Windows |
+| [ztcl::win](win.md) | The registry, the credentials, and the known folders of Windows. | `registry`, `credential`, `env` | Windows |
 | [web](web.md) | The Web APIs of the page, such as Web Serial, through the table of the Web IDL. | a group of `web:` in `allow` | `ztcl-host.wasm` in a browser |
 | [ztcl::mac](mac.md) | The keychain and the defaults of macOS. | `keychain`, `defaults` | macOS |
 
