@@ -25,4 +25,5 @@ pub const table = [_]Lib{
     .{ .name = "http", .version = "1.0", .script = @embedFile("lib/http1.tcl") },
     .{ .name = "opt", .version = "0.4.9", .script = @embedFile("lib/opt.tcl") },
     .{ .name = "safe", .version = "0.10", .script = @embedFile("lib/safe.tcl") },
+    .{ .name = "platform", .version = "1.0.19", .script = @embedFile("lib/platform.tcl") },
 };

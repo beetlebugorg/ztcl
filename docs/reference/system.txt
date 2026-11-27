@@ -68,6 +68,17 @@ names: tcl::OptKeyRegister tcl::OptKeyDelete tcl::OptKeyParse tcl::OptKeyError t
 ex: package require opt => 0.4.9
 ex: tcl::OptProc greet {{name -string "who"} {-loud}} {list $name $loud}; greet Ann -l => Ann 1
 
+== platform::generic
+syn: platform::generic
+syn: platform::identify
+syn: platform::patterns identifier
+does: The platform package 1.0.19 of the Tcl library, with `package require platform`: the system and the CPU as one identifier OS-CPU, such as `linux-x86_64` or `macosx-arm`, from `tcl_platform`. `identify` gives the same identifier as `generic`. `patterns` gives the identifiers that a package built for an identifier can run on, ending with `tcl`.
+cap: package
+flags: --allow package
+names: platform::identify platform::patterns
+ex: package require platform => 1.0.19
+ex: lindex [platform::patterns [platform::identify]] end => tcl
+
 == msgcat
 syn: msgcat::mc src ?arg ...?
 does: Message catalogs for text in more than one language. `mcset` adds a translation for a locale, `mclocale` sets the locale, and `mc` gives the text for the current locale, with `format` on the arguments, or calls `mcunknown`. `mcload` sources the `.msg` file of each preferred locale of a folder, `mcpreferences` gives the locale and its parents, `mcexists` tests for a translation, and `mcmax` gives the longest translation.
