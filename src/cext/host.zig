@@ -421,6 +421,7 @@ pub fn ztcl_cext_dispatch(id: u32, argc: usize) callconv(.c) i32 {
     }
     defer for (objv) |o| decr(o);
     Tcl_ResetResult(ip);
+    @import("chan.zig").last = ip;
     pushFrame();
     const code = if (c.nre) |nre| runNR(ip, nre(c.cd, ip, @intCast(argc), objv.ptr)) else c.proc.?(c.cd, ip, @intCast(argc), objv.ptr);
     popFrame();
@@ -438,6 +439,7 @@ pub fn ztcl_cext_precision(p: u32) callconv(.c) void {
 pub fn ztcl_cext_interp(handle: u32) callconv(.c) *Interp {
     const ip = gpa.create(Interp) catch panicText("out of memory");
     ip.* = .{ .handle = handle };
+    @import("chan.zig").last = ip;
     return ip;
 }
 
@@ -446,6 +448,7 @@ pub fn ztcl_cext_interp(handle: u32) callconv(.c) *Interp {
 /// it before it goes.
 pub fn ztcl_cext_interp_free(ip: *Interp) callconv(.c) void {
     @import("hash.zig").dropAssoc(ip);
+    @import("chan.zig").dropInterp(ip);
     dropPkgs(ip);
     if (ip.result) |r| decr(r);
     gpa.destroy(ip);

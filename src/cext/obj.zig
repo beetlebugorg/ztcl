@@ -74,6 +74,8 @@ pub const Interp = extern struct {
     assoc: ?*anyopaque = null,
     /// The client data of the packages: a list of `host.PkgData`.
     pkgs: ?*anyopaque = null,
+    /// The channels of the interp: a `chan.PerInterp`.
+    chans: ?*anyopaque = null,
 };
 
 pub const OK: c_int = 0;

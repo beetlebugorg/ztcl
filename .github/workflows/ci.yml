@@ -194,6 +194,29 @@ jobs:
       - name: Check the coverage table
         run: python3 -I tools/cext/coverage.py --check
 
+  # C packages in WebAssembly: the test packages of tests/cext built for
+  # wasm32-wasi and run on ztcl-host.wasm in Node.js, each one compared
+  # with tclsh.
+  cext-wasm:
+    name: C packages (WebAssembly)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Install tclsh and the Tcl headers
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tcl8.6 tcl8.6-dev > /dev/null
+      - name: Build the stub library and ztcl-host.wasm
+        run: zig build cext-stubs wasm-host -Dcext-wasm=true
+      - name: Compare the test packages with tclsh
+        run: TCLSH=tclsh8.6 tools/cext/wasm-check.sh
+
   # ztcl build: each runtime of `zig build runtimes`, and a binary for
   # each target with a payload. Each runner builds and runs the binary
   # of its own target from the runtime of `zig build runtimes`. Linux
