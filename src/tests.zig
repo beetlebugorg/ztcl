@@ -2994,9 +2994,18 @@ test "ztcl::vm: the capability, the jail of its paths, and the limits" {
     // A child interp has no `vm`, so the limits count the guests of one
     // interpreter.
     try std.testing.expectEqualStrings("0", try it.str(try it.eval("interp create k; k eval {llength [info commands ztcl::vm]}")));
-    if (@import("builtin").os.tag != .macos) {
+    const builtin = @import("builtin");
+    const on_kvm = builtin.os.tag == .linux and builtin.cpu.arch == .x86_64;
+    if (builtin.os.tag != .macos and !on_kvm) {
         try std.testing.expectEqualStrings("ZTCL VM UNAVAILABLE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image}; set ::errorCode")));
         return;
+    }
+    if (on_kvm) {
+        // A host without access to /dev/kvm gives the fix in the error.
+        @import("kvm.zig").probe() catch {
+            try std.testing.expectEqualStrings("ZTCL VM UNAVAILABLE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image}; set ::errorCode")));
+            return;
+        };
     }
     try std.testing.expectEqualStrings("ZTCL VM KERNEL", try it.str(try it.eval("catch {ztcl::vm create}; set ::errorCode")));
     try std.testing.expectEqualStrings("ZTCL VM NOFILE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image}; set ::errorCode")));
@@ -3009,6 +3018,16 @@ test "ztcl::vm: the capability, the jail of its paths, and the limits" {
     _ = try it.eval("file mkdir .zig-cache/ztcl-vm-test/share; close [open .zig-cache/ztcl-vm-test/Image w]");
     try tcl.fsroot.setRoot(&it, ".zig-cache/ztcl-vm-test");
     try std.testing.expectEqualStrings("POSIX EACCES {permission denied}", try it.str(try it.eval("catch {ztcl::vm create -kernel ../../build.zig}; set ::errorCode")));
+    if (on_kvm) {
+        try std.testing.expectEqualStrings("ZTCL VM SHARE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {share /mnt}}; set ::errorCode")));
+        try std.testing.expectEqualStrings("bad mode \"rx\": must be ro or rw", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -disk {Image rx}} m; set m")));
+        // An empty kernel fails at the start, and the guest stays.
+        try std.testing.expectEqualStrings("vm1", try it.str(try it.eval("ztcl::vm create -kernel Image")));
+        try std.testing.expectEqualStrings("ZTCL VM KERNEL", try it.str(try it.eval("catch {ztcl::vm start vm1}; set ::errorCode")));
+        try std.testing.expectEqualStrings("created", try it.str(try it.eval("ztcl::vm status vm1")));
+        _ = try it.eval("ztcl::vm delete vm1");
+        return;
+    }
     try std.testing.expectEqualStrings("bad mode \"rx\": must be ro or rw", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {share /mnt rx}} m; set m")));
     // The test program has no entitlement for the framework.
     try std.testing.expectEqualStrings("ZTCL VM ENTITLEMENT", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {share /mnt}}; set ::errorCode")));

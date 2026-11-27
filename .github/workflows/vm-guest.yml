@@ -3,7 +3,9 @@ name: VM guest
 # Builds the kernel and BusyBox of the spike guest of ztcl::vm (ztcl#203)
 # on an arm64 runner and an x86-64 runner (tools/vm-guest/build.sh), and
 # keeps them as the artifacts vm-guest (arm64, for macOS) and
-# vm-guest-x86_64 (for KVM). The proper guest image comes from the
+# vm-guest-x86_64 (for KVM). On x86-64 it then runs the boot test of
+# the KVM monitor (tools/vm-guest/test-kvm.sh), when the runner has
+# /dev/kvm. The proper guest image comes from the
 # build of dockyard#13.
 on:
   push:
@@ -11,6 +13,11 @@ on:
       - "tools/vm-guest/build.sh"
       - "tools/vm-guest/kernel.fragment"
       - "tools/vm-guest/kernel-x86_64.fragment"
+      - "tools/vm-guest/agent.zig"
+      - "tools/vm-guest/pack.sh"
+      - "tools/vm-guest/test-kvm.*"
+      - "src/kvm.zig"
+      - "src/microvm.zig"
       - ".github/workflows/vm-guest.yml"
   workflow_dispatch:
 
@@ -35,3 +42,23 @@ jobs:
         with:
           name: ${{ matrix.name }}
           path: tools/vm-guest/out/
+      # The boot test on KVM. GitHub gives /dev/kvm to the jobs of the
+      # x86-64 Linux runners; the udev rule opens it to the runner user.
+      - if: matrix.name == 'vm-guest-x86_64'
+        run: |
+          if [ -e /dev/kvm ]; then
+            echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+            sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+            sudo modprobe vhost_vsock && sudo chmod 666 /dev/vhost-vsock
+          fi
+          ls -l /dev/kvm /dev/vhost-vsock || true
+      - if: matrix.name == 'vm-guest-x86_64'
+        uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: "0.17.0"
+      - if: matrix.name == 'vm-guest-x86_64'
+        run: |
+          zig build -j4
+          TARGET=x86_64-linux-musl tools/vm-guest/pack.sh
+          tools/vm-guest/test-kvm.sh tools/vm-guest/out
+          KERNEL=vmlinux tools/vm-guest/test-kvm.sh tools/vm-guest/out

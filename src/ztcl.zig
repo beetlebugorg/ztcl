@@ -109,6 +109,7 @@ test {
     _ = @import("inflate.zig");
     _ = @import("vfs_tests.zig");
     _ = @import("tcl9_tests.zig");
+    if (@import("builtin").os.tag == .linux) _ = @import("kvm.zig");
     _ = zipwrite;
     _ = buildnative;
     _ = dbus;

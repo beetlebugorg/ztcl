@@ -1,6 +1,8 @@
 #!/bin/sh
 # Makes the initramfs files of the spike guest from out/busybox, the
-# agent, and init, on any host with Zig, cpio, and gzip:
+# agent, and init, on any host with Zig, cpio, and gzip. TARGET is the
+# Zig target of the agent (aarch64-linux-musl, or x86_64-linux-musl for
+# KVM):
 #   out/initramfs.cpio.gz  BusyBox, init (a shell script), and the agent
 #   out/agent.cpio         the agent alone, as /sbin/agent, uncompressed
 #   out/agent.cpio.gz      the same, with gzip
@@ -9,7 +11,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 out=${OUT:-$here/out}
 root=$(mktemp -d)
 mkdir -p "$root/bin" "$root/sbin" "$root/dev" "$root/mnt/share"
-zig build-exe -target aarch64-linux-musl -OReleaseSmall -fstrip "$here/agent.zig" -femit-bin="$root/sbin/agent"
+zig build-exe -target "${TARGET:-aarch64-linux-musl}" -OReleaseSmall -fstrip "$here/agent.zig" -femit-bin="$root/sbin/agent"
 rm -f "$root/sbin/agent.o"
 (cd "$root" && find . | cpio -o -H newc 2>/dev/null) > "$out/agent.cpio"
 gzip -9 < "$out/agent.cpio" > "$out/agent.cpio.gz"

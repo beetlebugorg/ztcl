@@ -17,3 +17,10 @@ CONFIG_KERNEL_LZ4=y
 CONFIG_NET_9P=y
 CONFIG_NET_9P_VIRTIO=y
 CONFIG_9P_FS=y
+# The signed guest image (ztcl#312): dm-verity on the read-only disks,
+# set up from the command line (dm-mod.create=) with the root hash of
+# the manifest.
+CONFIG_MD=y
+CONFIG_BLK_DEV_DM=y
+CONFIG_DM_INIT=y
+CONFIG_DM_VERITY=y

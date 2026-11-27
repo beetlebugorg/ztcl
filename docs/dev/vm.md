@@ -114,10 +114,37 @@ The spike builds its own guest. The proper image is the tiny kernel and BusyBox 
 
 ## Linux: KVM
 
-- `/dev/kvm` with the ioctls (`KVM_CREATE_VM`, `KVM_SET_USER_MEMORY_REGION`, `KVM_CREATE_VCPU`, `KVM_RUN`), one host thread per vCPU, on x86-64 and arm64. The direct boot loads the kernel and the initramfs into the memory of the guest, writes the boot parameters (x86-64) or a device tree (arm64), and starts the vCPUs.
-- The devices are our own, on virtio-mmio: the console, entropy, block, and vsock. vsock uses `/dev/vhost-vsock` of the host kernel, so the guest sockets reach `AF_VSOCK` on the host, and the host side is a normal socket.
-- virtio-fs needs a FUSE server on the host side. ztcl writes its own, in Zig, for the shares, in the file jail. This is the largest piece of the Linux part. A first step can share folders with virtio-9p, a smaller protocol, and keep the same Tcl API.
-- The user needs access to `/dev/kvm` (the `kvm` group). Without it, `create` gives `ZTCL VM UNAVAILABLE`.
+`src/kvm.zig` is a monitor of its own on the KVM ioctls of `/dev/kvm`, for x86-64 hosts. arm64 Linux comes later and gives `ZTCL VM UNAVAILABLE` until then.
+
+- The boot: one anonymous mapping with `MAP_NORESERVE` is the guest memory, so the host gives a page only when the guest touches it. The monitor loads a bzImage (its protected-mode part at 1 MB) or an uncompressed ELF `vmlinux` (each segment at its physical address), writes the boot parameters, the command line, a GDT, page tables with an identity map of 4 GB, and an MP table, and starts the boot vCPU in 64-bit mode at the 64-bit entry point of the boot protocol. The MP table lists the CPUs and the I/O APIC, so `-cpus 2` and more work with no ACPI.
+- KVM has the interrupt controllers (`KVM_CREATE_IRQCHIP`) and the PIT. Each vCPU is a host thread.
+- The devices are on virtio-mmio, given to the guest on its command line (`virtio_mmio.device=`): the console (`hvc0`), vsock, the disks, and the entropy device with `-entropy 1`. An 8250 UART at 0x3f8 sends the output of `console=ttyS0` to the console channel too; it exits to the monitor for each byte and is slow (about 1.4 s for the log of a boot), so it is for debugging.
+- vsock is vhost-vsock of the host kernel (`/dev/vhost-vsock`). An ioeventfd on the notify register kicks vhost and an irqfd gives its interrupts to the guest, so the data of a connection does not pass through ztcl. The host side is a normal `AF_VSOCK` socket to the context ID of the guest, which the monitor picks at random among the free ones.
+- A disk is a descriptor that ztcl opens in the file jail. The vCPU thread runs each request with `pread` and `pwrite`. A read-only disk has `VIRTIO_BLK_F_RO`, and the monitor refuses its writes.
+- The monitor adds `reboot=k panic=-1` to the command line. The guest stops itself with a reboot (the reset of the keyboard controller at port 0x64) or a panic. There is no ACPI, so a power-off of the guest halts it and does not stop it: `stop` without `-force` stops the guest at once on Linux until the agent has `poweroff`.
+- A pause sets `immediate_exit` of each vCPU and sends its thread a signal (40, with an empty handler), so `KVM_RUN` returns, and the thread waits on a futex. A warm guest (`-warm 1`) is a booted guest in this pause.
+- A share is not available on Linux yet (`ZTCL VM SHARE`). virtio-fs needs a FUSE server on the host side, which ztcl writes in Zig, in the file jail. A first step can share folders with virtio-9p, a smaller protocol, with the same Tcl API. The x86-64 guest kernel has 9P built in for it.
+- The user needs read and write access to `/dev/kvm` and `/dev/vhost-vsock` (the `kvm` group). Without it, `create` gives `ZTCL VM UNAVAILABLE` with the fix in the text.
+
+The x86-64 guest kernel has the options of `kernel.fragment` and `kernel-x86_64.fragment`: virtio-mmio with the devices of the command line, no PCI, no ACPI, the MP table, the paravirtual clock of KVM, the 8250 console, LZ4, 9P, and dm-verity with `dm-mod.create=` for the signed images of ztcl#312. The x86-64 job of `vm-guest.yml` builds it (the artifact `vm-guest-x86_64`: a 2.6 MB bzImage and a 14 MB `vmlinux`) and runs `tools/vm-guest/test-kvm.sh` with the agent of the spike.
+
+### Start time (Linux)
+
+`test-kvm.tcl` times each phase, best of 10, with 1 CPU, 64 MB, the agent as the first process (`rdinit=/sbin/agent quiet`), on an x86-64 Linux host (Intel Skylake, 4 GHz) that ran other builds at the same time:
+
+| Kernel | `start` | start to answer | guest: boot to agent | warm start to answer |
+|---|---|---|---|---|
+| bzImage (LZ4) | 12.46 | 65.61 | 25.54 | 0.124 |
+| ELF `vmlinux` | 10.94 | 59.85 | 23.21 | 0.146 |
+
+The times are in ms. `start` makes the VM, maps the memory, loads the kernel, makes the devices and the vCPUs, and starts the threads. "start to answer" is `start` to the 16 bytes of the agent over vsock.
+
+What the numbers show:
+
+- The setup of KVM (the VM, the interrupt controllers, the PIT, the memory) is 5 ms to 8 ms of `start`. The copy of the kernel into the guest memory is 1 ms for the bzImage and 5 ms to 6 ms for the `vmlinux` of 14 MB.
+- The ELF `vmlinux` saves the decompression of the bzImage, about 5 ms.
+- In the boot of the guest, the probe of the console device is 6 ms and the probe of vsock 3.4 ms (`initcall_debug`). These are the next levers, with the copy of the kernel (a copy-on-write mapping of the file instead).
+- A warm start is 0.12 ms to the answer of the agent: the threads leave the futex and enter `KVM_RUN` again.
 
 ## Windows: the Host Compute Service
 
@@ -133,7 +160,7 @@ The spike builds its own guest. The proper image is the tiny kernel and BusyBox 
 
 - A unit test of `vz.zig` that makes and checks a configuration. It runs on each macOS host and needs no entitlement for the parts before `validateWithError:`.
 - A boot test that runs the spike checks (ready line, vsock echo, a file in a share) on a Mac with the hypervisor. GitHub's macOS runners are VMs themselves, so a guest there needs nested virtualization from the host of the runner. The test asks `VZVirtualMachine.isSupported` and skips when it is false. Step 2 finds out with a run on the runners.
-- On Linux, the KVM test needs a runner with `/dev/kvm`. The x86-64 Ubuntu runners of GitHub have it.
+- On Linux, `tools/vm-guest/test-kvm.sh` runs the boot test (vsock echo, a stop and a new start, 2 CPUs, a disk, the entropy device, the console, a warm start) and the times, with the bzImage and with the `vmlinux`. It skips with the reason when the host has no access to `/dev/kvm` or `/dev/vhost-vsock`. The x86-64 job of `vm-guest.yml` opens `/dev/kvm` to the runner user with a udev rule and loads `vhost_vsock`.
 
 ## Steps
 
@@ -141,7 +168,7 @@ The spike builds its own guest. The proper image is the tiny kernel and BusyBox 
 2. `vz.zig` as the core of `src/microvm.zig` with `create`, `start`, `stop`, `status`, `console`, `vsock`, `delete`, `-warm`, and the capability, on macOS (done). `vm.zig` is the name of the bytecode file, so the new file is `src/microvm.zig`, and the command stays `ztcl::vm`. A child interp has no `vm`, so the limits count the guests of one interpreter. `tools/vm-guest/test.sh` runs the boot test on a Mac with the hypervisor.
 3. The entitlements in the Zig signer (done): `src/macho.zig` writes the requirements, the XML, and the DER blobs with their special slots. `zig build` signs the macOS `ztcl` with `tools/macho-sign`, and `ztcl build` signs an app with `vm` in `--allow`.
 4. The agent with `exec` and `mount`, and the guest image from dockyard#13.
-5. The KVM part.
+5. The KVM part on x86-64 (done, except the shares): `src/kvm.zig`. arm64 later.
 6. The HCS part.
 7. The docs page `docs/modules/vm.md` (#172).
 

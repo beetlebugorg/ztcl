@@ -1,0 +1,118 @@
+# The boot test of ztcl::vm on Linux with KVM (test-kvm.sh runs it): the
+# x86-64 guest of tools/vm-guest boots, the agent echoes over vsock, the
+# guest reads a disk, a stopped guest starts again, and a warm guest
+# answers after start. Then the times of a start, best of 10.
+proc check {what got want} {
+    if {$got ne $want} { error "$what: got \"$got\", want \"$want\"" }
+    puts "ok: $what"
+}
+set kernel [expr {[info exists env(KERNEL)] ? $env(KERNEL) : "bzImage"}]
+set boot [list -kernel $kernel -initrd agent.cpio -cmdline "rdinit=/sbin/agent quiet" -memory 64]
+
+# The boot time of the guest, in ns, from the 16 bytes of the agent.
+proc hello {ch} {
+    binary scan [read $ch 16] ww main listen
+    return $main
+}
+
+set vm [ztcl::vm create {*}$boot]
+check "a new guest" [ztcl::vm status $vm] created
+ztcl::vm start $vm
+check "a started guest" [ztcl::vm status $vm] running
+set ch [ztcl::vm vsock $vm 1024]
+hello $ch
+puts -nonewline $ch "hello from tcl\n"
+flush $ch
+check "the echo over vsock" [gets $ch] "hello from tcl"
+close $ch
+ztcl::vm stop $vm -force
+check "a stopped guest" [ztcl::vm status $vm] stopped
+ztcl::vm start $vm
+check "a guest that started again" [ztcl::vm status $vm] running
+close [ztcl::vm vsock $vm 1024]
+ztcl::vm delete $vm
+
+# The kernel log of a guest, from the agent: a first byte of 1 asks
+# for it.
+proc dmesg {vm} {
+    set ch [ztcl::vm vsock $vm 1024]
+    read $ch 16
+    puts -nonewline $ch "\x01"
+    flush $ch
+    set log ""
+    while {![string match "*Run /sbin/agent*" $log]} {
+        set got [read $ch 1]
+        if {$got eq ""} break
+        append log $got [chan read $ch [chan pending input $ch]]
+    }
+    close $ch
+    return $log
+}
+
+set nq [lreplace $boot 5 5 "rdinit=/sbin/agent"]
+set vm [ztcl::vm create {*}$nq -cpus 2]
+ztcl::vm start $vm
+check "two CPUs" [string match "*Total of 2 processors activated*" [dmesg $vm]] 1
+ztcl::vm delete $vm
+
+# A disk: the guest has /dev/vda, read-only.
+set f [open disk.img w]
+fconfigure $f -translation binary
+puts -nonewline $f [string repeat "ztcl disk block\n" 4096]
+close $f
+set vm [ztcl::vm create {*}$nq -disk disk.img -entropy 1]
+ztcl::vm start $vm
+set log [dmesg $vm]
+check "the disk in the log" [string match "*vda*128 512-byte*" $log] 1
+check "the entropy device" [string match "*virtio-mmio.3 at 0xd0003000*" $log] 1
+ztcl::vm delete $vm
+
+# The console: the kernel log of a guest on hvc0.
+set vm [ztcl::vm create {*}[lreplace $boot 5 5 "rdinit=/sbin/agent console=hvc0"]]
+set con [ztcl::vm console $vm]
+ztcl::vm start $vm
+close [ztcl::vm vsock $vm 1024]
+fconfigure $con -blocking 0
+check "the kernel log on the console" [string match "*Run /sbin/agent*" [read $con]] 1
+ztcl::vm delete $vm
+
+set w [ztcl::vm create {*}$boot -warm 1]
+check "a warm guest" [ztcl::vm status $w] paused
+set t [clock microseconds]
+ztcl::vm start $w
+set ch [ztcl::vm vsock $w 1024]
+read $ch 16
+set ms [expr {([clock microseconds] - $t) / 1000.0}]
+close $ch
+check "a warm start under 20 ms" [expr {$ms < 20}] 1
+ztcl::vm delete $w
+
+# The times, best of 10: start (the setup of KVM and the load of the
+# kernel), start to the answer of the agent, the boot clock of the
+# guest when the agent runs, and a warm start to the answer.
+proc best {list} { lindex [lsort -real $list] 0 }
+set starts {}; set answers {}; set boots {}; set warms {}
+for {set i 0} {$i < 10} {incr i} {
+    set vm [ztcl::vm create {*}$boot]
+    set t0 [clock microseconds]
+    ztcl::vm start $vm
+    set t1 [clock microseconds]
+    set ch [ztcl::vm vsock $vm 1024]
+    set main [hello $ch]
+    set t2 [clock microseconds]
+    close $ch
+    ztcl::vm delete $vm
+    lappend starts [expr {($t1 - $t0) / 1000.0}]
+    lappend answers [expr {($t2 - $t0) / 1000.0}]
+    lappend boots [expr {$main / 1e6}]
+    set w [ztcl::vm create {*}$boot -warm 1]
+    set t0 [clock microseconds]
+    ztcl::vm start $w
+    set ch [ztcl::vm vsock $w 1024]
+    read $ch 16
+    lappend warms [expr {([clock microseconds] - $t0) / 1000.0}]
+    close $ch
+    ztcl::vm delete $w
+}
+puts [format "times (ms, best of 10): start %.2f, start to answer %.2f, guest boot to agent %.2f, warm start to answer %.3f" \
+    [best $starts] [best $answers] [best $boots] [best $warms]]
