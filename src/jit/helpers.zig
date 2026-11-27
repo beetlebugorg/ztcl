@@ -88,6 +88,9 @@ pub const Helper = enum(u8) {
     /// `invoke` for a site whose cached command the code checked, with a
     /// direct call of a proc body (`jit/call.zig`).
     call_direct,
+    /// The probes of a line. `jit.prepare` does not compile a body with
+    /// probes, so no machine code calls it.
+    probe,
 };
 
 pub const count = @typeInfo(Helper).@"enum".field_names.len;
@@ -105,6 +108,7 @@ fn opOf(comptime h: Helper) @TypeOf(vm.opLoad) {
         .string_length => vm.opStringLength,
         .string_index => vm.opStringIndex,
         .step => vm.opStep,
+        .probe => vm.opProbe,
         .jump => vm.opJump,
         .lassign => vm.opLassign,
         .lassign_drop => vm.opLassignDrop,

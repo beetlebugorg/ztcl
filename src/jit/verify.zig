@@ -175,6 +175,7 @@ fn effect(code: *const Code, pc: u32) ?Effect {
             if (cold.b != pc) return null;
             return .{ .need = 0, .push = 0, .target = i.a };
         },
+        .probe => return .{ .need = 0, .push = 0 },
         .step, .incr_drop => {
             if (op == .incr_drop and i.a >= slots) return null;
             return .{ .need = 0, .push = 0 };

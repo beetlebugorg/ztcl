@@ -123,6 +123,9 @@ pub const Op = enum(u8) {
     /// `set name(index) value` on the array in slot `a`, with the index
     /// and the value on the stack. The value replaces the index.
     store_elem,
+    /// Runs the probes of line `a` of the proc body (`probe.zig`). Line
+    /// 0 is the entry. Uses no compute unit and changes no value.
+    probe,
 };
 
 pub const Ins = extern struct {
@@ -171,6 +174,9 @@ pub const Code = struct {
     /// The calls of the code before the JIT compiles it.
     jit_calls: u32 = 0,
     jit_state: enum(u8) { untried, failed, ready } = .untried,
+    /// The proc of a body with `probe` instructions. The JIT does not
+    /// compile such a body.
+    probed: ?*interp.Proc = null,
 };
 
 // ---- The guard ----
@@ -279,6 +285,15 @@ const Compiler = struct {
     arm_drop: bool = false,
     /// The result of the command that compiles now is dropped.
     dropped: bool = false,
+    /// The lines of the body with a probe, and the line in the body of
+    /// line 1 of the script that compiles now. `bases` has that line for
+    /// each nested script that an inline form compiles.
+    probe_lines: []const u32 = &.{},
+    line_base: u32 = 1,
+    /// The line of the command that compiles now. A command in it on
+    /// the same line gets no second probe.
+    outer_line: u32 = 0,
+    bases: std.AutoHashMapUnmanaged(*interp.Script, u32) = .empty,
 
     fn here(c: *Compiler) u32 {
         return @intCast(c.ins.items.len);
@@ -470,6 +485,11 @@ const Compiler = struct {
     fn compileScriptAs(c: *Compiler, s: *interp.Script, use: ScriptUse) Error!void {
         c.nest += 1;
         defer c.nest -= 1;
+        const base = c.line_base;
+        defer c.line_base = base;
+        if (c.probe_lines.len != 0) {
+            if (c.bases.get(s)) |b| c.line_base = b;
+        }
         if (s.cmds.len == 0) {
             _ = try c.emit(.{ .op = .push_empty });
             c.push(1);
@@ -572,6 +592,36 @@ const Compiler = struct {
     }
 
     fn bodyScript(c: *Compiler, cmd: *Cmd, i: usize) Error!?*interp.Script {
+        const s = try c.bodyScriptOf(cmd, i) orelse return null;
+        if (c.probe_lines.len != 0) {
+            const at = c.line_base + cmd.line - 1;
+            try c.bases.put(@import("probe.zig").embedderAlloc(c.it), s, at + cmd.words[i].line - cmd.line);
+        }
+        return s;
+    }
+
+    /// Parses each literal word with a space, a semicolon, or a newline
+    /// as a script, and the scripts in it, so that each gets its line in
+    /// the body (`bases`). A general command such as `catch` runs such a
+    /// script with `evalScript`, and `compileNamed` then puts the probes
+    /// in it. A word that is not a script gets a parsed form that no
+    /// code runs.
+    fn walk(c: *Compiler, s: *interp.Script, depth: u32) Error!void {
+        if (depth > 64) return;
+        const base = c.line_base;
+        defer c.line_base = base;
+        if (c.bases.get(s)) |b| c.line_base = b;
+        for (s.cmds) |*cmd| {
+            for (cmd.words, 0..) |w, i| {
+                if (i == 0 or w.kind != .lit or w.kind.lit != .str) continue;
+                if (std.mem.indexOfAny(u8, w.kind.lit.str, " \n;") == null) continue;
+                const inner = try c.bodyScript(cmd, i) orelse continue;
+                try c.walk(inner, depth + 1);
+            }
+        }
+    }
+
+    fn bodyScriptOf(c: *Compiler, cmd: *Cmd, i: usize) Error!?*interp.Script {
         if (cmd.cache[i].script) |s| return s;
         const it = c.it;
         const r, const code, const line = .{ it.result, it.error_code, it.error_line };
@@ -586,6 +636,13 @@ const Compiler = struct {
     }
 
     fn compileCmd(c: *Compiler, cmd: *Cmd) Error!void {
+        const outer = c.outer_line;
+        defer c.outer_line = outer;
+        if (c.probe_lines.len != 0) {
+            const line = c.line_base + cmd.line - 1;
+            if (line != outer and std.mem.indexOfScalar(u32, c.probe_lines, line) != null) _ = try c.emit(.{ .op = .probe, .a = line });
+            c.outer_line = line;
+        }
         if (cmd.has_expand) {
             _ = try c.emit(.{ .op = .eval_cmd, .a = try c.site(cmd) });
             c.push(1);
@@ -1210,9 +1267,20 @@ pub fn compileProc(it: *Interp, p: *interp.Proc, s: *interp.Script) Error!*Code 
     for (p.params) |prm| try c.names.append(a, prm.name);
     if (p.has_args) try c.names.append(a, "args");
     const params: u32 = @intCast(c.names.items.len);
+    const lines = if (it.probes != null) try @import("probe.zig").linesFor(it, p) else null;
+    defer if (lines) |l| {
+        @import("probe.zig").embedderAlloc(it).free(l);
+        c.bases.deinit(@import("probe.zig").embedderAlloc(it));
+    };
+    if (lines) |l| {
+        c.probe_lines = l;
+        try c.walk(s, 0);
+        if (std.mem.indexOfScalar(u32, l, 0) != null) _ = try c.emit(.{ .op = .probe, .a = 0 });
+    }
     try c.compileScript(s);
     _ = try c.emit(.{ .op = .ret });
     try c.finish();
+    if (lines != null) try @import("probe.zig").noteScripts(it, p, &c.bases);
     const code = try a.create(Code);
     code.* = .{
         .ins = c.ins.items,
@@ -1225,6 +1293,7 @@ pub fn compileProc(it: *Interp, p: *interp.Proc, s: *interp.Script) Error!*Code 
         .names = c.names.items,
         .max_stack = c.max + 1,
         .params = params,
+        .probed = if (lines != null) p else null,
     };
     // Test builds only: the JIT verifier checks each proc body.
     if (@import("builtin").is_test) @import("jit/verify.zig").testHook(code);
@@ -1235,6 +1304,19 @@ pub fn compileProc(it: *Interp, p: *interp.Proc, s: *interp.Script) Error!*Code 
 pub fn compileNamed(it: *Interp, s: *interp.Script) Error!*Code {
     const a = it.alloc();
     var c: Compiler = .{ .it = it, .a = a, .named = true };
+    // A script of a proc body with probes gets the probes of its lines.
+    const of = if (it.probes != null) @import("probe.zig").scriptOf(it, s) else null;
+    const lines = if (of) |e| try @import("probe.zig").linesFor(it, e.proc) else null;
+    defer if (lines) |l| {
+        @import("probe.zig").embedderAlloc(it).free(l);
+        c.bases.deinit(@import("probe.zig").embedderAlloc(it));
+    };
+    if (lines) |l| {
+        c.probe_lines = l;
+        c.line_base = of.?.base;
+        // The command of the body, such as `catch`, is on the first line.
+        c.outer_line = of.?.base;
+    }
     try c.compileScript(s);
     _ = try c.emit(.{ .op = .ret });
     try c.finish();
@@ -1254,6 +1336,7 @@ pub fn compileNamed(it: *Interp, s: *interp.Script) Error!*Code {
         .params = 0,
         .named = true,
         .hints = hints,
+        .probed = if (lines != null) of.?.proc else null,
     };
     return code;
 }
@@ -1712,6 +1795,11 @@ pub inline fn opGuard(comptime named: bool, it: *Interp, f: *Frame, code: *const
     if (guardJumps(it)) return true;
     try step(it);
     return false;
+}
+
+pub inline fn opProbe(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, stack, sp };
+    @import("probe.zig").fireLine(it, code.probed.?, i.a);
 }
 
 pub inline fn opStep(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
@@ -2197,6 +2285,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 continue :sw i.op;
             },
             .step => try opStep(named, it, f, code, stack, sp, i),
+            .probe => @import("probe.zig").fireLine(it, code.probed.?, i.a),
             .jump => {
                 pc = i.a;
                 continue;

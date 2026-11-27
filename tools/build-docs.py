@@ -74,6 +74,7 @@ PAGES = [
     ("docs/modules/README.md", "modules/", "Modules", "All modules"),
     ("docs/modules/json.md", "modules/json/", "Modules", "ztcl::json"),
     ("docs/modules/vt.md", "modules/vt/", "Modules", "ztcl::vt"),
+    ("docs/modules/probe.md", "modules/probe/", "Modules", "ztcl::probe"),
     ("docs/modules/pty.md", "modules/pty/", "Modules", "ztcl::pty"),
     ("docs/modules/watch.md", "modules/watch/", "Modules", "ztcl::watch"),
     ("docs/modules/open.md", "modules/open/", "Modules", "ztcl::open"),

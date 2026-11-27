@@ -22,6 +22,7 @@ const Cmd = interp.Cmd;
 const Error = interp.Error;
 const Var = interp.Var;
 const cmds = @import("cmds.zig");
+const probe = @import("probe.zig");
 
 pub const op_read: u8 = 1;
 pub const op_write: u8 = 2;
@@ -38,6 +39,10 @@ pub const VarTrace = struct {
     /// A trace of `vwait`: a write or an unset sets the flag and runs
     /// no script. `trace info` does not list it.
     flag: ?*bool = null,
+    /// A probe (`probe.Probe`): an operation runs the probe and no
+    /// script. `trace info` does not list it, and it uses no compute
+    /// units.
+    probe: ?*anyopaque = null,
 };
 
 pub const Traced = struct {
@@ -51,6 +56,12 @@ pub const Traced = struct {
     /// and an unset keeps the value. It does not turn the inline forms
     /// off, because a store to a `.traced` cell uses the general path.
     precision: bool = false,
+    /// The cell counts in `Interp.var_traces`. A cell with only probe
+    /// entries does not count, so the inline forms stay on. A store to
+    /// a `.traced` cell uses the general path.
+    counted: bool = true,
+    /// The count of probe entries in `list`.
+    probes: u32 = 0,
 };
 
 /// Makes the variable `tcl_precision`.
@@ -80,6 +91,8 @@ pub const CmdTraces = struct {
     /// The function of the command under the wrapper.
     orig: ?@FieldType(interp.Command, "impl") = null,
     busy: bool = false,
+    /// The count of probes on the command (`probe.zig`).
+    probes: u32 = 0,
 };
 
 fn eql(a: []const u8, b: []const u8) bool {
@@ -152,7 +165,7 @@ fn fire(it: *Interp, t: *Traced, name: []const u8, idx: ?[]const u8, op: u8) Err
     if (t.busy) return null;
     t.busy = true;
     defer t.busy = false;
-    try cmds.chargeEntries(it, t.list.items.len);
+    try cmds.chargeEntries(it, t.list.items.len - t.probes);
     const snapshot = try it.alloc().dupe(VarTrace, t.list.items);
     const changes = t.changes;
     var meter: cmds.Meter = .{};
@@ -164,6 +177,12 @@ fn fire(it: *Interp, t: *Traced, name: []const u8, idx: ?[]const u8, op: u8) Err
         }
         // A trace can remove a later trace of the same variable. With no
         // change of the list, each trace of the snapshot is still there.
+        if (tr.probe) |p| {
+            // A probe uses no compute units, so it skips the meter.
+            if (t.changes != changes and !stillProbe(t, p)) continue;
+            probe.fireVar(it, p, name, idx, op, if (op == op_unset) null else innerValue(t, idx));
+            continue;
+        }
         if (t.changes != changes) {
             try meter.add(it, t.list.items.len *| cmds.entry_units);
             if (!still(t, tr)) continue;
@@ -176,6 +195,20 @@ fn fire(it: *Interp, t: *Traced, name: []const u8, idx: ?[]const u8, op: u8) Err
         if (try runHook(it, tr.cmd, &.{ shown orelse name, if (shown != null) "" else idx orelse "", word })) |msg| return msg;
     }
     return null;
+}
+
+fn stillProbe(t: *const Traced, p: *anyopaque) bool {
+    for (t.list.items) |x| if (x.probe == p) return true;
+    return false;
+}
+
+/// The value of a traced cell, or of its element `idx`, with no trace.
+fn innerValue(t: *const Traced, idx: ?[]const u8) ?Value {
+    return switch (t.inner) {
+        .val => |v| if (idx == null) v else null,
+        .arr => |m| if (idx) |i| m.get(i) else null,
+        .undef => null,
+    };
 }
 
 fn still(t: *const Traced, tr: VarTrace) bool {
@@ -325,7 +358,7 @@ fn drop(it: *Interp, cell: *Var) void {
         .val => |v| cell.v = .{ .val = v },
         .arr => |m| cell.v = .{ .arr = m },
     }
-    it.var_traces -= 1;
+    if (t.counted) it.var_traces -= 1;
     it.epoch += 1;
 }
 
@@ -398,9 +431,21 @@ fn targetOf(it: *Interp, name: []const u8, make: bool) Error!?Target {
 }
 
 fn tracedOf(it: *Interp, cell: *Var) Error!*Traced {
-    if (cell.v == .traced) return cell.v.traced;
+    if (cell.v == .traced) {
+        const t = cell.v.traced;
+        if (!t.counted) {
+            t.counted = true;
+            it.var_traces += 1;
+            it.epoch += 1;
+        }
+        return t;
+    }
+    return tracedNew(it, cell, true);
+}
+
+fn tracedNew(it: *Interp, cell: *Var, counted: bool) Error!*Traced {
     const t = try it.alloc().create(Traced);
-    t.* = .{};
+    t.* = .{ .counted = counted };
     switch (cell.v) {
         .val => |v| t.inner = .{ .val = v },
         .owned => |v| t.inner = .{ .val = v },
@@ -408,7 +453,7 @@ fn tracedOf(it: *Interp, cell: *Var) Error!*Traced {
         else => {},
     }
     cell.v = .{ .traced = t };
-    it.var_traces += 1;
+    if (counted) it.var_traces += 1;
     it.epoch += 1;
     return t;
 }
@@ -434,7 +479,7 @@ fn varInfo(it: *Interp, name: []const u8, old_form: bool) Error!Value {
         if (idx) |i| {
             if (tr.elem == null or !eql(tr.elem.?, i)) continue;
         } else if (tr.elem != null) continue;
-        if (tr.flag != null) continue;
+        if (tr.flag != null or tr.probe != null) continue;
         if (old_form != (tr.old != null)) {
             if (old_form) continue;
         }
@@ -461,7 +506,68 @@ fn varRemove(it: *Interp, name: []const u8, ops: u8, cmd: Value, old: bool) Erro
         t.changes +%= 1;
         break;
     }
-    if (t.list.items.len == 0) drop(it, cell);
+    settle(it, cell);
+}
+
+/// Ends the traced form of a cell with no entry, and stops the count of
+/// a cell with only probe entries.
+fn settle(it: *Interp, cell: *Var) void {
+    const t = cell.v.traced;
+    if (t.list.items.len == 0) return drop(it, cell);
+    if (t.counted and t.probes == t.list.items.len and !t.precision) {
+        t.counted = false;
+        it.var_traces -= 1;
+        it.epoch += 1;
+    }
+}
+
+/// Adds the entry of a probe to a variable. The variable is made when
+/// it does not exist, as for `trace add variable`.
+pub fn addProbeVar(it: *Interp, name: []const u8, ops: u8, p: *anyopaque) Error!void {
+    const target = (try targetOf(it, name, true)).?;
+    const cell = target.cell;
+    const t = if (cell.v == .traced) cell.v.traced else try tracedNew(it, cell, false);
+    const copy: ?[]const u8 = if (target.idx) |i| try it.alloc().dupe(u8, i) else null;
+    try t.list.insert(it.alloc(), 0, .{ .ops = ops | op_unset, .cmd = Value.empty, .elem = copy, .probe = p });
+    t.probes += 1;
+    t.changes +%= 1;
+}
+
+pub fn removeProbeVar(it: *Interp, name: []const u8, p: *anyopaque) void {
+    const target = (targetOf(it, name, false) catch return) orelse return;
+    const cell = target.cell;
+    if (cell.v != .traced) return;
+    const t = cell.v.traced;
+    for (t.list.items, 0..) |tr, k| {
+        if (tr.probe == p) {
+            _ = t.list.orderedRemove(k);
+            t.probes -= 1;
+            t.changes +%= 1;
+            break;
+        }
+    }
+    settle(it, cell);
+}
+
+/// Puts the wrapper on a command for a probe.
+pub fn addProbeCommand(it: *Interp, c: *interp.Command) Error!void {
+    const t = try traceData(it, c);
+    t.probes += 1;
+    if (t.orig == null) {
+        t.orig = c.impl;
+        c.impl = .{ .native = execCall };
+        it.epoch += 1;
+    }
+}
+
+pub fn removeProbeCommand(it: *Interp, c: *interp.Command) void {
+    const t = c.traces orelse return;
+    t.probes -= 1;
+    if (t.probes == 0 and t.execs.items.len == 0 and t.orig != null) {
+        c.impl = t.orig.?;
+        t.orig = null;
+        it.epoch += 1;
+    }
 }
 
 fn varAdd(it: *Interp, name: []const u8, ops: u8, cmd: Value, old: ?[]const u8) Error!void {
@@ -590,6 +696,7 @@ fn execCall(it: *Interp, argv: []const Value, c: ?*Cmd) Error!Value {
         }
     }
     t.busy = false;
+    if (t.probes != 0) probe.fireCommand(it, self, argv, null);
     var code: i64 = 0;
     var failure: ?Error = null;
     var out: Value = Value.empty;
@@ -607,6 +714,7 @@ fn execCall(it: *Interp, argv: []const Value, c: ?*Cmd) Error!Value {
             else => return e,
         };
     }
+    if (t.probes != 0) probe.fireCommand(it, self, argv, .{ .code = code, .result = it.result });
     const res_text = try it.str(it.result);
     const code_text = try std.fmt.allocPrint(a, "{d}", .{code});
     t.busy = true;
@@ -751,7 +859,7 @@ pub fn cmdTrace(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 break;
             }
         }
-        if (k == .execution and t.execs.items.len == 0 and t.orig != null) {
+        if (k == .execution and t.execs.items.len == 0 and t.probes == 0 and t.orig != null) {
             c.impl = t.orig.?;
             t.orig = null;
             it.epoch += 1;

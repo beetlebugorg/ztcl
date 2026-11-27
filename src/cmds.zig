@@ -510,6 +510,7 @@ fn cmdProc(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     c.* = .{ .name = name, .impl = .{ .proc = p } };
     try it.commands.put(a, name, c);
     it.epoch += 1;
+    if (it.probes != null) @import("probe.zig").procDefined(it, name, p);
     return Value.empty;
 }
 

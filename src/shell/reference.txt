@@ -524,6 +524,8 @@ syn: exit ?returnCode?
 syn: ztcl::json subcommand ?arg ...?
 == ztcl::vt
 syn: ztcl::vt subcommand ?arg ...?
+== ztcl::probe
+syn: ztcl::probe subcommand ?arg ...?
 == ztcl::pty
 syn: ztcl::pty subcommand ?arg ...?
 == ztcl::watch
