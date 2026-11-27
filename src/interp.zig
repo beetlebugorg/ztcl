@@ -1258,6 +1258,9 @@ pub const Interp = struct {
     next_tail: u8 = 0,
     /// The state of the JIT, or null when it is off (`enableJit`).
     jit: ?*jit_mod.State = null,
+    /// The probes and their records (`probe.zig`), or null with no
+    /// probe. The state lives in the allocator of the embedder.
+    probes: ?*@import("probe.zig").State = null,
     /// The thread of this interpreter when the capability `thread` is
     /// on. Only the top interpreter of a thread has it.
     worker: ?*thread_mod.Worker = null,
@@ -1502,6 +1505,7 @@ pub const Interp = struct {
     /// values of scripts go away, and the arena frees its memory. The
     /// limits, the output, and the data of the embedder stay.
     pub fn reset(it: *Interp) Allocator.Error!void {
+        @import("probe.zig").dropAll(it);
         if (comptime thread_mod.supported) thread_mod.endGroup(it);
         @import("child.zig").destroyAll(it);
         @import("event.zig").forget(it);
@@ -1563,6 +1567,7 @@ pub const Interp = struct {
     /// evaluations. Each value in `roots` stays valid at a new address.
     /// All other values from before the call are invalid after it.
     pub fn compact(it: *Interp, roots: []Value, opts: @import("compact.zig").Options) @import("compact.zig").Error!void {
+        if (it.active == 0) @import("probe.zig").dropAll(it);
         return @import("compact.zig").run(it, roots, opts);
     }
 
@@ -1753,6 +1758,7 @@ pub const Interp = struct {
     }
 
     pub fn deinit(it: *Interp) void {
+        @import("probe.zig").dropAll(it);
         if (comptime thread_mod.supported) thread_mod.endGroup(it);
         if (!it.isRoot()) {
             var root = it.parent.?;
@@ -2414,6 +2420,7 @@ pub const Interp = struct {
             return;
         }
         if (!it.in_error) {
+            if (it.probes != null) @import("probe.zig").fireError(it, text);
             it.in_error = true;
             it.error_info = .empty;
             try it.error_info.appendSlice(a, try it.str(it.result));

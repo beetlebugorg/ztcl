@@ -351,6 +351,12 @@ pub fn prepare(it: *Interp, code: *vm.Code) ?*Fn {
         .failed => return null,
         .untried => {},
     }
+    // A body with probes stays in the interpreter. The body compiles
+    // again with no probe when the last probe goes.
+    if (code.probed != null) {
+        code.jit_state = .failed;
+        return null;
+    }
     code.jit_calls +|= 1;
     // A body with a loop compiles at its first call, so a later call
     // needs no scan.

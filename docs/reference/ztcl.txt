@@ -14,6 +14,11 @@ syn: ztcl::vt subcommand ?arg ...?
 does: A terminal screen in memory: feed it the bytes of a program, and read its cells and its text.
 page: modules/vt.md
 
+== ztcl::probe
+syn: ztcl::probe subcommand ?arg ...?
+does: Records the values of a running script at a proc, a line, a command, a variable, or an error, with no change to the script, and gives the records back as dicts or JSON.
+page: modules/probe.md
+
 == ztcl::pty
 syn: ztcl::pty subcommand ?arg ...?
 does: Runs a program in a pseudo terminal, for `ztcl::vt` and for tests of terminal apps.

@@ -104,6 +104,7 @@ test {
     _ = @import("isolate_windows_tests.zig");
     _ = @import("pty_windows_tests.zig");
     _ = @import("watch_tests.zig");
+    _ = @import("probe_tests.zig");
     _ = @import("zipread.zig");
     _ = @import("inflate.zig");
     _ = @import("vfs_tests.zig");

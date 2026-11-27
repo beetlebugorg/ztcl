@@ -45,6 +45,7 @@ pub const table: []const Module = blk: {
     if (options.mod_hello) list = list ++ @import("hello.zig").modules;
     if (options.mod_json) list = list ++ @import("json/cmd.zig").modules;
     if (options.mod_vt) list = list ++ @import("vt.zig").modules;
+    if (options.mod_probe) list = list ++ @import("probe.zig").modules;
     break :blk list;
 };
 
