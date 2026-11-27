@@ -2454,19 +2454,40 @@ test "a held value survives 100 collections and an unheld value is freed" {
     defer it.deinit();
     const kept = try it.eval("string repeat ab 30");
     try it.hold(kept);
-    const gone = try it.eval("string repeat cd 30");
+    // The test keeps the addresses as integers with the low bit set, so a
+    // scan of a native stack does not see them as pointers.
+    const gone = @intFromPtr((try it.eval("string repeat cd 30")).str.ptr) | 1;
     // A third block of the same size keeps the page.
     const anchor = try it.eval("string repeat ef 30");
     try it.hold(anchor);
     _ = try it.eval("set zz 1");
     for (0..100) |_| it.collect();
     try std.testing.expectEqualStrings("abababababababababababababababababababababababababababababab", try it.str(kept));
-    if (std.debug.runtime_safety) {
-        try std.testing.expectEqual(@as(u8, 0xDD), gone.str[0]);
-    }
+    try expectFreed(&it, gone & ~@as(usize, 1));
+    const kept_addr = @intFromPtr(kept.str.ptr) | 1;
     it.release(kept);
     it.collect();
-    if (std.debug.runtime_safety) try std.testing.expectEqual(@as(u8, 0xDD), kept.str[0]);
+    try expectFreed(&it, kept_addr & ~@as(usize, 1));
+}
+
+/// Fails when the collector kept the block at `addr`. It first prints
+/// each word of the roots of `it` that points into the block, with the
+/// field of `Interp` that holds the word.
+fn expectFreed(it: *tcl.Interp, addr: usize) !void {
+    const heap = @import("heap.zig");
+    if (heap.isFree(it.heap, addr)) return;
+    const words: [*]const usize = @ptrCast(@alignCast(it));
+    for (0..@sizeOf(tcl.Interp) / @sizeOf(usize)) |w| {
+        const v = words[w];
+        if (v < addr or v >= addr + 64) continue;
+        const off = w * @sizeOf(usize);
+        inline for (@typeInfo(tcl.Interp).@"struct".field_names) |name| {
+            const at = @offsetOf(tcl.Interp, name);
+            if (off >= at and off < at + @sizeOf(@FieldType(tcl.Interp, name))) std.debug.print("root: Interp.{s} + {d} = 0x{x}\n", .{ name, off - at, v });
+        }
+    }
+    for (it.held.items) |h| if (h == .str and @intFromPtr(h.str.ptr) == addr) std.debug.print("root: held\n", .{});
+    return error.TestBlockNotFreed;
 }
 
 test "a range from addRoot keeps the values in it" {
