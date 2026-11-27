@@ -69,3 +69,19 @@ set ms [expr {([clock microseconds] - $t) / 1000.0}]
 close $ch
 check "a warm start under 20 ms" [expr {$ms < 20}] 1
 puts "warm start to the agent: $ms ms"
+
+# -net nat: the agent gets 10.0.2.15 with DHCP, and the NAT answers a
+# ping to the gateway. A kernel with no virtio-net has no eth0: skipped.
+set nvm [ztcl::vm create {*}$boot -net nat]
+ztcl::vm start $nvm
+if {[dict get [ztcl::vm exec $nvm /bin/busybox test -e /sys/class/net/eth0] exit] == 0} {
+    check "-net nat: the address" [string match "*inet 10.0.2.15/24*" [dict get [ztcl::vm exec $nvm /bin/busybox ip -4 addr show eth0] stdout]] 1
+    check "-net nat: the default route" [string match "default via 10.0.2.2 *" [dict get [ztcl::vm exec $nvm /bin/busybox ip route] stdout]] 1
+    check "-net nat: a ping of the gateway" [dict get [ztcl::vm exec $nvm /bin/busybox ping -c 1 -W 2 10.0.2.2] exit] 0
+    check "-net nat: the name server in /run/resolv.conf" [dict get [ztcl::vm exec $nvm /bin/busybox cat /run/resolv.conf] stdout] "nameserver 10.0.2.3\n"
+} else {
+    puts "skip: -net nat (the kernel has no virtio-net)"
+}
+ztcl::vm stop $nvm -force
+ztcl::vm delete $nvm
+check "-net needs nat or none" [catch {ztcl::vm create {*}$boot -net bridge}] 1

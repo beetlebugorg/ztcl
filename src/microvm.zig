@@ -2,7 +2,7 @@
 //! (capability `vm`, ztcl#203). The plan is `docs/dev/vm.md`.
 //!
 //!   ztcl::vm create ?-cpus N? ?-memory MB? -kernel F ?-initrd F? ?-cmdline TEXT?
-//!                   ?-disk {F ?rw?}? ... ?-share {HOST GUEST ?rw?}? ... ?-entropy 0|1? ?-warm 0|1?
+//!                   ?-disk {F ?rw?}? ... ?-share {HOST GUEST ?rw?}? ... ?-entropy 0|1? ?-net nat|none? ?-warm 0|1?
 //!   ztcl::vm start|stop ?-force?|status|delete VM
 //!   ztcl::vm vsock VM PORT ?-timeout MS?
 //!   ztcl::vm exec VM ?-stdin DATA? ?-env LIST? ?-cwd DIR? ?-timeout MS? ?--? PROGRAM ?ARG ...?
@@ -561,6 +561,31 @@ fn execArgs(it: *Interp, args: []const Value) Error!ExecReq {
 /// The arguments of `ztcl::vm mount`.
 const MountReq = struct { tag: []const u8, path: []const u8, read_only: bool };
 
+/// The network of the NAT for the agent: address/prefix, gateway, DNS.
+const nat_cmdline = "ztcl.net=10.0.2.15/24,10.0.2.2,10.0.2.3";
+
+/// The network policy of the interpreter for each host address of the
+/// NAT of a guest, on the thread of the NAT. The policy of an
+/// interpreter does not change after the embedder sets it.
+fn natPolicy(ctx: ?*anyopaque, _: nat_engine.Proto, ip: nat_engine.Ip4, port: u16) bool {
+    const it: *Interp = @ptrCast(@alignCast(ctx.?));
+    var addr: sys.Addr = .{ .port = port };
+    @memcpy(addr.bytes[0..4], &ip);
+    return @import("sock.zig").permits(it.net, addr, port, null);
+}
+
+/// `-net nat`: a network through the user-mode NAT of ztcl#461. It needs
+/// the capability `socket`, as each connection of the guest is a
+/// connection of the host under its policy. Off by default.
+fn netOption(it: *Interp, v: Value) Error!bool {
+    const w = try it.str(v);
+    if (std.mem.eql(u8, w, "none")) return false;
+    if (!std.mem.eql(u8, w, "nat")) return it.fail("bad network \"{s}\": must be nat or none", .{w});
+    if (it.capabilities & @backingInt(interp.Capability.socket) == 0)
+        return it.failCode("ZTCL VM NONET", "-net nat needs the socket capability", .{});
+    return true;
+}
+
 fn mountArgs(it: *Interp, args: []const Value) Error!MountReq {
     const use = "ztcl::vm mount vm tag path ?-readonly?";
     if (args.len != 2 and args.len != 3) return it.wrongArgs(use);
@@ -615,9 +640,52 @@ const mac = if (on_mac) struct {
         started: bool = false,
         /// The listeners of `listen`, each with the write end of its pipe.
         listens: std.ArrayListUnmanaged(Listen) = .empty,
+        /// The network of `-net nat`.
+        net: ?*Net = null,
     };
 
     const Listen = struct { port: u32, l: *vz.Listener, pipe_w: c_int, chan: []const u8 };
+
+    /// The network of a guest with `-net nat`: a datagram socket pair, one
+    /// end for the virtio-net device of the framework
+    /// (`VZFileHandleNetworkDeviceAttachment`, one Ethernet frame for each
+    /// datagram) and one for the NAT engine (`Nat.initSocket`), which reads
+    /// and writes it on its own thread.
+    const Net = struct {
+        vm_fd: c_int,
+        nat: *nat_engine.Nat,
+
+        fn init(gpa: std.mem.Allocator, cfg: nat_engine.Config) !*Net {
+            var pair: [2]c.fd_t = undefined;
+            if (c.socketpair(c.AF.UNIX, c.SOCK.DGRAM, 0, &pair) != 0) return error.NoSocket;
+            const size: c_int = 4 << 20;
+            _ = c.setsockopt(pair[0], c.SOL.SOCKET, c.SO.SNDBUF, std.mem.asBytes(&size), @sizeOf(c_int));
+            _ = c.setsockopt(pair[0], c.SOL.SOCKET, c.SO.RCVBUF, std.mem.asBytes(&size), @sizeOf(c_int));
+            // The engine owns pair[1] once initSocket returns.
+            const engine = nat_engine.Nat.initSocket(gpa, cfg, pair[1]) catch |e| {
+                _ = c.close(pair[0]);
+                _ = c.close(pair[1]);
+                return e;
+            };
+            errdefer engine.deinit();
+            try engine.start();
+            const n = try gpa.create(Net);
+            n.* = .{ .vm_fd = pair[0], .nat = engine };
+            return n;
+        }
+
+        /// Stops the thread of the engine. The end of the framework closes
+        /// after the machine, in `close`.
+        fn stop(n: *Net) void {
+            n.nat.stop();
+        }
+
+        fn close(n: *Net, gpa: std.mem.Allocator) void {
+            n.nat.deinit();
+            _ = c.close(n.vm_fd);
+            gpa.destroy(n);
+        }
+    };
 
     const State = struct {
         guests: std.ArrayList(*Guest) = .empty,
@@ -718,6 +786,8 @@ const mac = if (on_mac) struct {
         var shares: std.ArrayList(vz.Share) = .empty;
         var disks: std.ArrayList(vz.Disk) = .empty;
         var warm = false;
+        var net_nat = false;
+        var dns = true;
         var image: ?[]const u8 = null;
         var image_disks: usize = 0;
         {
@@ -752,6 +822,10 @@ const mac = if (on_mac) struct {
                 cfg.entropy = try it.int(v) != 0;
             } else if (std.mem.eql(u8, opt, "-warm")) {
                 warm = try it.int(v) != 0;
+            } else if (std.mem.eql(u8, opt, "-net")) {
+                net_nat = try netOption(it, v);
+            } else if (std.mem.eql(u8, opt, "-dns")) {
+                dns = try it.int(v) != 0;
             } else if (std.mem.eql(u8, opt, "-disk")) {
                 const l = try it.list(v);
                 if (l.len < 1 or l.len > 2) return it.fail("a disk is {{file ?rw?}}", .{});
@@ -761,7 +835,7 @@ const mac = if (on_mac) struct {
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 const tag = try std.fmt.allocPrint(a, "share{d}", .{shares.items.len});
                 try shares.append(a, .{ .path = try hostPath(it, try it.str(l[0]), true), .tag = tag, .read_only = !(l.len == 3 and try isRw(it, l[2])) });
-            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -image, -initrd, -kernel, -memory, -share, or -warm", .{opt});
+            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -dns, -entropy, -image, -initrd, -kernel, -memory, -net, -share, or -warm", .{opt});
         }
         if (image) |name| {
             const r = try resolveImage(it, name);
@@ -779,11 +853,14 @@ const mac = if (on_mac) struct {
             disks = all;
         }
         if (cfg.kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel or -image", .{});
+        // The host knows the network of the NAT, so the agent takes it from
+        // the command line with no DHCP (docs/dev/vm-agent.md).
+        if (net_nat) cfg.cmdline = try std.fmt.allocPrint(a, "{s} {s}", .{ cfg.cmdline, nat_cmdline });
         cfg.shares = shares.items;
         cfg.disks = disks.items;
         // A guest of the image from the pool: no share and no disk of its
         // own, so its configuration is the one of the pool.
-        if (image != null and it.vm_host.pool_size > 0 and shares.items.len == 0 and disks.items.len == image_disks and !warm) {
+        if (image != null and it.vm_host.pool_size > 0 and shares.items.len == 0 and disks.items.len == image_disks and !warm and !net_nat) {
             const fp = try fingerprint(a, cfg);
             const got = take(fp);
             refill(fp, cfg, it.vm_host.pool_size);
@@ -812,6 +889,10 @@ const mac = if (on_mac) struct {
             _ = c.close(pair[1]);
         };
         cfg.console = .{ .in = pair[0], .out = pair[0] };
+        const net: ?*Net = if (net_nat) Net.init(it.heap.backing, .{ .policy = natPolicy, .policy_ctx = it, .dns = dns }) catch return it.failCode("ZTCL VM FRAMEWORK", "no socket for the network of the guest", .{}) else null;
+        var keep_net = false;
+        defer if (!keep_net) if (net) |n| n.close(it.heap.backing);
+        if (net) |n| cfg.net_fd = n.vm_fd;
         var why: []const u8 = "";
         const vc = vz.configure(cfg, &why) catch return framework(it, "the configuration of the guest", why);
         const g = try it.heap.backing.create(Guest);
@@ -822,10 +903,12 @@ const mac = if (on_mac) struct {
             .console_vm = pair[0],
             .console_host = pair[1],
             .warm = warm,
+            .net = net,
         };
         s.next += 1;
         try s.guests.append(it.heap.backing, g);
         keep = true;
+        keep_net = true;
         if (warm) {
             g.machine.start(&why) catch return framework(it, "the start of the guest", why);
             g.started = true;
@@ -1198,8 +1281,10 @@ const mac = if (on_mac) struct {
         for (g.listens.items) |x| dropListen(it, x);
         g.listens.deinit(it.heap.backing);
         stop(g, true);
+        if (g.net) |n| n.stop();
         g.machine.deinit();
         vz.release(g.config);
+        if (g.net) |n| n.close(it.heap.backing);
         _ = c.close(g.console_vm);
         if (g.console_host >= 0) _ = c.close(g.console_host);
         it.heap.backing.free(g.name);

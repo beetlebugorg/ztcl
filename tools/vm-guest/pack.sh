@@ -12,7 +12,9 @@ set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 out=${OUT:-$here/out}
 root=$(mktemp -d)
-mkdir -p "$root/bin" "$root/sbin" "$root/dev" "$root/mnt/share"
+mkdir -p "$root/bin" "$root/sbin" "$root/dev" "$root/mnt/share" "$root/run" "$root/etc"
+# The agent writes the name server of -net nat in /run, a tmpfs.
+ln -s /run/resolv.conf "$root/etc/resolv.conf"
 zig build-exe -target "${TARGET:-aarch64-linux-musl}" -OReleaseSmall -fstrip "$here/agent.zig" -femit-bin="$root/sbin/agent"
 rm -f "$root/sbin/agent.o"
 cp "$out/busybox" "$root/bin/busybox"

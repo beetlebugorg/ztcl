@@ -13,6 +13,10 @@ As process 1, the agent mounts `proc` at `/proc`, `sysfs` at `/sys`, `devtmpfs` 
 
 Each connection runs in a child process of the agent, so a long `exec` does not stop another connection. On Windows the host reaches the same ports through Hyper-V sockets (`HV_GUID_VSOCK_TEMPLATE` with the port in the first 4 bytes of the service id).
 
+## The network
+
+With a virtio-net device on the bus (virtio device id 1, from `-net nat`), the agent sets `lo` and `eth0` up before it listens. The host knows the network of its NAT and gives it on the command line of the kernel, `ztcl.net=10.0.2.15/24,10.0.2.2,10.0.2.3` (the address and prefix, the gateway, the DNS address), so the agent sets them with no DHCP. Without that option it asks with DHCP: first a REQUEST of 10.0.2.15 (the INIT-REBOOT state of RFC 2131), then DISCOVER and REQUEST, three tries of 500 ms each. It sets the address and the netmask of the answer on eth0 and the default route through its router, with the ioctls of the kernel. The guest kernel has no IP autoconfiguration. With a DNS address (the third field of `ztcl.net=`, or option 6 of DHCP), the agent mounts a tmpfs at `/run` and writes `/run/resolv.conf`; the root of an image is read-only, and its `/etc/resolv.conf` is a link to that file (`image.sh`, `pack.sh`). A guest with no network device skips this. On VZ the network costs about 0.5 ms before the agent listens, of which about 0.4 ms is the open of eth0 in the kernel (the virtio-net driver fills its receive queue); the DHCP path costs about 0.2 ms more.
+
 ## The client mode
 
 `/sbin/agent connect PORT` connects to vsock port `PORT` of the host (CID 2) and copies its standard input to the connection and the connection to its standard output, until both close. It exits 1 when the host has no listener there. The host listens with `ztcl::vm listen`; dockyard's guest proxy relays the connections of `127.0.0.1:3128` in the guest this way.
