@@ -124,6 +124,13 @@ export class Interp {
       if (!this._domRoot) throw new Error("dom: no domRoot and no document.body");
       this._handles = new Map();
       this._ids = new Map();
+      this._nextHandle = 1;
+      // The elements of `dom create`. A tree of them that is not in the
+      // document yet is in scope, so a script can build it before
+      // `dom append`.
+      this._made = new WeakSet();
+      this._domHtml = allow.includes("dom-html");
+      allow = allow.filter((c) => c !== "dom-html");
       if (this.x.ztcl_dom_allow(this.h) !== 0) throw new Error("ztcl_dom_allow: out of memory");
       allow = allow.filter((c) => c !== "dom");
     }
@@ -286,15 +293,24 @@ export class Interp {
       reply(msg);
       return -1;
     };
+    // An element is in scope when it is the root or below it, or when
+    // the top of its tree is an element of `dom create` that is not in
+    // the document.
+    const inScope = (e) => {
+      if (e === root || root.contains(e)) return true;
+      let top = e;
+      while (top.parentNode) top = top.parentNode;
+      return this._made.has(top) && !top.isConnected;
+    };
     let el = root;
     if (h !== 0) {
       el = this._handles.get(h);
-      if (!el || !(el === root || root.contains(el))) return fail(`invalid DOM handle "dom${h}"`);
+      if (!el || !inScope(el)) return fail(`invalid DOM handle "dom${h}"`);
     }
     const handle = (e) => {
       let id = this._ids.get(e);
       if (!id) {
-        id = this._handles.size + 1;
+        id = this._nextHandle++;
         this._handles.set(id, e);
         this._ids.set(e, id);
       }
@@ -302,6 +318,15 @@ export class Interp {
     };
     const sa = this._text(a, aLen);
     const sb = this._text(b, bLen);
+    // No command runs JavaScript: no element that loads or runs code,
+    // no event attribute, and no `javascript:` URL.
+    const badTags = ["script", "iframe", "frame", "frameset", "object", "embed", "base", "link", "meta", "template"];
+    const badAttr = (n, v) => {
+      n = n.toLowerCase();
+      if (n.startsWith("on") || n === "srcdoc" || n === "is") return true;
+      const url = String(v).replace(/[\s\x00-\x1f]/g, "").toLowerCase();
+      return url.startsWith("javascript:") || url.startsWith("vbscript:");
+    };
     try {
       switch (op) {
         case 1: {
@@ -321,7 +346,60 @@ export class Interp {
           reply(el.getAttribute(sa) ?? "");
           return 0;
         case 6:
+          if (badAttr(sa, sb)) return fail(`dom attr: the attribute "${sa}" can run code`);
           el.setAttribute(sa, sb);
+          return 0;
+        case 7: // class: `sa` is add, remove, toggle, or has.
+          if (sa === "add") el.classList.add(sb);
+          else if (sa === "remove") el.classList.remove(sb);
+          else if (sa === "toggle") return el.classList.toggle(sb) ? 1 : 0;
+          else return el.classList.contains(sb) ? 1 : 0;
+          return 0;
+        case 8:
+          reply(el.style.getPropertyValue(sa));
+          return 0;
+        case 9:
+          el.style.setProperty(sa, sb);
+          return 0;
+        case 10:
+          reply(String(el.type === "checkbox" || el.type === "radio" ? (el.checked ? 1 : 0) : (el.value ?? "")));
+          return 0;
+        case 11:
+          if (el.type === "checkbox" || el.type === "radio") el.checked = sa !== "" && sa !== "0";
+          else el.value = sa;
+          return 0;
+        case 12:
+          el.focus();
+          return 0;
+        case 13: {
+          const tag = sa.toLowerCase();
+          if (!/^[a-z][a-z0-9-]*$/.test(tag) || badTags.includes(tag)) return fail(`dom create: the element "${sa}" is not allowed`);
+          const e = (root.ownerDocument ?? document).createElement(tag);
+          this._made.add(e);
+          return handle(e);
+        }
+        case 14: {
+          // append: `b` is the handle of the child as text.
+          const kid = this._handles.get(Number(sb));
+          if (!kid || !inScope(kid)) return fail(`invalid DOM handle "dom${sb}"`);
+          if (kid === root || kid.contains(el)) return fail("dom append: an element cannot go below itself");
+          el.appendChild(kid);
+          return 0;
+        }
+        case 15:
+          if (el === root) return fail("dom remove: the root stays");
+          // The tree of the element leaves the scope with it.
+          el.remove();
+          this._made.delete(el);
+          this._handles.delete(h);
+          this._ids.delete(el);
+          return 0;
+        case 16:
+          reply(el.innerHTML);
+          return 0;
+        case 17:
+          if (!this._domHtml) return fail('dom html: setting HTML needs the grant "dom-html"');
+          el.innerHTML = sa;
           return 0;
       }
       return fail(`dom: unknown operation ${op}`);

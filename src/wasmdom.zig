@@ -1,4 +1,4 @@
-//! The command `dom` of `ztcl-host.wasm` (#85, task 01 of
+//! The command `dom` of `ztcl-host.wasm` (#85, tasks 01 and 02 of
 //! docs/dev/dom-tasks/README.md): reads and writes of the DOM of the page
 //! below a root element that the host gives.
 //!
@@ -6,15 +6,28 @@
 //!   dom queryAll ?el? selector     a list of the matches
 //!   dom text el ?value?            the text of an element
 //!   dom attr el name ?value?       an attribute ("" when it is absent)
+//!   dom class el action name       add, remove, toggle (gives 0 or 1), has
+//!   dom style el property ?value?  one property of the inline style
+//!   dom value el ?value?           the value of a form element (0 or 1
+//!                                  for a checkbox or a radio button)
+//!   dom focus el                   moves the focus to the element
+//!   dom create tag                 a new element, not in the page yet
+//!   dom append parent child        puts child at the end of parent
+//!   dom remove el                  takes the element out; the handle ends
+//!   dom html el ?value?            the inner HTML; a set needs `dom-html`
 //!
-//! An element is a handle `domN`. The table of handles is in
-//! `web/ztcl.mjs`, so Tcl never gets a pointer, and an omitted `el` is
-//! the root. Each command makes one call of the import
+//! An element is a handle `domN`. A tree of new elements is in scope
+//! before `dom append` puts it below the root. The host gives an error
+//! for the elements and the attributes that can run code: `script`,
+//! `iframe`, `object`, and the like, each `on...` attribute, and
+//! `javascript:` URLs. A set of `dom html` needs the grant `dom-html`.
+//! The table of handles is in `web/ztcl.mjs`, so Tcl never gets a
+//! pointer, and an omitted `el` is the root. Each command makes one call of the import
 //! `ztcl_host.dom(op, handle, a, a_len, b, b_len)`. The host gives an
 //! integer, and for text it puts a reply into the memory of the module
 //! (`ztcl_alloc`) and its address and length into `reply`. A negative
 //! integer is an error, with the message in the reply. The host checks
-//! that each handle is the root or below it. Each call costs one compute
+//! that each handle is in scope. Each call costs one compute
 //! unit. The command exists only after `ztcl_dom_allow`, so it is absent
 //! by default and in `ztcl.wasm`.
 //!
@@ -26,7 +39,25 @@ const Interp = ztcl.Interp;
 const Value = ztcl.Value;
 const Error = ztcl.interp.Error;
 
-pub const Op = enum(u32) { query = 1, query_all = 2, text_get = 3, text_set = 4, attr_get = 5, attr_set = 6 };
+pub const Op = enum(u32) {
+    query = 1,
+    query_all = 2,
+    text_get = 3,
+    text_set = 4,
+    attr_get = 5,
+    attr_set = 6,
+    class = 7,
+    style_get = 8,
+    style_set = 9,
+    value_get = 10,
+    value_set = 11,
+    focus = 12,
+    create = 13,
+    append = 14,
+    remove = 15,
+    html_get = 16,
+    html_set = 17,
+};
 
 const host = struct {
     extern "ztcl_host" fn dom(op: u32, handle: i32, a: [*]const u8, a_len: usize, b: [*]const u8, b_len: usize) i32;
@@ -111,7 +142,70 @@ pub fn Commands(comptime gpa: std.mem.Allocator) type {
                 }
                 return .{ .str = (try call(it, gpa, .attr_get, el, attr, "")).text };
             }
-            return it.fail("bad subcommand \"{s}\": must be attr, query, queryAll, or text", .{sub});
+            if (std.mem.eql(u8, sub, "class")) {
+                if (args.len != 3) return it.wrongArgs("dom class el add|remove|toggle|has name");
+                const el = try handleOf(it, args[0]);
+                const action = try it.str(args[1]);
+                const known = [_][]const u8{ "add", "remove", "toggle", "has" };
+                for (known) |k| {
+                    if (!std.mem.eql(u8, action, k)) continue;
+                    const r = try call(it, gpa, .class, el, action, try it.str(args[2]));
+                    if (action[0] == 't' or action[0] == 'h') return .{ .int = r.rc };
+                    return Value.empty;
+                }
+                return it.fail("bad action \"{s}\": must be add, has, remove, or toggle", .{action});
+            }
+            if (std.mem.eql(u8, sub, "style")) {
+                if (args.len < 2 or args.len > 3) return it.wrongArgs("dom style el property ?value?");
+                const el = try handleOf(it, args[0]);
+                const prop = try it.str(args[1]);
+                if (args.len == 3) {
+                    _ = try call(it, gpa, .style_set, el, prop, try it.str(args[2]));
+                    return Value.empty;
+                }
+                return .{ .str = (try call(it, gpa, .style_get, el, prop, "")).text };
+            }
+            if (std.mem.eql(u8, sub, "value")) {
+                if (args.len < 1 or args.len > 2) return it.wrongArgs("dom value el ?value?");
+                const el = try handleOf(it, args[0]);
+                if (args.len == 2) {
+                    _ = try call(it, gpa, .value_set, el, try it.str(args[1]), "");
+                    return Value.empty;
+                }
+                return .{ .str = (try call(it, gpa, .value_get, el, "", "")).text };
+            }
+            if (std.mem.eql(u8, sub, "focus")) {
+                if (args.len != 1) return it.wrongArgs("dom focus el");
+                _ = try call(it, gpa, .focus, try handleOf(it, args[0]), "", "");
+                return Value.empty;
+            }
+            if (std.mem.eql(u8, sub, "create")) {
+                if (args.len != 1) return it.wrongArgs("dom create tag");
+                return name(it, (try call(it, gpa, .create, 0, try it.str(args[0]), "")).rc);
+            }
+            if (std.mem.eql(u8, sub, "append")) {
+                if (args.len != 2) return it.wrongArgs("dom append parent child");
+                const parent = try handleOf(it, args[0]);
+                const kid = try handleOf(it, args[1]);
+                var buf: [12]u8 = undefined;
+                _ = try call(it, gpa, .append, parent, "", std.fmt.bufPrint(&buf, "{d}", .{kid}) catch unreachable);
+                return Value.empty;
+            }
+            if (std.mem.eql(u8, sub, "remove")) {
+                if (args.len != 1) return it.wrongArgs("dom remove el");
+                _ = try call(it, gpa, .remove, try handleOf(it, args[0]), "", "");
+                return Value.empty;
+            }
+            if (std.mem.eql(u8, sub, "html")) {
+                if (args.len < 1 or args.len > 2) return it.wrongArgs("dom html el ?value?");
+                const el = try handleOf(it, args[0]);
+                if (args.len == 2) {
+                    _ = try call(it, gpa, .html_set, el, try it.str(args[1]), "");
+                    return Value.empty;
+                }
+                return .{ .str = (try call(it, gpa, .html_get, el, "", "")).text };
+            }
+            return it.fail("bad subcommand \"{s}\": must be append, attr, class, create, focus, html, query, queryAll, remove, style, text, or value", .{sub});
         }
 
         pub fn register(it: *Interp) std.mem.Allocator.Error!void {
