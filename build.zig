@@ -182,6 +182,9 @@ pub fn build(b: *std.Build) void {
         .optimize = .fast,
     })) })).step);
     b.step("tls-x509-test", "Run the x509-limbo cases of the chain checks: zig build tls-x509-test -- limbo.json").dependOn(&limbo.step);
+    // Stage 1 of JSON alone, with its AVX2 form: with -Dcpu=baseline,
+    // `next` takes the AVX2 form by CPUID on a CPU that has it.
+    b.step("json-index-test", "Run the tests of stage 1 of the JSON parser").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = jsonIndex(b, target, kernelTarget(b, target), optimize) })).step);
     const tls_test = b.step("tls-test", "Run the unit tests of the TLS code");
     test_step.dependOn(tls_test);
     inline for (.{ "src/tls/aead.zig", "src/tls/record.zig", "src/tls/der.zig", "src/tls/x509.zig", "src/tls/pem.zig", "src/tls/chain.zig", "src/tls/roots.zig", "src/tls/messages.zig", "src/tls/client_vectors.zig", "src/tls/server_vectors.zig" }) |f| {
@@ -1094,16 +1097,7 @@ fn withCrypto(b: *std.Build, m: *std.Build.Module) *std.Build.Module {
 
 fn addCrypto(b: *std.Build, m: *std.Build.Module) void {
     const t = m.resolved_target orelse return;
-    // The CPU of the target, with its model, and more features.
-    var q = std.Target.Query.fromTarget(&t.result);
-    if (t.result.cpu.arch == .x86_64) {
-        const F = std.Target.x86.Feature;
-        q.cpu_features_add.addFeatureSet(std.Target.x86.featureSet(&[_]F{ .sse3, .ssse3, .sse4_1, .sse4_2, .popcnt, .pclmul, .aes, .avx, .avx2, .bmi, .bmi2 }));
-    }
-    if (t.result.cpu.arch == .aarch64) {
-        q.cpu_features_add.addFeatureSet(std.Target.aarch64.featureSet(&[_]std.Target.aarch64.Feature{.aes}));
-    }
-    const kt = b.resolveTargetQuery(q);
+    const kt = kernelTarget(b, t);
     m.addImport("crypto_x86_avx2", b.createModule(.{
         .root_source_file = b.path("src/crypto/x86_avx2.zig"),
         .target = kt,
@@ -1114,6 +1108,39 @@ fn addCrypto(b: *std.Build, m: *std.Build.Module) void {
         .target = kt,
         .optimize = m.optimize,
     }));
+    m.addImport("json_index", jsonIndex(b, t, kt, m.optimize));
+}
+
+/// The target of the kernel modules: the CPU of `t`, with its model,
+/// and more features.
+fn kernelTarget(b: *std.Build, t: std.Build.ResolvedTarget) std.Build.ResolvedTarget {
+    var q = std.Target.Query.fromTarget(&t.result);
+    if (t.result.cpu.arch == .x86_64) {
+        const F = std.Target.x86.Feature;
+        q.cpu_features_add.addFeatureSet(std.Target.x86.featureSet(&[_]F{ .sse3, .ssse3, .sse4_1, .sse4_2, .popcnt, .pclmul, .aes, .avx, .avx2, .bmi, .bmi2 }));
+    }
+    if (t.result.cpu.arch == .aarch64) {
+        q.cpu_features_add.addFeatureSet(std.Target.aarch64.featureSet(&[_]std.Target.aarch64.Feature{.aes}));
+    }
+    return b.resolveTargetQuery(q);
+}
+
+/// Stage 1 of the JSON parser (src/json/index.zig) as a module, with
+/// the module of its AVX2 form (src/crypto/x86_json.zig) compiled for
+/// `kt`. The two import each other. One pair serves each target and
+/// mode, so a compilation never has two modules of the same file.
+var json_mods: std.ArrayList(struct { t: std.Build.ResolvedTarget, opt: ?std.builtin.OptimizeMode, m: *std.Build.Module }) = .empty;
+
+fn jsonIndex(b: *std.Build, t: std.Build.ResolvedTarget, kt: std.Build.ResolvedTarget, opt: ?std.builtin.OptimizeMode) *std.Build.Module {
+    for (json_mods.items) |e| {
+        if (e.opt == opt and std.meta.eql(e.t.query, t.query)) return e.m;
+    }
+    const idx = b.createModule(.{ .root_source_file = b.path("src/json/index.zig"), .target = t, .optimize = opt });
+    const x86 = b.createModule(.{ .root_source_file = b.path("src/crypto/x86_json.zig"), .target = kt, .optimize = opt });
+    idx.addImport("json_x86", x86);
+    x86.addImport("json_index", idx);
+    json_mods.append(b.allocator, .{ .t = t, .opt = opt, .m = idx }) catch @panic("OOM");
+    return idx;
 }
 
 /// The targets of `zig build runtimes` and `ztcl build --target`.

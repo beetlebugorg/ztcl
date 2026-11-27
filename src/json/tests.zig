@@ -4,7 +4,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
-const index = @import("index.zig");
+const index = @import("json_index");
 const build = @import("build.zig");
 
 test {

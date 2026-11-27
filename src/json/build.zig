@@ -43,7 +43,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
-const index = @import("index.zig");
+const index = @import("json_index");
 const number_mod = @import("number.zig");
 const walk = if (@import("builtin").target.cpu.arch.isWasm()) @import("walk_wasm.zig") else @import("walk.zig");
 const interp = @import("../interp.zig");

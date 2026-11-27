@@ -58,14 +58,26 @@ const builtin = @import("builtin");
 const has_avx2 = builtin.cpu.arch == .x86_64 and std.Target.x86.featureSetHas(builtin.cpu.features, .avx2);
 const has_pclmul = builtin.cpu.arch == .x86_64 and std.Target.x86.featureSetHas(builtin.cpu.features, .pclmul);
 
-inline fn prefixXor(x: u64) u64 {
-    if (comptime has_pclmul) {
+/// The CPU features that a form of stage 1 uses. `nextWith` is inline,
+/// so its body compiles with the features of the function that calls
+/// it: `src/crypto/x86_json.zig` calls it from a module with AVX2 and
+/// PCLMUL, and `next` picks that form at run time (CPUID).
+pub const Cpu = struct { avx2: bool, pclmul: bool };
+pub const native: Cpu = .{ .avx2 = has_avx2, .pclmul = has_pclmul };
+const x86 = @import("json_x86");
+/// A Debug build of Zig 0.17.0 gives wrong code for the AVX2 form in the
+/// module of `x86_json.zig` (the forms disagree in the test below), so
+/// only a release build picks it.
+const dispatch = builtin.cpu.arch == .x86_64 and !(has_avx2 and has_pclmul) and builtin.mode != .debug;
+
+inline fn prefixXor(x: u64, comptime cpu: Cpu) u64 {
+    if (comptime cpu.pclmul) {
         // A carry-less multiply by all ones is the prefix XOR.
         const a: @Vector(2, u64) = .{ x, 0 };
         const b: @Vector(2, u64) = .{ ~@as(u64, 0), 0 };
         // With AVX, the VEX form: the legacy SSE form after 256-bit
         // instructions waits for the upper halves of the registers.
-        if (comptime has_avx2) {
+        if (comptime cpu.avx2) {
             return (asm ("vpclmulqdq $0, %[b], %[a], %[ret]"
                 : [ret] "=x" (-> @Vector(2, u64)),
                 : [a] "x" (a),
@@ -182,6 +194,14 @@ pub const Indexer = struct {
     /// `buf_len` long) and gives their count. At the end of the input it
     /// checks the state and sets `fault`.
     pub fn next(ix: *Indexer, out: []u32) usize {
+        if (comptime dispatch) {
+            if (x86.available()) return x86.next(ix, out);
+        }
+        return ix.nextWith(out, native);
+    }
+
+    /// `next` with the code of `cpu`.
+    pub inline fn nextWith(ix: *Indexer, out: []u32, comptime cpu: Cpu) usize {
         std.debug.assert(out.len >= buf_len);
         var n: usize = 0;
         const end = @min(ix.input.len, ix.pos + chunk_bytes);
@@ -189,7 +209,7 @@ pub const Indexer = struct {
         ix.chunk_start = ix.pos;
         while (ix.pos + 64 <= end) {
             const v: V = ix.input[ix.pos..][0..64].*;
-            const s = ix.block(v);
+            const s = ix.block(v, cpu);
             if (ix.fault != .none) return n;
             flatten(p, &n, @intCast(ix.pos), s);
             ix.pos += 64;
@@ -198,7 +218,7 @@ pub const Indexer = struct {
             // The tail: a block with spaces after the input.
             var tail: [64]u8 = @splat(' ');
             @memcpy(tail[0 .. end - ix.pos], ix.input[ix.pos..end]);
-            const s = ix.block(tail);
+            const s = ix.block(tail, cpu);
             if (ix.fault != .none) return n;
             flatten(p, &n, @intCast(ix.pos), s);
             ix.pos = end;
@@ -223,7 +243,7 @@ pub const Indexer = struct {
     }
 
     /// The structural bits of one block.
-    inline fn block(ix: *Indexer, v: V) u64 {
+    inline fn block(ix: *Indexer, v: V, comptime cpu: Cpu) u64 {
         // UTF-8: only a block with a high byte, or a pending sequence.
         const high: u64 = @bitCast(v >= @as(V, @splat(0x80)));
         if (high != 0 or ix.carry != 0) {
@@ -251,10 +271,10 @@ pub const Indexer = struct {
             qm[k] = quotes;
             ix.bs_masks.?[k] = bs;
         }
-        const in_string = prefixXor(quotes) ^ ix.prev_in_string;
+        const in_string = prefixXor(quotes, cpu) ^ ix.prev_in_string;
         ix.prev_in_string = @bitCast(@as(i64, @bitCast(in_string)) >> 63);
         // 3. The structural bytes.
-        const ws, const ops = classify(v);
+        const ws, const ops = classify(v, cpu);
         const scalar = ~(ops | ws);
         const nq_scalar = scalar & ~qt;
         const follows = (nq_scalar << 1) | ix.prev_scalar;
@@ -351,8 +371,8 @@ pub const Indexer = struct {
 ///   bit 2: the brackets (high 5 or 7; low B or D)
 ///   bit 3: colon (high 3; low A)
 ///   bit 4: comma (high 2; low C)
-inline fn classify(v: V) struct { u64, u64 } {
-    if (comptime has_avx2) {
+inline fn classify(v: V, comptime cpu: Cpu) struct { u64, u64 } {
+    if (comptime cpu.avx2) {
         const H = @Vector(32, u8);
         const hi_table: H = std.simd.repeat(32, [16]u8{ 1, 0, 2 | 16, 8, 0, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0 });
         const lo_table: H = std.simd.repeat(32, [16]u8{ 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1 | 8, 4, 16, 1 | 4, 0, 0 });
@@ -496,3 +516,61 @@ pub const Scalar = struct {
         return n;
     }
 };
+
+fn indexAll(input: []const u8, comptime form: enum { next, native, scalar }, out: *std.ArrayList(u32)) !Fault {
+    const a = std.testing.allocator;
+    const buf = try a.alloc(u32, buf_len);
+    defer a.free(buf);
+    if (form == .scalar) {
+        var s = Scalar.init(input);
+        while (!s.done() and s.fault == .none) try out.appendSlice(a, buf[0..s.next(buf)]);
+        return s.fault;
+    }
+    var ix = Indexer.init(input);
+    while (!ix.done() and ix.fault == .none) {
+        const n = if (form == .next) ix.next(buf) else ix.nextWith(buf, native);
+        try out.appendSlice(a, buf[0..n]);
+    }
+    return ix.fault;
+}
+
+test "the form of next, the form of this build, and Scalar agree" {
+    const a = std.testing.allocator;
+    var prng = std.Random.DefaultPrng.init(0x15);
+    const r = prng.random();
+    const alphabet = "{}[]:,\" \\\n\tabc0123-.eEtrufnl\xc3\xa9\x80";
+    var text: [3000]u8 = undefined;
+    for (0..300) |round| {
+        const len = r.uintLessThan(usize, text.len);
+        for (text[0..len]) |*c| c.* = alphabet[r.uintLessThan(usize, alphabet.len)];
+        // Half the rounds: a valid document of strings and numbers.
+        if (round % 2 == 0) {
+            var w: usize = 0;
+            text[0] = '[';
+            w = 1;
+            while (w + 12 < len) {
+                const piece = if (r.boolean()) "\"a\\\"b\xc3\xa9\"," else "-1.5e3,";
+                @memcpy(text[w..][0..piece.len], piece);
+                w += piece.len;
+            }
+            text[w] = '1';
+            text[w + 1] = ']';
+            for (text[w + 2 .. len]) |*c| c.* = ' ';
+        }
+        var x: std.ArrayList(u32) = .empty;
+        defer x.deinit(a);
+        var y: std.ArrayList(u32) = .empty;
+        defer y.deinit(a);
+        var z: std.ArrayList(u32) = .empty;
+        defer z.deinit(a);
+        const fx = try indexAll(text[0..len], .next, &x);
+        const fy = try indexAll(text[0..len], .native, &y);
+        const fz = try indexAll(text[0..len], .scalar, &z);
+        try std.testing.expectEqual(fy, fx);
+        try std.testing.expectEqualSlices(u32, y.items, x.items);
+        if (fy == .none) {
+            try std.testing.expectEqual(fz, fy);
+            try std.testing.expectEqualSlices(u32, z.items, y.items);
+        }
+    }
+}
