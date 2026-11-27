@@ -262,6 +262,28 @@ pub fn sharedSecret(g: Group, private: []const u8, peer: []const u8, out: *[max_
     }
 }
 
+/// The key share of `private` for `g`: the X25519 public key, or the
+/// uncompressed point.
+pub fn publicKey(g: Group, private: []const u8, out: *[97]u8) Error![]const u8 {
+    switch (g) {
+        .x25519 => {
+            if (private.len != 32) return error.BadKey;
+            out[0..32].* = crypto.dh.X25519.recoverPublicKey(private[0..32].*);
+            return out[0..32];
+        },
+        inline .secp256r1, .secp384r1 => |tg| {
+            const C = if (tg == .secp256r1) crypto.ecc.P256 else crypto.ecc.P384;
+            const n = C.scalar.encoded_length;
+            if (private.len != n) return error.BadKey;
+            const p = C.basePoint.mul(private[0..n].*, .big) catch return error.BadKey;
+            const sec1 = p.toUncompressedSec1();
+            @memcpy(out[0..sec1.len], &sec1);
+            return out[0..sec1.len];
+        },
+        _ => return error.Unsupported,
+    }
+}
+
 fn nist(comptime C: type, private: []const u8, peer: []const u8, out: *[max_secret]u8) Error![]const u8 {
     const n = C.scalar.encoded_length;
     if (private.len != n) return error.BadKey;
