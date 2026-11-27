@@ -130,12 +130,13 @@ The x86-64 guest kernel has the options of `kernel.fragment` and `kernel-x86_64.
 
 ### Start time (Linux)
 
-`test-kvm.tcl` times each phase, best of 10, with 1 CPU, 64 MB, the agent as the first process (`rdinit=/sbin/agent quiet`), on an x86-64 Linux host (Intel Skylake, 4 GHz) that ran other builds at the same time:
+`test-kvm.tcl` times each phase, best of 10, with 1 CPU, 64 MB, the agent as the first process (`rdinit=/sbin/agent quiet`), on an x86-64 Linux host (Intel Skylake, 4 GHz, 8 cores) that ran the builds of other work at the same time. The load of the host changes the numbers by a factor of 2 to 3:
 
 | Kernel | `start` | start to answer | guest: boot to agent | warm start to answer |
 |---|---|---|---|---|
-| bzImage (LZ4) | 12.46 | 65.61 | 25.54 | 0.124 |
-| ELF `vmlinux` | 10.94 | 59.85 | 23.21 | 0.146 |
+| bzImage (LZ4), the host busy | 12.46 | 65.61 | 25.54 | 0.124 |
+| bzImage (LZ4), the host less busy | 4.42 | 24.78 | 11.55 | 0.136 |
+| ELF `vmlinux`, the host busy | 10.94 | 59.85 | 23.21 | 0.146 |
 
 The times are in ms. `start` makes the VM, maps the memory, loads the kernel, makes the devices and the vCPUs, and starts the threads. "start to answer" is `start` to the 16 bytes of the agent over vsock.
 
@@ -145,6 +146,27 @@ What the numbers show:
 - The ELF `vmlinux` saves the decompression of the bzImage, about 5 ms.
 - In the boot of the guest, the probe of the console device is 6 ms and the probe of vsock 3.4 ms (`initcall_debug`). These are the next levers, with the copy of the kernel (a copy-on-write mapping of the file instead).
 - A warm start is 0.12 ms to the answer of the agent: the threads leave the futex and enter `KVM_RUN` again.
+
+## The shared virtio devices
+
+The monitors that give the guest its devices on virtio-mmio (KVM, and the Windows Hypervisor Platform) share the transport and the devices that run in ztcl. They are in `src/vm/virtio/`, with no system calls:
+
+- `queue.zig`: `Mem` (the guest memory as one host range from guest address 0, with a bounds check of each address and length of the guest), `Queue` (the split virtqueue), and `Chain` (a chain of descriptors as host slices).
+- `mmio.zig`: `Device`, the registers of the virtio-mmio transport, version 2, and the devices: `Device.console`, `Device.blk`, `Device.rng`, and `Device.external` for a device that the hypervisor runs (vhost-vsock on KVM).
+
+A backend implements this interface:
+
+| Part | What the backend does |
+|---|---|
+| `Host` | Gives `mem` and `interrupt(ctx, irq)`, an edge on the interrupt line of the device (`KVM_IRQ_LINE` 1 then 0 on KVM). |
+| The window | Gives device n the 4 KB window at 0xd0000000 + 0x1000 * n and its interrupt, and lists each one on the command line of the guest (`virtio_mmio.device=4K@ADDR:IRQ`). |
+| An access | Calls `Device.read(off, out)` or `Device.write(&host, off, data)` for each MMIO exit of a vCPU in the window, with `Device.lock` held. A write to QueueNotify runs the requests of that queue at once, on the thread of the vCPU. |
+| `Console` | Gives `write(ctx, bytes)` for the output of the guest and `rx_ready(ctx)`, which the device calls when the driver adds receive buffers. The backend calls `Console.push(dev, &host, bytes)` with `Device.lock` held for the input; it gives the count of bytes that went in. |
+| `Disk` | Gives `size`, `read_only`, and `read`, `write`, and `flush` at a byte offset. Each read or write is in full or gives false. |
+| `rng` | Gives a function that fills a buffer with random bytes and gives the count. |
+| `External` | Gives the virtio ID and the hooks `driverOk(ctx, dev)` and `reset(ctx, dev)`. The transport keeps the registers, and InterruptStatus always reads 1 (the device raises its own interrupts). |
+
+vsock on KVM is vhost-vsock, an external device. A monitor without vhost (WHP) needs a vsock device in ztcl, with the queues of section 5.10 of virtio 1.2, the next device for `src/vm/virtio/`.
 
 ## Windows: the Host Compute Service
 
