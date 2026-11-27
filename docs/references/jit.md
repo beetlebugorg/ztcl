@@ -146,7 +146,7 @@ Arm, "Arm Architecture Reference Manual for A-profile architecture" (DDI 0487).
 
 **License:** Specifications and manuals
 
-**How ztcl uses it:** The registers, the stack rules, and the instruction encodings of `src/jit/abi.zig`, `src/jit/x64.zig`, and `src/jit/a64.zig`. The assembler of `zig cc` checks each encoding in the tests.
+**How ztcl uses it:** The registers, the stack rules, and the instruction encodings of `src/jit/abi.zig`, `src/jit/x64.zig`, and `src/jit/a64.zig`. The cache maintenance for code that a program writes (`CTR_EL0`, `dc cvau`, `ic ivau`, `dsb ish`, `isb`) in `src/jit/mem.zig`. The assembler of `zig cc` checks each encoding in the tests.
 
 ## Tests
 

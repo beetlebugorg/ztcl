@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Adds the JIT on arm64 Linux, with tier 1 and tier 2. The region flushes the caches over the written pages with the line sizes of `CTR_EL0`. CI runs the unit tests, `tools/jit-diff.sh`, and the JIT fuzzer on an arm64 Linux runner for each pull request. `tools/jit-diff.sh` reads `JIT_DIFF_NO_OUT`.
 - `thread::transfer` moves a file or a socket to and from an isolated thread on Linux, with `SCM_RIGHTS` as on macOS.
 - Turns the JIT on by default, with tier 1 and tier 2, where the build and the system have it: in the runner, in `Interp.init`, in programs of `ztcl build`, and in threads of a creator with the JIT. A system that refuses executable memory runs the interpreter with no error. `--no-jit`, `--no-jit-tier2`, `ZTCL_JIT=off`, `Interp.disableJit`, and `ztcl build --no-jit` turn it off. `Interp.jitState` and the `state` field of `--jit-stats` give the reason. Removes the runner flags `--jit` and `--jit-tier2` and the flag `ztcl build --jit`.
 - Adds the module `ztcl::probe`: probes on a proc, a line of a proc body, a command, a variable, or each error, with `-if`, `-capture`, `-stack`, and the limits `-count`, `-every`, and `-rate`. The records go in a ring buffer outside the memory limit, and `ztcl::probe records` gives them as dicts or JSON lines, with `-where`, `-since`, `-first`, and `-last`. A probe uses no compute units of the script. A body with probes runs in the interpreter, and the other procs keep their machine code ([module page](docs/modules/probe.md)).

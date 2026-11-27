@@ -1,6 +1,6 @@
 # The JIT
 
-ztcl has a compiler from bytecode to machine code for x86-64 Linux, x86-64 Windows, and arm64 macOS. It is on by default where the build and the system have it. [Targets](targets.md) lists the JIT of each target. A script gives the same output, the same counts of compute units, and the same memory count with the JIT on and off.
+ztcl has a compiler from bytecode to machine code for x86-64 Linux, x86-64 Windows, arm64 Linux, and arm64 macOS. It is on by default where the build and the system have it. [Targets](targets.md) lists the JIT of each target. A script gives the same output, the same counts of compute units, and the same memory count with the JIT on and off.
 
 ## Turn it off
 

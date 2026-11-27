@@ -784,7 +784,7 @@ The order is x86-64 Linux, arm64 macOS, x86-64 macOS, x86-64 Windows, arm64 Linu
 | arm64 macOS | AAPCS64 with the Apple rules | `mmap` with `MAP_JIT`, `pthread_jit_write_protect_np` | `sys_icache_invalidate` | Frame pointers (`x29`). No table. | Tier 1 and tier 2 measured on an Apple silicon Mac. |
 | x86-64 macOS | System V | `mmap` read-write with `MAP_JIT`, then `mprotect` read-execute | no call needed | Frame pointers. No table. | Not tested. |
 | x86-64 Windows | System V between Zig and the machine code (below) | `VirtualAlloc` read-write, then `VirtualProtect` to `PAGE_EXECUTE_READ` | `FlushInstructionCache` | A growable function table with one unwind record for all functions | Tier 1 and tier 2 tested on an Intel Core i7-1165G7 (ztcl#263). |
-| arm64 Linux | AAPCS64 | `mmap` read-write, then `mprotect` read-execute | `__clear_cache` of the Zig runtime | Frame pointers. No table. | Not tested. |
+| arm64 Linux | AAPCS64 | `mmap` read-write, then `mprotect` read-execute | `dc cvau` and `ic ivau` over the written pages, with the line sizes of `CTR_EL0` (`src/jit/mem.zig`) | Frame pointers. No table. | Tier 1 and tier 2. Unit tests and `tools/jit-diff.sh` under qemu-aarch64, and CI on `ubuntu-24.04-arm`. |
 | WebAssembly | | none | | | The interpreter only, with the collector at bytecode safe points. |
 
 ### Rules for each ABI
