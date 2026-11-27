@@ -754,9 +754,11 @@ pub fn makeDevices(m: *Machine) Fail!void {
 /// each queue goes to an ioeventfd that the engine thread waits on, so
 /// a notify of the guest costs no exit to user space.
 fn makeNet(m: *Machine, k: usize, nc: nat_engine.Config) Fail!void {
-    m.net = .{ .mac = nat_stack.guest_mac, .ctx = m, .kick = netKick };
+    // TSO both ways: the guest sends TCP segments of up to 64 KB, and
+    // the engine sends it frames of up to 64 KB.
+    m.net = .{ .mac = nat_stack.guest_mac, .ctx = m, .kick = netKick, .offloads = vnet.f_csum | vnet.f_guest_csum | vnet.f_host_tso4 | vnet.f_guest_tso4 };
     m.devices[k] = Device.net(irqs[k], &m.net);
-    m.nat = nat_engine.Nat.init(m.alloc, nc, .{ .ctx = m, .deliver = netDeliver, .flush = netFlush }) catch {
+    m.nat = nat_engine.Nat.init(m.alloc, nc, .{ .ctx = m, .deliver = netDeliver, .flush = netFlush, .features = netFeatures }) catch {
         why = "no NAT engine";
         return error.Setup;
     };
@@ -818,6 +820,11 @@ fn netDeliver(ctx: *anyopaque, hdr: vnet.Hdr, parts: []const []const u8) bool {
         // and try again when it added some in the meantime.
         if (!m.net.rxArm(d, &h)) return false;
     }
+}
+
+fn netFeatures(ctx: *anyopaque) u64 {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
+    return @atomicLoad(u64, &m.netDev().driver_features, .monotonic);
 }
 
 fn netFlush(ctx: *anyopaque) void {

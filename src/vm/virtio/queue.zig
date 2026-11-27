@@ -145,6 +145,20 @@ pub const Queue = struct {
         return @atomicLoad(u16, @as(*u16, @ptrCast(@alignCast(ip))), .seq_cst) != q.last_avail;
     }
 
+    /// As `arm`, for a device that needs more than `have` chains (it
+    /// read `have` chains, found them too few, and gave them back): the
+    /// driver notifies when it makes chain `have` + 1 available, and the
+    /// call gives true when it is available now.
+    pub fn armAt(q: *Queue, m: Mem, have: u16) bool {
+        if (q.event_idx) {
+            const at = q.used + 4 + 8 * @as(u64, q.num);
+            const p = m.ptr(u16, at) orelse return false;
+            @atomicStore(u16, @as(*u16, @ptrCast(@alignCast(p))), q.last_avail +% have, .seq_cst);
+        }
+        const ip = m.ptr(u16, q.avail + 2) orelse return false;
+        return @atomicLoad(u16, @as(*u16, @ptrCast(@alignCast(ip))), .seq_cst) -% q.last_avail > have;
+    }
+
     /// Gives back the last `k` chains of `next`, for a device that read
     /// chains and then found them too few.
     pub fn unget(q: *Queue, k: u16) void {
