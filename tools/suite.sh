@@ -17,8 +17,8 @@
 #       `file<TAB>skipped<TAB>reason<TAB>count`.
 #   -p  Writes one line for each test to this file:
 #       `file<TAB>kind<TAB>name<TAB>detail`. The kind is pass, fail, or
-#       skip. The detail is the constraint of a skip, or the start of
-#       the result of a failure.
+#       skip. The detail is the constraint of a skip, or the codes and
+#       the start of the results of a failure.
 #
 # Prints one line for each file (the counts of the tests that pass,
 # fail, and are skipped), then the totals. The compute limit stops a test that loops.

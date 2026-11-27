@@ -21,6 +21,8 @@ if {![info exists tt_verbose]} { set tt_verbose 0 }
 # With tt_record set, each test also prints one line:
 # `tt<TAB>kind<TAB>name<TAB>detail`. The detail of a skip is the
 # constraint. The detail of a failure is the start of the result.
+# When the result or the code differs, it is `code G/W: got | want:
+# result`, with G the code of the body and W the expected codes.
 if {![info exists tt_record]} { set tt_record 0 }
 proc tt_note {kind {why {}} {name {}} {detail {}}} {
     global tt_pass tt_fail tt_skip tt_why tt_record
@@ -157,8 +159,22 @@ proc tcltest::test {name desc args} {
     set codes {ok return}
     set body {}
     set result {}
-    if {[string index [lindex $args 0] 0] eq "-" && [llength $args] % 2 == 0} {
-        foreach {k v} $args {
+    set ecode *
+    # The option form: the first argument starts with "-", or there is
+    # one argument. One argument is a list of options and values. Each
+    # value is then the concat of its words in the caller, as in tcltest.
+    if {[string match -* [lindex $args 0]] || [llength $args] <= 1} {
+        set opts $args
+        if {[llength $args] == 1} {
+            set opts {}
+            foreach {k v} [lindex $args 0] {
+                lappend opts $k [uplevel 1 [list ::concat $v]]
+            }
+        }
+        if {[llength $opts] % 2} {
+            return -code error "missing value for option \"[lindex $opts end]\""
+        }
+        foreach {k v} $opts {
             switch -- $k {
                 -constraints { set constraints $v }
                 -setup { set setup $v }
@@ -166,16 +182,23 @@ proc tcltest::test {name desc args} {
                 -cleanup { set cleanup $v }
                 -result { set result $v }
                 -returnCodes { set codes $v }
+                -errorCode { set ecode $v }
                 -match { set match $v }
                 -output { set want_out $v }
                 -errorOutput { set want_err $v }
-                default {}
+                default {
+                    return -code error "bad option \"$k\": must be -body, -cleanup, -constraints, -errorCode, -errorOutput, -match, -output, -result, -returnCodes, or -setup"
+                }
             }
         }
+        # An -errorCode with no error in -returnCodes expects an error.
+        if {$ecode ne "*" && "error" ni $codes && 1 ni $codes} { set codes 1 }
     } elseif {[llength $args] == 3} {
         lassign $args constraints body result
-    } else {
+    } elseif {[llength $args] == 2} {
         lassign $args body result
+    } else {
+        return -code error {wrong # args: should be "test name desc ?options?"}
     }
     set why [tt_blocked $constraints]
     if {$why ne ""} { tt_skip $why $name; return }
@@ -193,13 +216,15 @@ proc tcltest::test {name desc args} {
         catch {uplevel 1 $cleanup}
         return
     }
-    set code [catch {uplevel 1 $body} actual]
+    set code [catch {uplevel 1 $body} actual opts]
+    set ecode_ok 1
+    if {$code == 1 && ![string match $ecode [dict get $opts -errorcode]]} { set ecode_ok 0 }
     set clean_code [catch {uplevel 1 $cleanup} clean_msg]
     set tt_capture 0
     set code_ok 0
     foreach c $codes {
         switch -- $c {
-            ok { set c 0 }
+            ok - normal { set c 0 }
             error { set c 1 }
             return { set c 2 }
             break { set c 3 }
@@ -216,13 +241,16 @@ proc tcltest::test {name desc args} {
     if {[info exists want_err] && [catch {tt_same $match $want_err $tt_err} err_ok]} {
         set err_ok 0
     }
-    if {$code_ok && $same && $out_ok && $err_ok && $clean_code != 1} {
+    if {$code_ok && $ecode_ok && $same && $out_ok && $err_ok && $clean_code != 1} {
         tt_note pass {} $name
     } else {
         if {$clean_code == 1} {
             set detail "cleanup: $clean_msg"
         } elseif {!$code_ok || !$same} {
-            set detail "code $code: $actual"
+            set want [lsort -unique [string map {ok 0 normal 0 error 1 return 2 break 3 continue 4} $codes]]
+            set detail "code $code/[join $want ,]: [string range $actual 0 139] | want: [string range $result 0 139]"
+        } elseif {!$ecode_ok} {
+            set detail "errorcode: [dict get $opts -errorcode]"
         } else {
             set detail "output: $tt_out$tt_err"
         }

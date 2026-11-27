@@ -1,6 +1,6 @@
 # Tcl 8.6.16 suite results
 
-`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-26 at commit `9c7e820`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
+`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-26 at commit `6cf8590`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
 
 A test is applicable when it is outside the buckets `design`, `platform`, `internals`, and `tcl`. The goal of issue 244 is a pass for each applicable test.
 
@@ -8,8 +8,8 @@ A test is applicable when it is outside the buckets `design`, `platform`, `inter
 
 | Run | Total | Pass | Fail | Skip | Unreached |
 |---|---|---|---|---|---|
-| Interpreter | 46,494 | 37,416 | 3,041 | 3,780 | 2,257 |
-| JIT (`-j`) | 46,494 | 37,416 | 3,041 | 3,780 | 2,257 |
+| Interpreter | 46,494 | 37,426 | 3,027 | 3,784 | 2,257 |
+| JIT (`-j`) | 46,494 | 37,426 | 3,027 | 3,784 | 2,257 |
 
 Unreached is the test count of `tools/suite-scope.tsv` minus the tests that ran: the file stopped before them.
 
@@ -19,16 +19,16 @@ The tests of the interpreter run that do not pass, by bucket.
 
 | Bucket | Meaning | Tests |
 |---|---|---|
-| `bug` | A bug in ztcl | 0 |
-| `feature` | A missing feature or option | 71 |
-| `message` | An error message or -errorcode differs | 0 |
-| `internals` | Needs Tcl internals (C test commands, memory debugging) | 2,478 |
-| `design` | Absent by design | 0 |
-| `platform` | Platform only | 661 |
-| `tcl` | Skipped by tclsh too (knownBug, emptyTest, and others) | 139 |
-| `untriaged` | Not triaged yet | 5,729 |
+| `bug` | A bug in ztcl | 1,302 |
+| `feature` | A missing feature or option | 3,324 |
+| `message` | An error message or -errorcode differs | 241 |
+| `internals` | Needs Tcl internals (C test commands, memory debugging) | 2,618 |
+| `design` | Absent by design | 438 |
+| `platform` | Platform only | 736 |
+| `tcl` | Skipped by tclsh too (knownBug, emptyTest, and others) | 254 |
+| `untriaged` | Not triaged yet | 155 |
 
-Applicable tests: 43,216. Pass rate of the applicable tests: 86.6 %.
+Applicable tests: 42,448. Pass rate of the applicable tests: 88.2 %.
 
 ## JIT differences
 
@@ -52,7 +52,7 @@ Each test has the same result in the two runs.
 | chan.test | decide | 41 | 14 | 27 | 0 | 0 | 14 | 27 | 0 |
 | chanio.test | decide | 471 | 229 | 130 | 83 | 29 | 229 | 130 | 83 |
 | clock.test | decide | 8,532 | 8,390 | 132 | 7 | 3 | 8,390 | 132 | 7 |
-| cmdAH.test | decide | 323 | 91 | 54 | 178 | 0 | 91 | 54 | 178 |
+| cmdAH.test | decide | 323 | 93 | 48 | 182 | 0 | 93 | 48 | 182 |
 | cmdIL.test | in | 146 | 128 | 12 | 6 | 0 | 128 | 12 | 6 |
 | cmdInfo.test | na | 12 | 0 | 0 | 12 | 0 | 0 | 0 | 12 |
 | cmdMZ.test | in | 92 | 82 | 9 | 1 | 0 | 82 | 9 | 1 |
@@ -93,7 +93,7 @@ Each test has the same result in the two runs.
 | incr-old.test | in | 14 | 12 | 2 | 0 | 0 | 12 | 2 | 0 |
 | incr.test | in | 66 | 62 | 4 | 0 | 0 | 62 | 4 | 0 |
 | indexObj.test | na | 45 | 0 | 0 | 45 | 0 | 0 | 0 | 45 |
-| info.test | in | 266 | 97 | 166 | 3 | 0 | 97 | 166 | 3 |
+| info.test | in | 266 | 98 | 165 | 3 | 0 | 98 | 165 | 3 |
 | init.test | decide | 24 | 0 | 10 | 0 | 14 | 0 | 10 | 0 |
 | interp.test | decide | 352 | 198 | 141 | 13 | 0 | 198 | 141 | 13 |
 | io.test | decide | 524 | 239 | 144 | 83 | 58 | 239 | 144 | 83 |
@@ -110,7 +110,7 @@ Each test has the same result in the two runs.
 | lmap.test | in | 66 | 62 | 4 | 0 | 0 | 62 | 4 | 0 |
 | load.test | decide | 30 | 0 | 8 | 22 | 0 | 0 | 8 | 22 |
 | lrange.test | in | 34 | 32 | 0 | 2 | 0 | 32 | 0 | 2 |
-| lrepeat.test | in | 12 | 5 | 7 | 0 | 0 | 5 | 7 | 0 |
+| lrepeat.test | in | 12 | 12 | 0 | 0 | 0 | 12 | 0 | 0 |
 | lreplace.test | in | 1,787 | 1,787 | 0 | 0 | 0 | 1,787 | 0 | 0 |
 | lsearch.test | in | 118 | 111 | 7 | 0 | 0 | 111 | 7 | 0 |
 | lset.test | in | 89 | 83 | 5 | 1 | 0 | 83 | 5 | 1 |
@@ -199,321 +199,321 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| append-10.1 | `untriaged` | code 0: {#} 1 2 3 |
-| append-10.3 | `untriaged` | code 0: {#} 1 2 3 |
-| append-9.0 | `untriaged` | code 0: 1 {can't read "myvar(key)": no such variable} |
+| append-10.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {#} 1 2 3 \| want: # 1 2 3 |
+| append-10.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {#} 1 2 3 \| want: # 1 2 3 |
+| append-9.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read "myvar(key)": no such variable} \| want: 0 {{new value}} |
 
 ### appendComp.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| appendComp-10.1 | `untriaged` | code 0: {#} 1 2 3 |
-| appendComp-10.3 | `untriaged` | code 0: {#} 1 2 3 |
-| appendComp-9.0 | `untriaged` | code 0: 1 {can't read "::myvar(key)": BOOM. no such variable} |
+| appendComp-10.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {#} 1 2 3 \| want: # 1 2 3 |
+| appendComp-10.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {#} 1 2 3 \| want: # 1 2 3 |
+| appendComp-9.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read "::myvar(key)": BOOM. no such variable} \| want: 0 {{new value}} |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| expr:bug-3057639 | 5 | `untriaged` |
+| expr:bug-3057639 | 5 | `tcl`: the test file sets the constraint false, or it is false in tclsh 8.6 on Linux |
 
 ### apply.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| apply-3.3 | `untriaged` | code 1: namespace "NONEXIST::FOR::SURE" not found |
-| apply-3.4 | `untriaged` | code 1: namespace "NONEXIST::FOR::SURE" not found |
-| apply-4.3 | `untriaged` | code 1: wrong # args: should be "::apply lambdaExpr x" |
-| apply-4.4 | `untriaged` | code 1: wrong # args: should be "::apply lambdaExpr x" |
-| apply-4.5 | `untriaged` | code 1: wrong # args: should be "::apply lambdaExpr self x" |
+| apply-3.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: namespace "NONEXIST::FOR::SURE" not found \| want: namespace "::NONEXIST::FOR... |
+| apply-3.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: namespace "NONEXIST::FOR::SURE" not found \| want: namespace "::NONEXIST::FOR... |
+| apply-4.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::apply lambdaExpr x" \| want: wrong # args: should ... |
+| apply-4.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::apply lambdaExpr x" \| want: wrong # args: should ... |
+| apply-4.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::apply lambdaExpr self x" \| want: wrong # args: sh... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | memory | 3 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
-| applylambda | 1 | `untriaged` |
+| applylambda | 1 | `internals`: a C test command or package of the Tcl test binary |
 
 ### assemble.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| assemble-1.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-1.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-1.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-1.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-10.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-10.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-10.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-10.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-10.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-10.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-10.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-11.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-11.10 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-11.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-11.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-11.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-11.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-11.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-11.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-11.8 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-11.9 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-12.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-12.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-12.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-12.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-12.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-12.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-13.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-13.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-13.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-13.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-13.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-13.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-13.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-13.8 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-13.9 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-14.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-14.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-14.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-14.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-14.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-14.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-14.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-15.1 | `untriaged` | code 1: invalid command name "assemble" |
-| assemble-15.2 | `untriaged` | code 1: invalid command name "assemble" |
-| assemble-15.3 | `untriaged` | code 0: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} |
-| assemble-15.4 | `untriaged` | code 1: invalid command name "assemble" |
-| assemble-15.5 | `untriaged` | code 1: invalid command name "assemble" |
-| assemble-15.6 | `untriaged` | code 1: invalid command name "assemble" |
-| assemble-15.7 | `untriaged` | code 1: invalid command name "assemble" |
-| assemble-15.8 | `untriaged` | code 1: invalid command name "assemble" |
-| assemble-15.9 | `untriaged` | code 1: invalid command name "assemble" |
-| assemble-16.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-16.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-16.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-16.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-16.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-16.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.10 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.11 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.12 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.13 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.14 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.15 | `untriaged` | code 1: invalid command name "-setup" |
-| assemble-17.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.8 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-17.9 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-18.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-18.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-18.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-18.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-18.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-18.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-18.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-18.8 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-19.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-19.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-19.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-19.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-19.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-19.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-19.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-19.8 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-2.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-2.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-2.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-20.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-20.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-20.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-20.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-20.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-20.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-20.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-21.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-21.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-21.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-21.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-21.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-21.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-21.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-22.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-22.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-22.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-22.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-22.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-22.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-22.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-22.8 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-23.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-23.10 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-23.11 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-23.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-23.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-23.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-23.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-23.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-23.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-23.8 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-23.9 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-24.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-24.10 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-24.11 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-24.12 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-24.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-24.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-24.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-24.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-24.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-24.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-24.8 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-24.9 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-25.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-25.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-25.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-25.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-25.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-25.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-26.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-26.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-26.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-26.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-26.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-26.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-26.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-27.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-27.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-27.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-27.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-27.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-27.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-27.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-28.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-28.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-28.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-28.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-28.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-28.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-29.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-29.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-29.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-29.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-29.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-29.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-29.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-3.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-3.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-30.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-30.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-30.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-30.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-30.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-30.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-31.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-31.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-31.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-31.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-31.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-31.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-31.7 | `untriaged` | code 1: invalid command name "-setup" |
-| assemble-4.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-4.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-40.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-40.2 | `untriaged` | code 0: 1 {invalid command name "assemble"} {invalid command name "assemble"     while ... |
-| assemble-41.1 | `untriaged` | code 0: invalid command name "assemble"     while executing "assemble {   load y   jump... |
-| assemble-41.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-41.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-5.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-5.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-5.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-5.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-50.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-52.1 | `untriaged` | code 1: invalid command name "::tcl::unsupported::assemble" |
-| assemble-6.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-6.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-6.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-6.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7,34 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.10 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.11 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.12 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.13 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.13a | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.13b | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.14 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.15 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.16 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.17 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.18 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.19 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.20 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.21 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.22 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.23 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.24 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.25 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.26 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.27 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.28 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.29 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.30 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.31 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.32 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.33 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.35 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.36 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.37 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.38 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.39 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.41 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.42 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.43 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.43.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.44 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.45 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.46 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.8 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.9 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.9a | `untriaged` | code 1: invalid command name "-body" |
-| assemble-7.9b | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.10 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.11 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.12 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.13 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.14 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.15 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.16 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.17 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.18 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.19 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.20 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.21 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.7 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.8 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-8.9 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-9.1 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-9.2 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-9.3 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-9.4 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-9.5 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-9.6 | `untriaged` | code 1: invalid command name "-body" |
-| assemble-9.7 | `untriaged` | code 1: invalid command name "-body" |
+| assemble-1.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-1.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-1.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {invalid command name "assemble"     wh... |
+| assemble-1.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: this is a test |
+| assemble-10.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-10.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-10.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 11 |
+| assemble-10.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 11 |
+| assemble-10.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 11 |
+| assemble-10.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-10.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-11.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-11.10 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 123 |
+| assemble-11.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-11.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-11.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 0 |
+| assemble-11.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 0 0 |
+| assemble-11.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: a 1 b 222 c 3 |
+| assemble-11.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: a 1 b {2 2} c 3 |
+| assemble-11.8 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 123 |
+| assemble-11.9 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 123 |
+| assemble-12.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-12.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-12.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-12.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 8 |
+| assemble-12.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 8 |
+| assemble-12.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-13.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-13.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-13.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-13.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-13.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-13.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-13.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: -127 0 |
+| assemble-13.8 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 8 |
+| assemble-13.9 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-14.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-14.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-14.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-14.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-14.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-14.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: -127 0 |
+| assemble-14.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 8 |
+| assemble-15.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-15.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-15.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-15.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: bad index "rubbish"* |
+| assemble-15.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: c |
+| assemble-15.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: b |
+| assemble-15.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: c |
+| assemble-15.8 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want:  |
+| assemble-15.9 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want:  |
+| assemble-16.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-16.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-16.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-16.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-16.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::assemble" \| want: 1 2 |
+| assemble-16.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 1 1 1 |
+| assemble-17.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-17.10 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: x |
+| assemble-17.11 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: no yes |
+| assemble-17.12 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: yes no |
+| assemble-17.13 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-17.14 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: invalid command name "assemble"     while executing "assemble {#1      #2  ... |
+| assemble-17.15 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: -abababababababababababababababab- |
+| assemble-17.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-17.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-17.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-17.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-17.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-17.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-17.8 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: ceadbf |
+| assemble-17.9 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: abcd |
+| assemble-18.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-18.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-18.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-18.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-18.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-18.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: {a b c} {d e f} {g h j} |
+| assemble-18.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: d e f |
+| assemble-18.8 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: h |
+| assemble-19.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-19.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-19.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-19.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-19.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-19.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want:  |
+| assemble-19.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello |
+| assemble-19.8 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello world |
+| assemble-2.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: {this is a test} {this is a test} |
+| assemble-2.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: value1 value2 |
+| assemble-2.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want:  |
+| assemble-20.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-20.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-20.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-20.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-20.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-20.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: b |
+| assemble-20.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: a d c |
+| assemble-21.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-21.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-21.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-21.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-21.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-21.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 3 |
+| assemble-21.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 |
+| assemble-22.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-22.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-22.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-22.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-22.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-22.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 |
+| assemble-22.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 3 |
+| assemble-22.8 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 |
+| assemble-23.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-23.10 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 |
+| assemble-23.11 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: can't unset "a(b)": no such variable |
+| assemble-23.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-23.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-23.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected boolean value but got "rubb... |
+| assemble-23.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: {0 0} {1 1} {0 1} |
+| assemble-23.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 |
+| assemble-23.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 |
+| assemble-23.8 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: can't unset "a": no such variable |
+| assemble-23.9 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 |
+| assemble-24.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-24.10 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 |
+| assemble-24.11 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 |
+| assemble-24.12 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: can't unset "a(b)": no such variable |
+| assemble-24.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-24.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-24.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected boolean value but got "rubb... |
+| assemble-24.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-24.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: variable "::foo::bar" is not local |
+| assemble-24.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 |
+| assemble-24.8 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 |
+| assemble-24.9 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: can't unset "a": no such variable |
+| assemble-25.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-25.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-25.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-25.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-25.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-25.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 |
+| assemble-26.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-26.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-26.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-26.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-26.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-26.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-26.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: a 1 b 4 c 3 |
+| assemble-27.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-27.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-27.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-27.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-27.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-27.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-27.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: a 1 c 3 |
+| assemble-28.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-28.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-28.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-28.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-28.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-28.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: a 1 b 44 c 3 |
+| assemble-29.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-29.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-29.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-29.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected boolean value but got "rubb... |
+| assemble-29.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 |
+| assemble-29.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 |
+| assemble-29.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 |
+| assemble-3.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args:* |
+| assemble-3.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args:* |
+| assemble-30.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 |
+| assemble-30.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} \| want: 0 1 |
+| assemble-30.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} \| want: 0 {1 {1 whatever}} |
+| assemble-30.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} {{invalid... |
+| assemble-30.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} {invalid ... |
+| assemble-30.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {TCL LOOKUP COMMAND assemble} {invalid command name "assemble"     while ... |
+| assemble-31.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-31.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-31.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: assembly code may not contain substi... |
+| assemble-31.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: unmatched open brace in list |
+| assemble-31.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} {invalid ... |
+| assemble-31.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} {invalid ... |
+| assemble-31.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: {none of the above} one two three ... |
+| assemble-4.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {invalid command name "assemble"     wh... |
+| assemble-4.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: goodbye |
+| assemble-40.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0: 1 {invalid command name "assemble"} {invalid command name "assemble"     whil... |
+| assemble-40.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0: 1 {invalid command name "assemble"} {invalid command name "assemble"     whil... |
+| assemble-41.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: invalid command name "assemble"     while executing "assemble {   load y   ... |
+| assemble-41.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: invalid command name "assemble"     while executing "assemble {   load y   ... |
+| assemble-41.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: invalid command name "assemble"     while executing "assemble {   load y   ... |
+| assemble-5.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-5.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-5.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-5.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello world |
+| assemble-50.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 2 16 4 16 16 52 8 52 16 52 16 40... |
+| assemble-52.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "::tcl::unsupported::assemble" \| want:  |
+| assemble-6.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-6.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-6.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello |
+| assemble-6.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello |
+| assemble-7,34 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: -1 1 0 |
+| assemble-7.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-7.10 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 1 0 0 |
+| assemble-7.11 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 0 |
+| assemble-7.12 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 81 |
+| assemble-7.13 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 3.141592653589793 |
+| assemble-7.13a | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: missing operand at _@_ in expression... |
+| assemble-7.13b | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {invalid command name "assemble"     wh... |
+| assemble-7.14 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: {1 0 1 0} {0 0 1 1} {1 1 0 0} |
+| assemble-7.15 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 12 |
+| assemble-7.16 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 12 |
+| assemble-7.17 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: {0 0} {0 1} {0 1} {1 1} |
+| assemble-7.18 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: charlie dog |
+| assemble-7.19 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: baker charlie |
+| assemble-7.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 4 |
+| assemble-7.20 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: c |
+| assemble-7.21 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 4 |
+| assemble-7.22 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: charlie |
+| assemble-7.23 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: baker |
+| assemble-7.24 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: {a b} {c d} {e i} {g h} |
+| assemble-7.25 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 256 |
+| assemble-7.26 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 456 |
+| assemble-7.27 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 111111111 |
+| assemble-7.28 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 0 |
+| assemble-7.29 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 1 |
+| assemble-7.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello, world |
+| assemble-7.30 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: that |
+| assemble-7.31 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 16 |
+| assemble-7.32 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: baker charlie |
+| assemble-7.33 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: baker |
+| assemble-7.35 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: {1 0} {0 1} |
+| assemble-7.36 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: i |
+| assemble-7.37 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 7 |
+| assemble-7.38 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 25 |
+| assemble-7.39 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 42 |
+| assemble-7.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello, world |
+| assemble-7.41 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: -42 |
+| assemble-7.42 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 42 |
+| assemble-7.43 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: can't use non-numeric floating-point... |
+| assemble-7.43.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: domain error: argument not in valid ... |
+| assemble-7.44 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 |
+| assemble-7.45 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 1 |
+| assemble-7.46 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: x |
+| assemble-7.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 8 -13 14 6 |
+| assemble-7.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 142857 |
+| assemble-7.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 9 |
+| assemble-7.8 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: 0 1 |
+| assemble-7.9 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: test 7.3 |
+| assemble-7.9a | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: extra characters after close-brace |
+| assemble-7.9b | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {invalid command name "assemble"     wh... |
+| assemble-8.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-8.10 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello, world |
+| assemble-8.11 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello, world |
+| assemble-8.12 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello, world |
+| assemble-8.13 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello, world |
+| assemble-8.14 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello, world |
+| assemble-8.15 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello, world |
+| assemble-8.16 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello, world |
+| assemble-8.17 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello, world |
+| assemble-8.18 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: test |
+| assemble-8.19 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: test |
+| assemble-8.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-8.20 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: test |
+| assemble-8.21 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: test |
+| assemble-8.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-8.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-8.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
+| assemble-8.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: able |
+| assemble-8.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: able |
+| assemble-8.8 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: charlie |
+| assemble-8.9 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "set v0 literal0 set v1 literal1 set v2 literal2 set v... |
+| assemble-9.1 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-9.2 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: wrong # args* |
+| assemble-9.3 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: expected integer but got "rubbish" |
+| assemble-9.4 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: operand does not fit in one byte |
+| assemble-9.5 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/1: invalid command name "assemble" \| want: operand does not fit in one byte |
+| assemble-9.6 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 1/0,2: invalid command name "assemble" \| want: hello |
+| assemble-9.7 | `design`: the Tcl bytecode assembler; ztcl has its own bytecode | code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: ... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -537,15 +537,15 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| autoMkindex-1.2 | `untriaged` | code 1: invalid command name "auto_mkindex" |
-| autoMkindex-1.3 | `untriaged` | cleanup: unknown namespace "tcl_autoMkindex_tmp" in namespace delete command |
-| autoMkindex-2.1 | `untriaged` | code 1: invalid command name "auto_mkindex" |
-| autoMkindex-3.1 | `untriaged` | code 1: invalid command name "auto_mkindex_parser::slavehook" |
-| autoMkindex-3.2 | `untriaged` | cleanup: unknown namespace "tcl_autoMkindex_tmp" in namespace delete command |
-| autoMkindex-3.4 | `untriaged` | code 1: invalid command name "auto_mkindex" |
-| autoMkindex-4.1 | `untriaged` | code 1: invalid command name "auto_mkindex" |
-| autoMkindex-5.1 | `untriaged` | code 1: invalid command name "auto_mkindex" |
-| autoMkindex-5.2 | `untriaged` | code 1: invalid command name "auto_mkindex" |
+| autoMkindex-1.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_mkindex" \| want: 1 |
+| autoMkindex-1.3 | `bug`: the result differs from tclsh 8.6.16 | cleanup: unknown namespace "tcl_autoMkindex_tmp" in namespace delete command |
+| autoMkindex-2.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_mkindex" \| want: 0 {} pub_one ::buried::pub_one... |
+| autoMkindex-3.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_mkindex_parser::slavehook" \| want: 1 |
+| autoMkindex-3.2 | `bug`: the result differs from tclsh 8.6.16 | cleanup: unknown namespace "tcl_autoMkindex_tmp" in namespace delete command |
+| autoMkindex-3.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_mkindex" \| want: {set auto_index(::wok::command... |
+| autoMkindex-4.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_mkindex" \| want: {set auto_index(::college::tea... |
+| autoMkindex-5.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_mkindex" \| want: set auto_index(testProc) [list... |
+| autoMkindex-5.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_mkindex" \| want: 0 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -555,18 +555,18 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| basic-10.1 | `untriaged` | code 1: unknown namespace "::" in namespace delete command |
-| basic-12.1 | `untriaged` | code 0: 0 {} 1 {unknown command "x"} {} |
-| basic-13.1 | `untriaged` | code 1: unknown hidden command "cmd" |
-| basic-15.2 | `untriaged` | cleanup: unknown namespace "n" in namespace delete command |
-| basic-18.5 | `untriaged` | code 0: 1 {can't rename to "george::martha": command already exists} |
-| basic-18.6 | `untriaged` | code 0: {p in ::} {} {q in ::} |
-| basic-46.1 | `untriaged` | code 0: 1 { DONE } |
-| basic-46.2 | `untriaged` | code 1: hello invoked "break" outside of a loop |
-| basic-46.3 | `untriaged` | code 1: invoked "break" outside of a loop |
-| basic-46.4 | `untriaged` | code 1: invoked "break" outside of a loop |
-| basic-46.5 | `untriaged` | code 1: command returned bad code: 2 |
-| basic-50.1 | `untriaged` | code 0: 2 {} |
+| basic-10.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown namespace "::" in namespace delete command \| want: {::test_ns_basi... |
+| basic-12.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} 1 {unknown command "x"} {} \| want: 1 {can only hide global namespace ... |
+| basic-13.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown hidden command "cmd" \| want: :: {} 1 {cannot expose to a namespace... |
+| basic-15.2 | `bug`: the result differs from tclsh 8.6.16 | cleanup: unknown namespace "n" in namespace delete command |
+| basic-18.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't rename to "george::martha": command already exists} \| want: 1 {ca... |
+| basic-18.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {p in ::} {} {q in ::} \| want: {p in ::} {} {q in ::test_ns_basic} |
+| basic-46.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 { DONE } \| want: 1 {invoked "continue" outside of a loop     while execu... |
+| basic-46.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: hello invoked "break" outside of a loop \| want: hello invoked "break" outsid... |
+| basic-46.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: invoked "break" outside of a loop \| want: invoked "break" outside of a loop ... |
+| basic-46.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: invoked "break" outside of a loop \| want: invoked "break" outside of a loop ... |
+| basic-46.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: command returned bad code: 2 \| want: command returned bad code: 2     while ... |
+| basic-50.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {} \| want: 0 {} |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -579,42 +579,42 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| binary-1.3 | `untriaged` | code 1: unknown or ambiguous subcommand "f": must be decode, encode, format, or scan |
-| binary-13.13 | `untriaged` | code 0: ÿ |
-| binary-15.1 | `untriaged` | code 0: yz |
-| binary-16.1 | `untriaged` | code 0: z |
-| binary-16.4 | `untriaged` | code 0: fooz |
-| binary-16.5 | `untriaged` | code 0: fob |
-| binary-17.3 | `untriaged` | code 1: missing count for "@" field specifier |
-| binary-19.1 | `untriaged` | code 1: unknown or ambiguous subcommand "s": must be decode, encode, format, or scan |
-| binary-2.8 | `untriaged` | code 0: foox |
-| binary-3.8 | `untriaged` | code 0: foox  |
-| binary-36.1 | `untriaged` | code 1: not enough arguments for all format specifiers |
-| binary-37.10 | `untriaged` | code 1: the count of a binary field is too large |
-| binary-37.11 | `untriaged` | code 1: the count of a binary field is too large |
-| binary-37.12 | `untriaged` | code 1: the count of a binary field is too large |
-| binary-37.13 | `untriaged` | code 1: the count of a binary field is too large |
-| binary-40.3 | `untriaged` | code 0: 1 NaN |
-| binary-40.4 | `untriaged` | code 0: 1 NaN |
-| binary-43.6 | `untriaged` | code 0: 1 -9223372036854775808 |
-| binary-43.7 | `untriaged` | code 0: 1 -9223372036854775808 |
-| binary-43.8 | `untriaged` | code 0: 2 -9223372036854775808 -9223372036854775808 |
-| binary-43.9 | `untriaged` | code 0: 2 -9223372036854775808 -9223372036854775808 |
-| binary-46.4 | `untriaged` | code 1: unknown encoding "iso8859-15" |
-| binary-46.5 | `untriaged` | code 1: unknown encoding "iso8859-15" |
-| binary-53.12 | `untriaged` | code 0: ÿ |
-| binary-53.13 | `untriaged` | code 0: ÿ |
-| binary-63.2 | `untriaged` | code 0: 0x7ff0000000000000 |
-| binary-63.3 | `untriaged` | code 1: expected floating-point number but got "NaN(3123456789aBc)" |
-| binary-63.4 | `untriaged` | code 1: expected floating-point number but got "NaN( 3123456789aBc)" |
-| binary-64.2 | `untriaged` | code 0: NaN |
-| binary-73.35 | `untriaged` | code 0: 0 0 0 1 0 1 0 1 0 1 0 0 0 0 0 0 0 0 0 0 0 0 |
-| binary-73.37 | `untriaged` | code 1: invalid base64 character ":" at position 3 |
-| binary-75.25 | `untriaged` | code 0: ABC |
-| binary-75.7 | `untriaged` | code 0: 0 |
-| binary-75.8 | `untriaged` | code 0: 1 |
-| binary-75.9 | `untriaged` | code 0: 2 |
-| binary-76.1 | `untriaged` | code 1: couldn't open "/dev/null": no such file or directory |
+| binary-1.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "f": must be decode, encode, format, or scan ... |
+| binary-13.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ÿ \| want: ÿÿÿ |
+| binary-15.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: yz \| want: cannot use "*" in format string with "x" |
+| binary-16.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: z \| want: zoo |
+| binary-16.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: fooz \| want: foozar |
+| binary-16.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: fob \| want: fobzar |
+| binary-17.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: missing count for "@" field specifier \| want: abobarblat |
+| binary-19.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "s": must be decode, encode, format, or scan ... |
+| binary-2.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foox \| want: fooxr |
+| binary-3.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foox  \| want: foox r |
+| binary-36.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: not enough arguments for all format specifiers \| want: bad field specifier "u" |
+| binary-37.10 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: the count of a binary field is too large \| want: 0 |
+| binary-37.11 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: the count of a binary field is too large \| want: 0 |
+| binary-37.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: the count of a binary field is too large \| want: 0 |
+| binary-37.13 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: the count of a binary field is too large \| want: 0 |
+| binary-40.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 NaN \| want: 1 -NaN* |
+| binary-40.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 NaN \| want: 1 -NaN* |
+| binary-43.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 -9223372036854775808 \| want: 1 9223372036854775808 |
+| binary-43.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 -9223372036854775808 \| want: 1 9223372036854775808 |
+| binary-43.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 -9223372036854775808 -9223372036854775808 \| want: 2 9223372036854775808 ... |
+| binary-43.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 -9223372036854775808 -9223372036854775808 \| want: 2 9223372036854775808 ... |
+| binary-46.4 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso8859-15" \| want: ¤ ¤ |
+| binary-46.5 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso8859-15" \| want: 1 ¤ € |
+| binary-53.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ÿ \| want: ÿÿÿ |
+| binary-53.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ÿ \| want: ÿÿÿ |
+| binary-63.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0x7ff0000000000000 \| want: 0xfff0000000000000 |
+| binary-63.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: expected floating-point number but got "NaN(3123456789aBc)" \| want: 0x7ff3... |
+| binary-63.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: expected floating-point number but got "NaN( 3123456789aBc)" \| want: 0x7ff... |
+| binary-64.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: NaN \| want: NaN(*123456789abc) |
+| binary-73.35 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 0 1 0 1 0 1 0 1 0 0 0 0 0 0 0 0 0 0 0 0 \| want: 0 1 0 1 0 1 0 1 0 1 0 ... |
+| binary-73.37 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid base64 character ":" at position 3 \| want: abc |
+| binary-75.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: ABC \| want: invalid uuencode character "z" at position 5 |
+| binary-75.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| binary-75.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 2 |
+| binary-75.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 \| want: 3 |
+| binary-76.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't open "/dev/null": no such file or directory \| want: 3 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -626,168 +626,168 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| chan-10.1 | `untriaged` | code 0: stderr stdin stdout |
-| chan-11.1 | `untriaged` | code 1: wrong # args: should be "puts ?-nonewline? ?channelId? string" |
-| chan-12.1 | `untriaged` | code 1: wrong # args: should be "read channelId ?numChars?" or "read ?-nonewline? chann... |
-| chan-13.1 | `untriaged` | code 1: wrong # args: should be "seek channelId offset ?origin?" |
-| chan-14.1 | `untriaged` | code 1: wrong # args: should be "tell channelId" |
-| chan-15.1 | `untriaged` | code 1: unknown or ambiguous subcommand "truncate": must be close, configure, copy, eof... |
-| chan-15.2 | `untriaged` | code 1: unknown or ambiguous subcommand "truncate": must be close, configure, copy, eof... |
-| chan-16.10 | `untriaged` | code 1: can not find channel named "stdin" |
-| chan-16.11 | `untriaged` | code 1: can not find channel named "stdout" |
-| chan-16.4 | `untriaged` | code 1: can not find channel named "stdout" |
-| chan-16.5 | `untriaged` | code 1: can not find channel named "stdout" |
-| chan-16.6 | `untriaged` | code 1: can not find channel named "stdin" |
-| chan-17.1 | `untriaged` | code 1: unknown or ambiguous subcommand "pipe": must be close, configure, copy, eof, fl... |
-| chan-17.2 | `untriaged` | code 1: unknown or ambiguous subcommand "pipe": must be close, configure, copy, eof, fl... |
-| chan-17.3 | `untriaged` | cleanup: can't read "pw": no such variable |
-| chan-17.4 | `untriaged` | cleanup: can't read "::pw": no such variable |
-| chan-2.1 | `untriaged` | code 1: wrong # args: should be "fblocked channelId" |
-| chan-3.1 | `untriaged` | code 1: wrong # args: should be "close channelId ?direction?" |
-| chan-4.1 | `untriaged` | code 1: wrong # args: should be "fconfigure channelId ?-option value ...?" |
-| chan-4.2 | `untriaged` | code 0:  |
-| chan-4.3 | `untriaged` | code 0:  |
-| chan-4.5 | `untriaged` | code 0:  |
-| chan-5.1 | `untriaged` | code 1: wrong # args: should be "fcopy input output ?-size size? ?-command callback?" |
-| chan-6.1 | `untriaged` | code 1: wrong # args: should be "eof channelId" |
-| chan-7.1 | `untriaged` | code 1: wrong # args: should be "fileevent channelId event ?script?" |
-| chan-8.1 | `untriaged` | code 1: wrong # args: should be "flush channelId" |
-| chan-9.1 | `untriaged` | code 1: wrong # args: should be "gets channelId ?varName?" |
+| chan-10.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: stderr stdin stdout \| want: wrong # args: should be "chan names ?pattern?" |
+| chan-11.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "puts ?-nonewline? ?channelId? string" \| want: wrong... |
+| chan-12.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "read channelId ?numChars?" or "read ?-nonewline? cha... |
+| chan-13.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "seek channelId offset ?origin?" \| want: wrong # arg... |
+| chan-14.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "tell channelId" \| want: wrong # args: should be "ch... |
+| chan-15.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "truncate": must be close, configure, copy, e... |
+| chan-15.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "truncate": must be close, configure, copy,... |
+| chan-16.10 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdin" \| want: -1 |
+| chan-16.11 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdout" \| want: 0 |
+| chan-16.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdout" \| want: bad mode "input output": must be... |
+| chan-16.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdout" \| want: -1 |
+| chan-16.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdin" \| want: 0 |
+| chan-17.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "pipe": must be close, configure, copy, eof, ... |
+| chan-17.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "pipe": must be close, configure, copy, eof, ... |
+| chan-17.3 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't read "pw": no such variable |
+| chan-17.4 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't read "::pw": no such variable |
+| chan-2.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fblocked channelId" \| want: wrong # args: should be... |
+| chan-3.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "close channelId ?direction?" \| want: wrong # args: ... |
+| chan-4.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fconfigure channelId ?-option value ...?" \| want: w... |
+| chan-4.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: bad value* |
+| chan-4.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: bad value* |
+| chan-4.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: bad value for -eofchar:* |
+| chan-5.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fcopy input output ?-size size? ?-command callback?"... |
+| chan-6.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "eof channelId" \| want: wrong # args: should be "cha... |
+| chan-7.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fileevent channelId event ?script?" \| want: wrong #... |
+| chan-8.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "flush channelId" \| want: wrong # args: should be "c... |
+| chan-9.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "gets channelId ?varName?" \| want: wrong # args: sho... |
 
 ### chanio.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| chan-io-1.6 | `untriaged` | code 0: a9 |
-| chan-io-1.7 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| chan-io-1.8 | `untriaged` | code 1: unknown encoding "iso2022-jp" |
-| chan-io-1.9 | `untriaged` | code 1: unknown encoding "iso2022-jp" |
-| chan-io-11.4 | `untriaged` | code 0: {abcdefghijklmnopqrstuvwxyz } 1 {} 1 |
-| chan-io-13.11 | `untriaged` | code 0: abcd defgh |
-| chan-io-13.12 | `untriaged` | code 0:    ab  def    |
-| chan-io-14.2 | `untriaged` | code 0: {} {} {} |
-| chan-io-14.3 | `untriaged` | cleanup: can not find channel named "file193" |
-| chan-io-14.4 | `untriaged` | cleanup: can not find channel named "file194" |
-| chan-io-14.5 | `untriaged` | code 1: can not find channel named "stdin" |
-| chan-io-14.6 | `untriaged` | code 1: can not find channel named "stdout" |
-| chan-io-14.7 | `untriaged` | code 1: can not find channel named "stderr" |
-| chan-io-14.8 | `untriaged` | code 0:  |
-| chan-io-19.1 | `untriaged` | code 1: can not find channel named "stdin" |
-| chan-io-2.2 | `untriaged` | code 0: {} {123456789012345  12} |
-| chan-io-2.4 | `untriaged` | code 0: {abcdefg hijklmnopqrstuvwxyz} {abcdefg hijklmnopqrstuvwxyz} |
-| chan-io-20.1 | `untriaged` | code 0: utf-8 |
-| chan-io-20.3 | `untriaged` | code 0: {} {auto lf} |
-| chan-io-20.5 | `untriaged` | code 1:  |
-| chan-io-27.4 | `untriaged` | code 0: 0 0 72 |
-| chan-io-27.5 | `untriaged` | code 0: 0 0 72 |
-| chan-io-28.2 | `untriaged` | code 1: bad option "share": must be alias, aliases, children, create, delete, eval, exi... |
-| chan-io-29.1 | `untriaged` | code 1: can not find channel named "stdin" |
-| chan-io-29.20 | `untriaged` | code 0: 0 0 12600 |
-| chan-io-29.27 | `untriaged` | code 0: 1 {error writing "file254": broken pipe} {posix epipe {broken pipe}} |
-| chan-io-29.35 | `untriaged` | code 1: bad option "share": must be alias, aliases, children, create, delete, eval, exi... |
-| chan-io-29.9 | `untriaged` | code 1: can not find channel named "stdin" |
-| chan-io-3.1 | `untriaged` | code 1: unknown encoding "ascii" |
-| chan-io-3.2 | `untriaged` | code 1: unknown encoding "ascii" |
-| chan-io-3.3 | `untriaged` | code 1: unknown encoding "ascii" |
-| chan-io-3.4 | `untriaged` | code 1: unknown encoding "jis0208" |
-| chan-io-3.5 | `untriaged` | code 1: unknown encoding "jis0208" |
-| chan-io-3.6 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| chan-io-3.7 | `untriaged` | code 1: unknown encoding "jis0208" |
-| chan-io-3.8 | `untriaged` | code 1: unknown encoding "ascii" |
-| chan-io-30.16 | `untriaged` | code 0: hello there and here  |
-| chan-io-30.18 | `untriaged` | code 0: abc def 0 ghi 0 qrs 0 |
-| chan-io-30.19 | `untriaged` | code 0: abc def 0 ghi 0 qrs 0 |
-| chan-io-30.21 | `untriaged` | code 0: 0 0 def 0 |
-| chan-io-30.22 | `untriaged` | code 0: 0 0 def 0 |
-| chan-io-30.23 | `untriaged` | code 0: 17 1 |
-| chan-io-30.24 | `untriaged` | code 0: 17 1 |
-| chan-io-30.25 | `untriaged` | code 0: 17 1 |
-| chan-io-30.26 | `untriaged` | code 0: 17 1 |
-| chan-io-30.27 | `untriaged` | code 0: 17 1 |
-| chan-io-30.28 | `untriaged` | code 0: 17 1 |
-| chan-io-31.11 | `untriaged` | code 0: hello 6 cr 0 0 7 cr 0 |
-| chan-io-31.13 | `untriaged` | code 0: binary |
-| chan-io-31.18 | `untriaged` | code 0: hello there and here 0  0 |
-| chan-io-31.20 | `untriaged` | code 0: abc def 0 qrs 0 |
-| chan-io-31.21 | `untriaged` | code 0: abc def 0 qrs 0 |
-| chan-io-31.25 | `untriaged` | code 0: abc def 0 qrs 0 |
-| chan-io-31.26 | `untriaged` | code 0: abc def 0 qrs 0 |
-| chan-io-31.27 | `untriaged` | code 0: abc def 0 qrs 0 |
-| chan-io-31.28 | `untriaged` | code 0: abc def 0 qrs 0 |
-| chan-io-31.29 | `untriaged` | code 0: abc def 0 qrs 0 |
-| chan-io-31.30 | `untriaged` | code 0: abc def 0 qrs 0 |
-| chan-io-31.5 | `untriaged` | code 0: 5 6 cr 0 there 12 cr 0 |
-| chan-io-31.6 | `untriaged` | code 0: 5 6 crlf 0 there 12 crlf 0 |
-| chan-io-32.1 | `untriaged` | code 1: can not find channel named "stdout" |
-| chan-io-32.2 | `untriaged` | code 1: can not find channel named "stdin" |
-| chan-io-34.12 | `untriaged` | code 1: bad origin "cur": must be start, current, or end |
-| chan-io-34.19 | `untriaged` | code 0: 0 |
-| chan-io-34.8 | `untriaged` | code 1: error during seek on "file431": input/output error |
-| chan-io-35.10 | `untriaged` | code 0: 10 8 1 |
-| chan-io-35.11 | `untriaged` | code 0: 10 8 1 |
-| chan-io-35.12 | `untriaged` | code 0: 17 17 1 |
-| chan-io-35.13 | `untriaged` | code 0: 17 17 1 |
-| chan-io-35.14 | `untriaged` | code 0: 17 17 1 |
-| chan-io-35.15 | `untriaged` | code 0: 17 17 1 |
-| chan-io-35.16 | `untriaged` | code 0: 21 17 1 |
-| chan-io-35.17 | `untriaged` | code 0: 21 17 1 |
-| chan-io-35.6 | `untriaged` | code 0: 8 8 1 |
-| chan-io-35.7 | `untriaged` | code 0: 8 8 1 |
-| chan-io-35.8 | `untriaged` | code 0: 8 8 1 |
-| chan-io-35.9 | `untriaged` | code 0: 8 8 1 |
-| chan-io-38.3 | `untriaged` | code 1: error reading "file495": illegal operation on a directory |
-| chan-io-39.14 | `untriaged` | code 0: ç¦ |
-| chan-io-39.21 | `untriaged` | code 0: auto lf |
-| chan-io-39.22 | `untriaged` | code 0: {} {} {} |
-| chan-io-39.22a | `untriaged` | code 0: {} {} {0 {}} |
-| chan-io-39.23 | `untriaged` | code 0: {} lf |
-| chan-io-39.24 | `untriaged` | code 0: {} lf |
-| chan-io-4.4 | `untriaged` | code 0: {} {1234567          A} |
-| chan-io-40.17 | `untriaged` | setup: can't read "::env(HOME)": no such variable |
-| chan-io-41.1 | `untriaged` | code 1: wrong # args: should be "fileevent channelId event ?script?" |
-| chan-io-41.2 | `untriaged` | code 1: wrong # args: should be "fileevent channelId event ?script?" |
-| chan-io-42.2 | `untriaged` | code 1: bad event name "r": must be readable or writable |
-| chan-io-42.3 | `untriaged` | code 1: bad event name "r": must be readable or writable |
-| chan-io-43.2 | `untriaged` | code 1: bad event name "r": must be readable or writable |
-| chan-io-48.10 | `untriaged` | code 0: 5 {abc def foo bar {}} |
-| chan-io-48.11 | `untriaged` | code 0: 3 {abc def } |
-| chan-io-48.12 | `untriaged` | code 0: 5 {abc def foo bar {}} |
-| chan-io-48.13 | `untriaged` | code 0: 3 {abc def } |
-| chan-io-48.14 | `untriaged` | code 0: 5 {abc def foo bar {}} |
-| chan-io-48.15 | `untriaged` | code 0: 3 {abc def } |
-| chan-io-48.4 | `untriaged` | code 0: 3 {abc def } |
-| chan-io-48.5 | `untriaged` | code 0: 5 {abc def foo bar {}} |
-| chan-io-48.6 | `untriaged` | code 0: 3 {abc def } |
-| chan-io-48.7 | `untriaged` | code 0: 5 {abc def foo bar {}} |
-| chan-io-48.8 | `untriaged` | code 0: 3 {abc def } |
-| chan-io-48.9 | `untriaged` | code 0: 5 {abc def foo bar {}} |
-| chan-io-49.1 | `untriaged` | code 0: 7 a 1 { } 2 b 3 { } 4 c 5 { } 6 0 { } 0 |
-| chan-io-49.2 | `untriaged` | code 0: 7 {a } 2 {b } 4 {c } 6 0 { } 7 1 |
-| chan-io-49.3 | `untriaged` | code 0: 7 {a b} 3 { c } 6 0 { } 7 1 |
-| chan-io-5.2 | `untriaged` | code 0: {} 12345678901234567890 |
-| chan-io-5.4 | `untriaged` | code 1: unknown encoding "ascii" |
-| chan-io-52.1 | `untriaged` | code 1: fcopy -command is not available |
-| chan-io-52.2 | `untriaged` | code 1: fcopy -command is not available |
-| chan-io-52.3 | `untriaged` | code 1: error reading "file606": illegal operation on a directory |
-| chan-io-52.4 | `untriaged` | code 1: error reading "file608": illegal operation on a directory |
-| chan-io-52.5 | `untriaged` | code 1: error reading "file610": illegal operation on a directory |
-| chan-io-52.5a | `untriaged` | code 1: error reading "file612": illegal operation on a directory |
-| chan-io-52.5b | `untriaged` | code 1: error reading "file614": illegal operation on a directory |
-| chan-io-52.6 | `untriaged` | code 1: error reading "file616": illegal operation on a directory |
-| chan-io-52.7 | `untriaged` | code 1: error reading "file618": illegal operation on a directory |
-| chan-io-52.8 | `untriaged` | code 0: 0 0 |
-| chan-io-6.17 | `untriaged` | code 0: 0 {} -1 {} |
-| chan-io-6.21 | `untriaged` | code 0: 4 abcd 4 efgh 4 ijkl 0 {} |
-| chan-io-6.23 | `untriaged` | code 0: 0 {} -1 {} |
-| chan-io-6.29 | `untriaged` | code 0: 4 abcd 9 {efgh ijkl} 4 mnop |
-| chan-io-6.4 | `untriaged` | code 0: 4 H´ |
-| chan-io-6.5 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| chan-io-6.55 | `untriaged` | code 1: unknown encoding "iso2022-jp" |
-| chan-io-6.8 | `untriaged` | code 0: 12 abcdefghijk 6 wombat |
-| chan-io-6.9 | `untriaged` | code 0: 11 abcdefghijk 7 wombat |
-| chan-io-7.1 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| chan-io-7.2 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| chan-io-7.4 | `untriaged` | code 1: unknown encoding "shiftjis" |
+| chan-io-1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a9 \| want: aM |
+| chan-io-1.7 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: aá |
+| chan-io-1.8 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso2022-jp" \| want:     $B$O(B |
+| chan-io-1.9 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso2022-jp" \| want: 19 19 19 19 19 |
+| chan-io-11.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {abcdefghijklmnopqrstuvwxyz } 1 {} 1 \| want: abcdefghijkl 1 {} 1 |
+| chan-io-13.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abcd defgh \| want: abcd d |
+| chan-io-13.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:    ab  def    \| want:    ab  d |
+| chan-io-14.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {} {} \| want: line line none |
+| chan-io-14.3 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can not find channel named "file193" |
+| chan-io-14.4 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can not find channel named "file194" |
+| chan-io-14.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdin" \| want: {channel "stdin" wasn't opened ... |
+| chan-io-14.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdout" \| want: {} {} {can not find channel na... |
+| chan-io-14.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stderr" \| want: {} {} {can not find channel na... |
+| chan-io-14.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: hello |
+| chan-io-19.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdin" \| want: 0 |
+| chan-io-2.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {123456789012345  12} \| want: {123456789012345 } {123456789012345  12} |
+| chan-io-2.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {abcdefg hijklmnopqrstuvwxyz} {abcdefg hijklmnopqrstuvwxyz} \| want: {abcde... |
+| chan-io-20.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: utf-8 \| want: ascii |
+| chan-io-20.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {auto lf} \| want: {{} {}} {auto lf} |
+| chan-io-20.5 | `message`: an error where tclsh also gives one, with another message | code 1/1:  \| want: 777 |
+| chan-io-27.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 72 \| want: 0 60 72 |
+| chan-io-27.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 72 \| want: 0 60 72 |
+| chan-io-28.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| chan-io-29.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdin" \| want: channel "stdin" wasn't opened for... |
+| chan-io-29.20 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 12600 \| want: 4096 12288 12600 |
+| chan-io-29.27 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {error writing "file254": broken pipe} {posix epipe {broken pipe}} \| wan... |
+| chan-io-29.35 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| chan-io-29.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdin" \| want: channel "stdin" wasn't opened for... |
+| chan-io-3.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: abcdefghijklmnopqrstuvwxyz   |
+| chan-io-3.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: {123456789012345 } {123456789012345  12} |
+| chan-io-3.3 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want:   12 |
+| chan-io-3.4 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: !)!)!)!)!)!)!)!) !)!)!)!)!)!)!)!)!)!)!)... |
+| chan-io-3.5 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: !)!)!)!)!)!)!)!)! !)!)!)!)!)!)!)!)!)!)!... |
+| chan-io-3.6 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: 12345678901234' 12345678901234'a |
+| chan-io-3.7 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: !)!)!)!)!)!)!)!)! !)!)!)!)!)!)!)!)!)!)!... |
+| chan-io-3.8 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: {abcdefg hijklmno} {abcdefg hijklmnopqrst... |
+| chan-io-30.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: hello there and here  \| want: hello there and here  |
+| chan-io-30.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 ghi 0 qrs 0 \| want: abc def 0 {} 1 {} 1 |
+| chan-io-30.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 ghi 0 qrs 0 \| want: abc def 0 {} 1 {} 1 |
+| chan-io-30.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 def 0 \| want: 1 1 {} 1 |
+| chan-io-30.22 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 def 0 \| want: 1 1 {} 1 |
+| chan-io-30.23 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 1 \| want: 8 1 |
+| chan-io-30.24 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 1 \| want: 8 1 |
+| chan-io-30.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 1 \| want: 8 1 |
+| chan-io-30.26 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 1 \| want: 8 1 |
+| chan-io-30.27 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 1 \| want: 8 1 |
+| chan-io-30.28 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 1 \| want: 8 1 |
+| chan-io-31.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: hello 6 cr 0 0 7 cr 0 \| want: hello 6 cr 0 6 13 cr 0 |
+| chan-io-31.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: binary \| want: lf |
+| chan-io-31.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: hello there and here 0  0 \| want: hello there and here 0 {} 1 |
+| chan-io-31.20 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| chan-io-31.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| chan-io-31.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| chan-io-31.26 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| chan-io-31.27 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| chan-io-31.28 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| chan-io-31.29 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| chan-io-31.30 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| chan-io-31.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 6 cr 0 there 12 cr 0 \| want: 21 21 cr 1 {} 21 cr 1 |
+| chan-io-31.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 6 crlf 0 there 12 crlf 0 \| want: 21 21 crlf 1 {} 21 crlf 1 |
+| chan-io-32.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdout" \| want: channel "stdout" wasn't opened f... |
+| chan-io-32.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdin" \| want:  |
+| chan-io-34.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad origin "cur": must be start, current, or end \| want: 14 {xyz 123 xyzzy... |
+| chan-io-34.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 54 |
+| chan-io-34.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: error during seek on "file431": input/output error \| want: error during seek... |
+| chan-io-35.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 10 8 1 \| want: 11 8 1 |
+| chan-io-35.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 10 8 1 \| want: 11 8 1 |
+| chan-io-35.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 17 1 \| want: 17 8 1 |
+| chan-io-35.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 17 1 \| want: 17 8 1 |
+| chan-io-35.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 17 1 \| want: 17 8 1 |
+| chan-io-35.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 17 1 \| want: 17 8 1 |
+| chan-io-35.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 21 17 1 \| want: 21 8 1 |
+| chan-io-35.17 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 21 17 1 \| want: 21 8 1 |
+| chan-io-35.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
+| chan-io-35.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
+| chan-io-35.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
+| chan-io-35.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
+| chan-io-38.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file495": illegal operation on a directory \| want:  |
+| chan-io-39.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ç¦ \| want: 牦 |
+| chan-io-39.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: auto lf \| want: auto crlf |
+| chan-io-39.22 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {} {} \| want: {{} {}} {O G} {D D} |
+| chan-io-39.22a | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {} {0 {}} \| want: {O G} {D D} {1 {bad value for -eofchar: should be a l... |
+| chan-io-39.23 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} lf \| want: {{}} auto |
+| chan-io-39.24 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} lf \| want: {{}} auto |
+| chan-io-4.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {1234567          A} \| want: {1234567         } {1234567          A} |
+| chan-io-40.17 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "::env(HOME)": no such variable |
+| chan-io-41.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fileevent channelId event ?script?" \| want: wrong #... |
+| chan-io-41.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fileevent channelId event ?script?" \| want: wrong #... |
+| chan-io-42.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad event name "r": must be readable or writable \| want: {first script} {n... |
+| chan-io-42.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad event name "r": must be readable or writable \| want: 13 11 12 {} |
+| chan-io-43.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad event name "r": must be readable or writable \| want: {} {} {} {chan re... |
+| chan-io-48.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}} |
+| chan-io-48.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {abc def } \| want: 3 {abc def {}} |
+| chan-io-48.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}} |
+| chan-io-48.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {abc def } \| want: 3 {abc def {}} |
+| chan-io-48.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}} |
+| chan-io-48.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {abc def } \| want: 3 {abc def {}} |
+| chan-io-48.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {abc def } \| want: 3 {abc def {}} |
+| chan-io-48.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}} |
+| chan-io-48.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {abc def } \| want: 3 {abc def {}} |
+| chan-io-48.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}} |
+| chan-io-48.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {abc def } \| want: 3 {abc def {}} |
+| chan-io-48.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}} |
+| chan-io-49.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 7 a 1 { } 2 b 3 { } 4 c 5 { } 6 0 { } 0 \| want: 7 a 1 { } 2 b 3 { } 4 c 5 ... |
+| chan-io-49.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 7 {a } 2 {b } 4 {c } 6 0 { } 7 1 \| want: 7 {a } 2 {b } 4 {c } 7 0 {} 7 1 |
+| chan-io-49.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 7 {a b} 3 { c } 6 0 { } 7 1 \| want: 7 {a b} 3 { c } 7 0 {} 7 1 |
+| chan-io-5.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} 12345678901234567890 \| want: 1234567890123456 12345678901234567890 |
+| chan-io-5.4 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: {1234567890 1234567890} {1234567890 12345... |
+| chan-io-52.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: fcopy -command is not available \| want: channel "*" is busy |
+| chan-io-52.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: fcopy -command is not available \| want: channel "*" is busy |
+| chan-io-52.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file606": illegal operation on a directory \| want: 0 0 ok |
+| chan-io-52.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file608": illegal operation on a directory \| want: 0 0 40 |
+| chan-io-52.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file610": illegal operation on a directory \| want: 0 0 ok |
+| chan-io-52.5a | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file612": illegal operation on a directory \| want: 0 0 ok |
+| chan-io-52.5b | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file614": illegal operation on a directory \| want: 0 0 ok |
+| chan-io-52.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file616": illegal operation on a directory \| want: 0 0 ok |
+| chan-io-52.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file618": illegal operation on a directory \| want: 0 0 ok |
+| chan-io-52.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 \| want: 40 40 |
+| chan-io-6.17 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} -1 {} \| want: 1 { } -1 {} |
+| chan-io-6.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 abcd 4 efgh 4 ijkl 0 {} \| want: 9 {abcd efgh} 4 ijkl 5 { mnop} -1 {} |
+| chan-io-6.23 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} -1 {} \| want: 1 { } -1 {} |
+| chan-io-6.29 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 abcd 9 {efgh ijkl} 4 mnop \| want: 14 {abcd efgh ijkl} 4 mnop -1 {} |
+| chan-io-6.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 H´ \| want: 3 4 |
+| chan-io-6.5 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: 2 一丁 |
+| chan-io-6.55 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso2022-jp" \| want: 8 there一ok 11 {丁more bytes} 4 here |
+| chan-io-6.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 12 abcdefghijk 6 wombat \| want: 6 abcdef -1 {} |
+| chan-io-6.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 11 abcdefghijk 7 wombat \| want: 11 abcdefghijk 3 wom |
+| chan-io-7.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: 1234567890123０１２３４ |
+| chan-io-7.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: 10 1234567890 0 |
+| chan-io-7.4 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: -1 {} 1 17 1234567890123０１２３ 0 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -797,148 +797,148 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | emptyTest | 8 | `tcl`: tclsh skips it too |
 | nonBlockFiles | 8 | `untriaged` |
 | testchannelevent | 6 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| asyncPipeChan | 3 | `untriaged` |
+| asyncPipeChan | 3 | `tcl`: the test file sets the constraint false, or it is false in tclsh 8.6 on Linux |
 | win | 2 | `platform`: a constraint of another platform or word size |
 | extensive | 1 | `tcl`: tclsh skips it too |
-| makeFileInHome | 1 | `untriaged` |
+| makeFileInHome | 1 | `platform`: a property of the host: a second device, a writable home, IPv6 on localhost, ... |
 | nonPortable | 1 | `tcl`: tclsh skips it too |
 
 ### clock.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| clock-1.4 | `untriaged` | code 0: 1 {bad option "-oops": must be -format, -gmt, -locale or -timezone} {CLOCK badO... |
-| clock-10.10 | `untriaged` | code 0: 946684800 0 |
-| clock-13.2 | `untriaged` | code 0: 946857600 0 |
-| clock-13.3 | `untriaged` | code 0: 946857600 {CLOCK badInputString} |
-| clock-13.4 | `untriaged` | code 0: 946857600 {CLOCK badInputString} |
-| clock-15.2 | `untriaged` | code 0: 946684800 0 |
-| clock-15.3 | `untriaged` | code 0: 946684800 0 |
-| clock-16.10 | `untriaged` | code 0: 946684800 0 |
-| clock-16.11 | `untriaged` | code 0: 946684800 0 |
-| clock-18.2 | `untriaged` | code 0: 947116800 0 |
-| clock-18.3 | `untriaged` | code 0: 947116800 0 |
-| clock-18.4 | `untriaged` | code 0: 947116800 0 |
-| clock-20.2 | `untriaged` | code 0: 2678400 0 |
-| clock-20.3 | `untriaged` | code 0: 2678400 0 |
-| clock-20.4 | `untriaged` | code 0: 2678400 0 |
-| clock-21.6 | `untriaged` | code 0: 86400 0 |
-| clock-21.7 | `untriaged` | code 0: 86400 0 |
-| clock-21.8 | `untriaged` | code 0: 86400 0 |
-| clock-23.2 | `untriaged` | code 0: 604800 0 |
-| clock-25.2 | `untriaged` | code 0: 86400 0 |
-| clock-25.3 | `untriaged` | code 0: 86400 0 |
-| clock-25.4 | `untriaged` | code 0: 86400 0 |
-| clock-25.5 | `untriaged` | code 0: 86400 0 |
-| clock-25.6 | `untriaged` | code 0: 86400 0 |
-| clock-25.7 | `untriaged` | code 0: 86400 0 |
-| clock-27.2 | `untriaged` | code 0: -259200 0 |
-| clock-27.3 | `untriaged` | code 0: -259200 0 |
-| clock-27.4 | `untriaged` | code 0: -259200 0 |
-| clock-27.5 | `untriaged` | code 0: -259200 0 |
-| clock-27.6 | `untriaged` | code 0: -259200 0 |
-| clock-27.7 | `untriaged` | code 0: -259200 0 |
-| clock-27.8 | `untriaged` | code 0: -259200 0 |
-| clock-27.9 | `untriaged` | code 0: -259200 0 |
-| clock-28.1 | `untriaged` | code 0: 1234567890 |
-| clock-32.1 | `untriaged` | code 0: formatting -6857222400: 1752-247 should be 1752-258 scanning 1752-258: -6857222... |
-| clock-33.7 | `untriaged` | code 0: 1 {bad option "-": must be -milliseconds or -microseconds} |
-| clock-34.10 | `untriaged` | code 0: Jan 01,0071 00:00 GMT |
-| clock-34.11 | `untriaged` | code 0: Jan 01,0037 00:00 GMT |
-| clock-34.12 | `untriaged` | code 1: unable to convert date-time string "Oct 23, 1992 -1 day": syntax error |
-| clock-34.13 | `untriaged` | code 1: unable to convert date-time string "19921023": syntax error |
-| clock-34.15 | `untriaged` | code 1: unable to convert date-time string "23-Oct-1992": syntax error |
-| clock-34.16 | `untriaged` | code 1: unable to convert date-time string "19921023T235959": syntax error |
-| clock-34.17 | `untriaged` | code 1: unable to convert date-time string "19921023 235959": syntax error |
-| clock-34.18 | `untriaged` | code 1: unable to convert date-time string "19921023T000000": syntax error |
-| clock-34.19 | `untriaged` | code 1: unable to convert date-time string "5 am": syntax error |
-| clock-34.20 | `untriaged` | code 1: unable to convert date-time string "5:30 pm": syntax error |
-| clock-34.21 | `untriaged` | code 1: unable to convert date-time string "00:00-0800": syntax error |
-| clock-34.23 | `untriaged` | code 1: unable to convert date-time string "8:00:00 am": syntax error |
-| clock-34.24 | `untriaged` | code 1: unable to convert date-time string "8:00:00 pm": syntax error |
-| clock-34.25 | `untriaged` | code 1: unable to convert date-time string "00:00:30-0800": syntax error |
-| clock-34.28 | `untriaged` | code 1: unable to convert date-time string "Monday": syntax error |
-| clock-34.29 | `untriaged` | code 1: unable to convert date-time string "1/1": syntax error |
-| clock-34.3 | `untriaged` | code 1: unable to convert date-time string "14 Feb 92": syntax error |
-| clock-34.31 | `untriaged` | code 1: unable to convert date-time string "19990101": syntax error |
-| clock-34.32 | `untriaged` | code 1: unable to convert date-time string "now + 1 minute": syntax error |
-| clock-34.33 | `untriaged` | code 1: unable to convert date-time string "now +1 minute": syntax error |
-| clock-34.34 | `untriaged` | code 1: unable to convert date-time string "now 1 minute": syntax error |
-| clock-34.35 | `untriaged` | code 1: unable to convert date-time string "now - 1 minute": syntax error |
-| clock-34.36 | `untriaged` | code 1: unable to convert date-time string "now -1 minute": syntax error |
-| clock-34.37 | `untriaged` | code 1: unable to convert date-time string "20000112": syntax error |
-| clock-34.38 | `untriaged` | code 1: unable to convert date-time string "20000112": syntax error |
-| clock-34.39 | `untriaged` | code 1: unable to convert date-time string "20000112": syntax error |
-| clock-34.4 | `untriaged` | code 1: unable to convert date-time string "Feb 14, 1992 12:20 PM": syntax error |
-| clock-34.40 | `untriaged` | code 1: unable to convert date-time string "20000112": syntax error |
-| clock-34.41 | `untriaged` | code 1: unable to convert date-time string "monday": syntax error |
-| clock-34.42 | `untriaged` | code 1: unable to convert date-time string "2 monday": syntax error |
-| clock-34.43 | `untriaged` | code 1: unable to convert date-time string "monday 1 week ago": syntax error |
-| clock-34.44 | `untriaged` | code 1: unable to convert date-time string "monday": syntax error |
-| clock-34.45 | `untriaged` | code 1: unable to convert date-time string "2 monday": syntax error |
-| clock-34.46 | `untriaged` | code 1: unable to convert date-time string "monday 1 week ago": syntax error |
-| clock-34.47 | `untriaged` | code 1: unable to convert date-time string "2 days 2 hours ago": syntax error |
-| clock-34.48 | `untriaged` | code 1: unable to convert date-time string "10:00 11:00": syntax error |
-| clock-34.49 | `untriaged` | code 1: unable to convert date-time string "1/1/2001 2/2/2002": syntax error |
-| clock-34.5 | `untriaged` | code 1: unable to convert date-time string "Feb 14, 1992 12:20 PM": syntax error |
-| clock-34.50 | `untriaged` | code 1: unable to convert date-time string "10:00 EST CST": syntax error |
-| clock-34.51 | `untriaged` | code 1: unable to convert date-time string "Monday Tuesday": syntax error |
-| clock-34.52 | `untriaged` | code 1: unable to convert date-time string "next January next March": syntax error |
-| clock-34.53 | `untriaged` | code 1: unable to convert date-time string "19921023T00:00:00": syntax error |
-| clock-34.54 | `untriaged` | code 1: unable to convert date-time string "1992-10-23T00:00:00": syntax error |
-| clock-34.59 | `untriaged` | code 1: unable to convert date-time string "31 Jan 14 23:59:59 -0100": syntax error |
-| clock-34.6 | `untriaged` | code 1: unable to convert date-time string "Oct 23,1992 15:00": syntax error |
-| clock-34.60 | `untriaged` | code 1: unable to convert date-time string "31 Jan 14 23:59:59 +0100": syntax error |
-| clock-34.61 | `untriaged` | code 1: unable to convert date-time string "23:59:59 -0100": syntax error |
-| clock-34.62 | `untriaged` | code 1: unable to convert date-time string "23:59:59 +0100": syntax error |
-| clock-34.63 | `untriaged` | code 1: unable to convert date-time string "Mon, 30 Jun 2014 23:59:59 CEST": syntax error |
-| clock-34.64 | `untriaged` | code 1: unable to convert date-time string "Fri, 31 Jan 2014 23:59:59 CET": syntax error |
-| clock-34.65 | `untriaged` | code 1: unable to convert date-time string "23:59:59 +15 day": syntax error |
-| clock-34.66 | `untriaged` | code 1: unable to convert date-time string "23:59:59 -15 day": syntax error |
-| clock-34.67 | `untriaged` | code 1: unable to convert date-time string "10:59 pm CET": syntax error |
-| clock-34.68 | `untriaged` | code 1: unable to convert date-time string "10:59 pm +0100": syntax error |
-| clock-34.7 | `untriaged` | code 1: unable to convert date-time string "Oct 23,1992 15:00 GMT": syntax error |
-| clock-34.8 | `untriaged` | code 1: unable to convert date-time string "Oct 23,1992 15:00": syntax error |
-| clock-34.9 | `untriaged` | code 0: 1 {bad option "-bad": must be -base, -format, -gmt, -locale or -timezone} |
-| clock-36.1 | `untriaged` | code 1: unable to convert date-time string "june 1, 2000": syntax error |
-| clock-36.2 | `untriaged` | code 1: unable to convert date-time string "june 1, 2000": syntax error |
-| clock-36.3 | `untriaged` | code 1: unable to convert date-time string "june 1, 2000": syntax error |
-| clock-38.1 | `untriaged` | code 0: 00:00:00 |
-| clock-38.2 | `untriaged` | code 0: 0 |
-| clock-42.1 | `untriaged` | code 0: +0000 |
-| clock-44.1 | `untriaged` | code 1: time zone "US/East-Indiana" not found |
-| clock-46.2 | `untriaged` | code 1: unable to convert date-time string "20040000": syntax error |
-| clock-46.4 | `untriaged` | code 1: unable to convert date-time string "20041301": syntax error |
-| clock-46.5 | `untriaged` | code 1: unable to convert date-time string "12:01 am": syntax error |
-| clock-46.6 | `untriaged` | code 1: unable to convert date-time string "13:00 am": syntax error |
-| clock-47.1 | `untriaged` | code 1: unable to convert date-time string "0012": syntax error |
-| clock-47.2 | `untriaged` | code 1: unable to convert date-time string "0039": syntax error |
-| clock-52.2 | `untriaged` | code 0: 02:59:59 01:59:59 03:00:00 02:00:00 02:59:59 01:59:59 03:00:00 02:00:00 |
-| clock-52.3 | `untriaged` | code 0: 02:59:59 03:00:00 02:59:59 03:00:00 |
-| clock-55.5 | `untriaged` | code 1: input string does not match supplied format |
-| clock-55.6 | `untriaged` | code 1: input string does not match supplied format |
-| clock-55.8 | `untriaged` | code 1: input string does not match supplied format |
-| clock-55.9 | `untriaged` | code 1: input string does not match supplied format |
-| clock-56.1 | `untriaged` | setup: can't read "::tcl::clock::ZoneinfoPaths": no such variable |
-| clock-56.2 | `untriaged` | setup: can't read "::tcl::clock::ZoneinfoPaths": no such variable |
-| clock-56.3 | `untriaged` | setup: can't read "::tcl::clock::ZoneinfoPaths": no such variable |
-| clock-56.4 | `untriaged` | setup: can't read "::tcl::clock::ZoneinfoPaths": no such variable |
-| clock-58.1 | `untriaged` | code 0:  1872-12-31 converts to 12/31/1872 and should be \u00e8\u00a5\u00bf\u00e6\u009a... |
-| clock-59.1 | `untriaged` | code 0: pzone Z ps2 is {unable to convert date-time string "20000101 000000 Z": syntax ... |
-| clock-59.2 | `untriaged` | code 1: time zone "Etc/GMT-2" not found |
-| clock-6.0 | `untriaged` | code 0: -9223372036854775807 |
-| clock-6.10 | `untriaged` | code 0: 0 9223372036854775807 |
-| clock-6.9 | `untriaged` | code 0: 0 -9223372036854775807 |
-| clock-61.1 | `untriaged` | code 0: -9223372036854775808 |
-| clock-61.2 | `untriaged` | code 1: expected integer but got "-0x8000000000000001" |
-| clock-62.1 | `untriaged` | setup: invalid command name "::tcl::clock::ClearCaches" |
-| clock-63.1 | `untriaged` | code 1: invalid command name "::tcl::clock::ConvertLocalToUTC" |
-| clock-66.1 | `untriaged` | setup: invalid command name "::tcl::clock::ClearCaches" |
-| clock-67.4 | `untriaged` | code 0: 0 1 |
-| clock-67.5 | `untriaged` | code 1: input string does not match supplied format |
-| clock-7.6 | `untriaged` | code 0: 0 253402300800 {CLOCK badInputString} |
-| clock-7.7 | `untriaged` | code 0: 0 185331720384000 {CLOCK badInputString} |
-| clock-9.2 | `untriaged` | code 0: 946684800 |
+| clock-1.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {bad option "-oops": must be -format, -gmt, -locale or -timezone} {CLOCK ... |
+| clock-10.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 946684800 0 \| want: 0 0 |
+| clock-13.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 946857600 0 \| want: 0 0 |
+| clock-13.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 946857600 {CLOCK badInputString} \| want: {day of week is greater than 7} {... |
+| clock-13.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 946857600 {CLOCK badInputString} \| want: {day of week is greater than 7} {... |
+| clock-15.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 946684800 0 \| want: 0 0 |
+| clock-15.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 946684800 0 \| want: 0 0 |
+| clock-16.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 946684800 0 \| want: 0 0 |
+| clock-16.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 946684800 0 \| want: 0 0 |
+| clock-18.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 947116800 0 \| want: 0 0 |
+| clock-18.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 947116800 0 \| want: 0 0 |
+| clock-18.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 947116800 0 \| want: 0 0 |
+| clock-20.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2678400 0 \| want: 0 0 |
+| clock-20.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2678400 0 \| want: 0 0 |
+| clock-20.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2678400 0 \| want: 0 0 |
+| clock-21.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 86400 0 \| want: 0 0 |
+| clock-21.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 86400 0 \| want: 0 0 |
+| clock-21.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 86400 0 \| want: 0 0 |
+| clock-23.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 604800 0 \| want: 0 0 |
+| clock-25.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 86400 0 \| want: 0 0 |
+| clock-25.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 86400 0 \| want: 0 0 |
+| clock-25.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 86400 0 \| want: 0 0 |
+| clock-25.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 86400 0 \| want: 0 0 |
+| clock-25.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 86400 0 \| want: 0 0 |
+| clock-25.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 86400 0 \| want: 0 0 |
+| clock-27.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -259200 0 \| want: 0 0 |
+| clock-27.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -259200 0 \| want: 0 0 |
+| clock-27.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -259200 0 \| want: 0 0 |
+| clock-27.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -259200 0 \| want: 0 0 |
+| clock-27.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -259200 0 \| want: 0 0 |
+| clock-27.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -259200 0 \| want: 0 0 |
+| clock-27.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -259200 0 \| want: 0 0 |
+| clock-27.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -259200 0 \| want: 0 0 |
+| clock-28.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1234567890 \| want: 1234483200 |
+| clock-32.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: formatting -6857222400: 1752-247 should be 1752-258 scanning 1752-258: -685... |
+| clock-33.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {bad option "-": must be -milliseconds or -microseconds} \| want: 1 {ambi... |
+| clock-34.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Jan 01,0071 00:00 GMT \| want: Jan 01,1971 00:00 GMT |
+| clock-34.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Jan 01,0037 00:00 GMT \| want: Jan 01,2037 00:00 GMT |
+| clock-34.12 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Oct 23, 1992 -1 day": syntax error \| w... |
+| clock-34.13 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "19921023": syntax error \| want: Oct 23... |
+| clock-34.15 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "23-Oct-1992": syntax error \| want: Oct... |
+| clock-34.16 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "19921023T235959": syntax error \| want:... |
+| clock-34.17 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "19921023 235959": syntax error \| want:... |
+| clock-34.18 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "19921023T000000": syntax error \| want:... |
+| clock-34.19 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "5 am": syntax error \| want: {Dec 31, 1... |
+| clock-34.20 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "5:30 pm": syntax error \| want: Dec 31,... |
+| clock-34.21 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "00:00-0800": syntax error \| want: Dec ... |
+| clock-34.23 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "8:00:00 am": syntax error \| want: Dec ... |
+| clock-34.24 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "8:00:00 pm": syntax error \| want: Dec ... |
+| clock-34.25 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "00:00:30-0800": syntax error \| want: D... |
+| clock-34.28 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Monday": syntax error \| want: Jan 03, ... |
+| clock-34.29 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "1/1": syntax error \| want: Jan 01, 199... |
+| clock-34.3 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "14 Feb 92": syntax error \| want: 02/14... |
+| clock-34.31 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "19990101": syntax error \| want: Jan 01... |
+| clock-34.32 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "now + 1 minute": syntax error \| want: ... |
+| clock-34.33 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "now +1 minute": syntax error \| want: 9... |
+| clock-34.34 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "now 1 minute": syntax error \| want: 94... |
+| clock-34.35 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "now - 1 minute": syntax error \| want: ... |
+| clock-34.36 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "now -1 minute": syntax error \| want: 9... |
+| clock-34.37 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "20000112": syntax error \| want: Jan 12... |
+| clock-34.38 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "20000112": syntax error \| want: Jan 19... |
+| clock-34.39 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "20000112": syntax error \| want: Jan 13... |
+| clock-34.4 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Feb 14, 1992 12:20 PM": syntax error \|... |
+| clock-34.40 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "20000112": syntax error \| want: Jan 20... |
+| clock-34.41 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "monday": syntax error \| want: 1991-11-... |
+| clock-34.42 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "2 monday": syntax error \| want: 1991-1... |
+| clock-34.43 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "monday 1 week ago": syntax error \| wan... |
+| clock-34.44 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "monday": syntax error \| want: 1991-11-... |
+| clock-34.45 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "2 monday": syntax error \| want: 1991-1... |
+| clock-34.46 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "monday 1 week ago": syntax error \| wan... |
+| clock-34.47 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "2 days 2 hours ago": syntax error \| wa... |
+| clock-34.48 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/1: unable to convert date-time string "10:00 11:00": syntax error \| want: unabl... |
+| clock-34.49 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/1: unable to convert date-time string "1/1/2001 2/2/2002": syntax error \| want:... |
+| clock-34.5 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Feb 14, 1992 12:20 PM": syntax error \|... |
+| clock-34.50 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/1: unable to convert date-time string "10:00 EST CST": syntax error \| want: una... |
+| clock-34.51 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/1: unable to convert date-time string "Monday Tuesday": syntax error \| want: un... |
+| clock-34.52 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/1: unable to convert date-time string "next January next March": syntax error \|... |
+| clock-34.53 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "19921023T00:00:00": syntax error \| wan... |
+| clock-34.54 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "1992-10-23T00:00:00": syntax error \| w... |
+| clock-34.59 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "31 Jan 14 23:59:59 -0100": syntax error... |
+| clock-34.6 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Oct 23,1992 15:00": syntax error \| wan... |
+| clock-34.60 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "31 Jan 14 23:59:59 +0100": syntax error... |
+| clock-34.61 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "23:59:59 -0100": syntax error \| want: ... |
+| clock-34.62 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "23:59:59 +0100": syntax error \| want: ... |
+| clock-34.63 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Mon, 30 Jun 2014 23:59:59 CEST": syntax... |
+| clock-34.64 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Fri, 31 Jan 2014 23:59:59 CET": syntax ... |
+| clock-34.65 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "23:59:59 +15 day": syntax error \| want... |
+| clock-34.66 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "23:59:59 -15 day": syntax error \| want... |
+| clock-34.67 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "10:59 pm CET": syntax error \| want: Ja... |
+| clock-34.68 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "10:59 pm +0100": syntax error \| want: ... |
+| clock-34.7 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Oct 23,1992 15:00 GMT": syntax error \|... |
+| clock-34.8 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Oct 23,1992 15:00": syntax error \| wan... |
+| clock-34.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {bad option "-bad": must be -base, -format, -gmt, -locale or -timezone} \... |
+| clock-36.1 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "june 1, 2000": syntax error \| want: 06... |
+| clock-36.2 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "june 1, 2000": syntax error \| want: 07... |
+| clock-36.3 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "june 1, 2000": syntax error \| want: 05... |
+| clock-38.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 00:00:00 \| want: 01:00:00 |
+| clock-38.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| clock-42.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: +0000 \| want: -0500 |
+| clock-44.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: time zone "US/East-Indiana" not found \| want: 12:34:56-0500 |
+| clock-46.2 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "20040000": syntax error \| want: 107015... |
+| clock-46.4 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "20041301": syntax error \| want: 110453... |
+| clock-46.5 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "12:01 am": syntax error \| want: 60 43260 |
+| clock-46.6 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "13:00 am": syntax error \| want: 3600 4... |
+| clock-47.1 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "0012": syntax error \| want: 1795738320 |
+| clock-47.2 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "0039": syntax error \| want: 1795739940 |
+| clock-52.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 02:59:59 01:59:59 03:00:00 02:00:00 02:59:59 01:59:59 03:00:00 02:00:00 \| ... |
+| clock-52.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 02:59:59 03:00:00 02:59:59 03:00:00 \| want: 01:59:59 03:00:00 02:59:59 02:... |
+| clock-55.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: input string does not match supplied format \| want: -62135769600 |
+| clock-55.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: input string does not match supplied format \| want: -62135769600 |
+| clock-55.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: input string does not match supplied format \| want: -62135856000 |
+| clock-55.9 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: input string does not match supplied format \| want: -62135856000 |
+| clock-56.1 | `internals`: a variable inside the clock library of Tcl | setup: can't read "::tcl::clock::ZoneinfoPaths": no such variable |
+| clock-56.2 | `internals`: a variable inside the clock library of Tcl | setup: can't read "::tcl::clock::ZoneinfoPaths": no such variable |
+| clock-56.3 | `internals`: a variable inside the clock library of Tcl | setup: can't read "::tcl::clock::ZoneinfoPaths": no such variable |
+| clock-56.4 | `internals`: a variable inside the clock library of Tcl | setup: can't read "::tcl::clock::ZoneinfoPaths": no such variable |
+| clock-58.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  1872-12-31 converts to 12/31/1872 and should be \u00e8\u00a5\u00bf\u00e6\u... |
+| clock-59.1 | `feature`: a form of 'clock scan' that ztcl does not parse | code 0/0,2: pzone Z ps2 is {unable to convert date-time string "20000101 000000 Z": syn... |
+| clock-59.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: time zone "Etc/GMT-2" not found \| want: 1 1 1 1 1 1 1 1 1 1 1 1 |
+| clock-6.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -9223372036854775807 \| want: -9223372036854775808 |
+| clock-6.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 9223372036854775807 \| want: 1 {integer value too large to represent} |
+| clock-6.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 -9223372036854775807 \| want: 1 {integer value too large to represent} |
+| clock-61.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: -9223372036854775808 \| want: integer value too large to represent |
+| clock-61.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: expected integer but got "-0x8000000000000001" \| want: integer value too lar... |
+| clock-62.1 | `bug`: the result differs from tclsh 8.6.16 | setup: invalid command name "::tcl::clock::ClearCaches" |
+| clock-63.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "::tcl::clock::ConvertLocalToUTC" \| want: key "localsec... |
+| clock-66.1 | `bug`: the result differs from tclsh 8.6.16 | setup: invalid command name "::tcl::clock::ClearCaches" |
+| clock-67.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 1 \| want: 1 1 |
+| clock-67.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: input string does not match supplied format \| want: 1 |
+| clock-7.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 253402300800 {CLOCK badInputString} \| want: 1 {requested date too large ... |
+| clock-7.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 185331720384000 {CLOCK badInputString} \| want: 1 {requested date too lar... |
+| clock-9.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 946684800 \| want: 0 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -949,91 +949,85 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| cmdAH-1.4 | `untriaged` | code 0: 0 |
-| cmdAH-1.5 | `untriaged` | code 0: 0 |
-| cmdAH-16.1 | `untriaged` | code 1: invalid command name "-returnCodes" |
-| cmdAH-16.2 | `untriaged` | code 1: invalid command name "-constraints" |
-| cmdAH-16.3 | `untriaged` | code 1: invalid command name "-constraints" |
-| cmdAH-17.1 | `untriaged` | code 1: invalid command name "-returnCodes" |
-| cmdAH-17.2 | `untriaged` | code 1: invalid command name "-constraints" |
-| cmdAH-17.3 | `untriaged` | code 1: invalid command name "-constraints" |
-| cmdAH-19.10 | `untriaged` | code 0: ~nOsUcHuSeR |
-| cmdAH-19.11 | `untriaged` | cleanup: file attributes is not available |
-| cmdAH-2.3 | `untriaged` | setup: can't read "env(HOME)": no such variable |
-| cmdAH-2.4 | `untriaged` | setup: can't read "env(HOME)": no such variable |
-| cmdAH-2.5 | `untriaged` | code 1: couldn't change working directory to "~~": no such file or directory |
-| cmdAH-2.6.1 | `untriaged` | code 0:  |
-| cmdAH-20.1 | `untriaged` | code 1: file atime with a new time is not available |
-| cmdAH-20.4 | `untriaged` | code 1: file atime with a new time is not available |
-| cmdAH-20.5 | `untriaged` | code 1: file atime with a new time is not available |
-| cmdAH-23.6 | `untriaged` | code 0: 1 {can't set "x(atime)": variable isn't array} NONE |
-| cmdAH-24.1 | `untriaged` | code 1: file mtime with a new time is not available |
-| cmdAH-24.12 | `untriaged` | code 1: unable to convert date-time string "21:00:00 October 30 2004 GMT": syntax error |
-| cmdAH-24.13 | `untriaged` | code 1: file mtime with a new time is not available |
-| cmdAH-24.7 | `untriaged` | code 1: file mtime with a new time is not available |
-| cmdAH-24.8 | `untriaged` | code 1: file mtime with a new time is not available |
-| cmdAH-24.9 | `untriaged` | code 1: file mtime with a new time is not available |
-| cmdAH-25.3 | `untriaged` | code 0: 1 |
-| cmdAH-26.1 | `untriaged` | code 1: could not readlink: links are not available in the root folder |
-| cmdAH-28.5 | `untriaged` | code 0: 0o644 |
-| cmdAH-28.7 | `untriaged` | code 1: can't set "x(atime)": variable isn't array |
-| cmdAH-29.4 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| cmdAH-29.4.1 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| cmdAH-30.8 | `untriaged` | code 0: . |
-| cmdAH-31.1 | `untriaged` | code 0:  |
-| cmdAH-31.10 | `untriaged` | code 1: can not find channel named "file25" |
-| cmdAH-31.11 | `untriaged` | code 1: invalid command name "file" |
-| cmdAH-31.12 | `untriaged` | code 1: invalid command name "file" |
-| cmdAH-31.13 | `untriaged` | code 1: invalid command name "close" |
-| cmdAH-31.2 | `untriaged` | code 0:  |
-| cmdAH-31.4 | `untriaged` | code 0:  |
-| cmdAH-31.6 | `untriaged` | code 1: invalid command name "file" |
-| cmdAH-31.8 | `untriaged` | code 1: invalid command name "file" |
-| cmdAH-31.9 | `untriaged` | code 1: invalid command name "file" |
-| cmdAH-32.1 | `untriaged` | code 0: file26 |
-| cmdAH-32.4 | `untriaged` | code 0: foo produced /tcl_tmp3 |
-| cmdAH-32.5 | `untriaged` | code 0: /dir.file/foo produced /tcl_tmp4 |
-| cmdAH-4.1 | `untriaged` | code 1: wrong # args: should be "encoding option ?arg ...?" |
-| cmdAH-4.10 | `untriaged` | code 1: unknown encoding "jis0208" |
-| cmdAH-4.2 | `untriaged` | code 1: bad option "foo": must be convertfrom, convertto, dirs, names, or system |
-| cmdAH-4.5 | `untriaged` | code 1: unknown encoding "jis0208" |
-| cmdAH-4.6 | `untriaged` | code 1: unknown encoding "jis0208" |
-| cmdAH-4.9 | `untriaged` | code 1: unknown encoding "jis0208" |
-| cmdAH-5.4 | `untriaged` | code 0: 1 |
-| cmdAH-6.1 | `untriaged` | code 0: / |
-| cmdAH-7.1 | `untriaged` | code 1: file attributes is not available |
-| cmdAH-9.52 | `untriaged` | code 0: ~foo ~foo ~foo ~foo |
+| cmdAH-1.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| cmdAH-1.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| cmdAH-19.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: ~nOsUcHuSeR \| want: * |
+| cmdAH-19.11 | `feature`: 'file attributes' | cleanup: file attributes is not available |
+| cmdAH-2.3 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "env(HOME)": no such variable |
+| cmdAH-2.4 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "env(HOME)": no such variable |
+| cmdAH-2.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: couldn't change working directory to "~~": no such file or directory \| want:... |
+| cmdAH-2.6.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: couldn't change working directory to "": no such file or directory |
+| cmdAH-20.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: file atime with a new time is not available \| want: wrong # args: should be ... |
+| cmdAH-20.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: file atime with a new time is not available \| want: expected integer but got... |
+| cmdAH-20.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: file atime with a new time is not available \| want: 1 |
+| cmdAH-23.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "x(atime)": variable isn't array} NONE \| want: 1 {can't set "... |
+| cmdAH-24.1 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/1: file mtime with a new time is not available \| want: wrong # args: should be ... |
+| cmdAH-24.12 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "21:00:00 October 30 2004 GMT": syntax e... |
+| cmdAH-24.13 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/0,2: file mtime with a new time is not available \| want: 0 1 |
+| cmdAH-24.7 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/1: file mtime with a new time is not available \| want: expected integer but got... |
+| cmdAH-24.8 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/0,2: file mtime with a new time is not available \| want: 1 |
+| cmdAH-24.9 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/0,2: file mtime with a new time is not available \| want: 1 |
+| cmdAH-25.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| cmdAH-26.1 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not readlink: links are not available in the root folder \| want: wrong... |
+| cmdAH-28.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0o644 \| want: 0o765 |
+| cmdAH-28.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't set "x(atime)": variable isn't array \| want: can't set "x(dev)": varia... |
+| cmdAH-29.4 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: link |
+| cmdAH-29.4.1 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: link |
+| cmdAH-30.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: . \| want: user "woohgy" doesn't exist |
+| cmdAH-31.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: wrong # args: should be "file channels ?pattern?" |
+| cmdAH-31.10 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "file25" \| want:  |
+| cmdAH-31.11 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "file" \| want: {} file25 |
+| cmdAH-31.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "file" \| want: file25 stdout |
+| cmdAH-31.13 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "close" \| want: stdout |
+| cmdAH-31.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: stderr stdin stdout |
+| cmdAH-31.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: stderr stdin stdout |
+| cmdAH-31.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "file" \| want:  |
+| cmdAH-31.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "file" \| want: file25 file25 |
+| cmdAH-31.9 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "file" \| want: file25 stdout |
+| cmdAH-32.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: file26 \| want: wrong # args: should be "file tempfile ?nameVar? ?template?" |
+| cmdAH-32.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo produced /tcl_tmp3 \| want: ok |
+| cmdAH-32.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: /dir.file/foo produced /tcl_tmp4 \| want: ok |
+| cmdAH-4.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "encoding option ?arg ...?" \| want: wrong # args: sh... |
+| cmdAH-4.10 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 乎 |
+| cmdAH-4.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "foo": must be convertfrom, convertto, dirs, names, or system \| w... |
+| cmdAH-4.5 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 8C |
+| cmdAH-4.6 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 8C |
+| cmdAH-4.9 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 乎 |
+| cmdAH-5.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| cmdAH-6.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: / \| want: wrong # args: should be "file volumes" |
+| cmdAH-7.1 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: * |
+| cmdAH-9.52 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ~foo ~foo ~foo ~foo \| want: ./~foo ./~foo ./~foo ./~foo |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | testsetplatform | 145 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | win | 22 | `platform`: a constraint of another platform or word size |
 | nonPortable | 8 | `tcl`: tclsh skips it too |
-| filetime64bit | 2 | `untriaged` |
-| testchmod | 1 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
+| testchmod | 5 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
+| filetime64bit | 2 | `platform`: a property of the host: a second device, a writable home, IPv6 on localhost, ... |
 
 ### cmdIL.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| cmdIL-1.41 | `untriaged` | code 1: when used with "-stride", the leading "-index" value must be within the group |
-| cmdIL-1.42 | `untriaged` | code 1: when used with "-stride", the leading "-index" value must be within the group |
-| cmdIL-3.15 | `untriaged` | code 0: 1 {comparison error} {comparison error     while executing "error "comparison e... |
-| cmdIL-3.5.1 | `untriaged` | code 1: element 1+3 missing from sublist "1 . c" |
-| cmdIL-3.5.2 | `untriaged` | code 1: element -1-1 missing from sublist "1 . c" |
-| cmdIL-3.5.3 | `untriaged` | code 1: element -2 missing from sublist "1 . c" |
-| cmdIL-3.5.4 | `untriaged` | code 1: element end-4 missing from sublist "1 . c" |
-| cmdIL-3.5.7 | `untriaged` | code 1: element end--1 missing from sublist "1 . c" |
-| cmdIL-3.5.8 | `untriaged` | code 1: element end+1 missing from sublist "1 . c" |
-| cmdIL-3.5.9 | `untriaged` | code 1: element end+2 missing from sublist "1 . c" |
-| cmdIL-4.36 | `untriaged` | code 0: 256 32 257 |
-| info-20.6 | `untriaged` | code 0: 0 |
+| cmdIL-1.41 | `message`: an error where tclsh also gives one, with another message | code 1/1: when used with "-stride", the leading "-index" value must be within the group... |
+| cmdIL-1.42 | `message`: an error where tclsh also gives one, with another message | code 1/1: when used with "-stride", the leading "-index" value must be within the group... |
+| cmdIL-3.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {comparison error} {comparison error     while executing "error "comparis... |
+| cmdIL-3.5.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: element 1+3 missing from sublist "1 . c" \| want: element 4 missing from subl... |
+| cmdIL-3.5.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: element -1-1 missing from sublist "1 . c" \| want: index "-1-1" cannot select... |
+| cmdIL-3.5.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: element -2 missing from sublist "1 . c" \| want: index "-2" cannot select an ... |
+| cmdIL-3.5.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end-4 missing from sublist "1 . c" \| want: element -2 missing from s... |
+| cmdIL-3.5.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end--1 missing from sublist "1 . c" \| want: index "end--1" cannot se... |
+| cmdIL-3.5.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end+1 missing from sublist "1 . c" \| want: index "end+1" cannot sele... |
+| cmdIL-3.5.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end+2 missing from sublist "1 . c" \| want: index "end+2" cannot sele... |
+| cmdIL-4.36 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 256 32 257 \| want: 257 32 256 |
+| info-20.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| hasIsoLocale | 2 | `untriaged` |
+| hasIsoLocale | 2 | `internals`: a C test command or package of the Tcl test binary |
 | memory | 2 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
-| testWithLimit | 1 | `untriaged` |
+| testWithLimit | 1 | `internals`: a C test command or package of the Tcl test binary |
 | testobj | 1 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 
 ### cmdInfo.test
@@ -1047,15 +1041,15 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| cmdMZ-4.13 | `untriaged` | code 0: a {} {} b qw� {} N wq |
-| cmdMZ-return-1.0 | `untriaged` | code 2:  |
-| cmdMZ-return-2.1 | `untriaged` | code 0: 2 {-code 0 -level 1} |
-| cmdMZ-return-2.10 | `untriaged` | code 0: 1 {-code 1 -errorcode NONE -errorinfo {     while executing "return -level 0 -c... |
-| cmdMZ-return-2.14 | `untriaged` | code 1: bad completion code "foo": must be ok, error, return, break, continue, or an in... |
-| cmdMZ-return-2.18 | `untriaged` | code 1: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount, com... |
-| cmdMZ-return-2.2 | `untriaged` | code 0: 2 {-code 2 -level 1} |
-| cmdMZ-return-2.3 | `untriaged` | code 0: 2 {-code 2 -level 10} |
-| cmdMZ-return-2.8 | `untriaged` | code 1: bad completion code "-1": must be ok, error, return, break, continue, or an int... |
+| cmdMZ-4.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a {} {} b qw� {} N wq \| want: a b qw幎N wq |
+| cmdMZ-return-1.0 | `bug`: the result differs from tclsh 8.6.16 | code 2/1:  \| want: bad -options value:* |
+| cmdMZ-return-2.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {-code 0 -level 1} \| want: 2 {-bar soom -code 0 -level 1} |
+| cmdMZ-return-2.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {-code 1 -errorcode NONE -errorinfo {     while executing "return -level ... |
+| cmdMZ-return-2.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/3: bad completion code "foo": must be ok, error, return, break, continue, or an ... |
+| cmdMZ-return-2.18 | `feature`: 'info errorstack' | code 1/0,2: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount,... |
+| cmdMZ-return-2.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {-code 2 -level 1} \| want: 2 {-code 0 -level 2} |
+| cmdMZ-return-2.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {-code 2 -level 10} \| want: 2 {-code 0 -level 11} |
+| cmdMZ-return-2.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/-1: bad completion code "-1": must be ok, error, return, break, continue, or an ... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1080,70 +1074,70 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| compile-13.2 | `untriaged` | setup: the recursion limit of this interpreter is 600 |
-| compile-13.3 | `untriaged` | code 0: 1 1 1 1 |
-| compile-18.1 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.10 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.11 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.12 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.13 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.14 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.15 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.16 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.17 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.18 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.19 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.2 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.21 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.22 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.23 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.24 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.25 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.26 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.27 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.28 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.28.1 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.28.2 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.28.3 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.28.4 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.29 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.3 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.30 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.31 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.32 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.33 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.34 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.35 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.36 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.37 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.38 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.39 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.4 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.40 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.41 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.42 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.43 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.44 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.45 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.46 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.47 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.48 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.5 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.50 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.51 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.52 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.53 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.54 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.55 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.56 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.57 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.58 | `untriaged` | code 1: invalid command name "tcl::unsupported::getbytecode" |
-| compile-18.6 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.7 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.8 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-18.9 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-20.1 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
-| compile-20.2 | `untriaged` | code 1: invalid command name "tcl::unsupported::disassemble" |
+| compile-13.2 | `bug`: the result differs from tclsh 8.6.16 | setup: the recursion limit of this interpreter is 600 |
+| compile-13.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 1 1 1 \| want:  |
+| compile-18.1 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: wrong # args: s... |
+| compile-18.10 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::disassemble" \| want: * |
+| compile-18.11 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: wrong # args: s... |
+| compile-18.12 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: nosuchclass doe... |
+| compile-18.13 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: "justanobject" ... |
+| compile-18.14 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: unknown method ... |
+| compile-18.15 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::disassemble" \| want: * |
+| compile-18.16 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: wrong # args: s... |
+| compile-18.17 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: nosuchobject do... |
+| compile-18.18 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: unknown method ... |
+| compile-18.19 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::disassemble" \| want: * |
+| compile-18.2 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: bad type "?": m... |
+| compile-18.21 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: wrong # args: s... |
+| compile-18.22 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: bad type "?": m... |
+| compile-18.23 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: wrong # args: s... |
+| compile-18.24 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: can't interpret... |
+| compile-18.25 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::getbytecode" \| want: literals vari... |
+| compile-18.26 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: wrong # args: s... |
+| compile-18.27 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: "nosuchproc" is... |
+| compile-18.28 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::getbytecode" \| want: literals vari... |
+| compile-18.28.1 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::getbytecode" \| want: literals vari... |
+| compile-18.28.2 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::getbytecode" \| want: literals vari... |
+| compile-18.28.3 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::getbytecode" \| want: literals vari... |
+| compile-18.28.4 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::getbytecode" \| want: literals vari... |
+| compile-18.29 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: wrong # args: s... |
+| compile-18.3 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: wrong # args: s... |
+| compile-18.30 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::getbytecode" \| want: literals vari... |
+| compile-18.31 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: wrong # args: s... |
+| compile-18.32 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: nosuchclass doe... |
+| compile-18.33 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: "justanobject" ... |
+| compile-18.34 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: unknown method ... |
+| compile-18.35 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::getbytecode" \| want: literals vari... |
+| compile-18.36 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: wrong # args: s... |
+| compile-18.37 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: nosuchobject do... |
+| compile-18.38 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: unknown method ... |
+| compile-18.39 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::getbytecode" \| want: literals vari... |
+| compile-18.4 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: can't interpret... |
+| compile-18.40 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: wrong # args: s... |
+| compile-18.41 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: nosuchclass doe... |
+| compile-18.42 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: "justanobject" ... |
+| compile-18.43 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: "constructorles... |
+| compile-18.44 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::disassemble" \| want: * |
+| compile-18.45 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: wrong # args: s... |
+| compile-18.46 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: nosuchobject do... |
+| compile-18.47 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: "constructorles... |
+| compile-18.48 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::getbytecode" \| want: literals vari... |
+| compile-18.5 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::disassemble" \| want: * |
+| compile-18.50 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: wrong # args: s... |
+| compile-18.51 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: nosuchclass doe... |
+| compile-18.52 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: "justanobject" ... |
+| compile-18.53 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: "constructorles... |
+| compile-18.54 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::disassemble" \| want: * |
+| compile-18.55 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: wrong # args: s... |
+| compile-18.56 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: nosuchobject do... |
+| compile-18.57 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::getbytecode" \| want: "constructorles... |
+| compile-18.58 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::getbytecode" \| want: literals vari... |
+| compile-18.6 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: wrong # args: s... |
+| compile-18.7 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: "nosuchproc" is... |
+| compile-18.8 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::disassemble" \| want: * |
+| compile-18.9 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/1: invalid command name "tcl::unsupported::disassemble" \| want: wrong # args: s... |
+| compile-20.1 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::disassemble" \| want:  |
+| compile-20.2 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "tcl::unsupported::disassemble" \| want:  |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1154,39 +1148,39 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| pkgconfig-1.1 | `untriaged` | code 1: invalid command name "::tcl::pkgconfig" |
-| pkgconfig-1.2 | `untriaged` | code 1: invalid command name "::tcl::pkgconfig" |
-| pkgconfig-1.3 | `untriaged` | code 1: invalid command name "::tcl::pkgconfig" |
-| pkgconfig-2.0 | `untriaged` | code 0: invalid command name "::tcl::pkgconfig" |
-| pkgconfig-2.1 | `untriaged` | code 0: invalid command name "::tcl::pkgconfig" |
-| pkgconfig-2.2 | `untriaged` | code 0: invalid command name "::tcl::pkgconfig" |
-| pkgconfig-2.3 | `untriaged` | code 0: invalid command name "::tcl::pkgconfig" |
-| pkgconfig-2.4 | `untriaged` | code 0: invalid command name "::tcl::pkgconfig" |
-| pkgconfig-2.5 | `untriaged` | code 0: invalid command name "::tcl::pkgconfig" |
+| pkgconfig-1.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "::tcl::pkgconfig" \| want: 64bit bindir,install bindi... |
+| pkgconfig-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "::tcl::pkgconfig" \| want: 0 |
+| pkgconfig-1.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "::tcl::pkgconfig" \| want: 0 |
+| pkgconfig-2.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: wrong # args: should be ":... |
+| pkgconfig-2.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: bad subcommand "foo": must... |
+| pkgconfig-2.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: wrong # args: should be ":... |
+| pkgconfig-2.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: wrong # args: should be ":... |
+| pkgconfig-2.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: key not known |
+| pkgconfig-2.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid command name "::tcl::pkgconfig" \| want: wrong # args: should be ":... |
 
 ### coroutine.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| coroutine-10.1 | `untriaged` | code 1: namespace "tcl::unsupported" not found in "::" |
-| coroutine-3.2 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| coroutine-3.5 | `untriaged` | code 0: ::foo |
-| coroutine-3.6 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| coroutine-3.7 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| coroutine-4.4 | `untriaged` | code 0: global |
-| coroutine-7.10 | `untriaged` | code 2: a OUT b 123 c |
-| coroutine-7.11 | `untriaged` | code 2: a OUT b 123 c |
-| coroutine-7.4 | `untriaged` | code 0:  |
-| coroutine-7.5 | `untriaged` | code 0: 0 1 0 3 4 5 |
-| coroutine-7.8 | `untriaged` | code 2: a OUT b 123 c |
-| coroutine-7.9 | `untriaged` | code 2: a OUT b 123 c |
-| coroutine-8.0.0 | `untriaged` | code 1: invalid command name "tcl::unsupported::inject" |
-| coroutine-8.0.1 | `untriaged` | code 1: invalid command name "tcl::unsupported::inject" |
-| coroutine-8.1.1 | `untriaged` | code 1: invalid command name "tcl::unsupported::inject" |
-| coroutine-8.1.2 | `untriaged` | code 1: interpreter named "child" already exists, cannot create |
-| coroutine-9.1 | `untriaged` | code 1: invalid command name "::tcl::unsupported::corotype" |
-| coroutine-9.2 | `untriaged` | code 1: invalid command name "::tcl::unsupported::corotype" |
-| coroutine-9.3 | `untriaged` | code 1: invalid command name "::tcl::unsupported::corotype" |
+| coroutine-10.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: namespace "tcl::unsupported" not found in "::" \| want: ok ok {abc ::cbody1... |
+| coroutine-3.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| coroutine-3.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ::foo \| want:  |
+| coroutine-3.6 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| coroutine-3.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| coroutine-4.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: global \| want: local |
+| coroutine-7.10 | `bug`: the result differs from tclsh 8.6.16 | code 2/1: a OUT b 123 c \| want: yieldto called in deleted namespace |
+| coroutine-7.11 | `bug`: the result differs from tclsh 8.6.16 | code 2/1: a OUT b 123 c \| want: yieldto called in deleted namespace |
+| coroutine-7.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: b a |
+| coroutine-7.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 1 0 3 4 5 \| want: 0 1 2 3 4 5 |
+| coroutine-7.8 | `bug`: the result differs from tclsh 8.6.16 | code 2/1: a OUT b 123 c \| want: yieldto called in deleted namespace |
+| coroutine-7.9 | `bug`: the result differs from tclsh 8.6.16 | code 2/1: a OUT b 123 c \| want: yieldto called in deleted namespace |
+| coroutine-8.0.0 | `feature`: 'tcl::unsupported::inject' and 'corotype' | code 1/0,2: invalid command name "tcl::unsupported::inject" \| want: inject-executed |
+| coroutine-8.0.1 | `feature`: 'tcl::unsupported::inject' and 'corotype' | code 1/0,2: invalid command name "tcl::unsupported::inject" \| want: inject-executed 1 ... |
+| coroutine-8.1.1 | `feature`: 'tcl::unsupported::inject' and 'corotype' | code 1/0,2: invalid command name "tcl::unsupported::inject" \| want:  |
+| coroutine-8.1.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: interpreter named "child" already exists, cannot create \| want: inject-exe... |
+| coroutine-9.1 | `feature`: 'tcl::unsupported::inject' and 'corotype' | code 1/0,2: invalid command name "::tcl::unsupported::corotype" \| want: {PHASE 1} yiel... |
+| coroutine-9.2 | `feature`: 'tcl::unsupported::inject' and 'corotype' | code 1/1: invalid command name "::tcl::unsupported::corotype" \| want: can only get cor... |
+| coroutine-9.3 | `feature`: 'tcl::unsupported::inject' and 'corotype' | code 1/1: invalid command name "::tcl::unsupported::corotype" \| want: can only get cor... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1203,35 +1197,35 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| dict-10.1 | `untriaged` | code 1: unknown or ambiguous subcommand "info": must be append, create, exists, filter,... |
-| dict-10.2 | `untriaged` | code 1: unknown or ambiguous subcommand "info": must be append, create, exists, filter,... |
-| dict-10.3 | `untriaged` | code 1: unknown or ambiguous subcommand "info": must be append, create, exists, filter,... |
-| dict-10.4 | `untriaged` | code 1: unknown or ambiguous subcommand "info": must be append, create, exists, filter,... |
-| dict-11.13 | `untriaged` | code 1: wrong # args: should be "dict incr dictVarName key ?value ...?" |
-| dict-11.14 | `untriaged` | code 1: wrong # args: should be "dict incr dictVarName key ?value ...?" |
-| dict-14.12 | `untriaged` | code 0: 1 test 1 {test     while executing "error test"     invoked from within "dict f... |
-| dict-17.13 | `untriaged` | code 0: 1 x {x     while executing "error x"     invoked from within "dict filter {a b}... |
-| dict-20.21 | `untriaged` | code 0: a b c d |
-| dict-20.22 | `untriaged` | code 0: a b c d |
-| dict-22.10 | `untriaged` | code 1: key "b" not known in dictionary |
-| dict-23.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-23.10 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-23.11 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-23.12 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-23.13 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-23.14 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-23.2 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-23.3 | `untriaged` | code 1: invalid command name "tcl::dict::lappend" |
-| dict-23.4 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-23.5 | `untriaged` | code 1: invalid command name "tcl::dict::incr" |
-| dict-23.6 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-23.7 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-23.8 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-23.9 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-24.12 | `untriaged` | code 0: 1 test 1 {test     while executing "error test"     invoked from within "dict m... |
-| dict-24.20.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-24.21 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| dict-4.13a | `untriaged` | code 0: NONE |
+| dict-10.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown or ambiguous subcommand "info": must be append, create, exists, fil... |
+| dict-10.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "info": must be append, create, exists, filte... |
+| dict-10.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "info": must be append, create, exists, filte... |
+| dict-10.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "info": must be append, create, exists, filte... |
+| dict-11.13 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "dict incr dictVarName key ?value ...?" \| want: wron... |
+| dict-11.14 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "dict incr dictVarName key ?value ...?" \| want: wron... |
+| dict-14.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 test 1 {test     while executing "error test"     invoked from within "di... |
+| dict-17.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 x {x     while executing "error x"     invoked from within "dict filter {... |
+| dict-20.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a b c d \| want:  a b c d  |
+| dict-20.22 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a b c d \| want:  a b c d  |
+| dict-22.10 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: key "b" not known in dictionary \| want: 0 {} |
+| dict-23.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.10 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.11 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.12 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.13 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.14 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "tcl::dict::lappend" \| want: bar baz |
+| dict-23.4 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "tcl::dict::incr" \| want: bar 1 |
+| dict-23.6 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.8 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-23.9 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-24.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 test 1 {test     while executing "error test"     invoked from within "di... |
+| dict-24.20.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-24.21 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| dict-4.13a | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: NONE \| want: TCL VALUE DICTIONARY |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1247,46 +1241,46 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| encoding-1.3 | `untriaged` | code 1: unknown encoding "jis0208" |
-| encoding-10.1 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| encoding-11.2 | `untriaged` | code 1: unknown encoding "jis0201" |
-| encoding-11.3 | `untriaged` | code 1: unknown encoding "jis0208" |
-| encoding-11.4 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| encoding-11.5 | `untriaged` | code 1: unknown encoding "iso2022" |
-| encoding-11.5.1 | `untriaged` | code 1: unknown encoding "iso2022-jp" |
-| encoding-12.1 | `untriaged` | code 1: unknown encoding "iso8859-3" |
-| encoding-12.2 | `untriaged` | code 1: unknown encoding "iso8859-3" |
-| encoding-12.3 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| encoding-12.4 | `untriaged` | code 1: unknown encoding "jis0208" |
-| encoding-12.5 | `untriaged` | code 1: unknown encoding "symbol" |
-| encoding-13.1 | `untriaged` | code 1: unknown encoding "iso2022" |
-| encoding-15.10 | `untriaged` | code 0: 2 5 efbfbdc3a9 |
-| encoding-15.11 | `untriaged` | code 0: 2 5 efbfbdc3a9 |
-| encoding-15.12 | `untriaged` | code 0: 2 4 efbfbd59 |
-| encoding-15.13 | `untriaged` | code 0: 2 4 efbfbd59 |
-| encoding-15.14 | `untriaged` | code 0: 1 3 efbfbd |
-| encoding-15.15 | `untriaged` | code 0: 1 3 efbfbd |
-| encoding-15.4 | `untriaged` | code 0: 6 í ½í¸ |
-| encoding-15.5 | `untriaged` | code 0: 4 😂 |
-| encoding-15.6 | `untriaged` | code 0: 12 efbfbdefbfbdefbfbdefbfbd |
-| encoding-15.7 | `untriaged` | code 0: 3 9 efbfbdefbfbdefbfbd |
-| encoding-15.8 | `untriaged` | code 0: 3 8 efbfbdefbfbdc3a9 |
-| encoding-15.9 | `untriaged` | code 0: 3 7 efbfbdefbfbd58 |
-| encoding-16.3 | `untriaged` | code 0: ��� ED |
-| encoding-16.4 | `untriaged` | code 0: 䅁 |
-| encoding-17.2 | `untriaged` | code 0: ýÿ |
-| encoding-17.3 | `untriaged` | code 0: ýÿ |
-| encoding-18.1 | `untriaged` | code 0: 1 {unknown encoding "jis0208"} |
-| encoding-2.1 | `untriaged` | code 1: unknown encoding "jis0208" |
-| encoding-28.0 | `untriaged` | code 2: 6 |
-| encoding-3.1 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| encoding-3.2 | `untriaged` | code 0:  |
-| encoding-5.1 | `untriaged` | code 1: unknown encoding "jis0208" |
-| encoding-7.1 | `untriaged` | code 1: unknown encoding "jis0208" |
-| encoding-7.2 | `untriaged` | code 1: unknown encoding "jis0208" |
-| encoding-8.1 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| encoding-9.1 | `untriaged` | code 1: unknown encoding "jis0208" |
-| encoding-9.2 | `untriaged` | code 1: unknown encoding "jis0208" |
+| encoding-1.3 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 8C 乎 |
+| encoding-10.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: abÁg |
+| encoding-11.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0201" \| want: ｡ |
+| encoding-11.3 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 乎 |
+| encoding-11.4 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: 乎 |
+| encoding-11.5 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso2022" \| want: $B8C(B (\u001B$B8C\u001B(B) |
+| encoding-11.5.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso2022-jp" \| want: $B8C(B (\u001B$B8C\u001B(B) |
+| encoding-12.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso8859-3" \| want: Õ?Ġ |
+| encoding-12.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso8859-3" \| want: abÕgabĠg |
+| encoding-12.3 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: abÁgab乎g |
+| encoding-12.4 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 8C&A乎α |
+| encoding-12.5 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "symbol" \| want: ggγ |
+| encoding-13.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso2022" \| want: ab$B8C$(DD%(Bg (ab\u001B$B8C\u001B$(... |
+| encoding-15.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 5 efbfbdc3a9 \| want: 2 5 edb882c3a9 |
+| encoding-15.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 5 efbfbdc3a9 \| want: 2 5 eda882c3a9 |
+| encoding-15.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 4 efbfbd59 \| want: 2 4 edb88259 |
+| encoding-15.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 4 efbfbd59 \| want: 2 4 eda88259 |
+| encoding-15.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 3 efbfbd \| want: 1 3 edb882 |
+| encoding-15.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 3 efbfbd \| want: 1 3 eda882 |
+| encoding-15.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 6 í ½í¸ \| want: 6 �� |
+| encoding-15.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 😂 \| want: 4 �� |
+| encoding-15.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 12 efbfbdefbfbdefbfbdefbfbd \| want: 10 edb882f09f9882eda0bd |
+| encoding-15.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 9 efbfbdefbfbdefbfbd \| want: 3 9 edb882eda0bdeda0bd |
+| encoding-15.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 8 efbfbdefbfbdc3a9 \| want: 3 8 edb882eda0bdc3a9 |
+| encoding-15.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 7 efbfbdefbfbd58 \| want: 3 7 edb882eda0bd58 |
+| encoding-16.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ��� ED \| want: � DCDC |
+| encoding-16.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 䅁 \| want: 䅁� |
+| encoding-17.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ýÿ \| want: ÜÜ |
+| encoding-17.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ýÿ \| want: ØØ |
+| encoding-18.1 | `feature`: an encoding that ztcl does not have | code 0/0,2: 1 {unknown encoding "jis0208"} \| want: 0 !) |
+| encoding-2.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 8C |
+| encoding-28.0 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2: 6 \| want: 85 |
+| encoding-3.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: shiftjis |
+| encoding-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: jis0208 |
+| encoding-5.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 8C |
+| encoding-7.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 吾吾吾吾 |
+| encoding-7.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 512 乎 |
+| encoding-8.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: ab乎g |
+| encoding-9.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 8c8c8c8c |
+| encoding-9.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 1024 8C |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1300,20 +1294,20 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| env-1.1 | `untriaged` | code 1: can't read "env(test)": no such variable |
-| env-1.3 | `untriaged` | code 0: 0 |
-| env-2.2 | `untriaged` | code 0:  |
-| env-2.3 | `untriaged` | code 0:  |
-| env-2.4 | `untriaged` | code 0:  |
-| env-3.1 | `untriaged` | code 0:  |
-| env-4.1 | `untriaged` | code 0:  |
-| env-4.3 | `untriaged` | code 0:  |
-| env-4.4 | `untriaged` | code 0:  |
-| env-4.5 | `untriaged` | code 0:  |
-| env-5.2 | `untriaged` | code 1: can't unset "env": no such variable |
-| env-5.3 | `untriaged` | code 1: can't read "env(THIS_SHOULD_EXIST)": no such element in array |
-| env-5.4 | `untriaged` | code 1: can't read "env(THIS_SHOULD_EXIST)": no such element in array |
-| env-7.2 | `untriaged` | code 1: can't read "::env(PATH)": no such element in array |
+| env-1.1 | `design`: the suite runs without the 'env' capability, so 'env' is ... | code 1/0,2: can't read "env(test)": no such variable \| want: garbage |
+| env-1.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| env-2.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: NAME1=test string |
+| env-2.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: NAME1=test string NAME2=more |
+| env-2.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: NAME1=test string NAME2=more XYZZY=garbage |
+| env-3.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: NAME1=test string NAME2=new value XYZZY=garbage |
+| env-4.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: NAME1=test string XYZZY=garbage |
+| env-4.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: \u00a7=\u00b6 |
+| env-4.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: \u00a7=\u00a7 |
+| env-4.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: \u00b6=\u00a7 |
+| env-5.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't unset "env": no such variable \| want: 0 |
+| env-5.3 | `design`: the suite runs without the 'env' capability, so 'env' is ... | code 1/0,2: can't read "env(THIS_SHOULD_EXIST)": no such element in array \| want: a 1 |
+| env-5.4 | `design`: the suite runs without the 'env' capability, so 'env' is ... | code 1/0,2: can't read "env(THIS_SHOULD_EXIST)": no such element in array \| want: 1 a 1 |
+| env-7.2 | `design`: the suite runs without the 'env' capability, so 'env' is ... | code 1/0,2: can't read "::env(PATH)": no such element in array \| want: ok |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1323,15 +1317,15 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| error-1.3 | `untriaged` | code 0: wrong # args: should be "string index string charIndex"     while executing "st... |
-| error-19.1 | `untriaged` | code 1: wrong # args to on clause: must be "... on code variableList script" |
-| error-2.6 | `untriaged` | code 0: glorp2     while executing "error glorp2"     invoked from within "format [erro... |
-| error-20.2 | `untriaged` | code 0: a b c |
-| error-4.6 | `untriaged` | code 1: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount, com... |
-| error-4.7 | `untriaged` | code 1: key "-errorstack" not known in dictionary |
-| error-4.8 | `untriaged` | code 1: key "-errorstack" not known in dictionary |
-| error-6.10 | `untriaged` | code 1: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount, com... |
-| error-7.1 | `untriaged` | code 0: namespace |
+| error-1.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "string index string charIndex"     while executing... |
+| error-19.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args to on clause: must be "... on code variableList script" \| wan... |
+| error-2.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: glorp2     while executing "error glorp2"     invoked from within "format [... |
+| error-20.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: a b c \| want: bad completion code "34985723094872345": must be ok, error, re... |
+| error-4.6 | `feature`: 'info errorstack' | code 1/0,2: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount,... |
+| error-4.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: key "-errorstack" not known in dictionary \| want: INNER * CALL {g 1212} CA... |
+| error-4.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: key "-errorstack" not known in dictionary \| want: INNER {error bar} CALL g... |
+| error-6.10 | `feature`: 'info errorstack' | code 1/0,2: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount,... |
+| error-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: namespace \| want: *BadProc* |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1341,14 +1335,14 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| eval-2.5 | `untriaged` | code 0: test error     while executing "error "test error""     invoked from within "ev... |
+| eval-2.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: test error     while executing "error "test error""     invoked from within... |
 
 ### event.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| event-7.5 | `untriaged` | code 0: hello     while executing "error hello"     ("after" script) |
-| event-7.7 | `untriaged` | code 2: foo baz soom     (procedure "bgerror" line 1)     invoked from within "bgerror ... |
+| event-7.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: hello     while executing "error hello"     ("after" script) \| want: hello  ... |
+| event-7.7 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2: foo baz soom     (procedure "bgerror" line 1)     invoked from within "bger... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1360,10 +1354,10 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| exec-11.5 | `untriaged` | code 0:  |
-| exec-14.5 | `untriaged` | code 0: foo bar |
-| exec-18.2 | `untriaged` | code 1: cat: '/foo[{blah': No such file or directory |
-| exec-6.3 | `untriaged` | code 0: second msg |
+| exec-11.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: foo |
+| exec-14.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo bar \| want: foo bar bar |
+| exec-18.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: cat: '/foo[{blah': No such file or directory \| want: contents |
+| exec-6.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: second msg \| want: second msg foo bar |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1374,12 +1368,12 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| execute-10.3 | `untriaged` | code 0: 0 |
-| execute-6.11 | `untriaged` | code 1: invalid command name "load" |
-| execute-8.4 | `untriaged` | code 0: These differ: bar     while executing "error bar"     (procedure "foo" line 2) ... |
-| execute-8.5 | `untriaged` | code 0: -code 1 -level 0 -errorcode NONE -errorinfo {FOO     while executing "error FOO... |
-| execute-8.6 | `untriaged` | setup: can't find package tcltest 2.5 |
-| execute-8.7 | `untriaged` | setup: can't find package tcltest 2.5 |
+| execute-10.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 4 |
+| execute-6.11 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "load" \| want: {This is a result: 1} {This is a resul... |
+| execute-8.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: These differ: bar     while executing "error bar"     (procedure "foo" line... |
+| execute-8.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -code 1 -level 0 -errorcode NONE -errorinfo {FOO     while executing "error... |
+| execute-8.6 | `bug`: the result differs from tclsh 8.6.16 | setup: can't find package tcltest 2.5 |
+| execute-8.7 | `bug`: the result differs from tclsh 8.6.16 | setup: can't find package tcltest 2.5 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1390,18 +1384,18 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| expr-old-32.48 | `untriaged` | code 0: 0.8653658439782821 |
-| expr-old-32.50 | `untriaged` | code 0: 550 771 304 670 611 265 48 660 808 388 456 |
-| expr-old-34.3 | `untriaged` | code 0: 1 {can't use non-numeric string as operand of "hypot"} |
-| expr-old-36.1 | `untriaged` | code 1: invalid number "0o289" in expression "0o289" |
-| expr-old-36.7 | `untriaged` | code 0: 0 NaN |
-| expr-old-37.18 | `untriaged` | code 1: empty expression in expression "" |
-| expr-old-37.20 | `untriaged` | code 1: expected floating-point number but got "100000000000000000000000000000000000000" |
-| expr-old-37.22 | `untriaged` | code 1: expected floating-point number but got "179769313486231570000000000000000000000... |
-| expr-old-37.24 | `untriaged` | code 1: expected floating-point number but got "179769313486231650000000000000000000000... |
-| expr-old-37.25 | `untriaged` | code 0: 0 {This is a result: NaN} |
-| expr-old-37.3 | `untriaged` | code 1: empty expression in expression "" |
-| expr-old-38.2 | `untriaged` | code 1: empty expression in expression "" |
+| expr-old-32.48 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 0.8653658439782821 \| want: * |
+| expr-old-32.50 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 550 771 304 670 611 265 48 660 808 388 456 \| want: 97 834 948 36 12 51 766... |
+| expr-old-34.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't use non-numeric string as operand of "hypot"} \| want: 1 {expected... |
+| expr-old-36.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid number "0o289" in expression "0o289" \| want: *invalid octal number* |
+| expr-old-36.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 NaN \| want: 1 {domain error: argument not in valid range} |
+| expr-old-37.18 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: empty expression in expression "" \| want: This is a result: 0.0 |
+| expr-old-37.20 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: expected floating-point number but got "10000000000000000000000000000000000... |
+| expr-old-37.22 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: expected floating-point number but got "17976931348623157000000000000000000... |
+| expr-old-37.24 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: expected floating-point number but got "17976931348623165000000000000000000... |
+| expr-old-37.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {This is a result: NaN} \| want: 1 {domain error: argument not in valid r... |
+| expr-old-37.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: empty expression in expression "" \| want: This is a result: 0 |
+| expr-old-38.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: empty expression in expression "" \| want: 0 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1413,33 +1407,33 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| expr-22.5 | `untriaged` | code 0: 0 NaN |
-| expr-29.1 | `untriaged` | code 0: 0 0x0000000000000001 0 0x0000000000000000 0 0x0000000000000000 |
-| expr-29.2 | `untriaged` | code 0: 0 0x8000000000000001 0 0x8000000000000000 0 0x8000000000000000 |
-| expr-38.11 | `untriaged` | code 0: 0 |
-| expr-38.13 | `untriaged` | code 0: 0.0 |
-| expr-39.1 | `untriaged` | code 0: 5 |
-| expr-39.14 | `untriaged` | code 0: -2147483648 |
-| expr-39.17 | `untriaged` | code 0: 5.0 |
-| expr-39.19 | `untriaged` | code 0: 1e+17 |
-| expr-39.2 | `untriaged` | code 0: 3 |
-| expr-39.20 | `untriaged` | code 1: expected floating-point number but got "100000000000000000000000000000000000000" |
-| expr-39.21 | `untriaged` | code 0: 1.7976931348623157e+308 |
-| expr-39.22 | `untriaged` | code 1: expected floating-point number but got "179769313486231570000000000000000000000... |
-| expr-39.23 | `untriaged` | code 0: Inf |
-| expr-39.24 | `untriaged` | code 1: expected floating-point number but got "179769313486231650000000000000000000000... |
-| expr-39.25 | `untriaged` | code 0: 0 NaN |
-| expr-39.4 | `untriaged` | code 0: 3 |
-| expr-39.8 | `untriaged` | code 0: -2147483648 |
-| expr-45.8 | `untriaged` | code 0: 1 {can't use non-numeric floating-point value as operand of "entier"} |
-| expr-45.9 | `untriaged` | code 0: 1 {can't use non-numeric floating-point value as operand of "entier"} |
-| expr-47.2 | `untriaged` | code 0: 1 {can't use non-numeric string as operand of "isqrt"} |
-| expr-47.3 | `untriaged` | code 0: 1 {can't use non-numeric floating-point value as operand of "isqrt"} |
-| expr-50.1 | `untriaged` | code 0: 0 |
-| expr-52.1 | `untriaged` | code 1: invalid command name "::tcl::unsupported::representation" |
-| expr-8.17 | `untriaged` | code 0: 1 |
-| expr-8.22 | `untriaged` | code 0: 1 |
-| expr-8.23 | `untriaged` | code 0: 0 |
+| expr-22.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 NaN \| want: 1 {domain error: argument not in valid range} |
+| expr-29.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0x0000000000000001 0 0x0000000000000000 0 0x0000000000000000 \| want: 0 0... |
+| expr-29.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0x8000000000000001 0 0x8000000000000000 0 0x8000000000000000 \| want: 0 0... |
+| expr-38.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want:   0x0 |
+| expr-38.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0.0 \| want: 1e-324 |
+| expr-39.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 \| want: This is a result: 5 |
+| expr-39.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -2147483648 \| want: This is a result: -2147483648 |
+| expr-39.17 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5.0 \| want: This is a result: 5.0 |
+| expr-39.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1e+17 \| want: This is a result: 1e+17 |
+| expr-39.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 \| want: This is a result: 3 |
+| expr-39.20 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: expected floating-point number but got "10000000000000000000000000000000000... |
+| expr-39.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1.7976931348623157e+308 \| want: This is a result: 1.7976931348623157e+308 |
+| expr-39.22 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: expected floating-point number but got "17976931348623157000000000000000000... |
+| expr-39.23 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Inf \| want: This is a result: Inf |
+| expr-39.24 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: expected floating-point number but got "17976931348623165000000000000000000... |
+| expr-39.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 NaN \| want: 1 {domain error: argument not in valid range} |
+| expr-39.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 \| want: This is a result: 3 |
+| expr-39.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -2147483648 \| want: This is a result: -2147483648 |
+| expr-45.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't use non-numeric floating-point value as operand of "entier"} \| wa... |
+| expr-45.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't use non-numeric floating-point value as operand of "entier"} \| wa... |
+| expr-47.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't use non-numeric string as operand of "isqrt"} \| want: 1 {expected... |
+| expr-47.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't use non-numeric floating-point value as operand of "isqrt"} \| wan... |
+| expr-50.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| expr-52.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "::tcl::unsupported::representation" \| want: 0 0 1 1 |
+| expr-8.17 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| expr-8.22 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1 \| want: * |
+| expr-8.23 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 0 \| want: * |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1451,98 +1445,98 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| fCmd-10.10 | `untriaged` | code 1: error copying "tf1": illegal operation on a directory |
-| fCmd-10.11 | `untriaged` | code 1: error copying "tf1" to "": target file exists |
-| fCmd-10.12 | `untriaged` | code 1: error renaming "tf1" to "": target file exists |
-| fCmd-10.9 | `untriaged` | code 1: can't create directory "td1": file already exists |
-| fCmd-11.4 | `untriaged` | setup: can't read "::env(HOME)": no such variable |
-| fCmd-12.1 | `untriaged` | setup: can't read "::env(HOME)": no such variable |
-| fCmd-12.2 | `untriaged` | setup: can't read "::env(HOME)": no such variable |
-| fCmd-12.8 | `untriaged` | code 1: file attributes is not available |
-| fCmd-13.5 | `untriaged` | setup: can't read "::env(HOME)": no such variable |
-| fCmd-14.1 | `untriaged` | setup: can't read "::env(HOME)": no such variable |
-| fCmd-14.2 | `untriaged` | setup: can't read "::env(HOME)": no such variable |
-| fCmd-14.8 | `untriaged` | cleanup: file attributes is not available |
-| fCmd-15.1 | `untriaged` | setup: can't read "::env(HOME)": no such variable |
-| fCmd-15.4 | `untriaged` | cleanup: file attributes is not available |
-| fCmd-16.6 | `untriaged` | setup: can't read "::env(HOME)": no such variable |
-| fCmd-16.9 | `untriaged` | cleanup: file attributes is not available |
-| fCmd-17.1 | `untriaged` | cleanup: file attributes is not available |
-| fCmd-18.12 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-18.13 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-18.14 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-18.15 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-18.16 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-19.2 | `untriaged` | cleanup: file attributes is not available |
-| fCmd-20.1 | `untriaged` | cleanup: file attributes is not available |
-| fCmd-21.12 | `untriaged` | code 0: 0 1 1 |
-| fCmd-21.7.2 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-21.8.2 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-21.9 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-26.1 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-26.2 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-26.3 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-27.3 | `untriaged` | code 1: file attributes is not available |
-| fCmd-27.4 | `untriaged` | code 1: file attributes is not available |
-| fCmd-27.5 | `untriaged` | code 1: file attributes is not available |
-| fCmd-27.6 | `untriaged` | code 1: file attributes is not available |
-| fCmd-28.1 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.10 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.10.1 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.11 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.12 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.13 | `untriaged` | setup: could not link: links are not available in the root folder |
-| fCmd-28.15.2 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.16 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.17 | `untriaged` | setup: could not link: links are not available in the root folder |
-| fCmd-28.18 | `untriaged` | setup: could not link: links are not available in the root folder |
-| fCmd-28.2 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.20 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.21 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.22 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.3 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.4 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.5 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.7 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-28.9 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| fCmd-3.14 | `untriaged` | code 1: error renaming "~_totally_bogus_user": no such file or directory |
-| fCmd-3.15 | `untriaged` | code 1: error renaming "/": permission denied |
-| fCmd-3.16 | `untriaged` | code 1: error renaming "tf3" to "td1": target file exists |
-| fCmd-3.3 | `untriaged` | code 1: error renaming "xyz": no such file or directory |
-| fCmd-4.14 | `untriaged` | code 1: file attributes is not available |
-| fCmd-4.4 | `untriaged` | code 0:  |
-| fCmd-4.5 | `untriaged` | code 0:  |
-| fCmd-5.12 | `untriaged` | code 1: file attributes is not available |
-| fCmd-5.6 | `untriaged` | code 0:  |
-| fCmd-5.7 | `untriaged` | code 1: couldn't open "~/tf1": no such file or directory |
-| fCmd-6.10 | `untriaged` | code 1: error renaming "tf1" to "tf2": target file exists |
-| fCmd-6.11 | `untriaged` | code 1: error renaming "tf1" to "tf2": target file exists |
-| fCmd-6.13 | `untriaged` | code 1: error renaming "td1" to "td2": not a directory |
-| fCmd-6.14 | `untriaged` | code 1: error renaming "tf1" to "td1": illegal operation on a directory |
-| fCmd-6.16 | `untriaged` | code 1: error renaming "td2" to "td1": file already exists |
-| fCmd-6.17 | `untriaged` | code 1: error renaming "/": permission denied |
-| fCmd-6.18 | `untriaged` | code 1: error renaming "td2" to "td1": file already exists |
-| fCmd-6.24 | `untriaged` | cleanup: file attributes is not available |
-| fCmd-6.25 | `untriaged` | cleanup: file attributes is not available |
-| fCmd-6.30 | `untriaged` | code 1: file attributes is not available |
-| fCmd-7.5 | `untriaged` | code 1: no files matched glob pattern "--" |
-| fCmd-8.2 | `untriaged` | code 0: 1 |
-| fCmd-8.3 | `untriaged` | code 0:  |
-| fCmd-9.1 | `untriaged` | code 1: file attributes is not available |
-| fCmd-9.13 | `untriaged` | code 1: error renaming "td1" to "td2": file already exists |
-| fCmd-9.14 | `untriaged` | code 0: td1 {1 {error renaming "td1" to "td1": invalid argument}} |
-| fCmd-9.14.3 | `untriaged` | code 1: error renaming "../td1" to "../td1/foo": invalid argument |
-| fCmd-9.15 | `untriaged` | code 1: error renaming "td1" to "tf1": not a directory |
-| fCmd-9.16 | `untriaged` | code 1: error renaming "tf1" to "td1": illegal operation on a directory |
+| fCmd-10.10 | `message`: an error where tclsh also gives one, with another message | code 1/1: error copying "tf1": illegal operation on a directory \| want: can't overwrit... |
+| fCmd-10.11 | `message`: an error where tclsh also gives one, with another message | code 1/1: error copying "tf1" to "": target file exists \| want: error copying "tf1" to... |
+| fCmd-10.12 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "tf1" to "": target file exists \| want: error renaming "tf1" ... |
+| fCmd-10.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't create directory "td1": file already exists \| want: can't overwrite fi... |
+| fCmd-11.4 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "::env(HOME)": no such variable |
+| fCmd-12.1 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "::env(HOME)": no such variable |
+| fCmd-12.2 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "::env(HOME)": no such variable |
+| fCmd-12.8 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: 1 |
+| fCmd-13.5 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "::env(HOME)": no such variable |
+| fCmd-14.1 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "::env(HOME)": no such variable |
+| fCmd-14.2 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "::env(HOME)": no such variable |
+| fCmd-14.8 | `feature`: 'file attributes' | cleanup: file attributes is not available |
+| fCmd-15.1 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "::env(HOME)": no such variable |
+| fCmd-15.4 | `feature`: 'file attributes' | cleanup: file attributes is not available |
+| fCmd-16.6 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "::env(HOME)": no such variable |
+| fCmd-16.9 | `feature`: 'file attributes' | cleanup: file attributes is not available |
+| fCmd-17.1 | `feature`: 'file attributes' | cleanup: file attributes is not available |
+| fCmd-18.12 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: link |
+| fCmd-18.13 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: link |
+| fCmd-18.14 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: 1 0 |
+| fCmd-18.15 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: 1 |
+| fCmd-18.16 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: link |
+| fCmd-19.2 | `feature`: 'file attributes' | cleanup: file attributes is not available |
+| fCmd-20.1 | `feature`: 'file attributes' | cleanup: file attributes is not available |
+| fCmd-21.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 1 1 \| want: 1 1 1 |
+| fCmd-21.7.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: link |
+| fCmd-21.8.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: link li... |
+| fCmd-21.9 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: link |
+| fCmd-26.1 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: 1 0 |
+| fCmd-26.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: 1 0 |
+| fCmd-26.3 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: 0 0 |
+| fCmd-27.3 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: ?* |
+| fCmd-27.4 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: * |
+| fCmd-27.5 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want:  |
+| fCmd-27.6 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want:  |
+| fCmd-28.1 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: wrong # a... |
+| fCmd-28.10 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
+| fCmd-28.10.1 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
+| fCmd-28.11 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: abc.dir |
+| fCmd-28.12 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: ok |
+| fCmd-28.13 | `design`: 'file link' is outside the root folder model of the file ... | setup: could not link: links are not available in the root folder |
+| fCmd-28.15.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: link ab... |
+| fCmd-28.16 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: abc.fil... |
+| fCmd-28.17 | `design`: 'file link' is outside the root folder model of the file ... | setup: could not link: links are not available in the root folder |
+| fCmd-28.18 | `design`: 'file link' is outside the root folder model of the file ... | setup: could not link: links are not available in the root folder |
+| fCmd-28.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: wrong # a... |
+| fCmd-28.20 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
+| fCmd-28.21 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: d2 |
+| fCmd-28.22 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: d2/d3 |
+| fCmd-28.3 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: bad optio... |
+| fCmd-28.4 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: bad optio... |
+| fCmd-28.5 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
+| fCmd-28.7 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
+| fCmd-28.9 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: abc.file |
+| fCmd-3.14 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "~_totally_bogus_user": no such file or directory \| want: use... |
+| fCmd-3.15 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "/": permission denied \| want: error renaming "/" to "td1": f... |
+| fCmd-3.16 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "tf3" to "td1": target file exists \| want: error renaming "tf... |
+| fCmd-3.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "xyz": no such file or directory \| want: user "_totally_bogus... |
+| fCmd-4.14 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: can't create directory "foo/tf1": p... |
+| fCmd-4.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: user "_totally_bogus_user" doesn't exist |
+| fCmd-4.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't create directory "": no such file or directory |
+| fCmd-5.12 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: 0 0 {} |
+| fCmd-5.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: user "_totally_bogus_user" doesn't exist |
+| fCmd-5.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't open "~/tf1": no such file or directory \| want:  |
+| fCmd-6.10 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "tf1" to "tf2": target file exists \| want: error renaming "tf... |
+| fCmd-6.11 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "tf1" to "tf2": target file exists \| want: error renaming "tf... |
+| fCmd-6.13 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "td1" to "td2": not a directory \| want: can't overwrite file ... |
+| fCmd-6.14 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "tf1" to "td1": illegal operation on a directory \| want: can'... |
+| fCmd-6.16 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "td2" to "td1": file already exists \| want: error renaming "t... |
+| fCmd-6.17 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "/": permission denied \| want: error renaming "/" to "tf1": t... |
+| fCmd-6.18 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "td2" to "td1": file already exists \| want: error renaming "t... |
+| fCmd-6.24 | `feature`: 'file attributes' | cleanup: file attributes is not available |
+| fCmd-6.25 | `feature`: 'file attributes' | cleanup: file attributes is not available |
+| fCmd-6.30 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: *: permission denied |
+| fCmd-7.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "--" \| want: no files matched glob patterns "-... |
+| fCmd-8.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| fCmd-8.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: error copying "~" to "this/file/doesnt/exist": no such file or dire... |
+| fCmd-9.1 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: error renaming "td1" to "td2/td1": ... |
+| fCmd-9.13 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "td1" to "td2": file already exists \| want: error renaming "t... |
+| fCmd-9.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: td1 {1 {error renaming "td1" to "td1": invalid argument}} \| want: td1 {1 {... |
+| fCmd-9.14.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "../td1" to "../td1/foo": invalid argument \| want: error rena... |
+| fCmd-9.15 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "td1" to "tf1": not a directory \| want: can't overwrite file ... |
+| fCmd-9.16 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "tf1" to "td1": illegal operation on a directory \| want: can'... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | (file stopped early, status 0) | 1 | `untriaged` |
 | testchmod | 19 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | win | 11 | `platform`: a constraint of another platform or word size |
-| xdev | 6 | `untriaged` |
-| dontCopyLinks | 3 | `untriaged` |
-| notNetworkFilesystem | 3 | `untriaged` |
+| xdev | 6 | `platform`: a property of the host: a second device, a writable home, IPv6 on localhost, ... |
+| dontCopyLinks | 3 | `design`: 'file link' is outside the root folder model of the file capability |
+| notNetworkFilesystem | 3 | `tcl`: the test file sets the constraint false, or it is false in tclsh 8.6 on Linux |
 | emptyTest | 2 | `tcl`: tclsh skips it too |
 | knownBug | 1 | `tcl`: tclsh skips it too |
 | nonPortable | 1 | `tcl`: tclsh skips it too |
@@ -1553,75 +1547,75 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| fileName-20.10 | `untriaged` | code 0:  |
-| fileName-20.6 | `untriaged` | setup: couldn't open "~/test": no such file or directory |
-| fileName-20.8 | `untriaged` | code 0: ~test |
-| fileName-20.9 | `untriaged` | setup: couldn't open "~/test": no such file or directory |
-| filename-11.1 | `untriaged` | code 1: wrong # args: should be "glob ?switches? name ?name ...?" |
-| filename-11.14 | `untriaged` | code 1: no files matched glob pattern "~/globTest" |
-| filename-11.15 | `untriaged` | code 1: no files matched glob pattern "~\/globTest" |
-| filename-11.17.2 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| filename-11.17.3 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| filename-11.17.4 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| filename-11.17.7 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| filename-11.17.8 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| filename-11.18 | `untriaged` | code 0: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c... |
-| filename-11.19 | `untriaged` | code 0: globTest globTest |
-| filename-11.20 | `untriaged` | code 1: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -typ... |
-| filename-11.21 | `untriaged` | code 1: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -typ... |
-| filename-11.21.1 | `untriaged` | code 1: no files matched glob pattern "*" |
-| filename-11.22 | `untriaged` | code 1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -type... |
-| filename-11.23 | `untriaged` | code 1: unmatched open-brace in file name |
-| filename-11.24 | `untriaged` | code 1: unmatched open-brace in file name |
-| filename-11.25 | `untriaged` | code 1: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -typ... |
-| filename-11.25.1 | `untriaged` | code 1: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -typ... |
-| filename-11.25.2 | `untriaged` | code 1: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -typ... |
-| filename-11.26 | `untriaged` | code 1: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -typ... |
-| filename-11.27 | `untriaged` | code 1: no files matched glob pattern "*" |
-| filename-11.28 | `untriaged` | code 1: no files matched glob pattern "*" |
-| filename-11.29 | `untriaged` | code 1: no files matched glob pattern "*" |
-| filename-11.3 | `untriaged` | code 1: bad option "-nocomplai": must be -directory, -join, -nocomplain, -path, -tails,... |
-| filename-11.30 | `untriaged` | code 1: no files matched glob pattern "*" |
-| filename-11.32 | `untriaged` | code 1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -type... |
-| filename-11.34 | `untriaged` | code 1: bad option "-direct": must be -directory, -join, -nocomplain, -path, -tails, -t... |
-| filename-11.36 | `untriaged` | code 0: glob\[\{Test ~test.txt |
-| filename-11.37 | `untriaged` | code 1: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -typ... |
-| filename-11.38 | `untriaged` | code 1: unmatched open-brace in file name |
-| filename-11.39 | `untriaged` | code 1: unmatched open-brace in file name |
-| filename-11.4 | `untriaged` | code 1: wrong # args: should be "glob ?switches? name ?name ...?" |
-| filename-11.40 | `untriaged` | code 1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -type... |
-| filename-11.41 | `untriaged` | code 1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -type... |
-| filename-11.42 | `untriaged` | code 1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -type... |
-| filename-11.43 | `untriaged` | code 1: bad option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types,... |
-| filename-11.44 | `untriaged` | code 1: no files matched glob pattern "*" |
-| filename-11.45 | `untriaged` | code 0: {} {all.tcl httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkg... |
-| filename-11.46 | `untriaged` | code 1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -type... |
-| filename-11.47 | `untriaged` | code 1: no files matched glob pattern "*" |
-| filename-11.48 | `untriaged` | code 1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -type... |
-| filename-11.49 | `untriaged` | code 1: no files matched glob pattern "*" |
-| filename-11.5 | `untriaged` | code 0: all.tcl httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgInde... |
-| filename-11.50 | `untriaged` | code 1: no files matched glob pattern "*" |
-| filename-11.51 | `untriaged` | code 1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -type... |
-| filename-11.6 | `untriaged` | code 1: no files matched glob pattern "~xyqrszzz" |
-| filename-12.1 | `untriaged` | code 0: {} |
-| filename-12.1.2 | `untriaged` | code 0: {} |
-| filename-12.1.3 | `untriaged` | code 1: no files matched glob pattern "" |
-| filename-12.5 | `untriaged` | code 1: no files matched glob pattern "globTest\/x1.c" |
-| filename-12.6 | `untriaged` | code 1: no files matched glob pattern "globTest\/\x1.c" |
-| filename-12.8 | `untriaged` | code 1: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -typ... |
-| filename-13.1 | `untriaged` | code 0: globTest |
-| filename-13.11 | `untriaged` | code 0: globTest/x1.c globTest/x1.c globTest/z1.c globTest/z1.c |
-| filename-13.3 | `untriaged` | code 1: no files matched glob pattern "globTest/{\}" |
-| filename-13.5 | `untriaged` | code 1: no files matched glob pattern "globTest/}" |
-| filename-14.15 | `untriaged` | code 0: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c... |
-| filename-14.17 | `untriaged` | code 1: no files matched glob pattern "~/z*" |
-| filename-14.22 | `untriaged` | code 1: no files matched glob pattern "goo/*" |
-| filename-14.25 | `untriaged` | code 1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -type... |
-| filename-14.26 | `untriaged` | code 1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -type... |
-| filename-14.30 | `untriaged` | code 0: globTest/a1 |
-| filename-14.7 | `untriaged` | code 0: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c... |
-| filename-14.9 | `untriaged` | code 0: globTest/.1 |
-| filename-15.4.1 | `untriaged` | code 0: 0 {} 0 {} |
+| fileName-20.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ~/sub/fileName-20.10 |
+| fileName-20.6 | `bug`: the result differs from tclsh 8.6.16 | setup: couldn't open "~/test": no such file or directory |
+| fileName-20.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ~test \| want: ./~test |
+| fileName-20.9 | `bug`: the result differs from tclsh 8.6.16 | setup: couldn't open "~/test": no such file or directory |
+| filename-11.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "glob ?switches? name ?name ...?" \| want: no files m... |
+| filename-11.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3583633/globTest |
+| filename-11.15 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3583633/globTest |
+| filename-11.17.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
+| filename-11.17.3 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
+| filename-11.17.4 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
+| filename-11.17.7 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
+| filename-11.17.8 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
+| filename-11.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
+| filename-11.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: globTest globTest \| want: globTest/a1 globTest/a2 globTest/a3 {globTest/we... |
+| filename-11.20 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-11.21 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-11.21.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "*" \| want: {[tcl].testremains} |
+| filename-11.22 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
+| filename-11.23 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test/a1 glob\[\{Test/a2 ... |
+| filename-11.24 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test/a1 glob\[\{Test/a2 ... |
+| filename-11.25 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-11.25.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-11.25.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-11.26 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-11.27 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde |
+| filename-11.28 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": z |
+| filename-11.29 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: only one MacOS type or creator arg... |
+| filename-11.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-nocomplai": must be -directory, -join, -nocomplain, -path, -ta... |
+| filename-11.30 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: only one MacOS type or creator arg... |
+| filename-11.32 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -ty... |
+| filename-11.34 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-direct": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-11.36 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: glob\[\{Test ~test.txt \| want: "-tails" must be used with either "-directory... |
+| filename-11.37 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-11.38 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test |
+| filename-11.39 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test |
+| filename-11.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args: should be "glob ?switches? name ?name ...?" \| want:  |
+| filename-11.40 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
+| filename-11.41 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
+| filename-11.42 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
+| filename-11.43 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-t": must be -directory, -join, -nocomplain, -path, -tails, -type... |
+| filename-11.44 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: "-directory" cannot be used with "... |
+| filename-11.45 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {all.tcl httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl... |
+| filename-11.46 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -ty... |
+| filename-11.47 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde |
+| filename-11.48 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -ty... |
+| filename-11.49 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde |
+| filename-11.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: all.tcl httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIn... |
+| filename-11.50 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: "-path" may only be used once |
+| filename-11.51 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -ty... |
+| filename-11.6 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "~xyqrszzz" \| want: user "xyqrszzz" doesn't exist |
+| filename-12.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} \| want: . |
+| filename-12.1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} \| want: . |
+| filename-12.1.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "" \| want: . |
+| filename-12.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "globTest\/x1.c" \| want: globTest/x1.c |
+| filename-12.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "globTest\/\x1.c" \| want: globTest/x1.c |
+| filename-12.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-13.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: globTest \| want: globTest/ |
+| filename-13.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: globTest/x1.c globTest/x1.c globTest/z1.c globTest/z1.c \| want: globTest/x... |
+| filename-13.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/{\}" \| want: unmatched open-brace in... |
+| filename-13.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/}" \| want: unmatched close-brace in ... |
+| filename-14.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
+| filename-14.17 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3583633/globTest/z1.c |
+| filename-14.22 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "goo/*" \| want: no files matched glob patterns... |
+| filename-14.25 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
+| filename-14.26 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
+| filename-14.30 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: globTest/a1 \| want: globTest/a1/ |
+| filename-14.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
+| filename-14.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: globTest/.1 \| want: globTest/. globTest/.. globTest/.1 |
+| filename-15.4.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} 0 {} \| want: 1 {user "wontexist" doesn't exist} 1 {user "blahxyz" doe... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1635,52 +1629,52 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| filesystem-1.12 | `untriaged` | code 1: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -typ... |
-| filesystem-1.30 | `untriaged` | code 0: /~noonewiththisname |
-| filesystem-1.30.2 | `untriaged` | code 0: /~nonexistentuser@nonexistentdomain |
-| filesystem-1.30.3 | `untriaged` | setup: can't read "::env(HOME)": no such variable |
-| filesystem-1.34 | `untriaged` | code 0: /foo/bar/anc/.tml |
-| filesystem-1.35a | `untriaged` | code 0: /ffo/bar/anc/foo/.tml |
-| filesystem-1.36a | `untriaged` | code 0: /foo/bar/anc/asdasd/.tml |
-| filesystem-1.45 | `untriaged` | code 1: couldn't access "/xxx/../../bar": permission denied |
-| filesystem-1.47 | `untriaged` | code 1: couldn't access "/..": permission denied |
-| filesystem-1.48 | `untriaged` | code 1: couldn't access "/../": permission denied |
-| filesystem-1.51 | `untriaged` | code 1: couldn't access "/../..": permission denied |
-| filesystem-1.51.1 | `untriaged` | code 1: couldn't access "/../../": permission denied |
-| filesystem-1.53 | `untriaged` | code 1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -type... |
-| filesystem-6.1 | `untriaged` | code 0: file6 |
-| filesystem-6.11 | `untriaged` | code 0: 1 |
-| filesystem-6.14 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| filesystem-6.15 | `untriaged` | code 0:  |
-| filesystem-6.16 | `untriaged` | code 0: 1795742250 |
-| filesystem-6.17 | `untriaged` | code 1: file mtime with a new time is not available |
-| filesystem-6.18 | `untriaged` | code 0:  |
-| filesystem-6.2 | `untriaged` | code 0:  |
-| filesystem-6.20 | `untriaged` | code 0: / |
-| filesystem-6.21 | `untriaged` | code 0: 1 |
-| filesystem-6.23 | `untriaged` | code 0: 1 |
-| filesystem-6.24 | `untriaged` | code 1: could not readlink: links are not available in the root folder |
-| filesystem-6.25 | `untriaged` | code 1: error renaming "" to "": target file exists |
-| filesystem-6.27 | `untriaged` | code 0: / |
-| filesystem-6.28 | `untriaged` | code 0: 260 |
-| filesystem-6.3 | `untriaged` | code 0: 1795742250 |
-| filesystem-6.30 | `untriaged` | code 0: native root |
-| filesystem-6.32 | `untriaged` | code 0: directory |
-| filesystem-6.33 | `untriaged` | code 0: 1 |
-| filesystem-6.34 | `untriaged` | code 0: 1 {couldn't open "foo": permission denied} |
-| filesystem-6.4 | `untriaged` | code 1: file attributes is not available |
-| filesystem-6.5 | `untriaged` | code 1: error copying "" to "": target file exists |
-| filesystem-6.6 | `untriaged` | code 1: error deleting "": permission denied |
-| filesystem-6.8 | `untriaged` | code 0: 1 |
-| filesystem-6.9 | `untriaged` | code 0: 1 |
-| filesystem-9.7 | `untriaged` | code 0: 1 0 ~testNotExist ~testNotExist 1 0 ~testNotExist 0 ~testNotExist |
-| filesystem-9.8 | `untriaged` | code 0: ~testNotExist ~testNotExist 0 ~testNotExist 0 ~testNotExist |
-| filesystem-9.9 | `untriaged` | code 0: 0 1 0 1 1 |
+| filesystem-1.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filesystem-1.30 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: /~noonewiththisname \| want: user "noonewiththisname" doesn't exist |
+| filesystem-1.30.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: /~nonexistentuser@nonexistentdomain \| want: user "nonexistentuser@nonexisten... |
+| filesystem-1.30.3 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "::env(HOME)": no such variable |
+| filesystem-1.34 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: /foo/bar/anc/.tml \| want: ^(?:(?!/\./).)*$ |
+| filesystem-1.35a | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: /ffo/bar/anc/foo/.tml \| want: ^(?:(?!/\./).)*$ |
+| filesystem-1.36a | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: /foo/bar/anc/asdasd/.tml \| want: ^(?:(?!/\./).)*$ |
+| filesystem-1.45 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't access "/xxx/../../bar": permission denied \| want: ok |
+| filesystem-1.47 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't access "/..": permission denied \| want: ok |
+| filesystem-1.48 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't access "/../": permission denied \| want: ok |
+| filesystem-1.51 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't access "/../..": permission denied \| want: ok |
+| filesystem-1.51.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't access "/../../": permission denied \| want: ok |
+| filesystem-1.53 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
+| filesystem-6.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: file6 \| want: couldn't open "": no such file or directory |
+| filesystem-6.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| filesystem-6.14 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
+| filesystem-6.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: could not read "": no such file or directory |
+| filesystem-6.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1795742600 \| want: could not read "": no such file or directory |
+| filesystem-6.17 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/1: file mtime with a new time is not available \| want: could not read "": no su... |
+| filesystem-6.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't create directory "": no such file or directory |
+| filesystem-6.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: could not read "": no such file or directory |
+| filesystem-6.20 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: / \| want:  |
+| filesystem-6.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| filesystem-6.23 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| filesystem-6.24 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not readlink: links are not available in the root folder \| want: could... |
+| filesystem-6.25 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "" to "": target file exists \| want: error renaming "": no su... |
+| filesystem-6.27 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: / \| want: unrecognised path |
+| filesystem-6.28 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 260 \| want: could not read "": no such file or directory |
+| filesystem-6.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1795742600 \| want: could not read "": no such file or directory |
+| filesystem-6.30 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: native root \| want: unrecognised path |
+| filesystem-6.32 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: directory \| want: could not read "": no such file or directory |
+| filesystem-6.33 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| filesystem-6.34 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {couldn't open "foo": permission denied} \| want: 1 {couldn't open "foo":... |
+| filesystem-6.4 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: could not read "": no such file or ... |
+| filesystem-6.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: error copying "" to "": target file exists \| want: error copying "": no such... |
+| filesystem-6.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error deleting "": permission denied \| want:  |
+| filesystem-6.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| filesystem-6.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| filesystem-9.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 0 ~testNotExist ~testNotExist 1 0 ~testNotExist 0 ~testNotExist \| want: ... |
+| filesystem-9.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ~testNotExist ~testNotExist 0 ~testNotExist 0 ~testNotExist \| want: ~testN... |
+| filesystem-9.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 1 0 1 1 \| want: 0 0 0 0 1 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | win | 21 | `platform`: a constraint of another platform or word size |
-| hasLinks | 16 | `untriaged` |
+| hasLinks | 16 | `design`: 'file link' is outside the root folder model of the file capability |
 | testsimplefilesystem | 10 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | testfilesystem | 9 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | testsetplatform | 3 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
@@ -1689,15 +1683,15 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| filesystemEncoding-1.0 | `untriaged` | code 2: 1 1 |
+| filesystemEncoding-1.0 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2: 1 1 \| want: 0 1 |
 
 ### for.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| for-6.13 | `untriaged` | code 0: wrong # args: should be "set varName ?newValue?"     while executing "set"     ... |
-| for-6.6 | `untriaged` | code 0: 1 {wrong # args: should be "set varName ?newValue?"} {wrong # args: should be "... |
-| for-6.9 | `untriaged` | code 0: wrong # args: should be "set varName ?newValue?"     while executing "set"     ... |
+| for-6.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "set varName ?newValue?"     while executing "set" ... |
+| for-6.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {wrong # args: should be "set varName ?newValue?"} {wrong # args: should ... |
+| for-6.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "set varName ?newValue?"     while executing "set" ... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1707,15 +1701,15 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| foreach-1.14 | `untriaged` | code 0: 1 {can't set "a": variable is array} {can't set "a": variable is array     whil... |
-| foreach-9.2 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
+| foreach-1.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "a": variable is array} {can't set "a": variable is array     ... |
+| foreach-9.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
 
 ### format.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| format-19.4.2 | `untriaged` | code 0:                                                                                ... |
-| format-20.1 | `untriaged` | code 1: invalid command name "tcl::unsupported::representation" |
+| format-19.4.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:                                                                              ... |
+| format-20.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "tcl::unsupported::representation" \| want: value is a... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1726,7 +1720,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| get-3.2 | `untriaged` | code 0: 0 1 0 1 0 1 0 -1 1 {expected floating-point number but got "-+1.0"} 0 -1 1 {exp... |
+| get-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 1 0 1 0 1 0 -1 1 {expected floating-point number but got "-+1.0"} 0 -1 1 ... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1743,68 +1737,68 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| http-1.1 | `untriaged` | code 1: invalid command name "http::config" |
-| http-1.2 | `untriaged` | code 1: invalid command name "http::config" |
-| http-1.4 | `untriaged` | code 1: invalid command name "http::config" |
-| http-1.5 | `untriaged` | code 1: invalid command name "http::config" |
-| http-1.6 | `untriaged` | setup: invalid command name "http::config" |
-| http-2.1 | `untriaged` | code 0: 1 |
-| http-3.1 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.10 | `untriaged` | cleanup: can't read "t": no such variable |
-| http-3.11 | `untriaged` | cleanup: can't read "t": no such variable |
-| http-3.14 | `untriaged` | cleanup: can't read "token": no such variable |
-| http-3.15 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.16 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.17 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.18 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.19 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.2 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.20 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.21 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.22 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.23 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.24 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.25 | `untriaged` | cleanup: can't read "token": no such variable |
-| http-3.26 | `untriaged` | cleanup: can't read "token": no such variable |
-| http-3.27 | `untriaged` | cleanup: can't read "token": no such variable |
-| http-3.28 | `untriaged` | cleanup: can't read "token": no such variable |
-| http-3.29 | `untriaged` | code 0: 1 |
-| http-3.3 | `untriaged` | cleanup: can't read "token": no such variable |
-| http-3.30 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.31 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.32 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-3.33 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-3.4 | `untriaged` | cleanup: can't read "token": no such variable |
-| http-3.5 | `untriaged` | cleanup: invalid command name "http::config" |
-| http-3.6 | `untriaged` | cleanup: invalid command name "http::config" |
-| http-3.7 | `untriaged` | cleanup: can't read "token": no such variable |
-| http-3.8 | `untriaged` | cleanup: can't read "token": no such variable |
-| http-3.9 | `untriaged` | cleanup: can't read "token": no such variable |
-| http-4.1 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-4.10 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-4.11 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-4.12 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-4.13 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-4.14 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-4.15 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-4.16 | `untriaged` | code 1: invalid command name "http::geturl" |
-| http-4.2 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-4.3 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-4.4 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-4.5 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-4.6 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-4.7 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-4.8 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-4.9 | `untriaged` | cleanup: invalid command name "http::cleanup" |
-| http-5.1 | `untriaged` | code 1: invalid command name "http::formatQuery" |
-| http-5.3 | `untriaged` | code 1: invalid command name "http::formatQuery" |
-| http-5.4 | `untriaged` | code 1: invalid command name "http::formatQuery" |
-| http-5.5 | `untriaged` | code 1: invalid command name "http::config" |
-| http-6.1 | `untriaged` | cleanup: invalid command name "http::config" |
-| http-7.1 | `untriaged` | code 1: invalid command name "http::mapReply" |
-| http-7.2 | `untriaged` | code 1: invalid command name "http::mapReply" |
-| http-7.3 | `untriaged` | setup: invalid command name "http::config" |
-| http-7.4 | `untriaged` | setup: invalid command name "http::config" |
+| http-1.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::config" \| want: -accept */* -pipeline 1 -postf... |
+| http-1.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::config" \| want: http::ProxyRequired |
+| http-1.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::config" \| want: -accept */* -pipeline 1 -postf... |
+| http-1.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::config" \| want: Unknown option -junk, must be: -... |
+| http-1.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "http::config" |
+| http-2.1 | `feature`: the 'http' package | code 0/0,2: 1 \| want: 0 |
+| http-3.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: Unknown option flag, can be: -bi... |
+| http-3.10 | `feature`: the 'http' package | cleanup: can't read "t": no such variable |
+| http-3.11 | `feature`: the 'http' package | cleanup: can't read "t": no such variable |
+| http-3.14 | `feature`: the 'http' package | cleanup: can't read "token": no such variable |
+| http-3.15 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: Unsupported URL: {invalid}:url |
+| http-3.16 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: Unsupported URL: http:relative/url |
+| http-3.17 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: Missing host part: /absolute/url |
+| http-3.18 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: Invalid port number: 123456789 |
+| http-3.19 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: Illegal characters in URL user |
+| http-3.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: Unsupported URL: http:junk |
+| http-3.20 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: Illegal encoding character usage... |
+| http-3.21 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: Illegal characters in URL path |
+| http-3.22 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: Illegal encoding character usage... |
+| http-3.23 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: Illegal characters in URL path |
+| http-3.24 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: Illegal encoding character usage... |
+| http-3.25 | `feature`: the 'http' package | cleanup: can't read "token": no such variable |
+| http-3.26 | `feature`: the 'http' package | cleanup: can't read "token": no such variable |
+| http-3.27 | `feature`: the 'http' package | cleanup: can't read "token": no such variable |
+| http-3.28 | `feature`: the 'http' package | cleanup: can't read "token": no such variable |
+| http-3.29 | `feature`: the 'http' package | code 0/0,2: 1 \| want: 0 |
+| http-3.3 | `feature`: the 'http' package | cleanup: can't read "token": no such variable |
+| http-3.30 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::geturl" \| want: 200 |
+| http-3.31 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::geturl" \| want: 200 |
+| http-3.32 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-3.33 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::geturl" \| want: test 4660 /test |
+| http-3.4 | `feature`: the 'http' package | cleanup: can't read "token": no such variable |
+| http-3.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::config" |
+| http-3.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::config" |
+| http-3.7 | `feature`: the 'http' package | cleanup: can't read "token": no such variable |
+| http-3.8 | `feature`: the 'http' package | cleanup: can't read "token": no such variable |
+| http-3.9 | `feature`: the 'http' package | cleanup: can't read "token": no such variable |
+| http-4.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-4.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-4.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-4.12 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-4.13 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-4.14 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::geturl" \| want: connect failed connection refused |
+| http-4.15 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "http::geturl" \| want: couldn't open socket* |
+| http-4.16 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::geturl" \| want:  |
+| http-4.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-4.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-4.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-4.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-4.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-4.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-4.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-4.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::cleanup" |
+| http-5.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::formatQuery" \| want: name1=value1&name2=value%... |
+| http-5.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::formatQuery" \| want: lines=line1%0D%0Aline2%0D... |
+| http-5.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::formatQuery" \| want: name1=~bwelch&name2=%C2%A... |
+| http-5.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::config" \| want: name1=~bwelch&name2=%A1%A2%A2 |
+| http-6.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "http::config" |
+| http-7.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::mapReply" \| want: abc%24%5B%5D%22%5C%28%29%7D%7B |
+| http-7.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http::mapReply" \| want: %E2%88%88 |
+| http-7.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "http::config" |
+| http-7.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "http::config" |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1817,48 +1811,48 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| http11-1.0 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.1 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.10 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.11 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.12 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.13 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.2 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.3 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.4 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.5 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.6 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.7 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.8 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-1.9 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.0 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.1 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.10 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.11 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.12 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.2 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.3 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.4 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.4.1 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.5 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.6 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.7 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.8 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-2.9 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-3.0 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-3.1 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-3.2 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-3.3 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-3.4 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-3.5 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-3.6 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-3.7 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-3.8 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-3.9 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-4.0 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-4.1 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-4.2 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
-| http11-4.3 | `untriaged` | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.0 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.1 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.10 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.11 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.12 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.13 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.2 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.3 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.4 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.5 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.6 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.7 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.8 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-1.9 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.0 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.1 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.10 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.11 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.12 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.2 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.3 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.4 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.4.1 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.5 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.6 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.7 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.8 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-2.9 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-3.0 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-3.1 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-3.2 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-3.3 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-3.4 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-3.5 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-3.6 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-3.7 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-3.8 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-3.9 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-4.0 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-4.1 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-4.2 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
+| http11-4.3 | `feature`: the 'http' package | setup: can't wait for variable "httpd_output": would wait forever |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1868,60 +1862,60 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| (file stopped early, status 0) | 1996 | `untriaged` |
+| (file stopped early, status 0) | 1996 | `feature`: the 'http' package |
 
 ### httpold.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| httpold-1.1 | `untriaged` | code 1: invalid command name "http_config" |
-| httpold-1.2 | `untriaged` | code 1: invalid command name "http_config" |
-| httpold-1.4 | `untriaged` | code 1: invalid command name "http_config" |
-| httpold-2.1 | `untriaged` | code 0: 1 |
-| httpold-3.2 | `untriaged` | code 0: invalid command name "http_get" |
-| httpold-3.3 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-3.4 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-3.5 | `untriaged` | code 1: invalid command name "http_config" |
-| httpold-3.6 | `untriaged` | code 1: invalid command name "http_config" |
-| httpold-3.7 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-3.8 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-3.9 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-4.1 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-4.10 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-4.11 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-4.12 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-4.2 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-4.3 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-4.4 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-4.5 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-4.6 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-4.7 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-4.8 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-4.9 | `untriaged` | code 1: invalid command name "http_get" |
-| httpold-5.1 | `untriaged` | code 1: invalid command name "http_formatQuery" |
-| httpold-5.2 | `untriaged` | code 1: invalid command name "http_formatQuery" |
-| httpold-5.3 | `untriaged` | code 1: invalid command name "http_formatQuery" |
-| httpold-6.1 | `untriaged` | code 1: invalid command name "http_config" |
+| httpold-1.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_config" \| want: -accept */* -proxyfilter httpPr... |
+| httpold-1.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_config" \| want: httpProxyRequired |
+| httpold-1.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_config" \| want: -accept */* -proxyfilter myFilt... |
+| httpold-2.1 | `feature`: the 'http' package | code 0/0,2: 1 \| want: 0 |
+| httpold-3.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: invalid command name "http_get" \| want: Unsupported URL: http:junk |
+| httpold-3.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: <html><head><title>HTTP/1.0 TEST</... |
+| httpold-3.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: <html><head><title>HTTP/1.0 TEST</... |
+| httpold-3.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_config" \| want: <html><head><title>HTTP/1.0 TES... |
+| httpold-3.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_config" \| want: <html><head><title>HTTP/1.0 TES... |
+| httpold-3.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: <html><head><title>HTTP/1.0 TEST</... |
+| httpold-3.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: <html><head><title>HTTP/1.0 TEST</... |
+| httpold-3.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: HTTP/1.0 200 OK |
+| httpold-4.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: 1 |
+| httpold-4.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: 111 |
+| httpold-4.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: reset |
+| httpold-4.12 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: timeout |
+| httpold-4.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: 0 |
+| httpold-4.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: HTTP/1.0 200 Data follows |
+| httpold-4.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: <html><head><title>HTTP/1.0 TEST</... |
+| httpold-4.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: 1 |
+| httpold-4.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: This is binary data  more more mor... |
+| httpold-4.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: 111 111 |
+| httpold-4.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: ok |
+| httpold-4.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_get" \| want: HTTP/1.0 200 Data follows |
+| httpold-5.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_formatQuery" \| want: name1=value1&name2=value+two |
+| httpold-5.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_formatQuery" \| want: name1=%7ebwelch&name2=%a1%... |
+| httpold-5.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_formatQuery" \| want: lines=line1%0d%0aline2%0d%... |
+| httpold-6.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "http_config" \| want: <html><head><title>HTTP/1.0 TES... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| (file stopped early, status 0) | 1 | `untriaged` |
+| (file stopped early, status 0) | 1 | `feature`: the 'http' package |
 
 ### incr-old.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| incr-old-2.5 | `untriaged` | code 0: 1 {expected integer but got "1a"} {expected integer but got "1a"     while exec... |
-| incr-old-2.6 | `untriaged` | code 0: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-only ... |
+| incr-old-2.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {expected integer but got "1a"} {expected integer but got "1a"     while ... |
+| incr-old-2.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-o... |
 
 ### incr.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| incr-1.28 | `untriaged` | code 0: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-only ... |
-| incr-2.28 | `untriaged` | code 0: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-only ... |
-| incr-2.30 | `untriaged` | code 0: 1 {expected integer but got "1a"} {expected integer but got "1a"     while exec... |
-| incr-2.31 | `untriaged` | code 0: 1 {expected integer but got "1a"} {expected integer but got "1a"     while exec... |
+| incr-1.28 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-o... |
+| incr-2.28 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-o... |
+| incr-2.30 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {expected integer but got "1a"} {expected integer but got "1a"     while ... |
+| incr-2.31 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {expected integer but got "1a"} {expected integer but got "1a"     while ... |
 
 ### indexObj.test
 
@@ -1934,172 +1928,171 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| info-14.3 | `untriaged` | code 1: can't read "::tcl_patchLevel": no such variable |
-| info-16.2 | `untriaged` | code 0:  |
-| info-16.3 | `untriaged` | code 0: /gorp.info {} |
-| info-16.4 | `untriaged` | code 0:  |
-| info-16.5 | `untriaged` | code 0:  |
-| info-16.6 | `untriaged` | code 0: {} newname.txt {} |
-| info-16.7 | `untriaged` | code 0: /gorp.info newname.txt {} |
-| info-16.8 | `untriaged` | code 0: {/gorp.info foo.bar} {} |
-| info-18.3 | `untriaged` | code 1: can't read "::tcl_version": no such variable |
-| info-19.7 | `untriaged` | code 0: 0 |
-| info-19.8 | `untriaged` | code 0:  |
-| info-19.9 | `untriaged` | code 0:  |
-| info-21.2 | `untriaged` | code 1: unknown or ambiguous subcommand "gorp": must be args, body, cmdcount, commands,... |
-| info-21.3 | `untriaged` | code 1: unknown or ambiguous subcommand "c": must be args, body, cmdcount, commands, co... |
-| info-21.4 | `untriaged` | code 1: unknown or ambiguous subcommand "l": must be args, body, cmdcount, commands, co... |
-| info-21.5 | `untriaged` | code 1: unknown or ambiguous subcommand "s": must be args, body, cmdcount, commands, co... |
-| info-22.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-22.1 | `untriaged` | code 0: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-22.2 | `untriaged` | code 0: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-22.3 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-22.4 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-22.5 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-22.6 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-22.7 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-22.8 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-23.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-23.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-23.2 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-23.3 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-23.4 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-23.5 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-23.6 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-24.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-24.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-24.2 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-24.3 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-24.4 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-24.5 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-24.6.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-24.6.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-24.6.2 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-24.7 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-24.8 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-24.9 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-25.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-25.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-3.1 | `untriaged` | code 0: 3 |
-| info-3.2 | `untriaged` | code 0: 3 |
-| info-3.3 | `untriaged` | code 0: 3 |
-| info-30.0 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-30.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.10 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-30.11 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-30.12 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-30.13 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-30.14 | `untriaged` | code 1: interpreter named "sub" already exists, cannot create |
-| info-30.15 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.16 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.17 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.18 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.19 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.2 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.20 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.21 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.22 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.23 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.24 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.25 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.26 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.27 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.28 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.29 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.3 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.30 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.31 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.32 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.33 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.34 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.35 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.36 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.37 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.38 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.39 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.4 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-30.40 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.41 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.42 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.43 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.44 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.45 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.46 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.47 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.48 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.5 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-30.6 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-30.7 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-30.8 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-30.9 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-31.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-31.1 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-31.1a | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-31.2 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-31.4 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-31.5 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-31.6 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-31.7 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-32.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.10 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.11 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.12 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.13 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.14 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.15 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.16 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.17 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.18 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.19 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.2 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.20 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.21 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.22 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.23 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.24 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.25 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.26 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.27 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.28 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.29 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.2a | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.3 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.30 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.31 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.32 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.33 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.34 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.35 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.3a | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.4 | `untriaged` | code 1: dict element in quotes followed by ":" instead of space |
-| info-33.5 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.6 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.7 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.8 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-33.9 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-34.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-34.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-35.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-35.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-36.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-36.1.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-36.1.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-37.0 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-38.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-38.2 | `untriaged` | setup: bad option "debug": must be alias, aliases, children, create, delete, eval, exis... |
-| info-38.3 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-38.4 | `untriaged` | setup: bad option "debug": must be alias, aliases, children, create, delete, eval, exis... |
-| info-38.5 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-38.6 | `untriaged` | setup: interpreter named "sub" already exists, cannot create |
-| info-38.7 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-39.0 | `untriaged` | cleanup: can't unset "res": no such variable |
-| info-39.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-39.2 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-41.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| info-8.4 | `untriaged` | code 0: x {} {} {} {} |
-| info-8.5 | `untriaged` | code 1: invalid command name "-setup" |
+| info-14.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't read "::tcl_patchLevel": no such variable \| want: can't read "tcl_patc... |
+| info-16.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: info.test |
+| info-16.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: /gorp.info {} \| want: /gorp.info info.test |
+| info-16.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: info.test |
+| info-16.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: info.test |
+| info-16.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} newname.txt {} \| want: info.test newname.txt info.test |
+| info-16.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: /gorp.info newname.txt {} \| want: /gorp.info newname.txt info.test |
+| info-16.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {/gorp.info foo.bar} {} \| want: {/gorp.info foo.bar} info.test |
+| info-18.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't read "::tcl_version": no such variable \| want: can't read "tcl_version... |
+| info-19.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| info-19.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: tcl_platform |
+| info-19.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ::tcl_platform |
+| info-21.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "gorp": must be args, body, cmdcount, command... |
+| info-21.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "c": must be args, body, cmdcount, commands, ... |
+| info-21.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "l": must be args, body, cmdcount, commands, ... |
+| info-21.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "s": must be args, body, cmdcount, commands, ... |
+| info-22.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-22.1 | `feature`: 'info frame' | code 0/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-22.2 | `feature`: 'info frame' | code 0/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-22.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-22.4 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-22.5 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-22.6 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-22.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-22.8 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-23.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-23.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-23.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-23.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-23.4 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-23.5 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-23.6 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-24.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-24.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-24.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-24.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-24.4 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-24.5 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-24.6.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-24.6.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-24.6.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-24.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-24.8 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-24.9 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-25.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-25.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-3.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 \| want: 4 |
+| info-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 \| want: 4 |
+| info-3.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 \| want: 4 |
+| info-30.0 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-30.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.10 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-30.11 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-30.12 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-30.13 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-30.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: interpreter named "sub" already exists, cannot create \| want:  type source... |
+| info-30.15 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.16 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.17 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.18 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.19 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.20 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.21 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.22 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.23 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.24 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.25 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.26 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.27 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.28 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.29 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.30 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.31 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.32 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.33 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.34 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.35 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.36 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.37 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.38 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.39 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.4 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-30.40 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.41 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.42 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.43 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.44 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.45 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.46 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.47 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.48 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.5 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-30.6 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-30.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-30.8 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-30.9 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-31.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-31.1 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-31.1a | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-31.2 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-31.4 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-31.5 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-31.6 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-31.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-32.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.10 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.11 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.12 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.13 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.14 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.15 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.16 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.17 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.18 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.19 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.20 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.21 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.22 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.23 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.24 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.25 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.26 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.27 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.28 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.29 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.2a | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.30 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.31 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.32 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.33 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.34 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.35 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.3a | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: dict element in quotes followed by ":" instead of space \| want: type sourc... |
+| info-33.5 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.6 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.8 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-33.9 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-34.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-34.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-35.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-35.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-36.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-36.1.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-36.1.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-37.0 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-38.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-38.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | setup: bad option "debug": must be alias, aliases, children, create, delete, eval, exis... |
+| info-38.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-38.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | setup: bad option "debug": must be alias, aliases, children, create, delete, eval, exis... |
+| info-38.5 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-38.6 | `bug`: the result differs from tclsh 8.6.16 | setup: interpreter named "sub" already exists, cannot create |
+| info-38.7 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-39.0 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "res": no such variable |
+| info-39.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-39.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-41.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| info-8.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: x {} {} {} {} \| want: x {} x x x |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -2109,16 +2102,16 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| init-0.1 | `untriaged` | code 0: 1 {} 1 NONE |
-| init-0.2 | `untriaged` | code 0: 1 0 0 |
-| init-1.1 | `untriaged` | code 1: invalid command name "auto_qualify" |
-| init-1.2 | `untriaged` | code 1: invalid command name "auto_qualify" |
-| init-1.3 | `untriaged` | code 1: invalid command name "auto_qualify" |
-| init-1.4 | `untriaged` | code 1: invalid command name "auto_qualify" |
-| init-1.5 | `untriaged` | code 1: invalid command name "auto_qualify" |
-| init-1.6 | `untriaged` | code 1: invalid command name "auto_qualify" |
-| init-1.7 | `untriaged` | code 1: invalid command name "auto_qualify" |
-| init-1.8 | `untriaged` | code 1: invalid command name "auto_qualify" |
+| init-0.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {} 1 NONE \| want: 0 {} 0 {} |
+| init-0.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 0 0 \| want: 1 0 1 |
+| init-1.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: ::foo::bar |
+| init-1.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: global |
+| init-1.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: nocolons |
+| init-1.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: ::sub::nocolons nocolons |
+| init-1.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: ::foo::bar |
+| init-1.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: ::sub::foo::bar ::foo::bar |
+| init-1.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: ::foo::bar |
+| init-1.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: foo |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -2128,147 +2121,147 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| interp-1.2 | `untriaged` | code 1: bad option "frobox": must be alias, aliases, children, create, delete, eval, ex... |
-| interp-1.7 | `untriaged` | code 1: bad option "hello": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-1.8 | `untriaged` | code 1: bad option "-froboz": must be alias, aliases, children, create, delete, eval, e... |
-| interp-1.9 | `untriaged` | code 1: bad option "-froboz": must be alias, aliases, children, create, delete, eval, e... |
-| interp-11.4 | `untriaged` | code 1: target interpreter for alias "xcommand" in path "x1 x2 x3" is not my descendant |
-| interp-13.4 | `untriaged` | code 0: 0 0 |
-| interp-14.11 | `untriaged` | setup: bad option "-199990189": must be -safe or -- |
-| interp-14.4 | `untriaged` | code 0: 0 a a |
-| interp-14.5 | `untriaged` | code 0: wrong # args: should be "setx x"     while executing "a 1 2" |
-| interp-14.6 | `untriaged` | code 0: wrong # args: should be "setx x"     invoked from within "a 1 2"     invoked fr... |
-| interp-14.7 | `untriaged` | code 0: wrong # args: should be "setx x"     invoked from within "a 1 2" |
-| interp-15.1 | `untriaged` | code 1: can not find channel named "stdout" |
-| interp-15.2 | `untriaged` | code 1: bad option "share": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-15.3 | `untriaged` | code 0: 0 {} |
-| interp-15.4 | `untriaged` | code 1: bad option "share": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-15.5 | `untriaged` | code 1: bad option "share": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-15.6 | `untriaged` | code 1: bad option "share": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-15.7 | `untriaged` | code 1: bad option "transfer": must be alias, aliases, children, create, delete, eval, ... |
-| interp-15.8 | `untriaged` | code 1: bad option "transfer": must be alias, aliases, children, create, delete, eval, ... |
-| interp-17.1 | `untriaged` | code 0: 0 a |
-| interp-17.2 | `untriaged` | code 0: 0 loop |
-| interp-17.3 | `untriaged` | code 0: 0 b |
-| interp-17.4 | `untriaged` | code 0: 0 {} |
-| interp-17.5 | `untriaged` | code 0: 0 {} |
-| interp-17.6 | `untriaged` | code 0: 0 {} |
-| interp-18.10 | `untriaged` | code 0: 0 5 |
-| interp-18.7 | `untriaged` | code 0: 0 {} |
-| interp-18.8 | `untriaged` | code 0: 0 {} |
-| interp-18.9 | `untriaged` | code 0: 0 5 |
-| interp-19.2 | `untriaged` | code 0:  |
-| interp-19.6 | `untriaged` | code 0: zop foo |
-| interp-19.7 | `untriaged` | code 0: blotz |
-| interp-19.8 | `untriaged` | code 0: blotz blotz |
-| interp-19.9 | `untriaged` | code 1: invalid command name "foo" |
-| interp-20.23 | `untriaged` | code 0: 1 {invalid command name "interp"} |
-| interp-20.24 | `untriaged` | code 0: 1 {invalid command name "interp"} |
-| interp-20.28 | `untriaged` | code 0: 0 {} 1 {invalid command name "interp"} |
-| interp-20.29 | `untriaged` | code 0: 0 {} 1 {invalid command name "interp"} |
-| interp-20.30 | `untriaged` | code 0: 0 {} 1 {invalid command name "interp"} |
-| interp-20.32 | `untriaged` | code 0: 1 {invalid command name "interp"} |
-| interp-20.33 | `untriaged` | code 0: 1 {invalid command name "interp"} 0 {a b c} |
-| interp-20.34 | `untriaged` | code 0: 1 {invalid command name "interp"} 0 {a b c} |
-| interp-20.38 | `untriaged` | code 0: 1 {unknown hidden command "-global"} |
-| interp-20.39 | `untriaged` | code 0: 1 {unknown hidden command "-global"} |
-| interp-20.43 | `untriaged` | code 0: 1 {unknown hidden command "-global"} |
-| interp-20.44 | `untriaged` | code 0: 1 {unknown hidden command "-global"} |
-| interp-20.45 | `untriaged` | code 0: 0 {} |
-| interp-20.46 | `untriaged` | code 0: 0 {} |
-| interp-20.47 | `untriaged` | code 0: 0 {} |
-| interp-20.48 | `untriaged` | code 0: 0 {} |
-| interp-20.49 | `untriaged` | code 1: unknown hidden command "-namespace" |
-| interp-20.50.1 | `untriaged` | code 0: wrong # args: should be "coroutine name cmd ?arg ...?"     invoked from within ... |
-| interp-21.5 | `untriaged` | code 0:  |
-| interp-21.8 | `untriaged` | code 0:  |
-| interp-22.5 | `untriaged` | code 0: invalid command name "interp" |
-| interp-23.1 | `untriaged` | code 0: {} bar {} {} bar {} bar |
-| interp-23.2 | `untriaged` | code 0: {} bar {} {} bar {} bar |
-| interp-24.10 | `untriaged` | code 0: 1 {invalid command name "interp"} 1 {invalid command name "interp"} |
-| interp-24.12 | `untriaged` | code 0: 1 {invalid command name "interp"} 1 {invalid command name "interp"} |
-| interp-26.1 | `untriaged` | code 0: 1 0 1 1 1 1 1 |
-| interp-26.2 | `untriaged` | code 0: 1 {bad completion code "-1": must be ok, error, return, break, continue, or an ... |
-| interp-26.3 | `untriaged` | code 0: 1 0 1 2 3 4 5 |
-| interp-26.5 | `untriaged` | code 2: 1 {bad completion code "-1": must be ok, error, return, break, continue, or an ... |
-| interp-29.1.1 | `untriaged` | code 0: 0 600 |
-| interp-29.1.12 | `untriaged` | code 0: 1 {the recursion limit of this interpre} |
-| interp-29.1.3 | `untriaged` | code 0: 1 {could not find interpreter "foo"} |
-| interp-29.1.7 | `untriaged` | code 0: 1 {the recursion limit of this interpre} |
-| interp-29.1.8 | `untriaged` | code 0: 1 {wrong # args: should be "interp recursionlimit path ?newlimit?"} |
-| interp-29.2.1 | `untriaged` | code 0: 600 |
-| interp-29.2.2 | `untriaged` | code 0: 600 |
-| interp-29.2.3 | `untriaged` | code 0: 600 |
-| interp-29.3.10b | `untriaged` | code 0: 0 ok |
-| interp-29.3.11b | `untriaged` | code 0: 0 ok |
-| interp-29.3.4 | `untriaged` | code 0: 0 ok |
-| interp-29.3.5 | `untriaged` | code 0: 0 ok |
-| interp-29.3.7c | `untriaged` | code 0: 0 ok |
-| interp-29.3.8b | `untriaged` | code 0: 0 ok |
-| interp-29.4.1 | `untriaged` | code 0: 599 |
-| interp-29.4.2 | `untriaged` | code 0: 599 |
-| interp-29.5.1 | `untriaged` | code 1: the recursion limit of this interpreter is 600 |
-| interp-29.5.2 | `untriaged` | code 1: the recursion limit of this interpreter is 600 |
-| interp-29.5.3 | `untriaged` | code 1: the recursion limit of this interpreter is 600 |
-| interp-29.5.4 | `untriaged` | code 1: the recursion limit of this interpreter is 600 |
-| interp-29.6.1 | `untriaged` | code 0: 600 |
-| interp-29.6.10 | `untriaged` | code 1: interpreter named "child" already exists, cannot create |
-| interp-29.6.2 | `untriaged` | code 0: 600 |
-| interp-29.6.8 | `untriaged` | code 0: 1 {invalid command name "interp"} |
-| interp-29.6.9 | `untriaged` | code 1: invalid command name "interp" |
-| interp-34.1 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.10 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.11 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.12 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.13 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.14 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.2 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.3 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.3.1 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.4 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.5 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.6 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.7 | `untriaged` | code 1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invokeh... |
-| interp-34.8 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-34.9 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.1 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.10 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.11 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.12 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.13 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.14 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.15 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.16 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.17 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.18 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.19 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.2 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.20 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.21 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.22 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.23 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.24 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.3 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.4 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.5 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.6 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.7 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.8 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-35.9 | `untriaged` | code 1: bad option "limit": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-36.1 | `untriaged` | code 0: ::tcl::Bgerror |
-| interp-36.3 | `untriaged` | setup: interpreter named "child" already exists, cannot create |
-| interp-36.4 | `untriaged` | code 1: unmatched open brace in list |
-| interp-38.1 | `untriaged` | setup: bad option "debug": must be alias, aliases, children, create, delete, eval, exis... |
-| interp-38.2 | `untriaged` | code 1: bad option "debug": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-38.3 | `untriaged` | code 1: bad option "debug": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-38.4 | `untriaged` | code 1: bad option "debug": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-38.5 | `untriaged` | code 1: bad option "debug": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-38.6 | `untriaged` | code 1: bad option "debug": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-38.7 | `untriaged` | code 1: bad option "debug": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-38.8 | `untriaged` | code 1: bad option "debug": must be alias, aliases, children, create, delete, eval, exi... |
-| interp-7.6 | `untriaged` | code 0: bar foo |
-| interp-8.3 | `untriaged` | code 1: wrong # args: should be "interp alias childPath childCmd ?targetPath targetCmd ... |
-| interp-9.4 | `untriaged` | code 0: GLOBAL NAMESPACE |
+| interp-1.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "frobox": must be alias, aliases, children, create, delete, eval, ... |
+| interp-1.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "hello": must be alias, aliases, children, create, delete, eval, e... |
+| interp-1.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-froboz": must be alias, aliases, children, create, delete, eval,... |
+| interp-1.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-froboz": must be alias, aliases, children, create, delete, eval,... |
+| interp-11.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: target interpreter for alias "xcommand" in path "x1 x2 x3" is not my descen... |
+| interp-13.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 \| want: 1 {wrong # args: should be "a issafe"} |
+| interp-14.11 | `bug`: the result differs from tclsh 8.6.16 | setup: bad option "-199989484": must be -safe or -- |
+| interp-14.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 a a \| want: 1 {cannot define or rename alias "a": interpreter deleted} {} |
+| interp-14.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "setx x"     while executing "a 1 2" \| want: wrong... |
+| interp-14.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "setx x"     invoked from within "a 1 2"     invoke... |
+| interp-14.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "setx x"     invoked from within "a 1 2" \| want: w... |
+| interp-15.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdout" \| want: 1 {can not find channel named ... |
+| interp-15.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| interp-15.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {can not find channel named "stdout"} |
+| interp-15.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| interp-15.5 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| interp-15.6 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| interp-15.7 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "transfer": must be alias, aliases, children, create, delete, ev... |
+| interp-15.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "transfer": must be alias, aliases, children, create, delete, ev... |
+| interp-17.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 a \| want: 1 {cannot define or rename alias "a": would create a loop} |
+| interp-17.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 loop \| want: 1 {cannot define or rename alias "loop": would create a loop} |
+| interp-17.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 b \| want: 1 {cannot define or rename alias "b": would create a loop} |
+| interp-17.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {cannot define or rename alias "a": would create a loop} |
+| interp-17.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {cannot define or rename alias "l1": would create a loop} |
+| interp-17.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {cannot define or rename alias "b": would create a loop} |
+| interp-18.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 5 \| want: 1 {attempt to call eval in deleted interpreter} |
+| interp-18.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {attempt to call eval in deleted interpreter} |
+| interp-18.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {attempt to call eval in deleted interpreter} |
+| interp-18.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 5 \| want: 1 {attempt to call eval in deleted interpreter} |
+| interp-19.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: alias "foo" not found |
+| interp-19.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: zop foo \| want: ::foo foo |
+| interp-19.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: blotz \| want:  |
+| interp-19.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: blotz blotz \| want: foo {} |
+| interp-19.9 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "foo" \| want: 1156 |
+| interp-20.23 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {invalid command name "interp"} \| want: 1 {permission denied: safe inter... |
+| interp-20.24 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {invalid command name "interp"} \| want: 1 {permission denied: safe inter... |
+| interp-20.28 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} 1 {invalid command name "interp"} \| want: 0 {} 1 {permission denied: ... |
+| interp-20.29 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} 1 {invalid command name "interp"} \| want: 0 {} 1 {permission denied: ... |
+| interp-20.30 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} 1 {invalid command name "interp"} \| want: 0 {} 1 {permission denied: ... |
+| interp-20.32 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {invalid command name "interp"} \| want: 1 {not allowed to invoke hidden ... |
+| interp-20.33 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {invalid command name "interp"} 0 {a b c} \| want: 1 {not allowed to invo... |
+| interp-20.34 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {invalid command name "interp"} 0 {a b c} \| want: 1 {not allowed to invo... |
+| interp-20.38 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {unknown hidden command "-global"} \| want: 1 {can't read "z": no such va... |
+| interp-20.39 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {unknown hidden command "-global"} \| want: 0 91 |
+| interp-20.43 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {unknown hidden command "-global"} \| want: 1 {can't read "z": no such va... |
+| interp-20.44 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {unknown hidden command "-global"} \| want: 0 91 |
+| interp-20.45 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {cannot use namespace qualifiers in hidden command token (r... |
+| interp-20.46 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {can only hide global namespace commands (use rename then h... |
+| interp-20.47 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {cannot use namespace qualifiers in hidden command token (r... |
+| interp-20.48 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {cannot use namespace qualifiers in hidden command token (r... |
+| interp-20.49 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown hidden command "-namespace" \| want: ::foo |
+| interp-20.50.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0: wrong # args: should be "coroutine name cmd ?arg ...?"     invoked from withi... |
+| interp-21.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: cd encoding exec exit fconfigure file glob load open pwd socket s... |
+| interp-21.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: cd encoding exec exit fconfigure file glob load open pwd socket s... |
+| interp-22.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid command name "interp" \| want: permission denied: safe interpreter ... |
+| interp-23.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} bar {} {} bar {} bar \| want: {} bar {} bar bar {} {} |
+| interp-23.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} bar {} {} bar {} bar \| want: {cd encoding exec exit fconfigure file glo... |
+| interp-24.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {invalid command name "interp"} 1 {invalid command name "interp"} \| want... |
+| interp-24.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {invalid command name "interp"} 1 {invalid command name "interp"} \| want... |
+| interp-26.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 0 1 1 1 1 1 \| want: -1 0 1 2 3 4 5 |
+| interp-26.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {bad completion code "-1": must be ok, error, return, break, continue, or... |
+| interp-26.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 0 1 2 3 4 5 \| want: -1 0 1 2 3 4 5 |
+| interp-26.5 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2: 1 {bad completion code "-1": must be ok, error, return, break, continue, or... |
+| interp-29.1.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 600 \| want: 1 {wrong # args: should be "interp recursionlimit path ?newl... |
+| interp-29.1.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {the recursion limit of this interpre} \| want: 1 {integer value too larg... |
+| interp-29.1.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {could not find interpreter "foo"} \| want: 1 {wrong # args: should be "i... |
+| interp-29.1.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {the recursion limit of this interpre} \| want: 1 {integer value too larg... |
+| interp-29.1.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {wrong # args: should be "interp recursionlimit path ?newlimit?"} \| want... |
+| interp-29.2.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 600 \| want: 1000 |
+| interp-29.2.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 600 \| want: 1000 |
+| interp-29.2.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 600 \| want: 1000 |
+| interp-29.3.10b | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 ok \| want: 1 {too many nested evaluations (infinite loop?)} |
+| interp-29.3.11b | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 ok \| want: 1 {too many nested evaluations (infinite loop?)} |
+| interp-29.3.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 ok \| want: 1 {falling back due to new recursion limit} |
+| interp-29.3.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 ok \| want: 1 {falling back due to new recursion limit} |
+| interp-29.3.7c | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 ok \| want: 1 {too many nested evaluations (infinite loop?)} |
+| interp-29.3.8b | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 ok \| want: 1 {too many nested evaluations (infinite loop?)} |
+| interp-29.4.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 599 \| want: 50 |
+| interp-29.4.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 599 \| want: 50 |
+| interp-29.5.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: the recursion limit of this interpreter is 600 \| want: 1 20000 |
+| interp-29.5.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: the recursion limit of this interpreter is 600 \| want: 1 20000 |
+| interp-29.5.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: the recursion limit of this interpreter is 600 \| want: 1 20000 |
+| interp-29.5.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: the recursion limit of this interpreter is 600 \| want: 1 20000 |
+| interp-29.6.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 600 \| want: 1000 |
+| interp-29.6.10 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: interpreter named "child" already exists, cannot create \| want: 1 {permiss... |
+| interp-29.6.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 600 \| want: 1000 |
+| interp-29.6.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {invalid command name "interp"} \| want: 1 {permission denied: safe inter... |
+| interp-29.6.9 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "interp" \| want: 1 {permission denied: safe interpret... |
+| interp-34.1 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invok... |
+| interp-34.10 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, inv... |
+| interp-34.11 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, inv... |
+| interp-34.12 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, inv... |
+| interp-34.13 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invok... |
+| interp-34.14 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, inv... |
+| interp-34.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invok... |
+| interp-34.3 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invok... |
+| interp-34.3.1 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, invok... |
+| interp-34.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, inv... |
+| interp-34.5 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, inv... |
+| interp-34.6 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, inv... |
+| interp-34.7 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, eval, expose, hide, hidden, inv... |
+| interp-34.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-34.9 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
+| interp-35.1 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.10 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.11 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.12 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
+| interp-35.13 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
+| interp-35.14 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
+| interp-35.15 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.16 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.17 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.18 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.19 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.20 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.21 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.22 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
+| interp-35.23 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.24 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.3 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
+| interp-35.5 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
+| interp-35.6 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "limit": must be alias, aliases, children, create, delete, eval,... |
+| interp-35.7 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-35.9 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "limit": must be alias, aliases, children, create, delete, eval, e... |
+| interp-36.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: ::tcl::Bgerror \| want: wrong # args: should be "interp bgerror path ?cmdPref... |
+| interp-36.3 | `bug`: the result differs from tclsh 8.6.16 | setup: interpreter named "child" already exists, cannot create |
+| interp-36.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: unmatched open brace in list \| want: cmdPrefix must be list of length >= 1 |
+| interp-38.1 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | setup: bad option "debug": must be alias, aliases, children, create, delete, eval, exis... |
+| interp-38.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "debug": must be alias, aliases, children, create, delete, eval,... |
+| interp-38.3 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, children, create, delete, eval, e... |
+| interp-38.4 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "debug": must be alias, aliases, children, create, delete, eval,... |
+| interp-38.5 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "debug": must be alias, aliases, children, create, delete, eval,... |
+| interp-38.6 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, children, create, delete, eval, e... |
+| interp-38.7 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, children, create, delete, eval, e... |
+| interp-38.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, children, create, delete, eval, e... |
+| interp-7.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: bar foo \| want: wrong # args: should be "a aliases" |
+| interp-8.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "interp alias childPath childCmd ?targetPath targetCm... |
+| interp-9.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: GLOBAL NAMESPACE \| want: GLOBAL GLOBAL |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -2279,150 +2272,150 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| io-1.6 | `untriaged` | code 0: a9 |
-| io-1.7 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| io-1.8 | `untriaged` | code 1: unknown encoding "iso2022-jp" |
-| io-1.9 | `untriaged` | code 1: unknown encoding "iso2022-jp" |
-| io-11.4 | `untriaged` | code 0: {abcdefghijklmnopqrstuvwxyz } 1 {} 1 |
-| io-12.6 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| io-12.7 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| io-13.11 | `untriaged` | code 0: abcd defgh |
-| io-13.12 | `untriaged` | code 0:    ab  def    |
-| io-13.8.1 | `untriaged` | code 0: {abcd } { def} |
-| io-13.8.2 | `untriaged` | code 0: {abcd } { def} |
-| io-13.8.3 | `untriaged` | code 0: {abcd } {  def} |
-| io-14.2 | `untriaged` | code 0: {} {} {} |
-| io-14.3 | `untriaged` | code 1: child process exited abnormally |
-| io-14.4 | `untriaged` | code 1: child process exited abnormally |
-| io-14.5 | `untriaged` | code 1: can not find channel named "stdin" |
-| io-14.6 | `untriaged` | code 1: interpreter named "z" already exists, cannot create |
-| io-14.7 | `untriaged` | code 1: interpreter named "z" already exists, cannot create |
-| io-14.8 | `untriaged` | code 0:  |
-| io-19.1 | `untriaged` | code 1: can not find channel named "stdin" |
-| io-2.2 | `untriaged` | code 0: {} {123456789012345  12} |
-| io-2.4 | `untriaged` | code 0: {abcdefg hijklmnopqrstuvwxyz} {abcdefg hijklmnopqrstuvwxyz} |
-| io-20.1 | `untriaged` | code 0: utf-8 |
-| io-20.3 | `untriaged` | code 0: {} {auto lf} |
-| io-20.5 | `untriaged` | code 0:  |
-| io-27.4 | `untriaged` | code 0: 0 0 72 |
-| io-27.5 | `untriaged` | code 0: 0 0 72 |
-| io-28.2 | `untriaged` | code 1: bad option "share": must be alias, aliases, children, create, delete, eval, exi... |
-| io-29.1 | `untriaged` | code 0: 1 {can not find channel named "stdin"} |
-| io-29.20 | `untriaged` | code 0: 0 0 12600 |
-| io-29.27 | `untriaged` | code 0: 1 {error writing "": broken pipe} {posix epipe {broken pipe}} |
-| io-29.35 | `untriaged` | code 1: bad option "share": must be alias, aliases, children, create, delete, eval, exi... |
-| io-29.36.2 | `untriaged` | code 0: {<1 line>} {<2 line>} <> {<3 line>} {<1 line>} {<2 line>} {<3 line>} {<1 line>}... |
-| io-29.9 | `untriaged` | code 0: 1 {can not find channel named "stdin"} |
-| io-3.1 | `untriaged` | code 1: unknown encoding "ascii" |
-| io-3.2 | `untriaged` | code 1: unknown encoding "ascii" |
-| io-3.3 | `untriaged` | code 1: unknown encoding "ascii" |
-| io-3.4 | `untriaged` | code 1: unknown encoding "jis0208" |
-| io-3.5 | `untriaged` | code 1: unknown encoding "jis0208" |
-| io-3.6 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| io-3.7 | `untriaged` | code 1: unknown encoding "jis0208" |
-| io-3.8 | `untriaged` | code 1: unknown encoding "ascii" |
-| io-30.16 | `untriaged` | code 0: hello there and here  |
-| io-30.18 | `untriaged` | code 0: abc def 0 ghi 0 qrs 0 |
-| io-30.19 | `untriaged` | code 0: abc def 0 ghi 0 qrs 0 |
-| io-30.21 | `untriaged` | code 0: -1 0 def 0 |
-| io-30.22 | `untriaged` | code 0: -1 0 def 0 |
-| io-30.23 | `untriaged` | code 0: 17 1 |
-| io-30.24 | `untriaged` | code 0: 17 1 |
-| io-30.25 | `untriaged` | code 0: 17 1 |
-| io-30.26 | `untriaged` | code 0: 17 1 |
-| io-30.27 | `untriaged` | code 0: 17 1 |
-| io-30.28 | `untriaged` | code 0: 17 1 |
-| io-31.11 | `untriaged` | code 0: hello 6 cr 0 0 7 cr 0 |
-| io-31.13 | `untriaged` | code 0: binary |
-| io-31.18 | `untriaged` | code 0: hello there and here 0  0 |
-| io-31.20 | `untriaged` | code 0: abc def 0 qrs 0 |
-| io-31.21 | `untriaged` | code 0: abc def 0 qrs 0 |
-| io-31.25 | `untriaged` | code 0: abc def 0 qrs 0 |
-| io-31.26 | `untriaged` | code 0: abc def 0 qrs 0 |
-| io-31.27 | `untriaged` | code 0: abc def 0 qrs 0 |
-| io-31.28 | `untriaged` | code 0: abc def 0 qrs 0 |
-| io-31.29 | `untriaged` | code 0: abc def 0 qrs 0 |
-| io-31.30 | `untriaged` | code 0: abc def 0 qrs 0 |
-| io-31.5 | `untriaged` | code 0: 5 6 cr 0 there 12 cr 0 |
-| io-31.6 | `untriaged` | code 0: 5 6 crlf 0 there 12 crlf 0 |
-| io-32.1 | `untriaged` | code 0: 1 {can not find channel named "stdout"} |
-| io-32.11.1 | `untriaged` | code 0: {hello } { hello } |
-| io-32.11.2 | `untriaged` | code 0: {hello } { hello } |
-| io-32.2 | `untriaged` | code 1: can not find channel named "stdin" |
-| io-33.11 | `untriaged` | cleanup: can not find channel named "80" |
-| io-33.12 | `untriaged` | cleanup: can not find channel named "80" |
-| io-33.13 | `untriaged` | cleanup: can not find channel named "80" |
-| io-34.12 | `untriaged` | code 1: bad origin "cur": must be start, current, or end |
-| io-34.19 | `untriaged` | code 0: 0 |
-| io-34.8 | `untriaged` | code 0: 1 {error during seek on "": input/output error} |
-| io-35.10 | `untriaged` | code 0: 10 8 1 |
-| io-35.11 | `untriaged` | code 0: 10 8 1 |
-| io-35.12 | `untriaged` | code 0: 17 17 1 |
-| io-35.13 | `untriaged` | code 0: 17 17 1 |
-| io-35.14 | `untriaged` | code 0: 17 17 1 |
-| io-35.15 | `untriaged` | code 0: 17 17 1 |
-| io-35.16 | `untriaged` | code 0: 21 17 1 |
-| io-35.17 | `untriaged` | code 0: 21 17 1 |
-| io-35.18a | `untriaged` | code 0: 8 8 1 13 |
-| io-35.18b | `untriaged` | code 0: 1 1 1 13 |
-| io-35.19 | `untriaged` | code 0: 17 17 1 13 |
-| io-35.20 | `untriaged` | code 0: 9 9 1 13 |
-| io-35.6 | `untriaged` | code 0: 8 8 1 |
-| io-35.7 | `untriaged` | code 0: 8 8 1 |
-| io-35.8 | `untriaged` | code 0: 8 8 1 |
-| io-35.9 | `untriaged` | code 0: 8 8 1 |
-| io-38.3 | `untriaged` | code 1: error reading "file527": illegal operation on a directory |
-| io-39.14 | `untriaged` | code 0: ç¦ |
-| io-39.21 | `untriaged` | code 0: auto lf |
-| io-39.22 | `untriaged` | code 0: {} {} {} |
-| io-39.22a | `untriaged` | code 0: {} {} {0 {}} |
-| io-39.23 | `untriaged` | code 0: {} lf |
-| io-39.24 | `untriaged` | code 0: {} lf |
-| io-4.4 | `untriaged` | code 0: {} {1234567          A} |
-| io-40.17 | `untriaged` | code 1: can't read "::env(HOME)": no such variable |
-| io-42.2 | `untriaged` | code 1: bad event name "r": must be readable or writable |
-| io-42.3 | `untriaged` | code 1: bad event name "r": must be readable or writable |
-| io-43.2 | `untriaged` | code 1: bad event name "r": must be readable or writable |
-| io-48.10 | `untriaged` | code 0: 5 {abc def foo bar {}} |
-| io-48.11 | `untriaged` | code 0: 3 {abc def } |
-| io-48.12 | `untriaged` | code 0: 5 {abc def foo bar {}} |
-| io-48.13 | `untriaged` | code 0: 3 {abc def } |
-| io-48.14 | `untriaged` | code 0: 5 {abc def foo bar {}} |
-| io-48.15 | `untriaged` | code 0: 3 {abc def } |
-| io-48.4 | `untriaged` | code 0: 3 {abc def } |
-| io-48.5 | `untriaged` | code 0: 5 {abc def foo bar {}} |
-| io-48.6 | `untriaged` | code 0: 3 {abc def } |
-| io-48.7 | `untriaged` | code 0: 5 {abc def foo bar {}} |
-| io-48.8 | `untriaged` | code 0: 3 {abc def } |
-| io-48.9 | `untriaged` | code 0: 5 {abc def foo bar {}} |
-| io-49.1 | `untriaged` | code 0: 7 a 1 { } 2 b 3 { } 4 c 5 { } 6 0 { } 0 |
-| io-49.2 | `untriaged` | code 0: 7 {a } 2 {b } 4 {c } 6 0 { } 7 1 |
-| io-49.3 | `untriaged` | code 0: 7 {a b} 3 { c } 6 0 { } 7 1 |
-| io-5.2 | `untriaged` | code 0: {} 12345678901234567890 |
-| io-5.4 | `untriaged` | code 1: unknown encoding "ascii" |
-| io-52.1 | `untriaged` | code 1: fcopy -command is not available |
-| io-52.2 | `untriaged` | code 1: fcopy -command is not available |
-| io-52.3 | `untriaged` | code 1: error reading "file639": illegal operation on a directory |
-| io-52.4 | `untriaged` | code 1: error reading "file641": illegal operation on a directory |
-| io-52.4.1 | `untriaged` | code 1: error reading "file643": illegal operation on a directory |
-| io-52.5 | `untriaged` | code 1: error reading "file645": illegal operation on a directory |
-| io-52.5a | `untriaged` | code 1: error reading "file647": illegal operation on a directory |
-| io-52.5b | `untriaged` | code 1: error reading "file649": illegal operation on a directory |
-| io-52.6 | `untriaged` | code 1: error reading "file651": illegal operation on a directory |
-| io-52.7 | `untriaged` | code 1: error reading "file653": illegal operation on a directory |
-| io-52.8 | `untriaged` | code 0: 0 0 |
-| io-6.17 | `untriaged` | code 0: 0 {} -1 {} |
-| io-6.21 | `untriaged` | code 0: 4 abcd 4 efgh 4 ijkl 0 {} |
-| io-6.23 | `untriaged` | code 0: 0 {} -1 {} |
-| io-6.29 | `untriaged` | code 0: 4 abcd 9 {efgh ijkl} 4 mnop |
-| io-6.4 | `untriaged` | code 0: 4 H´ |
-| io-6.5 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| io-6.55 | `untriaged` | code 1: unknown encoding "iso2022-jp" |
-| io-6.8 | `untriaged` | code 0: 12 abcdefghijk 6 wombat |
-| io-6.9 | `untriaged` | code 0: 11 abcdefghijk 7 wombat |
-| io-7.1 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| io-7.2 | `untriaged` | code 1: unknown encoding "shiftjis" |
-| io-7.4 | `untriaged` | code 1: unknown encoding "shiftjis" |
+| io-1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a9 \| want: aM |
+| io-1.7 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: aá |
+| io-1.8 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso2022-jp" \| want:     $B$O(B |
+| io-1.9 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso2022-jp" \| want: 19 19 19 19 19 |
+| io-11.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {abcdefghijklmnopqrstuvwxyz } 1 {} 1 \| want: abcdefghijkl 1 {} 1 |
+| io-12.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| io-12.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| io-13.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abcd defgh \| want: abcd d |
+| io-13.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:    ab  def    \| want:    ab  d |
+| io-13.8.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {abcd } { def} \| want: {abcd } def |
+| io-13.8.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {abcd } { def} \| want: {abcd } def |
+| io-13.8.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {abcd } {  def} \| want: {abcd } { def} |
+| io-14.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {} {} \| want: line line none |
+| io-14.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: child process exited abnormally \| want: { out } {err } |
+| io-14.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: child process exited abnormally \| want: { close stdin stdout } {stderr } |
+| io-14.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdin" \| want: {channel "stdin" wasn't opened ... |
+| io-14.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: interpreter named "z" already exists, cannot create \| want: {} {} {can not... |
+| io-14.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: interpreter named "z" already exists, cannot create \| want: {} {} {can not... |
+| io-14.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: hello |
+| io-19.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdin" \| want: 0 |
+| io-2.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {123456789012345  12} \| want: {123456789012345 } {123456789012345  12} |
+| io-2.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {abcdefg hijklmnopqrstuvwxyz} {abcdefg hijklmnopqrstuvwxyz} \| want: {abcde... |
+| io-20.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: utf-8 \| want: ascii |
+| io-20.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {auto lf} \| want: {{} {}} {auto lf} |
+| io-20.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: 777 |
+| io-27.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 72 \| want: 0 60 72 |
+| io-27.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 72 \| want: 0 60 72 |
+| io-28.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| io-29.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't o... |
+| io-29.20 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 12600 \| want: 4096 12288 12600 |
+| io-29.27 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {error writing "": broken pipe} {posix epipe {broken pipe}} \| want: 1 {e... |
+| io-29.35 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval,... |
+| io-29.36.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {<1 line>} {<2 line>} <> {<3 line>} {<1 line>} {<2 line>} {<3 line>} {<1 li... |
+| io-29.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't o... |
+| io-3.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: abcdefghijklmnopqrstuvwxyz   |
+| io-3.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: {123456789012345 } {123456789012345  12} |
+| io-3.3 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want:   12 |
+| io-3.4 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: !)!)!)!)!)!)!)!) !)!)!)!)!)!)!)!)!)!)!)... |
+| io-3.5 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: !)!)!)!)!)!)!)!)! !)!)!)!)!)!)!)!)!)!)!... |
+| io-3.6 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: 12345678901234' 12345678901234'a |
+| io-3.7 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: !)!)!)!)!)!)!)!)! !)!)!)!)!)!)!)!)!)!)!... |
+| io-3.8 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: {abcdefg hijklmno} {abcdefg hijklmnopqrst... |
+| io-30.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: hello there and here  \| want: hello there and here  |
+| io-30.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 ghi 0 qrs 0 \| want: abc def 0 {} 1 {} 1 |
+| io-30.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 ghi 0 qrs 0 \| want: abc def 0 {} 1 {} 1 |
+| io-30.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -1 0 def 0 \| want: 0 1 {} 1 |
+| io-30.22 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -1 0 def 0 \| want: 0 1 {} 1 |
+| io-30.23 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 1 \| want: 8 1 |
+| io-30.24 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 1 \| want: 8 1 |
+| io-30.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 1 \| want: 8 1 |
+| io-30.26 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 1 \| want: 8 1 |
+| io-30.27 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 1 \| want: 8 1 |
+| io-30.28 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 1 \| want: 8 1 |
+| io-31.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: hello 6 cr 0 0 7 cr 0 \| want: hello 6 cr 0 6 13 cr 0 |
+| io-31.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: binary \| want: lf |
+| io-31.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: hello there and here 0  0 \| want: hello there and here 0 {} 1 |
+| io-31.20 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| io-31.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| io-31.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| io-31.26 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| io-31.27 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| io-31.28 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| io-31.29 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| io-31.30 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: abc def 0 qrs 0 \| want: abc def 0 {} 1 |
+| io-31.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 6 cr 0 there 12 cr 0 \| want: 21 21 cr 1 {} 21 cr 1 |
+| io-31.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 6 crlf 0 there 12 crlf 0 \| want: 21 21 crlf 1 {} 21 crlf 1 |
+| io-32.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't... |
+| io-32.11.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {hello } { hello } \| want: {hello } {hello } |
+| io-32.11.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {hello } { hello } \| want: {hello } {hello } |
+| io-32.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdin" \| want:  |
+| io-33.11 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can not find channel named "80" |
+| io-33.12 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can not find channel named "80" |
+| io-33.13 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can not find channel named "80" |
+| io-34.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad origin "cur": must be start, current, or end \| want: 14 {xyz 123 xyzzy... |
+| io-34.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 54 |
+| io-34.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {error during seek on "": input/output error} \| want: 1 {error during se... |
+| io-35.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 10 8 1 \| want: 11 8 1 |
+| io-35.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 10 8 1 \| want: 11 8 1 |
+| io-35.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 17 1 \| want: 17 8 1 |
+| io-35.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 17 1 \| want: 17 8 1 |
+| io-35.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 17 1 \| want: 17 8 1 |
+| io-35.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 17 1 \| want: 17 8 1 |
+| io-35.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 21 17 1 \| want: 21 8 1 |
+| io-35.17 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 21 17 1 \| want: 21 8 1 |
+| io-35.18a | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 13 \| want: 9 8 1 13 |
+| io-35.18b | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 1 1 13 \| want: 2 1 1 13 |
+| io-35.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 17 1 13 \| want: 17 8 1 13 |
+| io-35.20 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 9 9 1 13 \| want: 9 1 1 13 |
+| io-35.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
+| io-35.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
+| io-35.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
+| io-35.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
+| io-38.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file527": illegal operation on a directory \| want:  |
+| io-39.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ç¦ \| want: 牦 |
+| io-39.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: auto lf \| want: auto crlf |
+| io-39.22 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {} {} \| want: {{} {}} {O G} {D D} |
+| io-39.22a | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {} {0 {}} \| want: {O G} {D D} {1 {bad value for -eofchar: should be a l... |
+| io-39.23 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} lf \| want: {{}} auto |
+| io-39.24 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} lf \| want: {{}} auto |
+| io-4.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {1234567          A} \| want: {1234567         } {1234567          A} |
+| io-40.17 | `design`: the suite runs without the 'env' capability, so 'env' is ... | code 1/0,2: can't read "::env(HOME)": no such variable \| want: 1 {couldn't find HOME e... |
+| io-42.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad event name "r": must be readable or writable \| want: {first script} {n... |
+| io-42.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad event name "r": must be readable or writable \| want: 13 11 12 {} |
+| io-43.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad event name "r": must be readable or writable \| want: {} {} {} {read f}... |
+| io-48.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}} |
+| io-48.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {abc def } \| want: 3 {abc def {}} |
+| io-48.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}} |
+| io-48.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {abc def } \| want: 3 {abc def {}} |
+| io-48.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}} |
+| io-48.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {abc def } \| want: 3 {abc def {}} |
+| io-48.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {abc def } \| want: 3 {abc def {}} |
+| io-48.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}} |
+| io-48.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {abc def } \| want: 3 {abc def {}} |
+| io-48.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}} |
+| io-48.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {abc def } \| want: 3 {abc def {}} |
+| io-48.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}} |
+| io-49.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 7 a 1 { } 2 b 3 { } 4 c 5 { } 6 0 { } 0 \| want: 7 a 1 { } 2 b 3 { } 4 c 5 ... |
+| io-49.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 7 {a } 2 {b } 4 {c } 6 0 { } 7 1 \| want: 7 {a } 2 {b } 4 {c } 7 0 {} 7 1 |
+| io-49.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 7 {a b} 3 { c } 6 0 { } 7 1 \| want: 7 {a b} 3 { c } 7 0 {} 7 1 |
+| io-5.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} 12345678901234567890 \| want: 1234567890123456 12345678901234567890 |
+| io-5.4 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: {1234567890 1234567890} {1234567890 12345... |
+| io-52.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: fcopy -command is not available \| want: 0 |
+| io-52.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: fcopy -command is not available \| want: 0 |
+| io-52.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file639": illegal operation on a directory \| want: 0 0 ok |
+| io-52.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file641": illegal operation on a directory \| want: 0 0 0 40 |
+| io-52.4.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file643": illegal operation on a directory \| want: 0 0 0 40 |
+| io-52.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file645": illegal operation on a directory \| want: 0 0 ok |
+| io-52.5a | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file647": illegal operation on a directory \| want: 0 0 ok |
+| io-52.5b | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file649": illegal operation on a directory \| want: 0 0 ok |
+| io-52.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file651": illegal operation on a directory \| want: 0 0 ok |
+| io-52.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file653": illegal operation on a directory \| want: 0 0 ok |
+| io-52.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 \| want: 40 40 |
+| io-6.17 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} -1 {} \| want: 1 { } -1 {} |
+| io-6.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 abcd 4 efgh 4 ijkl 0 {} \| want: 9 {abcd efgh} 4 ijkl 5 { mnop} -1 {} |
+| io-6.23 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} -1 {} \| want: 1 { } -1 {} |
+| io-6.29 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 abcd 9 {efgh ijkl} 4 mnop \| want: 14 {abcd efgh ijkl} 4 mnop -1 {} |
+| io-6.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 H´ \| want: 3 4 |
+| io-6.5 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: 2 一丁 |
+| io-6.55 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso2022-jp" \| want: 8 there一ok 11 {丁more bytes} 4 here |
+| io-6.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 12 abcdefghijk 6 wombat \| want: 6 abcdef -1 {} |
+| io-6.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 11 abcdefghijk 7 wombat \| want: 11 abcdefghijk 3 wom |
+| io-7.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: 1234567890123０１２３４ |
+| io-7.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: 10 1234567890 0 |
+| io-7.4 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: -1 {} 1 17 1234567890123０１２３ 0 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -2435,181 +2428,181 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | asyncPipeClose | 3 | `untriaged` |
 | win | 2 | `platform`: a constraint of another platform or word size |
 | extensive | 1 | `tcl`: tclsh skips it too |
-| makeFileInHome | 1 | `untriaged` |
+| makeFileInHome | 1 | `platform`: a property of the host: a second device, a writable home, IPv6 on localhost, ... |
 | nonPortable | 1 | `tcl`: tclsh skips it too |
 
 ### ioCmd.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| ioCmd-13.11 | `untriaged` | code 2: 34123456x |
-| iocmd-1.5 | `untriaged` | code 0: 1 {can not find channel named "stdin"} |
-| iocmd-10.4 | `untriaged` | code 0: 1 {can not find channel named "stdout"} |
-| iocmd-10.5 | `untriaged` | code 1: can not find channel named "stdin" |
-| iocmd-11.1 | `untriaged` | code 0: 1 {can't write input to command: standard input was redirected} NONE |
-| iocmd-11.2 | `untriaged` | code 0: 1 {can't read output from command: standard output was redirected} NONE |
-| iocmd-11.3 | `untriaged` | code 0: 1 {can't read output from command: standard output was redirected} NONE |
-| iocmd-12.11 | `untriaged` | code 0: É |
-| iocmd-12.4 | `untriaged` | code 0: -1 |
-| iocmd-12.6 | `untriaged` | code 0: 1 unmatched open brace in list unmatched open brace in list     while executing... |
-| iocmd-12.7 | `untriaged` | code 0: 1 {invalid access mode "FOO": must be APPEND, BINARY, CREAT, EXCL, NOCTTY, NONB... |
-| iocmd-14.5 | `untriaged` | code 0: 1 {can not find channel named "stdout"} |
-| iocmd-14.6 | `untriaged` | code 0: 1 {can not find channel named "stdin"} |
-| iocmd-14.7 | `untriaged` | code 0: 1 {can not find channel named "stdout"} |
-| iocmd-14.8 | `untriaged` | code 0: 1 {can not find channel named "stderr"} |
-| iocmd-15.10 | `untriaged` | code 0: 1 {fcopy -command is not available} |
-| iocmd-15.12 | `untriaged` | code 0: 1 {fcopy -command is not available} |
-| iocmd-15.3 | `untriaged` | code 0: 1 {can not find channel named "1"} |
-| iocmd-15.4 | `untriaged` | code 0: 1 {can not find channel named "1"} |
-| iocmd-15.5 | `untriaged` | code 0: 1 {can not find channel named "1"} |
-| iocmd-15.8 | `untriaged` | code 0: 1 {error reading "file70": bad file number} |
-| iocmd-15.9 | `untriaged` | code 0: 0 0 |
-| iocmd-2.4 | `untriaged` | code 0: 1 {can not find channel named "stdin"} |
-| iocmd-21.0 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.1 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.10 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.11 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.12 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.13 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.14 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.15 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.16 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.17 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.18 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.19 | `untriaged` | code 0: {file18 file19} 1 {unknown or ambiguous subcommand "create": must be close, con... |
-| iocmd-21.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.20 | `untriaged` | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
-| iocmd-21.21 | `untriaged` | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
-| iocmd-21.22 | `untriaged` | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
-| iocmd-21.23 | `untriaged` | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
-| iocmd-21.24 | `untriaged` | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
-| iocmd-21.3 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.4 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.5 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.6 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.7 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.8 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-21.9 | `untriaged` | code 0: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-22.1 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-22.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-22.3 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-22.4 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-22.5 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-22.6 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-22.7 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-22.8 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-22.9 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-23.1 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-23.10 | `untriaged` | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
-| iocmd-23.11 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-23.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-23.3 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-23.4 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-23.5 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-23.6 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-23.7 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-23.8 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-23.9 | `untriaged` | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
-| iocmd-24.1 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-24.10 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-24.11 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-24.12 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-24.13 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-24.14 | `untriaged` | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
-| iocmd-24.15 | `untriaged` | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
-| iocmd-24.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-24.3 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-24.4 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-24.5 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-24.6 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-24.7 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-24.8 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-24.9 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-25.1 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-25.10 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-25.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-25.3 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-25.4 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-25.5 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-25.6 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-25.7 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-25.8 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-25.9 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-26.1 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-26.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-26.3 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-26.4 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-26.5 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-26.6 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-26.7 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-27.1 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-27.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-27.3 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-27.4 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-27.5 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-27.6 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.1 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.10 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.11 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.12 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.13 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.14 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.15 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.16 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.17 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.18 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.19.0 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.19.1 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.19.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.3 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.4 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.5 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.6 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.7 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.8 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-28.9 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-29.1 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-29.10 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-29.11 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-29.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-29.3 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-29.4 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-29.5 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-29.6 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-29.7 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-29.8 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-29.9 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-3.4 | `untriaged` | code 0: 1 {can not find channel named "stdout"} |
-| iocmd-30.1 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-30.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-30.3 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-30.4 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-31.1 | `untriaged` | code 0: unknown or ambiguous subcommand "postevent": must be close, configure, copy, eo... |
-| iocmd-31.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-31.3 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-31.4 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-31.5 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-31.6 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-31.7 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-31.8 | `untriaged` | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
-| iocmd-32.2 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-32.3.0 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-32.3.1 | `untriaged` | code 1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, ... |
-| iocmd-4.12 | `untriaged` | code 1: expected non-negative integer but got "12z" |
-| iocmd-4.6 | `untriaged` | code 0: 1 {can not find channel named "stdout"} |
-| iocmd-4.7 | `untriaged` | code 0: 1 {can not find channel named "stdout"} |
-| iocmd-4.9 | `untriaged` | code 0: 1 {can not find channel named "stdin"} {TCL LOOKUP CHANNEL stdin} |
-| iocmd-5.3 | `untriaged` | code 1: can not find channel named "stdin" |
-| iocmd-5.4 | `untriaged` | code 1: can not find channel named "stdin" |
-| iocmd-8.14 | `untriaged` | code 0:  |
-| iocmd-8.15.1 | `untriaged` | code 1: bad option "-blah": should be one of -blocking, -buffering, -buffersize, -encod... |
-| iocmd-8.2 | `untriaged` | code 0: 1 {can not find channel named "a"} |
-| iocmd-8.5 | `untriaged` | code 0: 0 {} |
-| iocmd-8.6 | `untriaged` | code 0: 0 {} |
-| iocmd-8.7 | `untriaged` | code 1: unknown encoding "unicode" |
-| iocmd-8.8 | `untriaged` | code 1: unknown encoding "unicode" |
-| iocmd-8.9 | `untriaged` | code 0: -blocking 1 -buffering none -buffersize 4040 -encoding binary -eofchar {} -tran... |
+| ioCmd-13.11 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2: 34123456x \| want: 341234x6 |
+| iocmd-1.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't o... |
+| iocmd-10.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't... |
+| iocmd-10.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdin" \| want: 0 |
+| iocmd-11.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't write input to command: standard input was redirected} NONE \| wan... |
+| iocmd-11.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read output from command: standard output was redirected} NONE \| ... |
+| iocmd-11.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read output from command: standard output was redirected} NONE \| ... |
+| iocmd-12.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: É \| want: H |
+| iocmd-12.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -1 \| want: 0 |
+| iocmd-12.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 unmatched open brace in list unmatched open brace in list     while execu... |
+| iocmd-12.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {invalid access mode "FOO": must be APPEND, BINARY, CREAT, EXCL, NOCTTY, ... |
+| iocmd-14.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 0 0 |
+| iocmd-14.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdin"} \| want: 0 0 |
+| iocmd-14.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 0 0 |
+| iocmd-14.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stderr"} \| want: 0 0 |
+| iocmd-15.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {fcopy -command is not available} \| want: 1 {bad option "foo": must be -... |
+| iocmd-15.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {fcopy -command is not available} \| want: 1 {expected integer but got "f... |
+| iocmd-15.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "1"} \| want: 1 {wrong # args: should be "fco... |
+| iocmd-15.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "1"} \| want: 1 {wrong # args: should be "fco... |
+| iocmd-15.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "1"} \| want: 1 {wrong # args: should be "fco... |
+| iocmd-15.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {error reading "file70": bad file number} \| want: 1 {channel "file70" wa... |
+| iocmd-15.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 \| want: 1 {channel "file69" wasn't opened for writing} |
+| iocmd-2.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't o... |
+| iocmd-21.0 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.10 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.11 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.12 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.13 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.14 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.15 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.16 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.17 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.18 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.19 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: {file18 file19} 1 {unknown or ambiguous subcommand "create": must be close,... |
+| iocmd-21.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.20 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
+| iocmd-21.21 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
+| iocmd-21.22 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
+| iocmd-21.23 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
+| iocmd-21.24 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
+| iocmd-21.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-21.9 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-22.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-22.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-22.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-22.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-22.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-22.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-22.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-22.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-22.9 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-23.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-23.10 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
+| iocmd-23.11 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-23.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-23.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-23.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-23.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-23.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-23.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-23.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-23.9 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
+| iocmd-24.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-24.10 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-24.11 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-24.12 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-24.13 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-24.14 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
+| iocmd-24.15 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
+| iocmd-24.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-24.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-24.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-24.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-24.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-24.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-24.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-24.9 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-25.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-25.10 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-25.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-25.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-25.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-25.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-25.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-25.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-25.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-25.9 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-26.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-26.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-26.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-26.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-26.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-26.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-26.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-27.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-27.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-27.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-27.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-27.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-27.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.10 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.11 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.12 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.13 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.14 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.15 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.16 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.17 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.18 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.19.0 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.19.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.19.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-28.9 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-29.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-29.10 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-29.11 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-29.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-29.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-29.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-29.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-29.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-29.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-29.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-29.9 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-3.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't... |
+| iocmd-30.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-30.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-30.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-30.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-31.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: unknown or ambiguous subcommand "postevent": must be close, configure, copy... |
+| iocmd-31.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-31.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-31.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-31.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-31.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-31.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-31.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
+| iocmd-32.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-32.3.0 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-32.3.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
+| iocmd-4.12 | `message`: the -errorcode differs | errorcode: NONE |
+| iocmd-4.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't... |
+| iocmd-4.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't... |
+| iocmd-4.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "stdin"} {TCL LOOKUP CHANNEL stdin} \| want: ... |
+| iocmd-5.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdin" \| want: expected integer but got "gugu" |
+| iocmd-5.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdin" \| want: bad origin "gugu": must be start,... |
+| iocmd-8.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: 4096 |
+| iocmd-8.15.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-blah": should be one of -blocking, -buffering, -buffersize, -enc... |
+| iocmd-8.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can not find channel named "a"} \| want: 1 {wrong # args: should be "fco... |
+| iocmd-8.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {bad value for -buffering: must be one of full, line, or none} |
+| iocmd-8.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {bad value for -translation: must be one of auto, binary, c... |
+| iocmd-8.7 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "unicode" \| want: -blocking 1 -buffering full -buffersize... |
+| iocmd-8.8 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "unicode" \| want: line {-blocking 1 -buffering line -buff... |
+| iocmd-8.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -blocking 1 -buffering none -buffersize 4040 -encoding binary -eofchar {} -... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -2620,73 +2613,73 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| iortrans-2.0 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.1 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.10 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.11 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.12 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.13 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.14 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.17 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.18 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.19 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.2 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.20 | `untriaged` | code 0: {} 1 {unknown or ambiguous subcommand "push": must be close, configure, copy, e... |
-| iortrans-2.3 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.4 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.5 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.6 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.7 | `untriaged` | code 2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.8 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-2.9 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-3.1 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-3.2 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-3.3 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-3.4 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-3.5 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-3.6 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-3.7 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-3.8 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-3.9 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-4.1 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-4.10 | `untriaged` | cleanup: can't read "chan": no such variable |
-| iortrans-4.10.1 | `untriaged` | cleanup: can't read "chan": no such variable |
-| iortrans-4.10.2 | `untriaged` | cleanup: can't read "chan": no such variable |
-| iortrans-4.11 | `untriaged` | cleanup: can't read "chan": no such variable |
-| iortrans-4.11.1 | `untriaged` | cleanup: can't read "chan": no such variable |
-| iortrans-4.11.2 | `untriaged` | cleanup: can't read "chan": no such variable |
-| iortrans-4.12 | `untriaged` | cleanup: can't read "chan": no such variable |
-| iortrans-4.2 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-4.3 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-4.4 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-4.5 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-4.6 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-4.7 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-4.8 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-4.8.1 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-4.8.2 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-4.9 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-5.1 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-5.10 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-5.11 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-5.2 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-5.3 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-5.4 | `untriaged` | cleanup: can not find channel named "file75" |
-| iortrans-5.5 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-5.6 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-5.7 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-5.8 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-5.9 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-6.1 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-6.2 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-7.1 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-7.2 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-7.3 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-7.4 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-8.1 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-8.2 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-8.3 | `untriaged` | code 1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, fl... |
-| iortrans-ea69b0258a9833cb | `untriaged` | cleanup: can't read "chan": no such variable |
+| iortrans-2.0 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.10 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.11 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.12 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.13 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.14 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.17 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.18 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.19 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-2.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.20 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: {} 1 {unknown or ambiguous subcommand "push": must be close, configure, cop... |
+| iortrans-2.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 2/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-2.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-2.9 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
+| iortrans-3.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-3.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-3.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-3.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-3.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-3.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-3.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-3.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-3.9 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-4.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-4.10 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't read "chan": no such variable |
+| iortrans-4.10.1 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't read "chan": no such variable |
+| iortrans-4.10.2 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't read "chan": no such variable |
+| iortrans-4.11 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't read "chan": no such variable |
+| iortrans-4.11.1 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't read "chan": no such variable |
+| iortrans-4.11.2 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't read "chan": no such variable |
+| iortrans-4.12 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't read "chan": no such variable |
+| iortrans-4.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-4.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-4.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-4.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-4.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-4.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-4.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-4.8.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-4.8.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-4.9 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-5.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-5.10 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-5.11 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-5.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-5.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-5.4 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can not find channel named "file75" |
+| iortrans-5.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-5.6 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-5.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-5.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-5.9 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-6.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-6.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-7.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-7.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-7.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-7.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-8.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-8.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-8.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
+| iortrans-ea69b0258a9833cb | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't read "chan": no such variable |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -2702,9 +2695,9 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| lindex-10.4 | `untriaged` | code 0: 1 {unmatched open brace in list} |
-| lindex-17.0 | `untriaged` | code 0:  |
-| lindex-2.4 | `untriaged` | code 0: 1 {unmatched open brace in list} |
+| lindex-10.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {unmatched open brace in list} \| want: 1 bad\ index\ \"\{\":\ must\ be\ ... |
+| lindex-17.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: bad index "foo"* |
+| lindex-2.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {unmatched open brace in list} \| want: 1 bad\ index\ \"\{\":\ must\ be\ ... |
 
 ### link.test
 
@@ -2716,7 +2709,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| list-1.26 | `untriaged` | code 0: #\{ #\{ |
+| list-1.26 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: #\{ #\{ \| want: \#\{ #\{ |
 
 ### listObj.test
 
@@ -2729,23 +2722,23 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| lmap-1.15 | `untriaged` | code 0: 1 {can't set "a": variable is array} {can't set "a": variable is array     whil... |
-| lmap-1.16 | `untriaged` | code 1: foreach varlist is empty |
-| lmap-4.16 | `untriaged` | code 1: foreach varlist is empty |
-| lmap-7.5 | `untriaged` | code 1: foreach varlist is empty |
+| lmap-1.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "a": variable is array} {can't set "a": variable is array     ... |
+| lmap-1.16 | `message`: an error where tclsh also gives one, with another message | code 1/1: foreach varlist is empty \| want: lmap varlist is empty |
+| lmap-4.16 | `message`: an error where tclsh also gives one, with another message | code 1/1: foreach varlist is empty \| want: lmap varlist is empty |
+| lmap-7.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: foreach varlist is empty \| want: lmap varlist is empty |
 
 ### load.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| load-1.1 | `untriaged` | code 1: invalid command name "load" |
-| load-1.2 | `untriaged` | code 1: invalid command name "load" |
-| load-1.3 | `untriaged` | code 1: invalid command name "load" |
-| load-1.4 | `untriaged` | code 1: invalid command name "load" |
-| load-1.5 | `untriaged` | code 1: invalid command name "load" |
-| load-1.6 | `untriaged` | code 1: invalid command name "load" |
-| load-1.7 | `untriaged` | code 1: invalid command name "load" |
-| load-1.8 | `untriaged` | code 1: invalid command name "load" |
+| load-1.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "load" \| want: wrong # args: should be "load ?-global? ... |
+| load-1.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "load" \| want: wrong # args: should be "load ?-global? ... |
+| load-1.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "load" \| want: could not find interpreter "foobar" |
+| load-1.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "load" \| want: must specify either file name or package... |
+| load-1.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "load" \| want: must specify either file name or package... |
+| load-1.6 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "load" \| want: package "Unknown" isn't loaded statically |
+| load-1.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "load" \| want: bad option "-abc": must be -global, -laz... |
+| load-1.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "load" \| want: couldn't figure out package name for -gl... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -2759,39 +2752,27 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 |---|---|---|
 | testpurebytesobj | 2 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 
-### lrepeat.test
-
-| Test | Bucket | Result (start) |
-|---|---|---|
-| lrepeat-1.1 | `untriaged` | code 1: invalid command name "-body" |
-| lrepeat-1.2 | `untriaged` | code 1: invalid command name "-body" |
-| lrepeat-1.3 | `untriaged` | code 1: invalid command name "-body" |
-| lrepeat-1.4 | `untriaged` | code 1: invalid command name "-body" |
-| lrepeat-1.5 | `untriaged` | code 1: invalid command name "-body" |
-| lrepeat-1.6 | `untriaged` | code 1: invalid command name "-body" |
-| lrepeat-1.7 | `untriaged` | code 1: invalid command name "-body" |
-
 ### lsearch.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| lsearch-17.12 | `untriaged` | code 1: element -2 missing from sublist "a" |
-| lsearch-17.13 | `untriaged` | code 1: element -1-1 missing from sublist "a" |
-| lsearch-17.14 | `untriaged` | code 1: element end--1 missing from sublist "a" |
-| lsearch-17.15 | `untriaged` | code 1: element end+1 missing from sublist "a" |
-| lsearch-17.16 | `untriaged` | code 1: element end+2 missing from sublist "a" |
-| lsearch-19.7 | `untriaged` | code 0: 0 end |
-| lsearch-19.8 | `untriaged` | code 0: {0 end} |
+| lsearch-17.12 | `message`: an error where tclsh also gives one, with another message | code 1/1: element -2 missing from sublist "a" \| want: index "-2" cannot select an elem... |
+| lsearch-17.13 | `message`: an error where tclsh also gives one, with another message | code 1/1: element -1-1 missing from sublist "a" \| want: index "-1-1" cannot select an ... |
+| lsearch-17.14 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end--1 missing from sublist "a" \| want: index "end--1" cannot select... |
+| lsearch-17.15 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end+1 missing from sublist "a" \| want: index "end+1" cannot select a... |
+| lsearch-17.16 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end+2 missing from sublist "a" \| want: index "end+2" cannot select a... |
+| lsearch-19.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 end \| want: 0 1 |
+| lsearch-19.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {0 end} \| want: {0 1} |
 
 ### lset.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| lset-16.2 | `untriaged` | code 1: list index out of range |
-| lset-16.3 | `untriaged` | code 1: list index out of range |
-| lset-16.6 | `untriaged` | code 1: list index out of range |
-| lset-16.7 | `untriaged` | code 1: list index out of range |
-| lset-2.2 | `untriaged` | code 0: 1 {list element in braces followed by "1" instead of space} |
+| lset-16.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: list index out of range \| want: {{test 1}} |
+| lset-16.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: list index out of range \| want: {{{test 1}}} |
+| lset-16.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: list index out of range \| want: {{test 1}} |
+| lset-16.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: list index out of range \| want: {{{test 1}}} |
+| lset-2.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {list element in braces followed by "1" instead of space} \| want: 1 {bad... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -2807,42 +2788,42 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| Tcl_Main-1.2 | `untriaged` | code 0: -script {} 0  |
-| Tcl_Main-1.7 | `untriaged` | cleanup: couldn't read file "-encoding": no such file or directory |
-| Tcl_Main-1.8 | `untriaged` | cleanup: couldn't read file "-encoding": no such file or directory |
-| Tcl_Main-1.9 | `untriaged` | cleanup: couldn't read file "-enc": no such file or directory |
-| Tcl_Main-3.2 | `untriaged` | code 0: 1 {child process exited abnormally} {ERROR } |
-| Tcl_Main-3.4 | `untriaged` | code 0: 1 child process exited abnormally missing close-brace  |
-| Tcl_Main-5.1 | `untriaged` | code 0:  |
-| Tcl_Main-5.2 | `untriaged` | code 0: 0 {} |
-| Tcl_Main-5.3 | `untriaged` | code 0: timeout |
-| Tcl_Main-5.7 | `untriaged` | code 0: bar foo  |
-| Tcl_Main-6.1 | `untriaged` | code 0:  |
-| Tcl_Main-6.3 | `untriaged` | code 0: not reached  |
-| Tcl_Main-6.4 | `untriaged` | code 0: YES  |
-| Tcl_Main-6.6 | `untriaged` | cleanup: can not find channel named "file45" |
-| Tcl_Main-6.7 | `untriaged` | code 0: invalid command name "foo"  |
-| Tcl_Main-9.1 | `untriaged` | code 0: This is   a test  |
-| Tcl_Main-9.2 | `untriaged` | code 0:  |
-| Tcl_Main-9.3 | `untriaged` | code 0:  |
-| Tcl_Main-9.4 | `untriaged` | code 0:  |
+| Tcl_Main-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: -script {} 0  \| want: /ztclsh -script 0  |
+| Tcl_Main-1.7 | `bug`: the result differs from tclsh 8.6.16 | cleanup: couldn't read file "-encoding": no such file or directory |
+| Tcl_Main-1.8 | `bug`: the result differs from tclsh 8.6.16 | cleanup: couldn't read file "-encoding": no such file or directory |
+| Tcl_Main-1.9 | `bug`: the result differs from tclsh 8.6.16 | cleanup: couldn't read file "-enc": no such file or directory |
+| Tcl_Main-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {child process exited abnormally} {ERROR } \| want: 1 {child process exit... |
+| Tcl_Main-3.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 child process exited abnormally missing close-brace  \| want: 1 child pro... |
+| Tcl_Main-5.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: can't set "tcl_interactive": variable must have boolean value  |
+| Tcl_Main-5.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 SUCCESS |
+| Tcl_Main-5.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: timeout \| want: child exit |
+| Tcl_Main-5.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: bar foo  \| want: bar  |
+| Tcl_Main-6.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: 1 %  |
+| Tcl_Main-6.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: not reached  \| want: 1  |
+| Tcl_Main-6.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: YES  \| want: 1 % YES  |
+| Tcl_Main-6.6 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can not find channel named "file45" |
+| Tcl_Main-6.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid command name "foo"  \| want: 1 % %  |
+| Tcl_Main-9.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: This is   a test  \| want: 1 one two This is   a test one  |
+| Tcl_Main-9.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: 1 foo % foo     while executing "error foo"     (script that gene... |
+| Tcl_Main-9.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: 1 %  |
+| Tcl_Main-9.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: 1 foo  |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| Tcltest | 36 | `untriaged` |
+| Tcltest | 36 | `internals`: a C test command or package of the Tcl test binary |
 
 ### mathop.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| mathop-24.3 | `untriaged` | code 0: {can't use non-numeric string as operand of "%" ARITH DOMAIN {non-numeric strin... |
-| mathop-25.30 | `untriaged` | code 0: 0 |
+| mathop-24.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {can't use non-numeric string as operand of "%" ARITH DOMAIN {non-numeric s... |
+| mathop-25.30 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
 
 ### misc.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| misc-1.2 | `untriaged` | code 0: 1 missing close-brace for variable name missing close-brace for variable name  ... |
+| misc-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 missing close-brace for variable name missing close-brace for variable na... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -2852,207 +2833,207 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| msgcat-0.0 | `untriaged` | setup: invalid command name "i" |
-| msgcat-0.1 | `untriaged` | setup: invalid command name "i" |
-| msgcat-0.2 | `untriaged` | setup: invalid command name "i" |
-| msgcat-0.3 | `untriaged` | setup: invalid command name "i" |
-| msgcat-0.4 | `untriaged` | setup: invalid command name "i" |
-| msgcat-0.5 | `untriaged` | setup: invalid command name "i" |
-| msgcat-0.6 | `untriaged` | setup: invalid command name "i" |
-| msgcat-0.7 | `untriaged` | setup: invalid command name "i" |
-| msgcat-1.10 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-1.11 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-1.12 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-1.13 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-1.3 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-1.4 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-1.5 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-1.6 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-1.7 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-1.8 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-1.9 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-10.1 | `untriaged` | code 1: invalid command name "mcloadedlocales" |
-| msgcat-10.2 | `untriaged` | code 1: invalid command name "mcloadedlocales" |
-| msgcat-10.3 | `untriaged` | setup: invalid command name "mcforgetpackage" |
-| msgcat-10.4 | `untriaged` | setup: invalid command name "mcforgetpackage" |
-| msgcat-11.1 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-11.2 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-11.3 | `untriaged` | code 1: invalid command name "mcpackageconfig" |
-| msgcat-12.1 | `untriaged` | code 1: invalid command name "mcpackagelocale" |
-| msgcat-12.10 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-12.2 | `untriaged` | code 1: invalid command name "mcpackagelocale" |
-| msgcat-12.3 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-12.4 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-12.5 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-12.6 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-12.7 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-12.8 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-12.9 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-13.1 | `untriaged` | code 1: invalid command name "mcpackageconfig" |
-| msgcat-13.2 | `untriaged` | code 1: invalid command name "mcpackageconfig" |
-| msgcat-13.3 | `untriaged` | code 1: invalid command name "mcpackageconfig" |
-| msgcat-13.4 | `untriaged` | setup: invalid command name "mcforgetpackage" |
-| msgcat-13.5 | `untriaged` | setup: invalid command name "mcforgetpackage" |
-| msgcat-2.3 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-2.4 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-2.5 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-2.6 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-2.7 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-3.10 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.11 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.12 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.13 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.14 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.15 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.16 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.2 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.3 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.4 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.5 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.6 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.7 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.8 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-3.9 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-4.2 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-4.3 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-4.4 | `untriaged` | setup: can't rename "msgcat::mcunknown": command doesn't exist |
-| msgcat-4.5 | `untriaged` | setup: can't rename "msgcat::mcunknown": command doesn't exist |
-| msgcat-4.6 | `untriaged` | setup: can't rename "msgcat::mcunknown": command doesn't exist |
-| msgcat-5.1 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-5.10 | `untriaged` | setup: can't rename "msgcat::mcunknown": command doesn't exist |
-| msgcat-5.11 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-5.2 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-5.3 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-5.4 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-5.5 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-5.6 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-5.7 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-5.8 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-5.9 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-6.1 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-6.10 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-6.11 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-6.12 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-6.2 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-6.3 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-6.4 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-6.5 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-6.6 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-6.7 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-6.8 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-6.9 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-7.1 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-7.2 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-7.3 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-7.4 | `untriaged` | setup: invalid command name "mcset" |
-| msgcat-8.1 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-8.2 | `untriaged` | setup: invalid command name "mclocale" |
-| msgcat-9.1 | `untriaged` | code 1: invalid command name "mcexists" |
-| msgcat-9.2 | `untriaged` | code 1: invalid command name "mcexists" |
-| msgcat-9.3 | `untriaged` | setup: invalid command name "mcforgetpackage" |
-| msgcat-9.4 | `untriaged` | setup: invalid command name "mcforgetpackage" |
-| msgcat-9.5 | `untriaged` | setup: invalid command name "mcforgetpackage" |
+| msgcat-0.0 | `feature`: the 'msgcat' package | setup: invalid command name "i" |
+| msgcat-0.1 | `feature`: the 'msgcat' package | setup: invalid command name "i" |
+| msgcat-0.2 | `feature`: the 'msgcat' package | setup: invalid command name "i" |
+| msgcat-0.3 | `feature`: the 'msgcat' package | setup: invalid command name "i" |
+| msgcat-0.4 | `feature`: the 'msgcat' package | setup: invalid command name "i" |
+| msgcat-0.5 | `feature`: the 'msgcat' package | setup: invalid command name "i" |
+| msgcat-0.6 | `feature`: the 'msgcat' package | setup: invalid command name "i" |
+| msgcat-0.7 | `feature`: the 'msgcat' package | setup: invalid command name "i" |
+| msgcat-1.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-1.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-1.12 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-1.13 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-1.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-1.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-1.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-1.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-1.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-1.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-1.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-10.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcloadedlocales" \| want: wrong # args: should be "mclo... |
+| msgcat-10.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcloadedlocales" \| want: unknown subcommand "junk": mu... |
+| msgcat-10.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
+| msgcat-10.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
+| msgcat-11.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-11.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-11.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "mcpackageconfig" \| want: 1 0 |
+| msgcat-12.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcpackagelocale" \| want: wrong # args: should be "mcpa... |
+| msgcat-12.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-12.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcpackagelocale" \| want: unknown subcommand "junk": mu... |
+| msgcat-12.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-12.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-12.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-12.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-12.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-12.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-12.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-13.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcpackageconfig" \| want: wrong # args: should be "mcpa... |
+| msgcat-13.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcpackageconfig" \| want: unknown subcommand "junk": mu... |
+| msgcat-13.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcpackageconfig" \| want: bad option "junk": must be mc... |
+| msgcat-13.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
+| msgcat-13.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
+| msgcat-2.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-2.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-2.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-2.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-2.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-3.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.12 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.13 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.14 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.15 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.16 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-3.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-4.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-4.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-4.4 | `feature`: the 'msgcat' package | setup: can't rename "msgcat::mcunknown": command doesn't exist |
+| msgcat-4.5 | `feature`: the 'msgcat' package | setup: can't rename "msgcat::mcunknown": command doesn't exist |
+| msgcat-4.6 | `feature`: the 'msgcat' package | setup: can't rename "msgcat::mcunknown": command doesn't exist |
+| msgcat-5.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-5.10 | `feature`: the 'msgcat' package | setup: can't rename "msgcat::mcunknown": command doesn't exist |
+| msgcat-5.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-5.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-5.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-5.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-5.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-5.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-5.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-5.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-5.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-6.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-6.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-6.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-6.12 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-6.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-6.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-6.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-6.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-6.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-6.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-6.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-6.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-7.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-7.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-7.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-7.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-8.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-8.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-9.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcexists" \| want: wrong # args: should be "mcexists ?-... |
+| msgcat-9.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcexists" \| want: unknown option "-unknown" |
+| msgcat-9.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
+| msgcat-9.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
+| msgcat-9.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| (file stopped early, status 0) | 6 | `untriaged` |
+| (file stopped early, status 0) | 6 | `feature`: the 'msgcat' package |
 
 ### namespace-old.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| namespace-old-1.11 | `untriaged` | code 0:  |
-| namespace-old-1.15 | `untriaged` | code 0:  |
-| namespace-old-1.16 | `untriaged` | code 0: test_ns_simple::test_ns_x test_ns_simple::test_ns_y |
-| namespace-old-2.3 | `untriaged` | code 0: test_ns_simple::test_ns_x test_ns_simple::test_ns_y |
-| namespace-old-2.4 | `untriaged` | code 0:  |
-| namespace-old-5.10 | `untriaged` | code 0:  |
-| namespace-old-6.14 | `untriaged` | code 1: can't read "test_ns_cache_var": no such variable |
-| namespace-old-7.2 | `untriaged` | code 0: 0 0 |
-| namespace-old-7.5 | `untriaged` | code 0: 0 0 |
-| namespace-old-9.14 | `untriaged` | code 0: cmd2 1 {invalid command name "cmd1"} |
-| namespace-old-9.18 | `untriaged` | code 0: cmd1 ::test_ns_import_use::cmd1 |
-| namespace-old-9.19 | `untriaged` | code 0: {cmd1 cmd2} {ncmd ncmd1 ncmd2} {::test_ns_import_use::cmd1 ::test_ns_import_use... |
+| namespace-old-1.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ::test_ns_simple::test_ns_x |
+| namespace-old-1.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ::test_ns_simple::test_ns_x ::test_ns_simple::test_ns_y |
+| namespace-old-1.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: test_ns_simple::test_ns_x test_ns_simple::test_ns_y \| want: ::test_ns_simp... |
+| namespace-old-2.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: test_ns_simple::test_ns_x test_ns_simple::test_ns_y \| want: ::test_ns_simp... |
+| namespace-old-2.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ::test_ns_simple::test_ns_x ::test_ns_simple::test_ns_y |
+| namespace-old-5.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: namespace "xyzzy" not found in "::" |
+| namespace-old-6.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "test_ns_cache_var": no such variable \| want: {cache1 version} ... |
+| namespace-old-7.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 \| want: 1 1 |
+| namespace-old-7.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 \| want: 1 1 |
+| namespace-old-9.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: cmd2 1 {invalid command name "cmd1"} \| want: {} 1 {invalid command name "c... |
+| namespace-old-9.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: cmd1 ::test_ns_import_use::cmd1 \| want: {} {} |
+| namespace-old-9.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {cmd1 cmd2} {ncmd ncmd1 ncmd2} {::test_ns_import_use::cmd1 ::test_ns_import... |
 
 ### namespace.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| namespace-10.3 | `untriaged` | code 0: {::test_ns_import::cmd1 ::test_ns_import::cmd2 ::test_ns_import::p} {::test_ns_... |
-| namespace-10.5 | `untriaged` | code 0:  |
-| namespace-10.9 | `untriaged` | code 0:  |
-| namespace-13.1 | `untriaged` | code 0: {::test_ns_import::cmd1 ::test_ns_import::cmd2 ::test_ns_import::p} {::test_ns_... |
-| namespace-14.1 | `untriaged` | code 0: 10 30 20 {::test_ns_1 ::test_ns_2 ::test_ns_2: ::test_ns_7 ::test_ns_export ::t... |
-| namespace-14.13 | `untriaged` | code 0:  |
-| namespace-14.2 | `untriaged` | code 0: 1 {can't read "::test_ns_777::v": no such variable} 0 {} |
-| namespace-14.3 | `untriaged` | code 1: can't read "v": no such variable |
-| namespace-14.4 | `untriaged` | code 0: ::test_ns_1::test_ns_2::foo 0 {} |
-| namespace-14.6 | `untriaged` | code 0: ::test_ns_1::test_ns_2::foo 0 {} |
-| namespace-14.8 | `untriaged` | code 0:  |
-| namespace-17.10 | `untriaged` | code 2: 0 |
-| namespace-17.7 | `untriaged` | code 1: can't read "x": no such variable |
-| namespace-19.3 | `untriaged` | code 0:  |
-| namespace-20.3 | `untriaged` | code 0: ::test_ns_2: ::test_ns_1 |
-| namespace-21.4 | `untriaged` | code 0: ::test_ns_1::test_ns_2::test_ns_3 |
-| namespace-34.7 | `untriaged` | code 0: {} ::test_ns_3::v3 ::test_ns_2::v2 0 {} |
-| namespace-37.2 | `untriaged` | code 0:  |
-| namespace-42.1 | `untriaged` | code 0: ns 1 {} ns |
-| namespace-42.10 | `untriaged` | code 1: invalid command name "::two" |
-| namespace-42.2 | `untriaged` | code 0: foo 1 {} foo |
-| namespace-42.4 | `untriaged` | code 0: 1 {unknown or ambiguous subcommand "x": must be x1, or x2} |
-| namespace-44.5 | `untriaged` | code 1: invalid command name "::::foobarconfigure" |
-| namespace-45.2 | `untriaged` | code 0: A x |
-| namespace-46.2 | `untriaged` | code 0: {unknown or ambiguous subcommand "?": must be x1, or x2} {unknown or ambiguous ... |
-| namespace-46.3 | `untriaged` | code 0: 1 {wrong # args: should be "ns subcommand ?arg ...?"} 10 3010 3010 p |
-| namespace-46.6 | `untriaged` | code 1: invalid command name "foo" |
-| namespace-46.7 | `untriaged` | code 1: unknown namespace "ns" in namespace delete command |
-| namespace-46.8 | `untriaged` | code 0: 0 0 |
-| namespace-47.1 | `untriaged` | code 0: {0 2 0 2 0 2 0 2 0 {}} {::ns::Magic ::ns::a ::ns::b ::ns::bar ::ns::c} {{making... |
-| namespace-47.2 | `untriaged` | code 0: 1 foobar {foobar     while executing "error foobar"     (procedure "::ns::Magic... |
-| namespace-47.3 | `untriaged` | code 0: 1 {unknown or ambiguous subcommand "spong": must be Magic, a, b, or c} 1 {} |
-| namespace-47.4 | `untriaged` | code 0: 1 {unknown subcommand handler returned bad code: break} {unknown subcommand han... |
-| namespace-47.5 | `untriaged` | code 0: {LOG foo bar} 1 {unknown subcommand "bar": namespace :: does not export any com... |
-| namespace-47.6 | `untriaged` | code 0: 1 {unmatched open brace in list} {unmatched open brace in list     while execut... |
-| namespace-47.7 | `untriaged` | code 0: foo\|one two three |
-| namespace-47.8 | `untriaged` | code 0: boo\|foo\|one two three |
-| namespace-48.1 | `untriaged` | code 0: {-map {} -namespace ::foo -parameters {} -prefixes 1 -subcommands x -unknown ::... |
-| namespace-48.2 | `untriaged` | code 0: 1 1 1 1 0 0 1 1 |
-| namespace-48.3 | `untriaged` | code 0: ::foo 1 {"boo" is not an ensemble command} 1 {"spong" is not an ensemble command} |
-| namespace-50.1 | `untriaged` | code 1: wrong # args: should be "bb c d ?e? ?arg ...?" |
-| namespace-50.2 | `untriaged` | code 1: wrong # args: should be "string is class ?-strict? ?-failindex var? str" |
-| namespace-50.3 | `untriaged` | code 1: wrong # args: should be "e f" |
-| namespace-50.4 | `untriaged` | code 1: wrong # args: should be "e f" |
-| namespace-50.5 | `untriaged` | code 0: {wrong # args: should be "bar ev"} {wrong # args: should be "bingo xx"} {wrong ... |
-| namespace-50.6 | `untriaged` | code 0: {wrong # args: should be "target x y"} {wrong # args: should be "target x y"} {... |
-| namespace-50.7 | `untriaged` | code 0: {wrong # args: should be "target x y"} {wrong # args: should be "target x y"} {... |
-| namespace-50.8 | `untriaged` | code 1: wrong # args: should be "e a b subcommand ?arg ...?" |
-| namespace-51.13 | `untriaged` | code 1: unknown namespace "::test_ns_2" in namespace delete command |
-| namespace-51.14 | `untriaged` | code 0: foo0 foo0 {::test_ns_3::foo2 foo0} foo0 foo0 |
-| namespace-51.3 | `untriaged` | code 0: 1,2,global,::test_ns_1 1,2,global,::test_ns_1 global,2,global,::test_ns_1 |
-| namespace-51.4 | `untriaged` | code 0: 1,2,global,::test_ns_1 1,2,global,::test_ns_1 global,2,global, |
-| namespace-51.7 | `untriaged` | code 0: ::test_ns_1 {} ::test_ns_1 |
-| namespace-51.8 | `untriaged` | code 0: {::test_ns_1 ::test_ns_2 ::test_ns_3} {} {::test_ns_1 ::test_ns_2 ::test_ns_3} |
-| namespace-51.9 | `untriaged` | code 0: {::test_ns_1 ::test_ns_2 ::test_ns_3} {} {} {::test_ns_1 ::test_ns_2 ::test_ns_3} |
-| namespace-52.11 | `untriaged` | code 0: FAIL |
-| namespace-52.7 | `untriaged` | code 1: invalid command name "dummy" |
-| namespace-52.8 | `untriaged` | code 1: unknown namespace "::" in namespace delete command |
-| namespace-53.1 | `untriaged` | code 0: ns {1 bar} {} ns |
-| namespace-53.10 | `untriaged` | code 0: 0 0 1 {wrong # args: should be "::ns::x::z1 a1"} 1 {wrong # args: should be "::... |
-| namespace-53.11 | `untriaged` | code 0: 1 {wrong # args: should be "::ns::x::z2 a1 a2"} |
-| namespace-53.2 | `untriaged` | code 0: foo {1 bar} {} foo |
-| namespace-53.7 | `untriaged` | code 0: 1 {wrong # args: should be "ns p1 subcommand ?arg ...?"} 1 {wrong # args: shoul... |
-| namespace-53.8 | `untriaged` | code 0: 0 {1 x2} {} 1 {unknown or ambiguous subcommand "x2": must be Magic, or x1} p1 1... |
-| namespace-53.9 | `untriaged` | code 0: 0 {1 x2} {} 1 {unknown or ambiguous subcommand "x2": must be Magic, or x1} {p1 ... |
-| namespace-55.2 | `untriaged` | code 1: invalid command name "::tcl::unsupported::disassemble" |
-| namespace-56.6 | `untriaged` | code 2: 0 |
-| namespace-6.2 | `untriaged` | code 0: ::test_ns_1::::foo ::test_ns_2:::::foo |
-| namespace-7.7 | `untriaged` | setup: can't rename "tcl::info::commands": command doesn't exist |
-| namespace-8.1 | `untriaged` | code 1: unknown namespace "::" in namespace delete command |
-| namespace-8.3 | `untriaged` | code 0: ::test_ns_1::test_ns_2 {} {} 0 {} {} |
-| namespace-8.4 | `untriaged` | code 0: {::test_ns_import::cmd1 ::test_ns_import::cmd2 ::test_ns_import::p} {} {::test_... |
-| namespace-8.7 | `untriaged` | code 0: NONE |
-| namespace-9.7 | `untriaged` | code 0: {cmd1: a b c} {cmd1: d e f} {} ::test_ns_export::cmd1 ::test_ns_export::cmd1 {c... |
-| namespace-9.9 | `untriaged` | code 0: ::one::cmd |
+| namespace-10.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {::test_ns_import::cmd1 ::test_ns_import::cmd2 ::test_ns_import::p} {::test... |
+| namespace-10.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: * |
+| namespace-10.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: * |
+| namespace-13.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {::test_ns_import::cmd1 ::test_ns_import::cmd2 ::test_ns_import::p} {::test... |
+| namespace-14.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 10 30 20 {::test_ns_1 ::test_ns_2 ::test_ns_2: ::test_ns_7 ::test_ns_export... |
+| namespace-14.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't create namespace "": only global namespace can have empty name |
+| namespace-14.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read "::test_ns_777::v": no such variable} 0 {} \| want: 1 {can't ... |
+| namespace-14.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "v": no such variable \| want: 10 20 |
+| namespace-14.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ::test_ns_1::test_ns_2::foo 0 {} \| want: ::test_ns_1::test_ns_2::foo 1 {na... |
+| namespace-14.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ::test_ns_1::test_ns_2::foo 0 {} \| want: ::test_ns_1::test_ns_2::foo 1 {na... |
+| namespace-14.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ::test_ns_1::test_ns_2::foo |
+| namespace-17.10 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2: 0 \| want: 1 |
+| namespace-17.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "x": no such variable \| want: 314159 |
+| namespace-19.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: namespace "test_ns_99" not found in "::test_ns_1" |
+| namespace-20.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ::test_ns_2: ::test_ns_1 \| want:  |
+| namespace-21.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ::test_ns_1::test_ns_2::test_ns_3 \| want:  |
+| namespace-34.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} ::test_ns_3::v3 ::test_ns_2::v2 0 {} \| want: ::env ::test_ns_3::v3 ::te... |
+| namespace-37.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: namespace "::test_ns_1::test_ns_foo" not found |
+| namespace-42.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ns 1 {} ns \| want: ns 1 {} {} |
+| namespace-42.10 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "::two" \| want: invalid command name *three* |
+| namespace-42.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo 1 {} foo \| want: foo 1 {} {} |
+| namespace-42.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {unknown or ambiguous subcommand "x": must be x1, or x2} \| want: 1 {unkn... |
+| namespace-44.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "::::foobarconfigure" \| want: invalid command name "foo... |
+| namespace-45.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: A x \| want: A ::ns::x |
+| namespace-46.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {unknown or ambiguous subcommand "?": must be x1, or x2} {unknown or ambigu... |
+| namespace-46.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {wrong # args: should be "ns subcommand ?arg ...?"} 10 3010 3010 p \| wan... |
+| namespace-46.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "foo" \| want:  |
+| namespace-46.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown namespace "ns" in namespace delete command \| want:  |
+| namespace-46.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 \| want: 1 0 |
+| namespace-47.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {0 2 0 2 0 2 0 2 0 {}} {::ns::Magic ::ns::a ::ns::b ::ns::bar ::ns::c} {{ma... |
+| namespace-47.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 foobar {foobar     while executing "error foobar"     (procedure "::ns::M... |
+| namespace-47.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {unknown or ambiguous subcommand "spong": must be Magic, a, b, or c} 1 {}... |
+| namespace-47.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {unknown subcommand handler returned bad code: break} {unknown subcommand... |
+| namespace-47.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {LOG foo bar} 1 {unknown subcommand "bar": namespace :: does not export any... |
+| namespace-47.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {unmatched open brace in list} {unmatched open brace in list     while ex... |
+| namespace-47.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo\|one two three \| want: ::foo\|one two three |
+| namespace-47.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: boo\|foo\|one two three \| want: boo\|::foo\|one two three |
+| namespace-48.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {-map {} -namespace ::foo -parameters {} -prefixes 1 -subcommands x -unknow... |
+| namespace-48.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 1 1 1 0 0 1 1 \| want: 1 0 1 1 0 0 1 0 |
+| namespace-48.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ::foo 1 {"boo" is not an ensemble command} 1 {"spong" is not an ensemble co... |
+| namespace-50.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "bb c d ?e? ?arg ...?" \| want: wrong # args: should ... |
+| namespace-50.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "string is class ?-strict? ?-failindex var? str" \| w... |
+| namespace-50.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "e f" \| want: wrong # args: should be "a b d f" |
+| namespace-50.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "e f" \| want: wrong # args: should be "a b" |
+| namespace-50.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {wrong # args: should be "bar ev"} {wrong # args: should be "bingo xx"} {wr... |
+| namespace-50.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {wrong # args: should be "target x y"} {wrong # args: should be "target x y... |
+| namespace-50.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {wrong # args: should be "target x y"} {wrong # args: should be "target x y... |
+| namespace-50.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "e a b subcommand ?arg ...?" \| want: wrong # args: s... |
+| namespace-51.13 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown namespace "::test_ns_2" in namespace delete command \| want: 2 {} {... |
+| namespace-51.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo0 foo0 {::test_ns_3::foo2 foo0} foo0 foo0 \| want: foo0 {foo1 foo2 foo0}... |
+| namespace-51.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1,2,global,::test_ns_1 1,2,global,::test_ns_1 global,2,global,::test_ns_1 \... |
+| namespace-51.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1,2,global,::test_ns_1 1,2,global,::test_ns_1 global,2,global, \| want: glo... |
+| namespace-51.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ::test_ns_1 {} ::test_ns_1 \| want: ::test_ns_1 {} {} |
+| namespace-51.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {::test_ns_1 ::test_ns_2 ::test_ns_3} {} {::test_ns_1 ::test_ns_2 ::test_ns... |
+| namespace-51.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {::test_ns_1 ::test_ns_2 ::test_ns_3} {} {} {::test_ns_1 ::test_ns_2 ::test... |
+| namespace-52.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: FAIL \| want: SUCCESS |
+| namespace-52.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "dummy" \| want: MYUNKNOWN: dummy a b c |
+| namespace-52.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown namespace "::" in namespace delete command \| want: FINE |
+| namespace-53.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ns {1 bar} {} ns \| want: ns {1 bar} {} {} |
+| namespace-53.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 1 {wrong # args: should be "::ns::x::z1 a1"} 1 {wrong # args: should be... |
+| namespace-53.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {wrong # args: should be "::ns::x::z2 a1 a2"} \| want: 1 {wrong # args: s... |
+| namespace-53.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo {1 bar} {} foo \| want: foo {1 bar} {} {} |
+| namespace-53.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {wrong # args: should be "ns p1 subcommand ?arg ...?"} 1 {wrong # args: s... |
+| namespace-53.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {1 x2} {} 1 {unknown or ambiguous subcommand "x2": must be Magic, or x1} ... |
+| namespace-53.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {1 x2} {} 1 {unknown or ambiguous subcommand "x2": must be Magic, or x1} ... |
+| namespace-55.2 | `design`: inspects the bytecode of Tcl; ztcl has its own bytecode | code 1/0,2: invalid command name "::tcl::unsupported::disassemble" \| want: 1 1 1 * |
+| namespace-56.6 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2: 0 \| want: 2 |
+| namespace-6.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ::test_ns_1::::foo ::test_ns_2:::::foo \| want: ::test_ns_1::foo ::test_ns_... |
+| namespace-7.7 | `bug`: the result differs from tclsh 8.6.16 | setup: can't rename "tcl::info::commands": command doesn't exist |
+| namespace-8.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown namespace "::" in namespace delete command \| want: {::test_ns_1 27... |
+| namespace-8.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ::test_ns_1::test_ns_2 {} {} 0 {} {} \| want: ::test_ns_1::test_ns_2 {} {} ... |
+| namespace-8.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {::test_ns_import::cmd1 ::test_ns_import::cmd2 ::test_ns_import::p} {} {::t... |
+| namespace-8.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: NONE \| want: baz |
+| namespace-9.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {cmd1: a b c} {cmd1: d e f} {} ::test_ns_export::cmd1 ::test_ns_export::cmd... |
+| namespace-9.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: ::one::cmd \| want: import pattern * would create a loop* |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3070,7 +3051,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| nre-4.2 | `untriaged` | setup: "::dict" is not an ensemble command |
+| nre-4.2 | `bug`: the result differs from tclsh 8.6.16 | setup: "::dict" is not an ensemble command |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3087,80 +3068,80 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| oo-0.2 | `untriaged` | code 1: unknown namespace "::" in namespace delete command |
-| oo-0.6 | `untriaged` | code 1: namespace "oo" not found in "::" |
-| oo-0.7 | `untriaged` | code 1: namespace "oo" not found in "::" |
-| oo-1.21 | `untriaged` | code 1: ::oo::Slot does not refer to an object |
-| oo-1.25 | `untriaged` | code 0: D D D |
-| oo-14.2 | `untriaged` | code 0: 1 {unknown method "?": must be bar, boo or destroy} 0 {::fooTest in bar} 0 {::f... |
-| oo-14.3 | `untriaged` | cleanup: mixin deletion failed to destroy dependent instance |
-| oo-14.4 | `untriaged` | setup: can't create object "c": command already exists with that name |
-| oo-15.1 | `untriaged` | code 1: can't create object "Aclass": command already exists with that name |
-| oo-15.13.1 | `untriaged` | cleanup: invalid command name "Cls2" |
-| oo-15.13.2 | `untriaged` | code 1: ::dupens refers to an existing namespace |
-| oo-15.14 | `untriaged` | code 1: ::dupens refers to an existing namespace |
-| oo-18.10 | `untriaged` | code 0: foobar     while executing "error foobar"     (in namespace eval "::oo::objdefi... |
-| oo-18.11 | `untriaged` | code 0: foobar     while executing "error foobar"     (in namespace eval "::oo::objdefi... |
-| oo-18.12 | `untriaged` | code 1: self may only be called from inside a method |
-| oo-18.2 | `untriaged` | code 0: 1 foo {foo     while executing "error foo"     (in namespace eval "::oo::define... |
-| oo-18.3b | `untriaged` | code 0: 1 bar {bar     while executing "error bar"     invoked from within "eval error ... |
-| oo-18.5 | `untriaged` | code 0: 1 foo {foo     while executing "error foo"     (in "my eval" script line 1)    ... |
-| oo-18.6 | `untriaged` | code 0: foo     while executing "::error foo"     (in definition script for class "::ab... |
-| oo-18.7 | `untriaged` | code 0: 1 foo {foo     while executing "error foo"     (in definition script for object... |
-| oo-18.8 | `untriaged` | code 0: foobar     while executing "error foobar"     (in namespace eval "::oo::objdefi... |
-| oo-18.9 | `untriaged` | code 0: err     while executing "error err"     (in definition script for class "::now_... |
-| oo-19.4 | `untriaged` | code 0: {} 0 {} |
-| oo-2.7 | `untriaged` | code 1: wrong # args: should be "::k::s create X j" |
-| oo-2.8 | `untriaged` | code 1: wrong # args: should be "::k::t create X j" |
-| oo-20.3 | `untriaged` | code 0:  |
-| oo-20.4 | `untriaged` | code 0:  |
-| oo-22.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| oo-22.2 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| oo-22.3 | `untriaged` | code 1: invalid command name "my" |
-| oo-22.4 | `untriaged` | code 1: invalid command name "my" |
-| oo-22.5 | `untriaged` | code 1: invalid command name "my" |
-| oo-22.6 | `untriaged` | code 1: invalid command name "my" |
-| oo-23.1 | `untriaged` | code 1: ::oo::Obj461 does not refer to an object |
-| oo-24.1 | `untriaged` | code 1: unknown method "foo": must be destroy or dummy |
-| oo-24.2 | `untriaged` | code 1: unknown method "foo": must be destroy, dummy or dummy2 |
-| oo-27.18 | `untriaged` | code 0: 1,1 2,2 |
-| oo-27.6 | `untriaged` | code 0: {3 2 y! {}} {x! y!} {} |
-| oo-3.4 | `untriaged` | code 0: 0 ok ::oo::Obj66::state ::oo::Obj66::localcmdexists {} |
-| oo-3.4a | `untriaged` | code 0: 0 ok ::oo::Obj68::state ::oo::Obj68::localcmdexists {} |
-| oo-3.5 | `untriaged` | code 0: 0 ok ::oo::Obj70::state ::oo::Obj70::localcmdexists {} |
-| oo-3.5a | `untriaged` | code 1: can't read "result": no such variable |
-| oo-32.1 | `untriaged` | setup: class "oo::Slot" does not exist |
-| oo-32.2 | `untriaged` | setup: class "oo::Slot" does not exist |
-| oo-32.3 | `untriaged` | setup: class "oo::Slot" does not exist |
-| oo-32.4 | `untriaged` | setup: class "oo::Slot" does not exist |
-| oo-32.5 | `untriaged` | setup: class "oo::Slot" does not exist |
-| oo-33.1 | `untriaged` | setup: class "oo::Slot" does not exist |
-| oo-33.2 | `untriaged` | setup: class "oo::Slot" does not exist |
-| oo-33.3 | `untriaged` | setup: class "oo::Slot" does not exist |
-| oo-33.4 | `untriaged` | setup: class "oo::Slot" does not exist |
-| oo-34.1 | `untriaged` | code 1: filter does not refer to an object |
-| oo-34.2 | `untriaged` | code 1: oo::Slot does not refer to an object |
-| oo-34.3 | `untriaged` | code 1: oo::define::filter does not refer to an object |
-| oo-34.4 | `untriaged` | code 1: oo::define::mixin does not refer to an object |
-| oo-34.5 | `untriaged` | code 1: oo::define::superclass does not refer to an object |
-| oo-34.6 | `untriaged` | code 1: oo::define::variable does not refer to an object |
-| oo-34.7 | `untriaged` | code 1: oo::objdefine::filter does not refer to an object |
-| oo-34.8 | `untriaged` | code 1: oo::objdefine::mixin does not refer to an object |
-| oo-34.9 | `untriaged` | code 1: oo::objdefine::variable does not refer to an object |
-| oo-35.2 | `untriaged` | code 1: unknown method "create": must be destroy or eat |
-| oo-35.5 | `untriaged` | code 1: can't create object "D": command already exists with that name |
-| oo-35.7.1 | `untriaged` | code 0: can't delete "o": command doesn't exist invalid command name "::oo::Obj563" |
-| oo-35.7.2 | `untriaged` | code 0: Destroyed invalid command name "::oo::Obj568" |
-| oo-6.10 | `untriaged` | code 1: wrong # args: should be "my handler a b c" |
-| oo-6.11 | `untriaged` | code 1: wrong # args: should be "my handler a b c" |
-| oo-6.13 | `untriaged` | code 1: wrong # args: should be "my handler a b c" |
-| oo-6.14 | `untriaged` | code 1: wrong # args: should be "my handler a b c" |
-| oo-6.16 | `untriaged` | code 1: wrong # args: should be "my handler a b c d" |
-| oo-6.17 | `untriaged` | code 1: wrong # args: should be "my handler a b c d" |
-| oo-6.18 | `untriaged` | code 1: wrong # args: should be "string length string" |
-| oo-6.8 | `untriaged` | code 1: wrong # args: should be "my handler a b c" |
-| oo-7.10 | `untriaged` | code 0: c2::m1 c2::destructor c2::m1 no-self c1::m1 /c2::m1 0 {c2::m1 c2::destructor c2... |
-| oo-7.7 | `untriaged` | code 0: {unknown method "?": must be destroy or foo} foo! {foo!     while executing "er... |
+| oo-0.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown namespace "::" in namespace delete command \| want:  |
+| oo-0.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: namespace "oo" not found in "::" \| want: 0 {} 1 {invalid command name "obj... |
+| oo-0.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: namespace "oo" not found in "::" \| want: 0 {} 1 {invalid command name "cla... |
+| oo-1.21 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: ::oo::Slot does not refer to an object \| want: {} {::oo::Slot ::oo::class ... |
+| oo-1.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: D D D \| want: D D D D D D |
+| oo-14.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {unknown method "?": must be bar, boo or destroy} 0 {::fooTest in bar} 0 ... |
+| oo-14.3 | `bug`: the result differs from tclsh 8.6.16 | cleanup: mixin deletion failed to destroy dependent instance |
+| oo-14.4 | `bug`: the result differs from tclsh 8.6.16 | setup: can't create object "c": command already exists with that name |
+| oo-15.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't create object "Aclass": command already exists with that name \| want... |
+| oo-15.13.1 | `bug`: the result differs from tclsh 8.6.16 | cleanup: invalid command name "Cls2" |
+| oo-15.13.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: ::dupens refers to an existing namespace \| want: 0 ::Cls2 1 |
+| oo-15.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: ::dupens refers to an existing namespace \| want: {} ::dupens::test-15.14 |
+| oo-18.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foobar     while executing "error foobar"     (in namespace eval "::oo::obj... |
+| oo-18.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foobar     while executing "error foobar"     (in namespace eval "::oo::obj... |
+| oo-18.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: self may only be called from inside a method \| want: ::foo |
+| oo-18.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 foo {foo     while executing "error foo"     (in namespace eval "::oo::de... |
+| oo-18.3b | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 bar {bar     while executing "error bar"     invoked from within "eval er... |
+| oo-18.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 foo {foo     while executing "error foo"     (in "my eval" script line 1)... |
+| oo-18.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo     while executing "::error foo"     (in definition script for class "... |
+| oo-18.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 foo {foo     while executing "error foo"     (in definition script for ob... |
+| oo-18.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foobar     while executing "error foobar"     (in namespace eval "::oo::obj... |
+| oo-18.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: err     while executing "error err"     (in definition script for class "::... |
+| oo-19.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} 0 {} \| want: ::testoo19_4::foo 0 ::testoo19_4::foo |
+| oo-2.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::k::s create X j" \| want: wrong # args: should be ... |
+| oo-2.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::k::t create X j" \| want: wrong # args: should be ... |
+| oo-20.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't define "a(b)": name refers to an element in an array |
+| oo-20.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't define "a(b)": name refers to an element in an array |
+| oo-22.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| oo-22.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| oo-22.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "my" \| want: {* method Work class ::A *} {* method Wo... |
+| oo-22.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "my" \| want: {* method Work class ::B *} {* method Wo... |
+| oo-22.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "my" \| want: {* method Work class ::B *} {* method Wo... |
+| oo-22.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "my" \| want: {* method Work class ::A *} {* method Wo... |
+| oo-23.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: ::oo::Obj461 does not refer to an object \| want: 1 1,2 1,2,3 1,2,3,4 1,x,3,4 |
+| oo-24.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown method "foo": must be destroy or dummy \| want: unknown method "foo":... |
+| oo-24.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown method "foo": must be destroy, dummy or dummy2 \| want: unknown metho... |
+| oo-27.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1,1 2,2 \| want: unknown method "-?": must be * |
+| oo-27.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {3 2 y! {}} {x! y!} {} \| want: {3 2 y! {}} {x! y!} {x! y!} |
+| oo-3.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 ok ::oo::Obj66::state ::oo::Obj66::localcmdexists {} \| want: 0 ok *::sta... |
+| oo-3.4a | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 ok ::oo::Obj68::state ::oo::Obj68::localcmdexists {} \| want: 0 ok *::sta... |
+| oo-3.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 ok ::oo::Obj70::state ::oo::Obj70::localcmdexists {} \| want: 0 ok *::sta... |
+| oo-3.5a | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "result": no such variable \| want: ::obj ok localcmdexists ::ob... |
+| oo-32.1 | `bug`: the result differs from tclsh 8.6.16 | setup: class "oo::Slot" does not exist |
+| oo-32.2 | `bug`: the result differs from tclsh 8.6.16 | setup: class "oo::Slot" does not exist |
+| oo-32.3 | `bug`: the result differs from tclsh 8.6.16 | setup: class "oo::Slot" does not exist |
+| oo-32.4 | `bug`: the result differs from tclsh 8.6.16 | setup: class "oo::Slot" does not exist |
+| oo-32.5 | `bug`: the result differs from tclsh 8.6.16 | setup: class "oo::Slot" does not exist |
+| oo-33.1 | `bug`: the result differs from tclsh 8.6.16 | setup: class "oo::Slot" does not exist |
+| oo-33.2 | `bug`: the result differs from tclsh 8.6.16 | setup: class "oo::Slot" does not exist |
+| oo-33.3 | `bug`: the result differs from tclsh 8.6.16 | setup: class "oo::Slot" does not exist |
+| oo-33.4 | `bug`: the result differs from tclsh 8.6.16 | setup: class "oo::Slot" does not exist |
+| oo-34.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: filter does not refer to an object \| want: ::oo::Slot ::oo::Slot ::oo::Slo... |
+| oo-34.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: oo::Slot does not refer to an object \| want: ::oo::define::filter ::oo::de... |
+| oo-34.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: oo::define::filter does not refer to an object \| want: {-append -clear -se... |
+| oo-34.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: oo::define::mixin does not refer to an object \| want: {-append -clear -set... |
+| oo-34.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: oo::define::superclass does not refer to an object \| want: {-append -clear... |
+| oo-34.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: oo::define::variable does not refer to an object \| want: {-append -clear -... |
+| oo-34.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: oo::objdefine::filter does not refer to an object \| want: {-append -clear ... |
+| oo-34.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: oo::objdefine::mixin does not refer to an object \| want: {-append -clear -... |
+| oo-34.9 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: oo::objdefine::variable does not refer to an object \| want: {-append -clea... |
+| oo-35.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown method "create": must be destroy or eat \| want: ::appleClass ::ora... |
+| oo-35.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't create object "D": command already exists with that name \| want: {c ... |
+| oo-35.7.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: can't delete "o": command doesn't exist invalid command name "::oo::Obj563"... |
+| oo-35.7.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Destroyed invalid command name "::oo::Obj568" \| want: Destroyed impossible... |
+| oo-6.10 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "my handler a b c" \| want: wrong # args: should be "... |
+| oo-6.11 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "my handler a b c" \| want: wrong # args: should be "... |
+| oo-6.13 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "my handler a b c" \| want: wrong # args: should be "... |
+| oo-6.14 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "my handler a b c" \| want: wrong # args: should be "... |
+| oo-6.16 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "my handler a b c d" \| want: wrong # args: should be... |
+| oo-6.17 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "my handler a b c d" \| want: wrong # args: should be... |
+| oo-6.18 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "string length string" \| want: wrong # args: should ... |
+| oo-6.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "my handler a b c" \| want: wrong # args: should be "... |
+| oo-7.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: c2::m1 c2::destructor c2::m1 no-self c1::m1 /c2::m1 0 {c2::m1 c2::destructo... |
+| oo-7.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {unknown method "?": must be destroy or foo} foo! {foo!     while executing... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3172,13 +3153,13 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| oo-call-2.10 | `untriaged` | code 1: a does not refer to an object |
-| oo-call-2.8 | `untriaged` | code 1: wrong # args: should be "info class subcommand ?arg ...?" |
-| oo-call-2.9 | `untriaged` | code 1: a does not refer to an object |
-| oo-call-3.3 | `untriaged` | code 2: {{{method <constructor> object method} {method <constructor> object method}} 0}... |
-| oo-call-3.4 | `untriaged` | code 2: {{{method <destructor> object method} {method <destructor> object method}} 0} {... |
-| oo-nextto-2.5 | `untriaged` | code 1: wrong # args: should be "::oo::Obj44 x y" |
-| oo-nextto-2.7 | `untriaged` | code 1: method implementation by "B" not reachable from here |
+| oo-call-2.10 | `message`: an error where tclsh also gives one, with another message | code 1/1: a does not refer to an object \| want: wrong # args: should be "info class ca... |
+| oo-call-2.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "info class subcommand ?arg ...?" \| want: wrong # ar... |
+| oo-call-2.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: a does not refer to an object \| want: wrong # args: should be "info class ca... |
+| oo-call-3.3 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2: {{{method <constructor> object method} {method <constructor> object method}... |
+| oo-call-3.4 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2: {{{method <destructor> object method} {method <destructor> object method}} ... |
+| oo-nextto-2.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::oo::Obj44 x y" \| want: wrong # args: should be "n... |
+| oo-nextto-2.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: method implementation by "B" not reachable from here \| want: method has no n... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3188,105 +3169,105 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| opt-10.1 | `untriaged` | code 1: invalid command name "::tcl::OptProc" |
-| opt-10.10 | `untriaged` | code 0: 1 {invalid command name "optTest"} |
-| opt-10.2 | `untriaged` | code 1: invalid command name "::tcl::OptProc" |
-| opt-10.3 | `untriaged` | code 1: invalid command name "::tcl::OptProc" |
-| opt-10.4 | `untriaged` | code 1: invalid command name "::tcl::OptProc" |
-| opt-10.5 | `untriaged` | code 0: 1 {invalid command name "optTest"} |
-| opt-10.6 | `untriaged` | code 0: 1 {invalid command name "optTest"} |
-| opt-10.7 | `untriaged` | code 1: invalid command name "optTest" |
-| opt-10.8 | `untriaged` | code 1: invalid command name "optTest" |
-| opt-10.9 | `untriaged` | code 1: invalid command name "optTest" |
-| opt-11.1 | `untriaged` | code 1: invalid command name "::tcl::OptKeyRegister" |
-| opt-11.2 | `untriaged` | code 1: invalid command name "::tcl::OptKeyRegister" |
-| opt-2.1 | `untriaged` | code 1: invalid command name "::tcl::OptKeyRegister" |
-| opt-3.1 | `untriaged` | code 1: can't read "::tcl::OptDescN": no such variable |
-| opt-3.2 | `untriaged` | code 1: can't read "::tcl::OptDescN": no such variable |
-| opt-4.1 | `untriaged` | code 1: invalid command name "::tcl::OptProc" |
-| opt-5.1 | `untriaged` | code 1: invalid command name "::tcl::OptProc" |
-| opt-6.1 | `untriaged` | code 1: invalid command name "::tcl::OptKeyRegister" |
-| opt-7.1 | `untriaged` | code 1: invalid command name "::tcl::OptCheckType" |
-| opt-8.1 | `untriaged` | code 1: invalid command name "::tcl::Lempty" |
-| opt-8.10 | `untriaged` | code 1: invalid command name "::tcl::Lvarpop" |
-| opt-8.11 | `untriaged` | code 1: invalid command name "::tcl::Lassign" |
-| opt-8.2 | `untriaged` | code 1: invalid command name "::tcl::Lempty" |
-| opt-8.3 | `untriaged` | code 1: invalid command name "::tcl::Lget" |
-| opt-8.4 | `untriaged` | code 1: invalid command name "::tcl::Lvarset" |
-| opt-8.5 | `untriaged` | code 1: invalid command name "::tcl::Lvarset1" |
-| opt-8.6 | `untriaged` | code 1: invalid command name "::tcl::Lvarincr" |
-| opt-8.7 | `untriaged` | code 1: invalid command name "::tcl::Lvarincr" |
-| opt-9.1 | `untriaged` | code 1: invalid command name "::tcl::SetMax" |
-| opt-9.2 | `untriaged` | code 1: invalid command name "::tcl::SetMin" |
+| opt-10.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::OptProc" \| want: ambigous option "-fL", choos... |
+| opt-10.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "optTest"} \| want: 1 {too many arguments (unexpect... |
+| opt-10.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::OptProc" \| want: 1 |
+| opt-10.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::OptProc" \| want: 1 |
+| opt-10.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::OptProc" \| want: ambigous option "-fLag1X", c... |
+| opt-10.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "optTest"} \| want: 1 {no value given for parameter... |
+| opt-10.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "optTest"} \| want: 1 {Usage information:     Var/F... |
+| opt-10.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "optTest" \| want: save 1 tst 7 0 |
+| opt-10.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "optTest" \| want: save 0 8 7 0 |
+| opt-10.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "optTest" \| want: save 1 tst 7 1 |
+| opt-11.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::OptKeyRegister" \| want: 1 {too many arguments... |
+| opt-11.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::OptKeyRegister" \| want: a b c |
+| opt-2.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::OptKeyRegister" \| want: testkey 1 {} 0 |
+| opt-3.1 | `feature`: the 'opt' package | code 1/0,2: can't read "::tcl::OptDescN": no such variable \| want: 1 {} {} 0 1 |
+| opt-3.2 | `feature`: the 'opt' package | code 1/0,2: can't read "::tcl::OptDescN": no such variable \| want: 1 0 |
+| opt-4.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::OptProc" \| want:  |
+| opt-5.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::OptProc" \| want: 0 1 1 1 |
+| opt-6.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::OptKeyRegister" \| want: 1 {Usage information:... |
+| opt-7.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::OptCheckType" \| want: 23 23.0 1 -blah {a b c}... |
+| opt-8.1 | `feature`: the 'opt' package | code 1/0,2: invalid command name "::tcl::Lempty" \| want: 1 |
+| opt-8.10 | `feature`: the 'opt' package | code 1/0,2: invalid command name "::tcl::Lvarpop" \| want: {b c 7 e} f |
+| opt-8.11 | `feature`: the 'opt' package | code 1/0,2: invalid command name "::tcl::Lassign" \| want: 3 a {b c 7 e} f 0 |
+| opt-8.2 | `feature`: the 'opt' package | code 1/0,2: invalid command name "::tcl::Lempty" \| want: 0 |
+| opt-8.3 | `feature`: the 'opt' package | code 1/0,2: invalid command name "::tcl::Lget" \| want: d |
+| opt-8.4 | `feature`: the 'opt' package | code 1/0,2: invalid command name "::tcl::Lvarset" \| want: a {b c D e} f |
+| opt-8.5 | `feature`: the 'opt' package | code 1/0,2: invalid command name "::tcl::Lvarset1" \| want: a b c {} {} {} X |
+| opt-8.6 | `feature`: the 'opt' package | code 1/0,2: invalid command name "::tcl::Lvarincr" \| want: a {b c 8 e} f |
+| opt-8.7 | `feature`: the 'opt' package | code 1/0,2: invalid command name "::tcl::Lvarincr" \| want: a {b c -2 e} f |
+| opt-9.1 | `feature`: the 'opt' package | code 1/0,2: invalid command name "::tcl::SetMax" \| want: 7 |
+| opt-9.2 | `feature`: the 'opt' package | code 1/0,2: invalid command name "::tcl::SetMin" \| want: -7 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| (file stopped early, status 0) | 1 | `untriaged` |
+| (file stopped early, status 0) | 1 | `feature`: the 'opt' package |
 
 ### package.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| package-1.1 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.10 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.11 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.12 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.13 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.14 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.15 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.16 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.2 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.3 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.4 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.5 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.6 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.7 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.8 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-1.9 | `untriaged` | code 1: invalid command name "::pkg::create" |
-| package-11.0 | `untriaged` | code 0: 0 |
-| package-11.132 | `untriaged` | code 0: 1 |
-| package-11.26 | `untriaged` | code 0: 0 |
-| package-11.27 | `untriaged` | code 0: 0 |
-| package-11.98 | `untriaged` | code 0: 0 |
-| package-11.99 | `untriaged` | code 0: 0 |
-| package-13.1 | `untriaged` | code 0: stable |
-| package-15.4 | `untriaged` | code 1: cannot change the preference to stable |
-| package-3.10 | `untriaged` | code 0: 1 {attempt to provide package t 2.1 failed: ifneeded test} {ifneeded test     w... |
-| package-3.15 | `untriaged` | code 2: {a b} |
-| package-3.16 | `untriaged` | code 0: 1 {testing package unknown} {testing package unknown     while executing "error... |
-| package-3.17 | `untriaged` | code 0: 1 {can't find package t 1.5} {t 1.5-1.5} |
-| package-3.24 | `untriaged` | code 1: version conflict for package "t": have 2.3, need 2.2 |
-| package-3.25 | `untriaged` | code 0: 1 {attempt to provide package t 2.1 failed: ifneeded test} {EI     invoked from... |
-| package-3.26 | `untriaged` | code 0: 1 {attempt to provide package t 2.1 failed: ifneeded test} {EI     invoked from... |
-| package-3.27 | `untriaged` | code 1: attempt to provide package foo 1 failed: attempt to provide package foo 1 faile... |
-| package-3.28 | `untriaged` | code 1: attempt to provide package foo 1 failed: can't find package foo 2 |
-| package-3.29 | `untriaged` | code 1: attempt to provide package foo 1 failed: attempt to provide package bar 1 faile... |
-| package-3.30 | `untriaged` | code 1: attempt to provide package foo 1 failed: conflicting versions provided for pack... |
-| package-3.31 | `untriaged` | code 1: attempt to provide package foo 1 failed: foo |
-| package-3.32 | `untriaged` | code 0: 1 |
-| package-3.37 | `untriaged` | code 1: attempt to provide package foo 1 failed: package foo 1 not provided |
-| package-3.40 | `untriaged` | code 1: wrong # args: should be "break" |
-| package-3.41 | `untriaged` | code 1: wrong # args: should be "continue" |
-| package-3.42 | `untriaged` | code 2: ;# |
-| package-3.43 | `untriaged` | code 10: ;# |
-| package-3.44 | `untriaged` | code 1: version conflict for package "demo": have 1.2.3, need 1.2 |
-| package-3.8 | `untriaged` | code 1: can't find package t 1.3 |
-| package-4.32 | `untriaged` | code 1: attempt to provide package t 2.3 failed: synthetic error |
-| package-4.55 | `untriaged` | code 1: expected versionMin-versionMax but got "3.2-x.y" |
-| package-4.56 | `untriaged` | code 1: expected versionMin-versionMax but got "x.y-3.2" |
-| package-8.7 | `untriaged` | code 1: version conflict for package "t": have 2.4, need 2.3 |
-| package-9.24 | `untriaged` | code 0: 0 |
-| package-9.25 | `untriaged` | code 0: 0 |
+| package-1.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "::pkg::create" \| want: wrong # args: should be "*" |
+| package-1.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::pkg::create" \| want: package ifneeded foo 1.0 [lis... |
+| package-1.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::pkg::create" \| want: package ifneeded foo 1.0 [lis... |
+| package-1.12 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::pkg::create" \| want: package ifneeded foo 1.0 [lis... |
+| package-1.13 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::pkg::create" \| want: package ifneeded foo 1.0 [lis... |
+| package-1.14 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::pkg::create" \| want: package ifneeded foo 1.0 [lis... |
+| package-1.15 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::pkg::create" \| want: package ifneeded foo 1.0 [lis... |
+| package-1.16 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::pkg::create" \| want: package ifneeded foo 1.0 [lis... |
+| package-1.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "::pkg::create" \| want: unknown option "bar": * |
+| package-1.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "::pkg::create" \| want: value for "-load" missing: * |
+| package-1.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "::pkg::create" \| want: value for "-name" missing: * |
+| package-1.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "::pkg::create" \| want: value for "-version" missing: * |
+| package-1.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "::pkg::create" \| want: at least one of -load and -sour... |
+| package-1.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::pkg::create" \| want: package ifneeded foo 1.0 [lis... |
+| package-1.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::pkg::create" \| want: package ifneeded foo 1.0 [lis... |
+| package-1.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::pkg::create" \| want: package ifneeded foo 1.0 [lis... |
+| package-11.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| package-11.132 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| package-11.26 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| package-11.27 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| package-11.98 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| package-11.99 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| package-13.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: stable \| want: latest |
+| package-15.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: cannot change the preference to stable \| want: stable latest latest |
+| package-3.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {attempt to provide package t 2.1 failed: ifneeded test} {ifneeded test  ... |
+| package-3.15 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2: {a b} \| want: {a b} 0- |
+| package-3.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {testing package unknown} {testing package unknown     while executing "e... |
+| package-3.17 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't find package t 1.5} {t 1.5-1.5} \| want: 1 {can't find package t e... |
+| package-3.24 | `message`: an error where tclsh also gives one, with another message | code 1/1: version conflict for package "t": have 2.3, need 2.2 \| want: version conflic... |
+| package-3.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {attempt to provide package t 2.1 failed: ifneeded test} {EI     invoked ... |
+| package-3.26 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {attempt to provide package t 2.1 failed: ifneeded test} {EI     invoked ... |
+| package-3.27 | `message`: an error where tclsh also gives one, with another message | code 1/1: attempt to provide package foo 1 failed: attempt to provide package foo 1 fai... |
+| package-3.28 | `message`: an error where tclsh also gives one, with another message | code 1/1: attempt to provide package foo 1 failed: can't find package foo 2 \| want: ci... |
+| package-3.29 | `message`: an error where tclsh also gives one, with another message | code 1/1: attempt to provide package foo 1 failed: attempt to provide package bar 1 fai... |
+| package-3.30 | `message`: an error where tclsh also gives one, with another message | code 1/1: attempt to provide package foo 1 failed: conflicting versions provided for pa... |
+| package-3.31 | `message`: an error where tclsh also gives one, with another message | code 1/1: attempt to provide package foo 1 failed: foo \| want: foo |
+| package-3.32 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want:  |
+| package-3.37 | `message`: an error where tclsh also gives one, with another message | code 1/1: attempt to provide package foo 1 failed: package foo 1 not provided \| want: ... |
+| package-3.40 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "break" \| want: bad return code:* |
+| package-3.41 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "continue" \| want: bad return code:* |
+| package-3.42 | `bug`: the result differs from tclsh 8.6.16 | code 2/1: ;# \| want: bad return code:* |
+| package-3.43 | `bug`: the result differs from tclsh 8.6.16 | code 10/1: ;# \| want: bad return code:* |
+| package-3.44 | `message`: an error where tclsh also gives one, with another message | code 1/1: version conflict for package "demo": have 1.2.3, need 1.2 \| want: version co... |
+| package-3.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't find package t 1.3 \| want: can't find package t exactly 1.3 |
+| package-4.32 | `message`: an error where tclsh also gives one, with another message | code 1/1: attempt to provide package t 2.3 failed: synthetic error \| want: synthetic e... |
+| package-4.55 | `message`: an error where tclsh also gives one, with another message | code 1/1: expected versionMin-versionMax but got "3.2-x.y" \| want: expected version nu... |
+| package-4.56 | `message`: an error where tclsh also gives one, with another message | code 1/1: expected versionMin-versionMax but got "x.y-3.2" \| want: expected version nu... |
+| package-8.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: version conflict for package "t": have 2.4, need 2.3 \| want: version conflic... |
+| package-9.24 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| package-9.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
 
 ### parse.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| parse-18.19 | `untriaged` | code 0: 0 abc, |
-| parse-19.1 | `untriaged` | setup: invalid command name "load" |
-| parse-19.2 | `untriaged` | setup: invalid command name "load" |
-| parse-8.12 | `untriaged` | code 1: invalid command name "noSuchCommand" |
-| parse-9.1 | `untriaged` | code 0: 1 {can't read "x": no such variable     while executing "set x"     invoked fro... |
+| parse-18.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 abc, \| want: 1 {extra characters after close-brace} |
+| parse-19.1 | `bug`: the result differs from tclsh 8.6.16 | setup: invalid command name "load" |
+| parse-19.2 | `bug`: the result differs from tclsh 8.6.16 | setup: invalid command name "load" |
+| parse-8.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "noSuchCommand" \| want: global |
+| parse-9.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read "x": no such variable     while executing "set x"     invoked... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3303,72 +3284,72 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| parseExpr-21.15 | `untriaged` | code 1: invalid character "~" in expression "0~0" |
-| parseExpr-21.16 | `untriaged` | code 1: invalid character ")" in expression "()" |
-| parseExpr-21.17 | `untriaged` | code 1: missing operand at _@_ in expression "(_@_" |
-| parseExpr-21.18 | `untriaged` | code 1: invalid character ")" in expression "a(0,)" |
-| parseExpr-21.2 | `untriaged` | code 1: invalid character "=" in expression "=" |
-| parseExpr-21.20 | `untriaged` | code 1: invalid character ")" in expression ")" |
-| parseExpr-21.21 | `untriaged` | code 1: invalid character "," in expression "a(,0)" |
-| parseExpr-21.22 | `untriaged` | code 1: invalid character "\|" in expression "0&\|0" |
-| parseExpr-21.23 | `untriaged` | code 1: invalid character "^" in expression "0^^0" |
-| parseExpr-21.24 | `untriaged` | code 1: invalid character "&" in expression "0\|&0" |
-| parseExpr-21.25 | `untriaged` | code 1: invalid character "," in expression "a(1+,0)" |
-| parseExpr-21.27 | `untriaged` | code 1: missing operator ":" in expression "0?0" |
-| parseExpr-21.28 | `untriaged` | code 1: invalid character ":" in expression "0:0" |
-| parseExpr-21.29 | `untriaged` | code 1: invalid character ")" in expression "0)" |
-| parseExpr-21.3 | `untriaged` | code 1: invalid bareword "x" in expression "x" |
-| parseExpr-21.30 | `untriaged` | code 1: invalid character "," in expression "0," |
-| parseExpr-21.31 | `untriaged` | code 1: invalid character "," in expression "0,0" |
-| parseExpr-21.32 | `untriaged` | code 1: unbalanced open paren in expression "(0,0)" |
-| parseExpr-21.33 | `untriaged` | code 1: missing close paren in expression "a(0:0,0)" |
-| parseExpr-21.34 | `untriaged` | code 1: invalid character "@" in expression ""abcdefghijklmnopqrstuvwxyz"@0" |
-| parseExpr-21.35 | `untriaged` | code 1: invalid character "@" in expression "0@"abcdefghijklmnopqrstuvwxyz"" |
-| parseExpr-21.36 | `untriaged` | code 1: invalid character "@" in expression ""abcdefghijklmnopqrstuvwxyz"@"abcdefghijkl... |
-| parseExpr-21.37 | `untriaged` | code 1: invalid character "@" in expression ""§§§§§§§§§§§§§§§§§§§§§§§§§" @ 0" |
-| parseExpr-21.38 | `untriaged` | code 1: invalid character "@" in expression "0 @ "§§§§§§§§§§§§§§§§§§§§§§§§§"" |
-| parseExpr-21.39 | `untriaged` | code 1: invalid character "@" in expression ""§§§§§§§§§§§§§§§§§§§§§§§§§" @ "§§§§§§§§§§§... |
-| parseExpr-21.4 | `untriaged` | code 1: invalid bareword "abcdefghijklmnopqrstuvwxyz" in expression "abcdefghijklmnopqr... |
-| parseExpr-21.40 | `untriaged` | code 0: invalid character "@" in expression ""abcdefghijklmnopqrstuvwxyz"@0"     while ... |
-| parseExpr-21.41 | `untriaged` | code 0: invalid character "@" in expression ""§§§§§§§§§§§§§§§§§§§§§§§§§" @ 0"     while... |
-| parseExpr-21.42 | `untriaged` | code 1: missing " in expression "123456789012345678901234567890*"abcdefghijklmnopqrstuv... |
-| parseExpr-21.43 | `untriaged` | code 1: missing close-brace for variable name in expression "12345678901234567890123456... |
-| parseExpr-21.44 | `untriaged` | code 1: missing ) in expression "123456789012345678901234567890*"foo$bar(abcdefghijklmn... |
-| parseExpr-21.45 | `untriaged` | code 1: extra characters after close-brace in expression "12345678901234567890123456789... |
-| parseExpr-21.46 | `untriaged` | code 1: extra characters after close-quote in expression "12345678901234567890123456789... |
-| parseExpr-21.47 | `untriaged` | code 1: missing close-bracket in expression "123456789012345678901234567890*"foo$bar([a... |
-| parseExpr-21.48 | `untriaged` | code 1: missing close-brace in expression "123456789012345678901234567890*"foo$bar([{ab... |
-| parseExpr-21.49 | `untriaged` | code 1: missing close-brace in expression "123456789012345678901234567890*{abcdefghijkl... |
-| parseExpr-21.5 | `untriaged` | code 1: invalid character "[" in expression "[][]" |
-| parseExpr-21.50 | `untriaged` | code 1: missing " in expression "123456789012345678901234567890*$foo(["abcdefghijklmnop... |
-| parseExpr-21.51 | `untriaged` | code 1: missing close-brace for variable name in expression "12345678901234567890123456... |
-| parseExpr-21.52 | `untriaged` | code 1: missing ) in expression "123456789012345678901234567890*$bar(abcdefghijklmnopqr... |
-| parseExpr-21.53 | `untriaged` | code 1: extra characters after close-brace in expression "12345678901234567890123456789... |
-| parseExpr-21.54 | `untriaged` | code 1: extra characters after close-quote in expression "12345678901234567890123456789... |
-| parseExpr-21.55 | `untriaged` | code 1: missing close-bracket in expression "123456789012345678901234567890*$bar([abcde... |
-| parseExpr-21.56 | `untriaged` | code 1: missing close-brace in expression "123456789012345678901234567890*$bar([{abcdef... |
-| parseExpr-21.57 | `untriaged` | code 1: missing " in expression "123456789012345678901234567890*["abcdefghijklmnopqrstu... |
-| parseExpr-21.58 | `untriaged` | code 1: missing close-brace for variable name in expression "12345678901234567890123456... |
-| parseExpr-21.59 | `untriaged` | code 1: missing ) in expression "123456789012345678901234567890*[$bar(abcdefghijklmnopq... |
-| parseExpr-21.6 | `untriaged` | code 1: invalid character "0" in expression "0 0" |
-| parseExpr-21.60 | `untriaged` | code 1: extra characters after close-brace in expression "12345678901234567890123456789... |
-| parseExpr-21.61 | `untriaged` | code 1: extra characters after close-quote in expression "12345678901234567890123456789... |
-| parseExpr-21.62 | `untriaged` | code 1: missing close-bracket in expression "123456789012345678901234567890*[abcdefghij... |
-| parseExpr-21.63 | `untriaged` | code 1: missing close-brace in expression "123456789012345678901234567890*[{abcdefghijk... |
-| parseExpr-21.7 | `untriaged` | code 1: invalid number "0o8" in expression "0o8" |
-| parseExpr-21.8 | `untriaged` | code 1: invalid number "0o8" in expression "0o8x" |
+| parseExpr-21.15 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "~" in expression "0~0" \| want: missing operator at _@_ in... |
+| parseExpr-21.16 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character ")" in expression "()" \| want: empty subexpression at _@_ ... |
+| parseExpr-21.17 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing operand at _@_ in expression "(_@_" \| want: unbalanced open paren in... |
+| parseExpr-21.18 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character ")" in expression "a(0,)" \| want: missing function argumen... |
+| parseExpr-21.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "=" in expression "=" \| want: incomplete operator "=" in e... |
+| parseExpr-21.20 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character ")" in expression ")" \| want: unbalanced close paren in ex... |
+| parseExpr-21.21 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "," in expression "a(,0)" \| want: missing function argumen... |
+| parseExpr-21.22 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "\|" in expression "0&\|0" \| want: missing operand at _@_ ... |
+| parseExpr-21.23 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "^" in expression "0^^0" \| want: missing operand at _@_ in... |
+| parseExpr-21.24 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "&" in expression "0\|&0" \| want: missing operand at _@_ i... |
+| parseExpr-21.25 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "," in expression "a(1+,0)" \| want: missing operand at _@_... |
+| parseExpr-21.27 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing operator ":" in expression "0?0" \| want: missing operator ":" at _@_... |
+| parseExpr-21.28 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character ":" in expression "0:0" \| want: unexpected operator ":" wi... |
+| parseExpr-21.29 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character ")" in expression "0)" \| want: unbalanced close paren in e... |
+| parseExpr-21.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid bareword "x" in expression "x" \| want: invalid bareword "x" in expre... |
+| parseExpr-21.30 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "," in expression "0," \| want: unexpected "," outside func... |
+| parseExpr-21.31 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "," in expression "0,0" \| want: unexpected "," outside fun... |
+| parseExpr-21.32 | `message`: an error where tclsh also gives one, with another message | code 1/1: unbalanced open paren in expression "(0,0)" \| want: unexpected "," outside f... |
+| parseExpr-21.33 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close paren in expression "a(0:0,0)" \| want: unexpected operator ":"... |
+| parseExpr-21.34 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "@" in expression ""abcdefghijklmnopqrstuvwxyz"@0" \| want:... |
+| parseExpr-21.35 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "@" in expression "0@"abcdefghijklmnopqrstuvwxyz"" \| want:... |
+| parseExpr-21.36 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "@" in expression ""abcdefghijklmnopqrstuvwxyz"@"abcdefghij... |
+| parseExpr-21.37 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "@" in expression ""§§§§§§§§§§§§§§§§§§§§§§§§§" @ 0" \| want... |
+| parseExpr-21.38 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "@" in expression "0 @ "§§§§§§§§§§§§§§§§§§§§§§§§§"" \| want... |
+| parseExpr-21.39 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "@" in expression ""§§§§§§§§§§§§§§§§§§§§§§§§§" @ "§§§§§§§§§... |
+| parseExpr-21.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid bareword "abcdefghijklmnopqrstuvwxyz" in expression "abcdefghijklmnop... |
+| parseExpr-21.40 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid character "@" in expression ""abcdefghijklmnopqrstuvwxyz"@0"     wh... |
+| parseExpr-21.41 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid character "@" in expression ""§§§§§§§§§§§§§§§§§§§§§§§§§" @ 0"     w... |
+| parseExpr-21.42 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing " in expression "123456789012345678901234567890*"abcdefghijklmnopqrst... |
+| parseExpr-21.43 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace for variable name in expression "123456789012345678901234... |
+| parseExpr-21.44 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing ) in expression "123456789012345678901234567890*"foo$bar(abcdefghijkl... |
+| parseExpr-21.45 | `message`: an error where tclsh also gives one, with another message | code 1/1: extra characters after close-brace in expression "123456789012345678901234567... |
+| parseExpr-21.46 | `message`: an error where tclsh also gives one, with another message | code 1/1: extra characters after close-quote in expression "123456789012345678901234567... |
+| parseExpr-21.47 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-bracket in expression "123456789012345678901234567890*"foo$bar(... |
+| parseExpr-21.48 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace in expression "123456789012345678901234567890*"foo$bar([{... |
+| parseExpr-21.49 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace in expression "123456789012345678901234567890*{abcdefghij... |
+| parseExpr-21.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "[" in expression "[][]" \| want: missing operator at _@_ i... |
+| parseExpr-21.50 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing " in expression "123456789012345678901234567890*$foo(["abcdefghijklmn... |
+| parseExpr-21.51 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace for variable name in expression "123456789012345678901234... |
+| parseExpr-21.52 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing ) in expression "123456789012345678901234567890*$bar(abcdefghijklmnop... |
+| parseExpr-21.53 | `message`: an error where tclsh also gives one, with another message | code 1/1: extra characters after close-brace in expression "123456789012345678901234567... |
+| parseExpr-21.54 | `message`: an error where tclsh also gives one, with another message | code 1/1: extra characters after close-quote in expression "123456789012345678901234567... |
+| parseExpr-21.55 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-bracket in expression "123456789012345678901234567890*$bar([abc... |
+| parseExpr-21.56 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace in expression "123456789012345678901234567890*$bar([{abcd... |
+| parseExpr-21.57 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing " in expression "123456789012345678901234567890*["abcdefghijklmnopqrs... |
+| parseExpr-21.58 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace for variable name in expression "123456789012345678901234... |
+| parseExpr-21.59 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing ) in expression "123456789012345678901234567890*[$bar(abcdefghijklmno... |
+| parseExpr-21.6 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid character "0" in expression "0 0" \| want: missing operator at _@_ in... |
+| parseExpr-21.60 | `message`: an error where tclsh also gives one, with another message | code 1/1: extra characters after close-brace in expression "123456789012345678901234567... |
+| parseExpr-21.61 | `message`: an error where tclsh also gives one, with another message | code 1/1: extra characters after close-quote in expression "123456789012345678901234567... |
+| parseExpr-21.62 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-bracket in expression "123456789012345678901234567890*[abcdefgh... |
+| parseExpr-21.63 | `message`: an error where tclsh also gives one, with another message | code 1/1: missing close-brace in expression "123456789012345678901234567890*[{abcdefghi... |
+| parseExpr-21.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid number "0o8" in expression "0o8" \| want: *invalid octal number* |
+| parseExpr-21.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid number "0o8" in expression "0o8x" \| want: *invalid octal number* |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | testexprparser | 215 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| expr:testexprparser && !ieeeFloatingPoint | 1 | `untriaged` |
-| expr:testexprparser && ieeeFloatingPoint | 1 | `untriaged` |
+| expr:testexprparser && !ieeeFloatingPoint | 1 | `internals`: a C test command or package of the Tcl test binary |
+| expr:testexprparser && ieeeFloatingPoint | 1 | `internals`: a C test command or package of the Tcl test binary |
 
 ### parseOld.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| parseOld-10.14 | `untriaged` | code 0: 1 {missing )} {missing )     while executing "eval \$x[format "%01000d" 0]("} |
+| parseOld-10.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {missing )} {missing )     while executing "eval \$x[format "%01000d" 0](... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3378,31 +3359,31 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| pkgMkIndex-1.1 | `untriaged` | code 0: {1 {invalid command name "pkg_mkIndex"}} / |
-| pkgMkIndex-11.1 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-12.1 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-13.1 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-14.1 | `untriaged` | code 1: invalid command name "tcl::Pkg::CompareExtension" |
-| pkgMkIndex-14.2 | `untriaged` | code 1: invalid command name "tcl::Pkg::CompareExtension" |
-| pkgMkIndex-14.3 | `untriaged` | code 1: invalid command name "tcl::Pkg::CompareExtension" |
-| pkgMkIndex-14.4 | `untriaged` | code 1: invalid command name "tcl::Pkg::CompareExtension" |
-| pkgMkIndex-14.5 | `untriaged` | code 1: invalid command name "tcl::Pkg::CompareExtension" |
-| pkgMkIndex-14.6 | `untriaged` | code 1: invalid command name "tcl::Pkg::CompareExtension" |
-| pkgMkIndex-2.1 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-2.2 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-2.3 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-2.4 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-3.1 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-4.1 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-4.2 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-5.1 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-6.1 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-6.2 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-7.1 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-7.2 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-8.1 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-8.2 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
-| pkgMkIndex-9.1 | `untriaged` | code 0: 1 {invalid command name "pkg_mkIndex"} |
+| pkgMkIndex-1.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: {1 {invalid command name "pkg_mkIndex"}} / \| want: {1 {no files matched gl... |
+| pkgMkIndex-11.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{fubar:1.0 {tclPkgSetup ... |
+| pkgMkIndex-12.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{football:1.0 {tclPkgSet... |
+| pkgMkIndex-13.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{spacename:1.0 {tclPkgSe... |
+| pkgMkIndex-14.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "tcl::Pkg::CompareExtension" \| want: 1 |
+| pkgMkIndex-14.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "tcl::Pkg::CompareExtension" \| want: 0 |
+| pkgMkIndex-14.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "tcl::Pkg::CompareExtension" \| want: 1 |
+| pkgMkIndex-14.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "tcl::Pkg::CompareExtension" \| want: 1 |
+| pkgMkIndex-14.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "tcl::Pkg::CompareExtension" \| want: 0 |
+| pkgMkIndex-14.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "tcl::Pkg::CompareExtension" \| want: 0 |
+| pkgMkIndex-2.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{simple:1.0 {tclPkgSetup... |
+| pkgMkIndex-2.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{simple:1.0 {source /pkg... |
+| pkgMkIndex-2.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{simple:1.0 {source /pkg... |
+| pkgMkIndex-2.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{simple:1.0 {source /pkg... |
+| pkgMkIndex-3.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{global:1.0 {tclPkgSetup... |
+| pkgMkIndex-4.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{pkg2:1.0 {tclPkgSetup {... |
+| pkgMkIndex-4.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{pkg2:1.0 {source /pkg/p... |
+| pkgMkIndex-5.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{std:1.0 {tclPkgSetup {s... |
+| pkgMkIndex-6.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{pkg1:1.0 {tclPkgSetup {... |
+| pkgMkIndex-6.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{pkg1:1.0 {source /pkg/p... |
+| pkgMkIndex-7.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{pkg3:1.0 {tclPkgSetup {... |
+| pkgMkIndex-7.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{pkg3:1.0 {source /pkg/p... |
+| pkgMkIndex-8.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{pkg2:1.0 {tclPkgSetup {... |
+| pkgMkIndex-8.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{pkg2:1.0 {source /pkg/p... |
+| pkgMkIndex-9.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 0/0,2: 1 {invalid command name "pkg_mkIndex"} \| want: 0 {{circ1:1.0 {tclPkgSetup ... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3412,155 +3393,155 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| platform-1.0 | `untriaged` | code 0: ztcl |
-| platform-1.1 | `untriaged` | code 0: byteOrder engine machine os osVersion platform pointerSize user wordSize |
+| platform-1.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ztcl \| want: Tcl |
+| platform-1.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: byteOrder engine machine os osVersion platform pointerSize user wordSize \|... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | (file stopped early, status 0) | 2 | `untriaged` |
-| testCPUID | 1 | `untriaged` |
+| testCPUID | 1 | `internals`: a C test command or package of the Tcl test binary |
 
 ### proc-old.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| proc-old-5.14 | `untriaged` | code 0: invoked "break" outside of a loop     while executing "tproc" |
-| proc-old-5.15 | `untriaged` | code 0: invoked "continue" outside of a loop     while executing "tproc" |
-| proc-old-5.16 | `untriaged` | code 0: 1 {Nested error} {Nested error     while executing "error "Nested error""     i... |
-| proc-old-7.11 | `untriaged` | code 1: invalid command name "normalizeMsg" |
-| proc-old-7.12 | `untriaged` | code 1: invalid command name "normalizeMsg" |
-| proc-old-7.13 | `untriaged` | code 1: invalid command name "normalizeMsg" |
-| proc-old-7.14 | `untriaged` | code 1: invalid command name "normalizeMsg" |
-| proc-old-7.4 | `untriaged` | code 0: 3 {} |
-| proc-old-7.5 | `untriaged` | code 0: 4 {} |
-| proc-old-7.6 | `untriaged` | code 0: 1 {bad completion code "-14": must be ok, error, return, break, continue, or an... |
+| proc-old-5.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invoked "break" outside of a loop     while executing "tproc" \| want: invo... |
+| proc-old-5.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invoked "continue" outside of a loop     while executing "tproc" \| want: i... |
+| proc-old-5.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {Nested error} {Nested error     while executing "error "Nested error""  ... |
+| proc-old-7.11 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "normalizeMsg" \| want: 1 {couldn't open "_bad_file_na... |
+| proc-old-7.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "normalizeMsg" \| want: 1 {couldn't open "_bad_file_na... |
+| proc-old-7.13 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "normalizeMsg" \| want: 1 {couldn't open "_bad_file_na... |
+| proc-old-7.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "normalizeMsg" \| want: 1 {couldn't open "_bad_file_na... |
+| proc-old-7.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {} \| want: 3 abc |
+| proc-old-7.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 {} \| want: 4 abc |
+| proc-old-7.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {bad completion code "-14": must be ok, error, return, break, continue, o... |
 
 ### proc.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| proc-1.2 | `untriaged` | code 0:  |
-| proc-3.4 | `untriaged` | code 0: {p in ::test_ns_1::baz} ::p |
-| proc-6.1 | `untriaged` | code 0: 1 |
+| proc-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't create procedure "test_ns_1::baz::p": unknown namespace |
+| proc-3.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {p in ::test_ns_1::baz} ::p \| want: {p in ::} ::p |
+| proc-6.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: -5 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| procbodytest | 9 | `untriaged` |
+| procbodytest | 9 | `internals`: a C test command or package of the Tcl test binary |
 
 ### reg.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| reg-10.15.compile | `untriaged` | code 0: 0 REG_UEMPTYMATCH |
-| reg-10.15.execute | `untriaged` | code 0: 1 {} |
-| reg-11.1 ARE.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-11.1 BRE.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-11.2 ARE.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-11.2 BRE.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-11.3 ARE.compile | `untriaged` | code 0: REG_UNONPOSIX |
-| reg-11.3 BRE.compile | `untriaged` | code 0: REG_UNONPOSIX |
-| reg-11.4 ARE.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-11.4 BRE.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-11.5 ARE.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-11.5 BRE.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-11.6 ARE.compile | `untriaged` | code 0: REG_UNONPOSIX |
-| reg-11.6 BRE.compile | `untriaged` | code 0: REG_UNONPOSIX |
-| reg-13.33.execute | `untriaged` | code 0: 0 {} |
-| reg-13.34.execute | `untriaged` | code 0: 0 {} |
-| reg-13.6.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-15.13.execute | `untriaged` | code 0: 0 {} |
-| reg-16.3.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-16.9.compile | `untriaged` | code 0: 0 {REG_UBRACES REG_UNONPOSIX REG_UUNSPEC} |
-| reg-16.9.execute | `untriaged` | code 0: 0 {} |
-| reg-17.1.compile | `untriaged` | code 1: couldn't compile regular expression pattern: quantifier operand invalid |
-| reg-17.1.execute | `untriaged` | code 1: couldn't compile regular expression pattern: quantifier operand invalid |
-| reg-19.4 ARE.compile | `untriaged` | code 0: 0 {} |
-| reg-19.4 BRE.compile | `untriaged` | code 0: 0 {} |
-| reg-19.5 ARE.compile | `untriaged` | code 0: {} |
-| reg-19.5 BRE.compile | `untriaged` | code 0: {} |
-| reg-2.1.error | `untriaged` | code 0: 0 REG_BADRPT |
-| reg-2.2.error | `untriaged` | code 0: 0 REG_BADRPT |
-| reg-2.3.error | `untriaged` | code 0: 0 REG_BADRPT |
-| reg-2.4.error | `untriaged` | code 0: 0 REG_BADRPT |
-| reg-2.5.error | `untriaged` | code 0: 0 REG_BADRPT |
-| reg-20.1 ARE.error | `untriaged` | code 0: 1 REG_BADRPT |
-| reg-20.1 BRE.error | `untriaged` | code 0: 1 REG_BADRPT |
-| reg-20.3 ARE.compile | `untriaged` | code 0: 0 {} |
-| reg-20.3 BRE.compile | `untriaged` | code 1: couldn't compile regular expression pattern: quantifier operand invalid |
-| reg-20.3 BRE.execute | `untriaged` | code 1: couldn't compile regular expression pattern: quantifier operand invalid |
-| reg-20.5.compile | `untriaged` | code 1: couldn't compile regular expression pattern: quantifier operand invalid |
-| reg-20.5.execute | `untriaged` | code 1: couldn't compile regular expression pattern: quantifier operand invalid |
-| reg-20.6.compile | `untriaged` | code 1: couldn't compile regular expression pattern: quantifier operand invalid |
-| reg-20.6.execute | `untriaged` | code 1: couldn't compile regular expression pattern: quantifier operand invalid |
-| reg-20.8 BRE.compile | `untriaged` | code 1: couldn't compile regular expression pattern: quantifier operand invalid |
-| reg-20.8 BRE.execute | `untriaged` | code 1: couldn't compile regular expression pattern: quantifier operand invalid |
-| reg-21.35.compile | `untriaged` | code 0: 3 {} |
-| reg-21.35.execute | `untriaged` | code 0: 1 { TO foo} foo foo {} |
-| reg-23.3.execute | `untriaged` | code 0: 1 ab |
-| reg-23.4.execute | `untriaged` | code 0: 1 |
-| reg-23.6.execute | `untriaged` | code 0: 0 {} |
-| reg-29.1.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.10.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.11.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.12.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.13.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.14.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.15.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.16.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.17.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.2.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.3.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.4.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.5.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.6.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.7.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-29.8.execute | `untriaged` | code 1: testregexp: REG_EXPECT has no stand-in |
-| reg-30.6 ARE.compile | `untriaged` | code 0: 0 {} |
-| reg-30.6 BRE.compile | `untriaged` | code 0: 0 {} |
-| reg-30.8.execute | `untriaged` | code 0: 1 |
-| reg-30.9.execute | `untriaged` | code 0: 0 {} |
-| reg-32.1 | `untriaged` | code 1: can't read "resvar": no such variable |
-| reg-32.2 | `untriaged` | code 1: can't read "resvar": no such variable |
-| reg-32.3 | `untriaged` | code 1: can't read "resvar": no such variable |
-| reg-32.3.1 | `untriaged` | code 1: can't read "resvar": no such variable |
-| reg-33.22 | `untriaged` | code 0: 0 |
-| reg-6.5.compile | `untriaged` | code 1: couldn't compile regular expression pattern: quantifier operand invalid |
-| reg-6.5.execute | `untriaged` | code 1: couldn't compile regular expression pattern: quantifier operand invalid |
-| reg-9.10 ARE.error | `untriaged` | code 0: 0 REG_ECOLLATE |
-| reg-9.10 BRE.error | `untriaged` | code 0: 0 REG_ECOLLATE |
-| reg-9.11 ARE.compile | `untriaged` | code 0: 0 {} |
-| reg-9.11 BRE.compile | `untriaged` | code 0: 0 {} |
-| reg-9.13 ARE.compile | `untriaged` | code 0: {} |
-| reg-9.13 BRE.compile | `untriaged` | code 0: {} |
-| reg-9.14 ARE.error | `untriaged` | code 0: 0 REG_ECTYPE |
-| reg-9.14 BRE.error | `untriaged` | code 0: 0 REG_ECTYPE |
-| reg-9.15 ARE.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-9.15 BRE.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-9.16 ARE.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-9.16 BRE.compile | `untriaged` | code 0: 0 REG_UNONPOSIX |
-| reg-9.27 ARE.compile | `untriaged` | code 0: 0 {} |
-| reg-9.27 BRE.compile | `untriaged` | code 0: 0 {} |
-| reg-9.29 ARE.compile | `untriaged` | code 0: 0 {} |
-| reg-9.29 BRE.compile | `untriaged` | code 0: 0 {} |
-| reg-9.31 ARE.error | `untriaged` | code 0: 0 REG_ERANGE |
-| reg-9.31 BRE.error | `untriaged` | code 0: 0 REG_ERANGE |
-| reg-9.32 ARE.compile | `untriaged` | code 0: 0 {} |
-| reg-9.32 BRE.compile | `untriaged` | code 0: 0 {} |
-| reg-9.4 ARE.compile | `untriaged` | code 1: couldn't compile regular expression pattern: invalid collating element |
-| reg-9.4 ARE.execute | `untriaged` | code 1: couldn't compile regular expression pattern: invalid collating element |
-| reg-9.4 BRE.compile | `untriaged` | code 1: couldn't compile regular expression pattern: invalid collating element |
-| reg-9.4 BRE.execute | `untriaged` | code 1: couldn't compile regular expression pattern: invalid collating element |
-| reg-9.44.compile | `untriaged` | code 0: 0 {REG_UBBS REG_UNONPOSIX} |
-| reg-9.5 ARE.compile | `untriaged` | code 1: couldn't compile regular expression pattern: invalid collating element |
-| reg-9.5 ARE.execute | `untriaged` | code 1: couldn't compile regular expression pattern: invalid collating element |
-| reg-9.5 BRE.compile | `untriaged` | code 1: couldn't compile regular expression pattern: invalid collating element |
-| reg-9.5 BRE.execute | `untriaged` | code 1: couldn't compile regular expression pattern: invalid collating element |
-| reg-9.6 ARE.compile | `untriaged` | code 0: 0 {} |
-| reg-9.6 BRE.compile | `untriaged` | code 0: 0 {} |
+| reg-10.15.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UEMPTYMATCH \| want: 0 {} |
+| reg-10.15.execute | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {} \| want: 1 ^ |
+| reg-11.1 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-11.1 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-11.2 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-11.2 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-11.3 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: REG_UNONPOSIX \| want: {REG_UNONPOSIX REG_ULOCALE} |
+| reg-11.3 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: REG_UNONPOSIX \| want: {REG_UNONPOSIX REG_ULOCALE} |
+| reg-11.4 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-11.4 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-11.5 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-11.5 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-11.6 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: REG_UNONPOSIX \| want: {REG_UNONPOSIX REG_ULOCALE} |
+| reg-11.6 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: REG_UNONPOSIX \| want: {REG_UNONPOSIX REG_ULOCALE} |
+| reg-13.33.execute | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 a�0x |
+| reg-13.34.execute | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 a�0x |
+| reg-13.6.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-15.13.execute | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 a81b |
+| reg-16.3.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {} |
+| reg-16.9.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {REG_UBRACES REG_UNONPOSIX REG_UUNSPEC} \| want: 0 {REG_UBOUNDS REG_UNONP... |
+| reg-16.9.execute | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 abc |
+| reg-17.1.compile | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| ... |
+| reg-17.1.execute | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| ... |
+| reg-19.4 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UUNPORT |
+| reg-19.4 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UUNPORT |
+| reg-19.5 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} \| want: REG_UUNPORT |
+| reg-19.5 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} \| want: REG_UUNPORT |
+| reg-2.1.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_BADRPT \| want: 1 REG_INVARG |
+| reg-2.2.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_BADRPT \| want: 1 REG_INVARG |
+| reg-2.3.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_BADRPT \| want: 1 REG_INVARG |
+| reg-2.4.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_BADRPT \| want: 1 REG_INVARG |
+| reg-2.5.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_BADRPT \| want: 1 REG_INVARG |
+| reg-20.1 ARE.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 REG_BADRPT \| want: 1 REG_BADPAT |
+| reg-20.1 BRE.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 REG_BADRPT \| want: 1 REG_BADPAT |
+| reg-20.3 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UNONPOSIX |
+| reg-20.3 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| ... |
+| reg-20.3 BRE.execute | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| ... |
+| reg-20.5.compile | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| ... |
+| reg-20.5.execute | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| ... |
+| reg-20.6.compile | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| ... |
+| reg-20.6.execute | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| ... |
+| reg-20.8 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| ... |
+| reg-20.8 BRE.execute | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| ... |
+| reg-21.35.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 {} \| want: 3 REG_UUNPORT |
+| reg-21.35.execute | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 { TO foo} foo foo {} \| want: 1 { TO foo} foo o {} |
+| reg-23.3.execute | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 ab \| want: 1 abc |
+| reg-23.4.execute | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| reg-23.6.execute | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 a |
+| reg-29.1.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 0 {3 2} {} |
+| reg-29.10.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 1 {2 4} {7 6} |
+| reg-29.11.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 0 {2 3} {} |
+| reg-29.12.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 1 {2 4} {5 4} |
+| reg-29.13.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 1 {2 4} {6 5} |
+| reg-29.14.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 1 {2 4} {6 5} |
+| reg-29.15.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 1 {2 4} {7 6} |
+| reg-29.16.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 1 {3 4} {2 4} |
+| reg-29.17.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 0 {3 5} {} |
+| reg-29.2.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 0 {1 2} {} |
+| reg-29.3.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 0 {0 3} {} |
+| reg-29.4.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 0 {3 4} {} |
+| reg-29.5.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 1 {0 2} {0 2} |
+| reg-29.6.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 1 {2 4} {2 4} |
+| reg-29.7.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 0 {2 3} {} |
+| reg-29.8.execute | `internals`: a C test command of the Tcl test binary, with no stand-in... | code 1/0,2: testregexp: REG_EXPECT has no stand-in \| want: 1 {2 4} {2 4} |
+| reg-30.6 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UUNPORT |
+| reg-30.6 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UUNPORT |
+| reg-30.8.execute | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| reg-30.9.execute | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 it0 |
+| reg-32.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "resvar": no such variable \| want: 0 7 |
+| reg-32.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "resvar": no such variable \| want: 0 7 |
+| reg-32.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "resvar": no such variable \| want: 0 7 |
+| reg-32.3.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "resvar": no such variable \| want: 0 -1 |
+| reg-33.22 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| reg-6.5.compile | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| ... |
+| reg-6.5.execute | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: quantifier operand invalid \| ... |
+| reg-9.10 ARE.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_ECOLLATE \| want: 1 REG_ERANGE |
+| reg-9.10 BRE.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_ECOLLATE \| want: 1 REG_ERANGE |
+| reg-9.11 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_ULOCALE |
+| reg-9.11 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_ULOCALE |
+| reg-9.13 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} \| want: REG_ULOCALE |
+| reg-9.13 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} \| want: REG_ULOCALE |
+| reg-9.14 ARE.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_ECTYPE \| want: 1 REG_ERANGE |
+| reg-9.14 BRE.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_ECTYPE \| want: 1 REG_ERANGE |
+| reg-9.15 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-9.15 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-9.16 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-9.16 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_UNONPOSIX \| want: 0 {REG_UNONPOSIX REG_ULOCALE} |
+| reg-9.27 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UUNPORT |
+| reg-9.27 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UUNPORT |
+| reg-9.29 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UUNPORT |
+| reg-9.29 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UUNPORT |
+| reg-9.31 ARE.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_ERANGE \| want: 1 REG_ERANGE |
+| reg-9.31 BRE.error | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 REG_ERANGE \| want: 1 REG_ERANGE |
+| reg-9.32 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UUNPORT |
+| reg-9.32 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UUNPORT |
+| reg-9.4 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| w... |
+| reg-9.4 ARE.execute | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| w... |
+| reg-9.4 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| w... |
+| reg-9.4 BRE.execute | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| w... |
+| reg-9.44.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {REG_UBBS REG_UNONPOSIX} \| want: 0 {REG_UBBS REG_UNONPOSIX REG_UUNPORT} |
+| reg-9.5 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| w... |
+| reg-9.5 ARE.execute | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| w... |
+| reg-9.5 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| w... |
+| reg-9.5 BRE.execute | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: couldn't compile regular expression pattern: invalid collating element \| w... |
+| reg-9.6 ARE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UUNPORT |
+| reg-9.6 BRE.compile | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 REG_UUNPORT |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| localeRegexp | 100 | `untriaged` |
+| localeRegexp | 100 | `tcl`: the test file sets the constraint false, or it is false in tclsh 8.6 on Linux |
 | knownBug | 9 | `tcl`: tclsh skips it too |
 | nonPortable | 1 | `tcl`: tclsh skips it too |
 
@@ -3568,7 +3549,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| regexp-22.5 | `untriaged` | code 0: 0 {REG_UBRACES REG_UUNSPEC} |
+| regexp-22.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 0 {REG_UBRACES REG_UUNSPEC} \| want: *too many colors* |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3578,8 +3559,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| regexpComp-21.10 | `untriaged` | code 0: 4 barfbarobarobar |
-| regexpComp-21.11 | `untriaged` | code 0: 1 bar |
+| regexpComp-21.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 barfbarobarobar \| want: 3 barfbarobaro |
+| regexpComp-21.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 bar \| want: 0 {} |
 
 ### registry.test
 
@@ -3591,7 +3572,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| rename-5.1 | `untriaged` | code 1: wrong # args: should be "proc name args body" |
+| rename-5.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args: should be "proc name args body" \| want:  |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3607,9 +3588,9 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| result-6.3 | `untriaged` | code 0: eek |
-| result-6.4 | `untriaged` | code 1: key "-errorcode" not known in dictionary |
-| result-6.5 | `untriaged` | code 1: key "-errorcode" not known in dictionary |
+| result-6.3 | `internals`: the C API of Tcl | code 0/0,2: eek \| want: bad -errorcode value: expected a list but got "{}a" |
+| result-6.4 | `internals`: the C API of Tcl | code 1/0,2: key "-errorcode" not known in dictionary \| want: {bad -errorstack value: e... |
+| result-6.5 | `internals`: the C API of Tcl | code 1/0,2: key "-errorcode" not known in dictionary \| want: {forbidden odd-sized list... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3622,136 +3603,136 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| safe-stock-7.1 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-stock-7.2 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-stock-7.4 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-stock-9.8 | `untriaged` | setup: invalid command name "safe::interpCreate" |
+| safe-stock-7.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want: 2.* |
+| safe-stock-7.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want: {$p(:0:)} {$p(:*:)} -- 1... |
+| safe-stock-7.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want: {$p(:0:)} {$p(:*:)} -- 0... |
+| safe-stock-9.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
 
 ### safe.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| safe-1.1 | `untriaged` | code 1: invalid command name "safe::interpConfigure" |
-| safe-1.2 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-1.3 | `untriaged` | code 1: invalid command name "safe::interpInit" |
-| safe-11.1 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-11.1a | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-11.2 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-11.3 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-11.4 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-11.5 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-11.6 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-11.7 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-11.7.1 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-11.8 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-11.8.1 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-12.1 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-12.2 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-12.3 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-12.4 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-12.5 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-12.6 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-12.7 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-13.1 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-13.10 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-13.2 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-13.3 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-13.4 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-13.5 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-13.6 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-13.7 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-13.7.1 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-13.8 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-13.9 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-15.1 | `untriaged` | code 1: invalid command name "tcl::file::split" |
-| safe-15.2 | `untriaged` | code 1: invalid command name "tcl::file::split" |
-| safe-16.1 | `untriaged` | setup: can't read "env(HOME)": no such variable |
-| safe-16.2 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-16.3 | `untriaged` | setup: can't read "env(HOME)": no such variable |
-| safe-16.4 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-16.5 | `untriaged` | setup: can't read "env(HOME)": no such variable |
-| safe-16.6 | `untriaged` | setup: can't read "env(HOME)": no such variable |
-| safe-16.7 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-16.8 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-2.2 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-2.3 | `untriaged` | code 1: interpreter named "a" already exists, cannot create |
-| safe-3.1 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-3.2 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-3.3 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-3.4 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-4.1 | `untriaged` | code 1: interpreter named "a" already exists, cannot create |
-| safe-4.2 | `untriaged` | code 1: interpreter named "a" already exists, cannot create |
-| safe-4.5 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-4.6 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-5.1 | `untriaged` | cleanup: invalid command name "auto_reset" |
-| safe-5.2 | `untriaged` | cleanup: invalid command name "auto_reset" |
-| safe-5.3 | `untriaged` | code 0: 1 {can't find package SafeTestPackage1} 1 {can't find package SafeTestPackage2}... |
-| safe-5.4 | `untriaged` | code 0: 1 {can't find package SafeTestPackage1} 1 {can't find package SafeTestPackage2}... |
-| safe-5.5 | `untriaged` | setup: invalid command name "tcl::tm::path" |
-| safe-5.6 | `untriaged` | setup: invalid command name "tcl::tm::path" |
-| safe-6.1 | `untriaged` | code 0: errorCode errorInfo tcl_patchLevel tcl_platform tcl_precision tcl_version |
-| safe-6.3 | `untriaged` | code 0: byteOrder engine machine os osVersion platform pointerSize user wordSize |
-| safe-7.1 | `untriaged` | setup: invalid command name "safe::interpCreate" |
-| safe-7.2 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-7.3 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-7.3.1 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-7.4 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-8.1 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-8.10 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-8.2 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-8.3 | `untriaged` | setup: invalid command name "safe::setLogCmd" |
-| safe-8.4 | `untriaged` | setup: invalid command name "safe::setLogCmd" |
-| safe-8.5 | `untriaged` | setup: invalid command name "safe::setLogCmd" |
-| safe-8.6 | `untriaged` | setup: invalid command name "safe::setLogCmd" |
-| safe-8.7 | `untriaged` | setup: invalid command name "safe::setLogCmd" |
-| safe-8.9 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-9.1 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-9.10 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-9.11 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-9.12 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-9.13 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-9.2 | `untriaged` | setup: invalid command name "safe::setLogCmd" |
-| safe-9.20 | `untriaged` | setup: invalid command name "tcl::tm::path" |
-| safe-9.21 | `untriaged` | setup: invalid command name "tcl::tm::path" |
-| safe-9.22 | `untriaged` | setup: invalid command name "tcl::tm::path" |
-| safe-9.23 | `untriaged` | setup: invalid command name "tcl::tm::path" |
-| safe-9.24 | `untriaged` | setup: invalid command name "tcl::tm::path" |
-| safe-9.3 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-9.4 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-9.5 | `untriaged` | code 1: invalid command name "safe::interpCreate" |
-| safe-9.6 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-9.7 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-9.8 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
-| safe-9.9 | `untriaged` | cleanup: invalid command name "safe::interpDelete" |
+| safe-1.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "safe::interpConfigure" \| want: no value given for para... |
+| safe-1.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "safe::interpCreate" \| want: Usage information:     Var... |
+| safe-1.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "safe::interpInit" \| want: bad value "-noStatics" for p... |
+| safe-11.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-11.1a | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-11.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-11.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-11.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-11.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-11.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-11.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-11.7.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-11.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-11.8.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-12.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-12.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-12.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-12.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-12.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-12.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-12.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-13.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-13.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-13.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-13.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-13.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-13.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-13.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-13.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-13.7.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-13.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-13.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-15.1 | `feature`: the 'safe' package | code 1/0,2: invalid command name "tcl::file::split" \| want: 1 {a b c} 1 {a b c} 1 {inv... |
+| safe-15.2 | `feature`: the 'safe' package | code 1/0,2: invalid command name "tcl::file::split" \| want: 1 {a b c} 1 {a b c} 1 {inv... |
+| safe-16.1 | `feature`: the 'safe' package | setup: can't read "env(HOME)": no such variable |
+| safe-16.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-16.3 | `feature`: the 'safe' package | setup: can't read "env(HOME)": no such variable |
+| safe-16.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-16.5 | `feature`: the 'safe' package | setup: can't read "env(HOME)": no such variable |
+| safe-16.6 | `feature`: the 'safe' package | setup: can't read "env(HOME)": no such variable |
+| safe-16.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-16.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-2.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-2.3 | `feature`: the 'safe' package | code 1/0,2: interpreter named "a" already exists, cannot create \| want: ::tcl::mathfun... |
+| safe-3.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-3.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-3.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-3.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-4.1 | `feature`: the 'safe' package | code 1/0,2: interpreter named "a" already exists, cannot create \| want:  |
+| safe-4.2 | `feature`: the 'safe' package | code 1/0,2: interpreter named "a" already exists, cannot create \| want:  |
+| safe-4.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-4.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want:  |
+| safe-5.1 | `feature`: the 'safe' package | cleanup: invalid command name "auto_reset" |
+| safe-5.2 | `feature`: the 'safe' package | cleanup: invalid command name "auto_reset" |
+| safe-5.3 | `feature`: the 'safe' package | code 0/0,2: 1 {can't find package SafeTestPackage1} 1 {can't find package SafeTestPacka... |
+| safe-5.4 | `feature`: the 'safe' package | code 0/0,2: 1 {can't find package SafeTestPackage1} 1 {can't find package SafeTestPacka... |
+| safe-5.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "tcl::tm::path" |
+| safe-5.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "tcl::tm::path" |
+| safe-6.1 | `feature`: the 'safe' package | code 0/0,2: errorCode errorInfo tcl_patchLevel tcl_platform tcl_precision tcl_version \... |
+| safe-6.3 | `feature`: the 'safe' package | code 0/0,2: byteOrder engine machine os osVersion platform pointerSize user wordSize \|... |
+| safe-7.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
+| safe-7.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want: {$p(:0:)} {$p(:*:)} {$p(... |
+| safe-7.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want: {} {} ok {} 0 {} |
+| safe-7.3.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want: {} {} ok ok {} 0 {} |
+| safe-7.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want: {$p(:0:)} {$p(:*:)} -- 0... |
+| safe-8.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-8.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want: ok |
+| safe-8.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-8.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::setLogCmd" |
+| safe-8.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::setLogCmd" |
+| safe-8.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::setLogCmd" |
+| safe-8.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::setLogCmd" |
+| safe-8.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::setLogCmd" |
+| safe-8.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want: ok |
+| safe-9.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want: {} {arg1 arg2 a} |
+| safe-9.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-9.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-9.12 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-9.13 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-9.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::setLogCmd" |
+| safe-9.20 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "tcl::tm::path" |
+| safe-9.21 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "tcl::tm::path" |
+| safe-9.22 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "tcl::tm::path" |
+| safe-9.23 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "tcl::tm::path" |
+| safe-9.24 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "tcl::tm::path" |
+| safe-9.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "safe::interpCreate" \| want: conflicting values given f... |
+| safe-9.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want:  |
+| safe-9.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "safe::interpCreate" \| want: conflicting values given f... |
+| safe-9.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-9.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-9.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
+| safe-9.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| (file stopped early, status 0) | 1 | `untriaged` |
-| TcltestPackage | 6 | `untriaged` |
+| (file stopped early, status 0) | 1 | `feature`: the 'safe' package |
+| TcltestPackage | 6 | `internals`: a C test command or package of the Tcl test binary |
 | emptyTest | 2 | `tcl`: tclsh skips it too |
 
 ### scan.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| scan-13.5 | `untriaged` | code 1: "%n$" argument index out of range |
-| scan-13.6 | `untriaged` | code 0: 6 {"%n$" argument index out of range} |
-| scan-13.7 | `untriaged` | code 1: "%n$" argument index out of range |
-| scan-13.8 | `untriaged` | code 1: "%n$" argument index out of range |
-| scan-14.1 | `untriaged` | code 2:  |
-| scan-14.2 | `untriaged` | code 2:  |
-| scan-4.15 | `untriaged` | code 0: 0 {} |
-| scan-4.40.3 | `untriaged` | code 0: 2 9 0 0 |
-| scan-4.41 | `untriaged` | code 0: 4 10 8 16 2 |
-| scan-4.44 | `untriaged` | code 0: 0 {} |
-| scan-4.45 | `untriaged` | code 0: 1 0 8 |
-| scan-4.46 | `untriaged` | code 0: 1 0 8 |
-| scan-4.55 | `untriaged` | code 0: 0 {} |
-| scan-4.60 | `untriaged` | code 0: 1 {can't set "z": variable is array} abc {} |
-| scan-5.17 | `untriaged` | code 0: 3 81985529216486895 81985529216486895 81985529216486895 |
-| scan-5.18 | `untriaged` | code 0: 1 -81985529216486895 |
-| scan-5.19 | `untriaged` | code 0: 1 81985529216486895 |
-| scan-7.6 | `untriaged` | code 0: 4 abc dÇ fghijk dum |
+| scan-13.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: "%n$" argument index out of range \| want:  |
+| scan-13.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 6 {"%n$" argument index out of range} \| want: 10 {{} {} {} {} {} {} {} {} ... |
+| scan-13.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: "%n$" argument index out of range \| want: 190 180 170 160 150 140 130 120 ... |
+| scan-13.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: "%n$" argument index out of range \| want: 200 10 20 30 |
+| scan-14.1 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2:  \| want: Inf |
+| scan-14.2 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2:  \| want: -Inf |
+| scan-4.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: -1 {} |
+| scan-4.40.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 9 0 0 \| want: 3 9 5 340282366920938463463374607431768211456 |
+| scan-4.41 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 10 8 16 2 \| want: 4 10 8 16 0 |
+| scan-4.44 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: -1 {} |
+| scan-4.45 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 0 8 \| want: 2 0 x |
+| scan-4.46 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 0 8 \| want: 2 0 X |
+| scan-4.55 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: -1 {} |
+| scan-4.60 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "z": variable is array} abc {} \| want: 1 {can't set "z": vari... |
+| scan-5.17 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 81985529216486895 81985529216486895 81985529216486895 \| want: 3 20769880... |
+| scan-5.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1 -81985529216486895 \| want: unsigned bignum scans are invalid |
+| scan-5.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1 81985529216486895 \| want: unsigned bignum scans are invalid |
+| scan-7.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 abc dÇ fghijk dum \| want: 4 abc dÇf ghijk dum |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3761,24 +3742,24 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| set-old-10.9 | `untriaged` | code 0: 1 {illegal search identifier "s-1-b"} |
-| set-old-7.14 | `untriaged` | code 0: 1 0 1 0 1 |
-| set-old-7.15 | `untriaged` | code 0: 1 0 0 1 1 1 0 1 |
-| set-old-7.4 | `untriaged` | code 0: 1 {can't unset "a(14)": no such variable} |
-| set-old-7.5 | `untriaged` | code 0: 1 {can't unset "a(14)": no such variable} |
-| set-old-8.35 | `untriaged` | code 0: 1 {can't array set "a": variable isn't array} |
-| set-old-8.38.5 | `untriaged` | code 0: 0 {} |
-| set-old-8.38.6 | `untriaged` | code 0: 0 {} |
-| set-old-8.38.7 | `untriaged` | code 0: 0 {} |
-| set-old-8.49 | `untriaged` | code 0: 9 entries in table |
-| set-old-9.10 | `untriaged` | code 0: 0 a 0 a |
+| set-old-10.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {illegal search identifier "s-1-b"} \| want: 1 {search identifier "s-1-b"... |
+| set-old-7.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 0 1 0 1 \| want: 1 0 1 0 0 |
+| set-old-7.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 0 0 1 1 1 0 1 \| want: 1 0 0 1 1 1 0 0 |
+| set-old-7.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't unset "a(14)": no such variable} \| want: 1 {can't unset "a(14)": ... |
+| set-old-7.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't unset "a(14)": no such variable} \| want: 1 {can't unset "a(14)": ... |
+| set-old-8.35 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't array set "a": variable isn't array} \| want: 1 {can't set "a(a)":... |
+| set-old-8.38.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {can't set "bogusnamespace::var": parent namespace doesn't ... |
+| set-old-8.38.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {can't set "bogusnamespace::var": parent namespace doesn't ... |
+| set-old-8.38.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {can't set "bogusnamespace::var(0)": parent namespace doesn... |
+| set-old-8.49 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 9 entries in table \| want: 9 entries in table, 4 buckets number of buckets... |
+| set-old-9.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 a 0 a \| want: 1 {couldn't find search "s-1-a"} 1 {couldn't find search "... |
 
 ### set.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| set-2.4 | `untriaged` | code 0: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-only ... |
-| set-4.4 | `untriaged` | code 0: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-only ... |
+| set-2.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-o... |
+| set-4.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-o... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3788,17 +3769,17 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| socket-14.11.0 | `untriaged` | code 0:  |
-| socket-14.5 | `untriaged` | code 1: couldn't open socket: the network policy does not allow the address "192.0.2.42" |
-| socket-14.8.0 | `untriaged` | code 0:  |
-| socket-14.8.2 | `untriaged` | code 0: {} {connection refused} {} |
-| socket-15.1.6 | `untriaged` | code 0: sock2842 |
-| socket_inet-3.2 | `untriaged` | code 0: ready timed_out |
-| socket_inet6-3.2 | `untriaged` | code 0: ready timed_out |
+| socket-14.11.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: socket is not connected |
+| socket-14.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: couldn't open socket: the network policy does not allow the address "192.0.2.... |
+| socket-14.8.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ok |
+| socket-14.8.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {connection refused} {} \| want: {error reading "sock*": socket is not c... |
+| socket-15.1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: sock2842 \| want: couldn't open socket: connection refused |
+| socket_inet-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ready timed_out \| want: ready done |
+| socket_inet6-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ready timed_out \| want: ready done |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| localhost_v6 | 9 | `untriaged` |
+| localhost_v6 | 9 | `platform`: a property of the host: a second device, a writable home, IPv6 on localhost, ... |
 | nonPortable | 1 | `tcl`: tclsh skips it too |
 | win | 1 | `platform`: a constraint of another platform or word size |
 
@@ -3806,49 +3787,49 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| source-2.7 | `untriaged` | code 1: invalid command name "﻿set" |
-| source-3.2 | `untriaged` | code 2: Silly result |
-| source-3.3 | `untriaged` | code 0: 2 {Simulated error} {invalid command name "﻿set"     while executing "﻿set y ne... |
-| source-3.4 | `untriaged` | code 0: 2 {} {invalid command name "﻿set"     while executing "﻿set y new-y"     (file ... |
-| source-3.5 | `untriaged` | code 0: 2 {} {invalid command name "﻿set"     while executing "﻿set y new-y"     (file ... |
-| source-4.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| source-7.2 | `untriaged` | setup: unknown encoding "unicode" |
-| source-7.3 | `untriaged` | code 1: couldn't read file "no_file": no such file or directory |
-| source-7.4 | `untriaged` | code 0:  |
-| source-7.6 | `untriaged` | code 0: foo |
+| source-2.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "﻿set" \| want: new-y |
+| source-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 2/3: Silly result \| want: Silly result |
+| source-3.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {Simulated error} {invalid command name "﻿set"     while executing "﻿set ... |
+| source-3.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {} {invalid command name "﻿set"     while executing "﻿set y new-y"     (f... |
+| source-3.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {} {invalid command name "﻿set"     while executing "﻿set y new-y"     (f... |
+| source-4.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| source-7.2 | `feature`: an encoding that ztcl does not have | setup: unknown encoding "unicode" |
+| source-7.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: couldn't read file "no_file": no such file or directory \| want: bad option* |
+| source-7.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: unknown encoding* |
+| source-7.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: foo \| want: invalid command name "€" |
 
 ### split.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| split-1.15 | `untriaged` | code 0: a � � � |
+| split-1.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a � � � \| want: a 💩 b |
 
 ### stack.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| stack-2.1 | `untriaged` | code 0: invalid command name "notaknownproc" |
-| stack-3.1 | `untriaged` | code 1: 1 1 the recursion limit of this interpreter is 600 |
+| stack-2.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: invalid command name "notaknownproc" \| want: too many nested evaluations (... |
+| stack-3.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: 1 1 the recursion limit of this interpreter is 600 \| want: 1 1 |
 
 ### string.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| string-21.23.0 | `untriaged` | code 0: Hello world! |
-| string-21.23.1 | `untriaged` | code 0: Hello world! |
-| string-21.24.0 | `untriaged` | code 0: Hello world!�� |
-| string-21.24.1 | `untriaged` | code 0: Hello world!�� |
-| string-21.25.0 | `untriaged` | code 0: ��Hello world! |
-| string-21.25.1 | `untriaged` | code 0: ��Hello world! |
-| string-24.15.0 | `untriaged` | code 1: invalid command name "tcl::string::reverse" |
-| string-24.15.1 | `untriaged` | code 1: invalid command name "tcl::string::reverse" |
+| string-21.23.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Hello world! \| want: ��Hello world!�� |
+| string-21.23.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Hello world! \| want: ��Hello world!�� |
+| string-21.24.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Hello world!�� \| want: ��Hello world!�� |
+| string-21.24.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Hello world!�� \| want: ��Hello world!�� |
+| string-21.25.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ��Hello world! \| want: ��Hello world!�� |
+| string-21.25.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ��Hello world! \| want: ��Hello world!�� |
+| string-24.15.0 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "tcl::string::reverse" \| want: 030201 |
+| string-24.15.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "tcl::string::reverse" \| want: 030201 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | testbytestring | 8 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | memory | 6 | `internals`: the memory debugging of a Tcl build with TCL_MEM_DEBUG |
 | testindexobj | 2 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| utf16 | 2 | `untriaged` |
+| utf16 | 2 | `design`: ztcl strings hold full code points, as in Tcl 9; Tcl 8.6 uses UTF-16 surrogates |
 
 ### stringComp.test
 
@@ -3866,8 +3847,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| subst-11.4 | `untriaged` | code 0: foo  |
-| subst-11.5 | `untriaged` | code 0: foo  |
+| subst-11.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: foo  \| want: extra characters after close-brace |
+| subst-11.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: foo  \| want: extra characters after close-brace |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3877,27 +3858,27 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| switch-13.5 | `untriaged` | code 0: 1 - a {can't set "x(x)": variable isn't array} |
-| switch-13.6 | `untriaged` | code 0: 1 - - {can't set "y(y)": variable isn't array} |
-| switch-4.1 | `untriaged` | code 0: 1 {Just a test} {Just a test     while executing "error "Just a test""     invo... |
-| switch-4.5 | `untriaged` | code 0: 1 switch2 {switch2     while executing "error switch2"     invoked from within ... |
-| switch-9.2 | `untriaged` | code 1: wrong # args: should be "switch ?-option ...? string ?pattern body ...? ?defaul... |
-| switch-9.3 | `untriaged` | code 1: wrong # args: should be "switch ?-option ...? string ?pattern body ...? ?defaul... |
-| switch-9.4 | `untriaged` | code 1: wrong # args: should be "switch ?-option ...? string ?pattern body ...? ?defaul... |
+| switch-13.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 - a {can't set "x(x)": variable isn't array} \| want: 1 - - {can't set "x... |
+| switch-13.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 - - {can't set "y(y)": variable isn't array} \| want: 1 {{0 0}} - {can't ... |
+| switch-4.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {Just a test} {Just a test     while executing "error "Just a test""     ... |
+| switch-4.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 switch2 {switch2     while executing "error switch2"     invoked from wit... |
+| switch-9.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "switch ?-option ...? string ?pattern body ...? ?defa... |
+| switch-9.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "switch ?-option ...? string ?pattern body ...? ?defa... |
+| switch-9.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "switch ?-option ...? string ?pattern body ...? ?defa... |
 
 ### tailcall.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| tailcall-1 | `untriaged` | code 0: 1::b \| 0:: *::a *::b \| {{1 ::b::moo} {2 ::a::xset}} |
-| tailcall-11c | `untriaged` | code 0: {0 2 3} {0 2 3} |
-| tailcall-12.2 | `untriaged` | output: 1: fred alpha 1: inside foo's alpha, v resolves to global level 1: foo's alpha ... |
-| tailcall-12.3a0 | `untriaged` | code 0: 2 |
-| tailcall-12.3a1 | `untriaged` | code 1: wrong # args: should be "tailcall command ?arg ...?" |
-| tailcall-12.3b0 | `untriaged` | code 0: 2 |
-| tailcall-12.3b1 | `untriaged` | code 1: wrong # args: should be "tailcall command ?arg ...?" |
-| tailcall-14.1 | `untriaged` | code 1: invalid command name "p" |
-| tailcall-14.1-bc | `untriaged` | code 1: invalid command name "p" |
+| tailcall-1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1::b \| 0:: *::a *::b \| {{1 ::b::moo} {2 ::a::xset}} \| want: 1::b \| 0:: ... |
+| tailcall-11c | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {0 2 3} {0 2 3} \| want: {0 3 2} {0 3 2} |
+| tailcall-12.2 | `bug`: the result differs from tclsh 8.6.16 | output: 1: fred alpha 1: inside foo's alpha, v resolves to global level 1: foo's alpha ... |
+| tailcall-12.3a0 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 2 \| want: invalid command name "foo" |
+| tailcall-12.3a1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args: should be "tailcall command ?arg ...?" \| want:  |
+| tailcall-12.3b0 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 2 \| want: invalid command name "foo" |
+| tailcall-12.3b1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args: should be "tailcall command ?arg ...?" \| want:  |
+| tailcall-14.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "p" \| want: namespace "::ns" not found |
+| tailcall-14.1-bc | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "p" \| want: namespace "::ns" not found |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3907,160 +3888,160 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| tcltest-1.1 | `untriaged` | code 0: 1 0 |
-| tcltest-1.2 | `untriaged` | code 0: 1 0 |
-| tcltest-2.0 | `untriaged` | code 1: invalid command name "i" |
-| tcltest-2.1 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-2.2 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-2.3 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-2.4 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-2.5 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-2.5a | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-2.6 | `untriaged` | code 1: invalid command name "-constraints" |
-| tcltest-2.6a | `untriaged` | code 1: invalid command name "-constraints" |
-| tcltest-2.7 | `untriaged` | code 1: invalid command name "-body" |
-| tcltest-2.8 | `untriaged` | code 1: invalid command name "-constraints" |
-| tcltest-3.1 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-3.2 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-3.3 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-3.4 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-3.5 | `untriaged` | code 1: invalid command name "-body" |
-| tcltest-4.1 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-4.2 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-4.3 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-4.4 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-4.5 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-4.6 | `untriaged` | code 1: invalid command name "-body" |
-| tcltest-5.1 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-5.2 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-5.3 | `untriaged` | code 1: invalid command name "-body" |
-| tcltest-6.1 | `untriaged` | code 1: invalid command name "-constraints" |
-| tcltest-6.2 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-6.3 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-6.4 | `untriaged` | code 1: interpreter named "::tcltest::test::i" already exists, cannot create |
-| tcltest-6.5 | `untriaged` | code 1: invalid command name "-setup" |
-| tcltest-6.6 | `untriaged` | code 1: invalid command name "-setup" |
-| tcltest-6.7 | `untriaged` | code 1: invalid command name "-setup" |
-| tcltest-6.8 | `untriaged` | code 1: invalid command name "-setup" |
-| tcltest-7.2 | `untriaged` | code 0: 0 0 |
-| tcltest-7.3 | `untriaged` | code 0: 0 0 |
-| tcltest-7.4 | `untriaged` | code 0: 0 0 |
-| tcltest-7.5 | `untriaged` | code 0: 0 0 |
-| tcltest-7.6 | `untriaged` | code 1: invalid command name "-setup" |
+| tcltest-1.1 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 0/0,2: 1 0 \| want: 1 1 |
+| tcltest-1.2 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 0/0,2: 1 0 \| want: 1 1 |
+| tcltest-2.0 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: invalid command name "i" \| want: 0 1 0 0 1 |
+| tcltest-2.1 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-2.2 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-2.3 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-2.4 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-2.5 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-2.5a | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-2.6 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-2.6a | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-2.7 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 0/0,2: {} {} \| want: body {} |
+| tcltest-2.8 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-3.1 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-3.2 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-3.3 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-3.4 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-3.5 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: invalid command name "match" \| want: foo bar |
+| tcltest-4.1 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-4.2 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-4.3 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-4.4 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-4.5 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-4.6 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: invalid command name "skip" \| want: foo bar |
+| tcltest-5.1 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-5.2 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-5.3 | `feature`: the real 'tcltest' package; the suite runs a stand-in | cleanup: can't unset "::tcltest::testConstraints(tcltestFakeConstraint)": no such variable |
+| tcltest-6.1 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-6.2 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-6.3 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-6.4 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 1/0,2: interpreter named "::tcltest::test::i" already exists, cannot create \| wan... |
+| tcltest-6.5 | `feature`: the real 'tcltest' package; the suite runs a stand-in | setup: invalid command name "errorChannel" |
+| tcltest-6.6 | `feature`: the real 'tcltest' package; the suite runs a stand-in | setup: invalid command name "errorFile" |
+| tcltest-6.7 | `feature`: the real 'tcltest' package; the suite runs a stand-in | setup: invalid command name "outputChannel" |
+| tcltest-6.8 | `feature`: the real 'tcltest' package; the suite runs a stand-in | setup: invalid command name "outputFile" |
+| tcltest-7.2 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 0/0,2: 0 0 \| want: 1 0 |
+| tcltest-7.3 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 0/0,2: 0 0 \| want: 1 0 |
+| tcltest-7.4 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 0/0,2: 0 0 \| want: 1 0 |
+| tcltest-7.5 | `feature`: the real 'tcltest' package; the suite runs a stand-in | code 0/0,2: 0 0 \| want: 1 1 |
+| tcltest-7.6 | `feature`: the real 'tcltest' package; the suite runs a stand-in | setup: can't read "::tcltest::debug": no such variable |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| (file stopped early, status 0) | 116 | `untriaged` |
-| expr:!singleTestInterp notWsl | 1 | `untriaged` |
+| (file stopped early, status 0) | 116 | `feature`: the real 'tcltest' package; the suite runs a stand-in |
+| expr:!singleTestInterp notWsl | 1 | `feature`: the real 'tcltest' package; the suite runs a stand-in |
 
 ### thread.test
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| drainEventQueue | 34 | `untriaged` |
+| drainEventQueue | 34 | `internals`: a C test command or package of the Tcl test binary |
 
 ### timer.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| timer-10.1 | `untriaged` | setup: import pattern "::after" tries to import from namespace "foo" into itself |
+| timer-10.1 | `bug`: the result differs from tclsh 8.6.16 | setup: import pattern "::after" tries to import from namespace "foo" into itself |
 
 ### tm.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| tm-1.1 | `untriaged` | code 0:  |
-| tm-1.2 | `untriaged` | code 1: invalid command name "::tcl::tm::path" |
-| tm-1.3 | `untriaged` | code 1: invalid command name "::tcl::tm::path" |
-| tm-1.4 | `untriaged` | code 1: invalid command name "::tcl::tm::path" |
-| tm-1.5 | `untriaged` | code 1: invalid command name "::tcl::tm::path" |
-| tm-2.1 | `untriaged` | code 0:  |
-| tm-2.2 | `untriaged` | code 1: invalid command name "::tcl::tm::roots" |
-| tm-2.3 | `untriaged` | code 1: invalid command name "::tcl::tm::roots" |
-| tm-3.1 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
-| tm-3.10 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
-| tm-3.11 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
-| tm-3.12 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
-| tm-3.13 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
-| tm-3.2 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
-| tm-3.3 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
-| tm-3.4 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
-| tm-3.5 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
-| tm-3.6 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
-| tm-3.7 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
-| tm-3.8 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
-| tm-3.9 | `untriaged` | setup: invalid command name "::tcl::tm::path" |
+| tm-1.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ::tcl::tm::path |
+| tm-1.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "::tcl::tm::path" \| want: unknown or ambiguous subcomma... |
+| tm-1.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::tm::path" \| want:  |
+| tm-1.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::tcl::tm::path" \| want:  |
+| tm-1.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "::tcl::tm::path" \| want: wrong # args: should be "::tc... |
+| tm-2.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ::tcl::tm::roots |
+| tm-2.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "::tcl::tm::roots" \| want: wrong # args: should be "::t... |
+| tm-2.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "::tcl::tm::roots" \| want: wrong # args: should be "::t... |
+| tm-3.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
+| tm-3.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
+| tm-3.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
+| tm-3.12 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
+| tm-3.13 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
+| tm-3.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
+| tm-3.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
+| tm-3.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
+| tm-3.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
+| tm-3.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
+| tm-3.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
+| tm-3.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
+| tm-3.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::tcl::tm::path" |
 
 ### trace.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| trace-1.11 | `untriaged` | code 0: bar 0 |
-| trace-1.12 | `untriaged` | code 0: bar 0 |
-| trace-1.13 | `untriaged` | code 0: 0 {bar 0} |
-| trace-1.14 | `untriaged` | code 0: 0 {bar 0} |
-| trace-1.4 | `untriaged` | code 0: 1 {can't read "x(2)": no such variable} {} |
-| trace-12.1 | `untriaged` | code 0: 0 22 |
-| trace-12.2 | `untriaged` | code 0: 1 {can't read "x(0)": no such variable} |
-| trace-12.8 | `untriaged` | code 0: 0 {} |
-| trace-16.10 | `untriaged` | code 0: 0 {} 1 {can't read "x": no such variable} 1 {can't read "y(0)": no such variable} |
-| trace-16.13 | `untriaged` | code 0: 0 {} 0 xyzzy 0 xyzzy 0 xyzzy |
-| trace-16.14 | `untriaged` | code 0: 0 {} 0 xyzzy 0 xyzzy 0 xyzzy |
-| trace-16.16 | `untriaged` | code 0: 1 {can't unset "x": no such variable} 1 {can't read "y(0)": no such element in ... |
-| trace-16.19 | `untriaged` | code 0: 1 {can't unset "y(0)": no such variable} 0 xyzzy 0 {} 0 xyzzy |
-| trace-16.2 | `untriaged` | code 0: 0 {} 1 {can't read "y(0)": no such element in array} 1 {can't read "y(0)": no s... |
-| trace-16.22 | `untriaged` | code 0: third 0 {} 1 {can't read "x": no such variable} 1 {can't read "y(0)": no such v... |
-| trace-16.6 | `untriaged` | code 0: 0 {} 0 xyzzy 0 xyzzy 0 xyzzy |
-| trace-16.7 | `untriaged` | code 0: 0 {} 0 xyzzy 0 xyzzy 0 xyzzy |
-| trace-16.8 | `untriaged` | code 0: unset 0 {} 1 {can't read "x": no such variable} 1 {can't read "y": no such vari... |
-| trace-16.9 | `untriaged` | code 0: 0 {} 1 {can't read "y(0)": no such element in array} 1 {can't read "y(0)": no s... |
-| trace-18.1 | `untriaged` | code 0: 0 {} |
-| trace-18.4 | `untriaged` | code 0:  |
-| trace-2.7 | `untriaged` | code 0: errorInfo {} write |
-| trace-20.10 | `untriaged` | code 1: can't delete "someothername": command doesn't exist |
-| trace-20.8 | `untriaged` | code 0: {} {{{rename delete} {traceDelete foo}}} |
-| trace-20.9 | `untriaged` | code 0: {} bar {} |
-| trace-21.11 | `untriaged` | code 0: ::a ::a |
-| trace-21.4 | `untriaged` | code 0: {foo {foo 3} enter} {foo {foo 3} 0 3 leave} |
-| trace-21.5 | `untriaged` | code 0: {foo {foo 3} enter} {foo {foo 3} 0 3 leave} |
-| trace-21.6 | `untriaged` | code 0:  |
-| trace-21.7 | `untriaged` | code 0:  |
-| trace-21.8 | `untriaged` | code 0:  |
-| trace-23.1 | `untriaged` | code 0: {factorial 1} enter {factorial 1} 0 1 leave |
-| trace-23.2 | `untriaged` | code 0: {factorial 2} enter {factorial 1} enter {factorial 1} 0 1 leave {factorial 2} 0... |
-| trace-23.3 | `untriaged` | code 0: {factorial 3} enter {factorial 2} enter {factorial 1} enter {factorial 1} 0 1 l... |
-| trace-24.3 | `untriaged` | code 1: wrong # args: should be "trace remove execution name opList command" |
-| trace-24.4 | `untriaged` | code 1: wrong # args: should be "trace remove execution name opList command" |
-| trace-24.5 | `untriaged` | code 0: {{foo 1} 0 1 leave} 0 {} |
-| trace-25.1 | `untriaged` | code 0: 1 {{foo 1} enter} 1 {unknown command "foo"} |
-| trace-25.10 | `untriaged` | code 0: 1 {{foo 1} 0 1 leave} 1 {unknown command "foo"} |
-| trace-25.11 | `untriaged` | code 0: 1 {{foo 1} enter} 1 {unknown command "foo"} |
-| trace-25.3 | `untriaged` | code 0: {can't delete "foo": command doesn't exist} {{foo 1} enter} 1 {unknown command ... |
-| trace-25.5 | `untriaged` | code 0: 1   |
-| trace-25.6 | `untriaged` | code 0: 1 tracePostExecute2 {foo 1} 0 leave tracePostExecute {foo 1} 0 leave  |
-| trace-25.7 | `untriaged` | code 0: 1   |
-| trace-25.8 | `untriaged` | code 0: {can't delete "foo": command doesn't exist} {{foo 1} enter} 1 {unknown command ... |
-| trace-25.9 | `untriaged` | code 0: {can't delete "foo": command doesn't exist} {{foo 1} enter} 1 {unknown command ... |
-| trace-28.1 | `untriaged` | code 0: foo foo enter foo foo 0 1 leave |
-| trace-28.2 | `untriaged` | code 0: {error error} {foo foo enter foo foo 0 error leave} |
-| trace-28.3 | `untriaged` | code 0: {error error} {foo foo enter foo foo 0 error leave} |
-| trace-28.4 | `untriaged` | code 0: {error error} {foo foo enter foo foo 0 error leave} |
-| trace-28.5 | `untriaged` | code 0: foo {foo test-28.4} enter foo {foo test-28.4} 0 1 leave |
-| trace-28.6 | `untriaged` | code 0:  |
-| trace-34.1 | `untriaged` | code 0: foo |
-| trace-34.2 | `untriaged` | code 1: invalid command name "soom" |
-| trace-34.4 | `untriaged` | code 0: notrace |
-| trace-34.5 | `untriaged` | code 0: notrace |
-| trace-35.1 | `untriaged` | code 0: 1 {can't set "y": can't set "x": foo} {can't set "y": can't set "x": foo     wh... |
-| trace-37.2 | `untriaged` | code 0: - * |
-| trace-38.2 | `untriaged` | code 0: - * |
-| trace-39.1 | `untriaged` | code 1: unknown command "::tcl::string::equal" |
-| trace-4.4 | `untriaged` | code 0:  |
-| trace-4.6 | `untriaged` | code 0:  |
-| trace-5.6 | `untriaged` | code 0: x {} array |
-| trace-6.2 | `untriaged` | code 0: x 0 write x 0 read x 0 write x 0 unset |
-| trace-7.3 | `untriaged` | code 0: A3 3 A2 2 A1 1 |
-| trace-8.4 | `untriaged` | code 0: 0 {} {} |
+| trace-1.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: bar 0 \| want:  |
+| trace-1.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: bar 0 \| want:  |
+| trace-1.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {bar 0} \| want: 1 {can't read "x(bar)": no such variable} |
+| trace-1.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {bar 0} \| want: 1 {can't read "x(bar)": no such variable} |
+| trace-1.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read "x(2)": no such variable} {} \| want: 1 {can't read "x(2)": n... |
+| trace-12.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 22 \| want: 1 {can't set "x": variable is array} |
+| trace-12.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read "x(0)": no such variable} \| want: 1 {can't read "x(0)": no s... |
+| trace-12.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 1 {can't trace "x(0)": variable isn't array} |
+| trace-16.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} 1 {can't read "x": no such variable} 1 {can't read "y(0)": no such var... |
+| trace-16.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} 0 xyzzy 0 xyzzy 0 xyzzy \| want: 0 {} 1 {can't set "y": upvar refers t... |
+| trace-16.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} 0 xyzzy 0 xyzzy 0 xyzzy \| want: 0 {} 0 xyzzy 0 {} 0 xyzzy |
+| trace-16.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't unset "x": no such variable} 1 {can't read "y(0)": no such element... |
+| trace-16.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't unset "y(0)": no such variable} 0 xyzzy 0 {} 0 xyzzy \| want: 1 {c... |
+| trace-16.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} 1 {can't read "y(0)": no such element in array} 1 {can't read "y(0)": ... |
+| trace-16.22 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: third 0 {} 1 {can't read "x": no such variable} 1 {can't read "y(0)": no su... |
+| trace-16.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} 0 xyzzy 0 xyzzy 0 xyzzy \| want: 0 {} 1 {can't set "y": upvar refers t... |
+| trace-16.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} 0 xyzzy 0 xyzzy 0 xyzzy \| want: 0 {} 0 xyzzy 1 {can't read "y(0)": no... |
+| trace-16.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: unset 0 {} 1 {can't read "x": no such variable} 1 {can't read "y": no such ... |
+| trace-16.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} 1 {can't read "y(0)": no such element in array} 1 {can't read "y(0)": ... |
+| trace-18.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: 0 {a x y} |
+| trace-18.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: 1110 |
+| trace-2.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: errorInfo {} write \| want: ::errorInfo {} write |
+| trace-20.10 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't delete "someothername": command doesn't exist \| want: {} {} someothe... |
+| trace-20.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {{{rename delete} {traceDelete foo}}} \| want: {::foo ::bar rename} {} |
+| trace-20.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} bar {} \| want: {} {} {} |
+| trace-21.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ::a ::a \| want: :: :: |
+| trace-21.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {foo {foo 3} enter} {foo {foo 3} 0 3 leave} \| want: {foo {foo 3} enter} {f... |
+| trace-21.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {foo {foo 3} enter} {foo {foo 3} 0 3 leave} \| want: {foo {foo 3} enter} {f... |
+| trace-21.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: {foo {set b 3} enterstep} {foo {set b 3} 0 3 leavestep} |
+| trace-21.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: {foo {set b 3} enterstep} |
+| trace-21.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: {foo {set b 3} 0 3 leavestep} |
+| trace-23.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {factorial 1} enter {factorial 1} 0 1 leave \| want: {factorial 1} enter {i... |
+| trace-23.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {factorial 2} enter {factorial 1} enter {factorial 1} 0 1 leave {factorial ... |
+| trace-23.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {factorial 3} enter {factorial 2} enter {factorial 1} enter {factorial 1} 0... |
+| trace-24.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args: should be "trace remove execution name opList command" \| wan... |
+| trace-24.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args: should be "trace remove execution name opList command" \| wan... |
+| trace-24.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {{foo 1} 0 1 leave} 0 {} \| want: {{set b 1} enterstep} 0 {} |
+| trace-25.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {{foo 1} enter} 1 {unknown command "foo"} \| want: {invalid command name ... |
+| trace-25.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {{foo 1} 0 1 leave} 1 {unknown command "foo"} \| want: 1 {{set b 1} 0 1 l... |
+| trace-25.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {{foo 1} enter} 1 {unknown command "foo"} \| want: {invalid command name ... |
+| trace-25.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {can't delete "foo": command doesn't exist} {{foo 1} enter} 1 {unknown comm... |
+| trace-25.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1   \| want: 1 traceExecute2 {set b 1} enterstep traceExecute {set b 1} ent... |
+| trace-25.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 tracePostExecute2 {foo 1} 0 leave tracePostExecute {foo 1} 0 leave  \| wa... |
+| trace-25.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1   \| want: 1 tracePostExecute {set b 1} 0 leavestep tracePostExecute2 {se... |
+| trace-25.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {can't delete "foo": command doesn't exist} {{foo 1} enter} 1 {unknown comm... |
+| trace-25.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {can't delete "foo": command doesn't exist} {{foo 1} enter} 1 {unknown comm... |
+| trace-28.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo foo enter foo foo 0 1 leave \| want: foo foo enter foo {set a 1} enters... |
+| trace-28.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {error error} {foo foo enter foo foo 0 error leave} \| want: {error error} ... |
+| trace-28.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {error error} {foo foo enter foo foo 0 error leave} \| want: {error error} ... |
+| trace-28.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {error error} {foo foo enter foo foo 0 error leave} \| want: {error error} ... |
+| trace-28.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo {foo test-28.4} enter foo {foo test-28.4} 0 1 leave \| want: foo {foo t... |
+| trace-28.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: enter set b x=42/enterstep leave set b x=42/0/x=42/leavestep ente... |
+| trace-34.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo \| want: {{lappend ::x foo} enterstep} done foo |
+| trace-34.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "soom" \| want:  |
+| trace-34.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: notrace \| want: ::foo::bar exists: ::foo::bar |
+| trace-34.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: notrace \| want: ::foo::bar exists:  |
+| trace-35.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "y": can't set "x": foo} {can't set "y": can't set "x": foo   ... |
+| trace-37.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: - * \| want: -* * |
+| trace-38.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: - * \| want: -* * |
+| trace-39.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown command "::tcl::string::equal" \| want: 3 \| 0 1 1 |
+| trace-4.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: x 1 unset 1 {can't read "x(1)": no such element in array} |
+| trace-4.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: x 1 unset 1 {can't read "x(1)": no such variable} |
+| trace-5.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: x {} array \| want:  |
+| trace-6.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: x 0 write x 0 read x 0 write x 0 unset \| want: x 0 read x 0 write x 0 read... |
+| trace-7.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: A3 3 A2 2 A1 1 \| want: A3 A2 A1 3 2 1 |
+| trace-8.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} {} \| want: 0 {} 1 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -4073,41 +4054,41 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| unixFCmd-1.1 | `untriaged` | cleanup: file attributes is not available |
-| unixFCmd-1.2 | `untriaged` | code 1: error renaming "td2" to "td1": target file exists |
-| unixFCmd-1.3 | `untriaged` | code 1: error renaming "td1" to "td1": invalid argument |
-| unixFCmd-1.7 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-12.1 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-12.2 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-13.1 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-13.2 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-14.1 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-14.2 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-15.1 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-15.2 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-16.1 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-16.2 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-16.3 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-17.1 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-17.11 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-17.12 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-17.2 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-17.3 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-17.4 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-17.5 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-17.6 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-17.7 | `untriaged` | code 1: file attributes is not available |
-| unixFCmd-2.2.2 | `untriaged` | code 1: could not link: links are not available in the root folder |
-| unixFCmd-2.3 | `untriaged` | code 1: could not read "/dev/null": no such file or directory |
-| unixFCmd-2.4 | `untriaged` | code 1: error copying "tf1": permission denied |
-| unixFCmd-2.5 | `untriaged` | code 1: file attributes is not available |
+| unixFCmd-1.1 | `feature`: 'file attributes' | cleanup: file attributes is not available |
+| unixFCmd-1.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "td2" to "td1": target file exists \| want: error renaming "td... |
+| unixFCmd-1.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "td1" to "td1": invalid argument \| want: error renaming "td1"... |
+| unixFCmd-1.7 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: *: permission denied |
+| unixFCmd-12.1 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: could not read "foo.test": no such ... |
+| unixFCmd-12.2 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: * |
+| unixFCmd-13.1 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: could not read "foo.test": no such ... |
+| unixFCmd-13.2 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: jcollins |
+| unixFCmd-14.1 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: could not read "foo.test": no such ... |
+| unixFCmd-14.2 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: * |
+| unixFCmd-15.1 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: could not set group for file "foo.t... |
+| unixFCmd-15.2 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: could not set group for file "foo.t... |
+| unixFCmd-16.1 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: {} jcollins |
+| unixFCmd-16.2 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: could not set owner for file "foo.t... |
+| unixFCmd-16.3 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: could not set owner for file "foo.t... |
+| unixFCmd-17.1 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: {} 0o000 |
+| unixFCmd-17.11 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: 0o111 |
+| unixFCmd-17.12 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: 0o000 0o777 |
+| unixFCmd-17.2 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: could not set permissions for file ... |
+| unixFCmd-17.3 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: unknown permission string format "foo" |
+| unixFCmd-17.4 | `feature`: 'file attributes' | code 1/1: file attributes is not available \| want: unknown permission string format "-... |
+| unixFCmd-17.5 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: 0o777 |
+| unixFCmd-17.6 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: 0o442 |
+| unixFCmd-17.7 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: 0o000 0o740 0o540 0o547 |
+| unixFCmd-2.2.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: link |
+| unixFCmd-2.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: could not read "/dev/null": no such file or directory \| want:  |
+| unixFCmd-2.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error copying "tf1": permission denied \| want: fifo fifo |
+| unixFCmd-2.5 | `feature`: 'file attributes' | code 1/0,2: file attributes is not available \| want: 0o472 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | emptyTest | 11 | `tcl`: tclsh skips it too |
-| readonlyAttr | 4 | `untriaged` |
+| readonlyAttr | 4 | `platform`: a property of the host: a second device, a writable home, IPv6 on localhost, ... |
 | nonPortable | 3 | `tcl`: tclsh skips it too |
-| dontCopyLinks | 1 | `untriaged` |
+| dontCopyLinks | 1 | `design`: 'file link' is outside the root folder model of the file capability |
 
 ### unixFile.test
 
@@ -4125,10 +4106,10 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| unixInit-1.2 | `untriaged` | code 0: Expected: '127.0.0.1 localhost 39839', Got '' |
-| unixInit-3.2 | `untriaged` | code 0: 1 |
-| unixInit-4.1 | `untriaged` | code 1: can't read "tcl_pkgPath": no such variable |
-| unixInit-7.1 | `untriaged` | code 1: couldn't open "/dev/null": no such file or directory |
+| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 46175', Got '' \| want: OK |
+| unixInit-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| unixInit-4.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "tcl_pkgPath": no such variable \| want: unix |
+| unixInit-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0: couldn't open "/dev/null": no such file or directory \| want:  |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -4138,55 +4119,55 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| unthreaded | 2 | `untriaged` |
+| unthreaded | 2 | `tcl`: the test file sets the constraint false, or it is false in tclsh 8.6 on Linux |
 
 ### unload.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| unload-1.1 | `untriaged` | code 1: invalid command name "unload" |
-| unload-1.2 | `untriaged` | code 1: invalid command name "unload" |
-| unload-1.3 | `untriaged` | code 1: invalid command name "unload" |
-| unload-1.4 | `untriaged` | code 1: invalid command name "unload" |
-| unload-1.5 | `untriaged` | code 1: invalid command name "unload" |
-| unload-1.6 | `untriaged` | code 1: invalid command name "unload" |
-| unload-1.7 | `untriaged` | code 1: invalid command name "unload" |
+| unload-1.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "unload" \| want: wrong # args: should be "unload ?-swit... |
+| unload-1.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "unload" \| want: wrong # args: should be "unload ?-swit... |
+| unload-1.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "unload" \| want: could not find interpreter "foobar" |
+| unload-1.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "unload" \| want: must specify either file name or packa... |
+| unload-1.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "unload" \| want: must specify either file name or packa... |
+| unload-1.6 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "unload" \| want: package "Unknown" is loaded statically... |
+| unload-1.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "unload" \| want:  |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| pkgua.soRequired | 20 | `untriaged` |
+| pkgua.soRequired | 20 | `internals`: a C test command or package of the Tcl test binary |
 
 ### uplevel.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| uplevel-4.0.1 | `untriaged` | code 0: 222 |
-| uplevel-4.0.2 | `untriaged` | code 0: 222 |
-| uplevel-4.17 | `untriaged` | code 1: invalid command name "-0xffffffff" |
-| uplevel-4.18 | `untriaged` | code 1: bad level "#-0xffffffff" |
-| uplevel-4.19 | `untriaged` | code 1: invalid command name "-4294967295" |
-| uplevel-4.20 | `untriaged` | code 1: bad level "#-4294967295" |
-| uplevel-4.9 | `untriaged` | code 1: invalid command name "-0" |
-| uplevel-8.0 | `untriaged` | code 1: invalid command name "::tcl::unsupported::representation" |
+| uplevel-4.0.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 222 \| want: bad level "1" |
+| uplevel-4.0.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 222 \| want: bad level "1" |
+| uplevel-4.17 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "-0xffffffff" \| want:  |
+| uplevel-4.18 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad level "#-0xffffffff" \| want:  |
+| uplevel-4.19 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "-4294967295" \| want:  |
+| uplevel-4.20 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad level "#-4294967295" \| want:  |
+| uplevel-4.9 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "-0" \| want:  |
+| uplevel-8.0 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "::tcl::unsupported::representation" \| want: 5 1 |
 
 ### upvar.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| upvar-10.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| upvar-5.3 | `untriaged` | code 0: {x1 {} unset} {} |
-| upvar-8.11 | `untriaged` | code 0:  |
-| upvar-8.4 | `untriaged` | code 0:  |
-| upvar-8.5 | `untriaged` | code 0:  |
-| upvar-8.7 | `untriaged` | code 1: variable "a" already exists |
-| upvar-8.8 | `untriaged` | cleanup: can't unset "x": no such variable |
-| upvar-8.9 | `untriaged` | code 1: can't unset "::test_ns_1::a": no such variable |
-| upvar-NS-1.3 | `untriaged` | code 1: can't read "w": no such variable |
-| upvar-NS-1.4 | `untriaged` | code 1: can't read "w": no such variable |
-| upvar-NS-1.9 | `untriaged` | code 1: can't read "w": no such variable |
-| upvar-NS-3.1 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| upvar-NS-3.2 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| upvar-NS-3.3 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
+| upvar-10.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| upvar-5.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {x1 {} unset} {} \| want: {x1 {} unset} x1 |
+| upvar-8.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: * |
+| upvar-8.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't upvar from variable to itself |
+| upvar-8.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't upvar from variable to itself |
+| upvar-8.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: variable "a" already exists \| want: variable "a" has traces: can't use for u... |
+| upvar-8.8 | `bug`: the result differs from tclsh 8.6.16 | cleanup: can't unset "x": no such variable |
+| upvar-8.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't unset "::test_ns_1::a": no such variable \| want: bad variable name "a"... |
+| upvar-NS-1.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't read "w": no such variable \| want: namespace "test_ns_0" not found in ... |
+| upvar-NS-1.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't read "w": no such variable \| want: namespace "test_ns_0" not found in ... |
+| upvar-NS-1.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't read "w": no such variable \| want: namespace "test_ns_0" not found in ... |
+| upvar-NS-3.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| upvar-NS-3.2 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| upvar-NS-3.3 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -4196,27 +4177,27 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| utf-10.45 | `untriaged` | code 0: 225 |
-| utf-10.56 | `untriaged` | code 0: 65533 |
-| utf-10.57 | `untriaged` | code 0: 65533 |
-| utf-10.58 | `untriaged` | code 0: 65533 |
-| utf-10.60 | `untriaged` | code 0: 65533 |
-| utf-10.61 | `untriaged` | code 0: 65533 |
-| utf-10.62 | `untriaged` | code 0: 65533 |
-| utf-11.4 | `untriaged` | code 0: ǣGH |
-| utf-11.5 | `untriaged` | code 0: აᲐ |
-| utf-11.6 | `untriaged` | code 0: 𐐨 |
-| utf-12.4 | `untriaged` | code 0: Ǣgh |
-| utf-12.5 | `untriaged` | code 0: აᲐ |
-| utf-12.7 | `untriaged` | code 0: 𐐀 |
-| utf-13.8 | `untriaged` | code 0: 𐐨𐐀 |
-| utf-16.2 | `untriaged` | code 0: ÿÿꞍǆ |
-| utf-18.3 | `untriaged` | code 0: ſ |
-| utf-21.11 | `untriaged` | code 0: 0 |
-| utf-21.12 | `untriaged` | code 0: 0 |
-| utf-21.2 | `untriaged` | code 0: 1 0 |
-| utf-24.1 | `untriaged` | code 0: 0 |
-| utf-24.2 | `untriaged` | code 0: 0 0 |
+| utf-10.45 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 225 \| want: 60 |
+| utf-10.56 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 65533 \| want: 69632 |
+| utf-10.57 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 65533 \| want: 69632 |
+| utf-10.58 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 65533 \| want: 69632 |
+| utf-10.60 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 65533 \| want: 1114111 |
+| utf-10.61 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 65533 \| want: 1114111 |
+| utf-10.62 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 65533 \| want: 1048575 |
+| utf-11.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ǣGH \| want: ǢGH |
+| utf-11.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: აᲐ \| want: ᲐᲐ |
+| utf-11.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 𐐨 \| want: 𐐀 |
+| utf-12.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Ǣgh \| want: ǣgh |
+| utf-12.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: აᲐ \| want: აა |
+| utf-12.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 𐐀 \| want: 𐐨 |
+| utf-13.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 𐐨𐐀 \| want: 𐐀𐐨 |
+| utf-16.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ÿÿꞍǆ \| want: ÿÿɥǆ |
+| utf-18.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ſ \| want: S |
+| utf-21.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| utf-21.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| utf-21.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 0 \| want: 1 1 |
+| utf-24.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| utf-24.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 \| want: 1 1 |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -4225,11 +4206,11 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | testbytestring | 26 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | ucs2 | 17 | `platform`: a constraint of another platform or word size |
 | testnumutfchars | 15 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| utf16 | 15 | `untriaged` |
+| utf16 | 15 | `design`: ztcl strings hold full code points, as in Tcl 9; Tcl 8.6 uses UTF-16 surrogates |
 | testgetunichar | 12 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | teststringobj | 9 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| pre388 | 2 | `untriaged` |
-| pairsTo4bytes | 1 | `untriaged` |
+| pre388 | 2 | `tcl`: the test file sets the constraint false, or it is false in tclsh 8.6 on Linux |
+| pairsTo4bytes | 1 | `internals`: a C test command or package of the Tcl test binary |
 | testfindfirst | 1 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | testfindlast | 1 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 
@@ -4237,29 +4218,29 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| util-14.1 | `untriaged` | code 0: NaN |
-| util-14.2 | `untriaged` | code 0: NaN |
-| util-17.1 | `untriaged` | code 0: 0x43fffffffffffffc -3c00000000000004 0x43fffffffffffffc -3c00000000000004 0x43f... |
-| util-3.1 | `untriaged` | code 0: #\ \\\{\ \\ 1 |
-| util-3.3 | `untriaged` | code 0: #\{ # a |
-| util-3.5.1 | `untriaged` | code 0:  |
-| util-3.6 | `untriaged` | code 1: target interpreter for alias "x" in path "" is not my descendant |
-| util-4.1 | `untriaged` | code 0: a b\ c |
-| util-4.2 | `untriaged` | code 0: a b\ c |
-| util-4.3 | `untriaged` | code 0: a b\\ c |
-| util-5.40 | `untriaged` | code 0: 1 |
-| util-5.41 | `untriaged` | code 0: 0 |
-| util-5.43 | `untriaged` | code 0: 0 |
-| util-5.44 | `untriaged` | code 0: 0 |
-| util-7.2 | `untriaged` | code 0: 0 12 |
-| util-7.3 | `untriaged` | code 0: {0 8} 12 |
-| util-8.1 | `untriaged` | code 1: target interpreter for alias "fooset" in path "" is not my descendant |
-| util-9.2.1 | `untriaged` | code 0: d |
-| util-9.2.2 | `untriaged` | code 0: d |
-| util-9.32 | `untriaged` | code 0:  |
-| util-9.33 | `untriaged` | code 0:  |
-| util-9.44 | `untriaged` | code 0:  |
-| util-9.5.2 | `untriaged` | code 0: c |
+| util-14.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: NaN \| want: -NaN |
+| util-14.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: NaN \| want: -NaN(3456789abcdef) |
+| util-17.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0x43fffffffffffffc -3c00000000000004 0x43fffffffffffffc -3c00000000000004 0... |
+| util-3.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: #\ \\\{\ \\ 1 \| want: \#\ \\\{\ \\ 1 |
+| util-3.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: #\{ # a \| want: \#\{ # a |
+| util-3.5.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: # |
+| util-3.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: target interpreter for alias "x" in path "" is not my descendant \| want:  |
+| util-4.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a b\ c \| want: a b\  c |
+| util-4.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a b\ c \| want: a b\  c |
+| util-4.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a b\\ c \| want: a b\\  c |
+| util-5.40 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
+| util-5.41 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| util-5.43 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| util-5.44 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| util-7.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 12 \| want: 12 6 |
+| util-7.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {0 8} 12 \| want: {1 {can't set "tcl_precision": can't modify precision fro... |
+| util-8.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: target interpreter for alias "fooset" in path "" is not my descendant \| wa... |
+| util-9.2.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: d \| want: * |
+| util-9.2.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: d \| want: * |
+| util-9.32 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: * |
+| util-9.33 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: * |
+| util-9.44 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: * |
+| util-9.5.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: c \| want: * |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -4273,30 +4254,30 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| var-1.11 | `untriaged` | code 0: 314159 |
-| var-1.12 | `untriaged` | code 0: 1997 |
-| var-1.15 | `untriaged` | code 0: 0 2 0 3 1 {can't set "foo(3)": variable isn't array} |
-| var-1.16 | `untriaged` | code 1: can't read "result": no such variable |
-| var-1.17 | `untriaged` | code 1: can't read "result": no such variable |
-| var-1.18 | `untriaged` | code 1: can't read "result": no such variable |
-| var-10.1 | `untriaged` | code 0:  |
-| var-10.2 | `untriaged` | code 0:  |
-| var-11.1 | `untriaged` | code 1: bad option "-dict": must be -ascii, -command, -decreasing, -dictionary, -increa... |
-| var-20.10 | `untriaged` | code 0:  |
-| var-21.0 | `untriaged` | code 1: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands... |
-| var-3.10 | `untriaged` | code 0: 0 1 |
-| var-3.11 | `untriaged` | code 0:  |
-| var-3.9 | `untriaged` | code 0:  |
-| var-7.1 | `untriaged` | code 0: test_ns_var::one 1 |
-| var-7.14 | `untriaged` | code 0:  |
-| var-7.15 | `untriaged` | code 0:  |
-| var-7.16 | `untriaged` | code 1: wrong # args: should be "variable ?name value...? name ?value?" |
-| var-7.17 | `untriaged` | code 1: wrong # args: should be "variable ?name value...? name ?value?" |
-| var-7.3 | `untriaged` | code 0: {test_ns_var::one test_ns_var::two} 2 |
-| var-7.4 | `untriaged` | code 0: {test_ns_var::four test_ns_var::one test_ns_var::three test_ns_var::two} 7 |
-| var-7.7 | `untriaged` | code 0:  |
-| var-7.9 | `untriaged` | code 0: test_ns_var2::x 1 0 0 {1 {can't read "test_ns_var2::y": no such variable}} test... |
-| var-8.2 | `untriaged` | code 0: {} {} |
+| var-1.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 314159 \| want: can't set "::test_ns_var::foo::bar": parent namespace doesn't... |
+| var-1.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1997 \| want: can't set "::test_ns_var::foo::": parent namespace doesn't exist |
+| var-1.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 2 0 3 1 {can't set "foo(3)": variable isn't array} \| want: 0 2 1 {can't ... |
+| var-1.16 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "result": no such variable \| want: 0 2 1 {can't set "foo": upva... |
+| var-1.17 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "result": no such variable \| want: 0 2 1 {can't set "foo": upva... |
+| var-1.18 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "result": no such variable \| want: 0 2 1 {can't set "foo": upva... |
+| var-10.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't set "arr(x)": variable isn't array |
+| var-10.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't set "arr(x)": variable isn't array |
+| var-11.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dict": must be -ascii, -command, -decreasing, -dictionary, -in... |
+| var-20.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: * |
+| var-21.0 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
+| var-3.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 1 \| want: 1 1 |
+| var-3.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: bad variable name "foo(bar)": can't create a scalar variable that l... |
+| var-3.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't create "test_ns_fred::lnk": parent namespace doesn't exist |
+| var-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: test_ns_var::one 1 \| want: ::test_ns_var::one 1 |
+| var-7.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't define "arrayvar(1)": name refers to an element in an array |
+| var-7.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't define "arrayvar(1)": name refers to an element in an array |
+| var-7.16 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args: should be "variable ?name value...? name ?value?" \| want:  |
+| var-7.17 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args: should be "variable ?name value...? name ?value?" \| want:  |
+| var-7.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {test_ns_var::one test_ns_var::two} 2 \| want: {::test_ns_var::one ::test_n... |
+| var-7.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {test_ns_var::four test_ns_var::one test_ns_var::three test_ns_var::two} 7 ... |
+| var-7.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't define "sev:::en": parent namespace doesn't exist |
+| var-7.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: test_ns_var2::x 1 0 0 {1 {can't read "test_ns_var2::y": no such variable}} ... |
+| var-8.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {} \| want: {} {::test_ns_var::v {} unset} |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -4309,13 +4290,13 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| while-old-4.6 | `untriaged` | code 0: 1 {loop aborted} {loop aborted     while executing "error "loop aborted""     i... |
+| while-old-4.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {loop aborted} {loop aborted     while executing "error "loop aborted""  ... |
 
 ### while.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| while-4.9 | `untriaged` | code 0: wrong # args: should be "set varName ?newValue?"     while executing "set"     ... |
+| while-4.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "set varName ?newValue?"     while executing "set" ... |
 
 ### winConsole.test
 
@@ -4327,7 +4308,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| dde | 49 | `untriaged` |
+| dde | 49 | `platform`: Windows only |
 | win | 1 | `platform`: a constraint of another platform or word size |
 
 ### winFCmd.test
@@ -4336,7 +4317,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 |---|---|---|
 | win | 170 | `platform`: a constraint of another platform or word size |
 | nt | 4 | `platform`: a constraint of another platform or word size |
-| winVista | 3 | `untriaged` |
+| winVista | 3 | `platform`: Windows only |
 | nonPortable | 1 | `tcl`: tclsh skips it too |
 
 ### winFile.test
@@ -4368,19 +4349,19 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| word-1.3 | `untriaged` | code 0: 5 |
-| word-1.4 | `untriaged` | code 0: 5 |
-| word-1.5 | `untriaged` | code 0: 5 |
-| word-1.7 | `untriaged` | code 0: 5 |
-| word-1.8 | `untriaged` | code 0: 5 |
+| word-1.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 \| want: -1 |
+| word-1.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 \| want: -1 |
+| word-1.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 \| want: -1 |
+| word-1.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 \| want: -1 |
+| word-1.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 5 \| want: -1 |
 
 ### zlib.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| zlib-15.1 | `untriaged` | setup: invalid command name "zlib" |
+| zlib-15.1 | `bug`: the result differs from tclsh 8.6.16 | setup: invalid command name "zlib" |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
-| zlib | 71 | `untriaged` |
+| zlib | 71 | `feature`: the 'zlib' command |
 | knownBug | 1 | `tcl`: tclsh skips it too |

@@ -9,6 +9,12 @@
 # Skips that tclsh on Linux also has.
 skip	*	^(emptyTest|knownBug|nonPortable|extensive|userInteraction|knownMsvcBug|interactive)$	tcl	tclsh skips it too
 skip	*	^(unixCrash)$	tcl	tclsh skips it too
+skip	*	^(localeRegexp|notNetworkFilesystem|asyncPipeChan|pre388|unthreaded|expr:bug-3057639)$	tcl	the test file sets the constraint false, or it is false in tclsh 8.6 on Linux
+skip	*	^(Tcltest|TcltestPackage|procbodytest|pkgua\.soRequired|applylambda|pairsTo4bytes|testWithLimit|testCPUID|hasIsoLocale|drainEventQueue|expr:testexprparser.*)$	internals	a C test command or package of the Tcl test binary
+skip	*	^zlib$	feature	the `zlib` command
+skip	*	^utf16$	design	ztcl strings hold full code points, as in Tcl 9; Tcl 8.6 uses UTF-16 surrogates
+skip	*	^(hasLinks|dontCopyLinks)$	design	`file link` is outside the root folder model of the file capability
+skip	*	^(xdev|makeFileInHome|localhost_v6|readonlyAttr|filetime64bit)$	platform	a property of the host: a second device, a writable home, IPv6 on localhost, file attributes, or 64-bit file times
 # Other platforms.
 skip	*	^(win|winOnly|pc|nt|mac|macOnly|macOrPc|macOrWin|winLessThan10|longIs32bit|wideIs32bit|bigEndian|ucs2|macosxFileAttr|Unix|wideBiggerThanInt)$	platform	a constraint of another platform or word size
 skip	*	^expr:!ieeeFloatingPoint$	platform	needs a machine without IEEE floats
@@ -21,3 +27,54 @@ fail	*	invalid command name "test[a-z0-9]+"	internals	a C test command of the Tc
 # Missing commands and packages.
 skip	*	^history$	feature	the `history` command
 skip	*	^http2\.9\.[0-9]+$	feature	the `http` package
+# Whole files.
+*	assemble.test/*		design	the Tcl bytecode assembler; ztcl has its own bytecode
+*	unixForkEvent.test/*		design	needs fork(2) in the interpreter process
+*	assocd.test/*		internals	the C API of Tcl
+*	async.test/*		internals	the C API of Tcl
+*	cmdInfo.test/*		internals	the C API of Tcl
+*	dcall.test/*		internals	the C API of Tcl
+*	dstring.test/*		internals	the C API of Tcl
+*	indexObj.test/*		internals	the C API of Tcl
+*	link.test/*		internals	the C API of Tcl
+*	notify.test/*		internals	the C API of Tcl
+*	obj.test/*		internals	the C API of Tcl
+*	resolver.test/*		internals	the C API of Tcl
+*	result.test/*		internals	the C API of Tcl
+*	stringObj.test/*		internals	the C API of Tcl
+*	macOSX*.test/*		platform	macOS only
+*	registry.test/*		platform	Windows only
+*	win*.test/*		platform	Windows only
+# Commands of the Tcl bytecode compiler.
+fail	*	tcl::unsupported::(disassemble|getbytecode|assemble)|invalid command name "assemble"	design	inspects the bytecode of Tcl; ztcl has its own bytecode
+# Missing subcommands and options.
+fail	*	subcommand "frame": must be args	feature	`info frame`
+fail	*	subcommand "errorstack": must be args	feature	`info errorstack`
+fail	*	subcommand "(create|push|pop|pipe|truncate)": must be close	feature	`chan create`, `chan push`, `chan pop`, `chan pipe`, `chan truncate`
+fail	*	bad option "(bgerror|cancel|debug|limit|share|transfer)": must be alias	feature	the `interp` subcommands bgerror, cancel, debug, limit, share, and transfer
+fail	*	invalid command name "(::)?tcl::unsupported::(inject|corotype)"	feature	`tcl::unsupported::inject` and `corotype`
+fail	*	unknown encoding "	feature	an encoding that ztcl does not have
+fail	*	unable to convert date-time string	feature	a form of `clock scan` that ztcl does not parse
+fail	*	file attributes is not available	feature	`file attributes`
+fail	*	file mtime with a new time is not available	feature	`file mtime` and `file atime` with a new time
+# Library packages of Tcl that ztcl does not have.
+fail	*	invalid command name "(::)?(safe::|msgcat::|mc[a-z]*"|http|::http|pkg_mkIndex|(::)?tcl::tm::|::pkg::create|auto_mkindex|auto_qualify|(::)?tcl::Opt|::tcl::OptKeyRegister|optTest|tcl::Pkg::)	feature	a library package of Tcl: safe, msgcat, http, the package index, tcl::tm, or opt
+*	msgcat.test/*		feature	the `msgcat` package
+*	safe.test/*		feature	the `safe` package
+*	safe-stock.test/*		feature	the `safe` package
+*	http*.test/*		feature	the `http` package
+*	opt.test/*		feature	the `opt` package
+*	tcltest.test/*		feature	the real `tcltest` package; the suite runs a stand-in
+# The root folder of the file capability.
+fail	*	links are not available in the root folder	design	`file link` is outside the root folder model of the file capability
+# Stand-ins of the suite runner.
+fail	*	has no stand-in	internals	a C test command of the Tcl test binary, with no stand-in yet
+# The suite turns off the env capability, so the tests see no host
+# environment.
+fail	*	can't read "(::)?env\(	design	the suite runs without the `env` capability, so `env` is empty
+fail	*	::tcl::clock::[A-Za-z]+": no such variable	internals	a variable inside the clock library of Tcl
+# The last rules: an error where Tcl also gives an error, then each
+# other failure.
+fail	*	^code 1/1: 	message	an error where tclsh also gives one, with another message
+fail	*	^errorcode: 	message	the -errorcode differs
+fail	*		bug	the result differs from tclsh 8.6.16
