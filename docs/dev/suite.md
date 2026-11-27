@@ -1,6 +1,6 @@
 # Tcl 8.6.16 suite results
 
-`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-27 at commit `c3260c4`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
+`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-27 at commit `ed6fb39`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
 
 A test is applicable when it is outside the buckets `design`, `platform`, `internals`, and `tcl`. The goal of issue 244 is a pass for each applicable test.
 
@@ -8,8 +8,8 @@ A test is applicable when it is outside the buckets `design`, `platform`, `inter
 
 | Run | Total | Pass | Fail | Skip | Unreached |
 |---|---|---|---|---|---|
-| Interpreter | 46,494 | 37,671 | 2,800 | 3,766 | 2,257 |
-| JIT (`-j`) | 46,494 | 37,671 | 2,800 | 3,766 | 2,257 |
+| Interpreter | 46,494 | 37,707 | 2,764 | 3,766 | 2,257 |
+| JIT (`-j`) | 46,494 | 37,707 | 2,764 | 3,766 | 2,257 |
 
 Unreached is the test count of `tools/suite-scope.tsv` minus the tests that ran: the file stopped before them.
 
@@ -19,9 +19,9 @@ The tests of the interpreter run that do not pass, by bucket.
 
 | Bucket | Meaning | Tests |
 |---|---|---|
-| `bug` | A bug in ztcl | 1,058 |
-| `feature` | A missing feature or option | 3,558 |
-| `message` | An error message or -errorcode differs | 156 |
+| `bug` | A bug in ztcl | 1,027 |
+| `feature` | A missing feature or option | 3,559 |
+| `message` | An error message or -errorcode differs | 150 |
 | `internals` | Needs Tcl internals (C test commands, memory debugging) | 2,621 |
 | `design` | Absent by design | 439 |
 | `platform` | Platform only | 736 |
@@ -36,18 +36,17 @@ The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the re
 
 | Bucket | Reason | Tests |
 |---|---|---|
-| `bug` | the result differs from tclsh 8.6.16 | 317 |
-| `bug` | channels: the result differs | 123 |
+| `bug` | the result differs from tclsh 8.6.16 | 315 |
+| `bug` | channels: the result differs | 118 |
 | `bug` | namespaces: the result differs | 79 |
 | `bug` | 'trace': the result differs | 66 |
 | `bug` | file names and 'glob': the result differs | 65 |
 | `bug` | 'clock': the result differs | 62 |
 | `bug` | 'interp': the result differs | 58 |
 | `bug` | TclOO: the result differs | 50 |
-| `bug` | encodings: the result differs | 39 |
 | `bug` | 'expr': the result differs | 38 |
+| `bug` | encodings: the result differs | 38 |
 | `bug` | 'binary': the result differs | 31 |
-| `bug` | the standard channels are not in the channel table | 31 |
 | `bug` | regular expressions: the match differs | 16 |
 | `bug` | the setup or the cleanup of the test fails | 15 |
 | `bug` | safe interpreters: hidden commands and their messages | 14 |
@@ -56,6 +55,7 @@ The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the re
 | `bug` | the recursion limit and its message | 11 |
 | `bug` | coroutines: the result differs | 10 |
 | `bug` | 'info': the result differs | 9 |
+| `bug` | the standard channels are not in the channel table | 8 |
 | `feature` | the 'http' package | 2,063 |
 | `feature` | a library package of Tcl: safe, msgcat, http, the package index, tcl::tm, or opt | 336 |
 | `feature` | 'chan create', 'chan push', 'chan pop', 'chan pipe', 'chan truncate' | 191 |
@@ -63,8 +63,8 @@ The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the re
 | `feature` | the real 'tcltest' package; the suite runs a stand-in | 157 |
 | `feature` | an encoding that ztcl does not have (koi8-r) stops the file early | 87 |
 | `feature` | the 'zlib' command | 71 |
+| `feature` | an encoding that ztcl does not have | 66 |
 | `feature` | a form of 'clock scan' that ztcl does not parse | 65 |
-| `feature` | an encoding that ztcl does not have | 65 |
 | `feature` | the 'history' command | 62 |
 | `feature` | the 'interp' subcommands bgerror, cancel, debug, limit, share, and transfer | 59 |
 | `feature` | the REG_U flags of 'regexp -about' | 50 |
@@ -83,7 +83,7 @@ The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the re
 | `feature` | 'info errorstack' | 3 |
 | `feature` | the 'platform' package | 2 |
 | `feature` | the variable '::oo::patchlevel' | 1 |
-| `message` | an error where tclsh also gives one, with another message | 155 |
+| `message` | an error where tclsh also gives one, with another message | 149 |
 | `message` | the -errorcode differs | 1 |
 
 ## JIT differences
@@ -105,10 +105,10 @@ Each test has the same result in the two runs.
 | basic.test | in | 146 | 100 | 12 | 34 | 0 | 100 | 12 | 34 |
 | binary.test | in | 717 | 602 | 36 | 79 | 0 | 602 | 36 | 79 |
 | case.test | in | 15 | 15 | 0 | 0 | 0 | 15 | 0 | 0 |
-| chan.test | decide | 41 | 17 | 24 | 0 | 0 | 17 | 24 | 0 |
-| chanio.test | decide | 471 | 297 | 70 | 75 | 29 | 297 | 70 | 75 |
+| chan.test | decide | 41 | 25 | 16 | 0 | 0 | 25 | 16 | 0 |
+| chanio.test | decide | 471 | 302 | 65 | 75 | 29 | 302 | 65 | 75 |
 | clock.test | decide | 8,532 | 8,390 | 132 | 7 | 3 | 8,390 | 132 | 7 |
-| cmdAH.test | decide | 323 | 93 | 48 | 182 | 0 | 93 | 48 | 182 |
+| cmdAH.test | decide | 323 | 95 | 46 | 182 | 0 | 95 | 46 | 182 |
 | cmdIL.test | in | 146 | 137 | 3 | 6 | 0 | 137 | 3 | 6 |
 | cmdInfo.test | na | 12 | 0 | 0 | 12 | 0 | 0 | 0 | 12 |
 | cmdMZ.test | in | 92 | 82 | 9 | 1 | 0 | 82 | 9 | 1 |
@@ -152,8 +152,8 @@ Each test has the same result in the two runs.
 | info.test | in | 266 | 106 | 157 | 3 | 0 | 106 | 157 | 3 |
 | init.test | decide | 24 | 0 | 10 | 0 | 14 | 0 | 10 | 0 |
 | interp.test | decide | 352 | 198 | 141 | 13 | 0 | 198 | 141 | 13 |
-| io.test | decide | 524 | 312 | 81 | 73 | 58 | 312 | 81 | 73 |
-| ioCmd.test | decide | 348 | 78 | 168 | 102 | 0 | 78 | 168 | 102 |
+| io.test | decide | 524 | 317 | 76 | 73 | 58 | 317 | 76 | 73 |
+| ioCmd.test | decide | 348 | 94 | 152 | 102 | 0 | 94 | 152 | 102 |
 | ioTrans.test | decide | 106 | 2 | 67 | 37 | 0 | 2 | 67 | 37 |
 | iogt.test | decide | 17 | 0 | 0 | 17 | 0 | 0 | 0 | 17 |
 | join.test | in | 10 | 10 | 0 | 0 | 0 | 10 | 0 | 0 |
@@ -676,26 +676,18 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| chan-10.1 | `bug`: channels: the result differs | code 0/1: stderr stdin stdout \| want: wrong # args: should be "chan names ?pattern?" |
+| chan-10.1 | `bug`: channels: the result differs | code 0/1: stdin stdout stderr \| want: wrong # args: should be "chan names ?pattern?" |
 | chan-11.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "puts ?-nonewline? ?channelId? string" \| want: wrong... |
 | chan-12.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "read channelId ?numChars?" or "read ?-nonewline? cha... |
 | chan-13.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "seek channelId offset ?origin?" \| want: wrong # arg... |
 | chan-14.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "tell channelId" \| want: wrong # args: should be "ch... |
 | chan-15.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "truncate": must be close, configure, copy, e... |
 | chan-15.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "truncate": must be close, configure, copy,... |
-| chan-16.10 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stdin" \| want: -1 |
-| chan-16.11 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stdout" \| want: 0 |
-| chan-16.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdout" \| want: bad mode "input output": must be... |
-| chan-16.5 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stdout" \| want: -1 |
-| chan-16.6 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stdin" \| want: 0 |
 | chan-17.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "chan pipe" \| want: wrong # args: should be "chan pi... |
 | chan-17.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "chan pipe" \| want: wrong # args: should be "chan pi... |
 | chan-2.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fblocked channelId" \| want: wrong # args: should be... |
 | chan-3.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "close channelId ?direction?" \| want: wrong # args: ... |
 | chan-4.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fconfigure channelId ?-option value ...?" \| want: w... |
-| chan-4.2 | `bug`: channels: the result differs | code 0/1:  \| want: bad value* |
-| chan-4.3 | `bug`: channels: the result differs | code 0/1:  \| want: bad value* |
-| chan-4.5 | `bug`: channels: the result differs | code 0/1:  \| want: bad value for -eofchar:* |
 | chan-5.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fcopy input output ?-size size? ?-command callback?"... |
 | chan-6.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "eof channelId" \| want: wrong # args: should be "cha... |
 | chan-8.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "flush channelId" \| want: wrong # args: should be "c... |
@@ -712,11 +704,10 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | chan-io-14.2 | `bug`: channels: the result differs | code 0/0,2: {} {} {} \| want: line line none |
 | chan-io-14.3 | `bug`: channels: the result differs | cleanup: can not find channel named "file193" |
 | chan-io-14.4 | `bug`: channels: the result differs | cleanup: can not find channel named "file194" |
-| chan-io-14.5 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stdin" \| want: {channel "stdin" wasn't opened ... |
-| chan-io-14.6 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stdout" \| want: {} {} {can not find channel na... |
-| chan-io-14.7 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stderr" \| want: {} {} {can not find channel na... |
+| chan-io-14.5 | `bug`: the standard channels are not in the channel table | code 0/0,2: {can not find channel named "stdin"} {can not find channel named "stdin"} {... |
+| chan-io-14.6 | `bug`: the standard channels are not in the channel table | code 0/0,2: {} {can not find channel named "stdout"} {} \| want: {} {} {can not find ch... |
+| chan-io-14.7 | `bug`: the standard channels are not in the channel table | code 0/0,2: {} {can not find channel named "stderr"} {} \| want: {} {} {can not find ch... |
 | chan-io-14.8 | `bug`: channels: the result differs | code 0/0,2:  \| want: hello |
-| chan-io-19.1 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stdin" \| want: 0 |
 | chan-io-2.2 | `bug`: channels: the result differs | code 0/0,2: {} {123456789012345  12} \| want: {123456789012345 } {123456789012345  12} |
 | chan-io-2.4 | `bug`: channels: the result differs | code 0/0,2: {abcdefg hijklmnopqrstuvwxyz} {abcdefg hijklmnopqrstuvwxyz} \| want: {abcde... |
 | chan-io-20.1 | `bug`: channels: the result differs | code 0/0,2: utf-8 \| want: ascii |
@@ -724,11 +715,9 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | chan-io-27.4 | `bug`: channels: the result differs | code 0/0,2: 0 0 72 \| want: 0 60 72 |
 | chan-io-27.5 | `bug`: channels: the result differs | code 0/0,2: 0 0 72 \| want: 0 60 72 |
 | chan-io-28.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delet... |
-| chan-io-29.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdin" \| want: channel "stdin" wasn't opened for... |
 | chan-io-29.20 | `bug`: channels: the result differs | code 0/0,2: 0 0 12600 \| want: 4096 12288 12600 |
 | chan-io-29.27 | `bug`: channels: the result differs | code 0/0,2: 1 {error writing "file254": broken pipe} {posix epipe {broken pipe}} \| wan... |
 | chan-io-29.35 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delet... |
-| chan-io-29.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdin" \| want: channel "stdin" wasn't opened for... |
 | chan-io-3.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: abcdefghijklmnopqrstuvwxyz   |
 | chan-io-3.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: {123456789012345 } {123456789012345  12} |
 | chan-io-3.3 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want:   12 |
@@ -743,8 +732,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | chan-io-31.13 | `bug`: channels: the result differs | code 0/0,2: binary \| want: lf |
 | chan-io-31.5 | `bug`: channels: the result differs | code 0/0,2: 5 6 cr 0 there 12 cr 0 \| want: 21 21 cr 1 {} 21 cr 1 |
 | chan-io-31.6 | `bug`: channels: the result differs | code 0/0,2: 5 6 crlf 0 there 12 crlf 0 \| want: 21 21 crlf 1 {} 21 crlf 1 |
-| chan-io-32.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdout" \| want: channel "stdout" wasn't opened f... |
-| chan-io-32.2 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stdin" \| want:  |
 | chan-io-34.12 | `bug`: channels: the result differs | code 1/0,2: bad origin "cur": must be start, current, or end \| want: 14 {xyz 123 xyzzy... |
 | chan-io-34.19 | `bug`: channels: the result differs | code 0/0,2: 0 \| want: 54 |
 | chan-io-34.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: error during seek on "file433": input/output error \| want: error during seek... |
@@ -960,13 +947,11 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | cmdAH-29.4 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: link |
 | cmdAH-29.4.1 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: link |
 | cmdAH-30.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: . \| want: user "woohgy" doesn't exist |
-| cmdAH-31.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: wrong # args: should be "file channels ?pattern?" |
 | cmdAH-31.10 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "file25" \| want:  |
 | cmdAH-31.11 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "file" \| want: {} file25 |
 | cmdAH-31.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "file" \| want: file25 stdout |
 | cmdAH-31.13 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "close" \| want: stdout |
 | cmdAH-31.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: stderr stdin stdout |
-| cmdAH-31.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: stderr stdin stdout |
 | cmdAH-31.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "file" \| want:  |
 | cmdAH-31.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "file" \| want: file25 file25 |
 | cmdAH-31.9 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "file" \| want: file25 stdout |
@@ -1245,7 +1230,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | encoding-2.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 8C |
 | encoding-28.0 | `bug`: encodings: the result differs | code 2/0,2: 6 \| want: 85 |
 | encoding-3.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "shiftjis" \| want: shiftjis |
-| encoding-3.2 | `bug`: encodings: the result differs | code 0/0,2:  \| want: jis0208 |
+| encoding-3.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: jis0208 |
 | encoding-5.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 8C |
 | encoding-7.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 吾吾吾吾 |
 | encoding-7.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "jis0208" \| want: 512 乎 |
@@ -1522,8 +1507,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | fileName-20.8 | `bug`: file names and 'glob': the result differs | code 0/0,2: ~test \| want: ./~test |
 | fileName-20.9 | `bug`: file names and 'glob': the result differs | setup: couldn't open "~/test": no such file or directory |
 | filename-11.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "glob ?switches? name ?name ...?" \| want: no files m... |
-| filename-11.14 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl178121/globTest |
-| filename-11.15 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl178121/globTest |
+| filename-11.14 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl424824/globTest |
+| filename-11.15 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl424824/globTest |
 | filename-11.17.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.3 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.4 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
@@ -1578,7 +1563,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filename-13.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/{\}" \| want: unmatched open-brace in... |
 | filename-13.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/}" \| want: unmatched close-brace in ... |
 | filename-14.15 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
-| filename-14.17 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl178121/globTest/z1.c |
+| filename-14.17 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl424824/globTest/z1.c |
 | filename-14.22 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "goo/*" \| want: no files matched glob patterns... |
 | filename-14.25 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
 | filename-14.26 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
@@ -1616,7 +1601,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.11 | `bug`: file names and 'glob': the result differs | code 0/0,2: 1 \| want: 0 |
 | filesystem-6.14 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
 | filesystem-6.15 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: could not read "": no such file or directory |
-| filesystem-6.16 | `bug`: file names and 'glob': the result differs | code 0/1: 1795748338 \| want: could not read "": no such file or directory |
+| filesystem-6.16 | `bug`: file names and 'glob': the result differs | code 0/1: 1795750350 \| want: could not read "": no such file or directory |
 | filesystem-6.17 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/1: file mtime with a new time is not available \| want: could not read "": no su... |
 | filesystem-6.18 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: can't create directory "": no such file or directory |
 | filesystem-6.2 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: could not read "": no such file or directory |
@@ -1627,7 +1612,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.25 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "" to "": target file exists \| want: error renaming "": no su... |
 | filesystem-6.27 | `bug`: file names and 'glob': the result differs | code 0/1: / \| want: unrecognised path |
 | filesystem-6.28 | `bug`: file names and 'glob': the result differs | code 0/1: 280 \| want: could not read "": no such file or directory |
-| filesystem-6.3 | `bug`: file names and 'glob': the result differs | code 0/1: 1795748338 \| want: could not read "": no such file or directory |
+| filesystem-6.3 | `bug`: file names and 'glob': the result differs | code 0/1: 1795750350 \| want: could not read "": no such file or directory |
 | filesystem-6.30 | `bug`: file names and 'glob': the result differs | code 0/1: native root \| want: unrecognised path |
 | filesystem-6.32 | `bug`: file names and 'glob': the result differs | code 0/1: directory \| want: could not read "": no such file or directory |
 | filesystem-6.33 | `bug`: file names and 'glob': the result differs | code 0/0,2: 1 \| want: 0 |
@@ -2246,11 +2231,10 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | io-14.2 | `bug`: channels: the result differs | code 0/0,2: {} {} {} \| want: line line none |
 | io-14.3 | `bug`: channels: the result differs | code 1/0,2: child process exited abnormally \| want: { out } {err } |
 | io-14.4 | `bug`: channels: the result differs | code 1/0,2: child process exited abnormally \| want: { close stdin stdout } {stderr } |
-| io-14.5 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stdin" \| want: {channel "stdin" wasn't opened ... |
-| io-14.6 | `bug`: the standard channels are not in the channel table | code 1/0,2: interpreter named "z" already exists, cannot create \| want: {} {} {can not... |
-| io-14.7 | `bug`: the standard channels are not in the channel table | code 1/0,2: interpreter named "z" already exists, cannot create \| want: {} {} {can not... |
+| io-14.5 | `bug`: the standard channels are not in the channel table | code 0/0,2: {can not find channel named "stdin"} {can not find channel named "stdin"} {... |
+| io-14.6 | `bug`: the standard channels are not in the channel table | code 0/0,2: {} {can not find channel named "stdout"} {} \| want: {} {} {can not find ch... |
+| io-14.7 | `bug`: the standard channels are not in the channel table | code 0/0,2: {} {can not find channel named "stderr"} {} \| want: {} {} {can not find ch... |
 | io-14.8 | `bug`: channels: the result differs | code 0/0,2:  \| want: hello |
-| io-19.1 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stdin" \| want: 0 |
 | io-2.2 | `bug`: channels: the result differs | code 0/0,2: {} {123456789012345  12} \| want: {123456789012345 } {123456789012345  12} |
 | io-2.4 | `bug`: channels: the result differs | code 0/0,2: {abcdefg hijklmnopqrstuvwxyz} {abcdefg hijklmnopqrstuvwxyz} \| want: {abcde... |
 | io-20.1 | `bug`: channels: the result differs | code 0/0,2: utf-8 \| want: ascii |
@@ -2258,12 +2242,10 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | io-27.4 | `bug`: channels: the result differs | code 0/0,2: 0 0 72 \| want: 0 60 72 |
 | io-27.5 | `bug`: channels: the result differs | code 0/0,2: 0 0 72 \| want: 0 60 72 |
 | io-28.2 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delet... |
-| io-29.1 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't o... |
 | io-29.20 | `bug`: channels: the result differs | code 0/0,2: 0 0 12600 \| want: 4096 12288 12600 |
 | io-29.27 | `bug`: channels: the result differs | code 0/0,2: 1 {error writing "": broken pipe} {posix epipe {broken pipe}} \| want: 1 {e... |
 | io-29.35 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/0,2: bad option "share": must be alias, aliases, cancel, children, create, delet... |
 | io-29.36.2 | `bug`: channels: the result differs | code 0/0,2: {<1 line>} {<2 line>} <> {<3 line>} {<1 line>} {<2 line>} {<3 line>} {<1 li... |
-| io-29.9 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't o... |
 | io-3.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: abcdefghijklmnopqrstuvwxyz   |
 | io-3.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: {123456789012345 } {123456789012345  12} |
 | io-3.3 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want:   12 |
@@ -2278,10 +2260,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | io-31.13 | `bug`: channels: the result differs | code 0/0,2: binary \| want: lf |
 | io-31.5 | `bug`: channels: the result differs | code 0/0,2: 5 6 cr 0 there 12 cr 0 \| want: 21 21 cr 1 {} 21 cr 1 |
 | io-31.6 | `bug`: channels: the result differs | code 0/0,2: 5 6 crlf 0 there 12 crlf 0 \| want: 21 21 crlf 1 {} 21 crlf 1 |
-| io-32.1 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't... |
 | io-32.11.1 | `bug`: channels: the result differs | code 0/0,2: {hello } { hello } \| want: {hello } {hello } |
 | io-32.11.2 | `bug`: channels: the result differs | code 0/0,2: {hello } { hello } \| want: {hello } {hello } |
-| io-32.2 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stdin" \| want:  |
 | io-33.11 | `bug`: channels: the result differs | cleanup: can not find channel named "80" |
 | io-33.12 | `bug`: channels: the result differs | cleanup: can not find channel named "80" |
 | io-33.13 | `bug`: channels: the result differs | cleanup: can not find channel named "80" |
@@ -2333,9 +2313,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | Test | Bucket | Result (start) |
 |---|---|---|
 | ioCmd-13.11 | `bug`: channels: the result differs | code 2/0,2: 34123456x \| want: 341234x6 |
-| iocmd-1.5 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't o... |
-| iocmd-10.4 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't... |
-| iocmd-10.5 | `bug`: the standard channels are not in the channel table | code 1/0,2: can not find channel named "stdin" \| want: 0 |
 | iocmd-11.1 | `bug`: channels: the result differs | code 0/0,2: 1 {can't write input to command: standard input was redirected} NONE \| wan... |
 | iocmd-11.2 | `bug`: channels: the result differs | code 0/0,2: 1 {can't read output from command: standard output was redirected} NONE \| ... |
 | iocmd-11.3 | `bug`: channels: the result differs | code 0/0,2: 1 {can't read output from command: standard output was redirected} NONE \| ... |
@@ -2343,10 +2320,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | iocmd-12.4 | `bug`: channels: the result differs | code 0/0,2: -1 \| want: 0 |
 | iocmd-12.6 | `bug`: channels: the result differs | code 0/0,2: 1 unmatched open brace in list unmatched open brace in list     while execu... |
 | iocmd-12.7 | `bug`: channels: the result differs | code 0/0,2: 1 {invalid access mode "FOO": must be APPEND, BINARY, CREAT, EXCL, NOCTTY, ... |
-| iocmd-14.5 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 0 0 |
-| iocmd-14.6 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdin"} \| want: 0 0 |
-| iocmd-14.7 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 0 0 |
-| iocmd-14.8 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stderr"} \| want: 0 0 |
 | iocmd-15.10 | `bug`: channels: the result differs | code 0/0,2: 1 {fcopy -command is not available} \| want: 1 {bad option "foo": must be -... |
 | iocmd-15.12 | `bug`: channels: the result differs | code 0/0,2: 1 {fcopy -command is not available} \| want: 1 {expected integer but got "f... |
 | iocmd-15.3 | `bug`: channels: the result differs | code 0/0,2: 1 {can not find channel named "1"} \| want: 1 {wrong # args: should be "fco... |
@@ -2354,7 +2327,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | iocmd-15.5 | `bug`: channels: the result differs | code 0/0,2: 1 {can not find channel named "1"} \| want: 1 {wrong # args: should be "fco... |
 | iocmd-15.8 | `bug`: channels: the result differs | code 0/0,2: 1 {error reading "file70": bad file number} \| want: 1 {channel "file70" wa... |
 | iocmd-15.9 | `bug`: channels: the result differs | code 0/0,2: 0 0 \| want: 1 {channel "file69" wasn't opened for writing} |
-| iocmd-2.4 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't o... |
 | iocmd-21.0 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
 | iocmd-21.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
 | iocmd-21.10 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
@@ -2366,7 +2338,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | iocmd-21.16 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
 | iocmd-21.17 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
 | iocmd-21.18 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
-| iocmd-21.19 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: {file18 file19} 1 {unknown or ambiguous subcommand "create": must be close,... |
+| iocmd-21.19 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: {stdin stdout stderr file18 file19} 1 {unknown or ambiguous subcommand "cre... |
 | iocmd-21.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
 | iocmd-21.20 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
 | iocmd-21.21 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, f... |
@@ -2470,7 +2442,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | iocmd-29.7 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
 | iocmd-29.8 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
 | iocmd-29.9 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
-| iocmd-3.4 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't... |
 | iocmd-30.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
 | iocmd-30.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
 | iocmd-30.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
@@ -2487,16 +2458,9 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | iocmd-32.3.0 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
 | iocmd-32.3.1 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, e... |
 | iocmd-4.12 | `message`: the -errorcode differs | errorcode: NONE |
-| iocmd-4.6 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't... |
-| iocmd-4.7 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdout"} \| want: 1 {channel "stdout" wasn't... |
-| iocmd-4.9 | `bug`: the standard channels are not in the channel table | code 0/0,2: 1 {can not find channel named "stdin"} {TCL LOOKUP CHANNEL stdin} \| want: ... |
-| iocmd-5.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdin" \| want: expected integer but got "gugu" |
-| iocmd-5.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: can not find channel named "stdin" \| want: bad origin "gugu": must be start,... |
-| iocmd-8.14 | `bug`: channels: the result differs | code 0/0,2:  \| want: 4096 |
+| iocmd-4.9 | `bug`: channels: the result differs | code 0/0,2: 1 {expected non-negative integer but got "foo"} NONE \| want: 1 {expected n... |
 | iocmd-8.15.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-blah": should be one of -blocking, -buffering, -buffersize, -enc... |
 | iocmd-8.2 | `bug`: channels: the result differs | code 0/0,2: 1 {can not find channel named "a"} \| want: 1 {wrong # args: should be "fco... |
-| iocmd-8.5 | `bug`: channels: the result differs | code 0/0,2: 0 {} \| want: 1 {bad value for -buffering: must be one of full, line, or none} |
-| iocmd-8.6 | `bug`: channels: the result differs | code 0/0,2: 0 {} \| want: 1 {bad value for -translation: must be one of auto, binary, c... |
 | iocmd-8.7 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "unicode" \| want: -blocking 1 -buffering full -buffersize... |
 | iocmd-8.8 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "unicode" \| want: line {-blocking 1 -buffering line -buff... |
 | iocmd-8.9 | `bug`: channels: the result differs | code 0/0,2: -blocking 1 -buffering none -buffersize 4040 -encoding binary -eofchar {} -... |
@@ -2521,7 +2485,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | iortrans-2.18 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
 | iortrans-2.19 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof... |
 | iortrans-2.2 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
-| iortrans-2.20 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: {} 1 {unknown or ambiguous subcommand "push": must be close, configure, cop... |
+| iortrans-2.20 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 0/0,2: {stdin stdout stderr} 1 {unknown or ambiguous subcommand "push": must be cl... |
 | iortrans-2.3 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
 | iortrans-2.4 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
 | iortrans-2.5 | `feature`: 'chan create', 'chan push', 'chan pop', 'chan pipe', 'cha... | code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, ... |
@@ -3599,7 +3563,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | socket-14.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: couldn't open socket: the network policy does not allow the address "192.0.2.... |
 | socket-14.8.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ok |
 | socket-14.8.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {connection refused} {} \| want: {error reading "sock*": socket is not c... |
-| socket-15.1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: sock2843 \| want: couldn't open socket: connection refused |
+| socket-15.1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: sock2842 \| want: couldn't open socket: connection refused |
 | socket_inet-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ready timed_out \| want: ready done |
 | socket_inet6-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ready timed_out \| want: ready done |
 
@@ -3929,7 +3893,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 42001', Got '' \| want: OK |
+| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 38505', Got '' \| want: OK |
 | unixInit-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
 | unixInit-4.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "tcl_pkgPath": no such variable \| want: unix |
 | unixInit-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0: couldn't open "/dev/null": no such file or directory \| want:  |
