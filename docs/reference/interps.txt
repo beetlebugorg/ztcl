@@ -29,7 +29,7 @@ diff: `interp limit` is not in ztcl. Each interpreter has the compute limit and 
 
 == package
 syn: package option ?arg ...?
-does: Loads packages by name and version. ztcl reads no folder by itself: a script or the host runs `package ifneeded`, or sources a `pkgIndex.tcl`. A build with modules loads the built-in `ztcl::` modules by name. With no capability, only `names`, `present`, `provide`, `require`, and `versions` exist.
+does: Loads packages by name and version. With the capabilities package and file, the handler `tclPkgUnknown` reads the `pkgIndex.tcl` file of each folder of `auto_path` and of each folder in it, as Tcl does. A script can also run `package ifneeded` itself. A build with modules loads the built-in `ztcl::` modules by name. With no capability, only `names`, `present`, `provide`, `require`, and `versions` exist.
 sub: package require ?-exact? NAME ?VERSION ...? | Loads a package and gives its version.
 sub: package provide NAME ?VERSION? | Says that the package is loaded, or gives its version.
 sub: package ifneeded NAME VERSION ?SCRIPT? | The script that loads a version.
@@ -43,3 +43,25 @@ sub: package prefer ?latest|stable? | Which versions `require` picks.
 sub: package unknown ?CMD? | The command that runs for a missing package.
 ex: package require ztcl::json => 1.0
 ex: package provide jot 0.1.0; package present jot => 0.1.0
+
+== tclPkgUnknown
+syn: tclPkgUnknown name ?version ...?
+does: The handler of `package unknown`: sources the `pkgIndex.tcl` file of each folder of `auto_path` and of each folder in it, once. A `pkgIndex.tcl` runs with the variable `dir` set to its folder.
+cap: package
+flags: --allow package
+names: tclPkgUnknown tclPkgSetup tclLog
+
+== auto_load
+syn: auto_load command ?namespace?
+does: Defines a command from `auto_index`, which the `tclIndex` files of `auto_path` and `tclPkgSetup` (the lazy `pkgIndex.tcl` form) fill. Gives 1 when the command exists after it. The `unknown` command calls it for a missing command.
+cap: package
+flags: --allow package
+names: auto_load auto_load_index auto_reset auto_qualify auto_import auto_execok
+ex: auto_qualify foo ::bar => bar::foo foo
+
+== history
+syn: history ?option? ?arg ...?
+does: The list of the commands of a session, as in Tcl: `add`, `change`, `clear`, `event`, `info`, `keep`, `nextid`, and `redo`.
+cap: package
+flags: --allow package
+ex: history add {set a 1}; history nextid => 2
