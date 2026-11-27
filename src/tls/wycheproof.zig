@@ -5,7 +5,7 @@
 //!
 //! The sets and the functions under test:
 //!
-//! - AES-GCM and ChaCha20-Poly1305: the AEADs of `record.zig`. AES-GCM
+//! - AES-GCM and ChaCha20-Poly1305: the AEADs of `record.zig`. Each one
 //!   runs with `std.crypto` and with each code of `aead.zig` that runs
 //!   on the CPU.
 //! - HKDF and HMAC with SHA-256 and SHA-384: the types of `schedule.zig`.
@@ -113,14 +113,13 @@ fn aeadCase(comptime A: type, a: std.mem.Allocator, t: Value) !bool {
     const sealed = std.mem.eql(u8, out, ct) and std.mem.eql(u8, &t2, tag);
     const opened = if (A.decrypt(out, ct, tag[0..A.tag_length].*, ad, iv[0..A.nonce_length].*, key[0..A.key_length].*)) |_| std.mem.eql(u8, out, msg) else |_| false;
     const ok = sealed and opened;
-    if (A == aead.chacha_poly.ChaCha20Poly1305) return ok;
-    // AES-GCM again with each code of aead.zig that runs on this CPU. A
+    // The AEAD again with each code of aead.zig that runs on this CPU. A
     // result that differs from std.crypto inverts the result of the case.
     defer fast.force(.unknown);
     for (std.enums.values(fast.Impl)) |i| {
         if (i == .unknown or !fast.available(i)) continue;
         fast.force(i);
-        const g = fast.Gcm.init(key);
+        const g = if (A == aead.chacha_poly.ChaCha20Poly1305) fast.ChaCha.init(key[0..32]) else fast.Gcm.init(key);
         g.seal(out, &t2, msg, ad, iv[0..12]);
         const s2 = std.mem.eql(u8, out, ct) and std.mem.eql(u8, &t2, tag);
         const o2 = if (g.open(out, ct, tag[0..16], ad, iv[0..12])) |_| std.mem.eql(u8, out, msg) else |_| false;
