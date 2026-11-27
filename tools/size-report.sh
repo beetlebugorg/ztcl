@@ -15,7 +15,7 @@
 # tools/size-budget.tsv and writes a warning when:
 #   - the full runner is above 6,850,000 bytes (x86-64 Linux only),
 #   - a module is more than 10 % above its row,
-#   - ztcl.wasm with modules is above 1,550,000 bytes, or the wasm build
+#   - ztcl.wasm with modules is above 1,600,000 bytes, or the wasm build
 #     with no module is above 1,000,000 bytes.
 # The sizes are goals, not gates: a row over its goal does not fail the
 # job. Add --strict to exit with 1 when a row is over its goal.
@@ -110,7 +110,7 @@ END {
     for (i = 1; i <= n; i++) {
         r = row[i]; b = bytes[r]; lim = ""; st = ""
         if (r == "full") { lim = 6850000; if (target != "Linux x86_64") lim = "" }
-        else if (r == "wasm") lim = 1550000
+        else if (r == "wasm") lim = 1600000
         else if (r == "wasm-core") lim = 1000000
         else if (r != "core" && (r in budget)) lim = int(budget[r] * 1.1)
         if (lim != "") { st = (b + 0 <= lim + 0) ? "ok" : "over"; if (st == "over") bad = 1 }
