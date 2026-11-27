@@ -281,24 +281,52 @@ const winh = struct {
     /// handle its kind u8 (0 a file, 1 a socket) and its value u64 in the
     /// process `target`, then the record of `tchan.shipOut`. The handles
     /// of `fds` stay open here.
-    fn payload(a: Allocator, to: u64, fds: []const i32, target: HANDLE, bytes: []const u8) ?[]u8 {
-        const p = a.alloc(u8, 9 + 9 * fds.len + bytes.len) catch return null;
-        std.mem.writeInt(u64, p[0..8], to, .little);
-        p[8] = @intCast(fds.len);
-        for (fds, 0..) |fd, k| {
+    ///
+    /// A socket for a child goes as the WSAPROTOCOL_INFOW of
+    /// `WSADuplicateSocketW` for the pid of the child (`pid`), since the
+    /// documentation of `DuplicateHandle` gives that call for a socket:
+    /// the entry is the kind 2 and the 628 bytes of the structure. A child
+    /// in an AppContainer cannot open its parent for that call, so a
+    /// socket from a child (`pid` null) goes as its handle of kind 1,
+    /// which the parent takes and checks with `getsockopt`.
+    fn payload(a: Allocator, to: u64, fds: []const i32, target: HANDLE, pid: ?u32, bytes: []const u8) ?[]u8 {
+        var p: std.ArrayList(u8) = .empty;
+        errdefer p.deinit(a);
+        p.appendSlice(a, &std.mem.toBytes(std.mem.nativeToLittle(u64, to))) catch return null;
+        p.append(a, @intCast(fds.len)) catch return null;
+        for (fds) |fd| {
             const h = sysw.handleOfFd(fd);
+            if (h.kind == 1) {
+                if (pid) |child| {
+                    var info: [sysw.socket_info_len]u8 = undefined;
+                    if (!sysw.socketInfoFor(fd, child, &info)) {
+                        p.deinit(a);
+                        return null;
+                    }
+                    p.append(a, 2) catch return null;
+                    p.appendSlice(a, &info) catch return null;
+                    continue;
+                }
+            }
             var out: ?HANDLE = null;
             if (DuplicateHandle(GetCurrentProcess(), @ptrFromInt(h.value), target, &out, 0, 0, same_access) == 0 or out == null) {
-                a.free(p);
+                p.deinit(a);
                 return null;
             }
-            const at = 9 + 9 * k;
-            p[at] = h.kind;
-            std.mem.writeInt(u64, p[at + 1 ..][0..8], @intFromPtr(out.?), .little);
+            p.append(a, h.kind) catch return null;
+            p.appendSlice(a, &std.mem.toBytes(std.mem.nativeToLittle(u64, @intFromPtr(out.?)))) catch return null;
         }
-        @memcpy(p[9 + 9 * fds.len ..], bytes);
-        return p;
+        p.appendSlice(a, bytes) catch return null;
+        return p.toOwnedSlice(a) catch null;
     }
+
+    /// The pid of the child of a bridge, or of this process for a child
+    /// of the spawner of a test.
+    fn pidOf(b: *const Bridge) u32 {
+        if (b.win) |c| return c.pid;
+        return GetCurrentProcessId();
+    }
+    extern "kernel32" fn GetCurrentProcessId() callconv(.winapi) u32;
 
     fn send(g: *Group, to: u64, bytes: []const u8, fds: []const i32) bool {
         const a = g.gpa;
@@ -306,7 +334,7 @@ const winh = struct {
         defer g.lock.unlock();
         if (g.find(to)) |t| {
             const b: *Bridge = @ptrCast(@alignCast(t.bridge orelse return false));
-            const p = payload(a, to, fds, childOf(b), bytes) orelse return false;
+            const p = payload(a, to, fds, childOf(b), pidOf(b), bytes) orelse return false;
             defer a.free(p);
             return b.link.write(a, .fd, 0, p);
         }
@@ -316,7 +344,7 @@ const winh = struct {
         const r = g.remote orelse return false;
         if (r.send != Child.rSend) return false;
         const c: *Child = @ptrCast(@alignCast(r.ctx));
-        const p = payload(c.a, to, fds, GetCurrentProcess(), bytes) orelse return false;
+        const p = payload(c.a, to, fds, GetCurrentProcess(), null, bytes) orelse return false;
         defer c.a.free(p);
         return c.link.write(c.a, .fd, 0, p);
     }
@@ -328,14 +356,37 @@ const winh = struct {
         if (payload_.len < 9) return;
         const to = std.mem.readInt(u64, payload_[0..8], .little);
         const n: usize = payload_[8];
-        if (n > iso.max_fds or payload_.len < 9 + 9 * n) return;
+        if (n > iso.max_fds) return;
         var fds: [iso.max_fds]i32 = undefined;
         var k: usize = 0;
         var good = true;
+        var at: usize = 9;
         while (k < n) : (k += 1) {
-            const at = 9 + 9 * k;
+            if (at >= payload_.len) {
+                good = false;
+                break;
+            }
             const kind = payload_[at];
+            if (kind == 2) {
+                // The information of a socket, which only the parent
+                // makes, for this process.
+                if (from != null or payload_.len < at + 1 + sysw.socket_info_len) {
+                    good = false;
+                    break;
+                }
+                fds[k] = sysw.socketOfInfo(payload_[at + 1 ..][0..sysw.socket_info_len]) orelse {
+                    good = false;
+                    break;
+                };
+                at += 1 + sysw.socket_info_len;
+                continue;
+            }
+            if (payload_.len < at + 9) {
+                good = false;
+                break;
+            }
             var v: usize = @intCast(std.mem.readInt(u64, payload_[at + 1 ..][0..8], .little));
+            at += 9;
             if (from) |src| {
                 var out: ?HANDLE = null;
                 if (DuplicateHandle(src, @ptrFromInt(v), GetCurrentProcess(), &out, 0, 0, same_access | close_source) == 0 or out == null) {
@@ -360,14 +411,14 @@ const winh = struct {
             for (fds[0..k]) |f| @import("sys.zig").close(f);
             return;
         }
-        const bytes = payload_[9 + 9 * n ..];
+        const bytes = payload_[at..];
         if (from != null) {
             // From one isolated thread to another: on to its child.
             g.lock.lock();
             const other = if (g.find(to)) |t| t.bridge else null;
             if (other) |ob| {
                 const b: *Bridge = @ptrCast(@alignCast(ob));
-                if (payload(g.gpa, to, fds[0..k], childOf(b), bytes)) |p| {
+                if (payload(g.gpa, to, fds[0..k], childOf(b), pidOf(b), bytes)) |p| {
                     _ = b.link.write(g.gpa, .fd, 0, p);
                     g.gpa.free(p);
                 }

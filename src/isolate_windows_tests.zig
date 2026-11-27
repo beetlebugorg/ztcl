@@ -252,11 +252,14 @@ test "isolate on Windows: thread::transfer moves a channel into the sandbox and 
     try t.expectEqualStrings("0 two", try ev(&it, "thread::transfer $t $fh; list [expr {$fh in [file channels]}] [thread::send $t \"gets $fh\"]"));
     // The child sends it back: the parent takes the handle out of the child.
     try t.expectEqualStrings("three", try ev(&it, "thread::send $t \"thread::transfer [thread::id] $fh\"; gets $fh"));
-    // A socket waits for WSADuplicateSocketW, and stays.
-    try it.allow(@backingInt(tcl.interp.Capability.socket));
-    _ = try ev(&it, "set srv [socket -server {apply {{c a p} {}}} -myaddr 127.0.0.1 0]; set cs [socket 127.0.0.1 [lindex [fconfigure $srv -sockname] 2]]");
-    try t.expectEqualStrings("ZTCL ISOLATION TRANSFER 1", try ev(&it, "catch {thread::transfer $t $cs}; list {*}$::errorCode [expr {$cs in [file channels]}]"));
-    _ = try ev(&it, "close $cs; close $srv");
+    // A socket goes to the child with WSADuplicateSocketW, and back as a
+    // handle that the parent takes out of the child.
+    try it.allow(@backingInt(tcl.interp.Capability.socket) | @backingInt(tcl.interp.Capability.event));
+    it.event_host = .{ .now = evNow, .sleep = evSleep };
+    _ = try ev(&it, "set srv [socket -server {apply {{c a p} {set ::peer $c}}} -myaddr 127.0.0.1 0]; set cs [socket 127.0.0.1 [lindex [fconfigure $srv -sockname] 2]]; vwait ::peer");
+    try t.expectEqualStrings("0 in-child", try ev(&it, "thread::transfer $t $cs; thread::send $t \"puts $cs in-child; flush $cs\"; list [expr {$cs in [file channels]}] [gets $::peer]"));
+    try t.expectEqualStrings("back", try ev(&it, "thread::send $t \"thread::transfer [thread::id] $cs\"; puts $cs back; flush $cs; gets $::peer"));
+    _ = try ev(&it, "close $cs; close $::peer; close $srv");
     _ = try ev(&it, "close $fh; thread::release $t");
     try t.expectEqualStrings("0", try ev(&it, "thread::join $t"));
 }
@@ -367,4 +370,13 @@ test "the JIT falls back to the interpreter under Arbitrary Code Guard" {
     const out = try f.readRoot("log.txt");
     try t.expect(std.mem.indexOf(u8, out, "75025") != null);
     try t.expect(std.mem.indexOf(u8, out, "jit compiled=1") == null);
+}
+
+/// The clock of the event loop: the real time, for `vwait`.
+fn evNow(_: ?*anyopaque) i64 {
+    return tcl.proc.nowMs() * 1000;
+}
+
+fn evSleep(_: ?*anyopaque, micros: i64) void {
+    tcl.proc.sleepMs(@intCast(@max(1, @divFloor(micros, 1000))));
 }
