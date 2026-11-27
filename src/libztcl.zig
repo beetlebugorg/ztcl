@@ -64,6 +64,12 @@ fn exportTable(comptime k: table.Kind) void {
     }
 }
 
+/// The spare interp of the channel slots (`cext/chan.zig`) in a thread
+/// with no interp. The runner of ztcl has no such function.
+pub fn spareInterp() ?*@import("cext/obj.zig").Interp {
+    return app.spare();
+}
+
 comptime {
     exportTable(.public);
     exportTable(.internal);

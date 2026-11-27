@@ -91,6 +91,7 @@ pub fn drop(it: *Interp) void {
     @import("interps.zig").dropInterp(&sh.core);
     @import("hash.zig").dropAssoc(&sh.core);
     @import("host.zig").dropPkgs(&sh.core);
+    @import("chan.zig").forgetInterp(&sh.core);
     native.unregister(sh.core.handle);
     freeKeys(&sh.state.loaded);
     gpa.destroy(sh.state);

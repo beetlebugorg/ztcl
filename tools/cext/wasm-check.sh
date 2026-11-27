@@ -22,8 +22,9 @@ out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 # cxfile uses the channel commands, which the WebAssembly library does
 # not have, and cxchild uses the command interp, which it does not have.
-# cxpanic and cxscript stop the process or run threads.
-skip=" cxchild cxfile cxpanic cxscript "
+# cxpanic and cxscript stop the process or run threads. cxthr uses the
+# thread and command info slots of the native path.
+skip=" cxchild cxfile cxpanic cxscript cxthr "
 names=${*:-$(cd "$root/tests/cext" && ls *.tcl | sed 's/\.tcl$//')}
 # Only the headers of Tcl: the folder of tcl.h can be /usr/include, whose
 # C headers are those of the host and not those of WASI.

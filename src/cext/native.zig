@@ -67,7 +67,7 @@ fn interpOf(handle: u32) *Interp {
 }
 
 /// A command of a package. Its data is the id of the command, plus 1.
-fn cmdC(it: *Interp, argv: []const Value, _: ?*interp_mod.Cmd) Error!Value {
+pub fn cmdC(it: *Interp, argv: []const Value, _: ?*interp_mod.Cmd) Error!Value {
     const self = it.findCommand(try it.str(argv[0])) orelse return it.fail("invalid command name", .{});
     const id: u32 = @intCast(@intFromPtr(self.ctx.?) - 1);
     const sh = try cext.shadowOf(it);

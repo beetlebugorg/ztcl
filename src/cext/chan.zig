@@ -185,6 +185,16 @@ threadlocal var thread_mark: u8 = 0;
 /// interp argument uses it to reach ztcl.
 pub threadlocal var last: ?*Interp = null;
 
+/// The interp of a slot with no interp argument: the interp of the last
+/// command, else in libztcl the spare interp of the thread (`app.zig`,
+/// through `spareInterp` of `src/libztcl.zig`).
+pub fn anyInterp() ?*Interp {
+    if (last) |ip| return ip;
+    const root = @import("root");
+    if (comptime !@hasDecl(root, "spareInterp")) return null;
+    return root.spareInterp();
+}
+
 /// The hooks of the native path for the channels of the interp of ztcl.
 /// The WebAssembly path has none.
 pub const Hooks = struct {
@@ -800,7 +810,7 @@ pub fn Tcl_IsChannelRegistered(ip: *Interp, c: *Channel) callconv(.c) c_int {
 pub fn Tcl_IsChannelExisting(name: [*:0]const u8) callconv(.c) c_int {
     const n = std.mem.span(name);
     for (all.items) |st| if (std.mem.eql(u8, st.name, n) and direct(st) == null) return 1;
-    const ip = last orelse return 0;
+    const ip = anyInterp() orelse return 0;
     return @intFromBool(ztclMode(ip.handle, n) != null);
 }
 
@@ -1616,7 +1626,7 @@ const std_names = [_][:0]const u8{ "stdin", "stdout", "stderr" };
 
 fn stdChannel(i: usize) ?*Channel {
     if (std_isset[i]) return std_set[i];
-    const ip = last orelse return null;
+    const ip = anyInterp() orelse return null;
     return ztclChannel(ip.handle, std_names[i], if (i == 0) TCL_READABLE else TCL_WRITABLE);
 }
 
@@ -1732,7 +1742,7 @@ fn opened(ip: *Interp, words: []const []const u8) ?*Channel {
 }
 
 pub fn Tcl_OpenFileChannel(ip: ?*Interp, path: [*:0]const u8, mode: [*:0]const u8, perms: c_int) callconv(.c) ?*Channel {
-    const i = ip orelse last orelse return null;
+    const i = ip orelse anyInterp() orelse return null;
     var pb: [24]u8 = undefined;
     const p = std.fmt.bufPrint(&pb, "0{o}", .{perms}) catch unreachable;
     return opened(i, &.{ "open", std.mem.span(path), std.mem.span(mode), p });
@@ -1782,7 +1792,7 @@ pub fn Tcl_CreatePipe(ip: *Interp, rd: *?*Channel, wr: *?*Channel, _: c_int) cal
 
 fn adopt(fd: ?*anyopaque, mask: c_int, sock: bool) ?*Channel {
     const h = hooks orelse return null;
-    const ip = last orelse return null;
+    const ip = anyInterp() orelse return null;
     const name = h.adopt(ip.handle, @intCast(@intFromPtr(fd)), mask, sock) orelse return null;
     return ztclChannel(ip.handle, name, mask);
 }
@@ -1943,11 +1953,17 @@ pub fn Tcl_ChannelTruncateProc(t: *const ChannelType) callconv(.c) ?TruncateFn {
 /// Closes the channels that `ip` registered. The interp of the package
 /// goes after this call.
 pub fn dropInterp(ip: *Interp) void {
+    forgetInterp(ip);
     const p: *PerInterp = @ptrCast(@alignCast(ip.chans orelse return));
     while (p.chans.items.len > 0) _ = Tcl_UnregisterChannel(ip, p.chans.items[p.chans.items.len - 1].top);
     p.chans.deinit(gpa);
     if (p.err) |e| obj.decr(e);
     gpa.destroy(p);
     ip.chans = null;
+}
+
+/// Clears `last` when it is `ip`, so a slot with no interp does not use
+/// an interp that is gone.
+pub fn forgetInterp(ip: *Interp) void {
     if (last == ip) last = null;
 }

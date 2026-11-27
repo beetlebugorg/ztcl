@@ -151,16 +151,16 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | strings and encodings | 86 | 86 | 86 | none |
 | lists and dicts | 28 | 28 | 28 | none |
 | errors | 25 | 25 | 25 | none |
-| interps and commands | 64 | 58 | 51 | `Tcl_CreateCommand`, `Tcl_GetCommandInfo`, `Tcl_SetCommandInfo`, `Tcl_GetCommandInfoFromToken`, `Tcl_SetCommandInfoFromToken`, `Tcl_SetExitProc` |
+| interps and commands | 64 | 63 | 51 | `Tcl_SetExitProc` |
 | hash tables | 13 | 13 | 13 | none |
 | variables | 21 | 21 | 21 | none |
-| events | 35 | 0 | 0 | 35 slots |
+| events | 35 | 9 | 0 | 26 slots |
 | namespaces | 25 | 25 | 25 | none |
-| threads | 15 | 0 | 0 | 15 slots |
-| filesystem | 63 | 1 | 1 | 62 slots |
+| threads | 15 | 14 | 0 | `Tcl_GetAllocMutex` |
+| filesystem | 63 | 22 | 1 | 41 slots |
 | zlib | 13 | 0 | 0 | 13 slots |
-| **public, all** | **630** | **489** (77%) | **475** (75%) | |
-| **internal** | **173** | **15** | **13** | |
+| **public, all** | **630** | **538** (85%) | **475** (75%) | |
+| **internal** | **173** | **16** | **13** | |
 | **internal platform** | **23** | **0** | **0** | |
 | **platform** | **0** | **0** | **0** | |
 <!-- /coverage -->
