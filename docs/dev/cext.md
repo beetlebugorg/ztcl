@@ -24,7 +24,7 @@ One package gives one list. Other packages use other slots, for example the chan
 
 ## Coverage
 
-The two paths use one implementation of each slot. `src/cext/obj.zig` has the objects, the interp result, the dynamic strings, and `Tcl_GetIndexFromObjStruct`. `src/cext/mem.zig` has the memory slots. `src/cext/host.zig` has the slots that call ztcl: commands, scripts, variables, and the non-recursive engine. They call ztcl through a set of functions with the handle of the interp: the imports of the module in the WebAssembly path, and the functions of `src/cext/native.zig` in the native path. Both sets call `src/cext/zside.zig` in ztcl. `src/cext/table.zig` builds the table of each path from its list of group files: `src/cext/stubs.zig` for the native path and `src/cext/wasm_stubs.zig` for the WebAssembly path. `Tcl_Panic`, `Tcl_PkgProvideEx`, and `Tcl_PkgRequireEx` have one implementation in each path: the native forms are in `src/cext/mem.zig` and `src/cext/pkgs.zig`. The unit tests of `zig build test-cext` check the shared files on the native target, and the test packages of `tools/cext/check.sh` check the native path against tclsh. A row gives the slots of the group that each path has.
+The two paths use one implementation of each slot. `src/cext/obj.zig` has the objects, the interp result, the dynamic strings, and `Tcl_GetIndexFromObjStruct`. `src/cext/mem.zig` has the memory slots. `src/cext/hash.zig` has the hash tables and the assoc data. `src/cext/host.zig` has the slots that call ztcl: commands, scripts, variables, and the non-recursive engine. They call ztcl through a set of functions with the handle of the interp: the imports of the module in the WebAssembly path, and the functions of `src/cext/native.zig` in the native path. Both sets call `src/cext/zside.zig` in ztcl. `src/cext/table.zig` builds the table of each path from its list of group files: `src/cext/stubs.zig` for the native path and `src/cext/wasm_stubs.zig` for the WebAssembly path. `Tcl_Panic`, `Tcl_PkgProvideEx`, and `Tcl_PkgRequireEx` have one implementation in each path: the native forms are in `src/cext/mem.zig` and `src/cext/pkgs.zig`. The unit tests of `zig build test-cext` check the shared files on the native target, and the test packages of `tools/cext/check.sh` check the native path against tclsh. A row gives the slots of the group that each path has.
 
 | Group | SQLite slots | WebAssembly | Native |
 |---|---:|---|---|
@@ -36,6 +36,7 @@ The two paths use one implementation of each slot. `src/cext/obj.zig` has the ob
 | Variables | 2 | 2 of 2, and 6 more get and set slots (shared) | 2 of 2, and 6 more get and set slots (shared) |
 | Dynamic strings | 4 | 4 of 4, and 5 more (shared) | 4 of 4, and 5 more (shared) |
 | Packages and helpers | 5 | 5 of 5 | 5 of 5. `Tcl_TranslateFileName`, `Tcl_GetVersion`, and `Tcl_GetIndexFromObjStruct` are shared. |
+| Hash tables | 0 | the area hash tables (shared). The WebAssembly path does not free the interp of a package, so the delete procs of its assoc data do not run. | the area hash tables (shared) |
 | Channels | 4 | 4 of 4 (shared): the record and the close. Scripts do not see the channel yet. | 4 of 4 (shared), as in the WebAssembly path |
 
 ## The shape of the Tcl_Obj bridge
@@ -145,14 +146,14 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | lists and dicts | 28 | 9 | 9 | 19 slots |
 | errors | 25 | 5 | 5 | 20 slots |
 | interps and commands | 64 | 3 | 3 | 61 slots |
-| hash tables | 13 | 0 | 0 | 13 slots |
+| hash tables | 13 | 13 | 13 | none |
 | variables | 21 | 8 | 8 | 13 slots |
 | events | 35 | 0 | 0 | 35 slots |
 | namespaces | 25 | 0 | 0 | 25 slots |
 | threads | 15 | 0 | 0 | 15 slots |
 | filesystem | 63 | 1 | 1 | 62 slots |
 | zlib | 13 | 0 | 0 | 13 slots |
-| **public, all** | **630** | **168** (26%) | **159** (25%) | |
+| **public, all** | **630** | **181** (28%) | **172** (27%) | |
 | **internal** | **173** | **0** | **0** | |
 | **internal platform** | **23** | **0** | **0** | |
 | **platform** | **0** | **0** | **0** | |

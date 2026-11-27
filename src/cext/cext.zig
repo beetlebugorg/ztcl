@@ -85,6 +85,7 @@ pub fn shadowOf(it: *Interp) Error!*Shadow {
 /// Frees the shadow of `it`. `Interp.deinit` calls it.
 pub fn drop(it: *Interp) void {
     const sh: *Shadow = @ptrCast(@alignCast(it.cext orelse return));
+    @import("hash.zig").dropAssoc(&sh.core);
     native.unregister(sh.core.handle);
     freeKeys(&sh.state.loaded);
     freeKeys(&sh.state.pkg_data);

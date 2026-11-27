@@ -14,4 +14,5 @@ test {
     _ = wasm_stubs;
     _ = @import("cext/obj.zig");
     _ = @import("cext/host.zig");
+    _ = @import("cext/hash.zig");
 }
