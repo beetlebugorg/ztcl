@@ -5,7 +5,9 @@
 //!
 //! The sets and the functions under test:
 //!
-//! - AES-GCM and ChaCha20-Poly1305: the AEADs of `record.zig`.
+//! - AES-GCM and ChaCha20-Poly1305: the AEADs of `record.zig`. AES-GCM
+//!   runs with `std.crypto` and with each code of `aead.zig` that runs
+//!   on the CPU.
 //! - HKDF and HMAC with SHA-256 and SHA-384: the types of `schedule.zig`.
 //! - X25519, ECDH on P-256 and P-384, ECDSA, Ed25519, RSASSA-PSS, and
 //!   RSASSA-PKCS1-v1_5: `crypto.sharedSecret` and `crypto.verify`.
@@ -29,6 +31,7 @@ const Io = std.Io;
 const tcrypto = @import("crypto.zig");
 const schedule = @import("schedule.zig");
 const aead = std.crypto.aead;
+const fast = @import("aead.zig");
 const Value = std.json.Value;
 
 const Expect = enum { valid, invalid, acceptable };
@@ -108,8 +111,22 @@ fn aeadCase(comptime A: type, a: std.mem.Allocator, t: Value) !bool {
     var t2: [A.tag_length]u8 = undefined;
     A.encrypt(out, &t2, msg, ad, iv[0..A.nonce_length].*, key[0..A.key_length].*);
     const sealed = std.mem.eql(u8, out, ct) and std.mem.eql(u8, &t2, tag);
-    A.decrypt(out, ct, tag[0..A.tag_length].*, ad, iv[0..A.nonce_length].*, key[0..A.key_length].*) catch return false;
-    return sealed and std.mem.eql(u8, out, msg);
+    const opened = if (A.decrypt(out, ct, tag[0..A.tag_length].*, ad, iv[0..A.nonce_length].*, key[0..A.key_length].*)) |_| std.mem.eql(u8, out, msg) else |_| false;
+    const ok = sealed and opened;
+    if (A == aead.chacha_poly.ChaCha20Poly1305) return ok;
+    // AES-GCM again with each code of aead.zig that runs on this CPU. A
+    // result that differs from std.crypto inverts the result of the case.
+    defer fast.force(.unknown);
+    for (std.enums.values(fast.Impl)) |i| {
+        if (i == .unknown or !fast.available(i)) continue;
+        fast.force(i);
+        const g = fast.Gcm.init(key);
+        g.seal(out, &t2, msg, ad, iv[0..12]);
+        const s2 = std.mem.eql(u8, out, ct) and std.mem.eql(u8, &t2, tag);
+        const o2 = if (g.open(out, ct, tag[0..16], ad, iv[0..12])) |_| std.mem.eql(u8, out, msg) else |_| false;
+        if (s2 != sealed or o2 != opened) return !ok;
+    }
+    return ok;
 }
 
 fn runAead(r: *Run, groups: []const Value, chacha: bool) !void {

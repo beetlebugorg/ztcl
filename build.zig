@@ -89,6 +89,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = libc,
     });
     ztcl.addOptions("build_options", gc_options);
+    addCrypto(b, ztcl);
     addVt(b, ztcl, target, optimize);
 
     const tests = b.addTest(.{ .root_module = ztcl });
@@ -96,68 +97,68 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&b.addRunArtifact(tests).step);
     // The TLS record layer and key schedule against RFC 8448, RFC 5869,
     // and RFC 8439. `zig build test` runs them too.
-    const tls_run = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+    const tls_run = b.addRunArtifact(b.addTest(.{ .root_module = withCrypto(b, b.createModule(.{
         .root_source_file = b.path("src/tls/vectors.zig"),
         .target = target,
         .optimize = optimize,
-    }) }));
+    })) }));
     b.step("tls-vectors", "Check the TLS record layer and key schedule with the RFC vectors").dependOn(&tls_run.step);
     test_step.dependOn(&tls_run.step);
-    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = withCrypto(b, b.createModule(.{
         .root_source_file = b.path("src/tls/crypto.zig"),
         .target = target,
         .optimize = optimize,
-    }) })).step);
+    })) })).step);
     // The Wycheproof sets of the TLS primitives, from tools/fetch-wycheproof.sh.
-    const wp = b.addRunArtifact(b.addExecutable(.{ .name = "tls-wycheproof", .root_module = b.createModule(.{
+    const wp = b.addRunArtifact(b.addExecutable(.{ .name = "tls-wycheproof", .root_module = withCrypto(b, b.createModule(.{
         .root_source_file = b.path("src/tls/wycheproof.zig"),
         .target = target,
         .optimize = optimize,
-    }) }));
+    })) }));
     wp.addPassthruArgs();
     b.step("tls-wycheproof", "Run the Wycheproof sets of the TLS primitives: zig build tls-wycheproof -- DIR").dependOn(&wp.step);
     // The x509-limbo cases of the chain checks, from tools/fetch-x509-limbo.sh.
-    const limbo = b.addRunArtifact(b.addExecutable(.{ .name = "tls-x509-test", .root_module = b.createModule(.{
+    const limbo = b.addRunArtifact(b.addExecutable(.{ .name = "tls-x509-test", .root_module = withCrypto(b, b.createModule(.{
         .root_source_file = b.path("src/tls/limbo.zig"),
         .target = target,
         .optimize = optimize,
-    }) }));
+    })) }));
     limbo.addPassthruArgs();
-    const x509_fuzz = b.addRunArtifact(b.addExecutable(.{ .name = "x509-fuzz", .root_module = b.createModule(.{
+    const x509_fuzz = b.addRunArtifact(b.addExecutable(.{ .name = "x509-fuzz", .root_module = withCrypto(b, b.createModule(.{
         .root_source_file = b.path("src/tls/x509_fuzz.zig"),
         .target = target,
         .optimize = .safe,
-    }) }));
+    })) }));
     x509_fuzz.addPassthruArgs();
     b.step("x509-fuzz", "Fuzz the DER, X.509, PEM, and chain code: zig build x509-fuzz -- --seconds N").dependOn(&x509_fuzz.step);
     // The test client of tools/tls-interop.sh.
-    const interop = b.addExecutable(.{ .name = "tls-interop", .root_module = b.createModule(.{
+    const interop = b.addExecutable(.{ .name = "tls-interop", .root_module = withCrypto(b, b.createModule(.{
         .root_source_file = b.path("src/tls/interop.zig"),
         .target = target,
         .optimize = optimize,
-    }) });
+    })) });
     b.step("tls-interop", "Build the test client of tools/tls-interop.sh").dependOn(&b.addInstallArtifact(interop, .{}).step);
     // The server side of RFC 8448 and the client of client.zig against
     // the server in memory. `zig build test` runs them too.
-    b.step("tls-server-test", "Run the tests of the TLS server").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+    b.step("tls-server-test", "Run the tests of the TLS server").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = withCrypto(b, b.createModule(.{
         .root_source_file = b.path("src/tls/server_vectors.zig"),
         .target = target,
         .optimize = optimize,
-    }) })).step);
+    })) })).step);
     // The speed of the record layer (tools/tls-bench.sh). Always
     // ReleaseFast; -Dcpu picks the CPU features.
-    b.step("tls-bench", "Print the speed of the TLS record layer for each suite").dependOn(&b.addRunArtifact(b.addExecutable(.{ .name = "tls-bench", .root_module = b.createModule(.{
+    b.step("tls-bench", "Print the speed of the TLS record layer for each suite").dependOn(&b.addRunArtifact(b.addExecutable(.{ .name = "tls-bench", .root_module = withCrypto(b, b.createModule(.{
         .root_source_file = b.path("src/tls/bench.zig"),
         .target = target,
         .optimize = .fast,
-    }) })).step);
+    })) })).step);
     b.step("tls-x509-test", "Run the x509-limbo cases of the chain checks: zig build tls-x509-test -- limbo.json").dependOn(&limbo.step);
-    inline for (.{ "src/tls/der.zig", "src/tls/x509.zig", "src/tls/pem.zig", "src/tls/chain.zig", "src/tls/roots.zig", "src/tls/messages.zig", "src/tls/client_vectors.zig", "src/tls/server_vectors.zig" }) |f| {
-        test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+    inline for (.{ "src/tls/aead.zig", "src/tls/record.zig", "src/tls/der.zig", "src/tls/x509.zig", "src/tls/pem.zig", "src/tls/chain.zig", "src/tls/roots.zig", "src/tls/messages.zig", "src/tls/client_vectors.zig", "src/tls/server_vectors.zig" }) |f| {
+        test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = withCrypto(b, b.createModule(.{
             .root_source_file = b.path(f),
             .target = target,
             .optimize = optimize,
-        }) })).step);
+        })) })).step);
     }
     // The I/O loop of task 06 on io_uring and epoll (Linux only). The
     // tests run on both backends.
@@ -341,6 +342,7 @@ pub fn build(b: *std.Build) void {
     const p3_lib = b.createModule(.{ .root_source_file = b.path("src/ztcl.zig"), .target = p3_target, .optimize = .ReleaseFast });
     p3_lib.addOptions("build_options", gc_options);
     addVt(b, p3_lib, p3_target, .ReleaseFast);
+    addCrypto(b, p3_lib);
     const p3_core = b.addExecutable(.{ .name = "ztcl-p3", .root_module = b.createModule(.{
         .root_source_file = b.path("src/wasi/run.zig"),
         .target = p3_target,
@@ -386,6 +388,7 @@ pub fn build(b: *std.Build) void {
     });
     fast.addOptions("build_options", gc_options);
     addVt(b, fast, target, runner_optimize);
+    addCrypto(b, fast);
 
     const exe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -436,6 +439,7 @@ pub fn build(b: *std.Build) void {
         const lib = b.createModule(.{ .root_source_file = b.path("src/ztcl.zig"), .target = rt, .optimize = .small });
         lib.addOptions("build_options", opts);
         addVt(b, lib, rt, .small);
+        addCrypto(b, lib);
         rt_mods[ri] = lib;
         const rexe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
@@ -777,6 +781,38 @@ fn addCextStubs(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
 fn addVt(b: *std.Build, m: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
     const dep = b.dependency("ghostty", .{ .target = target, .optimize = optimize, .simd = false, .@"emit-lib-vt" = true, .@"vt-features" = @as([]const u8, "-kitty_graphics") });
     m.addImport("ghostty-vt", dep.module("ghostty-vt"));
+}
+
+/// The modules of src/crypto, compiled with more CPU features than the
+/// target (src/tls/aead.zig checks the CPU at run time). Each module
+/// that has src/tls gets them.
+fn withCrypto(b: *std.Build, m: *std.Build.Module) *std.Build.Module {
+    addCrypto(b, m);
+    return m;
+}
+
+fn addCrypto(b: *std.Build, m: *std.Build.Module) void {
+    const t = m.resolved_target orelse return;
+    // The CPU of the target, with its model, and more features.
+    var q = std.Target.Query.fromTarget(&t.result);
+    if (t.result.cpu.arch == .x86_64) {
+        const F = std.Target.x86.Feature;
+        q.cpu_features_add.addFeatureSet(std.Target.x86.featureSet(&[_]F{ .sse3, .ssse3, .sse4_1, .sse4_2, .popcnt, .pclmul, .aes, .avx, .avx2, .bmi, .bmi2 }));
+    }
+    if (t.result.cpu.arch == .aarch64) {
+        q.cpu_features_add.addFeatureSet(std.Target.aarch64.featureSet(&[_]std.Target.aarch64.Feature{.aes}));
+    }
+    const kt = b.resolveTargetQuery(q);
+    m.addImport("crypto_x86_avx2", b.createModule(.{
+        .root_source_file = b.path("src/crypto/x86_avx2.zig"),
+        .target = kt,
+        .optimize = m.optimize,
+    }));
+    m.addImport("crypto_arm_aes", b.createModule(.{
+        .root_source_file = b.path("src/crypto/arm_aes.zig"),
+        .target = kt,
+        .optimize = m.optimize,
+    }));
 }
 
 /// The targets of `zig build runtimes` and `ztcl build --target`.

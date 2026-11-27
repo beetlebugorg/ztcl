@@ -14,6 +14,7 @@
 //! not zero. The scan reads each byte of the plaintext and has no
 //! branch on a byte, so its time depends on the length only. The AEADs
 //! of `std.crypto` compare the tag with `std.crypto.timing_safe.eql`.
+//! AES-GCM goes through `aead.zig`, which picks the code for the CPU.
 //!
 //! The limits of section 5: a plain fragment and the content of a
 //! protected record have at most 2^14 bytes, and a protected fragment
@@ -30,6 +31,7 @@
 const std = @import("std");
 const schedule = @import("schedule.zig");
 const aead = std.crypto.aead;
+const fast = @import("aead.zig");
 
 pub const header_len = 5;
 pub const max_plaintext = 1 << 14;
@@ -182,6 +184,8 @@ pub const Protection = struct {
     key: [32]u8,
     iv: [12]u8,
     seq: u64 = 0,
+    /// The expanded AES-GCM key (aead.zig).
+    gcm: fast.Gcm = undefined,
 
     pub fn init(suite: Suite, secret: []const u8) Protection {
         std.debug.assert(secret.len == suite.hashLen());
@@ -195,6 +199,10 @@ pub const Protection = struct {
         switch (p.suite) {
             .aes_256_gcm_sha384 => schedule.Sha384.trafficKey(p.key[0..32], &p.iv, p.secret[0..48].*),
             else => |s| schedule.Sha256.trafficKey(p.key[0..s.keyLen()], &p.iv, p.secret[0..32].*),
+        }
+        switch (p.suite) {
+            .aes_128_gcm_sha256, .aes_256_gcm_sha384 => |s| p.gcm = .init(p.key[0..s.keyLen()]),
+            .chacha20_poly1305_sha256 => {},
         }
     }
 
@@ -234,14 +242,25 @@ pub const Protection = struct {
         const hdr = out[0..header_len];
         (Header{ .type = .application_data, .version = 0x0303, .len = @intCast(len) }).write(hdr);
         const inner = out[header_len..][0..inner_len];
+        const tag = out[header_len + inner_len ..][0..tag_len];
+        const n = p.nonce();
+        // AES-GCM reads the content where it is, and the content type and
+        // padding from `extra`, when the content does not overlap the
+        // record or starts at the place of its content.
+        const apart = content.ptr == inner.ptr or @intFromPtr(content.ptr) + content.len <= @intFromPtr(out.ptr) or
+            @intFromPtr(out.ptr) + out.len <= @intFromPtr(content.ptr);
+        if (p.suite != .chacha20_poly1305_sha256 and apart and padding < fast.Gcm.max_extra) {
+            var extra: [fast.Gcm.max_extra]u8 = @splat(0);
+            extra[0] = @backingInt(ct);
+            p.gcm.sealExtra(inner, tag, content, extra[0 .. 1 + padding], hdr, &n);
+            p.seq += 1;
+            return out[0 .. header_len + len];
+        }
         @memmove(inner[0..content.len], content);
         inner[content.len] = @backingInt(ct);
         @memset(inner[content.len + 1 ..], 0);
-        const tag = out[header_len + inner_len ..][0..tag_len];
-        const n = p.nonce();
         switch (p.suite) {
-            .aes_128_gcm_sha256 => aead.aes_gcm.Aes128Gcm.encrypt(inner, tag, inner, hdr, n, p.key[0..16].*),
-            .aes_256_gcm_sha384 => aead.aes_gcm.Aes256Gcm.encrypt(inner, tag, inner, hdr, n, p.key),
+            .aes_128_gcm_sha256, .aes_256_gcm_sha384 => p.gcm.seal(inner, tag, inner, hdr, &n),
             .chacha20_poly1305_sha256 => aead.chacha_poly.ChaCha20Poly1305.encrypt(inner, tag, inner, hdr, n, p.key),
         }
         p.seq += 1;
@@ -266,8 +285,7 @@ pub const Protection = struct {
         const inner = out[0..inner_len];
         const n = p.nonce();
         (switch (p.suite) {
-            .aes_128_gcm_sha256 => aead.aes_gcm.Aes128Gcm.decrypt(inner, c, tag, ad, n, p.key[0..16].*),
-            .aes_256_gcm_sha384 => aead.aes_gcm.Aes256Gcm.decrypt(inner, c, tag, ad, n, p.key),
+            .aes_128_gcm_sha256, .aes_256_gcm_sha384 => p.gcm.open(inner, c, &tag, ad, &n),
             .chacha20_poly1305_sha256 => aead.chacha_poly.ChaCha20Poly1305.decrypt(inner, c, tag, ad, n, p.key),
         }) catch return error.BadRecordMac;
         p.seq += 1;
@@ -286,13 +304,26 @@ pub const Protection = struct {
 };
 
 /// One more than the place of the last byte that is not zero, or 0. The
-/// loop reads each byte, and a mask replaces the branch on its value.
+/// loop reads each byte, and masks replace the branches on the values.
+/// It compares 32 bytes at a time with vectors, and the bit mask of the
+/// bytes that are not zero gives the last place in the 32.
 fn contentEnd(inner: []const u8) usize {
+    const n = 32;
+    const Vn = @Vector(n, u8);
     var end: usize = 0;
-    for (inner, 1..) |b, i| {
+    var i: usize = 0;
+    while (i + n <= inner.len) : (i += n) {
+        const v: Vn = inner[i..][0..n].*;
+        const bits: u32 = @bitCast(v != @as(Vn, @splat(0)));
+        const any: usize = @intFromBool(bits != 0);
+        const mask = 0 -% any;
+        const here = i + n - @as(usize, @clz(bits));
+        end = (here & mask) | (end & ~mask);
+    }
+    for (inner[i..], i + 1..) |b, j| {
         const nz: usize = @intFromBool(b != 0);
         const mask = 0 -% nz;
-        end = (i & mask) | (end & ~mask);
+        end = (j & mask) | (end & ~mask);
     }
     return end;
 }
@@ -301,6 +332,13 @@ test "contentEnd" {
     try std.testing.expectEqual(@as(usize, 0), contentEnd(&.{ 0, 0, 0 }));
     try std.testing.expectEqual(@as(usize, 2), contentEnd(&.{ 5, 22, 0, 0 }));
     try std.testing.expectEqual(@as(usize, 1), contentEnd(&.{23}));
+    var buf: [100]u8 = @splat(0);
+    try std.testing.expectEqual(@as(usize, 0), contentEnd(&buf));
+    for (0..buf.len) |k| {
+        buf[k] = 1;
+        try std.testing.expectEqual(k + 1, contentEnd(&buf));
+        if (k > 0) try std.testing.expectEqual(k + 1, contentEnd(buf[k - 1 ..]) + k - 1);
+    }
 }
 
 fn testProtection(suite: Suite) Protection {
@@ -321,6 +359,27 @@ test "seal and open with padding for each suite" {
             try std.testing.expectEqual(ContentType.handshake, got.type);
             try std.testing.expectEqualStrings("hello", got.data);
         }
+    }
+}
+
+test "a record sealed from apart and from in place has the same bytes" {
+    var data: [3000]u8 = undefined;
+    for (&data, 0..) |*b, i| b.* = @truncate(i *% 7 +% 1);
+    for ([_]Suite{ .aes_128_gcm_sha256, .aes_256_gcm_sha384 }) |suite| {
+        for ([_]usize{ 0, 1, 15, 16, 127, 128, 129, 1000, 3000 }) |len| for ([_]usize{ 0, 1, 254, 255, 256, 300 }) |pad| {
+            var a = testProtection(suite);
+            var b = testProtection(suite);
+            var buf1: [max_record]u8 = undefined;
+            var buf2: [max_record]u8 = undefined;
+            const r1 = try a.seal(&buf1, .application_data, data[0..len], pad);
+            @memcpy(buf2[header_len..][0..len], data[0..len]);
+            const r2 = try b.seal(&buf2, .application_data, buf2[header_len..][0..len], pad);
+            try std.testing.expectEqualSlices(u8, r1, r2);
+            var r = testProtection(suite);
+            var out: [max_ciphertext]u8 = undefined;
+            const got = try r.open(&out, r1);
+            try std.testing.expectEqualSlices(u8, data[0..len], got.data);
+        };
     }
 }
 
