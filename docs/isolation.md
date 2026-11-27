@@ -56,9 +56,31 @@ When you review the code of a parent:
 - A send from a child is input. Check it as a line from the network: no `eval`, `uplevel`, or `subst` of its text.
 - A result of `thread::send` is data from the child. Parse it, and do not run it.
 
+## Move a channel to a thread
+
+`thread::transfer` moves an open channel into a `process` thread, back to the parent, and from one isolated thread to another through the parent. The system handle and the buffered input move, and the channel keeps its name. Use it to give a sandboxed thread one file or one connection, and no `file` or `socket` capability.
+
+```tcl
+set t [thread::create -isolation process {thread::wait}]
+set f [open report.txt]
+thread::transfer $t $f
+thread::send $t [list gets $f]
+```
+
+| Channel | Linux | macOS | Windows |
+|---|---|---|---|
+| A file or a pipe | Moves | Moves | Moves |
+| A console | Stays | Stays | Moves |
+| A socket | Moves | Moves | Stays (Coming: [#398](https://github.com/beetlebugorg/ztcl/pull/398)) |
+| A server socket, a command pipeline, a channel in memory, a terminal | Stays | Stays | Stays |
+
+Linux and macOS send the descriptor with `SCM_RIGHTS`. Windows uses `DuplicateHandle`, and the parent pulls a handle out of a child, because a child in an AppContainer cannot open its parent. A socket on Windows gives `ZTCL ISOLATION TRANSFER` in this version.
+
+A channel that stays gives an error, and the channel stays open in the sender. A channel whose `thread::attach` fails in the other process stays detached there, and closes at the end of the group. [Threads](threads.md) has the commands.
+
 ## Limits of this version
 
-- `thread::transfer` and a thread that the child creates give an error in the child. Pull request [#253](https://github.com/beetlebugorg/ztcl/pull/253) adds `thread::transfer` for `process` threads.
+- A `process` thread cannot create a thread: `thread::create` in the child gives `too many threads: the limit is 0` with the code `THREAD LIMIT`.
 - The runner starts the child (`Interp.iso_runner`). An embedder that is not the runner sets `iso_runner` to the path of a `ztcl` runner, or gets `ZTCL ISOLATION RUNNER`.
 - `tsv`, the mutexes, the conditions, and `thread::eval` in the child go through the parent, so each one costs a round trip.
 
@@ -70,6 +92,7 @@ When you review the code of a parent:
 | `ZTCL ISOLATION HOSTFILES` | A creator in host mode with files asks for a `process` thread with no `-files host`, or `-files host` comes with a root folder or with no `-isolation process`. |
 | `ZTCL ISOLATION RUNNER` | The embedder gave no runner for the child. |
 | `ZTCL ISOLATION START` | The child did not start. |
+| `ZTCL ISOLATION TRANSFER` | The channel cannot move to or from a `process` thread on this system. See the table of "Move a channel to a thread". |
 | `ZTCL ISOLATION BROKER` | The parent does not run a command for the child, or the parent of the thread is gone. |
 
 The protocol between the parent and the child is in the design notes of the repository (`docs/dev/isolation.md`).
