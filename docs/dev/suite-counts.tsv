@@ -2,7 +2,7 @@
 aaa_exit.test	2	2
 append.test	44	44
 appendComp.test	42	42
-apply.test	35	36
+apply.test	35	35
 assemble.test	0	0
 assocd.test	0	0
 async.test	0	0
@@ -24,7 +24,7 @@ concat.test	9	9
 config.test	0	0
 coroutine.test	37	37
 dcall.test	0	0
-dict.test	320	322
+dict.test	320	320
 dstring.test	0	0
 encoding.test	83	83
 env.test	8	8
@@ -40,7 +40,7 @@ fileName.test	58	58
 fileSystem.test	38	38
 fileSystemEncoding.test	0	0
 for-old.test	9	9
-for.test	77	77
+for.test	76	76
 foreach.test	42	42
 format.test	255	255
 get.test	5	5
@@ -87,7 +87,7 @@ namespace.test	235	235
 notify.test	0	0
 nre.test	4	4
 obj.test	3	3
-oo.test	218	220
+oo.test	218	218
 ooNext2.test	50	50
 opt.test	0	0
 package.test	375	375
@@ -151,4 +151,4 @@ winPipe.test	0	0
 winTime.test	0	0
 word.test	45	45
 zlib.test	0	0
-total	38097	38101
+total	38096	38095
