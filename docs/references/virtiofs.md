@@ -43,3 +43,11 @@ The Linux kernel, `include/uapi/linux/fuse.h`, protocol 7.47. https://github.com
 - The root is node 1. A read buffer of the client is at least 8,192 bytes.
 
 go-fuse, `fuse/types.go`, `fuse/types_linux.go`, and `fuse/opcode.go` (https://github.com/hanwen/go-fuse, New BSD License) were read to check the opcode numbers and the flags of `INIT` against the header.
+
+## The DAX window on Windows
+
+Microsoft, the documentation of the Windows Hypervisor Platform (https://learn.microsoft.com/virtualization/api/hypervisor-platform/hypervisor-platform) and of the memory-mapped files of Win32 (https://learn.microsoft.com/windows/win32/memory/file-mapping).
+
+**License:** the text of the documentation. ztcl copies no text and no code from it.
+
+**How ztcl uses it:** `WHvMapGpaRange` and `WHvUnmapGpaRange` with the flags read (1), write (2), and execute (4); `WHvAdviseGpaRange` with `WHvAdviseGpaRangeCodePopulate` (0) and the `Prefetch` flag; the `WHV_MEMORY_ACCESS_CONTEXT` of a memory exit, with the access type in the low bits of its access info and the guest address after it; `CreateFileMappingW` with `PAGE_READONLY` and `PAGE_READWRITE`, `MapViewOfFile` with `FILE_MAP_READ` and `FILE_MAP_WRITE` at a file offset that is a multiple of the allocation granularity (64 KiB), `UnmapViewOfFile`, and `ReOpenFile`. The documentation of file mapping says that the views of a file and its reads and writes stay coherent on a local file system, and that a file with a section cannot be truncated.
