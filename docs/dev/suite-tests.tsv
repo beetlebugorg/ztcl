@@ -8811,7 +8811,7 @@ clock.test	clock-33.9a	pass	pass
 clock.test	clock-34.1	pass	pass		
 clock.test	clock-34.10	fail	fail	bug	code 0/0,2: Jan 01,0071 00:00 GMT \| want: Jan 01,1971 00:00 GMT
 clock.test	clock-34.11	fail	fail	bug	code 0/0,2: Jan 01,0037 00:00 GMT \| want: Jan 01,2037 00:00 GMT
-clock.test	clock-34.12	fail	fail	feature	code 1/0,2: unable to convert date-time string "Oct 23, 1992 -1 day": syntax error \| want: Oct 22, 1992
+clock.test	clock-34.12	pass	pass		
 clock.test	clock-34.13	fail	fail	feature	code 1/0,2: unable to convert date-time string "19921023": syntax error \| want: Oct 23, 1992
 clock.test	clock-34.14	pass	pass		
 clock.test	clock-34.15	fail	fail	feature	code 1/0,2: unable to convert date-time string "23-Oct-1992": syntax error \| want: Oct 23, 1992
@@ -8828,14 +8828,14 @@ clock.test	clock-34.24	fail	fail	feature	code 1/0,2: unable to convert date-time
 clock.test	clock-34.25	fail	fail	feature	code 1/0,2: unable to convert date-time string "00:00:30-0800": syntax error \| want: Dec 31, 1999 08:00:30
 clock.test	clock-34.28	fail	fail	feature	code 1/0,2: unable to convert date-time string "Monday": syntax error \| want: Jan 03, 2000 00:00:00
 clock.test	clock-34.29	fail	fail	feature	code 1/0,2: unable to convert date-time string "1/1": syntax error \| want: Jan 01, 1999 00:00:00
-clock.test	clock-34.3	fail	fail	feature	code 1/0,2: unable to convert date-time string "14 Feb 92": syntax error \| want: 02/14/92 12:00:00 AM
+clock.test	clock-34.3	pass	pass		
 clock.test	clock-34.30	pass	pass		
 clock.test	clock-34.31	fail	fail	feature	code 1/0,2: unable to convert date-time string "19990101": syntax error \| want: Jan 01, 1999 00:00:00
-clock.test	clock-34.32	fail	fail	feature	code 1/0,2: unable to convert date-time string "now + 1 minute": syntax error \| want: 946627260
-clock.test	clock-34.33	fail	fail	feature	code 1/0,2: unable to convert date-time string "now +1 minute": syntax error \| want: 946627260
-clock.test	clock-34.34	fail	fail	feature	code 1/0,2: unable to convert date-time string "now 1 minute": syntax error \| want: 946627260
-clock.test	clock-34.35	fail	fail	feature	code 1/0,2: unable to convert date-time string "now - 1 minute": syntax error \| want: 946627140
-clock.test	clock-34.36	fail	fail	feature	code 1/0,2: unable to convert date-time string "now -1 minute": syntax error \| want: 946627140
+clock.test	clock-34.32	pass	pass		
+clock.test	clock-34.33	pass	pass		
+clock.test	clock-34.34	pass	pass		
+clock.test	clock-34.35	pass	pass		
+clock.test	clock-34.36	pass	pass		
 clock.test	clock-34.37	fail	fail	feature	code 1/0,2: unable to convert date-time string "20000112": syntax error \| want: Jan 12, 2000
 clock.test	clock-34.38	fail	fail	feature	code 1/0,2: unable to convert date-time string "20000112": syntax error \| want: Jan 19, 2000
 clock.test	clock-34.39	fail	fail	feature	code 1/0,2: unable to convert date-time string "20000112": syntax error \| want: Jan 13, 2000
@@ -8843,11 +8843,11 @@ clock.test	clock-34.4	fail	fail	feature	code 1/0,2: unable to convert date-time 
 clock.test	clock-34.40	fail	fail	feature	code 1/0,2: unable to convert date-time string "20000112": syntax error \| want: Jan 20, 2000
 clock.test	clock-34.41	fail	fail	feature	code 1/0,2: unable to convert date-time string "monday": syntax error \| want: 1991-11-11 1992-11-09 1993-11-08 1994-11-14 1995-11-13 1996-11-11
 clock.test	clock-34.42	fail	fail	feature	code 1/0,2: unable to convert date-time string "2 monday": syntax error \| want: 1991-11-11 1992-11-09 1993-11-08 1994-11-14 1995-11-13 1996-11-11
-clock.test	clock-34.43	fail	fail	feature	code 1/0,2: unable to convert date-time string "monday 1 week ago": syntax error \| want: 1991-11-25 1992-11-30 1993-11-29 1994-11-28 1995-11-27 1996-11-25
+clock.test	clock-34.43	fail	fail	feature	code 1/0,2: unable to convert date-time string "monday": syntax error \| want: 1991-11-25 1992-11-30 1993-11-29 1994-11-28 1995-11-27 1996-11-25
 clock.test	clock-34.44	fail	fail	feature	code 1/0,2: unable to convert date-time string "monday": syntax error \| want: 1991-11-11 1992-11-09 1993-11-08 1994-11-14 1995-11-13 1996-11-11
 clock.test	clock-34.45	fail	fail	feature	code 1/0,2: unable to convert date-time string "2 monday": syntax error \| want: 1991-11-11 1992-11-09 1993-11-08 1994-11-14 1995-11-13 1996-11-11
-clock.test	clock-34.46	fail	fail	feature	code 1/0,2: unable to convert date-time string "monday 1 week ago": syntax error \| want: 1991-11-25 1992-11-30 1993-11-29 1994-11-28 1995-11-27 1996-11-25
-clock.test	clock-34.47	fail	fail	feature	code 1/0,2: unable to convert date-time string "2 days 2 hours ago": syntax error \| want: 180000
+clock.test	clock-34.46	fail	fail	feature	code 1/0,2: unable to convert date-time string "monday": syntax error \| want: 1991-11-25 1992-11-30 1993-11-29 1994-11-28 1995-11-27 1996-11-25
+clock.test	clock-34.47	fail	fail	bug	code 0/0,2: -165600 \| want: 180000
 clock.test	clock-34.48	fail	fail	feature	code 1/1: unable to convert date-time string "10:00 11:00": syntax error \| want: unable to convert date-time string "10:00 11:00": more than one time of day in string
 clock.test	clock-34.49	fail	fail	feature	code 1/1: unable to convert date-time string "1/1/2001 2/2/2002": syntax error \| want: unable to convert date-time string "1/1/2001 2/2/2002": more than one date in string
 clock.test	clock-34.5	fail	fail	feature	code 1/0,2: unable to convert date-time string "Feb 14, 1992 12:20 PM": syntax error \| want: 02/14/92 12:20:00 PM
@@ -8855,31 +8855,31 @@ clock.test	clock-34.50	fail	fail	feature	code 1/1: unable to convert date-time s
 clock.test	clock-34.51	fail	fail	feature	code 1/1: unable to convert date-time string "Monday Tuesday": syntax error \| want: unable to convert date-time string "Monday Tuesday": more than one weekday in string
 clock.test	clock-34.52	fail	fail	feature	code 1/1: unable to convert date-time string "next January next March": syntax error \| want: unable to convert date-time string "next January next March": more than one ordinal month in string
 clock.test	clock-34.53	fail	fail	feature	code 1/0,2: unable to convert date-time string "19921023T00:00:00": syntax error \| want: Oct 23, 1992 00:00:00
-clock.test	clock-34.54	fail	fail	feature	code 1/0,2: unable to convert date-time string "1992-10-23T00:00:00": syntax error \| want: Oct 23, 1992 00:00:00
+clock.test	clock-34.54	pass	pass		
 clock.test	clock-34.55	pass	pass		
 clock.test	clock-34.56	pass	pass		
 clock.test	clock-34.57	pass	pass		
 clock.test	clock-34.58	pass	pass		
 clock.test	clock-34.59	fail	fail	feature	code 1/0,2: unable to convert date-time string "31 Jan 14 23:59:59 -0100": syntax error \| want: Feb 01,2014 00:59:59 GMT
-clock.test	clock-34.6	fail	fail	feature	code 1/0,2: unable to convert date-time string "Oct 23,1992 15:00": syntax error \| want: Oct 23,1992 15:00
+clock.test	clock-34.6	pass	pass		
 clock.test	clock-34.60	fail	fail	feature	code 1/0,2: unable to convert date-time string "31 Jan 14 23:59:59 +0100": syntax error \| want: Jan 31,2014 22:59:59 GMT
 clock.test	clock-34.61	fail	fail	feature	code 1/0,2: unable to convert date-time string "23:59:59 -0100": syntax error \| want: Jan 02,1970 00:59:59 GMT
 clock.test	clock-34.62	fail	fail	feature	code 1/0,2: unable to convert date-time string "23:59:59 +0100": syntax error \| want: Jan 01,1970 22:59:59 GMT
 clock.test	clock-34.63	fail	fail	feature	code 1/0,2: unable to convert date-time string "Mon, 30 Jun 2014 23:59:59 CEST": syntax error \| want: Jun 30,2014 21:59:59 GMT
 clock.test	clock-34.64	fail	fail	feature	code 1/0,2: unable to convert date-time string "Fri, 31 Jan 2014 23:59:59 CET": syntax error \| want: Jan 31,2014 22:59:59 GMT
-clock.test	clock-34.65	fail	fail	feature	code 1/0,2: unable to convert date-time string "23:59:59 +15 day": syntax error \| want: Feb 08,1970 23:59:59 GMT
-clock.test	clock-34.66	fail	fail	feature	code 1/0,2: unable to convert date-time string "23:59:59 -15 day": syntax error \| want: Jan 09,1970 23:59:59 GMT
+clock.test	clock-34.65	pass	pass		
+clock.test	clock-34.66	pass	pass		
 clock.test	clock-34.67	fail	fail	feature	code 1/0,2: unable to convert date-time string "10:59 pm CET": syntax error \| want: Jan 24,1970 21:59:00 GMT
 clock.test	clock-34.68	fail	fail	feature	code 1/0,2: unable to convert date-time string "10:59 pm +0100": syntax error \| want: Jan 24,1970 21:59:00 GMT
 clock.test	clock-34.7	fail	fail	feature	code 1/0,2: unable to convert date-time string "Oct 23,1992 15:00 GMT": syntax error \| want: Oct 23,1992 15:00 GMT
-clock.test	clock-34.8	fail	fail	feature	code 1/0,2: unable to convert date-time string "Oct 23,1992 15:00": syntax error \| want: Oct 23,1992 15:00 GMT
+clock.test	clock-34.8	pass	pass		
 clock.test	clock-34.9	fail	fail	bug	code 0/0,2: 1 {bad option "-bad": must be -base, -format, -gmt, -locale or -timezone} \| want: 1 {bad option "-bad", must be -base, -format, -gmt, -locale or -timezone}
 clock.test	clock-35.1	pass	pass		
 clock.test	clock-35.2	pass	pass		
 clock.test	clock-35.3	pass	pass		
-clock.test	clock-36.1	fail	fail	feature	code 1/0,2: unable to convert date-time string "june 1, 2000": syntax error \| want: 06.2001
-clock.test	clock-36.2	fail	fail	feature	code 1/0,2: unable to convert date-time string "june 1, 2000": syntax error \| want: 07.2000
-clock.test	clock-36.3	fail	fail	feature	code 1/0,2: unable to convert date-time string "june 1, 2000": syntax error \| want: 05.2001
+clock.test	clock-36.1	fail	fail	feature	code 1/0,2: unable to convert date-time string "next june": syntax error \| want: 06.2001
+clock.test	clock-36.2	fail	fail	feature	code 1/0,2: unable to convert date-time string "next july": syntax error \| want: 07.2000
+clock.test	clock-36.3	fail	fail	feature	code 1/0,2: unable to convert date-time string "next may": syntax error \| want: 05.2001
 clock.test	clock-37.1	pass	pass		
 clock.test	clock-38.1	fail	fail	bug	code 0/0,2: 00:00:00 \| want: 01:00:00
 clock.test	clock-38.2	fail	fail	bug	code 0/0,2: 0 \| want: 1
@@ -12182,29 +12182,29 @@ encoding.test	encoding-12.6	skip	skip	platform	ucs2
 encoding.test	encoding-13.1	pass	pass		
 encoding.test	encoding-14.1	pass	pass		
 encoding.test	encoding-15.1	pass	pass		
-encoding.test	encoding-15.10	fail	fail	bug	code 0/0,2: 2 5 efbfbdc3a9 \| want: 2 5 edb882c3a9
-encoding.test	encoding-15.11	fail	fail	bug	code 0/0,2: 2 5 efbfbdc3a9 \| want: 2 5 eda882c3a9
-encoding.test	encoding-15.12	fail	fail	bug	code 0/0,2: 2 4 efbfbd59 \| want: 2 4 edb88259
-encoding.test	encoding-15.13	fail	fail	bug	code 0/0,2: 2 4 efbfbd59 \| want: 2 4 eda88259
-encoding.test	encoding-15.14	fail	fail	bug	code 0/0,2: 1 3 efbfbd \| want: 1 3 edb882
-encoding.test	encoding-15.15	fail	fail	bug	code 0/0,2: 1 3 efbfbd \| want: 1 3 eda882
+encoding.test	encoding-15.10	pass	pass		
+encoding.test	encoding-15.11	pass	pass		
+encoding.test	encoding-15.12	pass	pass		
+encoding.test	encoding-15.13	pass	pass		
+encoding.test	encoding-15.14	pass	pass		
+encoding.test	encoding-15.15	pass	pass		
 encoding.test	encoding-15.16	pass	pass		
 encoding.test	encoding-15.2	skip	skip	internals	testbytestring
 encoding.test	encoding-15.3	skip	skip	internals	teststringbytes
-encoding.test	encoding-15.4	fail	fail	bug	code 0/0,2: 6 í ½í¸ \| want: 6 ��
-encoding.test	encoding-15.5	fail	fail	bug	code 0/0,2: 4 😂 \| want: 4 ��
-encoding.test	encoding-15.6	fail	fail	bug	code 0/0,2: 12 efbfbdefbfbdefbfbdefbfbd \| want: 10 edb882f09f9882eda0bd
-encoding.test	encoding-15.7	fail	fail	bug	code 0/0,2: 3 9 efbfbdefbfbdefbfbd \| want: 3 9 edb882eda0bdeda0bd
-encoding.test	encoding-15.8	fail	fail	bug	code 0/0,2: 3 8 efbfbdefbfbdc3a9 \| want: 3 8 edb882eda0bdc3a9
-encoding.test	encoding-15.9	fail	fail	bug	code 0/0,2: 3 7 efbfbdefbfbd58 \| want: 3 7 edb882eda0bd58
+encoding.test	encoding-15.4	pass	pass		
+encoding.test	encoding-15.5	pass	pass		
+encoding.test	encoding-15.6	pass	pass		
+encoding.test	encoding-15.7	pass	pass		
+encoding.test	encoding-15.8	pass	pass		
+encoding.test	encoding-15.9	pass	pass		
 encoding.test	encoding-16.1	pass	pass		
 encoding.test	encoding-16.2	pass	pass		
-encoding.test	encoding-16.3	fail	fail	bug	code 0/0,2: ��� ED \| want: � DCDC
-encoding.test	encoding-16.4	fail	fail	bug	code 0/0,2: 䅁 \| want: 䅁�
+encoding.test	encoding-16.3	pass	pass		
+encoding.test	encoding-16.4	pass	pass		
 encoding.test	encoding-16.5	skip	skip	platform	ucs2
 encoding.test	encoding-17.1	pass	pass		
-encoding.test	encoding-17.2	fail	fail	bug	code 0/0,2: ýÿ \| want: ÜÜ
-encoding.test	encoding-17.3	fail	fail	bug	code 0/0,2: ýÿ \| want: ØØ
+encoding.test	encoding-17.2	pass	pass		
+encoding.test	encoding-17.3	pass	pass		
 encoding.test	encoding-18.1	pass	pass		
 encoding.test	encoding-19.1	pass	pass		
 encoding.test	encoding-2.1	pass	pass		
@@ -12215,12 +12215,12 @@ encoding.test	encoding-22.1	pass	pass
 encoding.test	encoding-23.1	pass	pass		
 encoding.test	encoding-23.2	pass	pass		
 encoding.test	encoding-23.3	pass	pass		
-encoding.test	encoding-24.1	fail	fail	feature	code 1/0,2: unknown encoding "iso2022-jp" \| want: 
+encoding.test	encoding-24.1	pass	pass		
 encoding.test	encoding-24.10	pass	pass		
 encoding.test	encoding-24.11	pass	pass		
-encoding.test	encoding-24.2	fail	fail	feature	code 1/0,2: unknown encoding "cp1252" \| want: ab$B8C$(DD%(Bg (ab\u001B$B8C\u001B$(DD%\u001B(Bg)
-encoding.test	encoding-24.3	fail	fail	feature	code 1/0,2: unknown encoding "iso2022-jp" \| want: 3 {乎乞也 (\u4E4E\u4E5E\u4E5F)}
-encoding.test	encoding-24.4	fail	fail	bug	code 0/0,2: 2 \| want: 1
+encoding.test	encoding-24.2	pass	pass		
+encoding.test	encoding-24.3	fail	fail	bug	code 0/0,2: 9 { (\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000)} \| want: 3 {乎乞也 (\u4E4E\u4E5E\u4E5F)}
+encoding.test	encoding-24.4	pass	pass		
 encoding.test	encoding-24.5	pass	pass		
 encoding.test	encoding-24.6	pass	pass		
 encoding.test	encoding-24.7	pass	pass		
@@ -27882,8 +27882,8 @@ fileName.test	filename-11.1	fail	fail	message	code 1/1: wrong # args: should be 
 fileName.test	filename-11.10	skip	skip	internals	testsetplatform
 fileName.test	filename-11.11	skip	skip	internals	testsetplatform
 fileName.test	filename-11.12	skip	skip	internals	testsetplatform
-fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl1368296/globTest
-fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl1368296/globTest
+fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl2639770/globTest
+fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl2639770/globTest
 fileName.test	filename-11.16	pass	pass		
 fileName.test	filename-11.17	pass	pass		
 fileName.test	filename-11.17.1	skip	skip	platform	win
@@ -27899,47 +27899,47 @@ fileName.test	filename-11.18.1	skip	skip	platform	win
 fileName.test	filename-11.19	fail	fail	bug	code 0/0,2: globTest globTest \| want: globTest/a1 globTest/a2 globTest/a3 {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c
 fileName.test	filename-11.19.1	skip	skip	platform	win
 fileName.test	filename-11.2	pass	pass		
-fileName.test	filename-11.20	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: globTest/a1 globTest/a2 globTest/a3
-fileName.test	filename-11.21	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: globTest
+fileName.test	filename-11.20	fail	fail	bug	code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent \| want: globTest/a1 globTest/a2 globTest/a3
+fileName.test	filename-11.21	pass	pass		
 fileName.test	filename-11.21.1	fail	fail	bug	code 1/0,2: no files matched glob pattern "*" \| want: {[tcl].testremains}
-fileName.test	filename-11.22	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/weird\ name.c glob\[\{Test/...
+fileName.test	filename-11.22	fail	fail	bug	code 0/0,2: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/nonexistent glob\[\{Test/weird\ name.c glob\[\{Test/x,z1.c glob\[\{Test/x1.c gl \| want: glob\[\{Test/a1 glob\[\{Test/a2 glo...
 fileName.test	filename-11.22.1	skip	skip	platform	win
 fileName.test	filename-11.23	fail	fail	bug	code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/weird\ name.c glob\[\{Test/x,z1.c glob\[\{Test/x1.c glob\[\{Test/y1.c glob\[\{T
 fileName.test	filename-11.23.1	skip	skip	platform	win
 fileName.test	filename-11.24	fail	fail	bug	code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/weird\ name.c glob\[\{Test/x,z1.c glob\[\{Test/x1.c glob\[\{Test/y1.c glob\[\{T
 fileName.test	filename-11.24.1	skip	skip	platform	win
-fileName.test	filename-11.25	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3
-fileName.test	filename-11.25.1	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3
-fileName.test	filename-11.25.2	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3
-fileName.test	filename-11.26	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test
+fileName.test	filename-11.25	fail	fail	bug	code 0/0,2: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/nonexistent \| want: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3
+fileName.test	filename-11.25.1	fail	fail	bug	code 0/0,2: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/nonexistent glob\[\{Test/weird\ name.c glob\[\{Test/x,z1.c glob\[\{Test/x1.c gl \| want: glob\[\{Test/a1 glob\[\{Test/a2 glo...
+fileName.test	filename-11.25.2	fail	fail	bug	code 0/0,2: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/nonexistent glob\[\{Test/weird\ name.c glob\[\{Test/x,z1.c glob\[\{Test/x1.c gl \| want: glob\[\{Test/a1 glob\[\{Test/a2 glo...
+fileName.test	filename-11.26	fail	fail	bug	code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test
 fileName.test	filename-11.27	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde
 fileName.test	filename-11.28	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": z
 fileName.test	filename-11.29	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: only one MacOS type or creator argument to "-types" allowed
-fileName.test	filename-11.3	fail	fail	bug	code 1/0,2: bad option "-nocomplai": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: 
+fileName.test	filename-11.3	fail	fail	bug	code 1/0,2: wrong # args: should be "glob ?switches? name ?name ...?" \| want: 
 fileName.test	filename-11.30	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: only one MacOS type or creator argument to "-types" allowed
 fileName.test	filename-11.31	pass	pass		
-fileName.test	filename-11.32	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: "-directory" cannot be used with "-path"
+fileName.test	filename-11.32	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: "-directory" cannot be used with "-path"
 fileName.test	filename-11.33	pass	pass		
-fileName.test	filename-11.34	fail	fail	message	code 1/1: bad option "-direct": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: missing argument to "-directory"
+fileName.test	filename-11.34	pass	pass		
 fileName.test	filename-11.35	pass	pass		
 fileName.test	filename-11.36	fail	fail	bug	code 0/1: glob\[\{Test ~test.txt \| want: "-tails" must be used with either "-directory" or "-path"
-fileName.test	filename-11.37	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: glob\[\{Test
+fileName.test	filename-11.37	fail	fail	bug	code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test
 fileName.test	filename-11.38	fail	fail	bug	code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test
 fileName.test	filename-11.39	fail	fail	bug	code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test
 fileName.test	filename-11.4	fail	fail	bug	code 1/0,2: wrong # args: should be "glob ?switches? name ?name ...?" \| want: 
-fileName.test	filename-11.40	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
-fileName.test	filename-11.41	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: not equal
-fileName.test	filename-11.42	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
+fileName.test	filename-11.40	pass	pass		
+fileName.test	filename-11.41	pass	pass		
+fileName.test	filename-11.42	pass	pass		
 fileName.test	filename-11.43	fail	fail	message	code 1/1: bad option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: ambiguous option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types, or --
 fileName.test	filename-11.44	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: "-directory" cannot be used with "-path"
-fileName.test	filename-11.45	fail	fail	bug	code 0/0,2: {} {all.tcl fileName.test httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcl1368296 tcltests.tcl zt \| want: equal
-fileName.test	filename-11.46	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: bad argument to "-types": abcde
+fileName.test	filename-11.45	pass	pass		
+fileName.test	filename-11.46	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde
 fileName.test	filename-11.47	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde
-fileName.test	filename-11.48	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: bad argument to "-types": abcde
+fileName.test	filename-11.48	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde
 fileName.test	filename-11.49	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde
 fileName.test	filename-11.5	fail	fail	bug	code 0/1: all.tcl fileName.test httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcltests.tcl ztclsh \| want: user "xyqrszzz" doesn't exist
 fileName.test	filename-11.50	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: "-path" may only be used once
-fileName.test	filename-11.51	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: "-directory" may only be used once
+fileName.test	filename-11.51	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: "-directory" may only be used once
 fileName.test	filename-11.6	fail	fail	message	code 1/1: no files matched glob pattern "~xyqrszzz" \| want: user "xyqrszzz" doesn't exist
 fileName.test	filename-11.7	pass	pass		
 fileName.test	filename-11.8	pass	pass		
@@ -27957,7 +27957,7 @@ fileName.test	filename-12.4	pass	pass
 fileName.test	filename-12.5	fail	fail	bug	code 1/0,2: no files matched glob pattern "globTest\/x1.c" \| want: globTest/x1.c
 fileName.test	filename-12.6	fail	fail	bug	code 1/0,2: no files matched glob pattern "globTest\/\x1.c" \| want: globTest/x1.c
 fileName.test	filename-12.7	pass	pass		
-fileName.test	filename-12.8	fail	fail	feature	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
+fileName.test	filename-12.8	pass	pass		
 fileName.test	filename-12.9	skip	skip	platform	win
 fileName.test	filename-13.1	fail	fail	bug	code 0/0,2: globTest \| want: globTest/
 fileName.test	filename-13.10	pass	pass		
@@ -27980,7 +27980,7 @@ fileName.test	filename-14.1	pass	pass
 fileName.test	filename-14.11	pass	pass		
 fileName.test	filename-14.13	pass	pass		
 fileName.test	filename-14.15	fail	fail	bug	code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c \| want: globTest/a1/ globTest/a2/ globTest/a3/
-fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl1368296/globTest/z1.c
+fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl2639770/globTest/z1.c
 fileName.test	filename-14.18	pass	pass		
 fileName.test	filename-14.20	pass	pass		
 fileName.test	filename-14.21	pass	pass		
@@ -27988,9 +27988,9 @@ fileName.test	filename-14.22	fail	fail	message	code 1/1: no files matched glob p
 fileName.test	filename-14.23	pass	pass		
 fileName.test	filename-14.23.2	skip	skip	platform	win
 fileName.test	filename-14.24	skip	skip	platform	win
-fileName.test	filename-14.25	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c
+fileName.test	filename-14.25	pass	pass		
 fileName.test	filename-14.25.1	skip	skip	platform	win
-fileName.test	filename-14.26	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: 
+fileName.test	filename-14.26	fail	fail	bug	code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c \| want: 
 fileName.test	filename-14.27	pass	pass		
 fileName.test	filename-14.28	pass	pass		
 fileName.test	filename-14.29	pass	pass		
@@ -28140,7 +28140,7 @@ fileSystem.test	filesystem-1.0	skip	skip	design	hasLinks
 fileSystem.test	filesystem-1.1	skip	skip	design	hasLinks
 fileSystem.test	filesystem-1.10	skip	skip	design	hasLinks
 fileSystem.test	filesystem-1.11	skip	skip	design	hasLinks
-fileSystem.test	filesystem-1.12	fail	fail	bug	code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: 1
+fileSystem.test	filesystem-1.12	pass	pass		
 fileSystem.test	filesystem-1.13	skip	skip	platform	win
 fileSystem.test	filesystem-1.14	skip	skip	platform	win
 fileSystem.test	filesystem-1.15	skip	skip	platform	win
@@ -28197,7 +28197,7 @@ fileSystem.test	filesystem-1.51	fail	fail	bug	code 1/0,2: couldn't access "/../.
 fileSystem.test	filesystem-1.51.1	fail	fail	bug	code 1/0,2: couldn't access "/../../": permission denied \| want: ok
 fileSystem.test	filesystem-1.52	pass	pass		
 fileSystem.test	filesystem-1.52.1	pass	pass		
-fileSystem.test	filesystem-1.53	fail	fail	bug	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: 0
+fileSystem.test	filesystem-1.53	fail	fail	bug	code 0/0,2: 1 \| want: 0
 fileSystem.test	filesystem-1.54	pass	pass		
 fileSystem.test	filesystem-1.6	skip	skip	design	hasLinks
 fileSystem.test	filesystem-1.7	skip	skip	design	hasLinks
@@ -28221,7 +28221,7 @@ fileSystem.test	filesystem-6.12	pass	pass
 fileSystem.test	filesystem-6.13	pass	pass		
 fileSystem.test	filesystem-6.14	fail	fail	design	code 1/1: could not link: links are not available in the root folder \| want: could not read link "": no such file or directory
 fileSystem.test	filesystem-6.15	fail	fail	bug	code 0/1:  \| want: could not read "": no such file or directory
-fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795757441 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795766993 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.17	fail	fail	feature	code 1/1: file mtime with a new time is not available \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.18	fail	fail	bug	code 0/1:  \| want: can't create directory "": no such file or directory
 fileSystem.test	filesystem-6.19	pass	pass		
@@ -28236,7 +28236,7 @@ fileSystem.test	filesystem-6.26	pass	pass
 fileSystem.test	filesystem-6.27	fail	fail	bug	code 0/1: / \| want: unrecognised path
 fileSystem.test	filesystem-6.28	fail	fail	bug	code 0/1: 280 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.29	pass	pass		
-fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795757441 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795766993 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.30	fail	fail	bug	code 0/1: native root \| want: unrecognised path
 fileSystem.test	filesystem-6.31	pass	pass		
 fileSystem.test	filesystem-6.32	fail	fail	bug	code 0/1: directory \| want: could not read "": no such file or directory
@@ -28702,68 +28702,68 @@ get.test	get-3.1	pass	pass
 get.test	get-3.2	fail	fail	bug	code 0/0,2: 0 1 0 1 0 1 0 -1 1 {expected floating-point number but got "-+1.0"} 0 -1 1 {expected floating-point number but got "--1.0"} 1 {expected floa \| want: 0 1 0 1 1 {expected floating-point ...
 get.test	get-3.3	skip	skip	internals	testgetint
 get.test	get-3.4	skip	skip	internals	testdoubleobj
-history.test	history-1.1	skip	skip	feature	history
-history.test	history-1.10	skip	skip	feature	history
-history.test	history-1.2	skip	skip	feature	history
-history.test	history-1.3	skip	skip	feature	history
-history.test	history-1.4	skip	skip	feature	history
-history.test	history-1.5	skip	skip	feature	history
-history.test	history-1.6	skip	skip	feature	history
-history.test	history-1.7	skip	skip	feature	history
-history.test	history-1.8	skip	skip	feature	history
-history.test	history-1.9	skip	skip	feature	history
-history.test	history-10.1	skip	skip	feature	history
-history.test	history-10.2	skip	skip	feature	history
-history.test	history-2.1	skip	skip	feature	history
-history.test	history-2.2	skip	skip	feature	history
-history.test	history-2.3	skip	skip	feature	history
-history.test	history-2.4	skip	skip	feature	history
-history.test	history-3.1	skip	skip	feature	history
-history.test	history-3.2	skip	skip	feature	history
-history.test	history-3.3	skip	skip	feature	history
-history.test	history-3.4	skip	skip	feature	history
-history.test	history-3.5	skip	skip	feature	history
-history.test	history-3.6	skip	skip	feature	history
-history.test	history-3.7	skip	skip	feature	history
-history.test	history-3.8	skip	skip	feature	history
-history.test	history-3.9	skip	skip	feature	history
-history.test	history-4.1	skip	skip	feature	history
-history.test	history-4.2	skip	skip	feature	history
-history.test	history-4.3	skip	skip	feature	history
-history.test	history-4.4	skip	skip	feature	history
-history.test	history-4.5	skip	skip	feature	history
-history.test	history-4.6	skip	skip	feature	history
-history.test	history-4.7	skip	skip	feature	history
-history.test	history-5.1	skip	skip	feature	history
-history.test	history-5.2	skip	skip	feature	history
-history.test	history-5.3	skip	skip	feature	history
-history.test	history-5.4	skip	skip	feature	history
-history.test	history-5.5	skip	skip	feature	history
-history.test	history-6.1	skip	skip	feature	history
-history.test	history-6.10	skip	skip	feature	history
-history.test	history-6.11	skip	skip	feature	history
-history.test	history-6.12	skip	skip	feature	history
-history.test	history-6.13	skip	skip	feature	history
-history.test	history-6.14	skip	skip	feature	history
-history.test	history-6.15	skip	skip	feature	history
-history.test	history-6.16	skip	skip	feature	history
-history.test	history-6.2	skip	skip	feature	history
-history.test	history-6.3	skip	skip	feature	history
-history.test	history-6.4	skip	skip	feature	history
-history.test	history-6.5	skip	skip	feature	history
-history.test	history-6.6	skip	skip	feature	history
-history.test	history-6.7	skip	skip	feature	history
-history.test	history-6.8	skip	skip	feature	history
-history.test	history-6.9	skip	skip	feature	history
-history.test	history-7.1	skip	skip	feature	history
-history.test	history-7.2	skip	skip	feature	history
-history.test	history-7.3	skip	skip	feature	history
-history.test	history-7.4	skip	skip	feature	history
-history.test	history-8.1	skip	skip	feature	history
-history.test	history-8.2	skip	skip	feature	history
-history.test	history-8.3	skip	skip	feature	history
-history.test	history-9.1	skip	skip	feature	history
-history.test	history-9.2	skip	skip	feature	history
+history.test	history-1.1	fail	fail	bug	code 0/0,2: Another test \| want: set b [format {A test %s} string]
+history.test	history-1.10	fail	fail	bug	code 0/0,2: wrong # args: should be "::tcl::history::Find ?event?" \| want: wrong # args: should be "*history event \?event\?"
+history.test	history-1.2	pass	pass		
+history.test	history-1.3	pass	pass		
+history.test	history-1.4	pass	pass		
+history.test	history-1.5	fail	fail	bug	code 1/0,2: unknown or ambiguous subcommand "e": must be add, change, clear, event, info, keep, nextid, or redo \| want: set a 12345
+history.test	history-1.6	pass	pass		
+history.test	history-1.7	pass	pass		
+history.test	history-1.8	fail	fail	bug	code 0/0,2: Another test \| want: set b [format {A test %s} string]
+history.test	history-1.9	pass	pass		
+history.test	history-10.1	fail	fail	bug	code 1/0,2: invalid command name "::tcl::unsupported::representation" \| want: 1 2 1
+history.test	history-10.2	fail	fail	bug	code 1/0,2: invalid command name "::tcl::unsupported::representation" \| want: 1 2 1
+history.test	history-2.1	fail	fail	bug	code 0/0,2: 0 \| want: 12345
+history.test	history-2.2	fail	fail	bug	code 0/0,2: 0 \| want: A test string
+history.test	history-2.3	pass	pass		
+history.test	history-2.4	fail	fail	bug	code 0/0,2: wrong # args: should be "::tcl::history::Find ?event?" \| want: wrong # args: should be "*history redo \?event\?"
+history.test	history-3.1	pass	pass		
+history.test	history-3.2	fail	fail	bug	code 0/0,2: 0 \| want: 1
+history.test	history-3.3	fail	fail	bug	code 0/0,2:  \| want: bad argument "execGorp": should be "exec"
+history.test	history-3.4	fail	fail	bug	code 0/0,2: 0 \| want: 1
+history.test	history-3.5	fail	fail	bug	code 0/0,2:  \| want: bad argument "a": should be "exec"
+history.test	history-3.6	fail	fail	bug	code 0/0,2: 444 \| want: 555
+history.test	history-3.7	fail	fail	bug	code 0/0,2: 444 \| want: 555
+history.test	history-3.8	fail	fail	bug	code 0/0,2: 0 \| want: 1
+history.test	history-3.9	fail	fail	bug	code 0/0,2:  \| want: wrong # args: should be "*history add event \?exec\?"
+history.test	history-4.1	fail	fail	bug	code 1/0,2: unknown or ambiguous subcommand "n": must be add, change, clear, event, info, keep, nextid, or redo \| want: A test value
+history.test	history-4.2	fail	fail	bug	code 1/0,2: unknown or ambiguous subcommand "e": must be add, change, clear, event, info, keep, nextid, or redo \| want: Another test
+history.test	history-4.3	fail	fail	bug	code 1/0,2: unknown or ambiguous subcommand "n": must be add, change, clear, event, info, keep, nextid, or redo \| want: A test value
+history.test	history-4.4	pass	pass		
+history.test	history-4.5	fail	fail	bug	code 0/0,2: event "4" is too far in the past \| want: wrong # args: should be "*history change newValue \?event\?"
+history.test	history-4.6	pass	pass		
+history.test	history-4.7	pass	pass		
+history.test	history-5.1	fail	fail	bug	code 0/0,2:     10 set a 666     11 set a 666     12 set a 666 \| want:      1  set a {b  c d e}      2  set b 1234      3  set c {a  b  c}
+history.test	history-5.2	fail	fail	bug	code 1/0,2: unknown or ambiguous subcommand "i": must be add, change, clear, event, info, keep, nextid, or redo \| want:      2  set b 1234      3  set c {a  b  c}
+history.test	history-5.3	pass	pass		
+history.test	history-5.4	fail	fail	bug	code 0/0,2: unknown or ambiguous subcommand "i": must be add, change, clear, event, info, keep, nextid, or redo \| want: wrong # args: should be "*history info \?count\?"
+history.test	history-5.5	fail	fail	bug	code 0/0,2:     10 set a 666     11 set a 666     12 set a 666 \| want:      1  set a {b  c d e}      2  set b 1234      3  set c {a  b  c}
+history.test	history-6.1	fail	fail	bug	code 1/0,2: unknown or ambiguous subcommand "n": must be add, change, clear, event, info, keep, nextid, or redo \| want: foo3
+history.test	history-6.10	fail	fail	bug	code 0/0,2: 0 \| want: 1
+history.test	history-6.11	fail	fail	bug	code 0/0,2:  \| want: wrong # args: should be "*history keep \?count\?"
+history.test	history-6.12	pass	pass		
+history.test	history-6.13	fail	fail	bug	code 0/0,2: 4 \| want: 5
+history.test	history-6.14	fail	fail	bug	code 0/0,2: 0 \| want: 1
+history.test	history-6.15	fail	fail	bug	code 0/0,2:  \| want: illegal keep count "-3"
+history.test	history-6.16	fail	fail	bug	code 0/0,2:  \| want: illegal keep count "butter"
+history.test	history-6.2	fail	fail	bug	code 0/0,2: foo3 \| want: foo2
+history.test	history-6.3	fail	fail	bug	code 0/0,2: 0 \| want: 1
+history.test	history-6.4	fail	fail	bug	code 0/0,2: foo1 \| want: event "-3" is too far in the past
+history.test	history-6.5	fail	fail	bug	code 0/0,2: foo3 \| want: foo2
+history.test	history-6.6	fail	fail	bug	code 0/0,2: foo2 \| want: 
+history.test	history-6.7	fail	fail	bug	code 0/0,2: foo1 \| want: 
+history.test	history-6.8	fail	fail	bug	code 1/0,2: event "-4" is too far in the past \| want: 
+history.test	history-6.9	pass	pass		
+history.test	history-7.1	fail	fail	bug	code 0/0,2: foo3 \| want: Testing
+history.test	history-7.2	fail	fail	bug	code 1/0,2: unknown or ambiguous subcommand "next": must be add, change, clear, event, info, keep, nextid, or redo \| want: 3
+history.test	history-7.3	fail	fail	bug	code 0/0,2: 0 \| want: 1
+history.test	history-7.4	fail	fail	bug	code 0/0,2: 16 \| want: wrong # args: should be "*history nextid"
+history.test	history-8.1	fail	fail	bug	code 0/0,2: 0 \| want: 1
+history.test	history-8.2	pass	pass		
+history.test	history-8.3	fail	fail	bug	code 0/0,2:      1 Testing \| want:      1  Testing
+history.test	history-9.1	pass	pass		
+history.test	history-9.2	pass	pass		
 http.test	http-1.1	fail	fail	feature	code 1/0,2: invalid command name "http::config" \| want: -accept */* -pipeline 1 -postfresh 0 -proxyfilter http::ProxyRequired -proxyhost {} -proxyport {} -repost 0 -urlencoding utf-8 -useragent Us
 http.test	http-1.2	fail	fail	feature	code 1/0,2: invalid command name "http::config" \| want: http::ProxyRequired
 http.test	http-1.3	pass	pass		
@@ -29412,14 +29412,40 @@ info.test	info-9.8	pass	pass
 info.test	info-9.9	pass	pass		
 init.test	init-0.1	fail	fail	bug	code 0/0,2: 1 {} 1 NONE \| want: 0 {} 0 {}
 init.test	init-0.2	fail	fail	bug	code 0/0,2: 1 0 0 \| want: 1 0 1
-init.test	init-1.1	fail	fail	feature	code 1/0,2: invalid command name "auto_qualify" \| want: ::foo::bar
-init.test	init-1.2	fail	fail	feature	code 1/0,2: invalid command name "auto_qualify" \| want: global
-init.test	init-1.3	fail	fail	feature	code 1/0,2: invalid command name "auto_qualify" \| want: nocolons
-init.test	init-1.4	fail	fail	feature	code 1/0,2: invalid command name "auto_qualify" \| want: ::sub::nocolons nocolons
-init.test	init-1.5	fail	fail	feature	code 1/0,2: invalid command name "auto_qualify" \| want: ::foo::bar
-init.test	init-1.6	fail	fail	feature	code 1/0,2: invalid command name "auto_qualify" \| want: ::sub::foo::bar ::foo::bar
-init.test	init-1.7	fail	fail	feature	code 1/0,2: invalid command name "auto_qualify" \| want: ::foo::bar
-init.test	init-1.8	fail	fail	feature	code 1/0,2: invalid command name "auto_qualify" \| want: foo
+init.test	init-1.1	fail	fail	bug	code 0/0,2: foo::bar \| want: ::foo::bar
+init.test	init-1.2	pass	pass		
+init.test	init-1.3	pass	pass		
+init.test	init-1.4	fail	fail	bug	code 0/0,2: sub::nocolons nocolons \| want: ::sub::nocolons nocolons
+init.test	init-1.5	fail	fail	bug	code 0/0,2: foo::bar \| want: ::foo::bar
+init.test	init-1.6	fail	fail	bug	code 0/0,2: sub::foo::bar foo::bar \| want: ::sub::foo::bar ::foo::bar
+init.test	init-1.7	fail	fail	bug	code 0/0,2: :foo::::bar \| want: ::foo::bar
+init.test	init-1.8	fail	fail	bug	code 0/0,2: :foo \| want: foo
+init.test	init-2.0	fail	fail	bug	cleanup: can't delete "parray": command doesn't exist
+init.test	init-2.1	fail	fail	message	code 1/1: invalid command name "parray" \| want: wrong # args: should be "parray a ?pattern?"
+init.test	init-2.2	fail	fail	feature	code 1/0,2: invalid command name "::safe::setLogCmd" \| want: 
+init.test	init-2.3	fail	fail	feature	code 1/0,2: invalid command name "::safe::setLogCmd" \| want: 
+init.test	init-2.4	fail	fail	feature	code 1/0,2: invalid command name "safe:::setLogCmd" \| want: 
+init.test	init-2.5	fail	fail	feature	code 1/0,2: invalid command name "safe:::setLogCmd" \| want: 
+init.test	init-2.6	fail	fail	bug	code 1/0,2: invalid command name "setLogCmd" \| want: 
+init.test	init-2.7	fail	fail	bug	code 1/0,2: invalid command name "setLogCmd" \| want: 
+init.test	init-2.8	fail	fail	bug	cleanup: can't delete "tcl::HistAdd": command doesn't exist
+init.test	init-3.0	fail	fail	bug	code 1/0,2: invalid command name "foo:::bar::blah" \| want: 1
+init.test	init-4.0.0	pass	pass		
+init.test	init-4.0.1	pass	pass		
+init.test	init-4.1.0	pass	pass		
+init.test	init-4.1.1	pass	pass		
+init.test	init-4.2.0	pass	pass		
+init.test	init-4.2.1	pass	pass		
+init.test	init-4.3.0	pass	pass		
+init.test	init-4.3.1	pass	pass		
+init.test	init-4.4.0	pass	pass		
+init.test	init-4.4.1	pass	pass		
+init.test	init-4.5.0	pass	pass		
+init.test	init-4.5.1	pass	pass		
+init.test	init-4.6.0	pass	pass		
+init.test	init-4.6.1	pass	pass		
+init.test	init-4.7	pass	pass		
+init.test	init-5.0	fail	fail	bug	code 0/0,2: 1 xxx {-code 1 -level 0 -errorcode NONE -errorinfo {xxx     while executing "::xxx"} -errorline 1} 2 xxx {-code 1 -level 1} \| want: 2 xxx {-errorcode NONE -code 1 -level 1} 2 xxx {-cod...
 interp.test	interp-1.1	pass	pass		
 interp.test	interp-1.10	pass	pass		
 interp.test	interp-1.2	fail	fail	message	code 1/1: bad option "frobox": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mar \| want: bad option "frobox": must be alias, a...
@@ -29454,7 +29480,7 @@ interp.test	interp-13.3	pass	pass
 interp.test	interp-13.4	fail	fail	bug	code 0/0,2: 0 0 \| want: 1 {wrong # args: should be "a issafe"}
 interp.test	interp-14.1	pass	pass		
 interp.test	interp-14.10	pass	pass		
-interp.test	interp-14.11	fail	fail	bug	setup: bad option "-199989484": must be -safe or --
+interp.test	interp-14.11	fail	fail	bug	setup: bad option "-199989160": must be -safe or --
 interp.test	interp-14.2	pass	pass		
 interp.test	interp-14.3	pass	pass		
 interp.test	interp-14.4	fail	fail	bug	code 0/0,2: 0 a a \| want: 1 {cannot define or rename alias "a": interpreter deleted} {}
@@ -29764,7 +29790,7 @@ interp.test	interp-7.2	pass	pass
 interp.test	interp-7.3	pass	pass		
 interp.test	interp-7.4	pass	pass		
 interp.test	interp-7.5	pass	pass		
-interp.test	interp-7.6	fail	fail	bug	code 0/1: bar foo \| want: wrong # args: should be "a aliases"
+interp.test	interp-7.6	fail	fail	bug	code 0/1: foo bar \| want: wrong # args: should be "a aliases"
 interp.test	interp-8.1	pass	pass		
 interp.test	interp-8.2	pass	pass		
 interp.test	interp-8.3	fail	fail	message	code 1/1: wrong # args: should be "interp alias childPath childCmd ?targetPath targetCmd arg ...?" \| want: wrong # args: should be "a alias aliasName ?targetName? ?arg ...?"
@@ -30622,7 +30648,7 @@ ioCmd.test	iocmd-11.3	fail	fail	bug	code 0/0,2: 1 {can't read output from comman
 ioCmd.test	iocmd-11.4	pass	pass		
 ioCmd.test	iocmd-12.1	pass	pass		
 ioCmd.test	iocmd-12.10	pass	pass		
-ioCmd.test	iocmd-12.11	fail	fail	bug	code 0/0,2: É \| want: H
+ioCmd.test	iocmd-12.11	pass	pass		
 ioCmd.test	iocmd-12.2	pass	pass		
 ioCmd.test	iocmd-12.3	pass	pass		
 ioCmd.test	iocmd-12.4	fail	fail	bug	code 0/0,2: -1 \| want: 0
@@ -30847,8 +30873,8 @@ ioCmd.test	iocmd-8.3	pass	pass
 ioCmd.test	iocmd-8.4	pass	pass		
 ioCmd.test	iocmd-8.5	pass	pass		
 ioCmd.test	iocmd-8.6	pass	pass		
-ioCmd.test	iocmd-8.7	fail	fail	feature	code 1/0,2: unknown encoding "unicode" \| want: -blocking 1 -buffering full -buffersize 4096 -encoding unicode -eofchar {} -translation lf
-ioCmd.test	iocmd-8.8	fail	fail	feature	code 1/0,2: unknown encoding "unicode" \| want: line {-blocking 1 -buffering line -buffersize 3030 -encoding unicode -eofchar {} -translation lf}
+ioCmd.test	iocmd-8.7	pass	pass		
+ioCmd.test	iocmd-8.8	pass	pass		
 ioCmd.test	iocmd-8.9	fail	fail	bug	code 0/0,2: -blocking 1 -buffering none -buffersize 4040 -encoding binary -eofchar {} -translation binary \| want: -blocking 1 -buffering none -buffersize 4040 -encoding binary -eofchar {} -transla...
 ioCmd.test	iocmd-9.1	pass	pass		
 ioCmd.test	iocmd-9.2	pass	pass		
@@ -34248,98 +34274,104 @@ msgcat.test	msgcat-0.4	fail	fail	feature	setup: invalid command name "i"
 msgcat.test	msgcat-0.5	fail	fail	feature	setup: invalid command name "i"
 msgcat.test	msgcat-0.6	fail	fail	feature	setup: invalid command name "i"
 msgcat.test	msgcat-0.7	fail	fail	feature	setup: invalid command name "i"
-msgcat.test	msgcat-1.10	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-1.11	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-1.12	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-1.13	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-1.3	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-1.4	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-1.5	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-1.6	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-1.7	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-1.8	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-1.9	fail	fail	feature	setup: invalid command name "mclocale"
+msgcat.test	msgcat-1.10	pass	pass		
+msgcat.test	msgcat-1.11	pass	pass		
+msgcat.test	msgcat-1.12	fail	fail	feature	code 0/1: /path/to/evil/code \| want: invalid newLocale value *
+msgcat.test	msgcat-1.13	fail	fail	feature	code 0/1: looks/ok/../../../../but/is/path/to/evil/code \| want: invalid newLocale value *
+msgcat.test	msgcat-1.3	pass	pass		
+msgcat.test	msgcat-1.4	pass	pass		
+msgcat.test	msgcat-1.5	pass	pass		
+msgcat.test	msgcat-1.6	pass	pass		
+msgcat.test	msgcat-1.7	pass	pass		
+msgcat.test	msgcat-1.8	pass	pass		
+msgcat.test	msgcat-1.9	pass	pass		
 msgcat.test	msgcat-10.1	fail	fail	feature	code 1/1: invalid command name "mcloadedlocales" \| want: wrong # args: should be "mcloadedlocales subcommand"
 msgcat.test	msgcat-10.2	fail	fail	feature	code 1/1: invalid command name "mcloadedlocales" \| want: unknown subcommand "junk": must be clear, or loaded
 msgcat.test	msgcat-10.3	fail	fail	feature	setup: invalid command name "mcforgetpackage"
 msgcat.test	msgcat-10.4	fail	fail	feature	setup: invalid command name "mcforgetpackage"
-msgcat.test	msgcat-11.1	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-11.2	fail	fail	feature	setup: invalid command name "mclocale"
+msgcat.test	msgcat-11.1	fail	fail	feature	code 1/0,2: invalid command name "mcforgetpackage" \| want: 1 0
+msgcat.test	msgcat-11.2	fail	fail	feature	code 1/0,2: invalid command name "mcpackagelocale" \| want: bar foo
 msgcat.test	msgcat-11.3	fail	fail	feature	code 1/0,2: invalid command name "mcpackageconfig" \| want: 1 0
 msgcat.test	msgcat-12.1	fail	fail	feature	code 1/1: invalid command name "mcpackagelocale" \| want: wrong # args: should be "mcpackagelocale subcommand ?locale?"
-msgcat.test	msgcat-12.10	fail	fail	feature	setup: invalid command name "mclocale"
+msgcat.test	msgcat-12.10	fail	fail	feature	cleanup: invalid command name "mcforgetpackage"
 msgcat.test	msgcat-12.2	fail	fail	feature	code 1/1: invalid command name "mcpackagelocale" \| want: unknown subcommand "junk": must be clear, get, isset, loaded, present, set, or unset
-msgcat.test	msgcat-12.3	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-12.4	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-12.5	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-12.6	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-12.7	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-12.8	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-12.9	fail	fail	feature	setup: invalid command name "mclocale"
+msgcat.test	msgcat-12.3	fail	fail	feature	cleanup: invalid command name "mcforgetpackage"
+msgcat.test	msgcat-12.4	fail	fail	feature	cleanup: invalid command name "mcforgetpackage"
+msgcat.test	msgcat-12.5	fail	fail	feature	cleanup: invalid command name "mcforgetpackage"
+msgcat.test	msgcat-12.6	fail	fail	feature	cleanup: invalid command name "mcforgetpackage"
+msgcat.test	msgcat-12.7	fail	fail	feature	cleanup: invalid command name "mcforgetpackage"
+msgcat.test	msgcat-12.8	fail	fail	feature	cleanup: invalid command name "mcforgetpackage"
+msgcat.test	msgcat-12.9	fail	fail	feature	cleanup: invalid command name "mcforgetpackage"
 msgcat.test	msgcat-13.1	fail	fail	feature	code 1/1: invalid command name "mcpackageconfig" \| want: wrong # args: should be "mcpackageconfig subcommand option ?value?"
 msgcat.test	msgcat-13.2	fail	fail	feature	code 1/1: invalid command name "mcpackageconfig" \| want: unknown subcommand "junk": must be get, isset, set, or unset
 msgcat.test	msgcat-13.3	fail	fail	feature	code 1/1: invalid command name "mcpackageconfig" \| want: bad option "junk": must be mcfolder, loadcmd, changecmd, or unknowncmd
 msgcat.test	msgcat-13.4	fail	fail	feature	setup: invalid command name "mcforgetpackage"
 msgcat.test	msgcat-13.5	fail	fail	feature	setup: invalid command name "mcforgetpackage"
+msgcat.test	msgcat-14.1	fail	fail	feature	setup: invalid command name "mcforgetpackage"
+msgcat.test	msgcat-14.2	fail	fail	feature	setup: invalid command name "mcforgetpackage"
+msgcat.test	msgcat-14.3	fail	fail	feature	setup: invalid command name "mcforgetpackage"
+msgcat.test	msgcat-14.4	fail	fail	feature	setup: invalid command name "mcforgetpackage"
+msgcat.test	msgcat-14.5	fail	fail	feature	setup: invalid command name "mcforgetpackage"
+msgcat.test	msgcat-14.6	fail	fail	feature	setup: invalid command name "mcforgetpackage"
 msgcat.test	msgcat-2.1	pass	pass		
 msgcat.test	msgcat-2.2	pass	pass		
 msgcat.test	msgcat-2.2.1	pass	pass		
-msgcat.test	msgcat-2.3	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-2.4	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-2.5	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-2.6	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-2.7	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-3.10	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.11	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.12	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.13	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.14	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.15	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.16	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.2	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.3	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.4	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.5	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.6	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.7	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.8	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-3.9	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-4.2	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-4.3	fail	fail	feature	setup: invalid command name "mcset"
+msgcat.test	msgcat-2.3	fail	fail	feature	code 0/0,2: con1baz \| want: con1bar
+msgcat.test	msgcat-2.4	pass	pass		
+msgcat.test	msgcat-2.5	pass	pass		
+msgcat.test	msgcat-2.6	fail	fail	feature	code 0/0,2: con2baz \| want: con2bar
+msgcat.test	msgcat-2.7	pass	pass		
+msgcat.test	msgcat-3.10	pass	pass		
+msgcat.test	msgcat-3.11	pass	pass		
+msgcat.test	msgcat-3.12	pass	pass		
+msgcat.test	msgcat-3.13	pass	pass		
+msgcat.test	msgcat-3.14	pass	pass		
+msgcat.test	msgcat-3.15	pass	pass		
+msgcat.test	msgcat-3.16	pass	pass		
+msgcat.test	msgcat-3.2	pass	pass		
+msgcat.test	msgcat-3.3	pass	pass		
+msgcat.test	msgcat-3.4	pass	pass		
+msgcat.test	msgcat-3.5	pass	pass		
+msgcat.test	msgcat-3.6	pass	pass		
+msgcat.test	msgcat-3.7	pass	pass		
+msgcat.test	msgcat-3.8	pass	pass		
+msgcat.test	msgcat-3.9	pass	pass		
+msgcat.test	msgcat-4.2	pass	pass		
+msgcat.test	msgcat-4.3	pass	pass		
 msgcat.test	msgcat-4.4	fail	fail	feature	setup: can't rename "msgcat::mcunknown": command doesn't exist
 msgcat.test	msgcat-4.5	fail	fail	feature	setup: can't rename "msgcat::mcunknown": command doesn't exist
 msgcat.test	msgcat-4.6	fail	fail	feature	setup: can't rename "msgcat::mcunknown": command doesn't exist
-msgcat.test	msgcat-5.1	fail	fail	feature	setup: invalid command name "mclocale"
+msgcat.test	msgcat-5.1	fail	fail	feature	setup: invalid command name "::msgcat::mcloadedlocales"
 msgcat.test	msgcat-5.10	fail	fail	feature	setup: can't rename "msgcat::mcunknown": command doesn't exist
-msgcat.test	msgcat-5.11	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-5.2	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-5.3	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-5.4	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-5.5	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-5.6	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-5.7	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-5.8	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-5.9	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-6.1	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-6.10	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-6.11	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-6.12	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-6.2	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-6.3	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-6.4	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-6.5	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-6.6	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-6.7	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-6.8	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-6.9	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-7.1	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-7.2	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-7.3	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-7.4	fail	fail	feature	setup: invalid command name "mcset"
-msgcat.test	msgcat-8.1	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-8.2	fail	fail	feature	setup: invalid command name "mclocale"
-msgcat.test	msgcat-9.1	fail	fail	feature	code 1/1: invalid command name "mcexists" \| want: wrong # args: should be "mcexists ?-exactnamespace? ?-exactlocale? src"
-msgcat.test	msgcat-9.2	fail	fail	feature	code 1/1: invalid command name "mcexists" \| want: unknown option "-unknown"
+msgcat.test	msgcat-5.11	fail	fail	feature	setup: invalid command name "mcloadedlocales"
+msgcat.test	msgcat-5.2	fail	fail	feature	setup: invalid command name "::msgcat::mcloadedlocales"
+msgcat.test	msgcat-5.3	fail	fail	feature	setup: invalid command name "::msgcat::mcloadedlocales"
+msgcat.test	msgcat-5.4	fail	fail	feature	cleanup: invalid command name "mcloadedlocales"
+msgcat.test	msgcat-5.5	fail	fail	feature	cleanup: invalid command name "mcloadedlocales"
+msgcat.test	msgcat-5.6	pass	pass		
+msgcat.test	msgcat-5.7	pass	pass		
+msgcat.test	msgcat-5.8	pass	pass		
+msgcat.test	msgcat-5.9	pass	pass		
+msgcat.test	msgcat-6.1	pass	pass		
+msgcat.test	msgcat-6.10	pass	pass		
+msgcat.test	msgcat-6.11	pass	pass		
+msgcat.test	msgcat-6.12	pass	pass		
+msgcat.test	msgcat-6.2	fail	fail	feature	code 0/0,2: ov2_foo_bar \| want: ov2_foo
+msgcat.test	msgcat-6.3	fail	fail	feature	code 0/0,2: ov3_foo_bar_baz \| want: ov3_foo
+msgcat.test	msgcat-6.4	pass	pass		
+msgcat.test	msgcat-6.5	pass	pass		
+msgcat.test	msgcat-6.6	pass	pass		
+msgcat.test	msgcat-6.7	fail	fail	feature	code 0/0,2: ov3_foo_bar_baz \| want: ov3_foo_bar
+msgcat.test	msgcat-6.8	pass	pass		
+msgcat.test	msgcat-6.9	pass	pass		
+msgcat.test	msgcat-7.1	pass	pass		
+msgcat.test	msgcat-7.2	pass	pass		
+msgcat.test	msgcat-7.3	pass	pass		
+msgcat.test	msgcat-7.4	pass	pass		
+msgcat.test	msgcat-8.1	fail	fail	feature	setup: invalid command name "::msgcat::mcflset"
+msgcat.test	msgcat-8.2	fail	fail	feature	setup: invalid command name "::msgcat::mcflset"
+msgcat.test	msgcat-9.1	fail	fail	feature	code 1/1: wrong # args: should be "::msgcat::mcexists ?-exactnamespace? ?-exactlocale? src" \| want: wrong # args: should be "mcexists ?-exactnamespace? ?-exactlocale? src"
+msgcat.test	msgcat-9.2	fail	fail	feature	code 0/1: 0 \| want: unknown option "-unknown"
 msgcat.test	msgcat-9.3	fail	fail	feature	setup: invalid command name "mcforgetpackage"
 msgcat.test	msgcat-9.4	fail	fail	feature	setup: invalid command name "mcforgetpackage"
 msgcat.test	msgcat-9.5	fail	fail	feature	setup: invalid command name "mcforgetpackage"
@@ -35986,7 +36018,7 @@ parse.test	parse-7.1	skip	skip	internals	testparser
 parse.test	parse-8.1	skip	skip	internals	testevalobjv
 parse.test	parse-8.10	skip	skip	internals	testevalobjv
 parse.test	parse-8.11	skip	skip	internals	testevalobjv
-parse.test	parse-8.12	fail	fail	bug	code 1/0,2: invalid command name "noSuchCommand" \| want: global
+parse.test	parse-8.12	fail	fail	bug	code 0/0,2: ns \| want: global
 parse.test	parse-8.2	skip	skip	internals	testevalobjv
 parse.test	parse-8.3	skip	skip	internals	testevalobjv
 parse.test	parse-8.4	skip	skip	internals	testevalobjv
@@ -38295,7 +38327,7 @@ rename.test	rename-4.5	skip	skip	internals	testdel
 rename.test	rename-4.6	skip	skip	internals	testdel
 rename.test	rename-4.7	skip	skip	internals	testdel
 rename.test	rename-4.8	skip	skip	internals	testdel
-rename.test	rename-5.1	fail	fail	bug	code 1/0,2: wrong # args: should be "proc name args body" \| want: 
+rename.test	rename-5.1	fail	fail	bug	code 1/0,2: invalid command name "tcl_wordBreakBefore" \| want: 
 rename.test	rename-6.1	pass	pass		
 resolver.test	resolver-1.1	skip	skip	internals	testinterpresolver
 resolver.test	resolver-1.2	skip	skip	internals	testinterpresolver
@@ -38396,13 +38428,13 @@ safe.test	safe-4.1	fail	fail	feature	code 1/0,2: interpreter named "a" already e
 safe.test	safe-4.2	fail	fail	feature	code 1/0,2: interpreter named "a" already exists, cannot create \| want: 
 safe.test	safe-4.5	fail	fail	feature	cleanup: invalid command name "safe::interpDelete"
 safe.test	safe-4.6	fail	fail	feature	code 1/0,2: invalid command name "safe::interpCreate" \| want: 
-safe.test	safe-5.1	fail	fail	feature	cleanup: invalid command name "auto_reset"
-safe.test	safe-5.2	fail	fail	feature	cleanup: invalid command name "auto_reset"
+safe.test	safe-5.1	fail	fail	feature	code 0/0,2: 1 {invalid command name "report1"} 1 {invalid command name "report2"} \| want: 0 ok1 0 ok2
+safe.test	safe-5.2	pass	pass		
 safe.test	safe-5.3	fail	fail	feature	code 0/0,2: 1 {can't find package SafeTestPackage1} 1 {can't find package SafeTestPackage2} 1 {invalid command name "HeresPackage1"} 1 {invalid command  \| want: 0 1.2.3 0 2.3.4 0 OK1 0 OK2
 safe.test	safe-5.4	fail	fail	feature	code 0/0,2: 1 {can't find package SafeTestPackage1} 1 {can't find package SafeTestPackage2} 1 {invalid command name "HeresPackage1"} 1 {invalid command  \| want: 0 1.2.3 0 2.3.4 0 OK1 0 OK2
 safe.test	safe-5.5	fail	fail	feature	setup: invalid command name "tcl::tm::path"
 safe.test	safe-5.6	fail	fail	feature	setup: invalid command name "tcl::tm::path"
-safe.test	safe-6.1	fail	fail	feature	code 0/0,2: errorCode errorInfo oo::patchlevel oo::version tcl_patchLevel tcl_platform tcl_precision tcl_version \| want: tcl_interactive tcl_patchLevel tcl_platform tcl_version
+safe.test	safe-6.1	fail	fail	feature	code 0/0,2: errorCode errorInfo tcl_patchLevel tcl_platform tcl_precision tcl_version \| want: tcl_interactive tcl_patchLevel tcl_platform tcl_version
 safe.test	safe-6.2	pass	pass		
 safe.test	safe-6.3	fail	fail	feature	code 0/0,2: byteOrder engine machine os osVersion platform pointerSize user wordSize \| want: byteOrder engine pathSeparator platform pointerSize wordSize
 safe.test	safe-7.1	fail	fail	feature	setup: invalid command name "safe::interpCreate"
@@ -38871,7 +38903,7 @@ socket.test	socket-15.1.2	pass	pass
 socket.test	socket-15.1.3	pass	pass		
 socket.test	socket-15.1.4	pass	pass		
 socket.test	socket-15.1.5	pass	pass		
-socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2842 \| want: couldn't open socket: connection refused
+socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2844 \| want: couldn't open socket: connection refused
 socket.test	socket-15.1.7	pass	pass		
 socket.test	socket-15.1.8	pass	pass		
 socket.test	socket_inet-1.1	pass	pass		
@@ -39019,21 +39051,21 @@ source.test	source-2.3	pass	pass
 source.test	source-2.4	pass	pass		
 source.test	source-2.5	pass	pass		
 source.test	source-2.6	pass	pass		
-source.test	source-2.7	fail	fail	bug	code 1/0,2: invalid command name "﻿set" \| want: new-y
+source.test	source-2.7	pass	pass		
 source.test	source-3.1	pass	pass		
 source.test	source-3.2	fail	fail	bug	code 2/3: Silly result \| want: Silly result
-source.test	source-3.3	fail	fail	bug	code 0/0,2: 2 {Simulated error} {invalid command name "﻿set"     while executing "﻿set y new-y"     (file "/source.file" line 1)     invoked from within \| want: 1 {Simulated error} {Simulated erro...
-source.test	source-3.4	fail	fail	bug	code 0/0,2: 2 {} {invalid command name "﻿set"     while executing "﻿set y new-y"     (file "/source.file" line 1)     invoked from within "source -encod \| want: 1 {} {Simulated errorInfo stuff    ...
-source.test	source-3.5	fail	fail	bug	code 0/0,2: 2 {} {invalid command name "﻿set"     while executing "﻿set y new-y"     (file "/source.file" line 1)     invoked from within "source -encod \| want: 1 {} {Simulated errorInfo stuff    ...
+source.test	source-3.3	fail	fail	bug	code 0/0,2: 2 {Simulated error} {couldn't read file "/_non_existent_": no such file or directory     while executing "source $sourcefile"} {POSIX ENOENT \| want: 1 {Simulated error} {Simulated erro...
+source.test	source-3.4	fail	fail	bug	code 0/0,2: 2 {} {couldn't read file "/_non_existent_": no such file or directory     while executing "source $sourcefile"} {POSIX ENOENT {no such file  \| want: 1 {} {Simulated errorInfo stuff    ...
+source.test	source-3.5	fail	fail	bug	code 0/0,2: 2 {} {couldn't read file "/_non_existent_": no such file or directory     while executing "source $sourcefile"} {POSIX ENOENT {no such file  \| want: 1 {} {Simulated errorInfo stuff    ...
 source.test	source-4.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: source: 3 4 5
 source.test	source-6.1	pass	pass		
 source.test	source-6.2	pass	pass		
 source.test	source-7.1	pass	pass		
-source.test	source-7.2	fail	fail	feature	setup: unknown encoding "unicode"
-source.test	source-7.3	fail	fail	message	code 1/1: couldn't read file "no_file": no such file or directory \| want: bad option*
-source.test	source-7.4	fail	fail	bug	code 0/1:  \| want: unknown encoding*
+source.test	source-7.2	pass	pass		
+source.test	source-7.3	pass	pass		
+source.test	source-7.4	pass	pass		
 source.test	source-7.5	pass	pass		
-source.test	source-7.6	fail	fail	bug	code 0/1: foo \| want: invalid command name "€"
+source.test	source-7.6	pass	pass		
 source.test	source-8.1	pass	pass		
 split.test	split-1.1	pass	pass		
 split.test	split-1.10	pass	pass		
@@ -39603,12 +39635,12 @@ string.test	string-21.21.0	pass	pass
 string.test	string-21.21.1	pass	pass		
 string.test	string-21.22.0	pass	pass		
 string.test	string-21.22.1	pass	pass		
-string.test	string-21.23.0	fail	fail	bug	code 0/0,2: Hello world! \| want: ��Hello world!��
-string.test	string-21.23.1	fail	fail	bug	code 0/0,2: Hello world! \| want: ��Hello world!��
-string.test	string-21.24.0	fail	fail	bug	code 0/0,2: Hello world!�� \| want: ��Hello world!��
-string.test	string-21.24.1	fail	fail	bug	code 0/0,2: Hello world!�� \| want: ��Hello world!��
-string.test	string-21.25.0	fail	fail	bug	code 0/0,2: ��Hello world! \| want: ��Hello world!��
-string.test	string-21.25.1	fail	fail	bug	code 0/0,2: ��Hello world! \| want: ��Hello world!��
+string.test	string-21.23.0	pass	pass		
+string.test	string-21.23.1	pass	pass		
+string.test	string-21.24.0	pass	pass		
+string.test	string-21.24.1	pass	pass		
+string.test	string-21.25.0	pass	pass		
+string.test	string-21.25.1	pass	pass		
 string.test	string-21.3.0	pass	pass		
 string.test	string-21.3.1	pass	pass		
 string.test	string-21.4.0	pass	pass		
@@ -41411,10 +41443,10 @@ unixFile.test	unixFile-1.6	skip	skip	internals	testfindexecutable
 unixFile.test	unixFile-1.7	skip	skip	internals	testfindexecutable
 unixForkEvent.test	unixforkevent-1.1	skip	skip	internals	testfork
 unixInit.test	unixInit-1.1	pass	pass		
-unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 40693', Got '' \| want: OK
+unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 33409', Got '' \| want: OK
 unixInit.test	unixInit-3.1	pass	pass		
 unixInit.test	unixInit-3.2	fail	fail	bug	code 0/0,2: 1 \| want: 0
-unixInit.test	unixInit-4.1	fail	fail	bug	code 1/0,2: can't read "tcl_pkgPath": no such variable \| want: unix
+unixInit.test	unixInit-4.1	pass	pass		
 unixInit.test	unixInit-5.1	skip	skip	tcl	emptyTest
 unixInit.test	unixInit-6.1	skip	skip	tcl	emptyTest
 unixInit.test	unixInit-7.1	fail	fail	bug	code 1/0: couldn't open "/dev/null": no such file or directory \| want: 
@@ -41672,7 +41704,7 @@ utf.test	utf-11.2	pass	pass
 utf.test	utf-11.3	pass	pass		
 utf.test	utf-11.4	fail	fail	bug	code 0/0,2: ǣGH \| want: ǢGH
 utf.test	utf-11.5	fail	fail	bug	code 0/0,2: აᲐ \| want: ᲐᲐ
-utf.test	utf-11.6	fail	fail	bug	code 0/0,2: 𐐨 \| want: 𐐀
+utf.test	utf-11.6	pass	pass		
 utf.test	utf-11.7	pass	pass		
 utf.test	utf-11.8	pass	pass		
 utf.test	utf-12.1	pass	pass		
@@ -41681,7 +41713,7 @@ utf.test	utf-12.3	pass	pass
 utf.test	utf-12.4	fail	fail	bug	code 0/0,2: Ǣgh \| want: ǣgh
 utf.test	utf-12.5	fail	fail	bug	code 0/0,2: აᲐ \| want: აა
 utf.test	utf-12.6	pass	pass		
-utf.test	utf-12.7	fail	fail	bug	code 0/0,2: 𐐀 \| want: 𐐨
+utf.test	utf-12.7	pass	pass		
 utf.test	utf-12.8	pass	pass		
 utf.test	utf-13.1	pass	pass		
 utf.test	utf-13.2	pass	pass		
@@ -41690,7 +41722,7 @@ utf.test	utf-13.4	pass	pass
 utf.test	utf-13.5	pass	pass		
 utf.test	utf-13.6	pass	pass		
 utf.test	utf-13.7	pass	pass		
-utf.test	utf-13.8	fail	fail	bug	code 0/0,2: 𐐨𐐀 \| want: 𐐀𐐨
+utf.test	utf-13.8	pass	pass		
 utf.test	utf-13.9	pass	pass		
 utf.test	utf-14.1	pass	pass		
 utf.test	utf-14.2	pass	pass		

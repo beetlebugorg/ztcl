@@ -1,6 +1,6 @@
 # Tcl 8.6.16 suite results
 
-`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-27 at commit `368a697`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
+`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-27 at commit `a4712c8`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
 
 A test is applicable when it is outside the buckets `design`, `platform`, `internals`, and `tcl`. The goal of issue 244 is a pass for each applicable test.
 
@@ -8,8 +8,8 @@ A test is applicable when it is outside the buckets `design`, `platform`, `inter
 
 | Run | Total | Pass | Fail | Skip | Unreached |
 |---|---|---|---|---|---|
-| Interpreter | 47,121 | 37,843 | 2,733 | 4,399 | 2,146 |
-| JIT (`-j`) | 47,121 | 37,843 | 2,733 | 4,399 | 2,146 |
+| Interpreter | 47,133 | 37,982 | 2,688 | 4,337 | 2,126 |
+| JIT (`-j`) | 47,133 | 37,982 | 2,688 | 4,337 | 2,126 |
 
 Unreached is the test count of `tools/suite-scope.tsv` minus the tests that ran: the file stopped before them.
 
@@ -28,16 +28,16 @@ The tests of the interpreter run that do not pass, by bucket.
 
 | Bucket | Meaning | Tests |
 |---|---|---|
-| `bug` | A bug in ztcl | 1,053 |
-| `feature` | A missing feature or option | 3,393 |
-| `message` | An error message or -errorcode differs | 148 |
+| `bug` | A bug in ztcl | 1,087 |
+| `feature` | A missing feature or option | 3,233 |
+| `message` | An error message or -errorcode differs | 147 |
 | `internals` | Needs Tcl internals (C test commands, memory debugging) | 3,254 |
 | `design` | Absent by design | 439 |
 | `platform` | Platform only | 736 |
 | `tcl` | Skipped by tclsh too (knownBug, emptyTest, and others) | 255 |
 | `untriaged` | Not triaged yet | 0 |
 
-Applicable tests: 42,437. Pass rate of the applicable tests: 89.2 %.
+Applicable tests: 42,449. Pass rate of the applicable tests: 89.5 %.
 
 ## Reasons
 
@@ -45,19 +45,19 @@ The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the re
 
 | Bucket | Reason | Tests |
 |---|---|---|
-| `bug` | the result differs from tclsh 8.6.16 | 315 |
-| `bug` | channels: the result differs | 145 |
+| `bug` | the result differs from tclsh 8.6.16 | 360 |
+| `bug` | channels: the result differs | 144 |
 | `bug` | namespaces: the result differs | 79 |
+| `bug` | file names and 'glob': the result differs | 71 |
 | `bug` | 'trace': the result differs | 66 |
-| `bug` | file names and 'glob': the result differs | 65 |
-| `bug` | 'clock': the result differs | 62 |
+| `bug` | 'clock': the result differs | 63 |
 | `bug` | 'interp': the result differs | 58 |
 | `bug` | TclOO: the result differs | 49 |
 | `bug` | 'expr': the result differs | 38 |
-| `bug` | encodings: the result differs | 38 |
 | `bug` | 'binary': the result differs | 31 |
+| `bug` | encodings: the result differs | 19 |
+| `bug` | the setup or the cleanup of the test fails | 17 |
 | `bug` | regular expressions: the match differs | 16 |
-| `bug` | the setup or the cleanup of the test fails | 15 |
 | `bug` | safe interpreters: hidden commands and their messages | 14 |
 | `bug` | regular expressions: the error class of a bad pattern | 13 |
 | `bug` | regular expressions: a valid pattern that ztcl does not compile | 11 |
@@ -66,30 +66,26 @@ The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the re
 | `bug` | 'info': the result differs | 9 |
 | `bug` | the standard channels are not in the channel table | 8 |
 | `feature` | the 'http' package | 2,063 |
-| `feature` | a library package of Tcl: safe, msgcat, http, the package index, tcl::tm, or opt | 336 |
+| `feature` | a library package of Tcl: safe, msgcat, http, the package index, tcl::tm, or opt | 283 |
 | `feature` | 'chan create', 'chan push', 'chan pop', 'chan pipe', 'chan truncate' | 196 |
 | `feature` | 'info frame' | 166 |
 | `feature` | the real 'tcltest' package; the suite runs a stand-in | 157 |
 | `feature` | the 'zlib' command | 71 |
-| `feature` | a form of 'clock scan' that ztcl does not parse | 65 |
-| `feature` | the 'history' command | 62 |
 | `feature` | the 'interp' subcommands bgerror, cancel, debug, limit, share, and transfer | 59 |
+| `feature` | a form of 'clock scan' that ztcl does not parse | 52 |
 | `feature` | the REG_U flags of 'regexp -about' | 50 |
 | `feature` | 'file attributes' | 43 |
-| `feature` | the 'msgcat' package | 18 |
-| `feature` | the 'safe' package | 16 |
-| `feature` | 'auto_reset' and the index of the auto-load library | 14 |
-| `feature` | 'glob -type' and the short form of its options | 14 |
+| `feature` | the 'msgcat' package | 21 |
+| `feature` | the 'safe' package | 15 |
 | `feature` | the 'opt' package | 14 |
 | `feature` | the slot classes of TclOO ('oo::Slot') | 12 |
 | `feature` | 'tcl::pkgconfig' | 9 |
 | `feature` | 'file mtime' and 'file atime' with a new time | 6 |
 | `feature` | 'tcl::unsupported::inject' and 'corotype' | 6 |
-| `feature` | an encoding that ztcl does not have | 6 |
 | `feature` | 'info hostname', and '~' with no 'env(HOME)' | 5 |
 | `feature` | 'info errorstack' | 3 |
 | `feature` | the 'platform' package | 2 |
-| `message` | an error where tclsh also gives one, with another message | 147 |
+| `message` | an error where tclsh also gives one, with another message | 146 |
 | `message` | the -errorcode differs | 1 |
 
 ## JIT differences
@@ -113,7 +109,7 @@ Each test has the same result in the two runs.
 | case.test | in | 15 | 15 | 0 | 0 | 0 | 15 | 0 | 0 |
 | chan.test | decide | 41 | 25 | 16 | 0 | 0 | 25 | 16 | 0 |
 | chanio.test | decide | 777 | 330 | 59 | 388 | 0 | 330 | 59 | 388 |
-| clock.test | decide | 8,532 | 8,390 | 132 | 7 | 3 | 8,390 | 132 | 7 |
+| clock.test | decide | 8,532 | 8,402 | 120 | 7 | 3 | 8,402 | 120 | 7 |
 | cmdAH.test | decide | 323 | 99 | 42 | 182 | 0 | 99 | 42 | 182 |
 | cmdIL.test | in | 146 | 137 | 3 | 6 | 0 | 137 | 3 | 6 |
 | cmdInfo.test | na | 12 | 0 | 0 | 12 | 0 | 0 | 0 | 12 |
@@ -127,7 +123,7 @@ Each test has the same result in the two runs.
 | dcall.test | na | 6 | 0 | 0 | 6 | 0 | 0 | 0 | 6 |
 | dict.test | in | 342 | 317 | 23 | 2 | 0 | 317 | 23 | 2 |
 | dstring.test | na | 44 | 0 | 0 | 44 | 0 | 0 | 0 | 44 |
-| encoding.test | decide | 101 | 63 | 20 | 18 | 0 | 63 | 20 | 18 |
+| encoding.test | decide | 101 | 82 | 1 | 18 | 0 | 82 | 1 | 18 |
 | env.test | decide | 26 | 8 | 14 | 4 | 0 | 8 | 14 | 4 |
 | error.test | in | 317 | 300 | 9 | 8 | 0 | 300 | 9 | 8 |
 | eval.test | in | 12 | 11 | 1 | 0 | 0 | 11 | 1 | 0 |
@@ -137,15 +133,15 @@ Each test has the same result in the two runs.
 | expr-old.test | in | 460 | 433 | 11 | 16 | 0 | 433 | 11 | 16 |
 | expr.test | in | 14,185 | 14,124 | 27 | 34 | 0 | 14,124 | 27 | 34 |
 | fCmd.test | decide | 256 | 124 | 83 | 48 | 1 | 124 | 83 | 48 |
-| fileName.test | decide | 300 | 50 | 69 | 176 | 5 | 50 | 69 | 176 |
-| fileSystem.test | decide | 137 | 37 | 41 | 59 | 0 | 37 | 41 | 59 |
+| fileName.test | decide | 300 | 58 | 61 | 176 | 5 | 58 | 61 | 176 |
+| fileSystem.test | decide | 137 | 38 | 40 | 59 | 0 | 38 | 40 | 59 |
 | fileSystemEncoding.test | decide | 1 | 0 | 1 | 0 | 0 | 0 | 1 | 0 |
 | for-old.test | in | 9 | 9 | 0 | 0 | 0 | 9 | 0 | 0 |
 | for.test | in | 88 | 61 | 3 | 24 | 0 | 61 | 3 | 24 |
 | foreach.test | in | 43 | 41 | 2 | 0 | 0 | 41 | 2 | 0 |
 | format.test | in | 266 | 255 | 2 | 9 | 0 | 255 | 2 | 9 |
 | get.test | in | 22 | 5 | 1 | 16 | 0 | 5 | 1 | 16 |
-| history.test | decide | 62 | 0 | 0 | 62 | 0 | 0 | 0 | 62 |
+| history.test | decide | 62 | 17 | 45 | 0 | 0 | 17 | 45 | 0 |
 | http.test | decide | 75 | 2 | 62 | 11 | 0 | 2 | 62 | 11 |
 | http11.test | decide | 43 | 0 | 42 | 1 | 0 | 0 | 42 | 1 |
 | httpPipeline.test | decide | 1,996 | 0 | 0 | 0 | 1,996 | 0 | 0 | 0 |
@@ -156,10 +152,10 @@ Each test has the same result in the two runs.
 | incr.test | in | 66 | 62 | 4 | 0 | 0 | 62 | 4 | 0 |
 | indexObj.test | na | 45 | 0 | 0 | 45 | 0 | 0 | 0 | 45 |
 | info.test | in | 266 | 106 | 157 | 3 | 0 | 106 | 157 | 3 |
-| init.test | decide | 24 | 0 | 10 | 0 | 14 | 0 | 10 | 0 |
+| init.test | decide | 36 | 17 | 19 | 0 | 0 | 17 | 19 | 0 |
 | interp.test | decide | 352 | 198 | 141 | 13 | 0 | 198 | 141 | 13 |
 | io.test | decide | 830 | 364 | 79 | 387 | 0 | 364 | 79 | 387 |
-| ioCmd.test | decide | 348 | 95 | 151 | 102 | 0 | 95 | 151 | 102 |
+| ioCmd.test | decide | 348 | 98 | 148 | 102 | 0 | 98 | 148 | 102 |
 | ioTrans.test | decide | 106 | 2 | 67 | 37 | 0 | 2 | 67 | 37 |
 | iogt.test | decide | 17 | 0 | 0 | 17 | 0 | 0 | 0 | 17 |
 | join.test | in | 10 | 10 | 0 | 0 | 0 | 10 | 0 | 0 |
@@ -182,7 +178,7 @@ Each test has the same result in the two runs.
 | main.test | decide | 67 | 13 | 18 | 36 | 0 | 13 | 18 | 36 |
 | mathop.test | in | 349 | 347 | 2 | 0 | 0 | 347 | 2 | 0 |
 | misc.test | in | 301 | 1 | 1 | 299 | 0 | 1 | 1 | 299 |
-| msgcat.test | decide | 109 | 3 | 100 | 0 | 6 | 3 | 100 | 0 |
+| msgcat.test | decide | 109 | 49 | 60 | 0 | 0 | 49 | 60 | 0 |
 | namespace-old.test | in | 126 | 114 | 12 | 0 | 0 | 114 | 12 | 0 |
 | namespace.test | in | 313 | 235 | 75 | 3 | 0 | 235 | 75 | 3 |
 | notify.test | na | 23 | 0 | 0 | 23 | 0 | 0 | 0 | 23 |
@@ -209,16 +205,16 @@ Each test has the same result in the two runs.
 | resolver.test | na | 10 | 0 | 0 | 10 | 0 | 0 | 0 | 10 |
 | result.test | na | 26 | 1 | 3 | 22 | 0 | 1 | 3 | 22 |
 | safe-stock.test | decide | 4 | 0 | 4 | 0 | 0 | 0 | 4 | 0 |
-| safe.test | decide | 102 | 1 | 92 | 8 | 1 | 1 | 92 | 8 |
+| safe.test | decide | 102 | 2 | 91 | 8 | 1 | 2 | 91 | 8 |
 | scan.test | in | 181 | 162 | 18 | 1 | 0 | 162 | 18 | 1 |
 | security.test | decide | 1 | 1 | 0 | 0 | 0 | 1 | 0 | 0 |
 | set-old.test | in | 153 | 142 | 11 | 0 | 0 | 142 | 11 | 0 |
 | set.test | in | 64 | 61 | 2 | 1 | 0 | 61 | 2 | 1 |
 | socket.test | decide | 175 | 157 | 7 | 11 | 0 | 157 | 7 | 11 |
-| source.test | decide | 23 | 13 | 10 | 0 | 0 | 13 | 10 | 0 |
+| source.test | decide | 23 | 18 | 5 | 0 | 0 | 18 | 5 | 0 |
 | split.test | in | 17 | 16 | 1 | 0 | 0 | 16 | 1 | 0 |
 | stack.test | decide | 3 | 1 | 2 | 0 | 0 | 1 | 2 | 0 |
-| string.test | in | 1,266 | 1,240 | 8 | 18 | 0 | 1,240 | 8 | 18 |
+| string.test | in | 1,266 | 1,246 | 2 | 18 | 0 | 1,246 | 2 | 18 |
 | stringComp.test | in | 279 | 278 | 0 | 1 | 0 | 278 | 0 | 1 |
 | stringObj.test | na | 75 | 0 | 0 | 75 | 0 | 0 | 0 | 75 |
 | subst.test | in | 63 | 60 | 2 | 1 | 0 | 60 | 2 | 1 |
@@ -232,13 +228,13 @@ Each test has the same result in the two runs.
 | unixFCmd.test | decide | 49 | 2 | 28 | 19 | 0 | 2 | 28 | 19 |
 | unixFile.test | decide | 7 | 0 | 0 | 7 | 0 | 0 | 0 | 7 |
 | unixForkEvent.test | na | 1 | 0 | 0 | 1 | 0 | 0 | 0 | 1 |
-| unixInit.test | decide | 8 | 2 | 4 | 2 | 0 | 2 | 4 | 2 |
+| unixInit.test | decide | 8 | 3 | 3 | 2 | 0 | 3 | 3 | 2 |
 | unixNotfy.test | decide | 4 | 2 | 0 | 2 | 0 | 2 | 0 | 2 |
 | unknown.test | in | 7 | 7 | 0 | 0 | 0 | 7 | 0 | 0 |
 | unload.test | decide | 27 | 0 | 7 | 20 | 0 | 0 | 7 | 20 |
 | uplevel.test | in | 57 | 49 | 8 | 0 | 0 | 49 | 8 | 0 |
 | upvar.test | in | 65 | 43 | 14 | 8 | 0 | 43 | 14 | 8 |
-| utf.test | in | 498 | 123 | 21 | 354 | 0 | 123 | 21 | 354 |
+| utf.test | in | 498 | 126 | 18 | 354 | 0 | 126 | 18 | 354 |
 | util.test | in | 2,291 | 2,124 | 23 | 144 | 0 | 2,124 | 23 | 144 |
 | var.test | in | 110 | 66 | 24 | 20 | 0 | 66 | 24 | 20 |
 | while-old.test | in | 15 | 14 | 1 | 0 | 0 | 14 | 1 | 0 |
@@ -817,7 +813,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | clock-33.7 | `bug`: 'clock': the result differs | code 0/0,2: 1 {bad option "-": must be -milliseconds or -microseconds} \| want: 1 {ambi... |
 | clock-34.10 | `bug`: 'clock': the result differs | code 0/0,2: Jan 01,0071 00:00 GMT \| want: Jan 01,1971 00:00 GMT |
 | clock-34.11 | `bug`: 'clock': the result differs | code 0/0,2: Jan 01,0037 00:00 GMT \| want: Jan 01,2037 00:00 GMT |
-| clock-34.12 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Oct 23, 1992 -1 day": syntax error \| w... |
 | clock-34.13 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "19921023": syntax error \| want: Oct 23... |
 | clock-34.15 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "23-Oct-1992": syntax error \| want: Oct... |
 | clock-34.16 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "19921023T235959": syntax error \| want:... |
@@ -831,13 +826,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | clock-34.25 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "00:00:30-0800": syntax error \| want: D... |
 | clock-34.28 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Monday": syntax error \| want: Jan 03, ... |
 | clock-34.29 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "1/1": syntax error \| want: Jan 01, 199... |
-| clock-34.3 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "14 Feb 92": syntax error \| want: 02/14... |
 | clock-34.31 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "19990101": syntax error \| want: Jan 01... |
-| clock-34.32 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "now + 1 minute": syntax error \| want: ... |
-| clock-34.33 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "now +1 minute": syntax error \| want: 9... |
-| clock-34.34 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "now 1 minute": syntax error \| want: 94... |
-| clock-34.35 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "now - 1 minute": syntax error \| want: ... |
-| clock-34.36 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "now -1 minute": syntax error \| want: 9... |
 | clock-34.37 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "20000112": syntax error \| want: Jan 12... |
 | clock-34.38 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "20000112": syntax error \| want: Jan 19... |
 | clock-34.39 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "20000112": syntax error \| want: Jan 13... |
@@ -845,11 +834,11 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | clock-34.40 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "20000112": syntax error \| want: Jan 20... |
 | clock-34.41 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "monday": syntax error \| want: 1991-11-... |
 | clock-34.42 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "2 monday": syntax error \| want: 1991-1... |
-| clock-34.43 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "monday 1 week ago": syntax error \| wan... |
+| clock-34.43 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "monday": syntax error \| want: 1991-11-... |
 | clock-34.44 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "monday": syntax error \| want: 1991-11-... |
 | clock-34.45 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "2 monday": syntax error \| want: 1991-1... |
-| clock-34.46 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "monday 1 week ago": syntax error \| wan... |
-| clock-34.47 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "2 days 2 hours ago": syntax error \| wa... |
+| clock-34.46 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "monday": syntax error \| want: 1991-11-... |
+| clock-34.47 | `bug`: 'clock': the result differs | code 0/0,2: -165600 \| want: 180000 |
 | clock-34.48 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/1: unable to convert date-time string "10:00 11:00": syntax error \| want: unabl... |
 | clock-34.49 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/1: unable to convert date-time string "1/1/2001 2/2/2002": syntax error \| want:... |
 | clock-34.5 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Feb 14, 1992 12:20 PM": syntax error \|... |
@@ -857,24 +846,19 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | clock-34.51 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/1: unable to convert date-time string "Monday Tuesday": syntax error \| want: un... |
 | clock-34.52 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/1: unable to convert date-time string "next January next March": syntax error \|... |
 | clock-34.53 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "19921023T00:00:00": syntax error \| wan... |
-| clock-34.54 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "1992-10-23T00:00:00": syntax error \| w... |
 | clock-34.59 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "31 Jan 14 23:59:59 -0100": syntax error... |
-| clock-34.6 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Oct 23,1992 15:00": syntax error \| wan... |
 | clock-34.60 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "31 Jan 14 23:59:59 +0100": syntax error... |
 | clock-34.61 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "23:59:59 -0100": syntax error \| want: ... |
 | clock-34.62 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "23:59:59 +0100": syntax error \| want: ... |
 | clock-34.63 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Mon, 30 Jun 2014 23:59:59 CEST": syntax... |
 | clock-34.64 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Fri, 31 Jan 2014 23:59:59 CET": syntax ... |
-| clock-34.65 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "23:59:59 +15 day": syntax error \| want... |
-| clock-34.66 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "23:59:59 -15 day": syntax error \| want... |
 | clock-34.67 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "10:59 pm CET": syntax error \| want: Ja... |
 | clock-34.68 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "10:59 pm +0100": syntax error \| want: ... |
 | clock-34.7 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Oct 23,1992 15:00 GMT": syntax error \|... |
-| clock-34.8 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "Oct 23,1992 15:00": syntax error \| wan... |
 | clock-34.9 | `bug`: 'clock': the result differs | code 0/0,2: 1 {bad option "-bad": must be -base, -format, -gmt, -locale or -timezone} \... |
-| clock-36.1 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "june 1, 2000": syntax error \| want: 06... |
-| clock-36.2 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "june 1, 2000": syntax error \| want: 07... |
-| clock-36.3 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "june 1, 2000": syntax error \| want: 05... |
+| clock-36.1 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "next june": syntax error \| want: 06.2001 |
+| clock-36.2 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "next july": syntax error \| want: 07.2000 |
+| clock-36.3 | `feature`: a form of 'clock scan' that ztcl does not parse | code 1/0,2: unable to convert date-time string "next may": syntax error \| want: 05.2001 |
 | clock-38.1 | `bug`: 'clock': the result differs | code 0/0,2: 00:00:00 \| want: 01:00:00 |
 | clock-38.2 | `bug`: 'clock': the result differs | code 0/0,2: 0 \| want: 1 |
 | clock-42.1 | `bug`: 'clock': the result differs | code 0/0,2: +0000 \| want: -0500 |
@@ -1192,26 +1176,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| encoding-15.10 | `bug`: encodings: the result differs | code 0/0,2: 2 5 efbfbdc3a9 \| want: 2 5 edb882c3a9 |
-| encoding-15.11 | `bug`: encodings: the result differs | code 0/0,2: 2 5 efbfbdc3a9 \| want: 2 5 eda882c3a9 |
-| encoding-15.12 | `bug`: encodings: the result differs | code 0/0,2: 2 4 efbfbd59 \| want: 2 4 edb88259 |
-| encoding-15.13 | `bug`: encodings: the result differs | code 0/0,2: 2 4 efbfbd59 \| want: 2 4 eda88259 |
-| encoding-15.14 | `bug`: encodings: the result differs | code 0/0,2: 1 3 efbfbd \| want: 1 3 edb882 |
-| encoding-15.15 | `bug`: encodings: the result differs | code 0/0,2: 1 3 efbfbd \| want: 1 3 eda882 |
-| encoding-15.4 | `bug`: encodings: the result differs | code 0/0,2: 6 í ½í¸ \| want: 6 �� |
-| encoding-15.5 | `bug`: encodings: the result differs | code 0/0,2: 4 😂 \| want: 4 �� |
-| encoding-15.6 | `bug`: encodings: the result differs | code 0/0,2: 12 efbfbdefbfbdefbfbdefbfbd \| want: 10 edb882f09f9882eda0bd |
-| encoding-15.7 | `bug`: encodings: the result differs | code 0/0,2: 3 9 efbfbdefbfbdefbfbd \| want: 3 9 edb882eda0bdeda0bd |
-| encoding-15.8 | `bug`: encodings: the result differs | code 0/0,2: 3 8 efbfbdefbfbdc3a9 \| want: 3 8 edb882eda0bdc3a9 |
-| encoding-15.9 | `bug`: encodings: the result differs | code 0/0,2: 3 7 efbfbdefbfbd58 \| want: 3 7 edb882eda0bd58 |
-| encoding-16.3 | `bug`: encodings: the result differs | code 0/0,2: ��� ED \| want: � DCDC |
-| encoding-16.4 | `bug`: encodings: the result differs | code 0/0,2: 䅁 \| want: 䅁� |
-| encoding-17.2 | `bug`: encodings: the result differs | code 0/0,2: ýÿ \| want: ÜÜ |
-| encoding-17.3 | `bug`: encodings: the result differs | code 0/0,2: ýÿ \| want: ØØ |
-| encoding-24.1 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso2022-jp" \| want:  |
-| encoding-24.2 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "cp1252" \| want: ab$B8C$(DD%(Bg (ab\u001B$B8C\u001B$(D... |
-| encoding-24.3 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "iso2022-jp" \| want: 3 {乎乞也 (\u4E4E\u4E5E\u4E5F)} |
-| encoding-24.4 | `bug`: encodings: the result differs | code 0/0,2: 2 \| want: 1 |
+| encoding-24.3 | `bug`: encodings: the result differs | code 0/0,2: 9 { (\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000)} \| want: 3 {乎... |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -1482,8 +1447,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | fileName-20.8 | `bug`: file names and 'glob': the result differs | code 0/0,2: ~test \| want: ./~test |
 | fileName-20.9 | `bug`: file names and 'glob': the result differs | setup: couldn't open "~/test": no such file or directory |
 | filename-11.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "glob ?switches? name ?name ...?" \| want: no files m... |
-| filename-11.14 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl1368296/globTest |
-| filename-11.15 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl1368296/globTest |
+| filename-11.14 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl2639770/globTest |
+| filename-11.15 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl2639770/globTest |
 | filename-11.17.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.3 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.4 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
@@ -1491,57 +1456,49 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filename-11.17.8 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.18 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
 | filename-11.19 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest globTest \| want: globTest/a1 globTest/a2 globTest/a3 {globTest/we... |
-| filename-11.20 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
-| filename-11.21 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-11.20 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent \| want: globTest/... |
 | filename-11.21.1 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "*" \| want: {[tcl].testremains} |
-| filename-11.22 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
+| filename-11.22 | `bug`: file names and 'glob': the result differs | code 0/0,2: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/nonexistent gl... |
 | filename-11.23 | `bug`: file names and 'glob': the result differs | code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test/a1 glob\[\{Test/a2 ... |
 | filename-11.24 | `bug`: file names and 'glob': the result differs | code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test/a1 glob\[\{Test/a2 ... |
-| filename-11.25 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
-| filename-11.25.1 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
-| filename-11.25.2 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
-| filename-11.26 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-11.25 | `bug`: file names and 'glob': the result differs | code 0/0,2: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/nonexistent \|... |
+| filename-11.25.1 | `bug`: file names and 'glob': the result differs | code 0/0,2: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/nonexistent gl... |
+| filename-11.25.2 | `bug`: file names and 'glob': the result differs | code 0/0,2: glob\[\{Test/a1 glob\[\{Test/a2 glob\[\{Test/a3 glob\[\{Test/nonexistent gl... |
+| filename-11.26 | `bug`: file names and 'glob': the result differs | code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test |
 | filename-11.27 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde |
 | filename-11.28 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": z |
 | filename-11.29 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: only one MacOS type or creator arg... |
-| filename-11.3 | `bug`: file names and 'glob': the result differs | code 1/0,2: bad option "-nocomplai": must be -directory, -join, -nocomplain, -path, -ta... |
+| filename-11.3 | `bug`: file names and 'glob': the result differs | code 1/0,2: wrong # args: should be "glob ?switches? name ?name ...?" \| want:  |
 | filename-11.30 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: only one MacOS type or creator arg... |
-| filename-11.32 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -ty... |
-| filename-11.34 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-direct": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-11.32 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: "-directory" cannot be used with "... |
 | filename-11.36 | `bug`: file names and 'glob': the result differs | code 0/1: glob\[\{Test ~test.txt \| want: "-tails" must be used with either "-directory... |
-| filename-11.37 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
+| filename-11.37 | `bug`: file names and 'glob': the result differs | code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test |
 | filename-11.38 | `bug`: file names and 'glob': the result differs | code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test |
 | filename-11.39 | `bug`: file names and 'glob': the result differs | code 1/0,2: unmatched open-brace in file name \| want: glob\[\{Test |
 | filename-11.4 | `bug`: file names and 'glob': the result differs | code 1/0,2: wrong # args: should be "glob ?switches? name ?name ...?" \| want:  |
-| filename-11.40 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
-| filename-11.41 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
-| filename-11.42 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
 | filename-11.43 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-t": must be -directory, -join, -nocomplain, -path, -tails, -type... |
 | filename-11.44 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: "-directory" cannot be used with "... |
-| filename-11.45 | `bug`: file names and 'glob': the result differs | code 0/0,2: {} {all.tcl fileName.test httpTest.tcl httpTestScript.tcl httpd httpd11.tcl... |
-| filename-11.46 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -ty... |
+| filename-11.46 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde |
 | filename-11.47 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde |
-| filename-11.48 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -ty... |
+| filename-11.48 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde |
 | filename-11.49 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde |
 | filename-11.5 | `bug`: file names and 'glob': the result differs | code 0/1: all.tcl fileName.test httpTest.tcl httpTestScript.tcl httpd httpd11.tcl inter... |
 | filename-11.50 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: "-path" may only be used once |
-| filename-11.51 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -ty... |
+| filename-11.51 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "*" \| want: "-directory" may only be used once |
 | filename-11.6 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "~xyqrszzz" \| want: user "xyqrszzz" doesn't exist |
 | filename-12.1 | `bug`: file names and 'glob': the result differs | code 0/0,2: {} \| want: . |
 | filename-12.1.2 | `bug`: file names and 'glob': the result differs | code 0/0,2: {} \| want: . |
 | filename-12.1.3 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "" \| want: . |
 | filename-12.5 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "globTest\/x1.c" \| want: globTest/x1.c |
 | filename-12.6 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "globTest\/\x1.c" \| want: globTest/x1.c |
-| filename-12.8 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
 | filename-13.1 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest \| want: globTest/ |
 | filename-13.11 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/x1.c globTest/x1.c globTest/z1.c globTest/z1.c \| want: globTest/x... |
 | filename-13.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/{\}" \| want: unmatched open-brace in... |
 | filename-13.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/}" \| want: unmatched close-brace in ... |
 | filename-14.15 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
-| filename-14.17 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl1368296/globTest/z1.c |
+| filename-14.17 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl2639770/globTest/z1.c |
 | filename-14.22 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "goo/*" \| want: no files matched glob patterns... |
-| filename-14.25 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
-| filename-14.26 | `feature`: 'glob -type' and the short form of its options | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
+| filename-14.26 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
 | filename-14.30 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 \| want: globTest/a1/ |
 | filename-14.7 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
 | filename-14.9 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/.1 \| want: globTest/. globTest/.. globTest/.1 |
@@ -1559,7 +1516,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| filesystem-1.12 | `bug`: file names and 'glob': the result differs | code 1/0,2: bad option "-type": must be -directory, -join, -nocomplain, -path, -tails, ... |
 | filesystem-1.30 | `bug`: file names and 'glob': the result differs | code 0/1: /~noonewiththisname \| want: user "noonewiththisname" doesn't exist |
 | filesystem-1.30.2 | `bug`: file names and 'glob': the result differs | code 0/1: /~nonexistentuser@nonexistentdomain \| want: user "nonexistentuser@nonexisten... |
 | filesystem-1.30.3 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "::env(HOME)": no such variable |
@@ -1571,12 +1527,12 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-1.48 | `bug`: file names and 'glob': the result differs | code 1/0,2: couldn't access "/../": permission denied \| want: ok |
 | filesystem-1.51 | `bug`: file names and 'glob': the result differs | code 1/0,2: couldn't access "/../..": permission denied \| want: ok |
 | filesystem-1.51.1 | `bug`: file names and 'glob': the result differs | code 1/0,2: couldn't access "/../../": permission denied \| want: ok |
-| filesystem-1.53 | `bug`: file names and 'glob': the result differs | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
+| filesystem-1.53 | `bug`: file names and 'glob': the result differs | code 0/0,2: 1 \| want: 0 |
 | filesystem-6.1 | `bug`: file names and 'glob': the result differs | code 0/1: file6 \| want: couldn't open "": no such file or directory |
 | filesystem-6.11 | `bug`: file names and 'glob': the result differs | code 0/0,2: 1 \| want: 0 |
 | filesystem-6.14 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
 | filesystem-6.15 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: could not read "": no such file or directory |
-| filesystem-6.16 | `bug`: file names and 'glob': the result differs | code 0/1: 1795757441 \| want: could not read "": no such file or directory |
+| filesystem-6.16 | `bug`: file names and 'glob': the result differs | code 0/1: 1795766993 \| want: could not read "": no such file or directory |
 | filesystem-6.17 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/1: file mtime with a new time is not available \| want: could not read "": no su... |
 | filesystem-6.18 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: can't create directory "": no such file or directory |
 | filesystem-6.2 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: could not read "": no such file or directory |
@@ -1587,7 +1543,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.25 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "" to "": target file exists \| want: error renaming "": no su... |
 | filesystem-6.27 | `bug`: file names and 'glob': the result differs | code 0/1: / \| want: unrecognised path |
 | filesystem-6.28 | `bug`: file names and 'glob': the result differs | code 0/1: 280 \| want: could not read "": no such file or directory |
-| filesystem-6.3 | `bug`: file names and 'glob': the result differs | code 0/1: 1795757441 \| want: could not read "": no such file or directory |
+| filesystem-6.3 | `bug`: file names and 'glob': the result differs | code 0/1: 1795766993 \| want: could not read "": no such file or directory |
 | filesystem-6.30 | `bug`: file names and 'glob': the result differs | code 0/1: native root \| want: unrecognised path |
 | filesystem-6.32 | `bug`: file names and 'glob': the result differs | code 0/1: directory \| want: could not read "": no such file or directory |
 | filesystem-6.33 | `bug`: file names and 'glob': the result differs | code 0/0,2: 1 \| want: 0 |
@@ -1659,9 +1615,53 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 ### history.test
 
-| Skipped by | Tests | Bucket |
+| Test | Bucket | Result (start) |
 |---|---|---|
-| history | 62 | `feature`: the 'history' command |
+| history-1.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Another test \| want: set b [format {A test %s} string] |
+| history-1.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "::tcl::history::Find ?event?" \| want: wrong # arg... |
+| history-1.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown or ambiguous subcommand "e": must be add, change, clear, event, inf... |
+| history-1.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Another test \| want: set b [format {A test %s} string] |
+| history-10.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "::tcl::unsupported::representation" \| want: 1 2 1 |
+| history-10.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "::tcl::unsupported::representation" \| want: 1 2 1 |
+| history-2.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 12345 |
+| history-2.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: A test string |
+| history-2.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: wrong # args: should be "::tcl::history::Find ?event?" \| want: wrong # arg... |
+| history-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| history-3.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: bad argument "execGorp": should be "exec" |
+| history-3.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| history-3.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: bad argument "a": should be "exec" |
+| history-3.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 444 \| want: 555 |
+| history-3.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 444 \| want: 555 |
+| history-3.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| history-3.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: wrong # args: should be "*history add event \?exec\?" |
+| history-4.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown or ambiguous subcommand "n": must be add, change, clear, event, inf... |
+| history-4.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown or ambiguous subcommand "e": must be add, change, clear, event, inf... |
+| history-4.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown or ambiguous subcommand "n": must be add, change, clear, event, inf... |
+| history-4.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: event "4" is too far in the past \| want: wrong # args: should be "*history... |
+| history-5.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:     10 set a 666     11 set a 666     12 set a 666 \| want:      1  set a {... |
+| history-5.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown or ambiguous subcommand "i": must be add, change, clear, event, inf... |
+| history-5.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: unknown or ambiguous subcommand "i": must be add, change, clear, event, inf... |
+| history-5.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:     10 set a 666     11 set a 666     12 set a 666 \| want:      1  set a {... |
+| history-6.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown or ambiguous subcommand "n": must be add, change, clear, event, inf... |
+| history-6.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| history-6.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: wrong # args: should be "*history keep \?count\?" |
+| history-6.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 \| want: 5 |
+| history-6.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| history-6.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: illegal keep count "-3" |
+| history-6.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: illegal keep count "butter" |
+| history-6.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo3 \| want: foo2 |
+| history-6.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| history-6.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo1 \| want: event "-3" is too far in the past |
+| history-6.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo3 \| want: foo2 |
+| history-6.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo2 \| want:  |
+| history-6.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo1 \| want:  |
+| history-6.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: event "-4" is too far in the past \| want:  |
+| history-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo3 \| want: Testing |
+| history-7.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: unknown or ambiguous subcommand "next": must be add, change, clear, event, ... |
+| history-7.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| history-7.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 16 \| want: wrong # args: should be "*history nextid" |
+| history-8.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
+| history-8.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:      1 Testing \| want:      1  Testing |
 
 ### http.test
 
@@ -2026,18 +2026,23 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 |---|---|---|
 | init-0.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {} 1 NONE \| want: 0 {} 0 {} |
 | init-0.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 0 0 \| want: 1 0 1 |
-| init-1.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: ::foo::bar |
-| init-1.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: global |
-| init-1.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: nocolons |
-| init-1.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: ::sub::nocolons nocolons |
-| init-1.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: ::foo::bar |
-| init-1.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: ::sub::foo::bar ::foo::bar |
-| init-1.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: ::foo::bar |
-| init-1.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "auto_qualify" \| want: foo |
-
-| Skipped by | Tests | Bucket |
-|---|---|---|
-| (file stopped early, status 0) | 14 | `feature`: 'auto_reset' and the index of the auto-load library |
+| init-1.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo::bar \| want: ::foo::bar |
+| init-1.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: sub::nocolons nocolons \| want: ::sub::nocolons nocolons |
+| init-1.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: foo::bar \| want: ::foo::bar |
+| init-1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: sub::foo::bar foo::bar \| want: ::sub::foo::bar ::foo::bar |
+| init-1.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: :foo::::bar \| want: ::foo::bar |
+| init-1.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: :foo \| want: foo |
+| init-2.0 | `bug`: the setup or the cleanup of the test fails | cleanup: can't delete "parray": command doesn't exist |
+| init-2.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: invalid command name "parray" \| want: wrong # args: should be "parray a ?pat... |
+| init-2.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::safe::setLogCmd" \| want:  |
+| init-2.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "::safe::setLogCmd" \| want:  |
+| init-2.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe:::setLogCmd" \| want:  |
+| init-2.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe:::setLogCmd" \| want:  |
+| init-2.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "setLogCmd" \| want:  |
+| init-2.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "setLogCmd" \| want:  |
+| init-2.8 | `bug`: the setup or the cleanup of the test fails | cleanup: can't delete "tcl::HistAdd": command doesn't exist |
+| init-3.0 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "foo:::bar::blah" \| want: 1 |
+| init-5.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 xxx {-code 1 -level 0 -errorcode NONE -errorinfo {xxx     while executing... |
 
 ### interp.test
 
@@ -2049,7 +2054,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | interp-1.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-froboz": must be alias, aliases, cancel, children, create, delet... |
 | interp-11.4 | `bug`: 'interp': the result differs | code 1/0,2: target interpreter for alias "xcommand" in path "x1 x2 x3" is not my descen... |
 | interp-13.4 | `bug`: 'interp': the result differs | code 0/0,2: 0 0 \| want: 1 {wrong # args: should be "a issafe"} |
-| interp-14.11 | `bug`: 'interp': the result differs | setup: bad option "-199989484": must be -safe or -- |
+| interp-14.11 | `bug`: 'interp': the result differs | setup: bad option "-199989160": must be -safe or -- |
 | interp-14.4 | `bug`: 'interp': the result differs | code 0/0,2: 0 a a \| want: 1 {cannot define or rename alias "a": interpreter deleted} {} |
 | interp-14.5 | `bug`: 'interp': the result differs | code 0/0,2: wrong # args: should be "setx x"     while executing "a 1 2" \| want: wrong... |
 | interp-14.6 | `bug`: 'interp': the result differs | code 0/0,2: wrong # args: should be "setx x"     invoked from within "a 1 2"     invoke... |
@@ -2181,7 +2186,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | interp-38.6 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, cancel, children, create, delete,... |
 | interp-38.7 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, cancel, children, create, delete,... |
 | interp-38.8 | `feature`: the 'interp' subcommands bgerror, cancel, debug, limit, s... | code 1/1: bad option "debug": must be alias, aliases, cancel, children, create, delete,... |
-| interp-7.6 | `bug`: 'interp': the result differs | code 0/1: bar foo \| want: wrong # args: should be "a aliases" |
+| interp-7.6 | `bug`: 'interp': the result differs | code 0/1: foo bar \| want: wrong # args: should be "a aliases" |
 | interp-8.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "interp alias childPath childCmd ?targetPath targetCm... |
 | interp-9.4 | `bug`: 'interp': the result differs | code 0/0,2: GLOBAL NAMESPACE \| want: GLOBAL GLOBAL |
 
@@ -2296,7 +2301,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | iocmd-11.1 | `bug`: channels: the result differs | code 0/0,2: 1 {can't write input to command: standard input was redirected} NONE \| wan... |
 | iocmd-11.2 | `bug`: channels: the result differs | code 0/0,2: 1 {can't read output from command: standard output was redirected} NONE \| ... |
 | iocmd-11.3 | `bug`: channels: the result differs | code 0/0,2: 1 {can't read output from command: standard output was redirected} NONE \| ... |
-| iocmd-12.11 | `bug`: channels: the result differs | code 0/0,2: É \| want: H |
 | iocmd-12.4 | `bug`: channels: the result differs | code 0/0,2: -1 \| want: 0 |
 | iocmd-12.6 | `bug`: channels: the result differs | code 0/0,2: 1 unmatched open brace in list unmatched open brace in list     while execu... |
 | iocmd-12.7 | `bug`: channels: the result differs | code 0/0,2: 1 {invalid access mode "FOO": must be APPEND, BINARY, CREAT, EXCL, NOCTTY, ... |
@@ -2440,8 +2444,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | iocmd-4.9 | `bug`: channels: the result differs | code 0/0,2: 1 {expected non-negative integer but got "foo"} NONE \| want: 1 {expected n... |
 | iocmd-8.15.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: bad option "-blah": should be one of -blocking, -buffering, -buffersize, -enc... |
 | iocmd-8.2 | `bug`: channels: the result differs | code 0/0,2: 1 {can not find channel named "a"} \| want: 1 {wrong # args: should be "fco... |
-| iocmd-8.7 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "unicode" \| want: -blocking 1 -buffering full -buffersize... |
-| iocmd-8.8 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "unicode" \| want: line {-blocking 1 -buffering line -buff... |
 | iocmd-8.9 | `bug`: channels: the result differs | code 0/0,2: -blocking 1 -buffering none -buffersize 4040 -encoding binary -eofchar {} -... |
 
 | Skipped by | Tests | Bucket |
@@ -2672,102 +2674,58 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | msgcat-0.5 | `feature`: the 'msgcat' package | setup: invalid command name "i" |
 | msgcat-0.6 | `feature`: the 'msgcat' package | setup: invalid command name "i" |
 | msgcat-0.7 | `feature`: the 'msgcat' package | setup: invalid command name "i" |
-| msgcat-1.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-1.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-1.12 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-1.13 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-1.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-1.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-1.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-1.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-1.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-1.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-1.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-1.12 | `feature`: the 'msgcat' package | code 0/1: /path/to/evil/code \| want: invalid newLocale value * |
+| msgcat-1.13 | `feature`: the 'msgcat' package | code 0/1: looks/ok/../../../../but/is/path/to/evil/code \| want: invalid newLocale value * |
 | msgcat-10.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcloadedlocales" \| want: wrong # args: should be "mclo... |
 | msgcat-10.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcloadedlocales" \| want: unknown subcommand "junk": mu... |
 | msgcat-10.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
 | msgcat-10.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
-| msgcat-11.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-11.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-11.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "mcforgetpackage" \| want: 1 0 |
+| msgcat-11.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "mcpackagelocale" \| want: bar foo |
 | msgcat-11.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "mcpackageconfig" \| want: 1 0 |
 | msgcat-12.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcpackagelocale" \| want: wrong # args: should be "mcpa... |
-| msgcat-12.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-12.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "mcforgetpackage" |
 | msgcat-12.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcpackagelocale" \| want: unknown subcommand "junk": mu... |
-| msgcat-12.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-12.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-12.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-12.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-12.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-12.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-12.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-12.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "mcforgetpackage" |
+| msgcat-12.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "mcforgetpackage" |
+| msgcat-12.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "mcforgetpackage" |
+| msgcat-12.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "mcforgetpackage" |
+| msgcat-12.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "mcforgetpackage" |
+| msgcat-12.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "mcforgetpackage" |
+| msgcat-12.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "mcforgetpackage" |
 | msgcat-13.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcpackageconfig" \| want: wrong # args: should be "mcpa... |
 | msgcat-13.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcpackageconfig" \| want: unknown subcommand "junk": mu... |
 | msgcat-13.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcpackageconfig" \| want: bad option "junk": must be mc... |
 | msgcat-13.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
 | msgcat-13.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
-| msgcat-2.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-2.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-2.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-2.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-2.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-3.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.12 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.13 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.14 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.15 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.16 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-3.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-4.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-4.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
+| msgcat-14.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
+| msgcat-14.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
+| msgcat-14.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
+| msgcat-14.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
+| msgcat-14.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
+| msgcat-14.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
+| msgcat-2.3 | `feature`: the 'msgcat' package | code 0/0,2: con1baz \| want: con1bar |
+| msgcat-2.6 | `feature`: the 'msgcat' package | code 0/0,2: con2baz \| want: con2bar |
 | msgcat-4.4 | `feature`: the 'msgcat' package | setup: can't rename "msgcat::mcunknown": command doesn't exist |
 | msgcat-4.5 | `feature`: the 'msgcat' package | setup: can't rename "msgcat::mcunknown": command doesn't exist |
 | msgcat-4.6 | `feature`: the 'msgcat' package | setup: can't rename "msgcat::mcunknown": command doesn't exist |
-| msgcat-5.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
+| msgcat-5.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::msgcat::mcloadedlocales" |
 | msgcat-5.10 | `feature`: the 'msgcat' package | setup: can't rename "msgcat::mcunknown": command doesn't exist |
-| msgcat-5.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-5.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-5.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-5.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-5.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-5.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-5.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-5.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-5.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-6.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-6.10 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-6.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-6.12 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-6.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-6.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-6.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-6.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-6.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-6.7 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-6.8 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-6.9 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-7.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-7.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-7.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-7.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcset" |
-| msgcat-8.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-8.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mclocale" |
-| msgcat-9.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcexists" \| want: wrong # args: should be "mcexists ?-... |
-| msgcat-9.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/1: invalid command name "mcexists" \| want: unknown option "-unknown" |
+| msgcat-5.11 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcloadedlocales" |
+| msgcat-5.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::msgcat::mcloadedlocales" |
+| msgcat-5.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::msgcat::mcloadedlocales" |
+| msgcat-5.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "mcloadedlocales" |
+| msgcat-5.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "mcloadedlocales" |
+| msgcat-6.2 | `feature`: the 'msgcat' package | code 0/0,2: ov2_foo_bar \| want: ov2_foo |
+| msgcat-6.3 | `feature`: the 'msgcat' package | code 0/0,2: ov3_foo_bar_baz \| want: ov3_foo |
+| msgcat-6.7 | `feature`: the 'msgcat' package | code 0/0,2: ov3_foo_bar_baz \| want: ov3_foo_bar |
+| msgcat-8.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::msgcat::mcflset" |
+| msgcat-8.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "::msgcat::mcflset" |
+| msgcat-9.1 | `feature`: the 'msgcat' package | code 1/1: wrong # args: should be "::msgcat::mcexists ?-exactnamespace? ?-exactlocale? ... |
+| msgcat-9.2 | `feature`: the 'msgcat' package | code 0/1: 0 \| want: unknown option "-unknown" |
 | msgcat-9.3 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
 | msgcat-9.4 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
 | msgcat-9.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "mcforgetpackage" |
-
-| Skipped by | Tests | Bucket |
-|---|---|---|
-| (file stopped early, status 0) | 6 | `feature`: the 'msgcat' package |
 
 ### namespace-old.test
 
@@ -3090,7 +3048,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | parse-18.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 abc, \| want: 1 {extra characters after close-brace} |
 | parse-19.1 | `bug`: the setup or the cleanup of the test fails | setup: invalid command name "load" |
 | parse-19.2 | `bug`: the setup or the cleanup of the test fails | setup: invalid command name "load" |
-| parse-8.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "noSuchCommand" \| want: global |
+| parse-8.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ns \| want: global |
 | parse-9.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read "x": no such variable     while executing "set x"     invoked... |
 
 | Skipped by | Tests | Bucket |
@@ -3339,7 +3297,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| rename-5.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: wrong # args: should be "proc name args body" \| want:  |
+| rename-5.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "tcl_wordBreakBefore" \| want:  |
 
 | Skipped by | Tests | Bucket |
 |---|---|---|
@@ -3431,13 +3389,12 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | safe-4.2 | `feature`: the 'safe' package | code 1/0,2: interpreter named "a" already exists, cannot create \| want:  |
 | safe-4.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | cleanup: invalid command name "safe::interpDelete" |
 | safe-4.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want:  |
-| safe-5.1 | `feature`: the 'safe' package | cleanup: invalid command name "auto_reset" |
-| safe-5.2 | `feature`: the 'safe' package | cleanup: invalid command name "auto_reset" |
+| safe-5.1 | `feature`: the 'safe' package | code 0/0,2: 1 {invalid command name "report1"} 1 {invalid command name "report2"} \| wa... |
 | safe-5.3 | `feature`: the 'safe' package | code 0/0,2: 1 {can't find package SafeTestPackage1} 1 {can't find package SafeTestPacka... |
 | safe-5.4 | `feature`: the 'safe' package | code 0/0,2: 1 {can't find package SafeTestPackage1} 1 {can't find package SafeTestPacka... |
 | safe-5.5 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "tcl::tm::path" |
 | safe-5.6 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "tcl::tm::path" |
-| safe-6.1 | `feature`: the 'safe' package | code 0/0,2: errorCode errorInfo oo::patchlevel oo::version tcl_patchLevel tcl_platform ... |
+| safe-6.1 | `feature`: the 'safe' package | code 0/0,2: errorCode errorInfo tcl_patchLevel tcl_platform tcl_precision tcl_version \... |
 | safe-6.3 | `feature`: the 'safe' package | code 0/0,2: byteOrder engine machine os osVersion platform pointerSize user wordSize \|... |
 | safe-7.1 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | setup: invalid command name "safe::interpCreate" |
 | safe-7.2 | `feature`: a library package of Tcl: safe, msgcat, http, the package... | code 1/0,2: invalid command name "safe::interpCreate" \| want: {$p(:0:)} {$p(:*:)} {$p(... |
@@ -3540,7 +3497,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | socket-14.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: couldn't open socket: the network policy does not allow the address "192.0.2.... |
 | socket-14.8.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ok |
 | socket-14.8.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {connection refused} {} \| want: {error reading "sock*": socket is not c... |
-| socket-15.1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: sock2842 \| want: couldn't open socket: connection refused |
+| socket-15.1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: sock2844 \| want: couldn't open socket: connection refused |
 | socket_inet-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ready timed_out \| want: ready done |
 | socket_inet6-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ready timed_out \| want: ready done |
 
@@ -3554,16 +3511,11 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| source-2.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "﻿set" \| want: new-y |
 | source-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 2/3: Silly result \| want: Silly result |
-| source-3.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {Simulated error} {invalid command name "﻿set"     while executing "﻿set ... |
-| source-3.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {} {invalid command name "﻿set"     while executing "﻿set y new-y"     (f... |
-| source-3.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {} {invalid command name "﻿set"     while executing "﻿set y new-y"     (f... |
+| source-3.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {Simulated error} {couldn't read file "/_non_existent_": no such file or ... |
+| source-3.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {} {couldn't read file "/_non_existent_": no such file or directory     w... |
+| source-3.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 {} {couldn't read file "/_non_existent_": no such file or directory     w... |
 | source-4.1 | `feature`: 'info frame' | code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, comm... |
-| source-7.2 | `feature`: an encoding that ztcl does not have | setup: unknown encoding "unicode" |
-| source-7.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: couldn't read file "no_file": no such file or directory \| want: bad option* |
-| source-7.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: unknown encoding* |
-| source-7.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: foo \| want: invalid command name "€" |
 
 ### split.test
 
@@ -3582,12 +3534,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| string-21.23.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Hello world! \| want: ��Hello world!�� |
-| string-21.23.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Hello world! \| want: ��Hello world!�� |
-| string-21.24.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Hello world!�� \| want: ��Hello world!�� |
-| string-21.24.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Hello world!�� \| want: ��Hello world!�� |
-| string-21.25.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ��Hello world! \| want: ��Hello world!�� |
-| string-21.25.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ��Hello world! \| want: ��Hello world!�� |
 | string-24.15.0 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "tcl::string::reverse" \| want: 030201 |
 | string-24.15.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: invalid command name "tcl::string::reverse" \| want: 030201 |
 
@@ -3870,9 +3816,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 40693', Got '' \| want: OK |
+| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 33409', Got '' \| want: OK |
 | unixInit-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
-| unixInit-4.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "tcl_pkgPath": no such variable \| want: unix |
 | unixInit-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0: couldn't open "/dev/null": no such file or directory \| want:  |
 
 | Skipped by | Tests | Bucket |
@@ -3950,11 +3895,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | utf-10.62 | `bug`: encodings: the result differs | code 0/0,2: 65533 \| want: 1048575 |
 | utf-11.4 | `bug`: encodings: the result differs | code 0/0,2: ǣGH \| want: ǢGH |
 | utf-11.5 | `bug`: encodings: the result differs | code 0/0,2: აᲐ \| want: ᲐᲐ |
-| utf-11.6 | `bug`: encodings: the result differs | code 0/0,2: 𐐨 \| want: 𐐀 |
 | utf-12.4 | `bug`: encodings: the result differs | code 0/0,2: Ǣgh \| want: ǣgh |
 | utf-12.5 | `bug`: encodings: the result differs | code 0/0,2: აᲐ \| want: აა |
-| utf-12.7 | `bug`: encodings: the result differs | code 0/0,2: 𐐀 \| want: 𐐨 |
-| utf-13.8 | `bug`: encodings: the result differs | code 0/0,2: 𐐨𐐀 \| want: 𐐀𐐨 |
 | utf-16.2 | `bug`: encodings: the result differs | code 0/0,2: ÿÿꞍǆ \| want: ÿÿɥǆ |
 | utf-18.3 | `bug`: encodings: the result differs | code 0/0,2: ſ \| want: S |
 | utf-21.11 | `bug`: encodings: the result differs | code 0/0,2: 0 \| want: 1 |
