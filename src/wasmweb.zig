@@ -242,7 +242,7 @@ pub fn Commands(comptime gpa: std.mem.Allocator) type {
 
         /// The calls of the channels of the ports to the host.
         fn streamCall(it: *Interp, op: wasmfiles.StreamOp, id: u32, data: []const u8) Error!void {
-            _ = try call(it, gpa, @enumFromInt(@backingInt(op)), @intCast(id), "", data);
+            _ = try call(it, gpa, @fromBackingInt(@intCast(@backingInt(op))), @intCast(id), "", data);
         }
 
         pub const stream_host: wasmfiles.StreamHost = .{ .call = streamCall };
