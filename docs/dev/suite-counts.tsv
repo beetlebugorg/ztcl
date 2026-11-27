@@ -8,12 +8,12 @@ assocd.test	0	0
 async.test	0	0
 autoMkindex.test	1	1
 basic.test	100	100
-binary.test	602	602
+binary.test	604	604
 case.test	15	15
 chan.test	25	25
-chanio.test	302	302
+chanio.test	330	330
 clock.test	8390	8390
-cmdAH.test	95	95
+cmdAH.test	99	99
 cmdIL.test	137	137
 cmdInfo.test	0	0
 cmdMZ.test	82	82
@@ -26,7 +26,7 @@ coroutine.test	37	37
 dcall.test	0	0
 dict.test	317	317
 dstring.test	0	0
-encoding.test	11	11
+encoding.test	63	63
 env.test	8	8
 error.test	300	300
 eval.test	11	11
@@ -57,8 +57,8 @@ indexObj.test	0	0
 info.test	106	106
 init.test	0	0
 interp.test	198	198
-io.test	317	317
-ioCmd.test	94	94
+io.test	364	364
+ioCmd.test	95	95
 ioTrans.test	2	2
 iogt.test	0	0
 join.test	10	10
@@ -87,7 +87,7 @@ namespace.test	235	235
 notify.test	0	0
 nre.test	4	4
 obj.test	3	3
-oo.test	214	214
+oo.test	216	216
 ooNext2.test	50	50
 opt.test	0	0
 package.test	357	357
@@ -151,4 +151,4 @@ winPipe.test	0	0
 winTime.test	0	0
 word.test	45	45
 zlib.test	0	0
-total	37707	37707
+total	37843	37843

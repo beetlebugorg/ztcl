@@ -957,8 +957,8 @@ binary.test	binary-45.2	pass	pass
 binary.test	binary-46.1	pass	pass		
 binary.test	binary-46.2	pass	pass		
 binary.test	binary-46.3	pass	pass		
-binary.test	binary-46.4	fail	fail	feature	code 1/0,2: unknown encoding "iso8859-15" \| want: ¤ ¤
-binary.test	binary-46.5	fail	fail	feature	code 1/0,2: unknown encoding "iso8859-15" \| want: 1 ¤ €
+binary.test	binary-46.4	pass	pass		
+binary.test	binary-46.5	pass	pass		
 binary.test	binary-47.1	pass	pass		
 binary.test	binary-48.1	pass	pass		
 binary.test	binary-48.10	skip	skip	platform	bigEndian
@@ -1375,9 +1375,9 @@ chan.test	chan-8.1	fail	fail	message	code 1/1: wrong # args: should be "flush ch
 chan.test	chan-9.1	fail	fail	message	code 1/1: wrong # args: should be "gets channelId ?varName?" \| want: wrong # args: should be "chan gets channelId ?varName?"
 chanio.test	chan-io-1.5	skip	skip	tcl	emptyTest
 chanio.test	chan-io-1.6	fail	fail	bug	code 0/0,2: a9 \| want: aM
-chanio.test	chan-io-1.7	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: aá
-chanio.test	chan-io-1.8	fail	fail	feature	code 1/0,2: unknown encoding "iso2022-jp" \| want:     $B$O(B
-chanio.test	chan-io-1.9	fail	fail	feature	code 1/0,2: unknown encoding "iso2022-jp" \| want: 19 19 19 19 19
+chanio.test	chan-io-1.7	pass	pass		
+chanio.test	chan-io-1.8	pass	pass		
+chanio.test	chan-io-1.9	pass	pass		
 chanio.test	chan-io-10.1	skip	skip	tcl	emptyTest
 chanio.test	chan-io-10.2	pass	pass		
 chanio.test	chan-io-10.3	pass	pass		
@@ -1406,8 +1406,8 @@ chanio.test	chan-io-13.8	pass	pass
 chanio.test	chan-io-13.9	pass	pass		
 chanio.test	chan-io-14.1	skip	skip	internals	testchannel
 chanio.test	chan-io-14.2	fail	fail	bug	code 0/0,2: {} {} {} \| want: line line none
-chanio.test	chan-io-14.3	fail	fail	bug	cleanup: can not find channel named "file193"
-chanio.test	chan-io-14.4	fail	fail	bug	cleanup: can not find channel named "file194"
+chanio.test	chan-io-14.3	fail	fail	bug	cleanup: can not find channel named "file217"
+chanio.test	chan-io-14.4	fail	fail	bug	cleanup: can not find channel named "file218"
 chanio.test	chan-io-14.5	fail	fail	bug	code 0/0,2: {can not find channel named "stdin"} {can not find channel named "stdin"} {can not find channel named "stdin"} \| want: {channel "stdin" wasn't opened for writing} {} {can not find chan...
 chanio.test	chan-io-14.6	fail	fail	bug	code 0/0,2: {} {can not find channel named "stdout"} {} \| want: {} {} {can not find channel named "stdout"}
 chanio.test	chan-io-14.7	fail	fail	bug	code 0/0,2: {} {can not find channel named "stderr"} {} \| want: {} {} {can not find channel named "stderr"}
@@ -1472,7 +1472,7 @@ chanio.test	chan-io-29.23	pass	pass
 chanio.test	chan-io-29.24	pass	pass		
 chanio.test	chan-io-29.25	pass	pass		
 chanio.test	chan-io-29.26	pass	pass		
-chanio.test	chan-io-29.27	fail	fail	bug	code 0/0,2: 1 {error writing "file254": broken pipe} {posix epipe {broken pipe}} \| want: 1 {error flushing "*": broken pipe} {posix epipe {broken pipe}}
+chanio.test	chan-io-29.27	fail	fail	bug	code 0/0,2: 1 {error writing "file278": broken pipe} {posix epipe {broken pipe}} \| want: 1 {error flushing "*": broken pipe} {posix epipe {broken pipe}}
 chanio.test	chan-io-29.28	pass	pass		
 chanio.test	chan-io-29.29	pass	pass		
 chanio.test	chan-io-29.3	pass	pass		
@@ -1488,14 +1488,14 @@ chanio.test	chan-io-29.6	skip	skip	internals	testchannel
 chanio.test	chan-io-29.7	skip	skip	internals	testchannel
 chanio.test	chan-io-29.8	skip	skip	internals	testchannel
 chanio.test	chan-io-29.9	pass	pass		
-chanio.test	chan-io-3.1	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want: abcdefghijklmnopqrstuvwxyz  
-chanio.test	chan-io-3.2	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want: {123456789012345 } {123456789012345  12}
-chanio.test	chan-io-3.3	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want:   12
-chanio.test	chan-io-3.4	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: !)!)!)!)!)!)!)!) !)!)!)!)!)!)!)!)!)!)!)!)!)!)!)
-chanio.test	chan-io-3.5	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: !)!)!)!)!)!)!)!)! !)!)!)!)!)!)!)!)!)!)!)!)!)!)!)
-chanio.test	chan-io-3.6	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 12345678901234' 12345678901234'a
-chanio.test	chan-io-3.7	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: !)!)!)!)!)!)!)!)! !)!)!)!)!)!)!)!)!)!)!)!)!)!)!)
-chanio.test	chan-io-3.8	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want: {abcdefg hijklmno} {abcdefg hijklmnopqrstuvwxyz}
+chanio.test	chan-io-3.1	pass	pass		
+chanio.test	chan-io-3.2	fail	fail	bug	code 0/0,2: {} {123456789012345  12} \| want: {123456789012345 } {123456789012345  12}
+chanio.test	chan-io-3.3	pass	pass		
+chanio.test	chan-io-3.4	fail	fail	bug	code 0/0,2: {} !)!)!)!)!)!)!)!)!)!)!)!)!)!)!) \| want: !)!)!)!)!)!)!)!) !)!)!)!)!)!)!)!)!)!)!)!)!)!)!)
+chanio.test	chan-io-3.5	fail	fail	bug	code 0/0,2: {} !)!)!)!)!)!)!)!)!)!)!)!)!)!)!) \| want: !)!)!)!)!)!)!)!)! !)!)!)!)!)!)!)!)!)!)!)!)!)!)!)
+chanio.test	chan-io-3.6	fail	fail	bug	code 0/0,2: {} 12345678901234'a \| want: 12345678901234' 12345678901234'a
+chanio.test	chan-io-3.7	fail	fail	bug	code 0/0,2: {} !)!)!)!)!)!)!)!)!)!)!)!)!)!)!) \| want: !)!)!)!)!)!)!)!)! !)!)!)!)!)!)!)!)!)!)!)!)!)!)!)
+chanio.test	chan-io-3.8	fail	fail	bug	code 0/0,2: {abcdefg hijklmnopqrstuvwxyz} {abcdefg hijklmnopqrstuvwxyz} \| want: {abcdefg hijklmno} {abcdefg hijklmnopqrstuvwxyz}
 chanio.test	chan-io-30.1	pass	pass		
 chanio.test	chan-io-30.10	pass	pass		
 chanio.test	chan-io-30.11	pass	pass		
@@ -1601,7 +1601,7 @@ chanio.test	chan-io-34.4	pass	pass
 chanio.test	chan-io-34.5	pass	pass		
 chanio.test	chan-io-34.6	pass	pass		
 chanio.test	chan-io-34.7	pass	pass		
-chanio.test	chan-io-34.8	fail	fail	message	code 1/1: error during seek on "file433": input/output error \| want: error during seek on "*": invalid argument
+chanio.test	chan-io-34.8	fail	fail	message	code 1/1: error during seek on "file457": input/output error \| want: error during seek on "*": invalid argument
 chanio.test	chan-io-34.9	pass	pass		
 chanio.test	chan-io-35.1	pass	pass		
 chanio.test	chan-io-35.10	pass	pass		
@@ -1636,7 +1636,7 @@ chanio.test	chan-io-39.10	pass	pass
 chanio.test	chan-io-39.11	pass	pass		
 chanio.test	chan-io-39.12	pass	pass		
 chanio.test	chan-io-39.13	pass	pass		
-chanio.test	chan-io-39.14	fail	fail	bug	code 0/0,2: ç¦ \| want: 牦
+chanio.test	chan-io-39.14	pass	pass		
 chanio.test	chan-io-39.15	pass	pass		
 chanio.test	chan-io-39.16	pass	pass		
 chanio.test	chan-io-39.17	pass	pass		
@@ -1728,7 +1728,7 @@ chanio.test	chan-io-49.5	pass	pass
 chanio.test	chan-io-5.1	pass	pass		
 chanio.test	chan-io-5.2	fail	fail	bug	code 0/0,2: {} 12345678901234567890 \| want: 1234567890123456 12345678901234567890
 chanio.test	chan-io-5.3	pass	pass		
-chanio.test	chan-io-5.4	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want: {1234567890 1234567890} {1234567890 1234567890}
+chanio.test	chan-io-5.4	pass	pass		
 chanio.test	chan-io-5.5	pass	pass		
 chanio.test	chan-io-50.1	skip	skip	internals	testchannelevent
 chanio.test	chan-io-50.2	skip	skip	internals	testchannelevent
@@ -1737,8 +1737,10 @@ chanio.test	chan-io-50.4	skip	skip	internals	testchannelevent
 chanio.test	chan-io-50.5	skip	skip	internals	testchannelevent
 chanio.test	chan-io-50.6	skip	skip	internals	testchannelevent
 chanio.test	chan-io-51.1	pass	pass		
-chanio.test	chan-io-52.1	fail	fail	message	code 1/1: fcopy -command is not available \| want: channel "*" is busy
-chanio.test	chan-io-52.2	fail	fail	message	code 1/1: fcopy -command is not available \| want: channel "*" is busy
+chanio.test	chan-io-52.1	fail	fail	bug	code 0/1: 256275 \| want: channel "*" is busy
+chanio.test	chan-io-52.10	fail	fail	bug	code 0/0,2: 3 \| want: 5
+chanio.test	chan-io-52.11	fail	fail	bug	code 0/0,2: 5 \| want: 3
+chanio.test	chan-io-52.2	fail	fail	bug	code 0/1: 256275 \| want: channel "*" is busy
 chanio.test	chan-io-52.3	pass	pass		
 chanio.test	chan-io-52.4	pass	pass		
 chanio.test	chan-io-52.5	pass	pass		
@@ -1747,6 +1749,26 @@ chanio.test	chan-io-52.5b	pass	pass
 chanio.test	chan-io-52.6	pass	pass		
 chanio.test	chan-io-52.7	fail	fail	bug	code 2/0,2: 0 0 \| want: 0 0 ok
 chanio.test	chan-io-52.8	pass	pass		
+chanio.test	chan-io-52.9	pass	pass		
+chanio.test	chan-io-53.1	pass	pass		
+chanio.test	chan-io-53.10	pass	pass		
+chanio.test	chan-io-53.2	pass	pass		
+chanio.test	chan-io-53.3	pass	pass		
+chanio.test	chan-io-53.4	fail	fail	bug	code 1/0,2: bad event name "read": must be readable or writable \| want: done
+chanio.test	chan-io-53.5	pass	pass		
+chanio.test	chan-io-53.6	pass	pass		
+chanio.test	chan-io-53.7	fail	fail	bug	cleanup: can not find channel named "file687"
+chanio.test	chan-io-53.8	pass	pass		
+chanio.test	chan-io-53.8a	pass	pass		
+chanio.test	chan-io-53.9	pass	pass		
+chanio.test	chan-io-54.1	pass	pass		
+chanio.test	chan-io-54.2	pass	pass		
+chanio.test	chan-io-55.1	pass	pass		
+chanio.test	chan-io-56.1	skip	skip	internals	testchannelevent
+chanio.test	chan-io-57.1	pass	pass		
+chanio.test	chan-io-57.2	pass	pass		
+chanio.test	chan-io-58.1	pass	pass		
+chanio.test	chan-io-59.1	skip	skip	internals	testmainthread
 chanio.test	chan-io-6.1	pass	pass		
 chanio.test	chan-io-6.10	pass	pass		
 chanio.test	chan-io-6.11	pass	pass		
@@ -1791,22 +1813,335 @@ chanio.test	chan-io-6.46	skip	skip	internals	testchannel
 chanio.test	chan-io-6.47	skip	skip	internals	testchannel
 chanio.test	chan-io-6.48	skip	skip	internals	testchannel
 chanio.test	chan-io-6.49	skip	skip	internals	testchannel
-chanio.test	chan-io-6.5	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 2 一丁
+chanio.test	chan-io-6.5	pass	pass		
 chanio.test	chan-io-6.50	skip	skip	internals	testchannel
 chanio.test	chan-io-6.51	pass	pass		
 chanio.test	chan-io-6.52	skip	skip	internals	testchannel
 chanio.test	chan-io-6.53	pass	pass		
 chanio.test	chan-io-6.54	pass	pass		
-chanio.test	chan-io-6.55	fail	fail	feature	code 1/0,2: unknown encoding "iso2022-jp" \| want: 8 there一ok 11 {丁more bytes} 4 here
+chanio.test	chan-io-6.55	pass	pass		
 chanio.test	chan-io-6.56	pass	pass		
 chanio.test	chan-io-6.6	pass	pass		
 chanio.test	chan-io-6.7	pass	pass		
 chanio.test	chan-io-6.8	pass	pass		
 chanio.test	chan-io-6.9	pass	pass		
-chanio.test	chan-io-7.1	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 1234567890123０１２３４
-chanio.test	chan-io-7.2	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 10 1234567890 0
+chanio.test	chan-io-60.1	skip	skip	internals	testbytestring
+chanio.test	chan-io-61.1	fail	fail	bug	code 0/0,2: 77 {} 77 \| want: 77 = 23431
+chanio.test	chan-io-7.1	pass	pass		
+chanio.test	chan-io-7.2	pass	pass		
 chanio.test	chan-io-7.3	skip	skip	internals	testchannel
-chanio.test	chan-io-7.4	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: -1 {} 1 17 1234567890123０１２３ 0
+chanio.test	chan-io-7.4	fail	fail	bug	code 1/0,2: bad event name "read": must be readable or writable \| want: -1 {} 1 17 1234567890123０１２３ 0
+chanio.test	chan-io-70.0	skip	skip	internals	testchannel
+chanio.test	chan-io-70.1	skip	skip	internals	testchannel
+chanio.test	chan-io-71.0	skip	skip	internals	testchannel
+chanio.test	chan-io-71.1	skip	skip	internals	testchannel
+chanio.test	chan-io-71.10	skip	skip	internals	testchannel
+chanio.test	chan-io-71.11	skip	skip	internals	testchannel
+chanio.test	chan-io-71.12	skip	skip	internals	testchannel
+chanio.test	chan-io-71.13	skip	skip	internals	testchannel
+chanio.test	chan-io-71.14	skip	skip	internals	testchannel
+chanio.test	chan-io-71.15	skip	skip	internals	testchannel
+chanio.test	chan-io-71.16	skip	skip	internals	testchannel
+chanio.test	chan-io-71.17	skip	skip	internals	testchannel
+chanio.test	chan-io-71.18	skip	skip	internals	testchannel
+chanio.test	chan-io-71.19	skip	skip	internals	testchannel
+chanio.test	chan-io-71.2	skip	skip	internals	testchannel
+chanio.test	chan-io-71.20	skip	skip	internals	testchannel
+chanio.test	chan-io-71.21	skip	skip	internals	testchannel
+chanio.test	chan-io-71.22	skip	skip	internals	testchannel
+chanio.test	chan-io-71.23	skip	skip	internals	testchannel
+chanio.test	chan-io-71.24	skip	skip	internals	testchannel
+chanio.test	chan-io-71.25	skip	skip	internals	testchannel
+chanio.test	chan-io-71.26	skip	skip	internals	testchannel
+chanio.test	chan-io-71.27	skip	skip	internals	testchannel
+chanio.test	chan-io-71.28	skip	skip	internals	testchannel
+chanio.test	chan-io-71.29	skip	skip	internals	testchannel
+chanio.test	chan-io-71.3	skip	skip	internals	testchannel
+chanio.test	chan-io-71.30	skip	skip	internals	testchannel
+chanio.test	chan-io-71.31	skip	skip	internals	testchannel
+chanio.test	chan-io-71.32	skip	skip	internals	testchannel
+chanio.test	chan-io-71.33	skip	skip	internals	testchannel
+chanio.test	chan-io-71.34	skip	skip	internals	testchannel
+chanio.test	chan-io-71.35	skip	skip	internals	testchannel
+chanio.test	chan-io-71.36	skip	skip	internals	testchannel
+chanio.test	chan-io-71.37	skip	skip	internals	testchannel
+chanio.test	chan-io-71.38	skip	skip	internals	testchannel
+chanio.test	chan-io-71.39	skip	skip	internals	testchannel
+chanio.test	chan-io-71.4	skip	skip	internals	testchannel
+chanio.test	chan-io-71.40	skip	skip	internals	testchannel
+chanio.test	chan-io-71.41	skip	skip	internals	testchannel
+chanio.test	chan-io-71.42	skip	skip	internals	testchannel
+chanio.test	chan-io-71.43	skip	skip	internals	testchannel
+chanio.test	chan-io-71.44	skip	skip	internals	testchannel
+chanio.test	chan-io-71.45	skip	skip	internals	testchannel
+chanio.test	chan-io-71.46	skip	skip	internals	testchannel
+chanio.test	chan-io-71.47	skip	skip	internals	testchannel
+chanio.test	chan-io-71.48	skip	skip	internals	testchannel
+chanio.test	chan-io-71.49	skip	skip	internals	testchannel
+chanio.test	chan-io-71.5	skip	skip	internals	testchannel
+chanio.test	chan-io-71.50	skip	skip	internals	testchannel
+chanio.test	chan-io-71.51	skip	skip	internals	testchannel
+chanio.test	chan-io-71.52	skip	skip	internals	testchannel
+chanio.test	chan-io-71.53	skip	skip	internals	testchannel
+chanio.test	chan-io-71.54	skip	skip	internals	testchannel
+chanio.test	chan-io-71.55	skip	skip	internals	testchannel
+chanio.test	chan-io-71.56	skip	skip	internals	testchannel
+chanio.test	chan-io-71.57	skip	skip	internals	testchannel
+chanio.test	chan-io-71.58	skip	skip	internals	testchannel
+chanio.test	chan-io-71.59	skip	skip	internals	testchannel
+chanio.test	chan-io-71.6	skip	skip	internals	testchannel
+chanio.test	chan-io-71.60	skip	skip	internals	testchannel
+chanio.test	chan-io-71.61	skip	skip	internals	testchannel
+chanio.test	chan-io-71.62	skip	skip	internals	testchannel
+chanio.test	chan-io-71.63	skip	skip	internals	testchannel
+chanio.test	chan-io-71.64	skip	skip	internals	testchannel
+chanio.test	chan-io-71.65	skip	skip	internals	testchannel
+chanio.test	chan-io-71.66	skip	skip	internals	testchannel
+chanio.test	chan-io-71.67	skip	skip	internals	testchannel
+chanio.test	chan-io-71.68	skip	skip	internals	testchannel
+chanio.test	chan-io-71.69	skip	skip	internals	testchannel
+chanio.test	chan-io-71.7	skip	skip	internals	testchannel
+chanio.test	chan-io-71.70	skip	skip	internals	testchannel
+chanio.test	chan-io-71.71	skip	skip	internals	testchannel
+chanio.test	chan-io-71.72	skip	skip	internals	testchannel
+chanio.test	chan-io-71.73	skip	skip	internals	testchannel
+chanio.test	chan-io-71.74	skip	skip	internals	testchannel
+chanio.test	chan-io-71.75	skip	skip	internals	testchannel
+chanio.test	chan-io-71.76	skip	skip	internals	testchannel
+chanio.test	chan-io-71.77	skip	skip	internals	testchannel
+chanio.test	chan-io-71.78	skip	skip	internals	testchannel
+chanio.test	chan-io-71.79	skip	skip	internals	testchannel
+chanio.test	chan-io-71.8	skip	skip	internals	testchannel
+chanio.test	chan-io-71.80	skip	skip	internals	testchannel
+chanio.test	chan-io-71.81	skip	skip	internals	testchannel
+chanio.test	chan-io-71.82	skip	skip	internals	testchannel
+chanio.test	chan-io-71.83	skip	skip	internals	testchannel
+chanio.test	chan-io-71.84	skip	skip	internals	testchannel
+chanio.test	chan-io-71.85	skip	skip	internals	testchannel
+chanio.test	chan-io-71.86	skip	skip	internals	testchannel
+chanio.test	chan-io-71.87	skip	skip	internals	testchannel
+chanio.test	chan-io-71.88	skip	skip	internals	testchannel
+chanio.test	chan-io-71.89	skip	skip	internals	testchannel
+chanio.test	chan-io-71.9	skip	skip	internals	testchannel
+chanio.test	chan-io-71.90	skip	skip	internals	testchannel
+chanio.test	chan-io-71.91	skip	skip	internals	testchannel
+chanio.test	chan-io-71.92	skip	skip	internals	testchannel
+chanio.test	chan-io-71.93	skip	skip	internals	testchannel
+chanio.test	chan-io-71.94	skip	skip	internals	testchannel
+chanio.test	chan-io-71.95	skip	skip	internals	testchannel
+chanio.test	chan-io-71.96	skip	skip	internals	testchannel
+chanio.test	chan-io-71.97	skip	skip	internals	testchannel
+chanio.test	chan-io-71.98	skip	skip	internals	testchannel
+chanio.test	chan-io-71.99	skip	skip	internals	testchannel
+chanio.test	chan-io-71.a0	skip	skip	internals	testchannel
+chanio.test	chan-io-71.a1	skip	skip	internals	testchannel
+chanio.test	chan-io-71.a2	skip	skip	internals	testchannel
+chanio.test	chan-io-71.a3	skip	skip	internals	testchannel
+chanio.test	chan-io-71.a4	skip	skip	internals	testchannel
+chanio.test	chan-io-71.a5	skip	skip	internals	testchannel
+chanio.test	chan-io-71.a6	skip	skip	internals	testchannel
+chanio.test	chan-io-71.a7	skip	skip	internals	testchannel
+chanio.test	chan-io-71.a8	skip	skip	internals	testchannel
+chanio.test	chan-io-71.a9	skip	skip	internals	testchannel
+chanio.test	chan-io-71.b0	skip	skip	internals	testchannel
+chanio.test	chan-io-71.b1	skip	skip	internals	testchannel
+chanio.test	chan-io-71.b2	skip	skip	internals	testchannel
+chanio.test	chan-io-71.b3	skip	skip	internals	testchannel
+chanio.test	chan-io-71.b4	skip	skip	internals	testchannel
+chanio.test	chan-io-71.b5	skip	skip	internals	testchannel
+chanio.test	chan-io-71.b6	skip	skip	internals	testchannel
+chanio.test	chan-io-71.b7	skip	skip	internals	testchannel
+chanio.test	chan-io-71.b8	skip	skip	internals	testchannel
+chanio.test	chan-io-71.b9	skip	skip	internals	testchannel
+chanio.test	chan-io-71.c0	skip	skip	internals	testchannel
+chanio.test	chan-io-71.c1	skip	skip	internals	testchannel
+chanio.test	chan-io-71.c2	skip	skip	internals	testchannel
+chanio.test	chan-io-71.c3	skip	skip	internals	testchannel
+chanio.test	chan-io-71.c4	skip	skip	internals	testchannel
+chanio.test	chan-io-71.c5	skip	skip	internals	testchannel
+chanio.test	chan-io-71.c6	skip	skip	internals	testchannel
+chanio.test	chan-io-71.c7	skip	skip	internals	testchannel
+chanio.test	chan-io-71.c8	skip	skip	internals	testchannel
+chanio.test	chan-io-71.c9	skip	skip	internals	testchannel
+chanio.test	chan-io-71.d0	skip	skip	internals	testchannel
+chanio.test	chan-io-71.d1	skip	skip	internals	testchannel
+chanio.test	chan-io-71.d2	skip	skip	internals	testchannel
+chanio.test	chan-io-71.d3	skip	skip	internals	testchannel
+chanio.test	chan-io-71.d4	skip	skip	internals	testchannel
+chanio.test	chan-io-71.d5	skip	skip	internals	testchannel
+chanio.test	chan-io-71.d6	skip	skip	internals	testchannel
+chanio.test	chan-io-71.d7	skip	skip	internals	testchannel
+chanio.test	chan-io-71.d8	skip	skip	internals	testchannel
+chanio.test	chan-io-71.d9	skip	skip	internals	testchannel
+chanio.test	chan-io-71.e0	skip	skip	internals	testchannel
+chanio.test	chan-io-71.e1	skip	skip	internals	testchannel
+chanio.test	chan-io-71.e2	skip	skip	internals	testchannel
+chanio.test	chan-io-71.e3	skip	skip	internals	testchannel
+chanio.test	chan-io-71.e4	skip	skip	internals	testchannel
+chanio.test	chan-io-71.e5	skip	skip	internals	testchannel
+chanio.test	chan-io-71.e6	skip	skip	internals	testchannel
+chanio.test	chan-io-71.e7	skip	skip	internals	testchannel
+chanio.test	chan-io-71.e8	skip	skip	internals	testchannel
+chanio.test	chan-io-71.e9	skip	skip	internals	testchannel
+chanio.test	chan-io-71.f0	skip	skip	internals	testchannel
+chanio.test	chan-io-71.f1	skip	skip	internals	testchannel
+chanio.test	chan-io-71.f2	skip	skip	internals	testchannel
+chanio.test	chan-io-71.f3	skip	skip	internals	testchannel
+chanio.test	chan-io-72.0	skip	skip	internals	testchannel
+chanio.test	chan-io-72.1	skip	skip	internals	testchannel
+chanio.test	chan-io-72.10	skip	skip	internals	testchannel
+chanio.test	chan-io-72.11	skip	skip	internals	testchannel
+chanio.test	chan-io-72.12	skip	skip	internals	testchannel
+chanio.test	chan-io-72.13	skip	skip	internals	testchannel
+chanio.test	chan-io-72.14	skip	skip	internals	testchannel
+chanio.test	chan-io-72.15	skip	skip	internals	testchannel
+chanio.test	chan-io-72.16	skip	skip	internals	testchannel
+chanio.test	chan-io-72.17	skip	skip	internals	testchannel
+chanio.test	chan-io-72.18	skip	skip	internals	testchannel
+chanio.test	chan-io-72.19	skip	skip	internals	testchannel
+chanio.test	chan-io-72.2	skip	skip	internals	testchannel
+chanio.test	chan-io-72.20	skip	skip	internals	testchannel
+chanio.test	chan-io-72.21	skip	skip	internals	testchannel
+chanio.test	chan-io-72.22	skip	skip	internals	testchannel
+chanio.test	chan-io-72.23	skip	skip	internals	testchannel
+chanio.test	chan-io-72.24	skip	skip	internals	testchannel
+chanio.test	chan-io-72.25	skip	skip	internals	testchannel
+chanio.test	chan-io-72.26	skip	skip	internals	testchannel
+chanio.test	chan-io-72.27	skip	skip	internals	testchannel
+chanio.test	chan-io-72.28	skip	skip	internals	testchannel
+chanio.test	chan-io-72.29	skip	skip	internals	testchannel
+chanio.test	chan-io-72.3	skip	skip	internals	testchannel
+chanio.test	chan-io-72.30	skip	skip	internals	testchannel
+chanio.test	chan-io-72.31	skip	skip	internals	testchannel
+chanio.test	chan-io-72.32	skip	skip	internals	testchannel
+chanio.test	chan-io-72.33	skip	skip	internals	testchannel
+chanio.test	chan-io-72.34	skip	skip	internals	testchannel
+chanio.test	chan-io-72.35	skip	skip	internals	testchannel
+chanio.test	chan-io-72.36	skip	skip	internals	testchannel
+chanio.test	chan-io-72.37	skip	skip	internals	testchannel
+chanio.test	chan-io-72.38	skip	skip	internals	testchannel
+chanio.test	chan-io-72.39	skip	skip	internals	testchannel
+chanio.test	chan-io-72.4	skip	skip	internals	testchannel
+chanio.test	chan-io-72.40	skip	skip	internals	testchannel
+chanio.test	chan-io-72.41	skip	skip	internals	testchannel
+chanio.test	chan-io-72.42	skip	skip	internals	testchannel
+chanio.test	chan-io-72.43	skip	skip	internals	testchannel
+chanio.test	chan-io-72.44	skip	skip	internals	testchannel
+chanio.test	chan-io-72.45	skip	skip	internals	testchannel
+chanio.test	chan-io-72.46	skip	skip	internals	testchannel
+chanio.test	chan-io-72.47	skip	skip	internals	testchannel
+chanio.test	chan-io-72.48	skip	skip	internals	testchannel
+chanio.test	chan-io-72.49	skip	skip	internals	testchannel
+chanio.test	chan-io-72.5	skip	skip	internals	testchannel
+chanio.test	chan-io-72.50	skip	skip	internals	testchannel
+chanio.test	chan-io-72.51	skip	skip	internals	testchannel
+chanio.test	chan-io-72.52	skip	skip	internals	testchannel
+chanio.test	chan-io-72.53	skip	skip	internals	testchannel
+chanio.test	chan-io-72.54	skip	skip	internals	testchannel
+chanio.test	chan-io-72.55	skip	skip	internals	testchannel
+chanio.test	chan-io-72.56	skip	skip	internals	testchannel
+chanio.test	chan-io-72.57	skip	skip	internals	testchannel
+chanio.test	chan-io-72.58	skip	skip	internals	testchannel
+chanio.test	chan-io-72.59	skip	skip	internals	testchannel
+chanio.test	chan-io-72.6	skip	skip	internals	testchannel
+chanio.test	chan-io-72.60	skip	skip	internals	testchannel
+chanio.test	chan-io-72.61	skip	skip	internals	testchannel
+chanio.test	chan-io-72.62	skip	skip	internals	testchannel
+chanio.test	chan-io-72.63	skip	skip	internals	testchannel
+chanio.test	chan-io-72.64	skip	skip	internals	testchannel
+chanio.test	chan-io-72.65	skip	skip	internals	testchannel
+chanio.test	chan-io-72.66	skip	skip	internals	testchannel
+chanio.test	chan-io-72.67	skip	skip	internals	testchannel
+chanio.test	chan-io-72.68	skip	skip	internals	testchannel
+chanio.test	chan-io-72.69	skip	skip	internals	testchannel
+chanio.test	chan-io-72.7	skip	skip	internals	testchannel
+chanio.test	chan-io-72.70	skip	skip	internals	testchannel
+chanio.test	chan-io-72.71	skip	skip	internals	testchannel
+chanio.test	chan-io-72.72	skip	skip	internals	testchannel
+chanio.test	chan-io-72.73	skip	skip	internals	testchannel
+chanio.test	chan-io-72.74	skip	skip	internals	testchannel
+chanio.test	chan-io-72.75	skip	skip	internals	testchannel
+chanio.test	chan-io-72.76	skip	skip	internals	testchannel
+chanio.test	chan-io-72.77	skip	skip	internals	testchannel
+chanio.test	chan-io-72.78	skip	skip	internals	testchannel
+chanio.test	chan-io-72.79	skip	skip	internals	testchannel
+chanio.test	chan-io-72.8	skip	skip	internals	testchannel
+chanio.test	chan-io-72.80	skip	skip	internals	testchannel
+chanio.test	chan-io-72.81	skip	skip	internals	testchannel
+chanio.test	chan-io-72.82	skip	skip	internals	testchannel
+chanio.test	chan-io-72.83	skip	skip	internals	testchannel
+chanio.test	chan-io-72.84	skip	skip	internals	testchannel
+chanio.test	chan-io-72.85	skip	skip	internals	testchannel
+chanio.test	chan-io-72.86	skip	skip	internals	testchannel
+chanio.test	chan-io-72.87	skip	skip	internals	testchannel
+chanio.test	chan-io-72.88	skip	skip	internals	testchannel
+chanio.test	chan-io-72.89	skip	skip	internals	testchannel
+chanio.test	chan-io-72.9	skip	skip	internals	testchannel
+chanio.test	chan-io-72.90	skip	skip	internals	testchannel
+chanio.test	chan-io-72.91	skip	skip	internals	testchannel
+chanio.test	chan-io-72.92	skip	skip	internals	testchannel
+chanio.test	chan-io-72.93	skip	skip	internals	testchannel
+chanio.test	chan-io-72.94	skip	skip	internals	testchannel
+chanio.test	chan-io-72.95	skip	skip	internals	testchannel
+chanio.test	chan-io-72.96	skip	skip	internals	testchannel
+chanio.test	chan-io-72.97	skip	skip	internals	testchannel
+chanio.test	chan-io-72.98	skip	skip	internals	testchannel
+chanio.test	chan-io-72.99	skip	skip	internals	testchannel
+chanio.test	chan-io-72.a0	skip	skip	internals	testchannel
+chanio.test	chan-io-72.a1	skip	skip	internals	testchannel
+chanio.test	chan-io-72.a2	skip	skip	internals	testchannel
+chanio.test	chan-io-72.a3	skip	skip	internals	testchannel
+chanio.test	chan-io-72.a4	skip	skip	internals	testchannel
+chanio.test	chan-io-72.a5	skip	skip	internals	testchannel
+chanio.test	chan-io-72.a6	skip	skip	internals	testchannel
+chanio.test	chan-io-72.a7	skip	skip	internals	testchannel
+chanio.test	chan-io-72.a8	skip	skip	internals	testchannel
+chanio.test	chan-io-72.a9	skip	skip	internals	testchannel
+chanio.test	chan-io-72.b0	skip	skip	internals	testchannel
+chanio.test	chan-io-72.b1	skip	skip	internals	testchannel
+chanio.test	chan-io-72.b2	skip	skip	internals	testchannel
+chanio.test	chan-io-72.b3	skip	skip	internals	testchannel
+chanio.test	chan-io-72.b4	skip	skip	internals	testchannel
+chanio.test	chan-io-72.b5	skip	skip	internals	testchannel
+chanio.test	chan-io-72.b6	skip	skip	internals	testchannel
+chanio.test	chan-io-72.b7	skip	skip	internals	testchannel
+chanio.test	chan-io-72.b8	skip	skip	internals	testchannel
+chanio.test	chan-io-72.b9	skip	skip	internals	testchannel
+chanio.test	chan-io-72.c0	skip	skip	internals	testchannel
+chanio.test	chan-io-72.c1	skip	skip	internals	testchannel
+chanio.test	chan-io-72.c2	skip	skip	internals	testchannel
+chanio.test	chan-io-72.c3	skip	skip	internals	testchannel
+chanio.test	chan-io-72.c4	skip	skip	internals	testchannel
+chanio.test	chan-io-72.c5	skip	skip	internals	testchannel
+chanio.test	chan-io-72.c6	skip	skip	internals	testchannel
+chanio.test	chan-io-72.c7	skip	skip	internals	testchannel
+chanio.test	chan-io-72.c8	skip	skip	internals	testchannel
+chanio.test	chan-io-72.c9	skip	skip	internals	testchannel
+chanio.test	chan-io-72.d0	skip	skip	internals	testchannel
+chanio.test	chan-io-72.d1	skip	skip	internals	testchannel
+chanio.test	chan-io-72.d2	skip	skip	internals	testchannel
+chanio.test	chan-io-72.d3	skip	skip	internals	testchannel
+chanio.test	chan-io-72.d4	skip	skip	internals	testchannel
+chanio.test	chan-io-72.d5	skip	skip	internals	testchannel
+chanio.test	chan-io-72.d6	skip	skip	internals	testchannel
+chanio.test	chan-io-72.d7	skip	skip	internals	testchannel
+chanio.test	chan-io-72.d8	skip	skip	internals	testchannel
+chanio.test	chan-io-72.d9	skip	skip	internals	testchannel
+chanio.test	chan-io-72.e0	skip	skip	internals	testchannel
+chanio.test	chan-io-72.e1	skip	skip	internals	testchannel
+chanio.test	chan-io-72.e2	skip	skip	internals	testchannel
+chanio.test	chan-io-72.e3	skip	skip	internals	testchannel
+chanio.test	chan-io-72.e4	skip	skip	internals	testchannel
+chanio.test	chan-io-72.e5	skip	skip	internals	testchannel
+chanio.test	chan-io-72.e6	skip	skip	internals	testchannel
+chanio.test	chan-io-72.e7	skip	skip	internals	testchannel
+chanio.test	chan-io-72.e8	skip	skip	internals	testchannel
+chanio.test	chan-io-72.e9	skip	skip	internals	testchannel
+chanio.test	chan-io-72.f0	skip	skip	internals	testchannel
+chanio.test	chan-io-72.f1	skip	skip	internals	testchannel
+chanio.test	chan-io-72.f2	skip	skip	internals	testchannel
+chanio.test	chan-io-72.f3	skip	skip	internals	testchannel
+chanio.test	chan-io-73.1	pass	pass		
 chanio.test	chan-io-8.1	skip	skip	internals	testchannel
 chanio.test	chan-io-8.2	skip	skip	internals	testchannel
 chanio.test	chan-io-8.3	skip	skip	internals	testchannel
@@ -10582,18 +10917,18 @@ cmdAH.test	cmdAH-32.4	fail	fail	bug	code 0/0,2: foo produced /tcl_tmp3 \| want: 
 cmdAH.test	cmdAH-32.5	fail	fail	bug	code 0/0,2: /dir.file/foo produced /tcl_tmp4 \| want: ok
 cmdAH.test	cmdAH-32.6	skip	skip	tcl	nonPortable
 cmdAH.test	cmdAH-4.1	fail	fail	message	code 1/1: wrong # args: should be "encoding option ?arg ...?" \| want: wrong # args: should be "encoding subcommand ?arg ...?"
-cmdAH.test	cmdAH-4.10	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 乎
+cmdAH.test	cmdAH-4.10	pass	pass		
 cmdAH.test	cmdAH-4.11	pass	pass		
 cmdAH.test	cmdAH-4.12	pass	pass		
 cmdAH.test	cmdAH-4.13	pass	pass		
 cmdAH.test	cmdAH-4.2	fail	fail	message	code 1/1: bad option "foo": must be convertfrom, convertto, dirs, names, or system \| want: unknown or ambiguous subcommand "foo": must be convertfrom, convertto, dirs, names, or system
 cmdAH.test	cmdAH-4.3	pass	pass		
 cmdAH.test	cmdAH-4.4	pass	pass		
-cmdAH.test	cmdAH-4.5	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 8C
-cmdAH.test	cmdAH-4.6	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 8C
+cmdAH.test	cmdAH-4.5	pass	pass		
+cmdAH.test	cmdAH-4.6	pass	pass		
 cmdAH.test	cmdAH-4.7	pass	pass		
 cmdAH.test	cmdAH-4.8	pass	pass		
-cmdAH.test	cmdAH-4.9	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 乎
+cmdAH.test	cmdAH-4.9	pass	pass		
 cmdAH.test	cmdAH-5.1	pass	pass		
 cmdAH.test	cmdAH-5.2	pass	pass		
 cmdAH.test	cmdAH-5.3	pass	pass		
@@ -11829,22 +12164,22 @@ dstring.test	dstring-6.4	skip	skip	internals	testdstring
 dstring.test	dstring-6.5	skip	skip	internals	testdstring
 encoding.test	encoding-1.1	skip	skip	internals	testencoding
 encoding.test	encoding-1.2	skip	skip	internals	testencoding
-encoding.test	encoding-1.3	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 8C 乎
-encoding.test	encoding-10.1	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: abÁg
+encoding.test	encoding-1.3	pass	pass		
+encoding.test	encoding-10.1	pass	pass		
 encoding.test	encoding-11.1	skip	skip	internals	testencoding
-encoding.test	encoding-11.2	fail	fail	feature	code 1/0,2: unknown encoding "jis0201" \| want: ｡
-encoding.test	encoding-11.3	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 乎
-encoding.test	encoding-11.4	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 乎
-encoding.test	encoding-11.5	fail	fail	feature	code 1/0,2: unknown encoding "iso2022" \| want: $B8C(B (\u001B$B8C\u001B(B)
-encoding.test	encoding-11.5.1	fail	fail	feature	code 1/0,2: unknown encoding "iso2022-jp" \| want: $B8C(B (\u001B$B8C\u001B(B)
+encoding.test	encoding-11.2	pass	pass		
+encoding.test	encoding-11.3	pass	pass		
+encoding.test	encoding-11.4	pass	pass		
+encoding.test	encoding-11.5	pass	pass		
+encoding.test	encoding-11.5.1	pass	pass		
 encoding.test	encoding-11.6	skip	skip	internals	testencoding
-encoding.test	encoding-12.1	fail	fail	feature	code 1/0,2: unknown encoding "iso8859-3" \| want: Õ?Ġ
-encoding.test	encoding-12.2	fail	fail	feature	code 1/0,2: unknown encoding "iso8859-3" \| want: abÕgabĠg
-encoding.test	encoding-12.3	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: abÁgab乎g
-encoding.test	encoding-12.4	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 8C&A乎α
-encoding.test	encoding-12.5	fail	fail	feature	code 1/0,2: unknown encoding "symbol" \| want: ggγ
+encoding.test	encoding-12.1	pass	pass		
+encoding.test	encoding-12.2	pass	pass		
+encoding.test	encoding-12.3	pass	pass		
+encoding.test	encoding-12.4	pass	pass		
+encoding.test	encoding-12.5	pass	pass		
 encoding.test	encoding-12.6	skip	skip	platform	ucs2
-encoding.test	encoding-13.1	fail	fail	feature	code 1/0,2: unknown encoding "iso2022" \| want: ab$B8C$(DD%(Bg (ab\u001B$B8C\u001B$(DD%\u001B(Bg)
+encoding.test	encoding-13.1	pass	pass		
 encoding.test	encoding-14.1	pass	pass		
 encoding.test	encoding-15.1	pass	pass		
 encoding.test	encoding-15.10	fail	fail	bug	code 0/0,2: 2 5 efbfbdc3a9 \| want: 2 5 edb882c3a9
@@ -11870,26 +12205,64 @@ encoding.test	encoding-16.5	skip	skip	platform	ucs2
 encoding.test	encoding-17.1	pass	pass		
 encoding.test	encoding-17.2	fail	fail	bug	code 0/0,2: ýÿ \| want: ÜÜ
 encoding.test	encoding-17.3	fail	fail	bug	code 0/0,2: ýÿ \| want: ØØ
-encoding.test	encoding-18.1	fail	fail	feature	code 0/0,2: 1 {unknown encoding "jis0208"} \| want: 0 !)
+encoding.test	encoding-18.1	pass	pass		
 encoding.test	encoding-19.1	pass	pass		
-encoding.test	encoding-2.1	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 8C
+encoding.test	encoding-2.1	pass	pass		
 encoding.test	encoding-2.2	skip	skip	internals	testencoding
 encoding.test	encoding-20.1	pass	pass		
 encoding.test	encoding-21.1	pass	pass		
 encoding.test	encoding-22.1	pass	pass		
-encoding.test	encoding-28.0	fail	fail	bug	code 2/0,2: 6 \| want: 85
-encoding.test	encoding-3.1	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: shiftjis
-encoding.test	encoding-3.2	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: jis0208
+encoding.test	encoding-23.1	pass	pass		
+encoding.test	encoding-23.2	pass	pass		
+encoding.test	encoding-23.3	pass	pass		
+encoding.test	encoding-24.1	fail	fail	feature	code 1/0,2: unknown encoding "iso2022-jp" \| want: 
+encoding.test	encoding-24.10	pass	pass		
+encoding.test	encoding-24.11	pass	pass		
+encoding.test	encoding-24.2	fail	fail	feature	code 1/0,2: unknown encoding "cp1252" \| want: ab$B8C$(DD%(Bg (ab\u001B$B8C\u001B$(DD%\u001B(Bg)
+encoding.test	encoding-24.3	fail	fail	feature	code 1/0,2: unknown encoding "iso2022-jp" \| want: 3 {乎乞也 (\u4E4E\u4E5E\u4E5F)}
+encoding.test	encoding-24.4	fail	fail	bug	code 0/0,2: 2 \| want: 1
+encoding.test	encoding-24.5	pass	pass		
+encoding.test	encoding-24.6	pass	pass		
+encoding.test	encoding-24.7	pass	pass		
+encoding.test	encoding-24.8	pass	pass		
+encoding.test	encoding-24.9	pass	pass		
+encoding.test	encoding-25.1	pass	pass		
+encoding.test	encoding-25.10	pass	pass		
+encoding.test	encoding-25.11	pass	pass		
+encoding.test	encoding-25.12	pass	pass		
+encoding.test	encoding-25.13	pass	pass		
+encoding.test	encoding-25.14	pass	pass		
+encoding.test	encoding-25.15	pass	pass		
+encoding.test	encoding-25.16	pass	pass		
+encoding.test	encoding-25.2	pass	pass		
+encoding.test	encoding-25.3	pass	pass		
+encoding.test	encoding-25.4	pass	pass		
+encoding.test	encoding-25.5	pass	pass		
+encoding.test	encoding-25.6	pass	pass		
+encoding.test	encoding-25.7	pass	pass		
+encoding.test	encoding-25.8	pass	pass		
+encoding.test	encoding-25.9	pass	pass		
+encoding.test	encoding-26.0	skip	skip	internals	testgetdefenc
+encoding.test	encoding-27.1	pass	pass		
+encoding.test	encoding-27.2	pass	pass		
+encoding.test	encoding-28.0	pass	pass		
+encoding.test	encoding-3.1	pass	pass		
+encoding.test	encoding-3.2	pass	pass		
 encoding.test	encoding-4.1	skip	skip	internals	testencoding
-encoding.test	encoding-5.1	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 8C
+encoding.test	encoding-5.1	pass	pass		
 encoding.test	encoding-5.2	pass	pass		
 encoding.test	encoding-6.1	skip	skip	internals	testencoding
 encoding.test	encoding-6.2	skip	skip	internals	testencoding
-encoding.test	encoding-7.1	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 吾吾吾吾
-encoding.test	encoding-7.2	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 512 乎
-encoding.test	encoding-8.1	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: ab乎g
-encoding.test	encoding-9.1	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 8c8c8c8c
-encoding.test	encoding-9.2	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: 1024 8C
+encoding.test	encoding-7.1	pass	pass		
+encoding.test	encoding-7.2	pass	pass		
+encoding.test	encoding-8.1	pass	pass		
+encoding.test	encoding-9.1	pass	pass		
+encoding.test	encoding-9.2	pass	pass		
+encoding.test	encoding-bug-183a1adcc0-1	skip	skip	internals	testencoding
+encoding.test	encoding-bug-183a1adcc0-2	skip	skip	internals	testencoding
+encoding.test	encoding-bug-183a1adcc0-3	skip	skip	internals	testencoding
+encoding.test	encoding-bug-183a1adcc0-4	skip	skip	internals	testencoding
+encoding.test	encoding-bug-183a1adcc0-5	skip	skip	internals	testencoding
 env.test	env-1.1	fail	fail	design	code 1/0,2: can't read "env(test)": no such variable \| want: garbage
 env.test	env-1.2	pass	pass		
 env.test	env-1.3	fail	fail	bug	code 0/0,2: 0 \| want: 1
@@ -27509,8 +27882,8 @@ fileName.test	filename-11.1	fail	fail	message	code 1/1: wrong # args: should be 
 fileName.test	filename-11.10	skip	skip	internals	testsetplatform
 fileName.test	filename-11.11	skip	skip	internals	testsetplatform
 fileName.test	filename-11.12	skip	skip	internals	testsetplatform
-fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl424824/globTest
-fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl424824/globTest
+fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl1368296/globTest
+fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl1368296/globTest
 fileName.test	filename-11.16	pass	pass		
 fileName.test	filename-11.17	pass	pass		
 fileName.test	filename-11.17.1	skip	skip	platform	win
@@ -27559,7 +27932,7 @@ fileName.test	filename-11.41	fail	fail	feature	code 1/0,2: bad option "-dir": mu
 fileName.test	filename-11.42	fail	fail	feature	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
 fileName.test	filename-11.43	fail	fail	message	code 1/1: bad option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: ambiguous option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types, or --
 fileName.test	filename-11.44	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: "-directory" cannot be used with "-path"
-fileName.test	filename-11.45	fail	fail	bug	code 0/0,2: {} {all.tcl fileName.test httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcl424824 tcltests.tcl ztc \| want: equal
+fileName.test	filename-11.45	fail	fail	bug	code 0/0,2: {} {all.tcl fileName.test httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcl1368296 tcltests.tcl zt \| want: equal
 fileName.test	filename-11.46	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: bad argument to "-types": abcde
 fileName.test	filename-11.47	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde
 fileName.test	filename-11.48	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: bad argument to "-types": abcde
@@ -27607,7 +27980,7 @@ fileName.test	filename-14.1	pass	pass
 fileName.test	filename-14.11	pass	pass		
 fileName.test	filename-14.13	pass	pass		
 fileName.test	filename-14.15	fail	fail	bug	code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c \| want: globTest/a1/ globTest/a2/ globTest/a3/
-fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl424824/globTest/z1.c
+fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl1368296/globTest/z1.c
 fileName.test	filename-14.18	pass	pass		
 fileName.test	filename-14.20	pass	pass		
 fileName.test	filename-14.21	pass	pass		
@@ -27848,7 +28221,7 @@ fileSystem.test	filesystem-6.12	pass	pass
 fileSystem.test	filesystem-6.13	pass	pass		
 fileSystem.test	filesystem-6.14	fail	fail	design	code 1/1: could not link: links are not available in the root folder \| want: could not read link "": no such file or directory
 fileSystem.test	filesystem-6.15	fail	fail	bug	code 0/1:  \| want: could not read "": no such file or directory
-fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795750350 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795757441 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.17	fail	fail	feature	code 1/1: file mtime with a new time is not available \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.18	fail	fail	bug	code 0/1:  \| want: can't create directory "": no such file or directory
 fileSystem.test	filesystem-6.19	pass	pass		
@@ -27863,7 +28236,7 @@ fileSystem.test	filesystem-6.26	pass	pass
 fileSystem.test	filesystem-6.27	fail	fail	bug	code 0/1: / \| want: unrecognised path
 fileSystem.test	filesystem-6.28	fail	fail	bug	code 0/1: 280 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.29	pass	pass		
-fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795750350 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795757441 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.30	fail	fail	bug	code 0/1: native root \| want: unrecognised path
 fileSystem.test	filesystem-6.31	pass	pass		
 fileSystem.test	filesystem-6.32	fail	fail	bug	code 0/1: directory \| want: could not read "": no such file or directory
@@ -29401,9 +29774,9 @@ interp.test	interp-9.3	pass	pass
 interp.test	interp-9.4	fail	fail	bug	code 0/0,2: GLOBAL NAMESPACE \| want: GLOBAL GLOBAL
 io.test	io-1.5	skip	skip	tcl	emptyTest
 io.test	io-1.6	fail	fail	bug	code 0/0,2: a9 \| want: aM
-io.test	io-1.7	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: aá
-io.test	io-1.8	fail	fail	feature	code 1/0,2: unknown encoding "iso2022-jp" \| want:     $B$O(B
-io.test	io-1.9	fail	fail	feature	code 1/0,2: unknown encoding "iso2022-jp" \| want: 19 19 19 19 19
+io.test	io-1.7	pass	pass		
+io.test	io-1.8	pass	pass		
+io.test	io-1.9	pass	pass		
 io.test	io-10.1	skip	skip	tcl	emptyTest
 io.test	io-10.2	pass	pass		
 io.test	io-10.3	pass	pass		
@@ -29523,14 +29896,14 @@ io.test	io-29.6	skip	skip	internals	testchannel
 io.test	io-29.7	skip	skip	internals	testchannel
 io.test	io-29.8	skip	skip	internals	testchannel
 io.test	io-29.9	pass	pass		
-io.test	io-3.1	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want: abcdefghijklmnopqrstuvwxyz  
-io.test	io-3.2	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want: {123456789012345 } {123456789012345  12}
-io.test	io-3.3	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want:   12
-io.test	io-3.4	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: !)!)!)!)!)!)!)!) !)!)!)!)!)!)!)!)!)!)!)!)!)!)!)
-io.test	io-3.5	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: !)!)!)!)!)!)!)!)! !)!)!)!)!)!)!)!)!)!)!)!)!)!)!)
-io.test	io-3.6	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 12345678901234' 12345678901234'a
-io.test	io-3.7	fail	fail	feature	code 1/0,2: unknown encoding "jis0208" \| want: !)!)!)!)!)!)!)!)! !)!)!)!)!)!)!)!)!)!)!)!)!)!)!)
-io.test	io-3.8	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want: {abcdefg hijklmno} {abcdefg hijklmnopqrstuvwxyz}
+io.test	io-3.1	pass	pass		
+io.test	io-3.2	fail	fail	bug	code 0/0,2: {} {123456789012345  12} \| want: {123456789012345 } {123456789012345  12}
+io.test	io-3.3	pass	pass		
+io.test	io-3.4	fail	fail	bug	code 0/0,2: {} !)!)!)!)!)!)!)!)!)!)!)!)!)!)!) \| want: !)!)!)!)!)!)!)!) !)!)!)!)!)!)!)!)!)!)!)!)!)!)!)
+io.test	io-3.5	fail	fail	bug	code 0/0,2: {} !)!)!)!)!)!)!)!)!)!)!)!)!)!)!) \| want: !)!)!)!)!)!)!)!)! !)!)!)!)!)!)!)!)!)!)!)!)!)!)!)
+io.test	io-3.6	fail	fail	bug	code 0/0,2: {} 12345678901234'a \| want: 12345678901234' 12345678901234'a
+io.test	io-3.7	fail	fail	bug	code 0/0,2: {} !)!)!)!)!)!)!)!)!)!)!)!)!)!)!) \| want: !)!)!)!)!)!)!)!)! !)!)!)!)!)!)!)!)!)!)!)!)!)!)!)
+io.test	io-3.8	fail	fail	bug	code 0/0,2: {abcdefg hijklmnopqrstuvwxyz} {abcdefg hijklmnopqrstuvwxyz} \| want: {abcdefg hijklmno} {abcdefg hijklmnopqrstuvwxyz}
 io.test	io-3.9	pass	pass		
 io.test	io-30.1	pass	pass		
 io.test	io-30.10	pass	pass		
@@ -29684,7 +30057,7 @@ io.test	io-39.10	pass	pass
 io.test	io-39.11	pass	pass		
 io.test	io-39.12	pass	pass		
 io.test	io-39.13	pass	pass		
-io.test	io-39.14	fail	fail	bug	code 0/0,2: ç¦ \| want: 牦
+io.test	io-39.14	pass	pass		
 io.test	io-39.15	pass	pass		
 io.test	io-39.16	pass	pass		
 io.test	io-39.16a	pass	pass		
@@ -29777,7 +30150,7 @@ io.test	io-49.5	pass	pass
 io.test	io-5.1	pass	pass		
 io.test	io-5.2	fail	fail	bug	code 0/0,2: {} 12345678901234567890 \| want: 1234567890123456 12345678901234567890
 io.test	io-5.3	pass	pass		
-io.test	io-5.4	fail	fail	feature	code 1/0,2: unknown encoding "ascii" \| want: {1234567890 1234567890} {1234567890 1234567890}
+io.test	io-5.4	pass	pass		
 io.test	io-5.5	pass	pass		
 io.test	io-50.1	skip	skip	internals	testchannelevent
 io.test	io-50.2	skip	skip	internals	testchannelevent
@@ -29786,8 +30159,20 @@ io.test	io-50.4	skip	skip	internals	testchannelevent
 io.test	io-50.5	skip	skip	internals	testchannelevent
 io.test	io-50.6	skip	skip	internals	testchannelevent
 io.test	io-51.1	pass	pass		
-io.test	io-52.1	fail	fail	bug	code 1/0,2: fcopy -command is not available \| want: 0
-io.test	io-52.2	fail	fail	bug	code 1/0,2: fcopy -command is not available \| want: 0
+io.test	io-52.1	fail	fail	bug	code 0/0,2: -1 \| want: 0
+io.test	io-52.10	fail	fail	bug	code 0/0,2: 3 \| want: 5
+io.test	io-52.11	fail	fail	bug	code 0/0,2: 5 \| want: 3
+io.test	io-52.12	pass	pass		
+io.test	io-52.13	pass	pass		
+io.test	io-52.14	pass	pass		
+io.test	io-52.14.1	pass	pass		
+io.test	io-52.14.2	pass	pass		
+io.test	io-52.15	pass	pass		
+io.test	io-52.16	pass	pass		
+io.test	io-52.17	pass	pass		
+io.test	io-52.18	pass	pass		
+io.test	io-52.19	pass	pass		
+io.test	io-52.2	fail	fail	bug	code 0/0,2: -1 \| want: 0
 io.test	io-52.3	pass	pass		
 io.test	io-52.4	pass	pass		
 io.test	io-52.4.1	pass	pass		
@@ -29797,6 +30182,35 @@ io.test	io-52.5b	pass	pass
 io.test	io-52.6	pass	pass		
 io.test	io-52.7	fail	fail	bug	code 0/0,2: 0 0 \| want: 0 0 ok
 io.test	io-52.8	pass	pass		
+io.test	io-52.9	pass	pass		
+io.test	io-53.1	pass	pass		
+io.test	io-53.10	pass	pass		
+io.test	io-53.11	pass	pass		
+io.test	io-53.12	pass	pass		
+io.test	io-53.13	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: error reading "*": *
+io.test	io-53.14	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: error writing "*": *
+io.test	io-53.15	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
+io.test	io-53.16	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
+io.test	io-53.17	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
+io.test	io-53.2	pass	pass		
+io.test	io-53.3	pass	pass		
+io.test	io-53.4	fail	fail	bug	code 1/0,2: bad event name "read": must be readable or writable \| want: done
+io.test	io-53.4.1	pass	pass		
+io.test	io-53.5	pass	pass		
+io.test	io-53.6	pass	pass		
+io.test	io-53.7	fail	fail	bug	code 1/0,2: illegal use of & in a command pipeline \| want: 3450
+io.test	io-53.8	pass	pass		
+io.test	io-53.8a	pass	pass		
+io.test	io-53.8b	pass	pass		
+io.test	io-53.9	pass	pass		
+io.test	io-54.1	pass	pass		
+io.test	io-54.2	pass	pass		
+io.test	io-55.1	pass	pass		
+io.test	io-56.1	skip	skip	internals	testchannelevent
+io.test	io-57.1	pass	pass		
+io.test	io-57.2	pass	pass		
+io.test	io-58.1	pass	pass		
+io.test	io-59.1	skip	skip	internals	testmainthread
 io.test	io-6.1	pass	pass		
 io.test	io-6.10	pass	pass		
 io.test	io-6.11	pass	pass		
@@ -29841,22 +30255,345 @@ io.test	io-6.46	skip	skip	internals	testchannel
 io.test	io-6.47	skip	skip	internals	testchannel
 io.test	io-6.48	skip	skip	internals	testchannel
 io.test	io-6.49	skip	skip	internals	testchannel
-io.test	io-6.5	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 2 一丁
+io.test	io-6.5	pass	pass		
 io.test	io-6.50	skip	skip	internals	testchannel
 io.test	io-6.51	pass	pass		
 io.test	io-6.52	skip	skip	internals	testchannel
 io.test	io-6.53	pass	pass		
 io.test	io-6.54	pass	pass		
-io.test	io-6.55	fail	fail	feature	code 1/0,2: unknown encoding "iso2022-jp" \| want: 8 there一ok 11 {丁more bytes} 4 here
+io.test	io-6.55	pass	pass		
 io.test	io-6.56	pass	pass		
 io.test	io-6.6	pass	pass		
 io.test	io-6.7	pass	pass		
 io.test	io-6.8	pass	pass		
 io.test	io-6.9	pass	pass		
-io.test	io-7.1	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 1234567890123０１２３４
-io.test	io-7.2	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: 10 1234567890 0
+io.test	io-60.1	skip	skip	internals	testbytestring
+io.test	io-61.1	fail	fail	bug	code 0/0,2: 77 {} 77 \| want: 77 = 23431
+io.test	io-7.1	pass	pass		
+io.test	io-7.2	pass	pass		
 io.test	io-7.3	skip	skip	internals	testchannel
-io.test	io-7.4	fail	fail	feature	code 1/0,2: unknown encoding "shiftjis" \| want: -1 {} 1 17 1234567890123０１２３ 0
+io.test	io-7.4	fail	fail	bug	code 1/0,2: bad event name "read": must be readable or writable \| want: -1 {} 1 17 1234567890123０１２３ 0
+io.test	io-70.0	skip	skip	internals	testchannel
+io.test	io-70.1	skip	skip	internals	testchannel
+io.test	io-71.0	skip	skip	internals	testchannel
+io.test	io-71.1	skip	skip	internals	testchannel
+io.test	io-71.10	skip	skip	internals	testchannel
+io.test	io-71.11	skip	skip	internals	testchannel
+io.test	io-71.12	skip	skip	internals	testchannel
+io.test	io-71.13	skip	skip	internals	testchannel
+io.test	io-71.14	skip	skip	internals	testchannel
+io.test	io-71.15	skip	skip	internals	testchannel
+io.test	io-71.16	skip	skip	internals	testchannel
+io.test	io-71.17	skip	skip	internals	testchannel
+io.test	io-71.18	skip	skip	internals	testchannel
+io.test	io-71.19	skip	skip	internals	testchannel
+io.test	io-71.2	skip	skip	internals	testchannel
+io.test	io-71.20	skip	skip	internals	testchannel
+io.test	io-71.21	skip	skip	internals	testchannel
+io.test	io-71.22	skip	skip	internals	testchannel
+io.test	io-71.23	skip	skip	internals	testchannel
+io.test	io-71.24	skip	skip	internals	testchannel
+io.test	io-71.25	skip	skip	internals	testchannel
+io.test	io-71.26	skip	skip	internals	testchannel
+io.test	io-71.27	skip	skip	internals	testchannel
+io.test	io-71.28	skip	skip	internals	testchannel
+io.test	io-71.29	skip	skip	internals	testchannel
+io.test	io-71.3	skip	skip	internals	testchannel
+io.test	io-71.30	skip	skip	internals	testchannel
+io.test	io-71.31	skip	skip	internals	testchannel
+io.test	io-71.32	skip	skip	internals	testchannel
+io.test	io-71.33	skip	skip	internals	testchannel
+io.test	io-71.34	skip	skip	internals	testchannel
+io.test	io-71.35	skip	skip	internals	testchannel
+io.test	io-71.36	skip	skip	internals	testchannel
+io.test	io-71.37	skip	skip	internals	testchannel
+io.test	io-71.38	skip	skip	internals	testchannel
+io.test	io-71.39	skip	skip	internals	testchannel
+io.test	io-71.4	skip	skip	internals	testchannel
+io.test	io-71.40	skip	skip	internals	testchannel
+io.test	io-71.41	skip	skip	internals	testchannel
+io.test	io-71.42	skip	skip	internals	testchannel
+io.test	io-71.43	skip	skip	internals	testchannel
+io.test	io-71.44	skip	skip	internals	testchannel
+io.test	io-71.45	skip	skip	internals	testchannel
+io.test	io-71.46	skip	skip	internals	testchannel
+io.test	io-71.47	skip	skip	internals	testchannel
+io.test	io-71.48	skip	skip	internals	testchannel
+io.test	io-71.49	skip	skip	internals	testchannel
+io.test	io-71.5	skip	skip	internals	testchannel
+io.test	io-71.50	skip	skip	internals	testchannel
+io.test	io-71.51	skip	skip	internals	testchannel
+io.test	io-71.52	skip	skip	internals	testchannel
+io.test	io-71.53	skip	skip	internals	testchannel
+io.test	io-71.54	skip	skip	internals	testchannel
+io.test	io-71.55	skip	skip	internals	testchannel
+io.test	io-71.56	skip	skip	internals	testchannel
+io.test	io-71.57	skip	skip	internals	testchannel
+io.test	io-71.58	skip	skip	internals	testchannel
+io.test	io-71.59	skip	skip	internals	testchannel
+io.test	io-71.6	skip	skip	internals	testchannel
+io.test	io-71.60	skip	skip	internals	testchannel
+io.test	io-71.61	skip	skip	internals	testchannel
+io.test	io-71.62	skip	skip	internals	testchannel
+io.test	io-71.63	skip	skip	internals	testchannel
+io.test	io-71.64	skip	skip	internals	testchannel
+io.test	io-71.65	skip	skip	internals	testchannel
+io.test	io-71.66	skip	skip	internals	testchannel
+io.test	io-71.67	skip	skip	internals	testchannel
+io.test	io-71.68	skip	skip	internals	testchannel
+io.test	io-71.69	skip	skip	internals	testchannel
+io.test	io-71.7	skip	skip	internals	testchannel
+io.test	io-71.70	skip	skip	internals	testchannel
+io.test	io-71.71	skip	skip	internals	testchannel
+io.test	io-71.72	skip	skip	internals	testchannel
+io.test	io-71.73	skip	skip	internals	testchannel
+io.test	io-71.74	skip	skip	internals	testchannel
+io.test	io-71.75	skip	skip	internals	testchannel
+io.test	io-71.76	skip	skip	internals	testchannel
+io.test	io-71.77	skip	skip	internals	testchannel
+io.test	io-71.78	skip	skip	internals	testchannel
+io.test	io-71.79	skip	skip	internals	testchannel
+io.test	io-71.8	skip	skip	internals	testchannel
+io.test	io-71.80	skip	skip	internals	testchannel
+io.test	io-71.81	skip	skip	internals	testchannel
+io.test	io-71.82	skip	skip	internals	testchannel
+io.test	io-71.83	skip	skip	internals	testchannel
+io.test	io-71.84	skip	skip	internals	testchannel
+io.test	io-71.85	skip	skip	internals	testchannel
+io.test	io-71.86	skip	skip	internals	testchannel
+io.test	io-71.87	skip	skip	internals	testchannel
+io.test	io-71.88	skip	skip	internals	testchannel
+io.test	io-71.89	skip	skip	internals	testchannel
+io.test	io-71.9	skip	skip	internals	testchannel
+io.test	io-71.90	skip	skip	internals	testchannel
+io.test	io-71.91	skip	skip	internals	testchannel
+io.test	io-71.92	skip	skip	internals	testchannel
+io.test	io-71.93	skip	skip	internals	testchannel
+io.test	io-71.94	skip	skip	internals	testchannel
+io.test	io-71.95	skip	skip	internals	testchannel
+io.test	io-71.96	skip	skip	internals	testchannel
+io.test	io-71.97	skip	skip	internals	testchannel
+io.test	io-71.98	skip	skip	internals	testchannel
+io.test	io-71.99	skip	skip	internals	testchannel
+io.test	io-71.a0	skip	skip	internals	testchannel
+io.test	io-71.a1	skip	skip	internals	testchannel
+io.test	io-71.a2	skip	skip	internals	testchannel
+io.test	io-71.a3	skip	skip	internals	testchannel
+io.test	io-71.a4	skip	skip	internals	testchannel
+io.test	io-71.a5	skip	skip	internals	testchannel
+io.test	io-71.a6	skip	skip	internals	testchannel
+io.test	io-71.a7	skip	skip	internals	testchannel
+io.test	io-71.a8	skip	skip	internals	testchannel
+io.test	io-71.a9	skip	skip	internals	testchannel
+io.test	io-71.b0	skip	skip	internals	testchannel
+io.test	io-71.b1	skip	skip	internals	testchannel
+io.test	io-71.b2	skip	skip	internals	testchannel
+io.test	io-71.b3	skip	skip	internals	testchannel
+io.test	io-71.b4	skip	skip	internals	testchannel
+io.test	io-71.b5	skip	skip	internals	testchannel
+io.test	io-71.b6	skip	skip	internals	testchannel
+io.test	io-71.b7	skip	skip	internals	testchannel
+io.test	io-71.b8	skip	skip	internals	testchannel
+io.test	io-71.b9	skip	skip	internals	testchannel
+io.test	io-71.c0	skip	skip	internals	testchannel
+io.test	io-71.c1	skip	skip	internals	testchannel
+io.test	io-71.c2	skip	skip	internals	testchannel
+io.test	io-71.c3	skip	skip	internals	testchannel
+io.test	io-71.c4	skip	skip	internals	testchannel
+io.test	io-71.c5	skip	skip	internals	testchannel
+io.test	io-71.c6	skip	skip	internals	testchannel
+io.test	io-71.c7	skip	skip	internals	testchannel
+io.test	io-71.c8	skip	skip	internals	testchannel
+io.test	io-71.c9	skip	skip	internals	testchannel
+io.test	io-71.d0	skip	skip	internals	testchannel
+io.test	io-71.d1	skip	skip	internals	testchannel
+io.test	io-71.d2	skip	skip	internals	testchannel
+io.test	io-71.d3	skip	skip	internals	testchannel
+io.test	io-71.d4	skip	skip	internals	testchannel
+io.test	io-71.d5	skip	skip	internals	testchannel
+io.test	io-71.d6	skip	skip	internals	testchannel
+io.test	io-71.d7	skip	skip	internals	testchannel
+io.test	io-71.d8	skip	skip	internals	testchannel
+io.test	io-71.d9	skip	skip	internals	testchannel
+io.test	io-71.e0	skip	skip	internals	testchannel
+io.test	io-71.e1	skip	skip	internals	testchannel
+io.test	io-71.e2	skip	skip	internals	testchannel
+io.test	io-71.e3	skip	skip	internals	testchannel
+io.test	io-71.e4	skip	skip	internals	testchannel
+io.test	io-71.e5	skip	skip	internals	testchannel
+io.test	io-71.e6	skip	skip	internals	testchannel
+io.test	io-71.e7	skip	skip	internals	testchannel
+io.test	io-71.e8	skip	skip	internals	testchannel
+io.test	io-71.e9	skip	skip	internals	testchannel
+io.test	io-71.f0	skip	skip	internals	testchannel
+io.test	io-71.f1	skip	skip	internals	testchannel
+io.test	io-71.f2	skip	skip	internals	testchannel
+io.test	io-71.f3	skip	skip	internals	testchannel
+io.test	io-72.0	skip	skip	internals	testchannel
+io.test	io-72.1	skip	skip	internals	testchannel
+io.test	io-72.10	skip	skip	internals	testchannel
+io.test	io-72.11	skip	skip	internals	testchannel
+io.test	io-72.12	skip	skip	internals	testchannel
+io.test	io-72.13	skip	skip	internals	testchannel
+io.test	io-72.14	skip	skip	internals	testchannel
+io.test	io-72.15	skip	skip	internals	testchannel
+io.test	io-72.16	skip	skip	internals	testchannel
+io.test	io-72.17	skip	skip	internals	testchannel
+io.test	io-72.18	skip	skip	internals	testchannel
+io.test	io-72.19	skip	skip	internals	testchannel
+io.test	io-72.2	skip	skip	internals	testchannel
+io.test	io-72.20	skip	skip	internals	testchannel
+io.test	io-72.21	skip	skip	internals	testchannel
+io.test	io-72.22	skip	skip	internals	testchannel
+io.test	io-72.23	skip	skip	internals	testchannel
+io.test	io-72.24	skip	skip	internals	testchannel
+io.test	io-72.25	skip	skip	internals	testchannel
+io.test	io-72.26	skip	skip	internals	testchannel
+io.test	io-72.27	skip	skip	internals	testchannel
+io.test	io-72.28	skip	skip	internals	testchannel
+io.test	io-72.29	skip	skip	internals	testchannel
+io.test	io-72.3	skip	skip	internals	testchannel
+io.test	io-72.30	skip	skip	internals	testchannel
+io.test	io-72.31	skip	skip	internals	testchannel
+io.test	io-72.32	skip	skip	internals	testchannel
+io.test	io-72.33	skip	skip	internals	testchannel
+io.test	io-72.34	skip	skip	internals	testchannel
+io.test	io-72.35	skip	skip	internals	testchannel
+io.test	io-72.36	skip	skip	internals	testchannel
+io.test	io-72.37	skip	skip	internals	testchannel
+io.test	io-72.38	skip	skip	internals	testchannel
+io.test	io-72.39	skip	skip	internals	testchannel
+io.test	io-72.4	skip	skip	internals	testchannel
+io.test	io-72.40	skip	skip	internals	testchannel
+io.test	io-72.41	skip	skip	internals	testchannel
+io.test	io-72.42	skip	skip	internals	testchannel
+io.test	io-72.43	skip	skip	internals	testchannel
+io.test	io-72.44	skip	skip	internals	testchannel
+io.test	io-72.45	skip	skip	internals	testchannel
+io.test	io-72.46	skip	skip	internals	testchannel
+io.test	io-72.47	skip	skip	internals	testchannel
+io.test	io-72.48	skip	skip	internals	testchannel
+io.test	io-72.49	skip	skip	internals	testchannel
+io.test	io-72.5	skip	skip	internals	testchannel
+io.test	io-72.50	skip	skip	internals	testchannel
+io.test	io-72.51	skip	skip	internals	testchannel
+io.test	io-72.52	skip	skip	internals	testchannel
+io.test	io-72.53	skip	skip	internals	testchannel
+io.test	io-72.54	skip	skip	internals	testchannel
+io.test	io-72.55	skip	skip	internals	testchannel
+io.test	io-72.56	skip	skip	internals	testchannel
+io.test	io-72.57	skip	skip	internals	testchannel
+io.test	io-72.58	skip	skip	internals	testchannel
+io.test	io-72.59	skip	skip	internals	testchannel
+io.test	io-72.6	skip	skip	internals	testchannel
+io.test	io-72.60	skip	skip	internals	testchannel
+io.test	io-72.61	skip	skip	internals	testchannel
+io.test	io-72.62	skip	skip	internals	testchannel
+io.test	io-72.63	skip	skip	internals	testchannel
+io.test	io-72.64	skip	skip	internals	testchannel
+io.test	io-72.65	skip	skip	internals	testchannel
+io.test	io-72.66	skip	skip	internals	testchannel
+io.test	io-72.67	skip	skip	internals	testchannel
+io.test	io-72.68	skip	skip	internals	testchannel
+io.test	io-72.69	skip	skip	internals	testchannel
+io.test	io-72.7	skip	skip	internals	testchannel
+io.test	io-72.70	skip	skip	internals	testchannel
+io.test	io-72.71	skip	skip	internals	testchannel
+io.test	io-72.72	skip	skip	internals	testchannel
+io.test	io-72.73	skip	skip	internals	testchannel
+io.test	io-72.74	skip	skip	internals	testchannel
+io.test	io-72.75	skip	skip	internals	testchannel
+io.test	io-72.76	skip	skip	internals	testchannel
+io.test	io-72.77	skip	skip	internals	testchannel
+io.test	io-72.78	skip	skip	internals	testchannel
+io.test	io-72.79	skip	skip	internals	testchannel
+io.test	io-72.8	skip	skip	internals	testchannel
+io.test	io-72.80	skip	skip	internals	testchannel
+io.test	io-72.81	skip	skip	internals	testchannel
+io.test	io-72.82	skip	skip	internals	testchannel
+io.test	io-72.83	skip	skip	internals	testchannel
+io.test	io-72.84	skip	skip	internals	testchannel
+io.test	io-72.85	skip	skip	internals	testchannel
+io.test	io-72.86	skip	skip	internals	testchannel
+io.test	io-72.87	skip	skip	internals	testchannel
+io.test	io-72.88	skip	skip	internals	testchannel
+io.test	io-72.89	skip	skip	internals	testchannel
+io.test	io-72.9	skip	skip	internals	testchannel
+io.test	io-72.90	skip	skip	internals	testchannel
+io.test	io-72.91	skip	skip	internals	testchannel
+io.test	io-72.92	skip	skip	internals	testchannel
+io.test	io-72.93	skip	skip	internals	testchannel
+io.test	io-72.94	skip	skip	internals	testchannel
+io.test	io-72.95	skip	skip	internals	testchannel
+io.test	io-72.96	skip	skip	internals	testchannel
+io.test	io-72.97	skip	skip	internals	testchannel
+io.test	io-72.98	skip	skip	internals	testchannel
+io.test	io-72.99	skip	skip	internals	testchannel
+io.test	io-72.a0	skip	skip	internals	testchannel
+io.test	io-72.a1	skip	skip	internals	testchannel
+io.test	io-72.a2	skip	skip	internals	testchannel
+io.test	io-72.a3	skip	skip	internals	testchannel
+io.test	io-72.a4	skip	skip	internals	testchannel
+io.test	io-72.a5	skip	skip	internals	testchannel
+io.test	io-72.a6	skip	skip	internals	testchannel
+io.test	io-72.a7	skip	skip	internals	testchannel
+io.test	io-72.a8	skip	skip	internals	testchannel
+io.test	io-72.a9	skip	skip	internals	testchannel
+io.test	io-72.b0	skip	skip	internals	testchannel
+io.test	io-72.b1	skip	skip	internals	testchannel
+io.test	io-72.b2	skip	skip	internals	testchannel
+io.test	io-72.b3	skip	skip	internals	testchannel
+io.test	io-72.b4	skip	skip	internals	testchannel
+io.test	io-72.b5	skip	skip	internals	testchannel
+io.test	io-72.b6	skip	skip	internals	testchannel
+io.test	io-72.b7	skip	skip	internals	testchannel
+io.test	io-72.b8	skip	skip	internals	testchannel
+io.test	io-72.b9	skip	skip	internals	testchannel
+io.test	io-72.c0	skip	skip	internals	testchannel
+io.test	io-72.c1	skip	skip	internals	testchannel
+io.test	io-72.c2	skip	skip	internals	testchannel
+io.test	io-72.c3	skip	skip	internals	testchannel
+io.test	io-72.c4	skip	skip	internals	testchannel
+io.test	io-72.c5	skip	skip	internals	testchannel
+io.test	io-72.c6	skip	skip	internals	testchannel
+io.test	io-72.c7	skip	skip	internals	testchannel
+io.test	io-72.c8	skip	skip	internals	testchannel
+io.test	io-72.c9	skip	skip	internals	testchannel
+io.test	io-72.d0	skip	skip	internals	testchannel
+io.test	io-72.d1	skip	skip	internals	testchannel
+io.test	io-72.d2	skip	skip	internals	testchannel
+io.test	io-72.d3	skip	skip	internals	testchannel
+io.test	io-72.d4	skip	skip	internals	testchannel
+io.test	io-72.d5	skip	skip	internals	testchannel
+io.test	io-72.d6	skip	skip	internals	testchannel
+io.test	io-72.d7	skip	skip	internals	testchannel
+io.test	io-72.d8	skip	skip	internals	testchannel
+io.test	io-72.d9	skip	skip	internals	testchannel
+io.test	io-72.e0	skip	skip	internals	testchannel
+io.test	io-72.e1	skip	skip	internals	testchannel
+io.test	io-72.e2	skip	skip	internals	testchannel
+io.test	io-72.e3	skip	skip	internals	testchannel
+io.test	io-72.e4	skip	skip	internals	testchannel
+io.test	io-72.e5	skip	skip	internals	testchannel
+io.test	io-72.e6	skip	skip	internals	testchannel
+io.test	io-72.e7	skip	skip	internals	testchannel
+io.test	io-72.e8	skip	skip	internals	testchannel
+io.test	io-72.e9	skip	skip	internals	testchannel
+io.test	io-72.f0	skip	skip	internals	testchannel
+io.test	io-72.f1	skip	skip	internals	testchannel
+io.test	io-72.f2	skip	skip	internals	testchannel
+io.test	io-72.f3	skip	skip	internals	testchannel
+io.test	io-73.1	pass	pass		
+io.test	io-73.2	pass	pass		
+io.test	io-73.3	fail	fail	bug	code 0/0,2: 1 1 {} 1 {} 1 \| want: 1 1 {more data} 0 {} 1
+io.test	io-73.4	fail	fail	bug	code 0/0,2: 1 1 {} 1 \| want: 1 1 {more data } 1
+io.test	io-73.5	fail	fail	bug	code 0/0,2: 1 1 {} 1 \| want: 1 1 more data 1
+io.test	io-74.1	skip	skip	internals	testobj
+io.test	io-75.1	pass	pass		
+io.test	io-75.2	fail	fail	bug	code 0/0,2: A¢ \| want: A?
+io.test	io-75.3	pass	pass		
+io.test	io-75.4	pass	pass		
+io.test	io-75.5	pass	pass		
 io.test	io-8.1	skip	skip	internals	testchannel
 io.test	io-8.2	skip	skip	internals	testchannel
 io.test	io-8.3	skip	skip	internals	testchannel
@@ -29916,9 +30653,9 @@ ioCmd.test	iocmd-14.7	pass	pass
 ioCmd.test	iocmd-14.8	pass	pass		
 ioCmd.test	iocmd-14.9	pass	pass		
 ioCmd.test	iocmd-15.1	pass	pass		
-ioCmd.test	iocmd-15.10	fail	fail	bug	code 0/0,2: 1 {fcopy -command is not available} \| want: 1 {bad option "foo": must be -size or -command}
+ioCmd.test	iocmd-15.10	fail	fail	bug	code 0/0,2: 1 {bad option "foo": should be -size or -command} \| want: 1 {bad option "foo": must be -size or -command}
 ioCmd.test	iocmd-15.11	pass	pass		
-ioCmd.test	iocmd-15.12	fail	fail	bug	code 0/0,2: 1 {fcopy -command is not available} \| want: 1 {expected integer but got "foo"}
+ioCmd.test	iocmd-15.12	pass	pass		
 ioCmd.test	iocmd-15.2	pass	pass		
 ioCmd.test	iocmd-15.3	fail	fail	bug	code 0/0,2: 1 {can not find channel named "1"} \| want: 1 {wrong # args: should be "fcopy input output ?-size size? ?-command callback?"}
 ioCmd.test	iocmd-15.4	fail	fail	bug	code 0/0,2: 1 {can not find channel named "1"} \| want: 1 {wrong # args: should be "fcopy input output ?-size size? ?-command callback?"}
@@ -29944,7 +30681,7 @@ ioCmd.test	iocmd-21.15	fail	fail	feature	code 0/0,2: unknown or ambiguous subcom
 ioCmd.test	iocmd-21.16	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *supports "cget" but not "cgetall"
 ioCmd.test	iocmd-21.17	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *supports "cgetall" but not "cget"
 ioCmd.test	iocmd-21.18	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {} {initialize rc* {read write}} rc* {finaliz...
-ioCmd.test	iocmd-21.19	fail	fail	feature	code 0/0,2: {stdin stdout stderr file18 file19} 1 {unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pi \| want: {} {initialize rc* {read write}} 1 ...
+ioCmd.test	iocmd-21.19	fail	fail	feature	code 0/0,2: {} 1 {unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell} {} \| want: {} {initialize rc* {read write}} 1 ...
 ioCmd.test	iocmd-21.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: 
 ioCmd.test	iocmd-21.20	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
 ioCmd.test	iocmd-21.21	fail	fail	feature	setup: unknown or ambiguous subcommand "create": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell
@@ -30229,7 +30966,7 @@ ioTrans.test	iortrans-2.17	fail	fail	feature	code 1/1: unknown or ambiguous subc
 ioTrans.test	iortrans-2.18	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: *supports "flush" but not "write"
 ioTrans.test	iortrans-2.19	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: {} {initialize rt* {read write}} file* {drain r...
 ioTrans.test	iortrans-2.2	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: can not find channel named ""
-ioTrans.test	iortrans-2.20	fail	fail	feature	code 0/0,2: {stdin stdout stderr} 1 {unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read,  \| want: {} {initialize rt* {read write}} 1 ...
+ioTrans.test	iortrans-2.20	fail	fail	feature	code 0/0,2: {} 1 {unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell} {} \| want: {} {initialize rt* {read write}} 1 {*...
 ioTrans.test	iortrans-2.3	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: unmatched open brace in list
 ioTrans.test	iortrans-2.4	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: invalid command name "foo"
 ioTrans.test	iortrans-2.5	fail	fail	feature	code 1/1: unknown or ambiguous subcommand "push": must be close, configure, copy, eof, flush, gets, names, pipe, puts, read, seek, or tell \| want: wrong # args: should be "foo"
@@ -34194,9 +34931,10 @@ oo.test	oo-0.3	skip	skip	internals	memory
 oo.test	oo-0.4	skip	skip	internals	memory
 oo.test	oo-0.5.1	skip	skip	internals	memory
 oo.test	oo-0.5.2	skip	skip	internals	memory
-oo.test	oo-0.6	fail	fail	bug	code 1/0,2: namespace "oo" not found in "::" \| want: 0 {} 1 {invalid command name "object"}
-oo.test	oo-0.7	fail	fail	bug	code 1/0,2: namespace "oo" not found in "::" \| want: 0 {} 1 {invalid command name "class"}
+oo.test	oo-0.6	pass	pass		
+oo.test	oo-0.7	pass	pass		
 oo.test	oo-0.8	skip	skip	internals	memory
+oo.test	oo-0.9	fail	fail	bug	code 0/0,2: TclOO 1.1.0 0 \| want: TclOO 1.1.0 1
 oo.test	oo-1.1	pass	pass		
 oo.test	oo-1.10	pass	pass		
 oo.test	oo-1.11	pass	pass		
@@ -37664,7 +38402,7 @@ safe.test	safe-5.3	fail	fail	feature	code 0/0,2: 1 {can't find package SafeTestP
 safe.test	safe-5.4	fail	fail	feature	code 0/0,2: 1 {can't find package SafeTestPackage1} 1 {can't find package SafeTestPackage2} 1 {invalid command name "HeresPackage1"} 1 {invalid command  \| want: 0 1.2.3 0 2.3.4 0 OK1 0 OK2
 safe.test	safe-5.5	fail	fail	feature	setup: invalid command name "tcl::tm::path"
 safe.test	safe-5.6	fail	fail	feature	setup: invalid command name "tcl::tm::path"
-safe.test	safe-6.1	fail	fail	feature	code 0/0,2: errorCode errorInfo tcl_patchLevel tcl_platform tcl_precision tcl_version \| want: tcl_interactive tcl_patchLevel tcl_platform tcl_version
+safe.test	safe-6.1	fail	fail	feature	code 0/0,2: errorCode errorInfo oo::patchlevel oo::version tcl_patchLevel tcl_platform tcl_precision tcl_version \| want: tcl_interactive tcl_patchLevel tcl_platform tcl_version
 safe.test	safe-6.2	pass	pass		
 safe.test	safe-6.3	fail	fail	feature	code 0/0,2: byteOrder engine machine os osVersion platform pointerSize user wordSize \| want: byteOrder engine pathSeparator platform pointerSize wordSize
 safe.test	safe-7.1	fail	fail	feature	setup: invalid command name "safe::interpCreate"
@@ -40673,7 +41411,7 @@ unixFile.test	unixFile-1.6	skip	skip	internals	testfindexecutable
 unixFile.test	unixFile-1.7	skip	skip	internals	testfindexecutable
 unixForkEvent.test	unixforkevent-1.1	skip	skip	internals	testfork
 unixInit.test	unixInit-1.1	pass	pass		
-unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 38505', Got '' \| want: OK
+unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 40693', Got '' \| want: OK
 unixInit.test	unixInit-3.1	pass	pass		
 unixInit.test	unixInit-3.2	fail	fail	bug	code 0/0,2: 1 \| want: 0
 unixInit.test	unixInit-4.1	fail	fail	bug	code 1/0,2: can't read "tcl_pkgPath": no such variable \| want: unix
