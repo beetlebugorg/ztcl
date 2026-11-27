@@ -50,12 +50,14 @@ pub fn lsetOwned(it: *Interp, cell: *interp.Var, index: Value, v: Value) Error!b
 }
 
 /// `lset` with one index on a plain variable: the general command writes
-/// through `lsetOwned` and then ends the ownership, because it returns
-/// the list.
-fn lsetPlain(it: *Interp, name: []const u8, index: Value, v: Value) Error!?Value {
+/// through `lsetOwned`. It then ends the ownership, because it returns
+/// the list, unless the bytecode drops the result (`dropped`). The
+/// result is then an empty string, and the cell keeps the list.
+fn lsetPlain(it: *Interp, name: []const u8, index: Value, v: Value, dropped: bool) Error!?Value {
     if (std.mem.indexOfScalar(u8, name, '(') != null) return null;
-    const cell = (try it.findVar(it.frame, name, false)) orelse return null;
+    const cell = (if (dropped) try it.findOwnedVar(it.frame, name) else try it.findVar(it.frame, name, false)) orelse return null;
     if (!try lsetOwned(it, cell, index, v)) return null;
+    if (dropped) return Value.empty;
     const c = cell.target();
     const out = c.v.owned;
     c.v = .{ .val = out };
@@ -65,11 +67,12 @@ fn lsetPlain(it: *Interp, name: []const u8, index: Value, v: Value) Error!?Value
 pub fn cmdLset(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 3) return it.wrongArgs("lset listVar ?index? ?index ...? value");
     const name = try it.str(argv[1]);
+    const dropped = it.takeDropped(argv);
     // One index word is a list of indexes.
     var idxs = argv[2 .. argv.len - 1];
     if (idxs.len == 1) idxs = try it.list(idxs[0]);
     if (idxs.len == 1) {
-        if (try lsetPlain(it, name, idxs[0], argv[argv.len - 1])) |out| return out;
+        if (try lsetPlain(it, name, idxs[0], argv[argv.len - 1], dropped)) |out| return out;
     }
     const old = try it.getVar(name);
     const out = try lsetRec(it, old, idxs, argv[argv.len - 1]);
