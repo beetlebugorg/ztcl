@@ -51,6 +51,17 @@ fn pageBytes(size: usize, heap_bytes: usize) usize {
     return @max(16 * 1024, std.mem.alignForward(usize, size * 8, 4096));
 }
 const small_heap: usize = 2 << 20;
+/// The places of `Heap.spare_large`, and the most bytes of the blocks
+/// that they keep.
+const spare_large_max = 128;
+const spare_large_bytes = 32 << 20;
+
+const SpareLarge = struct {
+    ptr: ?[*]u8 = null,
+    len: usize = 0,
+    alignment: Alignment = .@"16",
+};
+
 /// The largest block of a size class.
 pub const max_small: usize = 8192;
 const max_small_align = 16;
@@ -175,6 +186,13 @@ pub const Heap = struct {
     table_shift: std.math.Log2Int(usize) = 0,
     /// The span of the last address that the mark found.
     last: ?*Span = null,
+    /// Large blocks with no address in them (`noscan`) that a sweep
+    /// freed, for the next large block of the same size and alignment.
+    /// A loop that makes a large string in each pass then reuses the
+    /// pages, with no new mapping and no page fault. The heap counts no
+    /// byte of a kept block (`bytes`), so the memory count of a script
+    /// does not change.
+    spare_large: [spare_large_max]SpareLarge = @splat(.{}),
     stress_left: u32 = 0,
     /// The character counts of the last long strings in heap blocks.
     /// The bytes of a block do not change while the block is live, so
@@ -308,6 +326,7 @@ pub const Heap = struct {
 
     /// Frees each span and keeps the heap usable.
     pub fn reset(h: *Heap) void {
+        h.dropSpareLarge();
         for (h.spans.items) |s| h.freeSpan(s);
         if (h.pool) |*p| _ = p.trim(4 << 20);
         h.spans.clearRetainingCapacity();
@@ -411,6 +430,51 @@ pub const Heap = struct {
             return;
         }
         h.backing.rawFree(mem[0..len], a, 0);
+    }
+
+    /// A kept large block of `size` bytes and alignment `a`, or null.
+    fn takeSpareLarge(h: *Heap, size: usize, a: Alignment, noscan: bool) ?[*]u8 {
+        if (!noscan) return null;
+        for (&h.spare_large) |*e| {
+            if (e.len == size and e.alignment == a) if (e.ptr) |p| {
+                e.ptr = null;
+                return p;
+            };
+        }
+        return null;
+    }
+
+    /// Frees a dead large span. A `noscan` block goes to `spare_large`
+    /// when a place is free (an empty place, or the place of a smaller
+    /// block) and the kept blocks stay within `spare_large_bytes`. Each
+    /// block that leaves the list goes back to the backing allocator. A
+    /// span of the page pool goes back to the pool, which keeps its pages.
+    fn freeLarge(h: *Heap, s: *Span, poison: bool) void {
+        if (poison or s.pooled or !s.noscan or s.len > spare_large_bytes) return h.freeSpan(s);
+        var at: ?*SpareLarge = null;
+        for (&h.spare_large) |*e| {
+            if (e.ptr == null) {
+                at = e;
+                break;
+            }
+            if (e.len < s.len and (at == null or e.len < at.?.len)) at = e;
+        }
+        const e = at orelse return h.freeSpan(s);
+        var total: usize = s.len;
+        for (&h.spare_large) |*o| if (o != e and o.ptr != null) {
+            total += o.len;
+        };
+        if (total > spare_large_bytes) return h.freeSpan(s);
+        if (e.ptr) |p| h.backing.rawFree(p[0..e.len], e.alignment, 0);
+        e.* = .{ .ptr = @ptrFromInt(s.base), .len = s.len, .alignment = s.alignment };
+        h.freeMeta(s);
+    }
+
+    fn dropSpareLarge(h: *Heap) void {
+        for (&h.spare_large) |*e| {
+            if (e.ptr) |p| h.backing.rawFree(p[0..e.len], e.alignment, 0);
+            e.* = .{};
+        }
     }
 
     /// The index in `spans` of the first span that ends above `addr`.
@@ -524,7 +588,11 @@ pub const Heap = struct {
     fn allocLarge(h: *Heap, len: usize, alignment: Alignment) ?[*]u8 {
         const a = alignment.max(span_align);
         const size = std.mem.alignForward(usize, len, 16);
-        const got = h.spanMem(size, a) orelse return null;
+        const noscan = alignment.toByteUnits() < @sizeOf(usize);
+        const got: SpanMem = if (h.takeSpareLarge(size, a, noscan)) |p|
+            .{ .mem = p, .pooled = false }
+        else
+            h.spanMem(size, a) orelse return null;
         const mem = got.mem;
         const s = h.makeSpan(1, .{
             .base = @intFromPtr(mem),
@@ -534,7 +602,7 @@ pub const Heap = struct {
             .count = 1,
             .nwords = 0,
             .class = 0,
-            .noscan = alignment.toByteUnits() < @sizeOf(usize),
+            .noscan = noscan,
             .large = true,
             .alignment = a,
             .free = &.{},
@@ -1132,7 +1200,7 @@ fn sweep(h: *Heap) void {
             if (s.mark[0] == 0) {
                 if (poison) @memset(@as([*]u8, @ptrFromInt(s.base))[0..s.len], dead_byte);
                 h.bytes -= s.len;
-                h.freeSpan(s);
+                h.freeLarge(s, poison);
                 continue;
             }
             s.mark[0] = 0;

@@ -197,6 +197,13 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         })) })).step);
     }
+    // The vector loops of base64 and hex against scalar code, in
+    // ReleaseFast so the LLVM backend builds the vectors.
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/crypto/b64_simd.zig"),
+        .target = target,
+        .optimize = .ReleaseFast,
+    }) })).step);
     // HPACK of RFC 7541 (task 28) and the HTTP/2 connection (task 29):
     // the tests in `zig build test` (conn.zig has the HPACK tests too),
     // the HPACK fuzz run in ReleaseSafe, and the h2c test server.
@@ -925,7 +932,7 @@ fn addWasmForm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise:
     wasm.root_module.addOptions("build_options", wasm_options);
     if (threads != .shared) addVt(b, wasm.root_module, wasm.root_module.resolved_target.?, .small);
     // The build with shared threads has no VT module, and src/json
-    // imports `json_index`.
+    // imports `json_index` and src/more.zig imports `b64_simd`.
     if (threads == .shared) addCrypto(b, wasm.root_module);
     wasm.entry = .disabled;
     wasm.rdynamic = true;
@@ -1138,6 +1145,13 @@ fn addCrypto(b: *std.Build, m: *std.Build.Module) void {
         .optimize = m.optimize,
     }));
     m.addImport("json_index", jsonIndex(b, t, kt, m.optimize));
+    // The vector loops of base64: the AVX2 features of crypto_x86_avx2
+    // on x86-64 (src/more.zig checks the CPU), else the target.
+    m.addImport("b64_simd", b.createModule(.{
+        .root_source_file = b.path("src/crypto/b64_simd.zig"),
+        .target = if (t.result.cpu.arch == .x86_64) kt else t,
+        .optimize = m.optimize,
+    }));
 }
 
 /// The target of the kernel modules: the CPU of `t`, with its model,
@@ -1235,6 +1249,8 @@ fn addEnclaveCore(b: *std.Build, size_plant: usize) *std.Build.Step.Compile {
     off[moduleIndex("json")] = true;
     addModuleOptions(b, opts, off);
     obj.root_module.addOptions("build_options", opts);
+    // src/more.zig imports `b64_simd`, which is off for UEFI.
+    addCrypto(b, obj.root_module);
     // The enclave CRT has no helpers of 128-bit floats.
     obj.bundle_compiler_rt = true;
     return obj;

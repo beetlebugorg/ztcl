@@ -184,6 +184,25 @@ Measured on commit `bbdc5bf`, `ReleaseFast`, x86-64 Linux, against `tclsh` 8.6.1
 
 The cause of the `bf_oo.tcl` result was not profiled. The two `bf` gates stay provisional until the user sets them.
 
+### base64 and hex with vector loops
+
+`binary encode` and `binary decode` of base64 and hex run the whole blocks in the vector loops of `src/crypto/b64_simd.zig`, after the method of Muła and Lemire ("Faster Base64 Encoding and Decoding Using AVX2 Instructions", ACM Transactions on the Web, 2018), with compares and selects in place of byte lookups. On x86-64 the module has AVX2 and a check of the CPU at run time; on aarch64 it has NEON. The scalar code does the tail, the padding, the white space, and each error with its position. The results are one allocation of the exact size, the scan of ASCII text reads 4 vectors at a time, and the heap keeps up to 32 MiB of freed large blocks of bytes for the next block of the same size.
+
+Measured on an i7-6700K (AVX2) with other load, `ReleaseFast`, GB/s of the input by the task clock of the process (`bench/ideas/base64.tcl` with `--tclsh`, a text of the letter `a`), against `tclsh` 8.6.16:
+
+| Case | 1 KB | 128 KB | 16 MB |
+|---|---|---|---|
+| encode base64, ztcl | 1.31 | 2.48 | 0.83 |
+| encode base64, tclsh | 0.23 | 0.36 | 0.32 |
+| decode base64, ztcl | 1.75 | 2.92 | 1.21 |
+| decode base64, tclsh | 0.19 | 0.24 | 0.25 |
+| encode hex, ztcl | 1.27 | 2.03 | 0.67 |
+| encode hex, tclsh | 0.44 | 0.81 | 0.43 |
+| decode hex, ztcl | 2.45 | 5.01 | 1.79 |
+| decode hex, tclsh | 0.20 | 0.25 | 0.23 |
+
+A loop of 2,000 encodes of 128 KB uses 364 M cycles against 3,251 M in `tclsh`, and 2,000 decodes use 413 M against 5,323 M. The 16 MB cases have a page fault for each new page of the result. `base64/test.tcl`: 5.36 G instructions against 72.4 G (ratio 0.07), and a task clock of 1.73 s against 9.02 s. Text with bytes above 127 still goes through the UTF-8 form of the string: an encode of 128 KB of such bytes is 0.33 ms against 0.39 ms in `tclsh`. A byte form of the value removes that step.
+
 ## Milestone B: the builtins of the outside benchmarks
 
 | Work | Today | Target |
