@@ -86,6 +86,16 @@ const KVM_IRQFD = IOCTL.IOW(KVMIO, 0x76, Irqfd);
 const KVM_CREATE_PIT2 = IOCTL.IOW(KVMIO, 0x77, PitConfig);
 const KVM_IOEVENTFD = IOCTL.IOW(KVMIO, 0x79, Ioeventfd);
 const KVM_RUN = IOCTL.IO(KVMIO, 0x80);
+const KVM_CHECK_EXTENSION = IOCTL.IO(KVMIO, 0x03);
+const KVM_PRE_FAULT_MEMORY = IOCTL.IOWR(KVMIO, 0xd5, PreFault);
+const kvm_cap_pre_fault_memory = 236;
+const madv_populate_read = 22;
+const PreFault = extern struct { gpa: u64, size: u64, flags: u64 = 0, padding: [5]u64 = @splat(0) };
+/// The size of one prefault call, so a resume waits at most for one
+/// call: vCPU 0 holds the vCPU mutex of KVM in it.
+const prefault_slice: u64 = 256 << 10;
+/// KVM_CAP_PRE_FAULT_MEMORY of the host: 0 not checked, 1 yes, 2 no.
+var pre_fault_cap: std.atomic.Value(u8) = .init(0);
 const KVM_SET_REGS = IOCTL.IOW(KVMIO, 0x82, Regs);
 const KVM_GET_SREGS = IOCTL.IOR(KVMIO, 0x83, Sregs);
 const KVM_SET_SREGS = IOCTL.IOW(KVMIO, 0x84, Sregs);
@@ -384,6 +394,12 @@ net_in_tx: bool = false,
 vs_event_idx: u16 = 0,
 /// A machine of `snapshot.prepare`, ready for a restore.
 snap_ready: bool = false,
+/// The prefault after a restore: the 2 MB chunks with data (the bitmap
+/// of the snapshot header) and the next guest address. vCPU 0 maps
+/// them in the EPT while the machine is paused, low addresses first.
+pf_chunks: [512]u8 = @splat(0),
+pf_next: u64 = 0,
+pf_go: std.atomic.Value(bool) = .init(false),
 /// The bytes of the free page reports of the guest.
 reported: std.atomic.Value(u64) = .init(0),
 /// The text of a failure of a vCPU.
@@ -1038,8 +1054,10 @@ pub fn vcpuMain(v: *Vcpu) void {
             _ = ioctl(v.fd, KVM_RUN, 0);
             _ = m.parked.fetchAdd(1, .seq_cst);
             _ = linux.futex_3arg(&m.parked.raw, .{ .cmd = .WAKE, .private = true }, 1);
-            while (m.want.load(.seq_cst) == want_pause)
+            while (m.want.load(.seq_cst) == want_pause) {
+                if (v.index == 0 and m.pf_go.load(.acquire) and m.prefaultStep(v)) continue;
                 _ = linux.futex_4arg(&m.want.raw, .{ .cmd = .WAIT, .private = true }, want_pause, null);
+            }
             _ = m.parked.fetchSub(1, .seq_cst);
             continue;
         }
@@ -1061,6 +1079,63 @@ pub fn vcpuMain(v: *Vcpu) void {
             else => {},
         }
     }
+}
+
+/// Starts the prefault of the chunks of `chunks` (a bitmap of 2 MB
+/// chunks) on vCPU 0 while the machine is paused. A resume stops it.
+pub fn prefaultStart(m: *Machine, chunks: []const u8) void {
+    const n = @min(chunks.len, m.pf_chunks.len);
+    @memcpy(m.pf_chunks[0..n], chunks[0..n]);
+    @memset(m.pf_chunks[n..], 0);
+    m.pf_next = 0;
+    m.pf_go.store(true, .release);
+    _ = linux.futex_3arg(&m.want.raw, .{ .cmd = .WAKE, .private = true }, std.math.maxInt(i32));
+}
+
+/// One slice of the prefault: the next 256 KB of a chunk with data,
+/// through KVM_PRE_FAULT_MEMORY, or MADV_POPULATE_READ of the host pages
+/// where KVM has no such call. KVM maps the pages for reads, so the
+/// first write of the guest to a page of the snapshot still faults and
+/// copies the page. Gives false when no memory is left.
+fn prefaultStep(m: *Machine, v: *Vcpu) bool {
+    while (m.pf_next < m.mem.size) {
+        const c = m.pf_next / huge_page;
+        if (c / 8 >= m.pf_chunks.len or m.pf_chunks[c / 8] & (@as(u8, 1) << @intCast(c % 8)) == 0) {
+            m.pf_next = (c + 1) * huge_page;
+            continue;
+        }
+        const len = @min(prefault_slice, (c + 1) * huge_page - m.pf_next, m.mem.size - m.pf_next);
+        prefaultRange(m, v, m.pf_next, len);
+        m.pf_next += len;
+        return true;
+    }
+    m.pf_go.store(false, .release);
+    return false;
+}
+
+fn prefaultRange(m: *Machine, v: *Vcpu, gpa: u64, len: u64) void {
+    if (pre_fault_cap.load(.monotonic) == 0) {
+        const rc = ioctl(m.vm, KVM_CHECK_EXTENSION, kvm_cap_pre_fault_memory);
+        const yes = linux.errno(rc) == .SUCCESS and rc > 0;
+        pre_fault_cap.store(if (yes) 1 else 2, .monotonic);
+    }
+    if (pre_fault_cap.load(.monotonic) == 1) {
+        var r: PreFault = .{ .gpa = gpa, .size = len };
+        while (r.size != 0) {
+            switch (linux.errno(ioctl(v.fd, KVM_PRE_FAULT_MEMORY, @intFromPtr(&r)))) {
+                .SUCCESS, .INTR, .AGAIN => {},
+                else => {
+                    // A host with the call but no two-dimensional paging
+                    // gives EOPNOTSUPP: the host pages stay the fallback.
+                    pre_fault_cap.store(2, .monotonic);
+                    break;
+                },
+            }
+            if (m.want.load(.seq_cst) != want_pause) return;
+        }
+        if (r.size == 0) return;
+    }
+    _ = linux.madvise(m.mem.base + gpa, @intCast(len), madv_populate_read);
 }
 
 /// The guest stopped by itself (`text` is empty) or failed: each vCPU

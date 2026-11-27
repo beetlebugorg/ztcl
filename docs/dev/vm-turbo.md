@@ -39,13 +39,26 @@ The test host: i7-6700K (4 cores, 8 threads), Linux 7.2, a load of 9 to 11 from 
 | `snapshot` of a warm guest (20 MB of 64 MB written) | 7.9 ms | |
 | `create -snapshot` into a prepared machine | 0.45 ms | 1.1 ms |
 | The same with no prepared machine (`prepare` inline) | 12 ms | 15 ms |
-| `start` of a restore to a ready agent (resume, the reset, the resume port 1027) | 2.8 ms | 4.3 ms |
+| `start` of a restore to a ready agent (resume, the reset, the resume port 1027), before the prefault (below) | 2.8 ms | 4.3 ms |
 | The first `exec` after that start | 2.0 ms | 2.7 ms |
 | 4 clones of one file, restore of all four (2 prepared, 2 inline) | 37 ms | |
 
 Of a restore into a prepared machine, the vCPU and VM state is about 0.2 ms. With 4 prepared machines (`ZTCL_VM_POOL=4`), 4 clones of one file restore in 1.0 ms in all.
 
-Before port 1027, the start of a restore to a ready agent was 4 ms with one connection to the agent for `RESUME` on port 1024, and the agent forks a child for each connection there: the first `exec` of a warm guest with no snapshot is 1.0 ms to 3.0 ms on the same host. `MADV_POPULATE_READ` on the chunks with data at the restore made the restore 1.6 ms and did not make the start faster, so the restore does not do it. The agent now serves the resume on port 1027 in its first process with no fork. With it, the start to a ready agent is 2.8 ms best and 4.3 ms median. The rest is likely the first touches of the guest after the restore: each page that the guest kernel and the agent touch is a fault of the EPT. This is not measured per fault. The next step is `KVM_PRE_FAULT_MEMORY` on the pages with data for a guest that a pool restores ahead of time (the pool of `create -image` and the vm threads), off the path of `start`.
+Before port 1027, the start of a restore to a ready agent was 4 ms with one connection to the agent for `RESUME` on port 1024, and the agent forks a child for each connection there: the first `exec` of a warm guest with no snapshot is 1.0 ms to 3.0 ms on the same host. `MADV_POPULATE_READ` on the chunks with data at the restore made the restore 1.6 ms and did not make the start faster, so the restore does not do it. The agent now serves the resume on port 1027 in its first process with no fork. With it, the start to a ready agent is 2.8 ms best and 4.3 ms median. The rest was the first touches of the guest after the restore: each page that the guest kernel and the agent touch is a fault of the EPT.
+
+### The prefault
+
+A restore now gives the 2 MB chunks with data to vCPU 0 (`kvm.prefaultStart`). While the machine is paused, the parked vCPU 0 thread maps them in the EPT with `KVM_PRE_FAULT_MEMORY` (Linux 6.11 and later, `KVM_CAP_PRE_FAULT_MEMORY`), low addresses first, in calls of 256 KB, and stops at the resume. A host without the call gets `MADV_POPULATE_READ` of the host pages in its place. A guest of a pool waits for its start, so the prefault is off the path of `start`. KVM maps the pages for reads, so the first write of the guest to a page of the snapshot still faults and copies the page.
+
+A loop of 20 restores of a 64 MB guest (the loop of `test-kvm-snapshot.tcl` with a 30 ms wait between `create -snapshot` and `start`, the 7.3.6 kernel of ztcl-guest-kernel c303719, a load of 10 to 15), three runs of each build:
+
+| Build | Start to a ready agent, best | Median | First exec, best |
+|---|---|---|---|
+| no prefault | 2.15 to 2.32 ms | 3.6 to 4.1 ms | 2.3 to 2.6 ms |
+| prefault | 1.43 to 1.48 ms | 2.2 to 4.2 ms | 1.9 to 2.1 ms |
+
+The prefault of the 24 MB of chunks with data is 4.6 ms to 7.0 ms. Without it, the vCPU thread has about 320 faults of the host in a start (`getrusage` of the thread), and the start is 0.7 ms to 0.9 ms longer at best: about 2.5 us for each fault, with the fault-around of 16 pages of the page cache. The rest of the start is the vsock round trips: the wait for the transport reset (0.2 ms to 0.4 ms), the connection to port 1027 (0.3 ms to 0.8 ms), and the answer of the resume (about 0.6 ms). The target of 1 ms needs fewer round trips: see the generation ID device.
 
 Without the cache of `kvm.probe`, each `create` opened and closed `/dev/kvm` and `/dev/vhost-vsock`, and a restore was 4 ms in place of 0.45 ms.
 

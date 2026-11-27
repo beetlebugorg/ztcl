@@ -613,6 +613,10 @@ pub fn restore(m: *Machine, fd: i32) Fail!void {
     const t5 = kvm.nowNs();
 
     m.state.store(.paused, .release);
+    // vCPU 0 maps the memory with data in the EPT while the guest
+    // waits for its start, so the first touches of the guest do not
+    // fault (`kvm.prefaultStart`).
+    m.prefaultStart(&h.chunks);
     const t6 = kvm.nowNs();
     last_restore = .{ .prepare = t1 - t0, .memory = t2 - t1, .devices = t3 - t2, .vcpus = t4 - t3, .state = t5 - t4, .total = t6 - t0 };
 }
