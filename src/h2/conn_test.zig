@@ -235,3 +235,24 @@ test "a request with an uppercase field or no :path gets RST_STREAM" {
     try run(&cl, &c, &seen);
     try testing.expectEqualStrings("/ok", seen.body[1].items);
 }
+
+test "an empty :path and a PRIORITY on itself get RST_STREAM (h2spec 8.1.2.3, 5.3.1)" {
+    inline for (.{ true, false }) |empty_path| {
+        var c = try conn.Conn.init(gpa, .{}, echo, null, clock);
+        defer c.deinit();
+        var cl = try Client.init();
+        defer cl.deinit();
+        var seen: Seen = .{};
+        defer seen.deinit();
+        try cl.start();
+        if (empty_path) {
+            try cl.get(1, "", true);
+        } else {
+            try cl.raw(.priority, 0, 1, &.{ 0, 0, 0, 1, 16 });
+        }
+        try run(&cl, &c, &seen);
+        try testing.expectEqual(frame.Code.protocol_error, seen.rst.?);
+        try testing.expect(!c.closed);
+        try testing.expectEqual(@as(u16, 0), seen.status[0]);
+    }
+}

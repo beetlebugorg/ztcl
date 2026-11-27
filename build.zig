@@ -175,6 +175,13 @@ pub fn build(b: *std.Build) void {
         }) }));
         hpack_fuzz.addPassthruArgs();
         b.step("hpack-fuzz", "Fuzz HPACK: zig build hpack-fuzz -- --seconds N").dependOn(&hpack_fuzz.step);
+        const hpack_corpus = b.addRunArtifact(b.addExecutable(.{ .name = "hpack-corpus", .root_module = b.createModule(.{
+            .root_source_file = b.path("src/h2/hpack_corpus.zig"),
+            .target = target,
+            .optimize = .safe,
+        }) }));
+        hpack_corpus.addPassthruArgs();
+        b.step("hpack-corpus", "Decode the hpack-test-case corpus: zig build hpack-corpus -- DIR").dependOn(&hpack_corpus.step);
         const hpack_bench = b.addRunArtifact(b.addExecutable(.{ .name = "hpack-bench", .root_module = b.createModule(.{
             .root_source_file = b.path("src/h2/hpack_bench.zig"),
             .target = target,
