@@ -3,7 +3,7 @@
 `ztcl::watch` gives the changes below a folder: the files and the folders that a program makes, changes, deletes, or moves. A script reads the changes when it wants them, for example from an event loop or a timer. It needs the capability `file`, and it watches only folders that the file commands can reach.
 
 > [!NOTE]
-> `ztcl::watch` works on Linux. On macOS, Windows, and WebAssembly, `add` gives the error `ZTCL WATCH UNAVAILABLE`. The designs of the other platforms are in the plan of the repository (`docs/dev/watch.md`).
+> `ztcl::watch` works on Linux and Windows. On macOS and WebAssembly, `add` gives the error `ZTCL WATCH UNAVAILABLE`. The designs of the other platforms are in the plan of the repository (`docs/dev/watch.md`).
 
 <!-- run: --root . --allow file,channels -->
 ```tcl
@@ -43,7 +43,7 @@ Starts a watch of the folder `PATH` and gives its handle, `watch1` for the first
 
 With `-recursive`, the watch covers each folder below `PATH`, and a folder that a program makes later gets a watch when its create event arrives. A file that a program makes in a new folder before that event arrives has no event of its own. The new folder shows as `created`.
 
-On Linux, each watch is an inotify descriptor. The descriptor is closed by `remove` and when the interpreter ends or resets.
+On Linux, each watch is an inotify descriptor. On Windows, each watch is a handle of the folder with a read of `ReadDirectoryChangesW` that waits on an I/O completion port. `remove` closes it, and so does the end or the reset of the interpreter.
 
 ### changes
 
@@ -90,7 +90,7 @@ puts [llength [ztcl::watch changes $w]]
 ztcl::watch fd W
 ```
 
-Gives the number of the inotify descriptor. An embedder can wait on it in its own event loop, and then call `changes`.
+Gives the number of the inotify descriptor on Linux, and on Windows the value of the handle of an event that is signaled when changes wait (for `WaitForSingleObject` or `MsgWaitForMultipleObjects`). An embedder can wait on it in its own event loop, and then call `changes`.
 
 ### remove
 
@@ -167,4 +167,5 @@ can not find watcher named "watch9"
 ## Platforms
 
 - Linux: inotify, in the runner and in each embedder that turns on `file`.
-- macOS, Windows, WebAssembly, and WASI: `add` gives `ZTCL WATCH UNAVAILABLE`, and `changes`, `fd`, and `remove` give `can not find watcher named "W"`.
+- Windows: `ReadDirectoryChangesW`, with `-recursive` as the watch of the subtree, so a new folder needs no step of its own. A change of the time of a folder, which Windows gives for each change in the folder, is no event, as on Linux. The file system keeps the changes between two calls of `changes` in a buffer, and a full buffer (64 KiB of records: more than 1,000 changes of names of 20 characters) gives `{overflow /}`.
+- macOS, WebAssembly, and WASI: `add` gives `ZTCL WATCH UNAVAILABLE`, and `changes`, `fd`, and `remove` give `can not find watcher named "W"`.

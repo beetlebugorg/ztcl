@@ -12,6 +12,9 @@
 //! path into one pair, and keeps the order of the first event of each
 //! path. More than 4,096 pairs give one pair `{overflow /}`.
 //!
+//! Windows uses `ReadDirectoryChangesW` on a completion port
+//! (`watch_windows.zig`), with the same kinds, merges, and overflow.
+//!
 //! On the other platforms, `add` gives an error. The designs are in the
 //! plan.
 //!
@@ -29,7 +32,9 @@ const Cmd = interp.Cmd;
 const Error = interp.Error;
 
 /// True on the platforms where `add` watches a folder.
-pub const supported = builtin.os.tag == .linux;
+pub const supported = builtin.os.tag == .linux or on_win;
+const on_win = builtin.os.tag == .windows;
+const ww = @import("watch_windows.zig");
 
 const max_changes = 4096;
 
@@ -46,6 +51,9 @@ const Watcher = struct {
     dirs: std.AutoHashMapUnmanaged(i32, []const u8) = .empty,
     changes: std.ArrayList(Change) = .empty,
     overflow: bool = false,
+    /// The folder of the watch on Windows, and its read.
+    win: if (on_win) ww.Win else void = undefined,
+    base: []const u8 = "",
 };
 
 pub const State = struct {
@@ -108,6 +116,14 @@ fn add(it: *Interp, argv: []const Value) Error!Value {
     }
     if (i + 1 != argv.len) return it.wrongArgs("ztcl::watch add ?-recursive? path");
     const rel = try fsroot.need(it, try it.str(argv[i]));
+    if (comptime on_win) {
+        const w = try it.alloc().create(Watcher);
+        w.* = .{ .id = it.watches.next, .fd = -1, .recursive = recursive, .base = try it.alloc().dupe(u8, rel) };
+        try ww.open(it, &w.win, rel, recursive);
+        it.watches.next += 1;
+        try it.watches.list.append(it.alloc(), w);
+        return .{ .str = try std.fmt.allocPrint(it.alloc(), "watch{d}", .{w.id}) };
+    }
     const rc = linux.inotify_init1(linux.IN.CLOEXEC | linux.IN.NONBLOCK);
     if (linux.errno(rc) != .SUCCESS) return fsroot.posixError(it, linux.errno(rc), "couldn't start a watch: ");
     const w = try it.alloc().create(Watcher);
@@ -139,6 +155,7 @@ fn note(it: *Interp, w: *Watcher, kind: Kind, path: []const u8) Error!void {
 
 /// Reads the events that wait on the descriptor.
 fn drain(it: *Interp, w: *Watcher) Error!void {
+    if (comptime on_win) return drainWin(it, w);
     const linux = std.os.linux;
     var buf: [8192]u8 align(@alignOf(linux.inotify_event)) = undefined;
     while (true) {
@@ -174,6 +191,35 @@ fn drain(it: *Interp, w: *Watcher) Error!void {
     }
 }
 
+/// The changes of the read on Windows. A change of a folder is the
+/// change of its time, which each change in the folder gives, so it is
+/// no event, as on Linux.
+fn drainWin(it: *Interp, w: *Watcher) Error!void {
+    var got: std.ArrayList(ww.Event) = .empty;
+    try ww.drain(it, &w.win, &got);
+    for (got.items) |e| {
+        if (e.kind == .overflow) {
+            w.overflow = false;
+            try note(it, w, .overflow, "/");
+            w.overflow = true;
+            continue;
+        }
+        const rel = try child(it.alloc(), w.base, e.name);
+        if (e.kind == .modified) switch (try fsroot.stat(it, rel)) {
+            .ok => |st| if (fsroot.isDir(st.mode)) continue,
+            else => {},
+        };
+        const kind: Kind = switch (e.kind) {
+            .created => .created,
+            .modified => .modified,
+            .deleted => .deleted,
+            .moved => .moved,
+            .overflow => unreachable,
+        };
+        try note(it, w, kind, try fsroot.shown(it, rel));
+    }
+}
+
 fn changes(it: *Interp, w: *Watcher) Error!Value {
     try drain(it, w);
     var out: std.ArrayList(Value) = .empty;
@@ -194,9 +240,9 @@ fn cmdWatch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 3) return it.wrongArgs("ztcl::watch changes|fd|remove watcher");
     const w = try find(it, argv[2]);
     if (std.mem.eql(u8, sub, "changes")) return changes(it, w);
-    if (std.mem.eql(u8, sub, "fd")) return .{ .int = w.fd };
+    if (std.mem.eql(u8, sub, "fd")) return .{ .int = if (comptime on_win) @intCast(w.win.waitHandle()) else w.fd };
     if (std.mem.eql(u8, sub, "remove")) {
-        sys.close(w.fd);
+        closeOne(it, w);
         for (it.watches.list.items, 0..) |x, k| if (x == w) {
             _ = it.watches.list.orderedRemove(k);
             break;
@@ -206,10 +252,16 @@ fn cmdWatch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return it.fail("bad option \"{s}\": must be add, changes, fd, or remove", .{sub});
 }
 
+fn closeOne(it: *Interp, w: *Watcher) void {
+    if (comptime on_win) {
+        ww.close(it, &w.win);
+    } else sys.close(w.fd);
+}
+
 /// Closes each watcher when the interpreter ends or resets.
 pub fn closeAll(it: *Interp) void {
     if (comptime !supported) return;
-    for (it.watches.list.items) |w| sys.close(w.fd);
+    for (it.watches.list.items) |w| closeOne(it, w);
     it.watches = .{};
 }
 
