@@ -30,10 +30,46 @@ const Spec = struct {
 
 pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("format formatString ?arg ...?");
-    const a = it.alloc();
-    const f = try it.str(argv[1]);
+    const src: Args = .{ .it = it, .argv = argv[2..] };
+    return .{ .str = try render(src, it.alloc(), try it.str(argv[1]), argv.len - 2) };
+}
+
+/// The arguments of the `format` command as a source of `render`.
+const Args = struct {
+    it: *Interp,
+    argv: []const Value,
+
+    pub fn str(s: Args, k: usize) Error![]const u8 {
+        return s.it.str(s.argv[k]);
+    }
+    pub fn int(s: Args, k: usize) Error!i64 {
+        return s.it.int(s.argv[k]);
+    }
+    pub fn intArg(s: Args, k: usize) Error!Value {
+        return expr.intArg(s.it, s.argv[k]);
+    }
+    pub fn low64(s: Args, v: Value) Error!i64 {
+        return bigint.low64(s.it, v);
+    }
+    pub fn digits(s: Args, v: Value, base: u8, case: std.fmt.Case) Error![]const u8 {
+        return bigint.digits(s.it, v, base, case);
+    }
+    pub fn number(s: Args, k: usize) Error!?Value {
+        return s.argv[k].asNumber();
+    }
+    pub fn fail(s: Args, comptime fmt: []const u8, args: anytype) Error {
+        return s.it.fail(fmt, args);
+    }
+};
+
+/// The text of the format string `f` with `n` arguments from `src`. The
+/// source has the functions of `Args`: the text, the int, the integer
+/// value, and the number of argument `k`, the low 64 bits and the digits
+/// of an integer value, and `fail` for an error message. The C packages
+/// of `src/cext` have their own source.
+pub fn render(src: anytype, a: std.mem.Allocator, f: []const u8, n: usize) ![]const u8 {
     var out: std.ArrayList(u8) = .empty;
-    var next: usize = 2;
+    var next: usize = 0;
     var saw_pos = false;
     var saw_seq = false;
     var i: usize = 0;
@@ -44,7 +80,10 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
             continue;
         }
         i += 1;
-        if (i >= f.len) return it.fail("format string ended in middle of field specifier", .{});
+        if (i >= f.len) {
+            if (!saw_pos and next >= n) return src.fail("not enough arguments for all format specifiers", .{});
+            return src.fail("format string ended in middle of field specifier", .{});
+        }
         if (f[i] == '%') {
             try out.append(a, '%');
             i += 1;
@@ -55,14 +94,14 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
         var di = i;
         while (di < f.len and std.ascii.isDigit(f[di])) di += 1;
         if (di > i and di < f.len and f[di] == '$') {
-            if (saw_seq) return it.fail("cannot mix \"%\" and \"%n$\" conversion specifiers", .{});
+            if (saw_seq) return src.fail("cannot mix \"%\" and \"%n$\" conversion specifiers", .{});
             saw_pos = true;
-            const n = std.fmt.parseInt(usize, f[i..di], 10) catch std.math.maxInt(usize);
-            if (n == 0 or n > argv.len - 2) return it.fail("\"%n$\" argument index out of range", .{});
-            positional = n + 1;
+            const k = std.fmt.parseInt(usize, f[i..di], 10) catch std.math.maxInt(usize);
+            if (k == 0 or k > n) return src.fail("\"%n$\" argument index out of range", .{});
+            positional = k - 1;
             i = di + 1;
         } else {
-            if (saw_pos) return it.fail("cannot mix \"%\" and \"%n$\" conversion specifiers", .{});
+            if (saw_pos) return src.fail("cannot mix \"%\" and \"%n$\" conversion specifiers", .{});
             saw_seq = true;
         }
         var sp: Spec = .{};
@@ -82,11 +121,11 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
         if (i < f.len and f[i] == '*') {
             var w: i64 = 0;
             if (pos) |k| {
-                w = try it.int(argv[k]);
+                w = try src.int(k);
                 pos = k + 1;
             } else {
-                if (next >= argv.len) return it.fail("not enough arguments for all format specifiers", .{});
-                w = try it.int(argv[next]);
+                if (next >= n) return src.fail("not enough arguments for all format specifiers", .{});
+                w = try src.int(next);
                 next += 1;
             }
             if (w < 0) sp.left = true;
@@ -101,12 +140,12 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
             if (i < f.len and f[i] == '*') {
                 var w: i64 = 0;
                 if (pos) |k| {
-                    if (k >= argv.len) return it.fail("\"%n$\" argument index out of range", .{});
-                    w = try it.int(argv[k]);
+                    if (k >= n) return src.fail("\"%n$\" argument index out of range", .{});
+                    w = try src.int(k);
                     pos = k + 1;
                 } else {
-                    if (next >= argv.len) return it.fail("not enough arguments for all format specifiers", .{});
-                    w = try it.int(argv[next]);
+                    if (next >= n) return src.fail("not enough arguments for all format specifiers", .{});
+                    w = try src.int(next);
                     next += 1;
                 }
                 p = @intCast(std.math.clamp(w, 0, 1 << 20));
@@ -122,27 +161,26 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
                 sp.long = true;
             } else short = true;
         }
-        if (i >= f.len) return it.fail("format string ended in middle of field specifier", .{});
+        if (i >= f.len) return src.fail("format string ended in middle of field specifier", .{});
         const conv = f[i];
         i += 1;
         if (std.mem.indexOfScalar(u8, "diuxXobcsfeEgG", conv) == null) {
-            return it.fail("bad field specifier \"{c}\"", .{conv});
+            return src.fail("bad field specifier \"{c}\"", .{conv});
         }
         var arg_at = next;
         if (positional != null) {
             arg_at = pos.?;
-            if (arg_at >= argv.len) return it.fail("\"%n$\" argument index out of range", .{});
+            if (arg_at >= n) return src.fail("\"%n$\" argument index out of range", .{});
         } else {
-            if (next >= argv.len) return it.fail("not enough arguments for all format specifiers", .{});
+            if (next >= n) return src.fail("not enough arguments for all format specifiers", .{});
             next += 1;
         }
-        const arg = argv[arg_at];
         var sign: []const u8 = "";
         var body: []const u8 = "";
         var numeric = true;
         sw: switch (conv) {
             's' => {
-                body = try it.str(arg);
+                body = try src.str(arg_at);
                 // The precision counts characters.
                 if (sp.prec) |p| {
                     var end: usize = 0;
@@ -155,16 +193,16 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
                 numeric = false;
             },
             'c' => {
-                const cp = try it.int(arg);
+                const cp = try src.int(arg_at);
                 var b: [4]u8 = undefined;
                 // A surrogate half has the three-byte form, as in Tcl.
                 const c: u21 = if (cp < 0 or cp > 0x10ffff) 0xfffd else @intCast(cp);
-                const n = std.unicode.wtf8Encode(c, &b) catch unreachable;
-                body = try a.dupe(u8, b[0..n]);
+                const nb = std.unicode.wtf8Encode(c, &b) catch unreachable;
+                body = try a.dupe(u8, b[0..nb]);
                 numeric = false;
             },
             'd', 'i' => {
-                const iv = try expr.intArg(it, arg);
+                const iv = try src.intArg(arg_at);
                 if (iv == .str and sp.full) {
                     const t = value.trimSpace(iv.str);
                     const neg = t[0] == '-';
@@ -172,14 +210,14 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
                     body = if (neg) t[1..] else t;
                     break :sw;
                 }
-                var n = try bigint.low64(it, iv);
-                if (short) n = @as(i16, @truncate(n));
-                sign = if (n < 0) "-" else if (sp.plus) "+" else if (sp.space) " " else "";
-                body = try std.fmt.allocPrint(a, "{d}", .{@abs(n)});
+                var v = try src.low64(iv);
+                if (short) v = @as(i16, @truncate(v));
+                sign = if (v < 0) "-" else if (sp.plus) "+" else if (sp.space) " " else "";
+                body = try std.fmt.allocPrint(a, "{d}", .{@abs(v)});
             },
             'u', 'x', 'X', 'o', 'b' => {
-                const uv = try expr.intArg(it, arg);
-                if (sp.full and conv == 'u' and (uv == .str or uv.int < 0)) return it.fail("unsigned bignum format is invalid", .{});
+                const uv = try src.intArg(arg_at);
+                if (sp.full and conv == 'u' and (uv == .str or uv.int < 0)) return src.fail("unsigned bignum format is invalid", .{});
                 if (sp.full and (uv == .str or uv.int < 0)) {
                     const base: u8 = switch (conv) {
                         'u' => 10,
@@ -187,14 +225,14 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
                         'b' => 2,
                         else => 16,
                     };
-                    const t = try bigint.digits(it, uv, base, if (conv == 'X') .upper else .lower);
+                    const t = try src.digits(uv, base, if (conv == 'X') .upper else .lower);
                     const neg = t[0] == '-';
                     sign = if (neg) "-" else "";
                     body = if (neg) t[1..] else t;
                     break :sw;
                 }
-                const n = try bigint.low64(it, uv);
-                var u: u64 = @bitCast(n);
+                const v = try src.low64(uv);
+                var u: u64 = @bitCast(v);
                 if (short) u &= 0xffff;
                 body = switch (conv) {
                     'u' => try std.fmt.allocPrint(a, "{d}", .{u}),
@@ -212,8 +250,8 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
                 };
             },
             else => {
-                const nv = arg.asNumber() orelse
-                    return it.fail("expected floating-point number but got \"{s}\"", .{try it.str(arg)});
+                const nv = try src.number(arg_at) orelse
+                    return src.fail("expected floating-point number but got \"{s}\"", .{try src.str(arg_at)});
                 var x: f64 = if (nv == .int) @floatFromInt(nv.int) else nv.double;
                 const neg = std.math.signbit(x) and !std.math.isNan(x);
                 sign = if (neg) "-" else if (sp.plus) "+" else if (sp.space) " " else "";
@@ -256,11 +294,11 @@ pub fn cmdFormat(it: *Interp, argv: []const Value, _: ?*interp.Cmd) Error!Value 
             try out.appendSlice(a, body);
         }
     }
-    return .{ .str = out.items };
+    return out.items;
 }
 
 /// Formats a double that is not negative as %f, %e, or %g does.
-fn formatFloat(a: std.mem.Allocator, x: f64, conv: u8, prec_in: ?usize, alt: bool) Error![]const u8 {
+fn formatFloat(a: std.mem.Allocator, x: f64, conv: u8, prec_in: ?usize, alt: bool) std.mem.Allocator.Error![]const u8 {
     const upper = conv == 'E' or conv == 'G';
     if (std.math.isNan(x)) return if (upper) "NAN" else "nan";
     if (std.math.isInf(x)) return if (upper) "INF" else "inf";
@@ -332,7 +370,7 @@ fn orderExact(x: f64, dec: []const u8) std.math.Order {
 
 /// Fixed form with `prec` decimals, rounded as C does: by the exact
 /// value of the double, and to the even digit at an exact half.
-fn fixed(a: std.mem.Allocator, buf: []u8, x: f64, prec: usize) Error![]const u8 {
+fn fixed(a: std.mem.Allocator, buf: []u8, x: f64, prec: usize) std.mem.Allocator.Error![]const u8 {
     // The shortest digits that read back to `x`.
     const short = std.fmt.float.render(buf, x, .{ .mode = .decimal }) catch return error.OutOfMemory;
     const dot = std.mem.indexOfScalar(u8, short, '.');
@@ -368,7 +406,7 @@ fn fixed(a: std.mem.Allocator, buf: []u8, x: f64, prec: usize) Error![]const u8 
 }
 
 /// Scientific form with a sign and two digits in the exponent.
-fn sci(a: std.mem.Allocator, buf: []u8, x: f64, prec: usize, upper: bool) Error![]const u8 {
+fn sci(a: std.mem.Allocator, buf: []u8, x: f64, prec: usize, upper: bool) std.mem.Allocator.Error![]const u8 {
     const s = std.fmt.float.render(buf, x, .{ .mode = .scientific, .precision = prec }) catch return error.OutOfMemory;
     const epos = std.mem.indexOfScalar(u8, s, 'e').?;
     const exp = std.fmt.parseInt(i32, s[epos + 1 ..], 10) catch 0;

@@ -128,6 +128,7 @@ const groups = .{
     @import("hash.zig").slots,
     @import("parse.zig").slots,
     @import("errors.zig").slots,
+    @import("strings.zig").slots,
 };
 
 fn missingFn(comptime k: tables.Kind, comptime n: usize) *const anyopaque {
