@@ -1405,6 +1405,23 @@ test "the opt package of the Tcl library" {
     )));
 }
 
+test "the safe package of the Tcl library" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.package) | @backingInt(tcl.interp.Capability.interp));
+    // The first call loads the package through auto_index.
+    try std.testing.expectEqualStrings("{$p(:0:)} {$p(:1:)} 42 1 1 {not allowed to invoke subcommand exists of file} 0", try it.str(try it.eval(
+        \\set c [safe::interpCreate -accessPath {/a /b}]
+        \\set r [interp eval $c {set auto_path}]
+        \\lappend r [interp eval $c {expr {6 * 7}}] [catch {interp eval $c {source /etc/passwd}}]
+        \\lappend r [catch {interp eval $c {file exists /}} m] $m
+        \\safe::interpDelete $c
+        \\lappend r [interp exists $c]
+        \\lrange $r 0 end
+    )));
+}
+
 test "package provides Tcl at the patch level" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);

@@ -44,6 +44,16 @@ sub: package unknown ?CMD? | The command that runs for a missing package.
 ex: package require ztcl::json => 1.0
 ex: package provide jot 0.1.0; package present jot => 0.1.0
 
+== safe::interpCreate
+syn: safe::interpCreate ?child? ?-accessPath LIST? ?-statics BOOL? ?-noStatics? ?-nested BOOL? ?-nestedLoadOk? ?-deleteHook SCRIPT?
+does: The safe package 0.10 of the Tcl library (the Safe Base), which loads at the first call of one of its commands: a safe child with aliases into the parent for `source`, `load`, `glob`, `encoding`, `exit`, `clock`, and the `file` subcommands that read no file. The child sees each directory of its access path only as a token, `$p(:N:)`. An alias turns the tokens back into the directories and checks each path against the access path. `interpInit` sets up a child that exists, `interpConfigure` reads or changes the options, `interpAddToAccessPath` and `interpFindInAccessPath` give the token of a directory, `interpDelete` runs the delete hook and deletes the child, and `setLogCmd` sets a command for the messages of each check.
+cap: package
+flags: --allow package,interp
+names: safe::interpInit safe::interpConfigure safe::interpDelete safe::interpAddToAccessPath safe::interpFindInAccessPath safe::setLogCmd
+ex: set c [safe::interpCreate -accessPath {/a /b}]; safe::interpFindInAccessPath $c /b => $p(:1:)
+ex: interp eval $c {expr {6 * 7}} => 42
+diff: A safe child of ztcl has no hidden commands, so the source alias reads the file in the parent and evaluates its text in the child. The child has the small `package` command, which runs no `ifneeded` script.
+
 == tclPkgUnknown
 syn: tclPkgUnknown name ?version ...?
 does: The handler of `package unknown`: sources the `pkgIndex.tcl` file of each folder of `auto_path` and of each folder in it, once. A `pkgIndex.tcl` runs with the variable `dir` set to its folder.
@@ -57,7 +67,7 @@ does: Defines a command from `auto_index`, which the `tclIndex` files of `auto_p
 cap: package
 flags: --allow package
 names: auto_load auto_load_index auto_reset auto_qualify auto_import auto_execok
-ex: auto_qualify foo ::bar => bar::foo foo
+ex: auto_qualify foo ::bar => ::bar::foo foo
 
 == history
 syn: history ?option? ?arg ...?
