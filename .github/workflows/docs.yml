@@ -36,7 +36,7 @@ jobs:
         with:
           version: "0.17.0"
       # The playground loads the WebAssembly build.
-      - run: zig build wasm wasm-threads wasm-shell
+      - run: zig build wasm wasm-threads wasm-shell wasm-host
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

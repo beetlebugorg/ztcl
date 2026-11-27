@@ -369,6 +369,8 @@ it.mem_limit = <span class="n">64</span> &lt;&lt; <span class="n">20</span>;
           <li><b>A small ES module</b> for the page, a Web Worker, and Node.js.</li>
           <li><b>Stop in a worker.</b> A long script runs off the main thread, and the page can end it.</li>
           <li><b>Threads</b> in Web Workers, on a cross-origin isolated page.</li>
+          <li><b>Tcl in the page.</b> With <code>ztcl-host.wasm</code>, <code>dom</code> reads and changes the elements below one root, and <code>dom on</code> runs a script for each event. <a href="dom/">Try it</a>.</li>
+          <li><b>WASI 0.3 components.</b> <code>ztcl build --component</code> puts your scripts in a command component for wasmtime.</li>
           <li><b>Procs compiled to WebAssembly.</b> <code>ztcl compile --wasm</code> gives each proc a WebAssembly function with the same results and limits. An integer loop runs in 0.28 times the time of the interpreter.</li>
           <li><b>Examples:</b> a REPL, a rule engine with limits, a worker with Cancel, and a Node.js runner.</li>
         </ul>

@@ -12,6 +12,13 @@
 // interpreter. The output and the result show under the code. Until the
 // first run, the output from the page shows there.
 //
+// An example of `dom` (data-dom on the figure) runs in the page, in an
+// Interp of ztcl-host.wasm with the capabilities `dom` and `event`. Its
+// stage (.ld-stage) is the root element, and each run starts from the
+// HTML of the stage again. The output of its event scripts shows under
+// the stage. It has no Stop: each eval and each event script has a
+// compute limit.
+//
 // An example of ztcl::vt (data-term on the figure) gets a "Screen"
 // button. The button shows the screen of the last terminal of the
 // example: an execution trace on ztcl::vt keeps the handle of each `new`
@@ -163,6 +170,8 @@ class Example {
       tabOut = false;
     });
     this.out = fig.querySelector(".ld-out");
+    this.stage = fig.dataset.dom ? fig.querySelector(".ld-stage") : null;
+    if (this.stage) this.stageHtml = this.stage.innerHTML;
     const bar = fig.querySelector(".ld-bar");
     const button = (text, f) => {
       const b = document.createElement("button");
@@ -175,6 +184,7 @@ class Example {
     button("Run", () => this.run());
     this.stop = button("Stop", () => this.tcl?.stop());
     this.stop.disabled = true;
+    if (this.stage) this.stop.hidden = true;
     button("Reset", () => { this.ta.value = this.original; this.paint(); this.run(); });
     if (fig.dataset.term) {
       this.screen = document.createElement("pre");
@@ -210,6 +220,7 @@ class Example {
       this.out.textContent = `The interpreter did not load: ${e.message}`;
       return;
     }
+    if (this.stage) return this.runDom(m, seq);
     this.tcl?.stop();
     const tcl = (this.tcl = new m.WorkerInterp(new URL("ztcl.wasm", base), { computeLimit: LIMIT }));
     let text = "";
@@ -237,6 +248,47 @@ class Example {
     }
     if (cells && seq === this.seq) renderScreen(this.screen, cells.ok ? cells.result : "");
     this.info.textContent = `${ms.toFixed(1)} ms in a worker · compute limit ${LIMIT.toLocaleString("en-US")}`;
+    return r;
+  }
+
+  // Shows the output and the result of a run, or of a run of events.
+  show(r, keep) {
+    if (!keep) this.out.replaceChildren();
+    if (r.output) this.out.append(r.output.endsWith("\n") ? r.output : r.output + "\n");
+    if (!r.ok || (!keep && r.result !== "")) {
+      const res = document.createElement("span");
+      res.className = r.ok ? "ld-result" : "ld-error";
+      res.textContent = r.ok ? `=> ${r.result}\n` : `error: ${r.result}\n`;
+      this.out.append(res);
+    }
+  }
+
+  async runDom(m, seq) {
+    this.host?.close();
+    this.host = null;
+    this.stage.innerHTML = this.stageHtml;
+    let tcl;
+    try {
+      tcl = await m.Interp.create(new URL("ztcl-host.wasm", base), {
+        allow: ["dom", "event"],
+        domRoot: this.stage,
+        computeLimit: LIMIT,
+        onEvents: (r) => { if (this.host === tcl) this.show(r, true); },
+      });
+    } catch (e) {
+      this.fig.dataset.live = "failed";
+      this.out.textContent = `The interpreter did not load: ${e.message}`;
+      return;
+    }
+    if (seq !== this.seq) { tcl.close(); return; }
+    this.host = tcl;
+    const t0 = performance.now();
+    const r = tcl.eval(this.ta.value);
+    const ms = performance.now() - t0;
+    this.fig.dataset.live = "1";
+    this.fig.dataset.ok = String(r.ok);
+    this.show(r, false);
+    this.info.textContent = `${ms.toFixed(1)} ms in the page · compute limit ${LIMIT.toLocaleString("en-US")}`;
     return r;
   }
 }

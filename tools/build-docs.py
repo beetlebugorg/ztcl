@@ -12,7 +12,7 @@ link to a missing page or a missing anchor, also on the HTML pages.
 The playground is docs/site/playground/ with the JS modules of web/ and
 the four modules of zig-out/lib/. The shell of the landing page and of
 docs/site/try/ (docs/site/shell.js) loads ztcl-shell.wasm from there.
-Run `zig build wasm wasm-threads wasm-shell` before the build.
+Run `zig build wasm wasm-threads wasm-shell wasm-host` before the build.
 """
 
 import html
@@ -86,6 +86,7 @@ PAGES = [
     ("docs/modules/mac.md", "modules/mac/", "Modules", "ztcl::mac"),
     ("docs/embedding.md", "embedding/", "Embed", "Embed in Zig"),
     ("docs/webassembly.md", "webassembly/", "Embed", "WebAssembly"),
+    ("docs/dom.md", "dom/", "Embed", "Tcl in a web page"),
     ("docs/performance.md", "performance/", "Project", "Performance"),
     ("docs/faq.md", "faq/", "Project", "FAQ"),
     ("CHANGELOG.md", "changelog/", "Project", "Changelog"),
@@ -109,7 +110,7 @@ SITE_DIR = ROOT / "docs" / "site"
 PLAYGROUND = SITE_DIR / "playground"
 # The files of the playground from web/ and zig-out/lib/.
 WEB_FILES = ["ztcl.mjs", "ztcl-worker.mjs", "ztcl-threads.mjs", "ztcl-thread-worker.mjs", "ztcl-shell.mjs"]
-WASM_FILES = ["ztcl.wasm", "ztcl-threads.wasm", "ztcl-async.wasm", "ztcl-shell.wasm"]
+WASM_FILES = ["ztcl.wasm", "ztcl-threads.wasm", "ztcl-async.wasm", "ztcl-shell.wasm", "ztcl-host.wasm"]
 # The HTML pages of docs/site and the page folder of each.
 HTML_PAGES = [(SITE_DIR / "index.html", ""), (PLAYGROUND / "index.html", "playground/"), (SITE_DIR / "try" / "index.html", "try/")]
 
@@ -153,8 +154,12 @@ class Build:
             # The output of the page shows until the example runs. An
             # example of ztcl::vt also gets a view of the screen.
             term = ' data-term="1"' if "ztcl::vt" in t.content else ""
-            return (f'<figure class="live-demo" id="{t.meta["id"]}"{term}><div class="ld-code"><pre><code class="language-tcl">'
-                    f'{html.escape(t.content)}</code></pre></div><pre class="ld-out" aria-live="polite">{html.escape(t.meta.get("out", ""))}</pre>'
+            # A DOM example runs in the page with ztcl-host.wasm, and its
+            # HTML is the stage: the root element of `dom`.
+            stage = f'<div class="ld-stage">{t.meta["dom"]}</div>' if "dom" in t.meta else ""
+            dom = ' data-dom="1"' if stage else ""
+            return (f'<figure class="live-demo" id="{t.meta["id"]}"{term}{dom}><div class="ld-code"><pre><code class="language-tcl">'
+                    f'{html.escape(t.content)}</code></pre></div>{stage}<pre class="ld-out" aria-live="polite">{html.escape(t.meta.get("out", ""))}</pre>'
                     f'<figcaption class="ld-bar"><span class="ld-tag">Live</span></figcaption></figure>\n')
         self.md.renderer.rules["fence"] = fence
         self.anchors = {}
@@ -232,6 +237,17 @@ class Build:
                         needs_shell = True
                     out.append(fence)
                     i += 4
+                    continue
+                if text == "<!-- dom -->":
+                    # A live example of `dom`: a tcl block, then an html
+                    # block with the elements of the stage.
+                    stage = tokens[i + 4] if i + 4 < len(tokens) else None
+                    if stage is None or stage.type != "fence" or stage.info.strip() != "html":
+                        raise SystemExit(f"{src}: <!-- dom --> needs an html block after the tcl block")
+                    count += 1
+                    fence.meta = {"live": True, "id": f"live-{count}", "dom": stage.content}
+                    out.append(fence)
+                    i += 5
                     continue
                 if text not in ("<!-- live -->", "<!-- run -->"):
                     raise SystemExit(f"{src}: an unknown comment line: {text}")
@@ -562,7 +578,7 @@ class Build:
                 raise SystemExit(f"{src}: link to a missing anchor: {page}#{anchor}")
         for name in WASM_FILES:
             if not (ROOT / "zig-out" / "lib" / name).exists():
-                raise SystemExit(f"zig-out/lib/{name} is missing: run `zig build wasm wasm-threads wasm-shell` first")
+                raise SystemExit(f"zig-out/lib/{name} is missing: run `zig build wasm wasm-threads wasm-shell wasm-host` first")
         for path, at in HTML_PAGES:
             self.check_html(path, at)
         if out.exists():
