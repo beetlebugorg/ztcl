@@ -1134,6 +1134,41 @@ fn cmdSubst(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     const s = try it.str(argv[argv.len - 1]);
     var out: std.ArrayList(u8) = .empty;
+    const flags: u64 = @as(u64, @intFromBool(do_bs)) | @as(u64, @intFromBool(do_cmd)) << 1 | @as(u64, @intFromBool(do_var)) << 2;
+    if (s.len > 0) if (try it.subst_cache.find(it, s, flags, substParts)) |parts| {
+        for (parts) |*part| switch (part.*) {
+            .lit => |b| try out.appendSlice(a, b),
+            .variable => |*ref| {
+                const v = it.readRef(ref) catch |e| switch (substCode(it, e)) {
+                    .stop => return .{ .str = out.items },
+                    .skip => continue,
+                    .use => it.result,
+                    .fail => return e,
+                };
+                try out.appendSlice(a, try it.str(v));
+            },
+            .script => |sc| {
+                var res: Value = Value.empty;
+                var skip = false;
+                for (sc.cmds) |*one| {
+                    res = it.evalCmd(one) catch |e| switch (substCode(it, e)) {
+                        .stop => return .{ .str = out.items },
+                        .skip => {
+                            skip = true;
+                            break;
+                        },
+                        .use => {
+                            res = it.result;
+                            break;
+                        },
+                        .fail => return e,
+                    };
+                }
+                if (!skip) try out.appendSlice(a, try it.str(res));
+            },
+        };
+        return .{ .str = out.items };
+    };
     var i: usize = 0;
     while (i < s.len) {
         const c = s[i];
@@ -1198,6 +1233,58 @@ fn cmdSubst(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }
     }
     return .{ .str = out.items };
+}
+
+/// The parts of the text `s` of `subst` with the options `flags` (bit 0
+/// backslashes, bit 1 commands, bit 2 variables), for the parse cache.
+/// A text with a syntax error gets null: it runs on the slow path of
+/// `cmdSubst`, which runs the parts before the error. The parse charges
+/// no compute units, so a hit and a miss count the same.
+fn substParts(it: *Interp, s: []const u8, flags: u64) Error!?[]const interp.Part {
+    const a = it.alloc();
+    var parts: std.ArrayList(interp.Part) = .empty;
+    var lit: std.ArrayList(u8) = .empty;
+    var i: usize = 0;
+    while (i < s.len) {
+        const c = s[i];
+        if (c == '\\' and flags & 1 != 0) {
+            i = try value.backslash(a, s, i, &lit);
+            continue;
+        }
+        if (c == '$' and flags & 4 != 0) {
+            var q: interp.Parser = .{ .a = a, .src = s, .pos = i };
+            const r = q.parseVar() catch |e| switch (e) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.TclError => return null,
+            };
+            if (r) |ref| {
+                i = q.pos;
+                try flushLit(a, &parts, &lit);
+                try parts.append(a, .{ .variable = ref });
+                continue;
+            }
+        } else if (c == '[' and flags & 2 != 0) {
+            var q: interp.Parser = .{ .a = a, .src = s, .pos = i + 1 };
+            const sc = q.parseScript(true) catch |e| switch (e) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.TclError => return null,
+            };
+            i = q.pos;
+            try flushLit(a, &parts, &lit);
+            try parts.append(a, .{ .script = sc });
+            continue;
+        }
+        try lit.append(a, c);
+        i += 1;
+    }
+    try flushLit(a, &parts, &lit);
+    return parts.items;
+}
+
+fn flushLit(a: std.mem.Allocator, parts: *std.ArrayList(interp.Part), lit: *std.ArrayList(u8)) !void {
+    if (lit.items.len == 0) return;
+    try parts.append(a, .{ .lit = lit.items });
+    lit.* = .empty;
 }
 
 const SubstAction = enum { stop, skip, use, fail };

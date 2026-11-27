@@ -391,6 +391,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.free_frames = null;
     it.freeCaches();
     it.list_cache = .{};
+    it.subst_cache = .{};
     it.chunks = .empty;
     it.chunk = 0;
     it.top = 0;

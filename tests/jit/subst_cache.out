@@ -1,0 +1,7 @@
+{v=0 1 	one A} {v=0 \t0} {v=0 [x] 
+} {v=$i 2 $} a ab0c aRb x3y {$ $  one} {} {v=1 2 	one A} {v=1 \t1} {v=1 [x] 
+} {v=$i 2 $} a ab1c aRb x3y {$ $  one} {} {v=2 3 	one A} {v=2 \t2} {v=2 [x] 
+} {v=$i 2 $} a ab2c aRb x3y {$ $  one} {}
+ran 0 {aran$} ran2 1 {missing close-bracket} 1 {can't read "nosuch": no such variable} 1 boom ran 0 {aran 0 {aran$} ran2 1 {missing close-bracket} 1 {can't read "nosuch": no such variable} 1 boom ran$} ran2 1 {missing close-bracket} 1 {can't read "nosuch": no such variable} 1 boom ran 0 {aran 0 {aran$} ran2 1 {missing close-bracket} 1 {can't read "nosuch": no such variable} 1 boom ran 0 {aran 0 {aran$} ran2 1 {missing close-bracket} 1 {can't read "nosuch": no such variable} 1 boom ran$} ran2 1 {missing close-bracket} 1 {can't read "nosuch": no such variable} 1 boom ran$} ran2 1 {missing close-bracket} 1 {can't read "nosuch": no such variable} 1 boom
+k0=0 k0=0 {k0=0 0} k1=1 k1=1 {k1=1 1} k2=2 k2=2 {k2=2 2} k3=3 k3=3 {k3=3 3}
+6
