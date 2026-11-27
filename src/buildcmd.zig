@@ -231,11 +231,16 @@ fn native(io: Io, a: std.mem.Allocator, env: anytype, nat: Native, entries: []co
         try out.print("ztcl build: the payload: {s}\n", .{@errorName(e)});
         return 1;
     };
-    // An app with `vm` gets the entitlement of Virtualization.framework
-    // in its Mach-O signature. ELF and PE files have no entitlements.
+    // The Mach-O signature of an app has the entitlement of the JIT, which
+    // a signature with the hardened runtime needs for MAP_JIT, and with
+    // `vm` the entitlement of Virtualization.framework. ELF and PE files
+    // have no entitlements.
     const vm_bit = @backingInt(tcl.interp.Capability.vm);
     const wants_vm = nat.allow.len > 0 and (tcl.interp.Capability.parse(nat.allow) orelse 0) & vm_bit != 0;
-    const ents: []const []const u8 = if (wants_vm) &.{"com.apple.security.virtualization"} else &.{};
+    const ents: []const []const u8 = if (wants_vm)
+        &.{ "com.apple.security.cs.allow-jit", "com.apple.security.virtualization" }
+    else
+        &.{"com.apple.security.cs.allow-jit"};
     const bin = bn.bundle(a, runtime, payload, std.fs.path.basename(output), ents) catch |e| {
         try out.print("ztcl build: {s}: {s}\n", .{ rt_path, switch (e) {
             error.UnknownFormat => "not an ELF, PE, or Mach-O file",
