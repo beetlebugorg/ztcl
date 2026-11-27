@@ -102,7 +102,7 @@ Makes a terminal and gives its handle, `vt0` for the first one. The options:
 | `-size {COLS ROWS}` | Each size is 1 to 4,096. | `{80 24}` |
 | `-scrollback LINES` | The most lines of scrollback, 0 to 1,000,000. libghostty-vt keeps whole pages of rows, so the scrollback can hold more lines than `LINES`. | 1,000 |
 
-The cursor starts at row 0, column 0. The colors that the OSC queries 10 and 11 report are black on white.
+The cursor starts at row 0, column 0. Grapheme clusters (mode 2027) are on, also after a reset, so a cluster of UAX #29 is one cell or one wide cell, as in modern terminals. `ESC [?2027l` turns them off. The colors that the OSC queries 10 and 11 report are black on white.
 
 ### feed
 
@@ -206,7 +206,7 @@ ztcl::vt cells T ?FIRST? ?LAST?
 
 Gives one list for each row, as `rows` does. Each row is a list of `COLS` cells, and a cell is the list `TEXT WIDTH FG BG ATTRS`:
 
-- `TEXT` is the character of the cell, or empty for a cell with no character.
+- `TEXT` is the grapheme cluster of the cell, such as `e` with U+0301 or an emoji ZWJ sequence, or empty for a cell with no character. A cell keeps the first 8 code points of a cluster.
 - `WIDTH` is 1, 2 for a wide character, or 0 for the cell after a wide character.
 - `FG` and `BG` are empty for the default color, an index of the 256-color palette, or `#rrggbb`.
 - `ATTRS` lists `bold`, `dim`, `italic`, `underline`, `blink`, `inverse`, `hidden`, and `strike`.

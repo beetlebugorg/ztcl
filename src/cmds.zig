@@ -1683,7 +1683,37 @@ fn cmdJoin(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return .{ .str = out.items };
 }
 
+/// True when `v` is the word -grapheme. A form with the word has one
+/// more argument than the plain form, so plain Tcl gives it an error.
+fn isGrapheme(it: *Interp, v: Value) Error!bool {
+    return std.mem.eql(u8, try it.str(v), "-grapheme");
+}
+
+/// The -grapheme forms of src/text/cmd.zig. A build with no module
+/// ztcl::text has none of its code or tables, and the forms fail.
+const text_cmd = if (@import("build_options").mod_text) @import("text/cmd.zig") else struct {
+    fn no(it: *Interp) Error!Value {
+        return it.fail("-grapheme needs the module ztcl::text in the build", .{});
+    }
+    pub fn length(it: *Interp, _: []const u8) Error!Value {
+        return no(it);
+    }
+    pub fn index(it: *Interp, _: []const u8, _: Value) Error!Value {
+        return no(it);
+    }
+    pub fn range(it: *Interp, _: []const u8, _: Value, _: Value) Error!Value {
+        return no(it);
+    }
+    pub fn reverse(it: *Interp, _: []const u8) Error!Value {
+        return no(it);
+    }
+    pub fn split(it: *Interp, _: []const u8, _: []const u8) Error!Value {
+        return no(it);
+    }
+};
+
 fn cmdSplit(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len == 4 and try isGrapheme(it, argv[3])) return text_cmd.split(it, try it.str(argv[1]), try it.str(argv[2]));
     if (argv.len != 2 and argv.len != 3) return it.wrongArgs("split string ?splitChars?");
     const s = try it.str(argv[1]);
     const seps = if (argv.len == 3) try it.str(argv[2]) else " \t\n\r";
@@ -2031,10 +2061,12 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             return .{ .int = @intCast((try it.str(args[0])).len) };
         },
         .length => {
+            if (args.len == 2 and try isGrapheme(it, args[0])) return text_cmd.length(it, try it.str(args[1]));
             if (args.len != 1) return it.wrongArgs("string length string");
             return .{ .int = @intCast(charCountOf(it, try it.str(args[0]))) };
         },
         .index => {
+            if (args.len == 3 and try isGrapheme(it, args[0])) return text_cmd.index(it, try it.str(args[1]), args[2]);
             if (args.len != 2) return it.wrongArgs("string index string charIndex");
             const s = try it.str(args[0]);
             const n = charCountOf(it, s);
@@ -2043,6 +2075,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             return .{ .str = s[byteOf(s, n, @intCast(i))..byteOf(s, n, @intCast(i + 1))] };
         },
         .range => {
+            if (args.len == 4 and try isGrapheme(it, args[0])) return text_cmd.range(it, try it.str(args[1]), args[2], args[3]);
             if (args.len != 3) return it.wrongArgs("string range string first last");
             const s = try it.str(args[0]);
             const n = charCountOf(it, s);
@@ -2242,6 +2275,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             return .{ .str = out };
         },
         .reverse => {
+            if (args.len == 2 and try isGrapheme(it, args[0])) return text_cmd.reverse(it, try it.str(args[1]));
             if (args.len != 1) return it.wrongArgs("string reverse string");
             const s = try it.str(args[0]);
             const out = try a.alloc(u8, s.len);

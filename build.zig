@@ -229,6 +229,13 @@ pub fn build(b: *std.Build) void {
         }) }));
         h2_load.addPassthruArgs();
         b.step("h2-load", "Load an h2c server: zig build h2-load -- --port N --conns C --streams S --seconds T").dependOn(&h2_load.step);
+        const text_bench = b.addRunArtifact(b.addExecutable(.{ .name = "text-bench", .root_module = b.createModule(.{
+            .root_source_file = b.path("src/text/bench.zig"),
+            .target = target,
+            .optimize = .fast,
+        }) }));
+        text_bench.addPassthruArgs();
+        b.step("text-bench", "Print the speed of the segmenters of ztcl::text: zig build text-bench -- FILE ...").dependOn(&text_bench.step);
     }
     // The I/O loop of task 10 on IOCP (Windows). `aio-test-exe` installs
     // the test program, for a cross build that runs on a Windows host.
@@ -885,6 +892,7 @@ const all_modules = [_]Mod{
     .{ .name = "tls", .std = true },
     .{ .name = "agent", .std = true },
     .{ .name = "wasmrt", .std = true },
+    .{ .name = "text", .std = true },
 };
 
 /// The flag of each module after the preset, the flags, and the rule

@@ -107,6 +107,20 @@ MB/s of the input text, best of 5 runs, from `tools/bench-stdlib.py` on the thre
 | Python `json` | 317 | 67 | 313 |
 | Go `encoding/json` | 127 | 86 | 129 |
 
+## Text
+
+MB/s of UTF-8 input, best of 5 runs, from `bench/text/run.sh` on five generated texts of 1,000,000 bytes or more (English, French with accents, Chinese, Hindi, and emoji sequences). The clock is the CPU time of the thread. ztcl reads UTF-8 in place. ICU 78.3 runs on UTF-16 that it gets before its clock starts. The two give the same counts of clusters, words, and sentences on each text, except Chinese words, where ICU uses a dictionary. Higher is faster. The numbers are from one x86-64 Linux machine on 2026-11-27.
+
+| Text | ztcl graphemes | ICU graphemes | ztcl words | ICU words | ztcl sentences | ICU sentences |
+|---|---:|---:|---:|---:|---:|---:|
+| English | **4,363** | 30 | **74** | 48 | **398** | 117 |
+| French | **159** | 39 | **86** | 60 | **181** | 155 |
+| Chinese | **114** | 65 | 87 | 12 (dictionary) | 154 | **210** |
+| Hindi | **156** | 88 | **143** | 140 | 150 | **298** |
+| Emoji | **146** | 71 | **115** | 78 | 111 | **160** |
+
+A count of grapheme clusters in ASCII and Latin text goes 16 or 32 bytes at a time with vector instructions, so English is fast. A sentence walk skips runs of ASCII bytes with no terminator the same way. `ztcl::text width` is 11,952 MB/s on the English text and 69 to 96 MB/s on the others.
+
 ## Point procs
 
 A `point proc` compiles one body to a vector program over blocks of 1024 points. The fuzzy skin proc of `zig build bench`, over 10 million points, 2026-11-23:

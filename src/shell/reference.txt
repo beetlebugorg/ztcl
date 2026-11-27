@@ -2,10 +2,13 @@
 == string
 syn: string subcommand ?arg ...?
 sub: string length STRING | The count of characters.
+sub: string length -grapheme STRING | The count of grapheme clusters.
 sub: string bytelength STRING | The count of bytes of the UTF-8 form.
 sub: string insert STRING INDEX TEXT | STRING with TEXT before the character at INDEX.
 sub: string index STRING INDEX | The character at INDEX, or an empty string past the end.
+sub: string index -grapheme STRING INDEX | The grapheme cluster at INDEX, with INDEX in clusters.
 sub: string range STRING FIRST LAST | The characters from FIRST to LAST.
+sub: string range -grapheme STRING FIRST LAST | The grapheme clusters from FIRST to LAST.
 sub: string first NEEDLE HAYSTACK ?START? | The index of the first NEEDLE from START, or -1.
 sub: string last NEEDLE HAYSTACK ?LAST? | The index of the last NEEDLE at or before LAST, or -1.
 sub: string compare ?-nocase? ?-length N? A B | -1, 0, or 1 in the order of the characters.
@@ -15,6 +18,7 @@ sub: string map ?-nocase? MAPPING STRING | Replaces each key of the key and valu
 sub: string repeat STRING COUNT | STRING COUNT times.
 sub: string replace STRING FIRST LAST ?NEW? | STRING with the characters from FIRST to LAST replaced by NEW.
 sub: string reverse STRING | The characters in the reverse order.
+sub: string reverse -grapheme STRING | The grapheme clusters in the reverse order, each with its characters in order.
 sub: string tolower STRING ?FIRST? ?LAST? | Lowercase.
 sub: string toupper STRING ?FIRST? ?LAST? | Uppercase.
 sub: string totitle STRING ?FIRST? ?LAST? | The first character uppercase and the rest lowercase.
@@ -40,6 +44,7 @@ syn: format formatString ?arg ...?
 syn: scan string format ?varName ...?
 == split
 syn: split string ?splitChars?
+syn: split string splitChars -grapheme
 == join
 syn: join list ?joinString?
 == regexp
@@ -583,6 +588,13 @@ sub: exports module|instance | A list of name, kind, and type for each export.
 sub: imports module | A list of module, name, kind, and type for each import.
 sub: info module | A dict of the counts and the features of a module.
 sub: delete handle ?handle ...? | Deletes modules and instances.
+== ztcl::text ztcl::text::graphemes ztcl::text::words ztcl::text::sentences ztcl::text::width ztcl::text::bounds
+syn: ztcl::text subcommand ?arg ...?
+sub: graphemes STRING | The list of the grapheme clusters: the characters that a user sees, such as an emoji with a skin tone or a letter with accents.
+sub: words ?-all? STRING | The list of the word segments that have a letter or a number.
+sub: sentences STRING | The list of the sentences, each with its spaces and line end.
+sub: width ?-ambiguous narrow|wide? STRING | The count of columns of the string in a terminal or a monospace font.
+sub: bounds ?-unit grapheme|word|sentence? STRING | The list of the character index of each boundary, from 0 to the length of the string.
 == ztcl::probe
 syn: ztcl::probe subcommand ?arg ...?
 == ztcl::tls ztcl::tls::socket

@@ -5,10 +5,13 @@
 syn: string subcommand ?arg ...?
 does: The commands for text. An index is a character index from 0, and `end` or `end-N` counts from the last character.
 sub: string length STRING | The count of characters.
+sub: string length -grapheme STRING | The count of grapheme clusters. It needs the module ztcl::text in the build, and no `package require`.
 sub: string bytelength STRING | The count of bytes of the UTF-8 form. Tcl 8.6 only.
 sub: string insert STRING INDEX TEXT | STRING with TEXT before the character at INDEX. `end` puts TEXT after the last character. Tcl 9.1 only.
 sub: string index STRING INDEX | The character at INDEX, or an empty string past the end.
+sub: string index -grapheme STRING INDEX | The grapheme cluster at INDEX, with INDEX in clusters.
 sub: string range STRING FIRST LAST | The characters from FIRST to LAST.
+sub: string range -grapheme STRING FIRST LAST | The grapheme clusters from FIRST to LAST.
 sub: string first NEEDLE HAYSTACK ?START? | The index of the first NEEDLE from START, or -1.
 sub: string last NEEDLE HAYSTACK ?LAST? | The index of the last NEEDLE at or before LAST, or -1.
 sub: string compare ?-nocase? ?-length N? A B | -1, 0, or 1 in the order of the characters.
@@ -18,6 +21,7 @@ sub: string map ?-nocase? MAPPING STRING | Replaces each key of the key and valu
 sub: string repeat STRING COUNT | STRING COUNT times.
 sub: string replace STRING FIRST LAST ?NEW? | STRING with the characters from FIRST to LAST replaced by NEW.
 sub: string reverse STRING | The characters in the reverse order.
+sub: string reverse -grapheme STRING | The grapheme clusters in the reverse order, each with its characters in order.
 sub: string tolower STRING ?FIRST? ?LAST? | Lowercase.
 sub: string toupper STRING ?FIRST? ?LAST? | Uppercase.
 sub: string totitle STRING ?FIRST? ?LAST? | The first character uppercase and the rest lowercase.
@@ -30,6 +34,8 @@ sub: string wordstart STRING INDEX | The index of the first character of the wor
 sub: string wordend STRING INDEX | The index after the last character of the word at INDEX.
 ex: string length "buy milk" => 8
 ex: string range "buy milk" 4 end => milk
+ex: string length -grapheme "\U1F1FA\U1F1F8 e\u0301" => 3
+ex: string equal [string reverse -grapheme "ae\u0301"] "e\u0301a" => 1
 ex: string map {a 1 b 2} abcab => 12c12
 ex: string is integer -strict "" => 0
 ex: string first k "buy milk" => 7
@@ -69,9 +75,12 @@ ex: scan "x=7" "x=%d" n => 1
 
 == split
 syn: split string ?splitChars?
-does: Makes a list: it cuts the string at each character of splitChars (white space by default). Two separators in a row give an empty element. An empty splitChars cuts between each character.
+syn: split string splitChars -grapheme
+does: Makes a list: it cuts the string at each character of splitChars (white space by default). Two separators in a row give an empty element. An empty splitChars cuts between each character. With `-grapheme`, the unit is the grapheme cluster: an empty splitChars gives each cluster, and a split character cuts only where it is a whole cluster. The form with `-grapheme` needs the module ztcl::text in the build.
 ex: split "a,b,,c" , => a b {} c
 ex: split abc "" => a b c
+ex: llength [split "e\u0301x" "" -grapheme] => 2
+diff: The form with `-grapheme` is new in ztcl. It has three arguments, so in Tcl it is an error.
 
 == join
 syn: join list ?joinString?

@@ -165,8 +165,13 @@ pub const Heap = struct {
     /// an entry stays true until a sweep or a reset frees blocks.
     counts: [4]Count = @splat(.{}),
     next_count: u8 = 0,
+    /// The grapheme marks of the last long strings (src/text/cmd.zig).
+    /// The marks are in a heap block, so the same rule holds.
+    graphemes: [2]Graphemes = @splat(.{}),
+    next_grapheme: u8 = 0,
 
     pub const Count = struct { ptr: usize = 0, len: usize = 0, n: usize = 0 };
+    pub const Graphemes = struct { ptr: usize = 0, len: usize = 0, n: usize = 0, marks: []const u32 = &.{} };
 
     /// The counts of the collections. The times come from a clock that
     /// does not go back (`meter.monoNs`), read only at the start, the end
@@ -270,6 +275,7 @@ pub const Heap = struct {
         h.threshold = min_threshold;
         h.alloc_base = 0;
         h.counts = @splat(.{});
+        h.graphemes = @splat(.{});
     }
 
     /// The stored character count of `s`, or null.
@@ -286,6 +292,20 @@ pub const Heap = struct {
         if (h.find(@intFromPtr(s.ptr)) == null) return;
         h.counts[h.next_count] = .{ .ptr = @intFromPtr(s.ptr), .len = s.len, .n = n };
         h.next_count = @intCast((h.next_count + 1) % h.counts.len);
+    }
+
+    /// The stored grapheme marks of `s`, or null.
+    pub fn cachedGraphemes(h: *const Heap, s: []const u8) ?Graphemes {
+        for (h.graphemes) |g| {
+            if (g.ptr == @intFromPtr(s.ptr) and g.len == s.len) return g;
+        }
+        return null;
+    }
+
+    /// Stores the grapheme marks of `s`, a string in a heap block.
+    pub fn putGraphemes(h: *Heap, s: []const u8, n: usize, marks: []const u32) void {
+        h.graphemes[h.next_grapheme] = .{ .ptr = @intFromPtr(s.ptr), .len = s.len, .n = n, .marks = marks };
+        h.next_grapheme ^= 1;
     }
 
     pub fn allocator(h: *Heap) Allocator {
@@ -682,6 +702,7 @@ fn sweep(h: *Heap) void {
     h.partial = @splat(null);
     h.last = null;
     h.counts = @splat(.{});
+    h.graphemes = @splat(.{});
     // The stress mode poisons in each build, so a suite run in
     // ReleaseFast also shows a use of a freed block.
     const poison = fill_dead or h.stress != 0;
