@@ -341,7 +341,7 @@ fn aliasCall(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return out;
 }
 
-fn makeAlias(it: *Interp, src: *Interp, src_name: []const u8, target: *Interp, words: []const Value) Error!Value {
+pub fn makeAlias(it: *Interp, src: *Interp, src_name: []const u8, target: *Interp, words: []const Value) Error!Value {
     const a = src.alloc();
     const copy = try target.alloc().alloc(Value, words.len);
     for (words, copy) |v, *o| o.* = try carry(it, target, v);
@@ -370,6 +370,16 @@ fn aliasInfo(it: *Interp, src: *Interp, name_in: []const u8) Error!Value {
     return carry(src, it, al.prefix);
 }
 
+/// The target interpreter and the words of alias `name` of `src`, for
+/// `Tcl_GetAlias` of a C package. Null when `name` is not an alias.
+pub fn aliasOf(src: *Interp, name_in: []const u8) Error!?struct { target: *Interp, words: []const Value } {
+    const name = if (std.mem.startsWith(u8, name_in, "::")) name_in else try std.mem.concat(src.alloc(), u8, &.{ "::", name_in });
+    const c = src.findCommand(name) orelse return null;
+    if (c.impl != .native or c.impl.native != &aliasCall) return null;
+    const al: *Alias = @ptrCast(@alignCast(c.ctx.?));
+    return .{ .target = al.target, .words = al.words };
+}
+
 fn aliasNames(it: *Interp, src: *Interp) Error!Value {
     var out: std.ArrayList(Value) = .empty;
     try cmds.chargeEntries(it, src.commands.count());
@@ -382,14 +392,14 @@ fn aliasNames(it: *Interp, src: *Interp) Error!Value {
     return value.wrapList(it.alloc(), out.items);
 }
 
-fn hideCmd(it: *Interp, target: *Interp, name: []const u8, as: []const u8) Error!Value {
+pub fn hideCmd(it: *Interp, target: *Interp, name: []const u8, as: []const u8) Error!Value {
     const kv = target.commands.fetchRemove(name) orelse return it.fail("unknown command \"{s}\"", .{name});
     try target.hidden.put(target.alloc(), try target.alloc().dupe(u8, as), kv.value);
     target.epoch += 1;
     return Value.empty;
 }
 
-fn exposeCmd(it: *Interp, target: *Interp, name: []const u8, as: []const u8) Error!Value {
+pub fn exposeCmd(it: *Interp, target: *Interp, name: []const u8, as: []const u8) Error!Value {
     const kv = target.hidden.fetchRemove(name) orelse return it.fail("unknown hidden command \"{s}\"", .{name});
     try target.commands.put(target.alloc(), try target.alloc().dupe(u8, as), kv.value);
     target.epoch += 1;

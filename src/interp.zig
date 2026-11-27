@@ -1133,6 +1133,7 @@ const cext_mod = if ((@hasDecl(@import("build_options"), "cext") and @import("bu
     pub const supported = false;
     pub fn register(_: *Interp) Allocator.Error!void {}
     pub fn drop(_: *Interp) void {}
+    pub const drop_hook: ?*const fn (*Interp) void = null;
 };
 const FsState = @import("fsroot.zig").State;
 const ProcHost = if (exec_supported) proc_mod.Host else struct {};
@@ -1740,6 +1741,7 @@ pub const Interp = struct {
         @import("microvm.zig").closeAll(it);
         if (comptime exec_supported) proc_mod.abandonAll(it);
         if (comptime cext_mod.supported) cext_mod.drop(it);
+        if (cext_mod.drop_hook) |f| f(it);
         // The arena frees the memory of the mounts.
         it.vfs = .{};
         const fs_keep = it.fs;
@@ -2056,6 +2058,7 @@ pub const Interp = struct {
         @import("microvm.zig").closeAll(it);
         if (comptime exec_supported) proc_mod.abandonAll(it);
         if (comptime cext_mod.supported) cext_mod.drop(it);
+        if (cext_mod.drop_hook) |f| f(it);
         if (comptime fs_supported) {
             if (it.fs.fd >= 0) @import("sys.zig").close(it.fs.fd);
         }

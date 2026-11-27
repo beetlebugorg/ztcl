@@ -16,6 +16,7 @@ These are the slots in groups, one group for each branch of task 04:
 | Commands | 3 | `Tcl_CreateObjCommand`, `Tcl_NRCreateCommand`, `Tcl_DeleteCommand` |
 | Scripts | 6 | `Tcl_EvalObjEx`, `Tcl_Eval`, `Tcl_GlobalEval`, `Tcl_VarEval`, `Tcl_NREvalObj`, `Tcl_NRAddCallback` |
 | Variables | 2 | `Tcl_GetVar2Ex`, `Tcl_ObjSetVar2` |
+| Interps and commands | 0 | the area interps and commands except the slots of `app.zig` and the three execution traces (shared, `src/cext/interps.zig`). A token of a command of ztcl has the full name of `namespace which`. A command trace is a hidden command `::tcl::cext::ctraceN` and a `trace add command` with it. A math function is the command `tcl::mathfunc::NAME`. The interp tree goes through the host call `interp_op` (`zside.interpOp`): a child, the parent, the path, safe, aliases, hidden commands, the recursion limit, and the active state. `Tcl_CreateSlave` evaluates `interp create`. A limit is state of the package: `Tcl_LimitCheck` runs the handlers and reads `info cmdcount`, and a script of ztcl does not check a limit. When a child interp with a handle goes, the import `ztcl_cext.interp_gone` of ztcl.wasm frees the interp of each package, so its `Tcl_CallWhenDeleted` procs run. The WebAssembly library has no capability `interp`, so `tools/cext/wasm-check.sh` skips cxchild. | as in the WebAssembly path |
 | Dynamic strings | 4 | `Tcl_DStringInit`, `Tcl_DStringAppend`, `Tcl_DStringAppendElement`, `Tcl_DStringFree` |
 | Packages and helpers | 5 | `Tcl_PkgProvideEx`, `Tcl_PkgRequireEx`, `Tcl_GetVersion`, `Tcl_GetIndexFromObjStruct`, `Tcl_TranslateFileName` |
 | Parse | 0 | the 9 parse slots and `Tcl_ParseArgsObjv` (shared). `Tcl_ParseExpr` sets the message of a syntax error, and no error code or error info. | as in the WebAssembly path |
@@ -149,7 +150,7 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | strings and encodings | 86 | 86 | 86 | none |
 | lists and dicts | 28 | 28 | 28 | none |
 | errors | 25 | 25 | 25 | none |
-| interps and commands | 64 | 10 | 3 | 54 slots |
+| interps and commands | 64 | 55 | 48 | 9 slots |
 | hash tables | 13 | 13 | 13 | none |
 | variables | 21 | 21 | 21 | none |
 | events | 35 | 0 | 0 | 35 slots |
@@ -157,8 +158,8 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | threads | 15 | 0 | 0 | 15 slots |
 | filesystem | 63 | 1 | 1 | 62 slots |
 | zlib | 13 | 0 | 0 | 13 slots |
-| **public, all** | **630** | **416** (66%) | **402** (63%) | |
-| **internal** | **173** | **2** | **0** | |
+| **public, all** | **630** | **461** (73%) | **447** (70%) | |
+| **internal** | **173** | **6** | **4** | |
 | **internal platform** | **23** | **0** | **0** | |
 | **platform** | **0** | **0** | **0** | |
 <!-- /coverage -->

@@ -76,6 +76,31 @@ pub const Arg = extern struct {
     bits: u64,
 };
 
+/// The operations of `interpOp` of `zside.zig` (`Host.interp_op`).
+pub const InterpOp = enum(u32) {
+    /// {path}: the handle of the child at `path`, or 0.
+    child = 1,
+    /// The handle of the parent, or 0.
+    parent = 2,
+    /// {handle}: the path of that interp from this one, or an error.
+    path = 3,
+    is_safe = 4,
+    make_safe = 5,
+    /// {name targetHandle word ...}: makes alias `name` in this interp.
+    alias = 6,
+    /// {name}: the list {targetHandle word ...} of alias `name`.
+    get_alias = 7,
+    /// {name hiddenName}
+    hide = 8,
+    /// {hiddenName name}
+    expose = 9,
+    /// {depth}: sets the recursion limit and gives the old one.
+    recursion = 10,
+    /// 1 while a script of the interp runs, else 0.
+    active = 11,
+    _,
+};
+
 /// The imports to ztcl. The tests set fakes.
 pub const Host = struct {
     cmd_create: *const fn (handle: u32, id: u32, name: [*]const u8, len: usize) callconv(.c) i32,
@@ -101,6 +126,12 @@ pub const Host = struct {
     /// a return: the list {errorCode errorInfo hasInfo errorLine
     /// returnCode returnLevel}. An empty errorCode keeps the code of ztcl.
     err_set: ?*const fn (handle: u32, a: *const Arg) callconv(.c) i32 = null,
+    /// Runs an operation of the interp tree (`zside.InterpOp`) with the
+    /// list `a`. Gives the code of Tcl, and the value in the reply.
+    interp_op: ?*const fn (handle: u32, op: u32, a: *const Arg) callconv(.c) i32 = null,
+    /// The interp of the package for `handle` in the native path, where
+    /// it is part of the shadow of ztcl. Null in the WebAssembly path.
+    interp_ptr: ?*const fn (handle: u32) callconv(.c) ?*Interp = null,
 };
 
 const wasm_host = struct {
@@ -112,6 +143,7 @@ const wasm_host = struct {
     extern "ztcl" fn pkg_provide(handle: u32, name: [*]const u8, len: usize, version: [*]const u8, vlen: usize) i32;
     extern "ztcl" fn err_get(handle: u32) i32;
     extern "ztcl" fn err_set(handle: u32, a: *const Arg) i32;
+    extern "ztcl" fn interp_op(handle: u32, op: u32, a: *const Arg) i32;
 };
 
 pub fn noHost() noreturn {
@@ -127,6 +159,7 @@ pub var host: Host = if (builtin.target.cpu.arch == .wasm32) .{
     .pkg_provide = &wasm_host.pkg_provide,
     .err_get = &wasm_host.err_get,
     .err_set = &wasm_host.err_set,
+    .interp_op = &wasm_host.interp_op,
 } else .{
     .cmd_create = struct {
         fn f(_: u32, _: u32, _: [*]const u8, _: usize) callconv(.c) i32 {
@@ -449,16 +482,37 @@ pub fn ztcl_cext_precision(p: u32) callconv(.c) void {
 
 /// Makes the interp of the package for interp `handle` of ztcl.
 pub fn ztcl_cext_interp(handle: u32) callconv(.c) *Interp {
+    for (interps.items) |ip| {
+        if (ip.handle == handle) return ip;
+    }
     const ip = gpa.create(Interp) catch panicText("out of memory");
     ip.* = .{ .handle = handle };
+    interps.append(gpa, ip) catch panicText("out of memory");
     @import("chan.zig").last = ip;
     return ip;
+}
+
+/// The interps of `ztcl_cext_interp`, one for each handle.
+pub threadlocal var interps: std.ArrayList(*Interp) = .empty;
+
+/// The interp of the package for interp `handle` of ztcl, or null for 0.
+pub fn interpFor(handle: u32) ?*Interp {
+    if (handle == 0) return null;
+    if (host.interp_ptr) |f| return f(handle);
+    return ztcl_cext_interp(handle);
 }
 
 /// Frees the interp of the package for the interp `ip.handle` of ztcl.
 /// It runs the delete procs of the assoc data. The interp of ztcl calls
 /// it before it goes.
 pub fn ztcl_cext_interp_free(ip: *Interp) callconv(.c) void {
+    @import("interps.zig").dropInterp(ip);
+    for (interps.items, 0..) |x, i| {
+        if (x == ip) {
+            _ = interps.swapRemove(i);
+            break;
+        }
+    }
     @import("hash.zig").dropAssoc(ip);
     @import("chan.zig").dropInterp(ip);
     dropPkgs(ip);
