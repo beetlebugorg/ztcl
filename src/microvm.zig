@@ -2682,6 +2682,11 @@ const lin = if (on_kvm) struct {
 /// queue the bytes for the pump.
 const win = if (on_whp) struct {
     const vsock = @import("vm/virtio/vsock.zig");
+    /// The MB of the memory of a guest that get the map of the hypervisor
+    /// after its start, with no `-prefault`: the first allocations of the
+    /// guest come from there, and a guest of 1 GB holds 256 MB of the host
+    /// at once. A guest of the pool gets none until a `create` uses it.
+    const default_prefault_mb: u32 = 256;
     /// The allocator of the guests: thread safe, and apart from an
     /// interpreter, since a guest of the pool boots on a thread of its own.
     const ga = std.heap.smp_allocator;
@@ -2905,6 +2910,9 @@ const win = if (on_whp) struct {
         var disks: std.ArrayList(struct { path: []const u8, rw: bool }) = .empty;
         var shares: std.ArrayList(struct { path: []const u8, rw: bool }) = .empty;
         var warm = false;
+        // The MB of the memory that gets the map of the hypervisor after the
+        // start (`whp.setPrefault`).
+        var prefault_mb: u32 = default_prefault_mb;
         var image: ?[]const u8 = null;
         {
             // -image gives the kernel, the initramfs, and the command line.
@@ -2939,6 +2947,10 @@ const win = if (on_whp) struct {
                 entropy = try it.int(v) != 0;
             } else if (std.mem.eql(u8, opt, "-warm")) {
                 warm = try it.int(v) != 0;
+            } else if (std.mem.eql(u8, opt, "-prefault")) {
+                const mb = try it.int(v);
+                if (mb < 0) return it.fail("bad -prefault \"{d}\": must be 0 or more", .{mb});
+                prefault_mb = @intCast(@min(mb, std.math.maxInt(u32)));
             } else if (std.mem.eql(u8, opt, "-disk")) {
                 const l = try it.list(v);
                 if (l.len < 1 or l.len > 2) return it.fail("a disk is {{file ?rw?}}", .{});
@@ -2949,8 +2961,9 @@ const win = if (on_whp) struct {
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 if (disks.items.len + shares.items.len >= whp.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{whp.max_disks});
                 try shares.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 3 and try isRw(it, l[2]) });
-            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -image, -initrd, -kernel, -memory, -share, or -warm", .{opt});
+            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -image, -initrd, -kernel, -memory, -prefault, -share, or -warm", .{opt});
         }
+        prefault_mb = @min(prefault_mb, memory_mb);
         if (kernel.len == 0 and image == null) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel or -image", .{});
 
         // A guest of the image from the pool: no disk of its own and no
@@ -2978,6 +2991,9 @@ const win = if (on_whp) struct {
                         return e;
                     };
                     s.next += 1;
+                    // A guest of the pool holds only the memory of its boot
+                    // until a create uses it.
+                    pg.machine.setPrefault(prefault_mb);
                     return .{ .str = pg.name };
                 }
             }
@@ -3029,7 +3045,7 @@ const win = if (on_whp) struct {
         g.shares = try ga.alloc(whp.Share, shares.items.len);
         for (g.shares) |*sh| sh.fd = -1;
         for (shares.items, g.shares) |d, *out| out.* = .{ .fd = try jailDir(it, d.path), .read_only = !d.rw };
-        machineOf(g, cpus, memory_mb, entropy) catch |e| switch (e) {
+        machineOf(g, cpus, memory_mb, entropy, prefault_mb) catch |e| switch (e) {
             error.Pair => return it.failCode("ZTCL VM WHP", "no socket pair for the console", .{}),
             else => |f| return failure(it, f),
         };
@@ -3436,7 +3452,7 @@ const win = if (on_whp) struct {
 
     /// The console pair and the machine of a guest whose kernel, initramfs,
     /// command line, and disks are in place.
-    fn machineOf(g: *Guest, cpus: u32, memory_mb: u32, entropy: bool) (whp.Fail || error{Pair})!void {
+    fn machineOf(g: *Guest, cpus: u32, memory_mb: u32, entropy: bool, prefault_mb: u32) (whp.Fail || error{Pair})!void {
         const con = pair() orelse return error.Pair;
         g.console_vm = con[0];
         g.console_host = con[1];
@@ -3444,6 +3460,7 @@ const win = if (on_whp) struct {
         g.machine = try whp.init(ga, .{
             .cpus = cpus,
             .memory_mb = memory_mb,
+            .prefault_mb = prefault_mb,
             .kernel = g.kernel,
             .initrd = g.initrd,
             .cmdline = g.cmdline,
@@ -3519,7 +3536,7 @@ const win = if (on_whp) struct {
                 fd.* = s.openObject(ga, d.sha256) catch break :blk false;
                 out.* = .{ .handle = @ptrFromInt(@as(usize, @intCast(fd.*))), .read_only = true };
             }
-            machineOf(g, 1, j.memory_mb, j.entropy) catch break :blk false;
+            machineOf(g, 1, j.memory_mb, j.entropy, 0) catch break :blk false;
             made = true;
             startRaw(g) catch break :blk false;
             const fd = connect(g, agent_port, 10_000) orelse break :blk false;
