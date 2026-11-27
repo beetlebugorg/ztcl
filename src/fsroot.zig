@@ -209,6 +209,8 @@ pub fn normal(it: *Interp, path: []const u8) Error!?[]const u8 {
     const a = it.alloc();
     // In host mode the normal form is the absolute path of the host.
     if (it.fs.host) {
+        // An empty path names no file, as in Tcl: it is not the current folder.
+        if (path.len == 0) return "";
         // As in Tcl 8.6, ~ at the start is the folder of $env(HOME).
         var p = path;
         if (p.len > 0 and p[0] == '~' and (p.len == 1 or p[1] == '/')) {
