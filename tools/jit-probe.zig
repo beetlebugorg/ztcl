@@ -14,7 +14,8 @@ pub fn main() void {
     var form: []const u8 = "none";
     if (mem.Region.init(std.heap.pageSize())) |r| {
         var region = r;
-        form = if (region.pages) "pages" else "packed";
+        // Linux has only the page form.
+        form = if (region.pages or @import("builtin").os.tag == .linux) "pages" else "packed";
         region.deinit();
     }
     std.debug.print("jit-probe: built={} selfTest={} region={s} failure={t} errno={d}\n", .{ tcl.jit.built, ok, form, mem.last_failure, mem.last_errno });

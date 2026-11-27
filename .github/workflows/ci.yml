@@ -283,6 +283,55 @@ jobs:
       - name: Differential test of the JIT
         run: tools/jit-diff.sh -t
 
+  # The JIT on arm64 Linux, on each pull request: the unit tests, the
+  # differential test, and the fuzzer for a bounded time. arm64 Linux has
+  # no coroutines yet, so the interpreter output of coroutine.tcl and
+  # owned_lists.tcl differs from tclsh there. jit-diff.sh still compares
+  # the modes of those scripts.
+  jit-arm64-linux:
+    name: JIT (ubuntu-24.04-arm)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04-arm
+    env:
+      JIT_DIFF_NO_OUT: coroutine.tcl owned_lists.tcl
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Build and test
+        run: |
+          ulimit -v 6000000
+          zig build
+          zig build jit-probe
+          zig build test
+      - name: Differential test of the JIT
+        run: |
+          ulimit -v 6000000
+          zig build suite-runner
+          tools/jit-diff.sh
+          tools/jit-diff.sh -t
+      - name: Fuzzer of the JIT
+        run: |
+          ulimit -v 6000000
+          zig build jit-fuzz -- --seconds 120
+          zig build jit-fuzz -- --seconds 120 --tier2
+      # The wall times for docs/jit.md: the best of 5 runs of each script.
+      - name: Time the JIT
+        run: |
+          zig build -Doptimize=ReleaseFast -p rel
+          for f in bench/sum.tcl bench/dsum.tcl bench/nested.tcl bench/foreach.tcl bench/fib.tcl; do
+            for m in --no-jit --no-jit-tier2 ""; do
+              best=
+              for k in 1 2 3 4 5; do
+                t0=$(date +%s%N); rel/bin/ztcl $m $f > /dev/null; t1=$(date +%s%N)
+                ms=$(( (t1 - t0) / 1000000 )); if [ -z "$best" ] || [ $ms -lt $best ]; then best=$ms; fi
+              done
+              echo "time $f ${m:-default} $best ms"
+            done
+          done
+
   suite:
     name: Tcl 8.6.16 suite
     needs: changes
@@ -482,7 +531,7 @@ jobs:
   report:
     name: Report a failure of the full run
     if: failure() && github.event_name == 'schedule'
-    needs: [test, build-native, jit-macos, suite, suite-full, wasm, wasm-aot, wasm-point, wasi]
+    needs: [test, build-native, jit-macos, jit-arm64-linux, suite, suite-full, wasm, wasm-aot, wasm-point, wasi]
     runs-on: ubuntu-latest
     permissions:
       issues: write

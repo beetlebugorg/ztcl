@@ -68,9 +68,10 @@ pub const EnterCtx = extern struct {
 };
 
 /// True when this target has a backend: x86-64 Linux and Windows, and
-/// arm64 macOS. Each backend has tier 1 and tier 2.
+/// arm64 Linux and macOS. Each backend has tier 1 and tier 2.
 pub const backend = (builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux) or
     (builtin.cpu.arch == .x86_64 and builtin.os.tag == .windows) or
+    (builtin.cpu.arch == .aarch64 and builtin.os.tag == .linux) or
     (builtin.cpu.arch == .aarch64 and builtin.os.tag == .macos);
 
 /// The calling convention of each call between Zig and the machine code:

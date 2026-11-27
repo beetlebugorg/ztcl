@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Adds the JIT on arm64 Linux, with tier 1 and tier 2. The region flushes the caches over the written pages with the line sizes of `CTR_EL0`. CI runs the unit tests, `tools/jit-diff.sh`, and the JIT fuzzer on an arm64 Linux runner for each pull request. `tools/jit-diff.sh` reads `JIT_DIFF_NO_OUT`.
 - `thread::transfer` moves a file or a socket to and from an isolated thread on Linux, with `SCM_RIGHTS` as on macOS.
 - Turns the JIT on by default, with tier 1 and tier 2, where the build and the system have it: in the runner, in `Interp.init`, in programs of `ztcl build`, and in threads of a creator with the JIT. A system that refuses executable memory runs the interpreter with no error. `--no-jit`, `--no-jit-tier2`, `ZTCL_JIT=off`, `Interp.disableJit`, and `ztcl build --no-jit` turn it off. `Interp.jitState` and the `state` field of `--jit-stats` give the reason. Removes the runner flags `--jit` and `--jit-tier2` and the flag `ztcl build --jit`.
 - Adds `ztcl debug`: it runs a script with probes (`--probe`) and writes a short report with the error, the stack with the locals of each frame, the probes, and the last records, within a byte budget (`--budget`). `--explain` runs the script again after an error with a probe on each line of the proc of the error, and gives the last changes of its variables. `--json` writes the report as JSON. `ztcl debug --mcp` serves the tools `ztcl_run`, `ztcl_explain`, `ztcl_records`, and `ztcl_eval` over MCP. `ztcl::probe add` gets `-locals` ([Debugging](docs/debugging.md)).

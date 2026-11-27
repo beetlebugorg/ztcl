@@ -205,27 +205,45 @@ test "selfTest runs a function from the region" {
     }
 }
 
+/// Functions that return 42 and 7 on this CPU: `mov eax, N` and `ret` on
+/// x86-64, `movz w0, #N` and `ret` on arm64.
+const ret42: []const u8 = if (builtin.cpu.arch == .aarch64)
+    &.{ 0x40, 0x05, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }
+else
+    &.{ 0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3 };
+const ret7: []const u8 = if (builtin.cpu.arch == .aarch64)
+    &.{ 0xE0, 0x00, 0x80, 0x52, 0xC0, 0x03, 0x5F, 0xD6 }
+else
+    &.{ 0xB8, 0x07, 0x00, 0x00, 0x00, 0xC3 };
+
+/// Fills `buf` with `nop` instructions of this CPU.
+fn fillNop(buf: []u8) void {
+    if (builtin.cpu.arch == .aarch64) {
+        for (0..buf.len / 4) |i| std.mem.writeInt(u32, buf[4 * i ..][0..4], 0xD503201F, .little);
+    } else @memset(buf, 0x90);
+}
+
 test "the region has no page that is writable and executable" {
     if (!jit.built or builtin.os.tag != .linux) return error.SkipZigTest;
     const page = std.heap.pageSize();
     var r = mem.Region.init(8 * page) orelse return error.NoRegion;
     defer r.deinit();
-    const ret42 = [_]u8{ 0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3 };
-    const ret7 = [_]u8{ 0xB8, 0x07, 0x00, 0x00, 0x00, 0xC3 };
-    const f1 = r.append(&ret42).?;
-    var big: [5000]u8 = undefined;
-    @memset(&big, 0x90);
-    @memcpy(big[big.len - ret7.len ..], &ret7);
-    const f2 = r.append(&big).?;
+    const f1 = r.append(ret42).?;
+    // One page and a part of the next: the second function has two pages.
+    const big = try testing.allocator.alloc(u8, page + 904);
+    defer testing.allocator.free(big);
+    fillNop(big);
+    @memcpy(big[big.len - ret7.len ..], ret7);
+    const f2 = r.append(big).?;
     try testing.expectEqual(3 * page, r.usedBytes());
     const text = try readMaps(testing.allocator);
     defer testing.allocator.free(text);
     try checkMaps(text, &r);
-    // The rest of the last page of each function is `int3`.
+    // The rest of the last page of each function is the fill byte: `int3` on x86-64, `udf` on arm64.
     for (f1.ptr[f1.len..page]) |b| try testing.expectEqual(mem.trap_byte, b);
     for (f2.ptr[f2.len .. 2 * page]) |b| try testing.expectEqual(mem.trap_byte, b);
-    const c1: *const fn () callconv(jit.cc) u32 = @ptrCast(f1.ptr);
-    const c2: *const fn () callconv(jit.cc) u32 = @ptrCast(f2.ptr);
+    const c1: *const fn () callconv(jit.cc) u32 = @ptrCast(@alignCast(f1.ptr));
+    const c2: *const fn () callconv(jit.cc) u32 = @ptrCast(@alignCast(f2.ptr));
     try testing.expectEqual(@as(u32, 42), c1());
     try testing.expectEqual(@as(u32, 7), c2());
 }
@@ -235,14 +253,14 @@ test "a full region returns null and keeps its functions" {
     const page = std.heap.pageSize();
     var r = mem.Region.init(2 * page) orelse return error.NoRegion;
     defer r.deinit();
-    const ret42 = [_]u8{ 0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3 };
-    const f1 = r.append(&ret42).?;
-    var big: [5000]u8 = undefined;
-    @memset(&big, 0x90);
-    try testing.expect(r.append(&big) == null);
-    _ = r.append(&ret42).?;
-    try testing.expect(r.append(&ret42) == null);
-    const c1: *const fn () callconv(jit.cc) u32 = @ptrCast(f1.ptr);
+    const f1 = r.append(ret42).?;
+    const big = try testing.allocator.alloc(u8, page + 904);
+    defer testing.allocator.free(big);
+    fillNop(big);
+    try testing.expect(r.append(big) == null);
+    _ = r.append(ret42).?;
+    try testing.expect(r.append(ret42) == null);
+    const c1: *const fn () callconv(jit.cc) u32 = @ptrCast(@alignCast(f1.ptr));
     try testing.expectEqual(@as(u32, 42), c1());
 }
 
@@ -291,8 +309,7 @@ test "a read of a guard page of the region faults" {
     const page = std.heap.pageSize();
     var r = mem.Region.init(4 * page) orelse return error.NoRegion;
     defer r.deinit();
-    const ret42 = [_]u8{ 0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3 };
-    const f = r.append(&ret42).?;
+    const f = r.append(ret42).?;
     const base = @intFromPtr(r.base);
     // The page before the region, a page after the used part, and the
     // page after the region.
@@ -322,8 +339,7 @@ test "the region on Windows has no page that is writable and executable" {
     const page = std.heap.pageSize();
     var r = mem.Region.init(8 * page) orelse return error.NoRegion;
     defer r.deinit();
-    const ret42 = [_]u8{ 0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3 };
-    _ = r.append(&ret42).?;
+    _ = r.append(ret42).?;
     var big: [5000]u8 = undefined;
     @memset(&big, 0x90);
     _ = r.append(&big).?;

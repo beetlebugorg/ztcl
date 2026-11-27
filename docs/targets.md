@@ -9,7 +9,7 @@ This page lists each target of ztcl. For each target it gives what `ztcl build` 
 | Target | Runtime | JIT | `coroutine` | `exec` and `ztcl::pty` | `ztcl::watch` |
 |---|---|---|---|---|---|
 | `x86_64-linux` | 2,494,256 bytes | tier 1 and tier 2 | yes | yes | yes |
-| `aarch64-linux` | 2,014,696 bytes | no | no | yes | yes |
+| `aarch64-linux` | 2,014,696 bytes | tier 1 and tier 2 | no | yes | yes |
 | `x86_64-macos` | 2,292,412 bytes | no | no | yes | no |
 | `aarch64-macos` | 2,256,584 bytes | tier 1 and tier 2 | yes | yes | no |
 | `x86_64-windows` | 2,691,584 bytes | tier 1 and tier 2 | yes | yes | yes |
@@ -58,7 +58,7 @@ The output, the errors, and the count of compute units of compiled code are the 
 | Target | Each pull request | The full run, every 6 hours on main |
 |---|---|---|
 | `x86_64-linux` | the unit tests, the Tcl suite, `ztcl build` and a run of the binary | the same |
-| `aarch64-linux` | `ztcl build` from Linux, and a run under qemu | the same |
+| `aarch64-linux` | `ztcl build` from Linux, and a run under qemu. On an arm64 Linux runner: the unit tests, `tools/jit-diff.sh`, and the JIT fuzzer | the same |
 | `x86_64-macos` | `ztcl build` from Linux, with no run | the unit tests on an Intel Mac |
 | `aarch64-macos` | `ztcl build` from Linux, with no run | the unit tests, the JIT tests, and `ztcl build` with a run and the signature |
 | `x86_64-windows` | `ztcl build` from Linux, with no run | the unit tests, and `ztcl build` with a run |

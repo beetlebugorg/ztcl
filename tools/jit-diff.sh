@@ -36,6 +36,9 @@
 #
 # `-x` adds flags to each mode, for example `-x "--gc-stress 1"`: the
 # memory count then differs, so the tool does not compare it.
+# The environment variable JIT_DIFF_NO_OUT lists the names of scripts
+# whose `.out` file is not compared, for a target that has no command
+# of the script, such as `coroutine`. The modes are still compared.
 # Run the tool under the memory cap of AGENTS.md. The exit code is 1
 # when a script differs.
 # SPDX-License-Identifier: BSD-2-Clause
@@ -118,10 +121,11 @@ def run(path, mode, limit=None):
 
 bad = 0
 count = 0
+no_out = os.environ.get("JIT_DIFF_NO_OUT", "").split()
 for path in (only or scripts()):
     ref = run(path, modes[0])
     exp = os.path.join(root, path[:-4] + ".out")
-    if path.startswith("tests/jit/") and os.path.exists(exp) and not extra:
+    if path.startswith("tests/jit/") and os.path.exists(exp) and not extra and os.path.basename(path) not in no_out:
         want = open(exp, "rb").read()
         got = ref["stdout"] + "".join(l + "\n" for l in ref["stderr"]).encode()
         if got != want:

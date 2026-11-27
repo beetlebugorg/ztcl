@@ -14,13 +14,13 @@ pub fn build(b: *std.Build) void {
     // The runtime of `ztcl compile --wasm` is only a WebAssembly build.
     gc_options.addOption(bool, "aot", false);
     // `-Djit=false` builds no JIT code. The default is true on a target
-    // with a backend: x86-64 Linux, x86-64 Windows, and arm64 macOS.
+    // with a backend: x86-64 Linux, x86-64 Windows, arm64 Linux, and arm64 macOS.
     const t = target.result;
     // `-Dcext=true` builds `load` of Tcl C packages and links the C
     // library. The default build has no code of it.
     const cext = b.option(bool, "cext", "Build load of Tcl C packages (not sandboxed)") orelse false;
     gc_options.addOption(bool, "cext", cext);
-    const jit_backend = (t.cpu.arch == .x86_64 and (t.os.tag == .linux or t.os.tag == .windows)) or (t.cpu.arch == .aarch64 and t.os.tag == .macos);
+    const jit_backend = (t.cpu.arch == .x86_64 and (t.os.tag == .linux or t.os.tag == .windows)) or (t.cpu.arch == .aarch64 and (t.os.tag == .linux or t.os.tag == .macos));
     gc_options.addOption(bool, "jit", b.option(bool, "jit", "Build the JIT compiler") orelse jit_backend);
     // `-Djit_bug=true` plants a known bug: the `bin_vv` template of tier 1
     // skips its overflow check. The test of the fuzzer uses it.
@@ -97,10 +97,13 @@ pub fn build(b: *std.Build) void {
 
     // The stubs table of a C package in WebAssembly (docs/dev/cext-tasks/04w-wasm-bridge.md).
     // It links into the package and is never part of ztcl.
-    // Zig 0.17 has no std.builtin.VaList on x86-64 Windows with LLVM, and
-    // the variadic slots use it, so these tests skip that target.
+    // Zig 0.17 has no std.builtin.VaList with LLVM on x86-64 Windows and
+    // on arm64 Linux, and the variadic slots use it, so these tests skip
+    // those targets.
     const stubs_step = b.step("test-cext", "Run the tests of the stubs table of C packages");
-    if (!(target.result.os.tag == .windows and target.result.cpu.arch == .x86_64)) {
+    const no_valist = (target.result.os.tag == .windows and target.result.cpu.arch == .x86_64) or
+        (target.result.os.tag == .linux and target.result.cpu.arch == .aarch64);
+    if (!no_valist) {
         const stubs_tests = b.addTest(.{ .root_module = addCextStubs(b, target, optimize) });
         test_step.dependOn(&b.addRunArtifact(stubs_tests).step);
         stubs_step.dependOn(&b.addRunArtifact(stubs_tests).step);
@@ -282,7 +285,7 @@ pub fn build(b: *std.Build) void {
         const opts = b.addOptions();
         opts.addOption(bool, "gc_precise", false);
         opts.addOption(bool, "aot", false);
-        opts.addOption(bool, "jit", (r.cpu.arch == .x86_64 and (r.os.tag == .linux or r.os.tag == .windows)) or (r.cpu.arch == .aarch64 and r.os.tag == .macos));
+        opts.addOption(bool, "jit", (r.cpu.arch == .x86_64 and (r.os.tag == .linux or r.os.tag == .windows)) or (r.cpu.arch == .aarch64 and (r.os.tag == .linux or r.os.tag == .macos)));
         opts.addOption(bool, "jit_bug", false);
         addModuleOptions(b, opts, on);
         opts.addOption(usize, "size_plant", 0);

@@ -47,7 +47,7 @@ On `error.TclError`, `it.result` holds the message and `it.error_line` holds the
 
 ## The JIT
 
-On x86-64 Linux and arm64 macOS, the default build has a compiler from bytecode to machine code. `Interp.init` turns it on with the default options. `enableJit` sets other options, and `disableJit` turns it off:
+On x86-64 Linux, arm64 Linux, and arm64 macOS, the default build has a compiler from bytecode to machine code. `Interp.init` turns it on with the default options. `enableJit` sets other options, and `disableJit` turns it off:
 
 ```zig
 try it.init(gpa);

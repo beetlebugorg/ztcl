@@ -18,7 +18,7 @@ That is the main use of ztcl. Set a compute limit and a memory limit, and turn o
 
 ## Which platforms does it run on?
 
-Linux and macOS on x86-64 and arm64, Windows on x86-64, and WebAssembly in browsers and Node.js. The JIT runs on x86-64 Linux and arm64 macOS. Coroutines need a stack switch, which exists for x86-64 Linux, arm64 macOS, and x86-64 Windows.
+Linux and macOS on x86-64 and arm64, Windows on x86-64, and WebAssembly in browsers and Node.js. The JIT runs on x86-64 Linux, arm64 Linux, and arm64 macOS. Coroutines need a stack switch, which exists for x86-64 Linux, arm64 macOS, and x86-64 Windows.
 
 ## Is the JIT on by default?
 

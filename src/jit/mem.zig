@@ -14,6 +14,14 @@
 //! that exists. After a failed system call, the region stops, and each
 //! later `append` returns null. No failure is an error of a script.
 //!
+//! On arm64 Linux, the fill is zero words (`udf`), and step 2 also
+//! flushes the caches for the written pages: `dc cvau` for each data
+//! cache line, `dsb ish`, `ic ivau` for each instruction cache line,
+//! `dsb ish`, and `isb`. The line sizes come from `CTR_EL0`. When
+//! `CTR_EL0.IDC` or `CTR_EL0.DIC` is set, the CPU keeps that cache
+//! coherent and the loop of that cache is skipped. Linux has no
+//! `MAP_JIT` and no write switch for each thread.
+//!
 //! On arm64 macOS, the region is one `mmap` with `MAP_JIT` and the
 //! rights read, write, and execute. The system keeps each `MAP_JIT` page
 //! writable or executable for one thread, never both, and
@@ -330,8 +338,8 @@ pub const Region = struct {
         }
         @memcpy(at[0..code.len], code);
         @memset(at[code.len..len], trap_byte);
-        // arm64 has no coherent instruction cache: flush the new code.
-        if (@import("builtin").cpu.arch == .aarch64) clearCache(at, at + code.len);
+        // arm64 has no coherent instruction cache: flush the new pages.
+        if (comptime builtin.cpu.arch == .aarch64) clearCache(at, at + len);
         if (linux.errno(linux.mprotect(at, len, .{ .READ = true, .EXEC = true })) != .SUCCESS) {
             _ = linux.mprotect(at, len, .{});
             r.stopped = true;
@@ -413,9 +421,38 @@ pub fn runConst(code: []const u8, want: u32) bool {
     return func() == want;
 }
 
-/// The instruction cache flush of compiler-rt, for arm64.
-extern fn __clear_cache(start: [*]u8, end: [*]u8) callconv(.c) void;
-
+/// Makes the instructions in `start` to `end` visible to the instruction
+/// fetch of each core, with the sequence of the Arm Architecture
+/// Reference Manual (DDI 0487) for code that a program writes.
 fn clearCache(start: [*]u8, end: [*]u8) void {
-    __clear_cache(start, end);
+    const ctr = asm volatile ("mrs %[ctr], ctr_el0"
+        : [ctr] "=r" (-> u64),
+    );
+    const lo = @intFromPtr(start);
+    const hi = @intFromPtr(end);
+    // CTR_EL0.IDC (bit 28): the data cache clean is not needed.
+    if (ctr & (1 << 28) == 0) {
+        const line = @as(usize, 4) << @intCast((ctr >> 16) & 0xF);
+        var a = lo & ~(line - 1);
+        while (a < hi) : (a += line) {
+            asm volatile ("dc cvau, %[a]"
+                :
+                : [a] "r" (a),
+                : .{ .memory = true });
+        }
+    }
+    asm volatile ("dsb ish" ::: .{ .memory = true });
+    // CTR_EL0.DIC (bit 29): the instruction cache invalidate is not needed.
+    if (ctr & (1 << 29) == 0) {
+        const line = @as(usize, 4) << @intCast(ctr & 0xF);
+        var a = lo & ~(line - 1);
+        while (a < hi) : (a += line) {
+            asm volatile ("ic ivau, %[a]"
+                :
+                : [a] "r" (a),
+                : .{ .memory = true });
+        }
+        asm volatile ("dsb ish" ::: .{ .memory = true });
+    }
+    asm volatile ("isb" ::: .{ .memory = true });
 }
