@@ -753,6 +753,7 @@ pub fn dropInterp(ip: *Interp) void {
         w.proc(w.cd, ip);
     }
     @import("vars.zig").dropInterp(ip);
+    @import("namespaces.zig").dropInterp(ip);
     if (findLimit(ip)) |li| {
         const l = limits.swapRemove(li);
         for (l.handlers.items) |h| freeHandler(h);
