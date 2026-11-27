@@ -561,9 +561,11 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
     it.output = .{ .ctx = out, .write = write };
     it.mem_limit = 2 << 30;
     it.vm_host.image_store = imageStore(h.gpa, h.env) catch "";
-    if (h.io != null) {
-        it.vm_host.fetch = vmFetch;
-        it.vm_host.fetch_ctx = @ptrCast(@constCast(h));
+    if (comptime tcl.microvm.runner_fetch) {
+        if (h.io != null) {
+            it.vm_host.fetch = vmFetch;
+            it.vm_host.fetch_ctx = @ptrCast(@constCast(h));
+        }
     }
     // The runner starts the child process of an isolated thread.
     if (comptime tcl.isothread.supported) it.iso_runner = std.process.executablePathAlloc(h.io.?, arena) catch null;

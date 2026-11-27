@@ -84,6 +84,9 @@ pub const Host = struct {
 
 pub const FetchError = error{ Network, Status, Io, OutOfMemory };
 
+/// The runner gives the download of `image fetch` (`zig build -Dvm-fetch`).
+pub const runner_fetch = @hasDecl(@import("build_options"), "vm_fetch") and @import("build_options").vm_fetch;
+
 /// The release of the images by default: a GitHub release that the
 /// publisher moves to each new image (docs/dev/vm-image.md).
 pub const image_base = "https://github.com/beetlebugorg/ztcl/releases/download/";
