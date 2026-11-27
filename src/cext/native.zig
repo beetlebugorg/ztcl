@@ -67,8 +67,17 @@ fn interpOf(handle: u32) *Interp {
 }
 
 /// A command of a package. Its data is the id of the command, plus 1.
-pub fn cmdC(it: *Interp, argv: []const Value, _: ?*interp_mod.Cmd) Error!Value {
+pub fn cmdC(it: *Interp, argv: []const Value, call: ?*interp_mod.Cmd) Error!Value {
+    // The command of the call site, when the interp has it resolved and
+    // current, as `Interp.resolve` checks it. Else the lookup by name.
+    if (call) |c| if (c.resolved) |r| {
+        if (c.epoch == it.epoch and c.ns == it.ns.ptr and r.impl == .native and r.impl.native == &cmdC) return runC(it, argv, r);
+    };
     const self = it.findCommand(try it.str(argv[0])) orelse return it.fail("invalid command name", .{});
+    return runC(it, argv, self);
+}
+
+fn runC(it: *Interp, argv: []const Value, self: *interp_mod.Command) Error!Value {
     const id: u32 = @intCast(@intFromPtr(self.ctx.?) - 1);
     const sh = try cext.shadowOf(it);
     const args = host.ztcl_cext_args(argv.len);

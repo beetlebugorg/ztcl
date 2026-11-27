@@ -98,8 +98,21 @@ fn newInterp() !*Interp {
     @import("../fsroot.zig").setHost(it) catch {};
     try it.register("exit", cmdExit);
     if (exe_name.*) |e| it.exe_name = std.mem.span(e);
+    // A program of libztcl can have many interps, such as one for each
+    // thread of a server, and an interp of Tcl frees its garbage at
+    // once. So the first collection starts at a small heap, and the free
+    // lists keep few bytes. The thresholds after it are the work of the
+    // collector (issue #526).
+    it.heap.threshold = embed_floor;
+    it.counter.rearm(embed_floor);
+    it.counter.spare.max = embed_spare;
     return it;
 }
+
+/// The heap size of the first collection in an interp of
+/// `Tcl_CreateInterp`, and the most bytes of its free lists.
+const embed_floor: usize = 1 << 20;
+const embed_spare: usize = 128 << 10;
 
 fn cmdExit(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len > 2) return it.wrongArgs("exit ?returnCode?");
