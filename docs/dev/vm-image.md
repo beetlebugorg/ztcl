@@ -72,6 +72,19 @@ The private half of the test key is in the repository, so anyone can sign with i
 - The test key signs only a manifest whose `name` ends in `-test`. A manifest with the name of a release image, such as `ztcl-guest`, signed by the test key is refused as untrusted. An SSH signature names one key, so a manifest is either signed by a release key or by the test key, never both.
 - A build that trusts the test key prints a warning on stderr when `ztcl::vm` starts, and `ztcl::vm image verify` (step 3) will name the key of each check.
 
+## The keys of an embedder
+
+A program that embeds ztcl can sign images of its own, such as a guest with its own tools disk. It gives its public keys in `Interp.vm_host.image_keys`, and ztcl trusts them with its own keys:
+
+```zig
+const vmimage = ztcl.vmimage;
+it.vm_host.image_keys = &.{
+    .{ .name = "myapp-test", .test_only = true, .key = comptime vmimage.sshKey("AAAAC3NzaC1lZDI1NTE5AAAA...") },
+};
+```
+
+A key with `test_only` signs only a manifest whose `name` ends in `-test`, as the test key of ztcl does. The embedder keeps its test key out of a release build. A key of an embedder still signs in the namespace `ztcl-vm-image`.
+
 ## Signing in CI
 
 The workflow of the image (`.github/workflows/vm-guest.yml`) builds each architecture on a runner of its own (`build.sh`, `pack.sh`, `image.sh`), then signs the manifest of both (`manifest.sh`) with the test key, under the name `ztcl-guest-test`, on each pull request that changes the guest. On a tag `vm-image-vVERSION`, or a run by hand from `main` of the workflow `VM image release` (`vm-image-release.yml`, which calls the workflow of the guest), the job `manifest-release` in the environment `vm-release` signs the manifest under the name `ztcl-guest` with the current key (`tools/vm-guest/keys/current.pub`): it writes the key to a file of mode 0600, adds it to an `ssh-agent` of the job with an askpass script that gives the passphrase from the environment, signs through the agent, then ends the agent and erases the files. It checks the signature with ztcl itself before it uploads `manifest.json.sig`. The first run with the current key waits on the owner.

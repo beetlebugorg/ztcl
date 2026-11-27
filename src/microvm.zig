@@ -87,6 +87,12 @@ pub const Host = struct {
     /// manifest before it counts, so the hook needs no trust.
     fetch: ?*const fn (ctx: ?*anyopaque, url: []const u8, fd: i32) FetchError!void = null,
     fetch_ctx: ?*anyopaque = null,
+    /// The image keys of the embedder, trusted with the keys of ztcl.
+    /// An embedder signs its own images (a guest with its own tools)
+    /// with one of them. Give a test key `test_only`, so that it signs
+    /// only a name that ends in `-test`, and keep it out of a release
+    /// build.
+    image_keys: []const @import("vmimage.zig").Key = &.{},
 };
 
 pub const FetchError = error{ Network, Status, Io, OutOfMemory };
@@ -150,10 +156,12 @@ const vmimage = @import("vmimage.zig");
 
 fn store(it: *Interp) Error!vmstore.Store {
     if (comptime !vmstore.supported) return it.failCode("ZTCL VM UNAVAILABLE", "the store of images is not available on this platform", .{});
-    return vmstore.Store.open(it.alloc(), it.vm_host.image_store) catch |e| switch (e) {
-        error.OutOfMemory => error.OutOfMemory,
-        else => it.failCode("ZTCL VM STORE", "no store of images: {s}", .{if (it.vm_host.image_store.len == 0) "the embedder gives no folder" else @errorName(e)}),
+    var s = vmstore.Store.open(it.alloc(), it.vm_host.image_store) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => return it.failCode("ZTCL VM STORE", "no store of images: {s}", .{if (it.vm_host.image_store.len == 0) "the embedder gives no folder" else @errorName(e)}),
     };
+    s.keys = it.vm_host.image_keys;
+    return s;
 }
 
 fn storeFail(it: *Interp, e: vmstore.Error) Error {

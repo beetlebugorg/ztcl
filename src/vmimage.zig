@@ -15,8 +15,11 @@
 //! key of `tools/vm-guest/testkey`. Anyone can sign with the test key,
 //! which is in the repository, so it signs only a manifest whose name
 //! ends in `-test`, never the name of a release image, and a build that
-//! trusts it says so (`test_key_warning`). A manifest has a counter, and `verify`
-//! refuses a counter below the highest that the store has seen.
+//! trusts it says so (`test_key_warning`). An embedder can add keys of
+//! its own (`Host.image_keys` of `microvm.zig`); a key with `test_only`
+//! signs only a name that ends in `-test`, as the test key does. A
+//! manifest has a counter, and `verify` refuses a counter below the
+//! highest that the store has seen.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 const std = @import("std");
@@ -28,11 +31,13 @@ const Sha256 = std.crypto.hash.sha2.Sha256;
 
 pub const namespace = "ztcl-vm-image";
 
-pub const Key = struct { name: []const u8, key: [32]u8 };
+/// A trusted key. `test_only`: the key signs only a manifest whose name
+/// ends in `-test`.
+pub const Key = struct { name: []const u8, key: [32]u8, test_only: bool = false };
 
 /// The 32 bytes of an `ssh-ed25519` public key in the base64 form of an
 /// `authorized_keys` line.
-fn sshKey(comptime b64: []const u8) [32]u8 {
+pub fn sshKey(comptime b64: []const u8) [32]u8 {
     @setEvalBranchQuota(100_000);
     const D = std.base64.standard.Decoder;
     var blob: [D.calcSizeForSlice(b64) catch unreachable]u8 = undefined;
@@ -52,7 +57,7 @@ pub const release_keys = [_]Key{
 
 /// The test key (tools/vm-guest/testkey/test_ed25519.pub), trusted only
 /// by a test build. SHA256:0i6ppbGLTgfdCV7fHFHBcnyT2S3mnECDbJ3BMwSUJO4
-pub const test_key: Key = .{ .name = "test", .key = sshKey("AAAAC3NzaC1lZDI1NTE5AAAAIJQFXLYWn/RbHTrjfGv15N3QaFDqa9jjAxBdncu7cx29") };
+pub const test_key: Key = .{ .name = "test", .test_only = true, .key = sshKey("AAAAC3NzaC1lZDI1NTE5AAAAIJQFXLYWn/RbHTrjfGv15N3QaFDqa9jjAxBdncu7cx29") };
 
 const options = @import("build_options");
 pub const trusts_test_key = builtin.is_test or (@hasDecl(options, "vm_test_key") and options.vm_test_key);
@@ -126,9 +131,10 @@ fn parse(blob: []const u8) Error!Sig {
     return .{ .public_key = key[0..32].*, .namespace = ns, .reserved = reserved, .hash_alg = hash_alg, .signature = sig[0..64].* };
 }
 
-fn trusted(key: [32]u8) ?Key {
+fn trusted(extra: []const Key, key: [32]u8) ?Key {
     for (release_keys) |k| if (std.mem.eql(u8, &k.key, &key)) return k;
     if (trusts_test_key and std.mem.eql(u8, &test_key.key, &key)) return test_key;
+    for (extra) |k| if (std.mem.eql(u8, &k.key, &key)) return k;
     return null;
 }
 
@@ -140,14 +146,14 @@ fn putStr(h: *Sha512, s: []const u8) void {
 }
 
 /// Checks the SSH signature `sig_text` of `message`, and gives the key
-/// that signed it.
-pub fn verifySignature(a: Allocator, message: []const u8, sig_text: []const u8) Error!Key {
+/// that signed it. `extra` is the keys of the embedder.
+pub fn verifySignature(a: Allocator, extra: []const Key, message: []const u8, sig_text: []const u8) Error!Key {
     const blob = try unarmor(a, sig_text);
     defer a.free(blob);
     const s = try parse(blob);
     if (!std.mem.eql(u8, s.namespace, namespace)) return error.Namespace;
     if (!std.mem.eql(u8, s.hash_alg, "sha512")) return error.BadSignature;
-    const key = trusted(s.public_key) orelse return error.Untrusted;
+    const key = trusted(extra, s.public_key) orelse return error.Untrusted;
     var digest: [Sha512.digest_length]u8 = undefined;
     Sha512.hash(message, &digest, .{});
     // The signed data: the magic, then the strings of the namespace, the
@@ -220,15 +226,20 @@ pub const Checked = struct {
 /// `seen` (the highest counter that the store accepted) is a rollback,
 /// unless `allow_rollback`.
 pub fn verify(a: Allocator, manifest: []const u8, sig_text: []const u8, seen: u64, allow_rollback: bool) Error!Checked {
-    const key = try verifySignature(a, manifest, sig_text);
+    return verifyWith(a, &.{}, manifest, sig_text, seen, allow_rollback);
+}
+
+/// `verify`, with the keys of the embedder in `extra` too.
+pub fn verifyWith(a: Allocator, extra: []const Key, manifest: []const u8, sig_text: []const u8, seen: u64, allow_rollback: bool) Error!Checked {
+    const key = try verifySignature(a, extra, manifest, sig_text);
     const p = std.json.parseFromSlice(Manifest, a, manifest, .{ .ignore_unknown_fields = true, .allocate = .alloc_always }) catch |e| switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.BadManifest,
     };
     errdefer p.deinit();
     if (p.value.format != 1) return error.BadManifest;
-    // The test key signs only a test image.
-    if (std.mem.eql(u8, key.name, test_key.name) and !std.mem.endsWith(u8, p.value.name, test_suffix)) return error.Untrusted;
+    // A test key signs only a test image.
+    if (key.test_only and !std.mem.endsWith(u8, p.value.name, test_suffix)) return error.Untrusted;
     if (p.value.counter < seen and !allow_rollback) return error.Rollback;
     for (p.value.archs.map.values()) |arch| {
         try checkHex(arch.kernel.sha256, 64);
@@ -298,6 +309,25 @@ test "vmimage: the test key signs only a test image" {
     const msg = @embedFile("vmimage_fixtures/release-name.json");
     const sig = @embedFile("vmimage_fixtures/release-name.json.sig");
     try std.testing.expectError(error.Untrusted, verify(a, msg, sig, 0, false));
+}
+
+test "vmimage: the keys of the embedder" {
+    const a = std.testing.allocator;
+    const msg = @embedFile("vmimage_fixtures/release-name.json");
+    const sig = @embedFile("vmimage_fixtures/release-name.json.sig.embedder");
+    const test_sig = @embedFile("vmimage_fixtures/manifest.json.sig.embedder");
+    const k: Key = .{ .name = "embedder", .key = comptime sshKey("AAAAC3NzaC1lZDI1NTE5AAAAIGQf92kcJqfKrdN7I5lIAVR0BGHZ1bDFzhfuixa6cSru") };
+    // Untrusted without the key, trusted with it.
+    try std.testing.expectError(error.Untrusted, verify(a, msg, sig, 0, false));
+    var c = try verifyWith(a, &.{k}, msg, sig, 0, false);
+    c.deinit();
+    try std.testing.expectEqualStrings("embedder", c.key.name);
+    // A test key of the embedder signs a test image, and not a release image.
+    var t: Key = k;
+    t.test_only = true;
+    try std.testing.expectError(error.Untrusted, verifyWith(a, &.{t}, msg, sig, 0, false));
+    var c2 = try verifyWith(a, &.{t}, fixtures.manifest, test_sig, 0, false);
+    c2.deinit();
 }
 
 test "vmimage: rollback" {

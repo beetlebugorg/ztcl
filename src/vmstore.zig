@@ -367,6 +367,9 @@ pub const Store = struct {
     /// relative to it, with no symlink below it.
     root: []const u8,
     fd: i32,
+    /// The keys of the embedder (`Host.image_keys`), trusted with the
+    /// keys of ztcl.
+    keys: []const vmimage.Key = &.{},
 
     /// Opens the store at `root`, and makes its folders. Call `close`.
     pub fn open(a: Allocator, root: []const u8) Error!Store {
@@ -459,12 +462,12 @@ pub const Store = struct {
         const sig = try readAll(a, src, "manifest.json.sig", 1 << 16);
         defer a.free(sig);
         // The signature first, with no rollback check, for the name.
-        var pre = try vmimage.verify(a, manifest, sig, 0, true);
+        var pre = try vmimage.verifyWith(a, s.keys, manifest, sig, 0, true);
         const name = try a.dupe(u8, pre.parsed.value.name);
         pre.deinit();
         errdefer a.free(name);
         if (std.mem.indexOfAny(u8, name, "/\\") != null or name.len == 0 or name[0] == '.') return error.BadManifest;
-        var c = try vmimage.verify(a, manifest, sig, try s.highest(a, name), allow_rollback);
+        var c = try vmimage.verifyWith(a, s.keys, manifest, sig, try s.highest(a, name), allow_rollback);
         defer c.deinit();
         const m = c.parsed.value;
         if (m.archs.map.get(arch) == null) return error.Missing;
@@ -526,7 +529,7 @@ pub const Store = struct {
         defer a.free(manifest);
         const sig = try readAll(a, s.fd, sp, 1 << 16);
         defer a.free(sig);
-        return vmimage.verify(a, manifest, sig, 0, true);
+        return vmimage.verifyWith(a, s.keys, manifest, sig, 0, true);
     }
 
     /// Checks each file of the release of `arch` in objects/ against its
@@ -598,12 +601,11 @@ pub const Store = struct {
     /// The name, the counter, and the files of this architecture of the
     /// signed manifest in the folder `dir`, before an install.
     pub fn peek(s: Store, a: Allocator, dir: i32) Error!struct { name: []u8, counter: u64, files: [][]u8 } {
-        _ = s;
         const manifest = try readAll(a, dir, "manifest.json", 1 << 20);
         defer a.free(manifest);
         const sig = try readAll(a, dir, "manifest.json.sig", 1 << 16);
         defer a.free(sig);
-        var c = try vmimage.verify(a, manifest, sig, 0, true);
+        var c = try vmimage.verifyWith(a, s.keys, manifest, sig, 0, true);
         defer c.deinit();
         const x = c.parsed.value.archs.map.get(host_arch) orelse return error.Missing;
         var files: std.ArrayList([]u8) = .empty;
