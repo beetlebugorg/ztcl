@@ -1,4 +1,5 @@
-//! Tests of `ztcl::watch` (`watch.zig`) in a root folder below /tmp.
+//! Tests of `ztcl::watch` (`watch.zig`) in a root folder below
+//! `.zig-cache`, on each platform of `watch.supported`.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -14,11 +15,34 @@ fn ev(it: *tcl.Interp, script: []const u8) ![]const u8 {
     return it.str(v);
 }
 
-/// Makes a fresh root folder. The caller removes it with `rm -rf`.
-fn jail(it: *tcl.Interp, buf: *[64:0]u8) ![:0]const u8 {
-    const linux = tcl.sys.os;
-    const root = try std.fmt.bufPrintSentinel(buf, "/tmp/ztcl-watch-{d}", .{linux.getpid()}, 0);
-    _ = linux.mkdirat(linux.AT.FDCWD, root, 0o700);
+/// Runs `script` in an interpreter with the files of the host, and
+/// copies its result to `buf`.
+fn host(script: []const u8, buf: []u8) ![]const u8 {
+    var h: tcl.Interp = undefined;
+    try h.init(std.testing.allocator);
+    defer h.deinit();
+    try tcl.fsroot.setHost(&h);
+    try h.allow(@backingInt(cap.channels) | @backingInt(cap.file));
+    const r = try ev(&h, script);
+    @memcpy(buf[0..r.len], r);
+    return buf[0..r.len];
+}
+
+/// Makes the empty folder `.zig-cache/<name>` and gives its full path.
+fn fresh(name: []const u8, buf: []u8) ![]const u8 {
+    var script: [160]u8 = undefined;
+    return host(try std.fmt.bufPrint(&script, "set d [file normalize .zig-cache/{s}]; file delete -force $d; file mkdir $d; set d", .{name}), buf);
+}
+
+fn remove(dir: []const u8) void {
+    var script: [400]u8 = undefined;
+    var out: [8]u8 = undefined;
+    _ = host(std.fmt.bufPrint(&script, "file delete -force {{{s}}}", .{dir}) catch return, &out) catch {};
+}
+
+/// An interpreter with the root folder `.zig-cache/ztcl-watch`.
+fn jail(it: *tcl.Interp, buf: []u8) ![]const u8 {
+    const root = try fresh("ztcl-watch", buf);
     try it.init(std.testing.allocator);
     try tcl.fsroot.setRoot(it, root);
     try it.allow(@backingInt(cap.channels) | @backingInt(cap.file));
@@ -36,12 +60,12 @@ test "ztcl::watch is absent without file" {
 test "ztcl::watch reports the changes of a folder" {
     if (!tcl.watch.supported) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
-    var buf: [64:0]u8 = undefined;
-    _ = try jail(&it, &buf);
+    var buf: [400]u8 = undefined;
+    const root = try jail(&it, &buf);
     defer {
         _ = it.eval("file delete -force /src /a.tcl /b.tcl /c.tcl") catch {};
         it.deinit();
-        _ = tcl.sys.os.unlinkat(tcl.sys.os.AT.FDCWD, &buf, tcl.sys.os.AT.REMOVEDIR);
+        remove(root);
     }
     _ = try ev(&it, "file mkdir /src; set w [ztcl::watch add -recursive /]");
     try std.testing.expectEqualStrings("", try ev(&it, "ztcl::watch changes $w"));
@@ -63,10 +87,9 @@ test "ztcl::watch reports the changes of a folder" {
 
 test "ztcl::watch gives host paths in host mode" {
     if (!tcl.watch.supported) return error.SkipZigTest;
-    const linux = tcl.sys.os;
-    var buf: [64:0]u8 = undefined;
-    const dir = try std.fmt.bufPrintSentinel(&buf, "/tmp/ztcl-watch-host-{d}", .{linux.getpid()}, 0);
-    _ = linux.mkdirat(linux.AT.FDCWD, dir, 0o700);
+    var buf: [400]u8 = undefined;
+    const dir = try fresh("ztcl-watch-host", &buf);
+    defer remove(dir);
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer {
@@ -75,8 +98,8 @@ test "ztcl::watch gives host paths in host mode" {
     }
     try tcl.fsroot.setHost(&it);
     try it.allow(@backingInt(cap.channels) | @backingInt(cap.file));
-    var script: [128]u8 = undefined;
-    _ = try ev(&it, try std.fmt.bufPrint(&script, "set d {s}; file mkdir $d/src; set w [ztcl::watch add -recursive $d]", .{dir}));
+    var script: [600]u8 = undefined;
+    _ = try ev(&it, try std.fmt.bufPrint(&script, "set d {{{s}}}; file mkdir $d/src; set w [ztcl::watch add -recursive $d]", .{dir}));
     _ = try ev(&it, "set f [open $d/a.tcl w]; close $f; set f [open $d/src/b.tcl w]; close $f");
     try std.testing.expectEqualStrings("1", try ev(&it, "expr {[ztcl::watch changes $w] eq [list [list created $d/a.tcl] [list created $d/src/b.tcl]]}"));
     _ = try ev(&it, "file mkdir $d/src/new; ztcl::watch changes $w; set f [open $d/src/new/c.tcl w]; close $f");
