@@ -100,10 +100,14 @@ pub const Backend = union(enum) {
     vsock: *vsock_mod.Vsock,
     /// The 9p device (`ninep.zig`): a share of a folder of the host.
     ninep: *ninep_mod.Server,
+    /// The virtio-fs device (`fuse.zig`): a share of a folder of the host
+    /// through FUSE.
+    fs: *fuse_mod.Server,
 };
 
 const vsock_mod = @import("vsock.zig");
 const ninep_mod = @import("ninep.zig");
+const fuse_mod = @import("fuse.zig");
 
 /// A spin lock for the registers of a device: the vCPU threads and the
 /// console thread of the backend take it for a short time.
@@ -121,7 +125,8 @@ pub const Device = struct {
     backend: Backend,
     irq: u32,
     features: u64,
-    config: [16]u8 = @splat(0),
+    /// 44 bytes for the tag of virtio-fs, the largest.
+    config: [48]u8 = @splat(0),
     config_len: u8 = 0,
     nqueues: u8,
     lock: Lock = .{},
@@ -158,7 +163,16 @@ pub const Device = struct {
     /// The 9p device of a share, with its tag in the configuration.
     pub fn ninep(irq: u32, server: *ninep_mod.Server, tag: []const u8) Device {
         var d: Device = .{ .backend = .{ .ninep = server }, .irq = irq, .features = f_version_1 | ninep_mod.f_mount_tag, .nqueues = 1 };
-        d.config_len = ninep_mod.Server.config(tag, &d.config);
+        d.config_len = ninep_mod.Server.config(tag, d.config[0..16]);
+        return d;
+    }
+
+    /// The virtio-fs device of a share, with its tag in the configuration:
+    /// the high priority queue and one request queue, and no shared memory
+    /// region.
+    pub fn virtiofs(irq: u32, server: *fuse_mod.Server, tag: []const u8) Device {
+        var d: Device = .{ .backend = .{ .fs = server }, .irq = irq, .features = f_version_1, .nqueues = 2 };
+        d.config_len = fuse_mod.Server.config(tag, &d.config);
         return d;
     }
 
@@ -178,6 +192,7 @@ pub const Device = struct {
             .external => |e| e.id,
             .vsock => vsock_mod.id,
             .ninep => ninep_mod.id,
+            .fs => 26,
         };
     }
 
@@ -210,6 +225,9 @@ pub const Device = struct {
             // buffer.
             0x060 => if (d.backend == .external) int_vring else d.int_status,
             0x070 => d.status,
+            // The shared memory regions (SHMLen and SHMBase): no region, a
+            // length of -1 and a base of all ones.
+            0x0b0, 0x0b4, 0x0b8, 0x0bc => 0xffffffff,
             else => 0,
         };
         std.mem.writeInt(u32, out[0..4], v, .little);
@@ -263,6 +281,7 @@ pub const Device = struct {
         if (d.backend == .external) d.backend.external.reset(d.backend.external.ctx, d);
         if (d.backend == .vsock) d.backend.vsock.reset();
         if (d.backend == .ninep) d.backend.ninep.reset();
+        if (d.backend == .fs) d.backend.fs.reset();
         d.status = 0;
         d.dev_sel = 0;
         d.drv_sel = 0;
@@ -281,6 +300,8 @@ pub const Device = struct {
             .external => {},
             .vsock => |v| if (qi == 1) v.tx(d, host) else if (qi == 0) v.rxReady(d, host),
             .ninep => |srv| if (qi == 0 and srv.run(&d.queues[0], host.mem)) d.raise(host),
+            // The high priority queue 0 and the request queue 1.
+            .fs => |srv| if (qi < 2 and srv.run(&d.queues[qi], host.mem)) d.raise(host),
         }
     }
 

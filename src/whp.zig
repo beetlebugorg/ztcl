@@ -46,7 +46,8 @@ const Mem = virtio.Mem;
 const Device = virtio.Device;
 const ninep = @import("vm/virtio/ninep.zig");
 const share_windows = @import("vm/share_windows.zig");
-const NinepState = struct { share: share_windows.Share, server: ninep.Server };
+const NinepState = struct { share: share_windows.Share, server: ninep.Server, fs: fuse.Server = undefined };
+const fuse = @import("vm/virtio/fuse.zig");
 
 pub const supported = builtin.os.tag == .windows and builtin.cpu.arch == .x86_64;
 
@@ -91,6 +92,9 @@ pub const Config = struct {
     disks: []const Disk = &.{},
     /// The 9p shares, after the disks.
     shares: []const Share = &.{},
+    /// The shares are virtio-fs devices (`vm/virtio/fuse.zig`) in the place
+    /// of 9p.
+    virtiofs: bool = false,
     /// A virtio entropy device, after the disks and the shares.
     entropy: bool = false,
     console: ConsoleOut,
@@ -395,7 +399,10 @@ fn teardown(m: *Machine) void {
         m.alloc.free(m.devices);
     }
     m.devices = &.{};
-    for (m.ninep_state) |*n| n.server.deinit();
+    for (m.ninep_state) |*n| {
+        n.server.deinit();
+        if (m.cfg.virtiofs) n.fs.deinit();
+    }
     if (m.ninep_state.len != 0) m.alloc.free(m.ninep_state);
     m.ninep_state = &.{};
     if (m.part) |p| _ = WHvDeletePartition(p);
@@ -539,7 +546,10 @@ fn makeDevices(m: *Machine) Fail!void {
         var tag_buf: [16]u8 = undefined;
         const tag = std.fmt.bufPrint(&tag_buf, "share{d}", .{i}) catch unreachable;
         const k = 2 + m.cfg.disks.len + i;
-        m.devices[k] = Device.ninep(irqs[k], &st.server, tag);
+        if (m.cfg.virtiofs) {
+            st.fs = fuse.Server.init(std.heap.smp_allocator, st.share.fs());
+            m.devices[k] = Device.virtiofs(irqs[k], &st.fs, tag);
+        } else m.devices[k] = Device.ninep(irqs[k], &st.server, tag);
     }
     if (m.cfg.entropy) m.devices[n - 1] = Device.rng(irqs[n - 1], fillRandom);
 }
