@@ -1,0 +1,1 @@
+{"format":1,"name":"ztcl-guest","version":"0.1.0","counter":3,"min_ztcl":"0.1.0","archs":{"arm64":{"kernel":{"file":"Image","sha256":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"},"cmdline":"rdinit=/sbin/agent quiet","disks":[]}}}

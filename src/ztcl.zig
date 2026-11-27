@@ -51,6 +51,7 @@ pub const isoproto = @import("isoproto.zig");
 pub const isothread = @import("isothread.zig");
 pub const isolate_mac = @import("isolate_mac.zig");
 pub const isobroker = @import("isobroker.zig");
+pub const vmimage = @import("vmimage.zig");
 pub const isolate_linux = @import("isolate_linux.zig");
 pub const filecmd = @import("filecmd.zig");
 pub const sys = @import("sys.zig");
@@ -117,6 +118,7 @@ test {
     _ = macho;
     _ = isoproto;
     _ = isobroker;
+    _ = vmimage;
     if (@import("builtin").os.tag == .macos) _ = isolate_mac;
     if (@import("builtin").os.tag == .linux) _ = @import("isolate_linux_tests.zig");
     _ = wasmbundle;
