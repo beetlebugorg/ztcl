@@ -1346,6 +1346,53 @@ test "ztcl::tls socket closes the channel after a failed handshake" {
     try std.testing.expectEqualStrings("1 {ZTCL TLS} 0", try it.str(try it.eval(script)));
 }
 
+test "the http package of the Tcl library" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    // The library packages need the full `package` command.
+    try std.testing.expectEqual(error.TclError, it.eval("package require http"));
+    try it.allow(@backingInt(tcl.interp.Capability.package) | @backingInt(tcl.interp.Capability.socket) |
+        @backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.event));
+    fake_ticks = 0;
+    it.event_host = .{ .now = fakeNow, .sleep = fakeSleep };
+    try std.testing.expectEqualStrings("2.9.8 {1.0 2.9.8}", try it.str(try it.eval(
+        \\list [package require http] [lsort [package versions http]]
+    )));
+    try std.testing.expectEqualStrings("a=1&b=x%20y%26z 1 {Unsupported URL: http:junk} 1 {Invalid port number: 99999}", try it.str(try it.eval(
+        \\list [http::formatQuery a 1 b "x y&z"] [catch {http::geturl http:junk} m] $m [catch {http::geturl http://h:99999/} m] $m
+    )));
+    // A request to a server of the same interpreter, on loopback.
+    try std.testing.expectEqualStrings("200 {GET /a?b=1} 5 text/plain", try it.str(try it.eval(
+        \\proc accept {s a p} {
+        \\    fconfigure $s -translation crlf -blocking 0
+        \\    fileevent $s readable [list serve $s]
+        \\}
+        \\proc serve {s} {
+        \\    if {[gets $s line] <= 0} return
+        \\    set ::got [lrange $line 0 1]
+        \\    while {[gets $s l] > 0} {}
+        \\    puts $s "HTTP/1.1 200 OK\nContent-Type: text/plain\nContent-Length: 5\nConnection: close\n"
+        \\    fconfigure $s -translation binary
+        \\    puts -nonewline $s hello
+        \\    close $s
+        \\}
+        \\set srv [socket -server accept -myaddr 127.0.0.1 0]
+        \\set port [lindex [fconfigure $srv -sockname] 2]
+        \\set t [http::geturl http://127.0.0.1:$port/a?b=1]
+        \\close $srv
+        \\list [http::ncode $t] $::got [http::size $t] [dict get [http::meta $t] Content-Type]
+    )));
+    // Version 1.0 has the global commands.
+    var it1: tcl.Interp = undefined;
+    try it1.init(std.testing.allocator);
+    defer it1.deinit();
+    try it1.allow(@backingInt(tcl.interp.Capability.package));
+    try std.testing.expectEqualStrings("1.0 a+b=%7e", try it1.str(try it1.eval(
+        \\list [package require http 1.0] [http_formatQuery "a b" ~]
+    )));
+}
+
 test "package provides Tcl at the patch level" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);

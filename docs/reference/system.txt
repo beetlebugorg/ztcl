@@ -49,6 +49,16 @@ sub: clock add SECONDS ?COUNT UNIT ...? ?-gmt BOOL? ?-timezone ZONE? | The secon
 ex: clock format 0 -format %Y-%m-%d -gmt 1 => 1970-01-01
 ex: clock scan 1970-01-02 -format %Y-%m-%d -gmt 1 => 86400
 
+== http
+syn: http::geturl url ?-option value ...?
+does: The http package 2.9.8 of the Tcl library, with `package require http`: an HTTP/1.1 client on the sockets of ztcl. `http::geturl` sends a GET, a POST with `-query` or `-querychannel`, or a HEAD with `-validate 1`, and gives a token, the name of an array with the status, the headers, and the body of the reply. With `-command` the request runs in the event loop and the command gets the token at the end. `http::config` sets the proxy, the user agent, and the other defaults, `http::formatQuery` encodes a query, and `http::status`, `http::ncode`, `http::meta`, `http::data`, and `http::cleanup` read and free a token. A request with `-keepalive 1` uses one persistent socket for each host and port. `https` URLs use the TLS channels of `ztcl::tls`. `package require http 1.0` gives the old commands `http_get`, `http_config`, and the others.
+cap: package
+flags: --allow package,channels
+names: http::config http::geturl http::formatQuery http::quoteString http::reset http::wait http::status http::size http::code http::ncode http::meta http::data http::error http::cleanup http::register http::registerError http::unregister
+ex: package require http => 2.9.8
+ex: http::formatQuery name "a b" x & => name=a%20b&x=%26
+diff: The requests on one persistent socket go one after the other, so `-pipeline` does not change the order on the socket. The codings gzip, deflate, and compress need the `zlib` command, so the default Accept-Encoding is identity.
+
 == msgcat
 syn: msgcat::mc src ?arg ...?
 does: Message catalogs for text in more than one language. `mcset` adds a translation for a locale, `mclocale` sets the locale, and `mc` gives the text for the current locale, with `format` on the arguments, or calls `mcunknown`. `mcload` sources the `.msg` file of each preferred locale of a folder, `mcpreferences` gives the locale and its parents, `mcexists` tests for a translation, and `mcmax` gives the longest translation.

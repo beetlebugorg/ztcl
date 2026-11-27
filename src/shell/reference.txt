@@ -568,6 +568,8 @@ sub: clock clicks ?-milliseconds|-microseconds? | A counter for time spans.
 sub: clock format SECONDS ?-format FMT? ?-gmt BOOL? ?-timezone ZONE? ?-locale L? | The time as text.
 sub: clock scan TEXT ?-format FMT? ?-gmt BOOL? ?-timezone ZONE? ?-base SECONDS? | The seconds of a time in text.
 sub: clock add SECONDS ?COUNT UNIT ...? ?-gmt BOOL? ?-timezone ZONE? | The seconds after adding days, months, and other units.
+== http http::config http::geturl http::formatQuery http::quoteString http::reset http::wait http::status http::size http::code http::ncode http::meta http::data http::error http::cleanup http::register http::registerError http::unregister
+syn: http::geturl url ?-option value ...?
 == msgcat msgcat::mc msgcat::mclocale msgcat::mcmset msgcat::mcset msgcat::mcexists msgcat::mcload msgcat::mcmax msgcat::mcpreferences
 syn: msgcat::mc src ?arg ...?
 == exec
