@@ -548,6 +548,11 @@ sub: info library | The folder of the Tcl library: empty in ztcl.
 sub: info loaded | The loaded binary packages.
 sub: info nameofexecutable | The path of the program.
 sub: info sharedlibextension | The extension of a shared library.
+sub: info hostname | The name of the host.
+sub: info errorstack ?INTERP? | The -errorstack of the last error: INNER and the failed command, then CALL and the words of each proc that the error left, and UP and a count of levels for a catch in the frame of uplevel.
+sub: info coroutine | The full name of the running coroutine, or an empty string.
+sub: info class SUBCOMMAND CLASS ?arg ...? | Facts about a TclOO class, as info class of Tcl 8.6.
+sub: info object SUBCOMMAND OBJECT ?arg ...? | Facts about a TclOO object, as info object of Tcl 8.6.
 == clock
 syn: clock subcommand ?arg ...?
 sub: clock seconds | The seconds since the epoch.
