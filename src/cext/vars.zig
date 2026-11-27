@@ -124,6 +124,8 @@ const Trace = struct {
     cd: ?*anyopaque,
     cmd: [:0]u8,
     live: bool = true,
+    /// The trace proc runs.
+    busy: bool = false,
 };
 
 threadlocal var traces: std.ArrayList(*Trace) = .empty;
@@ -149,6 +151,28 @@ fn opsText(flags: c_int) []const u8 {
     return gpa.dupe(u8, buf[0..n]) catch oom();
 }
 
+fn freeTrace(t: *Trace) void {
+    gpa.free(t.n1);
+    if (t.n2) |n| gpa.free(n);
+    gpa.free(t.name);
+    gpa.free(t.cmd);
+    gpa.destroy(t);
+}
+
+/// Frees the records of the traces that an unset or an untrace ended,
+/// with their hidden commands.
+fn sweep() void {
+    var i = traces.items.len;
+    while (i > 0) {
+        i -= 1;
+        const t = traces.items[i];
+        if (t.live or t.busy) continue;
+        _ = host.Tcl_DeleteCommand(t.ip, t.cmd[2..].ptr);
+        _ = traces.orderedRemove(i);
+        freeTrace(t);
+    }
+}
+
 fn traceCmd(cd: ?*anyopaque, ip: *Interp, objc: c_int, objv: [*]const *Obj) callconv(.c) c_int {
     const t: *Trace = @ptrCast(@alignCast(cd.?));
     if (!t.live or objc < 4) return OK;
@@ -162,8 +186,11 @@ fn traceCmd(cd: ?*anyopaque, ip: *Interp, objc: c_int, objv: [*]const *Obj) call
     const n2 = obj.text(objv[2]);
     const n2z = gpa.dupeSentinel(u8, n2, 0) catch oom();
     defer gpa.free(n2z);
-    const msg = t.proc(t.cd, ip, t.n1.ptr, if (n2.len > 0) n2z.ptr else null, flag) orelse return OK;
-    obj.setResultText(ip, std.mem.span(msg));
+    t.busy = true;
+    const msg = t.proc(t.cd, ip, t.n1.ptr, if (n2.len > 0) n2z.ptr else null, flag);
+    t.busy = false;
+    if (msg == null) return OK;
+    obj.setResultText(ip, std.mem.span(msg.?));
     return ERROR;
 }
 
@@ -179,6 +206,7 @@ fn traceWords(list: *std.ArrayList(*Obj), t: *Trace, sub: []const u8) void {
 }
 
 pub fn Tcl_TraceVar2(ip: *Interp, n1: [*:0]const u8, n2: ?[*:0]const u8, flags: c_int, proc: TraceProc, cd: ?*anyopaque) callconv(.c) c_int {
+    sweep();
     var buf: std.ArrayList(u8) = .empty;
     defer buf.deinit(gpa);
     const t = gpa.create(Trace) catch oom();
@@ -204,11 +232,34 @@ pub fn Tcl_TraceVar2(ip: *Interp, n1: [*:0]const u8, n2: ?[*:0]const u8, flags: 
     traceWords(&list, t, "add");
     if (evalFlags(ip, &list, LEAVE_ERR_MSG) != OK) {
         _ = host.Tcl_DeleteCommand(ip, t.cmd[2..].ptr);
-        t.live = false;
+        freeTrace(t);
         return ERROR;
     }
     traces.append(gpa, t) catch oom();
     return OK;
+}
+
+/// Frees the trace records and the links of `ip`, with no call to ztcl.
+/// The free of the interp calls it.
+pub fn dropInterp(ip: *Interp) void {
+    var i = traces.items.len;
+    while (i > 0) {
+        i -= 1;
+        const t = traces.items[i];
+        if (t.ip != ip) continue;
+        _ = traces.orderedRemove(i);
+        freeTrace(t);
+    }
+    i = links.items.len;
+    while (i > 0) {
+        i -= 1;
+        const l = links.items[i];
+        if (l.ip != ip) continue;
+        _ = links.orderedRemove(i);
+        l.last.deinit(gpa);
+        gpa.free(l.name);
+        gpa.destroy(l);
+    }
 }
 
 pub fn Tcl_TraceVar(ip: *Interp, n: [*:0]const u8, flags: c_int, proc: TraceProc, cd: ?*anyopaque) callconv(.c) c_int {
@@ -226,19 +277,17 @@ const trace_mask = TRACE_READS | TRACE_WRITES | TRACE_UNSETS | TRACE_ARRAY;
 pub fn Tcl_UntraceVar2(ip: *Interp, n1: [*:0]const u8, n2: ?[*:0]const u8, flags: c_int, proc: TraceProc, cd: ?*anyopaque) callconv(.c) void {
     // Each record of the trace goes: an unset leaves a record that is
     // not live.
-    var i = traces.items.len;
-    while (i > 0) {
-        i -= 1;
-        const t = traces.items[i];
+    for (traces.items) |t| {
         if (!same(t, ip, n1, n2) or t.proc != proc or t.cd != cd or t.flags & trace_mask != flags & trace_mask) continue;
         if (t.live) {
             var list: std.ArrayList(*Obj) = .empty;
             traceWords(&list, t, "remove");
             _ = evalFlags(ip, &list, 0);
         }
-        _ = host.Tcl_DeleteCommand(ip, t.cmd[2..].ptr);
-        _ = traces.orderedRemove(i);
+        t.live = false;
     }
+    // A record of a running trace proc goes later.
+    sweep();
 }
 
 pub fn Tcl_UntraceVar(ip: *Interp, n: [*:0]const u8, flags: c_int, proc: TraceProc, cd: ?*anyopaque) callconv(.c) void {

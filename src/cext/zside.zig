@@ -296,3 +296,104 @@ pub fn provide(it: *Interp, name: []const u8, version: []const u8, out: *Arg) i3
     _ = it.eval(buf.items) catch |e| return codeOf(it, e, out);
     return 0;
 }
+
+pub const InterpOp = @import("host.zig").InterpOp;
+
+/// The commands that `Tcl_MakeSafe` hides, as the safe interps of Tcl 8.6
+/// do.
+const unsafe_commands = [_][]const u8{ "cd", "exec", "exit", "fconfigure", "file", "glob", "load", "open", "pwd", "socket", "source", "unload" };
+
+/// Runs operation `op` of the interp tree for a C package. `H` maps an
+/// interp to its handle (`handleOf`) and a handle to its interp
+/// (`interpOf`). Gives the code of Tcl, and the value or the message in
+/// `out`.
+pub fn interpOp(it: *Interp, op: u32, a: *const Arg, out: *Arg, comptime H: type) i32 {
+    const r = interpRun(it, op, a, H) catch |e| return codeOf(it, e, out);
+    put(it, r, out);
+    return 0;
+}
+
+fn handleValue(comptime H: type, x: ?*Interp) Error!Value {
+    const p = x orelse return .{ .int = 0 };
+    return .{ .int = try H.handleOf(p) };
+}
+
+fn interpRun(it: *Interp, op: u32, a: *const Arg, comptime H: type) Error!Value {
+    const child = @import("../child.zig");
+    const v = try valueOf(it, a.*);
+    const args = if (v == .list) v.list.items() else &[_]Value{v};
+    const need = struct {
+        fn f(i: *Interp, xs: []const Value, n: usize) Error!void {
+            if (xs.len < n) return i.fail("the operation needs {d} arguments", .{n});
+        }
+    }.f;
+    switch (@as(InterpOp, @fromBackingInt(@intCast(op)))) {
+        .child => {
+            try need(it, args, 1);
+            var cur = it;
+            for (try it.list(args[0])) |w| {
+                const c = cur.children.get(try it.str(w)) orelse return .{ .int = 0 };
+                cur = c.it;
+            }
+            return handleValue(H, cur);
+        },
+        .parent => return handleValue(H, it.parent),
+        .path => {
+            try need(it, args, 1);
+            const target = H.interpOf(@intCast(try it.int(args[0]))) orelse return it.fail("", .{});
+            // The names from `it` down to `target`, last first.
+            var names: std.ArrayList(Value) = .empty;
+            var cur = target;
+            while (cur != it) {
+                const p = cur.parent orelse return it.fail("", .{});
+                var iter = p.children.iterator();
+                const name = while (iter.next()) |e| {
+                    if (e.value_ptr.*.it == cur) break e.key_ptr.*;
+                } else return it.fail("", .{});
+                try names.append(it.alloc(), .{ .str = name });
+                cur = p;
+            }
+            std.mem.reverse(Value, names.items);
+            return value.newList(it.alloc(), names.items);
+        },
+        .is_safe => return .{ .int = @intFromBool(it.is_safe) },
+        .make_safe => {
+            it.is_safe = true;
+            for (unsafe_commands) |n| {
+                if (it.commands.get(n) != null) _ = try child.hideCmd(it, it, n, n);
+            }
+            return Value.empty;
+        },
+        .alias => {
+            try need(it, args, 3);
+            const target = H.interpOf(@intCast(try it.int(args[1]))) orelse return it.fail("target interpreter not found", .{});
+            return child.makeAlias(it, it, try it.str(args[0]), target, args[2..]);
+        },
+        .get_alias => {
+            try need(it, args, 1);
+            const name = try it.str(args[0]);
+            const al = try child.aliasOf(it, name) orelse return it.fail("alias \"{s}\" not found", .{name});
+            const items = try it.alloc().alloc(Value, al.words.len + 1);
+            items[0] = try handleValue(H, al.target);
+            @memcpy(items[1..], al.words);
+            return value.newList(it.alloc(), items);
+        },
+        .hide => {
+            try need(it, args, 2);
+            return child.hideCmd(it, it, try it.str(args[0]), try it.str(args[1]));
+        },
+        .expose => {
+            try need(it, args, 2);
+            return child.exposeCmd(it, it, try it.str(args[0]), try it.str(args[1]));
+        },
+        .recursion => {
+            try need(it, args, 1);
+            const old = it.max_depth;
+            const n = try it.int(args[0]);
+            if (n > 0) it.max_depth = @intCast(@min(n, 600));
+            return .{ .int = old };
+        },
+        .active => return .{ .int = @intFromBool(it.active > 0 or it.depth > 0) },
+        _ => return it.fail("unknown interp operation {d}", .{op}),
+    }
+}

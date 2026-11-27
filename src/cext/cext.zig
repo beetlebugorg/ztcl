@@ -80,9 +80,15 @@ pub fn shadowOf(it: *Interp) Error!*Shadow {
     return sh;
 }
 
+/// A function that `Interp.deinit` calls for each interp. The bridge of
+/// C packages in WebAssembly (`src/wasm_cext.zig`) sets it, so a package
+/// frees its interp of a child that goes.
+pub var drop_hook: ?*const fn (*Interp) void = null;
+
 /// Frees the shadow of `it`. `Interp.deinit` calls it.
 pub fn drop(it: *Interp) void {
     const sh: *Shadow = @ptrCast(@alignCast(it.cext orelse return));
+    @import("interps.zig").dropInterp(&sh.core);
     @import("hash.zig").dropAssoc(&sh.core);
     @import("host.zig").dropPkgs(&sh.core);
     native.unregister(sh.core.handle);

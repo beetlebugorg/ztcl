@@ -133,6 +133,7 @@ const groups = .{
     @import("regexp.zig").slots,
     @import("lists.zig").slots,
     @import("vars.zig").slots,
+    @import("interps.zig").slots,
 };
 
 fn missingFn(comptime k: tables.Kind, comptime n: usize) *const anyopaque {
@@ -461,8 +462,7 @@ test "a dispatch runs the script and the callbacks of the non-recursive engine" 
     bridge.host = Fake.h;
     defer bridge.host = saved;
     const ip = ztcl_cext_interp(1);
-    defer gpa.destroy(ip);
-    defer Tcl_ResetResult(ip);
+    defer ztcl_cext_interp_free(ip);
     const c = Tcl_NRCreateCommand(ip, "count", null, Count.cmd, null, null);
     const id: u32 = @intCast(std.mem.indexOfScalar(*Command, bridge.commands.items, c).?);
     const argv = ztcl_cext_args(2);

@@ -38,6 +38,8 @@ pub fn register(sh: *cext.Shadow) Error!u32 {
         .canceled = &canceled,
         .err_get = &errGet,
         .err_set = &errSet,
+        .interp_op = &interpOp,
+        .interp_ptr = &interpPtr,
     };
     setChannelHooks();
     grab();
@@ -98,6 +100,31 @@ fn errGet(handle: u32) callconv(.c) i32 {
 
 fn errSet(handle: u32, a: *const Arg) callconv(.c) i32 {
     return zside.errSet(interpOf(handle), a);
+}
+
+/// The handles of the interps of ztcl for `zside.interpOp`.
+const Handles = struct {
+    pub fn handleOf(it: *Interp) Error!u32 {
+        return (try cext.shadowOf(it)).core.handle;
+    }
+    pub fn interpOf(handle: u32) ?*Interp {
+        grab();
+        defer lock.unlock();
+        if (handle == 0 or handle > shadows.items.len) return null;
+        return if (shadows.items[handle - 1]) |sh| sh.it else null;
+    }
+};
+
+fn interpOp(handle: u32, op: u32, a: *const Arg) callconv(.c) i32 {
+    return zside.interpOp(interpOf(handle), op, a, &host.reply, Handles);
+}
+
+/// The interp of a C package for `handle`: the start of its shadow.
+fn interpPtr(handle: u32) callconv(.c) ?*obj.Interp {
+    grab();
+    defer lock.unlock();
+    if (handle == 0 or handle > shadows.items.len) return null;
+    return if (shadows.items[handle - 1]) |sh| &sh.core else null;
 }
 
 fn varSet(handle: u32, name: [*]const u8, len: usize, v: *const Arg, _: c_int) callconv(.c) i32 {

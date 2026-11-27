@@ -102,7 +102,13 @@ export class Interp {
     // A build with `-Dcext-wasm` imports `ztcl_cext.call` for the commands of
     // the C packages of loadPackage().
     if (WebAssembly.Module.imports(mod).some((i) => i.module === "ztcl_cext")) {
-      imports.ztcl_cext = { call: (pkg, id, argc, argv, prec) => self._cextCall(pkg, id, argc, argv, prec) };
+      imports.ztcl_cext = {
+        call: (pkg, id, argc, argv, prec) => self._cextCall(pkg, id, argc, argv, prec),
+        // A child interp with handle `h` goes: each package frees its interp.
+        interp_gone: (h) => {
+          for (const pkg of self._pkgs ?? []) if (pkg.x?.ztcl_cext_interp_free) pkg.x.ztcl_cext_interp_free(pkg.x.ztcl_cext_interp(h));
+        },
+      };
     }
     const instance = await WebAssembly.instantiate(mod, imports);
     self = new Interp(instance, options);
@@ -884,6 +890,16 @@ export class Interp {
         const zb = zs.xbuf(this._argSize(ps, a, 1));
         this._argCopy(ps, a, 1, zs, zs.reply, zb);
         return z.ztcl_cext_err_set(h, zs.reply << 2);
+      },
+      // An operation of the interp tree (zside.InterpOp) with a list Arg.
+      interp_op: (h, op, arg) => {
+        if (!z.ztcl_cext_interp_op) return 1;
+        const ps = pkg.side, a = arg >>> 2;
+        const zb = zs.xbuf(this._argSize(ps, a, 1));
+        this._argCopy(ps, a, 1, zs, zs.reply, zb);
+        const rc = z.ztcl_cext_interp_op(h, op, zs.reply << 2);
+        this._cextReply(zs, pkg.side);
+        return rc;
       },
       pkg_provide: (h, ptr, len, vptr, vlen) => {
         if (!z.ztcl_cext_provide) return 0;
