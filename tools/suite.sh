@@ -104,6 +104,12 @@ for f in "$@"; do
     # The test file is in the root folder too, and it runs by a name
     # relative to the root folder, so `info script` names the file there.
     cp -- "$tests/$f" "$root"/
+    # The encoding files of Tcl, for a file that uses an encoding.
+    # tools/tcltest.tcl sets tcl_library to /usr/lib/tcl8.6.
+    enc="$tests/../library/encoding"
+    if [ -n "$jail" ] && [ -d "$enc" ] && grep -qE 'encoding (convert|system|names)|-encoding [a-z]' "$tests/$f"; then
+        mkdir -p "$root/usr/lib/tcl8.6" && cp -r -- "$enc" "$root/usr/lib/tcl8.6/"
+    fi
     # `exec` runs only for the test files, in the root folder, with a
     # program list, a time limit, and an environment with no data of
     # the caller. `ztclsh` is the `tclsh` of the tests: this runner.

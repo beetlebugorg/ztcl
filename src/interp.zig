@@ -1276,6 +1276,11 @@ pub const Interp = struct {
     /// The value of `encoding system` and of `encoding dirs`.
     sys_encoding: []const u8 = "utf-8",
     enc_dirs: Value = Value.empty,
+    /// True after a script sets `encoding dirs`. Before that, the folder
+    /// is `$tcl_library/encoding`.
+    enc_dirs_set: bool = false,
+    /// The encodings of `.enc` files that `enc.zig` loaded, by name.
+    enc_tables: std.StringHashMapUnmanaged(@import("enc.zig").Encoding) = .empty,
     /// The command prefix of `interp bgerror`, or null for the default.
     bg_handler: ?[]const u8 = null,
     /// The program list, the time limit, and the environment of `exec`.

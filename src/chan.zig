@@ -2,7 +2,8 @@
 //!
 //! A channel is a file below the root of `fsroot.zig`. Each channel has
 //! a read buffer and a write buffer. The translation of line ends and
-//! the encoding (`utf-8` or `binary`) apply at these buffers.
+//! the encoding apply at these buffers. `utf-8` and `binary` need no
+//! table; the other encodings are the tables of `enc.zig`.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -44,6 +45,13 @@ pub const Channel = struct {
     /// The `-profile` of the channel. Null is the default of the
     /// release: `strict` in Tcl 9.1, `tcl8` in Tcl 8.6.
     profile: ?enc.Profile = null,
+    /// The table encoding, or null for `utf-8` and `binary`.
+    enc: ?enc.Encoding = null,
+    /// The name of `-encoding`, or "" for `utf-8` or `binary`.
+    enc_name: []const u8 = "",
+    /// The state of the escape-driven encodings, for input and output.
+    in_state: enc.State = .{},
+    out_state: enc.State = .{},
     buffering: []const u8 = "full",
     buffersize: i64 = 4096,
     blocking: bool = true,
@@ -258,7 +266,22 @@ fn fill(it: *Interp, c: *Channel) Error!bool {
 }
 
 /// The text of input bytes after the translation and the encoding.
-fn decode(it: *Interp, c: *const Channel, raw: []const u8) Error![]const u8 {
+fn decode(it: *Interp, c: *Channel, raw: []const u8) Error![]const u8 {
+    if (c.enc) |e| return (try decodeTable(it, c, e, raw, true, std.math.maxInt(usize))).text;
+    return translate(it, c, raw, c.binary);
+}
+
+/// The text of input bytes in a table encoding, at most `limit`
+/// characters. `used` is the count of bytes of the text.
+fn decodeTable(it: *Interp, c: *Channel, e: enc.Encoding, raw: []const u8, end: bool, limit: usize) Error!struct { text: []const u8, used: usize } {
+    var out: std.ArrayList(u8) = .empty;
+    const got = try enc.toUtf(it, e, &c.in_state, raw, end, limit, &out);
+    return .{ .text = try translate(it, c, out.items, false), .used = got.used };
+}
+
+/// The text of input bytes after the translation of line ends. With
+/// `binary`, each byte is one character.
+fn translate(it: *Interp, c: *const Channel, raw: []const u8, binary: bool) Error![]const u8 {
     const a = it.alloc();
     var out: std.ArrayList(u8) = .empty;
     try out.ensureTotalCapacity(a, raw.len);
@@ -267,7 +290,7 @@ fn decode(it: *Interp, c: *const Channel, raw: []const u8) Error![]const u8 {
         // A run of bytes with no CR, and no high byte in binary mode,
         // goes to the output as it is.
         var j = i;
-        if (c.binary) {
+        if (binary) {
             while (j < raw.len and raw[j] != '\r' and raw[j] < 0x80) j += 1;
         } else j = std.mem.indexOfScalarPos(u8, raw, i, '\r') orelse raw.len;
         try out.appendSlice(a, raw[i..j]);
@@ -286,12 +309,12 @@ fn decode(it: *Interp, c: *const Channel, raw: []const u8) Error![]const u8 {
             },
             else => {},
         }
-        if (c.binary and ch >= 0x80) {
+        if (binary and ch >= 0x80) {
             try out.append(a, 0xC0 | (ch >> 6));
             try out.append(a, 0x80 | (ch & 63));
         } else try out.append(a, ch);
     }
-    if (!c.binary) {
+    if (!binary and c.enc == null) {
         const p = c.profile orelse enc.defaultProfile(it);
         if (p != .tcl8) return checkUtf8(it, c, out.items, p);
     }
@@ -346,6 +369,24 @@ fn checkUtf8(it: *Interp, c: *const Channel, text: []u8, p: enc.Profile) Error![
 fn writeText(it: *Interp, c: *Channel, text: []const u8) Error!void {
     if (!c.writable) return it.fail("channel \"{s}\" wasn't opened for writing", .{c.name});
     const a = it.alloc();
+    if (c.enc) |e| {
+        var lines: std.ArrayList(u8) = .empty;
+        for (text) |ch| switch (ch) {
+            '\n' => switch (c.output) {
+                .cr => try lines.append(a, '\r'),
+                .crlf => try lines.appendSlice(a, "\r\n"),
+                else => try lines.append(a, ch),
+            },
+            else => try lines.append(a, ch),
+        };
+        try enc.fromUtf(it, e, &c.out_state, lines.items, false, &c.wbuf);
+    } else try writeBytes(it, c, text);
+    const line = eql(c.buffering, "line") and std.mem.indexOfScalar(u8, text, '\n') != null;
+    if (eql(c.buffering, "none") or c.wbuf.items.len >= 65536 or line) try flushOut(it, c);
+}
+
+fn writeBytes(it: *Interp, c: *Channel, text: []const u8) Error!void {
+    const a = it.alloc();
     var i: usize = 0;
     while (i < text.len) : (i += 1) {
         var ch = text[i];
@@ -362,8 +403,6 @@ fn writeText(it: *Interp, c: *Channel, text: []const u8) Error!void {
         };
         try c.wbuf.append(a, ch);
     }
-    const line = eql(c.buffering, "line") and std.mem.indexOfScalar(u8, text, '\n') != null;
-    if (eql(c.buffering, "none") or c.wbuf.items.len >= 65536 or line) try flushOut(it, c);
 }
 
 /// `puts` on a channel of this module. Gives false for an unknown name.
@@ -492,6 +531,7 @@ fn closeFds(c: *Channel) void {
 }
 
 fn closeChan(it: *Interp, c: *Channel) Error!void {
+    if (c.writable and !c.draining) try endEncoding(it, c);
     if (c.writable and c.eof_out != 0 and !c.draining) {
         try c.wbuf.append(it.alloc(), c.eof_out);
         c.eof_out = 0;
@@ -854,6 +894,7 @@ fn cmdRead(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         // the file shows at the next read.
         if (!c.blocking and c.rbuf.items.len < c.rbuf.capacity) break;
     }
+    if (c.enc) |e| return readTable(it, c, e, want, nonl);
     var raw = c.rbuf.items[c.rpos..];
     if (want) |n| {
         if (raw.len > n) raw = raw[0..n] else c.at_eof = c.hit_eof;
@@ -868,9 +909,39 @@ fn cmdRead(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }
     }
     c.rpos += raw.len;
-    var text = try decode(it, c, raw);
+    var text = try translate(it, c, raw, c.binary);
     if (nonl and text.len > 0 and text[text.len - 1] == '\n') text = text[0 .. text.len - 1];
     return .{ .str = text };
+}
+
+/// `read` on a channel with a table encoding: `want` counts characters.
+fn readTable(it: *Interp, c: *Channel, e: enc.Encoding, want: ?usize, nonl: bool) Error!Value {
+    while (true) {
+        if (want) |n| {
+            var st = c.in_state;
+            var tmp: std.ArrayList(u8) = .empty;
+            const got = try enc.toUtf(it, e, &st, c.rbuf.items[c.rpos..], c.hit_eof, n, &tmp);
+            if (got.chars >= n) break;
+        }
+        if (!try fill(it, c)) break;
+        if (!c.blocking and c.rbuf.items.len < c.rbuf.capacity) break;
+    }
+    const raw = c.rbuf.items[c.rpos..];
+    const r = try decodeTable(it, c, e, raw, c.hit_eof, want orelse std.math.maxInt(usize));
+    c.rpos += r.used;
+    if (c.rpos >= c.rbuf.items.len) c.at_eof = c.hit_eof;
+    if (r.used < raw.len and !c.hit_eof and want == null) c.blocked = true;
+    var text = r.text;
+    if (nonl and text.len > 0 and text[text.len - 1] == '\n') text = text[0 .. text.len - 1];
+    return .{ .str = text };
+}
+
+/// Ends the output of an escape-driven encoding: the bytes that select
+/// the first table, and the `final` bytes.
+fn endEncoding(it: *Interp, c: *Channel) Error!void {
+    const e = c.enc orelse return;
+    if (e != .escape or !c.out_state.started) return;
+    try enc.fromUtf(it, e, &c.out_state, "", true, &c.wbuf);
 }
 
 fn cmdSeek(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
@@ -947,7 +1018,7 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (eql(o, "-blocking")) return .{ .int = @intFromBool(ch.blocking) };
             if (eql(o, "-buffering")) return .{ .str = ch.buffering };
             if (eql(o, "-buffersize")) return .{ .int = ch.buffersize };
-            if (eql(o, "-encoding")) return .{ .str = if (ch.binary) "binary" else "utf-8" };
+            if (eql(o, "-encoding")) return .{ .str = if (ch.enc_name.len > 0) ch.enc_name else if (ch.binary) "binary" else "utf-8" };
             if (eql(o, "-eofchar")) {
                 const in: Value = .{ .str = if (ch.eof_in == 0) "" else try x.alloc().dupe(u8, &.{ch.eof_in}) };
                 const out: Value = .{ .str = if (ch.eof_out == 0) "" else try x.alloc().dupe(u8, &.{ch.eof_out}) };
@@ -1025,11 +1096,19 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         } else if (eql(o, "-encoding")) {
             const e = try it.str(v);
             c.blocked = false;
-            if (eql(e, "binary") or eql(e, "iso8859-1")) {
-                c.binary = true;
-            } else if (eql(e, "utf-8") or eql(e, "identity") or e.len == 0) {
-                c.binary = false;
-            } else return it.failCode("TCL LOOKUP ENCODING", "unknown encoding \"{s}\"", .{e});
+            var table: ?enc.Encoding = null;
+            var bin = false;
+            if (eql(e, "binary") or eql(e, "iso8859-1") or e.len == 0) {
+                bin = true;
+            } else if (!eql(e, "utf-8") and !eql(e, "identity")) {
+                table = (try enc.forChannel(it, e)) orelse return it.failCode(try std.fmt.allocPrint(a, "TCL LOOKUP ENCODING {s}", .{e}), "unknown encoding \"{s}\"", .{e});
+            }
+            try endEncoding(it, c);
+            c.binary = bin;
+            c.enc = table;
+            c.enc_name = if (e.len == 0) "" else try a.dupe(u8, e);
+            c.in_state = .{};
+            c.out_state = .{};
         } else if (eql(o, "-translation")) {
             const l = try it.list(v);
             if (l.len == 0 or l.len > 2) return it.fail("bad value for -translation: must be a one or two element list", .{});
@@ -1038,7 +1117,10 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (c.readable) c.input = x;
             if (c.writable) c.output = if (y == .auto) .lf else y;
             if (x == .binary) {
+                try endEncoding(it, c);
                 c.binary = true;
+                c.enc = null;
+                c.enc_name = "";
                 c.eof_in = 0;
                 c.eof_out = 0;
             }
@@ -1069,24 +1151,89 @@ fn cmdFcopy(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const from = try find(it, argv[1]);
     const to = try find(it, argv[2]);
     var limit: ?usize = null;
+    var command: ?Value = null;
     var i: usize = 3;
     while (i + 1 < argv.len) : (i += 2) {
-        if (eql(try it.str(argv[i]), "-size")) {
+        const o = try it.str(argv[i]);
+        if (eql(o, "-size")) {
             const n = try it.int(argv[i + 1]);
             if (n >= 0) limit = @intCast(n);
-        } else return it.fail("fcopy -command is not available", .{});
+        } else if (eql(o, "-command")) {
+            command = argv[i + 1];
+        } else return it.fail("bad option \"{s}\": should be -size or -command", .{o});
+    }
+    if (command) |cb| {
+        // A background copy: each step copies the data that is ready
+        // and does not block, then the callback runs with the count.
+        const task = try it.alloc().create(Fcopy);
+        task.* = .{ .from = from.name, .to = to.name, .limit = limit, .command = cb };
+        try event.later(it, 0, fcopyStep, task);
+        return Value.empty;
     }
     var total: usize = 0;
-    while (limit == null or total < limit.?) {
+    try copyData(it, from, to, limit, &total);
+    return .{ .int = @intCast(total) };
+}
+
+/// Copies input to output until the end of the input, `limit` bytes,
+/// or no data without a block.
+fn copyData(it: *Interp, from: *Channel, to: *Channel, limit: ?usize, total: *usize) Error!void {
+    while (limit == null or total.* < limit.?) {
         if (from.rpos >= from.rbuf.items.len and !try fill(it, from)) break;
         var chunk = from.rbuf.items[from.rpos..];
-        if (limit) |n| chunk = chunk[0..@min(chunk.len, n - total)];
+        if (limit) |n| chunk = chunk[0..@min(chunk.len, n - total.*)];
+        if (from.enc) |e| {
+            const r = try decodeTable(it, from, e, chunk, from.hit_eof, std.math.maxInt(usize));
+            try writeText(it, to, r.text);
+            from.rpos += r.used;
+            total.* += r.used;
+            // The first bytes of a character wait for the rest.
+            if (r.used < chunk.len and !from.hit_eof and !try fill(it, from)) break;
+            continue;
+        }
         try writeText(it, to, try decode(it, from, chunk));
         from.rpos += chunk.len;
-        total += chunk.len;
+        total.* += chunk.len;
     }
     if (from.hit_eof and from.rpos >= from.rbuf.items.len) from.at_eof = true;
-    return .{ .int = @intCast(total) };
+}
+
+/// A background `fcopy`.
+const Fcopy = struct {
+    from: []const u8,
+    to: []const u8,
+    limit: ?usize,
+    command: Value,
+    total: usize = 0,
+};
+
+fn fcopyStep(it: *Interp, ctx: *anyopaque) Error!void {
+    const task: *Fcopy = @ptrCast(@alignCast(ctx));
+    const a = it.alloc();
+    const from = it.chans.table.get(task.from) orelse return;
+    const to = it.chans.table.get(task.to) orelse return;
+    var err: ?[]const u8 = null;
+    // The step reads only the data that is ready.
+    const was = from.blocking;
+    if (was and !from.mem) sys.setBlocking(from.fd, false);
+    from.blocking = false;
+    copyData(it, from, to, task.limit, &task.total) catch |e| {
+        if (e != error.TclError or it.uncatchable()) return e;
+        err = try it.str(it.result);
+    };
+    from.blocking = was;
+    if (was and !from.mem) sys.setBlocking(from.fd, true);
+    const done = err != null or from.at_eof or (task.limit != null and task.total >= task.limit.?);
+    if (!done) {
+        from.blocked = false;
+        return event.later(it, 5, fcopyStep, task);
+    }
+    flushOut(it, to) catch {};
+    var words: std.ArrayList(Value) = .empty;
+    try words.appendSlice(a, try it.list(task.command));
+    try words.append(a, .{ .int = @intCast(task.total) });
+    if (err) |m| try words.append(a, .{ .str = m });
+    try event.runEvent(it, it, try it.str(try value.wrapList(a, words.items)));
 }
 
 fn cmdSource(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
