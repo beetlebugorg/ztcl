@@ -148,6 +148,36 @@ pub fn fdOfHandle(h: HANDLE) ?Fd {
     return @intCast(v);
 }
 
+extern "kernel32" fn CreatePipe(r: *HANDLE, w: *HANDLE, sa: ?*anyopaque, size: DWORD) callconv(.winapi) BOOL;
+
+/// An anonymous pipe, read side first, for `chan pipe`. Its handles are
+/// not inherited. `poll` finds data or an end on the read side with
+/// `PeekNamedPipe`.
+pub fn pipe() ?[2]Fd {
+    var r: HANDLE = undefined;
+    var w: HANDLE = undefined;
+    if (CreatePipe(&r, &w, null, 0) == 0) return null;
+    const rf = fdOfHandle(r);
+    const wf = fdOfHandle(w);
+    if (rf == null or wf == null) {
+        _ = CloseHandle(r);
+        _ = CloseHandle(w);
+        return null;
+    }
+    return .{ rf.?, wf.? };
+}
+
+test "sys_windows: a pipe carries bytes from its write side to its read side" {
+    const fds = pipe() orelse return error.NoPipe;
+    defer _ = CloseHandle(handleOf(fds[0]));
+    var got: DWORD = 0;
+    try std.testing.expect(WriteFile(handleOf(fds[1]), "hello", 5, &got, null) != 0);
+    _ = CloseHandle(handleOf(fds[1]));
+    var buf: [8]u8 = undefined;
+    try std.testing.expect(ReadFile(handleOf(fds[0]), &buf, buf.len, &got, null) != 0);
+    try std.testing.expectEqualStrings("hello", buf[0..got]);
+}
+
 fn wsaError() u32 {
     return @intCast(WSAGetLastError());
 }
