@@ -12,7 +12,8 @@ web::release $serial
 
 ```js
 import { Interp } from "./ztcl.mjs";
-const tcl = await Interp.create("ztcl-host.wasm", { allow: ["web:serial"] });
+import * as web from "./ztcl-web.mjs";
+const tcl = await Interp.create("ztcl-host.wasm", { allow: ["web:serial"], web });
 ```
 
 ## Synopsis
@@ -65,4 +66,4 @@ Each interface of the table is in a group. The page grants a group with `allow`,
 
 ## Capability
 
-The commands exist only in `ztcl-host.wasm`, and only with a group of `web:` in `allow`. `ztcl.wasm` has no bridge. The page loads `web/ztcl-web.mjs` and the table `web/webidl-table.mjs` only for such a grant. Each command costs one compute unit. The option `webRoot` of `Interp.create` sets the global object of the paths of `web::root` (`globalThis` by default).
+The commands exist only in `ztcl-host.wasm`, and only with a group of `web:` in `allow`. `ztcl.wasm` has no bridge. The page imports the bridge `web/ztcl-web.mjs`, which imports the table `web/webidl-table.mjs`, and gives it as the option `web`. `ztcl.mjs` does not import the bridge, so a page without a grant loads neither file. Each command costs one compute unit. The option `webRoot` of `Interp.create` sets the global object of the paths of `web::root` (`globalThis` by default).
