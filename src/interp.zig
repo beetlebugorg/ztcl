@@ -884,6 +884,38 @@ pub const SoftChans = struct {
     serve: *const fn (cur: *Interp, it: *Interp, name: []const u8) Error!bool,
 };
 
+/// The Tcl release whose behavior an interpreter follows. Each command
+/// whose behavior differs between the releases reads `Interp.tcl`. 8.6
+/// is the default: most published Tcl code targets it.
+pub const TclVersion = enum {
+    v8_6,
+    v9_1,
+
+    /// The version of a `--tcl` option or of `interp create -tcl`:
+    /// "8.6" or "9.1". Null for other text.
+    pub fn parse(text: []const u8) ?TclVersion {
+        if (std.mem.eql(u8, text, "8.6")) return .v8_6;
+        if (std.mem.eql(u8, text, "9.1")) return .v9_1;
+        return null;
+    }
+
+    /// The value of `info tclversion`.
+    pub fn version(v: TclVersion) []const u8 {
+        return switch (v) {
+            .v8_6 => "8.6",
+            .v9_1 => "9.1",
+        };
+    }
+
+    /// The value of `info patchlevel` and of `package provide Tcl`.
+    pub fn patchLevel(v: TclVersion) []const u8 {
+        return switch (v) {
+            .v8_6 => "8.6.16",
+            .v9_1 => "9.1.0",
+        };
+    }
+};
+
 /// An optional group of commands. The default interpreter has none.
 /// The embedder turns one on with `Interp.allow`.
 pub const Capability = enum(u32) {
@@ -1215,6 +1247,8 @@ pub const Interp = struct {
     pins: std.ArrayList(usize) = .empty,
     parent: ?*Interp = null,
     is_safe: bool = false,
+    /// The Tcl release that the commands follow. `setTclVersion` changes it.
+    tcl: TclVersion = .v8_6,
     /// The count of calls into this interpreter that are running.
     active: u32 = 0,
     /// Deleted while it ran. The last call out of it frees it.
@@ -1684,9 +1718,40 @@ pub const Interp = struct {
     /// everywhere.
     pub fn startVars(it: *Interp) Allocator.Error!void {
         trace.installPrecision(it) catch return error.OutOfMemory;
-        _ = it.eval("array set tcl_platform {platform unix os ztcl osVersion 0 machine generic user {} byteOrder littleEndian wordSize 8 pointerSize 8 engine ztcl}; set tcl_version 8.6; set tcl_patchLevel 8.6.16; set errorInfo {}; set errorCode NONE") catch |e| switch (e) {
+        _ = it.eval("array set tcl_platform {platform unix os ztcl osVersion 0 machine generic user {} byteOrder littleEndian wordSize 8 pointerSize 8 engine ztcl}; set errorInfo {}; set errorCode NONE") catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
             else => unreachable,
+        };
+        try it.setVersionVars();
+    }
+
+    /// Makes the interpreter follow Tcl release `v`. It sets
+    /// `tcl_version`, `tcl_patchLevel`, and the version of the package
+    /// `Tcl`. Call it before a script runs. A child interpreter and a
+    /// thread start with the release of their parent.
+    pub fn setTclVersion(it: *Interp, v: TclVersion) Allocator.Error!void {
+        it.tcl = v;
+        try it.setVersionVars();
+        @import("pkg.zig").retagTcl(it) catch |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => {},
+        };
+    }
+
+    /// True when the interpreter follows Tcl 9.1.
+    pub fn tcl9(it: *const Interp) bool {
+        return it.tcl == .v9_1;
+    }
+
+    fn setVersionVars(it: *Interp) Allocator.Error!void {
+        const v = it.tcl;
+        it.setVar("::tcl_version", .{ .str = v.version() }) catch |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => {},
+        };
+        it.setVar("::tcl_patchLevel", .{ .str = v.patchLevel() }) catch |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            else => {},
         };
     }
 

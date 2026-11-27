@@ -432,6 +432,7 @@ pub const Worker = struct {
 /// What a new thread gets from its creator.
 const Start = struct {
     caps: u32,
+    tcl: interp.TclVersion,
     compute_limit: u64,
     mem_limit: usize,
     output: ?interp.Output,
@@ -880,6 +881,7 @@ fn startOf(it: *Interp) Error!Start {
     const g = me.group;
     var st: Start = .{
         .caps = root.capabilities,
+        .tcl = it.tcl,
         .compute_limit = 0,
         .mem_limit = g.limits.mem_limit,
         .output = .{ .ctx = g, .write = lockedWrite },
@@ -936,6 +938,7 @@ fn setup(w: *Worker, x: *Interp, st: Start) Allocator.Error!void {
     x.worker = w;
     if (comptime chan_names_ok) x.chans.shared = &w.group.chan_names;
     try x.allow(st.caps);
+    try x.setTclVersion(st.tcl);
 }
 
 fn threadMain(w: *Worker, st: Start) void {

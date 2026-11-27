@@ -221,8 +221,17 @@ fn require(it: *Interp, name: []const u8, reqs: []const Value, exact: bool) Erro
 fn provideTcl(it: *Interp) Error!void {
     if (it.pkg.tcl_provided) return;
     it.pkg.tcl_provided = true;
-    const level = it.getVar("::tcl_patchLevel") catch Value{ .str = "8.6.16" };
+    const level = it.getVar("::tcl_patchLevel") catch Value{ .str = it.tcl.patchLevel() };
     (try entry(it, "Tcl")).version = try it.alloc().dupe(u8, try it.str(level));
+}
+
+/// Sets the version of the package `Tcl` again after a change of
+/// `Interp.tcl`. Before the first `package` command, `provideTcl` reads
+/// the new patch level itself.
+pub fn retagTcl(it: *Interp) Error!void {
+    if (!it.pkg.tcl_provided) return;
+    it.pkg.tcl_provided = false;
+    try provideTcl(it);
 }
 
 pub fn cmdPackage(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
