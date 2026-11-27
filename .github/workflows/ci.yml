@@ -72,6 +72,20 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           zig build jit-probe
+      # The tests of isolate_linux_tests.zig need unprivileged user
+      # namespaces with mounts, which the AppArmor of Ubuntu limits, and
+      # a cgroup that the user owns with the cpu, memory, and pids
+      # controllers. The test steps run in that cgroup, and
+      # ZTCL_TEST_ISO_LINUX makes a skip of those tests a failure.
+      - name: Allow the sandbox of isolated threads
+        if: runner.os == 'Linux'
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          echo "+cpu +memory +pids" | sudo tee /sys/fs/cgroup/cgroup.subtree_control
+          sudo mkdir -p /sys/fs/cgroup/ztcl-ci/leaf
+          echo "+cpu +memory +pids" | sudo tee /sys/fs/cgroup/ztcl-ci/cgroup.subtree_control
+          sudo chown -R "$(id -u):$(id -g)" /sys/fs/cgroup/ztcl-ci
+          echo "ZTCL_TEST_ISO_LINUX=1" >> "$GITHUB_ENV"
       - name: Build and test
         # The tests of ztcl::mac call the keychain and the defaults of the
         # runner. A development Mac leaves the variable unset, because a
@@ -79,7 +93,10 @@ jobs:
         env:
           ZTCL_TEST_MAC: "1"
         run: |
-          if [ "$RUNNER_OS" = Linux ]; then ulimit -v 6000000; fi
+          if [ "$RUNNER_OS" = Linux ]; then
+            echo $$ | sudo tee /sys/fs/cgroup/ztcl-ci/leaf/cgroup.procs
+            ulimit -v 6000000
+          fi
           zig build
           zig build test
       - name: Run a script
@@ -104,6 +121,7 @@ jobs:
       - name: Test the gc-precise build
         if: runner.os == 'Linux'
         run: |
+          echo $$ | sudo tee /sys/fs/cgroup/ztcl-ci/leaf/cgroup.procs
           ulimit -v 6000000
           zig build test -Dgc-precise=true
 
