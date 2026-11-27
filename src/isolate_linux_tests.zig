@@ -275,6 +275,33 @@ test "isolate on Linux: an isolated thread of a jailed creator reaches only the 
     try t.expectEqualStrings("0", try ev(&it, "thread::join $t"));
 }
 
+test "isolate on Linux: thread::transfer moves a channel to an isolated thread and back" {
+    if (!on or comptime !tcl.isothread.supported) return error.SkipZigTest;
+    var h: tcl.Interp = undefined;
+    try hostInterp(&h);
+    defer h.deinit();
+    const exe = (try runner(&h)) orelse return error.SkipZigTest;
+    try makeRoot(&h, "transfer");
+    var it: tcl.Interp = undefined;
+    try it.init(t.allocator);
+    defer it.deinit();
+    it.iso_runner = exe;
+    try it.allow(@backingInt(tcl.interp.Capability.thread) | @backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setRoot(&it, rootPath());
+    _ = try ev(&it, "set w [open /d.txt w]; puts $w one\\ntwo\\nthree; close $w");
+    try skipLevel(&it, "set t [thread::create -isolation process -joinable {thread::wait}]");
+    // The descriptor goes with SCM_RIGHTS, and the buffered input goes
+    // with it.
+    try t.expectEqualStrings("one", try ev(&it, "set f [open /d.txt]; gets $f"));
+    try t.expectEqualStrings("0 two", try ev(&it, "thread::transfer $t $f; list [expr {$f in [file channels]}] [thread::send $t \"gets $f\"]"));
+    try t.expectEqualStrings("three", try ev(&it, "thread::send $t \"thread::transfer [thread::id] $f\"; gets $f"));
+    _ = try ev(&it, "close $f");
+    // A channel that moved out is not in the child after it moves back.
+    try t.expectEqualStrings("1", try ev(&it, "thread::send $t \"catch {gets $f}\""));
+    _ = try ev(&it, "thread::release $t");
+    try t.expectEqualStrings("0", try ev(&it, "thread::join $t"));
+}
+
 test "isolate on Linux: a creator in host mode needs -files host" {
     if (!on or comptime !tcl.isothread.supported) return error.SkipZigTest;
     var h: tcl.Interp = undefined;

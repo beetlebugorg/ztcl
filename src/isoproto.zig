@@ -90,10 +90,47 @@ extern "bcryptprimitives" fn ProcessPrng(data: [*]u8, len: usize) callconv(.wina
 /// `error.Canceled`.
 pub const Transport = if (on_win) WinTransport else PosixTransport;
 
-/// Descriptor passing (`SCM_RIGHTS`) on the socket pair: macOS for now.
-/// Linux gets it with its runner, and Windows moves handles in its own
-/// way (`docs/dev/isolation.md`).
-pub const passes_fds = builtin.os.tag == .macos;
+/// Descriptor passing (`SCM_RIGHTS`) on the socket pair: macOS and
+/// Linux. Windows moves handles in its own way (`docs/dev/isolation.md`).
+pub const passes_fds = builtin.os.tag == .macos or builtin.os.tag == .linux;
+
+/// The control message of `sendmsg` and `recvmsg`. macOS has 32-bit
+/// lengths and a 12-byte header. Linux has `size_t` lengths and a
+/// 16-byte header, and the ztcl runner calls the system calls with no C
+/// library.
+const Cm = if (builtin.os.tag == .linux) Lnx else Mac;
+
+const Lnx = struct {
+    const linux = std.os.linux;
+    const iovec = extern struct { base: [*]u8, len: usize };
+    const msghdr = extern struct {
+        name: ?*anyopaque = null,
+        namelen: u32 = 0,
+        iov: *iovec,
+        iovlen: usize,
+        control: ?*anyopaque,
+        controllen: usize,
+        flags: c_int = 0,
+    };
+    const cmsg_head = 16;
+    const sol_socket: c_int = 1;
+    const scm_rights: c_int = 1;
+    /// The received descriptors close on exec.
+    const msg_cmsg_cloexec: usize = 0x40000000;
+    fn writeLen(ctl: []u8, len: usize) void {
+        std.mem.writeInt(u64, ctl[0..8], len, .little);
+    }
+    fn readLen(ctl: []const u8) usize {
+        return @intCast(std.mem.readInt(u64, ctl[0..8], .little));
+    }
+    fn sendmsg(fd: c_int, msg: *const msghdr, flags: c_int) isize {
+        return @bitCast(linux.syscall3(.sendmsg, @bitCast(@as(isize, fd)), @intFromPtr(msg), @bitCast(@as(isize, flags))));
+    }
+    fn recvmsg(fd: c_int, msg: *msghdr, flags: c_int) isize {
+        return @bitCast(linux.syscall3(.recvmsg, @bitCast(@as(isize, fd)), @intFromPtr(msg), @as(usize, @bitCast(@as(isize, flags))) | msg_cmsg_cloexec));
+    }
+    fn cloexec(_: i32) void {}
+};
 
 const Mac = struct {
     const iovec = extern struct { base: [*]u8, len: usize };
@@ -112,6 +149,15 @@ const Mac = struct {
     const msg_ctrunc: c_int = 0x20;
     extern "c" fn sendmsg(fd: c_int, msg: *const msghdr, flags: c_int) isize;
     extern "c" fn recvmsg(fd: c_int, msg: *msghdr, flags: c_int) isize;
+    fn writeLen(ctl: []u8, len: usize) void {
+        std.mem.writeInt(u32, ctl[0..4], @intCast(len), .little);
+    }
+    fn readLen(ctl: []const u8) usize {
+        return std.mem.readInt(u32, ctl[0..4], .little);
+    }
+    fn cloexec(f: i32) void {
+        _ = std.c.fcntl(f, std.c.F.SETFD, @as(c_int, std.c.FD_CLOEXEC));
+    }
 };
 
 /// The most descriptors that one frame brings.
@@ -175,19 +221,19 @@ const PosixTransport = struct {
     /// `recvmsg`: the bytes, and each descriptor that came with them to
     /// `got`. A descriptor past the room of `got` closes.
     fn readFds(t: *PosixTransport, buf: []u8) isize {
-        var iov: Mac.iovec = .{ .base = buf.ptr, .len = buf.len };
-        var ctl: [Mac.cmsg_head + 4 * max_fds]u8 align(4) = undefined;
-        var m: Mac.msghdr = .{ .iov = &iov, .iovlen = 1, .control = &ctl, .controllen = ctl.len };
-        const n = Mac.recvmsg(t.fd, &m, 0);
-        if (n < 0 or m.controllen < Mac.cmsg_head) return n;
-        const len = std.mem.readInt(u32, ctl[0..4], .little);
-        const level = std.mem.readInt(i32, ctl[4..8], .little);
-        const kind = std.mem.readInt(i32, ctl[8..12], .little);
-        if (level != Mac.sol_socket or kind != Mac.scm_rights or len < Mac.cmsg_head) return n;
-        const count = @min((len - Mac.cmsg_head) / 4, max_fds);
+        var iov: Cm.iovec = .{ .base = buf.ptr, .len = buf.len };
+        var ctl: [Cm.cmsg_head + 4 * max_fds]u8 align(8) = undefined;
+        var m: Cm.msghdr = .{ .iov = &iov, .iovlen = 1, .control = &ctl, .controllen = ctl.len };
+        const n = Cm.recvmsg(t.fd, &m, 0);
+        if (n < 0 or m.controllen < Cm.cmsg_head) return n;
+        const len = Cm.readLen(&ctl);
+        const level = std.mem.readInt(i32, ctl[Cm.cmsg_head - 8 ..][0..4], .little);
+        const kind = std.mem.readInt(i32, ctl[Cm.cmsg_head - 4 ..][0..4], .little);
+        if (level != Cm.sol_socket or kind != Cm.scm_rights or len < Cm.cmsg_head) return n;
+        const count = @min((len - Cm.cmsg_head) / 4, max_fds);
         for (0..count) |k| {
-            const f = std.mem.readInt(i32, ctl[Mac.cmsg_head + 4 * k ..][0..4], .little);
-            _ = std.c.fcntl(f, std.c.F.SETFD, @as(c_int, std.c.FD_CLOEXEC));
+            const f = std.mem.readInt(i32, ctl[Cm.cmsg_head + 4 * k ..][0..4], .little);
+            Cm.cloexec(f);
             if (t.ngot < t.got.len) {
                 t.got[t.ngot] = f;
                 t.ngot += 1;
@@ -209,16 +255,18 @@ const PosixTransport = struct {
     pub fn writeAllFds(t: *PosixTransport, bytes: []const u8, fds: []const i32) Error!void {
         if (comptime !passes_fds) return error.Io;
         if (fds.len == 0 or fds.len > max_fds or bytes.len == 0) return error.Protocol;
-        var ctl: [Mac.cmsg_head + 4 * max_fds]u8 align(4) = undefined;
-        const clen: u32 = @intCast(Mac.cmsg_head + 4 * fds.len);
-        std.mem.writeInt(u32, ctl[0..4], clen, .little);
-        std.mem.writeInt(i32, ctl[4..8], Mac.sol_socket, .little);
-        std.mem.writeInt(i32, ctl[8..12], Mac.scm_rights, .little);
-        for (fds, 0..) |f, k| std.mem.writeInt(i32, ctl[Mac.cmsg_head + 4 * k ..][0..4], f, .little);
-        var iov: Mac.iovec = .{ .base = @constCast(bytes.ptr), .len = bytes.len };
-        const m: Mac.msghdr = .{ .iov = &iov, .iovlen = 1, .control = &ctl, .controllen = clen };
+        var ctl: [Cm.cmsg_head + 4 * max_fds]u8 align(8) = @splat(0);
+        const clen: usize = Cm.cmsg_head + 4 * fds.len;
+        Cm.writeLen(&ctl, clen);
+        std.mem.writeInt(i32, ctl[Cm.cmsg_head - 8 ..][0..4], Cm.sol_socket, .little);
+        std.mem.writeInt(i32, ctl[Cm.cmsg_head - 4 ..][0..4], Cm.scm_rights, .little);
+        for (fds, 0..) |f, k| std.mem.writeInt(i32, ctl[Cm.cmsg_head + 4 * k ..][0..4], f, .little);
+        var iov: Cm.iovec = .{ .base = @constCast(bytes.ptr), .len = bytes.len };
+        // Linux wants the length of the control buffer rounded up to 8.
+        const space = if (builtin.os.tag == .linux) std.mem.alignForward(usize, clen, 8) else clen;
+        const m: Cm.msghdr = .{ .iov = &iov, .iovlen = 1, .control = &ctl, .controllen = @intCast(space) };
         while (true) {
-            const n = Mac.sendmsg(t.fd, &m, 0);
+            const n = Cm.sendmsg(t.fd, &m, 0);
             switch (posix.errno(@as(usize, @bitCast(n)))) {
                 .SUCCESS => return t.writeAll(bytes[@intCast(n)..]),
                 .INTR, .AGAIN => continue,
