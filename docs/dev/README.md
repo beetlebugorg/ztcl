@@ -10,6 +10,8 @@ These files are the plans, the task lists, the reviews, and the test results of 
 | [tcl9.md](tcl9.md) | The Tcl 9.1.0 baseline and the proposed choices. |
 | [jit.md](jit.md), [jit-review.md](jit-review.md), [jit-tasks/](jit-tasks/README.md) | The JIT plan, its results, the review checklist, and the tasks. |
 | [perf-review.md](perf-review.md) | A performance review: the slow paths, with a measure and a proposed change for each one. |
+| [perf-ideas.md](perf-ideas.md) | 12 ranked performance ideas with their measures, designs, risks, and checks. The scripts are in `bench/ideas/`. |
+| [wasm-size.md](wasm-size.md) | The bytes of `ztcl.wasm` for each group of functions, and 8 ranked changes that make the download smaller. |
 | [interp-spike.md](interp-spike.md) | The profile of the bytecode loop, and the measures of two superinstruction experiments (#130). |
 | [stdlib.md](stdlib.md), [stdlib-tasks/](stdlib-tasks/README.md) | The plan of the built-in modules, and the tasks. |
 | [threads-tasks/](threads-tasks/README.md), [threads-notes.md](threads-notes.md) | The tasks of threads, the state of each part, and the decisions. |
