@@ -15,6 +15,7 @@ The `ztcl::` modules are built into ztcl. A module loads with `package require`,
 | [ztcl::notify](notify.md) | Shows a notification of the system. | `notify` | macOS; the others with a host callback |
 | [ztcl::vm](vm.md) | Starts a small Linux guest on the hypervisor of the host. | `vm` | macOS |
 | [ztcl::meter](meter.md) | Counts the compute units, the time, the memory, and the I/O of threads, for billing. | `meter` | each target with threads |
+| [ztcl::gc](gc.md) | Gives the counts of the collector: the pauses, the times, the bytes of the heap, and the resident set. | `meter` | each target |
 | [ztcl::win](win.md) | The registry, the credentials, and the known folders of Windows. | `registry`, `credential`, `env` | Windows |
 | [web](web.md) | The Web APIs of the page, such as Web Serial, through the table of the Web IDL. | a group of `web:` in `allow` | `ztcl-host.wasm` in a browser |
 | [ztcl::agent](agent.md) | Runs an LLM agent loop in an isolated thread with only the data and the tools of the host. | `thread`, and `socket` and `channels` for the endpoint | each target with threads |
