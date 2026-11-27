@@ -3513,7 +3513,7 @@ test "isolated threads: send, results, errors, exit, and names across the protoc
     try std.testing.expectEqualStrings("0", try it.str(try it.eval("thread::join $t")));
     try std.testing.expectEqualStrings("3", try it.str(try it.eval("thread::join [thread::create -isolation process -joinable {thread::exit 3}]")));
     try std.testing.expectEqualStrings("ZTCL ISOLATION LEVEL", try it.str(try it.eval("catch {thread::create -isolation vm {}}; set ::errorCode")));
-    try std.testing.expectEqualStrings("bad isolation level \"x\": must be interp or process", try it.str(try it.eval("catch {thread::create -isolation x {}} m; set m")));
+    try std.testing.expectEqualStrings("bad isolation level \"x\": must be interp, process, or vm", try it.str(try it.eval("catch {thread::create -isolation x {}} m; set m")));
 }
 
 test "isolated threads: tsv and the locks through the broker" {

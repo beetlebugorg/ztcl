@@ -10,6 +10,7 @@ As process 1, the agent mounts `proc` at `/proc`, `sysfs` at `/sys`, `devtmpfs` 
 |---|---|
 | 1024 | The protocol below. |
 | 1025 | The probe of the start time: 16 bytes (the boot clock of the guest in nanoseconds when `main` started and when the agent listened), then an echo of each byte. A first byte of 1 asks for the kernel log instead. `tools/vm-guest/spike.zig` uses it. |
+| 1027 | The resume of a guest of a snapshot (ztcl#468): the host sends 48 bytes, `ZTISOVM1`, the clock of the host (`u64` ns since 1970), and 32 random bytes. The agent sets the clock, adds the bytes to the random pool of the kernel (RNDADDENTROPY, then RNDRESEEDCRNG), and sends one byte. It serves this port in its first process, with no fork. |
 
 Each connection runs in a child process of the agent, so a long `exec` does not stop another connection. On Windows the host reaches the same ports through Hyper-V sockets (`HV_GUID_VSOCK_TEMPLATE` with the port in the first 4 bytes of the service id).
 
@@ -33,8 +34,8 @@ Numbers are little endian. `len` counts the type byte and the payload, and is at
 
 ## A connection
 
-1. The agent sends `HELLO`: `version u16` (1), `features u32` (bit 0 `exec`, bit 1 `mount`, bit 2 `log`), `boot_main u64`, `boot_listen u64`.
-2. The host sends one request: `EXEC`, `MOUNT`, `LOG`, or `PING`.
+1. The agent sends `HELLO`: `version u16` (1), `features u32` (bit 0 `exec`, bit 1 `mount`, bit 2 `log`, bit 3 `resume`), `boot_main u64`, `boot_listen u64`.
+2. The host sends one request: `EXEC`, `MOUNT`, `LOG`, `PING`, or `RESUME`.
 3. The agent answers as below, and closes the connection after its last frame. A new request takes a new connection.
 
 | Type | Value | From | Payload |
@@ -44,13 +45,14 @@ Numbers are little endian. `len` counts the type byte and the payload, and is at
 | `MOUNT` | 0x11 | host | `tag` string, `path` string, `flags u8` (bit 0: read only, bit 1: a 9p share in the place of virtio-fs) |
 | `LOG` | 0x12 | host | none |
 | `PING` | 0x13 | host | none |
+| `RESUME` | 0x14 | host | `realtime_ns u64`, 32 random bytes: the request of port 1027 as a frame of port 1024 |
 | `STARTED` | 0x20 | agent | `pid u32` |
 | `STDOUT` | 0x21 | agent | bytes |
 | `STDERR` | 0x22 | agent | bytes |
 | `STDIN` | 0x23 | host | bytes; an empty payload closes stdin |
 | `SIGNAL` | 0x24 | host | `signal u8` for the program |
 | `EXIT` | 0x25 | agent | `code i32`: the exit code, or minus the number of the signal that ended the program |
-| `OK` | 0x30 | agent | none (`MOUNT`, `PING`) |
+| `OK` | 0x30 | agent | none (`MOUNT`, `PING`, `RESUME`) |
 | `DATA` | 0x31 | agent | bytes of the kernel log (`LOG`), then `OK` |
 | `ERROR` | 0x3f | agent | `errno u32`, `message` string |
 

@@ -61,15 +61,18 @@ const std = @import("std");
 /// pthread_create gives EINVAL when the TLS does not fit. An embedder
 /// with a large TLS (dockyard: 266 KB) needs more than 256 KB. The pages
 /// that a thread does not touch take no memory.
-const thread_stack = 2 * 1024 * 1024;
+pub const thread_stack = 2 * 1024 * 1024;
 const builtin = @import("builtin");
 const linux = std.os.linux;
 const IOCTL = linux.IOCTL;
 
 pub const supported = builtin.os.tag == .linux and builtin.cpu.arch == .x86_64;
 
+/// Snapshots, restores, and clones of a machine (ztcl#468).
+pub const snapshot = @import("vm/kvm_snapshot.zig");
+
 // The ioctls of /dev/kvm (KVMIO is 0xAE).
-const KVMIO = 0xAE;
+pub const KVMIO = 0xAE;
 const KVM_GET_API_VERSION = IOCTL.IO(KVMIO, 0x00);
 const KVM_CREATE_VM = IOCTL.IO(KVMIO, 0x01);
 const KVM_GET_VCPU_MMAP_SIZE = IOCTL.IO(KVMIO, 0x04);
@@ -91,7 +94,7 @@ const KVM_SET_MSRS = IOCTL.IOW(KVMIO, 0x89, MsrsHead);
 const KVM_SET_CPUID2 = IOCTL.IOW(KVMIO, 0x90, Cpuid2);
 
 // The ioctls of /dev/vhost-vsock (VHOST_VIRTIO is 0xAF).
-const VHOST = 0xAF;
+pub const VHOST = 0xAF;
 const VHOST_GET_FEATURES = IOCTL.IOR(VHOST, 0x00, u64);
 const VHOST_SET_FEATURES = IOCTL.IOW(VHOST, 0x00, u64);
 const VHOST_SET_OWNER = IOCTL.IO(VHOST, 0x01);
@@ -112,8 +115,9 @@ const Msr1 = extern struct { head: MsrsHead = .{ .nmsrs = 1 }, index: u32, reser
 /// uses `rep movsb` and `rep stosb` for its copies.
 const msr_misc_enable = 0x1a0;
 const misc_fast_strings: u64 = 1;
-const huge_page: usize = 2 << 20;
+pub const huge_page: usize = 2 << 20;
 const madv_hugepage = 14;
+const madv_dontneed = 4;
 const IrqLevel = extern struct { irq: u32, level: u32 };
 const Irqfd = extern struct { fd: u32, gsi: u32, flags: u32, resamplefd: u32, pad: [16]u8 = @splat(0) };
 const PitConfig = extern struct { flags: u32, pad: [15]u32 = @splat(0) };
@@ -168,7 +172,7 @@ const CpuidBuf = extern struct { head: Cpuid2, entries: [max_cpuid]CpuidEntry };
 
 const VhostMemory = extern struct { nregions: u32, padding: u32 };
 const VhostRegion = extern struct { guest_phys_addr: u64, memory_size: u64, userspace_addr: u64, flags_padding: u64 };
-const VringState = extern struct { index: u32, num: u32 };
+pub const VringState = extern struct { index: u32, num: u32 };
 const VringAddr = extern struct { index: u32, flags: u32, desc_user_addr: u64, used_user_addr: u64, avail_user_addr: u64, log_guest_addr: u64 };
 const VringFile = extern struct { index: u32, fd: i32 };
 
@@ -182,7 +186,7 @@ const exit_internal_error = 17;
 const exit_system_event = 24;
 
 // Offsets in the mapping of a vCPU (struct kvm_run).
-const run_immediate_exit = 1;
+pub const run_immediate_exit = 1;
 const run_exit_reason = 8;
 const run_union = 32;
 
@@ -195,7 +199,7 @@ pub const mmio_base: u64 = 0xd0000000;
 const mmio_size: u64 = 0x1000;
 /// The ISA interrupts of the virtio devices, in order. 3 and 4 are the
 /// serial ports, 8 is the clock, and 13 is the FPU.
-const irqs = [_]u8{ 5, 6, 7, 9, 10, 11, 12, 14, 15 };
+pub const irqs = [_]u8{ 5, 6, 7, 9, 10, 11, 12, 14, 15 };
 pub const max_disks = irqs.len - 3;
 
 /// The signal that kicks a vCPU thread out of `KVM_RUN`. Its handler
@@ -226,9 +230,13 @@ pub const Config = struct {
     shares: []const Share = &.{},
     /// A virtio entropy device, after the disks and the shares.
     entropy: bool = false,
-    /// `-net nat`: a virtio-net device, last, on the NAT of
+    /// `-net nat`: a virtio-net device, before the balloon, on the NAT of
     /// `vm/nat/engine.zig` with this configuration.
     net: ?nat_engine.Config = null,
+    /// The memory balloon with free page reporting, last
+    /// (`vm/virtio/balloon.zig`): the host drops each page that the
+    /// guest reports as free.
+    balloon: bool = true,
     /// The descriptor of the console (a socket): the output of the
     /// guest goes to it, and its input goes to the guest.
     console: i32,
@@ -240,18 +248,18 @@ pub const Fail = error{ NoKvm, KvmAccess, NoVhost, VhostAccess, Setup, Kernel, M
 /// that failed.
 pub threadlocal var why: []const u8 = "";
 
-fn ok(rc: usize) ?usize {
+pub fn ok(rc: usize) ?usize {
     return if (linux.errno(rc) == .SUCCESS) rc else null;
 }
 
-fn check(rc: usize, what: []const u8) Fail!usize {
+pub fn check(rc: usize, what: []const u8) Fail!usize {
     return ok(rc) orelse {
         why = what;
         return error.Setup;
     };
 }
 
-fn ioctl(fd: i32, req: u32, arg: usize) usize {
+pub fn ioctl(fd: i32, req: u32, arg: usize) usize {
     return linux.ioctl(fd, req, arg);
 }
 
@@ -259,9 +267,14 @@ fn openDev(path: [*:0]const u8) usize {
     return linux.openat(linux.AT.FDCWD, path, .{ .ACCMODE = .RDWR, .CLOEXEC = true }, 0);
 }
 
+var probed = std.atomic.Value(bool).init(false);
+
 /// Checks that this host can run a guest: `/dev/kvm` and
 /// `/dev/vhost-vsock` open for reading and writing.
 pub fn probe() Fail!void {
+    // The open and the close of the two devices cost time at each
+    // create, so one good probe is enough for the process.
+    if (probed.load(.acquire)) return;
     const k = openDev("/dev/kvm");
     switch (linux.errno(k)) {
         .SUCCESS => _ = linux.close(@intCast(k)),
@@ -274,6 +287,7 @@ pub fn probe() Fail!void {
         .ACCES, .PERM => return error.VhostAccess,
         else => return error.NoVhost,
     }
+    probed.store(true, .release);
 }
 
 pub fn nowNs() u64 {
@@ -305,10 +319,10 @@ const Machine = @This();
 
 pub const State = enum(u32) { created, running, paused, stopped, failed };
 const want_run = 0;
-const want_pause = 1;
+pub const want_pause = 1;
 const want_stop = 2;
 
-const Vcpu = struct {
+pub const Vcpu = struct {
     fd: i32 = -1,
     run: [*]u8 = undefined,
     run_size: usize = 0,
@@ -351,6 +365,9 @@ times: struct { setup: u64 = 0, load: u64 = 0 } = .{},
 vs_kick: [2]i32 = .{ -1, -1 },
 vs_call: [2]i32 = .{ -1, -1 },
 vs_running: bool = false,
+/// The first index of the available ring of vsock queues 0 and 1 for
+/// vhost: 0 at a boot, and the saved index after a restore.
+vs_base: [2]u16 = .{ 0, 0 },
 /// The ioeventfd of InterruptACK of vsock.
 vs_ack: i32 = -1,
 /// `-net nat`: the device, its engine, and the ioeventfds of the
@@ -362,6 +379,13 @@ net: vnet.Net = undefined,
 nat: ?*nat_engine.Nat = null,
 net_kick: [2]i32 = .{ -1, -1 },
 net_in_tx: bool = false,
+/// The available index of the vsock event queue when a restore put the
+/// transport reset in it (`snapshot.waitReset`).
+vs_event_idx: u16 = 0,
+/// A machine of `snapshot.prepare`, ready for a restore.
+snap_ready: bool = false,
+/// The bytes of the free page reports of the guest.
+reported: std.atomic.Value(u64) = .init(0),
 /// The text of a failure of a vCPU.
 fail_text: []const u8 = "",
 /// The guest address of the 64-bit entry point of the kernel.
@@ -377,6 +401,13 @@ pub fn init(alloc: std.mem.Allocator, cfg: Config) Fail!*Machine {
     }
     const m = try alloc.create(Machine);
     m.* = .{ .alloc = alloc, .cfg = cfg };
+    // The balloon takes the last free interrupt, when one is free.
+    if (m.deviceCount() > irqs.len) m.cfg.balloon = false;
+    if (m.deviceCount() > irqs.len) {
+        alloc.destroy(m);
+        why = "too many devices for the interrupts of the guest";
+        return error.Setup;
+    }
     return m;
 }
 
@@ -452,7 +483,7 @@ fn closeFd(fd: *i32) void {
     fd.* = -1;
 }
 
-fn teardown(m: *Machine) void {
+pub fn teardown(m: *Machine) void {
     m.want.store(want_stop, .seq_cst);
     _ = linux.futex_3arg(&m.want.raw, .{ .cmd = .WAKE, .private = true }, std.math.maxInt(i32));
     m.kickAll();
@@ -479,6 +510,7 @@ fn teardown(m: *Machine) void {
     for (&m.vs_call) |*f| closeFd(f);
     closeFd(&m.vs_ack);
     m.vs_running = false;
+    m.vs_base = .{ 0, 0 };
     if (m.devices.len != 0) m.alloc.free(m.devices);
     m.devices = &.{};
     for (m.ninep_state) |*n| n.server.deinit();
@@ -493,6 +525,7 @@ fn teardown(m: *Machine) void {
     if (m.mem_map.len != 0) _ = linux.munmap(@ptrFromInt(m.mem_map.addr), m.mem_map.len);
     m.mem_map = .{};
     m.mem = .{ .base = undefined, .size = 0 };
+    m.snap_ready = false;
 }
 
 var kick_installed = std.atomic.Value(bool).init(false);
@@ -505,7 +538,9 @@ fn installKick() void {
     _ = linux.sigaction(kick_signal, &act, null);
 }
 
-fn setup(m: *Machine) Fail!void {
+/// Makes the VM with its interrupt controllers and its PIT, with no
+/// memory.
+pub fn setupVm(m: *Machine) Fail!void {
     installKick();
     const k = openDev("/dev/kvm");
     m.kvm = @intCast(ok(k) orelse return if (linux.errno(k) == .ACCES) error.KvmAccess else error.NoKvm);
@@ -518,7 +553,10 @@ fn setup(m: *Machine) Fail!void {
     _ = try check(ioctl(m.vm, KVM_CREATE_IRQCHIP, 0), "KVM_CREATE_IRQCHIP");
     var pit: PitConfig = .{ .flags = 0 };
     _ = try check(ioctl(m.vm, KVM_CREATE_PIT2, @intFromPtr(&pit)), "KVM_CREATE_PIT2");
+}
 
+fn setup(m: *Machine) Fail!void {
+    try m.setupVm();
     const size: u64 = @as(u64, m.cfg.memory_mb) << 20;
     // The guest memory starts on a 2 MB boundary and asks for
     // transparent huge pages, so the first write to each 2 MB of the
@@ -547,8 +585,13 @@ fn cmdline(m: *Machine) []const u8 {
         threadlocal var buf: [cmdline_max + 512]u8 = undefined;
     };
     var w: std.Io.Writer = .fixed(&S.buf);
-    w.print("{s} reboot=k panic=-1 nomodule", .{m.cfg.cmdline}) catch return S.buf[0..0];
+    // The words after " -- " are the arguments of the first process, so
+    // the options of the monitor go before them.
+    const cut = std.mem.indexOf(u8, m.cfg.cmdline, " -- ");
+    const head = if (cut) |c| m.cfg.cmdline[0..c] else m.cfg.cmdline;
+    w.print("{s} reboot=k panic=-1 nomodule", .{head}) catch return S.buf[0..0];
     for (0..m.deviceCount()) |i| w.print(" virtio_mmio.device=4K@0x{x}:{d}", .{ mmio_base + mmio_size * i, irqs[i] }) catch return w.buffered();
+    if (cut) |c| w.print("{s}", .{m.cfg.cmdline[c..]}) catch return w.buffered();
     return w.buffered();
 }
 
@@ -559,7 +602,7 @@ fn load(m: *Machine) Fail!void {
     };
 }
 
-fn makeVcpus(m: *Machine) Fail!void {
+pub fn makeVcpus(m: *Machine) Fail!void {
     const run_size = try check(ioctl(m.kvm, KVM_GET_VCPU_MMAP_SIZE, 0), "KVM_GET_VCPU_MMAP_SIZE");
     var cpuid: CpuidBuf = undefined;
     cpuid.head = .{ .nent = max_cpuid, .padding = 0 };
@@ -628,15 +671,15 @@ fn eventfd() Fail!i32 {
     return @intCast(try check(linux.eventfd(0, linux.EFD.CLOEXEC | linux.EFD.NONBLOCK), "eventfd"));
 }
 
-fn deviceCount(m: *const Machine) usize {
-    return 2 + m.cfg.disks.len + m.cfg.shares.len + @intFromBool(m.cfg.entropy) + @intFromBool(m.cfg.net != null);
+pub fn deviceCount(m: *const Machine) usize {
+    return 2 + m.cfg.disks.len + m.cfg.shares.len + @intFromBool(m.cfg.entropy) + @intFromBool(m.cfg.net != null) + @intFromBool(m.cfg.balloon);
 }
 
 fn entropyIndex(m: *const Machine) usize {
     return 2 + m.cfg.disks.len + m.cfg.shares.len;
 }
 
-fn makeDevices(m: *Machine) Fail!void {
+pub fn makeDevices(m: *Machine) Fail!void {
     const n = m.deviceCount();
     m.devices = try m.alloc.alloc(Device, n);
     m.devices[0] = Device.console(irqs[0], .{ .ctx = m, .write = consoleWrite, .rx_ready = consoleReady });
@@ -660,7 +703,8 @@ fn makeDevices(m: *Machine) Fail!void {
         m.devices[k] = Device.ninep(irqs[k], &st.server, tag);
     }
     if (m.cfg.entropy) m.devices[m.entropyIndex()] = Device.rng(irqs[m.entropyIndex()], fillRandom);
-    if (m.cfg.net) |nc| try m.makeNet(n - 1, nc);
+    if (m.cfg.net) |nc| try m.makeNet(n - 1 - @intFromBool(m.cfg.balloon), nc);
+    if (m.cfg.balloon) m.devices[n - 1] = Device.balloon(irqs[n - 1], .{ .ctx = m, .report = dropPages });
     m.con_stop = try eventfd();
     m.con_wake = try eventfd();
 
@@ -732,8 +776,9 @@ fn makeNet(m: *Machine, k: usize, nc: nat_engine.Config) Fail!void {
     };
 }
 
+/// The virtio-net device: last, or before the balloon.
 fn netDev(m: *Machine) *Device {
-    return &m.devices[m.devices.len - 1];
+    return &m.devices[m.devices.len - 1 - @intFromBool(m.cfg.balloon)];
 }
 
 /// A notify that did not go to an ioeventfd.
@@ -784,12 +829,12 @@ fn netFlush(ctx: *anyopaque) void {
     m.net.rxDone(d, &h);
 }
 
-fn host(m: *Machine) virtio.Host {
+pub fn host(m: *Machine) virtio.Host {
     return .{ .ctx = m, .mem = m.mem, .interrupt = irqEdge };
 }
 
 /// An edge on an ISA interrupt line of the guest.
-fn irqEdge(ctx: *anyopaque, irq: u32) void {
+pub fn irqEdge(ctx: *anyopaque, irq: u32) void {
     const m: *Machine = @ptrCast(@alignCast(ctx));
     var hi: IrqLevel = .{ .irq = irq, .level = 1 };
     _ = ioctl(m.vm, KVM_IRQ_LINE, @intFromPtr(&hi));
@@ -798,7 +843,7 @@ fn irqEdge(ctx: *anyopaque, irq: u32) void {
 }
 
 /// Gives vhost the memory and the two queues of vsock, and starts it.
-fn vhostStart(ctx: *anyopaque, d: *Device) bool {
+pub fn vhostStart(ctx: *anyopaque, d: *Device) bool {
     const m: *Machine = @ptrCast(@alignCast(ctx));
     const feats: u64 = d.driver_features & virtio_f_version_1;
     if (ok(ioctl(m.vhost, VHOST_SET_FEATURES, @intFromPtr(&feats))) == null) return false;
@@ -813,7 +858,7 @@ fn vhostStart(ctx: *anyopaque, d: *Device) bool {
         if (!q.ready) return false;
         const idx: u32 = @intCast(i);
         var num: VringState = .{ .index = idx, .num = q.num };
-        var start_at: VringState = .{ .index = idx, .num = 0 };
+        var start_at: VringState = .{ .index = idx, .num = m.vs_base[i] };
         var addr: VringAddr = .{ .index = idx, .flags = 0, .desc_user_addr = base + q.desc, .used_user_addr = base + q.used, .avail_user_addr = base + q.avail, .log_guest_addr = 0 };
         var kick: VringFile = .{ .index = idx, .fd = m.vs_kick[i] };
         var call: VringFile = .{ .index = idx, .fd = m.vs_call[i] };
@@ -875,7 +920,7 @@ fn consoleRx(m: *Machine) void {
 
 /// The console thread: reads the console descriptor into the receive
 /// queue of the console device.
-fn consoleMain(m: *Machine) void {
+pub fn consoleMain(m: *Machine) void {
     while (true) {
         var fds = [_]linux.pollfd{
             .{ .fd = m.con_stop, .events = linux.POLL.IN, .revents = 0 },
@@ -902,6 +947,16 @@ fn consoleMain(m: *Machine) void {
 fn waitStop(m: *Machine) void {
     var stop_fd = [_]linux.pollfd{.{ .fd = m.con_stop, .events = linux.POLL.IN, .revents = 0 }};
     _ = linux.poll(&stop_fd, 1, -1);
+}
+
+/// A range of free memory that the guest reported: its host pages go
+/// back to the host. The range of a guest is on 4 KB boundaries.
+fn dropPages(ctx: *anyopaque, range: []u8) void {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
+    _ = m.reported.fetchAdd(range.len, .monotonic);
+    const lo = std.mem.alignForward(usize, @intFromPtr(range.ptr), 4096);
+    const hi = std.mem.alignBackward(usize, @intFromPtr(range.ptr) + range.len, 4096);
+    if (hi > lo) _ = linux.madvise(@ptrFromInt(lo), hi - lo, madv_dontneed);
 }
 
 fn fillRandom(buf: []u8) usize {
@@ -948,7 +1003,7 @@ fn fullIo(fd: i32, b: []u8, pos: u64, write: bool) bool {
 // ---------------------------------------------------------------------
 // The vCPU threads
 
-fn vcpuMain(v: *Vcpu) void {
+pub fn vcpuMain(v: *Vcpu) void {
     const m = v.machine;
     v.tid.store(linux.gettid(), .seq_cst);
     defer v.tid.store(0, .seq_cst);
@@ -956,6 +1011,11 @@ fn vcpuMain(v: *Vcpu) void {
         const w = m.want.load(.seq_cst);
         if (w == want_stop) return;
         if (w == want_pause) {
+            // KVM_RUN with immediate_exit completes the I/O of the last
+            // exit and returns at once, so a snapshot of the parked vCPU
+            // has no pending operation.
+            @atomicStore(u8, &v.run[run_immediate_exit], 1, .seq_cst);
+            _ = ioctl(v.fd, KVM_RUN, 0);
             _ = m.parked.fetchAdd(1, .seq_cst);
             _ = linux.futex_3arg(&m.parked.raw, .{ .cmd = .WAKE, .private = true }, 1);
             while (m.want.load(.seq_cst) == want_pause)
@@ -1053,11 +1113,20 @@ fn mmio(m: *Machine, v: *Vcpu) void {
     if (write) d.write(&h, off, data[0..len]) else d.read(off, data[0..len]);
 }
 
+test "kvm: the arguments of the first process stay last" {
+    if (comptime !supported) return;
+    var m: Machine = .{ .alloc = std.testing.allocator, .cfg = .{ .kernel = "", .cmdline = "quiet rdinit=/sbin/ztcl -- --iso-vsock 1026", .console = -1, .balloon = false } };
+    try std.testing.expectEqualStrings(
+        "quiet rdinit=/sbin/ztcl reboot=k panic=-1 nomodule virtio_mmio.device=4K@0xd0000000:5 virtio_mmio.device=4K@0xd0001000:6 -- --iso-vsock 1026",
+        m.cmdline(),
+    );
+}
+
 test "kvm: the command line" {
     if (comptime !supported) return;
     var m: Machine = .{ .alloc = std.testing.allocator, .cfg = .{ .kernel = "", .cmdline = "console=hvc0", .console = -1, .cpus = 2, .disks = &.{.{ .fd = -1, .read_only = true }} } };
     try std.testing.expectEqualStrings(
-        "console=hvc0 reboot=k panic=-1 nomodule virtio_mmio.device=4K@0xd0000000:5 virtio_mmio.device=4K@0xd0001000:6 virtio_mmio.device=4K@0xd0002000:7",
+        "console=hvc0 reboot=k panic=-1 nomodule virtio_mmio.device=4K@0xd0000000:5 virtio_mmio.device=4K@0xd0001000:6 virtio_mmio.device=4K@0xd0002000:7 virtio_mmio.device=4K@0xd0003000:9",
         m.cmdline(),
     );
 }

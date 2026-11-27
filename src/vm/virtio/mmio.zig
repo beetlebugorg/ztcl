@@ -105,12 +105,15 @@ pub const Backend = union(enum) {
     fs: *fuse_mod.Server,
     /// The virtio-net device (`net.zig`).
     net: *net_mod.Net,
+    /// The memory balloon (`balloon.zig`) with free page reporting only.
+    balloon: balloon_mod.Balloon,
 };
 
 const vsock_mod = @import("vsock.zig");
 const ninep_mod = @import("ninep.zig");
 const fuse_mod = @import("fuse.zig");
 const net_mod = @import("net.zig");
+const balloon_mod = @import("balloon.zig");
 
 /// A spin lock for the registers of a device: the vCPU threads and the
 /// console thread of the backend take it for a short time.
@@ -187,6 +190,12 @@ pub const Device = struct {
         return d;
     }
 
+    /// The memory balloon with free page reporting: queues inflate (0),
+    /// deflate (1), and reporting (2).
+    pub fn balloon(irq: u32, b: balloon_mod.Balloon) Device {
+        return .{ .backend = .{ .balloon = b }, .irq = irq, .features = f_version_1 | balloon_mod.f_page_reporting, .nqueues = 3, .config_len = 8 };
+    }
+
     /// An external device with `features` (with VIRTIO_F_VERSION_1),
     /// `nqueues` queues, and the bytes of its configuration.
     pub fn external(irq: u32, e: External, features: u64, nqueues: u8, config: []const u8) Device {
@@ -205,6 +214,7 @@ pub const Device = struct {
             .ninep => ninep_mod.id,
             .fs => 26,
             .net => net_mod.id,
+            .balloon => balloon_mod.id,
         };
     }
 
@@ -316,6 +326,7 @@ pub const Device = struct {
             // The high priority queue 0 and the request queue 1.
             .fs => |srv| if (qi < 2 and srv.run(&d.queues[qi], host.mem)) d.raise(host),
             .net => |n| n.kick(n.ctx, qi),
+            .balloon => |b| if (qi < 3 and balloon_mod.run(b, &d.queues[qi], host.mem, qi == 2)) d.raise(host),
         }
     }
 

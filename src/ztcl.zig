@@ -54,6 +54,7 @@ pub const dbus = @import("dbus.zig");
 pub const macho = @import("macho.zig");
 pub const isoproto = @import("isoproto.zig");
 pub const isothread = @import("isothread.zig");
+pub const isovm = @import("isovm.zig");
 pub const isolate_mac = @import("isolate_mac.zig");
 pub const isobroker = @import("isobroker.zig");
 pub const vmimage = @import("vmimage.zig");
@@ -137,6 +138,9 @@ test {
     _ = @import("vm/nat/nat.zig");
     _ = @import("vm/virtio/net.zig");
     _ = @import("vm/nat/engine.zig");
+    _ = @import("vm/virtio/balloon.zig");
+    _ = @import("vm/kvm_snapshot.zig");
+    _ = @import("isovm.zig");
     _ = zipwrite;
     _ = buildnative;
     _ = dbus;

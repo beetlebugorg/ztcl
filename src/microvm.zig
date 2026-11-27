@@ -83,6 +83,14 @@ pub const Host = struct {
     /// about 85 ms; a guest of the pool resumes in under 1 ms. 0 turns the pool off. Each guest of
     /// the pool holds the memory that it touched.
     pool_size: u32 = 0,
+    /// The guest of `thread::create -isolation vm` (Linux with KVM): host
+    /// paths of a kernel and of an initramfs whose /sbin/ztcl is a ztcl
+    /// runner (`isovm.zig`). Empty: the level vm gives ZTCL ISOLATION
+    /// LEVEL.
+    iso_kernel: []const u8 = "",
+    iso_initrd: []const u8 = "",
+    /// The memory of the guest of each vm thread, in MB.
+    iso_memory_mb: u32 = 256,
     /// Downloads `url` (HTTPS) into the open file `fd`, for `ztcl::vm
     /// image fetch` and `update`. The runner gives one on std.http; an
     /// embedder with no network leaves it null, and fetch then gives
@@ -162,6 +170,13 @@ pub fn closeAll(it: *Interp) void {
     if (comptime on_whp) win.closeAll(it);
 }
 
+/// The spawner of `thread::create -isolation vm` for the interpreter
+/// `root`, or null when this host has no level vm.
+pub fn isoSpawner(root: *Interp) ?@import("isothread.zig").Spawner {
+    if (comptime !on_kvm) return null;
+    return lin.isoSpawner(root);
+}
+
 // ---- ztcl::vm image: the store of signed images (vmstore.zig) ----
 
 const vmstore = @import("vmstore.zig");
@@ -222,7 +237,7 @@ pub fn resolveImage(it: *Interp, name: []const u8) Error!Resolved {
 /// its SHA-256 on the bytes that the guest gets, and a descriptor of
 /// each disk, read-only, opened through the store. A disk with verity
 /// checks itself in the guest.
-pub const Loaded = struct { kernel: []u8, initrd: []u8, cmdline: []const u8, disks: []i32 };
+pub const Loaded = struct { kernel: []u8, initrd: []u8, cmdline: []const u8, disks: []i32, counter: u64 = 0 };
 
 pub fn loadImage(it: *Interp, b: std.mem.Allocator, name: []const u8) Error!Loaded {
     const s = try store(it);
@@ -244,7 +259,27 @@ pub fn loadImage(it: *Interp, b: std.mem.Allocator, name: []const u8) Error!Load
         disks[n] = s.openObject(a, d.sha256) catch |e| return storeFail(it, e);
         n += 1;
     }
-    return .{ .kernel = kernel, .initrd = initrd, .cmdline = try a.dupe(u8, x.cmdline), .disks = disks };
+    return .{ .kernel = kernel, .initrd = initrd, .cmdline = try a.dupe(u8, x.cmdline), .disks = disks, .counter = counter };
+}
+
+/// The disks of release `counter` of the image `name`, read-only, opened
+/// through the store, for the restore of a snapshot: the memory of the
+/// snapshot has the kernel and the initramfs.
+pub fn openImageDisks(it: *Interp, name: []const u8, counter: u64) Error![]i32 {
+    const s = try store(it);
+    defer s.close();
+    const a = it.alloc();
+    var c = s.load(a, name, counter) catch |e| return storeFail(it, e);
+    defer c.deinit();
+    const x = c.parsed.value.archs.map.get(vmstore.host_arch) orelse return storeFail(it, error.Missing);
+    const disks = try a.alloc(i32, x.disks.len);
+    var n: usize = 0;
+    errdefer for (disks[0..n]) |fd| sys.close(fd);
+    for (x.disks) |d| {
+        disks[n] = s.openObject(a, d.sha256) catch |e| return storeFail(it, e);
+        n += 1;
+    }
+    return disks;
 }
 
 fn imageCmd(it: *Interp, args: []const Value) Error!Value {
@@ -1323,6 +1358,14 @@ const lin = if (on_kvm) struct {
         pooled: bool = false,
         /// The listeners of `listen`.
         listens: std.ArrayListUnmanaged(Listen) = .empty,
+        /// The image of the guest as "name counter" (the tag of its
+        /// snapshot), and the count of its disks that are the disks of
+        /// the image.
+        image_tag: []u8 = &.{},
+        image_disks: usize = 0,
+        /// A guest of a snapshot before its first start: the start
+        /// sends the agent the time and new entropy.
+        restored: bool = false,
     };
 
     const Listen = struct { port: u32, l: *Listener, chan: []const u8 };
@@ -1382,6 +1425,10 @@ const lin = if (on_kvm) struct {
             if (args.len != 3) return it.wrongArgs("ztcl::vm status vm");
             return .{ .str = status(g) };
         }
+        if (std.mem.eql(u8, sub, "snapshot")) {
+            if (args.len != 4) return it.wrongArgs("ztcl::vm snapshot vm file");
+            return snapshot(it, g, try it.str(args[3]));
+        }
         if (std.mem.eql(u8, sub, "vsock")) return vsock(it, g, args[3..]);
         if (std.mem.eql(u8, sub, "listen")) return listenCmd(it, g, args[3..]);
         if (std.mem.eql(u8, sub, "unlisten")) return unlistenCmd(it, g, args[3..]);
@@ -1415,7 +1462,7 @@ const lin = if (on_kvm) struct {
             destroy(it, g);
             return .{ .str = "" };
         }
-        return it.fail("bad option \"{s}\": must be console, create, delete, exec, mount, start, status, stop, or vsock", .{sub});
+        return it.fail("bad option \"{s}\": must be console, create, delete, exec, mount, snapshot, start, status, stop, or vsock", .{sub});
     }
 
     /// Opens a path of the script below the root folder.
@@ -1476,6 +1523,8 @@ const lin = if (on_kvm) struct {
             return it.failCode("ZTCL VM LIMIT", "the interpreter has {d} guests, the limit", .{s.guests.items.len});
         if (args.len % 2 != 0) return it.wrongArgs("ztcl::vm create ?-option value ...?");
         kvm.probe() catch |e| return failure(it, e);
+        var k: usize = 0;
+        while (k < args.len) : (k += 2) if (std.mem.eql(u8, try it.str(args[k]), "-snapshot")) return createSnapshot(it, args);
         var cfg: kvm.Config = .{ .kernel = "", .cmdline = "console=hvc0 quiet", .console = -1 };
         var kernel: []const u8 = "";
         var initrd: []const u8 = "";
@@ -1504,6 +1553,8 @@ const lin = if (on_kvm) struct {
                 cfg.cmdline = try it.str(v);
             } else if (std.mem.eql(u8, opt, "-entropy")) {
                 cfg.entropy = try it.int(v) != 0;
+            } else if (std.mem.eql(u8, opt, "-balloon")) {
+                cfg.balloon = try it.int(v) != 0;
             } else if (std.mem.eql(u8, opt, "-warm")) {
                 warm = try it.int(v) != 0;
             } else if (std.mem.eql(u8, opt, "-net")) {
@@ -1527,7 +1578,7 @@ const lin = if (on_kvm) struct {
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 if (disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{kvm.max_disks});
                 try shares.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 3 and try isRw(it, l[2]) });
-            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -dns, -entropy, -image, -initrd, -kernel, -memory, -net, -share, or -warm", .{opt});
+            } else return it.fail("bad option \"{s}\": must be -balloon, -cmdline, -cpus, -disk, -dns, -entropy, -image, -initrd, -kernel, -memory, -net, -share, or -warm", .{opt});
         }
         if (cfg.net) |*nc| nc.dns = dns;
         if (cfg.net != null and disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest with -net nat has at most {d} disks and shares", .{kvm.max_disks - 1});
@@ -1548,7 +1599,7 @@ const lin = if (on_kvm) struct {
                     dropPooled(p);
                     return e;
                 };
-                g.* = .{ .name = "", .machine = p.machine, .kernel = p.kernel, .initrd = p.initrd, .cmdline = p.cmdline, .disks = p.disks, .shares = &.{}, .console_vm = p.console_vm, .console_host = p.console_host, .warm = true, .pooled = true };
+                g.* = .{ .name = "", .machine = p.machine, .kernel = p.kernel, .initrd = p.initrd, .cmdline = p.cmdline, .disks = p.disks, .shares = &.{}, .console_vm = p.console_vm, .console_host = p.console_host, .warm = true, .pooled = true, .restored = p.restored };
                 g.name = std.fmt.allocPrint(b, "vm{d}", .{s.next}) catch |e| {
                     destroy(it, g);
                     return e;
@@ -1571,6 +1622,13 @@ const lin = if (on_kvm) struct {
         var image_disks: []const i32 = &.{};
         if (image) |name| {
             const l = try loadImage(it, b, name);
+            g.image_tag = std.fmt.allocPrint(b, "{s} {d}", .{ name, l.counter }) catch |e| {
+                for (l.disks) |fd| sys.close(fd);
+                b.free(l.kernel);
+                b.free(l.initrd);
+                return e;
+            };
+            g.image_disks = l.disks.len;
             g.kernel = l.kernel;
             g.initrd = l.initrd;
             image_disks = l.disks;
@@ -1641,6 +1699,177 @@ const lin = if (on_kvm) struct {
             .created, .stopped, .failed => g.machine.start() catch |e| return failure(it, e),
             .running => return it.failCode("ZTCL VM STATE", "the guest {s} is running", .{g.name}),
         }
+        if (g.restored) {
+            g.restored = false;
+            resumeAgent(it, g);
+        }
+    }
+
+    /// The first start of a guest of a snapshot: the agent sets the
+    /// clock of the guest to the time of the host and adds new entropy
+    /// to the random pool of the guest, so the clones of one snapshot
+    /// have different random numbers. An agent without the request
+    /// `RESUME` (feature bit 3) gets nothing.
+    fn resumeAgent(it: *Interp, g: *Guest) void {
+        _ = kvm.snapshot.waitReset(g.machine, 100_000);
+        var rnd: [32]u8 = undefined;
+        if (linux.getrandom(&rnd, rnd.len, 0) != rnd.len) return;
+        // Port 1027 of the agent: the prelude of `isovm.zig`, served with
+        // no fork. An agent without it refuses the connection, and the
+        // request RESUME on port 1024 follows.
+        if (connectTry(g.machine, resume_port, 20, 250)) |rf| {
+            defer _ = linux.close(rf);
+            const p = isovm.prelude(realtimeNs(), &rnd);
+            if (linux.write(rf, &p, p.len) == p.len) {
+                var ack = [1]linux.pollfd{.{ .fd = rf, .events = linux.POLL.IN, .revents = 0 }};
+                var one: [1]u8 = undefined;
+                if (linux.poll(&ack, 1, 2000) == 1 and linux.read(rf, &one, 1) == 1) return;
+            }
+        }
+        const fd = connectTry(g.machine, vmagent.port, 2000, 250) orelse return;
+        defer _ = linux.close(fd);
+        var a: vmagent.Conn = .{ .fd = fd, .timeout_ms = 2000 };
+        const h = a.hello(it.alloc()) catch return;
+        if (h.features & vmagent.f_resume == 0) return;
+        vmagent.resumeGuest(&a, it.alloc(), realtimeNs(), &rnd) catch {};
+    }
+
+    /// The port of the agent for the resume prelude.
+    const resume_port: u32 = 1027;
+
+    fn realtimeNs() u64 {
+        var ts: linux.timespec = undefined;
+        _ = linux.clock_gettime(.REALTIME, &ts);
+        return @as(u64, @intCast(ts.sec)) * std.time.ns_per_s + @as(u64, @intCast(ts.nsec));
+    }
+
+    /// `ztcl::vm snapshot VM FILE`: the state and the memory of the guest
+    /// to FILE (`vm/kvm_snapshot.zig`). Gives the bytes of guest memory
+    /// that the file holds.
+    fn snapshot(it: *Interp, g: *Guest, path: []const u8) Error!Value {
+        if (g.shares.len != 0) return it.failCode("ZTCL VM SNAPSHOT", "the guest {s} has a share: a guest with a share has no snapshot", .{g.name});
+        if (g.disks.len != g.image_disks) return it.failCode("ZTCL VM SNAPSHOT", "the guest {s} has a -disk: only the disks of an image go in a snapshot", .{g.name});
+        switch (g.machine.getState()) {
+            .running, .paused => {},
+            else => return it.failCode("ZTCL VM STATE", "the guest {s} is {s}", .{ g.name, status(g) }),
+        }
+        if (it.capabilities & @backingInt(interp.Capability.file) == 0 or !it.fs_ok())
+            return it.failCode("ZTCL VM NOFILE", "a path of ztcl::vm needs the file capability", .{});
+        const rel = try fsroot.need(it, path);
+        const fd = switch (try fsroot.openRel(it, rel, .{ .access = .read_write, .create = true, .truncate = true }, 0o600)) {
+            .fd => |fd| fd,
+            .err => |e| return fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "couldn't open \"{s}\": ", .{path})),
+        };
+        defer sys.close(fd);
+        const n = kvm.snapshot.save(g.machine, fd, g.image_tag) catch |e| return failure(it, e);
+        return .{ .int = @intCast(n) };
+    }
+
+    /// `ztcl::vm create -snapshot FILE ?-count N?`: N guests (1 with no
+    /// -count) of one snapshot, each paused until its start. With
+    /// -count the result is the list of their names.
+    fn createSnapshot(it: *Interp, args: []const Value) Error!Value {
+        const b = it.heap.backing;
+        const s = try state(it);
+        var path: []const u8 = "";
+        var count: u32 = 1;
+        var list = false;
+        var i: usize = 0;
+        while (i < args.len) : (i += 2) {
+            const opt = try it.str(args[i]);
+            if (std.mem.eql(u8, opt, "-snapshot")) {
+                path = try it.str(args[i + 1]);
+            } else if (std.mem.eql(u8, opt, "-count")) {
+                count = try limit(it, args[i + 1], "clone count", it.vm_host.max_guests);
+                list = true;
+            } else return it.fail("bad option \"{s}\": -snapshot goes with -count only", .{opt});
+        }
+        if (s.guests.items.len + count > it.vm_host.max_guests)
+            return it.failCode("ZTCL VM LIMIT", "the interpreter has {d} guests, and the limit is {d}", .{ s.guests.items.len, it.vm_host.max_guests });
+        const fd = try openPath(it, path, false);
+        defer sys.close(fd);
+        var hdr: kvm.snapshot.Header = undefined;
+        const in = kvm.snapshot.info(fd, &hdr) catch return it.failCode("ZTCL VM SNAPSHOT", "\"{s}\" is not a snapshot of this version of ztcl::vm", .{path});
+        if (in.cpus > it.vm_host.max_cpus) return it.failCode("ZTCL VM LIMIT", "the snapshot has {d} CPUs, and the limit is {d}", .{ in.cpus, it.vm_host.max_cpus });
+        if (in.memory_mb > it.vm_host.max_memory_mb) return it.failCode("ZTCL VM LIMIT", "the snapshot has {d} MB of memory, and the limit is {d}", .{ in.memory_mb, it.vm_host.max_memory_mb });
+        // The disks of the image of the tag ("name counter").
+        var image_fds: []i32 = &.{};
+        defer for (image_fds) |x| sys.close(x);
+        if (in.tag.len != 0) {
+            const sp = std.mem.lastIndexOfScalar(u8, in.tag, ' ') orelse return it.failCode("ZTCL VM SNAPSHOT", "the image tag of the snapshot is bad", .{});
+            const counter = std.fmt.parseInt(u64, in.tag[sp + 1 ..], 10) catch return it.failCode("ZTCL VM SNAPSHOT", "the image tag of the snapshot is bad", .{});
+            image_fds = try openImageDisks(it, in.tag[0..sp], counter);
+        }
+        if (image_fds.len != in.disks) return it.failCode("ZTCL VM SNAPSHOT", "the snapshot has {d} disks, and its image has {d}", .{ in.disks, image_fds.len });
+
+        // A guest with no disk is a restore into a prepared machine of
+        // the spares, when the pool is on.
+        const set: ?*SpareSet = if (image_fds.len == 0 and it.vm_host.pool_size > 0) spareSet(in.cpus, in.memory_mb, in.entropy, in.balloon) else null;
+        var names: std.ArrayList(Value) = .empty;
+        for (0..count) |_| {
+            const took = if (set) |x| takeSpare(x, it.vm_host.pool_size) else null;
+            if (took) |sp| {
+                const g = b.create(Guest) catch |e| {
+                    sp.machine.deinit();
+                    sys.close(sp.console_vm);
+                    sys.close(sp.console_host);
+                    return e;
+                };
+                g.* = .{ .name = "", .machine = sp.machine, .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .shares = &.{}, .console_vm = sp.console_vm, .console_host = sp.console_host, .warm = true, .pooled = true, .restored = true };
+                kvm.snapshot.restore(g.machine, fd) catch |e| {
+                    destroy(it, g);
+                    return failure(it, e);
+                };
+                g.name = std.fmt.allocPrint(b, "vm{d}", .{s.next}) catch |e| {
+                    destroy(it, g);
+                    return e;
+                };
+                s.next += 1;
+                s.guests.append(b, g) catch |e| {
+                    destroy(it, g);
+                    return e;
+                };
+                try names.append(it.alloc(), .{ .str = g.name });
+                continue;
+            }
+            const g = try b.create(Guest);
+            g.* = .{ .name = "", .machine = undefined, .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .shares = &.{}, .console_vm = -1, .console_host = -1, .warm = true, .restored = true };
+            var made = false;
+            errdefer if (!made) freeGuest(it, g);
+            g.image_tag = try b.dupe(u8, in.tag);
+            g.image_disks = image_fds.len;
+            g.disks = try b.alloc(kvm.Disk, image_fds.len);
+            for (g.disks) |*d| d.fd = -1;
+            for (image_fds, g.disks) |x, *d| {
+                const rc = linux.fcntl(x, linux.F.DUPFD_CLOEXEC, 0);
+                if (linux.errno(rc) != .SUCCESS) return it.failCode("ZTCL VM KVM", "no descriptor for a disk", .{});
+                d.* = .{ .fd = @intCast(rc), .read_only = true };
+            }
+            var pair: [2]i32 = undefined;
+            if (linux.errno(linux.socketpair(linux.AF.UNIX, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0, &pair)) != .SUCCESS)
+                return it.failCode("ZTCL VM KVM", "no socket for the console", .{});
+            g.console_vm = pair[0];
+            g.console_host = pair[1];
+            const cfg: kvm.Config = .{ .kernel = "", .cmdline = "", .cpus = in.cpus, .memory_mb = in.memory_mb, .disks = g.disks, .entropy = in.entropy, .balloon = in.balloon, .console = g.console_vm };
+            g.machine = kvm.init(b, cfg) catch |e| return failure(it, e);
+            made = true;
+            kvm.snapshot.restore(g.machine, fd) catch |e| {
+                destroy(it, g);
+                return failure(it, e);
+            };
+            g.name = std.fmt.allocPrint(b, "vm{d}", .{s.next}) catch |e| {
+                destroy(it, g);
+                return e;
+            };
+            s.next += 1;
+            s.guests.append(b, g) catch |e| {
+                destroy(it, g);
+                return e;
+            };
+            try names.append(it.alloc(), .{ .str = g.name });
+        }
+        if (!list) return names.items[0];
+        return value.wrapList(it.alloc(), names.items);
     }
 
     fn status(g: *Guest) []const u8 {
@@ -1660,6 +1889,14 @@ const lin = if (on_kvm) struct {
     /// Connects to a port of the guest, again after each refused
     /// connection, until `timeout_ms` pass. Gives a blocking socket.
     fn connect(m: *kvm, port: u32, timeout_ms: u32) ?i32 {
+        return connectTry(m, port, timeout_ms, 1000_000);
+    }
+
+    /// `connect` with at most `try_us` microseconds for each try. After a
+    /// restore the guest drops a request that comes before it reads its
+    /// new context ID, so the first start of a restore tries again after
+    /// 250 us.
+    fn connectTry(m: *kvm, port: u32, timeout_ms: u32, try_us: u64) ?i32 {
         const end = nowMs() + timeout_ms;
         while (m.getState() == .running) {
             const rc = linux.socket(AF_VSOCK, linux.SOCK.STREAM | linux.SOCK.CLOEXEC | linux.SOCK.NONBLOCK, 0);
@@ -1673,7 +1910,9 @@ const lin = if (on_kvm) struct {
                 .INPROGRESS => {
                     const left = end -| nowMs();
                     var p = [_]linux.pollfd{.{ .fd = fd, .events = linux.POLL.OUT, .revents = 0 }};
-                    _ = linux.poll(&p, 1, @intCast(@min(left, 1000)));
+                    const wait_us = @min(left * 1000, try_us);
+                    var ts: linux.timespec = .{ .sec = @intCast(wait_us / 1_000_000), .nsec = @intCast((wait_us % 1_000_000) * 1000) };
+                    _ = linux.ppoll(&p, 1, &ts, null);
                     var err: i32 = 1;
                     var len: linux.socklen_t = @sizeOf(i32);
                     if (p[0].revents != 0 and linux.errno(linux.getsockopt(fd, linux.SOL.SOCKET, linux.SO.ERROR, std.mem.asBytes(&err), &len)) == .SUCCESS and err == 0) good = true;
@@ -1722,6 +1961,7 @@ const lin = if (on_kvm) struct {
         b.free(g.kernel);
         b.free(g.initrd);
         b.free(g.cmdline);
+        b.free(g.image_tag);
         if (g.console_vm >= 0) sys.close(g.console_vm);
         if (g.console_host >= 0) sys.close(g.console_host);
         it.heap.backing.free(g.name);
@@ -1731,7 +1971,7 @@ const lin = if (on_kvm) struct {
     // ---- The pool of booted guests (Host.pool_size) ----
 
     /// A guest of the pool: booted to the agent, then paused.
-    const Pooled = struct { machine: *kvm, kernel: []u8, initrd: []u8, cmdline: []u8, disks: []kvm.Disk, console_vm: i32, console_host: i32 };
+    const Pooled = struct { machine: *kvm, kernel: []u8, initrd: []u8, cmdline: []u8, disks: []kvm.Disk, console_vm: i32, console_host: i32, restored: bool = false };
 
     /// The configuration of the pool of one fingerprint: copies of the
     /// bytes of the image and of the descriptors of its disks. Each guest
@@ -1747,6 +1987,10 @@ const lin = if (on_kvm) struct {
         size: u32,
         ready: std.ArrayList(Pooled) = .empty,
         filling: bool = false,
+        /// A snapshot of the first guest of the pool in a memfd: each
+        /// later guest is a restore of it, a clone that shares the pages
+        /// that it does not write. -1 until the first guest is ready.
+        snap_fd: i32 = -1,
     };
     const thread_lock = @import("thread.zig").Lock;
     var pool_lock: thread_lock = .{};
@@ -1798,6 +2042,7 @@ const lin = if (on_kvm) struct {
     }
 
     fn freeTemplate(t: *Template) void {
+        if (t.snap_fd >= 0) sys.close(t.snap_fd);
         for (t.disks) |fd| if (fd >= 0) sys.close(fd);
         pa.free(t.disks);
         pa.free(t.kernel);
@@ -1829,6 +2074,13 @@ const lin = if (on_kvm) struct {
             p.console_host = pair[1];
             p.machine = kvm.init(pa, .{ .cpus = t.cpus, .memory_mb = t.memory_mb, .kernel = p.kernel, .initrd = p.initrd, .cmdline = p.cmdline, .disks = p.disks, .entropy = t.entropy, .console = p.console_vm }) catch break :blk false;
             made = true;
+            // A clone of the snapshot of the pool, when it has one.
+            if (t.snap_fd >= 0) {
+                if (kvm.snapshot.restore(p.machine, t.snap_fd)) |_| {
+                    p.restored = true;
+                    break :blk true;
+                } else |_| {}
+            }
             p.machine.start() catch break :blk false;
             const fd = connect(p.machine, agent_port, 10_000) orelse break :blk false;
             // One program of the image runs before the pause, so its
@@ -1844,12 +2096,109 @@ const lin = if (on_kvm) struct {
             } else |_| {}
             _ = linux.close(fd);
             p.machine.pause();
+            if (t.snap_fd < 0) snapTemplate(t, p.machine);
             break :blk true;
         };
         if (good) return p;
         if (made) p.machine.deinit();
         dropBytes(p);
         return null;
+    }
+
+    /// Writes the snapshot of the pool from its first guest, paused, to a
+    /// memfd. A failure leaves the pool on boots.
+    fn snapTemplate(t: *Template, m: *kvm) void {
+        const rc = linux.memfd_create("ztcl-vm-pool", linux.MFD.CLOEXEC);
+        if (linux.errno(rc) != .SUCCESS) return;
+        const fd: i32 = @intCast(rc);
+        _ = kvm.snapshot.save(m, fd, "") catch {
+            sys.close(fd);
+            return;
+        };
+        t.snap_fd = fd;
+    }
+
+    // ---- Prepared machines for `create -snapshot` ----
+
+    /// A machine of `kvm.snapshot.prepare` with its console, for a restore
+    /// with no disk.
+    const Spare = struct { machine: *kvm, console_vm: i32, console_host: i32 };
+    const SpareSet = struct { cpus: u32, memory_mb: u32, entropy: bool, balloon: bool, ready: std.ArrayList(Spare) = .empty, filling: bool = false, size: u32 = 0 };
+    var spares: std.ArrayList(*SpareSet) = .empty;
+
+    fn spareSet(cpus: u32, memory_mb: u32, entropy: bool, balloon: bool) ?*SpareSet {
+        pool_lock.lock();
+        defer pool_lock.unlock();
+        for (spares.items) |x| if (x.cpus == cpus and x.memory_mb == memory_mb and x.entropy == entropy and x.balloon == balloon) return x;
+        const x = pa.create(SpareSet) catch return null;
+        x.* = .{ .cpus = cpus, .memory_mb = memory_mb, .entropy = entropy, .balloon = balloon };
+        spares.append(pa, x) catch {
+            pa.destroy(x);
+            return null;
+        };
+        return x;
+    }
+
+    fn makeSpare(x: *SpareSet) ?Spare {
+        var pair: [2]i32 = undefined;
+        if (linux.errno(linux.socketpair(linux.AF.UNIX, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0, &pair)) != .SUCCESS) return null;
+        const m = kvm.init(pa, .{ .kernel = "", .cmdline = "", .cpus = x.cpus, .memory_mb = x.memory_mb, .entropy = x.entropy, .balloon = x.balloon, .console = pair[0] }) catch {
+            sys.close(pair[0]);
+            sys.close(pair[1]);
+            return null;
+        };
+        kvm.snapshot.prepare(m) catch {
+            m.deinit();
+            sys.close(pair[0]);
+            sys.close(pair[1]);
+            return null;
+        };
+        return .{ .machine = m, .console_vm = pair[0], .console_host = pair[1] };
+    }
+
+    fn spareMain(x: *SpareSet) void {
+        while (true) {
+            pool_lock.lock();
+            if (x.ready.items.len >= x.size) break;
+            pool_lock.unlock();
+            const sp = makeSpare(x) orelse {
+                pool_lock.lock();
+                break;
+            };
+            pool_lock.lock();
+            x.ready.append(pa, sp) catch {
+                pool_lock.unlock();
+                sp.machine.deinit();
+                sys.close(sp.console_vm);
+                sys.close(sp.console_host);
+                pool_lock.lock();
+                break;
+            };
+            pool_lock.unlock();
+        }
+        x.filling = false;
+        pool_lock.unlock();
+    }
+
+    /// A prepared machine of the set, or null. Starts a refill to `size`
+    /// either way.
+    fn takeSpare(x: *SpareSet, size: u32) ?Spare {
+        pool_lock.lock();
+        const sp = x.ready.pop();
+        x.size = size;
+        const go = !x.filling and size > 0;
+        if (go) x.filling = true;
+        pool_lock.unlock();
+        if (go) {
+            const th = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, spareMain, .{x}) catch {
+                pool_lock.lock();
+                x.filling = false;
+                pool_lock.unlock();
+                return sp;
+            };
+            th.detach();
+        }
+        return sp;
     }
 
     fn dropBytes(p: Pooled) void {
@@ -2144,6 +2493,175 @@ const lin = if (on_kvm) struct {
         if (fd < 0 or fd > std.math.maxInt(i32) or !g.listens.items[i].l.take(@intCast(fd)))
             return it.failCode("ZTCL VM LISTEN", "no connection {d} waits on port {d}", .{ fd, port });
         return binaryChannel(it, "vsock", @intCast(fd));
+    }
+
+    // ---- The guests of `thread::create -isolation vm` (isovm.zig) ----
+
+    const isovm = @import("isovm.zig");
+    const IsoFd = @import("isothread.zig").Fd;
+
+    /// The guest of the vm threads: the bytes of its boot, a snapshot of
+    /// it at the listen of the runner (a memfd), and the machines of the
+    /// threads that run.
+    const IsoTemplate = struct {
+        kernel: []u8,
+        initrd: []u8,
+        cmdline: []u8,
+        memory_mb: u32,
+        snap_fd: i32 = -1,
+        pool_size: u32,
+        lock: thread_lock = .{},
+        live: std.ArrayList(IsoLive) = .empty,
+    };
+    const IsoLive = struct { machine: *kvm, console_vm: i32, console_host: i32 };
+    var iso_template: ?*IsoTemplate = null;
+
+    fn readHost(path: []const u8) ?[]u8 {
+        const z = pa.dupeSentinel(u8, path, 0) catch return null;
+        defer pa.free(z);
+        const rc = linux.openat(linux.AT.FDCWD, z, .{ .CLOEXEC = true }, 0);
+        if (linux.errno(rc) != .SUCCESS) return null;
+        const fd: i32 = @intCast(rc);
+        defer sys.close(fd);
+        const end: i64 = @bitCast(linux.lseek(fd, 0, linux.SEEK.END));
+        if (end <= 0) return null;
+        const buf = pa.alloc(u8, @intCast(end)) catch return null;
+        var off: usize = 0;
+        while (off < buf.len) {
+            const n = linux.pread(fd, buf[off..].ptr, buf.len - off, @intCast(off));
+            if (linux.errno(n) != .SUCCESS or n == 0) {
+                pa.free(buf);
+                return null;
+            }
+            off += n;
+        }
+        return buf;
+    }
+
+    pub fn isoSpawner(root: *Interp) ?@import("isothread.zig").Spawner {
+        const h = root.vm_host;
+        if (h.iso_kernel.len == 0 or h.iso_initrd.len == 0) return null;
+        kvm.probe() catch return null;
+        pool_lock.lock();
+        defer pool_lock.unlock();
+        if (iso_template == null) {
+            const kernel = readHost(h.iso_kernel) orelse return null;
+            const initrd = readHost(h.iso_initrd) orelse {
+                pa.free(kernel);
+                return null;
+            };
+            const cmdline = std.fmt.allocPrint(pa, "console=hvc0 quiet rdinit=/sbin/ztcl -- --iso-vsock {d}", .{isovm.port}) catch return null;
+            const t = pa.create(IsoTemplate) catch return null;
+            t.* = .{ .kernel = kernel, .initrd = initrd, .cmdline = cmdline, .memory_mb = h.iso_memory_mb, .pool_size = @max(h.pool_size, 1) };
+            iso_template = t;
+        }
+        return .{ .ctx = iso_template.?, .spawn = isoSpawn };
+    }
+
+    /// Frees the machines of the vm threads that ended: the runner exits
+    /// at the end of its thread, and the guest stops.
+    fn isoReap(t: *IsoTemplate) void {
+        t.lock.lock();
+        defer t.lock.unlock();
+        var i: usize = 0;
+        while (i < t.live.items.len) {
+            const l = t.live.items[i];
+            switch (l.machine.getState()) {
+                .stopped, .failed => {
+                    l.machine.deinit();
+                    sys.close(l.console_vm);
+                    sys.close(l.console_host);
+                    _ = t.live.swapRemove(i);
+                },
+                else => i += 1,
+            }
+        }
+    }
+
+    /// Boots the guest of the runner to its listen, pauses it, and writes
+    /// its snapshot to a memfd. The guest stays, paused, for the thread
+    /// that asked.
+    fn isoBoot(t: *IsoTemplate, l: *IsoLive, made: *bool) bool {
+        l.machine = kvm.init(pa, .{ .cpus = 1, .memory_mb = t.memory_mb, .kernel = t.kernel, .initrd = t.initrd, .cmdline = t.cmdline, .console = l.console_vm }) catch return false;
+        made.* = true;
+        l.machine.start() catch return false;
+        // A probe: a connection with no prelude, which the runner closes.
+        const fd = connect(l.machine, isovm.port, 10_000) orelse return false;
+        sys.close(fd);
+        l.machine.pause();
+        const rc = linux.memfd_create("ztcl-vm-iso", linux.MFD.CLOEXEC);
+        if (linux.errno(rc) == .SUCCESS) {
+            const m: i32 = @intCast(rc);
+            if (kvm.snapshot.save(l.machine, m, "")) |_| t.snap_fd = m else |_| sys.close(m);
+        }
+        return true;
+    }
+
+    /// The spawn of a vm thread: a clone of the snapshot of the runner
+    /// guest in a prepared machine (or a boot, the first time), its
+    /// start, a vsock connection to the runner, and the prelude. Gives
+    /// the descriptor of the transport.
+    fn isoSpawn(ctx: ?*anyopaque) ?IsoFd {
+        const t: *IsoTemplate = @ptrCast(@alignCast(ctx.?));
+        isoReap(t);
+        var pair: [2]i32 = undefined;
+        if (linux.errno(linux.socketpair(linux.AF.UNIX, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0, &pair)) != .SUCCESS) return null;
+        var l: IsoLive = .{ .machine = undefined, .console_vm = pair[0], .console_host = pair[1] };
+        var made = false;
+        var restored = false;
+        const good = blk: {
+            t.lock.lock();
+            const snap = t.snap_fd;
+            if (snap < 0) {
+                const booted = isoBoot(t, &l, &made);
+                t.lock.unlock();
+                if (!booted) break :blk false;
+            } else {
+                t.lock.unlock();
+                const set = spareSet(1, t.memory_mb, false, true);
+                if (set) |x| if (takeSpare(x, t.pool_size)) |sp| {
+                    sys.close(l.console_vm);
+                    sys.close(l.console_host);
+                    l = .{ .machine = sp.machine, .console_vm = sp.console_vm, .console_host = sp.console_host };
+                    made = true;
+                };
+                if (!made) {
+                    l.machine = kvm.init(pa, .{ .cpus = 1, .memory_mb = t.memory_mb, .kernel = "", .cmdline = "", .console = l.console_vm }) catch break :blk false;
+                    made = true;
+                }
+                kvm.snapshot.restore(l.machine, snap) catch break :blk false;
+                restored = true;
+            }
+            break :blk true;
+        };
+        if (!good) {
+            if (made) l.machine.deinit();
+            sys.close(l.console_vm);
+            sys.close(l.console_host);
+            return null;
+        }
+        l.machine.@"resume"();
+        if (restored) _ = kvm.snapshot.waitReset(l.machine, 100_000);
+        const fd = connectTry(l.machine, isovm.port, 5000, 250) orelse {
+            l.machine.deinit();
+            sys.close(l.console_vm);
+            sys.close(l.console_host);
+            return null;
+        };
+        var rnd: [32]u8 = undefined;
+        _ = linux.getrandom(&rnd, rnd.len, 0);
+        const p = isovm.prelude(realtimeNs(), &rnd);
+        if (linux.write(fd, &p, p.len) != p.len) {
+            sys.close(fd);
+            l.machine.deinit();
+            sys.close(l.console_vm);
+            sys.close(l.console_host);
+            return null;
+        }
+        t.lock.lock();
+        t.live.append(pa, l) catch {};
+        t.lock.unlock();
+        return fd;
     }
 
     pub fn closeAll(it: *Interp) void {

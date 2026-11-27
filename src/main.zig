@@ -491,6 +491,18 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             }));
         }
     }
+    // The first process of a guest of `thread::create -isolation vm`
+    // (ztcl#468): `--iso-vsock PORT` last. The kernel puts the words of
+    // its command line that it does not know before them.
+    if (comptime tcl.isovm.supported) {
+        if (setup == null and args.len >= 3 and std.mem.eql(u8, args[args.len - 2], "--iso-vsock")) {
+            const port = std.fmt.parseInt(u32, args[args.len - 1], 10) catch std.process.exit(2);
+            std.process.exit(tcl.isovm.guestMain(init.gpa, port, .{
+                .clock = .{ .now = hostNow, .zone = hostZone },
+                .event = .{ .now = hostTicks, .sleep = hostSleep },
+            }));
+        }
+    }
     // A binary of `ztcl build` runs its payload and reads no option.
     if (builtin.os.tag != .wasi and setup == null) if (tcl.buildnative.payloadRange()) |r| return runApp(init, args, r.off, r.len);
     if (args.len > 1 and std.mem.eql(u8, args[1], "compile") and isPointCompile(args[2..])) {
@@ -579,6 +591,10 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
     // One booted guest of each image waits for `create -image`, unless
     // ZTCL_VM_POOL says another count (0: none).
     it.vm_host.pool_size = if (h.env("ZTCL_VM_POOL")) |v| std.fmt.parseInt(u32, v, 10) catch 1 else 1;
+    // The guest of `thread::create -isolation vm`: a kernel and an
+    // initramfs with this runner as /sbin/ztcl (tools/vm-guest/pack-iso.sh).
+    it.vm_host.iso_kernel = h.env("ZTCL_VM_ISO_KERNEL") orelse "";
+    it.vm_host.iso_initrd = h.env("ZTCL_VM_ISO_INITRD") orelse "";
     if (comptime tcl.microvm.runner_fetch) {
         if (h.io != null) {
             it.vm_host.fetch = vmFetch;
