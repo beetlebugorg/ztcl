@@ -16,9 +16,11 @@ namespace "::ns" not found
 9 9
 boom
 x
+    ("eval" body line 1)
     invoked from within
 "eval [list error boom] [list x]"
 y
+    ("uplevel" body line N)
     invoked from within
 "uplevel 1 [list error boom2] [list y]"
 1
