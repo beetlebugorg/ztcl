@@ -57,6 +57,10 @@ pub fn build(b: *std.Build) void {
         std.process.exit(1);
     }
     gc_options.addOption(bool, "vm_test_key", vm_test_key);
+    // The download of `ztcl::vm image fetch` in the runner: std.http and
+    // its TLS add about 650 KB, past the size budget of the full runner,
+    // so it is off until the TLS of src/tls (ztcl#312).
+    gc_options.addOption(bool, "vm_fetch", b.option(bool, "vm-fetch", "Give the runner the download of ztcl::vm image fetch (std.http)") orelse false);
     gc_options.addOption(bool, "tsan_plant", b.option(bool, "tsan-plant", "Plant a race for the ThreadSanitizer check") orelse false);
     const libc: ?bool = if (tsan or cext) true else null;
 
