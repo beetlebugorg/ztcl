@@ -275,23 +275,43 @@ pub const Protection = struct {
     /// Opens one whole protected record into `out`, which needs the
     /// length of the fragment less the tag.
     pub fn open(p: *Protection, out: []u8, record: []const u8) Error!Plain {
+        const inner_len = try p.check(record);
+        if (out.len < inner_len) return error.NoSpace;
+        return p.openTo(out[0..inner_len], record);
+    }
+
+    /// Opens one whole protected record in place: the plaintext goes
+    /// over the ciphertext in `record`, and the data of the result is a
+    /// slice of `record`. It saves the copy of `open` to a second
+    /// buffer.
+    pub fn openInPlace(p: *Protection, record: []u8) Error!Plain {
+        const inner_len = try p.check(record);
+        return p.openTo(record[header_len..][0..inner_len], record);
+    }
+
+    /// The checks of the header and the count, and the length of the
+    /// plaintext with the content type and the padding.
+    fn check(p: *const Protection, record: []const u8) Error!usize {
         if (record.len < header_len) return error.DecodeError;
         const h = Header.parse(record[0..header_len]);
         if (h.type != .application_data) return error.UnexpectedMessage;
         if (h.len > max_ciphertext) return error.RecordOverflow;
         if (record.len != header_len + h.len) return error.DecodeError;
         if (h.len < tag_len + 1) return error.BadRecordMac;
-        const inner_len = h.len - tag_len;
-        if (out.len < inner_len) return error.NoSpace;
         if (p.seq >= p.suite.recordLimit()) return error.KeyLimit;
-        const c = record[header_len..][0..inner_len];
-        const tag = record[header_len + inner_len ..][0..tag_len].*;
-        const ad = record[0..header_len];
-        const inner = out[0..inner_len];
+        return h.len - tag_len;
+    }
+
+    /// Decrypts into `inner`, which is the place of the ciphertext in
+    /// `record` or a buffer apart from it.
+    fn openTo(p: *Protection, inner: []u8, record: []const u8) Error!Plain {
+        const c = record[header_len..][0..inner.len];
+        const tag = record[header_len + inner.len ..][0..tag_len].*;
+        const ad = record[0..header_len].*;
         const n = p.nonce();
         (switch (p.suite) {
-            .aes_128_gcm_sha256, .aes_256_gcm_sha384 => p.gcm.open(inner, c, &tag, ad, &n),
-            .chacha20_poly1305_sha256 => p.cc.open(inner, c, &tag, ad, &n),
+            .aes_128_gcm_sha256, .aes_256_gcm_sha384 => p.gcm.open(inner, c, &tag, &ad, &n),
+            .chacha20_poly1305_sha256 => p.cc.open(inner, c, &tag, &ad, &n),
         }) catch return error.BadRecordMac;
         p.seq += 1;
         const end = contentEnd(inner);
@@ -310,16 +330,16 @@ pub const Protection = struct {
 
 /// One more than the place of the last byte that is not zero, or 0. The
 /// loop reads each byte, and masks replace the branches on the values.
-/// It compares 32 bytes at a time with vectors, and the bit mask of the
-/// bytes that are not zero gives the last place in the 32.
+/// It compares 64 bytes at a time with vectors, and the bit mask of the
+/// bytes that are not zero gives the last place in the 64.
 fn contentEnd(inner: []const u8) usize {
-    const n = 32;
+    const n = 64;
     const Vn = @Vector(n, u8);
     var end: usize = 0;
     var i: usize = 0;
     while (i + n <= inner.len) : (i += n) {
         const v: Vn = inner[i..][0..n].*;
-        const bits: u32 = @bitCast(v != @as(Vn, @splat(0)));
+        const bits: u64 = @bitCast(v != @as(Vn, @splat(0)));
         const any: usize = @intFromBool(bits != 0);
         const mask = 0 -% any;
         const here = i + n - @as(usize, @clz(bits));
@@ -385,6 +405,30 @@ test "a record sealed from apart and from in place has the same bytes" {
             const got = try r.open(&out, r1);
             try std.testing.expectEqualSlices(u8, data[0..len], got.data);
         };
+    }
+}
+
+test "openInPlace gives the data of open in the record buffer" {
+    for ([_]Suite{ .aes_128_gcm_sha256, .aes_256_gcm_sha384, .chacha20_poly1305_sha256 }) |suite| {
+        var w = testProtection(suite);
+        var r1 = testProtection(suite);
+        var r2 = testProtection(suite);
+        var data: [3000]u8 = undefined;
+        for (&data, 0..) |*b, i| b.* = @truncate(i *% 13 +% 5);
+        for ([_]usize{ 1, 16, 600, 3000 }) |len| {
+            var buf: [max_record]u8 = undefined;
+            const rec = try w.seal(&buf, .application_data, data[0..len], 7);
+            var out: [max_ciphertext]u8 = undefined;
+            const a = try r1.open(&out, rec);
+            const b = try r2.openInPlace(rec);
+            try std.testing.expectEqualSlices(u8, a.data, b.data);
+            try std.testing.expectEqual(@intFromPtr(rec.ptr) + header_len, @intFromPtr(b.data.ptr));
+        }
+        // A bad tag.
+        var buf: [max_record]u8 = undefined;
+        const rec = try w.seal(&buf, .application_data, "x", 0);
+        rec[rec.len - 1] ^= 1;
+        try std.testing.expectError(error.BadRecordMac, r2.openInPlace(rec));
     }
 }
 
