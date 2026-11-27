@@ -1033,7 +1033,7 @@ test "the verifier fails a Code that breaks one check" {
         }.f },
         .{ .name = "access form", .f = struct {
             fn f(m: *Mutable, _: std.mem.Allocator) !void {
-                m.ins[m.find(.access)].x = 4;
+                m.ins[m.find(.access)].x = 7;
             }
         }.f },
         .{ .name = "binary operator", .f = struct {

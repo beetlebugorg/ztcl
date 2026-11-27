@@ -139,6 +139,8 @@ const Item = enum {
     dict_set,
     dict_incr,
     dict_get,
+    dict_exists,
+    dict_size,
     append,
     string_length,
     string_index,
@@ -403,7 +405,7 @@ const Gen = struct {
             .{ .uplevel, 2 },       .{ .global, 2 },          .{ .eval, 2 },          .{ .rename_core, 1 },
             .{ .rename_proc, 1 },   .{ .trace, 1 },           .{ .unset, 2 },         .{ .coroutine, 1 },
             .{ .yield, 1 },         .{ .apply, 2 },           .{ .namespace, 1 },     .{ .puts, 4 },
-            .{ .call, 4 },
+            .{ .call, 4 },          .{ .dict_exists, 2 },     .{ .dict_size, 2 },
         };
         comptime var total: u64 = 0;
         inline for (table) |t| total += t[1];
@@ -615,6 +617,8 @@ const Gen = struct {
                 }
             },
             .dict_get => try g.p("set {s} [dict get ${s} {s}]", .{ g.v(), r.pick([]const u8, &.{ "dd", "dd", "a" }), r.pick([]const u8, &keys) }),
+            .dict_exists => try g.p("set {s} [dict exists ${s} {s}]", .{ g.v(), r.pick([]const u8, &.{ "dd", "dd", "a" }), r.pick([]const u8, &keys) }),
+            .dict_size => try g.p("set {s} [dict size ${s}]", .{ g.v(), r.pick([]const u8, &.{ "dd", "dd", "a" }) }),
             .append => {
                 const dst = r.pick([]const u8, &.{ "s", "s", "a", "c" });
                 const keep = r.chance(30);
