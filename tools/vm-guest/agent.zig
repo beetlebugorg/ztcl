@@ -106,12 +106,27 @@ fn mounts() void {
         _ = linux.mount("share0", "/mnt/share", "9p", 0, @intFromPtr(nine_p_options));
 }
 
-fn listenOn(port: u32) ?i32 {
+fn listenOnce(port: u32) ?i32 {
     const fd: i32 = @intCast(ok(linux.socket(AF_VSOCK, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0)) orelse return null);
     var addr: SockaddrVm = .{ .port = port, .cid = VMADDR_CID_ANY };
-    _ = ok(linux.bind(fd, @ptrCast(&addr), @sizeOf(SockaddrVm))) orelse return null;
-    _ = ok(linux.listen(fd, 16)) orelse return null;
+    if (ok(linux.bind(fd, @ptrCast(&addr), @sizeOf(SockaddrVm))) == null or ok(linux.listen(fd, 16)) == null) {
+        _ = linux.close(fd);
+        return null;
+    }
     return fd;
+}
+
+/// Listens on `port`. With `driver_async_probe=virtio-pci` the device of
+/// vsock may come a moment after the agent starts, so a failure is
+/// tried again each 0.2 ms for up to 2 seconds.
+fn listenOn(port: u32) ?i32 {
+    var k: u32 = 0;
+    while (k < 10_000) : (k += 1) {
+        if (listenOnce(port)) |fd| return fd;
+        const ts: linux.timespec = .{ .sec = 0, .nsec = 200_000 };
+        _ = linux.nanosleep(&ts, null);
+    }
+    return null;
 }
 
 pub fn main() void {
