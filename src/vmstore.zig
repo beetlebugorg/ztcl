@@ -409,7 +409,7 @@ pub const Store = struct {
 
     /// Each name and the counters of its releases, in order.
     pub fn list(s: Store, a: Allocator) Error![]Entry {
-        const rp = try join(a, &.{ "releases" });
+        const rp = try join(a, &.{"releases"});
         defer a.free(rp);
         const names = try listDir(a, s.fd, rp);
         defer freeList(a, names);
