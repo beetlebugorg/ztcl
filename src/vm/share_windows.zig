@@ -32,6 +32,9 @@ pub const Share = struct {
     /// its handle), opened as a folder.
     root: i32,
     read_only: bool,
+    /// The folders that walks opened lately, by their path. A walk
+    /// starts at the deepest one of its path in the place of the root.
+    cache: [cache_slots]Cached = @splat(.{}),
 
     pub fn fs(s: *Share) ninep.Fs {
         return .{ .ctx = s, .read_only = s.read_only, .vt = &vtable };
@@ -118,30 +121,129 @@ fn shareOf(ctx: *anyopaque) *Share {
     return @ptrCast(@alignCast(ctx));
 }
 
-/// The folder at `path` below the root, opened one name at a time. The
-/// root itself is the descriptor of the share: close the result only
-/// when it is not the root.
+// ---- The cache of folders ----
+//
+// A walk of each request opened each name of its path again, about 60 µs
+// for a path of three names. The share keeps the folders of the last
+// walks open, by path: a walk finds the deepest one of its path and opens
+// only the names after it. An entry lives 1 s, so a folder that the host
+// removed and made again under the same name is not served from an old
+// handle for long. A rename or a removal of the guest drops the entries
+// of its path and of the paths below it. A walk pins its entry until
+// `done`, so a second walk of the same request never closes it.
+
+const cache_slots = 32;
+const ttl_ms = 1000;
+
+const Cached = struct {
+    path: []u8 = &.{},
+    fd: i32 = -1,
+    at: u64 = 0,
+    pins: u32 = 0,
+    /// Dropped while pinned: `done` closes it.
+    dead: bool = false,
+};
+
+extern "kernel32" fn GetTickCount64() callconv(.winapi) u64;
+
+fn fresh(c: *const Cached, now: u64) bool {
+    return c.fd >= 0 and !c.dead and now -% c.at < ttl_ms;
+}
+
+fn free(c: *Cached) void {
+    if (c.fd >= 0) sys.close(c.fd);
+    a.free(c.path);
+    c.* = .{};
+}
+
+/// Keeps `fd` as the folder of `path`, pinned. False when each slot is
+/// pinned: the caller keeps the descriptor.
+fn keep(s: *Share, path: []const u8, fd: i32, now: u64) bool {
+    var slot: ?*Cached = null;
+    var oldest: u64 = std.math.maxInt(u64);
+    for (&s.cache) |*c| {
+        if (c.pins != 0) continue;
+        if (c.fd < 0) {
+            slot = c;
+            break;
+        }
+        if (c.at < oldest) {
+            oldest = c.at;
+            slot = c;
+        }
+    }
+    const c = slot orelse return false;
+    const p = a.dupe(u8, path) catch return false;
+    free(c);
+    c.* = .{ .path = p, .fd = fd, .at = now, .pins = 1 };
+    return true;
+}
+
+/// Drops the entries of `path` and of the paths below it.
+fn drop(s: *Share, path: []const u8) void {
+    for (&s.cache) |*c| {
+        if (c.fd < 0) continue;
+        const under = std.mem.eql(u8, c.path, path) or
+            (c.path.len > path.len and std.mem.startsWith(u8, c.path, path) and c.path[path.len] == '/');
+        if (!under) continue;
+        if (c.pins == 0) free(c) else c.dead = true;
+    }
+}
+
+/// The folder at `path` below the root, opened one name at a time from
+/// the deepest folder of the cache on the path. Give the result to
+/// `done`.
 fn walk(s: *Share, path: []const u8, out: *i32) u32 {
-    var cur = s.root;
     if (path.len == 0) {
-        out.* = cur;
+        out.* = s.root;
         return 0;
     }
-    var it = std.mem.splitScalar(u8, path, '/');
+    const now = GetTickCount64();
+    var best: ?*Cached = null;
+    for (&s.cache) |*c| {
+        if (!fresh(c, now)) continue;
+        const prefix = std.mem.eql(u8, c.path, path) or
+            (path.len > c.path.len and std.mem.startsWith(u8, path, c.path) and path[c.path.len] == '/');
+        if (prefix and (best == null or c.path.len > best.?.path.len)) best = c;
+    }
+    if (best) |b| if (b.path.len == path.len) {
+        b.pins += 1;
+        out.* = b.fd;
+        return 0;
+    };
+    var cur = if (best) |b| b.fd else s.root;
+    const start = if (best) |b| b.path.len + 1 else 0;
+    var owned = false;
+    var it = std.mem.splitScalar(u8, path[start..], '/');
     while (it.next()) |name| {
         const r = fw.openAt(cur, name, .dir);
-        if (cur != s.root) sys.close(cur);
+        if (owned) sys.close(cur);
         switch (r) {
-            .fd => |f| cur = f,
+            .fd => |f| {
+                cur = f;
+                owned = true;
+            },
             .err => |e| return errnoOf(e),
         }
+    }
+    if (!keep(s, path, cur, now)) {
+        // Each slot is pinned: the descriptor is the caller's to close.
+        out.* = cur;
+        return 0;
     }
     out.* = cur;
     return 0;
 }
 
+/// The end of the use of a folder of `walk`.
 fn done(s: *Share, fd: i32) void {
-    if (fd != s.root) sys.close(fd);
+    if (fd == s.root) return;
+    for (&s.cache) |*c| if (c.fd == fd) {
+        c.pins -= 1;
+        if (c.pins == 0 and c.dead) free(c);
+        return;
+    };
+    sys.close(fd);
 }
 
 /// The folder and the last name of a path. The root has no last name.
@@ -203,9 +305,82 @@ fn attrOf(fd: i32, out: *ninep.Attr) u32 {
     return 0;
 }
 
+const UnicodeString = extern struct { len: u16, max: u16, buf: ?[*]const u16 };
+const ObjectAttributes = extern struct {
+    length: u32 = @sizeOf(ObjectAttributes),
+    root: ?HANDLE,
+    name: *const UnicodeString,
+    attributes: u32 = 0x40, // OBJ_CASE_INSENSITIVE
+    security: ?*anyopaque = null,
+    qos: ?*anyopaque = null,
+};
+/// FILE_STAT_INFORMATION: 72 bytes.
+const StatInfo = extern struct {
+    id: u64,
+    creation: i64,
+    access: i64,
+    write: i64,
+    change: i64,
+    allocation: i64,
+    size: i64,
+    attributes: u32,
+    reparse_tag: u32,
+    links: u32,
+    access_mask: u32,
+};
+const class_stat = 68;
+extern "ntdll" fn NtQueryInformationByName(oa: *const ObjectAttributes, io: *IoStatus, buf: *anyopaque, len: u32, class: u32) callconv(.winapi) i32;
+
+/// True when a name can be an 8.3 short name of another long name.
+fn shortMark(name: []const u8) bool {
+    if (name.len < 2) return false;
+    for (name[0 .. name.len - 1], name[1..]) |c, d| if (c == '~' and d >= '0' and d <= '9') return true;
+    return false;
+}
+
+/// The attributes of `name` in the folder `dir` with no open: one
+/// `NtQueryInformationByName`, which gives the reparse tag of the name
+/// itself. A reparse point is ELOOP, as a walk gives it.
+fn statByName(dir: i32, name: []const u8, out: *ninep.Attr) u32 {
+    var wide: [256]u16 = undefined;
+    const n = std.unicode.utf8ToUtf16Le(&wide, name) catch return E.INVAL;
+    const text: UnicodeString = .{ .len = @intCast(n * 2), .max = @intCast(n * 2), .buf = &wide };
+    const oa: ObjectAttributes = .{ .root = handleOf(dir), .name = &text };
+    var io: IoStatus = .{};
+    var st: StatInfo = undefined;
+    const r = NtQueryInformationByName(&oa, &io, &st, @sizeOf(StatInfo), class_stat);
+    if (r < 0) return switch (@as(u32, @bitCast(r))) {
+        0xC000_0034, 0xC000_003A, 0xC000_000F => E.NOENT,
+        0xC000_0022 => 13,
+        0xC000_0103 => E.NOTDIR,
+        else => E.IO,
+    };
+    if (st.attributes & attr_reparse != 0) return 40;
+    const is_dir = st.attributes & attr_directory != 0;
+    out.* = .{
+        .mode = if (is_dir) 0o040755 else if (st.attributes & attr_readonly != 0) 0o100444 else 0o100644,
+        .nlink = if (is_dir) 2 else st.links,
+        .size = if (is_dir) 0 else @intCast(@max(st.size, 0)),
+        .blocks = @intCast(@divTrunc(@max(st.allocation, 0), 512)),
+        .atime = timeOf(st.access),
+        .mtime = timeOf(st.write),
+        .ctime = timeOf(st.change),
+        .ino = st.id,
+    };
+    return 0;
+}
+
 fn stat(ctx: *anyopaque, path: []const u8, out: *ninep.Attr) u32 {
     const s = shareOf(ctx);
     if (path.len == 0) return attrOf(s.root, out);
+    const p = split(path);
+    if (fw.nameOk(p.name) and !shortMark(p.name)) {
+        var dir: i32 = undefined;
+        const e = walk(s, p.dir, &dir);
+        if (e != 0) return e;
+        defer done(s, dir);
+        return statByName(dir, p.name, out);
+    }
     var fd: i32 = undefined;
     const e = openPath(s, path, .any, &fd);
     if (e != 0) return e;
@@ -276,7 +451,17 @@ fn walkCopy(s: *Share, path: []const u8, out: *i32) u32 {
         out.* = sys.win.fdOfHandle(h.?) orelse return E.IO;
         return 0;
     }
-    return walk(s, path, out);
+    // A copy of the folder of the walk, which `close` closes: the cache
+    // keeps its own.
+    var d: i32 = undefined;
+    const e = walk(s, path, &d);
+    if (e != 0) return e;
+    defer done(s, d);
+    var h: ?HANDLE = null;
+    const me = GetCurrentProcess();
+    if (DuplicateHandle(me, handleOf(d), me, &h, 0, 0, 2) == 0) return E.IO;
+    out.* = sys.win.fdOfHandle(h.?) orelse return E.IO;
+    return 0;
 }
 
 fn create(ctx: *anyopaque, dir_path: []const u8, name: []const u8, flags: u32, mode: u32, out: *u64) u32 {
@@ -421,6 +606,10 @@ fn unlink(ctx: *anyopaque, dir_path: []const u8, name: []const u8, is_dir: bool)
     defer done(s, dir);
     const base = a.dupeSentinel(u8, name, 0) catch return E.NOMEM;
     defer a.free(base);
+    // The folders of the cache below the name go first: a handle of
+    // the cache keeps no folder from its removal, but a new folder of
+    // the same name must not find it.
+    if (is_dir) dropJoined(s, dir_path, name);
     if (fw.removeAt(.{ .fd = dir, .base = base }, is_dir)) |x| return errnoOf(x);
     return 0;
 }
@@ -440,6 +629,8 @@ fn rename(ctx: *anyopaque, dir_path: []const u8, name: []const u8, new_dir: []co
     defer a.free(b1);
     const b2 = a.dupeSentinel(u8, new_name, 0) catch return E.NOMEM;
     defer a.free(b2);
+    dropJoined(s, dir_path, name);
+    dropJoined(s, new_dir, new_name);
     if (fw.renameAt(.{ .fd = from, .base = b1 }, .{ .fd = to, .base = b2 })) |x| return errnoOf(x);
     return 0;
 }
@@ -491,4 +682,11 @@ fn statfs(ctx: *anyopaque, out: *ninep.StatFs) u32 {
         .bavail = @intCast(f.caller_free),
     };
     return 0;
+}
+
+/// Drops the cache entries of `dir/name` and below.
+fn dropJoined(s: *Share, dir: []const u8, name: []const u8) void {
+    var buf: [ninep.max_path]u8 = undefined;
+    const p = if (dir.len == 0) name else std.fmt.bufPrint(&buf, "{s}/{s}", .{ dir, name }) catch return;
+    drop(s, p);
 }
