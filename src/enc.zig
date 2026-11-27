@@ -65,17 +65,40 @@ const Chars = struct {
     }
 };
 
+/// What a conversion does with a byte or a character that the encoding
+/// has no form for. `strict` stops the conversion with an error, as Tcl
+/// 9.1 does by default. `replace` puts U+FFFD (or `?` in a byte
+/// encoding). `tcl8` is the behavior of Tcl 8.6: a bad byte is the
+/// character of the same value.
+pub const Profile = enum { replace, strict, tcl8 };
+
+/// The profile of a conversion with no `-profile` option.
+pub fn defaultProfile(it: *const Interp) Profile {
+    return if (it.tcl9()) .strict else .tcl8;
+}
+
+pub fn parseProfile(it: *Interp, v: Value) Error!Profile {
+    const t = try it.str(v);
+    return std.meta.stringToEnum(Profile, t) orelse
+        it.failCode(try std.fmt.allocPrint(it.alloc(), "TCL ENCODING PROFILE {s}", .{t}), "bad profile name \"{s}\": must be replace, strict, or tcl8", .{t});
+}
+
+/// The output of a conversion, and the index of the first byte or
+/// character that `strict` stopped at.
+pub const Result = struct { text: []const u8, fail: ?usize = null };
+
 /// The byte string of a text in an encoding.
-pub fn encode(it: *Interp, name: []const u8, text: []const u8) Error![]const u8 {
+pub fn encode(it: *Interp, name: []const u8, text: []const u8, profile: Profile) Error!Result {
     const a = it.alloc();
     var out: std.ArrayList(u8) = .empty;
     if (eql(name, "utf-8") or eql(name, "identity")) {
         for (text) |b| try put(a, &out, b);
-        return out.items;
+        return .{ .text = out.items };
     }
     var chars: Chars = .{ .text = text };
     const limit: u21 = if (eql(name, "ascii")) 0x7f else 0xff;
-    while (chars.next()) |cp| {
+    var at: usize = 0;
+    while (chars.next()) |cp| : (at += 1) {
         if (eql(name, "unicode")) {
             if (cp >= 0x10000) {
                 const v = cp - 0x10000;
@@ -88,13 +111,15 @@ pub fn encode(it: *Interp, name: []const u8, text: []const u8) Error![]const u8 
             }
         } else if (eql(name, "binary")) {
             try put(a, &out, cp & 0xff);
+        } else if (cp > limit and profile == .strict) {
+            return .{ .text = out.items, .fail = at };
         } else try put(a, &out, if (cp > limit) '?' else cp);
     }
-    return out.items;
+    return .{ .text = out.items };
 }
 
 /// The text of a byte string in an encoding.
-pub fn decode(it: *Interp, name: []const u8, bytes_text: []const u8) Error![]const u8 {
+pub fn decode(it: *Interp, name: []const u8, bytes_text: []const u8, profile: Profile) Error!Result {
     const a = it.alloc();
     // The bytes of the string: each character is one byte.
     var raw: std.ArrayList(u8) = .empty;
@@ -102,9 +127,27 @@ pub fn decode(it: *Interp, name: []const u8, bytes_text: []const u8) Error![]con
     while (chars.next()) |cp| try raw.append(a, @truncate(cp));
     var out: std.ArrayList(u8) = .empty;
     if (eql(name, "utf-8") or eql(name, "identity")) {
-        var bytes: Chars = .{ .text = raw.items };
-        while (bytes.next()) |cp| try put(a, &out, cp);
-        return out.items;
+        if (profile == .tcl8) {
+            var bytes: Chars = .{ .text = raw.items };
+            while (bytes.next()) |cp| try put(a, &out, cp);
+            return .{ .text = out.items };
+        }
+        const r = raw.items;
+        var i: usize = 0;
+        while (i < r.len) {
+            const n = std.unicode.utf8ByteSequenceLength(r[i]) catch 0;
+            if (n > 0 and i + n <= r.len) {
+                if (std.unicode.utf8Decode(r[i .. i + n])) |cp| {
+                    try put(a, &out, cp);
+                    i += n;
+                    continue;
+                } else |_| {}
+            }
+            if (profile == .strict) return .{ .text = out.items, .fail = i };
+            try put(a, &out, 0xFFFD);
+            i += 1;
+        }
+        return .{ .text = out.items };
     }
     if (eql(name, "unicode")) {
         var i: usize = 0;
@@ -119,64 +162,121 @@ pub fn decode(it: *Interp, name: []const u8, bytes_text: []const u8) Error![]con
             }
             try put(a, &out, cp);
         }
-        return out.items;
+        if (raw.items.len % 2 == 1 and profile == .strict) return .{ .text = out.items, .fail = raw.items.len - 1 };
+        return .{ .text = out.items };
     }
-    for (raw.items) |b| try put(a, &out, if (eql(name, "ascii") and b > 0x7f) '?' else b);
-    return out.items;
+    const ascii = eql(name, "ascii");
+    for (raw.items, 0..) |b, i| {
+        if (ascii and b > 0x7f) {
+            if (profile == .strict) return .{ .text = out.items, .fail = i };
+            try put(a, &out, if (profile == .replace) 0xFFFD else '?');
+        } else try put(a, &out, b);
+    }
+    return .{ .text = out.items };
 }
 
 pub fn cmdEncoding(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("encoding option ?arg ...?");
     const a = it.alloc();
     const word = try it.str(argv[1]);
-    const subs = [_][]const u8{ "convertfrom", "convertto", "dirs", "names", "system" };
-    var sub: ?[]const u8 = null;
-    var hits: usize = 0;
-    for (subs) |s| {
-        if (eql(s, word)) {
-            sub = s;
-            hits = 1;
-            break;
-        }
-        if (word.len > 0 and std.mem.startsWith(u8, s, word)) {
-            sub = s;
-            hits += 1;
-        }
-    }
-    if (hits != 1) return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be convertfrom, convertto, dirs, names, or system", .{word});
-    const s = sub.?;
+    const Sub = enum { convertfrom, convertto, dirs, names, profiles, system, user };
+    const which = if (it.tcl9())
+        try @import("tcl9.zig").pick(it, Sub, word, .{ .v9_1 = &.{ .profiles, .user }, .code = "TCL LOOKUP SUBCOMMAND" })
+    else
+        try @import("tcl9.zig").pick(it, Sub, word, .{ .v9_1 = &.{ .profiles, .user }, .head = "bad option", .code = "TCL LOOKUP INDEX option" });
     const args = argv[2..];
-    if (eql(s, "names")) {
-        if (args.len != 0) return it.wrongArgs("encoding names");
-        var out: std.ArrayList(Value) = .empty;
-        for (names) |n| try out.append(a, .{ .str = n });
-        return value.wrapList(a, out.items);
+    switch (which) {
+        .names => {
+            if (args.len != 0) return it.wrongArgs("encoding names");
+            var out: std.ArrayList(Value) = .empty;
+            for (names) |n| try out.append(a, .{ .str = n });
+            return value.wrapList(a, out.items);
+        },
+        .profiles => {
+            if (args.len != 0) return it.wrongArgs("encoding profiles");
+            return .{ .str = "replace strict tcl8" };
+        },
+        .user => {
+            if (args.len != 0) return it.wrongArgs("encoding user");
+            return .{ .str = it.sys_encoding };
+        },
+        .system => {
+            if (args.len > 1) return it.wrongArgs("encoding system ?encoding?");
+            if (args.len == 1) {
+                const name = try it.str(args[0]);
+                try need(it, name);
+                it.sys_encoding = try a.dupe(u8, name);
+                return Value.empty;
+            }
+            return .{ .str = it.sys_encoding };
+        },
+        .dirs => {
+            if (args.len > 1) return it.wrongArgs("encoding dirs ?dirList?");
+            if (args.len == 1) {
+                _ = it.list(args[0]) catch return it.fail("expected directory list but got \"{s}\"", .{try it.str(args[0])});
+                it.enc_dirs = args[0];
+            }
+            return it.enc_dirs;
+        },
+        .convertfrom, .convertto => return convert(it, which == .convertto, args),
     }
-    if (eql(s, "system")) {
-        if (args.len > 1) return it.wrongArgs("encoding system ?encoding?");
-        if (args.len == 1) {
-            const name = try it.str(args[0]);
-            try need(it, name);
-            it.sys_encoding = try a.dupe(u8, name);
-            return Value.empty;
+}
+
+fn convert(it: *Interp, to: bool, args_in: []const Value) Error!Value {
+    var args = args_in;
+    var profile = defaultProfile(it);
+    var fail_var: ?[]const u8 = null;
+    // The options of Tcl 9.1: -profile and -failindex, before the
+    // encoding and the data.
+    if (it.tcl9()) {
+        while (args.len > 2) {
+            const o = try it.str(args[0]);
+            if (eql(o, "-profile")) {
+                profile = try parseProfile(it, args[1]);
+            } else if (eql(o, "-failindex")) {
+                fail_var = try it.str(args[1]);
+            } else if (o.len > 0 and o[0] == '-') {
+                return it.failCode(try std.fmt.allocPrint(it.alloc(), "TCL LOOKUP INDEX option {s}", .{o}), "bad option \"{s}\": must be -profile or -failindex", .{o});
+            } else break;
+            args = args[2..];
         }
-        return .{ .str = it.sys_encoding };
-    }
-    if (eql(s, "dirs")) {
-        if (args.len > 1) return it.wrongArgs("encoding dirs ?dirList?");
-        if (args.len == 1) {
-            _ = it.list(args[0]) catch return it.fail("expected directory list but got \"{s}\"", .{try it.str(args[0])});
-            it.enc_dirs = args[0];
-        }
-        return it.enc_dirs;
     }
     if (args.len < 1 or args.len > 2) {
-        if (eql(s, "convertto")) return it.wrongArgs("encoding convertto ?encoding? data");
+        if (it.tcl9()) {
+            if (to) return it.wrongArgs("encoding convertto ?-profile profile? ?-failindex var? encoding data\" or \"encoding convertto data");
+            return it.wrongArgs("encoding convertfrom ?-profile profile? ?-failindex var? encoding data\" or \"encoding convertfrom data");
+        }
+        if (to) return it.wrongArgs("encoding convertto ?encoding? data");
         return it.wrongArgs("encoding convertfrom ?encoding? data");
     }
     const name = if (args.len == 2) try it.str(args[0]) else it.sys_encoding;
     try need(it, name);
     const data = try it.str(args[args.len - 1]);
-    if (eql(s, "convertto")) return .{ .str = try encode(it, name, data) };
-    return .{ .str = try decode(it, name, data) };
+    const r = if (to) try encode(it, name, data, profile) else try decode(it, name, data, profile);
+    if (fail_var) |fv| {
+        try it.setVar(fv, .{ .int = if (r.fail) |f| @intCast(f) else -1 });
+        return .{ .str = r.text };
+    }
+    if (r.fail) |f| {
+        const code = try std.fmt.allocPrint(it.alloc(), "TCL ENCODING ILLEGALSEQUENCE {d}", .{f});
+        if (to) {
+            var c: Chars = .{ .text = data };
+            var k: usize = 0;
+            var cp: u21 = 0;
+            while (c.next()) |x| : (k += 1) if (k == f) {
+                cp = x;
+                break;
+            };
+            return it.failCode(code, "unexpected character at index {d}: 'U+{X:0>6}'", .{ f, cp });
+        }
+        var c: Chars = .{ .text = data };
+        var k: usize = 0;
+        var b: u21 = 0;
+        while (c.next()) |x| : (k += 1) if (k == f) {
+            b = x;
+            break;
+        };
+        return it.failCode(code, "unexpected byte sequence starting at index {d}: '\\x{X:0>2}'", .{ f, b & 0xff });
+    }
+    return .{ .str = r.text };
 }

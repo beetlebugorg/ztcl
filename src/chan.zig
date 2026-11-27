@@ -7,6 +7,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const enc = @import("enc.zig");
 /// The process code of the target: `proc_windows.zig` on Windows.
 const proc_mod = if (@import("builtin").os.tag == .windows) @import("proc_windows.zig") else @import("proc.zig");
 const pty_mod = if (@import("builtin").os.tag == .windows) @import("pty_windows.zig") else @import("pty.zig");
@@ -40,6 +41,9 @@ pub const Channel = struct {
     input: Translation = .auto,
     output: Translation = .lf,
     binary: bool = false,
+    /// The `-profile` of the channel. Null is the default of the
+    /// release: `strict` in Tcl 9.1, `tcl8` in Tcl 8.6.
+    profile: ?enc.Profile = null,
     buffering: []const u8 = "full",
     buffersize: i64 = 4096,
     blocking: bool = true,
@@ -287,7 +291,56 @@ fn decode(it: *Interp, c: *const Channel, raw: []const u8) Error![]const u8 {
             try out.append(a, 0x80 | (ch & 63));
         } else try out.append(a, ch);
     }
+    if (!c.binary) {
+        const p = c.profile orelse enc.defaultProfile(it);
+        if (p != .tcl8) return checkUtf8(it, c, out.items, p);
+    }
     return out.items;
+}
+
+/// The text of UTF-8 input under the profile `strict` or `replace`. A
+/// byte that starts no valid sequence is an error with `strict` and
+/// U+FFFD with `replace`. A sequence that the end of the input cuts
+/// stays as it is.
+fn checkUtf8(it: *Interp, c: *const Channel, text: []u8, p: enc.Profile) Error![]const u8 {
+    var i: usize = 0;
+    var out: ?std.ArrayList(u8) = null;
+    var copied: usize = 0;
+    while (i < text.len) {
+        if (text[i] < 0x80) {
+            i += 1;
+            continue;
+        }
+        const n = std.unicode.utf8ByteSequenceLength(text[i]) catch 0;
+        if (n > 0 and i + n > text.len) {
+            // A cut sequence at the end: the start of a valid one.
+            const tail = text[i..];
+            var ok = true;
+            for (tail[1..]) |b| ok = ok and b & 0xC0 == 0x80;
+            if (ok) break;
+        }
+        if (n > 0 and i + n <= text.len) {
+            if (std.unicode.utf8Decode(text[i .. i + n])) |_| {
+                i += n;
+                continue;
+            } else |_| {}
+        }
+        if (p == .strict) {
+            const msg = "invalid or incomplete multibyte or wide character";
+            return it.failCode("POSIX EILSEQ {" ++ msg ++ "}", "error reading \"{s}\": " ++ msg, .{c.name});
+        }
+        const a = it.alloc();
+        if (out == null) out = .empty;
+        try out.?.appendSlice(a, text[copied..i]);
+        try out.?.appendSlice(a, "\u{FFFD}");
+        i += 1;
+        copied = i;
+    }
+    if (out) |*o| {
+        try o.appendSlice(it.alloc(), text[copied..]);
+        return o.items;
+    }
+    return text;
 }
 
 fn writeText(it: *Interp, c: *Channel, text: []const u8) Error!void {
@@ -901,6 +954,7 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 if (ch.readable and ch.writable) return try value.newList(x.alloc(), &.{ in, out });
                 return if (ch.readable) in else out;
             }
+            if (x.tcl9() and eql(o, "-profile")) return .{ .str = @tagName(ch.profile orelse enc.defaultProfile(x)) };
             if (ch.kind != .file and ch.kind != .pipe) {
                 if (try @import("sock.zig").option(x, ch, o)) |v| return v;
             }
@@ -911,25 +965,27 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             return null;
         }
     }.f;
-    const known = "-blocking, -buffering, -buffersize, -encoding, -eofchar, or -translation";
+    const known = if (it.tcl9()) "-blocking, -buffering, -buffersize, -encoding, -eofchar, -profile, or -translation" else "-blocking, -buffering, -buffersize, -encoding, -eofchar, or -translation";
     if (opts.len == 0) {
         var out: std.ArrayList(Value) = .empty;
-        for ([_][]const u8{ "-blocking", "-buffering", "-buffersize", "-encoding", "-eofchar", "-translation" }) |o| {
+        const base: []const []const u8 = if (it.tcl9()) &.{ "-blocking", "-buffering", "-buffersize", "-encoding", "-eofchar", "-profile", "-translation" } else &.{ "-blocking", "-buffering", "-buffersize", "-encoding", "-eofchar", "-translation" };
+        for (base) |o| {
             try out.append(a, .{ .str = o });
             try out.append(a, (try get(it, c, o)).?);
         }
         if (c.kind == .socket or c.kind == .server) try @import("sock.zig").options(it, c, &out);
         // The list is in the order of Tcl: -translation is last.
         const n = out.items.len;
-        if (n > 12) {
-            const tr = [2]Value{ out.items[10], out.items[11] };
-            std.mem.copyForwards(Value, out.items[10 .. n - 2], out.items[12..n]);
+        const t = 2 * (base.len - 1);
+        if (n > t + 2) {
+            const tr = [2]Value{ out.items[t], out.items[t + 1] };
+            std.mem.copyForwards(Value, out.items[t .. n - 2], out.items[t + 2 .. n]);
             out.items[n - 2] = tr[0];
             out.items[n - 1] = tr[1];
         }
         return value.wrapList(a, out.items);
     }
-    const names = [_][]const u8{ "-blocking", "-buffering", "-buffersize", "-encoding", "-eofchar", "-translation", "-peername", "-sockname", "-error", "-connecting" };
+    const names = [_][]const u8{ "-blocking", "-buffering", "-buffersize", "-encoding", "-eofchar", "-translation", "-peername", "-sockname", "-error", "-connecting", "-profile" };
     const full = struct {
         fn f(x: *Interp, v: Value, table: []const []const u8) Error![]const u8 {
             const o = try x.str(v);
@@ -952,7 +1008,7 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (opts.len % 2 != 0) return it.wrongArgs("fconfigure channelId ?-option value ...?");
     var i: usize = 0;
     while (i < opts.len) : (i += 2) {
-        const o = try full(it, opts[i], names[0..6]);
+        const o = try full(it, opts[i], if (it.tcl9()) &.{ "-blocking", "-buffering", "-buffersize", "-encoding", "-eofchar", "-translation", "-profile" } else names[0..6]);
         const v = opts[i + 1];
         if (eql(o, "-blocking")) {
             c.blocking = try @import("expr.zig").truthy(it, v);
@@ -999,6 +1055,8 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             c.eof_in = ch[0];
             c.eof_out = ch[1];
             cutAtEof(c, c.rpos);
+        } else if (it.tcl9() and eql(o, "-profile")) {
+            c.profile = try enc.parseProfile(it, v);
         } else {
             return it.fail("bad option \"{s}\": should be one of {s}", .{ o, known });
         }
