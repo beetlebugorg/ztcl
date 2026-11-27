@@ -694,13 +694,22 @@ pub fn build(b: *std.Build) void {
     }
     // The spec tests of the wasm engine of `ztcl::wasm` (docs/dev/wasm-engine.md).
     const wspec = b.addExecutable(.{ .name = "wasm-spec", .root_module = b.createModule(.{
-        .root_source_file = b.path("src/wasmrt/spec_runner.zig"),
+        .root_source_file = b.path("src/wasm_spec.zig"),
         .target = target,
         .optimize = .ReleaseSafe,
     }) });
     const wspec_run = b.addRunArtifact(wspec);
     wspec_run.addPassthruArgs();
     b.step("wasm-spec", "Run the spec tests of the wasm engine: zig build wasm-spec -- FILE.json...").dependOn(&wspec_run.step);
+    // The differential fuzzer of the wasm JIT: interpreter against JIT.
+    const wfuzz = b.addExecutable(.{ .name = "wasm-fuzz", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/wasm_fuzz.zig"),
+        .target = target,
+        .optimize = .ReleaseSafe,
+    }) });
+    const wfuzz_run = b.addRunArtifact(wfuzz);
+    wfuzz_run.addPassthruArgs();
+    b.step("wasm-fuzz", "Compare the wasm JIT with the interpreter on random modules: zig build wasm-fuzz -- ?-seed N? ?-count N?").dependOn(&wfuzz_run.step);
     // The probe of executable memory: `zig build jit-probe`.
     const probe_exe = b.addExecutable(.{ .name = "jit-probe", .root_module = b.createModule(.{
         .root_source_file = b.path("tools/jit-probe.zig"),

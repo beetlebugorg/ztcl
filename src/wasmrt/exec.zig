@@ -31,6 +31,7 @@ const ValType = mod.ValType;
 const FuncType = mod.FuncType;
 const Ins = mod.Ins;
 const op = mod.op;
+const jit = @import("jit_x64.zig");
 
 pub const Trap = error{
     Unreachable,
@@ -178,6 +179,11 @@ pub const Store = struct {
     /// The count of nested runs of the interpreter (host calls inside).
     nest: u32 = 0,
     max_nest: u32 = 100,
+    /// True when calls run in the JIT code of `jit_x64.zig`. The default is
+    /// on where the JIT is supported.
+    jit_on: bool = jit.supported,
+    /// The lowest native stack address of the JIT frames of the outermost run.
+    jit_rsp_limit: usize = 0,
     /// The reason of the last link error.
     link_msg: []const u8 = "",
     link_index: usize = 0,
@@ -265,6 +271,10 @@ pub const Store = struct {
         return h.fits(h.ctx, more);
     }
 
+    pub fn tickPub(s: *Store) Trap!void {
+        return s.tick();
+    }
+
     fn tick(s: *Store) Trap!void {
         if (s.units.* == 0) return error.ComputeLimit;
         s.units.* -= 1;
@@ -281,7 +291,7 @@ pub const Store = struct {
         s.units.* -= units;
     }
 
-    fn ensureStack(s: *Store, need: usize) Error!void {
+    pub fn ensureStack(s: *Store, need: usize) Error!void {
         if (need <= s.stack.len) return;
         if (need > s.max_slots) return error.StackExhausted;
         var n = @max(s.stack.len * 2, 4096);
@@ -936,6 +946,28 @@ fn store(comptime o: u16, m: *Memory, base: u64, off: u32, v: u64) Trap!void {
 
 // ---- The interpreter ----
 
+/// The JIT code of a module: compiled at the first call, or null when the
+/// JIT cannot compile it.
+fn jitCode(m: *const Module) Error!?*const jit.Code {
+    const mm = @constCast(m);
+    if (mm.jit) |c| return @ptrCast(@alignCast(c));
+    if (mm.jit_failed) return null;
+    jit.lock();
+    defer jit.unlock();
+    const c = jit.compile(mm.arena.child_allocator, m) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => {
+            mm.jit_failed = true;
+            return null;
+        },
+    } orelse {
+        mm.jit_failed = true;
+        return null;
+    };
+    mm.jit = c;
+    return c;
+}
+
 /// Runs the wasm function `addr`. Its arguments are on top of the stack.
 /// At the end its results are on top of the stack.
 fn run(s: *Store, addr: u32) Error!void {
@@ -953,6 +985,12 @@ fn run(s: *Store, addr: u32) Error!void {
         const fi = &s.funcs.items[addr];
         const w = fi.kind.wasm;
         if (w.inst.dead) return error.InstanceDeleted;
+        if (jit.supported and s.jit_on) {
+            if (try jitCode(w.inst.module)) |c| {
+                const idx = (@intFromPtr(w.func) - @intFromPtr(w.inst.module.funcs.ptr)) / @sizeOf(mod.Func);
+                return jit.run(s, c, w.inst, idx);
+            }
+        }
         try s.tick();
         func = w.func;
         inst = w.inst;
@@ -1072,172 +1110,184 @@ fn run(s: *Store, addr: u32) Error!void {
                     },
                 }
             },
-            0x1a => sp -= 1,
-            0x1b => {
-                sp -= 2;
-                if (u32of(st[sp + 1]) == 0) st[sp - 1] = st[sp];
-            },
-            0x20 => {
-                st[sp] = st[fp + ins.a];
-                sp += 1;
-            },
-            0x21 => {
-                sp -= 1;
-                st[fp + ins.a] = st[sp];
-            },
-            0x22 => st[fp + ins.a] = st[sp - 1],
-            0x23 => {
-                st[sp] = inst.globals[ins.a].val;
-                sp += 1;
-            },
-            0x24 => {
-                sp -= 1;
-                inst.globals[ins.a].val = st[sp];
-            },
-            0x25 => {
-                const t = inst.tables[ins.a];
-                const i = u32of(st[sp - 1]);
-                if (i >= t.refs.items.len) return error.OutOfBoundsTable;
-                st[sp - 1] = t.refs.items[i];
-            },
-            0x26 => {
-                sp -= 2;
-                const t = inst.tables[ins.a];
-                const i = u32of(st[sp]);
-                if (i >= t.refs.items.len) return error.OutOfBoundsTable;
-                t.refs.items[i] = st[sp + 1];
-            },
-            inline 0x28...0x35 => |o| st[sp - 1] = try load(o, inst.mems[0], st[sp - 1], ins.a),
-            inline 0x36...0x3e => |o| {
-                sp -= 2;
-                try store(o, inst.mems[0], st[sp], ins.a, st[sp + 1]);
-            },
-            0x3f => {
-                st[sp] = inst.mems[0].pages();
-                sp += 1;
-            },
-            0x40 => {
-                const d = u32of(st[sp - 1]);
-                st[sp - 1] = if (s.growMemory(inst.mems[0], d)) |old| old else 0xffff_ffff;
-            },
-            0x41, 0x42, 0x43, 0x44 => {
-                st[sp] = ins.b;
-                sp += 1;
-            },
-            0x45 => st[sp - 1] = ofBool(u32of(st[sp - 1]) == 0),
-            inline 0x46...0x4f => |o| {
-                sp -= 1;
-                st[sp - 1] = ofBool(cmp32(o, u32of(st[sp - 1]), u32of(st[sp])));
-            },
-            0x50 => st[sp - 1] = ofBool(st[sp - 1] == 0),
-            inline 0x51...0x5a => |o| {
-                sp -= 1;
-                st[sp - 1] = ofBool(cmp64(o, st[sp - 1], st[sp]));
-            },
-            inline 0x5b...0x60 => |o| {
-                sp -= 1;
-                st[sp - 1] = ofBool(fcmp(f32, o - 0x5b, f32of(st[sp - 1]), f32of(st[sp])));
-            },
-            inline 0x61...0x66 => |o| {
-                sp -= 1;
-                st[sp - 1] = ofBool(fcmp(f64, o - 0x61, f64of(st[sp - 1]), f64of(st[sp])));
-            },
-            0x67 => st[sp - 1] = @clz(u32of(st[sp - 1])),
-            0x68 => st[sp - 1] = @ctz(u32of(st[sp - 1])),
-            0x69 => st[sp - 1] = @popCount(u32of(st[sp - 1])),
-            inline 0x6a...0x78 => |o| {
-                sp -= 1;
-                st[sp - 1] = try intOp32(o, u32of(st[sp - 1]), u32of(st[sp]));
-            },
-            0x79 => st[sp - 1] = @clz(st[sp - 1]),
-            0x7a => st[sp - 1] = @ctz(st[sp - 1]),
-            0x7b => st[sp - 1] = @popCount(st[sp - 1]),
-            inline 0x7c...0x8a => |o| {
-                sp -= 1;
-                st[sp - 1] = try intOp64(o, st[sp - 1], st[sp]);
-            },
-            inline 0x8b...0x91 => |o| st[sp - 1] = bits32(funary(f32, o - 0x8b, f32of(st[sp - 1]))),
-            inline 0x92...0x98 => |o| {
-                sp -= 1;
-                st[sp - 1] = bits32(fbinary(f32, o - 0x92, f32of(st[sp - 1]), f32of(st[sp])));
-            },
-            inline 0x99...0x9f => |o| st[sp - 1] = bits64(funary(f64, o - 0x99, f64of(st[sp - 1]))),
-            inline 0xa0...0xa6 => |o| {
-                sp -= 1;
-                st[sp - 1] = bits64(fbinary(f64, o - 0xa0, f64of(st[sp - 1]), f64of(st[sp])));
-            },
-            inline 0xa7...0xc4, op.fc + 0...op.fc + 7 => |o| st[sp - 1] = try convert(o, st[sp - 1]),
-            0xd0 => {
-                st[sp] = 0;
-                sp += 1;
-            },
-            0xd1 => st[sp - 1] = ofBool(st[sp - 1] == 0),
-            0xd2 => {
-                st[sp] = @as(u64, inst.funcs[ins.a]) + 1;
-                sp += 1;
-            },
-            op.fc + 8 => {
-                sp -= 3;
-                try memoryInit(inst, ins.a, u32of(st[sp]), u32of(st[sp + 1]), u32of(st[sp + 2]));
-                try s.bulk(u32of(st[sp + 2]));
-            },
-            op.fc + 9 => inst.datas[ins.a] = &.{},
-            op.fc + 10 => {
-                sp -= 3;
-                const m = inst.mems[0];
-                const d = u32of(st[sp]);
-                const src = u32of(st[sp + 1]);
-                const n = u32of(st[sp + 2]);
-                if (@as(u64, src) + n > m.bytes.len or @as(u64, d) + n > m.bytes.len) return error.OutOfBoundsMemory;
-                try s.bulk(n);
-                if (d <= src) std.mem.copyForwards(u8, m.bytes[d .. d + n], m.bytes[src .. src + n]) else std.mem.copyBackwards(u8, m.bytes[d .. d + n], m.bytes[src .. src + n]);
-            },
-            op.fc + 11 => {
-                sp -= 3;
-                const m = inst.mems[0];
-                const d = u32of(st[sp]);
-                const v: u8 = @truncate(st[sp + 1]);
-                const n = u32of(st[sp + 2]);
-                if (@as(u64, d) + n > m.bytes.len) return error.OutOfBoundsMemory;
-                try s.bulk(n);
-                @memset(m.bytes[d .. d + n], v);
-            },
-            op.fc + 12 => {
-                sp -= 3;
-                try tableInit(s, inst, @intCast(ins.b), ins.a, u32of(st[sp]), u32of(st[sp + 1]), u32of(st[sp + 2]));
-            },
-            op.fc + 13 => s.dropElem(inst, ins.a),
-            op.fc + 14 => {
-                sp -= 3;
-                const td = inst.tables[ins.a];
-                const ts = inst.tables[@intCast(ins.b)];
-                const d = u32of(st[sp]);
-                const src = u32of(st[sp + 1]);
-                const n = u32of(st[sp + 2]);
-                if (@as(u64, src) + n > ts.refs.items.len or @as(u64, d) + n > td.refs.items.len) return error.OutOfBoundsTable;
-                try s.bulk(n);
-                if (d <= src) std.mem.copyForwards(u64, td.refs.items[d .. d + n], ts.refs.items[src .. src + n]) else std.mem.copyBackwards(u64, td.refs.items[d .. d + n], ts.refs.items[src .. src + n]);
-            },
-            op.fc + 15 => {
-                sp -= 1;
-                const n = u32of(st[sp]);
-                const t = inst.tables[ins.a];
-                st[sp - 1] = if (s.growTable(t, n, st[sp - 1])) |old| old else 0xffff_ffff;
-            },
-            op.fc + 16 => {
-                st[sp] = inst.tables[ins.a].refs.items.len;
-                sp += 1;
-            },
-            op.fc + 17 => {
-                sp -= 3;
-                const t = inst.tables[ins.a];
-                const d = u32of(st[sp]);
-                const n = u32of(st[sp + 2]);
-                if (@as(u64, d) + n > t.refs.items.len) return error.OutOfBoundsTable;
-                try s.bulk(n);
-                @memset(t.refs.items[d .. d + n], st[sp + 1]);
-            },
-            else => unreachable,
+            else => sp = try simple(s, inst, st, fp, sp, ins),
         }
     }
+}
+
+/// The instructions with no control flow: each one changes the values at
+/// the top of the stack `st[fp..sp]` and gives the new `sp`. The
+/// interpreter inlines it, and the JIT calls `simpleOp` for the
+/// instructions that it does not compile itself, so both run one code.
+pub inline fn simple(s: *Store, inst: *Instance, st: [*]u64, fp: usize, sp_in: usize, ins: Ins) Error!usize {
+    var sp = sp_in;
+    switch (ins.op) {
+        0x1a => sp -= 1,
+        0x1b => {
+            sp -= 2;
+            if (u32of(st[sp + 1]) == 0) st[sp - 1] = st[sp];
+        },
+        0x20 => {
+            st[sp] = st[fp + ins.a];
+            sp += 1;
+        },
+        0x21 => {
+            sp -= 1;
+            st[fp + ins.a] = st[sp];
+        },
+        0x22 => st[fp + ins.a] = st[sp - 1],
+        0x23 => {
+            st[sp] = inst.globals[ins.a].val;
+            sp += 1;
+        },
+        0x24 => {
+            sp -= 1;
+            inst.globals[ins.a].val = st[sp];
+        },
+        0x25 => {
+            const t = inst.tables[ins.a];
+            const i = u32of(st[sp - 1]);
+            if (i >= t.refs.items.len) return error.OutOfBoundsTable;
+            st[sp - 1] = t.refs.items[i];
+        },
+        0x26 => {
+            sp -= 2;
+            const t = inst.tables[ins.a];
+            const i = u32of(st[sp]);
+            if (i >= t.refs.items.len) return error.OutOfBoundsTable;
+            t.refs.items[i] = st[sp + 1];
+        },
+        inline 0x28...0x35 => |o| st[sp - 1] = try load(o, inst.mems[0], st[sp - 1], ins.a),
+        inline 0x36...0x3e => |o| {
+            sp -= 2;
+            try store(o, inst.mems[0], st[sp], ins.a, st[sp + 1]);
+        },
+        0x3f => {
+            st[sp] = inst.mems[0].pages();
+            sp += 1;
+        },
+        0x40 => {
+            const d = u32of(st[sp - 1]);
+            st[sp - 1] = if (s.growMemory(inst.mems[0], d)) |old| old else 0xffff_ffff;
+        },
+        0x41, 0x42, 0x43, 0x44 => {
+            st[sp] = ins.b;
+            sp += 1;
+        },
+        0x45 => st[sp - 1] = ofBool(u32of(st[sp - 1]) == 0),
+        inline 0x46...0x4f => |o| {
+            sp -= 1;
+            st[sp - 1] = ofBool(cmp32(o, u32of(st[sp - 1]), u32of(st[sp])));
+        },
+        0x50 => st[sp - 1] = ofBool(st[sp - 1] == 0),
+        inline 0x51...0x5a => |o| {
+            sp -= 1;
+            st[sp - 1] = ofBool(cmp64(o, st[sp - 1], st[sp]));
+        },
+        inline 0x5b...0x60 => |o| {
+            sp -= 1;
+            st[sp - 1] = ofBool(fcmp(f32, o - 0x5b, f32of(st[sp - 1]), f32of(st[sp])));
+        },
+        inline 0x61...0x66 => |o| {
+            sp -= 1;
+            st[sp - 1] = ofBool(fcmp(f64, o - 0x61, f64of(st[sp - 1]), f64of(st[sp])));
+        },
+        0x67 => st[sp - 1] = @clz(u32of(st[sp - 1])),
+        0x68 => st[sp - 1] = @ctz(u32of(st[sp - 1])),
+        0x69 => st[sp - 1] = @popCount(u32of(st[sp - 1])),
+        inline 0x6a...0x78 => |o| {
+            sp -= 1;
+            st[sp - 1] = try intOp32(o, u32of(st[sp - 1]), u32of(st[sp]));
+        },
+        0x79 => st[sp - 1] = @clz(st[sp - 1]),
+        0x7a => st[sp - 1] = @ctz(st[sp - 1]),
+        0x7b => st[sp - 1] = @popCount(st[sp - 1]),
+        inline 0x7c...0x8a => |o| {
+            sp -= 1;
+            st[sp - 1] = try intOp64(o, st[sp - 1], st[sp]);
+        },
+        inline 0x8b...0x91 => |o| st[sp - 1] = bits32(funary(f32, o - 0x8b, f32of(st[sp - 1]))),
+        inline 0x92...0x98 => |o| {
+            sp -= 1;
+            st[sp - 1] = bits32(fbinary(f32, o - 0x92, f32of(st[sp - 1]), f32of(st[sp])));
+        },
+        inline 0x99...0x9f => |o| st[sp - 1] = bits64(funary(f64, o - 0x99, f64of(st[sp - 1]))),
+        inline 0xa0...0xa6 => |o| {
+            sp -= 1;
+            st[sp - 1] = bits64(fbinary(f64, o - 0xa0, f64of(st[sp - 1]), f64of(st[sp])));
+        },
+        inline 0xa7...0xc4, op.fc + 0...op.fc + 7 => |o| st[sp - 1] = try convert(o, st[sp - 1]),
+        0xd0 => {
+            st[sp] = 0;
+            sp += 1;
+        },
+        0xd1 => st[sp - 1] = ofBool(st[sp - 1] == 0),
+        0xd2 => {
+            st[sp] = @as(u64, inst.funcs[ins.a]) + 1;
+            sp += 1;
+        },
+        op.fc + 8 => {
+            sp -= 3;
+            try memoryInit(inst, ins.a, u32of(st[sp]), u32of(st[sp + 1]), u32of(st[sp + 2]));
+            try s.bulk(u32of(st[sp + 2]));
+        },
+        op.fc + 9 => inst.datas[ins.a] = &.{},
+        op.fc + 10 => {
+            sp -= 3;
+            const m = inst.mems[0];
+            const d = u32of(st[sp]);
+            const src = u32of(st[sp + 1]);
+            const n = u32of(st[sp + 2]);
+            if (@as(u64, src) + n > m.bytes.len or @as(u64, d) + n > m.bytes.len) return error.OutOfBoundsMemory;
+            try s.bulk(n);
+            if (d <= src) std.mem.copyForwards(u8, m.bytes[d .. d + n], m.bytes[src .. src + n]) else std.mem.copyBackwards(u8, m.bytes[d .. d + n], m.bytes[src .. src + n]);
+        },
+        op.fc + 11 => {
+            sp -= 3;
+            const m = inst.mems[0];
+            const d = u32of(st[sp]);
+            const v: u8 = @truncate(st[sp + 1]);
+            const n = u32of(st[sp + 2]);
+            if (@as(u64, d) + n > m.bytes.len) return error.OutOfBoundsMemory;
+            try s.bulk(n);
+            @memset(m.bytes[d .. d + n], v);
+        },
+        op.fc + 12 => {
+            sp -= 3;
+            try tableInit(s, inst, @intCast(ins.b), ins.a, u32of(st[sp]), u32of(st[sp + 1]), u32of(st[sp + 2]));
+        },
+        op.fc + 13 => s.dropElem(inst, ins.a),
+        op.fc + 14 => {
+            sp -= 3;
+            const td = inst.tables[ins.a];
+            const ts = inst.tables[@intCast(ins.b)];
+            const d = u32of(st[sp]);
+            const src = u32of(st[sp + 1]);
+            const n = u32of(st[sp + 2]);
+            if (@as(u64, src) + n > ts.refs.items.len or @as(u64, d) + n > td.refs.items.len) return error.OutOfBoundsTable;
+            try s.bulk(n);
+            if (d <= src) std.mem.copyForwards(u64, td.refs.items[d .. d + n], ts.refs.items[src .. src + n]) else std.mem.copyBackwards(u64, td.refs.items[d .. d + n], ts.refs.items[src .. src + n]);
+        },
+        op.fc + 15 => {
+            sp -= 1;
+            const n = u32of(st[sp]);
+            const t = inst.tables[ins.a];
+            st[sp - 1] = if (s.growTable(t, n, st[sp - 1])) |old| old else 0xffff_ffff;
+        },
+        op.fc + 16 => {
+            st[sp] = inst.tables[ins.a].refs.items.len;
+            sp += 1;
+        },
+        op.fc + 17 => {
+            sp -= 3;
+            const t = inst.tables[ins.a];
+            const d = u32of(st[sp]);
+            const n = u32of(st[sp + 2]);
+            if (@as(u64, d) + n > t.refs.items.len) return error.OutOfBoundsTable;
+            try s.bulk(n);
+            @memset(t.refs.items[d .. d + n], st[sp + 1]);
+        },
+        else => unreachable,
+    }
+    return sp;
 }

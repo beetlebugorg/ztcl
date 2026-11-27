@@ -125,6 +125,9 @@ pub const Func = struct {
     max_height: u32 = 0,
     code: []Ins = &.{},
     targets: []Target = &.{},
+    /// The height of the frame before each instruction of `code`, for the
+    /// JIT: the slot of the top operand is `heights[i] - 1`.
+    heights: []u32 = &.{},
 };
 
 /// The internal opcodes after the opcodes of WebAssembly.
@@ -163,10 +166,15 @@ pub const Module = struct {
     import_globals: u32 = 0,
     /// The features that the code uses, for `ztcl::wasm info`.
     features: Features = .{},
+    /// The machine code of `jit_x64.zig`, after the first call, or null.
+    jit: ?*anyopaque = null,
+    /// True when the JIT could not compile the module.
+    jit_failed: bool = false,
 
     /// Frees the module and its arena.
     pub fn deinit(m: *Module) void {
         const gpa = m.arena.child_allocator;
+        if (m.jit) |c| @import("jit_x64.zig").freeCode(gpa, @ptrCast(@alignCast(c)));
         m.arena.deinit();
         gpa.destroy(m);
     }
@@ -782,6 +790,9 @@ const Compiler = struct {
     patches: std.ArrayList(Patch) = .empty,
     max_vals: usize = 0,
     at: usize = 0,
+    heights: std.ArrayList(u32) = .empty,
+    /// The height before the instruction that the loop reads now.
+    cur_h: u32 = 0,
 
     fn err(k: *Compiler, msg: []const u8) DecodeError {
         return k.c.invalid(k.at, msg);
@@ -844,6 +855,7 @@ const Compiler = struct {
 
     fn emit(k: *Compiler, ins: Ins) DecodeError!void {
         try k.code.append(k.c.a, ins);
+        try k.heights.append(k.c.a, k.cur_h);
     }
 
     fn pc(k: *const Compiler) u32 {
@@ -1005,6 +1017,7 @@ fn compileBody(r: *Reader, c: *Ctx, f: *Func) DecodeError!void {
 
     while (k.ctrls.items.len > 0) {
         k.at = r.base + r.pos;
+        k.cur_h = k.height(k.vals.items.len);
         if (r.eof()) return r.fail("unexpected end of section or function");
         const b = try r.byte();
         switch (b) {
@@ -1053,6 +1066,8 @@ fn compileBody(r: *Reader, c: *Ctx, f: *Func) DecodeError!void {
                 }
                 if (fr.kind == .func) {
                     k.resolve(fr, k.pc());
+                    // A branch to the end leaves the results at the label.
+                    k.cur_h = k.height(fr.height + fr.results.len);
                     try k.emit(.{ .op = op.ret });
                 } else {
                     k.resolve(fr, k.pc());
@@ -1277,6 +1292,7 @@ fn compileBody(r: *Reader, c: *Ctx, f: *Func) DecodeError!void {
     if (!r.eof()) return r.fail("section size mismatch");
     f.code = k.code.items;
     f.targets = k.targets.items;
+    f.heights = k.heights.items;
     f.max_height = @intCast(locals.items.len + k.max_vals + 1);
 }
 

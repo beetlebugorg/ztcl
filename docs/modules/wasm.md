@@ -50,6 +50,7 @@ add func {{i32 i32} i32}
 | `ztcl::wasm imports module` | A list of module, name, kind, and type for each import. |
 | `ztcl::wasm info module` | A dict of counts and the features that the module uses. |
 | `ztcl::wasm delete handle ?handle ...?` | Deletes modules and instances. |
+| `ztcl::wasm jit ?boolean?` | Reads or sets the use of the JIT tier. Gives 1 when it is on. |
 
 The memory commands use the memory that the instance exports as `memory`, or its first memory.
 
@@ -95,6 +96,10 @@ ztcl::wasm call $w run
 ```text
 log 7
 ```
+
+## The JIT
+
+On x86-64 Linux and macOS, the engine compiles a module to machine code at its first call, and the calls run in that code. Elsewhere the interpreter runs. The JIT gives the same results, traps, compute units, and NaN bits as the interpreter: the CI runs the spec tests in both, and a fuzzer compares the two on random modules. `ztcl::wasm jit 0` turns the JIT off for the interpreter, and `ztcl::wasm jit` gives 1 when it is on.
 
 ## Limits
 
