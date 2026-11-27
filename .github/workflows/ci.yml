@@ -275,6 +275,9 @@ jobs:
           ext=; if [ "$RUNNER_OS" = Windows ]; then ext=.exe; fi
           ../zig-out/bin/ztcl build -o hello$ext --embed lib.tcl --embed data main.tcl
           test "$(./hello$ext a b | tr -d '\r')" = "$(printf 'hello from main.tcl a b\na file in the payload')"
+      - name: Build a stripped binary
+        if: runner.os == 'Linux'
+        run: tests/strip.sh
       - name: Build each target from Linux
         if: runner.os == 'Linux'
         run: |

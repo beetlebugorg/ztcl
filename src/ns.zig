@@ -335,6 +335,7 @@ pub fn cmdUnknown(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 }
 
 fn lookupError(it: *Interp, name: []const u8) Error {
+    if (@import("features.zig").strippedCommand(it, name)) |f| return @import("features.zig").commandError(it, name, f);
     const a = it.alloc();
     it.result = .{ .str = try std.fmt.allocPrint(a, "invalid command name \"{s}\"", .{name}) };
     it.error_code = try value.newList(a, &.{ .{ .str = "TCL" }, .{ .str = "LOOKUP" }, .{ .str = "COMMAND" }, .{ .str = name } });
@@ -508,7 +509,7 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             // Each part below is a scan of a whole table.
             try cmds.chargeEntries(it, it.namespaces.count() +| it.commands.count() +| it.global.vars.items.len);
             // The objects of the namespace end first.
-            try @import("oo.zig").namespaceGone(it, space, prefix);
+            if (comptime @import("features.zig").on("oo")) try @import("oo.zig").namespaceGone(it, space, prefix);
             // The namespace, its children, its commands, and its variables.
             var drop: std.ArrayList(usize) = .empty;
             for (it.namespaces.keys(), 0..) |k, i| {

@@ -87,7 +87,21 @@ fn write(ctx: ?*anyopaque, bytes: []const u8) void {
 var flush_each = false;
 
 pub fn main(init: std.process.Init) !void {
+    if (comptime tcl.app_only) return appMain(init);
     return runWith(init, null);
+}
+
+/// The entry of the app runtime of a stripped build: it runs only the
+/// payload of `ztcl build`, so the shell and the tools are not in the
+/// binary.
+fn appMain(init: std.process.Init) !void {
+    const arena = init.arena.allocator();
+    host_io = init.io;
+    host_preopens = init.preopens;
+    const args = try init.minimal.args.toSlice(arena);
+    if (tcl.buildnative.payloadRange()) |r| return runApp(init, args, r.off, r.len);
+    std.debug.print("{s}: this runtime runs only the program that ztcl build puts in it\n", .{if (args.len > 0) args[0] else "ztcl"});
+    std.process.exit(64);
 }
 
 /// The services of the system that the options and the scripts of the
@@ -365,23 +379,32 @@ fn runApp(init: std.process.Init, args: []const [:0]const u8, off: u64, len: u64
     const out = &out_w.interface;
     exit_out = out;
     const exe = try std.process.executablePathAlloc(io, arena);
-    const whole = Io.Dir.cwd().readFileAlloc(io, exe, arena, .unlimited) catch |e| {
-        try out.print("{s}: cannot read the program file: {s}\n", .{ exe, @errorName(e) });
+    // Only the payload is read: the runtime part of the file is code
+    // that the system has mapped already.
+    const payload = readPayload(io, arena, exe, off, len) catch |e| {
+        if (e == error.PastEnd) {
+            try out.print("{s}: the payload is past the end of the file\n", .{exe});
+        } else try out.print("{s}: cannot read the program file: {s}\n", .{ exe, @errorName(e) });
         out.flush() catch {};
         std.process.exit(70);
     };
-    if (off > whole.len or whole.len - off < len) {
-        try out.print("{s}: the payload is past the end of the file\n", .{exe});
-        out.flush() catch {};
-        std.process.exit(70);
-    }
-    const payload = whole[@intCast(off)..][0..@intCast(len)];
     var in_buf: [4096]u8 = undefined;
     var in_r: Io.File.Reader = .init(.stdin(), io, &in_buf);
     const words = try arena.alloc([]const u8, args.len);
     for (args, words) |w, *d| d.* = w;
     const h = nativeHost(init, words, out, &in_r.interface);
     return runPayload(&h, exe, payload);
+}
+
+/// The bytes `off` to `off + len` of the file `path`.
+fn readPayload(io: Io, a: std.mem.Allocator, path: []const u8, off: u64, len: u64) ![]u8 {
+    const file = try Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io);
+    const size = try file.length(io);
+    if (off > size or size - off < len) return error.PastEnd;
+    const buf = try a.alloc(u8, @intCast(len));
+    if (try file.readPositionalAll(io, buf, off) != buf.len) return error.PastEnd;
+    return buf;
 }
 
 /// The `Host` of the native runner.
