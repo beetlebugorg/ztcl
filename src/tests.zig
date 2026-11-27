@@ -13,6 +13,7 @@ test {
     _ = @import("json/tests.zig");
     if (@import("build_options").mod_wasmrt and @import("fsroot.zig").supported) _ = @import("wasmrt/tests.zig");
     _ = @import("text/tests.zig");
+    if (@import("build_options").mod_typeset and !@import("builtin").cpu.arch.isWasm()) _ = @import("typeset/root.zig");
 }
 
 const Case = struct { []const u8, []const u8 };
