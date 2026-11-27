@@ -66,6 +66,18 @@ pub const State = struct {
     thread_it: ?*Interp = null,
 };
 
+/// True when channels have handlers of `fileevent`. An embedder with a
+/// loop of its own calls `doOne(it, false, false)` in each pass then, so
+/// the handlers run.
+pub fn hasWatches(it: *Interp) bool {
+    const s = it.events orelse blk: {
+        var root = it;
+        while (root.parent) |p| root = p;
+        break :blk root.events orelse return false;
+    };
+    return s.watches.items.len > 0;
+}
+
 /// Makes the message queue of the thread of `it` a source of the loop.
 pub fn setSource(it: *Interp) std.mem.Allocator.Error!void {
     const s = state(it) catch return error.OutOfMemory;
