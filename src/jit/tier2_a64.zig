@@ -650,6 +650,31 @@ const Emitter = struct {
                 try e.arith(@fromBackingInt(@intCast(i.x)), over, e.place(d - 1));
                 try e.result(pc, d - 2);
             },
+            .mathfunc => {
+                // `abs`, `min`, and `max` of integers. `doubles` took the
+                // other inline forms.
+                const f: expr.Func = @fromBackingInt(@intCast(i.x));
+                const done = try s.newLabel();
+                if (f == .abs) {
+                    const over = try e.guardExit(pc, e.left[pc - e.p.head]);
+                    try s.movRR(rax, e.place(d - 1));
+                    try s.cmpR(rax, .zr, .lsl, 0);
+                    try s.bcond(.ge, done);
+                    // The least integer has no negative in 64 bits: the
+                    // helper gives its bignum.
+                    try s.opR(.subs, rax, .zr, rax, .lsl, 0);
+                    try s.bcond(.vs, over);
+                    s.bind(done);
+                    try e.result(pc, d - 1);
+                } else {
+                    try s.movRR(rax, e.place(d - 2));
+                    try s.cmpR(rax, e.place(d - 1), .lsl, 0);
+                    try s.bcond(if (f == .min) .le else .ge, done);
+                    try s.movRR(rax, e.place(d - 1));
+                    s.bind(done);
+                    try e.result(pc, d - 2);
+                }
+            },
             else => unreachable,
         }
         return true;
@@ -761,6 +786,36 @@ const Emitter = struct {
                     return true;
                 }
                 try e.arithDouble(pc, op, a, b, k);
+                return true;
+            },
+            .mathfunc => {
+                // `sqrt`, `double`, and `abs` with a result in a double
+                // register. The kinds said that the argument is a number.
+                if (i.a != 1 or e.kindAt(pc + 1, d - 1) != .double) return false;
+                const f: expr.Func = @fromBackingInt(@intCast(i.x));
+                const k = d - 1;
+                const a = e.placeOperand(pc, k);
+                if (f == .sqrt) try e.settleBelow(pc, k) else try e.settleReg(pc, k, e.dplace(k));
+                const ax = try e.inD(a, dx0);
+                if (f == .sqrt) {
+                    // A negative value runs the helper, for its domain
+                    // error. -0.0 is not below 0.0, and its root is -0.0
+                    // as in the helper.
+                    const neg = try e.guardExit(pc, e.left[pc - e.p.head]);
+                    try s.movImm(rcx, 0);
+                    try s.fmovDX(dx1, rcx);
+                    try s.fcmp(ax, dx1);
+                    try s.bcond(.mi, neg);
+                }
+                const dest = e.dplace(k);
+                switch (f) {
+                    .sqrt => try s.fsqrt(dest, ax),
+                    // abs(-0.0) is 0.0 in Tcl too.
+                    .abs => try s.fabs(dest, ax),
+                    else => if (ax != dest) try s.fmovDD(dest, ax),
+                }
+                e.alias[k - e.base] = null;
+                e.known[k - e.base] = null;
                 return true;
             },
             .jf_vv, .jf_vi => {

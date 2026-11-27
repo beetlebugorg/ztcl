@@ -324,7 +324,15 @@ const Gen = struct {
             try g.expr(d + 1, mul);
             return g.w(")");
         }
-        try g.w(g.r.pick([]const u8, &.{ "abs(", "int(", "double(", "bool(", "wide(" }));
+        if (g.r.chance(30)) {
+            // The two-argument forms that the JIT runs inline.
+            try g.w(g.r.pick([]const u8, &.{ "min(", "max(" }));
+            try g.expr(d + 1, mul);
+            try g.w(", ");
+            try g.expr(d + 1, mul);
+            return g.w(")");
+        }
+        try g.w(g.r.pick([]const u8, &.{ "abs(", "int(", "double(", "bool(", "wide(", "sqrt(" }));
         try g.expr(d + 1, mul);
         try g.w(")");
     }
