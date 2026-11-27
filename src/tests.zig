@@ -3289,13 +3289,16 @@ test "ztcl::vm on Windows: a guest boots, and vsock and exec reach its agent" {
     _ = try ev(&it, "ztcl::vm stop vm1");
     try std.testing.expectEqualStrings("stopped", try ev(&it, "ztcl::vm status vm1"));
     _ = try ev(&it, "ztcl::vm delete vm1");
-    // A 9p share of a folder of the root, read and written in the guest.
+    // A share of a folder of the root (virtio-fs with a DAX window), read
+    // and written in the guest. The init of the test image mounts share0
+    // at /mnt/share at boot and writes from-guest.txt in it.
     _ = try ev(&it, "file delete -force share-test; file mkdir share-test/sub; set f [open share-test/sub/in.txt w]; puts -nonewline $f {from the host}; close $f");
     _ = try ev(&it, "set v [ztcl::vm create -kernel bzImage -initrd initramfs.cpio.gz -memory 128 -share {share-test /mnt rw}]; ztcl::vm start $v");
     _ = try ev(&it, "close [ztcl::vm vsock $v 1025 -timeout 10000]; ztcl::vm mount $v share0 /mnt");
     try std.testing.expectEqualStrings("from the host", try ev(&it, "dict get [ztcl::vm exec $v /bin/busybox cat /mnt/sub/in.txt] stdout"));
     try std.testing.expectEqualStrings("0", try ev(&it, "dict get [ztcl::vm exec $v /bin/busybox sh -c {echo -n from the guest > /mnt/out.txt && /bin/busybox mkdir /mnt/made && /bin/busybox mv /mnt/sub/in.txt /mnt/made/moved.txt}] exit"));
-    try std.testing.expectEqualStrings("in.txt made out.txt sub", try ev(&it, "lsort [list in.txt {*}[lmap x [glob -tails -directory share-test *] {set x}]]"));
+    try std.testing.expectEqualStrings("from-guest.txt in.txt made out.txt sub", try ev(&it, "lsort [list in.txt {*}[lmap x [glob -tails -directory share-test *] {set x}]]"));
+    try std.testing.expectEqualStrings("written by the guest\n", try ev(&it, "set f [open share-test/from-guest.txt]; set t [read $f]; close $f; set t"));
     try std.testing.expectEqualStrings("from the guest", try ev(&it, "set f [open share-test/out.txt]; set t [read $f]; close $f; set t"));
     try std.testing.expectEqualStrings("from the host", try ev(&it, "set f [open share-test/made/moved.txt]; set t [read $f]; close $f; set t"));
     const ls = try ev(&it, "dict get [ztcl::vm exec $v /bin/busybox ls -l /mnt/out.txt] stdout");

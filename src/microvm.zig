@@ -2190,12 +2190,12 @@ const win = if (on_whp) struct {
         disk_fds: []i32,
         /// The 9p shares, with the descriptors of their root folders.
         shares: []whp.Share = &.{},
-        /// The shares are virtio-fs in the place of 9p (`ZTCL_VM_VIRTIOFS=1`,
-        /// the first step of `docs/dev/virtiofs.md`).
-        virtiofs: bool = false,
-        /// Each virtio-fs share has a DAX window (`ZTCL_VM_DAX=1`, step 3 of
-        /// the plan).
-        dax: bool = false,
+        /// The shares are virtio-fs (`docs/dev/virtiofs.md`), or 9p with
+        /// `ZTCL_VM_SHARE=9p` in the environment, for a guest with no
+        /// virtio-fs driver.
+        virtiofs: bool = true,
+        /// Each virtio-fs share has a DAX window, unless `ZTCL_VM_DAX=0`.
+        dax: bool = true,
         /// The end of the console pair that the pump has, and the end of
         /// the script, until `console` gives it as a channel.
         console_vm: i32,
@@ -2489,8 +2489,8 @@ const win = if (on_whp) struct {
         }
         // The root folder of each share, in the file jail.
         if (g.disks.len + shares.items.len > whp.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{whp.max_disks});
-        g.virtiofs = envOn("ZTCL_VM_VIRTIOFS");
-        g.dax = g.virtiofs and envOn("ZTCL_VM_DAX");
+        g.virtiofs = !envIs("ZTCL_VM_SHARE", "9p");
+        g.dax = g.virtiofs and !envIs("ZTCL_VM_DAX", "0");
         g.shares = try ga.alloc(whp.Share, shares.items.len);
         for (g.shares) |*sh| sh.fd = -1;
         for (shares.items, g.shares) |d, *out| out.* = .{ .fd = try jailDir(it, d.path), .read_only = !d.rw };
@@ -2725,15 +2725,17 @@ const win = if (on_whp) struct {
         return agentExec(it, g.name, &a, r);
     }
 
-    /// True when the environment variable `name` is "1".
-    fn envOn(comptime name: []const u8) bool {
-        var buf: [4]u16 = undefined;
+    /// True when the environment variable `name` is `want`, in ASCII.
+    fn envIs(comptime name: []const u8, comptime want: []const u8) bool {
+        var buf: [16]u16 = undefined;
         const n = GetEnvironmentVariableW(std.unicode.utf8ToUtf16LeStringLiteral(name), &buf, buf.len);
-        return n == 1 and buf[0] == '1';
+        if (n != want.len) return false;
+        for (want, buf[0..want.len]) |c, u| if (u != c) return false;
+        return true;
     }
     extern "kernel32" fn GetEnvironmentVariableW(name: [*:0]const u16, buf: [*]u16, size: u32) callconv(.winapi) u32;
-    /// `mount` through the agent: the 9p share of the tag at a path of the
-    /// guest.
+    /// `mount` through the agent: the share of the tag (virtio-fs, or 9p)
+    /// at a path of the guest.
     fn mountCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
         const r = try mountArgs(it, args);
         if (g.machine.getState() != .running) return it.failCode("ZTCL VM STATE", "the guest {s} is {s}", .{ g.name, status(g) });

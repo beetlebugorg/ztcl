@@ -61,7 +61,7 @@ virtio-fs answers both. A FUSE `READ` or `WRITE` has up to `max_pages` pages (25
 3. The DAX window on WHP, and the benchmark.
 4. The DAX window on KVM (the KVM agent).
 5. The notices of host changes.
-6. virtio-fs as the default share on KVM and WHP when the guest has the driver, and 9p for an older guest.
+6. virtio-fs as the default share on KVM and WHP when the guest has the driver, and 9p for an older guest. On WHP virtio-fs with DAX is the default, `ZTCL_VM_DAX=0` turns the window off, and `ZTCL_VM_SHARE=9p` gives 9p.
 
 ## The targets
 
@@ -73,7 +73,7 @@ The same benchmark as above, on WHP, Release build:
 
 ## Step 2, measured
 
-The device and the FUSE server with no DAX, on WHP, Release build, in a guest of 1 GB on Linux 7.3.6, two runs of each. `ZTCL_VM_VIRTIOFS=1` in the environment of `ztcl::vm create` makes the shares virtio-fs, until step 6 makes it the default.
+The device and the FUSE server with no DAX, on WHP, Release build, in a guest of 1 GB on Linux 7.3.6, two runs of each. `ztcl::vm create` made the shares virtio-fs with `ZTCL_VM_VIRTIOFS=1` then; step 6 made it the default.
 
 | Phase | 9p share, with #475 | virtio-fs share | The RAM disk of the guest |
 |---|---|---|---|
@@ -91,7 +91,7 @@ The device and the FUSE server with no DAX, on WHP, Release build, in a guest of
 
 ## Step 3, measured
 
-The DAX window on WHP, with the same benchmark, two runs of each. `ZTCL_VM_DAX=1` with `ZTCL_VM_VIRTIOFS=1` gives each share a window of 1 GiB at 4 GiB of guest addresses.
+The DAX window on WHP, with the same benchmark, two runs of each. Each share has a window of 1 GiB at 4 GiB of guest addresses.
 
 | Phase | virtio-fs | virtio-fs with DAX | The RAM disk of the guest |
 |---|---|---|---|
@@ -113,7 +113,7 @@ And `dd` of 64 MB with blocks of 1 MiB:
 
 - A write to a file with DAX skips the page cache of the guest: its pages are in a window, and the guest sends a `WRITE` of 1 MiB. The RAM disk of the guest is slower here, since each new page of the guest RAM is a first touch for the hypervisor.
 - DAX goes to a file of 0 bytes and to a file of 256 KiB or more (`fuse.dax_min`). A small file costs less to read with `READ` than with a mapping of its own: with DAX for each file, the read of 2,000 small files took 635 to 649 ms.
-- `ls -lR` after the create pays once for that rule: the new files had DAX at 0 bytes and lose it at 33 bytes, so the guest drops each inode once and looks it up again.
+- `ls -lR` after the create pays once for that rule: the new files had DAX at 0 bytes and lose it at 33 bytes, so the guest drops each inode once and looks it up again. With DAX only at 256 KiB or more, `ls -lR` is 23 to 29 ms, and a write of 256 MB is 919 to 923 ms: a new file then writes through the page cache of the guest. The rule keeps DAX at 0 bytes.
 - The checks of the content and of the coherence pass with and without DAX: the bytes of a write of the guest on the host, an edit and an append of the host in a file that the guest has read, a truncate on both sides, and a delete on both sides.
 
 ## Questions
