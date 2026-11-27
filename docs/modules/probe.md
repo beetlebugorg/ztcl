@@ -4,6 +4,8 @@
 
 The module needs no capability. It reads no file and gives a script no access to the host. It is in each native build and in the WebAssembly shell of the site (`ztcl-shell.wasm`). The WebAssembly library `ztcl.wasm` leaves it out, because that file has a size limit.
 
+[Debugging](../debugging.md) has `ztcl debug`, which runs a script with probes and writes a report, and its tools for agents.
+
 <!-- run -->
 ```tcl
 package require ztcl::probe
@@ -63,6 +65,7 @@ The other options:
 | `-if expr` | The probe records only when the expression is true. The expression runs in the frame of the target. |
 | `-capture list` | Each word of the list is a value of the record. A plain name is a variable. Each other word goes through `subst`, so `[llength $toks]` and `$a,$b` work. The key of a value is its word. |
 | `-stack` | The record has the call stack: one list of words for each frame, the innermost first. |
+| `-locals` | As `-stack`, and each frame is a list of two: the words, and a dict of its local variables. A value has at most `-maxlen` bytes. |
 | `-count n` | The probe makes at most `n` records. |
 | `-every n` | The probe records each `n`th hit. |
 | `-rate {n units}` | The probe makes at most `n` records in each window of `units` compute units. |

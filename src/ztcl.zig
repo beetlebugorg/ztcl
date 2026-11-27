@@ -41,6 +41,9 @@ pub const pty = if (@import("builtin").os.tag == .windows) @import("pty_windows.
 pub const vt = @import("vt.zig");
 pub const notify = @import("notify.zig");
 pub const watch = @import("watch.zig");
+pub const probe = @import("probe.zig");
+pub const debug = @import("debug.zig");
+pub const debugmcp = @import("debugmcp.zig");
 pub const vfs = @import("vfs.zig");
 pub const zipread = @import("zipread.zig");
 pub const zipwrite = @import("zipwrite.zig");
@@ -106,6 +109,7 @@ test {
     _ = @import("pty_windows_tests.zig");
     _ = @import("watch_tests.zig");
     _ = @import("probe_tests.zig");
+    _ = @import("debug_tests.zig");
     _ = @import("zipread.zig");
     _ = @import("inflate.zig");
     _ = @import("vfs_tests.zig");
