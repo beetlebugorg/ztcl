@@ -87,6 +87,7 @@ PAGES = [
     ("docs/embedding.md", "embedding/", "Embed", "Embed in Zig"),
     ("docs/webassembly.md", "webassembly/", "Embed", "WebAssembly"),
     ("docs/performance.md", "performance/", "Project", "Performance"),
+    ("docs/tls.md", "tls/", "Project", "TLS 1.3 (coming)"),
     ("docs/faq.md", "faq/", "Project", "FAQ"),
     ("CHANGELOG.md", "changelog/", "Project", "Changelog"),
     ("CONTRIBUTING.md", "contributing/", "Project", "Contributing"),

@@ -8,7 +8,7 @@ The `ztcl::` modules are built into ztcl. A module loads with `package require`,
 | [ztcl::vt](vt.md) | Keeps the state of a terminal: the cells, the cursor, the modes, and the scrollback. | none | each target, and WebAssembly except `ztcl-threads.wasm` |
 | [ztcl::probe](probe.md) | Records the values of a running script at a proc, a line, a command, a variable, or an error, with no change to the script. | none | each target, and the WebAssembly shell (`ztcl-shell.wasm`) |
 | [ztcl::pty](pty.md) | Runs a program on a pseudo-terminal, as a channel. | `exec` | Linux, macOS, x86-64 Windows |
-| [ztcl::watch](watch.md) | Gives the changes of the files below a folder. | `file` | Linux |
+| [ztcl::watch](watch.md) | Gives the changes of the files below a folder. | `file` | Linux, macOS, x86-64 Windows |
 | [ztcl::open](open.md) | Opens a URL or a file in the default app of the system. | `launch` | macOS, Windows; Linux with a host callback |
 | [ztcl::notify](notify.md) | Shows a notification of the system. | `notify` | macOS; the others with a host callback |
 | [ztcl::vm](vm.md) | Starts a small Linux guest on the hypervisor of the host. | `vm` | macOS |
