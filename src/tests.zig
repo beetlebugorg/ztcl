@@ -1406,6 +1406,17 @@ test "a child that deletes itself through an alias stays safe" {
     try std.testing.expectEqualStrings("0", try it.str(try it.eval("interp exists c")));
 }
 
+test "the delete of a child removes a hidden alias into it" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.interp));
+    _ = try it.eval("interp create c; c eval {proc hi {} {return hi}}; interp alias {} a c hi; interp hide {} a a");
+    _ = try it.eval("interp delete c");
+    try std.testing.expectEqualStrings("{}", try it.str(try it.eval("list [interp hidden {}]")));
+    try std.testing.expectError(error.TclError, it.eval("interp expose {} a a"));
+}
+
 fn fixedClock(_: ?*anyopaque) i64 {
     return 86_400_000_000;
 }
