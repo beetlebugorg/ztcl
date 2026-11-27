@@ -1,0 +1,10 @@
+argc 3
+to stderr
+arg 1 a
+arg 2 b
+who me
+fib 20 6765
+sum 1.643935
+malloc z
+stdin in line
+exit 0

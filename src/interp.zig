@@ -1530,6 +1530,8 @@ pub const Interp = struct {
     oo: ?*anyopaque = null,
     /// The terminals of the module `ztcl::vt` (`vt.State`).
     vt_state: ?*anyopaque = null,
+    /// The store of `ztcl::wasm` (`wasmrt/cmd.zig`), or null.
+    wasm_state: ?*anyopaque = null,
     /// The result of `info nameofexecutable`, from the embedder.
     exe_name: []const u8 = "",
     /// The value of `tcl_precision`.
@@ -1825,6 +1827,7 @@ pub const Interp = struct {
         if (comptime chan_supported) @import("chan.zig").closeAll(it);
         @import("watch.zig").closeAll(it);
         if (comptime @import("build_options").mod_vt) @import("vt.zig").closeAll(it);
+        if (comptime @import("build_options").mod_wasmrt and @import("fsroot.zig").supported and !@import("builtin").cpu.arch.isWasm()) @import("wasmrt/cmd.zig").closeAll(it);
         @import("microvm.zig").closeAll(it);
         if (comptime exec_supported) proc_mod.abandonAll(it);
         if (comptime cext_mod.supported) cext_mod.drop(it);
@@ -2142,6 +2145,7 @@ pub const Interp = struct {
         if (comptime chan_supported) @import("chan.zig").closeAll(it);
         @import("watch.zig").closeAll(it);
         if (comptime @import("build_options").mod_vt) @import("vt.zig").closeAll(it);
+        if (comptime @import("build_options").mod_wasmrt and @import("fsroot.zig").supported and !@import("builtin").cpu.arch.isWasm()) @import("wasmrt/cmd.zig").closeAll(it);
         @import("microvm.zig").closeAll(it);
         if (comptime exec_supported) proc_mod.abandonAll(it);
         if (comptime cext_mod.supported) cext_mod.drop(it);
