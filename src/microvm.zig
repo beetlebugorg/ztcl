@@ -1170,8 +1170,6 @@ const win = if (on_whp) struct {
         next: u32 = 1,
     };
 
-    extern "kernel32" fn Sleep(ms: u32) callconv(.winapi) void;
-
     fn state(it: *Interp) Error!*State {
         if (it.vm_state) |p| return @ptrCast(@alignCast(p));
         const s = try it.heap.backing.create(State);
@@ -1302,7 +1300,7 @@ const win = if (on_whp) struct {
             if (sys.accept(l)) |acc| {
                 if (acc.peer.port == mine.port and std.mem.eql(u8, &acc.peer.bytes, &mine.bytes)) return .{ a, acc.fd };
                 sys.close(acc.fd);
-            } else Sleep(1);
+            } else whp.sleepUs(100);
         }
         sys.close(a);
         return null;
@@ -1477,7 +1475,7 @@ const win = if (on_whp) struct {
                 else => {},
             };
             for (&g.streams, 0..) |*st, k| pumpStream(g, st, @intCast(k), &buf);
-            Sleep(1);
+            whp.sleepUs(1000);
         }
     }
 
@@ -1560,7 +1558,7 @@ const win = if (on_whp) struct {
                     g.machine.close(conn);
                     return null;
                 }
-                Sleep(1);
+                whp.sleepUs(250);
             }
             g.lock.lock();
             const s = st.state;
@@ -1578,7 +1576,7 @@ const win = if (on_whp) struct {
                 return p[1];
             }
             if (whp.nowNs() / std.time.ns_per_ms >= end) return null;
-            Sleep(50);
+            whp.sleepUs(2000);
         }
         return null;
     }

@@ -210,6 +210,18 @@ whp-spike out/bzImage out/busybox tools/vm-guest/init 256
 - The results on an Intel Core i7-1165G7 with Windows 11 Home 25H2 and 256 MB, three runs each: the ready line of init 396 ms to 402 ms after the start with the full kernel log on the console (about 20,000 exits, nearly all a byte of the console), and 211 ms to 214 ms with `quiet` (about 500 exits). The first spike, with no interrupts and with 0 on the ports of the i8042, took 956 ms to 981 ms. The probe of the uncore PMU reads the MSR 0x396 and gives a warning with a trace.
 - The monitor (ztcl#369): `src/whp.zig` on the shared devices, with the vsock device of `src/vm/virtio/vsock.zig` (ztcl#364) and the direct boot of `src/vm/boot.zig`. One CPU for now: the start of a second CPU through the startup IPI is not checked on the xAPIC emulation yet.
 - The commands (`src/microvm.zig`): `create`, `start`, `stop`, `status`, `vsock`, `console`, `exec`, `delete`, and `-warm`, as on Linux, and `exec` through the agent. The monitor has no descriptor of a vsock stream, so a pump thread of each guest moves the bytes of the console and of each stream between the monitor and one end of a pair of loopback sockets, and the script gets the other end as its channel. The accepted socket of a pair must be the one that ztcl connected, so no other program gets in. A share is not available yet (`ZTCL VM SHARE`).
+- The start time, on an Intel Core i7-1165G7 with Windows 11 Home 25H2, a guest of 256 MB, and `quiet`, the best of 10 from `start` to the answer of the agent on port 1025:
+
+  | Kernel | Before | With the changes below |
+  |---|---|---|
+  | The xz kernel of `vm-guest-x86_64` | 285 ms | 158 ms |
+  | An lz4 kernel of 2.4 MB | 176 ms | 35 ms |
+
+  `exec` of `/bin/busybox true` went from 63 ms to 4 ms.
+  - The hypervisor fills its map of a guest page on the first touch, with no exit to the monitor, and an lz4 kernel ran 50 ms from its start to its first exit. `WHvAdviseGpaRange` with the populate code fills 32 MB at each end of the guest memory first: the kernel loads at 16 MB and unpacks above it, and the initramfs and the first allocations of the kernel are at the top. The first exit then comes 4 ms after the start, and `start` is 11 ms longer. A touch of the pages from the host gave no gain, and 16 MB at each end misses the kernel.
+  - `Sleep` waits to the next tick of the clock of the system, 15.6 ms by default, so each wait of 1 ms of the pump thread and of `vsock` was 15 ms. A waitable timer of `CREATE_WAITABLE_TIMER_HIGH_RESOLUTION` waits the time it gets, and changes no setting of the system (`whp.sleepUs`).
+  - A connection that the guest refuses tries again after 2 ms, in the place of 50 ms.
+  - About 260 exits remain to the answer of the agent with the lz4 kernel, and all of them together cost the monitor under 1 ms. The most are the writes of the queue notify register (0x050) of the console, 268 with the xz kernel and 13 with the lz4 kernel, then the reads of the ports of no device (49).
 
 ## Tests
 
