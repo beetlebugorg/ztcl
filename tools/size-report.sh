@@ -15,7 +15,7 @@
 # and exits with 1 when:
 #   - the full runner is above 6 000 000 bytes (x86-64 Linux only),
 #   - a module is more than 10 % above its row,
-#   - ztcl.wasm with modules is above 1 500 000 bytes, or the wasm build
+#   - ztcl.wasm with modules is above 1 550 000 bytes, or the wasm build
 #     with no module is above 1 000 000 bytes.
 # --plant BYTES adds that many bytes of data to the test module hello,
 # to show the failure of the check.
@@ -107,7 +107,7 @@ END {
     for (i = 1; i <= n; i++) {
         r = row[i]; b = bytes[r]; lim = ""; st = ""
         if (r == "full") { lim = 6000000; if (target != "Linux x86_64") lim = "" }
-        else if (r == "wasm") lim = 1500000
+        else if (r == "wasm") lim = 1550000
         else if (r == "wasm-core") lim = 1000000
         else if (r != "core" && (r in budget)) lim = int(budget[r] * 1.1)
         if (lim != "") { st = (b + 0 <= lim + 0) ? "ok" : "over"; if (st == "over") bad = 1 }

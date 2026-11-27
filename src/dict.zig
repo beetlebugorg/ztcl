@@ -406,6 +406,16 @@ fn step(it: *Interp) Error!void {
 fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cmd) Error!?Value {
     const a = it.alloc();
     const args = argv[2..];
+    if (it.tcl9() and (eql(name, "getdef") or eql(name, "getwithdefault"))) {
+        if (args.len < 3) return it.fail("wrong # args: should be \"dict {s} dictionary ?key ...? key default\"", .{name});
+        var cur = args[0];
+        for (args[1 .. args.len - 1]) |k| {
+            const items = try readPairs(it, cur);
+            const at = try lookup(it, cur, items, k) orelse return args[args.len - 1];
+            cur = items[at + 1];
+        }
+        return cur;
+    }
     if (eql(name, "info")) {
         // Tcl gives the statistics of its hash table. The text is for
         // people, so ztcl gives the count of entries.
@@ -556,8 +566,10 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
     if (common == null) {
         if (try dictMore(it, name, argv, cmd)) |v| return v;
     }
-    const sub = common orelse
+    const sub = common orelse {
+        if (it.tcl9()) return it.fail("unknown or ambiguous subcommand \"{s}\": must be append, create, exists, filter, for, get, getdef, getwithdefault, incr, info, keys, lappend, map, merge, remove, replace, set, size, unset, update, values, or with", .{name});
         return it.fail("unknown or ambiguous subcommand \"{s}\": must be append, create, exists, filter, for, get, incr, info, keys, lappend, map, merge, remove, replace, set, size, unset, update, values, or with", .{name});
+    };
     const args = argv[2..];
     switch (sub) {
         .create => {

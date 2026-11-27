@@ -288,25 +288,48 @@ fn findSearch(it: *Interp, m: *interp.ArrayMap, name: []const u8, id: []const u8
     return it.failCode("TCL LOOKUP ARRAYSEARCH", "couldn't find search \"{s}\"", .{id});
 }
 
-fn cmdArray(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+/// array for {keyVar valueVar} arrayName body (Tcl 9.1): runs the body
+/// once for each element of a copy of the array, in the order of the
+/// array.
+fn arrayFor(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
+    if (argv.len != 5) return it.wrongArgs("array for {{key value}} arrayName body");
+    const names = try it.list(argv[2]);
+    if (names.len != 2) return it.fail("must have two variable names", .{});
+    const name = try it.str(argv[3]);
+    const cell = try it.findVar(it.frame, name, false);
+    if (cell != null and cell.?.v == .traced) try trace.arrayOp(it, cell.?, name);
+    var map: ?*interp.ArrayMap = if (cell != null and cell.?.v == .arr) cell.?.v.arr else null;
+    if (cell != null and cell.?.v == .traced and cell.?.v.traced.inner == .arr) map = cell.?.v.traced.inner.arr;
+    const m = map orelse return it.failCode(try std.fmt.allocPrint(it.alloc(), "TCL LOOKUP ARRAY {s}", .{name}), "\"{s}\" isn't an array", .{name});
+    try cmds.chargeEntries(it, m.count());
+    const keys = try it.alloc().dupe([]const u8, m.keys());
+    const vals = try it.alloc().dupe(Value, m.values());
+    const body = try it.scriptOf(argv, 4, cmd);
+    const kname = try it.str(names[0]);
+    const vname = try it.str(names[1]);
+    for (keys, vals) |k, v| {
+        try cmds.step(it);
+        try it.setVar(kname, .{ .str = k });
+        try it.setVar(vname, v);
+        _ = it.evalScript(body) catch |e| switch (e) {
+            error.TclBreak => break,
+            error.TclContinue => continue,
+            else => return e,
+        };
+    }
+    return Value.empty;
+}
+
+fn cmdArray(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("array subcommand ?arg ...?");
     const a = it.alloc();
-    const Sub = enum { anymore, donesearch, exists, get, names, nextelement, set, size, startsearch, statistics, unset };
+    const Sub = enum { anymore, donesearch, exists, @"for", get, names, nextelement, set, size, startsearch, statistics, unset };
     const word = try it.str(argv[1]);
-    var which: ?Sub = std.meta.stringToEnum(Sub, word);
-    if (which == null and word.len > 0) {
-        var hits: usize = 0;
-        inline for (@typeInfo(Sub).@"enum".field_names, @typeInfo(Sub).@"enum".field_values) |f_name, f_value| {
-            if (std.mem.startsWith(u8, f_name, word)) {
-                which = @fromBackingInt(@intCast(f_value));
-                hits += 1;
-            }
-        }
-        if (hits != 1) which = null;
-    }
-    const sub = which orelse return it.failCode("TCL LOOKUP INDEX subcommand", "unknown or ambiguous subcommand \"{s}\": must be anymore, donesearch, exists, get, names, nextelement, set, size, startsearch, statistics, or unset", .{word});
+    const sub = try @import("tcl9.zig").pick(it, Sub, word, .{ .v9_1 = &.{.@"for"}, .code = "TCL LOOKUP INDEX subcommand" });
+    if (sub == .@"for") return arrayFor(it, argv, cmd);
     if (argv.len < 3) {
         return switch (sub) {
+            .@"for" => unreachable,
             .anymore => it.wrongArgs("array anymore arrayName searchId"),
             .donesearch => it.wrongArgs("array donesearch arrayName searchId"),
             .exists => it.wrongArgs("array exists arrayName"),
@@ -326,6 +349,7 @@ fn cmdArray(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var map: ?*interp.ArrayMap = if (cell != null and cell.?.v == .arr) cell.?.v.arr else null;
     if (cell != null and cell.?.v == .traced and cell.?.v.traced.inner == .arr) map = cell.?.v.traced.inner.arr;
     switch (sub) {
+        .@"for" => unreachable,
         .exists => {
             if (argv.len != 3) return it.wrongArgs("array exists arrayName");
             return .{ .int = @intFromBool(map != null) };

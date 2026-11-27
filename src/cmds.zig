@@ -284,7 +284,7 @@ fn cmdIf(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     return Value.empty;
 }
 
-fn step(it: *Interp) Error!void {
+pub fn step(it: *Interp) Error!void {
     if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
     it.compute_limit -= 1;
     try it.checkMem();
@@ -328,9 +328,23 @@ fn cmdFor(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
 
 /// `foreach` and `lmap`: the name of the command selects the result.
 fn cmdForeach(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
-    const is_map = eql(try it.str(argv[0]), "lmap");
+    return loop(it, argv, cmd, if (eql(try it.str(argv[0]), "lmap")) .map else .each);
+}
+
+/// lfilter varList list ?varList list ...? command (Tcl 9.1): the values
+/// of the first variable for the passes where the command gives true.
+pub fn cmdLfilter(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
+    return loop(it, argv, cmd, .filter);
+}
+
+fn loop(it: *Interp, argv: []const Value, cmd: ?*Cmd, mode: enum { each, map, filter }) Error!Value {
+    const is_map = mode != .each;
     if (argv.len < 4 or argv.len % 2 != 0) {
-        return if (is_map) it.wrongArgs("lmap varList list ?varList list ...? command") else it.wrongArgs("foreach varList list ?varList list ...? command");
+        return switch (mode) {
+            .map => it.wrongArgs("lmap varList list ?varList list ...? command"),
+            .filter => it.wrongArgs("lfilter varList list ?varList list ...? command"),
+            .each => it.wrongArgs("foreach varList list ?varList list ...? command"),
+        };
     }
     const a = it.alloc();
     const n = (argv.len - 2) / 2;
@@ -340,7 +354,11 @@ fn cmdForeach(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     for (0..n) |k| {
         names[k] = try it.list(argv[1 + 2 * k]);
         lists[k] = try it.list(argv[2 + 2 * k]);
-        if (names[k].len == 0) return it.fail("{s} varlist is empty", .{if (is_map) "lmap" else "foreach"});
+        if (names[k].len == 0) return it.fail("{s} varlist is empty", .{switch (mode) {
+            .each => "foreach",
+            .map => "lmap",
+            .filter => "lfilter",
+        }});
         passes = @max(passes, (lists[k].len + names[k].len - 1) / names[k].len);
     }
     const body = try it.scriptOf(argv, argv.len - 1, cmd);
@@ -359,7 +377,11 @@ fn cmdForeach(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             error.TclContinue => continue,
             else => return e,
         };
-        if (is_map) try out.append(a, v);
+        switch (mode) {
+            .map => try out.append(a, v),
+            .filter => if (try @import("expr.zig").truthy(it, v)) try out.append(a, if (lists[0].len > pass * names[0].len) lists[0][pass * names[0].len] else Value.empty),
+            .each => {},
+        }
     }
     if (is_map) return value.wrapList(a, out.items);
     return Value.empty;
@@ -1158,7 +1180,7 @@ fn cmdLinsert(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return value.wrapList(it.alloc(), out);
 }
 
-fn cmdLreplace(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+pub fn cmdLreplace(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 4) return it.wrongArgs("lreplace list first last ?element ...?");
     const items = try it.list(argv[1]);
     const n: i64 = @intCast(items.len);
@@ -1600,28 +1622,24 @@ pub fn byteOf(s: []const u8, n: usize, k: usize) usize {
     return s.len;
 }
 
-/// The one name of the enum that starts with the text, or null.
-fn uniquePrefix(comptime E: type, text: []const u8) ?E {
-    if (text.len == 0) return null;
-    var found: ?E = null;
-    inline for (@typeInfo(E).@"enum".field_names, @typeInfo(E).@"enum".field_values) |f_name, f_value| {
-        if (std.mem.startsWith(u8, f_name, text)) {
-            if (found != null) return null;
-            found = @fromBackingInt(@intCast(f_value));
-        }
-    }
-    return found;
-}
-
 pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("string subcommand ?arg ...?");
     const a = it.alloc();
     const sub = try it.str(argv[1]);
     const args = argv[2..];
-    const Sub = enum { bytelength, length, index, range, equal, compare, first, last, map, tolower, toupper, totitle, trim, trimleft, trimright, repeat, is, match, reverse, cat, replace, wordstart, wordend };
-    const which = std.meta.stringToEnum(Sub, sub) orelse uniquePrefix(Sub, sub) orelse
-        return it.fail("unknown or ambiguous subcommand \"{s}\": must be bytelength, cat, compare, equal, first, index, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, trimright, wordend, or wordstart", .{sub});
+    const Sub = enum { bytelength, length, index, insert, range, equal, compare, first, last, map, tolower, toupper, totitle, trim, trimleft, trimright, repeat, is, match, reverse, cat, replace, wordstart, wordend };
+    const which = try @import("tcl9.zig").pick(it, Sub, sub, .{ .v8_6 = &.{.bytelength}, .v9_1 = &.{.insert} });
     switch (which) {
+        .insert => {
+            if (args.len != 3) return it.wrongArgs("string insert string index insertString");
+            const s = try it.str(args[0]);
+            const n = charCountOf(it, s);
+            var i = try index(it, args[1], n);
+            if (std.mem.startsWith(u8, value.trimSpace(try it.str(args[1])), "end")) i += 1;
+            const at: usize = @intCast(std.math.clamp(i, 0, @as(i64, @intCast(n))));
+            const b = byteOf(s, n, at);
+            return .{ .str = try std.mem.concat(a, u8, &.{ s[0..b], try it.str(args[2]), s[b..] }) };
+        },
         .bytelength => {
             if (args.len != 1) return it.wrongArgs("string bytelength string");
             return .{ .int = @intCast((try it.str(args[0])).len) };
@@ -1901,6 +1919,8 @@ pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 }
 
 const class_names = [_][]const u8{ "alnum", "alpha", "ascii", "control", "boolean", "digit", "double", "entier", "false", "graph", "integer", "list", "lower", "print", "punct", "space", "true", "upper", "wideinteger", "wordchar", "xdigit" };
+/// The classes of Tcl 9.1: also `dict`.
+const class_names9 = [_][]const u8{ "alnum", "alpha", "ascii", "control", "boolean", "dict", "digit", "double", "entier", "false", "graph", "integer", "list", "lower", "print", "punct", "space", "true", "upper", "wideinteger", "wordchar", "xdigit" };
 
 fn classOk(class: []const u8, c: u21) bool {
     if (eql(class, "alnum")) return ucd.isAlpha(c) or ucd.isDigit(c);
@@ -1962,9 +1982,10 @@ fn stringIs(it: *Interp, args: []const Value) Error!Value {
     const a = it.alloc();
     if (args.len < 2 or args.len > 5) return it.wrongArgs("string is class ?-strict? ?-failindex var? str");
     const word = try it.str(args[0]);
+    const classes: []const []const u8 = if (it.tcl9()) &class_names9 else &class_names;
     var class: ?[]const u8 = null;
     var hits: usize = 0;
-    for (class_names) |c| {
+    for (classes) |c| {
         if (eql(c, word)) {
             class = c;
             hits = 1;
@@ -1978,9 +1999,9 @@ fn stringIs(it: *Interp, args: []const Value) Error!Value {
     if (hits != 1) {
         var msg: std.ArrayList(u8) = .empty;
         try msg.print(a, "{s} class \"{s}\": must be ", .{ if (hits > 1) "ambiguous" else "bad", word });
-        for (class_names, 0..) |c, i| {
+        for (classes, 0..) |c, i| {
             if (i > 0) try msg.appendSlice(a, ", ");
-            if (i == class_names.len - 1) try msg.appendSlice(a, "or ");
+            if (i == classes.len - 1) try msg.appendSlice(a, "or ");
             try msg.appendSlice(a, c);
         }
         it.result = .{ .str = msg.items };
@@ -2035,6 +2056,8 @@ fn stringIs(it: *Interp, args: []const Value) Error!Value {
             ok = false;
             at = @intCast(listFaultStart(s));
         }
+    } else if (eql(cl, "dict")) {
+        ok = value.listFault(s) == null and (try it.list(v)).len % 2 == 0;
     } else {
         var i: usize = 0;
         var k: usize = 0;

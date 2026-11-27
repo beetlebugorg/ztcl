@@ -1737,6 +1737,7 @@ pub const Interp = struct {
     pub fn setTclVersion(it: *Interp, v: TclVersion) Allocator.Error!void {
         it.tcl = v;
         try it.setVersionVars();
+        try @import("tcl9.zig").apply(it);
         @import("pkg.zig").retagTcl(it) catch |e| switch (e) {
             error.OutOfMemory => return error.OutOfMemory,
             else => {},
