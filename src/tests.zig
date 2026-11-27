@@ -2507,22 +2507,63 @@ test "a held value survives 100 collections and an unheld value is freed" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
     defer it.deinit();
-    const kept = try it.eval("string repeat ab 30");
-    try it.hold(kept);
-    // The test keeps the addresses as integers with the low bit set, so a
-    // scan of a native stack does not see them as pointers.
-    const gone = @intFromPtr((try it.eval("string repeat cd 30")).str.ptr) | 1;
+    // The values stay out of the frame of the test. The helpers keep the
+    // addresses as integers with the low bit set, so a scan of a native
+    // stack or of the saved registers does not see them as pointers.
+    const kept = try holdNew(&it, "string repeat ab 30");
+    const gone = try evalAddr(&it, "string repeat cd 30");
     // A third block of the same size keeps the page.
-    const anchor = try it.eval("string repeat ef 30");
-    try it.hold(anchor);
+    _ = try holdNew(&it, "string repeat ef 30");
     _ = try it.eval("set zz 1");
-    for (0..100) |_| it.collect();
-    try std.testing.expectEqualStrings("abababababababababababababababababababababababababababababab", try it.str(kept));
+    for (0..100) |_| collectClean(&it);
+    try expectHeldText(&it, kept, "abababababababababababababababababababababababababababababab");
     try expectFreed(&it, gone & ~@as(usize, 1));
-    const kept_addr = @intFromPtr(kept.str.ptr) | 1;
-    it.release(kept);
+    releaseAt(&it, kept);
+    collectClean(&it);
+    try expectFreed(&it, kept & ~@as(usize, 1));
+}
+
+/// Evaluates `script` and gives the address of the string of its value
+/// with the low bit set.
+noinline fn evalAddr(it: *tcl.Interp, script: []const u8) !usize {
+    return @intFromPtr((try it.eval(script)).str.ptr) | 1;
+}
+
+/// Evaluates `script`, holds its value, and gives the address of the
+/// string with the low bit set.
+noinline fn holdNew(it: *tcl.Interp, script: []const u8) !usize {
+    const v = try it.eval(script);
+    try it.hold(v);
+    return @intFromPtr(v.str.ptr) | 1;
+}
+
+/// The held value with the string at the address `addr` (low bit set).
+noinline fn heldAt(it: *tcl.Interp, addr: usize) ?tcl.Value {
+    for (it.held.items) |h| if (h == .str and @intFromPtr(h.str.ptr) == addr & ~@as(usize, 1)) return h;
+    return null;
+}
+
+noinline fn expectHeldText(it: *tcl.Interp, addr: usize, want: []const u8) !void {
+    const v = heldAt(it, addr) orelse return error.TestValueNotHeld;
+    try std.testing.expectEqualStrings(want, try it.str(v));
+}
+
+noinline fn releaseAt(it: *tcl.Interp, addr: usize) void {
+    if (heldAt(it, addr)) |v| it.release(v);
+}
+
+/// Clears 64 KiB of the stack below the caller, then collects. The
+/// frames of the helpers above left their values in that memory, and a
+/// conservative scan of the stack reads it.
+noinline fn collectClean(it: *tcl.Interp) void {
+    clearStack();
     it.collect();
-    try expectFreed(&it, kept_addr & ~@as(usize, 1));
+}
+
+noinline fn clearStack() void {
+    var buf: [65536]u8 = undefined;
+    @memset(&buf, 0);
+    std.mem.doNotOptimizeAway(&buf);
 }
 
 /// Fails when the collector kept the block at `addr`. It first prints
