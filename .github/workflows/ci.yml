@@ -145,6 +145,11 @@ jobs:
       - name: Check the format
         if: runner.os == 'Linux'
         run: zig fmt --check build.zig src
+      - name: Run the Wycheproof sets of the TLS primitives
+        if: runner.os == 'Linux'
+        run: |
+          ulimit -v 6000000
+          zig build tls-wycheproof -Doptimize=ReleaseSafe -- "$(tools/fetch-wycheproof.sh)"
       # A gc-precise build uses the root rules of WebAssembly and has no JIT.
       - name: Test the gc-precise build
         if: runner.os == 'Linux'
