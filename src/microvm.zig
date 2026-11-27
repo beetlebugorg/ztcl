@@ -677,6 +677,114 @@ fn natDnsPolicy(ctx: ?*anyopaque, name: []const u8) bool {
     }
 }
 
+/// The events of the NAT of a guest, for `ztcl::vm netlog`, and the
+/// counts of its bytes for the meter of the interpreter (ztcl#243).
+/// The engine adds events on its own thread; `netlog` takes them.
+const NetLog = struct {
+    gpa: std.mem.Allocator,
+    meter: ?*@import("meter.zig").Meter,
+    lock: std.atomic.Value(bool) = .init(false),
+    ring: [max]Entry = undefined,
+    head: usize = 0,
+    n: usize = 0,
+    /// The events that a full ring dropped since the last `netlog`.
+    dropped: u64 = 0,
+
+    const max = 1024;
+    const Entry = struct {
+        ev: nat_engine.Event,
+        name: [253]u8,
+        name_len: u8,
+    };
+
+    fn create(gpa: std.mem.Allocator, it: *Interp) !*NetLog {
+        const l = try gpa.create(NetLog);
+        l.* = .{ .gpa = gpa, .meter = it.meter };
+        if (l.meter) |m| m.retain();
+        return l;
+    }
+
+    fn destroy(l: *NetLog) void {
+        if (l.meter) |m| m.release();
+        l.gpa.destroy(l);
+    }
+
+    fn acquire(l: *NetLog) void {
+        while (l.lock.cmpxchgWeak(false, true, .acquire, .monotonic) != null) std.atomic.spinLoopHint();
+    }
+
+    fn release(l: *NetLog) void {
+        l.lock.store(false, .release);
+    }
+
+    /// The hook `Config.event` of the engine.
+    fn event(ctx: ?*anyopaque, ev: *const nat_engine.Event) void {
+        const l: *NetLog = @ptrCast(@alignCast(ctx.?));
+        if (l.meter) |m| {
+            var hb: [24]u8 = undefined;
+            const host = std.fmt.bufPrint(&hb, "{d}.{d}.{d}.{d}", .{ ev.addr[0], ev.addr[1], ev.addr[2], ev.addr[3] }) catch "";
+            switch (ev.kind) {
+                .connect => m.addConnection(host),
+                .close => {
+                    m.addIo(.socket, true, ev.bytes_in, host);
+                    m.addIo(.socket, false, ev.bytes_out, host);
+                },
+                .dns => m.addIo(.socket, false, ev.bytes_out, host),
+                else => {},
+            }
+        }
+        l.acquire();
+        defer l.release();
+        if (l.n == max) {
+            l.head = (l.head + 1) % max;
+            l.n -= 1;
+            l.dropped += 1;
+        }
+        const e = &l.ring[(l.head + l.n) % max];
+        e.ev = ev.*;
+        const k = @min(ev.name.len, e.name.len);
+        @memcpy(e.name[0..k], ev.name[0..k]);
+        e.name_len = @intCast(k);
+        e.ev.name = "";
+        l.n += 1;
+    }
+
+    /// `ztcl::vm netlog VM`: the events since the last call, oldest
+    /// first, each a dict.
+    fn take(l: *NetLog, it: *Interp) Error!Value {
+        var copy: [max]Entry = undefined;
+        l.acquire();
+        const n = l.n;
+        for (0..n) |i| copy[i] = l.ring[(l.head + i) % max];
+        const dropped = l.dropped;
+        l.head = 0;
+        l.n = 0;
+        l.dropped = 0;
+        l.release();
+        const a = it.alloc();
+        var out = try a.alloc(Value, n + @intFromBool(dropped > 0));
+        for (copy[0..n], 0..) |*e, i| {
+            const ev = &e.ev;
+            var items: std.ArrayListUnmanaged(Value) = .empty;
+            try items.appendSlice(a, &.{
+                .{ .str = "event" },   .{ .str = @tagName(ev.kind) },
+                .{ .str = "proto" },   .{ .str = @tagName(ev.proto) },
+                .{ .str = "port" },    .{ .int = ev.guest_port },
+                .{ .str = "address" }, .{ .str = try std.fmt.allocPrint(a, "{d}.{d}.{d}.{d}:{d}", .{ ev.addr[0], ev.addr[1], ev.addr[2], ev.addr[3], ev.port }) },
+            });
+            if (ev.kind == .refuse) try items.appendSlice(a, &.{ .{ .str = "rule" }, .{ .int = ev.rule } });
+            if (ev.kind == .close) try items.appendSlice(a, &.{ .{ .str = "in" }, .{ .int = @intCast(ev.bytes_in) }, .{ .str = "out" }, .{ .int = @intCast(ev.bytes_out) } });
+            if (e.name_len > 0) try items.appendSlice(a, &.{ .{ .str = "name" }, .{ .str = try a.dupe(u8, e.name[0..e.name_len]) } });
+            out[i] = try value.wrapList(a, items.items);
+        }
+        if (dropped > 0) {
+            var items = [4]Value{ .{ .str = "event" }, .{ .str = "dropped" }, .{ .str = "count" }, .{ .int = @intCast(dropped) } };
+            out[n] = try value.wrapList(a, try a.dupe(Value, &items));
+        }
+        return value.wrapList(a, out);
+    }
+};
+
 /// `-net nat`: a network through the user-mode NAT of ztcl#461. It needs
 /// the capability `socket`, as each connection of the guest is a
 /// connection of the host under its policy. Off by default.
@@ -757,6 +865,8 @@ const mac = if (on_mac) struct {
     const Net = struct {
         vm_fd: c_int,
         nat: *nat_engine.Nat,
+        /// The events of the engine, for `netlog`.
+        log: ?*NetLog = null,
 
         fn init(gpa: std.mem.Allocator, cfg: nat_engine.Config) !*Net {
             var pair: [2]c.fd_t = undefined;
@@ -786,6 +896,7 @@ const mac = if (on_mac) struct {
         fn close(n: *Net, gpa: std.mem.Allocator) void {
             n.nat.deinit();
             _ = c.close(n.vm_fd);
+            if (n.log) |l| l.destroy();
             gpa.destroy(n);
         }
     };
@@ -835,6 +946,11 @@ const mac = if (on_mac) struct {
             stop(g, force);
             return .{ .str = "" };
         }
+        if (std.mem.eql(u8, sub, "netlog")) {
+            if (args.len != 3) return it.wrongArgs("ztcl::vm netlog vm");
+            const n = g.net orelse return it.failCode("ZTCL VM NONET", "the guest {s} has no -net nat", .{g.name});
+            return n.log.?.take(it);
+        }
         if (std.mem.eql(u8, sub, "status")) {
             if (args.len != 3) return it.wrongArgs("ztcl::vm status vm");
             return .{ .str = status(g) };
@@ -859,7 +975,7 @@ const mac = if (on_mac) struct {
             destroy(it, g);
             return .{ .str = "" };
         }
-        return it.fail("bad option \"{s}\": must be console, create, delete, exec, mount, start, status, stop, or vsock", .{sub});
+        return it.fail("bad option \"{s}\": must be console, create, delete, exec, mount, netlog, start, status, stop, or vsock", .{sub});
     }
 
     /// The host path of a path of the script, below the root folder.
@@ -992,7 +1108,12 @@ const mac = if (on_mac) struct {
             _ = c.close(pair[1]);
         };
         cfg.console = .{ .in = pair[0], .out = pair[0] };
-        const net: ?*Net = if (net_nat) Net.init(it.heap.backing, .{ .policy = natPolicy, .dns_allow = natDnsPolicy, .policy_ctx = it, .dns = dns }) catch return it.failCode("ZTCL VM FRAMEWORK", "no socket for the network of the guest", .{}) else null;
+        const log: ?*NetLog = if (net_nat) try NetLog.create(it.heap.backing, it) else null;
+        const net: ?*Net = if (net_nat) Net.init(it.heap.backing, .{ .policy = natPolicy, .dns_allow = natDnsPolicy, .policy_ctx = it, .dns = dns, .event = NetLog.event, .event_ctx = log }) catch {
+            log.?.destroy();
+            return it.failCode("ZTCL VM FRAMEWORK", "no socket for the network of the guest", .{});
+        } else null;
+        if (net) |x| x.log = log;
         var keep_net = false;
         defer if (!keep_net) if (net) |n| n.close(it.heap.backing);
         if (net) |n| cfg.net_fd = n.vm_fd;
@@ -1425,6 +1546,8 @@ const lin = if (on_kvm) struct {
         pooled: bool = false,
         /// The listeners of `listen`.
         listens: std.ArrayListUnmanaged(Listen) = .empty,
+        /// The events of `-net nat`, for `netlog`.
+        netlog: ?*NetLog = null,
         /// The image of the guest as "name counter" (the tag of its
         /// snapshot), and the count of its disks that are the disks of
         /// the image.
@@ -1492,6 +1615,11 @@ const lin = if (on_kvm) struct {
             if (args.len != 3) return it.wrongArgs("ztcl::vm status vm");
             return .{ .str = status(g) };
         }
+        if (std.mem.eql(u8, sub, "netlog")) {
+            if (args.len != 3) return it.wrongArgs("ztcl::vm netlog vm");
+            const l = g.netlog orelse return it.failCode("ZTCL VM NONET", "the guest {s} has no -net nat", .{g.name});
+            return l.take(it);
+        }
         if (std.mem.eql(u8, sub, "snapshot")) {
             if (args.len != 4) return it.wrongArgs("ztcl::vm snapshot vm file");
             return snapshot(it, g, try it.str(args[3]));
@@ -1529,7 +1657,7 @@ const lin = if (on_kvm) struct {
             destroy(it, g);
             return .{ .str = "" };
         }
-        return it.fail("bad option \"{s}\": must be console, create, delete, exec, mount, snapshot, start, status, stop, or vsock", .{sub});
+        return it.fail("bad option \"{s}\": must be console, create, delete, exec, mount, netlog, snapshot, start, status, stop, or vsock", .{sub});
     }
 
     /// Opens a path of the script below the root folder.
@@ -1736,6 +1864,11 @@ const lin = if (on_kvm) struct {
         cfg.disks = g.disks;
         cfg.shares = g.shares;
         cfg.console = g.console_vm;
+        if (cfg.net) |*nc| {
+            g.netlog = try NetLog.create(it.heap.backing, it);
+            nc.event = NetLog.event;
+            nc.event_ctx = g.netlog;
+        }
         g.machine = kvm.init(b, cfg) catch |e| return failure(it, e);
         made = true;
         // The first guest of an image for the pool: its bytes and disks
@@ -2038,6 +2171,7 @@ const lin = if (on_kvm) struct {
         b.free(g.image_tag);
         if (g.console_vm >= 0) sys.close(g.console_vm);
         if (g.console_host >= 0) sys.close(g.console_host);
+        if (g.netlog) |l| l.destroy();
         it.heap.backing.free(g.name);
         it.heap.backing.destroy(g);
     }

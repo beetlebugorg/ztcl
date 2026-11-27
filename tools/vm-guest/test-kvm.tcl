@@ -143,6 +143,15 @@ if {[dict get $r exit] == 9} {
     check "net: TCP to the host" [expr {[tsv::exists net sink] ? [tsv::get net sink] : -1}] 16777216
     check "net: a refused port" [dict get [ztcl::vm exec $vm /bin/busybox sh -c {/bin/busybox nc 10.0.2.2 1 < /dev/null; echo $?}] stdout] "1\n"
     thread::release $srv
+    # The events of the NAT: the refused name, and the connection from
+    # the host with its bytes. A second take is empty.
+    set waited 0
+    while {[llength [set log [ztcl::vm netlog $vm]]] == 0 && $waited < 50} { after 20; incr waited }
+    after 200
+    lappend log {*}[ztcl::vm netlog $vm]
+    check "netlog: the refused name" [expr {[lsearch $log "*event refuse*name example.com*"] >= 0}] 1
+    check "netlog: a TCP connection and its bytes" [expr {[lsearch $log "*event close proto tcp*in 16777216*"] >= 0}] 1
+    check "netlog: empty after a take" [ztcl::vm netlog $vm] {}
 }
 ztcl::vm delete $vm
 check "net: a bad network" [catch {ztcl::vm create {*}$boot -net tap}] 1
