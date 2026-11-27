@@ -103,7 +103,10 @@ fn unavailable(it: *Interp) Error {
 
 fn cmdVm(it: *Interp, args: []const Value, _: ?*interp.Cmd) Error!Value {
     if (args.len < 2) return it.wrongArgs(usage);
-    if (std.mem.eql(u8, try it.str(args[1]), "image")) return imageCmd(it, args[2..]);
+    if (std.mem.eql(u8, try it.str(args[1]), "image")) {
+        if (comptime !vmstore.supported) return unavailable(it);
+        return imageCmd(it, args[2..]);
+    }
     if (comptime on_kvm) return lin.run(it, args);
     if (comptime on_whp) return win.run(it, args);
     if (comptime !on_mac) return unavailable(it);
