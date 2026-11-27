@@ -113,8 +113,9 @@ def reference(runner):
         if "cap" in e and "flags" not in e:
             continue
         text = ref.markdown(e, lambda n: n, check=True)
-        if "flags" in e:
-            text = f"<!-- checkpoint: {e['flags']} -->\n```tcl\n```\n" + text
+        flags = " ".join(f for f in (e.get("flags"), f"--tcl {e['tcl']}" if "tcl" in e else None) if f)
+        if flags:
+            text = f"<!-- checkpoint: {flags} -->\n```tcl\n```\n" + text
         n, bad = lesson(runner, f"{e['file']}:{e['line']} {e['name']}", text)
         count += n
         fail |= bad

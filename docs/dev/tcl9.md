@@ -1,6 +1,6 @@
 # Tcl 8.6 and Tcl 9
 
-This page compares Tcl 8.6.16 and Tcl 9.1.0 for the commands that ztcl has. ztcl still follows Tcl 8.6. The choices below are proposals, and no choice is in the code yet.
+This page compares Tcl 8.6.16 and Tcl 9.1.0 for the commands that ztcl has. It is the record of the probes before issue 201. ztcl now follows Tcl 8.6 by default and Tcl 9.1 with `--tcl 9.1`. [Tcl 9.1](../tcl91.md) lists what the switch changes and what is not done. The tables below are the results of the probes, and some rows are out of date.
 
 ## Method
 
@@ -36,7 +36,7 @@ CPU milliseconds, best of 11 runs of the whole process, `ReleaseFast`, on an Int
 
 ## The state of the choices
 
-No choice of this page is in the code. Where Tcl 8.6 and Tcl 9 differ, ztcl keeps the behavior of 8.6 as the default. The work on the 152 test files of 8.6.16 added the event loop, `socket`, `exec`, TclOO, and `encoding`. These commands are the same in both versions for the inputs of the tests that ran, so they needed no choice. The owner of the project decides each proposal below.
+Where Tcl 8.6 and Tcl 9 differ, ztcl keeps the behavior of 8.6 as the default, and `--tcl 9.1` selects the behavior of 9.1 for the parts that [Tcl 9.1](../tcl91.md) lists. The work on the 152 test files of 8.6.16 added the event loop, `socket`, `exec`, TclOO, and `encoding`. These commands are the same in both versions for the inputs of the tests that ran, so they needed no choice. The owner of the project decides each proposal below.
 
 ## Differences and proposed choices
 

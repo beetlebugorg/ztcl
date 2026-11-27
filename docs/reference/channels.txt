@@ -55,7 +55,7 @@ cap: channels
 
 == fconfigure
 syn: fconfigure channelId ?-option value ...?
-does: Gives or sets the options of a channel: `-blocking`, `-buffering` (`full`, `line`, or `none`), `-buffersize`, `-encoding`, `-translation` (`auto`, `lf`, `crlf`, or `binary`), and `-eofchar`. A socket also has `-sockname` and `-peername`. `chan configure` is the same command.
+does: Gives or sets the options of a channel: `-blocking`, `-buffering` (`full`, `line`, or `none`), `-buffersize`, `-encoding`, `-translation` (`auto`, `lf`, `crlf`, or `binary`), and `-eofchar`. In Tcl 9.1 a channel also has `-profile` (`strict` by default, `replace`, or `tcl8`): with `strict`, bad UTF-8 input is an error of the read. A socket also has `-sockname` and `-peername`. `chan configure` is the same command.
 cap: channels
 
 == fblocked
@@ -136,7 +136,7 @@ ex: file mkdir data; file isdirectory data => 1
 
 == glob
 syn: glob ?switches? name ?name ...?
-does: The names of the files that match glob patterns. A pattern with no match is an error, unless `-nocomplain`.
+does: The names of the files that match glob patterns. In Tcl 8.6 a pattern with no match is an error, unless `-nocomplain`. In Tcl 9.1 it gives an empty list.
 cap: file
 opt: -nocomplain | No match gives an empty list.
 opt: -directory DIR | Matches in DIR.
