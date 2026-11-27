@@ -28,7 +28,7 @@
 //! descriptor (`F_GETPATH`), so a link in the root folder cannot point
 //! the guest outside it.
 //!
-//! A share is the virtio-fs tag `share0`, `share1`, ..., in the order of
+//! A share is the tag `share0`, `share1`, ..., in the order of
 //! the options, and a disk is `/dev/vda`, `/dev/vdb`, .... A share or a
 //! disk is read-only unless its list ends in `rw`.
 //!
@@ -44,8 +44,9 @@
 //! `/dev/vhost-vsock` (the `kvm` group). Without it, `create` gives the
 //! error `ZTCL VM UNAVAILABLE` with the fix. ztcl opens each path of a
 //! guest in the file jail and gives the monitor the open descriptor, so
-//! a swap of the file after the check cannot reach the guest. A share is
-//! not available on Linux yet (`ZTCL VM SHARE`).
+//! a swap of the file after the check cannot reach the guest. A share on
+//! Linux is the 9p device of ztcl (`vm/virtio/ninep.zig`), with the tag
+//! `share0`, `share1`, ..., and the agent mounts it with 9p.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 const std = @import("std");
@@ -724,6 +725,7 @@ const lin = if (on_kvm) struct {
         initrd: []u8,
         cmdline: []u8,
         disks: []kvm.Disk,
+        shares: []kvm.Share,
         /// The end of the console socket that the monitor has, and the
         /// end of the script, until `console` gives it as a channel.
         console_vm: i32,
@@ -831,6 +833,19 @@ const lin = if (on_kvm) struct {
         };
     }
 
+    /// Opens a folder of the script below the root folder, with
+    /// `O_PATH`, for the root folder of a share.
+    fn openDir(it: *Interp, path: []const u8) Error!i32 {
+        if (it.capabilities & @backingInt(interp.Capability.file) == 0 or !it.fs_ok())
+            return it.failCode("ZTCL VM NOFILE", "a path of ztcl::vm needs the file capability", .{});
+        const rel = try fsroot.need(it, path);
+        const r = try fsroot.openRel(it, rel, .{ .directory = true, .path_only = true }, 0);
+        return switch (r) {
+            .fd => |fd| fd,
+            .err => |e| fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "couldn't open \"{s}\": ", .{path})),
+        };
+    }
+
     /// The bytes of a file of the script, for the kernel and the
     /// initramfs.
     fn readPath(it: *Interp, path: []const u8) Error![]u8 {
@@ -868,6 +883,7 @@ const lin = if (on_kvm) struct {
         var kernel: []const u8 = "";
         var initrd: []const u8 = "";
         var disks: std.ArrayList(struct { path: []const u8, rw: bool }) = .empty;
+        var shares: std.ArrayList(struct { path: []const u8, rw: bool }) = .empty;
         var warm = false;
         var i: usize = 0;
         while (i < args.len) : (i += 2) {
@@ -890,16 +906,19 @@ const lin = if (on_kvm) struct {
             } else if (std.mem.eql(u8, opt, "-disk")) {
                 const l = try it.readList(v);
                 if (l.len < 1 or l.len > 2) return it.fail("a disk is {{file ?rw?}}", .{});
-                if (disks.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks", .{kvm.max_disks});
+                if (disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{kvm.max_disks});
                 try disks.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 2 and try isRw(it, l[1]) });
             } else if (std.mem.eql(u8, opt, "-share")) {
-                return it.failCode("ZTCL VM SHARE", "a share is not available on Linux yet", .{});
+                const l = try it.readList(v);
+                if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
+                if (disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{kvm.max_disks});
+                try shares.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 3 and try isRw(it, l[2]) });
             } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -initrd, -kernel, -memory, -share, or -warm", .{opt});
         }
         if (kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel until the base image of the plan", .{});
 
         const g = try b.create(Guest);
-        g.* = .{ .name = "", .machine = undefined, .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .console_vm = -1, .console_host = -1, .warm = warm };
+        g.* = .{ .name = "", .machine = undefined, .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .shares = &.{}, .console_vm = -1, .console_host = -1, .warm = warm };
         var made = false;
         errdefer if (!made) freeGuest(it, g);
         g.kernel = try readPath(it, kernel);
@@ -908,6 +927,9 @@ const lin = if (on_kvm) struct {
         g.disks = try b.alloc(kvm.Disk, disks.items.len);
         for (g.disks) |*d| d.fd = -1;
         for (disks.items, g.disks) |d, *out| out.* = .{ .fd = try openPath(it, d.path, d.rw), .read_only = !d.rw };
+        g.shares = try b.alloc(kvm.Share, shares.items.len);
+        for (g.shares) |*d| d.fd = -1;
+        for (shares.items, g.shares) |d, *out| out.* = .{ .fd = try openDir(it, d.path), .read_only = !d.rw };
         var pair: [2]i32 = undefined;
         if (linux.errno(linux.socketpair(linux.AF.UNIX, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0, &pair)) != .SUCCESS)
             return it.failCode("ZTCL VM KVM", "no socket for the console", .{});
@@ -917,6 +939,7 @@ const lin = if (on_kvm) struct {
         cfg.initrd = g.initrd;
         cfg.cmdline = g.cmdline;
         cfg.disks = g.disks;
+        cfg.shares = g.shares;
         cfg.console = g.console_vm;
         g.machine = kvm.init(b, cfg) catch |e| return failure(it, e);
         made = true;
@@ -1018,6 +1041,8 @@ const lin = if (on_kvm) struct {
         const b = it.heap.backing;
         for (g.disks) |d| if (d.fd >= 0) sys.close(d.fd);
         b.free(g.disks);
+        for (g.shares) |d| if (d.fd >= 0) sys.close(d.fd);
+        b.free(g.shares);
         b.free(g.kernel);
         b.free(g.initrd);
         b.free(g.cmdline);

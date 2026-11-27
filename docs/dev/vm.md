@@ -123,7 +123,7 @@ The spike builds its own guest. The proper image is the tiny kernel and BusyBox 
 - A disk is a descriptor that ztcl opens in the file jail. The vCPU thread runs each request with `pread` and `pwrite`. A read-only disk has `VIRTIO_BLK_F_RO`, and the monitor refuses its writes.
 - The monitor adds `reboot=k panic=-1` to the command line. The guest stops itself with a reboot (the reset of the keyboard controller at port 0x64) or a panic. There is no ACPI, so a power-off of the guest halts it and does not stop it: `stop` without `-force` stops the guest at once on Linux until the agent has `poweroff`.
 - A pause sets `immediate_exit` of each vCPU and sends its thread a signal (40, with an empty handler), so `KVM_RUN` returns, and the thread waits on a futex. A warm guest (`-warm 1`) is a booted guest in this pause.
-- A share is not available on Linux yet (`ZTCL VM SHARE`). virtio-fs needs a FUSE server on the host side, which ztcl writes in Zig, in the file jail. A first step can share folders with virtio-9p, a smaller protocol, with the same Tcl API. The x86-64 guest kernel has 9P built in for it.
+- A share is the 9p device of ztcl (virtio ID 9, `src/vm/virtio/ninep.zig`) with a server of 9P2000.L, and the guest mounts it with `trans=virtio,version=9p2000.L`. `-share {host guest ?rw?}` gives the tag `share0`, `share1`, ... in the order of the options, as on macOS: the agent mounts `share0` at `/mnt/share` at boot, and `ztcl::vm mount` mounts the others. ztcl opens the root folder of the share in the file jail with `O_PATH`, and `src/vm/share_linux.zig` opens each path of the guest from it with `openat2`, `RESOLVE_BENEATH`, and `RESOLVE_NO_SYMLINKS`. The server keeps the path of each fid and resolves `..` with the names of that path, so no path leaves the folder, and the host follows no symbolic link of the guest: the guest resolves them itself. A read-only share refuses each change with `EROFS`. Each lock of the guest succeeds, and extended attributes give `EOPNOTSUPP`. virtio-fs, with a FUSE server in Zig, can come later with the same Tcl API.
 - The user needs read and write access to `/dev/kvm` and `/dev/vhost-vsock` (the `kvm` group). Without it, `create` gives `ZTCL VM UNAVAILABLE` with the fix in the text.
 
 The x86-64 guest kernel has the options of `kernel.fragment` and `kernel-x86_64.fragment`: virtio-mmio with the devices of the command line, no PCI, no ACPI, the MP table, the paravirtual clock of KVM, the 8250 console, LZ4, 9P, and dm-verity with `dm-mod.create=` for the signed images of ztcl#312. The x86-64 job of `vm-guest.yml` builds it (the artifact `vm-guest-x86_64`: a 2.6 MB bzImage and a 14 MB `vmlinux`) and runs `tools/vm-guest/test-kvm.sh` with the agent of the spike.
@@ -165,6 +165,7 @@ The monitors that give the guest its devices on virtio-mmio (KVM, and the Window
 - `queue.zig`: `Mem` (the guest memory as one host range from guest address 0, with a bounds check of each address and length of the guest), `Queue` (the split virtqueue), and `Chain` (a chain of descriptors as host slices).
 - `mmio.zig`: `Device`, the registers of the virtio-mmio transport, version 2, and the devices: `Device.console`, `Device.blk`, `Device.rng`, `Device.vsock`, and `Device.external` for a device that the hypervisor runs (vhost-vsock on KVM).
 - `vsock.zig`: `Vsock`, the vsock device of section 5.10 of virtio 1.2 in ztcl, for a monitor with no vsock of its host kernel.
+- `ninep.zig`: `Server`, the 9p device and its server of 9P2000.L, on an `Fs` of the backend.
 
 A backend implements this interface:
 
@@ -177,6 +178,7 @@ A backend implements this interface:
 | `Disk` | Gives `size`, `read_only`, and `read`, `write`, and `flush` at a byte offset. Each read or write is in full or gives false. |
 | `rng` | Gives a function that fills a buffer with random bytes and gives the count. |
 | `External` | Gives the virtio ID and the hooks `driverOk(ctx, dev)` and `reset(ctx, dev)`. The transport keeps the registers, and InterruptStatus always reads 1 (the device raises its own interrupts). |
+| `Fs` | For `Device.ninep`: the calls on the files of a share (`stat`, `open`, `create`, `read`, `write`, `readdir`, `mkdir`, `unlink`, `rename`, `setattr`, and the others of `Fs.VTable`), each with a path below the root folder of the share and a Linux errno as its result. `src/vm/share_linux.zig` is the `Fs` of Linux. |
 | `Vsock` | Gives a `Sink`: `data(ctx, conn, bytes)` for the bytes of the guest on a stream, and `event(ctx, conn, e)` for `connected`, `refused`, and `closed`. The backend calls `connect(dev, &host, port)`, `send`, and `close` with `Device.lock` held; `send` gives the count of bytes that went in. |
 
 vsock on KVM is vhost-vsock, an external device. A monitor without vhost (WHP) uses `Vsock`, with the host as CID 2. A stream starts with a `connect` of the host to a port of the guest. The host sends no more than the credit of the guest (its `buf_alloc` less the bytes in flight), and gives each byte of the guest to the sink at once, so its own credit is its `fwd_cnt`. A REQUEST of the guest gets RST until the host can listen. KVM can use `Vsock` in the place of vhost-vsock.
@@ -223,7 +225,7 @@ whp-spike out/bzImage out/busybox tools/vm-guest/init 256
 2. `vz.zig` as the core of `src/microvm.zig` with `create`, `start`, `stop`, `status`, `console`, `vsock`, `delete`, `-warm`, and the capability, on macOS (done). `vm.zig` is the name of the bytecode file, so the new file is `src/microvm.zig`, and the command stays `ztcl::vm`. A child interp has no `vm`, so the limits count the guests of one interpreter. `tools/vm-guest/test.sh` runs the boot test on a Mac with the hypervisor.
 3. The entitlements in the Zig signer (done): `src/macho.zig` writes the requirements, the XML, and the DER blobs with their special slots. `zig build` signs the macOS `ztcl` with `tools/macho-sign`, and `ztcl build` signs an app with `vm` in `--allow`.
 4. The agent with `exec` and `mount` (done): the protocol is `docs/dev/vm-agent.md`, the host side `src/vmagent.zig`, and `ztcl::vm exec` and `mount` on macOS and KVM. The image builds for arm64 and x86-64 (`tools/vm-guest`, the artifacts `vm-guest` and `vm-guest-x86_64`). The signed image is ztcl#312.
-5. The KVM part on x86-64 (done, except the shares): `src/kvm.zig`. arm64 later.
+5. The KVM part on x86-64 (done): `src/kvm.zig`, with 9p shares. arm64 later.
 6. The Windows part on the Windows Hypervisor Platform: the spike, the interrupts, the monitor, and the commands (done, except the shares and a second CPU).
 7. The docs page `docs/modules/vm.md` (#172).
 

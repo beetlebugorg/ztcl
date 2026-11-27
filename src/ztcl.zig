@@ -118,10 +118,12 @@ test {
     _ = @import("vfs_tests.zig");
     _ = @import("tcl9_tests.zig");
     if (@import("builtin").os.tag == .linux) _ = @import("kvm.zig");
+    if (@import("builtin").os.tag == .linux) _ = @import("vm/share_linux.zig");
     _ = @import("vm/virtio/mmio.zig");
     _ = @import("vm/virtio/vsock.zig");
     _ = @import("vm/boot.zig");
     if (@import("builtin").os.tag == .windows) _ = @import("whp.zig");
+    _ = @import("vm/virtio/ninep.zig");
     _ = zipwrite;
     _ = buildnative;
     _ = dbus;
