@@ -263,6 +263,23 @@ So ztcl uses no part of `std.Io.Uring`. `src/aio/uring.zig` implements each oper
 
 The interface of `aio` is open (see questions). An implementation of `std.Io` needs `async`, `await`, `cancel`, and the futex calls on fibers of its own, and 110 vtable entries. ztcl writes its own TLS and HTTP code. The std TLS 1.2 client of decision 7 reads and writes an `Io.Reader` and an `Io.Writer` (`std.crypto.tls.Client.init`), and a buffer of a connection of `aio` can give these two interfaces with no `std.Io`. A completion interface of its own (submit an operation with a callback or a coroutine to resume, and run the loop) is smaller, and `src/event.zig` and the coroutines of ztcl can use it directly.
 
+### The aio loop on Linux (task 06)
+
+`src/aio/` has the completion interface of the paragraph above, for Linux. A `Completion` has an operation (accept, connect, read, write, or a timer), a callback, and a result: the count of bytes, the new descriptor, or 0, and a negative errno for an error. `Loop.submit` starts the operation, `Loop.run` waits with an optional time limit and runs the callbacks, `Loop.cancel` ends an operation with `-ECANCELED`, and `Loop.wake` ends a wait from another thread. The loop has no interpreter and no `std.Io`. `src/event.zig` does not use it yet.
+
+- `uring.zig`: one SQE for each operation on `std.os.linux.IoUring`. A wait with a time limit adds a timeout with a count of one, so no timeout stays in the ring after the wait.
+- `epoll.zig`: the system call at once, then a level-triggered wait for the read side or the write side of the descriptor. Timers are a list sorted by deadline. One operation can wait on each side of a descriptor.
+- `Backend.auto` uses io_uring, and epoll when `io_uring_setup` fails. With `io_uring_setup` blocked by a seccomp filter (`systemd-run -p SystemCallFilter=~io_uring_setup`), `auto` gives epoll.
+
+`zig build aio-test` runs the same tests on both backends. `zig build aio-stress -- --conns N --seconds S` runs N loopback connections that each send 16 bytes and read the echo, in one loop. `sendfile` is later work, with the HTTP server.
+
+The stress gate on 2026-11-27 (x86-64 Linux, a shared machine, `--conns 10000 --seconds 300`, ReleaseSafe):
+
+| Backend | Round trips | Memory after the connects | At 60 s | At the end | Descriptors left |
+|---|---:|---:|---:|---:|---|
+| uring | 9,560,457 | 3,564 KiB | 3,572 KiB | 3,572 KiB | the 2 of the loop |
+| epoll | 7,740,000 | 3,640 KiB | 4,104 KiB | 4,104 KiB | the 2 of the loop |
+
 ### The event loop of an interpreter
 
 `src/event.zig` keeps its Tcl behavior: `after`, `vwait`, `update`, `fileevent`, the order of timers, and the idle scripts. Its wait changes from `poll` to the `aio` loop. The test files `event.test`, `socket.test`, `timer.test`, and `ioCmd.test` must keep their pass counts.
