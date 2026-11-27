@@ -244,6 +244,39 @@ pub fn nowNs() u64 {
     return @intCast(@divTrunc(@as(i128, c) * std.time.ns_per_s, f));
 }
 
+/// Waits `us` microseconds. `Sleep` waits at least to the next tick of
+/// the clock of the system, 15.6 ms unless a process asks for a faster
+/// one, and so a wait of 1 ms there gave a vsock connection 15 ms. A
+/// waitable timer of CREATE_WAITABLE_TIMER_HIGH_RESOLUTION (Windows 10
+/// 1803) waits the time it gets and changes no setting of the system.
+/// Each thread has its own timer, and a host with no such timer falls
+/// back to `Sleep`.
+pub fn sleepUs(us: u32) void {
+    const S = struct {
+        threadlocal var timer: ?HANDLE = null;
+        threadlocal var tried = false;
+    };
+    if (!S.tried) {
+        S.tried = true;
+        // CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS.
+        S.timer = CreateWaitableTimerExW(null, null, 0x2, 0x1f0003);
+    }
+    if (S.timer) |t| {
+        // A negative due time is relative, in units of 100 ns.
+        const due: i64 = -@as(i64, us) * 10;
+        if (SetWaitableTimer(t, &due, 0, null, null, 0) != 0) {
+            _ = WaitForSingleObject(t, 0xffffffff);
+            return;
+        }
+    }
+    Sleep(@max(1, us / 1000));
+}
+
+extern "kernel32" fn CreateWaitableTimerExW(attrs: ?*anyopaque, name: ?[*:0]const u16, flags: u32, access: u32) callconv(.winapi) ?HANDLE;
+extern "kernel32" fn SetWaitableTimer(t: HANDLE, due: *const i64, period: i32, routine: ?*anyopaque, arg: ?*anyopaque, resume_: i32) callconv(.winapi) i32;
+extern "kernel32" fn WaitForSingleObject(h: HANDLE, ms: u32) callconv(.winapi) u32;
+extern "kernel32" fn Sleep(ms: u32) callconv(.winapi) void;
+
 /// Makes a machine of the configuration. The machine uses the bytes of
 /// `cfg` with no copy, so the caller keeps them until `deinit`.
 pub fn init(alloc: std.mem.Allocator, cfg: Config) Fail!*Machine {
@@ -381,7 +414,41 @@ fn setup(m: *Machine) Fail!void {
     };
     m.mem = .{ .base = @ptrCast(base), .size = size };
     if (WHvMapGpaRange(p, base, 0, size, map_rwx) < 0) return fail("WHvMapGpaRange", 0);
+    populate(p, size);
 }
+
+/// The hypervisor fills its map of a guest page on the first touch of the
+/// guest, with no exit to this monitor, and the decompressor of the kernel
+/// and the first allocations of the kernel touch thousands of pages. A
+/// guest of 256 MB on an Intel Core i7-1165G7 took 50 ms from its start
+/// to its first exit with an lz4 kernel, and 4 ms when the two ends of its
+/// memory had their map first. Here the advice of `WHvAdviseGpaRange`
+/// fills 32 MB at each end: the kernel loads at 16 MB and unpacks above
+/// it, and the initramfs and the first allocations of the kernel are at
+/// the top. The call came after the rest of the API (Windows 10 2004), so
+/// this monitor finds it at run time, and a host without it starts the
+/// guest with no advice.
+fn populate(p: Partition, size: u64) void {
+    const Range = extern struct { gpa: u64, size: u64 };
+    // WHV_ADVISE_GPA_RANGE_POPULATE: the flag Prefetch, and the access
+    // WHvMemoryAccessWrite.
+    const Advice = extern struct { flags: u32, access: u32 };
+    const Fn = *const fn (Partition, [*]const Range, u32, u32, *const Advice, u32) callconv(.winapi) HRESULT;
+    const lib = GetModuleHandleA("winhvplatform.dll") orelse return;
+    const f: Fn = @ptrCast(GetProcAddress(lib, "WHvAdviseGpaRange") orelse return);
+    const each: u64 = @min(size / 2, populate_end);
+    const ranges = [2]Range{ .{ .gpa = 0, .size = each }, .{ .gpa = size - each, .size = each } };
+    const advice: Advice = .{ .flags = 1, .access = 1 };
+    // WHvAdviseGpaRangeCodePopulate. A failure leaves the map to the
+    // first touch, as before.
+    _ = f(p, &ranges, ranges.len, 0, &advice, @sizeOf(Advice));
+}
+
+/// The part at each end of the guest memory that `populate` fills.
+const populate_end: u64 = 32 << 20;
+
+extern "kernel32" fn GetModuleHandleA(name: [*:0]const u8) callconv(.winapi) ?*anyopaque;
+extern "kernel32" fn GetProcAddress(lib: *anyopaque, name: [*:0]const u8) callconv(.winapi) ?*const anyopaque;
 
 /// The command line of the guest: the one of the configuration, then the
 /// options of this monitor and the list of the virtio-mmio devices. The
