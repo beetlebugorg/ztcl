@@ -157,6 +157,8 @@ pub fn delete(it: *Interp, name: []const u8, out: *Arg) i32 {
 
 /// Provides package `name` at `version`.
 pub fn provide(it: *Interp, name: []const u8, version: []const u8, out: *Arg) i32 {
+    // An interp with no command `package` keeps no versions.
+    if (it.findCommand("package") == null) return 0;
     var buf: std.ArrayList(u8) = .empty;
     buf.appendSlice(it.alloc(), "package provide ") catch |e| return codeOf(it, e, out);
     value.appendElement(it.alloc(), &buf, name, false) catch |e| return codeOf(it, e, out);

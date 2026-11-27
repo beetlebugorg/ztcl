@@ -44,6 +44,7 @@ const ztcl_cext_args = bridge.ztcl_cext_args;
 const ztcl_cext_buf = bridge.ztcl_cext_buf;
 const ztcl_cext_dispatch = bridge.ztcl_cext_dispatch;
 const ztcl_cext_interp = bridge.ztcl_cext_interp;
+const ztcl_cext_interp_free = bridge.ztcl_cext_interp_free;
 const ztcl_cext_precision = bridge.ztcl_cext_precision;
 const ztcl_cext_reply = bridge.ztcl_cext_reply;
 const ztcl_cext_result = bridge.ztcl_cext_result;
@@ -97,14 +98,10 @@ comptime {
         @export(&ztcl_cext_reply, .{ .name = "ztcl_cext_reply" });
         @export(&ztcl_cext_dispatch, .{ .name = "ztcl_cext_dispatch" });
         @export(&ztcl_cext_interp, .{ .name = "ztcl_cext_interp" });
+        @export(&ztcl_cext_interp_free, .{ .name = "ztcl_cext_interp_free" });
         @export(&ztcl_cext_result, .{ .name = "ztcl_cext_result" });
         @export(&ztcl_cext_precision, .{ .name = "ztcl_cext_precision" });
     }
-}
-
-pub fn Tcl_Panic(format: [*:0]const u8, ...) callconv(.c) noreturn {
-    // The format arguments are not expanded.
-    panicText(std.mem.span(format));
 }
 
 /// A slot with no implementation.
@@ -477,4 +474,27 @@ test "a dispatch runs the script and the callbacks of the non-recursive engine" 
     try testing.expect(Tcl_GetVar2Ex(ip, "nope", null, TCL_LEAVE_ERR_MSG) == null);
     try testing.expectEqualStrings("no such variable", std.mem.span(Tcl_GetStringResult(ip)));
     try testing.expectEqual(OK, Tcl_DeleteCommandFromToken(ip, c));
+}
+
+test "the free of an interp runs the delete procs and drops the package data" {
+    const saved = bridge.host;
+    bridge.host = Fake.h;
+    defer bridge.host = saved;
+    const D = struct {
+        var runs: usize = 0;
+        fn drop(_: ?*anyopaque, _: *Interp) callconv(.c) void {
+            runs += 1;
+        }
+    };
+    const hash = @import("hash.zig");
+    const ip = ztcl_cext_interp(1);
+    hash.Tcl_SetAssocData(ip, "a", D.drop, null);
+    hash.Tcl_SetAssocData(ip, "b", D.drop, null);
+    var marker: u8 = 0;
+    try testing.expectEqual(OK, bridge.Tcl_PkgProvideEx(ip, "p", "1.0", &marker));
+    try testing.expect(ip.pkgs != null);
+    Tcl_SetObjResult(ip, Tcl_NewStringObj("x", 1));
+    D.runs = 0;
+    ztcl_cext_interp_free(ip);
+    try testing.expectEqual(2, D.runs);
 }

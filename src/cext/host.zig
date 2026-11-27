@@ -1,5 +1,5 @@
 //! The slots that call ztcl: commands, scripts, variables, the
-//! non-recursive engine, and `Tcl_PkgProvideEx`. The native path
+//! non-recursive engine, and the package slots. The native path
 //! (`stubs.zig`) and the WebAssembly path (`wasm_stubs.zig`) use this one
 //! file, so each slot here has one implementation for the two paths.
 //!
@@ -55,19 +55,6 @@ pub fn Tcl_TranslateFileName(_: ?*Interp, name: [*:0]const u8, ds: *DString) cal
     Tcl_DStringInit(ds);
     dsAppend(ds, std.mem.span(name));
     return @ptrCast(ds.string);
-}
-
-pub fn Tcl_PkgRequireEx(ip: *Interp, name: [*:0]const u8, version: ?[*:0]const u8, exact: c_int, client_data: ?*anyopaque) callconv(.c) ?[*:0]const u8 {
-    _ = exact;
-    if (client_data) |cd| @as(*?*anyopaque, @ptrCast(@alignCast(cd))).* = null;
-    if (std.mem.eql(u8, std.mem.span(name), "Tcl")) {
-        const v = if (version) |p| std.mem.span(p) else "";
-        if (v.len == 0 or v[0] == '8') return "8.6.16";
-        setResultText(ip, "version conflict for package \"Tcl\": have 8.6.16");
-        return null;
-    }
-    setResultText(ip, "Tcl_PkgRequireEx: only the package Tcl is available");
-    return null;
 }
 
 // ---- Commands, scripts, and variables ----
@@ -410,6 +397,16 @@ pub fn ztcl_cext_interp(handle: u32) callconv(.c) *Interp {
     return ip;
 }
 
+/// Frees the interp of the package for the interp `ip.handle` of ztcl.
+/// It runs the delete procs of the assoc data. The interp of ztcl calls
+/// it before it goes.
+pub fn ztcl_cext_interp_free(ip: *Interp) callconv(.c) void {
+    @import("hash.zig").dropAssoc(ip);
+    dropPkgs(ip);
+    if (ip.result) |r| decr(r);
+    gpa.destroy(ip);
+}
+
 /// Puts the result of `ip` in `reply`, after the init function.
 pub fn ztcl_cext_result(ip: *Interp) callconv(.c) *Arg {
     reply = argOf(result(ip));
@@ -532,14 +529,161 @@ pub fn Tcl_SetVar(ip: *Interp, n: [*:0]const u8, s: [*:0]const u8, flags: c_int)
     return Tcl_SetVar2(ip, n, null, s, flags);
 }
 
-pub fn Tcl_PkgProvideEx(ip: *Interp, name: [*:0]const u8, version: [*:0]const u8, _: ?*const anyopaque) callconv(.c) c_int {
+// ---- Packages ----
+//
+// The package `Tcl` is ztcl itself at version 8.6.16. Its client data is
+// the public stubs table of the path (`Interp.stub_table`), so
+// `Tcl_InitStubs` of a package gets the table from `Tcl_PkgRequireEx`.
+// Each other package goes to the `package` command of the interp, when
+// it has one. The client data of `Tcl_PkgProvideEx` is in the list
+// `Interp.pkgs`.
+
+const tcl_version = "8.6.16";
+const tcl_parts = [_]u32{ 8, 6, 16 };
+
+/// The parts of a version such as "8.6.16". Null when the text is not a
+/// version.
+fn versionParts(t: []const u8, out: *[8]u32) ?[]u32 {
+    var n: usize = 0;
+    var it = std.mem.splitScalar(u8, t, '.');
+    while (it.next()) |p| {
+        if (n == out.len or p.len == 0) return null;
+        out[n] = std.fmt.parseInt(u32, p, 10) catch return null;
+        n += 1;
+    }
+    return out[0..n];
+}
+
+fn versionOrder(a: []const u32, b: []const u32) std.math.Order {
+    for (0..@max(a.len, b.len)) |i| {
+        const x = if (i < a.len) a[i] else 0;
+        const y = if (i < b.len) b[i] else 0;
+        if (x != y) return std.math.order(x, y);
+    }
+    return .eq;
+}
+
+/// True when Tcl 8.6.16 satisfies `want`: the same major version and no
+/// lower, or the same version with `exact`.
+pub fn tclOk(want: []const u8, exact: bool) bool {
+    var buf: [8]u32 = undefined;
+    const w = versionParts(want, &buf) orelse return false;
+    if (exact) return versionOrder(&tcl_parts, w) == .eq;
+    return w[0] == tcl_parts[0] and versionOrder(&tcl_parts, w) != .lt;
+}
+
+/// The client data of a package of `Tcl_PkgProvideEx`.
+pub const PkgData = struct {
+    next: ?*PkgData,
+    name: []u8,
+    data: ?*anyopaque,
+};
+
+fn pkgData(ip: *Interp, name: []const u8) ?*PkgData {
+    var p: ?*PkgData = @ptrCast(@alignCast(ip.pkgs));
+    while (p) |d| : (p = d.next) {
+        if (std.mem.eql(u8, d.name, name)) return d;
+    }
+    return null;
+}
+
+/// Frees the list `Interp.pkgs`.
+pub fn dropPkgs(ip: *Interp) void {
+    while (ip.pkgs) |p| {
+        const d: *PkgData = @ptrCast(@alignCast(p));
+        ip.pkgs = d.next;
+        gpa.free(d.name);
+        gpa.destroy(d);
+    }
+}
+
+fn spanOr(p: ?[*:0]const u8) []const u8 {
+    return if (p) |q| std.mem.span(q) else "";
+}
+
+pub fn Tcl_PkgProvideEx(ip: *Interp, name: [*:0]const u8, version: [*:0]const u8, data: ?*anyopaque) callconv(.c) c_int {
     const n = std.mem.span(name);
     const v = std.mem.span(version);
+    if (std.mem.eql(u8, n, "Tcl")) return if (std.mem.eql(u8, v, tcl_version)) OK else ERROR;
     if (host.pkg_provide(ip.handle, n.ptr, n.len, v.ptr, v.len) != 0) {
         takeReply(ip);
         return ERROR;
     }
+    if (pkgData(ip, n)) |d| {
+        d.data = data;
+        return OK;
+    }
+    const d = gpa.create(PkgData) catch panicText("out of memory");
+    d.* = .{ .next = @ptrCast(@alignCast(ip.pkgs)), .name = gpa.dupe(u8, n) catch panicText("out of memory"), .data = data };
+    ip.pkgs = d;
     return OK;
+}
+
+pub fn Tcl_PkgProvide(ip: *Interp, name: [*:0]const u8, version: [*:0]const u8) callconv(.c) c_int {
+    return Tcl_PkgProvideEx(ip, name, version, null);
+}
+
+/// `package require` or `package present` of `name`. The text of the
+/// version stays valid until the command of the package returns.
+fn require(ip: *Interp, name: []const u8, version: []const u8, exact: bool, data: ?*?*anyopaque, present: bool) ?[*:0]const u8 {
+    if (std.mem.eql(u8, name, "Tcl")) {
+        if (version.len != 0 and !tclOk(version, exact)) {
+            var b: std.ArrayList(u8) = .empty;
+            defer b.deinit(gpa);
+            b.print(gpa, "version conflict for package \"Tcl\": have {s}, need {s}{s}", .{ tcl_version, if (exact) "exactly " else "", version }) catch panicText("out of memory");
+            setResultText(ip, b.items);
+            return null;
+        }
+        if (data) |d| d.* = @constCast(ip.stub_table);
+        return tcl_version;
+    }
+    // The script gives the error of Tcl when the interp has no command
+    // `package`.
+    var s: std.ArrayList(u8) = .empty;
+    defer s.deinit(gpa);
+    s.appendSlice(gpa, "if {[llength [info commands ::package]]} {::package ") catch panicText("out of memory");
+    s.appendSlice(gpa, if (present) "present" else "require") catch panicText("out of memory");
+    if (exact) s.appendSlice(gpa, " -exact") catch panicText("out of memory");
+    s.append(gpa, ' ') catch panicText("out of memory");
+    value.appendElement(gpa, &s, name, false) catch panicText("out of memory");
+    if (version.len != 0) {
+        s.append(gpa, ' ') catch panicText("out of memory");
+        value.appendElement(gpa, &s, version, false) catch panicText("out of memory");
+    }
+    s.appendSlice(gpa, "} else {::error ") catch panicText("out of memory");
+    var msg: std.ArrayList(u8) = .empty;
+    defer msg.deinit(gpa);
+    msg.print(gpa, "can't find package {s}", .{name}) catch panicText("out of memory");
+    value.appendElement(gpa, &s, msg.items, false) catch panicText("out of memory");
+    s.appendSlice(gpa, " {} {TCL PACKAGE UNFOUND}}") catch panicText("out of memory");
+    if (evalText(ip, s.items, TCL_EVAL_GLOBAL) != OK) return null;
+    const o = own(result(ip));
+    if (data) |d| d.* = if (pkgData(ip, name)) |p| p.data else null;
+    return Tcl_GetString(o);
+}
+
+pub fn Tcl_PkgRequireEx(ip: *Interp, name: [*:0]const u8, version: ?[*:0]const u8, exact: c_int, data: ?*?*anyopaque) callconv(.c) ?[*:0]const u8 {
+    return require(ip, std.mem.span(name), spanOr(version), exact != 0, data, false);
+}
+
+pub fn Tcl_PkgRequire(ip: *Interp, name: [*:0]const u8, version: ?[*:0]const u8, exact: c_int) callconv(.c) ?[*:0]const u8 {
+    return require(ip, std.mem.span(name), spanOr(version), exact != 0, null, false);
+}
+
+pub fn Tcl_PkgPresentEx(ip: *Interp, name: [*:0]const u8, version: ?[*:0]const u8, exact: c_int, data: ?*?*anyopaque) callconv(.c) ?[*:0]const u8 {
+    return require(ip, std.mem.span(name), spanOr(version), exact != 0, data, true);
+}
+
+pub fn Tcl_PkgPresent(ip: *Interp, name: [*:0]const u8, version: ?[*:0]const u8, exact: c_int) callconv(.c) ?[*:0]const u8 {
+    return require(ip, std.mem.span(name), spanOr(version), exact != 0, null, true);
+}
+
+test "cext: the version rule of Tcl_PkgRequireEx" {
+    try std.testing.expect(tclOk("8.6", false));
+    try std.testing.expect(tclOk("8.4", false));
+    try std.testing.expect(!tclOk("9.0", false));
+    try std.testing.expect(!tclOk("8.6", true));
+    try std.testing.expect(tclOk("8.6.16", true));
 }
 
 /// Runs `bgerror` with the result. An error of `bgerror` is dropped.
