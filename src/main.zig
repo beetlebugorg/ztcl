@@ -997,7 +997,7 @@ fn imageStore(a: std.mem.Allocator, env: anytype) ![]const u8 {
 
 /// The download of `ztcl::vm image fetch`: std.http with its TLS (until
 /// the TLS of src/tls), into the open file `fd`.
-fn vmFetch(ctx: ?*anyopaque, url: []const u8, fd: i32) tcl.microvm.FetchError!void {
+fn vmFetch(ctx: ?*anyopaque, url: []const u8, fd: i32, max: u64) tcl.microvm.FetchError!void {
     const h: *const Host = @ptrCast(@alignCast(ctx.?));
     const io = h.io orelse return error.Network;
     var client: std.http.Client = .{ .allocator = h.gpa, .io = io };
@@ -1007,7 +1007,26 @@ fn vmFetch(ctx: ?*anyopaque, url: []const u8, fd: i32) tcl.microvm.FetchError!vo
     const handle = if (builtin.os.tag == .windows) @as(std.os.windows.HANDLE, @ptrFromInt(@as(usize, @intCast(fd)))) else fd;
     const file: std.Io.File = .{ .handle = handle, .flags = .{ .nonblocking = false } };
     var w = file.writerStreaming(io, &buf);
-    const r = client.fetch(.{ .location = .{ .url = url }, .response_writer = &w.interface }) catch return error.Network;
+    const uri = std.Uri.parse(url) catch return error.Network;
+    var req = client.request(.GET, uri, .{ .redirect_behavior = @fromBackingInt(3), .headers = .{ .accept_encoding = .omit } }) catch return error.Network;
+    defer req.deinit();
+    req.sendBodiless() catch return error.Network;
+    var redirect: [8192]u8 = undefined;
+    var response = req.receiveHead(&redirect) catch return error.Network;
+    if (response.head.status != .ok) return error.Status;
+    if (response.head.content_encoding != .identity) return error.Network;
+    // The body in parts, at most `max` bytes.
+    var transfer: [64]u8 = undefined;
+    const r = response.reader(&transfer);
+    var left: u64 = max + 1;
+    while (true) {
+        const n = r.stream(&w.interface, .limited(left)) catch |e| switch (e) {
+            error.EndOfStream => break,
+            error.ReadFailed => return error.Network,
+            error.WriteFailed => return error.Io,
+        };
+        left -= n;
+        if (left == 0) return error.TooLarge;
+    }
     w.interface.flush() catch return error.Io;
-    if (r.status != .ok) return error.Status;
 }
