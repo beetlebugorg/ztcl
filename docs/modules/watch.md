@@ -3,7 +3,7 @@
 `ztcl::watch` gives the changes below a folder: the files and the folders that a program makes, changes, deletes, or moves. A script reads the changes when it wants them, for example from an event loop or a timer. It needs the capability `file`, and it watches only folders that the file commands can reach.
 
 > [!NOTE]
-> `ztcl::watch` works on Linux and Windows. On macOS and WebAssembly, `add` gives the error `ZTCL WATCH UNAVAILABLE`. The designs of the other platforms are in the plan of the repository (`docs/dev/watch.md`).
+> `ztcl::watch` works on Linux, macOS, and Windows. On WebAssembly, `add` gives the error `ZTCL WATCH UNAVAILABLE`. The designs of the other platforms are in the plan of the repository (`docs/dev/watch.md`).
 
 <!-- run: --root . --allow file,channels -->
 ```tcl
@@ -43,7 +43,7 @@ Starts a watch of the folder `PATH` and gives its handle, `watch1` for the first
 
 With `-recursive`, the watch covers each folder below `PATH`, and a folder that a program makes later gets a watch when its create event arrives. A file that a program makes in a new folder before that event arrives has no event of its own. The new folder shows as `created`.
 
-On Linux, each watch is an inotify descriptor. On Windows, each watch is a handle of the folder with a read of `ReadDirectoryChangesW` that waits on an I/O completion port. `remove` closes it, and so does the end or the reset of the interpreter.
+On Linux, each watch is an inotify descriptor. On macOS, each watch is an FSEvents stream. On Windows, each watch is a handle of the folder with a read of `ReadDirectoryChangesW` that waits on an I/O completion port. `remove` closes it, and so does the end or the reset of the interpreter.
 
 ### changes
 
@@ -90,7 +90,7 @@ puts [llength [ztcl::watch changes $w]]
 ztcl::watch fd W
 ```
 
-Gives the number of the inotify descriptor on Linux, and on Windows the value of the handle of an event that is signaled when changes wait (for `WaitForSingleObject` or `MsgWaitForMultipleObjects`). An embedder can wait on it in its own event loop, and then call `changes`.
+Gives the number of the inotify descriptor on Linux, on macOS the read end of a pipe that gets a byte when the stream has changes, and on Windows the value of the handle of an event that is signaled when changes wait (for `WaitForSingleObject` or `MsgWaitForMultipleObjects`). An embedder can wait on it in its own event loop, and then call `changes`.
 
 ### remove
 
@@ -145,7 +145,7 @@ helper::watch build dir rec act
 | `NONE` | `can not find watcher named "X"` | A handle that `add` did not give, or a removed handle. |
 | `POSIX ENOENT ...` | `couldn't watch the folder: no such file or directory` | `PATH` is not a folder. Each other error of the system has its POSIX code. |
 | `POSIX EACCES ...` | `couldn't access "PATH": permission denied` | With a root folder, `PATH` is outside the root. |
-| `ZTCL WATCH UNAVAILABLE` | `ztcl::watch is not available on macOS yet` | `add` on a platform with no backend. |
+| `ZTCL WATCH UNAVAILABLE` | `ztcl::watch is not available on this platform yet` | `add` on a platform with no backend. |
 
 <!-- run: --root . --allow file,channels -->
 ```tcl
@@ -168,4 +168,5 @@ can not find watcher named "watch9"
 
 - Linux: inotify, in the runner and in each embedder that turns on `file`.
 - Windows: `ReadDirectoryChangesW`, with `-recursive` as the watch of the subtree, so a new folder needs no step of its own. A change of the time of a folder, which Windows gives for each change in the folder, is no event, as on Linux. The file system keeps the changes between two calls of `changes` in a buffer, and a full buffer (64 KiB of records: more than 1,000 changes of names of 20 characters) gives `{overflow /}`.
-- macOS, WebAssembly, and WASI: `add` gives `ZTCL WATCH UNAVAILABLE`, and `changes`, `fd`, and `remove` give `can not find watcher named "W"`.
+- macOS: an FSEvents stream with the events of each file, on the real path of the folder, so a new folder needs no step of its own. FSEvents delivers a change some milliseconds after it (the stream asks for 50 ms at most), so `changes` right after a write can give nothing yet: a script that waits for a change calls `changes` again, or waits on `fd`. FSEvents merges the flags of one path, so the kind comes from the flags and the file: a path that was there before the watch and changes is `modified`. A dropped event of the system gives `{overflow /}`. CoreServices loads on the first `add`.
+- WebAssembly and WASI: `add` gives `ZTCL WATCH UNAVAILABLE`, and `changes`, `fd`, and `remove` give `can not find watcher named "W"`.
