@@ -194,6 +194,7 @@ pub fn build(b: *std.Build) void {
     });
     lib_mod.addOptions("build_options", lib_options);
     addVt(b, lib_mod, target, runner_optimize);
+    addCrypto(b, lib_mod);
     const libztcl = b.addLibrary(.{
         .name = if (t.os.tag == .windows) "tcl86" else "tcl8.6",
         .linkage = .dynamic,
