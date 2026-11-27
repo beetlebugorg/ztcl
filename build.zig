@@ -110,8 +110,15 @@ pub fn build(b: *std.Build) void {
     }) }));
     x509_fuzz.addPassthruArgs();
     b.step("x509-fuzz", "Fuzz the DER, X.509, PEM, and chain code: zig build x509-fuzz -- --seconds N").dependOn(&x509_fuzz.step);
+    // The test client of tools/tls-interop.sh.
+    const interop = b.addExecutable(.{ .name = "tls-interop", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/tls/interop.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    b.step("tls-interop", "Build the test client of tools/tls-interop.sh").dependOn(&b.addInstallArtifact(interop, .{}).step);
     b.step("tls-x509-test", "Run the x509-limbo cases of the chain checks: zig build tls-x509-test -- limbo.json").dependOn(&limbo.step);
-    inline for (.{ "src/tls/der.zig", "src/tls/x509.zig", "src/tls/pem.zig", "src/tls/chain.zig", "src/tls/roots.zig" }) |f| {
+    inline for (.{ "src/tls/der.zig", "src/tls/x509.zig", "src/tls/pem.zig", "src/tls/chain.zig", "src/tls/roots.zig", "src/tls/messages.zig", "src/tls/client_vectors.zig" }) |f| {
         test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
             .root_source_file = b.path(f),
             .target = target,

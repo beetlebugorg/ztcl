@@ -35,6 +35,10 @@ ztcl has its own TLS 1.3 code, for the client and for the server, on the primiti
 | `src/tls/roots.zig` | The trust anchors: PEM text, a PEM file, DER bytes, or the store of the system. |
 | `src/tls/limbo.zig` | The runner of the x509-limbo cases. |
 | `src/tls/x509_fuzz.zig` | A mutation fuzzer of the DER, X.509, PEM, and chain code. |
+| `src/tls/messages.zig` | The vectors of the handshake messages: a reader with bounds checks, a builder, and the join of messages across records. |
+| `src/tls/client.zig` | The client handshake with no I/O of its own, and `Conn` on a `std.Io.Reader` and a `std.Io.Writer`. |
+| `src/tls/client_vectors.zig` | The client side of the RFC 8448 traces, and changed records of the server. |
+| `src/tls/interop.zig` | The test client of `tools/tls-interop.sh`. |
 
 Run the checks:
 
@@ -68,3 +72,11 @@ zig build x509-fuzz -- --seconds 600
 ```
 
 The runner skips the cases of revocation, of the network, of ML-DSA, of policy constraints, and of client certificates. Where an RFC 5280 case conflicts with a webpki case, the runner follows the webpki case. `differ` in `limbo.zig` lists each case where the result can differ from the expected result, with the reason: the key identifiers, the common name, the authority information access, the Public Suffix List, a leaf with no extended key usage, the extended key usage of an anchor, a root with a `basicConstraints` that is not critical, and a CA certificate as the leaf.
+
+## The client
+
+The client offers X25519, P-256, and P-384, the three suites, and the signature schemes of `crypto.zig`. It sends a key share for X25519 and handles one HelloRetryRequest. It checks the chain with `chain.verify`, the CertificateVerify with `crypto.verify`, and the Finished of the server. A request for a client certificate gets an empty Certificate message. The middlebox compatibility mode of RFC 8446 appendix D.4 is on by default. PSK resumption and 0-RTT are later work (task 20). No ztcl command uses the client yet.
+
+`zig build test` replays the client side of RFC 8448 sections 3, 5, and 7. The test reads the options of the client from the first ClientHello of the trace, and each record of the client matches the trace byte for byte. The certificate of the RFC has an RSA key of 1024 bits, so the test skips the chain and the signature.
+
+`tools/tls-interop.sh client` runs the client against `openssl s_server -tls1_3` with a P-256, P-384, Ed25519, and RSA 2048 leaf, each suite, each group, ALPN, and a HelloRetryRequest. The client must refuse a wrong host name, an unknown CA, and an expired leaf. `--quick` runs a smaller set.

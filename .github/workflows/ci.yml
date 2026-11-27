@@ -156,6 +156,11 @@ jobs:
           ulimit -v 6000000
           zig build tls-x509-test -Doptimize=ReleaseSafe -- "$(tools/fetch-x509-limbo.sh)"
           zig build x509-fuzz -- --seconds 60
+      - name: Run the TLS client against openssl s_server
+        if: runner.os == 'Linux'
+        run: |
+          ulimit -v 6000000
+          tools/tls-interop.sh --quick client
       # A gc-precise build uses the root rules of WebAssembly and has no JIT.
       - name: Test the gc-precise build
         if: runner.os == 'Linux'
