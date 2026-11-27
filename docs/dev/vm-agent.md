@@ -36,8 +36,10 @@ Numbers are little endian. `len` counts the type byte and the payload, and is at
 
 ## A connection
 
-1. The agent sends `HELLO`: `version u16` (1), `features u32` (bit 0 `exec`, bit 1 `mount`, bit 2 `log`, bit 3 `resume`, bit 4 the framed relay), `boot_main u64`, `boot_listen u64`.
+1. The agent sends `HELLO`: `version u16` (1), `features u32` (bit 0 `exec`, bit 1 `mount`, bit 2 `log`, bit 3 `resume`, bit 4 the framed relay, bit 5 `keepalive`), `boot_main u64`, `boot_listen u64`.
 2. The host sends one request: `EXEC`, `MOUNT`, `LOG`, `PING`, or `RESUME`.
+
+With `keepalive` (bit 5), the connection takes another request after the answer of one ends, until the host closes it: the agent reads the next request where the last one ended, and drops an `STDIN` or `SIGNAL` frame that comes before it (input for a program that ended). The host keeps the connection of a request that ended well for the next request of the guest, and checks first that the idle connection has no byte to read (an ended one is readable); a guest that stops or goes closes it. On Virtualization.framework this saves the connect of vsock and the HELLO, about 110 us of each `exec`. A host that closes after one request works with the agent as before.
 3. The agent answers as below, and closes the connection after its last frame. A new request takes a new connection.
 
 | Type | Value | From | Payload |

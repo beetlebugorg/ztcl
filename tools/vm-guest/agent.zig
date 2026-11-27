@@ -24,8 +24,10 @@ const port_probe: u32 = 1025;
 const port_resume: u32 = 1027;
 const version: u16 = 1;
 /// Bit 0 exec, bit 1 mount, bit 2 log, bit 3 resume, bit 4 the framed
-/// relay of `agent connect -framed` (docs/dev/vm-agent.md).
-const features: u32 = 0b11111;
+/// relay of `agent connect -framed`, bit 5 keepalive: a connection takes
+/// more requests after the answer of one, until the host closes it
+/// (docs/dev/vm-agent.md).
+const features: u32 = 0b111111;
 const max_frame = (1 << 20) + 1;
 
 const t_hello = 0x01;
@@ -305,7 +307,22 @@ fn serve(c: i32) void {
     std.mem.writeInt(u64, hello[14..22], times[1], .little);
     send(c, t_hello, &hello);
     var in: In = .{ .fd = c, .buf = &in_buf };
-    const f = in.next() orelse return;
+    // One request after another, until the host closes the connection: a
+    // host that keeps it (keepalive) saves the connect of vsock and the
+    // HELLO for each request.
+    while (true) {
+        const f = in.next() orelse return;
+        // Input or a signal for a program that ended already: the host sent
+        // it before it read the exit.
+        if (f.kind == t_stdin or f.kind == t_signal) {
+            in.drop(f.size);
+            continue;
+        }
+        serveOne(c, &in, f);
+    }
+}
+
+fn serveOne(c: i32, in: *In, f: Frame) void {
     // The request moves out of the buffer, which then holds the frames
     // that come after it.
     const req = req_buf[0..f.payload.len];
@@ -323,7 +340,7 @@ fn serve(c: i32) void {
         },
         t_mount => mount(c, &r),
         t_resume => resumeGuest(c, &r),
-        t_exec => exec(c, &in, req) catch sendError(c, 22, "bad exec request"),
+        t_exec => exec(c, in, req) catch sendError(c, 22, "bad exec request"),
         else => sendError(c, 95, "unknown request"),
     }
 }
