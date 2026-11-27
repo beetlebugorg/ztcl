@@ -197,6 +197,44 @@ A backend implements this interface:
 
 vsock on KVM is vhost-vsock, an external device. A monitor without vhost (WHP) uses `Vsock`, with the host as CID 2. A stream starts with a `connect` of the host to a port of the guest. The host sends no more than the credit of the guest (its `buf_alloc` less the bytes in flight), and gives each byte of the guest to the sink at once, so its own credit is its `fwd_cnt`. A REQUEST of the guest gets RST until the host can listen. KVM can use `Vsock` in the place of vhost-vsock.
 
+## The NAT engine (ztcl#461)
+
+`-net nat` gives a guest a network through a user-mode NAT in Zig, `src/vm/nat/`. The same engine serves the three monitors. The plan and the speed design are in [vm-net.md](vm-net.md). This section is the interface, so that each backend can attach to it now.
+
+The network of the guest is 10.0.2.0/24: the guest is 10.0.2.15, the gateway 10.0.2.2 is the host (a connection to it goes to 127.0.0.1 of the host), and 10.0.2.3 is the DNS server of the NAT. The guest gets this with DHCP from the NAT. Its MAC address is 52:54:00:12:34:56, and the MAC address of the gateway is 52:54:00:12:34:02. The MTU is 1500.
+
+The engine has two attachments. A guest uses one of them:
+
+| Attachment | For | What goes through it |
+|---|---|---|
+| A frame socket | macOS (`VZFileHandleNetworkDeviceAttachment`) | `Nat.initSocket(alloc, cfg, fd)` gets one end of a `socketpair(AF_UNIX, SOCK_DGRAM)`, and the backend gives the other end to the framework. Each datagram is one Ethernet frame (destination, source, type, payload, no FCS), with no virtio header, of at most 1514 bytes. The engine reads and writes the socket on its own thread, with `recvmmsg` and `sendmmsg` where the system has them. The buffers of the socket are 4 MB in each direction (`SO_SNDBUF`, `SO_RCVBUF`). |
+| In process | KVM and WHP (the virtio-net device of `src/vm/virtio/`) | `Nat.init(alloc, cfg, port)`. The device calls `Nat.fromGuest(hdr, parts)` for each frame of the transmit queue, and the engine calls `Port.deliver` for each frame to the guest. `hdr` is the virtio-net header (section 5.1.6 of virtio 1.2): the flags, `gso_type`, `gso_size`, `csum_start`, and `csum_offset`. So a frame of the guest can be a TCP segment of up to 64 KB with no checksum (TSO and checksum offload), and a frame to the guest can be one too, when the driver accepted `GUEST_TSO4` and `GUEST_CSUM`. |
+
+The in-process calls:
+
+- `Nat.fromGuest(hdr: NetHdr, parts: []const []const u8) void`: one frame, as the slices of its descriptors in guest memory. It runs on the thread that ran the transmit notify (a vCPU thread, or the thread of the device). It does not block: it copies what it keeps before it returns, so the device can put the chain in the used ring at once. A frame that the engine cannot take counts in `Nat.stats().dropped`.
+- `Port.deliver(ctx, hdr: NetHdr, parts: []const []const u8) bool`: one frame for the guest, on the thread of the engine. The device copies it into receive buffers (more than one with `MRG_RXBUF`), puts them in the used ring, and raises the interrupt (with event index, only when the driver asks for it). It gives false when the receive queue has no room. The engine then keeps the frame and its later frames in order, and calls `deliver` again after the device calls `Nat.rxSpace()`.
+- `Nat.rxSpace() void`: the driver added receive buffers. The device calls it from the notify of the receive queue. It only wakes the engine.
+- `Port.features: u64`: the offloads that the driver accepted, given by the device at DRIVER_OK. The engine sends large segments and frames with no checksum only when they are in it.
+
+The configuration, `nat.Config`:
+
+| Field | What it is |
+|---|---|
+| `allow`, `deny` | The rules of `-allow` and `-deny`: a host name, an address range in CIDR form, or either with `:port` or `:low-high`, and `tcp:` or `udp:` in front for one protocol. With an allow list, a connection needs a match in it. A match in the deny list refuses a connection. The engine compiles both into one sorted table of address ranges. A host name matches the addresses of the DNS answers that the guest got for it. |
+| `policy` | `fn (ctx, proto, addr, port) bool`: the network policy of the embedder (`sys.resolve` and the socket policy of ztcl), asked for each host address before a socket opens, after the rules. The default policy of ztcl is `loopback`. |
+| `dns` | On: the engine answers DNS at 10.0.2.3 with the name servers of the host, and reads the answers. Off: queries to 10.0.2.3 get no answer. |
+| `forwards` | The pairs of `-forward`: a TCP port of the host (on 127.0.0.1) and a port of the guest. The engine listens on each, and a connection to it becomes a connection to the guest port. |
+| `event` | `fn (ctx, ev: *const Event) void`, on the thread of the engine, for `ztcl::vm netlog` and the metering of ztcl#243. `Event.kind` is `connect`, `refuse`, `close`, `dns`, or `forward`. It has the protocol, the port of the guest, the address and port of the host side, the host name when a DNS answer gave one, the rule that refused (an index into `allow` or `deny`, or the policy), and at `close` the bytes in each direction. The backend copies the event to its own queue and returns; it does not call the engine from the hook. |
+
+Threading and life:
+
+- `Nat.start()` starts the thread of the engine. It waits on one epoll set (kqueue on macOS, an I/O completion port on Windows) for its wake eventfd, its host sockets, and the frame socket. Later, with multiqueue, there is one engine thread for each queue pair, and each owns its connections. The fast path has no lock: `fromGuest` puts work on a single-producer queue of the engine thread when it cannot finish it on the calling thread.
+- `Nat.stop()` closes each host socket and joins the thread. `Nat.deinit()` frees the engine. A guest that stops and starts again gets a new engine, so it has no connections of the old boot.
+- The engine never calls into the monitor except through `Port.deliver` and the `event` hook.
+
+The first code is `src/vm/nat/nat.zig`, with ARP, DHCP, ICMP echo, UDP, and the checksum. Its internal calls change to this interface in the next step.
+
 ## Windows: the Windows Hypervisor Platform
 
 The Windows part runs on the Windows Hypervisor Platform (`WinHvPlatform.dll`), with our own devices, the same shape as the KVM part. The user chose it on 2026-11-26.
