@@ -43,6 +43,8 @@ pub const Options = struct {
     last: usize = 10,
     /// Serve the tools over MCP on stdin and stdout.
     mcp: bool = false,
+    /// Serve the debugger over the Debug Adapter Protocol (`dap.zig`).
+    dap: bool = false,
     /// The file of `--record` or `--replay`. The runner reads and
     /// writes it, and gives the tape in `tape`.
     record_path: ?[]const u8 = null,
@@ -556,6 +558,8 @@ pub fn parseArgs(a: Allocator, args: anytype, opts: *Options, rest: *std.ArrayLi
             opts.explain = true;
         } else if (std.mem.eql(u8, arg, "--mcp")) {
             opts.mcp = true;
+        } else if (std.mem.eql(u8, arg, "--dap")) {
+            opts.dap = true;
         } else if (std.mem.eql(u8, arg, "--who-set") and has) {
             i += 1;
             try qs.append(a, .{ .kind = .who_set, .name = args[i] });
@@ -591,6 +595,7 @@ pub fn parseArgs(a: Allocator, args: anytype, opts: *Options, rest: *std.ArrayLi
 pub const help =
     \\Use: ztcl debug [options] [runner options] script.tcl
     \\     ztcl debug --mcp [runner options]
+    \\     ztcl debug --dap [runner options] [script.tcl]
     \\
     \\Runs the script with probes and writes a report: the status, the
     \\error with the stack and the locals, the probes, and the records.
@@ -613,5 +618,7 @@ pub const help =
     \\                         with its value, its time, and the stack
     \\  --when VAR VALUE       gives the first write of VALUE to VAR
     \\  --mcp                  serves the tools on stdin and stdout (MCP)
+    \\  --dap                  serves a debugger on stdin and stdout (DAP),
+    \\                         with breakpoints, steps, and the stack
     \\
 ;

@@ -44,6 +44,7 @@ pub const watch = @import("watch.zig");
 pub const probe = @import("probe.zig");
 pub const debug = @import("debug.zig");
 pub const debugmcp = @import("debugmcp.zig");
+pub const dap = @import("dap.zig");
 pub const tape = @import("tape.zig");
 pub const vfs = @import("vfs.zig");
 pub const zipread = @import("zipread.zig");

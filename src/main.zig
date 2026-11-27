@@ -208,6 +208,11 @@ fn runDebug(it: *tcl.Interp, out: *Io.Writer, a: std.mem.Allocator, text: []cons
     return if (rep.ok) 0 else 1;
 }
 
+fn serveDap(it: *tcl.Interp, h: anytype, out: *Io.Writer, program: ?[]const u8, text: []const u8) !void {
+    var server: tcl.dap.Server = .{ .it = it, .gpa = h.gpa, .in = h.in, .out = out, .read = mcpRead, .program = program, .text = text };
+    try tcl.dap.serve(&server);
+}
+
 fn mcpRead(_: ?*anyopaque, path: []const u8, a: std.mem.Allocator) anyerror![]u8 {
     return host.read(path, a);
 }
@@ -538,7 +543,7 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
             out.flush() catch {};
             host.exit(2);
         };
-        if (keep.items.len == 0 and !opts.mcp) {
+        if (keep.items.len == 0 and !opts.mcp and !opts.dap) {
             try out.writeAll(tcl.debug.help);
             return;
         }
@@ -816,6 +821,7 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
         };
         it.error_line = 0;
         it.script_name = arg;
+        if (debug_opts) |d| if (d.dap) return serveDap(&it, h, out, arg, text);
         if (debug_opts) |d| if (!d.mcp) host.exit(try runDebug(&it, out, arena, text, d));
         if (keep_going) {
             // Run each command of the file; an error does not stop the file.
@@ -856,6 +862,7 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
         if (timed) try out.print("{s}: {d:.1} ms\n", .{ arg, @as(f64, @floatFromInt(best)) / 1e6 });
     }
     if (ran) return;
+    if (debug_opts) |d| if (d.dap) return serveDap(&it, h, out, null, "");
     if (debug_opts) |d| if (d.mcp) {
         var server: tcl.debugmcp.Server = .{ .it = &it, .gpa = h.gpa, .read = mcpRead };
         defer server.captured.deinit(h.gpa);

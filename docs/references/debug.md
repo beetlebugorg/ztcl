@@ -19,3 +19,9 @@ The variable and execution traces of Tcl 8.6, as `docs/references/tcl.md` lists 
 The record and replay debugger of Mozilla: a run writes its inputs from the system to a trace, and a replay gives the same inputs back, so a bug that shows once can be studied again with a debugger. https://rr-project.org/
 
 **How ztcl uses it:** `ztcl debug --record` writes the inputs of the host to a tape, and `--replay` gives them back. The compute units of the interpreter are the time of each input, so a replay can add probes and still read each input at the same place.
+
+## Debug Adapter Protocol
+
+The protocol between an editor and a debugger, from the VS Code project: a message has a `Content-Length` header and a JSON body, and the requests set breakpoints, step, and read the stack and the variables. https://microsoft.github.io/debug-adapter-protocol/specification
+
+**How ztcl uses it:** `ztcl debug --dap` (`src/dap.zig`) answers the requests of the specification for one thread. The stops come from the line hook of `probe.zig`, so a breakpoint uses the same `probe` instruction as a line probe.

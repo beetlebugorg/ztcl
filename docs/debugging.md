@@ -1,10 +1,11 @@
 # Debugging
 
-ztcl has three tools to find a bug:
+ztcl has four tools to find a bug:
 
 - `ztcl::probe` records values at a proc, a line, a command, a variable, or an error, with no change to the script. [The module page](modules/probe.md) has each option.
 - `ztcl debug` runs a script with probes and writes a short report: the error, the stack with the locals of each frame, the probes, and the last records. `--explain` also gives the last changes of the variables of the failed command.
 - `ztcl debug --mcp` gives the same tools to an agent over the Model Context Protocol.
+- `ztcl debug --dap` is a debugger for an editor: breakpoints, steps, the stack, the locals, watches, and hot reload.
 
 ## Probes in a running program
 
@@ -162,6 +163,32 @@ answer: x: got the value 8 at unit 13 (record #2), stack: {step 2}
 | `ztcl_eval` | Evaluates Tcl code in the interpreter of the last run, for example to read a variable or to add a probe. |
 
 Each tool has the argument `budget`, the most bytes of its answer (default 4,000). The answer starts with the summary, so an agent reads the status and the error first, and asks for more with `detail`, `last`, or `ztcl_records`.
+
+## A debugger in the editor (DAP)
+
+`ztcl debug --dap` serves a debugger on stdin and stdout with the Debug Adapter Protocol, the protocol of the debuggers of VS Code and other editors. The runner options after `--dap` set the capabilities and the limits of the run. The program is the script after the options, or the argument `program` of the request `launch`.
+
+```sh
+ztcl debug --dap --allow clock job.tcl
+```
+
+The debugger has these parts:
+
+| Part | Requests |
+|---|---|
+| Breakpoints on lines of the program file, with an optional condition (a Tcl expression in the frame of the line). | `setBreakpoints` |
+| Breakpoints on procs: the run stops at the entry of the proc. | `setFunctionBreakpoints` |
+| Steps: step in, step over, and step out. `stopOnEntry` in `launch` stops at the first command. | `next`, `stepIn`, `stepOut`, `continue` |
+| The stack, with the line of each frame. | `stackTrace` |
+| The locals of each frame, and the globals. | `scopes`, `variables` |
+| Tcl code in a frame: a watch, a hover, or a command of the console. | `evaluate` |
+| Hot reload: the debugger reads the program file again and runs each `proc` command of its top level. A frame that runs keeps the old body until it returns. | `ztclReload` (a custom request, with an optional `path`) |
+
+A stop happens at each line of a proc and at each command of the top level of the program file. The body of a loop at the top level has no stops. Put the loop in a proc to step through it. The output of `puts` goes to the event `output`, because stdout has the protocol. An editor gets the debugger with a launch entry that starts `ztcl debug --dap`. In VS Code, an extension of the type `ztcl` with this entry in `package.json` is enough:
+
+```json
+{"debuggers": [{"type": "ztcl", "label": "ztcl", "program": "ztcl", "args": ["debug", "--dap"]}]}
+```
 
 ## From Zig
 

@@ -2095,8 +2095,11 @@ pub const Interp = struct {
             it.gc_scope = 1;
             if (gc.precise) {
                 // The top level runs as bytecode, so a long loop reaches
-                // the safe points of `vm.exec`.
-                s.runs = @max(s.runs, 1);
+                // the safe points of `vm.exec`. The program of the
+                // debugger stays on the tree path, which calls the line
+                // hook for each command (`probe.fireTop`).
+                const debugged = @import("probe.zig").enabled and if (it.probes) |st| st.top == s else false;
+                if (!debugged) s.runs = @max(s.runs, 1);
                 it.gc_token = true;
             }
         }
@@ -2302,7 +2305,12 @@ pub const Interp = struct {
         it.nest += 1;
         defer it.nest -= 1;
         var res: Value = Value.empty;
-        for (s.cmds) |*c| res = try it.evalCmd(c);
+        const probe = @import("probe.zig");
+        const top = if (probe.enabled) (if (it.probes) |st| st.top == s else false) else false;
+        for (s.cmds) |*c| {
+            if (probe.enabled and top) probe.fireTop(it, c);
+            res = try it.evalCmd(c);
+        }
         return res;
     }
 
