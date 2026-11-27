@@ -171,6 +171,32 @@ pub fn fdOfKind(kind: u8, value: usize) ?Fd {
     return fdOfHandle(@ptrFromInt(value));
 }
 
+/// The size of WSAPROTOCOL_INFOW.
+pub const socket_info_len = 628;
+
+extern "ws2_32" fn WSADuplicateSocketW(s: SOCKET, pid: u32, info: *[socket_info_len]u8) callconv(.winapi) i32;
+
+/// The WSAPROTOCOL_INFOW of the socket `fd` for the process `pid`, as
+/// `WSADuplicateSocketW` gives it. False for a descriptor that is no
+/// socket, or a failure.
+pub fn socketInfoFor(fd: Fd, pid: u32, out: *[socket_info_len]u8) bool {
+    if (!isSocket(fd)) return false;
+    return WSADuplicateSocketW(socketOf(fd), pid, out) == 0;
+}
+
+/// The socket of a WSAPROTOCOL_INFOW of `socketInfoFor`, in this
+/// process, overlapped and not inherited as each socket here.
+pub fn socketOfInfo(info: *const [socket_info_len]u8) ?Fd {
+    startup();
+    // FROM_PROTOCOL_INFO, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT
+    const s = WSASocketW(-1, -1, -1, @constCast(info), 0, 0x01 | 0x80);
+    if (s == std.math.maxInt(SOCKET)) return null;
+    return fdOfSocket(s) orelse {
+        _ = closesocket(s);
+        return null;
+    };
+}
+
 /// A host error. The names are the POSIX names that `fsroot.posixError`
 /// reads, and the values are Win32 codes. Another code stays as it is.
 pub const E = enum(u32) {
