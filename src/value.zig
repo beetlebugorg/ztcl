@@ -526,17 +526,32 @@ pub fn backslash(a: Allocator, s: []const u8, i: usize, out: *std.ArrayList(u8))
                 v = v *% 16 + (std.fmt.charToDigit(s[j], 16) catch unreachable);
                 j += 1;
             }
-            if (k == 0) try out.append(a, c) else try appendCodepoint(a, out, v);
+            if (k == 0) {
+                try out.append(a, c);
+                return j;
+            }
+            // A high surrogate and a `\u` escape of a low surrogate after
+            // it are one character, as in Tcl.
+            if (c == 'u' and v >= 0xd800 and v < 0xdc00 and j + 6 <= s.len and s[j] == '\\' and s[j + 1] == 'u') {
+                const lo = std.fmt.parseInt(u32, s[j + 2 .. j + 6], 16) catch 0;
+                if (lo >= 0xdc00 and lo < 0xe000 and std.ascii.isHex(s[j + 2])) {
+                    try appendCodepoint(a, out, 0x10000 + ((v - 0xd800) << 10) + (lo - 0xdc00));
+                    return j + 6;
+                }
+            }
+            try appendCodepoint(a, out, v);
         },
         else => try out.append(a, c),
     }
     return j;
 }
 
-fn appendCodepoint(a: Allocator, out: *std.ArrayList(u8), cp: u32) Allocator.Error!void {
+/// Appends a character as UTF-8. A surrogate half has the three-byte
+/// form, as in Tcl. A value above U+10FFFF is U+FFFD.
+pub fn appendCodepoint(a: Allocator, out: *std.ArrayList(u8), cp: u32) Allocator.Error!void {
     var b: [4]u8 = undefined;
-    const c: u21 = if (cp > 0x10ffff or (cp >= 0xd800 and cp <= 0xdfff)) 0xfffd else @intCast(cp);
-    const n = std.unicode.utf8Encode(c, &b) catch unreachable;
+    const c: u21 = if (cp > 0x10ffff) 0xfffd else @intCast(cp);
+    const n = std.unicode.wtf8Encode(c, &b) catch unreachable;
     try out.appendSlice(a, b[0..n]);
 }
 

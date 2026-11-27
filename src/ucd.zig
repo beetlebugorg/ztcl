@@ -1,7 +1,7 @@
 //! A small model of Unicode character classes and simple case maps.
 //!
-//! It covers ASCII, Latin-1, Latin Extended-A, Greek, Cyrillic, the
-//! space characters, and the common punctuation blocks. A character
+//! It covers ASCII, Latin-1, Latin Extended-A, Greek, Cyrillic, Deseret,
+//! the space characters, and the common punctuation blocks. A character
 //! outside those ranges counts as a letter when it is in a block of
 //! letters, and it has no case. This is an approximation of the full
 //! tables of Tcl 8.6.
@@ -89,6 +89,7 @@ pub fn toLower(c: u21) u21 {
         0x460...0x481, 0x48A...0x4BF, 0x4D0...0x52F => if (c % 2 == 0) c + 1 else c,
         0x531...0x556 => c + 48,
         0xFF21...0xFF3A => c + 32,
+        0x10400...0x10427 => c + 40,
         else => c,
     };
 }
@@ -114,6 +115,7 @@ pub fn toUpper(c: u21) u21 {
         0x460...0x481, 0x48A...0x4BF, 0x4D0...0x52F => if (c % 2 == 1) c - 1 else c,
         0x561...0x586 => c - 48,
         0xFF41...0xFF5A => c - 32,
+        0x10428...0x1044F => c - 40,
         else => c,
     };
 }
@@ -128,19 +130,20 @@ pub fn toTitle(c: u21) u21 {
     };
 }
 
-/// Decodes the character at `s[i]`. An invalid byte is one character.
+/// Decodes the character at `s[i]`. A surrogate half in the three-byte
+/// form is one character. An invalid byte is one character.
 pub fn next(s: []const u8, i: usize) struct { cp: u21, len: usize } {
     const c = s[i];
     if (c < 0x80) return .{ .cp = c, .len = 1 };
     const n = std.unicode.utf8ByteSequenceLength(c) catch return .{ .cp = c, .len = 1 };
     if (i + n > s.len) return .{ .cp = c, .len = 1 };
-    const cp = std.unicode.utf8Decode(s[i .. i + n]) catch return .{ .cp = c, .len = 1 };
+    const cp = std.unicode.wtf8Decode(s[i .. i + n]) catch return .{ .cp = c, .len = 1 };
     return .{ .cp = cp, .len = n };
 }
 
 pub fn appendCp(a: std.mem.Allocator, out: *std.ArrayList(u8), cp: u21) std.mem.Allocator.Error!void {
     var buf: [4]u8 = undefined;
-    const n = std.unicode.utf8Encode(cp, &buf) catch {
+    const n = std.unicode.wtf8Encode(cp, &buf) catch {
         try out.append(a, @truncate(cp));
         return;
     };
