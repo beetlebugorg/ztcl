@@ -76,3 +76,45 @@ set f [open $dir/fd.txt]
 puts [read $f]
 close $f
 puts [cxchan names]
+# fileevent on a channel of a C package. The driver runs the script in
+# Tcl_NotifyChannel, and buffered input gives readable events.
+set m [cxchan open]
+puts $m "one\ntwo\nthree"
+flush $m
+seek $m 0
+puts [gets $m]
+set got {}
+fileevent $m readable {
+    lappend got [gets $m]
+    if {[llength $got] == 2} {fileevent $m readable {}; set done 1}
+}
+puts [string trim [fileevent $m readable]]
+vwait done
+puts $got:[fileevent $m readable]
+fileevent $m writable {set w fired; fileevent $m writable {}}
+cxchan notify $m 4
+puts $w:[fileevent $m writable]
+proc bgerror {msg} {puts bgerror:$msg}
+fileevent $m writable {error boom}
+cxchan notify $m 4
+update
+puts gone:[fileevent $m writable]
+set r [cxchan open r]
+puts [catch {fileevent $r writable {}} e]:$e
+close $r
+cxchan closed
+# fcopy from and to a channel of a C package.
+seek $m 0
+set f [open $dir/copy.txt w]
+puts [fcopy $m $f -size 5]
+puts [fcopy $m $f]
+close $f
+set f [open $dir/copy.txt]
+set g [cxchan open]
+puts [chan copy $f $g]
+close $f
+seek $g 0
+puts [read $g]
+close $m
+close $g
+puts [cxchan closed]

@@ -157,6 +157,10 @@ pub const State = struct {
     err: ?*Obj = null,
     /// True when the interp of ztcl has the channel (`native.zig`).
     in_ztcl: bool = false,
+    /// The interp of ztcl and its channel record while a script of
+    /// `fileevent` waits on the channel (`native.zig`).
+    ev_it: ?*anyopaque = null,
+    ev_chan: ?*anyopaque = null,
 };
 
 /// A channel of ztcl: its name in the interp of ztcl `handle`.

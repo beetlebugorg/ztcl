@@ -111,6 +111,30 @@ pub const Channel = struct {
 /// the words after the channel name. `cext/native.zig` sets it.
 pub var ext_op: ?*const fn (it: *Interp, c: *Channel, op: []const u8, args: []const Value) Error!Value = null;
 
+/// The events of a channel of a C package. `ready` is true when the
+/// loop must call `serve` at once. `cext/native.zig` sets them.
+pub const ExtEvents = struct {
+    ready: *const fn (it: *Interp, c: *Channel) bool,
+    serve: *const fn (cur: *Interp, it: *Interp, c: *Channel) Error!bool,
+};
+pub var ext_events: ?ExtEvents = null;
+
+/// True when the channel `name` of a C package has an event to serve.
+pub fn extReady(it: *Interp, name: []const u8) bool {
+    const c = it.chans.table.get(name) orelse return false;
+    if (c.ext == null) return false;
+    const e = ext_events orelse return false;
+    return e.ready(it, c);
+}
+
+/// Serves the events of the channel `name` of a C package.
+pub fn extServe(cur: *Interp, it: *Interp, name: []const u8) Error!bool {
+    const c = it.chans.table.get(name) orelse return false;
+    if (c.ext == null) return false;
+    const e = ext_events orelse return false;
+    return e.serve(cur, it, c);
+}
+
 fn extCall(it: *Interp, c: *Channel, op: []const u8, args: []const Value) Error!Value {
     const f = ext_op orelse return it.fail("channel \"{s}\" belongs to a C package", .{c.name});
     return f(it, c, op, args);
@@ -666,6 +690,8 @@ pub fn lookup(it: *Interp, name: []const u8) ?*Channel {
 /// What the event loop waits for on a channel, or null.
 pub fn wanted(it: *Interp, name: []const u8) ?struct { fd: i32, wfd: i32, read: bool, write: bool, ready: bool } {
     const c = it.chans.table.get(name) orelse return null;
+    // A channel of a C package has no descriptor: see `extReady`.
+    if (c.ext != null) return null;
     if (c.kind == .server) return .{ .fd = c.fd, .wfd = c.fd, .read = true, .write = false, .ready = false };
     const r = c.on_read != null;
     const pending = c.wbuf.items.len > 0 and !c.blocking;
@@ -1176,7 +1202,6 @@ fn cmdFcopy(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 3) return it.wrongArgs("fcopy input output ?-size size? ?-command callback?");
     const from = try find(it, argv[1]);
     const to = try find(it, argv[2]);
-    if (from.ext != null or to.ext != null) return it.fail("fcopy does not support a channel of a C package", .{});
     var limit: ?usize = null;
     var command: ?Value = null;
     var i: usize = 3;
@@ -1197,6 +1222,7 @@ fn cmdFcopy(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         try event.later(it, 0, fcopyStep, task);
         return Value.empty;
     }
+    if (from.ext != null or to.ext != null) return copyChars(it, from, to, limit);
     var total: usize = 0;
     try copyData(it, from, to, limit, &total);
     return .{ .int = @intCast(total) };
@@ -1261,6 +1287,26 @@ fn fcopyStep(it: *Interp, ctx: *anyopaque) Error!void {
     try words.append(a, .{ .int = @intCast(task.total) });
     if (err) |m| try words.append(a, .{ .str = m });
     try event.runEvent(it, it, try it.str(try value.wrapList(a, words.items)));
+}
+
+/// `fcopy` with a channel of a C package on one side. The copy goes
+/// through characters: `read` of the input with its encoding, and
+/// `puts` of the output with its encoding. The limit and the count are
+/// in characters.
+fn copyChars(it: *Interp, from: *Channel, to: *Channel, limit: ?usize) Error!Value {
+    if (to.ext == null and !to.writable) return it.fail("channel \"{s}\" wasn't opened for writing", .{to.name});
+    var total: usize = 0;
+    while (limit == null or total < limit.?) {
+        const want: usize = if (limit) |n| @min(n - total, 4096) else 4096;
+        const got = try cmdRead(it, &.{ .{ .str = "read" }, .{ .str = from.name }, .{ .int = @intCast(want) } }, null);
+        const text = try it.str(got);
+        if (text.len == 0) break;
+        // The channel can go in `read` and `puts`; `find` gives the error.
+        _ = try putsTo(it, to.name, text, false);
+        total += std.unicode.utf8CountCodepoints(text) catch text.len;
+        if (lookup(it, from.name) != from) break;
+    }
+    return .{ .int = @intCast(total) };
 }
 
 fn cmdSource(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {

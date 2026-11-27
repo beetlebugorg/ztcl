@@ -204,7 +204,7 @@ static const char *const ops[] = {
     "open", "write", "wbytes", "read", "rbytes", "gets", "getsobj", "flush",
     "seek", "tell", "eof", "blocked", "cfg", "close", "info", "push", "pop",
     "raw", "std", "events", "ungets", "names", "closed", "file", "fd",
-    "error", "same", NULL
+    "error", "same", "notify", NULL
 };
 
 static int Cxchan(ClientData cd, Tcl_Interp *interp, int objc, Tcl_Obj *const objv[]) {
@@ -414,6 +414,12 @@ static int Cxchan(ClientData cd, Tcl_Interp *interp, int objc, Tcl_Obj *const ob
             Tcl_GetChannel(interp, "stderr", NULL) == Tcl_GetStdChannel(TCL_STDERR),
             Tcl_GetStdChannel(TCL_STDIN) != NULL);
         Tcl_SetObjResult(interp, Tcl_NewStringObj(buf, -1));
+        return TCL_OK;
+    }
+    if (strcmp(opname, "notify") == 0) {
+        int mask;
+        if (objc != 4 || Tcl_GetIntFromObj(interp, objv[3], &mask) != TCL_OK) return TCL_ERROR;
+        Tcl_NotifyChannel(ch, mask);
         return TCL_OK;
     }
     if (strcmp(opname, "events") == 0) {
