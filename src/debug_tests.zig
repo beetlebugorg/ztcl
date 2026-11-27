@@ -558,6 +558,9 @@ fn dapThreads(level: []const u8) !void {
     var server: tcl.dap.Server = .{ .it = &it, .gpa = a, .read = dapReadThread, .program = "/w/th.tcl", .text = script, .reader = true, .sink = .{ .ctx = &c, .write = Client.write } };
     const runner = try std.Thread.spawn(.{}, tcl.dap.serve, .{&server});
     defer runner.join();
+    // A request before the server makes its main target reads that target
+    // with no value: the test crashed at times in a call through it.
+    while (!tcl.dap.started(&server)) std.Thread.yield() catch {};
     errdefer send(&server, "{\"seq\":99,\"type\":\"request\",\"command\":\"disconnect\"}") catch {};
     try send(&server, "{\"seq\":1,\"type\":\"request\",\"command\":\"initialize\"}");
     try send(&server, "{\"seq\":2,\"type\":\"request\",\"command\":\"setBreakpoints\",\"arguments\":{\"source\":{\"path\":\"/w/th.tcl\"},\"breakpoints\":[{\"line\":3}]}}");
