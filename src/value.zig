@@ -258,6 +258,65 @@ pub fn parseIntStrict(text: []const u8) ?i64 {
 }
 
 fn parseIntMode(text: []const u8, wrap: bool) ?i64 {
+    if (parseIntRaw(text, wrap)) |n| return n;
+    const t = tcl9Form(text) orelse return null;
+    return parseIntRaw(t, wrap);
+}
+
+/// The text of a number of Tcl 9.1 in the forms of Tcl 8.6, or null.
+/// Tcl 9.1 allows `_` between two digits (TIP 551) and the prefix `0d`
+/// for a decimal integer (TIP 472): `1_000` is 1000, and `0d10` is 10.
+/// The result is in a buffer of the thread, valid until the next call.
+/// A number of more than `form_max` characters is not converted.
+pub fn tcl9Form(text: []const u8) ?[]const u8 {
+    if (octal_zero) return null;
+    var s = trimSpace(text);
+    if (s.len == 0 or s.len > form_max) return null;
+    var n: usize = 0;
+    if (s[0] == '-' or s[0] == '+') {
+        form_buf[0] = s[0];
+        n = 1;
+        s = s[1..];
+    }
+    var hex = false;
+    var changed = false;
+    if (s.len >= 2 and s[0] == '0') switch (s[1]) {
+        'd', 'D' => {
+            s = s[2..];
+            if (s.len == 0) return null;
+            for (s) |c| if (c != '_' and !std.ascii.isDigit(c)) return null;
+            changed = true;
+        },
+        'x', 'X', 'b', 'B', 'o', 'O' => {
+            hex = s[1] == 'x' or s[1] == 'X';
+            @memcpy(form_buf[n .. n + 2], s[0..2]);
+            n += 2;
+            s = s[2..];
+        },
+        else => {},
+    };
+    for (s, 0..) |c, i| {
+        if (c == '_') {
+            // A run of `_` has a digit on each side.
+            const digit = if (hex) &std.ascii.isHex else &std.ascii.isDigit;
+            if (i == 0 or (s[i - 1] != '_' and !digit(s[i - 1]))) return null;
+            var j = i + 1;
+            while (j < s.len and s[j] == '_') j += 1;
+            if (j == s.len or !digit(s[j])) return null;
+            changed = true;
+            continue;
+        }
+        form_buf[n] = c;
+        n += 1;
+    }
+    if (!changed) return null;
+    return form_buf[0..n];
+}
+
+const form_max = 4096;
+threadlocal var form_buf: [form_max]u8 = undefined;
+
+fn parseIntRaw(text: []const u8, wrap: bool) ?i64 {
     var s = trimSpace(text);
     if (s.len == 0) return null;
     var neg = false;
@@ -308,6 +367,12 @@ fn parseIntMode(text: []const u8, wrap: bool) ?i64 {
 }
 
 pub fn parseDouble(text: []const u8) ?f64 {
+    if (parseDoubleRaw(text)) |d| return d;
+    const t = tcl9Form(text) orelse return null;
+    return parseDoubleRaw(t);
+}
+
+fn parseDoubleRaw(text: []const u8) ?f64 {
     var s = trimSpace(text);
     if (s.len == 0) return null;
     var t = s;

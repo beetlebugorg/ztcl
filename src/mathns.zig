@@ -69,7 +69,7 @@ fn twoCmd(comptime op: BinOp, comptime words: []const u8) interp.NativeFn {
 }
 
 /// A comparison of each adjacent pair of arguments.
-fn chainCmd(comptime op: BinOp) interp.NativeFn {
+pub fn chainCmd(comptime op: BinOp) interp.NativeFn {
     return struct {
         fn call(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (argv.len < 3) return .{ .int = 1 };

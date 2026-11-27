@@ -40,6 +40,11 @@ pub const BinOp = enum {
     ne,
     streq,
     strne,
+    /// The string order operators of Tcl 9.1 (TIP 461).
+    strlt,
+    strgt,
+    strle,
+    strge,
     in,
     ni,
     bitand,
@@ -66,6 +71,10 @@ pub const BinOp = enum {
             .ne => "!=",
             .streq => "eq",
             .strne => "ne",
+            .strlt => "lt",
+            .strgt => "gt",
+            .strle => "le",
+            .strge => "ge",
             .in => "in",
             .ni => "ni",
             .bitand => "&",
@@ -82,7 +91,7 @@ pub const BinOp = enum {
             .mul, .div, .mod => 12,
             .add, .sub => 11,
             .shl, .shr => 10,
-            .lt, .gt, .le, .ge => 9,
+            .lt, .gt, .le, .ge, .strlt, .strgt, .strle, .strge => 9,
             .eq, .ne => 8,
             .streq, .strne => 7,
             .in, .ni => 6,
@@ -196,7 +205,16 @@ const ExprParser = struct {
     }
 
     fn skip(e: *ExprParser) void {
-        while (e.p.pos < e.p.src.len and (e.p.src[e.p.pos] == ' ' or (e.p.src[e.p.pos] >= 9 and e.p.src[e.p.pos] <= 13))) e.p.pos += 1;
+        const s = e.p.src;
+        while (e.p.pos < s.len) {
+            const c = s[e.p.pos];
+            if (c == ' ' or (c >= 9 and c <= 13)) {
+                e.p.pos += 1;
+            } else if (c == '#' and e.it.tcl9()) {
+                // A comment of Tcl 9.1 (TIP 582) runs to the end of the line.
+                while (e.p.pos < s.len and s[e.p.pos] != '\n') e.p.pos += 1;
+            } else break;
+        }
     }
 
     fn node(e: *ExprParser, n: Node) Error!*Node {
@@ -219,6 +237,14 @@ const ExprParser = struct {
         for (table2) |t| if (std.mem.eql(u8, two, t[0])) {
             return .{ t[1], 2 };
         };
+        if (e.it.tcl9()) {
+            const table9 = [_]struct { []const u8, BinOp }{
+                .{ "lt", .strlt }, .{ "gt", .strgt }, .{ "le", .strle }, .{ "ge", .strge },
+            };
+            for (table9) |t| if (std.mem.eql(u8, two, t[0])) {
+                return .{ t[1], 2 };
+            };
+        }
         const op: BinOp = switch (s[0]) {
             '*' => .mul,
             '/' => .div,
@@ -348,22 +374,24 @@ const ExprParser = struct {
         if (std.ascii.isDigit(c) or c == '.') {
             var i = e.p.pos;
             var is_int = true;
-            if (c == '0' and i + 1 < s.len and (s[i + 1] == 'x' or s[i + 1] == 'X' or s[i + 1] == 'b' or s[i + 1] == 'B' or s[i + 1] == 'o' or s[i + 1] == 'O')) {
+            // Tcl 9.1 allows `_` between digits and the prefix 0d.
+            const t9 = e.it.tcl9();
+            if (c == '0' and i + 1 < s.len and (s[i + 1] == 'x' or s[i + 1] == 'X' or s[i + 1] == 'b' or s[i + 1] == 'B' or s[i + 1] == 'o' or s[i + 1] == 'O' or (t9 and (s[i + 1] == 'd' or s[i + 1] == 'D')))) {
                 i += 2;
-                while (i < s.len and std.ascii.isHex(s[i])) i += 1;
+                while (i < s.len and (std.ascii.isHex(s[i]) or (t9 and s[i] == '_'))) i += 1;
             } else {
-                while (i < s.len and std.ascii.isDigit(s[i])) i += 1;
+                while (i < s.len and (std.ascii.isDigit(s[i]) or (t9 and s[i] == '_'))) i += 1;
                 if (i < s.len and s[i] == '.') {
                     is_int = false;
                     i += 1;
-                    while (i < s.len and std.ascii.isDigit(s[i])) i += 1;
+                    while (i < s.len and (std.ascii.isDigit(s[i]) or (t9 and s[i] == '_'))) i += 1;
                 }
                 if (i < s.len and (s[i] == 'e' or s[i] == 'E')) {
                     var j = i + 1;
                     if (j < s.len and (s[j] == '+' or s[j] == '-')) j += 1;
                     if (j < s.len and std.ascii.isDigit(s[j])) {
                         is_int = false;
-                        while (j < s.len and std.ascii.isDigit(s[j])) j += 1;
+                        while (j < s.len and (std.ascii.isDigit(s[j]) or (t9 and s[j] == '_'))) j += 1;
                         i = j;
                     }
                 }
@@ -787,7 +815,7 @@ pub fn intOp(it: *Interp, op: BinOp, x: i64, y: i64) Error!Value {
         .bitor => return .{ .int = x | y },
         .streq => return b2v(x == y),
         .strne => return b2v(x != y),
-        .in, .ni => return binaryOp(it, op, .{ .int = x }, .{ .int = y }),
+        .in, .ni, .strlt, .strgt, .strle, .strge => return binaryOp(it, op, .{ .int = x }, .{ .int = y }),
         .land, .lor => unreachable,
     }
 }
@@ -797,6 +825,15 @@ pub fn binaryOp(it: *Interp, op: BinOp, x: Value, y: Value) Error!Value {
         .streq, .strne => {
             const same = std.mem.eql(u8, try it.str(x), try it.str(y));
             return b2v(same == (op == .streq));
+        },
+        .strlt, .strgt, .strle, .strge => {
+            const order = std.mem.order(u8, try it.str(x), try it.str(y));
+            return b2v(switch (op) {
+                .strlt => order == .lt,
+                .strgt => order == .gt,
+                .strle => order != .gt,
+                else => order != .lt,
+            });
         },
         .in, .ni => {
             const sx = try it.str(x);

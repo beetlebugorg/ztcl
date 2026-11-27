@@ -43,6 +43,15 @@ err: expr {log2(-1)} | domain error: argument not in valid range
 err: expr {trunc("a")} | expected floating-point number but got "a"
 diff: The functions come from `std.math` of Zig. The last digit of a result can differ from tclsh 9.1.0, which gives 3.0000000000000004 for `cbrt(27)`. tclsh gives the error "floating-point value too large to represent" for some results below 2**-1022, such as `asinh(1e-310)`, and ztcl gives the result.
 
+== tcl::mathop::lt
+syn: tcl::mathop::lt ?arg ...?
+does: The string order operators of Tcl 9.1: `lt`, `gt`, `le`, and `ge`. In `expr` they compare two values as strings, with the precedence of `<`. As a command, each one gives 1 when each pair of neighbor arguments is in the order.
+tcl: 9.1
+names: tcl::mathop::gt tcl::mathop::le tcl::mathop::ge
+ex: expr {"10" lt "9"} => 1
+ex: expr {"b" ge "a"} => 1
+ex: tcl::mathop::lt a b c => 1
+
 == divmod
 syn: divmod dividend divisor
 does: The quotient and the remainder of two integers of any size, as a list. The quotient is rounded down, as `/` of `expr` does, so the remainder has the sign of the divisor.

@@ -2182,7 +2182,8 @@ fn stringIs(it: *Interp, args: []const Value) Error!Value {
             at = if (n != null) -1 else @intCast(numberPrefix(s, false));
         }
     } else if (eql(cl, "double")) {
-        const body = value.trimSpace(s);
+        // The number forms of Tcl 9.1, such as 1_000.5, in the forms of 8.6.
+        const body = value.tcl9Form(s) orelse value.trimSpace(s);
         const prefix = numberPrefix(body, true);
         const plain = prefix == body.len and value.parseDouble(body) != null;
         const named = value.parseDouble(body) != null and body.len > 0 and !std.ascii.isDigit(body[body.len - 1]) and body[body.len - 1] != '.';

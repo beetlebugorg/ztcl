@@ -213,3 +213,27 @@ test "the math functions and commands of Tcl 9.1" {
         .{ "list [frexp 10] [modf -2.5] [remquo 6 4] [fpclassify 1e-310]", "!invalid command name \"frexp\"", "{0.625 4} {-2.0 -0.5} {-2.0 2} subnormal" },
     });
 }
+
+test "the string order operators and the comments of expr in Tcl 9.1" {
+    try check(0, &.{
+        .{ "expr {\"a\" lt \"b\"}", "!invalid bareword \"lt\"\nin expression \"\"a\" lt \"b\"\";\nshould be \"$lt\" or \"{lt}\" or \"lt(...)\" or ...", "1" },
+        .{ "list [expr {10 lt 9}] [expr {\"a\" le \"a\"}] [expr {\"b\" gt \"a\"}] [expr {\"a\" ge \"b\"}]", "!invalid bareword \"lt\"\nin expression \"10 lt 9\";\nshould be \"$lt\" or \"{lt}\" or \"lt(...)\" or ...", "1 1 1 0" },
+        .{ "expr {\"b\" lt \"a\" == 0}", "!invalid bareword \"lt\"\nin expression \"\"b\" lt \"a\" == 0\";\nshould be \"$lt\" or \"{lt}\" or \"lt(...)\" or ...", "1" },
+        .{ "tcl::mathop::lt a b c", "!invalid command name \"tcl::mathop::lt\"", "1" },
+        .{ "tcl::mathop::ge c b b", "!invalid command name \"tcl::mathop::ge\"", "1" },
+        .{ "expr {1 + # one\n 2}", "!invalid character \"#\"\nin expression \"1 + # one\n 2\"", "3" },
+        .{ "expr {1 lt}", "!invalid bareword \"lt\"\nin expression \"1 lt\";\nshould be \"$lt\" or \"{lt}\" or \"lt(...)\" or ...", "!missing operand at _@_\nin expression \"1 lt_@_\"" },
+    });
+}
+
+test "the number forms 0d10 and 1_000 of Tcl 9.1" {
+    try check(0, &.{
+        .{ "expr {1_000 + 0d10}", "!invalid bareword \"1_000\"\nin expression \"1_000 + 0d10\";\nshould be \"$1_000\" or \"{1_000}\" or \"1_000(...)\" or ...", "1010" },
+        .{ "set x 0; incr x 1_0", "!expected integer but got \"1_0\"", "10" },
+        .{ "string is double 1_0.5", "0", "1" },
+        .{ "lindex {a b c} 0d1", "!bad index \"0d1\": must be integer?[+-]integer? or end?[+-]integer?", "b" },
+        .{ "expr {\"0x1_0\" + 1}", "!can't use non-numeric string as operand of \"+\"", "17" },
+        .{ "string is entier 1_000_000_000_000_000_000_000", "0", "1" },
+        .{ "list [string is integer 1_] [string is integer _1] [string is integer 0x_1] [string is integer 1__0]", "0 0 0 0", "0 0 0 1" },
+    });
+}

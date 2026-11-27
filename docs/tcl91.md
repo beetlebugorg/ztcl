@@ -37,6 +37,27 @@ These commands and subcommands exist only in Tcl 9.1. In 8.6 they are absent, as
 
 The [command reference](reference/README.md) marks each command and subcommand of one release.
 
+### Expressions
+
+In 9.1 `expr` has the string order operators `lt`, `gt`, `le`, and `ge`, and a `#` starts a comment that runs to the end of the line:
+
+```tcl
+expr {"10" lt "9"}
+# 1
+expr {1 + # the base
+      2}
+# 3
+```
+
+A number can have `_` between two digits, and `0d` starts a decimal integer. These forms work in each command that reads a number:
+
+| Script | 9.1 |
+|---|---|
+| `expr {1_000_000 + 1}` | 1000001 |
+| `expr {0xff_ff}` | 65535 |
+| `incr x 0d10` | 10 more |
+| `string is double 1_0.5` | 1 |
+
 ### Encodings
 
 In 9.1 the default encoding profile is `strict`. A byte that is not valid in the encoding is an error:
@@ -88,7 +109,6 @@ These parts of Tcl 9.1 are not in ztcl yet. A script that uses them gets an erro
 - The commands `const`, `timer`, `unicode`, `tcl::process`, `coroinject`, and `coroprobe`.
 - `array default`, `info cmdtype`, `info constant`, `info consts`, `interp set`, `chan isbinary`, `file home`, `file tildeexpand`, `file tempdir`, `clock monotonic`, and `package files`.
 - The option `-stride` of `lsearch`, and the options `-backslashes`, `-commands`, and `-variables` of `subst`.
-- The operators `lt`, `le`, `gt`, and `ge` of `expr`, and the number forms `0d10` and `1_000`.
 - The removal of the old forms of `trace` (`variable`, `vdelete`, `vinfo`).
 - The changes of `format` for 64-bit values, such as `format %x -1`, and integers above 64 bits in `string is integer`.
 - The zipfs subcommands that 9.1 adds to the ones that ztcl has.

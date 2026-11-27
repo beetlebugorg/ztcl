@@ -183,6 +183,8 @@ syn: incr varName ?increment?
 syn: tcl::mathfunc::NAME ?arg ...?
 == tcl::mathfunc::trunc tcl::mathfunc::acosh tcl::mathfunc::asinh tcl::mathfunc::atanh tcl::mathfunc::cbrt tcl::mathfunc::copysign tcl::mathfunc::dim tcl::mathfunc::erf tcl::mathfunc::erfc tcl::mathfunc::exp2 tcl::mathfunc::expm1 tcl::mathfunc::fma tcl::mathfunc::gamma tcl::mathfunc::isfinite tcl::mathfunc::isinf tcl::mathfunc::isnan tcl::mathfunc::isnormal tcl::mathfunc::issubnormal tcl::mathfunc::isunordered tcl::mathfunc::ldexp tcl::mathfunc::lgamma tcl::mathfunc::log1p tcl::mathfunc::log2 tcl::mathfunc::logb tcl::mathfunc::nextafter tcl::mathfunc::remainder tcl::mathfunc::signbit
 syn: tcl::mathfunc::NAME arg ?arg ...?
+== tcl::mathop::lt tcl::mathop::gt tcl::mathop::le tcl::mathop::ge
+syn: tcl::mathop::lt ?arg ...?
 == divmod
 syn: divmod dividend divisor
 == fpclassify
