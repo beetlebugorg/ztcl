@@ -207,7 +207,26 @@ fn isChecked(v: Value) bool {
 /// The caller must not write to the result.
 fn readPairs(it: *Interp, v: Value) Error![]const Value {
     if (isChecked(v)) return v.list.items();
+    // A dict in a string (a literal, or a value read back from text):
+    // the pairs come from the parse cache, so a loop that reads the same
+    // string pays for the parse and the check of the keys one time.
+    if (v == .str and v.str.len > 0) {
+        if (try it.list_cache.find(it, v.str, pairs_salt, makePairs)) |p| return p;
+    }
     return pairs(it, v);
+}
+
+/// The salt of the entries of the parse cache that hold the pairs of a
+/// dict, apart from the entries of the list of the same text.
+const pairs_salt: u64 = 0x6469_6374_7061_6972;
+
+/// The pairs of the text of a cache entry, or null when the text is no
+/// dict: the caller then gives the error of `pairs`.
+fn makePairs(it: *Interp, text: []const u8, _: u64) Error!?[]const Value {
+    return pairs(it, .{ .str = text }) catch |e| switch (e) {
+        error.TclError => null,
+        else => e,
+    };
 }
 
 /// The list of the pairs of `v` for `dict for`: a marked dict itself, or
