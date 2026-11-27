@@ -33,7 +33,7 @@ eval.test	11	11
 event.test	35	35
 exec.test	87	87
 execute.test	71	71
-expr-old.test	432	432
+expr-old.test	433	433
 expr.test	14124	14124
 fCmd.test	124	124
 fileName.test	50	50
@@ -92,7 +92,7 @@ ooNext2.test	50	50
 opt.test	0	0
 package.test	357	357
 parse.test	114	114
-parseExpr.test	13	13
+parseExpr.test	67	67
 parseOld.test	154	154
 pid.test	5	5
 pkgMkIndex.test	0	0
@@ -113,7 +113,7 @@ scan.test	162	162
 security.test	1	1
 set-old.test	142	142
 set.test	61	61
-socket.test	157	156
+socket.test	157	158
 source.test	13	13
 split.test	16	16
 stack.test	1	1
@@ -151,4 +151,4 @@ winPipe.test	0	0
 winTime.test	0	0
 word.test	45	45
 zlib.test	0	0
-total	37480	37479
+total	37535	37536

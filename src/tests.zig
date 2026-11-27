@@ -2610,6 +2610,17 @@ test "messages of Tcl 8.6.16 from the suite" {
         .{ "catch {lsort -index -1 {}} m; set m", "index \"-1\" cannot select an element from any list" },
         .{ "catch {lsearch -index end-5 {a} a} m; set m", "element -5 missing from sublist \"a\"" },
         .{ "catch {lsort -index 5 {{1 . c}}} m; set m", "element 5 missing from sublist \"1 . c\"" },
+        .{ "catch {expr {0~0}} m; set m", "missing operator at _@_\nin expression \"0_@_~0\"" },
+        .{ "catch {expr {()}} m; set m", "empty subexpression at _@_\nin expression \"(_@_)\"" },
+        .{ "catch {expr {(}} m; set m", "unbalanced open paren\nin expression \"(\"" },
+        .{ "catch {expr {a(0,)}} m; set m", "missing function argument at _@_\nin expression \"a(0,_@_)\"" },
+        .{ "catch {expr {=}} m o; list $m [dict get $o -errorcode]", "{incomplete operator \"=\"\nin expression \"=\"} {TCL PARSE EXPR PARTOP}" },
+        .{ "catch {expr {1 ? 2}} m; set m", "missing operator \":\" at _@_\nin expression \"1 ? 2_@_\"" },
+        .{ "catch {expr {1 : 2}} m; set m", "unexpected operator \":\" without preceding \"?\"\nin expression \"1 : 2\"" },
+        .{ "catch {expr {08}} m o; list $m [dict get $o -errorcode]", "{invalid bareword \"08\"\nin expression \"08\";\nshould be \"$08\" or \"{08}\" or \"08(...)\" or ... (invalid octal number?)} {TCL PARSE EXPR BADNUMBER OCTAL}" },
+        .{ "set e \"123456789012345678901234567890*\\{abcdefghijklmnopqrstuvwxyz\"; catch {expr $e} m; set m", "missing close-brace\nin expression \"...012345678901234567890*{abcdefghijklmnopqrstuv...\"" },
+        .{ "catch {expr {sin(1,2)}} m o; string match {*parsing*} [dict get $o -errorinfo]", "0" },
+        .{ "catch {expr {1 +}} m o; dict get $o -errorinfo", "missing operand at _@_\nin expression \"1 +_@_\"\n    (parsing expression \"1 +\")\n    invoked from within\n\"expr {1 +}\"" },
     });
 }
 
