@@ -86,6 +86,9 @@ pub const ConsoleOut = struct {
 pub const Config = struct {
     cpus: u32 = 1,
     memory_mb: u32 = 256,
+    /// The MB of the guest memory that a thread fills in the map of the
+    /// hypervisor after the start (`fill`), 0 for none.
+    prefault_mb: u32 = 0,
     /// The bytes of the kernel: a bzImage or an ELF vmlinux.
     kernel: []const u8,
     initrd: []const u8 = "",
@@ -132,6 +135,10 @@ vcpus: []Vcpu = &.{},
 devices: []Device = &.{},
 /// The 9p servers of the shares, made with the devices.
 ninep_state: []NinepState = &.{},
+/// The thread of `fill`, while it runs.
+filler: ?std.Thread = null,
+/// The bytes that `fill` gives the advice for.
+prefault: u64 = 0,
 vs: vsock.Vsock,
 want: std.atomic.Value(u32) = .init(want_run),
 parked: std.atomic.Value(u32) = .init(0),
@@ -350,6 +357,8 @@ pub fn start(m: *Machine) Fail!void {
         why = "no thread for a vCPU";
         return error.Setup;
     };
+    // With no thread the rest of the memory waits for its first touch.
+    m.setPrefault(m.cfg.prefault_mb);
 }
 
 /// Stops each vCPU and frees the partition. The machine can start again.
@@ -391,6 +400,8 @@ fn teardown(m: *Machine) void {
         t.join();
         v.thread = null;
     };
+    if (m.filler) |t| t.join();
+    m.filler = null;
     for (m.vcpus) |*v| {
         if (v.emu) |e| _ = WHvEmulatorDestroyEmulator(e);
         if (m.part) |p| _ = WHvDeleteVirtualProcessor(p, v.index);
@@ -464,20 +475,79 @@ fn setup(m: *Machine) Fail!void {
 /// this monitor finds it at run time, and a host without it starts the
 /// guest with no advice.
 fn populate(p: Partition, size: u64) void {
+    const each: u64 = @min(size / 2, populate_end);
+    _ = advise(p, 0, each);
+    _ = advise(p, size - each, each);
+}
+
+/// Fills the map of the hypervisor for a range of guest memory, for a
+/// write. False when the host has no `WHvAdviseGpaRange`, or the call
+/// fails; the pages then wait for their first touch.
+fn advise(p: Partition, gpa: u64, size: u64) bool {
     const Range = extern struct { gpa: u64, size: u64 };
     // WHV_ADVISE_GPA_RANGE_POPULATE: the flag Prefetch, and the access
     // WHvMemoryAccessWrite.
     const Advice = extern struct { flags: u32, access: u32 };
     const Fn = *const fn (Partition, [*]const Range, u32, u32, *const Advice, u32) callconv(.winapi) HRESULT;
-    const lib = GetModuleHandleA("winhvplatform.dll") orelse return;
-    const f: Fn = @ptrCast(GetProcAddress(lib, "WHvAdviseGpaRange") orelse return);
-    const each: u64 = @min(size / 2, populate_end);
-    const ranges = [2]Range{ .{ .gpa = 0, .size = each }, .{ .gpa = size - each, .size = each } };
+    const lib = GetModuleHandleA("winhvplatform.dll") orelse return false;
+    const f: Fn = @ptrCast(GetProcAddress(lib, "WHvAdviseGpaRange") orelse return false);
+    const range = [1]Range{.{ .gpa = gpa, .size = size }};
     const advice: Advice = .{ .flags = 1, .access = 1 };
-    // WHvAdviseGpaRangeCodePopulate. A failure leaves the map to the
-    // first touch, as before.
-    _ = f(p, &ranges, ranges.len, 0, &advice, @sizeOf(Advice));
+    // WHvAdviseGpaRangeCodePopulate.
+    return f(p, &range, 1, 0, &advice, @sizeOf(Advice)) >= 0;
 }
+
+/// Advice for `prefault` bytes of the guest memory above the low end of
+/// `populate`, up from that end, in pieces of `fill_piece` from a thread
+/// of its own while the guest runs. A first touch of a page in the guest
+/// costs about 12 µs, and the advice about 0.35 µs a page. In a guest of
+/// 1 GB the first write of 256 MB to its RAM disk took 790 ms with no
+/// advice, 55 ms with advice for the 256 MB above the low end, and 790 ms
+/// with advice for the 256 MB below the top end: the guest allocates from
+/// the low memory first. The fill waits `fill_delay_ms` after the start, so the boot
+/// keeps its time: 21 ms on the clock of the guest at the listen of its
+/// agent, against 22 ms with no wait and 160 ms from the start to the
+/// agent with all the memory before the start. A paused guest gets no
+/// advice until it runs again, and a stop ends the fill. The host keeps
+/// each page that got the advice, as the guest has it once it touches it.
+fn fill(m: *Machine) void {
+    const p = m.part.?;
+    // The boot of the guest first: the advice and the faults of the boot
+    // share the map of the hypervisor. A stop ends the wait.
+    const run_v: u32 = want_run;
+    _ = WaitOnAddress(&m.want.raw, &run_v, 4, fill_delay_ms);
+    const size = m.mem.size;
+    const each: u64 = @min(size / 2, populate_end);
+    var at: u64 = each;
+    const high = at + @min(m.prefault, size - 2 * each);
+    while (at < high) {
+        const w = m.want.load(.seq_cst);
+        if (w == want_stop) return;
+        if (w == want_pause) {
+            const pause_v: u32 = want_pause;
+            _ = WaitOnAddress(&m.want.raw, &pause_v, 4, 1000);
+            continue;
+        }
+        const n = @min(fill_piece, high - at);
+        if (!advise(p, at, n)) return;
+        at += n;
+    }
+}
+
+/// Starts the fill of `mb` MB of the guest memory (`fill`), once: for a
+/// guest of the pool, when a `create` uses it.
+pub fn setPrefault(m: *Machine, mb: u32) void {
+    if (mb == 0 or m.filler != null) return;
+    const s = m.getState();
+    if (s != .running and s != .paused) return;
+    m.prefault = @as(u64, mb) << 20;
+    m.filler = std.Thread.spawn(.{ .stack_size = 64 * 1024 }, fill, .{m}) catch null;
+}
+/// The size of each piece of `fill`.
+const fill_piece: u64 = 64 << 20;
+/// The wait of `fill` after the start: a guest of ztcl reaches its agent
+/// in about 50 ms.
+const fill_delay_ms: u32 = 50;
 
 /// The part at each end of the guest memory that `populate` fills.
 const populate_end: u64 = 32 << 20;

@@ -3276,7 +3276,8 @@ test "ztcl::vm on Windows: a guest boots, and vsock and exec reach its agent" {
             return x.str(v);
         }
     }.f;
-    try std.testing.expectEqualStrings("vm1", try ev(&it, "ztcl::vm create -kernel bzImage -initrd initramfs.cpio.gz -memory 128"));
+    try std.testing.expectEqualStrings("bad -prefault \"-1\": must be 0 or more", try ev(&it, "catch {ztcl::vm create -kernel bzImage -prefault -1} m; set m"));
+    try std.testing.expectEqualStrings("vm1", try ev(&it, "ztcl::vm create -kernel bzImage -initrd initramfs.cpio.gz -memory 128 -prefault 64"));
     _ = try ev(&it, "ztcl::vm start vm1");
     try std.testing.expectEqualStrings("running", try ev(&it, "ztcl::vm status vm1"));
     // The probe of the agent: 16 bytes of its boot clock, then an echo.
