@@ -52,7 +52,7 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"; echo "docs=$docs" >> "$GITHUB_OUTPUT"
           # The files that the WebAssembly and WASI jobs build or run. A
           # pull request that changes none of them skips those jobs.
-          wasm_re='^(src/|build\.zig|build\.zig\.zon|wit/|web/|npm/|enclave/|bench/|examples/web/|tests/(jit|mem|point|thread|web)/|tools/(wasm|point|wasi|jit-fuzz|fetch-|tcltest|suite|thread-tests|witgen)|\.github/workflows/ci\.yml)'
+          wasm_re='^(src/|build\.zig|build\.zig\.zon|wit/|web/|npm/|enclave/|bench/|examples/web/|tests/(jit|mem|point|thread|web)/|tools/(wasm|point|wasi|jit-fuzz|fetch-|tcltest|suite|thread-tests|witgen|web-)|docs/site/playground/|\.github/workflows/ci\.yml)'
           if printf '%s\n' "$files" | grep -qE "$wasm_re"; then wasm=true; else wasm=false; fi
           echo "wasm=$wasm" >> "$GITHUB_OUTPUT"
 
@@ -436,6 +436,9 @@ jobs:
       - run: node tools/wasm-shell.mjs zig-out/lib/ztcl-shell.wasm
       - run: node tools/wasm-host.mjs zig-out/lib/ztcl.wasm zig-out/lib/ztcl-host.wasm
       - run: node tools/web-api.mjs zig-out/lib/ztcl.wasm zig-out/lib/ztcl-host.wasm
+      - run: node tools/web-groups.mjs zig-out/lib/ztcl-host.wasm
+      # The demo pages of the Web APIs in Chromium, with fake devices.
+      - run: node tools/web-demos.mjs /usr/bin/google-chrome
       # The threads in Node.js and in Chromium, with and without
       # cross-origin isolation. The browser test uses the Chrome of the
       # runner.

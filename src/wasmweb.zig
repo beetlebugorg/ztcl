@@ -37,7 +37,7 @@
 //! `web::on` needs the attribute `on<event>` of the type `EventHandler`
 //! in the table. The host puts each event into the same queue, and
 //! `ztcl_web_event` puts the values of the event in place of `%type`,
-//! `%target`, and `%detail` (`%%` is one `%`).
+//! `%target`, `%detail`, `%value`, and `%data` (`%%` is one `%`).
 //!
 //! Web Serial (task 06) gives a port as a channel of `wasmfiles.zig`:
 //!
@@ -84,7 +84,7 @@ pub const Op = enum(u32) {
 
 /// The names of the substitutions of `web::on`, in the order of the
 /// values of an event.
-pub const subs = [_][]const u8{ "type", "target", "detail" };
+pub const subs = [_][]const u8{ "type", "target", "detail", "value", "data" };
 
 const host = struct {
     extern "ztcl_host" fn web(op: u32, handle: i32, a: [*]const u8, a_len: usize, b: [*]const u8, b_len: usize) i32;
@@ -358,6 +358,10 @@ test "web::on puts the values of an event in place of %type, %target, and %detai
     const aa = arena.allocator();
     const vals = [_]Value{ .{ .str = "connect" }, .{ .str = "web4" }, .{ .str = "" } };
     try std.testing.expectEqualStrings("got connect web4 {} 100%", try substitute(aa, "got %type %target %detail 100%%", &vals));
+    // An event with fewer values gives an empty %value and %data.
+    try std.testing.expectEqualStrings("v {} {}", try substitute(aa, "v %value %data", &vals));
+    const five = [_]Value{ .{ .str = "midimessage" }, .{ .str = "web2" }, .{ .str = "" }, .{ .str = "" }, .{ .str = "1 2" } };
+    try std.testing.expectEqualStrings("m web2 {1 2}", try substitute(aa, "m %target %data", &five));
 }
 
 test "a reply of words and lists reads as a Tcl list" {

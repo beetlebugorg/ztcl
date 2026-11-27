@@ -268,6 +268,22 @@ export class Bridge {
     return n && this.table.interfaces[n] ? n : fallback;
   }
 
+  // The attribute `name` of `obj` (an event or its target) as a word or a
+  // list, by the type of the table, or undefined when the interface of
+  // the object has no such attribute or its group is not granted.
+  eventAttr(obj, name, type) {
+    if (obj == null) return undefined;
+    type ??= this.typeOf(obj, undefined);
+    if (!type) return undefined;
+    try {
+      const m = this.member(type, "attributes", name);
+      if (m.type === "EventHandler") return undefined;
+      return this.fromJS(m.type, obj[name]);
+    } catch {
+      return undefined;
+    }
+  }
+
   // Puts the script of a result into the queue and asks the Interp for
   // a run of the events.
   push(script, vals, subst = false) {
@@ -580,7 +596,12 @@ export class Bridge {
             const target = t && t !== o.obj ? this.wrap(t, this.typeOf(t, "EventTarget")) : t ? `web${h}` : "";
             let detail = "";
             if (ev.detail !== undefined && ev.detail !== null) detail = typeof ev.detail === "object" ? "" : String(ev.detail);
-            this.push(script, [String(ev.type), target, detail], true);
+            // `%value` and `%data`: the attribute of the event, or else
+            // `value` of the target, converted now, before a later event
+            // changes it.
+            const value = this.eventAttr(ev, "value") ?? this.eventAttr(t, "value", t === o.obj ? o.type : undefined) ?? "";
+            const data = this.eventAttr(ev, "data") ?? "";
+            this.push(script, [String(ev.type), target, detail, value, data], true);
           };
           o.obj.addEventListener(sa, fn);
           this.listeners.set(key, { obj: o.obj, type: sa, fn });

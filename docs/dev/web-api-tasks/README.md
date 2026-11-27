@@ -40,6 +40,12 @@ A value is a string, a number, a boolean (0 or 1), a list for a sequence, a dict
 
 fetch, WebSocket, and the File System Access API go behind the HTTP client (#27), the channels, and the capability `file` in later tasks of #251.
 
+## Wrappers
+
+The second part of #251 gives each group a namespace `web::GROUP` of Tcl-shaped commands: `-name value` options, `-command` scripts with `ok` or `error` appended, and channels for streams. A wrapper is a Tcl file of `src/web/`, and `ztcl_web_lib` of `src/wasm.zig` runs it (after `src/web/common.tcl`) for the grant of its group. Each wrapper has a reference page in `docs/modules/web-GROUP.md`, a guide in `docs/web/`, a demo in `docs/site/playground/` that starts only on a click, a support table from the MDN data, tests with fakes in `tools/web-groups.mjs`, and a run of the demo in Chromium in `tools/web-demos.mjs`.
+
+Order: Bluetooth, Gamepad, MIDI, USB, HID, fetch and WebSocket, IndexedDB, File System Access, Clipboard, Web Crypto, Web Audio, getUserMedia, Speech, Geolocation and sensors, Wake Lock, Notifications, Share.
+
 ## Rules for each task
 
 1. Follow the rules of [the host API tasks](../wasm-host-tasks/README.md#rules-for-each-task).
@@ -57,3 +63,4 @@ fetch, WebSocket, and the File System Access API go behind the HTTP client (#27)
 | 05 | done (#418) |
 | 06 | done |
 | 07 | done |
+| Bluetooth wrapper | done |

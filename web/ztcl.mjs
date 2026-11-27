@@ -186,6 +186,16 @@ export class Interp {
       this._web = new web.Bridge(this, { groups: groups.map((c) => c.slice(4)), root: webRoot });
       if (this.x.ztcl_web_allow(this.h) !== 0) throw new Error("ztcl_web_allow: out of memory");
       if (groups.includes("web:serial") && this.x.ztcl_web_serial_allow(this.h) !== 0) throw new Error("ztcl_web_serial_allow: out of memory");
+      // The Tcl wrapper of each group, such as web::bluetooth:: (src/web/).
+      for (const g of groups) {
+        const t = encoder.encode(g.slice(4));
+        const p = this.x.ztcl_alloc(t.length || 1);
+        if (!p) throw new Error("ztcl_alloc: out of memory");
+        new Uint8Array(this.x.memory.buffer, p, t.length).set(t);
+        const rc = this.x.ztcl_web_lib(this.h, p, t.length);
+        this.x.ztcl_free(p, t.length || 1);
+        if (rc === 1) throw new Error(`ztcl_web_lib ${g}: ${this._text(this.x.ztcl_result_ptr(this.h), this.x.ztcl_result_len(this.h))}`);
+      }
       allow = allow.filter((c) => !c.startsWith("web:"));
     }
     if (allow.length) {

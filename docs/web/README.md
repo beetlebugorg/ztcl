@@ -8,16 +8,21 @@ import * as web from "./ztcl-web.mjs";
 const tcl = await Interp.create("ztcl-host.wasm", { allow: ["dom", "event", "web:serial"], web });
 ```
 
-| Group | Page | Grant |
-|---|---|---|
-| Web Serial | [Serial ports](serial.md) | `web:serial` |
-| WebUSB | [USB devices](usb.md) | `web:usb` |
-| Web Bluetooth | [Bluetooth devices](bluetooth.md) | `web:bluetooth` |
-| WebHID | [HID devices](hid.md) | `web:hid` |
-| Web MIDI | [MIDI ports](midi.md) | `web:midi` |
-| Gamepad | [Gamepads](gamepad.md) | `web:gamepad` |
+| Group | Guide | Commands | Grant |
+|---|---|---|---|
+| Web Serial | [Serial ports](serial.md) | [`web::serial::`](../modules/web.md#web-serial), channels | `web:serial` |
+| WebUSB | [USB devices](usb.md) | `web::call` | `web:usb` |
+| Web Bluetooth | [Bluetooth devices](bluetooth.md) | [`web::bluetooth::`](../modules/web-bluetooth.md) | `web:bluetooth` |
+| WebHID | [HID devices](hid.md) | `web::call` | `web:hid` |
+| Web MIDI | [MIDI ports](midi.md) | `web::call` | `web:midi` |
+| Gamepad | [Gamepads](gamepad.md) | `web::call` | `web:gamepad` |
 
-The demo [M115 to a 3D printer](https://beetlebug.org/ztcl/playground/serial.html) sends a G-code to a printer on a serial port and shows the reply. It needs a browser with Web Serial.
+A group with its own commands has a Tcl wrapper in `ztcl-host.wasm`, and the grant of the group adds the commands. The other groups use the commands of `web::` directly.
+
+The demos run in a page of their own, and each one starts only after a click:
+
+- [M115 to a 3D printer](https://beetlebug.org/ztcl/playground/serial.html) sends a G-code to a printer on a serial port and shows the reply. It needs a browser with Web Serial.
+- [A heart-rate monitor](https://beetlebug.org/ztcl/playground/bluetooth.html) shows the rate of a Bluetooth heart-rate monitor. It needs a browser with Web Bluetooth.
 
 ## Support by browser
 
@@ -36,4 +41,4 @@ Each API except Gamepad needs a secure context (HTTPS or `localhost`). A chooser
 
 ## Tests
 
-`tools/web-api.mjs` tests the bridge in Node.js with fake objects: the groups, the conversions, the promises, the events, `navigator.getGamepads`, and a Web Serial port. The examples of the pages for USB, Bluetooth, HID, and MIDI use only members of the table, and no test runs them against a device.
+`tools/web-api.mjs` tests the bridge in Node.js with fake objects: the groups, the conversions, the promises, the events, `navigator.getGamepads`, and a Web Serial port. `tools/web-groups.mjs` tests the wrappers, such as `web::bluetooth::`, and the scripts of the demos with fake devices. The examples of the pages for USB, HID, and MIDI use only members of the table, and no test runs them against a device.
