@@ -56,9 +56,9 @@
 |---|---|---|---|
 | [01](01-build.md) | shared/wasi | `zig build -Dtarget=wasm32-wasi` on preview 1 | merged (#78) |
 | [02](02-ci.md) | shared/wasi | The smoke tests and the CI job under wasmtime | merged (#86) |
-| [03](03-p1-capabilities.md) | shared/wasi | Files, clock, random, env, and the event loop on preview 1 | PR #83 |
-| [04](04-async-abi.md) | shared/wasi | The async canonical ABI of WASI 0.3, and the first component | PR #210 |
-| [05](05-wit-bindings.md) | shared | The WIT files of WASI 0.3.2 and the bindings generator | open |
+| [03](03-p1-capabilities.md) | shared/wasi | Files, clock, random, env, and the event loop on preview 1 | merged (#83) |
+| [04](04-async-abi.md) | shared/wasi | The async canonical ABI of WASI 0.3, and the first component | merged (#210) |
+| [05](05-wit-bindings.md) | shared | The WIT files of WASI 0.3.2 and the bindings generator | PR (this branch) |
 | [06](06-native.md) | shared/wasi | Native WASI 0.3 for the CLI, clocks, random, and files | open |
 | [07](07-sockets.md) | shared/wasi | Sockets on `wasi:sockets` 0.3 | open |
 | [08](08-embed-world.md) | shared/wasi | The `ztcl:embed` world for the library | open |
