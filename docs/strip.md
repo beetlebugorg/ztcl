@@ -168,4 +168,16 @@ The size of a feature is the size of the full native runtime less the size with 
 | `json` | 69,168 |
 | `regexp` | 36,608 |
 
+These rows are of a later commit, with a full runtime of 3,196,000 bytes:
+
+| Feature | Bytes |
+|---|---|
+| `clock` | 46,088 |
+| `interp` | 22,792 |
+| `binary` | 19,832 |
+| `exec` | 13,352 |
+| `event` | 8,744 |
+
+`coroutine` and `socket` change the size by less than 2 KB in this measure.
+
 The start of a binary of `ztcl build` reads only the payload from the program file, so the size of the runtime has a small effect on the start time.
