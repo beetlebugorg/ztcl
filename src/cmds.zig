@@ -1697,13 +1697,49 @@ pub fn byteOf(s: []const u8, n: usize, k: usize) usize {
     return s.len;
 }
 
-pub fn cmdString(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+/// The subcommand that the site `cmd` keeps for the command function
+/// `self`, or null. A site whose second word is a literal keeps the enum
+/// value of its subcommand in `Cmd.sub`, with the address of `self` in
+/// `Cmd.sub_fn` (see `noteSub`). A hit needs the same function, the same
+/// word count, and the value of the literal word in `argv[1]`. So a
+/// rename or an alias finds the name again. The hint depends only on the
+/// literal, on the function, and on the release of the interpreter of
+/// the site, so it needs no epoch.
+inline fn siteSub(comptime Sub: type, comptime self: interp.NativeFn, argv: []const Value, cmd: ?*Cmd) ?Sub {
+    const c = cmd orelse return null;
+    if (c.sub_fn != @intFromPtr(self) or !siteLit(c, argv)) return null;
+    return @fromBackingInt(@as(@typeInfo(Sub).@"enum".tag_type, @intCast(c.sub)));
+}
+
+/// Keeps the subcommand `s` of `argv[1]` in the site `cmd`.
+inline fn noteSub(comptime Sub: type, comptime self: interp.NativeFn, argv: []const Value, cmd: ?*Cmd, s: Sub) void {
+    const c = cmd orelse return;
+    if (!siteLit(c, argv)) return;
+    c.sub_fn = @intFromPtr(self);
+    c.sub = @backingInt(s);
+}
+
+/// True when `argv[1]` is the literal second word of the site `c`.
+fn siteLit(c: *const Cmd, argv: []const Value) bool {
+    if (c.has_expand or c.words.len != argv.len or argv.len < 2) return false;
+    const lit = switch (c.words[1].kind) {
+        .lit => |v| v,
+        else => return false,
+    };
+    return lit == .str and argv[1] == .str and lit.str.ptr == argv[1].str.ptr and lit.str.len == argv[1].str.len;
+}
+
+pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("string subcommand ?arg ...?");
     const a = it.alloc();
     const sub = try it.str(argv[1]);
     const args = argv[2..];
     const Sub = enum { bytelength, length, index, insert, range, equal, compare, first, last, map, tolower, toupper, totitle, trim, trimleft, trimright, repeat, is, match, reverse, cat, replace, wordstart, wordend };
-    const which = try @import("tcl9.zig").pick(it, Sub, sub, .{ .v8_6 = &.{.bytelength}, .v9_1 = &.{.insert} });
+    const which = siteSub(Sub, &cmdString, argv, cmd) orelse blk: {
+        const w = try @import("tcl9.zig").pick(it, Sub, sub, .{ .v8_6 = &.{.bytelength}, .v9_1 = &.{.insert} });
+        noteSub(Sub, &cmdString, argv, cmd, w);
+        break :blk w;
+    };
     switch (which) {
         .insert => {
             if (args.len != 3) return it.wrongArgs("string insert string index insertString");
@@ -2332,48 +2368,50 @@ fn namesList(it: *Interp, frame: *interp.Frame, pattern: ?[]const u8, links: boo
     return value.wrapList(it.alloc(), out.items);
 }
 
-const info_names = [_][]const u8{ "args", "body", "class", "cmdcount", "commands", "complete", "coroutine", "default", "exists", "functions", "globals", "level", "library", "loaded", "locals", "nameofexecutable", "object", "patchlevel", "procs", "script", "sharedlibextension", "tclversion", "vars" };
+/// The subcommand of `info` that `word` names or is a unique prefix of.
+fn infoSub(word: []const u8) ?InfoSub {
+    if (std.meta.stringToEnum(InfoSub, word)) |w| return w;
+    if (word.len == 0) return null;
+    var found: ?InfoSub = null;
+    inline for (comptime std.meta.fieldNames(InfoSub)) |name| {
+        if (std.mem.startsWith(u8, name, word)) {
+            if (found != null) return null;
+            found = @field(InfoSub, name);
+        }
+    }
+    return found;
+}
 
-fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+const InfoSub = enum { args, body, class, cmdcount, commands, complete, coroutine, default, exists, functions, globals, level, library, loaded, locals, nameofexecutable, object, patchlevel, procs, script, sharedlibextension, tclversion, vars };
+
+fn cmdInfo(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("info subcommand ?arg ...?");
     const a = it.alloc();
     const word = try it.str(argv[1]);
-    var sub: []const u8 = word;
-    var hits: usize = 0;
-    for (info_names) |n| {
-        if (eql(n, word)) {
-            sub = n;
-            hits = 1;
-            break;
-        }
-        if (word.len > 0 and std.mem.startsWith(u8, n, word)) {
-            sub = n;
-            hits += 1;
-        }
-    }
-    if (hits != 1) sub = word;
+    const which: ?InfoSub = siteSub(InfoSub, &cmdInfo, argv, cmd) orelse infoSub(word);
+    if (which) |w| noteSub(InfoSub, &cmdInfo, argv, cmd, w);
+    const sub: []const u8 = if (which) |w| @tagName(w) else word;
     const pattern: ?[]const u8 = if (argv.len > 2) try it.str(argv[2]) else null;
-    for ([_][]const u8{ "commands", "globals", "locals", "procs", "vars" }) |n| {
-        if (eql(sub, n) and argv.len > 3) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"info {s} ?pattern?\"", .{n});
-    }
-    for ([_][]const u8{ "cmdcount", "nameofexecutable", "patchlevel", "sharedlibextension", "tclversion", "library" }) |n| {
-        if (eql(sub, n) and argv.len != 2) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"info {s}\"", .{n});
-    }
-    if (eql(sub, "cmdcount")) return .{ .int = @bitCast(std.math.maxInt(u64) - it.compute_limit) };
-    if (eql(sub, "coroutine")) {
+    if (which) |w| switch (w) {
+        .commands, .globals, .locals, .procs, .vars => if (argv.len > 3) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"info {s} ?pattern?\"", .{sub}),
+        .cmdcount, .nameofexecutable, .patchlevel, .sharedlibextension, .tclversion, .library => if (argv.len != 2) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"info {s}\"", .{sub}),
+        else => {},
+    };
+    if (which == .cmdcount) return .{ .int = @bitCast(std.math.maxInt(u64) - it.compute_limit) };
+    if (which == .coroutine) {
         if (argv.len != 2) return it.wrongArgs("info coroutine");
         return coro.current(it);
     }
-    if (eql(sub, "sharedlibextension")) return .{ .str = ".so" };
-    if (eql(sub, "library")) {
+    if (which == .sharedlibextension) return .{ .str = ".so" };
+    if (which == .library) {
         return (try it.getVarOpt("::tcl_library")) orelse it.fail("no library has been specified for Tcl", .{});
     }
-    if (eql(sub, "loaded")) {
+    if (which == .loaded) {
         if (argv.len > 3) return it.wrongArgs("info loaded ?interp?");
         if (argv.len == 3 and pattern.?.len > 0) return it.failCode("TCL LOOKUP INTERP", "could not find interpreter \"{s}\"", .{pattern.?});
         return Value.empty;
     }
-    if (eql(sub, "functions")) {
+    if (which == .functions) {
         if (argv.len > 3) return it.wrongArgs("info functions ?pattern?");
         var out: std.ArrayList(Value) = .empty;
         try chargeEntries(it, it.commands.count());
@@ -2391,7 +2429,7 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }.less);
         return value.wrapList(a, out.items);
     }
-    if (eql(sub, "exists")) {
+    if (which == .exists) {
         if (argv.len != 3) return it.wrongArgs("info exists varName");
         const name, const idx = Interp.splitName(pattern.?);
         const cell = try it.findVar(it.frame, name, false) orelse return .{ .int = 0 };
@@ -2408,9 +2446,9 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }
         if (idx) |i| return .{ .int = @intFromBool(cell.v == .arr and cell.v.arr.contains(i)) };
         return .{ .int = @intFromBool(cell.v == .val or cell.v == .arr) };
-    } else if (eql(sub, "commands") or eql(sub, "procs")) {
+    } else if (which == .commands or which == .procs) {
         var out: std.ArrayList(Value) = .empty;
-        const only_procs = eql(sub, "procs");
+        const only_procs = which == .procs;
         // A qualified pattern lists one namespace with full names. A
         // plain pattern lists the current and the global namespace.
         const qualified = if (pattern) |p| std.mem.indexOf(u8, p, "::") != null else false;
@@ -2446,7 +2484,7 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         };
         std.mem.sort(Value, out.items, {}, S.less);
         return value.wrapList(a, out.items);
-    } else if (eql(sub, "default")) {
+    } else if (which == .default) {
         if (argv.len != 5) return it.wrongArgs("info default procname arg varname");
         const c = it.findCommand(pattern.?);
         if (c == null or c.?.impl != .proc) return it.fail("\"{s}\" isn't a procedure", .{pattern.?});
@@ -2461,21 +2499,21 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             return .{ .int = 0 };
         }
         return it.fail("procedure \"{s}\" doesn't have an argument \"{s}\"", .{ pattern.?, want });
-    } else if (eql(sub, "object")) {
+    } else if (which == .object) {
         return @import("oo.zig").infoObject(it, argv);
-    } else if (eql(sub, "class")) {
+    } else if (which == .class) {
         return @import("oo.zig").infoClass(it, argv);
-    } else if (eql(sub, "args") or eql(sub, "body")) {
+    } else if (which == .args or which == .body) {
         if (argv.len != 3) return it.fail("wrong # args: should be \"info {s} procname\"", .{sub});
         const c = it.findCommand(pattern.?);
         if (c == null or c.?.impl != .proc) return it.fail("\"{s}\" isn't a procedure", .{pattern.?});
         const p = c.?.impl.proc;
-        if (eql(sub, "body")) return p.body;
+        if (which == .body) return p.body;
         var out: std.ArrayList(Value) = .empty;
         for (p.params) |prm| try out.append(a, .{ .str = prm.name });
         if (p.has_args) try out.append(a, .{ .str = "args" });
         return value.wrapList(a, out.items);
-    } else if (eql(sub, "level")) {
+    } else if (which == .level) {
         if (argv.len > 3) return it.wrongArgs("info level ?number?");
         if (argv.len == 2) return .{ .int = it.frame.level };
         const n = try it.int(argv[2]);
@@ -2484,19 +2522,19 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         var f = it.frame;
         while (f.level > target) f = f.parent.?;
         return value.newList(a, f.argv);
-    } else if (eql(sub, "vars")) {
+    } else if (which == .vars) {
         return namesList(it, it.frame, pattern, true);
-    } else if (eql(sub, "locals")) {
+    } else if (which == .locals) {
         if (it.frame == &it.global) return Value.empty;
         return namesList(it, it.frame, pattern, false);
-    } else if (eql(sub, "globals")) {
+    } else if (which == .globals) {
         // A pattern can name the global namespace: "::x" and ":::x" are "x".
         var pat = pattern;
         if (pat) |q| {
             if (std.mem.startsWith(u8, q, "::")) pat = std.mem.trimStart(u8, q[2..], ":");
         }
         return namesList(it, &it.global, pat, true);
-    } else if (eql(sub, "complete")) {
+    } else if (which == .complete) {
         if (argv.len != 3) return it.wrongArgs("info complete command");
         // A backslash and a newline at the end continue the command.
         const text = pattern.?;
@@ -2511,15 +2549,15 @@ fn cmdInfo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (e == error.OutOfMemory) return error.OutOfMemory;
             return .{ .int = @intFromBool(std.mem.indexOf(u8, p.message, "missing") == null) };
         }
-    } else if (eql(sub, "tclversion")) {
+    } else if (which == .tclversion) {
         return it.getVar("::tcl_version");
-    } else if (eql(sub, "patchlevel")) {
+    } else if (which == .patchlevel) {
         return it.getVar("::tcl_patchLevel");
-    } else if (eql(sub, "script")) {
+    } else if (which == .script) {
         if (argv.len > 3) return it.wrongArgs("info script ?filename?");
         if (argv.len == 3) it.script_name = try a.dupe(u8, pattern.?);
         return .{ .str = it.script_name };
-    } else if (eql(sub, "nameofexecutable")) {
+    } else if (which == .nameofexecutable) {
         return .{ .str = it.exe_name };
     }
     return it.failCode("TCL LOOKUP INDEX subcommand", "unknown or ambiguous subcommand \"{s}\": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, library, loaded, locals, nameofexecutable, patchlevel, procs, script, sharedlibextension, tclversion, or vars", .{word});
