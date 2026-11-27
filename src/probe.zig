@@ -77,6 +77,8 @@ pub const Spec = struct {
     capture: []const u8 = "",
     /// The record has the call stack.
     stack: bool = false,
+    /// Each frame of the stack has its local variables.
+    locals: bool = false,
     /// The most records of the probe.
     count: u64 = std.math.maxInt(u64),
     /// The probe records each Nth hit.
@@ -657,7 +659,7 @@ fn fire(it: *Interp, s: *State, pr: *Probe, fields: []const Field) void {
         nx += 1;
     }
     if (pr.spec.stack) {
-        extra[nx] = .{ .key = "stack", .val = stackText(it) };
+        extra[nx] = .{ .key = "stack", .val = stackText(it, pr.spec.locals, s.maxlen) };
         nx += 1;
     }
     const all = g.alloc(Field, fields.len + nx) catch return;
@@ -729,17 +731,46 @@ fn clip(g: Allocator, text: []const u8, max: usize) Allocator.Error![]u8 {
 }
 
 /// The call stack: a list with one item for each frame, innermost
-/// first. An item is the list of the words of the call.
-fn stackText(it: *Interp) []const u8 {
+/// first. An item is the list of the words of the call. With `locals`,
+/// an item is a list of two: the words, and a dict of the locals with
+/// values of at most `max` bytes.
+fn stackText(it: *Interp, locals: bool, max: usize) []const u8 {
     const a = it.alloc();
     var items: std.ArrayList(Value) = .empty;
     var f: ?*interp.Frame = it.frame;
     while (f) |fr| : (f = fr.parent) {
         if (fr.parent == null) break;
-        const words = value.listToString(a, fr.argv) catch return "";
-        items.append(a, .{ .str = words }) catch return "";
+        const words: Value = .{ .str = value.listToString(a, fr.argv) catch return "" };
+        if (!locals) {
+            items.append(a, words) catch return "";
+            continue;
+        }
+        const vars = localsOf(it, fr, max) catch return "";
+        items.append(a, value.newList(a, &.{ words, vars }) catch return "") catch return "";
     }
     return value.listToString(a, items.items) catch "";
+}
+
+/// The locals of a frame with a value, as a dict. An array shows the
+/// count of its elements.
+pub fn localsOf(it: *Interp, fr: *interp.Frame, max: usize) Error!Value {
+    const a = it.alloc();
+    var out: std.ArrayList(Value) = .empty;
+    for (fr.vars.items) |e| {
+        const text: []const u8 = switch (e.cell.target().v) {
+            .val, .owned => |v| try it.str(v),
+            .arr => |m| try std.fmt.allocPrint(a, "<array of {d}>", .{m.count()}),
+            .traced => |t| switch (t.inner) {
+                .val => |v| try it.str(v),
+                .arr => |m| try std.fmt.allocPrint(a, "<array of {d}>", .{m.count()}),
+                .undef => continue,
+            },
+            else => continue,
+        };
+        try out.append(a, .{ .str = e.name });
+        try out.append(a, .{ .str = try clip(a, text, max) });
+    }
+    return value.wrapList(a, out.items);
 }
 
 // ---- Queries ----
@@ -966,6 +997,11 @@ fn cmdAdd(it: *Interp, args: []const Value) Error!Value {
             spec.stack = true;
             continue;
         }
+        if (std.mem.eql(u8, opt, "-locals")) {
+            spec.stack = true;
+            spec.locals = true;
+            continue;
+        }
         if (std.mem.eql(u8, opt, "-leave")) {
             spec.leave = true;
             continue;
@@ -1009,7 +1045,7 @@ fn cmdAdd(it: *Interp, args: []const Value) Error!Value {
             if (w.len != 2) return it.fail("-rate needs a list of two numbers: records and compute units", .{});
             spec.rate_n = try count(it, w[0], "-rate");
             spec.rate_units = try count(it, w[1], "-rate");
-        } else return it.fail("bad option \"{s}\": must be -capture, -command, -count, -error, -every, -if, -leave, -line, -ops, -proc, -rate, -stack, or -var", .{opt});
+        } else return it.fail("bad option \"{s}\": must be -capture, -command, -count, -error, -every, -if, -leave, -line, -locals, -ops, -proc, -rate, -stack, or -var", .{opt});
     }
     if (!have) return it.wrongArgs("ztcl::probe add -proc name ?-line n? | -command name | -var name | -error ?option value ...?");
     if (have_line and spec.kind != .line) return it.fail("-line needs -proc", .{});

@@ -1,5 +1,9 @@
 //! A runner for Tcl scripts: `ztcl [--time] [--compute N] [--mem N] [--repeat N] file.tcl ...`.
 //!
+//! `ztcl debug [options] file.tcl` runs a script with probes and writes
+//! a report, and `ztcl debug --mcp` serves its tools. See
+//! `src/debug.zig` and `src/debugmcp.zig`.
+//!
 //! `ztcl build --wasm ... -o OUT.wasm file.tcl ...` writes a copy of
 //! ztcl.wasm with the scripts in it. See `src/buildcmd.zig`.
 //!
@@ -159,6 +163,28 @@ fn hostPath(path: []const u8) HostPath {
         best_len = base.len;
     }
     return best orelse .{ .dir = .cwd(), .sub = std.mem.trimStart(u8, path, "/") };
+}
+
+/// `ztcl debug script`: the output of the script, then the report.
+/// Gives the exit code: 0 for a run with no error, 1 for an error, and
+/// 2 for a bad probe.
+fn runDebug(it: *tcl.Interp, out: *Io.Writer, a: std.mem.Allocator, text: []const u8, opts: tcl.debug.Options) !u8 {
+    var rep = tcl.debug.run(it, text, opts) catch |e| {
+        if (e == error.TclError) {
+            try out.print("ztcl debug: {s}\n", .{it.str(it.result) catch ""});
+            out.flush() catch {};
+            return 2;
+        }
+        return e;
+    };
+    defer rep.deinit();
+    try out.writeAll(if (opts.json) try tcl.debug.writeJson(a, &rep, opts) else try tcl.debug.writeText(a, &rep, opts));
+    out.flush() catch {};
+    return if (rep.ok) 0 else 1;
+}
+
+fn mcpRead(_: ?*anyopaque, path: []const u8, a: std.mem.Allocator) anyerror![]u8 {
+    return host.read(path, a);
 }
 
 fn readScript(io: Io, path: []const u8, a: std.mem.Allocator) ![]u8 {
@@ -365,7 +391,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     const arena = init.arena.allocator();
     const io = init.io;
     host_io = io;
-    const args = try init.minimal.args.toSlice(arena);
+    var args = try init.minimal.args.toSlice(arena);
     host_preopens = init.preopens;
     // The child process of an isolated thread (ztcl#209): `--iso-fd N`,
     // or `--iso-handle 0x...` on Windows, the value of an inherited handle.
@@ -450,9 +476,30 @@ fn nativeNanos() i96 {
 pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !void {
     host = h;
     const arena = h.arena;
-    const args = h.args;
+    var args = h.args;
     const out = h.out;
     defer out.flush() catch {};
+
+    // `ztcl debug`: its options, then the options of the runner.
+    var debug_opts: ?tcl.debug.Options = null;
+    if (setup == null and args.len > 1 and std.mem.eql(u8, args[1], "debug")) {
+        var opts: tcl.debug.Options = .{};
+        var keep: std.ArrayList(usize) = .empty;
+        tcl.debug.parseArgs(arena, args[2..], &opts, &keep) catch {
+            try out.writeAll(tcl.debug.help);
+            out.flush() catch {};
+            std.process.exit(2);
+        };
+        if (keep.items.len == 0 and !opts.mcp) {
+            try out.writeAll(tcl.debug.help);
+            return;
+        }
+        const rest = try arena.alloc(@TypeOf(args[0]), keep.items.len + 1);
+        rest[0] = args[0];
+        for (keep.items, 1..) |k, j| rest[j] = args[k + 2];
+        args = rest;
+        debug_opts = opts;
+    }
 
     var it: tcl.Interp = undefined;
     try it.init(h.gpa);
@@ -716,6 +763,7 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
         };
         it.error_line = 0;
         it.script_name = arg;
+        if (debug_opts) |d| if (!d.mcp) std.process.exit(try runDebug(&it, out, arena, text, d));
         if (keep_going) {
             // Run each command of the file; an error does not stop the file.
             const script = it.compile(text) catch {
@@ -755,6 +803,11 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
         if (timed) try out.print("{s}: {d:.1} ms\n", .{ arg, @as(f64, @floatFromInt(best)) / 1e6 });
     }
     if (ran) return;
+    if (debug_opts) |d| if (d.mcp) {
+        var server: tcl.debugmcp.Server = .{ .it = &it, .gpa = h.gpa, .read = mcpRead };
+        defer server.captured.deinit(h.gpa);
+        return tcl.debugmcp.serve(&server, h.in, out);
+    };
     if (tclsh) return runTclsh(&it, out, &.{}, root, cwd);
 
     // The interactive shell, when stdin and stdout are a terminal.
