@@ -49,7 +49,6 @@ src/vm/ vm
 src/wasi/ wasm
 src/wasm_aot/ wasm
 src/wasmrt/ wasm
-src/wasi/run.zig cli
 
 # sys: the platform interface, one file for each OS.
 src/sys*.zig sys
@@ -176,14 +175,7 @@ src/probe.zig debug
 src/tape.zig debug
 
 # cli: the runner and `ztcl build` and `ztcl compile`.
-src/main.zig cli
-src/buildcmd.zig cli
-src/buildnative.zig cli
-src/stripbuild.zig cli
-src/stripscan.zig cli
-src/macho.zig cli
-src/compile.zig cli
-src/compilecmd.zig cli
+src/cli/ cli
 
 # registry: the table of built-in modules.
 src/modules.zig registry

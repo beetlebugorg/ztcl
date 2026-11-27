@@ -9,7 +9,7 @@ The heap can collect: `heap.collect(it)` marks each block that a root reaches an
 - `src/heap.zig`: `collect`, the mark stack, the sweep.
 - `src/gc.zig` (new): the roots of an interpreter, and the capture of the registers.
 - `src/interp.zig`: the fields `gc_stress: u32 = 0` and `gc_count`. No other change.
-- `src/main.zig`: the flag `--gc-stress N`. `tools/suite.sh`: the option `-g N` passes it.
+- `src/cli/main.zig`: the flag `--gc-stress N`. `tools/suite.sh`: the option `-g N` passes it.
 - `src/tests.zig`: the tests below.
 
 ## The mark

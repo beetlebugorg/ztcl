@@ -6,7 +6,7 @@
 //! standard library use no preview 1 function.
 //!
 //! `run` gives the arguments of `wasi:cli/environment` to `runHost` of
-//! `src/main.zig`, the runner of the native `ztcl`, with a `Host` of
+//! `src/cli/main.zig`, the runner of the native `ztcl`, with a `Host` of
 //! WASI 0.3.2 functions: the output and the input on the streams of
 //! `wasi:cli`, script files through the preopened folders, the clocks of
 //! `wasi:clocks`, and the exit code through `wasi:cli/exit`. So the

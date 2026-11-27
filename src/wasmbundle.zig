@@ -3,7 +3,7 @@
 //! `ztcl build --component` uses the same patch on the core module of
 //! the command component of WASI 0.3.2 (`patchComponent`). Its payload
 //! is the zip archive and the manifest of a native app of
-//! `src/buildnative.zig`.
+//! `src/cli/buildnative.zig`.
 //!
 //! `ztcl build --wasm` writes the bundle. The scripts and the files go
 //! in a new active data segment above the initial memory of the module.

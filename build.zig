@@ -472,21 +472,21 @@ pub fn build(b: *std.Build) void {
         .dependOn(&b.addInstallBinFile(bind_component, "wasi-bindings.component.wasm").step);
 
     // The `ztcl` command component of WASI 0.3.2 (docs/dev/wasi-tasks/06-native.md):
-    // the core module of src/wasi/run.zig imports only WASI 0.3.2
+    // the core module of src/cli/wasi_run.zig imports only WASI 0.3.2
     // functions, and `wasm-tools` makes the component (needs wasm-tools).
     const p3_target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .wasi });
     const p3_lib = b.createModule(.{ .root_source_file = b.path("src/ztcl.zig"), .target = p3_target, .optimize = .ReleaseFast });
     p3_lib.addOptions("build_options", gc_options);
     addVt(b, p3_lib, p3_target, .ReleaseFast);
     const p3_core = b.addExecutable(.{ .name = "ztcl-p3", .root_module = b.createModule(.{
-        .root_source_file = b.path("src/wasi/run.zig"),
+        .root_source_file = b.path("src/cli/wasi_run.zig"),
         .target = p3_target,
         .optimize = .ReleaseFast,
         .strip = true,
         .imports = &.{
             .{ .name = "ztcl", .module = p3_lib },
             .{ .name = "runner", .module = b.createModule(.{
-                .root_source_file = b.path("src/main.zig"),
+                .root_source_file = b.path("src/cli/main.zig"),
                 .target = p3_target,
                 .optimize = .ReleaseFast,
                 .imports = &.{.{ .name = "ztcl", .module = p3_lib }},
@@ -525,7 +525,7 @@ pub fn build(b: *std.Build) void {
     addVt(b, fast, target, runner_optimize);
 
     const exe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/cli/main.zig"),
         .target = target,
         .optimize = runner_optimize,
         .strip = if (strip) true else null,
@@ -539,12 +539,12 @@ pub fn build(b: *std.Build) void {
     if (t.os.tag == .macos) exe.headerpad_size = 0x1000;
     if (t.os.tag == .macos) {
         // The macOS ztcl gets a new ad hoc signature with the entitlement
-        // of `ztcl::vm`, from the signer of `ztcl build` (src/macho.zig).
+        // of `ztcl::vm`, from the signer of `ztcl build` (src/cli/macho.zig).
         const signer = b.addExecutable(.{ .name = "macho-sign", .root_module = b.createModule(.{
             .root_source_file = b.path("tools/macho-sign/main.zig"),
             .target = b.graph.host,
             .optimize = .ReleaseSafe,
-            .imports = &.{.{ .name = "macho", .module = b.createModule(.{ .root_source_file = b.path("src/macho.zig"), .target = b.graph.host }) }},
+            .imports = &.{.{ .name = "macho", .module = b.createModule(.{ .root_source_file = b.path("src/cli/macho.zig"), .target = b.graph.host }) }},
         }) });
         const run = b.addRunArtifact(signer);
         run.addArtifactArg(exe);
@@ -588,7 +588,7 @@ pub fn build(b: *std.Build) void {
         addVt(b, lib, rt, .small);
         rt_mods[ri] = lib;
         const rexe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/cli/main.zig"),
             .target = rt,
             .optimize = .small,
             .strip = true,
@@ -626,7 +626,7 @@ pub fn build(b: *std.Build) void {
         lib.addOptions("build_options", opts);
         addVt(b, lib, at, .small);
         const aexe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/cli/main.zig"),
             .target = at,
             .optimize = .small,
             .strip = true,
@@ -653,7 +653,7 @@ pub fn build(b: *std.Build) void {
     // The suite runner: the runner with the test commands of
     // tools/suite_cmds.zig. Only `zig build suite-runner` builds it.
     const runner_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/cli/main.zig"),
         .target = target,
         .optimize = runner_optimize,
         .imports = &.{.{ .name = "ztcl", .module = fast }},

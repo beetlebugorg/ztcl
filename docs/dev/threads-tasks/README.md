@@ -51,7 +51,7 @@ The user decides the three points of "Decisions for the user" in the design befo
    ```
 
    The pass count of each suite file must not drop. `thread.test` gains.
-5. Put thread code in its own files. A change to `src/interp.zig`, `src/vm.zig`, `src/event.zig`, `src/child.zig`, `src/main.zig`, or `src/ztcl.zig` stays inside the hunks that the task names. Other work changes the call path, the list ownership, `switch`, and the TclOO calls of `interp.zig` and `vm.zig` at the same time.
+5. Put thread code in its own files. A change to `src/interp.zig`, `src/vm.zig`, `src/event.zig`, `src/child.zig`, `src/cli/main.zig`, or `src/ztcl.zig` stays inside the hunks that the task names. Other work changes the call path, the list ownership, `switch`, and the TclOO calls of `interp.zig` and `vm.zig` at the same time.
 6. No value crosses threads by pointer. Only the thread that owns a heap allocates from it.
 7. Each wait is a slice of at most 50 ms, and the thread checks its stop flag after each slice.
 8. Each new source file starts with a `//!` comment that explains its algorithm, and an SPDX line for BSD-2-Clause.

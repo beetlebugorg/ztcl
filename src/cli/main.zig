@@ -5,7 +5,7 @@
 //! `src/debug.zig` and `src/debugmcp.zig`.
 //!
 //! `ztcl build --wasm ... -o OUT.wasm file.tcl ...` writes a copy of
-//! ztcl.wasm with the scripts in it. See `src/buildcmd.zig`.
+//! ztcl.wasm with the scripts in it. See `src/cli/buildcmd.zig`.
 //!
 //! It runs the files in order in one interpreter and writes the output
 //! of `puts` to stdout. With no file, it reads commands from stdin, one
@@ -113,7 +113,7 @@ fn appMain(init: std.process.Init) !void {
 
 /// The services of the system that the options and the scripts of the
 /// runner use. `runWith` fills it from `std.process.Init`. The command
-/// component of WASI 0.3.2 (`src/wasi/run.zig`) fills it with WASI 0.3.2
+/// component of WASI 0.3.2 (`src/cli/wasi_run.zig`) fills it with WASI 0.3.2
 /// functions, because `std.Io` on WASI uses preview 1.
 pub const Host = struct {
     /// The `Io` of the standard library, or null in the component.
@@ -492,7 +492,7 @@ pub fn runPayload(h: *const Host, program: []const u8, payload: []const u8) !voi
 }
 
 /// True for `ztcl compile FILE -proc NAME ...`, the compile of a point
-/// proc (`src/compilecmd.zig`). Other forms go to `src/compile.zig`.
+/// proc (`src/cli/compilecmd.zig`). Other forms go to `src/cli/compile.zig`.
 fn isPointCompile(args: []const [:0]const u8) bool {
     for (args) |a| if (std.mem.eql(u8, a, "-proc")) return true;
     return false;

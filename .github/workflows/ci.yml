@@ -413,7 +413,7 @@ jobs:
   # of its own target from the runtime of `zig build runtimes`. Linux
   # also builds each other target and runs the arm64 binary under qemu.
   # On arm64 macOS the kernel runs only a binary with a valid signature,
-  # so the run checks the ad hoc signature of src/macho.zig.
+  # so the run checks the ad hoc signature of src/cli/macho.zig.
   build-native:
     name: ztcl build (${{ matrix.os }})
     needs: changes

@@ -13,7 +13,7 @@ Add each switch and each tool of the JIT with no compiler behind them. After thi
 - `src/child.zig`: a new child of an interpreter with the JIT gets its own state with the same options. A child of an interpreter with no JIT has none.
 - `src/vm.zig`: `Code` gets `jit: ?*anyopaque = null`, `jit_calls: u32 = 0`, and `jit_state: enum(u8) { untried, failed, ready } = .untried`. The parameter of `run` becomes `*Code`.
 - `src/ztcl.zig`: `pub const jit = @import("jit.zig");`.
-- `src/main.zig`: the flags `--jit`, `--jit-threshold N`, `--jit-stats`.
+- `src/cli/main.zig`: the flags `--jit`, `--jit-threshold N`, `--jit-stats`.
 - `tools/jit-perf.sh` (new), `bench/jit-baseline.tsv` (new).
 - `tools/suite.sh`: the option `-j` adds `--jit --jit-threshold 0` to the runner and to the `ztclsh` script.
 

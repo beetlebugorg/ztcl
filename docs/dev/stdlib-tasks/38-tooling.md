@@ -8,7 +8,7 @@ The test runner, the benchmark command, and the profiler of the design.
 
 ## Files
 
-- `src/main.zig`: the subcommands `test`, `bench`, and `prof`. One hunk for the dispatch.
+- `src/cli/main.zig`: the subcommands `test`, `bench`, and `prof`. One hunk for the dispatch.
 - `src/tool/` (new).
 
 ## Test sources

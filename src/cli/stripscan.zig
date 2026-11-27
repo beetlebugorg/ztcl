@@ -30,8 +30,8 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
-const interp = @import("interp.zig");
-const ft = @import("features_table.zig");
+const interp = @import("../interp.zig");
+const ft = @import("../features_table.zig");
 
 const Allocator = std.mem.Allocator;
 const Interp = interp.Interp;

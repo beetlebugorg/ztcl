@@ -103,7 +103,7 @@ The reviewer runs the acceptance commands of the task again, under the memory ca
 - [ ] No dependency. No code from another project. No source of a GPL or AGPL project was read for the work.
 - [ ] Each new idea has its source in `docs/references/jit.md`.
 - [ ] Each new file has the `//!` header and the SPDX line.
-- [ ] The diff does not touch `src/coro.zig`, `src/sys.zig`, `src/sys_windows.zig`, `src/fsroot.zig`, or `src/proc.zig`. The hunks in `src/interp.zig`, `src/main.zig`, and `src/ztcl.zig` are those of the task.
+- [ ] The diff does not touch `src/coro.zig`, `src/sys.zig`, `src/sys_windows.zig`, `src/fsroot.zig`, or `src/proc.zig`. The hunks in `src/interp.zig`, `src/cli/main.zig`, and `src/ztcl.zig` are those of the task.
 - [ ] The text follows WRITING.md. The words "compute limit" name the limit on steps.
 - [ ] No AI model or vendor is named. No attribution line is in a commit or a file.
 - [ ] No local path and no private data is in the repository.

@@ -13,7 +13,7 @@ Decision 10 of the user.
 ## Files
 
 - `src/bundle.zig` (new).
-- `src/main.zig`: the subcommand `build` and the start of a bundle. Hunks for each.
+- `src/cli/main.zig`: the subcommand `build` and the start of a bundle. Hunks for each.
 - `.github/workflows/release.yml`: the runner of each target as a release asset with a checksum.
 
 ## Test sources

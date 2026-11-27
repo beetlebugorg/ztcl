@@ -791,7 +791,7 @@ All new code is in new files. The JIT changes no line of `src/coro.zig`, `src/sy
 | `tests/jit/` | The scripts of the differential tests. |
 | `tools/jit-diff.sh`, `tools/jit-perf.sh`, `tools/jit-fuzz.zig`, `tools/jit-asm-golden.sh` | The test tools. |
 
-Small changes go in `build.zig`, `src/ztcl.zig`, `src/vm.zig`, `src/interp.zig`, `src/compact.zig`, `src/child.zig`, `src/main.zig`, and `tools/suite.sh`. `ports3` also changes `interp.zig`, `main.zig`, and `ztcl.zig`. Each task names its hunks, and they rebase by hand.
+Small changes go in `build.zig`, `src/ztcl.zig`, `src/vm.zig`, `src/interp.zig`, `src/compact.zig`, `src/child.zig`, `src/cli/main.zig`, and `tools/suite.sh`. `ports3` also changes `interp.zig`, `main.zig`, and `ztcl.zig`. Each task names its hunks, and they rebase by hand.
 
 ## Targets
 

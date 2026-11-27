@@ -12,7 +12,7 @@ Built-in modules that `package require` loads from memory, with a build flag for
 - `src/pkg.zig`: the small `package require`, `present`, `provide`, and `versions` that see only the built-in modules (decision 1).
 - `build.zig`: `-Dbatteries=core|std|full`, `-Dmod-NAME`, the dependency rules between modules, and a build option with the list.
 - `src/interp.zig`: the new capability bits `random`, `env`, and `sqlite` (`fetch` is wasm only). One hunk in `Capability`.
-- `src/main.zig`: `--allow` accepts the new names. One hunk.
+- `src/cli/main.zig`: `--allow` accepts the new names. One hunk.
 - `tests/stdlib/modules.test` (new).
 
 ## Rules

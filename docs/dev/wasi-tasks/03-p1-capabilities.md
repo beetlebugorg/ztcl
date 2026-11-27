@@ -11,7 +11,7 @@ The runner turns on `file`, channels, `clock`, `random`, `env`, and the event lo
 - `src/sys_wasi.zig`: the functions of `sys.zig` for WASI: `read`, `write`, `close`, `setBlocking`, `poll` (on `poll_oneoff`), and `seek`. `listenAt`, `connectTo`, `accept`, and `resolve` give `ENOTSUP`.
 - `src/fsroot_wasi.zig`: the root folder on the descriptor of a preopen. Each path opens relative to that descriptor with the checks of `fsroot.zig`: no `..` above the root, and no symlink that leaves it.
 - `src/sys.zig`, `src/fsroot.zig`: one hunk each that picks the WASI file on the WASI target.
-- `src/main.zig`: `--root DIR` finds the preopen with the name DIR, or `/`.
+- `src/cli/main.zig`: `--root DIR` finds the preopen with the name DIR, or `/`.
 
 ## Rules
 
