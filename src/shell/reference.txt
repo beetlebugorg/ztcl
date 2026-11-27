@@ -1,0 +1,533 @@
+# Made by `python3 -I tools/reference.py shell-table` from docs/reference/*.txt. Do not edit.
+== string
+syn: string subcommand ?arg ...?
+sub: string length STRING | The count of characters.
+sub: string bytelength STRING | The count of bytes of the UTF-8 form.
+sub: string index STRING INDEX | The character at INDEX, or an empty string past the end.
+sub: string range STRING FIRST LAST | The characters from FIRST to LAST.
+sub: string first NEEDLE HAYSTACK ?START? | The index of the first NEEDLE from START, or -1.
+sub: string last NEEDLE HAYSTACK ?LAST? | The index of the last NEEDLE at or before LAST, or -1.
+sub: string compare ?-nocase? ?-length N? A B | -1, 0, or 1 in the order of the characters.
+sub: string equal ?-nocase? ?-length N? A B | 1 when the strings are the same, else 0.
+sub: string match ?-nocase? PATTERN STRING | 1 when the glob PATTERN matches all of STRING.
+sub: string map ?-nocase? MAPPING STRING | Replaces each key of the key and value list MAPPING with its value.
+sub: string repeat STRING COUNT | STRING COUNT times.
+sub: string replace STRING FIRST LAST ?NEW? | STRING with the characters from FIRST to LAST replaced by NEW.
+sub: string reverse STRING | The characters in the reverse order.
+sub: string tolower STRING ?FIRST? ?LAST? | Lowercase.
+sub: string toupper STRING ?FIRST? ?LAST? | Uppercase.
+sub: string totitle STRING ?FIRST? ?LAST? | The first character uppercase and the rest lowercase.
+sub: string trim STRING ?CHARS? | STRING with the CHARS (white space by default) removed at both ends.
+sub: string trimleft STRING ?CHARS? | The same at the start only.
+sub: string trimright STRING ?CHARS? | The same at the end only.
+sub: string is CLASS ?-strict? ?-failindex VAR? STRING | 1 when each character is of CLASS: alnum, alpha, ascii, boolean, digit, double, integer, wideinteger, list, lower, upper, space, xdigit, and others.
+sub: string cat ?STRING ...? | The strings joined with no separator.
+sub: string wordstart STRING INDEX | The index of the first character of the word at INDEX.
+sub: string wordend STRING INDEX | The index after the last character of the word at INDEX.
+== tcl::prefix
+syn: tcl::prefix subcommand ?arg ...?
+sub: tcl::prefix match ?-exact? ?-message TEXT? ?-error OPTIONS? TABLE STRING | The entry of TABLE that STRING is a unique prefix of, or an error.
+sub: tcl::prefix all TABLE STRING | Each entry that starts with STRING.
+sub: tcl::prefix longest TABLE STRING | The longest common prefix of those entries.
+== append
+syn: append varName ?value ...?
+== concat
+syn: concat ?arg ...?
+== format
+syn: format formatString ?arg ...?
+== scan
+syn: scan string format ?varName ...?
+== split
+syn: split string ?splitChars?
+== join
+syn: join list ?joinString?
+== regexp
+syn: regexp ?-option ...? exp string ?matchVar? ?subMatchVar ...?
+opt: -nocase | Matches letters with no case.
+opt: -all | Finds each match.
+opt: -inline | Gives the match and its groups as a list, and sets no variable.
+opt: -indices | Gives the start and end index of each match in place of the text.
+opt: -start INDEX | Starts the search at INDEX.
+opt: -line | ^ and $ match at each line, and .
+opt: -expanded | White space and # comments in exp are ignored.
+opt: -about | Gives the count of groups and the flags of exp.
+== regsub
+syn: regsub ?-option ...? exp string subSpec ?varName?
+opt: -all | Replaces each match.
+opt: -nocase | Matches letters with no case.
+opt: -start INDEX | Starts the search at INDEX.
+== subst
+syn: subst ?-nobackslashes? ?-nocommands? ?-novariables? string
+== encoding
+syn: encoding option ?arg ...?
+sub: encoding convertto ENCODING STRING | The bytes of STRING in ENCODING, as a byte string.
+sub: encoding convertfrom ENCODING BYTES | The text of BYTES in ENCODING.
+sub: encoding names | The names of the encodings.
+sub: encoding system | The encoding of the system: utf-8.
+sub: encoding dirs | An empty list: ztcl reads no encoding files.
+== binary
+syn: binary subcommand ?arg ...?
+sub: binary format TEMPLATE ?VALUE ...? | Gives the bytes.
+sub: binary scan BYTES TEMPLATE ?VAR ...? | Sets the variables and gives the count of values that it read.
+sub: binary encode FORMAT ?-option value ...? DATA | base64, hex, or uuencode text of the bytes.
+sub: binary decode FORMAT ?-option value ...? DATA | The bytes of the text.
+== tcl_endOfWord tcl_startOfNextWord tcl_startOfPreviousWord tcl_wordBreakAfter tcl_wordBreakBefore
+syn: tcl_endOfWord str start
+== list
+syn: list ?arg ...?
+== llength
+syn: llength list
+== lindex
+syn: lindex list ?index ...?
+== lrange
+syn: lrange list first last
+== lappend
+syn: lappend varName ?value ...?
+== linsert
+syn: linsert list index ?element ...?
+== lreplace
+syn: lreplace list first last ?element ...?
+== lset
+syn: lset listVar ?index? ?index ...? value
+== lassign
+syn: lassign list ?varName ...?
+== lrepeat
+syn: lrepeat count ?value ...?
+== lreverse
+syn: lreverse list
+== lsearch
+syn: lsearch ?-option value ...? list pattern
+opt: -exact | The element equals the pattern.
+opt: -glob | A glob pattern (the default).
+opt: -regexp | A regular expression.
+opt: -all | Gives each index that matches.
+opt: -inline | Gives the elements in place of the indexes.
+opt: -not | Finds the elements that do not match.
+opt: -nocase | Matches letters with no case.
+opt: -index INDEX | Compares element INDEX of each element.
+opt: -sorted | The list is sorted, and the search is a binary search.
+opt: -start INDEX | Starts at INDEX.
+== lsort
+syn: lsort ?-option value ...? list
+opt: -ascii | Compares the text (the default).
+opt: -dictionary | Compares the text with no case, and runs of digits as numbers: a2 before a10.
+opt: -integer | Compares integers.
+opt: -real | Compares floats.
+opt: -command CMD | Calls CMD with two elements.
+opt: -increasing | The smallest first (the default).
+opt: -decreasing | The largest first.
+opt: -index INDEX | Compares element INDEX of each element.
+opt: -unique | Keeps one of each run of equal elements.
+opt: -nocase | Compares letters with no case.
+== lmap
+syn: lmap varList list ?varList list ...? command
+== foreach
+syn: foreach varList list ?varList list ...? command
+== dict
+syn: dict subcommand ?arg ...?
+sub: dict create ?KEY VALUE ...? | A new dict.
+sub: dict get DICT ?KEY ...? | The value at the path of keys.
+sub: dict exists DICT KEY ?KEY ...? | 1 when the path of keys exists.
+sub: dict set VAR KEY ?KEY ...? VALUE | Sets the value at the path in the dict of a variable, and gives the new dict.
+sub: dict unset VAR KEY ?KEY ...? | Removes a key in the dict of a variable.
+sub: dict keys DICT ?PATTERN? | The keys, or the keys that match a glob pattern.
+sub: dict values DICT ?PATTERN? | The values.
+sub: dict size DICT | The count of keys.
+sub: dict for {KEYVAR VALUEVAR} DICT BODY | Runs BODY for each key and value.
+sub: dict map {KEYVAR VALUEVAR} DICT BODY | A new dict with the same keys and the results of BODY as values.
+sub: dict filter DICT key|value|script ... | The keys and values that match a pattern, or a script that gives true.
+sub: dict merge ?DICT ...? | One dict.
+sub: dict remove DICT ?KEY ...? | A copy with no such keys.
+sub: dict replace DICT ?KEY VALUE ...? | A copy with the new values.
+sub: dict incr VAR KEY ?INCREMENT? | Adds to an integer value in the dict of a variable.
+sub: dict append VAR KEY ?STRING ...? | Adds text to a value in the dict of a variable.
+sub: dict lappend VAR KEY ?VALUE ...? | Adds elements to a list value in the dict of a variable.
+sub: dict update VAR KEY VARNAME ?KEY VARNAME ...? BODY | Links variables to keys while BODY runs, and writes them back after it.
+sub: dict with VAR ?KEY ...? BODY | Makes a variable of each key while BODY runs, and writes them back after it.
+sub: dict info DICT | Text about the hash table of the dict.
+== array
+syn: array subcommand ?arg ...?
+sub: array set NAME LIST | Sets the elements from a list of names and values.
+sub: array get NAME ?PATTERN? | A list of names and values.
+sub: array names NAME ?MODE? ?PATTERN? | The element names.
+sub: array exists NAME | 1 when the variable is an array.
+sub: array size NAME | The count of elements.
+sub: array unset NAME ?PATTERN? | Removes the elements, or the whole array.
+sub: array statistics NAME | Text about the hash table.
+sub: array startsearch NAME | A search id, for the old way to go through an array one element at a time.
+sub: array nextelement NAME ID | The next element name of the search.
+sub: array anymore NAME ID | 1 when the search has more elements.
+sub: array donesearch NAME ID | Ends the search.
+== expr
+syn: expr arg ?arg ...?
+== incr
+syn: incr varName ?increment?
+== tcl::mathfunc tcl::mathfunc::abs tcl::mathfunc::acos tcl::mathfunc::asin tcl::mathfunc::atan tcl::mathfunc::atan2 tcl::mathfunc::bool tcl::mathfunc::ceil tcl::mathfunc::cos tcl::mathfunc::cosh tcl::mathfunc::double tcl::mathfunc::entier tcl::mathfunc::exp tcl::mathfunc::floor tcl::mathfunc::fmod tcl::mathfunc::hypot tcl::mathfunc::int tcl::mathfunc::isqrt tcl::mathfunc::log tcl::mathfunc::log10 tcl::mathfunc::max tcl::mathfunc::min tcl::mathfunc::pow tcl::mathfunc::rand tcl::mathfunc::round tcl::mathfunc::sin tcl::mathfunc::sinh tcl::mathfunc::sqrt tcl::mathfunc::srand tcl::mathfunc::tan tcl::mathfunc::tanh tcl::mathfunc::wide
+syn: tcl::mathfunc::NAME ?arg ...?
+== tcl::mathop tcl::mathop::! tcl::mathop::!= tcl::mathop::% tcl::mathop::& tcl::mathop::* tcl::mathop::** tcl::mathop::+ tcl::mathop::- tcl::mathop::/ tcl::mathop::< tcl::mathop::<< tcl::mathop::<= tcl::mathop::== tcl::mathop::> tcl::mathop::>= tcl::mathop::>> tcl::mathop::^ tcl::mathop::eq tcl::mathop::in tcl::mathop::ne tcl::mathop::ni tcl::mathop::| tcl::mathop::~
+syn: tcl::mathop::OP ?arg ...?
+== noise3
+syn: noise3 x y z
+== set
+syn: set varName ?newValue?
+== unset
+syn: unset ?-nocomplain? ?--? ?name ...?
+== global
+syn: global ?varName ...?
+== variable
+syn: variable ?name value ...? name ?value?
+== upvar
+syn: upvar ?level? otherVar localVar ?otherVar localVar ...?
+== trace
+syn: trace option ?arg ...?
+sub: trace add variable NAME OPS CMD | OPS is a list of read, write, unset, and array.
+sub: trace add command NAME OPS CMD | OPS is a list of rename and delete.
+sub: trace add execution NAME OPS CMD | OPS is a list of enter, leave, enterstep, and leavestep.
+sub: trace remove TYPE NAME OPS CMD | Removes a trace.
+sub: trace info TYPE NAME | The traces of a name.
+sub: trace variable NAME OPS CMD | The old form of trace add variable.
+sub: trace vdelete NAME OPS CMD | The old form of trace remove variable.
+sub: trace vinfo NAME | The old form of trace info variable.
+== if
+syn: if expr1 ?then? body1 elseif expr2 ?then? body2 ... ?else? ?bodyN?
+== while
+syn: while test command
+== for
+syn: for start test next command
+== break
+syn: break
+== continue
+syn: continue
+== switch
+syn: switch ?-option ...? string ?pattern body ...? ?default body?
+opt: -exact | The pattern equals the string (the default).
+opt: -glob | A glob pattern.
+opt: -regexp | A regular expression.
+opt: -nocase | Matches letters with no case.
+opt: -- | The end of the options, for a string that starts with -.
+== case
+syn: case string ?in? ?pattern body ...? ?default body?
+== eval
+syn: eval arg ?arg ...?
+== uplevel
+syn: uplevel ?level? command ?arg ...?
+== apply
+syn: apply lambdaExpr ?arg ...?
+== time
+syn: time command ?count?
+== timerate
+syn: timerate ?-direct? ?-calibrate? ?-overhead double? command ?time ?max-count??
+== proc
+syn: proc name args body
+== return
+syn: return ?-code code? ?-errorcode list? ?-level n? ?-options dict? ?value?
+== tailcall
+syn: tailcall command ?arg ...?
+== rename
+syn: rename oldName newName
+== namespace
+syn: namespace subcommand ?arg ...?
+sub: namespace eval NS SCRIPT | Runs SCRIPT in NS, and makes NS when it does not exist.
+sub: namespace current | The name of the current namespace.
+sub: namespace children ?NS? ?PATTERN? | The namespaces in NS.
+sub: namespace parent ?NS? | The namespace around NS.
+sub: namespace exists NS | 1 when NS exists.
+sub: namespace delete ?NS ...? | Removes namespaces with their commands and variables.
+sub: namespace export ?-clear? ?PATTERN ...? | The commands that other code can import, and that an ensemble has.
+sub: namespace import ?-force? ?PATTERN ...? | Makes the exported commands of another namespace callable by their short names.
+sub: namespace forget ?PATTERN ...? | Removes imported commands.
+sub: namespace ensemble create ?-option value ...? | Makes the namespace a command with its exported commands as subcommands.
+sub: namespace path ?LIST? | The namespaces where a command name is looked up after the current one.
+sub: namespace which ?-command? ?-variable? NAME | The full name of a command or variable, or an empty string.
+sub: namespace origin CMD | The full name of the command that an imported command points to.
+sub: namespace qualifiers NAME | The part of NAME before its last ::.
+sub: namespace tail NAME | The part of NAME after its last ::.
+sub: namespace code SCRIPT | A script that runs in the current namespace from each place, for a callback.
+sub: namespace inscope NS SCRIPT ?ARG ...? | Runs SCRIPT in NS.
+sub: namespace upvar NS OTHERVAR MYVAR ?OTHERVAR MYVAR ...? | Links local names to variables of NS.
+sub: namespace unknown ?SCRIPT? | The handler of an unknown command in the namespace.
+== unknown
+syn: unknown commandName ?arg ...?
+== coroutine
+syn: coroutine name cmd ?arg ...?
+== yield
+syn: yield ?value?
+== yieldto
+syn: yieldto command ?arg ...?
+== walk
+syn: walk
+== error
+syn: error message ?errorInfo? ?errorCode?
+== throw
+syn: throw type message
+== catch
+syn: catch script ?resultVarName? ?optionVarName?
+== try
+syn: try body ?handler ...? ?finally script?
+== open
+syn: open fileName ?access? ?permissions?
+== close
+syn: close channelId ?direction?
+== gets
+syn: gets channelId ?varName?
+== read
+syn: read ?-nonewline? channelId ?numChars?
+== puts
+syn: puts ?-nonewline? ?channelId? string
+== flush
+syn: flush channelId
+== eof
+syn: eof channelId
+== seek
+syn: seek channelId offset ?origin?
+== tell
+syn: tell channelId
+== fconfigure
+syn: fconfigure channelId ?-option value ...?
+== fblocked
+syn: fblocked channelId
+== fcopy
+syn: fcopy input output ?-size size? ?-command callback?
+== chan
+syn: chan subcommand ?arg ...?
+sub: chan close CHAN ?DIRECTION? | As close.
+sub: chan configure CHAN ?-option value ...? | As fconfigure.
+sub: chan copy IN OUT ?-size N? ?-command CB? | As fcopy.
+sub: chan eof CHAN | As eof.
+sub: chan flush CHAN | As flush.
+sub: chan gets CHAN ?VAR? | As gets.
+sub: chan names ?PATTERN? | The names of the open channels.
+sub: chan puts ?-nonewline? ?CHAN? STRING | As puts.
+sub: chan read ?-nonewline? CHAN ?N? | As read.
+sub: chan seek CHAN OFFSET ?ORIGIN? | As seek.
+sub: chan tell CHAN | As tell.
+== source
+syn: source ?-encoding name? fileName
+== file
+syn: file subcommand ?arg ...?
+sub: file join NAME ?NAME ...? | One path from parts.
+sub: file split NAME | The parts of a path.
+sub: file dirname NAME | The path without its last part.
+sub: file tail NAME | The last part.
+sub: file extension NAME | The extension with its dot, such as .json.
+sub: file rootname NAME | The path without its extension.
+sub: file normalize NAME | The full path with .
+sub: file pathtype NAME | absolute, relative, or volumerelative.
+sub: file nativename NAME | The path with the separator of the platform.
+sub: file separator ?NAME? | The separator of paths.
+sub: file exists NAME | 1 when the file exists.
+sub: file isfile NAME | 1 for a file.
+sub: file isdirectory NAME | 1 for a folder.
+sub: file readable NAME | 1 when the file can be read.
+sub: file writable NAME | 1 when the file can be written.
+sub: file executable NAME | 1 when the file can run.
+sub: file owned NAME | 1 when the user owns the file.
+sub: file size NAME | The size in bytes.
+sub: file mtime NAME ?TIME? | The time of the last change, in seconds.
+sub: file atime NAME ?TIME? | The time of the last read, in seconds.
+sub: file stat NAME VAR | Puts the facts of the file in an array.
+sub: file lstat NAME VAR | As stat, for a link itself.
+sub: file type NAME | file, directory, link, and others.
+sub: file attributes NAME ?OPTION ?VALUE ...?? | The attributes of the platform, such as -permissions.
+sub: file mkdir ?DIR ...? | Makes folders, with each missing parent.
+sub: file copy ?-force? ?--? SOURCE ?SOURCE ...? TARGET | Copies files and folders.
+sub: file rename ?-force? ?--? SOURCE ?SOURCE ...? TARGET | Moves files and folders.
+sub: file delete ?-force? ?--? ?NAME ...? | Removes files, and folders with -force.
+sub: file link ?-symbolic|-hard? LINK ?TARGET? | Makes a link, or gives its target.
+sub: file readlink NAME | The target of a symbolic link.
+sub: file tempfile ?VAR? ?TEMPLATE? | Opens a new temporary file and gives its channel.
+sub: file channels ?PATTERN? | The names of the open channels.
+sub: file system NAME | The file system of a path.
+sub: file volumes | The volumes, such as /.
+== glob
+syn: glob ?switches? name ?name ...?
+opt: -nocomplain | No match gives an empty list.
+opt: -directory DIR | Matches in DIR.
+opt: -types TYPES | Only files of the types, such as f and d.
+opt: -tails | Gives the names without the folder of -directory.
+== cd
+syn: cd ?dirName?
+== pwd
+syn: pwd
+== zipfs
+syn: zipfs subcommand ?arg ...?
+sub: zipfs mount ?ZIPFILE? ?MOUNTPOINT? | Mounts a zip file, or gives the mounts.
+sub: zipfs unmount MOUNTPOINT | Removes a mount.
+sub: zipfs list ?(-glob|-regexp)? ?PATTERN? | The names of the files in the mounts.
+sub: zipfs exists NAME | 1 when the file is in a mount.
+sub: zipfs info NAME | The zip file, the size, the packed size, and the offset of a file.
+sub: zipfs root | The root of the mounts: //zipfs:/.
+== socket
+syn: socket ?-myaddr addr? ?-myport myport? ?-async? host port
+syn: socket -server command ?-myaddr addr? port
+== after
+syn: after ms ?script ...?
+syn: after cancel id|script
+syn: after idle script ?script ...?
+syn: after info ?id?
+== vwait
+syn: vwait varName
+== update
+syn: update ?idletasks?
+== fileevent
+syn: fileevent channelId event ?script?
+== tcl::Bgerror bgerror
+syn: tcl::Bgerror message options
+== interp
+syn: interp cmd ?arg ...?
+sub: interp create ?-safe? ?--? ?PATH? | A new child, and its path.
+sub: interp eval PATH ARG ?ARG ...? | Runs a script in the child.
+sub: interp alias SRCPATH SRCCMD TARGETPATH TARGETCMD ?ARG ...? | Makes SRCCMD of the child run TARGETCMD of the parent.
+sub: interp aliases ?PATH? | The aliases of a child.
+sub: interp delete ?PATH ...? | Removes children.
+sub: interp exists PATH | 1 when the child exists.
+sub: interp children ?PATH? | The children.
+sub: interp cancel ?-unwind? ?--? ?PATH? ?RESULT? | Stops the script of the interp with the error "eval canceled", or RESULT.
+sub: interp slaves ?PATH? | The old name of children.
+sub: interp issafe ?PATH? | 1 for a safe interpreter.
+sub: interp hide PATH CMD ?NAME? | Hides a command from the scripts of the child.
+sub: interp expose PATH NAME ?CMD? | Makes a hidden command visible again.
+sub: interp hidden ?PATH? | The hidden commands.
+sub: interp invokehidden PATH ?-global? NAME ?ARG ...? | Runs a hidden command.
+sub: interp marktrusted PATH | Makes a safe child trusted.
+sub: interp recursionlimit PATH ?N? | The nesting limit of the child.
+sub: interp target PATH ALIAS | The target of an alias.
+== package
+syn: package option ?arg ...?
+sub: package require ?-exact? NAME ?VERSION ...? | Loads a package and gives its version.
+sub: package provide NAME ?VERSION? | Says that the package is loaded, or gives its version.
+sub: package ifneeded NAME VERSION ?SCRIPT? | The script that loads a version.
+sub: package present ?-exact? NAME ?VERSION? | The version of a loaded package, or an error.
+sub: package names | The names of the known packages.
+sub: package versions NAME | The versions of a package that ifneeded knows.
+sub: package forget ?NAME ...? | Forgets packages.
+sub: package vcompare V1 V2 | -1, 0, or 1.
+sub: package vsatisfies VERSION REQ ?REQ ...? | 1 when VERSION fits a requirement such as 1.2, 1.2-, or 1.2-2.0.
+sub: package prefer ?latest|stable? | Which versions require picks.
+sub: package unknown ?CMD? | The command that runs for a missing package.
+== oo::class oo::object
+syn: oo::class create name ?definition?
+syn: oo::class new ?definition?
+== oo::define oo::define::constructor oo::define::deletemethod oo::define::destructor oo::define::export oo::define::filter oo::define::forward oo::define::method oo::define::mixin oo::define::renamemethod oo::define::self oo::define::superclass oo::define::unexport oo::define::variable
+syn: oo::define className arg ?arg ...?
+sub: constructor ARGS BODY | The code that runs when an object is made.
+sub: destructor BODY | The code that runs when an object is removed.
+sub: method NAME ARGS BODY | A method.
+sub: variable ?NAME ...? | Variables that each method sees with no my variable.
+sub: superclass ?CLASS ...? | The parent classes.
+sub: mixin ?CLASS ...? | Classes whose methods come before the methods of the class.
+sub: filter ?METHOD ...? | Methods that run around each call.
+sub: forward NAME CMD ?ARG ...? | A method that runs a command.
+sub: export NAME ?NAME ...? | Makes methods callable from outside.
+sub: unexport NAME ?NAME ...? | Makes methods callable only with my.
+sub: deletemethod NAME ?NAME ...? | Removes methods.
+sub: renamemethod OLD NEW | Gives a method a new name.
+sub: self SCRIPT | Changes the definition of the class object itself.
+== oo::objdefine oo::objdefine::class oo::objdefine::deletemethod oo::objdefine::export oo::objdefine::filter oo::objdefine::forward oo::objdefine::method oo::objdefine::mixin oo::objdefine::renamemethod oo::objdefine::unexport oo::objdefine::variable
+syn: oo::objdefine object arg ?arg ...?
+== oo::copy
+syn: oo::copy sourceObject ?targetObject?
+== my
+syn: my methodName ?arg ...?
+== self oo::Helpers::self
+syn: self ?subcommand?
+== next nextto oo::Helpers::next oo::Helpers::nextto
+syn: next ?arg ...?
+== thread thread::attach thread::broadcast thread::cancel thread::cond thread::configure thread::create thread::detach thread::errorproc thread::eval thread::exists thread::exit thread::id thread::join thread::mutex thread::names thread::preserve thread::release thread::rwmutex thread::send thread::transfer thread::unwind thread::wait
+syn: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?script?
+sub: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?SCRIPT? | A new thread that runs SCRIPT, and its id.
+sub: thread::send ?-async? ?-head? ID SCRIPT ?VAR? | Runs SCRIPT in the thread and gives its result.
+sub: thread::broadcast SCRIPT | Sends SCRIPT to each other thread.
+sub: thread::wait | Runs the event loop of the thread until thread::release.
+sub: thread::id | The id of this thread.
+sub: thread::names | The ids of the threads.
+sub: thread::exists ID | 1 when the thread exists.
+sub: thread::join ID | Waits for a joinable thread to end.
+sub: thread::preserve ?ID? | Adds a reference.
+sub: thread::release ?-wait? ?ID? | Takes a reference away.
+sub: thread::cancel ?-unwind? ID ?RESULT? | Stops the script that runs in a thread.
+sub: thread::unwind | Ends thread::wait of this thread.
+sub: thread::exit ?STATUS? | Ends this thread.
+sub: thread::configure ID ?OPTION? ?VALUE? | The options of a thread, such as -eventmark.
+sub: thread::errorproc ?PROC? | The proc for errors of scripts of -async sends.
+sub: thread::transfer ID CHANNEL | Moves a channel to a thread.
+sub: thread::mutex create|destroy|lock|unlock ?ID? | Mutexes.
+sub: thread::eval ?-lock MUTEX? SCRIPT | Runs SCRIPT with a mutex locked.
+== tsv tsv::append tsv::array tsv::exists tsv::get tsv::handlers tsv::incr tsv::keyldel tsv::keylget tsv::keylkeys tsv::keylset tsv::lappend tsv::lindex tsv::linsert tsv::llength tsv::lock tsv::lpop tsv::lpush tsv::lrange tsv::lreplace tsv::lsearch tsv::lset tsv::move tsv::names tsv::object tsv::pop tsv::set tsv::unset
+syn: tsv::set array element ?value?
+sub: tsv::set ARRAY ELEMENT ?VALUE? | Sets or gives a value.
+sub: tsv::get ARRAY ELEMENT ?VAR? | The value.
+sub: tsv::exists ARRAY ?ELEMENT? | 1 when it exists.
+sub: tsv::unset ARRAY ?ELEMENT ...? | Removes elements or the array.
+sub: tsv::incr ARRAY ELEMENT ?N? | Adds to an integer.
+sub: tsv::append ARRAY ELEMENT VALUE ... | Adds text.
+sub: tsv::lappend ARRAY ELEMENT VALUE ... | Adds list elements.
+sub: tsv::pop ARRAY ELEMENT | The value, and removes it.
+sub: tsv::move ARRAY OLD NEW | Gives an element a new name.
+sub: tsv::names ?PATTERN? | The names of the arrays.
+sub: tsv::array set|get|names|size|reset ARRAY ... | Commands on a whole array.
+sub: tsv::lock ARRAY ARG ?ARG ...? | Runs a script with the lock of the array.
+sub: tsv::keylset ARRAY ELEMENT KEY VALUE | Keyed lists: keylget, keylkeys, and keyldel go with it.
+sub: tsv::object ARRAY ELEMENT | A command for one element.
+sub: tsv::handlers | The names of the storage handlers.
+== tpool tpool::cancel tpool::create tpool::get tpool::names tpool::post tpool::preserve tpool::release tpool::resume tpool::suspend tpool::wait
+syn: tpool::create ?-minworkers N? ?-maxworkers N? ?-idletime S? ?-initcmd SCRIPT? ?-exitcmd SCRIPT?
+sub: tpool::create ?OPTIONS? | A new pool, and its id.
+sub: tpool::post ?-detached? ?-nowait? POOL SCRIPT | Gives a job to the pool, and its job id.
+sub: tpool::wait POOL JOBLIST ?VAR? | Waits for one job of the list to end, and gives the ids of the jobs that ended.
+sub: tpool::get POOL JOB | The result of a job that ended.
+sub: tpool::cancel POOL JOBLIST ?VAR? | Removes jobs that have not started.
+sub: tpool::suspend POOL | Stops the start of new jobs.
+sub: tpool::preserve POOL | Adds a reference.
+sub: tpool::names | The ids of the pools.
+== info
+syn: info subcommand ?arg ...?
+sub: info commands ?PATTERN? | The names of the commands.
+sub: info procs ?PATTERN? | The names of the procs.
+sub: info exists VAR | 1 when the variable has a value.
+sub: info vars ?PATTERN? | The visible variables.
+sub: info globals ?PATTERN? | The variables of the top level.
+sub: info locals ?PATTERN? | The local variables of the proc.
+sub: info args PROC | The argument names of a proc.
+sub: info body PROC | The body of a proc.
+sub: info default PROC ARG VAR | 1 when the argument has a default, which goes in VAR.
+sub: info level ?N? | The depth of the call stack, or the command at level N.
+sub: info complete SCRIPT | 1 when the script has no open brace, bracket, or quote.
+sub: info script ?NAME? | The file of the script that source runs.
+sub: info functions ?PATTERN? | The names of the math functions.
+sub: info cmdcount | The count of commands that ran.
+sub: info patchlevel | The version of Tcl that ztcl follows: 8.6.16.
+sub: info tclversion | 8.6.
+sub: info library | The folder of the Tcl library: empty in ztcl.
+sub: info loaded | The loaded binary packages.
+sub: info nameofexecutable | The path of the program.
+sub: info sharedlibextension | The extension of a shared library.
+== clock
+syn: clock subcommand ?arg ...?
+sub: clock seconds | The seconds since the epoch.
+sub: clock milliseconds | The milliseconds since the epoch.
+sub: clock microseconds | The microseconds since the epoch.
+sub: clock clicks ?-milliseconds|-microseconds? | A counter for time spans.
+sub: clock format SECONDS ?-format FMT? ?-gmt BOOL? ?-timezone ZONE? ?-locale L? | The time as text.
+sub: clock scan TEXT ?-format FMT? ?-gmt BOOL? ?-timezone ZONE? ?-base SECONDS? | The seconds of a time in text.
+sub: clock add SECONDS ?COUNT UNIT ...? ?-gmt BOOL? ?-timezone ZONE? | The seconds after adding days, months, and other units.
+== msgcat msgcat::mc msgcat::mclocale msgcat::mcmset msgcat::mcset
+syn: msgcat::mc src ?arg ...?
+== exec
+syn: exec ?-option ...? arg ?arg ...?
+== pid
+syn: pid ?fileId?
+== exit
+syn: exit ?returnCode?
+== ztcl::json ztcl::json::parse ztcl::json::valid ztcl::json::get ztcl::json::exists ztcl::json::encode ztcl::json::object ztcl::json::array ztcl::json::string ztcl::json::number ztcl::json::bool ztcl::json::null ztcl::json::raw ztcl::json::pretty
+syn: ztcl::json subcommand ?arg ...?
+== ztcl::vt
+syn: ztcl::vt subcommand ?arg ...?
+== ztcl::pty
+syn: ztcl::pty subcommand ?arg ...?
+== ztcl::watch
+syn: ztcl::watch subcommand ?arg ...?
+== ztcl::open
+syn: ztcl::open target
+== ztcl::notify
+syn: ztcl::notify ?-option value ...? title ?body?

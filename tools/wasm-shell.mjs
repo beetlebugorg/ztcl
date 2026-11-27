@@ -73,6 +73,21 @@ const screen = (s) => s.text().join("\n");
 }
 
 {
+  const s = await shell({ cols: 70 });
+  s.feed("lsort -dic\t");
+  check("Tab completes an option from the command table", s.text()[s.cursor.y] === "% lsort -dictionary", screen(s));
+  check("the hint row shows the option from the command table", s.text()[s.cursor.y + 1].startsWith("-dictionary  Compares the text with no case"), screen(s));
+  s.feed("\x15lsort ");
+  check("the hint row shows the synopsis of a command", s.text()[s.cursor.y + 1] === "lsort ?-option value ...? list", screen(s));
+  s.feed("\x15string ran\t");
+  check("Tab completes a subcommand from the command table", s.text()[s.cursor.y] === "% string range", screen(s));
+  s.feed(" ");
+  check("the hint row shows the subcommand", s.text()[s.cursor.y + 1] === "string range STRING FIRST LAST  The characters from FIRST to LAST.", screen(s));
+  s.feed("\x15dict ");
+  check("a long hint ends at the edge of the screen", s.text().every((l) => l.length <= 70), screen(s));
+}
+
+{
   const s = await shell();
   s.vi = true;
   s.feed("puts abc");

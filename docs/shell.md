@@ -39,8 +39,8 @@ Emacs keys are the default.
 - A paste of many lines comes in as one command, with bracketed paste.
 - Up with text before the cursor searches the history for that prefix. Ctrl-R searches with fuzzy matching: each character of the query must come in order. Escape keeps the match to edit it.
 - A dim hint after the cursor is the newest history entry that starts with the command. Right arrow, Ctrl-F, or End accepts it.
-- The row under the command shows the parameters of the proc of the command at the cursor.
-- Tab completes command names, namespaces, variables after `$`, the subcommands of an ensemble, the methods of a TclOO object, and file names when the interpreter has `file` (the runner flag `--allow file`). A folder completes with a slash. With more than one match, a menu shows them, and Tab again puts in each one in turn.
+- The row under the command shows the parameters of the proc of the command at the cursor. For a built-in command, the row shows a line of the [command reference](reference/README.md): the last option before the cursor, the subcommand, or the synopsis.
+- Tab completes command names, namespaces, variables after `$`, the subcommands of an ensemble, the options and the subcommands of a built-in command from the command reference, the methods of a TclOO object, and file names when the interpreter has `file` (the runner flag `--allow file`). A folder completes with a slash. With more than one match, a menu shows them, and Tab again puts in each one in turn.
 - Colors show commands, strings, braces, variables, comments, and numbers. A command that does not exist shows in red before Enter. A bracket that matches the bracket at the cursor shows in reverse.
 
 ## Output

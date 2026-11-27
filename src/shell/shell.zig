@@ -22,7 +22,10 @@
 //! The hint after the cursor is the newest history entry that starts
 //! with the buffer. Right arrow, Ctrl-F, or End at the end of the buffer
 //! accepts it. The row under the command shows the parameters of the proc
-//! of the command at the cursor.
+//! of the command at the cursor. For a built-in command, the row and Tab
+//! use the command table of `reftable.zig`: Tab completes its options
+//! and its subcommands, and the row shows the last option before the
+//! cursor, the subcommand, or the synopsis.
 //!
 //! A result prints in color. A long list prints one item on each row, and
 //! a dict with keys in a column. An error prints its message in red, and
@@ -57,6 +60,7 @@ const tcl = @import("../ztcl.zig");
 const keys = @import("keys.zig");
 const text = @import("text.zig");
 const hl = @import("highlight.zig");
+const reftable = @import("reftable.zig");
 const render = @import("render.zig");
 const termmod = if (web) @import("term_web.zig") else @import("term.zig");
 const editor = @import("editor.zig");
@@ -254,13 +258,36 @@ pub const Shell = struct {
         const name = firstWord(s.ed.buf.items, s.ed.cur);
         if (name.len == 0 or s.ed.cur <= commandStart(s.ed.buf.items, s.ed.cur) + name.len) return null;
         const cmd = s.it.findCommand(name) orelse return null;
-        if (cmd.impl != .proc) return null;
+        if (cmd.impl != .proc) return s.tableHint(name);
         const q = s.quoted(name) catch return null;
         const script = std.fmt.allocPrint(s.a, "info args {s}", .{q}) catch return null;
         defer s.a.free(script);
         const args = s.probe(script) orelse return null;
         defer s.a.free(args);
         return std.fmt.allocPrint(s.a, "{s} {s}", .{ name, args }) catch null;
+    }
+
+    /// The line of the command table for the command `name` at the
+    /// cursor: the last option before the cursor, the subcommand, or the
+    /// synopsis.
+    fn tableHint(s: *Shell, name: []const u8) ?[]u8 {
+        const body = reftable.entry(name) orelse return null;
+        const buf = s.ed.buf.items;
+        var words = std.mem.tokenizeAny(u8, buf[commandStart(buf, s.ed.cur)..s.ed.cur], " \t\n");
+        _ = words.next();
+        var line: ?[]const u8 = null;
+        if (words.next()) |second| {
+            line = reftable.findSub(body, second);
+            var w: ?[]const u8 = second;
+            while (w) |x| : (w = words.next()) {
+                if (x.len > 1 and x[0] == '-') {
+                    if (reftable.findOpt(body, x)) |l| line = l;
+                }
+            }
+        }
+        var syn = reftable.lines(body, "syn");
+        const t = line orelse syn.next() orelse return null;
+        return std.mem.replaceOwned(u8, s.a, t, " | ", "  ") catch null;
     }
 
     fn historyHint(s: *Shell) []const u8 {
@@ -303,7 +330,10 @@ pub const Shell = struct {
         if (!s.final) {
             if (s.argHint()) |h| {
                 try owned.append(a, h);
-                try below.append(a, h);
+                // The hint is one row: a long line ends at the edge.
+                var end = @min(h.len, @max(width, 2) - 1);
+                while (end < h.len and end > 0 and h[end] & 0xC0 == 0x80) end -= 1;
+                try below.append(a, h[0..end]);
             }
             for (s.menu.items) |m| try below.append(a, m);
         }
@@ -348,6 +378,29 @@ pub const Shell = struct {
         return i;
     }
 
+    /// The options of a built-in command for a word that starts with
+    /// `-`, and its subcommands for the second word, from the command
+    /// table. `before` is the text of the command before the word.
+    fn tableCandidates(s: *Shell, out: *std.ArrayList([]u8), cmd: []const u8, before: []const u8, word: []const u8) !void {
+        const c = s.it.findCommand(cmd) orelse return;
+        if (c.impl == .proc) return;
+        const body = reftable.entry(cmd) orelse return;
+        var n: usize = 0;
+        var words = std.mem.tokenizeAny(u8, before, " \t\n");
+        while (words.next()) |_| n += 1;
+        const option = word.len > 0 and word[0] == '-';
+        if (!option and n != 1) return;
+        var l = reftable.lines(body, if (option) "opt" else "sub");
+        while (l.next()) |line| {
+            const name = (if (option) reftable.optName(line) else reftable.subName(line)) orelse continue;
+            if (!std.mem.startsWith(u8, name, word)) continue;
+            const dup = for (out.items) |y| {
+                if (std.mem.eql(u8, y, name)) break true;
+            } else false;
+            if (!dup) try out.append(s.a, try s.a.dupe(u8, name));
+        }
+    }
+
     /// The candidates for the word at the cursor.
     fn candidates(s: *Shell, start: usize) !std.ArrayList([]u8) {
         const a = s.a;
@@ -383,6 +436,7 @@ pub const Shell = struct {
             n += 1;
         } else {
             const cmd = firstWord(buf, s.ed.cur);
+            try s.tableCandidates(&out, cmd, buf[cs..start], word);
             const qc = try s.quoted(cmd);
             // The subcommands that an ensemble lists in its error, and the
             // methods of a TclOO object.
