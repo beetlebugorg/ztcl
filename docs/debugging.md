@@ -1,11 +1,12 @@
 # Debugging
 
-ztcl has four tools to find a bug:
+ztcl has five tools to find a bug:
 
 - `ztcl::probe` records values at a proc, a line, a command, a variable, or an error, with no change to the script. [The module page](modules/probe.md) has each option.
 - `ztcl debug` runs a script with probes and writes a short report: the error, the stack with the locals of each frame, the probes, and the last records. `--explain` also gives the last changes of the variables of the failed command.
 - `ztcl debug --mcp` gives the same tools to an agent over the Model Context Protocol.
 - `ztcl debug --dap` is a debugger for an editor: breakpoints, steps, the stack, the locals, watches, and hot reload.
+- `ztcl::disasm` shows the bytecode of a proc or a script under the source line of each command. [The module page](modules/disasm.md) has the format.
 
 The lesson [Debug a script](learn/91-debug-a-script.md) finds two bugs with a probe and with `ztcl debug`, in the shell of the page.
 

@@ -429,3 +429,33 @@ test "the DAP server stops in a loop body of the top level, at an error, and at 
     try has(out2.written(), "\"reason\":\"pause\"");
     try has(out2.written(), "\"event\":\"exited\",\"body\":{\"exitCode\":0}");
 }
+
+test "ztcl::disasm lists the bytecode under the line of each command" {
+    if (!options.mod_disasm) return error.SkipZigTest;
+    const a = std.testing.allocator;
+    var it: tcl.Interp = undefined;
+    try it.init(a);
+    defer it.deinit();
+    _ = try it.eval(
+        \\package require ztcl::disasm
+        \\proc twice {x} {
+        \\    set y [expr {$x * 2}]
+        \\    return $y
+        \\}
+    );
+    const text = try it.str(try it.eval("ztcl::disasm proc twice"));
+    try has(text, "twice: ");
+    try has(text, "  slot 0 x (parameter)\n  slot 1 y\n  # line 2: \"set y [expr {$x * 2}]\"\n     0 guard");
+    try has(text, "  # line 3: \"return $y\"\n     4 guard");
+    try has(text, "store_pop 1 0 0  # $y");
+    const loop = try it.str(try it.eval("ztcl::disasm script {foreach i {1 2 3} {incr n $i}}"));
+    try has(loop, "push 0 0 0  # \"1 2 3\"");
+    try has(loop, "script: instructions 17, literals 1, slots 2, stack 4, jit ");
+    const tcl_form = try it.str(try it.eval("::tcl::unsupported::disassemble proc twice"));
+    try has(tcl_form, "  Proc 0x");
+    try has(tcl_form, "      slot 0, scalar, arg, \"x\"");
+    try has(tcl_form, "      3: pc 5-6, src 31-39        \"return $y\"");
+    try has(tcl_form, "  Command 3: \"return $y\"\n    (4) guard");
+    try std.testing.expectError(error.TclError, it.eval("ztcl::disasm proc puts"));
+    try std.testing.expectEqualStrings("\"puts\" isn't a procedure", try it.str(it.result));
+}

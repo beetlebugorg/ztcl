@@ -635,6 +635,7 @@ fn addWasmForm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise:
     // ztcl.wasm has a size limit (tools/size-report.sh), so `ztcl::probe`
     // is only in the shell build of the site, which has the live examples.
     if (!shell) mods_on[moduleIndex("probe")] = false;
+    if (!shell) mods_on[moduleIndex("disasm")] = false;
     addModuleOptions(b, wasm_options, mods_on);
     wasm.root_module.addOptions("build_options", wasm_options);
     if (threads != .shared) addVt(b, wasm.root_module, wasm.root_module.resolved_target.?, .small);
@@ -669,6 +670,7 @@ const all_modules = [_]Mod{
     .{ .name = "json", .std = true },
     .{ .name = "vt", .std = true },
     .{ .name = "probe", .std = true },
+    .{ .name = "disasm", .std = true },
 };
 
 /// The flag of each module after the preset, the flags, and the rule
