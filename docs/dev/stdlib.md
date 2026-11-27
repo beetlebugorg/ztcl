@@ -760,7 +760,7 @@ The parts of a TLS stack that go wrong are the state machine, the parsers, the v
 
 `zig build test` runs the examples, the integers of C.1, the fields of C.2, each byte value through the Huffman code, the bad paddings, random round trips with table sizes of 0 to 4,096 and size updates, bad blocks, and 20,000 random blocks. `zig build hpack-fuzz -- --seconds N` runs random round trips and decodes changed and random blocks in ReleaseSafe. `zig build hpack-bench` prints the speed.
 
-2026-11-27, i7-6700K (shared), a browser request of 12 fields (360 bytes of names and values): Huffman decode 386 MB/s of text and encode 1,032 MB/s; the first block of a connection (304 bytes) decodes 605,518 times a second and a later block (12 bytes) 8,757,279 times a second; the encoder makes 621,467 first blocks and 1,391,199 later blocks a second. The `hpack-test-case` corpus is not in the checks (see questions).
+2026-11-27, i7-6700K (shared), a browser request of 12 fields (360 bytes of names and values): Huffman decode 386 MB/s of text and encode 1,032 MB/s; the first block of a connection (304 bytes) decodes 605,518 times a second and a later block (12 bytes) 8,757,279 times a second; the encoder makes 621,467 first blocks and 1,391,199 later blocks a second. `zig build hpack-corpus` runs the `hpack-test-case` corpus (see Conformance below).
 
 ### The HTTP/2 connection (task 29, first part)
 
@@ -784,7 +784,42 @@ The parts of a TLS stack that go wrong are the state machine, the parsers, the v
 | 64 | 100 | 13 bytes | 1,176,542 | 15.3 |
 | 8 | 8 | 65,536 bytes | 17,823 | 1,168.1 |
 
-The RSS of the server stayed under 3 MB. h2load, nghttpd, and h2spec are not on this machine (see questions), so the table has no reference server yet. The next parts: `h2` over `ztcl::tls` with ALPN, writes of a response body with no copy (the body slice in the write), h2spec, and the HTTP server of task 12.
+The RSS of the server stayed under 3 MB.
+
+#### h2load against nghttpd
+
+2026-11-27, the same machine at a load of 14, h2c with prior knowledge. h2load 1.71.0 (`-t 1`) loads `h2-serve` and the reference server nghttpd 1.71.0 (`--no-tls`, one thread, a file from `-d`). Each row is the median of three runs:
+
+| Connections | Streams each | Body | `h2-serve` requests/s | nghttpd requests/s | Ratio |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 1 | 13 bytes | 22,381 | 18,446 | 1.21 |
+| 4 | 32 | 13 bytes | 317,872 | 140,625 | 2.26 |
+| 64 | 100 | 13 bytes | 307,522 | 105,771 | 2.91 |
+| 8 | 8 | 65,536 bytes | 17,725 | 16,798 | 1.06 |
+
+- nghttpd sends more header fields (`server`, `date`, `content-length`, `last-modified`) than `h2-serve`, so a row of small bodies is part HPACK work.
+- With `-t 1`, h2load itself is the limit near 320,000 requests/s: `zig build h2-load` gets 1,176,542 requests/s from the same server (the table above).
+- With a body of 64 KiB, the two servers are equal: the copy of the body into the output buffer is the cost. The next step removes it (a write of the body slice, with no copy).
+
+#### Conformance
+
+- h2spec 2.6.0 (`h2spec -h 127.0.0.1 -p PORT`) gives 146 of 146 on `h2-serve`, and 147 of 147 with `-S` (strict). The first run gave 144: a PRIORITY frame on its own stream and an empty `:path` did not reset the stream. Both have a test in `conn_test.zig` now.
+- `zig build hpack-corpus -- DIR` runs the hpack-test-case corpus (github.com/http2jp/hpack-test-case, commit 8a1406e, MIT). It decodes each story of the 14 encoder folders (3,267 or 3,384 cases each) with one decoder for each story, and compares the fields in order. It also encodes the `raw-data` stories with `Encoder` in each Huffman mode and decodes them again. No case fails.
+
+The sizes of all the blocks of the `raw-data` stories, for each encoder of the corpus that uses a table of 4,096 bytes:
+
+| Encoder | Block bytes |
+|---|---:|
+| nghttp2 | 360,319 |
+| node-http2-hpack | 360,328 |
+| `hpack.zig`, Huffman `shorter` (the default) | 361,250 |
+| swift-nio-hpack-huffman | 361,259 |
+| python-hpack | 361,262 |
+| haskell-http2-linear-huffman | 368,177 |
+| `hpack.zig`, no Huffman | 455,386 |
+| go-hpack | 993,735 |
+
+The next parts: `h2` over `ztcl::tls` with ALPN, writes of a response body with no copy, and the HTTP server of task 12.
 
 ## HTTP/3 and QUIC (later)
 
