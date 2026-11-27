@@ -158,6 +158,7 @@ CAP python3 -I tools/bench-stdlib.py --only json --check bench/stdlib/gates.tsv
 ```
 
 - Each measure runs 5 times, and the table keeps the best run. A JSON number is MB/s of the input text. A program times its own work, so the start of a process and the read of the file are not in the number.
+- The group `json-cpu` has the cycles and the instructions of user space for each byte of input of each ztcl JSON mode, from `perf stat`. Each count is a run of 20 operations less a run of 0 operations. A change of the cycles with the same instructions is a change of the code layout or of the machine. The rows are absent when `perf` is absent or cannot count.
 - The script builds simdjson and yyjson with the C++ compiler of the system, the Go programs, the `sqlite3` package of `tclsh` from SQLite 3.54.0, and a Python environment with `orjson`, `pysimdjson`, and `uvicorn`. A runtime that is absent gives a row with the value `absent`.
 - The HTTP tests run the server on one half of the cores and `wrk` or `h2load` on the other half, with `taskset`.
 - `--check FILE` compares the ratio of ztcl to each other runtime with the minimum of each row of `bench/stdlib/gates.tsv`. `--dry-run` reads the last table and runs no program.

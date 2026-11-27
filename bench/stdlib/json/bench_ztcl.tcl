@@ -2,8 +2,11 @@
 #   ztcl --allow channels,clock --root DATA --tclsh bench_ztcl.tcl MODE FILE.json
 # DATA has FILE.json and paths.json. Prints the best time of one run, in
 # seconds, or "skip" when the build has no ztcl::json.
+#   ztcl ... bench_ztcl.tcl MODE FILE.json COUNT
+# runs the operation COUNT times with no clock and prints "done", for a
+# count of cycles and instructions with perf.
 # SPDX-License-Identifier: BSD-2-Clause
-lassign $argv mode file
+lassign $argv mode file count
 if {[catch {package require ztcl::json}]} { puts skip; return }
 proc slurp {name} {
     set f [open $name]
@@ -27,6 +30,11 @@ switch -- $mode {
         set op {ztcl::json encode -typed $::parsed}
     }
     default { puts skip; return }
+}
+if {$count ne ""} {
+    for {set i 0} {$i < $count} {incr i} { eval $op }
+    puts done
+    return
 }
 set best 1e9; set total 0.0; set n 0
 while {$n < 3 || $total < 0.5} {

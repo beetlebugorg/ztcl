@@ -29,6 +29,11 @@ jobs:
       # The runner image has Go and Python.
       - name: Install the outside programs
         run: sudo apt-get update && sudo apt-get install -y wrk nghttp2-client tcl tcl-dev openssl
+      # perf for the json-cpu rows. The rows are absent when perf cannot count.
+      - name: Install perf
+        run: |
+          sudo apt-get install -y "linux-tools-$(uname -r)" linux-tools-common || true
+          sudo sysctl -w kernel.perf_event_paranoid=1 || true
       - name: Build the runner
         run: zig build
       - name: Run the benchmarks

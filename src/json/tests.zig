@@ -10,6 +10,16 @@ const build = @import("build.zig");
 test {
     _ = @import("number.zig");
 }
+
+test "walk_wasm.zig is walk.zig without the alignment" {
+    const a = std.testing.allocator;
+    const copy = try std.mem.replaceOwned(u8, a, @embedFile("walk.zig"), " align(hot_align)", "");
+    defer a.free(copy);
+    std.testing.expectEqualStrings(copy, @embedFile("walk_wasm.zig")) catch |e| {
+        std.debug.print("run tools/json-walk-wasm.sh\n", .{});
+        return e;
+    };
+}
 const Interp = @import("../interp.zig").Interp;
 const Value = @import("../value.zig").Value;
 

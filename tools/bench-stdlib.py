@@ -15,6 +15,11 @@ when the ratio is below its minimum, or when a row has no ztcl number.
 --dry-run reads the last bench.tsv and runs no program. It prints each
 comparison, and only a malformed gate file fails it.
 
+The group json-cpu has the cycles and the instructions of user space for
+each byte of input of each ztcl JSON mode, from `perf stat`. The rows
+are absent when perf is absent or cannot count. BENCH_CPU_OPS sets the
+count of operations of a run (20 by default).
+
 A runtime that is absent gives a row with the value "absent" and its
 reason. The script fetches the data and the C parsers with
 bench/stdlib/fetch.sh, which checks a SHA-256 of each file.
@@ -194,6 +199,7 @@ def bench_json(data, tools, ztcl, others_only):
         ("simdjson ondemand", "4.2.0", lambda m, f: [tools["bench_c"], "simdjson-ondemand", m, f], "bench_c" in tools),
         ("yyjson", "0.12.0", lambda m, f: [tools["bench_c"], "yyjson", m, f], "bench_c" in tools),
     ]
+    zver = None
     if not others_only:
         zver = version_of(["git", "-C", TOP, "rev-parse", "--short", "HEAD"])
         progs.insert(0, ("ztcl", zver, lambda m, f: [ztcl, "--allow", "channels,clock", "--root", data, "--tclsh",
@@ -219,6 +225,58 @@ def bench_json(data, tools, ztcl, others_only):
                         pass
                     continue
                 add("json", mode, case, name, ver, "%.1f" % (sizes[f] / 1e6 / s), "MB/s")
+    if not others_only and ztcl and os.path.exists(ztcl):
+        bench_json_cpu(data, ztcl, sizes, zver)
+
+
+# The count of operations of a perf run. The run with a count of 0 gives
+# the cost of the start, the read of the file, and the setup of the mode.
+CPU_OPS = int(os.environ.get("BENCH_CPU_OPS", "20"))
+
+
+def perf_counts(cmd):
+    """The least cycles and instructions of user space of RUNS runs."""
+    best = None
+    for _ in range(RUNS):
+        r = subprocess.run(["perf", "stat", "-x,", "-e", "cycles:u,instructions:u", "--"] + cmd,
+                           capture_output=True, text=True, timeout=600)
+        if r.returncode != 0 or r.stdout.strip() not in ("done", "skip"):
+            raise RuntimeError("perf: exit %d: %s" % (r.returncode, (r.stderr or r.stdout)[-400:]))
+        if r.stdout.strip() == "skip":
+            return None
+        got = {}
+        for line in r.stderr.splitlines():
+            parts = line.split(",")
+            if len(parts) > 2 and parts[0].isdigit():
+                got[parts[2].split(":")[0]] = int(parts[0])
+        if "cycles" not in got or "instructions" not in got:
+            raise RuntimeError("perf gave no count of cycles: " + r.stderr[-400:])
+        n = (got["cycles"], got["instructions"])
+        best = n if best is None or n[0] < best[0] else best
+    return best
+
+
+def bench_json_cpu(data, ztcl, sizes, zver):
+    """Cycles and instructions for each byte of input of each ztcl JSON
+    mode, from perf. A change of the cycles with the same instructions
+    is a change of the code layout or of the machine, not of the code."""
+    if not shutil.which("perf"):
+        log("json cycles: skip, no perf")
+        return
+    for mode in JSON_MODES:
+        for f in JSON_FILES:
+            cmd = [ztcl, "--allow", "channels", "--root", data, "--tclsh", "bench_ztcl.tcl", mode, f]
+            try:
+                full = perf_counts(cmd + [str(CPU_OPS)])
+                base = perf_counts(cmd + ["0"])
+            except (OSError, RuntimeError, subprocess.SubprocessError) as e:
+                log("json cycles: skip, %s" % e)
+                return
+            if full is None or base is None:
+                continue
+            n = CPU_OPS * sizes[f]
+            add("json-cpu", mode, f[:-5], "ztcl", zver, "%.3f" % ((full[0] - base[0]) / n), "cycles/B")
+            add("json-cpu", mode + "-instr", f[:-5], "ztcl", zver, "%.3f" % ((full[1] - base[1]) / n), "instr/B")
 
 
 # ---- HTTP ---------------------------------------------------------------
