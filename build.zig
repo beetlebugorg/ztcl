@@ -83,6 +83,19 @@ pub fn build(b: *std.Build) void {
     }) }));
     b.step("tls-vectors", "Check the TLS record layer and key schedule with the RFC vectors").dependOn(&tls_run.step);
     test_step.dependOn(&tls_run.step);
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/tls/crypto.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) })).step);
+    // The Wycheproof sets of the TLS primitives, from tools/fetch-wycheproof.sh.
+    const wp = b.addRunArtifact(b.addExecutable(.{ .name = "tls-wycheproof", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/tls/wycheproof.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) }));
+    wp.addPassthruArgs();
+    b.step("tls-wycheproof", "Run the Wycheproof sets of the TLS primitives: zig build tls-wycheproof -- DIR").dependOn(&wp.step);
     // The tests of C packages only, for a build with `-Dcext=true`.
     const cext_tests = b.addTest(.{ .root_module = ztcl, .filters = &.{"cext:"} });
     b.step("test-cext-native", "Run the tests of the native loader of C packages").dependOn(&b.addRunArtifact(cext_tests).step);
