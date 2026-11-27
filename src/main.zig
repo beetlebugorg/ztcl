@@ -211,7 +211,7 @@ fn runDebug(it: *tcl.Interp, out: *Io.Writer, a: std.mem.Allocator, text: []cons
 }
 
 fn serveDap(it: *tcl.Interp, h: anytype, out: *Io.Writer, program: ?[]const u8, text: []const u8) !void {
-    var server: tcl.dap.Server = .{ .it = it, .gpa = h.gpa, .in = h.in, .out = out, .read = mcpRead, .program = program, .text = text, .poll = stdinReady, .poll_ctx = h.in };
+    var server: tcl.dap.Server = .{ .it = it, .gpa = h.gpa, .in = h.in, .out = out, .read = mcpRead, .program = program, .text = text, .poll = stdinReady, .poll_ctx = h.in, .reader = true };
     try tcl.dap.serve(&server);
 }
 

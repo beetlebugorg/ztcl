@@ -182,6 +182,10 @@ pub const State = struct {
     /// The line of the program file of line 1 of the body of each proc
     /// that a command of `top` defined.
     bases: std.AutoHashMapUnmanaged(*interp.Proc, u32) = .empty,
+    /// The bodies of `catch`, and of `try` with a handler of errors,
+    /// that run now. Counted only with the line hook. A body that a
+    /// coroutine leaves with `yield` stays in the count.
+    catching: u32 = 0,
 };
 
 /// A function of the debugger at a line. `p` is null for a command of
@@ -217,6 +221,51 @@ pub fn fireTopLine(it: *Interp, line: u32) void {
     const s = it.probes orelse return;
     if (s.busy) return;
     if (s.line_hook) |h| h.f(h.ctx, it, null, line);
+}
+
+/// A writer of whole messages, such as the DEBUG frames of an isolated
+/// thread. False: the message did not go.
+pub const MsgSink = struct {
+    ctx: ?*anyopaque = null,
+    write: *const fn (ctx: ?*anyopaque, body: []const u8) bool,
+};
+
+/// The functions of the debugger for the threads of the program. Each
+/// runs on the thread that it names.
+pub const ThreadHook = struct {
+    ctx: ?*anyopaque = null,
+    /// A thread of the level `interp` with the id `id` has the new
+    /// interpreter `x`, and runs `script` next (empty for a thread that
+    /// waits for scripts).
+    start: *const fn (ctx: ?*anyopaque, x: *Interp, id: u64, script: []const u8) void,
+    /// The interpreter `x` of a thread ends.
+    end: *const fn (ctx: ?*anyopaque, x: *Interp) void,
+    /// An isolated thread starts: `out` sends DEBUG frames to its child.
+    /// The hook sends the first frame, and gives the handle of the
+    /// thread for `child` and `gone`. Null: the hook sent no frame, and
+    /// the thread runs with no debugger.
+    remote: *const fn (ctx: ?*anyopaque, id: u64, out: MsgSink) ?*anyopaque,
+    /// A DEBUG frame of the child of `handle`.
+    child: *const fn (ctx: ?*anyopaque, handle: *anyopaque, body: []const u8) void,
+    /// The child of `handle` ended.
+    gone: *const fn (ctx: ?*anyopaque, handle: *anyopaque) void,
+};
+
+/// The debugger of the threads, while `ztcl debug --dap` runs a
+/// program. Only one debugger runs in a process.
+pub var threads: ?ThreadHook = null;
+
+/// Runs `text` at the top level of `x`, as `Interp.eval` does. With the
+/// line hook, each command of the top level and each body in it calls
+/// the hook, as for the program file.
+pub fn evalDebug(x: *Interp, text: []const u8) Error!Value {
+    const copy = try x.alloc().dupe(u8, text);
+    const script = try x.compile(copy);
+    if (comptime enabled) if (x.probes) |s| if (s.line_hook != null) {
+        s.top = script;
+        s.top_text = copy;
+    };
+    return x.evalTop(script);
 }
 
 /// The mark at the start of the result of `linesFor` for a proc that

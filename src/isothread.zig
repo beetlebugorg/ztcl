@@ -45,6 +45,8 @@ const interp = @import("interp.zig");
 const thread = @import("thread.zig");
 const iso = @import("isoproto.zig");
 const isobroker = @import("isobroker.zig");
+const probe = @import("probe.zig");
+const dap = @import("dap.zig");
 const Interp = interp.Interp;
 const Error = interp.Error;
 const Worker = thread.Worker;
@@ -78,6 +80,9 @@ const flag_reply: u8 = 1;
 const flag_head: u8 = 2;
 const hosts_clock: u8 = 1;
 const hosts_event: u8 = 2;
+/// The debugger of the parent debugs the child: a DEBUG frame follows
+/// START, before READY. An older child ignores the bit and the frame.
+const hosts_debug: u8 = 4;
 
 // ---- Payloads ----
 
@@ -528,6 +533,8 @@ const Pending = struct { from: u64, seq: u64 };
 pub const Bridge = struct {
     gpa: Allocator,
     w: *Worker,
+    /// The handle of the debugger for this thread (`probe.ThreadHook`).
+    dbg: ?*anyopaque = null,
     runner: ?[]const u8,
     spawner: ?Spawner,
     hosts: u8,
@@ -818,12 +825,35 @@ fn threadIo() std.Io {
 }
 
 fn failBridge(w: *Worker, b: *Bridge, st: anytype, text: []const u8) void {
+    dbgGone(b);
     b.err = text;
     if (b.meter) |m| m.release();
     b.meter = null;
     killChild(b);
     _ = reapChild(b, 2000);
     thread.failStart(w, st);
+}
+
+fn dbgWrite(ctx: ?*anyopaque, body: []const u8) bool {
+    const b: *Bridge = @ptrCast(@alignCast(ctx.?));
+    return b.link.write(b.gpa, .debug, 0, body);
+}
+
+/// The debugger sends its first DEBUG frame to the child, after START.
+/// With no debugger, an empty frame lets the child go on.
+fn dbgStart(b: *Bridge) bool {
+    if (comptime !probe.enabled) return true;
+    const h = probe.threads orelse return b.link.write(b.gpa, .debug, 0, "");
+    b.dbg = h.remote(h.ctx, b.w.id, .{ .ctx = b, .write = dbgWrite });
+    return b.dbg != null or b.link.write(b.gpa, .debug, 0, "");
+}
+
+/// The debugger forgets the child.
+fn dbgGone(b: *Bridge) void {
+    if (comptime !probe.enabled) return;
+    const d = b.dbg orelse return;
+    b.dbg = null;
+    if (probe.threads) |h| h.gone(h.ctx, d);
 }
 
 /// The OS thread of an isolated thread in the parent.
@@ -854,7 +884,9 @@ pub fn bridgeMain(w: *Worker, b: *Bridge, st: anytype) void {
         return failBridge(w, b, st, "the handshake with the child process failed");
     };
     a.free(wel.service);
-    if (!sendStart(b, st)) {
+    const debugged = probe.enabled and probe.threads != null;
+    if (debugged) b.hosts |= hosts_debug;
+    if (!sendStart(b, st) or (debugged and !dbgStart(b))) {
         b.link.t.deinit();
         return failBridge(w, b, st, "the child process did not take the start");
     }
@@ -882,6 +914,7 @@ pub fn bridgeMain(w: *Worker, b: *Bridge, st: anytype) void {
         return endBridge(w, b, null);
     };
     forward(w, b);
+    dbgGone(b);
     endBridge(w, b, reader);
 }
 
@@ -1056,6 +1089,7 @@ fn readerMain(b: *Bridge) void {
             .usage => if (meter_mod.Counts.decode(f.payload)) |c| {
                 b.child_counts = c;
             },
+            .debug => if (comptime probe.enabled) if (b.dbg) |d| if (probe.threads) |h| h.child(h.ctx, d, f.payload),
             .exit => {
                 var r: iso.Reader = .{ .b = f.payload };
                 b.status = r.int(i64) catch 1;
@@ -1174,6 +1208,8 @@ pub const Hosts = struct {
 const Child = struct {
     a: Allocator,
     link: *Link,
+    /// The debugger of the parent reaches this child (`dap.zig`).
+    dbg: ?*dap.Server = null,
     w: *Worker = undefined,
     caller: isobroker.Caller = undefined,
 
@@ -1210,6 +1246,11 @@ const Child = struct {
     fn outWrite(ctx: ?*anyopaque, bytes: []const u8) void {
         const c: *Child = @ptrCast(@alignCast(ctx.?));
         _ = c.link.write(c.a, .output, 0, bytes);
+    }
+
+    fn dbgWrite(ctx: ?*anyopaque, body: []const u8) bool {
+        const c: *Child = @ptrCast(@alignCast(ctx.?));
+        return c.link.write(c.a, .debug, 0, body);
     }
 };
 
@@ -1260,6 +1301,7 @@ fn childReader(c: *Child) void {
                 c.caller.deliver(f.stream, p);
             },
             .fd => if (comptime on_win) winh.take(g, f.payload, null) else takeChannel(g, c.link, f.payload, false),
+            .debug => if (comptime probe.enabled) if (c.dbg) |d| dap.deliver(d, c.a.dupe(u8, f.payload) catch continue),
             .goodbye => break,
             else => {},
         }
@@ -1344,6 +1386,13 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     defer a.free(f.payload);
     if (f.kind != .start) return 2;
     const st = readStart(f.payload) catch return 2;
+    // The first DEBUG frame: the state of the debugger of the parent.
+    var attach: ?iso.Frame = null;
+    defer if (attach) |d| a.free(d.payload);
+    if (st.hosts & hosts_debug != 0) {
+        attach = readMessage(&link, a) catch return 2;
+        if (attach.?.kind != .debug) return 2;
+    }
 
     var c: Child = .{ .a = a, .link = &link };
     var x: Interp = undefined;
@@ -1396,10 +1445,14 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
         for (child_meter.net.keys()) |k| a.free(k);
         child_meter.net.deinit(a);
     }
+    if (comptime probe.enabled) if (attach) |d| if (d.payload.len > 0) {
+        c.dbg = dap.startChild(a, &x, d.payload, st.script, .{ .ctx = &c, .write = Child.dbgWrite }) catch null;
+    };
+    defer if (comptime probe.enabled) if (c.dbg) |d| dap.endChild(d);
     if (!link.write(a, .ready, 0, "")) return 2;
 
     const reader = std.Thread.spawn(.{}, childReader, .{&c}) catch return 2;
-    const r = if (st.script.len > 0) x.eval(st.script) else thread.topScope(&x, thread.waitLoop, .{&x});
+    const r = if (st.script.len > 0) probe.evalDebug(&x, st.script) else thread.topScope(&x, thread.waitLoop, .{&x});
     if (r) |_| {} else |e| thread.endError(w, &x, e);
     // The counts of the child for the meter of the parent.
     meter_mod.sync(&x);

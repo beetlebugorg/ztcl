@@ -112,6 +112,7 @@ A process of the same user can read the memory of the parent and take its handle
 | `USAGE` | child | the compute units and the bytes of the heap | The use of the child, at its end and every 100 ms of compute. |
 | `EXIT` | child | the exit status, or the error that ended the thread | The end of the thread. `thread::join` gets it. |
 | `GOODBYE` | both | none | The connection ends normally. |
+| `DEBUG` | both | DAP JSON (`src/dap.zig`) | The debugger of the parent and the debugger of the child. The frame always has `skip`. With the bit 4 in the hosts byte of `START`, the parent sends one `DEBUG` frame after `START`, before `READY`: the request `ztclAttach` with the thread id, the frame base, the program, and the breakpoints, or an empty payload for no debugger. Then the parent sends the requests for the thread, and the child sends its answers and its events. A request with `seq` 0 gets no answer. |
 
 - A send that waits (`thread::send` without `-async`) keeps the reader of the sender running: it runs each `SEND` that comes for its own thread while it waits, so two threads that send to each other do not deadlock, as today.
 - `thread::broadcast`, `thread::names`, `thread::exists`, and the pools are in the parent. A child asks with `SEND` to the group (thread id 0) and a fixed command.

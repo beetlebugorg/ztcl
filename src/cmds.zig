@@ -956,6 +956,22 @@ fn runCaughtBody(it: *Interp, script: Error!*interp.Script, argv: []const Value,
     return c;
 }
 
+/// The debugger counts the open bodies that catch an error, for its
+/// exception filter `uncaught`. With no debugger, it costs one test.
+fn enterCatch(it: *Interp) bool {
+    const probe = @import("probe.zig");
+    if (comptime !probe.enabled) return false;
+    const s = it.probes orelse return false;
+    if (s.line_hook == null) return false;
+    s.catching += 1;
+    return true;
+}
+
+fn leaveCatch(it: *Interp, on: bool) void {
+    if (!on) return;
+    if (it.probes) |s| s.catching -|= 1;
+}
+
 fn cmdCatch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2 or argv.len > 4) return it.wrongArgs("catch script ?resultVarName? ?optionVarName?");
     // Tcl compiles `catch` in a proc body, and also outside one when it
@@ -967,7 +983,10 @@ fn cmdCatch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         const literal = !c.has_expand and c.words.len > 1 and c.words[1].kind == .lit;
         if (!literal and (in_proc or argv.len == 2)) site = c;
     }
-    const c = try runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv, site);
+    const counted = enterCatch(it);
+    const r = runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv, site);
+    leaveCatch(it, counted);
+    const c = try r;
     if (argv.len >= 3) try it.setVar(try it.str(argv[2]), c.res);
     if (argv.len == 4) try it.setVar(try it.str(argv[3]), try c.options(it));
     return .{ .int = c.code };
@@ -997,20 +1016,26 @@ fn cmdTry(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         }
         return it.wrongArgs(usage);
     }
-    // Check the handlers before the body runs.
+    // Check the handlers before the body runs. A `trap` or an `on
+    // error` handler catches an error, for the debugger.
+    var catches = false;
     var h: usize = 2;
     while (h < end) : (h += 4) {
         const kind = try it.str(argv[h]);
         if (eql(kind, "on")) {
-            _ = try tryCode(it, argv[h + 1]);
+            catches = catches or (try tryCode(it, argv[h + 1])) == 1;
         } else if (eql(kind, "trap")) {
+            catches = true;
             _ = it.list(argv[h + 1]) catch return it.fail("bad prefix '{s}': must be a list", .{try it.str(argv[h + 1])});
         } else return it.fail("bad handler \"{s}\": must be finally, on, or trap", .{kind});
         if ((try it.list(argv[h + 2])).len > 2) return it.fail("wrong # args to {s} clause: must be \"... {s} {s} variableList script\"", .{ kind, kind, if (eql(kind, "on")) "code" else "pattern" });
     }
     if (end > 2 and eql(try it.str(argv[end - 1]), "-")) return it.fail("last non-finally clause must not have a body of \"-\"", .{});
 
-    var out = try runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv, null);
+    const counted = catches and enterCatch(it);
+    const first = runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv, null);
+    leaveCatch(it, counted);
+    var out = try first;
     h = 2;
     while (h < end) : (h += 4) {
         const kind = try it.str(argv[h]);

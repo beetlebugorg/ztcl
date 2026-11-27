@@ -6,7 +6,7 @@
 row	bytes	note
 table	14000	module table and package require, and the code that more than one module uses; measured 7,408 before ztcl::tls and 12,768 with it
 hello	12000	test modules ztcl::hello and ztcl::hellonet; while hello is the only module, its row also has the module table
-probe	100000	ztcl::probe: the engine, the command, and the tape of ztcl debug, measured 102,080 (native, with the tape; 82,240 before it); a build without the module has no probe code, and ztcl.wasm leaves it out
+probe	120000	ztcl::probe: the engine, the command, the tape of ztcl debug, and the DAP server with threads, measured 119,776 (native; 102,080 before the threads of the debugger, 82,240 before the tape); a build without the module has no probe code, and ztcl.wasm leaves it out
 json	115000	ztcl::json and the tcllib json names; task 05 measured 104 480 (two forms of the walk, the writer, and the tcllib names)
 formats	90000	csv, toml, msgpack, cbor, url, encode
 compress	270000	flate and zstd
