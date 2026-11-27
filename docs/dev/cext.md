@@ -16,7 +16,7 @@ These are the slots in groups, one group for each branch of task 04:
 | Commands | 3 | `Tcl_CreateObjCommand`, `Tcl_NRCreateCommand`, `Tcl_DeleteCommand` |
 | Scripts | 6 | `Tcl_EvalObjEx`, `Tcl_Eval`, `Tcl_GlobalEval`, `Tcl_VarEval`, `Tcl_NREvalObj`, `Tcl_NRAddCallback` |
 | Variables | 2 | `Tcl_GetVar2Ex`, `Tcl_ObjSetVar2` |
-| Interps and commands | 0 | the area interps and commands except the slots of `app.zig` and the three execution traces (shared, `src/cext/interps.zig`). A token of a command of ztcl has the full name of `namespace which`. A command trace is a hidden command `::tcl::cext::ctraceN` and a `trace add command` with it. A math function is the command `tcl::mathfunc::NAME`. The interp tree goes through the host call `interp_op` (`zside.interpOp`): a child, the parent, the path, safe, aliases, hidden commands, the recursion limit, and the active state. `Tcl_CreateSlave` evaluates `interp create`. A limit is state of the package: `Tcl_LimitCheck` runs the handlers and reads `info cmdcount`, and a script of ztcl does not check a limit. When a child interp with a handle goes, the import `ztcl_cext.interp_gone` of ztcl.wasm frees the interp of each package, so its `Tcl_CallWhenDeleted` procs run. The WebAssembly library has no capability `interp`, so `tools/cext/wasm-check.sh` skips cxchild. | as in the WebAssembly path |
+| Interps and commands | 0 | the area interps and commands except the slots of `app.zig` (shared, `src/cext/interps.zig`). A token of a command of ztcl has the full name of `namespace which`. A command trace is a hidden command `::tcl::cext::ctraceN` and a `trace add command` with it. An execution trace (`Tcl_CreateObjTrace`, `Tcl_CreateTrace`) is a hidden command `::tcl::cext::etraceN` and a hook of the interp of ztcl (host call `interp_op`, `trace.addExecHook`). While a hook exists, the command sites keep no cache, so each call runs the hook first. With no hook, the calls have no added cost. A trace with no `TCL_ALLOW_INLINE_COMPILATION` turns the inline forms of the bytecode off. The level of a command is the nest of its scripts, and a command substitution adds no level, as in the bytecode of Tcl. The command text ends at the last word, and Tcl keeps the white space before a close brace. A native ensemble such as `string length` is one traced call, where Tcl traces the call of the ensemble and of its subcommand. A math function is the command `tcl::mathfunc::NAME`. The interp tree goes through the host call `interp_op` (`zside.interpOp`): a child, the parent, the path, safe, aliases, hidden commands, the recursion limit, and the active state. `Tcl_CreateSlave` evaluates `interp create`. A limit is state of the package: `Tcl_LimitCheck` runs the handlers and reads `info cmdcount`, and a script of ztcl does not check a limit. When a child interp with a handle goes, the import `ztcl_cext.interp_gone` of ztcl.wasm frees the interp of each package, so its `Tcl_CallWhenDeleted` procs run. The WebAssembly library has no capability `interp`, so `tools/cext/wasm-check.sh` skips cxchild. | as in the WebAssembly path |
 | Namespaces | 0 | the area namespaces (shared, `src/cext/namespaces.zig`). A `Tcl_Namespace` is a record with the layout of tcl.h, one for each full name, and each slot evaluates `namespace` of ztcl in it. A lookup runs `namespace exists` first, so it makes no namespace. The delete proc runs at `Tcl_DeleteNamespace` and when the interp goes, and a delete by a script does not run it. An ensemble is a command token, and its slots use `namespace ensemble configure`. | as in the WebAssembly path |
 | Dynamic strings | 4 | `Tcl_DStringInit`, `Tcl_DStringAppend`, `Tcl_DStringAppendElement`, `Tcl_DStringFree` |
 | Packages and helpers | 5 | `Tcl_PkgProvideEx`, `Tcl_PkgRequireEx`, `Tcl_GetVersion`, `Tcl_GetIndexFromObjStruct`, `Tcl_TranslateFileName` |
@@ -151,7 +151,7 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | strings and encodings | 86 | 86 | 86 | none |
 | lists and dicts | 28 | 28 | 28 | none |
 | errors | 25 | 25 | 25 | none |
-| interps and commands | 64 | 55 | 48 | 9 slots |
+| interps and commands | 64 | 58 | 51 | `Tcl_CreateCommand`, `Tcl_GetCommandInfo`, `Tcl_SetCommandInfo`, `Tcl_GetCommandInfoFromToken`, `Tcl_SetCommandInfoFromToken`, `Tcl_SetExitProc` |
 | hash tables | 13 | 13 | 13 | none |
 | variables | 21 | 21 | 21 | none |
 | events | 35 | 0 | 0 | 35 slots |
@@ -159,7 +159,7 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | threads | 15 | 0 | 0 | 15 slots |
 | filesystem | 63 | 1 | 1 | 62 slots |
 | zlib | 13 | 0 | 0 | 13 slots |
-| **public, all** | **630** | **486** (77%) | **472** (74%) | |
+| **public, all** | **630** | **489** (77%) | **475** (75%) | |
 | **internal** | **173** | **15** | **13** | |
 | **internal platform** | **23** | **0** | **0** | |
 | **platform** | **0** | **0** | **0** | |

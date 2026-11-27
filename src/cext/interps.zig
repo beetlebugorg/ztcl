@@ -9,7 +9,10 @@
 //! name is the full name from `namespace which`, and the token keeps that
 //! name after a rename. A command trace is a hidden command of the
 //! package and a `trace add command` of ztcl, as the variable traces of
-//! `vars.zig`. A math function is the command `tcl::mathfunc::NAME`
+//! `vars.zig`. An execution trace is a hidden command of the package
+//! and a hook of the interp of ztcl (`trace.addExecHook`). A trace with
+//! no `TCL_ALLOW_INLINE_COMPILATION` turns the inline forms of the
+//! bytecode off, so it also sees `set` and `incr`. A math function is the command `tcl::mathfunc::NAME`
 //! that converts its arguments to `Tcl_Value`s.
 //!
 //! The interp tree goes through `host.interp_op` (`zside.interpOp`): an
@@ -134,6 +137,13 @@ pub fn Tcl_FindCommand(ip: *Interp, name: [*:0]const u8, ns: ?*const Namespace, 
         }
         return null;
     }
+    return tokenOf(ip, full);
+}
+
+/// The token of the command with the full name `full`.
+fn tokenOf(ip: *Interp, full: []const u8) *Command {
+    var buf: std.ArrayList(u8) = .empty;
+    defer buf.deinit(gpa);
     for (host.commands.items) |c| {
         if (c.live and c.interp == ip and std.mem.eql(u8, fullOf(&buf, c.name), full)) return c;
     }
@@ -501,6 +511,139 @@ pub fn Tcl_ProcObjCmd(_: ?*anyopaque, ip: *Interp, objc: c_int, objv: [*]const *
 /// Slot 690 of the public table. Tcl 8.6 has no function in it.
 pub fn TclUnusedStubEntry() callconv(.c) void {}
 
+// ---- Execution traces ----
+
+pub const CmdObjTraceProc = *const fn (?*anyopaque, *Interp, c_int, [*:0]const u8, *Command, c_int, [*]const *Obj) callconv(.c) c_int;
+pub const CmdTraceProc = *const fn (?*anyopaque, *Interp, c_int, [*:0]u8, CmdProc, ?*anyopaque, c_int, [*]const [*:0]const u8) callconv(.c) void;
+pub const CmdProc = *const fn (?*anyopaque, *Interp, c_int, [*]const [*:0]const u8) callconv(.c) c_int;
+
+const ALLOW_INLINE_COMPILATION: c_int = 0x20000;
+
+/// A trace of `Tcl_CreateObjTrace` or `Tcl_CreateTrace`. The token of
+/// the trace is the address of the record.
+const ExecTrace = struct {
+    ip: *Interp,
+    obj_proc: ?CmdObjTraceProc,
+    str_proc: ?CmdTraceProc,
+    cd: ?*anyopaque,
+    delete: ?host.DeleteProc,
+    cmd: [:0]u8,
+    live: bool = true,
+    busy: bool = false,
+};
+
+threadlocal var etraces: std.ArrayList(*ExecTrace) = .empty;
+
+/// Frees the records of the execution traces that a delete ended.
+fn sweepExec() void {
+    var i = etraces.items.len;
+    while (i > 0) {
+        i -= 1;
+        const t = etraces.items[i];
+        if (t.live or t.busy) continue;
+        _ = host.Tcl_DeleteCommand(t.ip, t.cmd[2..].ptr);
+        _ = etraces.orderedRemove(i);
+        gpa.free(t.cmd);
+        gpa.destroy(t);
+    }
+}
+
+/// The string proc that `Tcl_CreateTrace` gives for each command: it
+/// runs the words as one command.
+fn invokeWords(_: ?*anyopaque, ip: *Interp, argc: c_int, argv: [*]const [*:0]const u8) callconv(.c) c_int {
+    var list: std.ArrayList(*Obj) = .empty;
+    for (argv[0..@intCast(argc)]) |w| word(&list, std.mem.span(w));
+    const r = evalWords(ip, &list, true) orelse return ERROR;
+    obj.Tcl_SetObjResult(ip, r);
+    obj.decr(r);
+    return OK;
+}
+
+/// The hidden command of a trace: `cmd level text name words`, from the
+/// hook of ztcl (`trace.addExecHook`).
+fn execTraceCmd(cd: ?*anyopaque, ip: *Interp, objc: c_int, objv: [*]const *Obj) callconv(.c) c_int {
+    const t: *ExecTrace = @ptrCast(@alignCast(cd.?));
+    if (!t.live or objc < 5) return OK;
+    var level: c_int = 0;
+    if (obj.Tcl_GetIntFromObj(null, objv[1], &level) != OK) return OK;
+    var n: c_int = 0;
+    var words: [*]*Obj = undefined;
+    if (obj.Tcl_ListObjGetElements(null, objv[4], &n, &words) != OK) return OK;
+    const text = gpa.dupeSentinel(u8, obj.text(objv[2]), 0) catch oom();
+    defer gpa.free(text);
+    const token = tokenOf(ip, obj.text(objv[3]));
+    t.busy = true;
+    defer t.busy = false;
+    if (t.obj_proc) |f| return f(t.cd, ip, level, text.ptr, token, n, words);
+    const argv = gpa.alloc([*:0]const u8, @intCast(n)) catch oom();
+    defer gpa.free(argv);
+    for (argv, words[0..@intCast(n)]) |*a, w| a.* = obj.Tcl_GetString(w);
+    t.str_proc.?(t.cd, ip, level, text.ptr, &invokeWords, token.cd, n, argv.ptr);
+    return OK;
+}
+
+fn newExecTrace(ip: *Interp, level: c_int, strict: bool, t: ExecTrace) ?*ExecTrace {
+    sweepExec();
+    const rec = gpa.create(ExecTrace) catch oom();
+    rec.* = t;
+    rec.cmd = std.fmt.allocPrintSentinel(gpa, "::tcl::cext::etrace{d}", .{next_trace}, 0) catch oom();
+    next_trace += 1;
+    // The operation makes the namespace of the hidden command first.
+    var list: std.ArrayList(*Obj) = .empty;
+    word(&list, "add");
+    word(&list, rec.cmd);
+    push(&list, obj.Tcl_NewWideIntObj(level));
+    push(&list, obj.Tcl_NewWideIntObj(@intFromBool(strict)));
+    if (op(ip, .exec_hook, &list) != OK) {
+        gpa.free(rec.cmd);
+        gpa.destroy(rec);
+        return null;
+    }
+    _ = host.createCommand(ip, rec.cmd[2..].ptr, &execTraceCmd, null, rec, null);
+    etraces.append(gpa, rec) catch oom();
+    return rec;
+}
+
+pub fn Tcl_CreateObjTrace(ip: *Interp, level: c_int, flags: c_int, proc: CmdObjTraceProc, cd: ?*anyopaque, delete: ?host.DeleteProc) callconv(.c) ?*anyopaque {
+    const strict = flags & ALLOW_INLINE_COMPILATION == 0;
+    return newExecTrace(ip, level, strict, .{ .ip = ip, .obj_proc = proc, .str_proc = null, .cd = cd, .delete = delete, .cmd = undefined });
+}
+
+pub fn Tcl_CreateTrace(ip: *Interp, level: c_int, proc: CmdTraceProc, cd: ?*anyopaque) callconv(.c) ?*anyopaque {
+    return newExecTrace(ip, level, true, .{ .ip = ip, .obj_proc = null, .str_proc = proc, .cd = cd, .delete = null, .cmd = undefined });
+}
+
+pub fn Tcl_DeleteTrace(ip: *Interp, token: ?*anyopaque) callconv(.c) void {
+    for (etraces.items) |t| {
+        if (@as(?*anyopaque, t) != token or !t.live or t.ip != ip) continue;
+        var list: std.ArrayList(*Obj) = .empty;
+        word(&list, "remove");
+        word(&list, t.cmd);
+        _ = op(ip, .exec_hook, &list);
+        t.live = false;
+        if (t.delete) |d| d(t.cd);
+        break;
+    }
+    sweepExec();
+}
+
+/// Ends the execution traces of `ip` at the free of the interp. The
+/// delete procs run, as in Tcl.
+fn dropExecTraces(ip: *Interp) void {
+    var i: usize = 0;
+    while (i < etraces.items.len) {
+        const t = etraces.items[i];
+        if (t.ip != ip) {
+            i += 1;
+            continue;
+        }
+        _ = etraces.orderedRemove(i);
+        if (t.live) if (t.delete) |d| d(t.cd);
+        gpa.free(t.cmd);
+        gpa.destroy(t);
+    }
+}
+
 // ---- The interp tree ----
 
 /// Runs operation `op` on `ip` with the words of `list`, and frees them.
@@ -752,6 +895,7 @@ pub fn dropInterp(ip: *Interp) void {
         _ = when_deleted.orderedRemove(i);
         w.proc(w.cd, ip);
     }
+    dropExecTraces(ip);
     @import("vars.zig").dropInterp(ip);
     @import("namespaces.zig").dropInterp(ip);
     if (findLimit(ip)) |li| {

@@ -98,6 +98,9 @@ pub const InterpOp = enum(u32) {
     recursion = 10,
     /// 1 while a script of the interp runs, else 0.
     active = 11,
+    /// {add name level strict} or {remove name}: an execution hook of
+    /// the interp that runs command `name` (`trace.addExecHook`).
+    exec_hook = 12,
     _,
 };
 

@@ -873,3 +873,103 @@ pub fn cmdTrace(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     return Value.empty;
 }
+
+// ---- The execution hooks of the interpreter ----
+//
+// A hook runs before each command, as `Tcl_CreateObjTrace` of a C
+// package asks (`src/cext/interps.zig`). With no hook, the code of this
+// part does not run: `Interp.resolve` checks the count only on a miss
+// of the cache of a site, and it keeps no cache while a hook exists.
+// Each call then goes through `hookedCall`. A strict hook also counts in
+// `Interp.exec_strict`, which turns the inline forms off, so the
+// inlined core commands run as calls too.
+
+pub const ExecHook = struct {
+    /// The command that runs as `cmd level text name words`.
+    cmd: []const u8,
+    /// The hook runs only for a command at this level or lower.
+    level: u32,
+    strict: bool,
+    busy: bool = false,
+    dead: bool = false,
+};
+
+/// Adds a hook that runs command `cmd`. A strict hook also runs for
+/// the commands that the bytecode inlines.
+pub fn addExecHook(it: *Interp, cmd: []const u8, level: u32, strict: bool) Error!void {
+    const h = try it.alloc().create(ExecHook);
+    h.* = .{ .cmd = try it.alloc().dupe(u8, cmd), .level = level, .strict = strict };
+    try it.exec_hooks.append(it.alloc(), h);
+    if (strict) it.exec_strict += 1;
+    it.epoch += 1;
+}
+
+/// Removes the hook that runs `cmd`. Returns false when no hook runs it.
+pub fn removeExecHook(it: *Interp, cmd: []const u8) bool {
+    for (it.exec_hooks.items, 0..) |h, i| {
+        if (!eql(h.cmd, cmd)) continue;
+        h.dead = true;
+        if (h.strict) it.exec_strict -= 1;
+        _ = it.exec_hooks.orderedRemove(i);
+        it.epoch += 1;
+        return true;
+    }
+    return false;
+}
+
+/// The function of `Interp.hooked`, the command that `resolve` gives
+/// while a hook exists. It finds the command of the name again.
+pub fn hookedCall(it: *Interp, argv: []const Value, c: ?*Cmd) Error!Value {
+    const command = it.findCommand(try it.str(argv[0])) orelse &it.missing;
+    return callHooked(it, command, argv, c);
+}
+
+/// Runs the hooks for the call of `command` with `argv`, then the call.
+/// An error or another code of a hook stops the call.
+pub fn callHooked(it: *Interp, command: *interp.Command, argv: []const Value, c: ?*Cmd) Error!Value {
+    if (command != &it.missing and it.exec_quiet == 0) try runExecHooks(it, command, argv, c);
+    return it.call(command, argv, c);
+}
+
+/// Runs a command substitution while a hook exists. Tcl compiles a
+/// substitution into the bytecode of its script, so the substitution
+/// adds no level. Here a substitution is a script with one more nest,
+/// so `execLevel` subtracts the count of these scripts from the nest.
+/// Tcl adds a level for a substitution only at the top level of `source`
+/// and of `Tcl_EvalEx`, where it does not compile the script.
+pub fn evalSubst(it: *Interp, s: *interp.Script) Error!Value {
+    it.exec_subst += 1;
+    defer it.exec_subst -= 1;
+    return it.evalScript(s);
+}
+
+/// The level of a command for a hook, as in Tcl: 1 for a command of the
+/// top level, one more for each script inside it.
+fn execLevel(it: *Interp) u32 {
+    return it.nest -| it.exec_subst;
+}
+
+fn runExecHooks(it: *Interp, command: *interp.Command, argv: []const Value, c: ?*Cmd) Error!void {
+    const level = execLevel(it);
+    const a = it.alloc();
+    const snapshot = try a.dupe(*ExecHook, it.exec_hooks.items);
+    var words: ?[5]Value = null;
+    for (snapshot) |h| {
+        if (h.dead or h.busy or level > h.level) continue;
+        const hook = it.findCommand(h.cmd) orelse continue;
+        if (words == null) {
+            const text: Value = if (c != null and c.?.text.len > 0) .{ .str = c.?.text } else try value.newList(a, argv);
+            words = .{
+                .{ .str = h.cmd },
+                .{ .int = level },
+                text,
+                .{ .str = try std.fmt.allocPrint(a, "::{s}", .{std.mem.trimStart(u8, command.name, ":")}) },
+                try value.newList(a, argv),
+            };
+        }
+        words.?[0] = .{ .str = h.cmd };
+        h.busy = true;
+        defer h.busy = false;
+        _ = try it.call(hook, &words.?, null);
+    }
+}

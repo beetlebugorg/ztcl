@@ -333,6 +333,16 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
         try c.text(@constCast(gop.key_ptr));
     }
 
+    // The execution hooks stay: the package that made a hook still has it.
+    var hooks: @TypeOf(it.exec_hooks) = .empty;
+    try hooks.ensureTotalCapacity(a, it.exec_hooks.items.len);
+    for (it.exec_hooks.items) |h| {
+        const n = try a.create(@import("trace.zig").ExecHook);
+        n.* = h.*;
+        try c.text(&n.cmd);
+        hooks.appendAssumeCapacity(n);
+    }
+
     var globals: @TypeOf(it.global.vars) = .empty;
     if (opts.vars == .keep) {
         try globals.ensureTotalCapacity(a, it.global.vars.items.len);
@@ -371,6 +381,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.last_during = null;
     it.last_info = Value.empty;
     it.ns_unknown = ns_unknown;
+    it.exec_hooks = hooks;
     it.searches = .empty;
     it.var_traces = c.elem_links;
     if (opts.vars != .keep) {

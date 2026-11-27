@@ -205,7 +205,7 @@ const Access = enum(u8) { llength, lindex, string_length, string_index, dict_get
 /// of commands, except at the first check, which counts the keys.
 fn recheck(it: *Interp) bool {
     if (it.unsafe_epoch == it.epoch) return false;
-    if (it.var_traces != 0 or it.commands.shadowCount() != 0) {
+    if (it.var_traces != 0 or it.exec_strict != 0 or it.commands.shadowCount() != 0) {
         it.unsafe_epoch = it.epoch;
         return false;
     }
