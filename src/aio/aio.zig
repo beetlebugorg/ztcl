@@ -19,30 +19,38 @@
 //!   (`epoll.zig`). The epoll backend allows one read side and one
 //!   write side operation at a time on a descriptor.
 //! - `auto`: `uring`, or `epoll` when the kernel refuses io_uring (an
-//!   old kernel, a seccomp filter, or `kernel.io_uring_disabled`).
+//!   old kernel, a seccomp filter, or `kernel.io_uring_disabled`). On
+//!   macOS: `kqueue`.
+//! - `kqueue`: readiness through kqueue, then the system call
+//!   (`kqueue.zig`, macOS). The same rule of one operation on each side.
 //!
 //! The loop has no interpreter, so the compute limit and the memory
 //! limit of a script do not apply. Each buffer of the loop has a fixed
 //! size: the ring has `entries` slots, and epoll reads `max_events`
 //! events in each wait.
 //!
-//! This version is for Linux. kqueue (task 09) and IOCP (task 10) come
-//! with the same API.
+//! Linux and macOS. IOCP (task 10) comes with the same API.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const builtin = @import("builtin");
 const linux = std.os.linux;
+pub const sys = @import("sys.zig");
 pub const uring = @import("uring.zig");
 pub const epoll = @import("epoll.zig");
+pub const kqueue = @import("kqueue.zig");
 
-pub const fd_t = linux.fd_t;
+pub const fd_t = sys.fd_t;
+
+/// True on the systems with a backend.
+pub const supported = builtin.os.tag == .linux or builtin.os.tag.isDarwin();
 
 pub const Op = union(enum) {
     /// Gives a new connection of the listening socket `fd`.
     accept: struct { fd: fd_t },
     /// Connects `fd` to `addr`. The caller keeps `addr` alive.
-    connect: struct { fd: fd_t, addr: *const linux.sockaddr, len: linux.socklen_t },
+    connect: struct { fd: fd_t, addr: *const sys.sockaddr, len: sys.socklen_t },
     /// Reads up to `buf.len` bytes. 0 is the end of the stream.
     read: struct { fd: fd_t, buf: []u8 },
     /// Writes a part of `buf`, at least one byte.
@@ -63,10 +71,10 @@ pub const Completion = struct {
     /// The links and the fields of the backends.
     next: ?*Completion = null,
     deadline: u64 = 0,
-    ts: linux.kernel_timespec = .{ .sec = 0, .nsec = 0 },
+    ts: if (sys.is_linux) linux.kernel_timespec else void = if (sys.is_linux) .{ .sec = 0, .nsec = 0 } else {},
 };
 
-pub const Backend = enum { auto, uring, epoll };
+pub const Backend = enum { auto, uring, epoll, kqueue };
 
 pub const Options = struct {
     backend: Backend = .auto,
@@ -75,14 +83,19 @@ pub const Options = struct {
 };
 
 pub const Loop = struct {
-    impl: union(enum) { uring: uring.Ring, epoll: epoll.Poll },
+    impl: if (sys.is_linux) union(enum) { uring: uring.Ring, epoll: epoll.Poll } else union(enum) { kqueue: kqueue.Queue },
     /// The count of submitted operations whose callback has not run.
     pending: usize = 0,
 
     pub fn init(gpa: std.mem.Allocator, opts: Options) !Loop {
+        if (!sys.is_linux) return switch (opts.backend) {
+            .auto, .kqueue => .{ .impl = .{ .kqueue = try kqueue.Queue.init(gpa) } },
+            .uring, .epoll => error.Unsupported,
+        };
         switch (opts.backend) {
             .uring => return .{ .impl = .{ .uring = try uring.Ring.init(opts.entries) } },
             .epoll => return .{ .impl = .{ .epoll = try epoll.Poll.init(gpa) } },
+            .kqueue => return error.Unsupported,
             .auto => {
                 if (uring.Ring.init(opts.entries)) |r| return .{ .impl = .{ .uring = r } } else |_| {}
                 return .{ .impl = .{ .epoll = try epoll.Poll.init(gpa) } };
@@ -98,8 +111,7 @@ pub const Loop = struct {
 
     pub fn backend(l: *const Loop) Backend {
         return switch (l.impl) {
-            .uring => .uring,
-            .epoll => .epoll,
+            inline else => |_, tag| @field(Backend, @tagName(tag)),
         };
     }
 
@@ -128,11 +140,9 @@ pub const Loop = struct {
 
     /// Ends a wait of `run` from another thread.
     pub fn wake(l: *Loop) void {
-        const fd = switch (l.impl) {
-            inline else => |*b| b.wake_fd,
-        };
-        const one: u64 = 1;
-        _ = linux.write(fd, std.mem.asBytes(&one), 8);
+        switch (l.impl) {
+            inline else => |*b| b.wake(),
+        }
     }
 
     /// Waits for at least one completion, a `wake`, or the end of
@@ -159,9 +169,7 @@ pub const Loop = struct {
 };
 
 pub fn now() u64 {
-    var ts: linux.timespec = undefined;
-    _ = linux.clock_gettime(.MONOTONIC, &ts);
-    return @as(u64, @intCast(ts.sec)) * std.time.ns_per_s + @as(u64, @intCast(ts.nsec));
+    return sys.now();
 }
 
 /// The negative errno of a raw system call result, or the value.

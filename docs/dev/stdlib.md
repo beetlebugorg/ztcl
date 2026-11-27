@@ -280,6 +280,16 @@ The stress gate on 2026-11-27 (x86-64 Linux, a shared machine, `--conns 10000 --
 | uring | 9,560,457 | 3,564 KiB | 3,572 KiB | 3,572 KiB | the 2 of the loop |
 | epoll | 7,740,000 | 3,640 KiB | 4,104 KiB | 4,104 KiB | the 2 of the loop |
 
+### The aio loop on macOS (task 09)
+
+`std.Io.Kqueue` and `std.Io.Dispatch` of Zig 0.17.0 are implementations of the `std.Io` interface on fibers (`Kqueue.zig` and `Dispatch.zig` use `std.Io.fiber`), as `std.Io.Uring` is. The reasons of task 06 hold for them too: `aio` is a completion interface with no `std.Io` and no fibers. So `src/aio/kqueue.zig` implements the loop on the `kqueue` and `kevent` calls of libc, with the same API and the same tests. ztcl ran no probe of the two `std.Io` files on macOS.
+
+- `kqueue.zig`: the model of `epoll.zig`. The system call runs at once. On EAGAIN, the completion waits on its side, and a one-shot EVFILT_READ or EVFILT_WRITE filter goes into a list of changes. The next `kevent` of `run` gives the list and waits in one system call. A change that fails comes back with EV_ERROR and ends the completion with its errno. `wake` triggers an EVFILT_USER event.
+- `sys.zig`: the system calls of `aio` and its tests, raw on Linux and through libc on macOS. macOS has no `accept4` and no `SOCK_NONBLOCK`, so `sys.accept` and `sys.tcpSocket` set O_NONBLOCK and FD_CLOEXEC with `fcntl`, and set SO_NOSIGPIPE.
+- `aio-stress` on macOS raises the soft limit of descriptors to 10,240, counts the open descriptors with `fcntl`, and gives the peak RSS of `getrusage` in place of the current RSS.
+
+`zig build aio-test` and `zig build aio-stress` build for macOS. The checks on 2026-11-27: the tests and the stress run pass on x86-64 Linux, and the tests and `aio-stress` compile for aarch64-macos and x86_64-macos. They have not run on a Mac yet (see questions).
+
 ### The event loop of an interpreter
 
 `src/event.zig` keeps its Tcl behavior: `after`, `vwait`, `update`, `fileevent`, the order of timers, and the idle scripts. Its wait changes from `poll` to the `aio` loop. The test files `event.test`, `socket.test`, `timer.test`, and `ioCmd.test` must keep their pass counts.
