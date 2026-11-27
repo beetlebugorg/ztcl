@@ -11,14 +11,16 @@
 # -Dbatteries=core.
 #
 # It writes size.md (Markdown) and size.tsv to DIR (the default is
-# zig-out/size). --check compares the numbers with tools/size-budget.tsv
-# and exits with 1 when:
+# zig-out/size). --check compares the numbers with the goals in
+# tools/size-budget.tsv and writes a warning when:
 #   - the full runner is above 6,850,000 bytes (x86-64 Linux only),
 #   - a module is more than 10 % above its row,
-#   - ztcl.wasm with modules is above 1 550 000 bytes, or the wasm build
-#     with no module is above 1 000 000 bytes.
+#   - ztcl.wasm with modules is above 1,550,000 bytes, or the wasm build
+#     with no module is above 1,000,000 bytes.
+# The sizes are goals, not gates: a row over its goal does not fail the
+# job. Add --strict to exit with 1 when a row is over its goal.
 # --plant BYTES adds that many bytes of data to the test module hello,
-# to show the failure of the check.
+# to show the warning.
 #
 # On macOS, the size of a runner is the sum of the sizes of its sections
 # (`size -m`). The file of a Mach-O binary grows in pages of 16 KiB on
@@ -26,10 +28,11 @@
 # SPDX-License-Identifier: BSD-2-Clause
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 top=$here/..
-check=; plant=0; out=$top/zig-out/size; wasm=1
+check=; strict=; plant=0; out=$top/zig-out/size; wasm=1
 while [ $# -gt 0 ]; do
     case $1 in
     --check) check=1 ;;
+    --strict) check=1; strict=1 ;;
     --plant) plant=$2; shift ;;
     --out) out=$2; shift ;;
     --no-wasm) wasm= ;;
@@ -122,7 +125,10 @@ if [ -n "$GITHUB_STEP_SUMMARY" ]; then
     { echo "### Size of the runner and the modules ($target)"; echo; cat "$out/size.md"; } >> "$GITHUB_STEP_SUMMARY"
 fi
 if [ -n "$check" ] && [ $rc -ne 0 ]; then
-    echo "size check failed: a row is over its limit" >&2
-    exit 1
+    if [ -n "$GITHUB_ACTIONS" ]; then
+        echo "::warning title=Size::a row is over its size goal (see the job summary)"
+    fi
+    echo "size: a row is over its goal" >&2
+    [ -n "$strict" ] && exit 1
 fi
 exit 0

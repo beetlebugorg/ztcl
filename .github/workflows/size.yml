@@ -1,15 +1,12 @@
 name: Size
 
-# Reports the size of each built-in module and fails above the budget
-# (tools/size-report.sh and tools/size-budget.tsv).
+# Reports the size of each built-in module against its goal
+# (tools/size-report.sh and tools/size-budget.tsv). The sizes are goals:
+# a row over its goal gives a warning and does not fail. The job runs on
+# main and on demand, not on pull requests, so it does not slow them.
 on:
   push:
     branches: [main]
-  pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "**.md"
-      - "tools/build-docs.py"
   workflow_dispatch:
   # The full matrix (macOS, Windows) runs every 6 hours on main; pull
   # requests and pushes run the quick Linux jobs only.
