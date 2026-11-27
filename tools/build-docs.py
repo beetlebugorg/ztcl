@@ -105,7 +105,7 @@ PAGES = [
     ("docs/webassembly.md", "webassembly/", "Embed", "WebAssembly"),
     ("docs/dom.md", "dom/", "Embed", "Tcl in a web page"),
     ("docs/performance.md", "performance/", "Project", "Performance"),
-    ("docs/tls.md", "tls/", "Project", "TLS 1.3 (coming)"),
+    ("docs/tls.md", "tls/", "Project", "TLS 1.3"),
     ("docs/faq.md", "faq/", "Project", "FAQ"),
     ("CHANGELOG.md", "changelog/", "Project", "Changelog"),
     ("CONTRIBUTING.md", "contributing/", "Project", "Contributing"),

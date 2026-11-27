@@ -1,6 +1,6 @@
 # TLS 1.3
 
-ztcl has its own TLS 1.3 code, for the client and for the server, on the primitives of `std.crypto`. This page gives the threat model and the rules of the work. The code is in `src/tls/`. No command uses it yet, and TLS stays behind a build flag until an outside review is done ([the plan](dev/stdlib.md#tls-13), decision 8).
+ztcl has its own TLS 1.3 code, for the client and for the server, on the primitives of `std.crypto`. This page gives the threat model and the rules of the work. The code is in `src/tls/`. The client is the command [`ztcl::tls socket`](modules/tls.md) of the native builds. No command uses the server yet. The code has had no outside review yet ([the plan](dev/stdlib.md#tls-13), decision 8).
 
 ## The threat model
 
@@ -24,9 +24,11 @@ ztcl has its own TLS 1.3 code, for the client and for the server, on the primiti
 | Part | State |
 |---|---|
 | The primitives, the key schedule, and the record layer | In `src/tls/`, with the checks of this page |
-| X.509: the parse, the chain checks, PEM keys, and the root stores | Coming: pull request [#391](https://github.com/beetlebugorg/ztcl/pull/391) |
-| The client handshake, checked with RFC 8448 and `openssl s_server` | Coming: pull request [#395](https://github.com/beetlebugorg/ztcl/pull/395) |
-| A TLS socket command, https in the HTTP client, and the server | Coming: issue [#27](https://github.com/beetlebugorg/ztcl/issues/27) |
+| X.509: the parse, the chain checks, PEM keys, and the root stores | In `src/tls/` (`x509.zig`, `chain.zig`, `pem.zig`, `roots.zig`) |
+| The client handshake, checked with RFC 8448 and `openssl s_server` | In `src/tls/client.zig`, pull request [#395](https://github.com/beetlebugorg/ztcl/pull/395) |
+| The server handshake, checked with RFC 8448 and `openssl s_client` | In `src/tls/server.zig`, pull request [#426](https://github.com/beetlebugorg/ztcl/pull/426) |
+| The client channel `ztcl::tls socket` | In the native builds, pull request [#424](https://github.com/beetlebugorg/ztcl/pull/424). The wasm builds have no TCP socket, so they have no `ztcl::tls`. |
+| https in the HTTP client, and a TLS server command | Coming: issue [#27](https://github.com/beetlebugorg/ztcl/issues/27) |
 
 ## The parts that exist
 

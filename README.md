@@ -11,7 +11,7 @@ A fast, sandboxed Tcl interpreter in Zig. ztcl runs Tcl 8.6 scripts with exact c
 - **One binary for your program.** `ztcl build` puts the runtime and your scripts in one static binary for Linux, macOS, or Windows.
 - **Made for code from an agent.** The [Learn course](docs/learn/01-read-a-command.md) teaches Tcl to review agent code, and the [command reference](docs/reference/README.md) and its `api.json` give an agent each synopsis, error, and capability.
 
-Coming, each in an open issue: more isolation levels for threads ([#209](https://github.com/beetlebugorg/ztcl/issues/209)), ztcl as a host of wasm modules ([#202](https://github.com/beetlebugorg/ztcl/issues/202)), and sandboxed agents ([#216](https://github.com/beetlebugorg/ztcl/issues/216)).
+Coming, each in an open issue: the isolation levels `wasm` and `vm-confidential` for threads ([#209](https://github.com/beetlebugorg/ztcl/issues/209)), ztcl as a host of wasm modules ([#202](https://github.com/beetlebugorg/ztcl/issues/202)), and https and an HTTP/2 server ([#27](https://github.com/beetlebugorg/ztcl/issues/27)).
 
 ## Install
 
@@ -44,6 +44,8 @@ fib.tcl:2: compute limit reached
 
 - [Quick start](docs/quickstart.md) and [the language](docs/language.md)
 - [Limits and capabilities](docs/limits.md), [threads](docs/threads.md), and [the JIT](docs/jit.md)
+- [Isolated threads](docs/isolation.md), [Linux guests](docs/vm.md) with `ztcl::vm`, and [sandboxed agents](docs/agents.md)
+- [Debugging](docs/debugging.md), [Tcl 9.1](docs/tcl91.md), and [TLS 1.3](docs/tls.md)
 - [Build a program](docs/build.md): one native binary for Linux, macOS, or Windows, from any host, with `ztcl build`
 - [Strip a program](docs/strip.md): a runtime with only the commands, capabilities, and modules that the scripts use, with `ztcl build --strip`
 - [Embed in Zig](docs/embedding.md) and [WebAssembly](docs/webassembly.md)
@@ -53,7 +55,7 @@ fib.tcl:2: compute limit reached
 
 ## Status
 
-ztcl is experimental, and its APIs can change in any release. It passes 37,413 of the 46,494 tests of the Tcl 8.6.16 suite, so it is not yet a drop-in replacement for Tcl. The code and the docs were written largely with AI coding agents, under human direction. Review the code before you depend on it. The [issues](https://github.com/beetlebugorg/ztcl/issues) and the [milestones](https://github.com/beetlebugorg/ztcl/milestones) have the roadmap.
+ztcl is experimental, and its APIs can change in any release. It passes 38,054 of the 47,133 tests of the Tcl 8.6.16 suite, so it is not yet a drop-in replacement for Tcl. The code and the docs were written largely with AI coding agents, under human direction. Review the code before you depend on it. The [issues](https://github.com/beetlebugorg/ztcl/issues) and the [milestones](https://github.com/beetlebugorg/ztcl/milestones) have the roadmap.
 
 ## Contact
 
