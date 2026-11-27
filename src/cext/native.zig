@@ -78,8 +78,15 @@ fn cmdC(it: *Interp, argv: []const Value, _: ?*interp_mod.Cmd) Error!Value {
 }
 
 fn cmdCreate(handle: u32, id: u32, name: [*]const u8, len: usize) callconv(.c) i32 {
-    zside.command(interpOf(handle), name[0..len], cmdC, @ptrFromInt(@as(usize, id) + 1)) catch return 1;
+    const c = zside.command(interpOf(handle), name[0..len], cmdC, @ptrFromInt(@as(usize, id) + 1)) catch return 1;
+    c.on_delete = &cmdGone;
     return 0;
+}
+
+/// Runs the delete proc of a C command that a script deleted.
+fn cmdGone(_: *Interp, c: *interp_mod.Command) void {
+    const id = @intFromPtr(c.ctx) - 1;
+    if (id < host.commands.items.len) host.forget(host.commands.items[id]);
 }
 
 fn cmdDelete(handle: u32, name: [*]const u8, len: usize) callconv(.c) i32 {

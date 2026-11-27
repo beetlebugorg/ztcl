@@ -387,6 +387,7 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.error_info = .empty;
     it.in_error = false;
     it.skip_info = false;
+    it.endEvaluation();
     it.ns = "";
     it.global.argv = &.{};
     it.free_vars = null;

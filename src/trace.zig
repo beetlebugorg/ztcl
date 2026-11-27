@@ -132,12 +132,16 @@ fn runHook(it: *Interp, cmd: Value, words: []const []const u8) Error!?[]const u8
     const saved_in = it.in_error;
     const saved_info = it.error_info;
     const saved_skip = it.skip_info;
+    const saved_logged = it.logged_len;
+    const saved_cmd = it.log_cmd;
     it.in_error = false;
     it.error_info = .empty;
     defer {
         it.in_error = saved_in;
         it.error_info = saved_info;
         it.skip_info = saved_skip;
+        it.logged_len = saved_logged;
+        it.log_cmd = saved_cmd;
     }
     const script = try it.compile(text.items);
     _ = it.evalScript(script) catch |e| switch (e) {

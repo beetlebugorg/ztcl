@@ -150,6 +150,9 @@ pub const Range = struct {
     brk: u32 = no_target,
     cont: u32 = no_target,
     depth: u32 = 0,
+    /// The loop of a body that Tcl does not compile outside a proc. An
+    /// error that leaves the body gets the context line of that loop.
+    ctx: enum(u8) { none, foreach, lmap } = .none,
 };
 
 pub const Code = struct {
@@ -1047,6 +1050,9 @@ const Compiler = struct {
                 try arms.append(c.a, .{ .pat = try it.str(items[k]), .body = s });
             }
         } else {
+            // Tcl compiles arms in separate words only after "--". Each
+            // other form adds the line of the arm to an error trace.
+            if (!dashes) return false;
             if ((w.len - i) % 2 != 0) return false;
             if (!allLiteral(cmd)) return false;
             var k = i;
@@ -1319,7 +1325,7 @@ const Compiler = struct {
         c.ins.items[top].b = end;
         for (loop.breaks.items) |j| c.ins.items[j].a = end;
         for (loop.conts.items) |j| c.ins.items[j].a = top;
-        try c.ranges.append(c.a, .{ .start = body_start, .end = body_end, .brk = end, .cont = top, .depth = state });
+        try c.ranges.append(c.a, .{ .start = body_start, .end = body_end, .brk = end, .cont = top, .depth = state, .ctx = if (!c.named) .none else if (collect) .lmap else .foreach });
         _ = try c.emit(.{ .op = .pop });
         _ = try c.emit(.{ .op = .pop });
         c.depth = base;
@@ -1725,7 +1731,13 @@ inline fn runLoop(it: *Interp, code: *Code, jf: ?*jit.Fn, af: ?u32, stack: [*]Va
                     if (err != error.TclError) return err;
                     for (code.ranges) |r| {
                         if (pc < r.start or pc >= r.end) continue;
-                        if (r.cmd) |cmd| _ = it.noteLine(cmd, err) catch {};
+                        if (r.cmd) |cmd| {
+                            _ = it.noteLine(cmd, err) catch {};
+                        } else switch (r.ctx) {
+                            .none => {},
+                            .foreach => it.addContext("\n    (\"foreach\" body line {d})", .{it.proc_line}),
+                            .lmap => it.addContext("\n    (\"lmap\" body line {d})", .{it.proc_line}),
+                        }
                     }
                     return err;
                 },

@@ -88,7 +88,7 @@ test "the parser: substitutions" {
         .{ "set x {[not run]}", "[not run]" },
         .{ "set nope", "!can't read \"nope\": no such variable" },
         .{ "set x $nope", "!can't read \"nope\": no such variable" },
-        .{ "set a::b 4; set c $a::b", "4" },
+        .{ "namespace eval a {}; set a::b 4; set c $a::b", "4" },
     });
 }
 
@@ -746,6 +746,8 @@ test "namespaces" {
         .{ "namespace eval e {namespace export a b; proc a {x} {return a$x}; proc b {} {return b}; proc hid {} {}; namespace ensemble create}; list [e a 1] [e b]", "a1 b" },
         .{ "namespace eval e {namespace export a b; proc a {} {}; proc b {} {}; namespace ensemble create}; e zz", "!unknown or ambiguous subcommand \"zz\": must be a, or b" },
         .{ "namespace eval e {proc impl {x} {return i$x}; namespace ensemble create -map {go impl}}; e go 5", "i5" },
+        .{ "namespace eval e {proc f {} {}; namespace ensemble create -map {x f y {f 1} z ::g}}; namespace ensemble configure e -map", "x ::e::f y {::e::f 1} z ::g" },
+        .{ "namespace eval a {proc f {} {}}; set r {}; trace add command a::f delete {apply {{o n op} {lappend ::r $o $op}}}; namespace delete a; set r", "::a::f delete" },
         .{ "namespace eval e {proc one {} {return 1}; namespace ensemble create -command ::ee -subcommands {one}}; list [ee one] [namespace ensemble exists ee] [namespace ensemble exists set]", "1 1 0" },
         .{ "namespace eval foo {proc f {} {return 1}}; namespace delete foo; list [namespace exists foo] [catch {foo::f}]", "0 1" },
         .{ "list [namespace qualifiers ::a::b::c] [namespace tail ::a::b::c] [namespace tail x]", "::a::b c x" },
@@ -803,7 +805,7 @@ test "eval of a list value runs its words" {
         .{ "eval [list]", "" },
         .{ "set x [list set y {$z}]; eval $x; set y", "$z" },
         .{ "set l [list lset l 0 X]; eval $l; set l", "X l 0 X" },
-        .{ "proc f {} {eval [list error boom]}; catch f; set errorInfo", "boom\n    while executing\n\"error boom\"\n    invoked from within\n\"eval [list error boom]\"\n    (procedure \"f\" line 1)\n    invoked from within\n\"f\"" },
+        .{ "proc f {} {eval [list error boom]}; catch f; set errorInfo", "boom\n    while executing\n\"error boom\"\n    (\"eval\" body line 1)\n    invoked from within\n\"eval [list error boom]\"\n    (procedure \"f\" line 1)\n    invoked from within\n\"f\"" },
         .{ "proc d n {if {$n > 0} {eval [list d [expr {$n - 1}]]} else {info level}}; d 4", "5" },
         .{ "catch {eval [list nosuch a]} m; set m", "invalid command name \"nosuch\"" },
     });

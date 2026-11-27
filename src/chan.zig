@@ -64,6 +64,9 @@ pub const Channel = struct {
     enc: ?enc.Encoding = null,
     /// The name of `-encoding`, or "" for `utf-8` or `binary`.
     enc_name: []const u8 = "",
+    /// True for stdout and stderr until a write or `-encoding`: the
+    /// first write takes the encoding of `encoding system`.
+    lazy_enc: bool = false,
     /// The state of the escape-driven encodings, for input and output.
     in_state: enc.State = .{},
     out_state: enc.State = .{},
@@ -439,8 +442,35 @@ fn checkUtf8(it: *Interp, c: *const Channel, text: []u8, p: enc.Profile) Error![
     return text;
 }
 
+/// Sets the encoding of a channel, as `-encoding` does.
+fn setEncoding(it: *Interp, c: *Channel, e: []const u8) Error!void {
+    const a = it.alloc();
+    var table: ?enc.Encoding = null;
+    var bin = false;
+    if (eql(e, "binary") or eql(e, "iso8859-1") or e.len == 0) {
+        bin = true;
+    } else if (!eql(e, "utf-8") and !eql(e, "identity")) {
+        table = (try enc.forChannel(it, e)) orelse return it.failCode(try std.fmt.allocPrint(a, "TCL LOOKUP ENCODING {s}", .{e}), "unknown encoding \"{s}\"", .{e});
+    }
+    try endEncoding(it, c);
+    c.binary = bin;
+    c.enc = table;
+    c.enc_name = if (e.len == 0) "" else try a.dupe(u8, e);
+    c.in_state = .{};
+    c.out_state = .{};
+}
+
+/// Gives a standard channel the system encoding at its first write, as
+/// Tcl makes the standard channels at their first use.
+fn settleEncoding(it: *Interp, c: *Channel) Error!void {
+    c.lazy_enc = false;
+    if (eql(it.sys_encoding, "utf-8")) return;
+    try setEncoding(it, c, it.sys_encoding);
+}
+
 fn writeText(it: *Interp, c: *Channel, text: []const u8) Error!void {
     if (!c.writable) return it.fail("channel \"{s}\" wasn't opened for writing", .{c.name});
+    if (c.lazy_enc) try settleEncoding(it, c);
     const a = it.alloc();
     if (c.enc) |e| {
         var lines: std.ArrayList(u8) = .empty;
@@ -695,6 +725,7 @@ pub fn useStdio(it: *Interp) Error!void {
     for (specs) |sp| {
         const c = try a.create(Channel);
         c.* = .{ .name = sp[0], .fd = sp[1], .readable = sp[2], .writable = !sp[2], .kind = .pipe };
+        c.lazy_enc = sp[1] != 0;
         if (sp[1] == 1) c.buffering = "line";
         if (sp[1] == 2) c.buffering = "none";
         try it.chans.table.put(a, sp[0], c);
@@ -1127,7 +1158,10 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (eql(o, "-blocking")) return .{ .int = @intFromBool(ch.blocking) };
             if (eql(o, "-buffering")) return .{ .str = ch.buffering };
             if (eql(o, "-buffersize")) return .{ .int = ch.buffersize };
-            if (eql(o, "-encoding")) return .{ .str = if (ch.enc_name.len > 0) ch.enc_name else if (ch.binary) "binary" else "utf-8" };
+            if (eql(o, "-encoding")) {
+                if (ch.lazy_enc) return .{ .str = x.sys_encoding };
+                return .{ .str = if (ch.enc_name.len > 0) ch.enc_name else if (ch.binary) "binary" else "utf-8" };
+            }
             if (eql(o, "-eofchar")) {
                 const in: Value = .{ .str = if (ch.eof_in == 0) "" else try x.alloc().dupe(u8, &.{ch.eof_in}) };
                 const out: Value = .{ .str = if (ch.eof_out == 0) "" else try x.alloc().dupe(u8, &.{ch.eof_out}) };
@@ -1210,21 +1244,9 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         } else if (eql(o, "-buffersize")) {
             c.buffersize = std.math.clamp(try it.int(v), 1, 1 << 20);
         } else if (eql(o, "-encoding")) {
-            const e = try it.str(v);
             c.blocked = false;
-            var table: ?enc.Encoding = null;
-            var bin = false;
-            if (eql(e, "binary") or eql(e, "iso8859-1") or e.len == 0) {
-                bin = true;
-            } else if (!eql(e, "utf-8") and !eql(e, "identity")) {
-                table = (try enc.forChannel(it, e)) orelse return it.failCode(try std.fmt.allocPrint(a, "TCL LOOKUP ENCODING {s}", .{e}), "unknown encoding \"{s}\"", .{e});
-            }
-            try endEncoding(it, c);
-            c.binary = bin;
-            c.enc = table;
-            c.enc_name = if (e.len == 0) "" else try a.dupe(u8, e);
-            c.in_state = .{};
-            c.out_state = .{};
+            c.lazy_enc = false;
+            try setEncoding(it, c, try it.str(v));
         } else if (eql(o, "-translation")) {
             const l = try it.list(v);
             if (l.len == 0 or l.len > 2) return it.fail("bad value for -translation: must be a one or two element list", .{});
@@ -1233,6 +1255,7 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (c.readable) c.input = x;
             if (c.writable) c.output = if (y == .auto) .lf else y;
             if (x == .binary) {
+                c.lazy_enc = false;
                 try endEncoding(it, c);
                 c.binary = true;
                 c.enc = null;

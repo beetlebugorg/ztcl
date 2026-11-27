@@ -26,6 +26,9 @@ pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try it.register("case", cmdCase);
     try it.register("tcl::prefix", cmdPrefix);
     _ = try it.internNs("tcl");
+    // The namespaces of a new interpreter of Tcl 8.6. A script can set a
+    // variable in one with no `namespace eval` first.
+    for ([_][]const u8{ "oo", "zlib", "tcl::array", "tcl::binary", "tcl::chan", "tcl::clock", "tcl::dict", "tcl::encoding", "tcl::file", "tcl::info", "tcl::namespace", "tcl::prefix", "tcl::string", "tcl::unsupported", "tcl::zlib" }) |name| _ = try it.internNs(name);
     try it.register("tcl_wordBreakAfter", wordCmd(.after, "tcl_wordBreakAfter"));
     try it.register("tcl_wordBreakBefore", wordCmd(.before, "tcl_wordBreakBefore"));
     try it.register("tcl_endOfWord", wordCmd(.end, "tcl_endOfWord"));

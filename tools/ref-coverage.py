@@ -8,8 +8,9 @@ The script runs RUNNER with each capability on, loads the built-in
 modules, and lists each command of each namespace. Each name must be the
 name of an entry of docs/reference/*.txt or in the `names` of one. For
 each ensemble, it reads the list of subcommands from the error of a bad
-subcommand, and each one must have a `sub` line. It exits with 1 when a
-name has no entry.
+subcommand, and each one must have a `sub` line. The list of `info` is
+the list of Tcl 8.6: a subcommand that gives "not supported by ztcl"
+needs no entry. It exits with 1 when a name has no entry.
 """
 import importlib.util
 import pathlib
@@ -42,7 +43,19 @@ foreach c [walk_ns ::] {
 puts "names\t[lsort -unique $names]"
 foreach c {string dict info namespace file chan array interp clock package trace binary encoding zipfs} {
     catch {$c __bogus__} m
-    if {[regexp {must be (.*)$} $m -> list]} { puts "subs\t$c\t[string map {", or " " " ", " " "} $list]" }
+    if {![regexp {must be (.*)$} $m -> list]} continue
+    set list [string map {", or " " " ", " " "} $list]
+    # The list of `info` is the list of Tcl 8.6. A subcommand that ztcl
+    # does not have gives "not supported by ztcl" and needs no entry.
+    if {$c eq "info"} {
+        set have {}
+        foreach w $list {
+            if {[catch {info $w} m2] && [string match "*not supported by ztcl*" $m2]} continue
+            lappend have $w
+        }
+        set list $have
+    }
+    puts "subs\t$c\t$list"
 }
 """
 
