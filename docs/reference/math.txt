@@ -29,6 +29,61 @@ ex: expr {isqrt(17)} => 4
 ex: proc tcl::mathfunc::twice {x} {expr {$x * 2}}; expr {twice(21)} => 42
 diff: `rand()` has a fixed seed in a new interpreter, so that a script with no capability gives the same output each run.
 
+== tcl::mathfunc::trunc
+syn: tcl::mathfunc::NAME arg ?arg ...?
+does: The math functions of Tcl 9.1: the functions of C99 `acosh`, `asinh`, `atanh`, `cbrt`, `copysign`, `dim` (fdim of C), `erf`, `erfc`, `exp2`, `expm1`, `fma`, `gamma` (tgamma of C), `ldexp`, `lgamma`, `log1p`, `log2`, `logb`, `nextafter`, `remainder`, and `trunc`, and the tests `isfinite`, `isinf`, `isnan`, `isnormal`, `issubnormal`, `isunordered`, and `signbit`. Each function except a test gives a double. A test gives 0 or 1, and it takes NaN, an integer of any size, or a double.
+tcl: 9.1
+names: tcl::mathfunc::acosh tcl::mathfunc::asinh tcl::mathfunc::atanh tcl::mathfunc::cbrt tcl::mathfunc::copysign tcl::mathfunc::dim tcl::mathfunc::erf tcl::mathfunc::erfc tcl::mathfunc::exp2 tcl::mathfunc::expm1 tcl::mathfunc::fma tcl::mathfunc::gamma tcl::mathfunc::isfinite tcl::mathfunc::isinf tcl::mathfunc::isnan tcl::mathfunc::isnormal tcl::mathfunc::issubnormal tcl::mathfunc::isunordered tcl::mathfunc::ldexp tcl::mathfunc::lgamma tcl::mathfunc::log1p tcl::mathfunc::log2 tcl::mathfunc::logb tcl::mathfunc::nextafter tcl::mathfunc::remainder tcl::mathfunc::signbit
+ex: expr {trunc(-2.5)} => -2.0
+ex: expr {log2(8)} => 3.0
+ex: expr {remainder(7, 2)} => -1.0
+ex: expr {isnan(NaN)} => 1
+ex: expr {signbit(-0.0)} => 1
+err: expr {log2(-1)} | domain error: argument not in valid range
+err: expr {trunc("a")} | expected floating-point number but got "a"
+diff: The functions come from `std.math` of Zig. The last digit of a result can differ from tclsh 9.1.0, which gives 3.0000000000000004 for `cbrt(27)`. tclsh gives the error "floating-point value too large to represent" for some results below 2**-1022, such as `asinh(1e-310)`, and ztcl gives the result.
+
+== divmod
+syn: divmod dividend divisor
+does: The quotient and the remainder of two integers of any size, as a list. The quotient is rounded down, as `/` of `expr` does, so the remainder has the sign of the divisor.
+tcl: 9.1
+ex: divmod 7 2 => 3 1
+ex: divmod -7 2 => -4 1
+err: divmod 7 0 | divide by zero
+err: divmod 7.5 2 | dividend must be an integer
+diff: tclsh 9.1.0 gives a wrong quotient for `divmod 9223372036854775807 -1` and ends with SIGFPE for `divmod -9223372036854775808 -1`. ztcl gives the exact result.
+
+== fpclassify
+syn: fpclassify floatValue
+does: The class of a number: `zero`, `subnormal`, `normal`, `infinite`, or `nan`.
+tcl: 9.1
+ex: fpclassify 1.5 => normal
+ex: fpclassify 1e-310 => subnormal
+ex: fpclassify Inf => infinite
+
+== frexp
+syn: frexp floatValue
+does: The fraction and the exponent of a double, as a list. The fraction is from 0.5 to 1, and the value is the fraction times 2 to the exponent.
+tcl: 9.1
+ex: frexp 10 => 0.625 4
+ex: frexp -3 => -0.75 2
+
+== modf
+syn: modf floatValue
+does: The integer part and the fraction part of a double, as a list. Both parts have the sign of the value.
+tcl: 9.1
+ex: modf 2.5 => 2.0 0.5
+ex: modf -2.5 => -2.0 -0.5
+
+== remquo
+syn: remquo dividend divisor
+does: The remainder of `remainder()` and the low 3 bits of the rounded quotient with the sign of the quotient, as a list.
+tcl: 9.1
+ex: remquo 7 2 => -1.0 4
+ex: remquo 100 3 => 1.0 1
+err: remquo 7 0 | domain error: argument not in valid range
+diff: tclsh 9.1.0 gives NaN and an undefined quotient for a zero divisor or an infinite dividend. ztcl gives a domain error, as `remainder()` does.
+
 == tcl::mathop
 syn: tcl::mathop::OP ?arg ...?
 does: Each operator of `expr` as a command: `+`, `-`, `*`, `/`, `%`, `**`, `<<`, `>>`, `&`, `|`, `^`, `~`, `!`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `eq`, `ne`, `in`, and `ni`. `+` and `*` take any count of arguments. Import them with `namespace path tcl::mathop` to write `+ 1 2`.

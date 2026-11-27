@@ -102,6 +102,14 @@ R. Nigel Horspool, "Practical fast searching in strings", Software: Practice and
 
 **How ztcl uses it:** `string first` and `string last` in `src/cmds.zig` use the skip table of the paper, forward and in reverse. ztcl has its own code. Each compare of the needle uses units of the compute limit.
 
+### The error function
+
+`src/math/erf.c` of musl libc, from the copy in `lib/libc/musl` of Zig 0.17.0. It comes from `s_erf.c` of FreeBSD msun and the fdlibm of Sun Microsystems (1993). Online: https://git.musl-libc.org/cgit/musl/tree/src/math/erf.c
+
+**License:** MIT for musl. The text is in `licenses/musl-MIT.txt`. The notice of Sun permits use, copy, change, and distribution with the notice kept, and `src/math9.zig` keeps it.
+
+**How ztcl uses it:** `erf()` and `erfc()` of Tcl 9.1 in `src/math9.zig` are a port of the two functions to Zig, with the same constants and intervals. The results and the error messages of the other math functions of Tcl 9.1 follow the manual page `mathfunc.n` of Tcl 9.1.0, TIP 521, TIP 745, and the output of tclsh 9.1.0.
+
 ## Not used
 
 Jim Tcl (https://jim.tcl-lang.org/, BSD 2-Clause) is a small Tcl in C. The authors did not read its source for this interpreter, and ztcl has no code of it.
@@ -113,7 +121,7 @@ The ztcl binaries contain the Zig standard library. It has ports of code from ot
 | Source | Use | License text |
 |---|---|---|
 | Zig standard library | All of ztcl | `licenses/zig-std-MIT.txt` |
-| musl libc | Math functions of `std.math` | `licenses/musl-MIT.txt` |
+| musl libc | Math functions of `std.math`, and `erf` and `erfc` in `src/math9.zig` | `licenses/musl-MIT.txt` |
 | Go | `std.fmt.parseFloat`, `std.math.pow` | `licenses/go-BSD-3-Clause.txt` |
 | ARM optimized-routines | `std.math.acos`, `std.math.atan` | `licenses/arm-optimized-routines.txt` |
 

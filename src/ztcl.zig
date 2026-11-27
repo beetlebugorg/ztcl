@@ -116,6 +116,7 @@ test {
     _ = @import("inflate.zig");
     _ = @import("vfs_tests.zig");
     _ = @import("tcl9_tests.zig");
+    _ = @import("math9.zig");
     if (@import("builtin").os.tag == .linux) _ = @import("kvm.zig");
     _ = @import("vm/virtio/mmio.zig");
     _ = @import("vm/virtio/vsock.zig");
