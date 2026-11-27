@@ -204,6 +204,12 @@ jobs:
         run: TCLSH=tclsh8.6 tools/cext/check.sh zig-out/bin/ztcl
       - name: Check the coverage table
         run: python3 -I tools/cext/coverage.py --check
+      - name: Build libztcl and compare embedders with libtcl8.6
+        run: |
+          ulimit -v 6000000
+          zig build libztcl
+          TCLSH=tclsh8.6 tools/libztcl/check.sh
+          TCLSH=tclsh8.6 tools/libztcl/tclsh.sh
 
   # C packages in WebAssembly: the test packages of tests/cext built for
   # wasm32-wasi and run on ztcl-host.wasm in Node.js, each one compared

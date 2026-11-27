@@ -8,11 +8,15 @@ pub fn build(b: *std.Build) void {
     // `-Dgc-precise=true` builds the root rules of WebAssembly on a
     // native target, so the stress tests run them with safety checks.
     const gc_options = b.addOptions();
+    // The options of libztcl: the same values, with `cext` on.
+    const lib_options = b.addOptions();
     const gc_precise = b.option(bool, "gc-precise", "Use the precise roots of WebAssembly") orelse false;
     gc_options.addOption(bool, "gc_precise", gc_precise);
+    lib_options.addOption(bool, "gc_precise", gc_precise);
     cext_on = b.option(bool, "cext-wasm", "Add the exports of C packages in WebAssembly to the wasm libraries") orelse false;
     // The runtime of `ztcl compile --wasm` is only a WebAssembly build.
     gc_options.addOption(bool, "aot", false);
+    lib_options.addOption(bool, "aot", false);
     // `-Djit=false` builds no JIT code. The default is true on a target
     // with a backend: x86-64 Linux, x86-64 Windows, arm64 Linux, and arm64 macOS.
     const t = target.result;
@@ -20,20 +24,27 @@ pub fn build(b: *std.Build) void {
     // library. The default build has no code of it.
     const cext = b.option(bool, "cext", "Build load of Tcl C packages (not sandboxed)") orelse false;
     gc_options.addOption(bool, "cext", cext);
+    lib_options.addOption(bool, "cext", true);
     const jit_backend = (t.cpu.arch == .x86_64 and (t.os.tag == .linux or t.os.tag == .windows)) or (t.cpu.arch == .aarch64 and (t.os.tag == .linux or t.os.tag == .macos));
-    gc_options.addOption(bool, "jit", b.option(bool, "jit", "Build the JIT compiler") orelse jit_backend);
+    const jit_on = b.option(bool, "jit", "Build the JIT compiler") orelse jit_backend;
+    gc_options.addOption(bool, "jit", jit_on);
+    lib_options.addOption(bool, "jit", jit_on);
     // `-Djit_bug=true` plants a known bug: the `bin_vv` template of tier 1
     // skips its overflow check. The test of the fuzzer uses it.
-    gc_options.addOption(bool, "jit_bug", b.option(bool, "jit_bug", "Plant a known bug in tier 1 for the fuzzer test") orelse false);
+    const jit_bug = b.option(bool, "jit_bug", "Plant a known bug in tier 1 for the fuzzer test") orelse false;
+    gc_options.addOption(bool, "jit_bug", jit_bug);
+    lib_options.addOption(bool, "jit_bug", jit_bug);
     // The built-in modules: `-Dbatteries` gives the preset, and
     // `-Dmod-NAME` puts one module in or leaves it out after the preset.
     const batteries = b.option(Batteries, "batteries", "The modules: core (none), std (the default), or full") orelse .std;
     const on = moduleFlags(b, batteries);
     addModuleOptions(b, gc_options, on);
+    addModuleOptions(b, lib_options, on);
     // `-Dsize-plant=N` adds N bytes of data to the test module hello. The
     // size report uses it to show that its check fails.
     const size_plant = b.option(usize, "size-plant", "Add bytes to the test module hello") orelse 0;
     gc_options.addOption(usize, "size_plant", size_plant);
+    lib_options.addOption(usize, "size_plant", size_plant);
     // `-Dstrip=true` strips the runner, for the size report.
     const strip = b.option(bool, "strip", "Strip the runner") orelse false;
     // `-Drunner-optimize` sets the mode of the runner and the suite runner.
@@ -57,11 +68,16 @@ pub fn build(b: *std.Build) void {
         std.process.exit(1);
     }
     gc_options.addOption(bool, "vm_test_key", vm_test_key);
+    lib_options.addOption(bool, "vm_test_key", vm_test_key);
     // The download of `ztcl::vm image fetch` in the runner: std.http and
     // its TLS add about 650 KB, past the size budget of the full runner,
     // so it is off until the TLS of src/tls (ztcl#312).
-    gc_options.addOption(bool, "vm_fetch", b.option(bool, "vm-fetch", "Give the runner the download of ztcl::vm image fetch (std.http)") orelse false);
-    gc_options.addOption(bool, "tsan_plant", b.option(bool, "tsan-plant", "Plant a race for the ThreadSanitizer check") orelse false);
+    const vm_fetch = b.option(bool, "vm-fetch", "Give the runner the download of ztcl::vm image fetch (std.http)") orelse false;
+    gc_options.addOption(bool, "vm_fetch", vm_fetch);
+    lib_options.addOption(bool, "vm_fetch", vm_fetch);
+    const tsan_plant = b.option(bool, "tsan-plant", "Plant a race for the ThreadSanitizer check") orelse false;
+    gc_options.addOption(bool, "tsan_plant", tsan_plant);
+    lib_options.addOption(bool, "tsan_plant", tsan_plant);
     const libc: ?bool = if (tsan or cext) true else null;
 
     // The module that other packages import.
@@ -164,6 +180,34 @@ pub fn build(b: *std.Build) void {
     // The tests of C packages only, for a build with `-Dcext=true`.
     const cext_tests = b.addTest(.{ .root_module = ztcl, .filters = &.{"cext:"} });
     b.step("test-cext-native", "Run the tests of the native loader of C packages").dependOn(&b.addRunArtifact(cext_tests).step);
+
+    // libztcl (ztcl#246): a shared library with the C API of Tcl 8.6 and
+    // the file name of libtcl8.6: libtcl8.6.so (also the SONAME),
+    // libtcl8.6.dylib, or tcl86.dll. docs/dev/libztcl.md has the steps.
+    const lib_mod = b.createModule(.{
+        .root_source_file = b.path("src/libztcl.zig"),
+        .target = target,
+        .optimize = runner_optimize,
+        .link_libc = true,
+        .pic = true,
+    });
+    lib_mod.addOptions("build_options", lib_options);
+    addVt(b, lib_mod, target, runner_optimize);
+    const libztcl = b.addLibrary(.{
+        .name = if (t.os.tag == .windows) "tcl86" else "tcl8.6",
+        .linkage = .dynamic,
+        .root_module = lib_mod,
+    });
+    if (t.os.tag == .macos) libztcl.install_name = "@rpath/libtcl8.6.dylib";
+    const lib_step = b.step("libztcl", "Build libztcl, the drop-in library for libtcl8.6");
+    // The loader of C packages has no Windows port yet, and Zig 0.17 has
+    // no std.builtin.VaList with LLVM on x86-64 Windows for the variadic
+    // slots, so the step fails there with this reason.
+    if (t.os.tag == .windows) {
+        lib_step.dependOn(&b.addFail("libztcl does not build for Windows yet: the C package code has no Windows port, and Zig 0.17 has no VaList with LLVM on x86-64 Windows").step);
+    } else {
+        lib_step.dependOn(&b.addInstallArtifact(libztcl, .{}).step);
+    }
     // The interactive shell of the runner.
     const shell_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/shell/all.zig"),

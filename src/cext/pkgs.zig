@@ -39,4 +39,4 @@ pub const slots = struct {
     }
 };
 
-var exe_name: ?[*:0]const u8 = null;
+pub var exe_name: ?[*:0]const u8 = null;
