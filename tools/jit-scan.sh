@@ -52,8 +52,9 @@ def run(args, script):
     for line in err.splitlines():
         if line.startswith("jit "):
             for kv in line.split()[1:]:
-                k, v = kv.split("=")
-                stats[k] = int(v)
+                k, v = kv.split("=", 1)
+                # Most fields are counts. A field such as `state=on` stays a word.
+                stats[k] = int(v) if v.lstrip("-").isdigit() else v
     return p.stdout, p.returncode, stats
 
 def check(name, ok, detail=""):
@@ -73,7 +74,7 @@ puts [a 1]; puts [b 2]; puts [c 3]; puts [d 4]
 """
 # The second run adds tier 2 at a loop count of 1, so the loops of `b`
 # and `d` also compile to tier 2. The dump then has the tier 2 code.
-for tier, flags in (("tier 1", ["--no-jit-tier2"]), ("tier 2", ["--jit-tier2-count", "1"])):
+for tier, flags, need2 in (("tier 1", ["--no-jit-tier2"], False), ("tier 2", ["--jit-tier2-count", "1"], True)):
     dump = os.path.join(work, "dump" + str(len(flags)))
     os.mkdir(dump)
     out, rc, st = run(["--jit-threshold", "0", "--jit-stats", "--jit-dump", dump] + flags, script)
@@ -85,7 +86,7 @@ for tier, flags in (("tier 1", ["--no-jit-tier2"]), ("tier 2", ["--jit-tier2-cou
             for pat in (struct.pack("<I", c), struct.pack(">I", c)):
                 if pat in data:
                     hits.append("%s has %s" % (f, pat.hex()))
-    ok = rc == 0 and len(files) >= 4 and not hits and (not flags or st.get("tier2", 0) >= 1)
+    ok = rc == 0 and len(files) >= 4 and not hits and (not need2 or st.get("tier2", 0) >= 1)
     check("no script constant in code, " + tier, ok,
           "%d functions, tier2=%d, %s" % (len(files), st.get("tier2", 0), "; ".join(hits) or "no hit"))
 
