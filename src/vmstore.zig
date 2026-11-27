@@ -47,15 +47,58 @@ fn z(a: Allocator, s: []const u8) Allocator.Error![:0]u8 {
     return a.dupeSentinel(u8, s, 0);
 }
 
-/// Makes the folder `path` and each parent.
-fn mkdirs(a: Allocator, path: []const u8) Error!void {
+const nofollow_dir: os.O = .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .NOFOLLOW = true, .CLOEXEC = true };
+
+/// The parent folder of `path` below `dir`, opened one name at a time
+/// with no symlink, and the last name. Close `fd` when it is not `dir`.
+const Parent = struct {
+    fd: i32,
+    own: bool,
+    base: [:0]u8,
+
+    fn close(p: Parent, a: Allocator) void {
+        if (p.own) _ = os.close(p.fd);
+        a.free(p.base);
+    }
+};
+
+fn parent(a: Allocator, dir: i32, path: []const u8) Error!Parent {
+    if (path.len == 0 or path[0] == '/') return error.Io;
+    var cur = dir;
+    var own = false;
+    errdefer if (own) {
+        _ = os.close(cur);
+    };
+    var it = std.mem.splitScalar(u8, path, '/');
+    var name = it.next().?;
+    while (it.next()) |next| {
+        if (name.len == 0 or std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return error.Io;
+        const nz = try z(a, name);
+        defer a.free(nz);
+        const rc = os.openat(cur, nz, nofollow_dir, 0);
+        if (!ok(rc)) return if (os.errno(rc) == .NOENT) error.NotFound else error.Io;
+        if (own) _ = os.close(cur);
+        cur = @intCast(rc);
+        own = true;
+        name = next;
+    }
+    if (name.len == 0 or std.mem.eql(u8, name, ".") or std.mem.eql(u8, name, "..")) return error.Io;
+    return .{ .fd = cur, .own = own, .base = try z(a, name) };
+}
+
+/// Makes the folder `path` below `dir` and each parent, with no symlink.
+fn mkdirs(a: Allocator, dir: i32, path: []const u8) Error!void {
     var k: usize = 1;
     while (k <= path.len) : (k += 1) {
         if (k == path.len or path[k] == '/') {
-            const p = try z(a, path[0..k]);
-            defer a.free(p);
-            const rc = os.mkdirat(os.AT.FDCWD, p, 0o755);
+            const p = try parent(a, dir, path[0..k]);
+            defer p.close(a);
+            const rc = os.mkdirat(p.fd, p.base, 0o755);
             if (!ok(rc) and os.errno(rc) != .EXIST) return error.Io;
+            // A name that exists must be a folder, not a symlink.
+            const fd = os.openat(p.fd, p.base, nofollow_dir, 0);
+            if (!ok(fd)) return error.Io;
+            _ = os.close(@intCast(fd));
         }
     }
 }
@@ -64,10 +107,11 @@ fn join(a: Allocator, parts: []const []const u8) Allocator.Error![]u8 {
     return std.mem.join(a, "/", parts);
 }
 
-fn readAll(a: Allocator, path: []const u8, max: usize) Error![]u8 {
-    const p = try z(a, path);
-    defer a.free(p);
-    const rc = os.open(p, .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0);
+/// Reads the file `path` below `dir`. A symlink on the way is an error.
+fn readAll(a: Allocator, dir: i32, path: []const u8, max: usize) Error![]u8 {
+    const p = try parent(a, dir, path);
+    defer p.close(a);
+    const rc = os.openat(p.fd, p.base, .{ .ACCMODE = .RDONLY, .NOFOLLOW = true, .CLOEXEC = true }, 0);
     if (!ok(rc)) return if (os.errno(rc) == .NOENT) error.NotFound else error.Io;
     const fd: i32 = @intCast(rc);
     defer _ = os.close(fd);
@@ -88,14 +132,14 @@ fn readAll(a: Allocator, path: []const u8, max: usize) Error![]u8 {
 fn writeAtomic(a: Allocator, s: Store, path: []const u8, data: []const u8) Error!void {
     const tmp = try s.tmpName(a);
     defer a.free(tmp);
-    try writeNew(a, tmp, data);
-    try rename(a, tmp, path);
+    try writeNew(a, s.fd, tmp, data);
+    try rename(a, s.fd, tmp, path);
 }
 
-fn writeNew(a: Allocator, path: []const u8, data: []const u8) Error!void {
-    const p = try z(a, path);
-    defer a.free(p);
-    const rc = os.open(p, .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true, .CLOEXEC = true }, 0o644);
+fn writeNew(a: Allocator, dir: i32, path: []const u8, data: []const u8) Error!void {
+    const p = try parent(a, dir, path);
+    defer p.close(a);
+    const rc = os.openat(p.fd, p.base, .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true, .NOFOLLOW = true, .CLOEXEC = true }, 0o644);
     if (!ok(rc)) return error.Io;
     const fd: i32 = @intCast(rc);
     defer _ = os.close(fd);
@@ -107,34 +151,34 @@ fn writeNew(a: Allocator, path: []const u8, data: []const u8) Error!void {
     }
 }
 
-fn rename(a: Allocator, from: []const u8, to: []const u8) Error!void {
-    const f = try z(a, from);
-    defer a.free(f);
-    const t = try z(a, to);
-    defer a.free(t);
-    if (!ok(os.renameat(os.AT.FDCWD, f, os.AT.FDCWD, t))) return error.Io;
+fn rename(a: Allocator, dir: i32, from: []const u8, to: []const u8) Error!void {
+    const f = try parent(a, dir, from);
+    defer f.close(a);
+    const t = try parent(a, dir, to);
+    defer t.close(a);
+    if (!ok(os.renameat(f.fd, f.base, t.fd, t.base))) return error.Io;
 }
 
-fn exists(a: Allocator, path: []const u8) bool {
-    const p = z(a, path) catch return false;
-    defer a.free(p);
-    const rc = os.open(p, .{ .ACCMODE = .RDONLY, .CLOEXEC = true }, 0);
+fn exists(a: Allocator, dir: i32, path: []const u8) bool {
+    const p = parent(a, dir, path) catch return false;
+    defer p.close(a);
+    const rc = os.openat(p.fd, p.base, .{ .ACCMODE = .RDONLY, .NOFOLLOW = true, .CLOEXEC = true }, 0);
     if (!ok(rc)) return false;
     _ = os.close(@intCast(rc));
     return true;
 }
 
-fn unlink(a: Allocator, path: []const u8, dir: bool) void {
-    const p = z(a, path) catch return;
-    defer a.free(p);
-    _ = os.unlinkat(os.AT.FDCWD, p, if (dir) os.AT.REMOVEDIR else 0);
+fn unlink(a: Allocator, dir: i32, path: []const u8, is_dir: bool) void {
+    const p = parent(a, dir, path) catch return;
+    defer p.close(a);
+    _ = os.unlinkat(p.fd, p.base, if (is_dir) os.AT.REMOVEDIR else 0);
 }
 
-/// The names in the folder `path`, with no `.` and `..`.
-fn listDir(a: Allocator, path: []const u8) Error![][]u8 {
-    const p = try z(a, path);
-    defer a.free(p);
-    const rc = os.open(p, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
+/// The names in the folder `path` below `dir`, with no `.` and `..`.
+fn listDir(a: Allocator, dir: i32, path: []const u8) Error![][]u8 {
+    const p = parent(a, dir, path) catch |e| return if (e == error.NotFound) &.{} else e;
+    defer p.close(a);
+    const rc = os.openat(p.fd, p.base, nofollow_dir, 0);
     if (!ok(rc)) return if (os.errno(rc) == .NOENT) &.{} else error.Io;
     const fd: i32 = @intCast(rc);
     var out: std.ArrayList([]u8) = .empty;
@@ -180,34 +224,60 @@ fn freeList(a: Allocator, l: [][]u8) void {
 var tmp_counter = std.atomic.Value(u64).init(0);
 
 pub const Store = struct {
+    /// The path of the store, for the paths of objects that a guest
+    /// gets, and the descriptor of its folder: each step of the store is
+    /// relative to it, with no symlink below it.
     root: []const u8,
+    fd: i32,
 
-    /// Opens the store at `root`, and makes its folders.
+    /// Opens the store at `root`, and makes its folders. Call `close`.
     pub fn open(a: Allocator, root: []const u8) Error!Store {
         if (root.len == 0) return error.NoStore;
-        for ([_][]const u8{ "objects", "releases", "tmp" }) |sub| {
-            const p = try join(a, &.{ root, sub });
-            defer a.free(p);
-            try mkdirs(a, p);
+        // The path of the store itself comes from the embedder and may
+        // have symlinks (/var on macOS); the names below it may not.
+        var k: usize = if (root[0] == '/') 1 else 0;
+        while (k <= root.len) : (k += 1) {
+            if (k == 0) continue;
+            if (k == root.len or root[k] == '/') {
+                const pz = try z(a, root[0..k]);
+                defer a.free(pz);
+                _ = os.mkdirat(os.AT.FDCWD, pz, 0o755);
+            }
         }
-        return .{ .root = root };
+        const rz = try z(a, root);
+        defer a.free(rz);
+        const rc = os.open(rz, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
+        if (!ok(rc)) return error.NoStore;
+        const s: Store = .{ .root = root, .fd = @intCast(rc) };
+        errdefer s.close();
+        for ([_][]const u8{ "objects", "releases", "tmp" }) |sub| try mkdirs(a, s.fd, sub);
+        return s;
     }
 
-    fn tmpName(s: Store, a: Allocator) Allocator.Error![]u8 {
+    pub fn close(s: Store) void {
+        _ = os.close(s.fd);
+    }
+
+    fn tmpName(_: Store, a: Allocator) Allocator.Error![]u8 {
         var r: [8]u8 = undefined;
         @import("isoproto.zig").entropy(&r);
         const n = tmp_counter.fetchAdd(1, .monotonic);
-        return std.fmt.allocPrint(a, "{s}/tmp/{x}-{d}", .{ s.root, std.mem.readInt(u64, &r, .little), n });
+        return std.fmt.allocPrint(a, "tmp/{x}-{d}", .{ std.mem.readInt(u64, &r, .little), n });
     }
 
+    /// The host path of an object, for a guest.
     pub fn objectPath(s: Store, a: Allocator, sha: []const u8) Allocator.Error![]u8 {
         return join(a, &.{ s.root, "objects", sha });
     }
 
+    fn objectRel(a: Allocator, sha: []const u8) Allocator.Error![]u8 {
+        return join(a, &.{ "objects", sha });
+    }
+
     fn counterFile(s: Store, a: Allocator, name: []const u8, which: []const u8) Error!?u64 {
-        const p = try join(a, &.{ s.root, "releases", name, which });
+        const p = try join(a, &.{ "releases", name, which });
         defer a.free(p);
-        const t = readAll(a, p, 64) catch |e| return if (e == error.NotFound) null else e;
+        const t = readAll(a, s.fd, p, 64) catch |e| return if (e == error.NotFound) null else e;
         defer a.free(t);
         return std.fmt.parseInt(u64, std.mem.trim(u8, t, " \n"), 10) catch error.Io;
     }
@@ -226,9 +296,9 @@ pub const Store = struct {
     /// SHA-256. A file that is there already stays.
     fn addObject(s: Store, a: Allocator, data: []const u8, sha: []const u8) Error!void {
         try vmimage.checkHash(data, sha);
-        const dest = try s.objectPath(a, sha);
+        const dest = try objectRel(a, sha);
         defer a.free(dest);
-        if (exists(a, dest)) return;
+        if (exists(a, s.fd, dest)) return;
         try writeAtomic(a, s, dest, data);
     }
 
@@ -236,14 +306,10 @@ pub const Store = struct {
     /// signature, and the files of the manifest): the files of `arch`
     /// must be there, and the files of the other architectures that are
     /// there come too. Gives the name and the counter.
-    pub fn install(s: Store, a: Allocator, src: []const u8, arch: []const u8, allow_rollback: bool) Error!struct { name: []u8, counter: u64, key: []const u8 } {
-        const mpath = try join(a, &.{ src, "manifest.json" });
-        defer a.free(mpath);
-        const manifest = try readAll(a, mpath, 1 << 20);
+    pub fn install(s: Store, a: Allocator, src: i32, arch: []const u8, allow_rollback: bool) Error!struct { name: []u8, counter: u64, key: []const u8 } {
+        const manifest = try readAll(a, src, "manifest.json", 1 << 20);
         defer a.free(manifest);
-        const spath = try join(a, &.{ src, "manifest.json.sig" });
-        defer a.free(spath);
-        const sig = try readAll(a, spath, 1 << 16);
+        const sig = try readAll(a, src, "manifest.json.sig", 1 << 16);
         defer a.free(sig);
         // The signature first, with no rollback check, for the name.
         var pre = try vmimage.verify(a, manifest, sig, 0, true);
@@ -264,9 +330,7 @@ pub const Store = struct {
             for (x.disks) |d| try files.append(a, .{ .file = d.file, .sha256 = d.sha256 });
             for (files.items) |f| {
                 if (std.mem.indexOf(u8, f.file, "..") != null) return error.BadManifest;
-                const p = try join(a, &.{ src, f.file });
-                defer a.free(p);
-                const data = readAll(a, p, 8 << 30) catch |e| switch (e) {
+                const data = readAll(a, src, f.file, 8 << 30) catch |e| switch (e) {
                     error.NotFound => if (required) return error.Missing else continue,
                     else => return e,
                 };
@@ -277,21 +341,21 @@ pub const Store = struct {
         // The release folder, then `highest` and `current`.
         var num: [24]u8 = undefined;
         const cs = std.fmt.bufPrint(&num, "{d}", .{m.counter}) catch unreachable;
-        const ndir = try join(a, &.{ s.root, "releases", name });
+        const ndir = try join(a, &.{ "releases", name });
         defer a.free(ndir);
-        try mkdirs(a, ndir);
+        try mkdirs(a, s.fd, ndir);
         const rdir = try join(a, &.{ ndir, cs });
         defer a.free(rdir);
-        if (!exists(a, rdir)) {
+        if (!exists(a, s.fd, rdir)) {
             const tmp = try s.tmpName(a);
             defer a.free(tmp);
-            try mkdirs(a, tmp);
+            try mkdirs(a, s.fd, tmp);
             for ([_][]const u8{ "manifest.json", "manifest.json.sig" }, [_][]const u8{ manifest, sig }) |fname, data| {
                 const p = try join(a, &.{ tmp, fname });
                 defer a.free(p);
-                try writeNew(a, p, data);
+                try writeNew(a, s.fd, p, data);
             }
-            try rename(a, tmp, rdir);
+            try rename(a, s.fd, tmp, rdir);
         }
         const hp = try join(a, &.{ ndir, "highest" });
         defer a.free(hp);
@@ -307,13 +371,13 @@ pub const Store = struct {
     pub fn load(s: Store, a: Allocator, name: []const u8, counter: u64) Error!vmimage.Checked {
         var num: [24]u8 = undefined;
         const cs = std.fmt.bufPrint(&num, "{d}", .{counter}) catch unreachable;
-        const mp = try join(a, &.{ s.root, "releases", name, cs, "manifest.json" });
+        const mp = try join(a, &.{ "releases", name, cs, "manifest.json" });
         defer a.free(mp);
-        const sp = try join(a, &.{ s.root, "releases", name, cs, "manifest.json.sig" });
+        const sp = try join(a, &.{ "releases", name, cs, "manifest.json.sig" });
         defer a.free(sp);
-        const manifest = try readAll(a, mp, 1 << 20);
+        const manifest = try readAll(a, s.fd, mp, 1 << 20);
         defer a.free(manifest);
-        const sig = try readAll(a, sp, 1 << 16);
+        const sig = try readAll(a, s.fd, sp, 1 << 16);
         defer a.free(sig);
         return vmimage.verify(a, manifest, sig, 0, true);
     }
@@ -331,9 +395,9 @@ pub const Store = struct {
         if (x.initrd) |f| try files.append(a, f);
         for (x.disks) |d| try files.append(a, .{ .file = d.file, .sha256 = d.sha256 });
         for (files.items) |f| {
-            const p = try s.objectPath(a, f.sha256);
+            const p = try objectRel(a, f.sha256);
             defer a.free(p);
-            const data = readAll(a, p, 8 << 30) catch |e| return if (e == error.NotFound) error.Missing else e;
+            const data = readAll(a, s.fd, p, 8 << 30) catch |e| return if (e == error.NotFound) error.Missing else e;
             defer a.free(data);
             try vmimage.checkHash(data, f.sha256);
             n += 1;
@@ -345,9 +409,9 @@ pub const Store = struct {
 
     /// Each name and the counters of its releases, in order.
     pub fn list(s: Store, a: Allocator) Error![]Entry {
-        const rp = try join(a, &.{ s.root, "releases" });
+        const rp = try join(a, &.{ "releases" });
         defer a.free(rp);
-        const names = try listDir(a, rp);
+        const names = try listDir(a, s.fd, rp);
         defer freeList(a, names);
         std.mem.sort([]u8, names, {}, struct {
             fn lt(_: void, x: []u8, y: []u8) bool {
@@ -358,7 +422,7 @@ pub const Store = struct {
         for (names) |n| {
             const np = try join(a, &.{ rp, n });
             defer a.free(np);
-            const subs = try listDir(a, np);
+            const subs = try listDir(a, s.fd, np);
             defer freeList(a, subs);
             var cs: std.ArrayList(u64) = .empty;
             for (subs) |x| if (std.fmt.parseInt(u64, x, 10)) |v| try cs.append(a, v) else |_| {};
@@ -376,10 +440,10 @@ pub const Store = struct {
     /// Removes a release, or each release of `name` when `counter` is
     /// null, then each object that no release names.
     pub fn remove(s: Store, a: Allocator, name: []const u8, counter: ?u64) Error!void {
-        const np = try join(a, &.{ s.root, "releases", name });
+        const np = try join(a, &.{ "releases", name });
         defer a.free(np);
-        if (!exists(a, np)) return error.NotFound;
-        const subs = try listDir(a, np);
+        if (!exists(a, s.fd, np)) return error.NotFound;
+        const subs = try listDir(a, s.fd, np);
         defer freeList(a, subs);
         var num: [24]u8 = undefined;
         const want: ?[]const u8 = if (counter) |c| std.fmt.bufPrint(&num, "{d}", .{c}) catch unreachable else null;
@@ -391,17 +455,17 @@ pub const Store = struct {
             for ([_][]const u8{ "manifest.json", "manifest.json.sig" }) |f| {
                 const p = try join(a, &.{ np, x, f });
                 defer a.free(p);
-                unlink(a, p, false);
+                unlink(a, s.fd, p, false);
             }
             const d = try join(a, &.{ np, x });
             defer a.free(d);
-            unlink(a, d, true);
+            unlink(a, s.fd, d, true);
         }
         if (!found) return error.NotFound;
         if (counter == null or (try s.current(a, name)) == counter) {
             const cp = try join(a, &.{ np, "current" });
             defer a.free(cp);
-            unlink(a, cp, false);
+            unlink(a, s.fd, cp, false);
         }
         if (counter == null) {
             // `highest` stays: a removal is no reason to accept an older
@@ -429,14 +493,14 @@ pub const Store = struct {
                 for (x.disks) |d| try keep.put(a, try a.dupe(u8, d.sha256), {});
             }
         };
-        const op = try join(a, &.{ s.root, "objects" });
+        const op = try a.dupe(u8, "objects");
         defer a.free(op);
-        const objs = try listDir(a, op);
+        const objs = try listDir(a, s.fd, op);
         defer freeList(a, objs);
         for (objs) |o| if (!keep.contains(o)) {
             const p = try join(a, &.{ op, o });
             defer a.free(p);
-            unlink(a, p, false);
+            unlink(a, s.fd, p, false);
         };
     }
 };
@@ -449,31 +513,49 @@ pub fn freeEntries(a: Allocator, entries: []Store.Entry) void {
     a.free(entries);
 }
 
+fn openDirFd(a: Allocator, path: []const u8) !i32 {
+    const pz = try z(a, path);
+    defer a.free(pz);
+    const rc = os.open(pz, .{ .ACCMODE = .RDONLY, .DIRECTORY = true, .CLOEXEC = true }, 0);
+    if (!ok(rc)) return error.Io;
+    return @intCast(rc);
+}
+
+fn symlinkAt(a: Allocator, target: []const u8, dir: i32, path: []const u8) !void {
+    const t = try z(a, target);
+    defer a.free(t);
+    const pz = try z(a, path);
+    defer a.free(pz);
+    if (!ok(os.symlinkat(t, dir, pz))) return error.Io;
+}
+
 test "vmstore: install, list, check, rollback, and remove" {
     const a = std.testing.allocator;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     const base = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path});
     defer a.free(base);
+    const bfd = try openDirFd(a, base);
+    defer _ = os.close(bfd);
     // A release folder: the signed manifest of the fixtures, and its
     // kernel, the 4 bytes "test".
+    try mkdirs(a, bfd, "src");
+    const files = [_][2][]const u8{
+        .{ "src/manifest.json", @embedFile("vmimage_fixtures/manifest.json") },
+        .{ "src/manifest.json.sig", @embedFile("vmimage_fixtures/manifest.json.sig.good") },
+        .{ "src/Image", "test" },
+        .{ "real", "test" },
+    };
+    for (files) |f| try writeNew(a, bfd, f[0], f[1]);
     const src = try join(a, &.{ base, "src" });
     defer a.free(src);
-    try mkdirs(a, src);
-    const files = [_][2][]const u8{
-        .{ "manifest.json", @embedFile("vmimage_fixtures/manifest.json") },
-        .{ "manifest.json.sig", @embedFile("vmimage_fixtures/manifest.json.sig.good") },
-        .{ "Image", "test" },
-    };
-    for (files) |f| {
-        const p = try join(a, &.{ src, f[0] });
-        defer a.free(p);
-        try writeNew(a, p, f[1]);
-    }
+    const sfd = try openDirFd(a, src);
+    defer _ = os.close(sfd);
     const root = try join(a, &.{ base, "store" });
     defer a.free(root);
     const s = try Store.open(a, root);
-    const r = try s.install(a, src, "arm64", false);
+    defer s.close();
+    const r = try s.install(a, sfd, "arm64", false);
     defer a.free(r.name);
     try std.testing.expectEqualStrings("ztcl-guest-test", r.name);
     try std.testing.expectEqual(@as(u64, 3), r.counter);
@@ -484,21 +566,54 @@ test "vmstore: install, list, check, rollback, and remove" {
     try std.testing.expectEqual(@as(usize, 1), l.len);
     try std.testing.expectEqualSlices(u64, &.{3}, l[0].counters);
     // An architecture that the manifest does not have.
-    try std.testing.expectError(error.Missing, s.install(a, src, "x86_64", false));
+    try std.testing.expectError(error.Missing, s.install(a, sfd, "x86_64", false));
     // A changed object fails the check.
-    const obj = try s.objectPath(a, "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08");
-    defer a.free(obj);
-    unlink(a, obj, false);
-    try writeNew(a, obj, "tesT");
+    const obj = "objects/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+    unlink(a, s.fd, obj, false);
+    try writeNew(a, s.fd, obj, "tesT");
     try std.testing.expectError(error.Hash, s.verifyRelease(a, r.name, 3, "arm64"));
     // A higher counter seen before: the same release is a rollback.
-    const hp = try join(a, &.{ root, "releases", r.name, "highest" });
+    const hp = try join(a, &.{ "releases", r.name, "highest" });
     defer a.free(hp);
     try writeAtomic(a, s, hp, "9");
-    try std.testing.expectError(error.Rollback, s.install(a, src, "arm64", false));
+    try std.testing.expectError(error.Rollback, s.install(a, sfd, "arm64", false));
     // The removal of the release takes its objects.
     try s.remove(a, r.name, null);
-    try std.testing.expect(!exists(a, obj));
+    try std.testing.expect(!exists(a, s.fd, obj));
     try std.testing.expectEqual(@as(?u64, null), try s.current(a, r.name));
     try std.testing.expectError(error.NotFound, s.remove(a, r.name, 3));
+}
+
+test "vmstore: a symlink in the release or in the store is refused" {
+    const a = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const base = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path});
+    defer a.free(base);
+    const bfd = try openDirFd(a, base);
+    defer _ = os.close(bfd);
+    try mkdirs(a, bfd, "src");
+    try writeNew(a, bfd, "src/manifest.json", @embedFile("vmimage_fixtures/manifest.json"));
+    try writeNew(a, bfd, "src/manifest.json.sig", @embedFile("vmimage_fixtures/manifest.json.sig.good"));
+    // The kernel of the release is a symlink to a file with the right
+    // bytes outside the folder: a swap that the jail checked before.
+    try writeNew(a, bfd, "outside", "test");
+    try symlinkAt(a, "../outside", bfd, "src/Image");
+    const src = try join(a, &.{ base, "src" });
+    defer a.free(src);
+    const sfd = try openDirFd(a, src);
+    defer _ = os.close(sfd);
+    const root = try join(a, &.{ base, "store" });
+    defer a.free(root);
+    const s = try Store.open(a, root);
+    defer s.close();
+    try std.testing.expectError(error.Io, s.install(a, sfd, "arm64", false));
+    // The file itself, then objects/ of the store swapped for a symlink.
+    unlink(a, bfd, "src/Image", false);
+    try writeNew(a, bfd, "src/Image", "test");
+    try mkdirs(a, bfd, "elsewhere");
+    unlink(a, s.fd, "objects", true);
+    try symlinkAt(a, "../elsewhere", s.fd, "objects");
+    try std.testing.expect(std.meta.isError(s.install(a, sfd, "arm64", false)));
+    try std.testing.expect(!exists(a, bfd, "elsewhere/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"));
 }
