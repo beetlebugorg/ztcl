@@ -294,6 +294,41 @@ fn formatFloat(a: std.mem.Allocator, x: f64, conv: u8, prec_in: ?usize, alt: boo
     }
 }
 
+/// The order of the exact value of the positive double `x` and the
+/// value of the decimal text `dec` (an optional `-`, digits, and an
+/// optional `.`), with no sign. `value.exactDigits` with more digits
+/// than a double has gives all the digits of `x` with no rounding.
+fn orderExact(x: f64, dec: []const u8) std.math.Order {
+    var digs: [800]u8 = undefined;
+    const xe = value.exactDigits(x, digs.len, &digs);
+    const text = std.mem.trimStart(u8, dec, "-");
+    const int_len: i32 = @intCast(std.mem.indexOfScalar(u8, text, '.') orelse text.len);
+    // The significant digits of `dec` and the exponent of the first one.
+    var sd: [64]u8 = undefined;
+    var sn: usize = 0;
+    var de: i32 = 0;
+    var pos: i32 = 0;
+    for (text) |c| {
+        if (c == '.') continue;
+        if (sn == 0 and c == '0') {
+            pos += 1;
+            continue;
+        }
+        if (sn == 0) de = int_len - 1 - pos;
+        if (sn == sd.len) break;
+        sd[sn] = c;
+        sn += 1;
+        pos += 1;
+    }
+    if (sn == 0) return .gt;
+    if (xe != de) return std.math.order(xe, de);
+    for (digs, 0..) |c, k| {
+        const d = if (k < sn) sd[k] else '0';
+        if (c != d) return std.math.order(c, d);
+    }
+    return .eq;
+}
+
 /// Fixed form with `prec` decimals, rounded as C does: by the exact
 /// value of the double, and to the even digit at an exact half.
 fn fixed(a: std.mem.Allocator, buf: []u8, x: f64, prec: usize) Error![]const u8 {
@@ -306,12 +341,11 @@ fn fixed(a: std.mem.Allocator, buf: []u8, x: f64, prec: usize) Error![]const u8 
     if (decimals != prec + 1 or short[short.len - 1] != '5') {
         return std.fmt.float.render(try a.alloc(u8, buf.len), x, .{ .mode = .decimal, .precision = prec }) catch return error.OutOfMemory;
     }
-    const half = std.fmt.parseFloat(f128, short) catch return error.OutOfMemory;
-    const exact: f128 = x;
+    const order = orderExact(@abs(x), short);
     var keep = short[0 .. short.len - 1];
     if (prec == 0) keep = keep[0 .. keep.len - 1];
     const last = keep[keep.len - 1];
-    const up = if (exact == half) (last - '0') % 2 == 1 else exact > half;
+    const up = if (order == .eq) (last - '0') % 2 == 1 else order == .gt;
     const out = try a.alloc(u8, keep.len + 1);
     out[0] = '0';
     @memcpy(out[1..], keep);
