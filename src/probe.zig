@@ -169,7 +169,34 @@ pub const State = struct {
     /// The scripts in the bodies of procs with probes, with the line in
     /// the body of their line 1. `compileNamed` reads it.
     scripts: std.ArrayList(ScriptEntry) = .empty,
+    /// The debugger (`dap.zig`). With a hook, each line of each proc
+    /// has a `probe` instruction, and each command of `top` calls it.
+    line_hook: ?LineHook = null,
+    /// The script of the program file, and its command that runs now.
+    top: ?*interp.Script = null,
+    top_cmd: ?*interp.Cmd = null,
+    /// The line of the program file of line 1 of the body of each proc
+    /// that a command of `top` defined.
+    bases: std.AutoHashMapUnmanaged(*interp.Proc, u32) = .empty,
 };
+
+/// A function of the debugger at a line. `p` is null for a command of
+/// the top level of the program file, and `line` is then the line of
+/// the file. Line 0 is the entry of `p`.
+pub const LineHook = struct {
+    ctx: ?*anyopaque = null,
+    f: *const fn (ctx: ?*anyopaque, it: *Interp, p: ?*interp.Proc, line: u32) void,
+};
+
+/// The mark at the start of the result of `linesFor` for a proc that
+/// gets a `probe` instruction at each line.
+pub const all_lines = std.math.maxInt(u32);
+
+/// True when the compiler puts a `probe` instruction at `line`.
+pub fn wantsLine(lines: []const u32, line: u32) bool {
+    if (lines.len != 0 and lines[0] == all_lines) return true;
+    return std.mem.indexOfScalar(u32, lines, line) != null;
+}
 
 pub const ScriptEntry = struct { script: *interp.Script, proc: *interp.Proc, base: u32 };
 
@@ -398,6 +425,7 @@ pub fn dropAll(it: *Interp) void {
     for (s.probes.items) |p| detach(it, p);
     clear(s);
     s.ring.deinit(s.gpa);
+    s.bases.deinit(s.gpa);
     it.probes = null;
 }
 
@@ -406,6 +434,10 @@ pub fn dropAll(it: *Interp) void {
 pub fn procDefined(it: *Interp, name: []const u8, p: *interp.Proc) void {
     if (comptime !enabled) return;
     const s = it.probes orelse return;
+    if (s.top_cmd) |c| if (it.frame.parent == null and c.words.len == 4 and c.words[0].kind == .lit) {
+        const word = it.str(c.words[0].kind.lit) catch "";
+        if (std.mem.eql(u8, word, "proc")) s.bases.put(s.gpa, p, c.words[3].line) catch {};
+    };
     for (s.probes.items) |pr| {
         if (pr.spec.kind != .proc and pr.spec.kind != .line) continue;
         if (!sameName(pr.spec.target, name)) continue;
@@ -424,6 +456,7 @@ pub fn linesFor(it: *Interp, p: *interp.Proc) Allocator.Error!?[]u32 {
     if (comptime !enabled) return null;
     const s = it.probes orelse return null;
     var out: std.ArrayList(u32) = .empty;
+    if (s.line_hook != null) try out.append(s.gpa, all_lines);
     for (s.probes.items) |pr| {
         if (pr.proc != p) continue;
         const line: u32 = if (pr.spec.kind == .line) pr.spec.line else 0;
@@ -440,6 +473,7 @@ pub fn fireLine(it: *Interp, p: *interp.Proc, line: u32) void {
     if (comptime !enabled) return;
     const s = it.probes orelse return;
     if (s.busy) return;
+    if (s.line_hook) |h| h.f(h.ctx, it, p, line);
     for (s.probes.items) |pr| {
         if (pr.proc != p) continue;
         const at: u32 = if (pr.spec.kind == .line) pr.spec.line else 0;
@@ -458,6 +492,15 @@ pub fn fireLine(it: *Interp, p: *interp.Proc, line: u32) void {
         }
         fire(it, s, pr, fields[0..n]);
     }
+}
+
+/// A command of the top level of the program file starts.
+pub fn fireTop(it: *Interp, c: *interp.Cmd) void {
+    if (comptime !enabled) return;
+    const s = it.probes orelse return;
+    s.top_cmd = c;
+    if (s.busy) return;
+    if (s.line_hook) |h| h.f(h.ctx, it, null, c.line);
 }
 
 /// A command with a probe ran. `result` is null at the entry.

@@ -640,7 +640,7 @@ const Compiler = struct {
         defer c.outer_line = outer;
         if (probe_on and c.probe_lines.len != 0) {
             const line = c.line_base + cmd.line - 1;
-            if (line != outer and std.mem.indexOfScalar(u32, c.probe_lines, line) != null) _ = try c.emit(.{ .op = .probe, .a = line });
+            if (line != outer and @import("probe.zig").wantsLine(c.probe_lines, line)) _ = try c.emit(.{ .op = .probe, .a = line });
             c.outer_line = line;
         }
         if (cmd.has_expand) {
@@ -1310,7 +1310,7 @@ pub fn compileProc(it: *Interp, p: *interp.Proc, s: *interp.Script) Error!*Code 
     if (lines) |l| {
         c.probe_lines = l;
         try c.walk(s, 0);
-        if (std.mem.indexOfScalar(u32, l, 0) != null) _ = try c.emit(.{ .op = .probe, .a = 0 });
+        if (@import("probe.zig").wantsLine(l, 0)) _ = try c.emit(.{ .op = .probe, .a = 0 });
     }
     try c.compileScript(s);
     _ = try c.emit(.{ .op = .ret });

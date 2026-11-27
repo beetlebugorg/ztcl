@@ -270,3 +270,71 @@ test "a replay gives the recorded entropy and environment" {
     try std.testing.expectEqualStrings("hi", (try tcl.tape.bytes(&it, .random, null, fillNone)).?);
     try std.testing.expect(try tcl.tape.bytes(&it, .env, null, fillHi) == null);
 }
+
+const dap_script =
+    \\proc f {x} {
+    \\    set y [expr {$x * 2}]
+    \\    return $y
+    \\}
+    \\set r [f 3]
+    \\puts $r
+;
+
+fn dapRead(_: ?*anyopaque, _: []const u8, a: std.mem.Allocator) anyerror![]u8 {
+    return a.dupe(u8, dap_script);
+}
+
+fn frame(a: std.mem.Allocator, out: *std.ArrayList(u8), body: []const u8) !void {
+    try out.print(a, "Content-Length: {d}\r\n\r\n{s}", .{ body.len, body });
+}
+
+test "the DAP server stops at a breakpoint, steps, and gives the stack" {
+    if (!options.mod_probe) return error.SkipZigTest;
+    const a = std.testing.allocator;
+    var it: tcl.Interp = undefined;
+    try it.init(a);
+    defer it.deinit();
+    var in: std.ArrayList(u8) = .empty;
+    defer in.deinit(a);
+    const reqs = [_][]const u8{
+        \\{"seq":1,"type":"request","command":"initialize","arguments":{"adapterID":"ztcl"}}
+        ,
+        \\{"seq":2,"type":"request","command":"launch","arguments":{"program":"/w/t.tcl"}}
+        ,
+        \\{"seq":3,"type":"request","command":"setBreakpoints","arguments":{"source":{"path":"/w/t.tcl"},"breakpoints":[{"line":3},{"line":2,"condition":"$x > 5"}]}}
+        ,
+        \\{"seq":4,"type":"request","command":"configurationDone"}
+        ,
+        \\{"seq":5,"type":"request","command":"stackTrace","arguments":{"threadId":1}}
+        ,
+        \\{"seq":6,"type":"request","command":"variables","arguments":{"variablesReference":1}}
+        ,
+        \\{"seq":7,"type":"request","command":"evaluate","arguments":{"expression":"expr {$y + 1}","frameId":0}}
+        ,
+        \\{"seq":8,"type":"request","command":"next","arguments":{"threadId":1}}
+        ,
+        \\{"seq":9,"type":"request","command":"stackTrace","arguments":{"threadId":1}}
+        ,
+        \\{"seq":10,"type":"request","command":"continue","arguments":{"threadId":1}}
+        ,
+        \\{"seq":11,"type":"request","command":"disconnect"}
+        ,
+    };
+    for (reqs) |r| try frame(a, &in, r);
+    var reader: std.Io.Reader = .fixed(in.items);
+    var out: std.Io.Writer.Allocating = .init(a);
+    defer out.deinit();
+    var server: tcl.dap.Server = .{ .it = &it, .gpa = a, .in = &reader, .out = &out.writer, .read = dapRead };
+    try tcl.dap.serve(&server);
+    const text = out.written();
+    // The condition of line 2 is false, so the first stop is line 3.
+    try has(text, "\"event\":\"stopped\",\"body\":{\"reason\":\"breakpoint\"");
+    try has(text, "{\"id\":0,\"name\":\"f 3\",\"line\":3,\"column\":1,\"source\":{\"name\":\"t.tcl\",\"path\":\"/w/t.tcl\"}}");
+    try has(text, "{\"name\":\"x\",\"value\":\"3\",\"variablesReference\":0},{\"name\":\"y\",\"value\":\"6\"");
+    try has(text, "\"command\":\"evaluate\",\"body\":{\"result\":\"7\"");
+    // The step leaves `f` and stops at the next line of the top level.
+    try has(text, "\"reason\":\"step\"");
+    try has(text, "{\"id\":0,\"name\":\"<top>\",\"line\":6");
+    try has(text, "\"category\":\"stdout\",\"output\":\"6\\n\"");
+    try has(text, "\"event\":\"exited\",\"body\":{\"exitCode\":0}");
+}
