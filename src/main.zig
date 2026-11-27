@@ -82,6 +82,31 @@ pub fn main(init: std.process.Init) !void {
     return runWith(init, null);
 }
 
+/// The services of the system that the options and the scripts of the
+/// runner use. `runWith` fills it from `std.process.Init`. The command
+/// component of WASI 0.3.2 (`src/wasi/run.zig`) fills it with WASI 0.3.2
+/// functions, because `std.Io` on WASI uses preview 1.
+pub const Host = struct {
+    /// The `Io` of the standard library, or null in the component.
+    io: ?Io,
+    gpa: std.mem.Allocator,
+    arena: std.mem.Allocator,
+    args: []const []const u8,
+    out: *Io.Writer,
+    in: *Io.Reader,
+    /// The value of an environment variable of the runner.
+    env: *const fn (name: []const u8) ?[]const u8,
+    /// The text of a script file.
+    read: *const fn (path: []const u8, a: std.mem.Allocator) anyerror![]u8,
+    /// Ends the process with the exit code.
+    exit: *const fn (code: u8) noreturn,
+    /// A monotonic time in nanoseconds, for `--time`.
+    nanos: *const fn () i96,
+    clock: @typeInfo(@FieldType(tcl.Interp, "clock_host")).optional.child,
+    event: tcl.event.Host,
+};
+
+var host: *const Host = undefined;
 var host_io: Io = undefined;
 const chan_ok = tcl.sys.supported;
 const exec_ok = tcl.proc.supported;
@@ -171,6 +196,13 @@ var jit_stats = false;
 fn report(it: *const tcl.Interp) void {
     if (jit_stats) tcl.jit.printStats(it);
     if (!report_on) return;
+    // The debug `Io` of the component gives no output, so the report
+    // goes to descriptor 2 there.
+    if (comptime tcl.sys.wasi_p3) {
+        var buf: [128]u8 = undefined;
+        _ = tcl.sys.write(2, std.fmt.bufPrint(&buf, "report compute={d} mem={d} peak={d}\n", .{ max_compute - it.compute_limit, it.counter.used, it.counter.mem_peak }) catch return);
+        return;
+    }
     std.debug.print("report compute={d} mem={d} peak={d}\n", .{ max_compute - it.compute_limit, it.counter.used, it.counter.mem_peak });
     if (std.debug.runtime_safety) std.debug.print("gc collections={d}\n", .{it.gcCount()});
 }
@@ -186,11 +218,11 @@ fn leave(it: *tcl.Interp, code: u8) noreturn {
     exit_out.flush() catch {};
     report(it);
     it.deinit();
-    std.process.exit(code);
+    host.exit(code);
 }
 
 /// The part of `tclsh` that the Tcl tests use for a child process.
-fn runTclsh(it: *tcl.Interp, out: *Io.Writer, words: []const [:0]const u8, root: ?[]const u8, cwd: ?[]const u8) !void {
+fn runTclsh(it: *tcl.Interp, out: *Io.Writer, words: []const []const u8, root: ?[]const u8, cwd: ?[]const u8) !void {
     exit_out = out;
     const channels = chan_ok and it.capabilities & @backingInt(tcl.interp.Capability.channels) != 0;
     if (comptime chan_ok) {
@@ -225,7 +257,7 @@ fn runTclsh(it: *tcl.Interp, out: *Io.Writer, words: []const [:0]const u8, root:
         \\}}
     ;
     if (words.len > 0 and !channels) {
-        const text = try readScript(host_io, words[0], a);
+        const text = try host.read(words[0], a);
         it.script_name = words[0];
         _ = it.eval(text) catch |e| return tclshError(it, e);
         leave(it, 0);
@@ -372,16 +404,64 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
         return;
     }
 
+    var in_buf: [1 << 16]u8 = undefined;
+    var in_r: Io.File.Reader = .init(.stdin(), io, &in_buf);
+    const words = try arena.alloc([]const u8, args.len);
+    for (args, words) |w, *d| d.* = w;
+    native_env = init.environ_map;
+    const h: Host = .{
+        .io = io,
+        .gpa = init.gpa,
+        .arena = arena,
+        .args = words,
+        .out = out,
+        .in = &in_r.interface,
+        .env = nativeEnv,
+        .read = nativeRead,
+        .exit = nativeExit,
+        .nanos = nativeNanos,
+        .clock = .{ .now = hostNow, .zone = hostZone },
+        .event = .{ .now = hostTicks, .sleep = hostSleep },
+    };
+    return runHost(&h, setup);
+}
+
+var native_env: *std.process.Environ.Map = undefined;
+
+fn nativeEnv(name: []const u8) ?[]const u8 {
+    return native_env.get(name);
+}
+
+fn nativeRead(path: []const u8, a: std.mem.Allocator) anyerror![]u8 {
+    return readScript(host_io, path, a);
+}
+
+fn nativeExit(code: u8) noreturn {
+    std.process.exit(code);
+}
+
+fn nativeNanos() i96 {
+    return Io.Clock.awake.now(host_io).toNanoseconds();
+}
+
+/// Runs the options and the scripts of `h.args` with the services of `h`.
+pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !void {
+    host = h;
+    const arena = h.arena;
+    const args = h.args;
+    const out = h.out;
+    defer out.flush() catch {};
+
     var it: tcl.Interp = undefined;
-    try it.init(init.gpa);
+    try it.init(h.gpa);
     defer it.deinit();
     defer report(&it);
     it.output = .{ .ctx = out, .write = write };
     it.mem_limit = 2 << 30;
     // The runner starts the child process of an isolated thread.
-    if (comptime tcl.isothread.supported) it.iso_runner = std.process.executablePathAlloc(io, arena) catch null;
+    if (comptime tcl.isothread.supported) it.iso_runner = std.process.executablePathAlloc(h.io.?, arena) catch null;
     if (setup) |f| try f(&it);
-    if (init.environ_map.get("ZTCL_JIT")) |v| {
+    if (h.env("ZTCL_JIT")) |v| {
         if (std.mem.eql(u8, v, "off")) it.disableJit();
     }
 
@@ -434,7 +514,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             } else {
                 try out.print("--gc needs on or off\n", .{});
                 out.flush() catch {};
-                std.process.exit(2);
+                host.exit(2);
             }
             continue;
         }
@@ -500,7 +580,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             it.net = (try tcl.sock.parsePolicy(arena, args[i])) orelse {
                 try out.print("bad network policy \"{s}\"\n", .{args[i]});
                 out.flush() catch {};
-                std.process.exit(2);
+                host.exit(2);
             };
             continue;
         }
@@ -522,7 +602,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             tcl.fsroot.setRoot(&it, args[i]) catch {
                 try out.print("cannot open the root folder \"{s}\"\n", .{args[i]});
                 out.flush() catch {};
-                std.process.exit(2);
+                host.exit(2);
             };
             continue;
         }
@@ -531,11 +611,10 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             const bits = tcl.interp.Capability.parse(args[i]) orelse {
                 try out.print("unknown capability in \"{s}\"\n", .{args[i]});
                 out.flush() catch {};
-                std.process.exit(2);
+                host.exit(2);
             };
-            host_io = io;
-            it.clock_host = .{ .now = hostNow, .zone = hostZone };
-            it.event_host = .{ .now = hostTicks, .sleep = hostSleep };
+            it.clock_host = h.clock;
+            it.event_host = h.event;
             // A write to a closed pipe or socket is an error of the
             // script. It must not end the runner.
             if (comptime chan_ok) tcl.sys.ignorePipeSignal();
@@ -618,10 +697,10 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
             continue;
         }
         ran = true;
-        const text = readScript(io, arg, arena) catch |e| {
+        const text = h.read(arg, arena) catch |e| {
             try out.print("{s}: {s}\n", .{ arg, @errorName(e) });
             out.flush() catch {};
-            std.process.exit(2);
+            host.exit(2);
         };
         it.error_line = 0;
         if (keep_going) {
@@ -650,15 +729,15 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
         }
         var best: i96 = std.math.maxInt(i96);
         for (0..@max(repeat, 1)) |_| {
-            const start = Io.Clock.awake.now(io);
+            const start = h.nanos();
             _ = it.eval(text) catch |e| {
                 const msg = if (e == error.TclError) it.str(it.result) catch "out of memory" else @errorName(e);
                 try out.print("{s}:{d}: {s}\n", .{ arg, it.error_line, msg });
                 out.flush() catch {};
                 report(&it);
-                std.process.exit(1);
+                host.exit(1);
             };
-            best = @min(best, start.untilNow(io, .awake).toNanoseconds());
+            best = @min(best, h.nanos() - start);
         }
         if (timed) try out.print("{s}: {d:.1} ms\n", .{ arg, @as(f64, @floatFromInt(best)) / 1e6 });
     }
@@ -666,25 +745,23 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     if (tclsh) return runTclsh(&it, out, &.{}, root, cwd);
 
     // The interactive shell, when stdin and stdout are a terminal.
-    const env = init.environ_map;
-    if (shell_ok and shell.term.interactive(io, env.get("TERM"))) {
+    const env = h.env;
+    if (shell_ok and shell.term.interactive(h.io.?, env("TERM"))) {
         try out.flush();
         // The output of `puts` shows at once, before the next prompt.
         flush_each = true;
         var sh = shell.shell.Shell.init(std.heap.smp_allocator, &it, .{
-            .io = io,
-            .home = env.get("HOME") orelse env.get("USERPROFILE"),
-            .no_color = env.get("NO_COLOR") != null,
-            .editor_cmd = env.get("VISUAL") orelse env.get("EDITOR"),
+            .io = h.io.?,
+            .home = env("HOME") orelse env("USERPROFILE"),
+            .no_color = env("NO_COLOR") != null,
+            .editor_cmd = env("VISUAL") orelse env("EDITOR"),
         });
         defer sh.deinit();
         if (sh.loop()) |_| return else |e| if (e != error.NoTerminal) return e;
     }
 
     // The command line: one command for each line of stdin.
-    var in_buf: [1 << 16]u8 = undefined;
-    var in_r: Io.File.Reader = .init(.stdin(), io, &in_buf);
-    const in = &in_r.interface;
+    const in = h.in;
     while (true) {
         try out.writeAll("% ");
         try out.flush();

@@ -33,7 +33,8 @@ const on_mac = builtin.os.tag == .macos;
 const on_win = builtin.os.tag == .windows and builtin.cpu.arch == .x86_64;
 const win = @import("fsroot_windows.zig");
 const on_wasi = builtin.os.tag == .wasi;
-const wfs = @import("fsroot_wasi.zig");
+/// The command component of WASI 0.3.2 uses `fsroot_wasi3.zig`.
+const wfs = if (sys.wasi_p3) @import("fsroot_wasi3.zig") else @import("fsroot_wasi.zig");
 /// ARM64 Windows stays off until its tests can run.
 pub const supported = builtin.os.tag == .linux or on_mac or on_win or on_wasi;
 

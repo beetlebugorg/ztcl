@@ -11,10 +11,19 @@
 # Wasmtime limits the native stack of wasm code to 512 KiB by default.
 # The interpreter can use 5 MiB (`max_native`), so the limit is 8 MiB.
 #
-# `WASMTIME` names the wasmtime binary, and `ZTCL_WASM` the module.
+# `--component` as the first argument runs the command component of
+# WASI 0.3.2, zig-out/bin/ztcl.component.wasm, in place of the preview 1
+# module.
+#
+# `WASMTIME` names the wasmtime binary, `ZTCL_WASM` the module, and
+# `ZTCL_COMPONENT` the component.
 # SPDX-License-Identifier: BSD-2-Clause
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 wasm=${ZTCL_WASM:-$here/../zig-out/bin/ztcl.wasm}
+if [ "$1" = --component ]; then
+    shift
+    wasm=${ZTCL_COMPONENT:-$here/../zig-out/bin/ztcl.component.wasm}
+fi
 set -- "$@" --
 dirs=
 while [ "$1" != -- ]; do

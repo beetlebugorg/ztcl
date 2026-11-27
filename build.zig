@@ -176,7 +176,15 @@ pub fn build(b: *std.Build) void {
         .target = p3_target,
         .optimize = .ReleaseFast,
         .strip = true,
-        .imports = &.{.{ .name = "ztcl", .module = p3_lib }},
+        .imports = &.{
+            .{ .name = "ztcl", .module = p3_lib },
+            .{ .name = "runner", .module = b.createModule(.{
+                .root_source_file = b.path("src/main.zig"),
+                .target = p3_target,
+                .optimize = .ReleaseFast,
+                .imports = &.{.{ .name = "ztcl", .module = p3_lib }},
+            }) },
+        },
     }) });
     p3_core.entry = .disabled;
     p3_core.stack_size = 8 << 20;
@@ -190,8 +198,13 @@ pub fn build(b: *std.Build) void {
     p3_new.addFileArg(p3_embedded);
     p3_new.addArg("-o");
     const p3_component = p3_new.addOutputFileArg("ztcl.component.wasm");
+    const p3_install = b.addInstallBinFile(p3_component, "ztcl.component.wasm");
     b.step("wasi-component", "Build zig-out/bin/ztcl.component.wasm, the command component of WASI 0.3.2 (needs wasm-tools)")
-        .dependOn(&b.addInstallBinFile(p3_component, "ztcl.component.wasm").step);
+        .dependOn(&p3_install.step);
+    // `-Dwasi=p3` with a WASI target: `zig build` installs the command
+    // component of WASI 0.3.2 in place of the preview 1 module.
+    const wasi_abi = b.option(enum { p1, p3 }, "wasi", "The WASI of -Dtarget=wasm32-wasi: p1 (default, zig-out/bin/ztcl.wasm) or p3 (zig-out/bin/ztcl.component.wasm, needs wasm-tools)") orelse .p1;
+    const p3_default = t.os.tag == .wasi and wasi_abi == .p3;
 
     // The runner and the benchmark always build in ReleaseFast.
     const fast = b.createModule(.{
@@ -231,6 +244,8 @@ pub fn build(b: *std.Build) void {
         const signed = run.addOutputFileArg("ztcl");
         run.addArgs(&.{ "ztcl", "com.apple.security.virtualization", "com.apple.security.cs.allow-jit" });
         b.getInstallStep().dependOn(&b.addInstallBinFile(signed, "ztcl").step);
+    } else if (p3_default) {
+        b.getInstallStep().dependOn(&p3_install.step);
     } else b.installArtifact(exe);
 
     // `zig build runtimes`: the runner of each target of `ztcl build`,

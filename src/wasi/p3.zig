@@ -413,6 +413,11 @@ pub const filesystem_types = struct {
         };
     };
 
+    pub const MetadataHashValue = extern struct {
+        lower: u64,
+        upper: u64,
+    };
+
     /// A handle of the resource `descriptor`.
     pub const Descriptor = u32;
 
@@ -635,6 +640,17 @@ pub const filesystem_types = struct {
         }
     };
 
+    /// `metadata-hash-at: async func(/// Flags determining the method of how the path is resolved. path-flags: path-flags, /// The relative path of the file or directory to inspect. path: string,) -> result<metadata-hash-value, error-code>;`
+    pub const descriptor_metadata_hash_at = struct {
+        /// The return area.
+        pub const Ret = Result(MetadataHashValue, ErrorCode);
+        pub const call = @extern(*const fn (self: u32, path_flags: u32, path_0: u32, path_1: u32, ret: u32) callconv(.c) u32, .{ .name = "[async-lower][method]descriptor.metadata-hash-at", .library_name = "wasi:filesystem/types@0.3.2" });
+
+        comptime {
+            check(Ret, 24, 8);
+        }
+    };
+
     /// `open-at: async func(/// Flags determining the method of how the path is resolved. path-flags: path-flags, /// The relative path of the object to open. path: string, /// The method by which to open the file. open-flags: open-flags, /// Flags to use for the resulting descriptor. %flags: descriptor-flags,) -> result<descriptor, error-code>;`
     pub const descriptor_open_at = struct {
         /// The parameters in memory.
@@ -720,6 +736,7 @@ pub const filesystem_types = struct {
         check(LinkCount, 8, 8);
         check(DirectoryEntry, 24, 4);
         check(ErrorCode, 16, 4);
+        check(MetadataHashValue, 16, 8);
         check(Descriptor, 4, 4);
     }
 };
