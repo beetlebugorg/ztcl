@@ -1597,6 +1597,15 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
         if (check) {
             try s.aluMI(.cmp, Emitter.itAt(l.it_compute_limit), @intCast(pt.steps));
             try s.jcc(.b, try e.exit(pc, 0));
+            // The memory check of a step, as in tier 1: a stop of the
+            // thread (`thread.stopWorker`) stores zero in `mem_limit`, and
+            // a loop with no call sees it only here. `rax` can hold a
+            // value of the instruction before, and `pop` keeps the flags.
+            try s.push(.rax);
+            try s.movRM(.rax, Emitter.itAt(l.it_mem_trip));
+            try s.aluRM(.cmp, .rax, Emitter.itAt(l.it_mem_limit));
+            try s.pop(.rax);
+            try s.jcc(.ae, try e.exit(pc, 0));
             try s.aluMI(.sub, Emitter.itAt(l.it_compute_limit), @intCast(pt.steps));
         }
         if (!p.seen[k]) {
