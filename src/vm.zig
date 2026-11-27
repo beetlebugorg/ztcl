@@ -902,7 +902,9 @@ const Compiler = struct {
         } else if (eql(u8, name, "lmap")) {
             return c.compileForeach(cmd, true, false);
         } else if (eql(u8, name, "switch")) {
-            return c.compileSwitch(cmd);
+            if (try c.compileSwitch(cmd)) return true;
+            try c.listSwitchBody(cmd);
+            return false;
         } else if (eql(u8, name, "lassign")) {
             return c.compileLassign(cmd);
         } else if (eql(u8, name, "lset")) {
@@ -1022,6 +1024,39 @@ const Compiler = struct {
             it.result, it.error_code, it.error_line = .{ r, code, line };
             return null;
         };
+    }
+
+    /// A `switch` that the compiler does not compile, such as one with
+    /// `-regexp`, runs the command. When its patterns and bodies are one
+    /// literal word, that word becomes a list value here, so the command
+    /// does not parse the list at each call. Tcl keeps the list form of
+    /// the literal in the same way.
+    fn listSwitchBody(c: *Compiler, cmd: *Cmd) Error!void {
+        const w = cmd.words;
+        var i: usize = 1;
+        while (i < w.len) : (i += 1) {
+            if (w[i].kind != .lit or w[i].kind.lit != .str) return;
+            const opt = w[i].kind.lit.str;
+            if (opt.len == 0 or opt[0] != '-') break;
+            if (std.mem.eql(u8, opt, "--")) {
+                i += 1;
+                break;
+            }
+            const known = [_][]const u8{ "-exact", "-glob", "-regexp", "-nocase" };
+            const takes_arg = std.mem.eql(u8, opt, "-matchvar") or std.mem.eql(u8, opt, "-indexvar");
+            if (takes_arg) {
+                i += 1;
+                continue;
+            }
+            for (known) |k| {
+                if (std.mem.eql(u8, opt, k)) break;
+            } else return;
+        }
+        // The subject and one word of patterns and bodies.
+        if (w.len != i + 2 or w[i + 1].expand or w[i + 1].kind != .lit or w[i + 1].kind.lit != .str) return;
+        const items = w[i + 1].kind.lit.asList(c.it.alloc()) catch return;
+        if (items.len < 2 or items.len % 2 != 0) return;
+        w[i + 1].kind = .{ .lit = try value.newList(c.it.alloc(), items) };
     }
 
     /// `switch ?-exact|-glob? ?--? string {pattern body ...}`, also with the

@@ -704,6 +704,16 @@ fn versionOrder(a: []const u32, b: []const u32) std.math.Order {
 /// lower, or the same version with `exact`.
 pub fn tclOk(want: []const u8, exact: bool) bool {
     var buf: [8]u32 = undefined;
+    // A range of package.n: `min-` is min or higher, and `min-max` is
+    // min or higher and below max.
+    if (std.mem.indexOfScalar(u8, want, '-')) |dash| {
+        const lo = versionParts(want[0..dash], &buf) orelse return false;
+        if (versionOrder(&tcl_parts, lo) == .lt) return false;
+        if (dash + 1 == want.len) return true;
+        var hb: [8]u32 = undefined;
+        const hi = versionParts(want[dash + 1 ..], &hb) orelse return false;
+        return versionOrder(&tcl_parts, hi) == .lt;
+    }
     const w = versionParts(want, &buf) orelse return false;
     if (exact) return versionOrder(&tcl_parts, w) == .eq;
     return w[0] == tcl_parts[0] and versionOrder(&tcl_parts, w) != .lt;

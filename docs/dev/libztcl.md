@@ -106,6 +106,22 @@ Results of 2026-11-27 on x86-64 Linux (8 cores, with other builds on the host, s
 
 The resident memory of `nsd` after a round is 27 MB to 28 MB on Tcl and 248 MB to 255 MB on libztcl. Each connection thread of NaviServer has its own interp, and an interp of ztcl takes more memory than an interp of Tcl. This is the next item for servers.
 
+### Profile and changes
+
+`perf record --user-callchains` on `nsd` under `httpload` (this host allows user call chains only). The CPU time of `nsd` for each request (user and system time from `/proc`, divided by the requests) is steadier than the requests per second on this host, which had a load average of 14 to 26.
+
+| CPU µs for each request | Static file | Small ADP page | ADP page with Tcl work | RSS after the runs |
+|---|---:|---:|---:|---:|
+| Tcl 8.6.16 | 98 to 105 | 123 to 128 | 3,295 to 3,370 | 28 MB |
+| libztcl, first run | 111 | 148 | 1,260 | 247 MB |
+| libztcl, this PR | 113 to 120 | 129 to 137 | 1,335 to 1,380 | 255 MB to 284 MB |
+
+- The static file runs in the C code of NaviServer and libc. The functions of libztcl are 10% of its CPU (14% for libtcl8.6 on Tcl), mostly `Tcl_DStringSetLength` and `Tcl_DStringAppend` for the log, with the same work as in Tcl. The differences on this page are in the range of the noise of the host.
+- On the small page, a `switch -glob` of the scripts of NaviServer parsed its literal list of patterns and bodies at each call (`cmdSwitch`, `listSlow`, `parseList`: 5% of the CPU). The compiler now keeps such a literal as a list value (`listSwitchBody` in `src/vm.zig`), as Tcl keeps the list form of a literal.
+- A command of a C package looked up its own name at each call (`native.cmdC`). It now uses the command of the call site when the site is current.
+- The memory is in the heaps of the 10 interps: a collection waits for 16 MB of heap in each interp, and each interp keeps up to 16 MB of free blocks. A threshold of 1 MB and a smaller margin after each collection gave 100 MB to 125 MB for 25% more CPU on the work page. Those changes are in the collector, so they are in issue #526 with the numbers. This PR only sets the first threshold and the free lists of an interp of `Tcl_CreateInterp`.
+- The JIT is off in an interp of `Tcl_CreateInterp`.
+
 ## Missing functions by programs blocked
 
 From `tools/libztcl/needs.py` on the subjects above. This list goes to the agent of the stubs tables (#1).
@@ -117,7 +133,8 @@ None of the subjects above imports a missing function now. The slots that Expect
 - The tommath stubs table (`TclBN_*`) and the Unix helpers outside the four tables.
 - `Tcl_ThreadQueueEvent` and `Tcl_ThreadAlert`: they need the event queue of the C API.
 - ztcl does not call `Tcl_AsyncInvoke` between commands yet.
-- The memory of an interp: NaviServer on libztcl uses 9 times the memory of NaviServer on Tcl.
+- The memory of an interp: NaviServer on libztcl uses 9 times the memory of NaviServer on Tcl (issue #526).
+- The JIT in interps of `Tcl_CreateInterp`, and compiled code shared across the interps of the threads.
 - The legacy fields of `Tcl_Interp` other than the first four: `result` is an empty string, and a program that reads `interp->result` gets no text.
 - The Windows build (`Tcl_MainExW`, the platform table of Windows), and a run on macOS. The macOS library builds (`-Dtarget=aarch64-macos`) and is not run yet.
 - libztk, the library of Tk 8.6 for Python's `_tkinter` (ztk #223).
