@@ -256,7 +256,8 @@ export class Interp {
     const queue = this._domQueue ?? [];
     if (queue.length) this._domQueue = [];
     for (const ev of queue) add(this._domEvent(ev));
-    // The results of the promises of `web::call -command`.
+    // The results of the promises of `web::call -command` and the events
+    // of `web::on`, in their order.
     for (const ev of this._web?.take() ?? []) add(this._webEvent(ev));
     if (this._events) {
       add(this._call(() => this.x.ztcl_run_events(this.h, now)));
@@ -284,7 +285,7 @@ export class Interp {
   }
 
   // Runs the script of one event of `web::` with its own compute limit.
-  _webEvent({ script, vals }) {
+  _webEvent({ script, vals, subst = false }) {
     const x = this.x;
     return this._call(() => {
       const s = encoder.encode(script);
@@ -294,7 +295,7 @@ export class Interp {
       if (!sp || !vp) throw new Error("ztcl_alloc: out of memory");
       new Uint8Array(x.memory.buffer, sp, s.length).set(s);
       new Uint8Array(x.memory.buffer, vp, v.length).set(v);
-      const rc = x.ztcl_web_event(this.h, sp, s.length, vp, v.length);
+      const rc = x.ztcl_web_event(this.h, sp, s.length, vp, v.length, subst ? 1 : 0);
       x.ztcl_free(sp, s.length || 1);
       x.ztcl_free(vp, v.length);
       return rc;

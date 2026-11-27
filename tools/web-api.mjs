@@ -180,6 +180,40 @@ r = t.eval("set got");
 check(r.ok, "the interpreter runs after the limit");
 t.close();
 
+// Task 03: web::on and web::off with %type, %target, and %detail.
+t = await Interp.create(host, { allow: ["web:serial"], web, webRoot });
+t.eval("set s [web::root navigator.serial]; set seen {}");
+r = t.eval("web::on $s connect {lappend ::seen %type %target [web::get %target connected] %detail}");
+check(r.ok, `web::on (got ${r.result})`);
+const port2 = new SerialPort({ usbVendorId: 1 });
+const connect = (detail) => {
+  const e = new CustomEvent("connect", { detail });
+  Object.defineProperty(e, "target", { value: port2 });
+  serial.dispatchEvent(e);
+};
+connect(7);
+await tick();
+r = t.eval("set seen");
+check(r.ok && r.result === "connect web2 1 7", `a connect event (got ${r.result})`);
+r = t.eval("web::on $s message {puts x}");
+check(!r.ok && /has no attribute "onmessage"/.test(r.result), `an event out of the table (got ${r.result})`);
+r = t.eval("web::on $s connected {puts x}");
+check(!r.ok, `a bad event name (got ${r.result})`);
+t.eval("web::off $s connect");
+connect(8);
+await tick();
+r = t.eval("set seen");
+check(r.result === "connect web2 1 7", `no script after web::off (got ${r.result})`);
+t.eval("web::on $s connect {lappend ::seen again}; web::release $s");
+connect(9);
+await tick();
+check(t.eval("set seen").result === "connect web2 1 7", "no script after web::release");
+t.close();
+t = await Interp.create(host, { allow: ["web:usb"], web, webRoot });
+r = t.eval("web::on web1 connect {}");
+check(!r.ok && /invalid web handle/.test(r.result), `web::on of an unknown handle (got ${r.result})`);
+t.close();
+
 if (failed) {
   console.error(`${failed} failed`);
   process.exit(1);
