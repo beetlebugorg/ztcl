@@ -1,8 +1,9 @@
 # The library commands of Tcl for an interpreter with the capability
 # package: auto_path, the handler of `package unknown` that reads the
 # pkgIndex.tcl files of auto_path, auto_load with tclIndex files,
-# auto_execok, auto_qualify, and history. The commands follow the manual
-# pages library.n and package.n of Tcl 8.6. src/interp.zig evaluates
+# auto_execok, auto_qualify, history, and the Tcl modules (tcl::tm).
+# The commands follow the manual pages library.n, package.n, and tm.n
+# of Tcl 8.6. src/interp.zig evaluates
 # this file when it turns on package. A search needs the capability file
 # when it runs; with no file, it finds nothing.
 # SPDX-License-Identifier: BSD-2-Clause
@@ -44,6 +45,131 @@ proc ::tclLog {msg} {
 }
 
 package unknown ::tclPkgUnknown
+
+# ---- tcl::tm: Tcl modules ----
+
+# The module path of tm.n: a list of folders, searched from the first.
+# A module is a file NAME-VERSION.tm below a folder of the path, with
+# each :: of the package name as a folder separator.
+namespace eval ::tcl::tm {
+    variable paths {}
+    namespace export path roots
+}
+
+proc ::tcl::tm::path {{sub ""} args} {
+    switch -exact -- $sub {
+        add {return [Add {*}$args]}
+        remove {
+            variable paths
+            foreach p $args {
+                set i [lsearch -exact $paths $p]
+                if {$i >= 0} {set paths [lreplace $paths $i $i]}
+            }
+            return
+        }
+        list {
+            if {[llength $args]} {
+                return -code error "wrong # args: should be \"::tcl::tm::path list\""
+            }
+            variable paths
+            return $paths
+        }
+        default {
+            return -code error "unknown or ambiguous subcommand \"$sub\": must be add, list, or remove"
+        }
+    }
+}
+
+# Adds each folder at the head of the path. A folder that is an
+# ancestor or a subfolder of another folder of the path is an error,
+# and then no folder goes in.
+proc ::tcl::tm::Add {args} {
+    variable paths
+    set new $paths
+    foreach p $args {
+        if {$p in $new} continue
+        foreach q $new {
+            if {[string match $p/* $q]} {
+                return -code error "$p is ancestor of existing module path $q."
+            }
+            if {[string match $q/* $p]} {
+                return -code error "$p is subdirectory of existing module path $q."
+            }
+        }
+        set new [linsert $new 0 $p]
+    }
+    set paths $new
+    return
+}
+
+# Adds ROOT/tclX/site-tcl and ROOT/tclX/X.y for each y up to the minor
+# version of Tcl, for each root.
+proc ::tcl::tm::roots {args} {
+    if {[llength $args] != 1} {
+        return -code error "wrong # args: should be \"::tcl::tm::roots paths\""
+    }
+    regexp {^(\d+)\.(\d+)} [info tclversion] -> major minor
+    foreach root [lindex $args 0] {
+        if {[llength [info commands ::file]]} {catch {set root [file normalize $root]}}
+        set base $root/tcl$major
+        set list [list $base/site-tcl]
+        for {set i 0} {$i <= $minor} {incr i} {lappend list $base/$major.$i}
+        foreach p [lreverse $list] {Add $p}
+    }
+    return
+}
+
+# The handler of package unknown: an ifneeded script for each module of
+# the name on the path, then the handler before it when none fits.
+proc ::tcl::tm::UnknownHandler {original name args} {
+    variable paths
+    set found 0
+    if {[llength [info commands ::glob]]} {
+        set partial [string map {:: /} $name]
+        set dir [file dirname $partial]
+        set tail [file tail $partial]
+        foreach p $paths {
+            set d [expr {$dir eq "." ? $p : "$p/$dir"}]
+            if {[catch {glob -nocomplain -directory $d -types f -- $tail-*.tm} files]} continue
+            foreach f $files {
+                if {![regexp -- {-([[:digit:]][^-]*)\.tm$} $f -> version]} continue
+                if {[catch {package vcompare $version 0}]} continue
+                if {[package ifneeded $name $version] eq ""} {
+                    package ifneeded $name $version [list source -encoding utf-8 $f]
+                }
+                if {[llength $args] == 0 || [package vsatisfies $version {*}$args]} {set found 1}
+            }
+        }
+    }
+    if {!$found && [llength $original]} {
+        uplevel 1 $original [list $name] $args
+    }
+}
+
+# The default paths: the roots next to tcl_library and the program,
+# and the folders of the variables TCLX.y_TM_PATH and TCLX_y_TM_PATH.
+proc ::tcl::tm::Defaults {} {
+    if {![llength [info commands ::file]]} return
+    regexp {^(\d+)\.(\d+)} [info tclversion] -> major minor
+    set roots {}
+    if {[info exists ::tcl_library] && $::tcl_library ne ""} {
+        lappend roots [file dirname $::tcl_library]
+    }
+    catch {
+        set exe [info nameofexecutable]
+        if {$exe ne ""} {lappend roots [file join [file dirname [file dirname $exe]] lib]}
+    }
+    catch {roots $roots}
+    for {set i $minor} {$i >= 0} {incr i -1} {
+        foreach v [list TCL${major}.${i}_TM_PATH TCL${major}_${i}_TM_PATH] {
+            if {[info exists ::env($v)]} {
+                catch {Add {*}[lreverse [split $::env($v) [expr {$::tcl_platform(platform) eq "windows" ? ";" : ":"}]]]}
+            }
+        }
+    }
+}
+::tcl::tm::Defaults
+package unknown [list ::tcl::tm::UnknownHandler [package unknown]]
 
 # Loads the definition of a command from auto_index, which the
 # tclIndex files of auto_path and tclPkgSetup fill. Gives 1 when the

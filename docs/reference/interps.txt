@@ -61,6 +61,17 @@ cap: package
 flags: --allow package
 names: tclPkgUnknown tclPkgSetup tclLog
 
+== tcl::tm::path
+syn: tcl::tm::path add ?path ...?
+syn: tcl::tm::path remove ?path ...?
+syn: tcl::tm::path list
+syn: tcl::tm::roots paths
+does: The module path of Tcl modules. A module is a file `NAME-VERSION.tm` in a folder of the path, with each `::` of the package name as a folder, and `package require` sources it. `add` puts folders at the head of the path; a folder that is an ancestor or a subfolder of another folder of the path is an error. `roots` adds `ROOT/tcl8/site-tcl` and `ROOT/tcl8/8.0` to `ROOT/tcl8/8.6` for each root. The handler of `package unknown` searches the path first, then the `pkgIndex.tcl` files of `auto_path`.
+cap: package
+flags: --allow package
+names: tcl::tm::roots tcl::tm::UnknownHandler
+ex: foreach p [tcl::tm::path list] {tcl::tm::path remove $p}; tcl::tm::path add /a /b; tcl::tm::path list => /b /a
+
 == auto_load
 syn: auto_load command ?namespace?
 does: Defines a command from `auto_index`, which the `tclIndex` files of `auto_path` and `tclPkgSetup` (the lazy `pkgIndex.tcl` form) fill. Gives 1 when the command exists after it. The `unknown` command calls it for a missing command.
