@@ -589,6 +589,38 @@ test "the DAP server stops an isolated thread over DEBUG frames" {
     try dapThreads("process");
 }
 
+test "ztcl::disasm machine lists the code of the JIT under each instruction" {
+    if (!options.mod_disasm or !options.jit) return error.SkipZigTest;
+    const a = std.testing.allocator;
+    var it: tcl.Interp = undefined;
+    try it.init(a);
+    defer it.deinit();
+    _ = try it.eval(
+        \\package require ztcl::disasm
+        \\proc twice {x} {
+        \\    set y [expr {$x * 2}]
+        \\    return $y
+        \\}
+        \\proc sum {n} {
+        \\    set t 0
+        \\    for {set i 0} {$i < $n} {incr i} {incr t $i}
+        \\    return $t
+        \\}
+    );
+    const x = try it.str(try it.eval("ztcl::disasm machine proc twice"));
+    const arm = @import("builtin").cpu.arch == .aarch64;
+    try has(x, if (arm) "twice: tier 1, aarch64, " else "twice: tier 1, x86_64, ");
+    try has(x, "  # entry and exit\n");
+    try has(x, "  # line 2: \"set y [expr {$x * 2}]\"\n     0 guard");
+    try has(x, if (arm) "blr x16" else "call qword [r12+0x");
+    const t = try it.str(try it.eval("ztcl::disasm machine proc sum"));
+    try has(t, "sum: tier 2, the loop at ");
+    try has(t, "  # out of line: ");
+    for ([_][]const u8{ x, t }) |text| {
+        try std.testing.expect(std.mem.indexOf(u8, text, ".byte") == null and std.mem.indexOf(u8, text, ".word") == null);
+    }
+}
+
 test "ztcl::disasm lists the bytecode under the line of each command" {
     if (!options.mod_disasm) return error.SkipZigTest;
     const a = std.testing.allocator;
