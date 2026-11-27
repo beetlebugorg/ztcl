@@ -29,7 +29,8 @@ rm -f "$root/sbin/agent.o"
 cp "$out/busybox" "$root/bin/busybox"
 chmod 755 "$root/bin/busybox" "$root/sbin/agent"
 rm -f "$out/root.img"
-mksquashfs "$root" "$out/root.img" -noappend -all-root -no-xattrs -comp gzip \
+# LZ4 reads faster at boot than gzip, for a disk that is a little larger.
+mksquashfs "$root" "$out/root.img" -noappend -all-root -no-xattrs -comp "${COMP:-lz4}" \
     -mkfs-time 0 -all-time 0 -reproducible -quiet
 rm -rf "$root"
 # The data fills whole blocks of 4,096 bytes, and the tree starts after it.
