@@ -60,7 +60,7 @@ pub fn valueOf(it: *Interp, a: Arg) Error!Value {
 }
 
 /// `s` with each U+0000 as C0 80. Text with no U+0000 is not copied.
-fn toModified(it: *Interp, s: []const u8) Error![]const u8 {
+pub fn toModified(it: *Interp, s: []const u8) Error![]const u8 {
     const n = std.mem.count(u8, s, "\x00");
     if (n == 0) return s;
     const out = try it.alloc().alloc(u8, s.len + n);
@@ -80,7 +80,7 @@ fn toModified(it: *Interp, s: []const u8) Error![]const u8 {
 
 /// `s` with each C0 80 as U+0000. With `copy`, the text is always a
 /// copy in the interp; else only text with a C0 80 is copied.
-fn fromModified(it: *Interp, s: []const u8, copy: bool) Error![]const u8 {
+pub fn fromModified(it: *Interp, s: []const u8, copy: bool) Error![]const u8 {
     if (std.mem.indexOf(u8, s, "\xc0\x80") == null) return if (copy) try it.alloc().dupe(u8, s) else s;
     const out = try it.alloc().alloc(u8, s.len);
     var n: usize = 0;

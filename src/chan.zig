@@ -102,7 +102,19 @@ pub const Channel = struct {
     peer_host: []const u8 = "",
     read_closed: bool = false,
     write_closed: bool = false,
+    /// The channel of a C package (`cext/chan.zig`), or null. The
+    /// commands of a script on it go to `ext_op`.
+    ext: ?*anyopaque = null,
 };
+
+/// Runs the command `op` of a script on a channel of a C package, with
+/// the words after the channel name. `cext/native.zig` sets it.
+pub var ext_op: ?*const fn (it: *Interp, c: *Channel, op: []const u8, args: []const Value) Error!Value = null;
+
+fn extCall(it: *Interp, c: *Channel, op: []const u8, args: []const Value) Error!Value {
+    const f = ext_op orelse return it.fail("channel \"{s}\" belongs to a C package", .{c.name});
+    return f(it, c, op, args);
+}
 
 pub const State = struct {
     table: std.StringArrayHashMapUnmanaged(*Channel) = .empty,
@@ -408,6 +420,10 @@ fn writeBytes(it: *Interp, c: *Channel, text: []const u8) Error!void {
 /// `puts` on a channel of this module. Gives false for an unknown name.
 pub fn putsTo(it: *Interp, name: []const u8, text: []const u8, newline: bool) Error!bool {
     const c = it.chans.table.get(name) orelse return false;
+    if (c.ext != null) {
+        _ = try extCall(it, c, if (newline) "putsnl" else "puts", &.{.{ .str = text }});
+        return true;
+    }
     try writeText(it, c, text);
     if (newline) try writeText(it, c, "\n");
     return true;
@@ -738,6 +754,7 @@ pub fn cmdFileevent(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const readable = eql(ev, "readable");
     if (!readable and !eql(ev, "writable")) return it.failCode("TCL LOOKUP INDEX {event name}", "bad event name \"{s}\": must be readable or writable", .{ev});
     const c = try find(it, argv[1]);
+    if (c.ext != null) return extCall(it, c, "fileevent", argv[2..]);
     if (readable and !c.readable) return it.fail("channel is not readable", .{});
     if (!readable and !c.writable) return it.fail("channel is not writable", .{});
     const slot = if (readable) &c.on_read else &c.on_write;
@@ -756,6 +773,7 @@ pub fn cmdFileevent(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 fn cmdFblocked(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2) return it.wrongArgs("fblocked channelId");
     const c = try find(it, argv[1]);
+    if (c.ext != null) return extCall(it, c, "fblocked", argv[2..]);
     if (!c.readable) return it.fail("channel \"{s}\" wasn't opened for reading", .{c.name});
     return .{ .int = @intFromBool(c.blocked) };
 }
@@ -763,6 +781,7 @@ fn cmdFblocked(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 fn cmdClose(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2 and argv.len != 3) return it.wrongArgs("close channelId ?direction?");
     const c = try find(it, argv[1]);
+    if (c.ext != null) return extCall(it, c, "close", argv[2..]);
     if (argv.len == 3) {
         const dir = try it.str(argv[2]);
         const rd = dir.len > 0 and std.mem.startsWith(u8, "read", dir);
@@ -794,6 +813,7 @@ fn cmdFlush(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const name = try it.str(argv[1]);
     if (it.chans.table.get(name) == null and (eql(name, "stdout") or eql(name, "stderr"))) return Value.empty;
     const c = try find(it, argv[1]);
+    if (c.ext != null) return extCall(it, c, "flush", argv[2..]);
     if (!c.writable) return it.fail("channel \"{s}\" wasn't opened for writing", .{name});
     try flushOut(it, c);
     return Value.empty;
@@ -802,12 +822,14 @@ fn cmdFlush(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 fn cmdEof(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2) return it.wrongArgs("eof channelId");
     const c = try find(it, argv[1]);
+    if (c.ext != null) return extCall(it, c, "eof", argv[2..]);
     return .{ .int = @intFromBool(c.at_eof) };
 }
 
 fn cmdGets(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2 and argv.len != 3) return it.wrongArgs("gets channelId ?varName?");
     const c = try find(it, argv[1]);
+    if (c.ext != null) return extCall(it, c, "gets", argv[2..]);
     if (!c.readable) return it.fail("channel \"{s}\" wasn't opened for reading", .{c.name});
     try flushOut(it, c);
     c.blocked = false;
@@ -878,6 +900,7 @@ fn cmdRead(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     if (args.len < 1 or args.len > 2) return it.wrongArgs("read channelId ?numChars?\" or \"read ?-nonewline? channelId");
     const c = try find(it, args[0]);
+    if (c.ext != null) return extCall(it, c, if (nonl) "read-nonewline" else "read", args[1..]);
     if (!c.readable) return it.fail("channel \"{s}\" wasn't opened for reading", .{c.name});
     try flushOut(it, c);
     c.blocked = false;
@@ -947,6 +970,7 @@ fn endEncoding(it: *Interp, c: *Channel) Error!void {
 fn cmdSeek(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 3 and argv.len != 4) return it.wrongArgs("seek channelId offset ?origin?");
     const c = try find(it, argv[1]);
+    if (c.ext != null) return extCall(it, c, "seek", argv[2..]);
     const off = try it.int(argv[2]);
     var whence: usize = 0;
     var adjust: i64 = 0;
@@ -993,6 +1017,7 @@ fn memSeek(it: *Interp, c: *Channel, off: i64, whence: usize) Error!Value {
 fn cmdTell(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2) return it.wrongArgs("tell channelId");
     const c = try find(it, argv[1]);
+    if (c.ext != null) return extCall(it, c, "tell", argv[2..]);
     if (c.mem) return .{ .int = @intCast(c.rpos) };
     const at: i64 = switch (sys.seek(c.fd, 0, 1)) {
         .at => |x| x,
@@ -1012,6 +1037,7 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const name = try it.str(argv[1]);
     if (it.chans.table.get(name) == null and (eql(name, "stdout") or eql(name, "stderr") or eql(name, "stdin"))) return Value.empty;
     const c = try find(it, argv[1]);
+    if (c.ext != null) return extCall(it, c, "fconfigure", argv[2..]);
     const opts = argv[2..];
     const get = struct {
         fn f(x: *Interp, ch: *Channel, o: []const u8) Error!?Value {
@@ -1150,6 +1176,7 @@ fn cmdFcopy(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 3) return it.wrongArgs("fcopy input output ?-size size? ?-command callback?");
     const from = try find(it, argv[1]);
     const to = try find(it, argv[2]);
+    if (from.ext != null or to.ext != null) return it.fail("fcopy does not support a channel of a C package", .{});
     var limit: ?usize = null;
     var command: ?Value = null;
     var i: usize = 3;
@@ -1299,6 +1326,7 @@ fn cmdChan(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         if (argv.len != 4) return it.wrongArgs("chan pending mode channelId");
         const mode = try it.str(argv[2]);
         const c = try find(it, argv[3]);
+        if (c.ext != null) return extCall(it, c, "pending", argv[2..3]);
         if (eql(mode, "input")) return .{ .int = if (c.readable) @intCast(c.rbuf.items.len - c.rpos) else -1 };
         if (eql(mode, "output")) return .{ .int = if (c.writable) @intCast(c.wbuf.items.len) else -1 };
         return it.failCode("TCL LOOKUP INDEX mode", "bad mode \"{s}\": must be input or output", .{mode});

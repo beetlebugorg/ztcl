@@ -559,7 +559,8 @@ export class Interp {
   /// ztcl library built with `-Dcext-wasm`. `wasi` is the import object of
   /// `wasi_snapshot_preview1`, for example the wasiImport of a WASI of
   /// Node.js. With no `wasi`, the package gets no files: each call of
-  /// WASI gives ENOSYS, except the clock and random bytes.
+  /// WASI gives ENOSYS, except the clock, random bytes, and an empty list
+  /// of preopened folders.
   async loadPackage(source, { init, wasi = null } = {}) {
     const mod = source instanceof WebAssembly.Module ? source : await WebAssembly.compile(source);
     this._loadModule(mod, init, wasi);
@@ -1054,6 +1055,9 @@ function noWasi(pkg) {
     args_sizes_get: (argc, size) => { new Uint32Array(mem(), argc, 1)[0] = 0; new Uint32Array(mem(), size, 1)[0] = 0; return 0; },
     environ_sizes_get: (n, size) => { new Uint32Array(mem(), n, 1)[0] = 0; new Uint32Array(mem(), size, 1)[0] = 0; return 0; },
     proc_exit: (code) => { throw new Error(`the package called proc_exit(${code})`); },
+    // EBADF: the package has no preopened folders. The startup of the
+    // C library stops at the first EBADF.
+    fd_prestat_get: () => 8,
   };
   return new Proxy({}, { get: (_, name) => own[name] ?? (() => 52) });
 }

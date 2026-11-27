@@ -128,6 +128,7 @@ pub fn callC(sh: *Shadow, comptime R: type, f: anytype, args: anytype) Error!R {
     const prev = current;
     current = sh;
     defer current = prev;
+    @import("chan.zig").last = &sh.core;
     sh.state.missing = null;
     sh.it.result = Value.empty;
     obj.Tcl_ResetResult(&sh.core);
