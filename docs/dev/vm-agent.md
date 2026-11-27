@@ -4,7 +4,7 @@ The agent is the first process of the guest of `ztcl::vm` (ztcl#203): `/sbin/age
 
 ## The start
 
-As process 1, the agent mounts `proc` at `/proc`, `sysfs` at `/sys`, `devtmpfs` at `/dev`, and `tmpfs` at `/tmp`. The virtio-fs share with the tag `share0` goes to `/mnt/share` when the guest has it. Then the agent listens on two vsock ports, with the CID of any host:
+As process 1, the agent mounts `proc` at `/proc`, `sysfs` at `/sys`, `devtmpfs` at `/dev`, and `tmpfs` at `/tmp`. The share with the tag `share0` goes to `/mnt/share` when the guest has it: virtio-fs, or else 9p. Then the agent listens on two vsock ports, with the CID of any host:
 
 | Port | Service |
 |---|---|
@@ -33,7 +33,7 @@ Numbers are little endian. `len` counts the type byte and the payload, and is at
 |---|---|---|---|
 | `HELLO` | 0x01 | agent | as above |
 | `EXEC` | 0x10 | host | `argv` list, `env` list (`NAME=value`), `cwd` string (empty: `/`), `flags u8` (bit 0: stdin is open) |
-| `MOUNT` | 0x11 | host | `tag` string, `path` string, `flags u8` (bit 0: read only) |
+| `MOUNT` | 0x11 | host | `tag` string, `path` string, `flags u8` (bit 0: read only, bit 1: a 9p share in the place of virtio-fs) |
 | `LOG` | 0x12 | host | none |
 | `PING` | 0x13 | host | none |
 | `STARTED` | 0x20 | agent | `pid u32` |
@@ -48,7 +48,7 @@ Numbers are little endian. `len` counts the type byte and the payload, and is at
 
 `EXEC` runs `argv[0]` by its path, with no search of `PATH` and no shell: a shell is `argv` `{/bin/sh -c ...}` when the image has one. The agent answers `STARTED`, then `STDOUT` and `STDERR` frames as the program writes, then `EXIT` once the program ended and both pipes are at their end. The host may send `STDIN` and `SIGNAL` frames until `EXIT`. A host that closes the connection before `EXIT` ends the program with `SIGKILL`. A failed start gives `ERROR` with the `errno` of `execve` and no `STARTED`.
 
-`MOUNT` makes the folder `path` and its parents, and mounts the virtio-fs share `tag` there. A failure gives `ERROR`.
+`MOUNT` makes the folder `path` and its parents, and mounts the share `tag` there: virtio-fs (Virtualization.framework), or with bit 1 a 9p share of virtio (`trans=virtio,version=9p2000.L`, the KVM monitor). A failure gives `ERROR`.
 
 The protocol has no authentication: vsock reaches the agent only from the host of the guest. A host that gives the guest to a script lets the script run each program of the image as root in the guest, with no more reach than the guest has.
 

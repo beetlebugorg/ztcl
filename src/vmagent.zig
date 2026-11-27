@@ -184,13 +184,15 @@ pub fn exec(c: *Conn, a: Allocator, argv: []const []const u8, env: []const []con
     }
 }
 
-/// Mounts the virtio-fs share `tag` at `path` in the guest.
-pub fn mount(c: *Conn, a: Allocator, tag: []const u8, path: []const u8, read_only: bool) Error!void {
+pub const Share = enum { virtiofs, nine_p };
+
+/// Mounts the share `tag` at `path` in the guest.
+pub fn mount(c: *Conn, a: Allocator, tag: []const u8, path: []const u8, read_only: bool, kind: Share) Error!void {
     var req: std.ArrayList(u8) = .empty;
     defer req.deinit(a);
     try putStr(a, &req, tag);
     try putStr(a, &req, path);
-    try req.append(a, if (read_only) 1 else 0);
+    try req.append(a, @as(u8, if (read_only) 1 else 0) | @as(u8, if (kind == .nine_p) 2 else 0));
     try c.send(t_mount, req.items);
     const f = try c.read(a);
     defer a.free(f.payload);
