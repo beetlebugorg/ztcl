@@ -2523,6 +2523,39 @@ test "a held value survives 100 collections and an unheld value is freed" {
     try expectFreed(&it, kept & ~@as(usize, 1));
 }
 
+test "diag: held value, values in the test frame" {
+    try heldInFrame(false);
+}
+
+test "diag: held value, values in the test frame, spare lists off" {
+    try heldInFrame(true);
+}
+
+fn heldInFrame(no_spare: bool) !void {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    if (no_spare) {
+        it.counter.spare.max = 0;
+        it.counter.releaseSpare();
+    }
+    const kept = try it.eval("string repeat ab 30");
+    try it.hold(kept);
+    const gone = @intFromPtr((try it.eval("string repeat cd 30")).str.ptr) | 1;
+    const anchor = try it.eval("string repeat ef 30");
+    try it.hold(anchor);
+    _ = try it.eval("set zz 1");
+    for (0..100) |_| it.collect();
+    try std.testing.expectEqualStrings("abababababababababababababababababababababababababababababab", try it.str(kept));
+    try expectFreed(&it, gone & ~@as(usize, 1));
+    const kept_addr = @intFromPtr(kept.str.ptr) | 1;
+    it.release(kept);
+    it.collect();
+    std.debug.print("diag no_spare={} first collect: freed={}\n", .{ no_spare, @import("heap.zig").isFree(it.heap, kept_addr & ~@as(usize, 1)) });
+    collectClean(&it);
+    try expectFreed(&it, kept_addr & ~@as(usize, 1));
+}
+
 /// Evaluates `script` and gives the address of the string of its value
 /// with the low bit set.
 noinline fn evalAddr(it: *tcl.Interp, script: []const u8) !usize {
