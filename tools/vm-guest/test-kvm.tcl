@@ -175,6 +175,27 @@ if {[dict get [ztcl::vm exec $vm /bin/busybox sh -c $dhcp] exit] != 9} {
 ztcl::vm delete $vm
 thread::release $srv
 
+# -forward: a connection to a host port goes to a listener of the guest.
+set probe [socket -server {apply {{c a p} {close $c}}} -myaddr 127.0.0.1 0]
+set hp [lindex [fconfigure $probe -sockname] 2]
+close $probe
+set vm [ztcl::vm create {*}$boot -net nat -forward [list $hp 8080]]
+ztcl::vm start $vm
+set vm2 [ztcl::vm create {*}$boot -net nat -forward [list $hp 8081]]
+check "forward: a host port in use" [catch {ztcl::vm start $vm2}] 1
+ztcl::vm delete $vm2
+ztcl::vm exec $vm /bin/busybox sh -c {/bin/busybox ip link set eth0 up; /bin/busybox ifconfig eth0 10.0.2.15 netmask 255.255.255.0 up; (echo hello | /bin/busybox nc -l -p 8080 > /dev/null 2>&1 &)}
+set got ""
+for {set i 0} {$i < 50 && $got eq ""} {incr i} {
+    set s [socket 127.0.0.1 $hp]
+    set got [string trim [read $s]]
+    close $s
+    if {$got eq ""} { after 20 }
+}
+check "forward: the answer of the guest" $got hello
+check "forward: its event" [expr {[lsearch [ztcl::vm netlog $vm] "*event forward*"] >= 0}] 1
+ztcl::vm delete $vm
+
 # Shares with 9p: share0 at /mnt/share (rw), share1 read-only.
 file delete -force share ro
 file mkdir share/sub ro

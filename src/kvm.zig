@@ -758,8 +758,8 @@ fn makeNet(m: *Machine, k: usize, nc: nat_engine.Config) Fail!void {
     // the engine sends it frames of up to 64 KB.
     m.net = .{ .mac = nat_stack.guest_mac, .ctx = m, .kick = netKick, .offloads = vnet.f_csum | vnet.f_guest_csum | vnet.f_host_tso4 | vnet.f_guest_tso4 };
     m.devices[k] = Device.net(irqs[k], &m.net);
-    m.nat = nat_engine.Nat.init(m.alloc, nc, .{ .ctx = m, .deliver = netDeliver, .flush = netFlush, .features = netFeatures, .deliverFill = netDeliverFill }) catch {
-        why = "no NAT engine";
+    m.nat = nat_engine.Nat.init(m.alloc, nc, .{ .ctx = m, .deliver = netDeliver, .flush = netFlush, .features = netFeatures, .deliverFill = netDeliverFill }) catch |e| {
+        why = if (e == error.ForwardPort) "a host port of -forward is in use" else "no NAT engine";
         return error.Setup;
     };
     const calls = [2]*const fn (*anyopaque) void{ netRx, netTx };

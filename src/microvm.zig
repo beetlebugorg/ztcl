@@ -632,6 +632,22 @@ fn natPolicy(ctx: ?*anyopaque, _: nat_engine.Proto, ip: nat_engine.Ip4, port: u1
     return @import("sock.zig").permits(it.net, addr, port, name);
 }
 
+/// `-forward {HOSTPORT GUESTPORT ...}`: pairs of ports.
+fn natForward(it: *Interp, v: Value) Error![][2]u16 {
+    const items = try it.list(v);
+    if (items.len % 2 != 0) return it.fail("-forward needs pairs of a host port and a guest port", .{});
+    if (items.len / 2 > nat_engine.max_forward) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} ports of -forward", .{nat_engine.max_forward});
+    const out = try it.alloc().alloc([2]u16, items.len / 2);
+    for (out, 0..) |*o, i| {
+        for (o, 0..) |*p, k| {
+            const x = try it.int(items[2 * i + k]);
+            if (x < 1 or x > 65535) return it.fail("bad port {d}: must be 1 to 65535", .{x});
+            p.* = @intCast(x);
+        }
+    }
+    return out;
+}
+
 /// The rules of `-allow` or `-deny`: a list of host names (or
 /// `*.SUFFIX`), addresses, and ranges in CIDR form, each with an
 /// optional `:port` or `:port-port`, as the rules of a network policy.
@@ -1006,6 +1022,7 @@ const mac = if (on_mac) struct {
         var dns = true;
         var allow: []nat_engine.policy.Rule = &.{};
         var deny: []nat_engine.policy.Rule = &.{};
+        var forward: [][2]u16 = &.{};
         var image: ?[]const u8 = null;
         var image_disks: usize = 0;
         {
@@ -1048,6 +1065,8 @@ const mac = if (on_mac) struct {
                 allow = try natRules(it, v);
             } else if (std.mem.eql(u8, opt, "-deny")) {
                 deny = try natRules(it, v);
+            } else if (std.mem.eql(u8, opt, "-forward")) {
+                forward = try natForward(it, v);
             } else if (std.mem.eql(u8, opt, "-disk")) {
                 const l = try it.list(v);
                 if (l.len < 1 or l.len > 2) return it.fail("a disk is {{file ?rw?}}", .{});
@@ -1057,7 +1076,7 @@ const mac = if (on_mac) struct {
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 const tag = try std.fmt.allocPrint(a, "share{d}", .{shares.items.len});
                 try shares.append(a, .{ .path = try hostPath(it, try it.str(l[0]), true), .tag = tag, .read_only = !(l.len == 3 and try isRw(it, l[2])) });
-            } else return it.fail("bad option \"{s}\": must be -allow, -cmdline, -cpus, -deny, -disk, -dns, -entropy, -image, -initrd, -kernel, -memory, -net, -share, or -warm", .{opt});
+            } else return it.fail("bad option \"{s}\": must be -allow, -cmdline, -cpus, -deny, -disk, -dns, -entropy, -forward, -image, -initrd, -kernel, -memory, -net, -share, or -warm", .{opt});
         }
         if (image) |name| {
             const r = try resolveImage(it, name);
@@ -1111,10 +1130,11 @@ const mac = if (on_mac) struct {
             _ = c.close(pair[1]);
         };
         cfg.console = .{ .in = pair[0], .out = pair[0] };
-        if (!net_nat and allow.len + deny.len > 0) return it.fail("-allow and -deny need -net nat", .{});
+        if (!net_nat and allow.len + deny.len + forward.len > 0) return it.fail("-allow, -deny, and -forward need -net nat", .{});
         const log: ?*NetLog = if (net_nat) try NetLog.create(it.heap.backing, it) else null;
-        const net: ?*Net = if (net_nat) Net.init(it.heap.backing, .{ .policy = natPolicy, .dns_allow = natDnsPolicy, .policy_ctx = it, .dns = dns, .allow = allow, .deny = deny, .event = NetLog.event, .event_ctx = log }) catch {
+        const net: ?*Net = if (net_nat) Net.init(it.heap.backing, .{ .policy = natPolicy, .dns_allow = natDnsPolicy, .policy_ctx = it, .dns = dns, .allow = allow, .deny = deny, .forward = forward, .event = NetLog.event, .event_ctx = log }) catch |e| {
             log.?.destroy();
+            if (e == error.ForwardPort) return it.failCode("ZTCL VM NONET", "a host port of -forward is in use", .{});
             return it.failCode("ZTCL VM FRAMEWORK", "no socket for the network of the guest", .{});
         } else null;
         if (net) |x| x.log = log;
@@ -1736,6 +1756,7 @@ const lin = if (on_kvm) struct {
         var dns = true;
         var allow: []nat_engine.policy.Rule = &.{};
         var deny: []nat_engine.policy.Rule = &.{};
+        var forward: [][2]u16 = &.{};
         var i: usize = 0;
         while (i < args.len) : (i += 2) {
             const opt = try it.str(args[i]);
@@ -1774,6 +1795,8 @@ const lin = if (on_kvm) struct {
                 allow = try natRules(it, v);
             } else if (std.mem.eql(u8, opt, "-deny")) {
                 deny = try natRules(it, v);
+            } else if (std.mem.eql(u8, opt, "-forward")) {
+                forward = try natForward(it, v);
             } else if (std.mem.eql(u8, opt, "-disk")) {
                 const l = try it.list(v);
                 if (l.len < 1 or l.len > 2) return it.fail("a disk is {{file ?rw?}}", .{});
@@ -1784,13 +1807,14 @@ const lin = if (on_kvm) struct {
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 if (disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{kvm.max_disks});
                 try shares.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 3 and try isRw(it, l[2]) });
-            } else return it.fail("bad option \"{s}\": must be -allow, -balloon, -cmdline, -cpus, -deny, -disk, -dns, -entropy, -image, -initrd, -kernel, -memory, -net, -share, or -warm", .{opt});
+            } else return it.fail("bad option \"{s}\": must be -allow, -balloon, -cmdline, -cpus, -deny, -disk, -dns, -entropy, -forward, -image, -initrd, -kernel, -memory, -net, -share, or -warm", .{opt});
         }
         if (cfg.net) |*nc| {
             nc.dns = dns;
             nc.allow = allow;
             nc.deny = deny;
-        } else if (allow.len + deny.len > 0) return it.fail("-allow and -deny need -net nat", .{});
+            nc.forward = forward;
+        } else if (allow.len + deny.len + forward.len > 0) return it.fail("-allow, -deny, and -forward need -net nat", .{});
         if (cfg.net != null and disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest with -net nat has at most {d} disks and shares", .{kvm.max_disks - 1});
         if (image != null and own_boot) return it.fail("-image gives the kernel, the initramfs, and the command line: no -kernel, -initrd, or -cmdline with it", .{});
         if (image == null and kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel or -image", .{});
