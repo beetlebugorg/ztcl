@@ -53,6 +53,11 @@ pub const Attrs = packed struct(u16) {
 pub const Cell = struct {
     /// The first code point, or 0 for an empty cell.
     cp: u21 = 0,
+    /// The other code points of the grapheme cluster of the cell, in
+    /// order (with grapheme clusters on, mode 2027). A cluster of more
+    /// than 1 + `extra.len` code points keeps the first ones.
+    extra: [7]u21 = @splat(0),
+    extra_len: u3 = 0,
     /// 1 for a normal cell, 2 for the first cell of a wide character,
     /// and 0 for the spacer after it.
     width: u2 = 1,
@@ -108,6 +113,10 @@ pub const Term = struct {
             .stream = undefined,
         };
         self.stream = self.t.vtStream();
+        // Grapheme clusters (mode 2027) are on, also after a reset, so
+        // the cells and the cursor follow UAX #29 as modern terminals do.
+        self.t.modes.setDefault(.grapheme_cluster, true);
+        self.t.modes.set(.grapheme_cluster, true);
         self.stream.handler.effects.write_pty = writePty;
         self.stream.handler.effects.bell = bell;
         self.stream.handler.effects.device_attributes = deviceAttributes;
@@ -230,7 +239,15 @@ pub const Term = struct {
     fn convert(pin: gvt.Pin, c: *const gvt.Cell) Cell {
         var o: Cell = .{};
         switch (c.content_tag) {
-            .codepoint, .codepoint_grapheme => o.cp = c.content.codepoint.data,
+            .codepoint => o.cp = c.content.codepoint.data,
+            .codepoint_grapheme => {
+                o.cp = c.content.codepoint.data;
+                if (pin.grapheme(c)) |more| {
+                    const n = @min(more.len, o.extra.len);
+                    @memcpy(o.extra[0..n], more[0..n]);
+                    o.extra_len = @intCast(n);
+                }
+            },
             .bg_color_palette => o.bg = .{ .index = c.content.color_palette.data },
             .bg_color_rgb => {
                 const v = c.content.color_rgb;
@@ -487,11 +504,20 @@ fn rowText(a: Allocator, cells: []const Cell) ![]const u8 {
     var out: std.ArrayList(u8) = .empty;
     for (cells[0..end]) |c| {
         if (c.width == 0) continue;
-        var b: [4]u8 = undefined;
-        const n = std.unicode.utf8Encode(if (c.cp == 0) ' ' else c.cp, &b) catch 1;
-        try out.appendSlice(a, b[0..n]);
+        var b: [32]u8 = undefined;
+        try out.appendSlice(a, cellText(c, &b, ' '));
     }
     return out.items;
+}
+
+/// The UTF-8 text of a cell: its first code point and the other code
+/// points of its cluster, or `empty` for no code point.
+pub fn cellText(c: Cell, buf: *[32]u8, empty: u21) []const u8 {
+    const first = if (c.cp == 0) empty else c.cp;
+    if (first == 0) return buf[0..0];
+    var n: usize = std.unicode.utf8Encode(first, buf[0..4]) catch 0;
+    for (c.extra[0..c.extra_len]) |cp| n += std.unicode.utf8Encode(cp, buf[n..][0..4]) catch 0;
+    return buf[0..n];
 }
 
 /// One cell is a list: the text, the width, the foreground, the
@@ -501,8 +527,8 @@ fn cellList(it: *Interp, cells: []const Cell) interp.Error!Value {
     const a = it.alloc();
     const out = try a.alloc(Value, cells.len);
     for (cells, out) |c, *o| {
-        var b: [4]u8 = undefined;
-        const n = if (c.cp == 0) 0 else std.unicode.utf8Encode(c.cp, &b) catch 0;
+        var b: [32]u8 = undefined;
+        const txt = cellText(c, &b, 0);
         var at: [8]Value = undefined;
         var k: usize = 0;
         inline for (.{ "bold", "dim", "italic", "underline", "blink", "inverse", "hidden", "strike" }) |f| {
@@ -512,7 +538,7 @@ fn cellList(it: *Interp, cells: []const Cell) interp.Error!Value {
             }
         }
         o.* = try list(it, &.{
-            .{ .str = try a.dupe(u8, b[0..n]) },
+            .{ .str = try a.dupe(u8, txt) },
             .{ .int = c.width },
             try colorValue(a, c.fg),
             try colorValue(a, c.bg),

@@ -43,6 +43,9 @@ pub const proc = if (@import("builtin").os.tag == .windows) @import("proc_window
 pub const pty = if (@import("builtin").os.tag == .windows) @import("pty_windows.zig") else @import("pty.zig");
 /// The terminal state of the module `ztcl::vt`, on libghostty-vt.
 pub const vt = @import("vt.zig");
+/// Grapheme clusters, words, sentences, and display width (UAX #29,
+/// UAX #11). `ztk` uses it for the cursor, selection, and wrap.
+pub const text = @import("text/seg.zig");
 pub const notify = @import("notify.zig");
 pub const watch = @import("watch.zig");
 pub const probe = @import("probe.zig");

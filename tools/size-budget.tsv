@@ -26,3 +26,4 @@ sqlite	800000	SQLite and the binding
 http3	250000	QUIC, HTTP/3, QPACK
 vt	720000	ztcl::vt and libghostty-vt with -Dsimd=false; measured 710,528 on 2026-11-26 (x86-64 Linux, full runner with and without the module, stripped)
 wasmrt	270000	ztcl::wasm: the decoder, the interpreter, WASI preview 1, the bridge of C packages, and the command; measured 264,144 by the Size job on 2026-11-27 (x86-64 Linux, full runner, stripped)
+text	60000	ztcl::text: the break and width tables (23,584 bytes) and the segmenters; measured 52,800 on 2026-11-27 (x86-64 Linux, std runner with and without the module, stripped); ztcl.wasm grows by 40,279 bytes

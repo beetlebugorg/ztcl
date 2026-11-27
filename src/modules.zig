@@ -47,6 +47,7 @@ pub const table: []const Module = blk: {
     if (options.mod_vt) list = list ++ @import("vt.zig").modules;
     if (options.mod_probe) list = list ++ @import("probe.zig").modules;
     if (options.mod_disasm) list = list ++ @import("disasm.zig").modules;
+    if (options.mod_text) list = list ++ @import("text/cmd.zig").modules;
     // TLS needs the TCP sockets of `sys.zig` (not on aarch64 Windows)
     // and the entropy and clock of the host.
     if (options.mod_tls and @import("sys.zig").supported and !@import("builtin").cpu.arch.isWasm()) list = list ++ @import("tls/cmd.zig").modules;
