@@ -14,7 +14,7 @@
 //! not zero. The scan reads each byte of the plaintext and has no
 //! branch on a byte, so its time depends on the length only. The AEADs
 //! of `std.crypto` compare the tag with `std.crypto.timing_safe.eql`.
-//! AES-GCM goes through `aead.zig`, which picks the code for the CPU.
+//! The AEADs go through `aead.zig`, which picks the code for the CPU.
 //!
 //! The limits of section 5: a plain fragment and the content of a
 //! protected record have at most 2^14 bytes, and a protected fragment
@@ -186,6 +186,8 @@ pub const Protection = struct {
     seq: u64 = 0,
     /// The expanded AES-GCM key (aead.zig).
     gcm: fast.Gcm = undefined,
+    /// The ChaCha20-Poly1305 key (aead.zig).
+    cc: fast.ChaCha = undefined,
 
     pub fn init(suite: Suite, secret: []const u8) Protection {
         std.debug.assert(secret.len == suite.hashLen());
@@ -202,7 +204,7 @@ pub const Protection = struct {
         }
         switch (p.suite) {
             .aes_128_gcm_sha256, .aes_256_gcm_sha384 => |s| p.gcm = .init(p.key[0..s.keyLen()]),
-            .chacha20_poly1305_sha256 => {},
+            .chacha20_poly1305_sha256 => p.cc = .init(&p.key),
         }
     }
 
@@ -249,10 +251,13 @@ pub const Protection = struct {
         // record or starts at the place of its content.
         const apart = content.ptr == inner.ptr or @intFromPtr(content.ptr) + content.len <= @intFromPtr(out.ptr) or
             @intFromPtr(out.ptr) + out.len <= @intFromPtr(content.ptr);
-        if (p.suite != .chacha20_poly1305_sha256 and apart and padding < fast.Gcm.max_extra) {
+        if (apart and padding < fast.Gcm.max_extra) {
             var extra: [fast.Gcm.max_extra]u8 = @splat(0);
             extra[0] = @backingInt(ct);
-            p.gcm.sealExtra(inner, tag, content, extra[0 .. 1 + padding], hdr, &n);
+            if (p.suite == .chacha20_poly1305_sha256)
+                p.cc.sealExtra(inner, tag, content, extra[0 .. 1 + padding], hdr, &n)
+            else
+                p.gcm.sealExtra(inner, tag, content, extra[0 .. 1 + padding], hdr, &n);
             p.seq += 1;
             return out[0 .. header_len + len];
         }
@@ -261,7 +266,7 @@ pub const Protection = struct {
         @memset(inner[content.len + 1 ..], 0);
         switch (p.suite) {
             .aes_128_gcm_sha256, .aes_256_gcm_sha384 => p.gcm.seal(inner, tag, inner, hdr, &n),
-            .chacha20_poly1305_sha256 => aead.chacha_poly.ChaCha20Poly1305.encrypt(inner, tag, inner, hdr, n, p.key),
+            .chacha20_poly1305_sha256 => p.cc.seal(inner, tag, inner, hdr, &n),
         }
         p.seq += 1;
         return out[0 .. header_len + len];
@@ -286,7 +291,7 @@ pub const Protection = struct {
         const n = p.nonce();
         (switch (p.suite) {
             .aes_128_gcm_sha256, .aes_256_gcm_sha384 => p.gcm.open(inner, c, &tag, ad, &n),
-            .chacha20_poly1305_sha256 => aead.chacha_poly.ChaCha20Poly1305.decrypt(inner, c, tag, ad, n, p.key),
+            .chacha20_poly1305_sha256 => p.cc.open(inner, c, &tag, ad, &n),
         }) catch return error.BadRecordMac;
         p.seq += 1;
         const end = contentEnd(inner);
@@ -365,7 +370,7 @@ test "seal and open with padding for each suite" {
 test "a record sealed from apart and from in place has the same bytes" {
     var data: [3000]u8 = undefined;
     for (&data, 0..) |*b, i| b.* = @truncate(i *% 7 +% 1);
-    for ([_]Suite{ .aes_128_gcm_sha256, .aes_256_gcm_sha384 }) |suite| {
+    for ([_]Suite{ .aes_128_gcm_sha256, .aes_256_gcm_sha384, .chacha20_poly1305_sha256 }) |suite| {
         for ([_]usize{ 0, 1, 15, 16, 127, 128, 129, 1000, 3000 }) |len| for ([_]usize{ 0, 1, 254, 255, 256, 300 }) |pad| {
             var a = testProtection(suite);
             var b = testProtection(suite);

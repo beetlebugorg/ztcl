@@ -85,7 +85,7 @@ fn extraX86(comptime m: std.Target.Cpu.Feature.Set) []const Bit {
         var out: []const Bit = &.{};
         const here = builtin.cpu.features;
         for (std.enums.values(std.Target.x86.Feature)) |f| {
-            const i = @intFromEnum(f);
+            const i = @backingInt(f);
             if (!m.isEnabled(i) or here.isEnabled(i)) continue;
             const b = for (x86_bits) |b| {
                 if (b.f == f) break b;
@@ -156,7 +156,7 @@ fn extraArm(comptime m: std.Target.Cpu.Feature.Set) usize {
         var n: usize = 0;
         const here = builtin.cpu.features;
         for (std.enums.values(std.Target.aarch64.Feature)) |f| {
-            const i = @intFromEnum(f);
+            const i = @backingInt(f);
             if (!m.isEnabled(i) or here.isEnabled(i)) continue;
             if (std.mem.indexOfScalar(std.Target.aarch64.Feature, &arm_extra, f) == null)
                 @compileError("src/crypto has the aarch64 feature " ++ @tagName(f) ++ " with no check in aead.zig");
@@ -264,6 +264,90 @@ pub const Gcm = struct {
         };
     }
 };
+
+/// ChaCha20-Poly1305 with the code for this CPU.
+pub const ChaCha = struct {
+    impl: Impl,
+    key: [32]u8,
+
+    pub fn init(key: *const [32]u8) ChaCha {
+        return .{ .impl = impl(), .key = key.* };
+    }
+
+    pub fn deinit(c: *ChaCha) void {
+        std.crypto.secureZero(u8, std.mem.asBytes(c));
+    }
+
+    pub const max_extra = 256;
+
+    /// As `Gcm.sealExtra`.
+    pub fn sealExtra(c: *const ChaCha, dst: []u8, tag: *[tag_len]u8, src: []const u8, extra: []const u8, ad: []const u8, nonce: *const [nonce_len]u8) void {
+        std.debug.assert(dst.len == src.len + extra.len and extra.len <= max_extra);
+        if (kx.enabled and c.impl == .x86_avx2) return kx.chacha.seal(&c.key, dst, tag, src, extra, ad, nonce);
+        if (src.ptr != dst.ptr) @memcpy(dst[0..src.len], src);
+        @memcpy(dst[src.len..], extra);
+        std.crypto.aead.chacha_poly.ChaCha20Poly1305.encrypt(dst, tag, dst, ad, nonce.*, c.key);
+    }
+
+    pub fn seal(c: *const ChaCha, dst: []u8, tag: *[tag_len]u8, src: []const u8, ad: []const u8, nonce: *const [nonce_len]u8) void {
+        c.sealExtra(dst, tag, src, "", ad, nonce);
+    }
+
+    /// As `Gcm.open`.
+    pub fn open(c: *const ChaCha, dst: []u8, src: []const u8, tag: *const [tag_len]u8, ad: []const u8, nonce: *const [nonce_len]u8) error{AuthenticationFailed}!void {
+        std.debug.assert(dst.len == src.len);
+        if (kx.enabled and c.impl == .x86_avx2) {
+            if (!kx.chacha.open(&c.key, dst, src, tag, ad, nonce)) return error.AuthenticationFailed;
+            return;
+        }
+        std.crypto.aead.chacha_poly.ChaCha20Poly1305.decrypt(dst, src, tag.*, ad, nonce.*, c.key) catch |e| {
+            std.crypto.secureZero(u8, dst);
+            return e;
+        };
+    }
+};
+
+test "ChaCha20-Poly1305 for this CPU matches std.crypto" {
+    const C = std.crypto.aead.chacha_poly.ChaCha20Poly1305;
+    var key: [32]u8 = undefined;
+    var nonce: [12]u8 = undefined;
+    var ad: [40]u8 = undefined;
+    var m: [20000]u8 = undefined;
+    var prng = std.Random.DefaultPrng.init(0xc4a);
+    const r = prng.random();
+    for (0..100) |_| {
+        r.bytes(&key);
+        r.bytes(&nonce);
+        r.bytes(&ad);
+        r.bytes(&m);
+        const len = if (r.boolean()) r.uintLessThan(usize, 1100) else r.uintLessThan(usize, m.len + 1);
+        const al = r.uintLessThan(usize, ad.len + 1);
+        var want: [20000]u8 = undefined;
+        var want_tag: [16]u8 = undefined;
+        C.encrypt(want[0..len], &want_tag, m[0..len], ad[0..al], nonce, key);
+        inline for (.{ Impl.soft, Impl.x86_avx2 }) |i| {
+            if (available(i)) {
+                force(i);
+                defer force(.unknown);
+                const c = ChaCha.init(&key);
+                var got: [20000]u8 = undefined;
+                var tag: [16]u8 = undefined;
+                c.seal(got[0..len], &tag, m[0..len], ad[0..al], &nonce);
+                try std.testing.expectEqualSlices(u8, want[0..len], got[0..len]);
+                try std.testing.expectEqualSlices(u8, &want_tag, &tag);
+                const xl = @min(r.uintLessThan(usize, len + 1), ChaCha.max_extra);
+                c.sealExtra(got[0..len], &tag, m[0 .. len - xl], m[len - xl .. len], ad[0..al], &nonce);
+                try std.testing.expectEqualSlices(u8, want[0..len], got[0..len]);
+                try std.testing.expectEqualSlices(u8, &want_tag, &tag);
+                try c.open(got[0..len], got[0..len], &tag, ad[0..al], &nonce);
+                try std.testing.expectEqualSlices(u8, m[0..len], got[0..len]);
+                tag[r.uintLessThan(usize, 16)] ^= @as(u8, 1) << r.int(u3);
+                try std.testing.expectError(error.AuthenticationFailed, c.open(got[0..len], want[0..len], &tag, ad[0..al], &nonce));
+                for (got[0..len]) |b| try std.testing.expectEqual(0, b);
+            }
+        }
+    }
+}
 
 test "the code for this CPU matches std.crypto" {
     var key: [32]u8 = undefined;

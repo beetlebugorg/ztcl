@@ -1,4 +1,5 @@
-//! AES-GCM for x86-64 CPUs with AES-NI, PCLMULQDQ, and AVX2.
+//! AES-GCM for x86-64 CPUs with AES-NI, PCLMULQDQ, and AVX2, and the
+//! ChaCha20-Poly1305 of `x86_chacha.zig`.
 //!
 //! build.zig compiles this file as its own module, `crypto_x86_avx2`,
 //! with these CPU features added to the target. LLVM gives each
@@ -26,6 +27,9 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
+
+/// ChaCha20-Poly1305 for the same CPUs.
+pub const chacha = @import("x86_chacha.zig");
 
 /// The CPU features of this module, for the check in `aead.zig`.
 pub const features = builtin.cpu.features;
