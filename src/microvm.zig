@@ -410,6 +410,20 @@ fn vsockArgs(it: *Interp, args: []const Value) Error!struct { port: u32, timeout
     return .{ .port = @intCast(port), .timeout = timeout };
 }
 
+/// The glue of `listen`: the pipe gives the number of each new
+/// descriptor, and `accept` turns it into a channel for the script.
+const listen_glue =
+    \\namespace eval ::ztcl::vmpriv {
+    \\    proc accept {vm port pipe cmd} {
+    \\        set b [read $pipe 4]
+    \\        if {[string length $b] != 4} { return }
+    \\        binary scan $b i fd
+    \\        set ch [::ztcl::vm accept $vm $port $fd]
+    \\        uplevel #0 [linsert $cmd end $ch]
+    \\    }
+    \\}
+;
+
 /// The arguments of `ztcl::vm exec`.
 const ExecReq = struct {
     argv: []const []const u8,
@@ -993,20 +1007,6 @@ const mac = if (on_mac) struct {
 
     // ---- Connections of the guest to the host (`listen`) ----
 
-    /// The glue of `listen`: the pipe gives the number of each new
-    /// descriptor, and `accept` turns it into a channel for the script.
-    const listen_glue =
-        \\namespace eval ::ztcl::vmpriv {
-        \\    proc accept {vm port pipe cmd} {
-        \\        set b [read $pipe 4]
-        \\        if {[string length $b] != 4} { return }
-        \\        binary scan $b i fd
-        \\        set ch [::ztcl::vm accept $vm $port $fd]
-        \\        uplevel #0 [linsert $cmd end $ch]
-        \\    }
-        \\}
-    ;
-
     fn findListen(g: *Guest, port: u32) ?usize {
         for (g.listens.items, 0..) |x, i| if (x.port == port) return i;
         return null;
@@ -1155,7 +1155,11 @@ const lin = if (on_kvm) struct {
         /// A guest of the pool: its bytes, its disks, and its machine
         /// use `pa`.
         pooled: bool = false,
+        /// The listeners of `listen`.
+        listens: std.ArrayListUnmanaged(Listen) = .empty,
     };
+
+    const Listen = struct { port: u32, l: *Listener, chan: []const u8 };
 
     const State = struct {
         guests: std.ArrayList(*Guest) = .empty,
@@ -1213,6 +1217,9 @@ const lin = if (on_kvm) struct {
             return .{ .str = status(g) };
         }
         if (std.mem.eql(u8, sub, "vsock")) return vsock(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "listen")) return listenCmd(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "unlisten")) return unlistenCmd(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "accept")) return acceptCmd(it, g, args[3..]);
         if (std.mem.eql(u8, sub, "exec")) {
             const r = try execArgs(it, args[3..]);
             var a = try agent(it, g, r.timeout);
@@ -1726,8 +1733,227 @@ const lin = if (on_kvm) struct {
     }
 
     fn destroy(it: *Interp, g: *Guest) void {
+        for (g.listens.items) |x| dropListen(it, x);
+        g.listens.deinit(it.heap.backing);
         g.machine.deinit();
         freeGuest(it, g);
+    }
+
+    // ---- Connections of the guest to the host (`listen`) ----
+    //
+    // The vsock ports of the host are one space for the whole host, so a
+    // port has one listening socket in this process (`PortSock`), bound to
+    // VMADDR_CID_ANY. Its thread accepts each connection and gives it to
+    // the `Listener` of the guest with the CID of the peer; a connection
+    // of any other CID closes. The listener keeps the descriptor in its
+    // pending set and writes its number to its pipe, and `accept` gives
+    // only a descriptor of that set.
+
+    const vmaddr_cid_any: u32 = 0xffffffff;
+    const SockaddrVm = extern struct { family: u16 = AF_VSOCK, reserved1: u16 = 0, port: u32, cid: u32, flags: u8 = 0, zero: [3]u8 = @splat(0) };
+    const Lock = @import("thread.zig").Lock;
+    const lpa = std.heap.smp_allocator;
+
+    const Listener = struct {
+        /// The machine of the guest: its CID changes at each start.
+        machine: *kvm,
+        pipe_w: i32,
+        lock: Lock = .{},
+        pending: std.ArrayListUnmanaged(i32) = .empty,
+
+        /// True when `fd` waits in the pending set; it then leaves it.
+        fn take(l: *Listener, fd: i32) bool {
+            l.lock.lock();
+            defer l.lock.unlock();
+            const i = std.mem.indexOfScalar(i32, l.pending.items, fd) orelse return false;
+            _ = l.pending.swapRemove(i);
+            return true;
+        }
+    };
+
+    const PortSock = struct {
+        port: u32,
+        fd: i32,
+        stop: i32,
+        thread: std.Thread = undefined,
+        listeners: std.ArrayListUnmanaged(*Listener) = .empty,
+    };
+
+    var ports_lock: Lock = .{};
+    var ports: std.ArrayListUnmanaged(*PortSock) = .empty;
+
+    fn acceptMain(p: *PortSock) void {
+        while (true) {
+            var fds = [_]linux.pollfd{
+                .{ .fd = p.stop, .events = linux.POLL.IN, .revents = 0 },
+                .{ .fd = p.fd, .events = linux.POLL.IN, .revents = 0 },
+            };
+            if (linux.errno(linux.poll(&fds, 2, -1)) != .SUCCESS) continue;
+            if (fds[0].revents != 0) return;
+            var addr: SockaddrVm = .{ .port = 0, .cid = 0 };
+            var len: linux.socklen_t = @sizeOf(SockaddrVm);
+            const rc = linux.accept4(p.fd, @ptrCast(&addr), &len, linux.SOCK.CLOEXEC);
+            if (linux.errno(rc) != .SUCCESS) continue;
+            const fd: i32 = @intCast(rc);
+            ports_lock.lock();
+            var to: ?*Listener = null;
+            for (p.listeners.items) |l| if (@atomicLoad(u64, &l.machine.cid, .acquire) == addr.cid) {
+                to = l;
+            };
+            const kept = if (to) |l| blk: {
+                l.lock.lock();
+                defer l.lock.unlock();
+                l.pending.append(lpa, fd) catch break :blk false;
+                const n: i32 = fd;
+                _ = linux.write(l.pipe_w, std.mem.asBytes(&n), 4);
+                break :blk true;
+            } else false;
+            ports_lock.unlock();
+            if (!kept) _ = linux.close(fd);
+        }
+    }
+
+    /// Adds a listener of the guest of `machine` to the socket of `port`, and makes that
+    /// socket when it is the first listener of the port.
+    fn addListener(port: u32, machine: *kvm, pipe_w: i32) error{ InUse, Fail }!*Listener {
+        ports_lock.lock();
+        defer ports_lock.unlock();
+        const p = for (ports.items) |x| {
+            if (x.port == port) break x;
+        } else blk: {
+            const rc = linux.socket(AF_VSOCK, linux.SOCK.STREAM | linux.SOCK.CLOEXEC | linux.SOCK.NONBLOCK, 0);
+            if (linux.errno(rc) != .SUCCESS) return error.Fail;
+            const fd: i32 = @intCast(rc);
+            var addr: SockaddrVm = .{ .port = port, .cid = vmaddr_cid_any };
+            const b = linux.bind(fd, @ptrCast(&addr), @sizeOf(SockaddrVm));
+            if (linux.errno(b) != .SUCCESS or linux.errno(linux.listen(fd, 64)) != .SUCCESS) {
+                _ = linux.close(fd);
+                return if (linux.errno(b) == .ADDRINUSE) error.InUse else error.Fail;
+            }
+            const ev = linux.eventfd(0, linux.EFD.CLOEXEC);
+            if (linux.errno(ev) != .SUCCESS) {
+                _ = linux.close(fd);
+                return error.Fail;
+            }
+            const x = lpa.create(PortSock) catch {
+                _ = linux.close(fd);
+                _ = linux.close(@intCast(ev));
+                return error.Fail;
+            };
+            x.* = .{ .port = port, .fd = fd, .stop = @intCast(ev) };
+            x.thread = std.Thread.spawn(.{ .stack_size = 64 * 1024 }, acceptMain, .{x}) catch {
+                _ = linux.close(fd);
+                _ = linux.close(x.stop);
+                lpa.destroy(x);
+                return error.Fail;
+            };
+            ports.append(lpa, x) catch {};
+            break :blk x;
+        };
+        for (p.listeners.items) |l| if (l.machine == machine) return error.InUse;
+        const l = lpa.create(Listener) catch return error.Fail;
+        l.* = .{ .machine = machine, .pipe_w = pipe_w };
+        p.listeners.append(lpa, l) catch {
+            lpa.destroy(l);
+            return error.Fail;
+        };
+        return l;
+    }
+
+    /// Takes the listener off its port, closes the descriptors that no
+    /// `accept` took, and closes the socket of the port after its last
+    /// listener.
+    fn removeListener(port: u32, l: *Listener) void {
+        ports_lock.lock();
+        var last: ?*PortSock = null;
+        for (ports.items, 0..) |p, i| if (p.port == port) {
+            if (std.mem.indexOfScalar(*Listener, p.listeners.items, l)) |j| _ = p.listeners.swapRemove(j);
+            if (p.listeners.items.len == 0) {
+                last = p;
+                _ = ports.swapRemove(i);
+            }
+            break;
+        };
+        ports_lock.unlock();
+        if (last) |p| {
+            const one: u64 = 1;
+            _ = linux.write(p.stop, std.mem.asBytes(&one), 8);
+            p.thread.join();
+            _ = linux.close(p.fd);
+            _ = linux.close(p.stop);
+            p.listeners.deinit(lpa);
+            lpa.destroy(p);
+        }
+        for (l.pending.items) |fd| _ = linux.close(fd);
+        l.pending.deinit(lpa);
+        _ = linux.close(l.pipe_w);
+        lpa.destroy(l);
+    }
+
+    fn findListen(g: *Guest, port: u32) ?usize {
+        for (g.listens.items, 0..) |x, i| if (x.port == port) return i;
+        return null;
+    }
+
+    fn dropListen(it: *Interp, x: Listen) void {
+        removeListener(x.port, x.l);
+        const script = std.fmt.allocPrint(it.alloc(), "catch {{close {{{s}}}}}", .{x.chan}) catch return;
+        _ = it.eval(script) catch {};
+        it.heap.backing.free(x.chan);
+    }
+
+    /// `listen VM PORT -command SCRIPT`, as on macOS.
+    fn listenCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        const use = "ztcl::vm listen vm port -command script";
+        if (args.len != 3 or !std.mem.eql(u8, try it.str(args[1]), "-command")) return it.wrongArgs(use);
+        const port = try it.int(args[0]);
+        if (port < 1 or port > std.math.maxInt(u32) - 1) return it.fail("bad port \"{d}\"", .{port});
+        if (it.findCommand("fileevent") == null) return it.failCode("ZTCL VM NOEVENT", "ztcl::vm listen needs the event capability", .{});
+        if (findListen(g, @intCast(port)) != null) return it.failCode("ZTCL VM LISTEN", "the guest {s} has a listener on port {d} already", .{ g.name, port });
+        var pipe: [2]i32 = undefined;
+        if (linux.errno(linux.pipe2(&pipe, .{ .CLOEXEC = true })) != .SUCCESS) return it.failCode("ZTCL VM KVM", "no pipe for the listener", .{});
+        const ch = binaryChannel(it, "vmlisten", pipe[0]) catch |e| {
+            _ = linux.close(pipe[0]);
+            _ = linux.close(pipe[1]);
+            return e;
+        };
+        const l = addListener(@intCast(port), g.machine, pipe[1]) catch |e| {
+            _ = linux.close(pipe[1]);
+            const script = std.fmt.allocPrint(it.alloc(), "catch {{close {{{s}}}}}", .{try it.str(ch)}) catch "";
+            _ = it.eval(script) catch {};
+            return switch (e) {
+                error.InUse => it.failCode("ZTCL VM LISTEN", "vsock port {d} of the host is in use", .{port}),
+                error.Fail => it.failCode("ZTCL VM KVM", "the guest {s} cannot listen on port {d}", .{ g.name, port }),
+            };
+        };
+        const name = try it.heap.backing.dupe(u8, try it.str(ch));
+        try g.listens.append(it.heap.backing, .{ .port = @intCast(port), .l = l, .chan = name });
+        if (it.findCommand("::ztcl::vmpriv::accept") == null) _ = try it.eval(listen_glue);
+        var words = [_]Value{ .{ .str = "::ztcl::vmpriv::accept" }, .{ .str = g.name }, .{ .int = port }, ch, args[2] };
+        const handler = try value.wrapList(it.alloc(), try it.alloc().dupe(Value, &words));
+        var fe = [_]Value{ .{ .str = "fileevent" }, ch, .{ .str = "readable" }, handler };
+        _ = try it.evalWords(&fe);
+        return .{ .str = "" };
+    }
+
+    fn unlistenCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        if (args.len != 1) return it.wrongArgs("ztcl::vm unlisten vm port");
+        const port = try it.int(args[0]);
+        const i = (if (port >= 0 and port <= std.math.maxInt(u32)) findListen(g, @intCast(port)) else null) orelse
+            return it.failCode("ZTCL VM LISTEN", "the guest {s} has no listener on port {d}", .{ g.name, port });
+        dropListen(it, g.listens.swapRemove(i));
+        return .{ .str = "" };
+    }
+
+    fn acceptCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        if (args.len != 2) return it.wrongArgs("ztcl::vm accept vm port fd");
+        const port = try it.int(args[0]);
+        const fd = try it.int(args[1]);
+        const i = (if (port >= 0 and port <= std.math.maxInt(u32)) findListen(g, @intCast(port)) else null) orelse
+            return it.failCode("ZTCL VM LISTEN", "the guest {s} has no listener on port {d}", .{ g.name, port });
+        if (fd < 0 or fd > std.math.maxInt(i32) or !g.listens.items[i].l.take(@intCast(fd)))
+            return it.failCode("ZTCL VM LISTEN", "no connection {d} waits on port {d}", .{ fd, port });
+        return binaryChannel(it, "vsock", @intCast(fd));
     }
 
     pub fn closeAll(it: *Interp) void {
