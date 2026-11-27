@@ -42,6 +42,7 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var joinable = false;
     var preserved = false;
     var level: thread.Isolation = .interp;
+    var guest: ?thread.Guest = null;
     var host_files = false;
     var caps: ?u32 = null;
     var meter_name: ?[]const u8 = null;
@@ -61,6 +62,13 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                     return it.failCode("ZTCL ISOLATION LEVEL", "the isolation level {s} is not available yet", .{l});
                 return it.fail("bad isolation level \"{s}\": must be interp, process, or vm", .{l});
             };
+        } else if (eql(o, "-guest") and i + 1 < argv.len) {
+            // The guest of the level vm: a Linux guest with the runner as
+            // its first process (ztcl#468), or the ztcl unikernel
+            // (ztcl#471), which has no files, sockets, or processes.
+            i += 1;
+            const gname = try it.str(argv[i]);
+            guest = std.meta.stringToEnum(thread.Guest, gname) orelse return it.fail("bad guest \"{s}\": must be linux or unikernel", .{gname});
         } else if (eql(o, "-files") and i + 1 < argv.len) {
             i += 1;
             const m = try it.str(argv[i]);
@@ -90,10 +98,11 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     // The files of the host are a part of the isolation of a child: a
     // thread of the level interp has the files of its creator already.
     if (host_files and level != .process) return it.fail("-files host needs -isolation process", .{});
+    if (guest != null and level != .vm) return it.fail("-guest needs -isolation vm", .{});
     const mt = @import("meter.zig");
     const m: ?*mt.Meter = if (meter_name) |n| try (try mt.registry(it)).obtain(n) else null;
     defer if (m) |x| x.release();
-    const id = try thread.createOpts(it, script, .{ .joinable = joinable, .preserved = preserved, .isolation = level, .host_files = host_files, .meter = m, .compute = compute, .caps = caps });
+    const id = try thread.createOpts(it, script, .{ .joinable = joinable, .preserved = preserved, .isolation = level, .guest = guest orelse .linux, .host_files = host_files, .meter = m, .compute = compute, .caps = caps });
     return thread.idValue(it, id);
 }
 

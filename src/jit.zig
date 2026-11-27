@@ -72,7 +72,8 @@ pub const EnterCtx = extern struct {
 pub const backend = (builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux) or
     (builtin.cpu.arch == .x86_64 and builtin.os.tag == .windows) or
     (builtin.cpu.arch == .aarch64 and builtin.os.tag == .linux) or
-    (builtin.cpu.arch == .aarch64 and builtin.os.tag == .macos);
+    (builtin.cpu.arch == .aarch64 and builtin.os.tag == .macos) or
+    (builtin.cpu.arch == .x86_64 and builtin.os.tag == .freestanding);
 
 /// The calling convention of each call between Zig and the machine code:
 /// the entry, the helpers, and the tier changes. On Windows it is the

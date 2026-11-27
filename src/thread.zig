@@ -51,15 +51,20 @@ pub const chan_names_ok = @import("sys.zig").supported;
 pub const web = builtin.cpu.arch.isWasm() and !builtin.single_threaded;
 const webthread = if (web) @import("webthread.zig") else struct {};
 
+/// True in the ztcl unikernel (ztcl#471): one CPU, one interpreter, and
+/// waits that read the frames of the host (`uk/wait.zig`).
+pub const uk = builtin.os.tag == .freestanding and builtin.cpu.arch == .x86_64;
+const ukwait = if (uk) @import("uk/wait.zig") else struct {};
+
 /// True when the target has threads.
-pub const supported = web or (!builtin.single_threaded and !builtin.cpu.arch.isWasm() and builtin.os.tag != .freestanding);
+pub const supported = web or uk or (!builtin.single_threaded and !builtin.cpu.arch.isWasm() and builtin.os.tag != .freestanding);
 
 /// The stack of a thread. A worker on the web uses the shared memory for
 /// its stack, so it gets less. The interpreter uses 5 MiB at most.
 const stack_size: usize = if (web) 8 << 20 else 32 << 20;
 
 /// The thread of the system, or the worker of the host on the web.
-const OsThread = if (web) webthread.Thread else std.Thread;
+const OsThread = if (web) webthread.Thread else if (uk) ukwait.Thread else std.Thread;
 
 /// The limits of the threads of one host. The embedder sets them in
 /// `Interp.thread_limits` before it turns the capability on.
@@ -86,7 +91,7 @@ fn io() std.Io {
     return std.Io.Threaded.global_single_threaded.io();
 }
 
-pub const Lock = if (web) webthread.Lock else if (!supported) NoLock else struct {
+pub const Lock = if (web) webthread.Lock else if (!supported or uk) NoLock else struct {
     m: std.Io.Mutex = .init,
 
     pub fn lock(l: *Lock) void {
@@ -134,14 +139,14 @@ pub const Event = struct {
     /// Sleeps until the count is not `s` or `ns` nanoseconds end, and
     /// removes the waiter of `enter`.
     pub fn sleep(e: *Event, s: u32, ns: u64) void {
-        if (web) webthread.futexWait(&e.seq.raw, s, @intCast(ns)) else if (!supported) {} else io().futexWaitTimeout(u32, &e.seq.raw, s, .{ .duration = .{ .raw = .fromNanoseconds(@intCast(ns)), .clock = .awake } }) catch {};
+        if (web) webthread.futexWait(&e.seq.raw, s, @intCast(ns)) else if (uk) ukwait.wait(ns) else if (!supported) {} else io().futexWaitTimeout(u32, &e.seq.raw, s, .{ .duration = .{ .raw = .fromNanoseconds(@intCast(ns)), .clock = .awake } }) catch {};
         _ = e.waiters.fetchSub(1, .release);
     }
 
     pub fn signal(e: *Event) void {
         _ = e.seq.fetchAdd(1, .seq_cst);
         if (e.waiters.load(.seq_cst) == 0) return;
-        if (web) webthread.futexWake(&e.seq.raw, std.math.maxInt(u32)) else if (!supported) {} else io().futexWake(u32, &e.seq.raw, std.math.maxInt(u32));
+        if (web) webthread.futexWake(&e.seq.raw, std.math.maxInt(u32)) else if (uk) {} else if (!supported) {} else io().futexWake(u32, &e.seq.raw, std.math.maxInt(u32));
     }
 };
 
@@ -150,7 +155,7 @@ pub const slice_ns: u64 = 50 * std.time.ns_per_ms;
 
 /// Nanoseconds on a clock that does not go back.
 pub fn nowNs() i96 {
-    return if (web) webthread.nowNs() else if (!supported) 0 else std.Io.Clock.awake.now(io()).nanoseconds;
+    return if (web) webthread.nowNs() else if (uk) ukwait.nowNs() else if (!supported) 0 else std.Io.Clock.awake.now(io()).nanoseconds;
 }
 
 // ---- The memory of a group ----
@@ -719,6 +724,13 @@ pub fn overLimit(it: *const Interp) bool {
 /// calls it for an interpreter of a thread.
 pub fn safePoint(it: *Interp, w: *Worker) Error!void {
     if (w.is_main) return;
+    // The unikernel: the interrupt of a frame of the host stores zero in
+    // `mem_limit` (`uk/cpu.zig`). The limit comes back, and the frames
+    // that wait run now, so a cancel reaches a script that computes.
+    if (comptime uk) {
+        if (w.it) |x| @atomicStore(usize, &x.mem_limit, w.mem_limit, .release);
+        ukwait.poll();
+    }
     // A zero in `mem_limit` comes only with a flag, and `checkFlags`
     // restores the limit when it reads the flag.
     try checkFlags(it, w);
@@ -776,6 +788,7 @@ pub const Opts = struct {
     /// The level of the thread (ztcl#209). A level past `interp` runs the
     /// thread in a child process through `isothread.zig`.
     isolation: Isolation = .interp,
+    guest: Guest = .linux,
     /// `-files host`: an isolated thread of a creator in host mode gets
     /// the files of the host (`isothread.prepare`).
     host_files: bool = false,
@@ -790,6 +803,10 @@ pub const Opts = struct {
 };
 
 pub const Isolation = enum { interp, process, vm };
+
+/// The guest of the level vm: a Linux guest with the runner (ztcl#468),
+/// or the ztcl unikernel (ztcl#471).
+pub const Guest = enum { linux, unikernel };
 
 /// The platforms of isolated threads (`isothread.zig`).
 const iso_ok = @import("isothread.zig").supported;
@@ -851,9 +868,9 @@ pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
         if (comptime fd_os) {
             if (st.fs_fd >= 0) closeFd(st.fs_fd);
         }
-        return it.failCode("ZTCL ISOLATION LEVEL", "the level process is not available on this platform yet", .{});
+        return it.failCode("ZTCL ISOLATION LEVEL", "the level {s} is not available on this platform yet", .{@tagName(o.isolation)});
     }
-    const iso = if (comptime iso_ok) (if (o.isolation != .interp) @import("isothread.zig").prepare(it, w, st, o.host_files, o.isolation == .vm) catch |e| {
+    const iso = if (comptime iso_ok) (if (o.isolation != .interp) @import("isothread.zig").prepare(it, w, st, o.host_files, o.isolation == .vm, o.guest) catch |e| {
         if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left += steps;
         g.lock.unlock();
         g.alloc().free(text);

@@ -6,6 +6,8 @@
 #   -r  The ztcl binary. The default is zig-out/bin/ztcl.
 #   -x  Extra flags for the runner, for example "--jit-threshold 0" or "--no-jit".
 #   -n  Runs each file this many times in a row. The default is 1.
+#   -p  A prelude of tests/thread/ that runs after lib.tcl, for example
+#       prelude/vm.tcl, which runs each thread at the level vm.
 #
 # Each file runs after tests/thread/lib.tcl in one interpreter with the
 # capabilities thread, event, package, and clock. A line
@@ -16,12 +18,13 @@
 # SPDX-License-Identifier: BSD-2-Clause
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 dir="$here/../tests/thread"
-tcl="$here/../zig-out/bin/ztcl"; extra=; runs=1
-while getopts r:x:n: o; do
+tcl="$here/../zig-out/bin/ztcl"; extra=; runs=1; prelude=
+while getopts r:x:n:p: o; do
     case $o in
     r) tcl=$OPTARG ;;
     x) extra=$OPTARG ;;
     n) runs=$OPTARG ;;
+    p) prelude=$OPTARG ;;
     *) exit 2 ;;
     esac
 done
@@ -43,13 +46,14 @@ for f in "$@"; do
         root=
         if [ -n "$flags" ]; then
             root=$(mktemp -d "${TMPDIR:-/tmp}/ztcl-thread.XXXXXX") || exit 1
-            cp "$dir/lib.tcl" "$f" "$root/"
+            cp "$dir/lib.tcl" "$f" ${prelude:+"$dir/$prelude"} "$root/"
+            prelude_here=${prelude:+${prelude##*/}}
         fi
         # shellcheck disable=SC2086
         if [ -n "$root" ]; then
-            out=$(cd "$root" && timeout 120 "$tcl" --allow thread,event,package,clock $flags --root "$root" $extra lib.tcl "${f##*/}" 2>&1)
+            out=$(cd "$root" && timeout 120 "$tcl" --allow thread,event,package,clock $flags --root "$root" $extra lib.tcl $prelude_here "${f##*/}" 2>&1)
         else
-            out=$(timeout 120 "$tcl" --allow thread,event,package,clock $extra "$dir/lib.tcl" "$f" 2>&1)
+            out=$(timeout 120 "$tcl" --allow thread,event,package,clock $extra "$dir/lib.tcl" ${prelude:+"$dir/$prelude"} "$f" 2>&1)
         fi
         rc=$?
         [ -n "$root" ] && rm -rf -- "$root"
@@ -58,7 +62,7 @@ for f in "$@"; do
         "pass "*" fail 0") [ $rc -eq 0 ] && ok=$((ok + 1)) ;;
         esac
         if [ $ok -ne $n ]; then
-            printf '%s\n' "$out" | tail -n 20
+            printf '%s\n' "$out" | tail -n ${TAIL:-20}
             echo "status $rc"
             break
         fi

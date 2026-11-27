@@ -64,6 +64,9 @@ pub const spawns_runner = builtin.os.tag == .macos or on_win or (on_linux and is
 const isow = @import("isolate_windows.zig");
 const isol = @import("isolate_linux.zig");
 const on_linux = builtin.os.tag == .linux;
+const isouk = if (on_linux and builtin.cpu.arch == .x86_64) @import("isouk.zig") else struct {
+    pub const supported = false;
+};
 
 /// The parent end of a transport: a descriptor, or a pipe handle on
 /// Windows.
@@ -564,6 +567,9 @@ pub const Bridge = struct {
     /// folder that `bridgeMain` allocates.
     lin: if (on_linux) ?isol.Child else void = if (on_linux) null else {},
     real_root: ?[]u8 = null,
+    /// The level vm: the path of the unikernel image, and its guest.
+    unikernel: ?[]u8 = null,
+    guest: if (isouk.supported) ?*isouk.Guest else void = if (isouk.supported) null else {},
     /// The memory limit of the thread, for the limit of the system.
     mem: usize = std.math.maxInt(usize),
     /// The error of a failed start, for `startError`.
@@ -611,14 +617,16 @@ fn rootOf(it: *Interp) *Interp {
 /// With `vm`, the child is the runner in a guest of `ztcl::vm`
 /// (`isovm.zig`, Linux with KVM): the thread gets no capability that
 /// reaches the host (`vm_masked`), since the guest has no files, sockets,
-/// or processes of the host.
-pub fn prepare(it: *Interp, w: *Worker, st: anytype, host_files: bool, vm: bool) Error!*Bridge {
+/// or processes of the host. With `guest` unikernel, the child is the
+/// ztcl unikernel (`isouk.zig`).
+pub fn prepare(it: *Interp, w: *Worker, st: anytype, host_files: bool, vm: bool, guest: thread.Guest) Error!*Bridge {
     if (comptime !supported) return it.failCode("ZTCL ISOLATION LEVEL", "the level process is not available on this platform yet", .{});
     const root = rootOf(it);
     var vm_spawner: ?Spawner = null;
     if (vm) {
         if (it.capabilities & @backingInt(interp.Capability.vm) == 0)
             return it.failCode("ZTCL ISOLATION LEVEL", "the level vm needs the vm capability", .{});
+        if (guest == .unikernel) return prepareVm(it, w, st);
         vm_spawner = @import("microvm.zig").isoSpawner(root) orelse
             return it.failCode("ZTCL ISOLATION LEVEL", "the level vm needs ztcl::vm on Linux with KVM and a guest of the runner (Host.iso_kernel and iso_initrd)", .{});
     }
@@ -652,7 +660,34 @@ pub fn prepare(it: *Interp, w: *Worker, st: anytype, host_files: bool, vm: bool)
     return b;
 }
 
+/// The bridge of a thread at the level vm: the ztcl unikernel next to
+/// the runner, on KVM (`isouk.zig`). The guest has no files and no
+/// sockets, so the child gets only the capabilities of `uk_caps`.
+fn prepareVm(it: *Interp, w: *Worker, st: anytype) Error!*Bridge {
+    if (comptime !isouk.supported) return it.failCode("ZTCL ISOLATION LEVEL", "the level vm is not available on this platform yet", .{});
+    const root = rootOf(it);
+    const runner = root.iso_runner orelse return it.failCode("ZTCL ISOLATION RUNNER", "the embedder gives no runner for isolated threads", .{});
+    const g = w.group;
+    const dir = std.fs.path.dirname(runner) orelse ".";
+    const path = std.fs.path.join(g.gpa, &.{ dir, "ztcl-unikernel" }) catch return error.OutOfMemory;
+    errdefer g.gpa.free(path);
+    const b = try g.gpa.create(Bridge);
+    b.* = .{
+        .gpa = g.gpa,
+        .w = w,
+        .runner = null,
+        .spawner = null,
+        .hosts = (if (st.clock_host != null) hosts_clock else 0) | (if (st.event_host != null) hosts_event else 0),
+        .caps = st.caps & uk_caps,
+        .jit = st.jit != null,
+        .mem_limit = st.mem_limit,
+        .unikernel = path,
+    };
+    return b;
+}
+
 pub fn unprepare(b: *Bridge) void {
+    if (b.unikernel) |p| b.gpa.free(p);
     if (b.real_root) |r| b.gpa.free(r);
     b.gpa.destroy(b);
 }
@@ -665,6 +700,14 @@ pub fn startError(it: *Interp, b: *Bridge) Error {
 
 fn spawnChild(b: *Bridge) ?Fd {
     if (b.spawner) |s| return s.spawn(s.ctx);
+    if (comptime isouk.supported) if (b.unikernel) |path| {
+        const g = isouk.start(b.gpa, path, b.mem) orelse {
+            b.err = isouk.why;
+            return null;
+        };
+        b.guest = g;
+        return g.fd;
+    };
     const runner = b.runner orelse return null;
     return spawnRunner(b, runner);
 }
@@ -777,6 +820,11 @@ fn closeFd(fd: Fd) void {
 extern "kernel32" fn CloseHandle(h: *anyopaque) callconv(.winapi) i32;
 
 fn killChild(b: *Bridge) void {
+    if (comptime isouk.supported) if (b.guest) |g| {
+        g.stop(b.gpa);
+        b.guest = null;
+        return;
+    };
     if (comptime !spawns_runner) return;
     if (comptime on_win) {
         if (b.win) |*c| c.kill();
@@ -791,6 +839,18 @@ fn killChild(b: *Bridge) void {
 
 /// Waits up to `ms` for the child to end.
 fn reapChild(b: *Bridge, ms: u32) bool {
+    if (comptime isouk.supported) if (b.guest) |g| {
+        // The unikernel stops itself after GOODBYE.
+        var waited: u32 = 0;
+        while (g.m.getState() == .running and waited < ms) : (waited += 1) {
+            var ts: std.os.linux.timespec = .{ .sec = 0, .nsec = 1_000_000 };
+            _ = std.os.linux.nanosleep(&ts, null);
+        }
+        if (g.m.getState() == .running) return false;
+        g.stop(b.gpa);
+        b.guest = null;
+        return true;
+    };
     if (comptime !spawns_runner) return true;
     if (comptime on_win) {
         const c = if (b.win) |*c| c else return true;
@@ -897,7 +957,8 @@ pub fn bridgeMain(w: *Worker, b: *Bridge, st: anytype) void {
         return failBridge(w, b, st, "no transport for the child process");
     } };
     b.link.conn = iso.Conn.init(&b.link.t);
-    const wel = iso.parentHandshake(&b.link.conn, a, null, &.{"thread"}, false) catch {
+    const secret: ?[32]u8 = if (comptime isouk.supported) (if (b.guest) |gu| gu.secret else null) else null;
+    const wel = iso.parentHandshake(&b.link.conn, a, secret, &.{"thread"}, false) catch {
         b.link.t.deinit();
         return failBridge(w, b, st, "the handshake with the child process failed");
     };
@@ -1230,6 +1291,8 @@ const Child = struct {
     dbg: ?*dap.Server = null,
     w: *Worker = undefined,
     caller: isobroker.Caller = undefined,
+    /// True after the end of the connection.
+    done: bool = false,
 
     fn write(ctx: *anyopaque, kind: iso.Kind, stream: u32, payload: []const u8) bool {
         const c: *Child = @ptrCast(@alignCast(ctx));
@@ -1273,16 +1336,23 @@ const Child = struct {
 };
 
 fn childReader(c: *Child) void {
+    while (childFrame(c)) {}
+    childEnd(c);
+}
+
+/// Reads one message of the parent and acts on it. Gives false at the
+/// end of the connection.
+fn childFrame(c: *Child) bool {
     const w = c.w;
     const g = w.group;
-    while (true) {
-        const f = readMessage(c.link, c.a) catch break;
+    {
+        const f = readMessage(c.link, c.a) catch return false;
         defer c.a.free(f.payload);
         switch (f.kind) {
             .send => {
-                const s = readSend(f.payload) catch break;
+                const s = readSend(f.payload) catch return false;
                 const a = g.alloc();
-                const m = a.create(Msg) catch continue;
+                const m = a.create(Msg) catch return true;
                 m.* = .{ .kind = .script, .from = s.from, .seq = if (s.flags & flag_reply != 0) f.stream else 0 };
                 m.text = a.dupe(u8, s.script) catch &.{};
                 m.var_name = a.dupe(u8, s.var_name) catch &.{};
@@ -1291,15 +1361,15 @@ fn childReader(c: *Child) void {
                 g.lock.unlock();
             },
             .result => {
-                const r = readResult(g, f.stream, f.payload) catch break;
+                const r = readResult(g, f.stream, f.payload) catch return false;
                 g.lock.lock();
                 thread.pushMsg(w, r.msg, false);
                 g.lock.unlock();
             },
             .cancel => {
                 var r: iso.Reader = .{ .b = f.payload };
-                const bits = r.int(u32) catch break;
-                const text = readStr(&r) catch break;
+                const bits = r.int(u32) catch return false;
+                const text = readStr(&r) catch return false;
                 g.lock.lock();
                 w.lock.lock();
                 if (text.len > 0) {
@@ -1315,19 +1385,25 @@ fn childReader(c: *Child) void {
                 w.wake();
             },
             .tsv => {
-                const p = c.a.dupe(u8, f.payload) catch continue;
+                const p = c.a.dupe(u8, f.payload) catch return true;
                 c.caller.deliver(f.stream, p);
             },
             .fd => if (comptime on_win) winh.take(g, f.payload, null) else takeChannel(g, c.link, f.payload, false),
-            .debug => if (comptime probe.enabled) if (c.dbg) |d| dap.deliver(d, c.a.dupe(u8, f.payload) catch continue),
-            .goodbye => break,
+            .debug => if (comptime probe.enabled) if (c.dbg) |d| dap.deliver(d, c.a.dupe(u8, f.payload) catch return true),
+            .goodbye => return false,
             else => {},
         }
     }
-    // The parent is gone or said goodbye: the thread stops.
+    return true;
+}
+
+/// The parent is gone or said goodbye: the thread stops.
+fn childEnd(c: *Child) void {
+    c.done = true;
+    const g = c.w.group;
     c.caller.end();
     g.lock.lock();
-    thread.stopWorker(w, thread.Flag.stop);
+    thread.stopWorker(c.w, thread.Flag.stop);
     g.lock.unlock();
 }
 
@@ -1399,7 +1475,7 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     var link: Link = .{ .t = t };
     defer link.t.deinit();
     link.conn = iso.Conn.init(&link.t);
-    iso.childHandshake(&link.conn, a, null, "thread", 0) catch return 2;
+    iso.childHandshake(&link.conn, a, if (comptime thread.uk) ukSecret() else null, "thread", 0) catch return 2;
     const f = readMessage(&link, a) catch return 2;
     defer a.free(f.payload);
     if (f.kind != .start) return 2;
@@ -1427,7 +1503,10 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     // The thread of the child makes no thread of its own in this version.
     x.thread_limits.max_threads = 0;
     const thread_bit = @backingInt(interp.Capability.thread);
-    x.allow(st.caps | thread_bit) catch return 2;
+    // The unikernel has no files, sockets, or processes: only the
+    // capabilities of `uk_caps`.
+    const caps = if (comptime thread.uk) st.caps & uk_caps else st.caps;
+    x.allow(caps | thread_bit) catch return 2;
     const w = x.worker orelse return 2;
     w.id = st.id;
     w.is_main = false;
@@ -1446,9 +1525,11 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     isobroker.install(&x, &c.caller) catch return 2;
     // `-caps` with no `thread`: the child has no `thread::send` to the
     // parent and no `tsv`.
-    if (st.caps & thread_bit == 0) thread.dropThreadCommands(&x) catch return 2;
+    if (caps & thread_bit == 0) thread.dropThreadCommands(&x) catch return 2;
     w.group.remote = c.remote();
-    if (!jail(a, &x, st, hosts)) return 2;
+    if (comptime !thread.uk) {
+        if (!jail(a, &x, st, hosts)) return 2;
+    }
     // After the sandbox, so a sandbox that refuses executable memory
     // leaves the interpreter with no JIT.
     if (st.jit == 1) _ = x.enableJit(.{});
@@ -1469,7 +1550,9 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     defer if (comptime probe.enabled) if (c.dbg) |d| dap.endChild(d);
     if (!link.write(a, .ready, 0, "")) return 2;
 
-    const reader = std.Thread.spawn(.{}, childReader, .{&c}) catch return 2;
+    // The unikernel has no threads: each wait of the interpreter reads
+    // one frame (`uk/wait.zig`).
+    const reader = if (comptime thread.uk) ukPumpOn(&c) else std.Thread.spawn(.{}, childReader, .{&c}) catch return 2;
     const r = if (st.script.len > 0) probe.evalDebug(&x, st.script) else thread.topScope(&x, thread.waitLoop, .{&x});
     if (r) |_| {} else |e| thread.endError(w, &x, e);
     // The counts of the child for the meter of the parent.
@@ -1482,9 +1565,64 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     _ = link.write(a, .exit, 0, o.list.items);
     o.deinit();
     // The parent answers with goodbye, or closes.
-    reader.join();
+    if (comptime thread.uk) {
+        while (!c.done) ukPump();
+    } else reader.join();
     w.group.remote = null;
     return 0;
+}
+
+/// The capabilities of a thread in the unikernel: `thread`, whose calls
+/// go to the parent, child interps, and the clock and the event loop of
+/// `uk/hosts.zig`.
+pub const uk_caps: u32 = @backingInt(interp.Capability.thread) | @backingInt(interp.Capability.interp) |
+    @backingInt(interp.Capability.clock) | @backingInt(interp.Capability.event);
+
+/// The bootstrap secret of the command line of the guest.
+fn ukSecret() ?[32]u8 {
+    const hex = @import("uk/uk.zig").param("ztcl.secret") orelse return null;
+    var out: [32]u8 = undefined;
+    const got = std.fmt.hexToBytes(&out, hex) catch return null;
+    if (got.len != 32) return null;
+    return out;
+}
+
+var uk_child: ?*Child = null;
+
+fn ukPumpOn(c: *Child) void {
+    uk_child = c;
+    const wt = @import("uk/wait.zig");
+    wt.pump = ukPump;
+    wt.poll_fn = ukPoll;
+    wt.ready_fn = ukReady;
+    if (c.w.it) |x| @import("uk/cpu.zig").uk_limit_word = @intFromPtr(&x.mem_limit);
+}
+
+fn ukReady() bool {
+    const c = uk_child orelse return false;
+    return !c.done and (c.link.conn.buffered() or @import("uk/vsock.zig").readable());
+}
+
+/// Runs each whole frame that waits, with no sleep.
+fn ukPoll() void {
+    const c = uk_child orelse return;
+    while (ukReady()) {
+        if (!childFrame(c)) childEnd(c);
+    }
+}
+
+/// One step of the reader of the unikernel: a frame when one waits, or
+/// a sleep to the next interrupt.
+fn ukPump() void {
+    const c = uk_child orelse return;
+    if (c.done) return;
+    const vs = @import("uk/vsock.zig");
+    // The connection can hold whole frames that an earlier read took.
+    if (!c.link.conn.buffered() and !vs.readable()) {
+        vs.waitWork();
+        if (!vs.readable()) return;
+    }
+    if (!childFrame(c)) childEnd(c);
 }
 
 /// The entry of the runner for `--iso-fd N`, or `--iso-handle 0x...` on

@@ -719,6 +719,11 @@ pub fn build(b: *std.Build) void {
     const enclave_core = addEnclaveCore(b, size_plant);
     b.step("enclave-core", "Build the library of the VBS enclave of Windows").dependOn(&b.addInstallFile(enclave_core.getEmittedBin(), "lib/ztcl-enclave-core.lib").step);
 
+    // The ztcl unikernel of ztcl#471: zig-out/bin/ztcl-unikernel, an ELF
+    // image that `thread::create -isolation vm` boots on KVM.
+    const unikernel = addUnikernel(b, size_plant, target);
+    b.step("unikernel", "Build the ztcl unikernel for -isolation vm").dependOn(&b.addInstallArtifact(unikernel, .{}).step);
+
     // The libraries of the capability `thread` on the web (task 14):
     // ztcl-threads.wasm shares one memory between the workers, and
     // ztcl-async.wasm gives each worker its own memory.
@@ -1157,6 +1162,49 @@ fn addEnclaveCore(b: *std.Build, size_plant: usize) *std.Build.Step.Compile {
     // The enclave CRT has no helpers of 128-bit floats.
     obj.bundle_compiler_rt = true;
     return obj;
+}
+
+/// The ztcl unikernel (src/unikernel.zig): x86-64 with no operating
+/// system, at the address of src/uk/link.ld, with the JIT. Interrupts come on the
+/// stack of the code that runs, so the code has no red zone.
+fn addUnikernel(b: *std.Build, size_plant: usize, host: std.Build.ResolvedTarget) *std.Build.Step.Compile {
+    // The CPU of the runner, so the guest code is the same code as the
+    // code of the host.
+    var query: std.Target.Query = .{ .cpu_arch = .x86_64, .os_tag = .freestanding, .abi = .none };
+    if (host.result.cpu.arch == .x86_64) {
+        query.cpu_model = .{ .explicit = host.result.cpu.model };
+        query.cpu_features_add = host.result.cpu.features;
+    }
+    const exe = b.addExecutable(.{ .name = "ztcl-unikernel", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/unikernel.zig"),
+        .target = b.resolveTargetQuery(query),
+        .optimize = .ReleaseFast,
+        .single_threaded = true,
+        .stack_check = false,
+        .red_zone = false,
+        .pic = false,
+    }) });
+    exe.pie = false;
+    exe.setLinkerScript(b.path("src/uk/link.ld"));
+    const opts = b.addOptions();
+    opts.addOption(bool, "gc_precise", false);
+    opts.addOption(bool, "jit", true);
+    opts.addOption(bool, "aot", false);
+    opts.addOption(bool, "shell", false);
+    opts.addOption(bool, "jit_bug", false);
+    opts.addOption(bool, "tsan_plant", false);
+    opts.addOption(usize, "size_plant", size_plant);
+    opts.addOption(WebThreads, "web_threads", .none);
+    opts.addOption(bool, "wasm_point", false);
+    opts.addOption(bool, "wasm_host", false);
+    opts.addOption(bool, "cext", false);
+    opts.addOption(bool, "vm_test_key", false);
+    opts.addOption(bool, "vm_fetch", false);
+    const off: [all_modules.len]bool = @splat(false);
+    addModuleOptions(b, opts, off);
+    exe.root_module.addOptions("build_options", opts);
+    exe.bundle_compiler_rt = true;
+    return exe;
 }
 
 fn moduleIndex(comptime name: []const u8) usize {

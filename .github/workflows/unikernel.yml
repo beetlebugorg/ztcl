@@ -1,0 +1,43 @@
+name: Unikernel
+
+# Builds the ztcl unikernel (zig build unikernel, ztcl#471) and runs the
+# thread tests with each thread in it (tools/unikernel-test.sh) on KVM.
+# GitHub gives /dev/kvm to the jobs of the x86-64 Linux runners; the
+# udev rule opens it to the runner user.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/thread/**"
+      - "tools/thread-tests.sh"
+      - "tools/unikernel-test.sh"
+      - "build.zig"
+      - ".github/workflows/unikernel.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/thread/**"
+      - "tools/thread-tests.sh"
+      - "tools/unikernel-test.sh"
+      - "build.zig"
+      - ".github/workflows/unikernel.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  unikernel:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: "0.17.0"
+      - run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+          sudo modprobe vhost_vsock && sudo chmod 666 /dev/vhost-vsock
+          ls -l /dev/kvm /dev/vhost-vsock
+      - run: zig build -j4 && zig build unikernel -j4
+      - run: tools/unikernel-test.sh
