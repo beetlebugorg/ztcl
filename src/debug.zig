@@ -22,6 +22,7 @@ const std = @import("std");
 const interp = @import("interp.zig");
 const value = @import("value.zig");
 const probe = @import("probe.zig");
+const tape = @import("tape.zig");
 
 const Interp = interp.Interp;
 const Value = value.Value;
@@ -42,12 +43,28 @@ pub const Options = struct {
     last: usize = 10,
     /// Serve the tools over MCP on stdin and stdout.
     mcp: bool = false,
+    /// The file of `--record` or `--replay`. The runner reads and
+    /// writes it, and gives the tape in `tape`.
+    record_path: ?[]const u8 = null,
+    replay_path: ?[]const u8 = null,
+    /// The tape of the run: it records the inputs, or replays them.
+    tape: ?*tape.Tape = null,
+    /// Questions over the run: who last set a variable, and when a
+    /// variable first got a value.
+    questions: []const Question = &.{},
 };
 
 /// One change of a variable: the value before, the value after, and the
 /// lines of the two records. A command at the first line, or the loop
 /// head between the two lines, made the change.
 pub const Change = struct { name: []const u8, from: []const u8, to: []const u8, line: []const u8, next: []const u8 };
+
+pub const Question = struct {
+    kind: enum { who_set, when },
+    /// A global or namespace variable.
+    name: []const u8,
+    value: []const u8 = "",
+};
 
 pub const FrameInfo = struct { words: []const u8, locals: []const probe.Field };
 
@@ -81,6 +98,13 @@ pub const Report = struct {
     changes: []const Change = &.{},
     /// A note on the second run of `explain`.
     note: []const u8 = "",
+    /// A line on the tape: the count of entries, or the first difference
+    /// of a replay.
+    tape_note: []const u8 = "",
+    /// One line for each question of the options.
+    answers: []const []const u8 = &.{},
+    /// The first error of the run, when it is not the last error.
+    first_error: []const u8 = "",
 
     pub fn deinit(r: *Report) void {
         r.arena.deinit();
@@ -93,11 +117,44 @@ pub const Report = struct {
 pub fn prepare(it: *Interp, opts: Options) Error!u32 {
     _ = try it.eval("package require ztcl::probe");
     const id = try probe.add(it, .{ .kind = .@"error", .stack = true, .locals = true });
+    for (opts.questions) |q| {
+        const full = if (std.mem.startsWith(u8, q.name, "::")) q.name else try std.fmt.allocPrint(it.alloc(), "::{s}", .{q.name});
+        const cond = if (q.kind == .when) try std.fmt.allocPrint(it.alloc(), "[set {{{s}}}] eq {{{s}}}", .{ full, q.value }) else "";
+        _ = try probe.add(it, .{ .kind = .variable, .target = full, .ops = probe_write, .cond = cond, .stack = true, .count = if (q.kind == .when) 1 else std.math.maxInt(u64) });
+    }
     for (opts.probes) |spec| {
         const text = try std.fmt.allocPrint(it.alloc(), "ztcl::probe add {s}", .{spec});
         _ = try it.eval(text);
     }
     return id;
+}
+
+const probe_write = @import("trace.zig").op_write;
+
+/// The answer to each question from the records of its probe. The probe
+/// of question k has the id `err_id + 1 + k`.
+fn answer(it: *Interp, rep: *Report, err_id: u32, qs: []const Question) Error!void {
+    const ra = rep.arena.allocator();
+    var out: std.ArrayList([]const u8) = .empty;
+    for (qs, 0..) |q, k| {
+        const id: u32 = err_id + 1 + @as(u32, @intCast(k));
+        const rs = try probe.select(it, .{ .probe = id });
+        if (rs.len == 0) {
+            try out.append(ra, try std.fmt.allocPrint(ra, "{s}: {s}", .{ q.name, if (q.kind == .when) "never got the value" else "no write" }));
+            continue;
+        }
+        const r = if (q.kind == .when) rs[0] else rs[rs.len - 1];
+        const where = field(r, "stack");
+        try out.append(ra, try std.fmt.allocPrint(ra, "{s}: {s} {s} at unit {d} (record #{d}), stack: {s}", .{
+            q.name,
+            if (q.kind == .when) "got the value" else "was last set to",
+            field(r, "value"),
+            r.units,
+            r.seq,
+            if (where.len > 0) where else "the global level",
+        }));
+    }
+    rep.answers = out.items;
 }
 
 /// Runs `text` and gives the report. The output of the script goes to
@@ -110,7 +167,24 @@ pub fn run(it: *Interp, text: []const u8, opts: Options) Error!Report {
     const err_id = try prepare(it, opts);
     const units = it.compute_limit;
     it.error_line = 0;
-    if (it.eval(text)) |v| {
+    // `explain` replays the inputs of the first run in the second run, so
+    // a script with capabilities gets a tape of its own.
+    var own: tape.Tape = .{ .gpa = probe.embedderAlloc(it), .mode = .record };
+    defer own.deinit();
+    const tp: ?*tape.Tape = opts.tape orelse if (opts.explain and it.capabilities != 0) &own else null;
+    if (tp) |t| tape.start(it, t);
+    const res = it.eval(text);
+    if (tp != null) tape.stop(it);
+    if (opts.tape) |t| {
+        rep.tape_note = switch (t.mode) {
+            .record => try std.fmt.allocPrint(ra, "recorded {d} inputs", .{t.entries.items.len}),
+            .replay => if (t.diverged) |d|
+                try std.fmt.allocPrint(ra, "the replay left the tape: {s}", .{d})
+            else
+                try std.fmt.allocPrint(ra, "replayed {d} of {d} inputs", .{ t.pos, t.entries.items.len }),
+        };
+    }
+    if (res) |v| {
         rep.result = try ra.dupe(u8, try it.str(v));
     } else |e| {
         if (e == error.OutOfMemory) return e;
@@ -119,8 +193,15 @@ pub fn run(it: *Interp, text: []const u8, opts: Options) Error!Report {
         rep.errorcode = try ra.dupe(u8, try it.str(it.error_code));
         try findOrigin(it, &rep, err_id);
     }
+    try answer(it, &rep, err_id, opts.questions);
+    if (!rep.ok) {
+        const errs = try probe.select(it, .{ .probe = err_id, .first = 1 });
+        if (errs.len > 0 and !std.mem.eql(u8, field(errs[0], "message"), rep.message)) {
+            rep.first_error = try std.fmt.allocPrint(ra, "{s} (at {s}, unit {d})", .{ field(errs[0], "message"), field(errs[0], "cmd"), errs[0].units });
+        }
+    }
     try copyProbes(it, &rep, err_id);
-    if (!rep.ok and opts.explain) try explain(it, text, &rep, units);
+    if (!rep.ok and opts.explain) try explain(it, text, &rep, units, tp);
     return rep;
 }
 
@@ -206,7 +287,7 @@ fn addName(a: Allocator, out: *std.ArrayList([]const u8), name: []const u8) Allo
 
 /// The second run of `explain`: a probe on each line of the proc of the
 /// error, with the variables of the failed command and the locals.
-fn explain(it: *Interp, text: []const u8, rep: *Report, units: u64) Error!void {
+fn explain(it: *Interp, text: []const u8, rep: *Report, units: u64, tp: ?*tape.Tape) Error!void {
     const ra = rep.arena.allocator();
     if (rep.frames.len == 0) {
         rep.note = "the error is at the global level, so no proc has lines to probe";
@@ -231,7 +312,6 @@ fn explain(it: *Interp, text: []const u8, rep: *Report, units: u64) Error!void {
     }
     const caps = it.capabilities;
     try it.reset();
-    it.compute_limit = units;
     _ = try it.eval("package require ztcl::probe");
     try probe.setSize(try probe.state(it), 100_000);
     var capture: std.ArrayList(u8) = .empty;
@@ -246,13 +326,25 @@ fn explain(it: *Interp, text: []const u8, rep: *Report, units: u64) Error!void {
     const out = it.output;
     it.output = .{ .write = discard };
     defer it.output = out;
-    const same = if (it.eval(text)) |_| false else |e| blk: {
+    it.compute_limit = units;
+    // The second run gets the inputs of the first run from the tape.
+    const mode = if (tp) |t| t.mode else .record;
+    if (tp) |t| {
+        t.mode = .replay;
+        tape.start(it, t);
+    }
+    const res = it.eval(text);
+    if (tp) |t| {
+        tape.stop(it);
+        t.mode = mode;
+    }
+    const same = if (res) |_| false else |e| blk: {
         if (e == error.OutOfMemory) return e;
         break :blk std.mem.eql(u8, it.str(it.result) catch "", rep.message);
     };
     if (!same) {
         rep.note = "the second run did not end with the same error, so the changes can be wrong";
-    } else if (caps != 0) {
+    } else if (caps != 0 and tp == null) {
         rep.note = "the script has capabilities, so the second run can differ from the first";
     }
     rep.changes = try changesOf(it, ra, names.items);
@@ -347,6 +439,9 @@ pub fn writeText(a: Allocator, rep: *const Report, opts: Options) Allocator.Erro
         }
     }
     if (rep.note.len > 0) try b.line("note: {s}", .{rep.note});
+    if (rep.tape_note.len > 0) try b.line("tape: {s}", .{rep.tape_note});
+    if (rep.first_error.len > 0) try b.line("first error: {s}", .{try short(a, rep.first_error, 300)});
+    for (rep.answers) |l| try b.line("answer: {s}", .{try short(a, l, 400)});
     if (rep.probes.len > 0) try b.line("probes:", .{});
     for (rep.probes) |p| {
         const at = if (p.kind == .line) try std.fmt.allocPrint(a, " line {d}", .{p.line}) else "";
@@ -420,6 +515,16 @@ pub fn writeJson(a: Allocator, rep: *const Report, opts: Options) Allocator.Erro
     }
     try o.appendSlice(a, "],\"note\":");
     try js(a, &o, rep.note);
+    try o.appendSlice(a, ",\"tape\":");
+    try js(a, &o, rep.tape_note);
+    try o.appendSlice(a, ",\"first_error\":");
+    try js(a, &o, rep.first_error);
+    try o.appendSlice(a, ",\"answers\":[");
+    for (rep.answers, 0..) |l, i| {
+        if (i > 0) try o.append(a, ',');
+        try js(a, &o, l);
+    }
+    try o.append(a, ']');
     try o.appendSlice(a, ",\"probes\":[");
     for (rep.probes, 0..) |p, i| {
         if (i > 0) try o.append(a, ',');
@@ -442,6 +547,7 @@ pub fn writeJson(a: Allocator, rep: *const Report, opts: Options) Allocator.Erro
 /// of each word that is not an option of `ztcl debug`, for the runner.
 pub fn parseArgs(a: Allocator, args: anytype, opts: *Options, rest: *std.ArrayList(usize)) (Allocator.Error || error{BadOption})!void {
     var probes: std.ArrayList([]const u8) = .empty;
+    var qs: std.ArrayList(Question) = .empty;
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         const arg = args[i];
@@ -450,6 +556,18 @@ pub fn parseArgs(a: Allocator, args: anytype, opts: *Options, rest: *std.ArrayLi
             opts.explain = true;
         } else if (std.mem.eql(u8, arg, "--mcp")) {
             opts.mcp = true;
+        } else if (std.mem.eql(u8, arg, "--who-set") and has) {
+            i += 1;
+            try qs.append(a, .{ .kind = .who_set, .name = args[i] });
+        } else if (std.mem.eql(u8, arg, "--when") and i + 2 < args.len) {
+            try qs.append(a, .{ .kind = .when, .name = args[i + 1], .value = args[i + 2] });
+            i += 2;
+        } else if (std.mem.eql(u8, arg, "--record") and has) {
+            i += 1;
+            opts.record_path = args[i];
+        } else if (std.mem.eql(u8, arg, "--replay") and has) {
+            i += 1;
+            opts.replay_path = args[i];
         } else if (std.mem.eql(u8, arg, "--json")) {
             opts.json = true;
         } else if ((std.mem.eql(u8, arg, "--probe") or std.mem.eql(u8, arg, "-p")) and has) {
@@ -467,6 +585,7 @@ pub fn parseArgs(a: Allocator, args: anytype, opts: *Options, rest: *std.ArrayLi
         } else try rest.append(a, i);
     }
     opts.probes = probes.items;
+    opts.questions = qs.items;
 }
 
 pub const help =
@@ -485,6 +604,14 @@ pub const help =
     \\  --budget N             the most bytes of the report (default 4000)
     \\  --detail PART          summary, stack, changes, records, or all
     \\  --last N               the count of records (default 10)
+    \\  --record FILE          writes the inputs of the run to FILE: the
+    \\                         clock, the event loop, and each read of a
+    \\                         channel
+    \\  --replay FILE          runs again with the inputs of FILE, also
+    \\                         with new probes
+    \\  --who-set VAR          gives the last write of a global variable,
+    \\                         with its value, its time, and the stack
+    \\  --when VAR VALUE       gives the first write of VALUE to VAR
     \\  --mcp                  serves the tools on stdin and stdout (MCP)
     \\
 ;

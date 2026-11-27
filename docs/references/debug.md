@@ -13,3 +13,9 @@ The probe model of DTrace: a probe at a named place of a running program, an opt
 The variable and execution traces of Tcl 8.6, as `docs/references/tcl.md` lists them. https://www.tcl-lang.org/man/tcl8.6/TclCmd/trace.htm
 
 **How ztcl uses it:** a variable probe and a command probe are entries of the same cells and wrappers that `trace.zig` makes for `trace add`. A probe entry runs no script and uses no compute units.
+
+## rr
+
+The record and replay debugger of Mozilla: a run writes its inputs from the system to a trace, and a replay gives the same inputs back, so a bug that shows once can be studied again with a debugger. https://rr-project.org/
+
+**How ztcl uses it:** `ztcl debug --record` writes the inputs of the host to a tape, and `--replay` gives them back. The compute units of the interpreter are the time of each input, so a replay can add probes and still read each input at the same place.

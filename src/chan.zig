@@ -205,7 +205,7 @@ fn fillMore(it: *Interp, c: *Channel) Error!Fill {
     if (c.fail != null) return sysError(it, .{ .name = "ENOTCONN", .text = "socket is not connected" }, try std.fmt.allocPrint(it.alloc(), "error reading \"{s}\": ", .{c.name}));
     try c.rbuf.ensureUnusedCapacity(it.alloc(), 16384);
     const room = c.rbuf.unusedCapacitySlice();
-    switch (sys.read(c.fd, room)) {
+    switch (try @import("tape.zig").read(it, c.fd, room)) {
         .n => |n| {
             if (n == 0) {
                 c.hit_eof = true;

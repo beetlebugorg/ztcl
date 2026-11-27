@@ -117,3 +117,80 @@ test "the MCP server answers initialize, tools/list, and tools/call" {
     try has(text, "\"id\":7,\"error\":{\"code\":-32601");
     try has(text, "\"id\":null,\"error\":{\"code\":-32700");
 }
+
+var fake_now: i64 = 1000;
+fn fakeClock(_: ?*anyopaque) i64 {
+    fake_now += 7;
+    return fake_now;
+}
+
+fn outText(ctx: ?*anyopaque, bytes: []const u8) void {
+    const l: *std.ArrayList(u8) = @ptrCast(@alignCast(ctx.?));
+    l.appendSlice(std.testing.allocator, bytes) catch {};
+}
+
+/// Runs `script` with the fake clock and the tape `t`, and gives the
+/// output of `puts`.
+fn runTaped(t: *tcl.tape.Tape, script: []const u8, probes: []const []const u8, buf: *std.ArrayList(u8)) !debug.Report {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.clock_host = .{ .now = fakeClock };
+    try it.allow(@backingInt(tcl.interp.Capability.clock));
+    it.output = .{ .ctx = buf, .write = outText };
+    return debug.run(&it, script, .{ .tape = t, .probes = probes });
+}
+
+test "a replay gives the recorded clock, also with new probes" {
+    if (!options.mod_probe) return error.SkipZigTest;
+    const script = "proc f {} {clock microseconds}; set a [f]; set b [f]; puts [expr {$b - $a}],[expr {$a % 1000}]";
+    var rec: tcl.tape.Tape = .{ .gpa = std.testing.allocator, .mode = .record };
+    defer rec.deinit();
+    var out1: std.ArrayList(u8) = .empty;
+    defer out1.deinit(std.testing.allocator);
+    var r1 = try runTaped(&rec, script, &.{}, &out1);
+    defer r1.deinit();
+    try std.testing.expectEqual(@as(usize, 2), rec.entries.items.len);
+    var file: std.ArrayList(u8) = .empty;
+    defer file.deinit(std.testing.allocator);
+    try tcl.tape.write(&rec, std.testing.allocator, &file);
+    // The clock moves on, and the replay still gives the old times.
+    fake_now += 500;
+    var rep_tape: tcl.tape.Tape = .{ .gpa = std.testing.allocator, .mode = .replay };
+    defer rep_tape.deinit();
+    try tcl.tape.parse(&rep_tape, file.items);
+    var out2: std.ArrayList(u8) = .empty;
+    defer out2.deinit(std.testing.allocator);
+    var r2 = try runTaped(&rep_tape, script, &.{"-proc f -stack"}, &out2);
+    defer r2.deinit();
+    try std.testing.expectEqualStrings(out1.items, out2.items);
+    try std.testing.expectEqualStrings("replayed 2 of 2 inputs", r2.tape_note);
+    try std.testing.expectEqual(@as(usize, 2), r2.records.len);
+    // A script that asks for the inputs in another order leaves the tape.
+    var bad: tcl.tape.Tape = .{ .gpa = std.testing.allocator, .mode = .replay };
+    defer bad.deinit();
+    try tcl.tape.parse(&bad, file.items);
+    var out3: std.ArrayList(u8) = .empty;
+    defer out3.deinit(std.testing.allocator);
+    var r3 = try runTaped(&bad, "set x 1; clock microseconds", &.{}, &out3);
+    defer r3.deinit();
+    try std.testing.expect(!r3.ok);
+    try std.testing.expectEqualStrings("ZTCL TAPE DIVERGED", r3.errorcode);
+    try has(r3.tape_note, "the replay left the tape: entry 1 of the tape is clock at unit ");
+}
+
+test "who set a variable, when it got a value, and the first error" {
+    if (!options.mod_probe) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    const script = "proc step {k} { global x; set x [expr {$x * 2 + $k}] }; set x 1; foreach k {1 2 3 4} { step $k }; catch {error early}; error late";
+    var rep = try debug.run(&it, script, .{ .questions = &.{ .{ .kind = .who_set, .name = "x" }, .{ .kind = .when, .name = "x", .value = "8" } } });
+    defer rep.deinit();
+    try std.testing.expectEqual(@as(usize, 2), rep.answers.len);
+    try has(rep.answers[0], "x: was last set to 42 at unit ");
+    try has(rep.answers[0], "stack: {step 4}");
+    try has(rep.answers[1], "x: got the value 8 at unit ");
+    try has(rep.answers[1], "stack: {step 2}");
+    try has(rep.first_error, "early (at error early, unit ");
+}

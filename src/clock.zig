@@ -1255,7 +1255,7 @@ fn subAdd(it: *Interp, args: []const Value) Error!Value {
 
 fn nowMicros(it: *Interp) Error!i64 {
     const h = it.clock_host orelse return it.fail("the embedder gave no clock", .{});
-    return h.now(h.ctx);
+    return @import("tape.zig").time(it, .clock, h.ctx, h.now);
 }
 
 pub fn cmdClock(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {

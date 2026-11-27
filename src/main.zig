@@ -168,7 +168,20 @@ fn hostPath(path: []const u8) HostPath {
 /// `ztcl debug script`: the output of the script, then the report.
 /// Gives the exit code: 0 for a run with no error, 1 for an error, and
 /// 2 for a bad probe.
-fn runDebug(it: *tcl.Interp, out: *Io.Writer, a: std.mem.Allocator, text: []const u8, opts: tcl.debug.Options) !u8 {
+fn runDebug(it: *tcl.Interp, out: *Io.Writer, a: std.mem.Allocator, text: []const u8, opts_in: tcl.debug.Options) !u8 {
+    var opts = opts_in;
+    var tp: tcl.tape.Tape = .{ .gpa = a, .mode = if (opts.replay_path != null) .replay else .record };
+    if (opts.replay_path) |path| {
+        const data = host.read(path, a) catch |e| {
+            try out.print("ztcl debug: {s}: {s}\n", .{ path, @errorName(e) });
+            return 2;
+        };
+        tcl.tape.parse(&tp, data) catch {
+            try out.print("ztcl debug: {s} is not a tape of ztcl debug --record\n", .{path});
+            return 2;
+        };
+    }
+    if (opts.replay_path != null or opts.record_path != null) opts.tape = &tp;
     var rep = tcl.debug.run(it, text, opts) catch |e| {
         if (e == error.TclError) {
             try out.print("ztcl debug: {s}\n", .{it.str(it.result) catch ""});
@@ -178,6 +191,18 @@ fn runDebug(it: *tcl.Interp, out: *Io.Writer, a: std.mem.Allocator, text: []cons
         return e;
     };
     defer rep.deinit();
+    if (opts.record_path) |path| {
+        var data: std.ArrayList(u8) = .empty;
+        try tcl.tape.write(&tp, a, &data);
+        const io = host.io orelse {
+            try out.print("ztcl debug: this host has no files for {s}\n", .{path});
+            return 2;
+        };
+        Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = data.items }) catch |e| {
+            try out.print("ztcl debug: {s}: {s}\n", .{ path, @errorName(e) });
+            return 2;
+        };
+    }
     try out.writeAll(if (opts.json) try tcl.debug.writeJson(a, &rep, opts) else try tcl.debug.writeText(a, &rep, opts));
     out.flush() catch {};
     return if (rep.ok) 0 else 1;
