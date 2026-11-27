@@ -1,12 +1,13 @@
 #!/bin/sh
 # Maps the changed files of a pull request to the jobs of ci.yml.
 #
-# Usage: tools/ci-changes.sh [--all] < files
+# Usage: tools/ci-changes.sh [--all | --none] < files
 #
 # The input has one path for each line. The output has one line
 # NAME=true or NAME=false for each job gate, in the format of
 # $GITHUB_OUTPUT. With --all, each gate is true (pushes to main and
-# the full runs).
+# the full runs). With --none, each gate is false (pull requests: the
+# QA agents run the jobs, and they use this script to pick them).
 #
 # Each path goes in the first area whose pattern it matches. A path
 # that matches no area is in the area core, and core runs each job.
@@ -14,9 +15,10 @@
 # job. docs/dev/ci.md has the table of the areas and the jobs.
 set -eu
 
-if [ "${1:-}" = --all ]; then
+if [ "${1:-}" = --all ] || [ "${1:-}" = --none ]; then
+  v=true; if [ "$1" = --none ]; then v=false; fi
   for g in code docs test native suite jit cext cext_wasm wasm wasm_compile wasi wasm_engine; do
-    echo "$g=true"
+    echo "$g=$v"
   done
   exit 0
 fi

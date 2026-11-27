@@ -1,0 +1,56 @@
+name: CI image
+
+# Builds the image of the jobs on our own runners (ci/runner/Dockerfile)
+# for x86-64 and arm64, and publishes it as
+# ghcr.io/beetlebugorg/ztcl-ci:<tag>. The tag is the first 16 digits of
+# the SHA-256 of the Dockerfile, so ci.yml finds the image of its own
+# Dockerfile. It runs on the runners of GitHub only.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ci/runner/**"
+      - ".github/workflows/ci-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Image (${{ matrix.arch }})
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Build and push
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(sha256sum < ci/runner/Dockerfile | cut -c1-16)
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build --build-arg TARGETARCH=${{ matrix.arch }} -t "ghcr.io/beetlebugorg/ztcl-ci:$tag-${{ matrix.arch }}" ci/runner
+          docker push "ghcr.io/beetlebugorg/ztcl-ci:$tag-${{ matrix.arch }}"
+
+  manifest:
+    name: Image (both)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Join the two images under one tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(sha256sum < ci/runner/Dockerfile | cut -c1-16)
+          i=ghcr.io/beetlebugorg/ztcl-ci:$tag
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker buildx imagetools create -t "$i" "$i-amd64" "$i-arm64"
+          docker buildx imagetools inspect "$i"
