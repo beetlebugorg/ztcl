@@ -268,10 +268,21 @@ fn mainId(it: *Interp) u64 {
     return if (thread.workerOf(it)) |w| w.id else 1;
 }
 
-/// Makes the target of the main thread.
+/// Makes the target of the main thread. A thread that calls `deliver`
+/// while `serve` starts reads `main` after this, under the lock.
 fn begin(s: *Server) !void {
+    s.lock.lock();
+    defer s.lock.unlock();
     s.main = .{ .s = s, .id = mainId(s.it), .num = 0, .it = s.it };
     try s.targets.append(s.gpa, &s.main);
+}
+
+/// True once `serve` has made the target of the main thread. A request
+/// from another thread before then reads a `main` with no value.
+pub fn started(s: *Server) bool {
+    s.lock.lock();
+    defer s.lock.unlock();
+    return s.targets.items.len > 0;
 }
 
 fn end(s: *Server) void {
