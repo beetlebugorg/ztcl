@@ -36,9 +36,24 @@ pub const Host = struct {
     ctx: ?*anyopaque = null,
     /// Microseconds on a clock that does not go back.
     now: *const fn (ctx: ?*anyopaque) i64,
-    /// Blocks for a count of microseconds.
-    sleep: *const fn (ctx: ?*anyopaque, micros: i64) void,
+    /// Blocks for a count of microseconds. Null when the host runs the
+    /// events from its own loop (`ztcl-host.wasm`): then `vwait` and
+    /// `after ms` with no script give an error.
+    sleep: ?*const fn (ctx: ?*anyopaque, micros: i64) void,
 };
+
+/// The microseconds of the next event of the loop of `it`: the time of
+/// the oldest timer, or the time now when an idle script exists. Null
+/// when the loop has no event.
+pub fn nextDue(it: *Interp) Error!?i64 {
+    const s = it.events orelse return null;
+    if (s.idles.items.len > 0) return try now(it);
+    var next: ?i64 = null;
+    for (s.timers.items) |t| {
+        if (next == null or t.at < next.?) next = t.at;
+    }
+    return next;
+}
 
 const BgError = struct { msg: []const u8, opts: []const u8, info: []const u8, ecode: []const u8, code: i64 };
 
@@ -383,7 +398,7 @@ pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
                     try thread.block(x, @intCast(@min(timeout, 1 << 40) * 1000));
                 } else {
                     const h = it.event_host.?;
-                    if (!@import("tape.zig").skipSleep(it)) h.sleep(h.ctx, timeout);
+                    if (h.sleep) |f| if (!@import("tape.zig").skipSleep(it)) f(h.ctx, timeout);
                 }
             }
             t_now = try now(it);
@@ -484,13 +499,14 @@ fn cmdAfter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const ms = @max(ms_in, 0);
         const h = it.event_host orelse return it.fail("the embedder gave no event clock", .{});
         if (argv.len == 2) {
+            if (h.sleep == null) return it.fail("can't wait {d} ms: the host runs the events", .{ms});
             // A plain sleep. Each second of it uses one step.
             var left: i64 = @as(i64, @min(ms, 1 << 40)) * 1000;
             while (left > 0) {
                 const part = @min(left, 1_000_000);
                 if (thread.supported and it.worker != null and !it.worker.?.is_main) {
                     try thread.nap(it, @intCast(part * 1000));
-                } else if (!@import("tape.zig").skipSleep(it)) h.sleep(h.ctx, part);
+                } else if (!@import("tape.zig").skipSleep(it)) h.sleep.?(h.ctx, part);
                 left -= part;
                 if (it.compute_limit == 0) return it.fail("compute limit reached", .{});
                 it.compute_limit -= 1;
@@ -556,6 +572,7 @@ fn cmdAfter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 fn cmdVwait(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2) return it.wrongArgs("vwait name");
     const name = try it.str(argv[1]);
+    if (it.event_host) |h| if (h.sleep == null) return it.fail("can't wait for variable \"{s}\": the host runs the events", .{name});
     var done = false;
     const frame = it.frame;
     const ns = it.ns;

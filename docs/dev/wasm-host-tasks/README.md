@@ -26,6 +26,7 @@ A wasm module cannot have an optional import: the host must give each import tha
 
 - Task 02: `zig build wasm-host` makes `ztcl-host.wasm` with the import `ztcl_host.output`. `web/ztcl.mjs` gives the import, and `onOutput` gets each `puts` at the time of the call. Each write costs one compute unit in both forms. `tools/wasm-host.mjs` checks both.
 - Task 03: `allow: ["clock"]` in `ztcl-host.wasm` calls the export `ztcl_clock_allow`. The imports `ztcl_host.now_ms` and `ztcl_host.zone` give the time and the TZif bytes of a zone. `Interp.create` has the options `now` (Date.now by default) and `zone(name)`. `tools/wasm-host.mjs` checks a fake clock and a zone of the system.
+- Task 04: `allow: ["event"]` in `ztcl-host.wasm` calls the export `ztcl_events_allow`. The clock of the events is the import `ztcl_host.now_ms`, or the time of `ztcl_run_events(h, now_ms)` during a run. `Interp.runEvents(now)` calls `ztcl_run_events`, and a timer of `setTimeout` calls it at the time of `ztcl_next_event`. The field `sleep` of `event.Host` can be null: then `vwait` and `after ms` with no script give an error. `tools/wasm-host.mjs` checks a fake clock and the timer.
 
 ## Rules for each task
 

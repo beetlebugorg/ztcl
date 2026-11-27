@@ -70,8 +70,10 @@ export class Interp {
   /// source as for compile(), and it can be left out.
   /// Options: computeLimit (compute units for each eval, null for no limit),
   /// memLimit (bytes), onOutput (a function that gets the `puts` text),
-  /// allow (a list of capabilities: only "file", for the files of a
-  /// bundle), point (true adds `point proc` and the output commands), and
+  /// allow (a list of capabilities: "file" for the files of a bundle;
+  /// "clock", "event", "dom", and "dom-html" with ztcl-host.wasm),
+  /// onEvents (a function that gets the result of each run of the
+  /// events of a timer), point (true adds `point proc` and the output commands), and
   /// packages (a function of a file name for the `load` command of the C
   /// packages, in a build with `-Dcext-wasm`: see _addLoad), and tcl
   /// (the Tcl release that the commands follow: "8.6", the default, or
@@ -101,7 +103,7 @@ export class Interp {
     return self;
   }
 
-  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = "8.6" } = {}) {
+  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = "8.6", onEvents = null } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
@@ -129,6 +131,17 @@ export class Interp {
       if (!this.x.ztcl_clock_allow) throw new Error("clock: this module has no clock (use ztcl-host.wasm)");
       if (this.x.ztcl_clock_allow(this.h) !== 0) throw new Error("ztcl_clock_allow: out of memory");
       allow = allow.filter((c) => c !== "clock");
+    }
+    // `event` (`after`, `after idle`, `update`) in ztcl-host.wasm. The
+    // events run from setTimeout on the clock `now`, and `onEvents` gets
+    // the { ok, result, output } of each run.
+    this.onEvents = onEvents;
+    this._timer = null;
+    if (allow.includes("event")) {
+      if (!this.x.ztcl_events_allow) throw new Error("event: this module has no event loop (use ztcl-host.wasm)");
+      if (this.x.ztcl_events_allow(this.h) !== 0) throw new Error("ztcl_events_allow: out of memory");
+      this._events = true;
+      allow = allow.filter((c) => c !== "event");
     }
     if (allow.includes("dom")) {
       if (!this.x.ztcl_dom_allow) throw new Error("dom: this module has no DOM access (use ztcl-host.wasm)");
@@ -192,7 +205,7 @@ export class Interp {
   eval(script) {
     const x = this.x;
     if (this._depth) return this._evalIn(script);
-    return this._call(() => {
+    const r = this._call(() => {
       const bytes = encoder.encode(script);
       const ptr = x.ztcl_alloc(bytes.length || 1);
       if (!ptr) throw new Error("ztcl_alloc: out of memory");
@@ -201,6 +214,33 @@ export class Interp {
       x.ztcl_free(ptr, bytes.length || 1);
       return rc;
     });
+    if (this._events) this._schedule();
+    return r;
+  }
+
+  /// Runs the events that are due at `now` (milliseconds on the clock of
+  /// the option `now`), after `allow: ["event"]`. Returns { ok, result,
+  /// output }. A timer of setTimeout calls it for each due event, so a
+  /// page calls it only to run the events at a time of its own.
+  runEvents(now = this._now()) {
+    if (!this._events) throw new Error("runEvents: no allow: [\"event\"]");
+    const r = this._call(() => this.x.ztcl_run_events(this.h, now));
+    this._schedule();
+    return r;
+  }
+
+  // Sets the timer for the next event, or clears it when no event exists.
+  _schedule() {
+    if (this._timer !== null) clearTimeout(this._timer);
+    this._timer = null;
+    if (!this.h) return;
+    const left = this.x.ztcl_next_event(this.h, this._now());
+    if (left < 0) return;
+    this._timer = setTimeout(() => {
+      this._timer = null;
+      const r = this.runEvents();
+      if (this.onEvents) this.onEvents(r);
+    }, left);
   }
 
   /// The point proc `name` of a script, after `point: true`: its
@@ -596,6 +636,8 @@ export class Interp {
 
   /// Frees the interpreter. Drop the Interp after this call.
   close() {
+    if (this._timer !== null) clearTimeout(this._timer);
+    this._timer = null;
     // The interp of each package goes first, so the delete procs of its
     // assoc data run.
     for (const pkg of this._pkgs ?? []) if (pkg.ip) pkg.x.ztcl_cext_interp_free(pkg.ip);

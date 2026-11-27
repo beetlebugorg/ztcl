@@ -228,5 +228,29 @@ if (existsSync("/usr/share/zoneinfo/America/New_York")) {
   z.close();
 } else console.log("SKIP: no /usr/share/zoneinfo");
 
+// #26 task 04: events that the host runs.
+const noEv = await Interp.create(host);
+check(noEv.eval("info commands after").result === "", "after is absent by default");
+noEv.close();
+let evNow = 5000;
+const ev4 = await Interp.create(host, { allow: ["event"], now: () => evNow });
+check(ev4.eval("after 10 {set x 1}; after idle {lappend order idle}; info exists x").result === "0", "after 10 waits for the host");
+evNow += 5;
+check(ev4.runEvents().ok && ev4.eval("info exists x").result === "0", "the timer is not due after 5 ms");
+check(ev4.eval("set order").result === "idle", "after idle runs at the first run of the events");
+check(ev4.runEvents(evNow + 5).ok && ev4.eval("set x").result === "1", "after 10 runs after one runEvents 10 ms later");
+const vw = ev4.eval("vwait y");
+check(!vw.ok && vw.result.includes('"y"'), `vwait gives an error with the name (got ${vw.result})`);
+check(!ev4.eval("after 5").ok, "after with no script gives an error");
+check(ev4.eval("after 1 {set z 2}; update; info exists z").result === "0", "update runs the due events only");
+ev4.close();
+// The timer of setTimeout runs the events on the real clock.
+const ev5 = await Interp.create(host, { allow: ["event"], onOutput: () => {} });
+const ran = new Promise((resolve) => { ev5.onEvents = resolve; });
+ev5.eval("after 20 {puts tick; set w 3}");
+const r5 = await ran;
+check(r5.ok && r5.output === "tick\n" && ev5.eval("set w").result === "3", `setTimeout runs the events (got ${JSON.stringify(r5)})`);
+ev5.close();
+
 if (failed) process.exit(1);
 console.log("wasm host ok");

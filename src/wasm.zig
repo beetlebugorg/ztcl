@@ -35,6 +35,8 @@ pub const Handle = struct {
     /// The names of the procs of `ztcl_point_compile`. An id is an index
     /// plus 1, so a proc that the script defines again runs in its new form.
     point_names: std.ArrayList([]u8) = .empty,
+    /// The time of `ztcl_run_events` in microseconds, during the run.
+    event_us: ?i64 = null,
 };
 
 const wasmbundle = @import("wasmbundle.zig");
@@ -90,6 +92,47 @@ fn ztcl_clock_allow(h: *Handle) callconv(.c) i32 {
     h.it.clock_host = .{ .now = hostNow, .zone = hostZone };
     h.it.allow(@backingInt(Capability.clock)) catch return 1;
     return 0;
+}
+
+/// The clock of the events in `ztcl-host.wasm`: the time of the run of
+/// `ztcl_run_events`, or the time of the host.
+fn eventNow(ctx: ?*anyopaque) i64 {
+    const h: *Handle = @ptrCast(@alignCast(ctx.?));
+    return h.event_us orelse hostNow(null);
+}
+
+/// Turns on `event` (`after`, `update`, `vwait`) in `ztcl-host.wasm`.
+/// The host runs the events with `ztcl_run_events`, so `vwait` and a
+/// plain `after ms` give an error. Gives 0, or 1 when the memory is full.
+fn ztcl_events_allow(h: *Handle) callconv(.c) i32 {
+    h.it.event_host = .{ .ctx = h, .now = eventNow, .sleep = null };
+    h.it.allow(@backingInt(Capability.event)) catch return 1;
+    return 0;
+}
+
+/// Runs the events that are due at `now_ms` (milliseconds on the clock
+/// of `now_ms` of the host), as `update` runs them. Gives 0, or 1 with
+/// the error in the result.
+fn ztcl_run_events(h: *Handle, now_ms: f64) callconv(.c) i32 {
+    if (!std.math.isFinite(now_ms)) {
+        h.result = "ztcl_run_events: the time is not a finite number";
+        return 1;
+    }
+    h.event_us = @intFromFloat(@floor(now_ms * 1000));
+    defer h.event_us = null;
+    h.result = "";
+    return ztcl_eval(h, "update", 6);
+}
+
+/// The milliseconds from `now_ms` to the next event: 0 for an event
+/// that is due, and -1 for no event.
+fn ztcl_next_event(h: *Handle, now_ms: f64) callconv(.c) f64 {
+    if (!std.math.isFinite(now_ms)) return -1;
+    h.event_us = @intFromFloat(@floor(now_ms * 1000));
+    defer h.event_us = null;
+    const at = (@import("event.zig").nextDue(&h.it) catch return -1) orelse return -1;
+    const left: f64 = @as(f64, @floatFromInt(at)) / 1000 - now_ms;
+    return @max(left, 0);
 }
 
 /// The text of `puts`. `ztcl-host.wasm` gives it to the host at once
@@ -192,6 +235,9 @@ comptime {
     if (host_imports) {
         @export(&ztcl_dom_allow, .{ .name = "ztcl_dom_allow" });
         @export(&ztcl_clock_allow, .{ .name = "ztcl_clock_allow" });
+        @export(&ztcl_events_allow, .{ .name = "ztcl_events_allow" });
+        @export(&ztcl_run_events, .{ .name = "ztcl_run_events" });
+        @export(&ztcl_next_event, .{ .name = "ztcl_next_event" });
         @export(&ztcl_zone_reply, .{ .name = "ztcl_zone_reply" });
     }
 }
