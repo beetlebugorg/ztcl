@@ -91,7 +91,7 @@ pub const shell = @import("shell/shell.zig");
 pub const shell_term = if (@import("builtin").os.tag == .freestanding) @import("shell/term_web.zig") else @import("shell/term.zig");
 /// The JSON parser, for the tools of the JSON module.
 pub const json = struct {
-    pub const index = @import("json/index.zig");
+    pub const index = @import("json_index");
     pub const build = @import("json/build.zig");
 };
 

@@ -959,6 +959,18 @@ ztcl build app.tcl --include templates/ --include public/ --allow socket,event,t
 - `bench/stdlib/` has the scripts and the data. `tools/bench-stdlib.py` runs each program and writes a table to the job summary and a TSV file to the artifacts.
 - The first numbers come from task 03 (the baselines). Each gate below is a target. The task of the module measures it, and the user sets the final number.
 
+### JSON stage 1 on the baseline CPU
+
+A release build for the baseline x86-64 CPU (the build of the packages) ran stage 1 on SSE2, because `src/json/index.zig` picked the AVX2 classify and the PCLMULQDQ prefix XOR at compile time. Now the features are a comptime parameter of `Indexer.nextWith`, an inline function. `src/crypto/x86_json.zig` calls it from a module with AVX2 and PCLMUL (`kernelTarget` in build.zig), so the body compiles there with the vector code. `Indexer.next` takes that form when CPUID gives AVX2, PCLMULQDQ, and the YMM state in XCR0. `index.zig` is the module `json_index`, one for each target and mode, and it imports `json_x86` (the two modules import each other). A Debug build of Zig 0.17.0 gives wrong code for the AVX2 module, so only a release build takes it. `zig build json-index-test` compares the two forms and `Scalar` on 300 random inputs.
+
+2026-11-27, i7-6700K (shared, load near 18), `-Doptimize=ReleaseFast -Dcpu=baseline`, `bench/stdlib/json/bench_ztcl.tcl`, the best of two runs:
+
+| File | Validate before | Validate after | Parse before | Parse after |
+|---|---:|---:|---:|---:|
+| `twitter.json` | 789 µs | 553 µs | 1,359 µs | 1,102 µs |
+| `canada.json` | 4,539 µs | 3,816 µs | 14,634 µs | 13,138 µs |
+| `citm_catalog.json` | 1,852 µs | 1,302 µs | 3,396 µs | 2,928 µs |
+
 ### JSON
 
 The data: `twitter.json`, `canada.json`, and `citm_catalog.json` from the nativejson-benchmark, as simdjson uses them.
