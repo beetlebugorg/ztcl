@@ -44,6 +44,8 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var level: thread.Isolation = .interp;
     var host_files = false;
     var caps: ?u32 = null;
+    var meter_name: ?[]const u8 = null;
+    var compute: ?u64 = null;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
         const o = try it.str(argv[i]);
@@ -70,6 +72,14 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         } else if (eql(o, "-caps") and i + 1 < argv.len) {
             i += 1;
             caps = try capsOf(it, argv[i]);
+        } else if (eql(o, "-meter") and i + 1 < argv.len and it.capabilities & @backingInt(interp.Capability.meter) != 0) {
+            i += 1;
+            meter_name = try it.str(argv[i]);
+        } else if (eql(o, "-compute") and i + 1 < argv.len) {
+            i += 1;
+            const n = try it.int(argv[i]);
+            if (n < 0) return it.fail("bad compute limit \"{d}\": must be 0 or more", .{n});
+            compute = @intCast(n);
         } else if (eql(o, "--")) {
             i += 1;
             break;
@@ -80,7 +90,10 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     // The files of the host are a part of the isolation of a child: a
     // thread of the level interp has the files of its creator already.
     if (host_files and level == .interp) return it.fail("-files host needs -isolation process", .{});
-    const id = try thread.createOpts(it, script, .{ .joinable = joinable, .preserved = preserved, .isolation = level, .host_files = host_files, .caps = caps });
+    const mt = @import("meter.zig");
+    const m: ?*mt.Meter = if (meter_name) |n| try (try mt.registry(it)).obtain(n) else null;
+    defer if (m) |x| x.release();
+    const id = try thread.createOpts(it, script, .{ .joinable = joinable, .preserved = preserved, .isolation = level, .host_files = host_files, .meter = m, .compute = compute, .caps = caps });
     return thread.idValue(it, id);
 }
 
@@ -216,8 +229,10 @@ fn cmdExit(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     me.status = status;
     me.exiting = true;
     // A script cannot catch the end of its compute limit, so the exit goes
-    // up to the top of the thread.
+    // up to the top of the thread. The meter counts the units to here.
+    @import("meter.zig").sync(it);
     it.compute_limit = 0;
+    it.meter_mark = 0;
     return it.failCode("THREAD EXIT", "thread::exit", .{});
 }
 

@@ -1054,6 +1054,10 @@ pub const Capability = enum(u32) {
     /// Manager, for the services of `Interp.credential_allow` only, on
     /// Windows.
     credential = 1048576,
+    /// `ztcl::meter`, and `-meter` of `thread::create` and `interp
+    /// create`: the counts of compute units, time, memory, and I/O of
+    /// ztcl#243. The counts of time depend on the host.
+    meter = 2097152,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
@@ -1172,6 +1176,20 @@ pub const Interp = struct {
     /// The compute units left. Each command and each loop pass uses one
     /// compute unit. Work on large data uses one unit for each 4,096 bytes.
     compute_limit: u64 = std.math.maxInt(u64),
+    /// The meter of the interpreter (`meter.zig`), or null. A sync adds
+    /// `meter_mark - compute_limit` to it and sets the mark again.
+    meter: ?*@import("meter.zig").Meter = null,
+    meter_mark: u64 = 0,
+    /// The units of the budget of the meter that the interpreter holds.
+    meter_resv: u64 = 0,
+    /// The clock and the CPU time of the thread at the last sync.
+    meter_ns: u64 = 0,
+    meter_cpu: u64 = 0,
+    /// The meters of a root interpreter with no thread group.
+    meters: ?*@import("meter.zig").Registry = null,
+    /// The Ed25519 key of the host for `ztcl::meter record -sign`. An
+    /// embedder sets it before the first use of a meter.
+    meter_key: ?std.crypto.sign.Ed25519.KeyPair = null,
     /// A pending cancel of `interp cancel` or `cancelEval`: the bits of
     /// `cancel_bits`. A request stores zero in `mem_limit`, so the next
     /// memory check point of the interp runs `memPoint`, and `memPoint`
@@ -1478,6 +1496,8 @@ pub const Interp = struct {
         const h = it.heap;
         var root = it;
         while (root.parent) |p| root = p;
+        if (it.meter != null) @import("meter.zig").sync(it);
+        if (root != it and root.meter != null) @import("meter.zig").sync(root);
         if (comptime thread_mod.supported) {
             if (root.worker) |w| try thread_mod.safePoint(it, w);
         }
@@ -1655,6 +1675,7 @@ pub const Interp = struct {
     /// limits, the output, and the data of the embedder stay.
     pub fn reset(it: *Interp) Allocator.Error!void {
         @import("probe.zig").dropAll(it);
+        @import("meter.zig").sync(it);
         if (comptime thread_mod.supported) thread_mod.endGroup(it);
         @import("child.zig").destroyAll(it);
         @import("event.zig").forget(it);
@@ -1707,6 +1728,14 @@ pub const Interp = struct {
         it.exec_host = keep.exec_host;
         it.net = keep.net;
         it.thread_limits = keep.thread_limits;
+        // A meter of the embedder counts on across the reset.
+        it.meter = keep.meter;
+        it.meter_mark = it.compute_limit;
+        it.meter_resv = keep.meter_resv;
+        it.meter_ns = keep.meter_ns;
+        it.meter_cpu = keep.meter_cpu;
+        it.meters = keep.meters;
+        it.meter_key = keep.meter_key;
         it.parent = keep.parent;
         it.is_safe = keep.is_safe;
         try it.start();
@@ -1911,6 +1940,7 @@ pub const Interp = struct {
         if (new & @backingInt(Capability.defaults) != 0) try @import("mac.zig").registerDefaults(it);
         if (new & @backingInt(Capability.notify) != 0) try @import("notify.zig").register(it);
         if (new & @backingInt(Capability.vm) != 0) try @import("microvm.zig").register(it);
+        if (new & @backingInt(Capability.meter) != 0) try it.register("ztcl::meter", @import("metercmd.zig").cmdMeter);
         if (comptime cext_mod.supported) {
             if (new & @backingInt(Capability.cext) != 0) try cext_mod.register(it);
         }
@@ -1957,6 +1987,7 @@ pub const Interp = struct {
 
     pub fn deinit(it: *Interp) void {
         @import("probe.zig").dropAll(it);
+        @import("meter.zig").deinitInterp(it);
         if (comptime thread_mod.supported) thread_mod.endGroup(it);
         if (!it.isRoot()) {
             var root = it.parent.?;

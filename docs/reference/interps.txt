@@ -6,7 +6,7 @@ syn: interp cmd ?arg ...?
 does: Makes and runs child interpreters. A child has its own commands and variables, and never more capabilities than its parent. An alias is a command of a child that runs a command of the parent, and is the way to give a child one exact power.
 cap: interp
 flags: --allow interp
-sub: interp create ?-safe? ?--? ?PATH? | A new child, and its path.
+sub: interp create ?-safe? ?-meter NAME? ?--? ?PATH? | A new child, and its path. `-meter` (capability `meter`) counts the child in a meter of `ztcl::meter`.
 sub: interp eval PATH ARG ?ARG ...? | Runs a script in the child.
 sub: interp alias SRCPATH SRCCMD TARGETPATH TARGETCMD ?ARG ...? | Makes SRCCMD of the child run TARGETCMD of the parent.
 sub: interp aliases ?PATH? | The aliases of a child.

@@ -46,6 +46,8 @@ pub fn enter(from: *Interp, to: *Interp) Saved {
     const s: Saved = .{ .depth = to.depth, .nest = to.nest, .base = to.native_base, .native = to.max_native, .limit = to.mem_limit, .scope = to.gc_scope };
     to.active += 1;
     to.compute_limit = from.compute_limit;
+    // The units of a child with a meter count from here.
+    if (to.meter != null) to.meter_mark = to.compute_limit;
     to.depth += from.depth;
     to.nest += from.nest + 1;
     to.native_base = from.native_base;
@@ -59,6 +61,7 @@ pub fn enter(from: *Interp, to: *Interp) Saved {
 }
 
 pub fn leave(from: *Interp, to: *Interp, s: Saved) void {
+    if (to.meter != null) @import("meter.zig").sync(to);
     from.compute_limit = to.compute_limit;
     to.depth = s.depth;
     to.nest = s.nest;
@@ -509,6 +512,7 @@ pub fn cmdInterp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (eql(sub, "create")) {
         var safe = false;
         var ver = it.tcl;
+        var meter_name: ?[]const u8 = null;
         var path: ?Value = null;
         var k: usize = 0;
         var end_opts = false;
@@ -530,6 +534,13 @@ pub fn cmdInterp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                     k += 1;
                     const t = try it.str(args[k]);
                     ver = interp.TclVersion.parse(t) orelse return it.failCode("TCL VALUE TCLVERSION", "bad Tcl version \"{s}\": must be 8.6 or 9.1", .{t});
+                    continue;
+                }
+                // `-meter NAME` is an option of ztcl#243, with the
+                // capability `meter`: the child counts in that meter.
+                if (eql(o, "-meter") and k + 1 < args.len and it.capabilities & @backingInt(interp.Capability.meter) != 0) {
+                    k += 1;
+                    meter_name = try it.str(args[k]);
                     continue;
                 }
                 return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -safe or --", .{o});
@@ -559,7 +570,13 @@ pub fn cmdInterp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 if (!parent.children.contains(name) and !parent.commands.contains(name)) break;
             }
         }
-        _ = try create(parent, name, safe, ver);
+        const child = try create(parent, name, safe, ver);
+        if (meter_name) |mn| {
+            const mt = @import("meter.zig");
+            const m = try (try mt.registry(it)).obtain(mn);
+            defer m.release();
+            mt.attach(child, m, 0);
+        }
         return if (i < path_args.len) path_args[i] else .{ .str = name };
     }
     if (eql(sub, "delete")) {

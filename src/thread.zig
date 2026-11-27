@@ -447,6 +447,10 @@ const Start = struct {
     fs_fd: i32,
     fs_cwd: []const u8,
     fs_path: []const u8,
+    /// The meter of `-meter`, and the units of its budget that the
+    /// thread holds. The creator holds a reference until the start ends.
+    meter: ?*meter_mod.Meter = null,
+    meter_resv: u64 = 0,
 };
 
 /// The way of a child process to the group of its parent.
@@ -496,6 +500,8 @@ pub const Group = struct {
     /// The name counters of the channels of each thread of the group.
     chan_names: if (chan_names_ok) @import("chan.zig").Counters else void = if (chan_names_ok) .{} else {},
     sync: ?*anyopaque = null,
+    /// The meters of the group (`meter.zig`), made at the first use.
+    meters: ?*anyopaque = null,
     /// The lock of `thread::eval` with no `-lock`.
     eval_lock: ?[]const u8 = null,
     /// Frees a table at the end of the group.
@@ -731,13 +737,17 @@ pub fn checkFlags(it: *Interp, w: *Worker) Error!void {
     if (f & Flag.stop == 0) w.cancel_text = null;
     w.lock.unlock();
     if (f & Flag.stop != 0) {
+        @import("meter.zig").sync(it);
         it.compute_limit = 0;
+        it.meter_mark = 0;
         return it.failCode("TCL CANCEL UNWIND", "the thread was stopped", .{});
     }
     defer if (text) |t| w.group.alloc().free(t);
     const msg: []const u8 = text orelse if (f & Flag.unwind != 0) "eval unwound" else "eval canceled";
     if (f & Flag.unwind != 0) {
+        @import("meter.zig").sync(it);
         it.compute_limit = 0;
+        it.meter_mark = 0;
         return it.failCode("TCL CANCEL IUNWIND", "{s}", .{msg});
     }
     return it.failCode("TCL CANCEL EVAL", "{s}", .{msg});
@@ -771,12 +781,18 @@ pub const Opts = struct {
     /// `-caps`: the capabilities of the thread, a subset of the bits of
     /// its creator, or null for all of them.
     caps: ?u32 = null,
+    /// `-meter`: the meter of the thread. The caller holds a reference
+    /// for the call.
+    meter: ?*meter_mod.Meter = null,
+    /// `-compute`: the most compute units of the thread.
+    compute: ?u64 = null,
 };
 
 pub const Isolation = enum { interp, process };
 
 /// The platforms of isolated threads (`isothread.zig`).
 const iso_ok = @import("isothread.zig").supported;
+const meter_mod = @import("meter.zig");
 
 /// Starts a thread with options. Gives its id.
 pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
@@ -813,8 +829,16 @@ pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
         g.gpa.destroy(w);
         return it.failCode("THREAD LIMIT", "too many threads: the limit is {d}", .{g.limits.max_threads});
     }
-    const want = g.limits.compute_limit orelse it.compute_limit;
-    const steps = @min(want, g.compute_left);
+    const want = @min(g.limits.compute_limit orelse it.compute_limit, o.compute orelse std.math.maxInt(u64));
+    var steps = @min(want, g.compute_left);
+    // A meter with a budget holds the units of the thread until its end.
+    if (o.meter) |m| {
+        steps = m.reserve(steps);
+        st.meter = m;
+        st.meter_resv = steps;
+    }
+    var resv_back = o.meter != null;
+    defer if (resv_back) o.meter.?.unreserve(st.meter_resv);
     if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left -= steps;
     st.compute_limit = steps;
     w.* = .{ .group = g, .id = g.next_id, .joinable = joinable, .refs = if (preserved) 1 else 0, .script = text, .steps = steps, .mem_limit = st.mem_limit, .pool = o.pool, .pool_main = o.pool_main };
@@ -862,6 +886,8 @@ pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
     };
     while (w.state == .starting) g.ev.wait(&g.lock, slice_ns);
     const ok = w.state != .failed;
+    // The thread or the bridge took the reservation.
+    if (ok) resv_back = false;
     const id = w.id;
     g.lock.unlock();
     if (!ok) {
@@ -960,6 +986,14 @@ fn setup(w: *Worker, x: *Interp, st: Start) Allocator.Error!void {
     if (comptime chan_names_ok) x.chans.shared = &w.group.chan_names;
     try x.allow(st.caps);
     try x.setTclVersion(st.tcl);
+    if (st.meter) |m| {
+        meter_mod.attach(x, m, st.meter_resv);
+        // The units of the setup, such as `package provide`, count too.
+        x.meter_mark = st.compute_limit;
+        m.acquire();
+        m.counts.threads_interp += 1;
+        m.unlock();
+    }
 }
 
 fn threadMain(w: *Worker, st: Start) void {
@@ -1491,6 +1525,8 @@ fn runMsg(w: *Worker, it: *Interp, m: *Msg) Error!void {
                 }
                 return e;
             };
+            // The sender of a reply sees the counts of this script.
+            if (it.meter != null) meter_mod.sync(it);
             if (m.seq != 0 or m.var_name.len > 0) {
                 try sendResult(w, it, m, c);
             } else if (c.code == 1) {

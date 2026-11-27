@@ -39,6 +39,7 @@
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 const std = @import("std");
+const meter_mod = @import("meter.zig");
 const builtin = @import("builtin");
 const interp = @import("interp.zig");
 const thread = @import("thread.zig");
@@ -212,12 +213,22 @@ const Link = struct {
     t: iso.Transport,
     conn: iso.Conn = undefined,
     wlock: thread.Lock = .{},
+    /// The messages and the payload bytes in both directions, for the
+    /// meter of the thread (`meter.zig`).
+    frames: std.atomic.Value(u64) = .init(0),
+    bytes: std.atomic.Value(u64) = .init(0),
 
     fn write(l: *Link, a: Allocator, kind: iso.Kind, stream: u32, payload: []const u8) bool {
         l.wlock.lock();
         defer l.wlock.unlock();
         l.conn.writeMessage(a, kind, stream, payload) catch return false;
+        l.count(payload.len);
         return true;
+    }
+
+    fn count(l: *Link, n: usize) void {
+        _ = l.frames.fetchAdd(1, .monotonic);
+        _ = l.bytes.fetchAdd(n, .monotonic);
     }
 
     fn writeFds(l: *Link, a: Allocator, kind: iso.Kind, payload: []const u8, fds: []const i32) bool {
@@ -488,6 +499,12 @@ fn takeChannel(g: *Group, l: *Link, payload: []const u8, from_child: bool) void 
 /// make one payload. A frame of another stream between them is an
 /// error of the protocol in this version.
 fn readMessage(l: *Link, a: Allocator) iso.Error!iso.Frame {
+    const f = try readWhole(l, a);
+    l.count(f.payload.len);
+    return f;
+}
+
+fn readWhole(l: *Link, a: Allocator) iso.Error!iso.Frame {
     var f = try l.conn.readFrame(a);
     if (f.flags & iso.flag_more == 0) return f;
     var all: std.ArrayList(u8) = .fromOwnedSlice(f.payload);
@@ -543,6 +560,16 @@ pub const Bridge = struct {
     next_stream: u32 = 2,
     ended: std.atomic.Value(bool) = .init(false),
     status: i64 = 0,
+    /// The meter of the thread (`thread::create -meter`), its units of
+    /// the budget, the counts that the child reports in `USAGE`, the
+    /// counts of the system, and the times of the start.
+    meter: ?*meter_mod.Meter = null,
+    meter_resv: u64 = 0,
+    child_counts: meter_mod.Counts = .{},
+    os_cpu_ns: u64 = 0,
+    os_peak: u64 = 0,
+    t0: u64 = 0,
+    start_ns: u64 = 0,
     exited: bool = false,
     broker: isobroker.Broker = undefined,
 };
@@ -743,6 +770,9 @@ fn reapChild(b: *Bridge, ms: u32) bool {
     if (comptime on_win) {
         const c = if (b.win) |*c| c else return true;
         if (c.wait(ms) == null) return false;
+        const u = c.usage();
+        b.os_cpu_ns = u.cpu_ns;
+        b.os_peak = u.peak_bytes;
         c.deinit();
         b.win = null;
         return true;
@@ -750,6 +780,9 @@ fn reapChild(b: *Bridge, ms: u32) bool {
     if (comptime on_linux) {
         const c = if (b.lin) |*c| c else return true;
         if (c.wait(ms) == null) return false;
+        const u = c.usage();
+        b.os_cpu_ns = u.cpu_ns;
+        b.os_peak = u.peak_bytes;
         c.deinit();
         b.lin = null;
         b.pid = -1;
@@ -759,7 +792,18 @@ fn reapChild(b: *Bridge, ms: u32) bool {
     var waited: u32 = 0;
     while (true) : (waited += 10) {
         var status: c_int = 0;
-        const r = std.c.waitpid(b.pid, &status, std.c.W.NOHANG);
+        var ru: std.c.rusage = undefined;
+        const r = std.c.wait4(b.pid, &status, std.c.W.NOHANG, &ru);
+        if (r == b.pid) {
+            const tv = struct {
+                fn ns(t: std.c.timeval) u64 {
+                    return @as(u64, @intCast(t.sec)) * std.time.ns_per_s + @as(u64, @intCast(t.usec)) * std.time.ns_per_us;
+                }
+            };
+            b.os_cpu_ns = tv.ns(ru.utime) + tv.ns(ru.stime);
+            // macOS gives ru_maxrss in bytes.
+            b.os_peak = @intCast(ru.maxrss);
+        }
         if (r == b.pid or r < 0) {
             b.pid = -1;
             return true;
@@ -775,6 +819,8 @@ fn threadIo() std.Io {
 
 fn failBridge(w: *Worker, b: *Bridge, st: anytype, text: []const u8) void {
     b.err = text;
+    if (b.meter) |m| m.release();
+    b.meter = null;
     killChild(b);
     _ = reapChild(b, 2000);
     thread.failStart(w, st);
@@ -785,6 +831,12 @@ pub fn bridgeMain(w: *Worker, b: *Bridge, st: anytype) void {
     const g = w.group;
     const a = b.gpa;
     b.mem = st.mem_limit;
+    if (st.meter) |m| {
+        m.retain();
+        b.meter = m;
+        b.meter_resv = st.meter_resv;
+        b.t0 = meter_mod.monoNs();
+    }
     if (comptime on_linux) {
         // The child sees the root folder at its real path.
         if (st.fs_fd >= 0) b.real_root = realPathFd(a, st.fs_fd);
@@ -818,6 +870,7 @@ pub fn bridgeMain(w: *Worker, b: *Bridge, st: anytype) void {
     if (st.fs_fd >= 0) thread.closeFd(st.fs_fd);
     b.broker = .init(a, w, .{ .ctx = b, .write = bridgeWrite });
 
+    if (b.meter != null) b.start_ns = meter_mod.monoNs() -| b.t0;
     g.lock.lock();
     w.bridge = b;
     w.state = .running;
@@ -1000,6 +1053,9 @@ fn readerMain(b: *Bridge) void {
             },
             .tsv, .lock, .unlock, .cancel => toBroker(a, f, &b.broker),
             .fd => if (comptime on_win) winh.take(g, f.payload, winh.childOf(b)) else takeChannel(g, &b.link, f.payload, true),
+            .usage => if (meter_mod.Counts.decode(f.payload)) |c| {
+                b.child_counts = c;
+            },
             .exit => {
                 var r: iso.Reader = .{ .b = f.payload };
                 b.status = r.int(i64) catch 1;
@@ -1083,6 +1139,22 @@ fn endBridge(w: *Worker, b: *Bridge, reader: ?std.Thread) void {
     while (it.next()) |e| thread.replyFailed(g, e.value_ptr.from, e.value_ptr.seq);
     b.pending.deinit(a);
     if (b.real_root) |r| a.free(r);
+    if (b.meter) |m| {
+        var c = b.child_counts;
+        // The parent measures the time and the transport. The other
+        // counts come from the child.
+        c.wall_ns = meter_mod.monoNs() -| b.t0;
+        c.threads_interp = 0;
+        c.threads_process = 1;
+        c.process_messages = b.link.frames.load(.monotonic);
+        c.process_bytes = b.link.bytes.load(.monotonic);
+        c.process_start_ns = b.start_ns;
+        c.os_cpu_ns = b.os_cpu_ns;
+        c.os_mem_peak = b.os_peak;
+        m.merge(c);
+        m.unreserve(b.meter_resv -| c.units);
+        m.release();
+    }
     a.destroy(b);
     thread.retire(w, 0);
 }
@@ -1313,11 +1385,27 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     // After the sandbox, so a sandbox that refuses executable memory
     // leaves the interpreter with no JIT.
     if (st.jit == 1) _ = x.enableJit(.{});
+    // The child counts its own use, and sends it in `USAGE` at its end.
+    // A parent with no meter drops the frame.
+    var child_meter: meter_mod.Meter = .{ .gpa = a, .name = &.{} };
+    child_meter.refs.store(2, .monotonic);
+    meter_mod.attach(&x, &child_meter, 0);
+    x.meter_mark = st.compute;
+    defer {
+        x.meter = null;
+        for (child_meter.net.keys()) |k| a.free(k);
+        child_meter.net.deinit(a);
+    }
     if (!link.write(a, .ready, 0, "")) return 2;
 
     const reader = std.Thread.spawn(.{}, childReader, .{&c}) catch return 2;
     const r = if (st.script.len > 0) x.eval(st.script) else thread.topScope(&x, thread.waitLoop, .{&x});
     if (r) |_| {} else |e| thread.endError(w, &x, e);
+    // The counts of the child for the meter of the parent.
+    meter_mod.sync(&x);
+    var counts: [meter_mod.Counts.frame_len]u8 = undefined;
+    child_meter.counts.encode(&counts);
+    _ = link.write(a, .usage, 0, &counts);
     var o: Out = .{ .a = a };
     o.int(i64, w.status) catch {};
     _ = link.write(a, .exit, 0, o.list.items);

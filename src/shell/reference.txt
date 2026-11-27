@@ -409,7 +409,7 @@ syn: fileevent channelId event ?script?
 syn: tcl::Bgerror message options
 == interp
 syn: interp cmd ?arg ...?
-sub: interp create ?-safe? ?--? ?PATH? | A new child, and its path.
+sub: interp create ?-safe? ?-meter NAME? ?--? ?PATH? | A new child, and its path.
 sub: interp eval PATH ARG ?ARG ...? | Runs a script in the child.
 sub: interp alias SRCPATH SRCCMD TARGETPATH TARGETCMD ?ARG ...? | Makes SRCCMD of the child run TARGETCMD of the parent.
 sub: interp aliases ?PATH? | The aliases of a child.
@@ -474,8 +474,8 @@ syn: self ?subcommand?
 == next nextto oo::Helpers::next oo::Helpers::nextto
 syn: next ?arg ...?
 == thread thread::attach thread::broadcast thread::cancel thread::cond thread::configure thread::create thread::detach thread::errorproc thread::eval thread::exists thread::exit thread::id thread::join thread::mutex thread::names thread::preserve thread::release thread::rwmutex thread::send thread::transfer thread::unwind thread::wait
-syn: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?-caps LIST? ?script?
-sub: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?-caps LIST? ?SCRIPT? | A new thread that runs SCRIPT, and its id.
+syn: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?-caps LIST? ?-compute UNITS? ?-meter NAME? ?script?
+sub: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?-caps LIST? ?-compute UNITS? ?-meter NAME? ?SCRIPT? | A new thread that runs SCRIPT, and its id.
 sub: thread::send ?-async? ?-head? ID SCRIPT ?VAR? | Runs SCRIPT in the thread and gives its result.
 sub: thread::broadcast SCRIPT | Sends SCRIPT to each other thread.
 sub: thread::wait | Runs the event loop of the thread until thread::release.
@@ -580,3 +580,14 @@ syn: ztcl::watch subcommand ?arg ...?
 syn: ztcl::open target
 == ztcl::notify
 syn: ztcl::notify ?-option value ...? title ?body?
+== ztcl::meter
+syn: ztcl::meter subcommand ?arg ...?
+sub: ztcl::meter create NAME ?-budget UNITS? ?-tenant TEXT? | Makes the meter NAME, or sets the options of the meter NAME.
+sub: ztcl::meter get NAME | The dict of the counts of NAME.
+sub: ztcl::meter list | The names of the meters.
+sub: ztcl::meter reset NAME | Sets each count of NAME to zero.
+sub: ztcl::meter delete NAME | Removes NAME.
+sub: ztcl::meter run NAME SCRIPT | Runs SCRIPT in the current interpreter and counts it in NAME.
+sub: ztcl::meter record NAME ?-tenant TEXT? ?-script TEXT? ?-sign? ?-key SEED? | The usage record of NAME: one line of JSON with the SHA-256 of the record before it.
+sub: ztcl::meter verify RECORD PUBLICKEY | 1 when the signature of RECORD matches the hex public key, else 0.
+sub: ztcl::meter pubkey SEED | The hex public key of a hex seed.
