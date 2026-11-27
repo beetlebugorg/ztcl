@@ -65,4 +65,5 @@ Order: Bluetooth, Gamepad, MIDI, USB, HID, fetch and WebSocket, IndexedDB, File 
 | 07 | done |
 | Bluetooth wrapper | done (#548) |
 | Gamepad wrapper | done (#554) |
-| MIDI wrapper | done |
+| MIDI wrapper | done (#557) |
+| USB wrapper | done |

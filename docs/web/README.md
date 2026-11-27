@@ -11,7 +11,7 @@ const tcl = await Interp.create("ztcl-host.wasm", { allow: ["dom", "event", "web
 | Group | Guide | Commands | Grant |
 |---|---|---|---|
 | Web Serial | [Serial ports](serial.md) | [`web::serial::`](../modules/web.md#web-serial), channels | `web:serial` |
-| WebUSB | [USB devices](usb.md) | `web::call` | `web:usb` |
+| WebUSB | [USB devices](usb.md) | [`web::usb::`](../modules/web-usb.md), channels | `web:usb` |
 | Web Bluetooth | [Bluetooth devices](bluetooth.md) | [`web::bluetooth::`](../modules/web-bluetooth.md) | `web:bluetooth` |
 | WebHID | [HID devices](hid.md) | `web::call` | `web:hid` |
 | Web MIDI | [MIDI ports](midi.md) | [`web::midi::`](../modules/web-midi.md) | `web:midi` |
@@ -43,4 +43,4 @@ Each API except Gamepad needs a secure context (HTTPS or `localhost`). A chooser
 
 ## Tests
 
-`tools/web-api.mjs` tests the bridge in Node.js with fake objects: the groups, the conversions, the promises, the events, `navigator.getGamepads`, and a Web Serial port. `tools/web-groups.mjs` tests the wrappers, such as `web::bluetooth::`, `web::gamepad::`, and `web::midi::`, and the scripts of the demos with fake devices. The examples of the pages for USB and HID use only members of the table, and no test runs them against a device.
+`tools/web-api.mjs` tests the bridge in Node.js with fake objects: the groups, the conversions, the promises, the events, `navigator.getGamepads`, and a Web Serial port. `tools/web-groups.mjs` tests the wrappers, such as `web::bluetooth::`, `web::gamepad::`, `web::midi::`, and `web::usb::`, and the scripts of the demos with fake devices. The examples of the page for HID use only members of the table, and no test runs them against a device.

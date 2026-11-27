@@ -572,6 +572,138 @@ function midiRoot(deny = false) {
   t.close();
 }
 
+// ---- USB ----
+
+class USBConfiguration {
+  constructor(v) {
+    this.configurationValue = v;
+  }
+}
+class USBInTransferResult {
+  constructor(status, data) {
+    Object.assign(this, { status, data });
+  }
+}
+class USBOutTransferResult {
+  constructor(status, bytesWritten) {
+    Object.assign(this, { status, bytesWritten });
+  }
+}
+class USBDevice {
+  constructor() {
+    Object.assign(this, { vendorId: 0x2e8a, productId: 0x000a, manufacturerName: "Raspberry Pi", productName: "Pico", serialNumber: "E66", deviceClass: 0, opened: false, configuration: null, claimed: [], out: [], inbox: [], waiting: null, controls: [] });
+  }
+  open() {
+    this.opened = true;
+    return Promise.resolve();
+  }
+  close() {
+    this.opened = false;
+    return Promise.resolve();
+  }
+  selectConfiguration(v) {
+    this.configuration = new USBConfiguration(v);
+    return Promise.resolve();
+  }
+  claimInterface(n) {
+    this.claimed.push(n);
+    return Promise.resolve();
+  }
+  transferOut(ep, data) {
+    this.out.push([ep, Array.from(data)]);
+    // The fake echoes each write in upper case.
+    this.send(new TextDecoder().decode(data).toUpperCase());
+    return Promise.resolve(new USBOutTransferResult("ok", data.length));
+  }
+  transferIn(ep, len) {
+    return new Promise((res) => {
+      const take = () => res(new USBInTransferResult("ok", new DataView(new TextEncoder().encode(this.inbox.shift()).buffer)));
+      if (this.inbox.length) take();
+      else this.waiting = take;
+    });
+  }
+  send(text) {
+    this.inbox.push(text);
+    const w = this.waiting;
+    this.waiting = null;
+    if (w) w();
+  }
+  controlTransferIn(setup, len) {
+    this.controls.push(["in", setup, len]);
+    return Promise.resolve(new USBInTransferResult("ok", new DataView(new Uint8Array([1, 2]).buffer)));
+  }
+  controlTransferOut(setup, data) {
+    this.controls.push(["out", setup, Array.from(data ?? [])]);
+    return Promise.resolve(new USBOutTransferResult("ok", data ? data.length : 0));
+  }
+}
+class USBConnectionEvent extends Event {
+  constructor(type, device) {
+    super(type);
+    this.device = device;
+  }
+}
+class USB extends EventTarget {
+  constructor() {
+    super();
+    this.device = new USBDevice();
+    this.asked = [];
+  }
+  requestDevice(o) {
+    this.asked.push(o);
+    return Promise.resolve(this.device);
+  }
+  getDevices() {
+    return Promise.resolve([this.device]);
+  }
+}
+
+{
+  const usb = new USB();
+  const { t, out } = await session(["web:usb"], { navigator: { usb } });
+  const ev = (s) => t.eval(s);
+  let r = ev(`proc got {s dev} {
+    set ::dev $dev
+    web::usb::open $dev -interface 1 -in 1 -out 2 -command opened
+}
+proc opened {s chan} {
+    if {$s eq "error"} {puts "open error $chan"; return}
+    set f [open $chan r+]
+    set ::f $f
+    fconfigure $f -blocking 0 -buffering line
+    fileevent $f readable [list apply {{f} {while {[gets $f line] >= 0} {puts "got $line"}}} $f]
+    puts $f hello
+}
+web::usb::request -vendor 0x2e8a -command got`);
+  check(r.ok, `usb request (got ${r.result})`);
+  await until(() => out().includes("got HELLO"));
+  check(JSON.stringify(usb.asked[0]) === JSON.stringify({ filters: [{ vendorId: 0x2e8a }] }), `usb filters (got ${JSON.stringify(usb.asked)})`);
+  check(usb.device.opened && usb.device.configuration?.configurationValue === 1 && usb.device.claimed[0] === 1, "usb open, configure, claim");
+  check(JSON.stringify(usb.device.out[0]) === JSON.stringify([2, [...new TextEncoder().encode("hello\n")]]) && out().includes("got HELLO"), `usb channel (got ${JSON.stringify(out())} ${JSON.stringify(usb.device.out)})`);
+  r = ev("web::usb::info $::dev");
+  check(r.result === "vendor 11914 product 10 manufacturer {Raspberry Pi} name Pico serial E66 class 0 opened 1 configuration 1", `usb info (got ${r.result})`);
+  r = ev("fconfigure $::f -mode 9600,n,8,1");
+  check(!r.ok && /no -mode/.test(r.result), `usb channel -mode (got ${r.result})`);
+  r = ev(`web::usb::control $::dev -direction in -type vendor -recipient interface -request 3 -value 1 -index 0 -length 2 -command {apply {{s v} {binary scan $v cu* n; puts "control $s $n"}}}
+web::usb::control $::dev -direction out -type class -recipient interface -request 0x22 -value 3 -index 1`);
+  check(r.ok, `usb control (got ${r.result})`);
+  await until(() => out().includes("control"));
+  check(out().includes("control ok 1 2") && JSON.stringify(usb.device.controls[1]) === JSON.stringify(["out", { requestType: "class", recipient: "interface", request: 34, value: 3, index: 1 }, []]), `usb control transfers (got ${JSON.stringify(usb.device.controls)} ${JSON.stringify(out())})`);
+  r = ev("web::usb::transmit $::dev 2 abc -command {apply {{s n} {puts \"sent $s $n\"}}}");
+  await until(() => out().includes("sent"));
+  check(out().includes("sent ok 3"), `usb transmit (got ${JSON.stringify(out())})`);
+  ev("close $::f");
+  ev("web::usb::ondisconnect {apply {{d} {puts \"unplugged [dict get [web::usb::info $d] name]\"}}}");
+  usb.dispatchEvent(new USBConnectionEvent("disconnect", usb.device));
+  await until(() => out().includes("unplugged"));
+  check(out().includes("unplugged Pico"), `usb ondisconnect (got ${JSON.stringify(out())})`);
+  t.close();
+  const s2 = await session(["web:usb"], { navigator: {} });
+  r = s2.t.eval("web::usb::devices -command puts");
+  check(!r.ok && r.result === "web::usb: this browser has no WebUSB", `a browser without WebUSB (got ${r.result})`);
+  s2.t.close();
+}
+
 if (failed) {
   console.error(`${failed} failed`);
   process.exit(1);

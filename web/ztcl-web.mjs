@@ -219,10 +219,54 @@ export class Bridge {
     await s.port.close();
   }
 
+  // Reads the IN endpoint of a USB channel into the channel, one
+  // transfer after the other, until the channel closes.
+  async usbReadLoop(id, s) {
+    while (s.open) {
+      let r;
+      try {
+        r = await s.port.transferIn(s.inEp, s.packet);
+      } catch (e) {
+        if (s.open) this.feed(id, encoder.encode(errorText(e)), 2);
+        return;
+      }
+      if (!s.open) return;
+      if (r.status === "stall") {
+        await s.port.clearHalt("in", s.inEp).catch(() => {});
+        continue;
+      }
+      if (r.status !== "ok") {
+        this.feed(id, encoder.encode(`web: the USB transfer gave the status "${r.status}"`), 2);
+        return;
+      }
+      if (r.data?.byteLength) this.feed(id, new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength).slice());
+    }
+  }
+
+  // The calls of a USB channel: a write goes to transferOut of the OUT
+  // endpoint, and a close ends the reads.
+  usbStream(s, op, id, data) {
+    if (op === 10) {
+      if (!s.outEp) fail("web: the USB channel has no OUT endpoint");
+      const bytes = data.slice();
+      this.step(id, async () => {
+        const r = await s.port.transferOut(s.outEp, bytes);
+        if (r.status !== "ok") throw new Error(`the USB transfer gave the status "${r.status}"`);
+      });
+      return;
+    }
+    if (op === 12) {
+      s.open = false;
+      return;
+    }
+    fail("web: a USB channel has no -mode, -handshake, or -ttycontrol");
+  }
+
   // The calls of the channel of a port (src/wasmfiles.zig StreamOp).
   serial(op, id, data) {
     const s = this.ports.get(id);
     if (!s) fail(`web: no port ${id}`);
+    if (s.kind === "usb") return this.usbStream(s, op, id, data);
     const text = decoder.decode(data);
     switch (op) {
       case 10: {
@@ -604,6 +648,23 @@ export class Bridge {
           if (typeof nav?.getGamepads !== "function") fail("web: this browser has no navigator.getGamepads");
           const pads = Array.from(nav.getGamepads()).filter(Boolean);
           reply(pads.map((p) => [String(p.index), String(p.id), String(p.mapping), p.connected ? "1" : "0", String(p.timestamp), Array.from(p.axes, String), Array.from(p.buttons, (b) => String(b.value)), Array.from(p.buttons, (b) => (b.pressed ? "1" : "0"))]));
+          return 0;
+        }
+        case 17: {
+          // web::usb::Stream: a channel of the endpoints of an open device.
+          if (!this.groups.has("usb")) fail('web: the group "usb" is not allowed');
+          const o = this.obj(h);
+          if (!this.isA(o.type, "USBDevice")) fail(`web: the handle "web${h}" is not a USBDevice`);
+          // The endpoints are numbers from 0 to 255, 0 for none.
+          for (const w of args.slice(0, 2)) this.toJS("octet", w);
+          const n = Number(args[2]);
+          if (!Number.isInteger(n) || n < 1 || n > 1048576) fail(`web: bad packet size "${args[2]}": must be 1 to 1048576`);
+          const id = this.nextPort++;
+          const s = { kind: "usb", port: o.obj, inEp: Number(args[0]), outEp: Number(args[1]), packet: n, chain: Promise.resolve(), open: true, mode: true };
+          this.ports.set(id, s);
+          if (x.ztcl_web_usb_port(this.interp.h, id) !== 0) fail("web: out of memory");
+          if (s.inEp) this.usbReadLoop(id, s);
+          reply(`webusb${id}`);
           return 0;
         }
         case 10:
