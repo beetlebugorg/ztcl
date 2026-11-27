@@ -109,6 +109,10 @@ if {[dict get $r exit] == 9} {
     check "net: a DHCP lease" [dict get $r stdout] "lease of 10.0.2.15 obtained\n"
     check "net: the route" [string match "*10.0.2.2*" [dict get [ztcl::vm exec $vm /bin/busybox route -n] stdout]] 1
     check "net: ping the gateway" [dict get [ztcl::vm exec $vm /bin/busybox sh -c {/bin/busybox ping -c 3 -W 2 10.0.2.2 > /dev/null; echo $?}] stdout] "0\n"
+    check "net: the network on the command line" [string match "*ztcl.net=10.0.2.15/24,10.0.2.2,10.0.2.3*" [dict get [ztcl::vm exec $vm /bin/busybox cat /proc/cmdline] stdout]] 1
+    # The loopback policy permits no name: the NAT answers REFUSED, and
+    # no query goes to the name server of the host.
+    check "net: DNS refused by the policy" [string match "*REFUSED*" [dict get [ztcl::vm exec $vm /bin/busybox sh -c {/bin/busybox nslookup example.com 10.0.2.3 2>&1}] stdout]] 1
 }
 ztcl::vm delete $vm
 check "net: a bad network" [catch {ztcl::vm create {*}$boot -net tap}] 1
