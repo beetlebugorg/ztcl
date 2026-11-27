@@ -1620,7 +1620,7 @@ chanio.test	chan-io-35.6	pass	pass
 chanio.test	chan-io-35.7	pass	pass		
 chanio.test	chan-io-35.8	pass	pass		
 chanio.test	chan-io-35.9	pass	pass		
-chanio.test	chan-io-36.1	pass	fail		
+chanio.test	chan-io-36.1	pass	pass		
 chanio.test	chan-io-36.2	pass	pass		
 chanio.test	chan-io-36.3	pass	pass		
 chanio.test	chan-io-36.4	pass	pass		
@@ -27882,8 +27882,8 @@ fileName.test	filename-11.1	fail	fail	message	code 1/1: wrong # args: should be 
 fileName.test	filename-11.10	skip	skip	internals	testsetplatform
 fileName.test	filename-11.11	skip	skip	internals	testsetplatform
 fileName.test	filename-11.12	skip	skip	internals	testsetplatform
-fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3842262/globTest
-fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3842262/globTest
+fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl4160309/globTest
+fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl4160309/globTest
 fileName.test	filename-11.16	pass	pass		
 fileName.test	filename-11.17	pass	pass		
 fileName.test	filename-11.17.1	skip	skip	platform	win
@@ -27980,7 +27980,7 @@ fileName.test	filename-14.1	pass	pass
 fileName.test	filename-14.11	pass	pass		
 fileName.test	filename-14.13	pass	pass		
 fileName.test	filename-14.15	fail	fail	bug	code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c \| want: globTest/a1/ globTest/a2/ globTest/a3/
-fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3842262/globTest/z1.c
+fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl4160309/globTest/z1.c
 fileName.test	filename-14.18	pass	pass		
 fileName.test	filename-14.20	pass	pass		
 fileName.test	filename-14.21	pass	pass		
@@ -28221,7 +28221,7 @@ fileSystem.test	filesystem-6.12	pass	pass
 fileSystem.test	filesystem-6.13	pass	pass		
 fileSystem.test	filesystem-6.14	fail	fail	design	code 1/1: could not link: links are not available in the root folder \| want: could not read link "": no such file or directory
 fileSystem.test	filesystem-6.15	fail	fail	bug	code 0/1:  \| want: could not read "": no such file or directory
-fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795775940 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795777729 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.17	fail	fail	feature	code 1/1: file mtime with a new time is not available \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.18	fail	fail	bug	code 0/1:  \| want: can't create directory "": no such file or directory
 fileSystem.test	filesystem-6.19	pass	pass		
@@ -28236,7 +28236,7 @@ fileSystem.test	filesystem-6.26	pass	pass
 fileSystem.test	filesystem-6.27	fail	fail	bug	code 0/1: / \| want: unrecognised path
 fileSystem.test	filesystem-6.28	fail	fail	bug	code 0/1: 280 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.29	pass	pass		
-fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795775940 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795777729 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.30	fail	fail	bug	code 0/1: native root \| want: unrecognised path
 fileSystem.test	filesystem-6.31	pass	pass		
 fileSystem.test	filesystem-6.32	fail	fail	bug	code 0/1: directory \| want: could not read "": no such file or directory
@@ -35579,13 +35579,13 @@ package.test	package-2.7.7	pass	pass
 package.test	package-2.7.8	pass	pass		
 package.test	package-2.7.9	pass	pass		
 package.test	package-3.1	pass	pass		
-package.test	package-3.10	fail	fail	bug	code 0/0,2: 1 {attempt to provide package t 2.1 failed: ifneeded test} {ifneeded test     while executing "error "ifneeded test""     invoked from withi \| want: 1 {ifneeded test} {ifneeded test   ...
+package.test	package-3.10	pass	pass		
 package.test	package-3.11	pass	pass		
 package.test	package-3.12	pass	pass		
 package.test	package-3.13	pass	pass		
 package.test	package-3.14	pass	pass		
-package.test	package-3.15	fail	fail	bug	code 2/0,2: {a b} \| want: {a b} 0-
-package.test	package-3.16	fail	fail	bug	code 0/0,2: 1 {testing package unknown} {testing package unknown     while executing "error "testing package unknown""     (procedure "pkgUnknown" line  \| want: 1 {testing package unknown} {testin...
+package.test	package-3.15	pass	pass		
+package.test	package-3.16	pass	pass		
 package.test	package-3.17	pass	pass		
 package.test	package-3.18	pass	pass		
 package.test	package-3.19	pass	pass		
@@ -35595,15 +35595,15 @@ package.test	package-3.21	pass	pass
 package.test	package-3.22	pass	pass		
 package.test	package-3.23	pass	pass		
 package.test	package-3.24	pass	pass		
-package.test	package-3.25	fail	fail	bug	code 0/0,2: 1 {attempt to provide package t 2.1 failed: ifneeded test} {EI     invoked from within "package require t 2.1"} \| want: 1 {ifneeded test} {EI     ("package ifneeded*" script)     invok...
-package.test	package-3.26	fail	fail	bug	code 0/0,2: 1 {attempt to provide package t 2.1 failed: ifneeded test} {EI     invoked from within "foreach x 1 {error "ifneeded test" EI}"     invoked  \| want: 1 {ifneeded test} {EI     ("foreach...
-package.test	package-3.27	fail	fail	message	code 1/1: attempt to provide package foo 1 failed: attempt to provide package foo 1 failed: attempt to provide package foo 1 failed: attempt to provid \| want: circular package dependency:*
-package.test	package-3.28	fail	fail	message	code 1/1: attempt to provide package foo 1 failed: can't find package foo 2 \| want: circular package dependency:*
-package.test	package-3.29	fail	fail	message	code 1/1: attempt to provide package foo 1 failed: attempt to provide package bar 1 failed: attempt to provide package foo 1 failed: attempt to provid \| want: circular package dependency:*
+package.test	package-3.25	pass	pass		
+package.test	package-3.26	fail	fail	bug	code 0/0,2: 1 {ifneeded test} {EI     invoked from within "foreach x 1 {error "ifneeded test" EI}"     ("package ifneeded t 2.1" script)     invoked fro \| want: 1 {ifneeded test} {EI     ("foreach...
+package.test	package-3.27	pass	pass		
+package.test	package-3.28	pass	pass		
+package.test	package-3.29	pass	pass		
 package.test	package-3.3	pass	pass		
-package.test	package-3.30	fail	fail	message	code 1/1: attempt to provide package foo 1 failed: conflicting versions provided for package "foo": 2, then 1 \| want: circular package dependency:*
-package.test	package-3.31	fail	fail	message	code 1/1: attempt to provide package foo 1 failed: foo \| want: foo
-package.test	package-3.32	fail	fail	bug	code 0/0,2: 1 \| want: 
+package.test	package-3.30	pass	pass		
+package.test	package-3.31	pass	pass		
+package.test	package-3.32	pass	pass		
 package.test	package-3.33	pass	pass		
 package.test	package-3.34	pass	pass		
 package.test	package-3.34.1	pass	pass		
@@ -35611,14 +35611,14 @@ package.test	package-3.34.2	pass	pass
 package.test	package-3.35	pass	pass		
 package.test	package-3.35.1	pass	pass		
 package.test	package-3.36	pass	pass		
-package.test	package-3.37	fail	fail	message	code 1/1: attempt to provide package foo 1 failed: package foo 1 not provided \| want: attempt to provide package * failed: bad return code:*
+package.test	package-3.37	pass	pass		
 package.test	package-3.38	pass	pass		
 package.test	package-3.39	pass	pass		
 package.test	package-3.4	pass	pass		
-package.test	package-3.40	fail	fail	message	code 1/1: wrong # args: should be "break" \| want: bad return code:*
-package.test	package-3.41	fail	fail	message	code 1/1: wrong # args: should be "continue" \| want: bad return code:*
-package.test	package-3.42	fail	fail	bug	code 2/1: ;# \| want: bad return code:*
-package.test	package-3.43	fail	fail	bug	code 10/1: ;# \| want: bad return code:*
+package.test	package-3.40	pass	pass		
+package.test	package-3.41	pass	pass		
+package.test	package-3.42	pass	pass		
+package.test	package-3.43	pass	pass		
 package.test	package-3.44	pass	pass		
 package.test	package-3.5	pass	pass		
 package.test	package-3.50	pass	pass		
@@ -35652,7 +35652,7 @@ package.test	package-4.29	pass	pass
 package.test	package-4.3	pass	pass		
 package.test	package-4.30	pass	pass		
 package.test	package-4.31	pass	pass		
-package.test	package-4.32	fail	fail	message	code 1/1: attempt to provide package t 2.3 failed: synthetic error \| want: synthetic error
+package.test	package-4.32	pass	pass		
 package.test	package-4.33	pass	pass		
 package.test	package-4.34	pass	pass		
 package.test	package-4.35	pass	pass		
@@ -35677,8 +35677,8 @@ package.test	package-4.51	pass	pass
 package.test	package-4.52	pass	pass		
 package.test	package-4.53	pass	pass		
 package.test	package-4.54	pass	pass		
-package.test	package-4.55	fail	fail	message	code 1/1: expected versionMin-versionMax but got "3.2-x.y" \| want: expected version number but got "x.y"
-package.test	package-4.56	fail	fail	message	code 1/1: expected versionMin-versionMax but got "x.y-3.2" \| want: expected version number but got "x.y"
+package.test	package-4.55	pass	pass		
+package.test	package-4.56	pass	pass		
 package.test	package-4.6	pass	pass		
 package.test	package-4.7	pass	pass		
 package.test	package-4.8	pass	pass		
@@ -38903,7 +38903,7 @@ socket.test	socket-15.1.2	pass	pass
 socket.test	socket-15.1.3	pass	pass		
 socket.test	socket-15.1.4	pass	pass		
 socket.test	socket-15.1.5	pass	pass		
-socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2843 \| want: couldn't open socket: connection refused
+socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2842 \| want: couldn't open socket: connection refused
 socket.test	socket-15.1.7	pass	pass		
 socket.test	socket-15.1.8	pass	pass		
 socket.test	socket_inet-1.1	pass	pass		
@@ -38956,7 +38956,7 @@ socket.test	socket_inet-2.7	pass	pass
 socket.test	socket_inet-2.8	pass	pass		
 socket.test	socket_inet-2.9	pass	pass		
 socket.test	socket_inet-3.1	pass	pass		
-socket.test	socket_inet-3.2	fail	pass	bug	code 0/0,2: ready timed_out \| want: ready done
+socket.test	socket_inet-3.2	fail	fail	bug	code 0/0,2: ready timed_out \| want: ready done
 socket.test	socket_inet-4.1	pass	pass		
 socket.test	socket_inet-4.2	pass	pass		
 socket.test	socket_inet-5.1	pass	pass		
@@ -39006,7 +39006,7 @@ socket.test	socket_inet6-11.9	pass	pass
 socket.test	socket_inet6-12.1	pass	pass		
 socket.test	socket_inet6-12.2	pass	pass		
 socket.test	socket_inet6-12.3	pass	pass		
-socket.test	socket_inet6-13.1	pass	pass		
+socket.test	socket_inet6-13.1	pass	fail		
 socket.test	socket_inet6-13.2.cl1	pass	pass		
 socket.test	socket_inet6-13.2.cl2	pass	pass		
 socket.test	socket_inet6-13.2.tr1	pass	pass		
@@ -41443,7 +41443,7 @@ unixFile.test	unixFile-1.6	skip	skip	internals	testfindexecutable
 unixFile.test	unixFile-1.7	skip	skip	internals	testfindexecutable
 unixForkEvent.test	unixforkevent-1.1	skip	skip	internals	testfork
 unixInit.test	unixInit-1.1	pass	pass		
-unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 38441', Got '' \| want: OK
+unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 34993', Got '' \| want: OK
 unixInit.test	unixInit-3.1	pass	pass		
 unixInit.test	unixInit-3.2	fail	fail	bug	code 0/0,2: 1 \| want: 0
 unixInit.test	unixInit-4.1	pass	pass		

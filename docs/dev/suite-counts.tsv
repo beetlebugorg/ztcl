@@ -11,7 +11,7 @@ basic.test	100	100
 binary.test	604	604
 case.test	15	15
 chan.test	39	39
-chanio.test	330	329
+chanio.test	330	330
 clock.test	8402	8402
 cmdAH.test	99	99
 cmdIL.test	137	137
@@ -90,7 +90,7 @@ obj.test	3	3
 oo.test	217	217
 ooNext2.test	50	50
 opt.test	0	0
-package.test	357	357
+package.test	375	375
 parse.test	114	114
 parseExpr.test	67	67
 parseOld.test	154	154
@@ -113,7 +113,7 @@ scan.test	180	180
 security.test	1	1
 set-old.test	142	142
 set.test	61	61
-socket.test	157	157
+socket.test	157	155
 source.test	18	18
 split.test	16	16
 stack.test	1	1
@@ -151,4 +151,4 @@ winPipe.test	0	0
 winTime.test	0	0
 word.test	45	45
 zlib.test	0	0
-total	38036	38035
+total	38054	38052
