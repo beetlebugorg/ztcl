@@ -37,6 +37,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const nat = @import("nat.zig");
+const tcp = @import("tcp.zig");
 const vnet = @import("../virtio/net.zig");
 
 pub const Ip4 = nat.Ip4;
@@ -90,6 +91,9 @@ pub const Port = struct {
     deliver: *const fn (ctx: *anyopaque, h: Hdr, parts: []const []const u8) bool,
     /// The end of a batch of `deliver`: the device raises its interrupt.
     flush: *const fn (ctx: *anyopaque) void,
+    /// The features that the driver accepted, for the offloads to the
+    /// guest (`vnet.f_guest_csum`, `vnet.f_guest_tso4`).
+    features: ?*const fn (ctx: *anyopaque) u64 = null,
 };
 
 pub const Stats = struct {
@@ -106,6 +110,9 @@ const tag_wake: u64 = 0;
 const tag_watch: u64 = 1 << 32;
 const tag_flow: u64 = 2 << 32;
 const tag_sock: u64 = 3 << 32;
+pub const tag_conn: u64 = 4 << 32;
+/// The period of the TCP timers while one is set.
+const tick_ns: u64 = 5 * std.time.ns_per_ms;
 
 const Flow = struct {
     fd: i32 = -1,
@@ -137,6 +144,7 @@ pub const Nat = struct {
     stopping: std.atomic.Value(bool) = .init(false),
     rx_wanted: std.atomic.Value(bool) = .init(false),
     flows: [max_flows]Flow = @splat(.{}),
+    tcp: tcp.Tcp = undefined,
     watches: [max_watch]Watch = @splat(.{}),
     dns_server: ?Ip4 = null,
     /// The token bucket of the DNS rate limit, in 1/1000 of a query.
@@ -179,6 +187,8 @@ pub const Nat = struct {
         const ring = try alloc.create([ring_len][nat.max_frame]u8);
         errdefer alloc.destroy(ring);
         n.* = .{ .alloc = alloc, .cfg = cfg, .ring = ring, .stack = .{ .host = .{ .ctx = n, .emit = emit, .udpSend = udpSend } } };
+        try n.tcp.init(alloc, now() ^ @intFromPtr(n));
+        errdefer n.tcp.deinit(alloc);
         n.poll = try os.pollCreate();
         errdefer os.close(n.poll);
         n.wake_fd = try os.wakeCreate(n.poll, tag_wake);
@@ -192,6 +202,7 @@ pub const Nat = struct {
     pub fn deinit(n: *Nat) void {
         n.stop();
         for (&n.flows) |*f| if (f.fd >= 0) os.close(f.fd);
+        n.tcp.deinit(n.alloc);
         if (n.sock >= 0) os.close(n.sock);
         if (!on_mac and n.wake_fd >= 0) os.close(n.wake_fd);
         os.close(n.poll);
@@ -236,8 +247,8 @@ pub const Nat = struct {
     /// One frame of the guest, as the slices of its descriptors. On the
     /// thread of the engine (a `watch` callback), or before `start`.
     pub fn fromGuest(n: *Nat, h: Hdr, parts: []const []const u8) void {
-        _ = h;
         n.stats_.from_guest += 1;
+        if (n.tcpFrame(h, parts)) return;
         if (parts.len == 1) return n.stack.fromGuest(parts[0]);
         var len: usize = 0;
         for (parts) |p| {
@@ -264,11 +275,20 @@ pub const Nat = struct {
     fn run(n: *Nat) void {
         var evs: [64]os.Ev = undefined;
         var last_sweep: u64 = now();
+        var last_tick: u64 = last_sweep;
         while (!n.stopping.load(.acquire)) {
-            const k = os.wait(n.poll, &evs, 1000);
-            for (evs[0..k]) |*e| n.dispatch(os.tag(e));
-            n.endBatch();
+            const busy = n.tcp.timers > 0 or (n.sock >= 0 and n.tcp.nblocked > 0);
+            const k = os.wait(n.poll, &evs, if (busy) 5 else 1000);
+            for (evs[0..k]) |*e| n.dispatch(e);
             const t = now();
+            if (n.tcp.timers > 0 and t - last_tick >= tick_ns) {
+                last_tick = t;
+                tcp.tick(n, t);
+            }
+            // A frame socket has no notify for room: a blocked
+            // connection tries again on each turn.
+            if (n.sock >= 0 and n.tcp.nblocked > 0) tcp.resumeAll(n);
+            n.endBatch();
             if (t - last_sweep > std.time.ns_per_s) {
                 last_sweep = t;
                 n.sweep(t);
@@ -276,13 +296,16 @@ pub const Nat = struct {
         }
     }
 
-    fn dispatch(n: *Nat, tag: u64) void {
+    fn dispatch(n: *Nat, e: *const os.Ev) void {
+        const tag = os.tag(e);
         const i: usize = @intCast(tag & 0xffffffff);
         switch (tag & ~@as(u64, 0xffffffff)) {
             tag_wake => {
                 os.drain(n.wake_fd);
                 n.flushRing();
+                if (n.ring_n == 0) tcp.resumeAll(n);
             },
+            tag_conn => tcp.hostReady(n, @intCast(i), os.isIn(e), os.isOut(e)),
             tag_watch => {
                 const w = &n.watches[i];
                 os.drain(w.fd);
@@ -295,6 +318,7 @@ pub const Nat = struct {
     }
 
     fn endBatch(n: *Nat) void {
+        tcp.flushAcks(n);
         if (n.delivered) {
             n.delivered = false;
             if (n.port) |p| p.flush(p.ctx);
@@ -357,8 +381,7 @@ pub const Nat = struct {
                 n.stats_.dropped += 1;
                 continue;
             }
-            n.stats_.from_guest += 1;
-            n.stack.fromGuest(buf[0..@intCast(r)]);
+            n.fromGuest(.{}, &.{buf[0..@intCast(r)]});
         }
     }
 
@@ -407,20 +430,30 @@ pub const Nat = struct {
         return best;
     }
 
+    /// The host address for an address of the guest: the gateway is the
+    /// host loopback, and the DNS address is the name server of the host.
+    pub fn hostAddr(n: *const Nat, dst: Ip4, dport: u16) ?Ip4 {
+        if (std.mem.eql(u8, &dst, &nat.gateway_ip)) return .{ 127, 0, 0, 1 };
+        if (std.mem.eql(u8, &dst, &nat.dns_ip)) return if (dport == 53) n.dns_server else null;
+        return dst;
+    }
+
+    /// The policy for a new flow or connection. A refusal is an event.
+    pub fn allowed(n: *Nat, proto: Proto, sport: u16, dst: Ip4, host: Ip4, dport: u16) bool {
+        // A UDP flow to the DNS address carries only the queries that
+        // passed `dnsQuery`. TCP to it has no relay, so no name passes
+        // the check of the names there.
+        if (std.mem.eql(u8, &dst, &nat.dns_ip)) return proto == .udp;
+        const pol = n.cfg.policy orelse return true;
+        if (pol(n.cfg.policy_ctx, proto, host, dport)) return true;
+        n.event(.{ .kind = .refuse, .proto = proto, .guest_port = sport, .addr = host, .port = dport });
+        return false;
+    }
+
     fn openFlow(n: *Nat, i: usize, sport: u16, dst: Ip4, dport: u16) ?*Flow {
-        const host: Ip4 = if (std.mem.eql(u8, &dst, &nat.gateway_ip))
-            .{ 127, 0, 0, 1 }
-        else if (std.mem.eql(u8, &dst, &nat.dns_ip))
-            (if (dport == 53) n.dns_server orelse return null else return null)
-        else
-            dst;
+        const host = n.hostAddr(dst, dport) orelse return null;
         const is_dns = std.mem.eql(u8, &dst, &nat.dns_ip);
-        // A flow to the DNS address carries only the queries that passed
-        // `dnsQuery`, so the policy of addresses does not apply to it.
-        if (!is_dns) if (n.cfg.policy) |pol| if (!pol(n.cfg.policy_ctx, .udp, host, dport)) {
-            n.event(.{ .kind = .refuse, .proto = .udp, .guest_port = sport, .addr = host, .port = dport });
-            return null;
-        };
+        if (!n.allowed(.udp, sport, dst, host, dport)) return null;
         const fd = os.udpConnect(host, dport) orelse return null;
         os.add(n.poll, fd, tag_flow | i) catch {
             os.close(fd);
@@ -537,9 +570,179 @@ pub const Nat = struct {
     pub fn event(n: *Nat, ev: Event) void {
         if (n.cfg.event) |hook| hook(n.cfg.event_ctx, &ev);
     }
+
+    // -- TCP
+
+    fn features(n: *const Nat) u64 {
+        const p = n.port orelse return 0;
+        const f = p.features orelse return 0;
+        return f(p.ctx);
+    }
+
+    /// The guest takes GSO frames of TCP (and so a partial checksum).
+    pub fn guestTso(n: *const Nat) bool {
+        const want = vnet.f_guest_tso4 | vnet.f_guest_csum;
+        return n.features() & want == want;
+    }
+
+    /// A TCP frame of the guest goes to `tcp.input` with its payload in
+    /// place. Gives false for each other frame.
+    fn tcpFrame(n: *Nat, h: Hdr, parts: []const []const u8) bool {
+        _ = h;
+        // The headers can span descriptors: at most 134 bytes of them
+        // are copied.
+        var hb: [14 + 60 + 60]u8 = undefined;
+        var got: usize = 0;
+        var total: usize = 0;
+        for (parts) |p| {
+            total += p.len;
+            if (got < hb.len) {
+                const k = @min(p.len, hb.len - got);
+                @memcpy(hb[got..][0..k], p[0..k]);
+                got += k;
+            }
+        }
+        if (got < 54 or std.mem.readInt(u16, hb[12..14], .big) != 0x0800) return false;
+        const ip = hb[14..];
+        if (ip[0] >> 4 != 4 or ip[9] != 6) return false;
+        const ihl = @as(usize, ip[0] & 0xf) * 4;
+        const tot = std.mem.readInt(u16, ip[2..4], .big);
+        if (ihl < 20 or 14 + ihl + 20 > got or std.mem.readInt(u16, ip[6..8], .big) & 0x3fff != 0 or
+            !std.mem.eql(u8, ip[12..16], &nat.guest_ip))
+        {
+            n.stats_.dropped += 1;
+            return true;
+        }
+        const dst: Ip4 = ip[16..20].*;
+        if (dst[0] == 10 and dst[1] == 0 and dst[2] == 2 and !std.mem.eql(u8, &dst, &nat.gateway_ip) and !std.mem.eql(u8, &dst, &nat.dns_ip)) {
+            n.stats_.dropped += 1;
+            return true;
+        }
+        const th = hb[14 + ihl ..];
+        const doff = @as(usize, th[12] >> 4) * 4;
+        const hl = 14 + ihl + doff;
+        if (doff < 20 or hl > got or tot < ihl + doff or 14 + @as(usize, tot) > total) {
+            n.stats_.dropped += 1;
+            return true;
+        }
+        var s: tcp.Seg = .{
+            .sport = std.mem.readInt(u16, th[0..2], .big),
+            .dst = dst,
+            .dport = std.mem.readInt(u16, th[2..4], .big),
+            .seq = std.mem.readInt(u32, th[4..8], .big),
+            .ack = std.mem.readInt(u32, th[8..12], .big),
+            .flags = th[13],
+            .wnd = std.mem.readInt(u16, th[14..16], .big),
+            .len = @intCast(tot - ihl - doff),
+        };
+        if (doff > 20) s.options(th[20..doff]);
+        // The payload, as slices of the descriptors, past the headers.
+        var pl: [vnet.max_parts][]const u8 = undefined;
+        var np: usize = 0;
+        var skip = hl;
+        var left: usize = s.len;
+        for (parts) |p| {
+            if (left == 0) break;
+            if (skip >= p.len) {
+                skip -= p.len;
+                continue;
+            }
+            const b = p[skip..][0..@min(p.len - skip, left)];
+            skip = 0;
+            pl[np] = b;
+            np += 1;
+            left -= b.len;
+        }
+        tcp.input(n, &s, pl[0..np]);
+        return true;
+    }
+
+    /// A TCP segment to the guest: from `src:sport` to the guest port
+    /// `dport`, with `opts` and the payload `pl`. A segment with no
+    /// payload goes through `emit`; a segment with payload gives false
+    /// when the guest has no room, and then nothing went out. A payload
+    /// longer than `mss` goes as one GSO frame.
+    pub fn sendSeg(n: *Nat, src: Ip4, sport: u16, dport: u16, seq: u32, ackn: u32, flags: u8, wnd: u16, opts: []const u8, pl: *const [2][]const u8, mss: u16) bool {
+        const len = pl[0].len + pl[1].len;
+        const th_len = 20 + opts.len;
+        const hl = 34 + th_len;
+        const o = &n.tcp.hdr;
+        @memcpy(o[0..6], &nat.guest_mac);
+        @memcpy(o[6..12], &nat.gateway_mac);
+        std.mem.writeInt(u16, o[12..14], 0x0800, .big);
+        const ip = o[14..34];
+        ip[0] = 0x45;
+        ip[1] = 0;
+        std.mem.writeInt(u16, ip[2..4], @intCast(@min(20 + th_len + len, 65535)), .big);
+        std.mem.writeInt(u16, ip[4..6], 0, .big);
+        std.mem.writeInt(u16, ip[6..8], 0x4000, .big);
+        ip[8] = 64;
+        ip[9] = 6;
+        std.mem.writeInt(u16, ip[10..12], 0, .big);
+        @memcpy(ip[12..16], &src);
+        @memcpy(ip[16..20], &nat.guest_ip);
+        std.mem.writeInt(u16, ip[10..12], nat.checksum(ip, 0), .big);
+        const th = o[34..hl];
+        std.mem.writeInt(u16, th[0..2], sport, .big);
+        std.mem.writeInt(u16, th[2..4], dport, .big);
+        std.mem.writeInt(u32, th[4..8], seq, .big);
+        std.mem.writeInt(u32, th[8..12], ackn, .big);
+        th[12] = @intCast(th_len / 4 << 4);
+        th[13] = flags;
+        std.mem.writeInt(u16, th[14..16], wnd, .big);
+        std.mem.writeInt(u32, th[16..20], 0, .big);
+        @memcpy(th[20..], opts);
+        const ps = nat.pseudo(src, nat.guest_ip, 6, th_len + len);
+        if (len == 0) {
+            std.mem.writeInt(u16, th[16..18], nat.checksum(th, ps), .big);
+            emit(n, o[0..hl]);
+            return true;
+        }
+        // Frames that wait in the ring go first, in order.
+        if (n.ring_n > 0) n.flushRing();
+        if (n.ring_n > 0) return false;
+        if (n.port != null and n.features() & vnet.f_guest_csum != 0) {
+            // A partial checksum: the field holds the sum of the
+            // pseudo-header, and the guest takes the payload as valid.
+            std.mem.writeInt(u16, th[16..18], ~nat.checksum(&.{}, ps), .big);
+            var h: Hdr = .{ .flags = vnet.hdr_needs_csum, .csum_start = 34, .csum_offset = 16, .hdr_len = @intCast(hl) };
+            if (len > mss) {
+                h.gso_type = vnet.gso_tcpv4;
+                h.gso_size = mss;
+            }
+            const p = n.port.?;
+            if (!p.deliver(p.ctx, h, &.{ o[0..hl], pl[0], pl[1] })) {
+                n.rx_wanted.store(true, .release);
+                return false;
+            }
+            n.delivered = true;
+            n.stats_.to_guest += 1;
+            return true;
+        }
+        // No offload: one frame of at most one MSS, with its checksum.
+        if (hl + len > nat.max_frame) return true;
+        const f = &n.tcp.frame;
+        @memcpy(f[0..hl], o[0..hl]);
+        @memcpy(f[hl..][0..pl[0].len], pl[0]);
+        @memcpy(f[hl + pl[0].len ..][0..pl[1].len], pl[1]);
+        std.mem.writeInt(u16, f[50..52], nat.checksum(f[34 .. hl + len], ps), .big);
+        const frame = f[0 .. hl + len];
+        if (n.sock >= 0) {
+            if (os.send(n.sock, frame) < 0) return false;
+            n.stats_.to_guest += 1;
+            return true;
+        }
+        const p = n.port orelse return true;
+        if (!n.deliverOne(p, frame)) {
+            n.rx_wanted.store(true, .release);
+            return false;
+        }
+        n.stats_.to_guest += 1;
+        return true;
+    }
 };
 
-fn now() u64 {
+pub fn now() u64 {
     var ts: std.posix.timespec = undefined;
     _ = std.posix.system.clock_gettime(.MONOTONIC, &ts);
     return @as(u64, @intCast(ts.sec)) * std.time.ns_per_s + @as(u64, @intCast(ts.nsec));
@@ -626,7 +829,7 @@ pub fn parseIp4(s: []const u8) ?Ip4 {
 
 /// The system calls of the engine: Linux with direct calls, macOS with
 /// libc and kqueue.
-const os = if (on_mac) mac_os else linux_os;
+pub const os = if (on_mac) mac_os else linux_os;
 
 const linux_os = struct {
     const Ev = linux.epoll_event;
@@ -675,7 +878,7 @@ const linux_os = struct {
         var v: u64 = 0;
         _ = linux.read(fd, std.mem.asBytes(&v), 8);
     }
-    fn close(fd: i32) void {
+    pub fn close(fd: i32) void {
         _ = linux.close(fd);
     }
     fn nonblock(fd: i32) !void {
@@ -697,11 +900,63 @@ const linux_os = struct {
         }
         return fd;
     }
-    fn send(fd: i32, b: []const u8) isize {
+    pub fn send(fd: i32, b: []const u8) isize {
         return sres(linux.sendto(fd, b.ptr, b.len, linux.MSG.NOSIGNAL | linux.MSG.DONTWAIT, null, 0));
     }
     fn recv(fd: i32, b: []u8) isize {
         return sres(linux.recvfrom(fd, b.ptr, b.len, linux.MSG.DONTWAIT, null, null));
+    }
+    pub const Iov = std.posix.iovec_const;
+    pub const IovMut = std.posix.iovec;
+    pub fn isIn(e: *const Ev) bool {
+        return e.events & (linux.EPOLL.IN | linux.EPOLL.RDHUP | linux.EPOLL.HUP | linux.EPOLL.ERR) != 0;
+    }
+    pub fn isOut(e: *const Ev) bool {
+        return e.events & (linux.EPOLL.OUT | linux.EPOLL.HUP | linux.EPOLL.ERR) != 0;
+    }
+    /// A TCP socket, edge-triggered for read and write.
+    pub fn addConn(poll: i32, fd: i32, tag_: u64) !void {
+        var ev: Ev = .{ .events = linux.EPOLL.IN | linux.EPOLL.OUT | linux.EPOLL.RDHUP | linux.EPOLL.ET, .data = .{ .u64 = tag_ } };
+        if (linux.errno(linux.epoll_ctl(poll, linux.EPOLL.CTL_ADD, fd, &ev)) != .SUCCESS) return error.NoPoll;
+    }
+    /// A connect with no wait. `done` is true when it ended at once.
+    pub fn tcpConnect(a: Ip4, port: u16, done: *bool) ?i32 {
+        const rc = linux.socket(linux.AF.INET, linux.SOCK.STREAM | linux.SOCK.NONBLOCK | linux.SOCK.CLOEXEC, 0);
+        if (linux.errno(rc) != .SUCCESS) return null;
+        const fd: i32 = @intCast(rc);
+        const one: c_int = 1;
+        _ = setsockopt(fd, linux.IPPROTO.TCP, linux.TCP.NODELAY, std.mem.asBytes(&one));
+        var sa: linux.sockaddr.in = .{ .port = std.mem.nativeToBig(u16, port), .addr = @bitCast(a) };
+        switch (linux.errno(linux.connect(fd, @ptrCast(&sa), @sizeOf(linux.sockaddr.in)))) {
+            .SUCCESS => done.* = true,
+            .INPROGRESS => done.* = false,
+            else => {
+                close(fd);
+                return null;
+            },
+        }
+        return fd;
+    }
+    pub fn sendv(fd: i32, iov: []const Iov) isize {
+        const m: linux.msghdr_const = .{ .name = null, .namelen = 0, .iov = iov.ptr, .iovlen = iov.len, .control = null, .controllen = 0, .flags = 0 };
+        return sres(linux.sendmsg(fd, &m, linux.MSG.NOSIGNAL | linux.MSG.DONTWAIT));
+    }
+    pub fn recvv(fd: i32, iov: []const IovMut) isize {
+        return sres(linux.readv(fd, iov.ptr, iov.len));
+    }
+    pub fn sockError(fd: i32) i32 {
+        var v: i32 = 0;
+        var l: linux.socklen_t = 4;
+        if (linux.errno(linux.getsockopt(fd, linux.SOL.SOCKET, linux.SO.ERROR, std.mem.asBytes(&v), &l)) != .SUCCESS) return -1;
+        return v;
+    }
+    pub fn shutdownWr(fd: i32) void {
+        _ = linux.shutdown(fd, linux.SHUT.WR);
+    }
+    /// The close of the socket then resets the connection of the host.
+    pub fn lingerZero(fd: i32) void {
+        const l = [2]i32{ 1, 0 };
+        _ = setsockopt(fd, linux.SOL.SOCKET, linux.SO.LINGER, std.mem.asBytes(&l));
     }
     fn readFile(path: [*:0]const u8, buf: []u8) ?usize {
         const rc = linux.open(path, .{ .CLOEXEC = true }, 0);
@@ -757,7 +1012,7 @@ const mac_os = struct {
         var b: [64]u8 = undefined;
         _ = c.read(fd, &b, b.len);
     }
-    fn close(fd: i32) void {
+    pub fn close(fd: i32) void {
         _ = c.close(fd);
     }
     fn nonblock(fd: i32) !void {
@@ -783,11 +1038,67 @@ const mac_os = struct {
         }
         return fd;
     }
-    fn send(fd: i32, b: []const u8) isize {
+    pub fn send(fd: i32, b: []const u8) isize {
         return c.send(fd, b.ptr, b.len, 0);
     }
     fn recv(fd: i32, b: []u8) isize {
         return c.recv(fd, b.ptr, b.len, 0);
+    }
+    pub const Iov = std.posix.iovec_const;
+    pub const IovMut = std.posix.iovec;
+    pub fn isIn(e: *const Ev) bool {
+        return e.filter == c.EVFILT.READ;
+    }
+    pub fn isOut(e: *const Ev) bool {
+        return e.filter == c.EVFILT.WRITE;
+    }
+    pub fn addConn(kq: i32, fd: i32, tag_: u64) !void {
+        if (!change(kq, @intCast(fd), c.EVFILT.READ, c.EV.ADD | c.EV.CLEAR, 0, tag_)) return error.NoPoll;
+        if (!change(kq, @intCast(fd), c.EVFILT.WRITE, c.EV.ADD | c.EV.CLEAR, 0, tag_)) return error.NoPoll;
+    }
+    fn res(r: isize) isize {
+        return if (r < 0) -@as(isize, @backingInt(std.posix.errno(r))) else r;
+    }
+    pub fn tcpConnect(a: Ip4, port: u16, done: *bool) ?i32 {
+        const fd = c.socket(c.AF.INET, c.SOCK.STREAM, 0);
+        if (fd < 0) return null;
+        _ = c.fcntl(fd, c.F.SETFD, @as(c_int, c.FD_CLOEXEC));
+        const one: c_int = 1;
+        _ = setsockopt(fd, c.IPPROTO.TCP, c.TCP.NODELAY, std.mem.asBytes(&one));
+        _ = setsockopt(fd, c.SOL.SOCKET, c.SO.NOSIGPIPE, std.mem.asBytes(&one));
+        nonblock(fd) catch {
+            close(fd);
+            return null;
+        };
+        var sa: c.sockaddr.in = .{ .port = std.mem.nativeToBig(u16, port), .addr = @bitCast(a) };
+        if (c.connect(fd, @ptrCast(&sa), @sizeOf(c.sockaddr.in)) == 0) {
+            done.* = true;
+        } else if (std.posix.errno(@as(c_int, -1)) == .INPROGRESS) {
+            done.* = false;
+        } else {
+            close(fd);
+            return null;
+        }
+        return fd;
+    }
+    pub fn sendv(fd: i32, iov: []const Iov) isize {
+        return res(c.writev(fd, iov.ptr, @intCast(iov.len)));
+    }
+    pub fn recvv(fd: i32, iov: []const IovMut) isize {
+        return res(c.readv(fd, iov.ptr, @intCast(iov.len)));
+    }
+    pub fn sockError(fd: i32) i32 {
+        var v: i32 = 0;
+        var l: c.socklen_t = 4;
+        if (c.getsockopt(fd, c.SOL.SOCKET, c.SO.ERROR, std.mem.asBytes(&v), &l) != 0) return -1;
+        return v;
+    }
+    pub fn shutdownWr(fd: i32) void {
+        _ = c.shutdown(fd, 1);
+    }
+    pub fn lingerZero(fd: i32) void {
+        const l = [2]i32{ 1, 0 };
+        _ = setsockopt(fd, c.SOL.SOCKET, c.SO.LINGER, std.mem.asBytes(&l));
     }
     fn readFile(path: [*:0]const u8, buf: []u8) ?usize {
         const fd = c.open(path, .{ .CLOEXEC = true });
@@ -1035,4 +1346,111 @@ test "nat engine: a DNS query, and the match of a name" {
     try std.testing.expect(!nameMatch("*.ok.test", "evilok.test"));
     try std.testing.expect(nameMatch("example.com.", "example.com"));
     try std.testing.expect(!nameMatch("example.com", "x.example.com"));
+}
+
+fn tcpGuestFrame(buf: []u8, dport: u16, seq: u32, ackn: u32, flags: u8, opts: []const u8, payload: []const u8) []u8 {
+    @memcpy(buf[0..6], &nat.gateway_mac);
+    @memcpy(buf[6..12], &nat.guest_mac);
+    std.mem.writeInt(u16, buf[12..14], 0x0800, .big);
+    const tl = 20 + opts.len;
+    const h = buf[14..34];
+    @memset(h, 0);
+    h[0] = 0x45;
+    std.mem.writeInt(u16, h[2..4], @intCast(20 + tl + payload.len), .big);
+    h[8] = 64;
+    h[9] = 6;
+    @memcpy(h[12..16], &nat.guest_ip);
+    @memcpy(h[16..20], &nat.gateway_ip);
+    std.mem.writeInt(u16, h[10..12], nat.checksum(h, 0), .big);
+    const t = buf[34..];
+    @memset(t[0..20], 0);
+    std.mem.writeInt(u16, t[0..2], 41000, .big);
+    std.mem.writeInt(u16, t[2..4], dport, .big);
+    std.mem.writeInt(u32, t[4..8], seq, .big);
+    std.mem.writeInt(u32, t[8..12], ackn, .big);
+    t[12] = @intCast(tl / 4 << 4);
+    t[13] = flags;
+    std.mem.writeInt(u16, t[14..16], 65535, .big);
+    @memcpy(t[20..][0..opts.len], opts);
+    @memcpy(t[tl..][0..payload.len], payload);
+    return buf[0 .. 34 + tl + payload.len];
+}
+
+/// The next TCP frame to the guest port 41000 on the frame socket.
+fn tcpRecv(fd: i32, out: []u8) !struct { seq: u32, ack: u32, flags: u8, data: []u8 } {
+    var pfd = [_]linux.pollfd{.{ .fd = fd, .events = linux.POLL.IN, .revents = 0 }};
+    while (true) {
+        if (linux.poll(&pfd, 1, 2000) != 1) return error.Timeout;
+        const k: usize = @intCast(linux_os.recv(fd, out));
+        if (k < 54 or out[23] != 6) continue;
+        const t = out[34..k];
+        try std.testing.expectEqual(@as(u16, 41000), std.mem.readInt(u16, t[2..4], .big));
+        // The checksum of each frame of a frame socket is whole.
+        try std.testing.expectEqual(@as(u16, 0), nat.checksum(t, nat.pseudo(nat.gateway_ip, nat.guest_ip, 6, t.len)));
+        const doff = @as(usize, t[12] >> 4) * 4;
+        return .{ .seq = std.mem.readInt(u32, t[4..8], .big), .ack = std.mem.readInt(u32, t[8..12], .big), .flags = t[13], .data = t[doff..] };
+    }
+}
+
+test "nat engine: a TCP connection to the gateway through a frame socket" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    const T = tcp;
+    const srv: i32 = @intCast(linux.socket(linux.AF.INET, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0));
+    defer _ = linux.close(srv);
+    var sa: linux.sockaddr.in = .{ .port = 0, .addr = @bitCast([4]u8{ 127, 0, 0, 1 }) };
+    try std.testing.expectEqual(@as(usize, 0), linux.bind(srv, @ptrCast(&sa), @sizeOf(linux.sockaddr.in)));
+    _ = linux.listen(srv, 4);
+    var sl: linux.socklen_t = @sizeOf(linux.sockaddr.in);
+    _ = linux.getsockname(srv, @ptrCast(&sa), &sl);
+    const port = std.mem.bigToNative(u16, sa.port);
+
+    var pair: [2]i32 = undefined;
+    try std.testing.expectEqual(@as(usize, 0), linux.socketpair(linux.AF.UNIX, linux.SOCK.DGRAM | linux.SOCK.CLOEXEC, 0, &pair));
+    defer _ = linux.close(pair[1]);
+    const n = try Nat.initSocket(std.testing.allocator, .{ .dns = false }, pair[0]);
+    defer n.deinit();
+    try n.start();
+    var fb: [nat.max_frame]u8 = undefined;
+    var out: [nat.max_frame]u8 = undefined;
+
+    // The handshake: MSS 1460, SACK-permitted, window scale 7.
+    _ = linux_os.send(pair[1], tcpGuestFrame(&fb, port, 1000, 0, T.syn, &.{ 2, 4, 5, 0xb4, 1, 1, 4, 2, 1, 3, 3, 7 }, ""));
+    const sa1 = try tcpRecv(pair[1], &out);
+    try std.testing.expectEqual(T.syn | T.ack, sa1.flags);
+    try std.testing.expectEqual(@as(u32, 1001), sa1.ack);
+    const peer: i32 = @intCast(linux.accept(srv, null, null));
+    defer _ = linux.close(peer);
+    _ = linux_os.send(pair[1], tcpGuestFrame(&fb, port, 1001, sa1.seq +% 1, T.ack, "", "hello"));
+    var got: [16]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 5), linux.read(peer, &got, got.len));
+    try std.testing.expectEqualStrings("hello", got[0..5]);
+    const a1 = try tcpRecv(pair[1], &out);
+    try std.testing.expectEqual(@as(u32, 1006), a1.ack);
+
+    // The host answers, then closes.
+    _ = linux.write(peer, "world", 5);
+    const d = try tcpRecv(pair[1], &out);
+    try std.testing.expectEqualStrings("world", d.data);
+    try std.testing.expectEqual(sa1.seq +% 1, d.seq);
+    _ = linux.shutdown(peer, linux.SHUT.WR);
+    const f = try tcpRecv(pair[1], &out);
+    try std.testing.expect(f.flags & T.fin != 0);
+    try std.testing.expectEqual(d.seq +% 5, f.seq);
+    // The guest acknowledges both, and sends its FIN.
+    _ = linux_os.send(pair[1], tcpGuestFrame(&fb, port, 1006, f.seq +% 1, T.ack | T.fin, "", ""));
+    try std.testing.expectEqual(@as(usize, 0), linux.read(peer, &got, got.len));
+    const last = try tcpRecv(pair[1], &out);
+    try std.testing.expectEqual(@as(u32, 1007), last.ack);
+    var tries: u32 = 0;
+    while (n.tcp.active() > 0 and tries < 200) : (tries += 1) {
+        var none_ = [0]linux.pollfd{};
+        _ = linux.poll(&none_, 0, 1);
+    }
+    try std.testing.expectEqual(@as(usize, 0), n.tcp.active());
+
+    // A port with no listener: a RST.
+    _ = linux_os.send(pair[1], tcpGuestFrame(&fb, 1, 5000, 0, T.syn, "", ""));
+    const r = try tcpRecv(pair[1], &out);
+    try std.testing.expect(r.flags & T.rst != 0);
+    try std.testing.expectEqual(@as(u32, 5001), r.ack);
 }

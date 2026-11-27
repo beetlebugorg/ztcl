@@ -46,6 +46,19 @@ Each step publishes its numbers in this file. Each number is measured on the sam
 ### Results
 
 - Step 2, KVM, 2026-11-27, x86-64 host with a load average of 12: `ping -c 200 -i 0.01 10.0.2.2` in the guest gives a round trip of 0.114 ms at best and 0.194 ms on average. The engine answers the echo itself, so this is the time of the device and the interrupt path. No reference program ran yet.
+- Step 3, KVM, 2026-11-27, x86-64 host with a load average of 22, guest with 2 vCPUs and the gk2 kernel, ztcl built with `-Doptimize=ReleaseFast`. The tool is `tools/vm-guest/netbench.zig`: `netbench serve 5201` on the host, and the clients in the guest through a share. Each bulk run moves 1 MB writes; `rr` is a request and an answer of 1 byte on one connection; `crr` is a connect, 1 byte each way, and a close. The host column is the same tool on the host loopback, at the same time.
+
+| Run | Guest through the NAT | Host loopback |
+|---|---|---|
+| Guest to host, 1 stream | 5.95 Gbit/s | 13.5 Gbit/s |
+| Host to guest, 1 stream | 7.41 Gbit/s | 13.1 Gbit/s |
+| Guest to host, 4 streams | 8.37 Gbit/s | 26.4 Gbit/s |
+| Host to guest, 4 streams | 5.59 Gbit/s | 29.5 Gbit/s |
+| Round trip of 1 byte | 258 us mean, 67 us best | 24.7 us mean, 15.3 us best |
+| Connections each second | 701 | 1,508 |
+
+  On this shared host the numbers move by about 30 % from run to run. A profile of the host to guest run (a Debug build) has 57 % of the user time of ztcl in `memcpy`: the copy from the `in` ring to the receive buffers.
+  The data path of this step: TSO both ways (`HOST_TSO4` and `GUEST_TSO4`), `sendmsg` over the descriptors in guest memory toward the host, and one copy toward the guest (from the `in` ring of a connection to the receive buffers). The receive side has one copy more than it needs: `recvmsg` straight into receive buffers needs the retransmit data elsewhere (`MSG_PEEK` with `SO_PEEK_OFF` keeps it in the host socket). That, io_uring, and `send_zc` are the next measured changes. No reference program ran yet.
 
 ## Steps
 

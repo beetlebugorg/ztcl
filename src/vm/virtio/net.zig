@@ -56,6 +56,9 @@ pub const hdr_len = 12;
 /// of 1,500 bytes needs 44.
 pub const max_bufs = 64;
 
+/// The most descriptors of one frame of the guest.
+pub const max_parts = Chain.max;
+
 /// The header of a frame (section 5.1.6).
 pub const Hdr = struct {
     flags: u8 = 0,
@@ -110,6 +113,9 @@ pub const Net = struct {
     /// The frames that the device dropped: a bad chain of the guest, or
     /// a frame larger than the receive buffers of the guest.
     dropped: u64 = 0,
+    /// The receive chains that the last frame found, when they were too
+    /// few for it: `rxArm` waits for one more.
+    rx_short: u16 = 0,
 
     pub fn features(n: *const Net) u64 {
         return mmio.f_version_1 | f_mac | f_status | f_mrg_rxbuf | f_event_idx | n.offloads;
@@ -211,6 +217,7 @@ pub const Net = struct {
             }
             const head = q.next(m) orelse {
                 q.unget(taken);
+                n.rx_short = taken;
                 return false;
             };
             const c = Chain.read(q, m, head) orelse {
@@ -260,9 +267,11 @@ pub const Net = struct {
     }
 
     /// Asks the driver for a notify when it adds receive buffers, and
-    /// gives true when it added some in the meantime.
-    pub fn rxArm(_: *Net, d: *Device, host: *const Host) bool {
-        return d.queues[rx_queue].arm(host.mem);
+    /// gives true when it added some in the meantime. After a frame that
+    /// found too few buffers, it waits for one more than the frame found,
+    /// so that a caller that tries again does not spin.
+    pub fn rxArm(n: *Net, d: *Device, host: *const Host) bool {
+        return d.queues[rx_queue].armAt(host.mem, n.rx_short);
     }
 };
 
