@@ -75,6 +75,48 @@ pub const init_flag = struct {
     pub const init_ext: u32 = 1 << 30;
 };
 
+/// The flags of `flags2` of FUSE_INIT, with FUSE_INIT_EXT.
+pub const init_flag2 = struct {
+    pub const has_inode_dax: u32 = 1 << 1;
+};
+
+/// FUSE_ATTR_DAX in the `flags` of fuse_attr: the guest maps the file
+/// in the DAX window.
+pub const attr_dax: u32 = 1 << 1;
+
+/// A regular file has FUSE_ATTR_DAX at this size or more, or at 0 bytes:
+/// a small file costs less to read with FUSE_READ than with a mapping of
+/// its own, and a new file gets the writes of DAX, which skip the page
+/// cache of the guest.
+pub const dax_min: u64 = 256 << 10;
+
+/// The write flag of fuse_setupmapping_in.
+const setupmapping_write: u64 = 1 << 0;
+
+/// The DAX window of a device: the monitor maps a range of an open file
+/// at an offset in the window, and removes ranges. Each call gives 0 or
+/// a Linux errno.
+pub const Dax = struct {
+    ctx: *anyopaque,
+    /// The size of the window in bytes.
+    size: u64,
+    /// The alignment of a mapping, as a power of 2: of the offset in
+    /// the file, the offset in the window, and the length.
+    align_log2: u16,
+    setup: *const fn (ctx: *anyopaque, node: u64, fh: u64, foffset: u64, len: u64, write: bool, moffset: u64) u32,
+    remove: *const fn (ctx: *anyopaque, moffset: u64, len: u64) u32,
+    /// Drops the host views of the mappings of a node, and keeps the
+    /// ranges: the next access of the guest maps them again. The server
+    /// calls it before a change of the size or the name of a file, and
+    /// at its release, so the host can change the file.
+    drop: *const fn (ctx: *anyopaque, node: u64) void,
+    /// The guest has no open handle of the node (`on`), or has one again:
+    /// the monitor drops the views of an idle node after a while.
+    idle: *const fn (ctx: *anyopaque, node: u64, on: bool) void,
+    /// Removes each mapping, at the end of a session.
+    clear: *const fn (ctx: *anyopaque) void,
+};
+
 const fattr = struct {
     const mode: u32 = 1 << 0;
     const uid: u32 = 1 << 1;
@@ -98,6 +140,8 @@ pub const max_write = max_pages * 4096;
 const Node = struct {
     path: []u8,
     lookups: u64,
+    /// The open handles of the guest for the node.
+    opens: u32 = 0,
 };
 
 pub const Server = struct {
@@ -115,6 +159,11 @@ pub const Server = struct {
     req: []u8 = &.{},
     rep: []u8 = &.{},
     bad_chains: u64 = 0,
+    /// The DAX window of the device, when it has one.
+    dax: ?Dax = null,
+    /// The guest uses DAX for each file that has FUSE_ATTR_DAX
+    /// (FUSE_HAS_INODE_DAX of FUSE_INIT).
+    inode_dax: bool = false,
 
     pub fn init(alloc: std.mem.Allocator, fs: Fs) Server {
         return .{ .alloc = alloc, .fs = fs };
@@ -140,6 +189,8 @@ pub const Server = struct {
         s.by_path.clearRetainingCapacity();
         s.next_node = 2;
         s.minor = 0;
+        s.inode_dax = false;
+        if (s.dax) |d| d.clear(d.ctx);
     }
 
     /// The configuration of the device: the tag in 36 bytes, padded with
@@ -305,7 +356,9 @@ pub const Server = struct {
         const ro = s.fs.read_only;
         if (opcode == op.init) return s.initSession(body, w);
         if (opcode == op.destroy) return 0;
+        if (opcode == op.removemapping) return s.mapping(opcode, node, "", body);
         const path = s.pathOf(node) orelse return E.NOENT;
+        if (opcode == op.setupmapping) return s.mapping(opcode, node, path, body);
         var buf: [ninep.max_path]u8 = undefined;
         switch (opcode) {
             op.lookup => {
@@ -331,6 +384,7 @@ pub const Server = struct {
                 if (valid & fattr.size != 0) sa.size = rd64(body, 16);
                 if (valid & fattr.atime_now != 0) sa.atime = .now else if (valid & fattr.atime != 0) sa.atime = .{ .at = .{ .sec = rd64(body, 32), .nsec = rd32(body, 56) } };
                 if (valid & fattr.mtime_now != 0) sa.mtime = .now else if (valid & fattr.mtime != 0) sa.mtime = .{ .at = .{ .sec = rd64(body, 40), .nsec = rd32(body, 60) } };
+                if (sa.size != null) s.dropNode(node);
                 var e = vt.setattr(ctx, path, sa);
                 if (e != 0) return e;
                 var a: Attr = .{};
@@ -383,6 +437,7 @@ pub const Server = struct {
                 if (ro) return E.ROFS;
                 const name = cstr(body) orelse return E.INVAL;
                 const p = child(&buf, path, name) orelse return E.INVAL;
+                s.dropPath(p);
                 const e = vt.unlink(ctx, path, name, opcode == op.rmdir);
                 if (e != 0) return e;
                 s.gone(p);
@@ -399,6 +454,8 @@ pub const Server = struct {
                 const old = child(&buf, path, name) orelse return E.INVAL;
                 var buf2: [ninep.max_path]u8 = undefined;
                 const new = child(&buf2, new_path, new_name) orelse return E.INVAL;
+                s.dropPath(old);
+                s.dropPath(new);
                 const e = vt.rename(ctx, path, name, new_path, new_name);
                 if (e != 0) return e;
                 s.gone(new);
@@ -420,9 +477,12 @@ pub const Server = struct {
                 var flags = rd32(body, 0) & (ninep.O.ACCMODE | ninep.O.TRUNC | ninep.O.APPEND | ninep.O.SYNC | ninep.O.DSYNC);
                 if (opcode == op.opendir) flags = ninep.O.RDONLY | ninep.O.DIRECTORY;
                 if (ro and (flags & ninep.O.ACCMODE != ninep.O.RDONLY or flags & ninep.O.TRUNC != 0)) return E.ROFS;
+                // Windows truncates no file with a view.
+                if (flags & ninep.O.TRUNC != 0) s.dropNode(node);
                 var h: u64 = 0;
                 const e = vt.open(ctx, path, flags, &h);
                 if (e != 0) return e;
+                if (opcode == op.open) s.opened(node);
                 openOut(h, w);
                 return 0;
             },
@@ -440,6 +500,7 @@ pub const Server = struct {
                     vt.close(ctx, h);
                     return e;
                 }
+                if (s.by_path.get(p)) |id| s.opened(id);
                 openOut(h, w);
                 return 0;
             },
@@ -475,6 +536,7 @@ pub const Server = struct {
             },
             op.release, op.releasedir => {
                 if (body.len < 8) return E.INVAL;
+                if (opcode == op.release) s.released(node);
                 vt.close(ctx, rd64(body, 0));
                 return 0;
             },
@@ -523,13 +585,28 @@ pub const Server = struct {
         }
         if (major < 7) return E.PROTO;
         s.reset();
-        s.minor = @min(minor, 31);
+        s.minor = @min(minor, 36);
         const ours = init_flag.async_read | init_flag.atomic_o_trunc | init_flag.big_writes |
             init_flag.do_readdirplus | init_flag.readdirplus_auto | init_flag.parallel_dirops | init_flag.max_pages;
+        var reply = flags & ours;
+        var flags2: u32 = 0;
+        var alignment: u16 = 0;
+        if (s.dax) |d| {
+            if (flags & init_flag.map_alignment != 0) {
+                reply |= init_flag.map_alignment;
+                alignment = d.align_log2;
+            }
+            const theirs2: u32 = if (flags & init_flag.init_ext != 0 and body.len >= 20) rd32(body, 16) else 0;
+            if (theirs2 & init_flag2.has_inode_dax != 0) {
+                reply |= init_flag.init_ext;
+                flags2 = init_flag2.has_inode_dax;
+                s.inode_dax = true;
+            }
+        }
         w.u32_(7);
         w.u32_(s.minor);
         w.u32_(max_readahead);
-        w.u32_(flags & ours);
+        w.u32_(reply);
         // Before 7.23 the reply is 24 bytes.
         if (s.minor < 23) {
             w.u16_(16);
@@ -542,8 +619,8 @@ pub const Server = struct {
         w.u32_(max_write);
         w.u32_(1); // time_gran: 1 ns
         w.u16_(max_pages);
-        w.u16_(0); // map_alignment
-        w.u32_(0); // flags2
+        w.u16_(alignment); // map_alignment, a power of 2
+        w.u32_(flags2);
         w.u32_(0); // max_stack_depth
         w.u16_(0); // request_timeout
         for (0..11) |_| w.u16_(0);
@@ -567,18 +644,94 @@ pub const Server = struct {
         w.u64_(s.ttl_ns / std.time.ns_per_s);
         w.u32_(@intCast(s.ttl_ns % std.time.ns_per_s));
         w.u32_(@intCast(s.ttl_ns % std.time.ns_per_s));
-        attrBody(a, w);
+        attrBody(a, s.attrFlags(a), w);
     }
 
     fn attrOut(s: *Server, a: *const Attr, w: *Writer) void {
         w.u64_(s.ttl_ns / std.time.ns_per_s);
         w.u32_(@intCast(s.ttl_ns % std.time.ns_per_s));
         w.u32_(0);
-        attrBody(a, w);
+        attrBody(a, s.attrFlags(a), w);
+    }
+
+    /// FUSE_SETUPMAPPING: a range of an open file at an offset of the
+    /// window. FUSE_REMOVEMAPPING: a count, then each range of the window
+    /// as an offset and a length. Each one has an empty reply.
+    fn mapping(s: *Server, opcode: u32, node: u64, path: []const u8, body: []const u8) u32 {
+        const d = s.dax orelse return E.NOSYS;
+        const mask = (@as(u64, 1) << @intCast(d.align_log2)) - 1;
+        if (opcode == op.setupmapping) {
+            if (body.len < 40) return E.INVAL;
+            const fh = rd64(body, 0);
+            const foffset = rd64(body, 8);
+            const len = rd64(body, 16);
+            const flags = rd64(body, 24);
+            const moffset = rd64(body, 32);
+            if (len == 0 or foffset & mask != 0 or moffset & mask != 0) return E.INVAL;
+            if (moffset > d.size or len > d.size - moffset) return E.INVAL;
+            if (flags & setupmapping_write != 0 and s.fs.read_only) return E.ROFS;
+            const write = flags & setupmapping_write != 0;
+            // The guest maps a file by its node, with no open handle (an fh
+            // of all ones): the server opens the path for the setup.
+            var e: u32 = 0;
+            if (fh != std.math.maxInt(u64)) {
+                e = d.setup(d.ctx, node, fh, foffset, len, write, moffset);
+            } else {
+                var h: u64 = 0;
+                e = s.fs.vt.open(s.fs.ctx, path, if (write) ninep.O.RDWR else ninep.O.RDONLY, &h);
+                if (e != 0) return e;
+                defer s.fs.vt.close(s.fs.ctx, h);
+                e = d.setup(d.ctx, node, h, foffset, len, write, moffset);
+            }
+            // A mapping of a file with no open handle of the guest (a page of
+            // an mmap after its close) starts idle.
+            const n = s.nodes.get(node);
+            if (e == 0 and (n == null or n.?.opens == 0)) d.idle(d.ctx, node, true);
+            return e;
+        }
+        if (body.len < 4) return E.INVAL;
+        const count = rd32(body, 0);
+        if (body.len < 4 + @as(u64, count) * 16) return E.INVAL;
+        for (0..count) |i| {
+            const moffset = rd64(body, 4 + i * 16);
+            const len = rd64(body, 4 + i * 16 + 8);
+            if (moffset > d.size or len > d.size - moffset) return E.INVAL;
+            const e = d.remove(d.ctx, moffset, len);
+            if (e != 0) return e;
+        }
+        return 0;
+    }
+
+    fn opened(s: *Server, node: u64) void {
+        const n = s.nodes.getPtr(node) orelse return;
+        n.opens += 1;
+        if (n.opens == 1) if (s.dax) |d| d.idle(d.ctx, node, false);
+    }
+
+    fn released(s: *Server, node: u64) void {
+        const n = s.nodes.getPtr(node) orelse return;
+        n.opens -|= 1;
+        if (n.opens == 0) if (s.dax) |d| d.idle(d.ctx, node, true);
+    }
+
+    fn dropNode(s: *Server, node: u64) void {
+        if (s.dax) |d| d.drop(d.ctx, node);
+    }
+
+    /// Drops the views of the node of `path`, when the guest has one.
+    fn dropPath(s: *Server, path: []const u8) void {
+        const d = s.dax orelse return;
+        if (s.by_path.get(path)) |node| d.drop(d.ctx, node);
+    }
+
+    /// FUSE_ATTR_DAX for a regular file, when the guest uses DAX by file.
+    fn attrFlags(s: *const Server, a: *const Attr) u32 {
+        if (!s.inode_dax or a.mode & 0o170000 != 0o100000) return 0;
+        return if (a.size == 0 or a.size >= dax_min) attr_dax else 0;
     }
 };
 
-fn attrBody(a: *const Attr, w: *Writer) void {
+fn attrBody(a: *const Attr, flags: u32, w: *Writer) void {
     w.u64_(a.ino);
     w.u64_(a.size);
     w.u64_(a.blocks);
@@ -594,7 +747,7 @@ fn attrBody(a: *const Attr, w: *Writer) void {
     w.u32_(a.gid);
     w.u32_(@intCast(@min(a.rdev, std.math.maxInt(u32))));
     w.u32_(@intCast(@min(a.blksize, std.math.maxInt(u32))));
-    w.u32_(0); // flags
+    w.u32_(flags);
 }
 
 fn openOut(h: u64, w: *Writer) void {
@@ -1114,4 +1267,208 @@ test "fuse: an opcode the server does not have gives ENOSYS, and STATFS" {
 
     // A request shorter than its header has no reply.
     try std.testing.expectEqual(@as(usize, 0), s.handle(out[0..20], &out));
+}
+
+/// A DAX window that records the calls of the server.
+const TestDax = struct {
+    setups: u32 = 0,
+    last_fh: u64 = 0,
+    last_node: u64 = 0,
+    last_write: bool = false,
+    removes: u32 = 0,
+    drops: u32 = 0,
+    idles: u32 = 0,
+    busy: u32 = 0,
+    clears: u32 = 0,
+    opens_at_setup: u32 = 0,
+    fs: *MemFs,
+
+    fn setup(ctx: *anyopaque, node: u64, fh: u64, _: u64, _: u64, write: bool, _: u64) u32 {
+        const t: *TestDax = @ptrCast(@alignCast(ctx));
+        t.setups += 1;
+        t.last_fh = fh;
+        t.last_node = node;
+        t.last_write = write;
+        t.opens_at_setup = t.fs.opens;
+        return 0;
+    }
+    fn remove(ctx: *anyopaque, _: u64, _: u64) u32 {
+        const t: *TestDax = @ptrCast(@alignCast(ctx));
+        t.removes += 1;
+        return 0;
+    }
+    fn drop(ctx: *anyopaque, _: u64) void {
+        const t: *TestDax = @ptrCast(@alignCast(ctx));
+        t.drops += 1;
+    }
+    fn idle(ctx: *anyopaque, _: u64, on: bool) void {
+        const t: *TestDax = @ptrCast(@alignCast(ctx));
+        if (on) t.idles += 1 else t.busy += 1;
+    }
+    fn clear(ctx: *anyopaque) void {
+        const t: *TestDax = @ptrCast(@alignCast(ctx));
+        t.clears += 1;
+    }
+    fn dax(t: *TestDax) Dax {
+        return .{ .ctx = t, .size = 1 << 30, .align_log2 = 16, .setup = setup, .remove = remove, .drop = drop, .idle = idle, .clear = clear };
+    }
+};
+
+/// INIT with FUSE_INIT_EXT and FUSE_HAS_INODE_DAX in `flags2`.
+fn startDaxSession(s: *Server, out: []u8) !void {
+    var r = Req.init(op.init, 0);
+    const flags = init_flag.async_read | init_flag.max_pages | init_flag.map_alignment | init_flag.init_ext;
+    const n = s.handle(r.u32_(7).u32_(46).u32_(131072).u32_(flags).u32_(init_flag2.has_inode_dax).done(), out);
+    try std.testing.expectEqual(@as(i32, 0), try replyStatus(out, n));
+}
+
+/// The `flags` of the fuse_attr of an entry reply in `out`.
+fn entryAttrFlags(out: []const u8) u32 {
+    return rd32(out, out_header_len + 40 + 84);
+}
+
+test "fuse: INIT gives DAX by file, and the alignment of the window" {
+    var fs: MemFs = .{};
+    var t: TestDax = .{ .fs = &fs };
+    var s = testServer(&fs, false);
+    defer s.deinit();
+    s.dax = t.dax();
+    var out: [512]u8 = undefined;
+    try startDaxSession(&s, &out);
+    try std.testing.expectEqual(@as(u32, 36), rd32(&out, 20));
+    const flags = rd32(&out, 28);
+    try std.testing.expect(flags & init_flag.map_alignment != 0);
+    try std.testing.expect(flags & init_flag.init_ext != 0);
+    try std.testing.expectEqual(@as(u16, 16), std.mem.readInt(u16, out[46..48], .little));
+    try std.testing.expectEqual(init_flag2.has_inode_dax, rd32(&out, 48));
+    try std.testing.expect(s.inode_dax);
+    // Each INIT starts a session and removes each mapping.
+    try std.testing.expectEqual(@as(u32, 1), t.clears);
+
+    // With no window, the server offers no DAX.
+    var fs2: MemFs = .{};
+    var plain = testServer(&fs2, false);
+    defer plain.deinit();
+    try startDaxSession(&plain, &out);
+    try std.testing.expectEqual(@as(u32, 0), rd32(&out, 28) & (init_flag.map_alignment | init_flag.init_ext));
+    try std.testing.expectEqual(@as(u32, 0), rd32(&out, 48));
+}
+
+test "fuse: FUSE_ATTR_DAX for a new file and a large one, and none for a small one" {
+    var fs: MemFs = .{ .made = true };
+    var t: TestDax = .{ .fs = &fs };
+    var s = testServer(&fs, false);
+    defer s.deinit();
+    s.dax = t.dax();
+    var out: [512]u8 = undefined;
+    try startDaxSession(&s, &out);
+    var r = Req.init(op.lookup, 1);
+    _ = s.handle(r.name("a").done(), &out);
+    // "a" has 5 bytes.
+    try std.testing.expectEqual(@as(u32, 0), entryAttrFlags(&out));
+    r = Req.init(op.lookup, 1);
+    _ = s.handle(r.name("d").done(), &out);
+    const d = rd64(&out, 16);
+    // A folder has no DAX.
+    try std.testing.expectEqual(@as(u32, 0), entryAttrFlags(&out));
+    r = Req.init(op.lookup, d);
+    _ = s.handle(r.name("n").done(), &out);
+    // "d/n" has 0 bytes.
+    try std.testing.expectEqual(attr_dax, entryAttrFlags(&out));
+    fs.len = dax_min;
+    r = Req.init(op.lookup, 1);
+    _ = s.handle(r.name("a").done(), &out);
+    try std.testing.expectEqual(attr_dax, entryAttrFlags(&out));
+}
+
+test "fuse: SETUPMAPPING by node opens the file for the setup, and REMOVEMAPPING" {
+    var fs: MemFs = .{};
+    var t: TestDax = .{ .fs = &fs };
+    var s = testServer(&fs, false);
+    defer s.deinit();
+    s.dax = t.dax();
+    var out: [512]u8 = undefined;
+    try startDaxSession(&s, &out);
+    var r = Req.init(op.lookup, 1);
+    _ = s.handle(r.name("a").done(), &out);
+    const a = rd64(&out, 16);
+
+    // An fh of all ones: the server opens "a" for the setup, and closes it.
+    r = Req.init(op.setupmapping, a);
+    var n = s.handle(r.u64_(std.math.maxInt(u64)).u64_(0).u64_(2 << 20).u64_(2).u64_(0).done(), &out);
+    try std.testing.expectEqual(@as(i32, 0), try replyStatus(&out, n));
+    try std.testing.expectEqual(@as(usize, out_header_len), n);
+    try std.testing.expectEqual(@as(u32, 1), t.setups);
+    try std.testing.expectEqual(@as(u64, 2), t.last_fh);
+    try std.testing.expectEqual(a, t.last_node);
+    try std.testing.expect(!t.last_write);
+    try std.testing.expectEqual(@as(u32, 1), t.opens_at_setup);
+    try std.testing.expectEqual(@as(u32, 0), fs.opens);
+    // The guest has no open handle of "a", so the mapping starts idle.
+    try std.testing.expectEqual(@as(u32, 1), t.idles);
+
+    // An offset that is not a multiple of 64 KiB, and a range past the window.
+    r = Req.init(op.setupmapping, a);
+    n = s.handle(r.u64_(7).u64_(4096).u64_(2 << 20).u64_(2).u64_(0).done(), &out);
+    try std.testing.expectEqual(-@as(i32, E.INVAL), try replyStatus(&out, n));
+    r = Req.init(op.setupmapping, a);
+    n = s.handle(r.u64_(7).u64_(0).u64_(2 << 20).u64_(2).u64_(1 << 30).done(), &out);
+    try std.testing.expectEqual(-@as(i32, E.INVAL), try replyStatus(&out, n));
+
+    // REMOVEMAPPING of two ranges.
+    r = Req.init(op.removemapping, a);
+    n = s.handle(r.u32_(2).u64_(0).u64_(2 << 20).u64_(2 << 20).u64_(2 << 20).done(), &out);
+    try std.testing.expectEqual(@as(i32, 0), try replyStatus(&out, n));
+    try std.testing.expectEqual(@as(u32, 2), t.removes);
+
+    // A write mapping on a read-only share.
+    var fs2: MemFs = .{};
+    var t2: TestDax = .{ .fs = &fs2 };
+    var ro = testServer(&fs2, true);
+    defer ro.deinit();
+    ro.dax = t2.dax();
+    try startDaxSession(&ro, &out);
+    r = Req.init(op.setupmapping, 1);
+    n = ro.handle(r.u64_(7).u64_(0).u64_(2 << 20).u64_(1).u64_(0).done(), &out);
+    try std.testing.expectEqual(-@as(i32, E.ROFS), try replyStatus(&out, n));
+}
+
+test "fuse: the views of a file go idle at its last release, and go before a size change" {
+    var fs: MemFs = .{};
+    var t: TestDax = .{ .fs = &fs };
+    var s = testServer(&fs, false);
+    defer s.deinit();
+    s.dax = t.dax();
+    var out: [512]u8 = undefined;
+    try startDaxSession(&s, &out);
+    var r = Req.init(op.lookup, 1);
+    _ = s.handle(r.name("a").done(), &out);
+    const a = rd64(&out, 16);
+
+    var fhs: [2]u64 = undefined;
+    for (&fhs) |*fh| {
+        r = Req.init(op.open, a);
+        _ = s.handle(r.u32_(ninep.O.RDONLY).u32_(0).done(), &out);
+        fh.* = rd64(&out, 16);
+    }
+    try std.testing.expectEqual(@as(u32, 1), t.busy);
+    r = Req.init(op.release, a);
+    _ = s.handle(r.u64_(fhs[0]).u32_(0).u32_(0).u64_(0).done(), &out);
+    try std.testing.expectEqual(@as(u32, 0), t.idles);
+    r = Req.init(op.release, a);
+    _ = s.handle(r.u64_(fhs[1]).u32_(0).u32_(0).u64_(0).done(), &out);
+    try std.testing.expectEqual(@as(u32, 1), t.idles);
+
+    // SETATTR of the size, and OPEN with O_TRUNC, drop the views first.
+    r = Req.init(op.setattr, a);
+    _ = r.u32_(1 << 3).u32_(0).u64_(0).u64_(3);
+    r.n += 88 - 24;
+    var n = s.handle(r.done(), &out);
+    try std.testing.expectEqual(@as(i32, 0), try replyStatus(&out, n));
+    try std.testing.expectEqual(@as(u32, 1), t.drops);
+    r = Req.init(op.open, a);
+    n = s.handle(r.u32_(ninep.O.RDWR | ninep.O.TRUNC).u32_(0).done(), &out);
+    try std.testing.expectEqual(@as(u32, 2), t.drops);
+    r = Req.init(op.release, a);
+    _ = s.handle(r.u64_(rd64(&out, 16)).u32_(0).u32_(0).u64_(0).done(), &out);
 }

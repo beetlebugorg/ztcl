@@ -140,6 +140,11 @@ pub const Device = struct {
     queue_sel: u32 = 0,
     queues: [3]Queue = @splat(.{}),
     int_status: u32 = 0,
+    /// Shared memory region 0 (the DAX window of virtio-fs): its guest
+    /// address and its size, with a size of 0 for no region.
+    shm_base: u64 = 0,
+    shm_len: u64 = 0,
+    shm_sel: u32 = 0,
 
     pub fn console(irq: u32, c: Console) Device {
         return .{ .backend = .{ .console = c }, .irq = irq, .features = f_version_1, .nqueues = 2, .config_len = 12 };
@@ -195,6 +200,11 @@ pub const Device = struct {
         return d;
     }
 
+    /// The selected shared memory region, when it exists.
+    fn shm(d: *const Device) ?struct { base: u64, len: u64 } {
+        if (d.shm_sel != 0 or d.shm_len == 0) return null;
+        return .{ .base = d.shm_base, .len = d.shm_len };
+    }
     fn id(d: *const Device) u32 {
         return switch (d.backend) {
             .console => 3,
@@ -237,9 +247,13 @@ pub const Device = struct {
             // buffer.
             0x060 => if (d.backend == .external) int_vring else d.int_status,
             0x070 => d.status,
-            // The shared memory regions (SHMLen and SHMBase): no region, a
-            // length of -1 and a base of all ones.
-            0x0b0, 0x0b4, 0x0b8, 0x0bc => 0xffffffff,
+            // The shared memory regions (SHMLen and SHMBase): region 0 when
+            // the device has one, and for another region a length of -1 and
+            // a base of all ones.
+            0x0b0 => if (d.shm()) |r| @truncate(r.len) else 0xffffffff,
+            0x0b4 => if (d.shm()) |r| @truncate(r.len >> 32) else 0xffffffff,
+            0x0b8 => if (d.shm()) |r| @truncate(r.base) else 0xffffffff,
+            0x0bc => if (d.shm()) |r| @truncate(r.base >> 32) else 0xffffffff,
             else => 0,
         };
         std.mem.writeInt(u32, out[0..4], v, .little);
@@ -286,6 +300,7 @@ pub const Device = struct {
             0x094 => if (qok) setHigh(&q.avail, v),
             0x0a0 => if (qok) setLow(&q.used, v),
             0x0a4 => if (qok) setHigh(&q.used, v),
+            0x0ac => d.shm_sel = v,
             else => {},
         }
     }
@@ -302,6 +317,7 @@ pub const Device = struct {
         d.queue_sel = 0;
         d.queues = @splat(.{});
         d.int_status = 0;
+        d.shm_sel = 0;
     }
 
     /// A notification of the driver for queue `qi`.
