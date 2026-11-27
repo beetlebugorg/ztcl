@@ -26,6 +26,14 @@
 //!
 //! A folder is each prefix of a name that ends at a slash. `glob` matches
 //! each part of a name with `string match`, so `*` stops at a slash.
+//! A stream is a channel of the host, such as a serial port of Web Serial
+//! (`src/wasmweb.zig`). The host adds its name with `addPort`, and `open`
+//! of the name gives a channel. The bytes of the host come in through
+//! `feed`, and a read gives the bytes that are there, as for a pipe. The
+//! output goes to `StreamHost.call` at each flush. `fconfigure` of a
+//! stream also has `-mode`, `-handshake`, `-ttycontrol`, and `-queue`,
+//! which go to the host.
+//!
 //! The host turns the commands on with the `file` capability. With
 //! `writable` false, as in ztcl.wasm, the files are read-only, as the
 //! mount of a native program of `ztcl build` is: `open` for writing
@@ -47,6 +55,18 @@ const globMatch = @import("cmds.zig").globMatch;
 
 pub const mount = "//zipfs:/app/";
 
+/// True in `ztcl-host.wasm`, the only build with streams of the host.
+/// Elsewhere the code of the streams ends at compile time.
+const streams = blk: {
+    const o = @import("build_options");
+    break :blk @hasDecl(o, "wasm_host") and o.wasm_host;
+};
+
+fn streamOf(c: anytype) ?*Stream {
+    if (comptime !streams) return null;
+    return c.stream;
+}
+
 /// The size of the output of a channel with `-buffering full` that goes
 /// to its file or pipe.
 const buffer_size = 4096;
@@ -65,12 +85,35 @@ const Pipe = struct {
     writer: bool = true,
 };
 
+/// The bytes of a stream of the host.
+const Stream = struct {
+    id: u32,
+    data: std.ArrayList(u8) = .empty,
+    /// The bytes before `pos` are read.
+    pos: usize = 0,
+    ended: bool = false,
+    /// True when bytes or the end came after the last run of the readable
+    /// handler. A partial line runs the handler once, as in Tcl.
+    fresh: bool = false,
+    /// The error of the host that ended the stream, or empty.
+    err: []const u8 = "",
+    mode: []const u8 = "",
+};
+
+/// The calls of the channels of streams to the host. `call` gives an
+/// error of the interpreter for an error of the host.
+pub const StreamOp = enum(u32) { write = 10, mode = 11, close = 12, handshake = 13, ttycontrol = 14 };
+pub const StreamHost = struct {
+    call: *const fn (it: *Interp, op: StreamOp, id: u32, data: []const u8) Error!void,
+};
+
 const Chan = struct {
     name: []const u8,
     /// A file of the bundle, for reading.
     fixed: []const u8 = &.{},
     file: ?*File = null,
     pipe: ?*Pipe = null,
+    stream: ?*Stream = null,
     pos: usize = 0,
     readable: bool = true,
     writable: bool = false,
@@ -93,10 +136,69 @@ pub const State = struct {
     chans: std.ArrayList(?Chan) = .empty,
     /// The files in memory, by their name under the mount.
     files: std.StringArrayHashMapUnmanaged(*File) = .empty,
+    /// The streams of the host, by name, after `addPort`.
+    streams: std.StringArrayHashMapUnmanaged(*Stream) = .empty,
+    stream_host: ?*const StreamHost = null,
 
     pub fn deinit(s: *State, a: std.mem.Allocator) void {
         s.chans.deinit(a);
         s.files.deinit(a);
+        s.streams.deinit(a);
+    }
+
+    /// The most bytes that wait in a stream. More input ends the stream
+    /// with an error.
+    pub const stream_max = 1 << 20;
+
+    /// Adds the stream `name` with the id `id` of the host. The streams
+    /// are in the memory of `gpa`, outside the heap of the interpreter,
+    /// because the host feeds them between two runs of a script.
+    pub fn addPort(s: *State, gpa: std.mem.Allocator, name: []const u8, id: u32) std.mem.Allocator.Error!void {
+        if (s.streams.get(name) != null) return;
+        const st = try gpa.create(Stream);
+        st.* = .{ .id = id };
+        try s.streams.put(gpa, try gpa.dupe(u8, name), st);
+    }
+
+    /// Puts bytes of the host into the stream `id`: data (`kind` 0), the
+    /// end (1), or an error that ends it (2, with the message in
+    /// `bytes`). Gives false for an unknown id.
+    pub fn feed(s: *State, gpa: std.mem.Allocator, id: u32, bytes: []const u8, kind: u32) std.mem.Allocator.Error!bool {
+        for (s.streams.values()) |st| {
+            if (st.id != id) continue;
+            if (st.ended) return true;
+            st.fresh = true;
+            switch (kind) {
+                0 => {
+                    // Moves the bytes that wait to the start.
+                    const left = st.data.items.len - st.pos;
+                    std.mem.copyForwards(u8, st.data.items[0..left], st.data.items[st.pos..]);
+                    st.data.items.len = left;
+                    st.pos = 0;
+                    if (left + bytes.len > stream_max) return s.feed(gpa, id, "the input buffer is full", 2);
+                    try st.data.appendSlice(gpa, bytes);
+                },
+                1 => st.ended = true,
+                else => {
+                    st.ended = true;
+                    gpa.free(st.err);
+                    st.err = try gpa.dupe(u8, bytes);
+                },
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /// Empties a stream for the next `open` of its name.
+    fn reset(st: *Stream, gpa: std.mem.Allocator) void {
+        st.data.clearAndFree(gpa);
+        st.pos = 0;
+        st.ended = false;
+        gpa.free(st.err);
+        st.err = "";
+        gpa.free(st.mode);
+        st.mode = "";
     }
 };
 
@@ -187,6 +289,19 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
     return struct {
         const soft: interp.SoftChans = .{ .puts = putsTo, .ready = ready, .serve = serve };
 
+        /// Adds the commands of the streams of the host: the commands of
+        /// `register`, and `flush`, `fblocked`, `fconfigure`, and
+        /// `fileevent`, for a build with no writable files.
+        pub fn registerStreams(it: *Interp) std.mem.Allocator.Error!void {
+            try register(it);
+            if (comptime writable) return;
+            try it.register("flush", flush);
+            try it.register("fblocked", fblocked);
+            try it.register("fconfigure", fconfigure);
+            try it.register("fileevent", fileevent);
+            it.soft_chans = &soft;
+        }
+
         pub fn register(it: *Interp) std.mem.Allocator.Error!void {
             try it.register("source", source);
             try it.register("open", open);
@@ -262,10 +377,14 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             const path = try it.str(argv[1]);
             const mode = if (argv.len >= 3) try it.str(argv[2]) else "r";
             const acc = parseAccess(mode) orelse return it.fail("illegal access mode \"{s}\"", .{mode});
+            const s = stateOf(it);
+            if (comptime streams) if (s.streams.get(path)) |st| {
+                for (s.chans.items) |x| if (x) |c| if (c.stream == st) return it.fail("couldn't open \"{s}\": the port is open", .{path});
+                return .{ .str = try newChan(it, "serial", .{ .name = "", .stream = st, .readable = acc.read, .writable = acc.write }) };
+            };
             if (comptime !writable) {
                 if (acc.write) return it.failCode("POSIX EROFS {read-only file system}", "couldn't open \"{s}\": read-only file system", .{path});
             }
-            const s = stateOf(it);
             var buf: [1024]u8 = undefined;
             const name = normalize(path, &buf) orelse {
                 if (!acc.write) return notFound(it, "open", path);
@@ -296,7 +415,8 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
 
         fn index(it: *Interp, name: []const u8) ?usize {
             const s = stateOf(it);
-            for ([_][]const u8{ "zipfs", "file" }) |p| {
+            const prefixes: []const []const u8 = if (streams) &.{ "zipfs", "file", "serial" } else &.{ "zipfs", "file" };
+            for (prefixes) |p| {
                 if (!std.mem.startsWith(u8, name, p)) continue;
                 const n = std.fmt.parseInt(usize, name[p.len..], 10) catch return null;
                 if (n < s.chans.items.len) {
@@ -328,18 +448,35 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
         /// The bytes that a read of `c` can give now.
         fn input(c: *const Chan) []const u8 {
             if (c.pipe) |p| return p.data.items[p.pos..];
+            if (streamOf(c)) |st| return st.data.items[st.pos..];
             const d = if (c.file) |f| f.data.items else c.fixed;
             return d[@min(c.pos, d.len)..];
         }
 
         fn consume(c: *Chan, n: usize) void {
-            if (c.pipe) |p| p.pos += n else c.pos += n;
+            if (c.pipe) |p| {
+                p.pos += n;
+            } else if (streamOf(c)) |st| {
+                st.pos += n;
+            } else c.pos += n;
         }
 
         /// True when no more bytes can come: a file, or a pipe with no
         /// writer.
         fn ended(c: *const Chan) bool {
+            if (streamOf(c)) |st| return st.ended;
             return if (c.pipe) |p| !p.writer else true;
+        }
+
+        /// The error of the host for a stream that ended with one.
+        fn streamError(it: *Interp, c: *const Chan) Error!void {
+            const st = streamOf(c) orelse return;
+            if (st.err.len > 0 and st.pos == st.data.items.len) return it.fail("error reading \"{s}\": {s}", .{ c.name, st.err });
+        }
+
+        fn host(it: *Interp, c: *const Chan, op: StreamOp, data: []const u8) Error!void {
+            const sh = stateOf(it).stream_host orelse return it.fail("channel \"{s}\": no host for the stream", .{c.name});
+            return sh.call(it, op, streamOf(c).?.id, data);
         }
 
         fn flushOut(it: *Interp, c: *Chan) Error!void {
@@ -352,6 +489,8 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
                 if (end > f.data.items.len) try f.data.resize(a, end);
                 @memcpy(f.data.items[c.pos..end], c.out.items);
                 c.pos = end;
+            } else if (streamOf(c) != null) {
+                try host(it, c, .write, c.out.items);
             } else if (c.pipe) |p| {
                 if (!p.reader) return it.failCode("POSIX EPIPE {broken pipe}", "error writing \"{s}\": broken pipe", .{c.name});
                 if (p.pos == p.data.items.len) {
@@ -385,6 +524,7 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             const n = index(it, name) orelse return false;
             const c = &stateOf(it).chans.items[n].?;
             if (c.on_write != null) return true;
+            if (streamOf(c)) |st| return c.on_read != null and st.fresh;
             return c.on_read != null and (input(c).len > 0 or ended(c));
         }
 
@@ -396,7 +536,11 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
                 const n = index(it, name) orelse return ran;
                 const c = &stateOf(it).chans.items[n].?;
                 const script = if (reading) c.on_read else c.on_write;
-                const due = if (reading) input(c).len > 0 or ended(c) else true;
+                var due = if (reading) input(c).len > 0 or ended(c) else true;
+                if (reading) if (streamOf(c)) |st| {
+                    due = st.fresh;
+                    st.fresh = false;
+                };
                 if (script != null and due) {
                     ran = true;
                     if (try event.runHandler(cur, it, script.?) == .gone) return true;
@@ -411,6 +555,7 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             const nonl = eql(try it.str(argv[1]), "-nonewline");
             if (nonl and argv.len != 3) return it.wrongArgs(usage);
             const c = try readableChan(it, argv[if (nonl) 2 else 1]);
+            try streamError(it, c);
             const in = input(c);
             var end = in.len;
             if (argv.len == 3 and !nonl) {
@@ -430,6 +575,7 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
         fn gets(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (argv.len != 2 and argv.len != 3) return it.wrongArgs("gets channelId ?varName?");
             const c = try readableChan(it, argv[1]);
+            try streamError(it, c);
             const rest = input(c);
             var line: []const u8 = "";
             var got = false;
@@ -475,13 +621,20 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             const c = try find(it, argv[1]);
             const opts = argv[2..];
             const bad = "bad option \"{s}\": should be one of -blocking or -buffering";
+            const bad_port = "bad option \"{s}\": should be one of -blocking, -buffering, -handshake, -mode, -queue, or -ttycontrol";
             if (opts.len == 0) {
+                if (streamOf(c)) |st| return .{ .str = try std.fmt.allocPrint(it.alloc(), "-blocking {d} -buffering {s} -mode {s}", .{ @intFromBool(c.blocking), @tagName(c.buffering), if (st.mode.len > 0) st.mode else "{}" }) };
                 return .{ .str = try std.fmt.allocPrint(it.alloc(), "-blocking {d} -buffering {s}", .{ @intFromBool(c.blocking), @tagName(c.buffering) }) };
             }
             if (opts.len == 1) {
                 const o = try it.str(opts[0]);
                 if (eql(o, "-blocking")) return .{ .int = @intFromBool(c.blocking) };
                 if (eql(o, "-buffering")) return .{ .str = @tagName(c.buffering) };
+                if (streamOf(c)) |st| {
+                    if (eql(o, "-mode")) return .{ .str = st.mode };
+                    if (eql(o, "-queue")) return .{ .str = try std.fmt.allocPrint(it.alloc(), "{d} 0", .{input(c).len}) };
+                    return it.fail(bad_port, .{o});
+                }
                 return it.fail(bad, .{o});
             }
             if (opts.len % 2 != 0) return it.fail("missing value for option \"{s}\"", .{try it.str(opts[opts.len - 1])});
@@ -494,6 +647,19 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
                     const v = try it.str(opts[k + 1]);
                     c.buffering = std.meta.stringToEnum(Buffering, v) orelse return it.failCode("TCL VALUE FCONFIGURE BUFFERING", "bad value for -buffering: must be one of full, line, or none", .{});
                     if (c.buffering == .none) try flushOut(it, c);
+                } else if (streamOf(c)) |st| {
+                    const v = try it.str(opts[k + 1]);
+                    if (eql(o, "-mode")) {
+                        try flushOut(it, c);
+                        try host(it, c, .mode, v);
+                        const m = try gpa.dupe(u8, v);
+                        gpa.free(st.mode);
+                        st.mode = m;
+                    } else if (eql(o, "-handshake")) {
+                        try host(it, c, .handshake, v);
+                    } else if (eql(o, "-ttycontrol")) {
+                        try host(it, c, .ttycontrol, v);
+                    } else return it.fail(bad_port, .{o});
                 } else return it.fail(bad, .{o});
             }
             return Value.empty;
@@ -609,6 +775,10 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             if (c.pipe) |p| {
                 if (c.readable) p.reader = false;
                 if (c.writable) p.writer = false;
+            }
+            if (streamOf(c)) |st| {
+                host(it, c, .close, "") catch {};
+                State.reset(st, gpa);
             }
             if (c.on_read != null or c.on_write != null) event.unwatch(it, c.name);
             s.chans.items[n] = null;

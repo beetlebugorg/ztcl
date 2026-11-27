@@ -39,6 +39,19 @@
 //! `ztcl_web_event` puts the values of the event in place of `%type`,
 //! `%target`, and `%detail` (`%%` is one `%`).
 //!
+//! Web Serial (task 06) gives a port as a channel of `wasmfiles.zig`:
+//!
+//!   web::serial::request ?-filters list? -command script
+//!   web::serial::ports -command script
+//!
+//! The script gets `ok` and the name of a port (for `ports`, a list of
+//! names), or `error` and the message. `open` of the name with `r+` gives
+//! the channel, and `fconfigure -mode` opens the port at its baud. The
+//! host reads the `ReadableStream` of the port into the channel with
+//! `ztcl_web_serial_data`, so `gets`, `read`, and `fileevent readable`
+//! work as for a pipe. A write goes to the `WritableStream` at each
+//! flush.
+//!
 //! The commands exist only after `ztcl_web_allow`, so they are absent by
 //! default and in `ztcl.wasm`.
 //!
@@ -49,6 +62,7 @@ const ztcl = @import("ztcl.zig");
 const Interp = ztcl.Interp;
 const Value = ztcl.Value;
 const Error = ztcl.interp.Error;
+const wasmfiles = @import("wasmfiles.zig");
 
 pub const Op = enum(u32) {
     root = 1,
@@ -59,6 +73,13 @@ pub const Op = enum(u32) {
     call_async = 6,
     on = 7,
     off = 8,
+    serial_request = 9,
+    serial_write = 10,
+    serial_mode = 11,
+    serial_close = 12,
+    serial_handshake = 13,
+    serial_ttycontrol = 14,
+    serial_ports = 15,
 };
 
 /// The names of the substitutions of `web::on`, in the order of the
@@ -188,6 +209,48 @@ pub fn Commands(comptime gpa: std.mem.Allocator) type {
             if (argv.len != 2) return it.wrongArgs("web::release obj");
             _ = try call(it, gpa, .release, try handleOf(it, argv[1]), "", "");
             return Value.empty;
+        }
+
+        fn cmdSerialRequest(it: *Interp, argv: []const Value, _: ?*ztcl.interp.Cmd) Error!Value {
+            const usage = "web::serial::request ?-filters list? -command script";
+            var filters: []const u8 = "";
+            var script: ?[]const u8 = null;
+            var k: usize = 1;
+            while (k + 1 < argv.len) : (k += 2) {
+                const o = try it.str(argv[k]);
+                if (std.mem.eql(u8, o, "-filters")) {
+                    filters = try it.str(argv[k + 1]);
+                } else if (std.mem.eql(u8, o, "-command")) {
+                    script = try it.str(argv[k + 1]);
+                } else return it.fail("bad option \"{s}\": must be -command or -filters", .{o});
+            }
+            if (k != argv.len or script == null) return it.wrongArgs(usage);
+            var out: std.ArrayList(u8) = .empty;
+            try putWord(it.alloc(), &out, script.?);
+            try putWord(it.alloc(), &out, filters);
+            _ = try call(it, gpa, .serial_request, 0, "", out.items);
+            return Value.empty;
+        }
+
+        fn cmdSerialPorts(it: *Interp, argv: []const Value, _: ?*ztcl.interp.Cmd) Error!Value {
+            if (argv.len != 3 or !std.mem.eql(u8, try it.str(argv[1]), "-command")) return it.wrongArgs("web::serial::ports -command script");
+            var out: std.ArrayList(u8) = .empty;
+            try putWord(it.alloc(), &out, try it.str(argv[2]));
+            _ = try call(it, gpa, .serial_ports, 0, "", out.items);
+            return Value.empty;
+        }
+
+        /// The calls of the channels of the ports to the host.
+        fn streamCall(it: *Interp, op: wasmfiles.StreamOp, id: u32, data: []const u8) Error!void {
+            _ = try call(it, gpa, @enumFromInt(@backingInt(op)), @intCast(id), "", data);
+        }
+
+        pub const stream_host: wasmfiles.StreamHost = .{ .call = streamCall };
+
+        /// Adds `web::serial::request` and `web::serial::ports`.
+        pub fn registerSerial(it: *Interp) std.mem.Allocator.Error!void {
+            try it.register("web::serial::request", cmdSerialRequest);
+            try it.register("web::serial::ports", cmdSerialPorts);
         }
 
         pub fn register(it: *Interp) std.mem.Allocator.Error!void {
