@@ -35,9 +35,9 @@
 //!
 //! The address of a freed block can come back for another string, so a
 //! cache that keys a value by its address must not outlive the text.
-//! `script_cache` and `expr_cache` have tables outside the heap. An
-//! entry stays while its text is live, and the mark then keeps its
-//! compiled form. So a collection does not change which run of a script
+//! `script_cache`, `expr_cache`, and `lambda_cache` have tables outside
+//! the heap. An entry stays while its text (or the items of its list) is
+//! live, and the mark then keeps its compiled form. So a collection does not change which run of a script
 //! is its second run, and the step counts stay equal. The text cache is
 //! in the interpreter, so `markInterp` marks its scripts and texts as
 //! roots. The list cache and the tails of `append` hold no state that a
@@ -226,7 +226,7 @@ fn markCaches(root: *Interp, h: *Heap) void {
 
 fn markCache(it: *Interp, h: *Heap) bool {
     var changed = false;
-    inline for (.{ &it.script_cache, &it.expr_cache }) |map| {
+    inline for (.{ &it.script_cache, &it.expr_cache, &it.lambda_cache }) |map| {
         var e = map.iterator();
         while (e.next()) |x| {
             const key = x.key_ptr.*;
@@ -241,7 +241,7 @@ fn markCache(it: *Interp, h: *Heap) bool {
 
 /// Removes each cache entry whose text is dead.
 fn sweepCaches(it: *Interp, h: *Heap) void {
-    inline for (.{ &it.script_cache, &it.expr_cache }) |map| {
+    inline for (.{ &it.script_cache, &it.expr_cache, &it.lambda_cache }) |map| {
         var e = map.iterator();
         while (e.next()) |x| {
             const key = x.key_ptr.*;

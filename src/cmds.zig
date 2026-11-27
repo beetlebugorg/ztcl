@@ -234,8 +234,37 @@ fn cmdUplevel(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     }
     // The frame of the caller is not in the chain of `frame`.
     const keep = [_]usize{ @intFromPtr(saved), @intFromPtr(saved_ns.ptr) };
+    if (i == argv.len - 1 and argv[i] == .list and it.nest != 0) return it.evalWords(argv[i].list.items());
     if (i == argv.len - 1) return it.evalBody(try it.scriptOf(argv, i, cmd), argv, &keep);
+    if (it.nest != 0) if (try joinWords(it, argv[i..])) |words| return it.evalWords(words);
     return it.evalBody(try it.scriptOfValue(.{ .str = try concat(it, argv[i..]) }, null), argv, &keep);
+}
+
+/// The words of the `concat` of `args` when each one is a list, an
+/// integer, or a double: the items of the lists and the numbers, in
+/// order. A number has the string form of one word. Null when an
+/// argument is a string, or when the result has no word. The text path
+/// then parses the `concat` of the texts.
+fn joinWords(it: *Interp, args: []const Value) Error!?[]const Value {
+    var n: usize = 0;
+    for (args) |v| n += switch (v) {
+        .list => |l| l.len,
+        .int, .double => 1,
+        .str => return null,
+    };
+    if (n == 0) return null;
+    const words = try it.alloc().alloc(Value, n);
+    var k: usize = 0;
+    for (args) |v| {
+        if (v == .list) {
+            @memcpy(words[k..][0..v.list.len], v.list.items());
+            k += v.list.len;
+        } else {
+            words[k] = v;
+            k += 1;
+        }
+    }
+    return words;
 }
 
 /// True for a native command whose frame keeps each value across its
@@ -520,19 +549,55 @@ fn stripNs(name: []const u8) []const u8 {
 
 fn cmdApply(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("apply lambdaExpr ?arg ...?");
-    const lambda = try it.list(argv[1]);
-    if (lambda.len < 2 or lambda.len > 3) return it.fail("can't interpret \"{s}\" as a lambda expression", .{try it.str(argv[1])});
-    const p = makeProc(it, lambda[0], lambda[1]) catch |e| {
-        if (e == error.TclError) {
-            it.in_error = true;
-            it.error_info = .empty;
-            try it.error_info.print(it.alloc(), "{s}\n    (parsing lambda expression \"{s}\")", .{ try it.str(it.result), try it.str(argv[1]) });
-        }
-        return e;
+    const p = try lambdaProc(it, argv[1]);
+    const mark = try it.beginProcBody(argv, &.{@intFromPtr(p)});
+    defer it.endProcBody(mark);
+    return it.callLambda(p, argv);
+}
+
+/// The proc of a lambda, from `lambda_cache` or new. The key of a list
+/// is its items, and a hit also needs the same first two items, because
+/// a write in place can change an item. A string does not change. The
+/// namespace check runs on each call, because a script can delete the
+/// namespace. A bad lambda does not go in the table. `makeProc` uses no
+/// compute unit, so a hit and a miss use the same units.
+fn lambdaProc(it: *Interp, lam: Value) Error!*interp.Proc {
+    const key: Interp.SliceKey = switch (lam) {
+        .list => |l| .{ .ptr = @intFromPtr(l.obj.buf.ptr), .len = l.len | Interp.lambda_list_bit },
+        .str => |t| .{ .ptr = @intFromPtr(t.ptr), .len = t.len },
+        else => .{ .ptr = 0, .len = 0 },
+    };
+    var ns_word: ?Value = null;
+    const p = hit: {
+        if (key.len != 0) if (it.lambda_cache.get(key)) |p| {
+            if (lam != .list) {
+                ns_word = p.lambda_ns;
+                break :hit p;
+            }
+            const items = lam.list.items();
+            if (sameValue(items[0], p.params_text) and sameValue(items[1], p.body)) {
+                if (items.len == 3) ns_word = items[2];
+                break :hit p;
+            }
+        };
+        const lambda = try it.list(lam);
+        if (lambda.len < 2 or lambda.len > 3) return it.fail("can't interpret \"{s}\" as a lambda expression", .{try it.str(lam)});
+        const p = makeProc(it, lambda[0], lambda[1]) catch |e| {
+            if (e == error.TclError) {
+                it.in_error = true;
+                it.error_info = .empty;
+                try it.error_info.print(it.alloc(), "{s}\n    (parsing lambda expression \"{s}\")", .{ try it.str(it.result), try it.str(lam) });
+            }
+            return e;
+        };
+        if (lambda.len == 3) ns_word = lambda[2];
+        p.lambda_ns = ns_word;
+        if (key.len != 0) try it.lambda_cache.put(it.heap.backing, key, p);
+        break :hit p;
     };
     p.ns = "";
-    if (lambda.len == 3) {
-        const raw = try it.str(lambda[2]);
+    if (ns_word) |w| {
+        const raw = try it.str(w);
         const space = std.mem.trim(u8, raw, ":");
         if (space.len > 0 and !it.namespaces.contains(space)) {
             // Tcl names the namespace of a lambda from the global one.
@@ -541,9 +606,18 @@ fn cmdApply(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }
         p.ns = try it.internNs(space);
     }
-    const mark = try it.beginProcBody(argv, &.{@intFromPtr(p)});
-    defer it.endProcBody(mark);
-    return it.callLambda(p, argv);
+    return p;
+}
+
+/// True when two values are the same bits: the same number, or the same
+/// bytes or items at the same address.
+fn sameValue(a: Value, b: Value) bool {
+    return switch (a) {
+        .int => |x| b == .int and b.int == x,
+        .double => |x| b == .double and @as(u64, @bitCast(b.double)) == @as(u64, @bitCast(x)),
+        .str => |x| b == .str and b.str.ptr == x.ptr and b.str.len == x.len,
+        .list => |x| b == .list and b.list.obj == x.obj and b.list.len == x.len,
+    };
 }
 
 fn cmdRename(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
@@ -888,6 +962,7 @@ fn cmdEval(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     // A list value has its words already, as in Tcl: no text, no parse.
     if (argv.len == 2 and argv[1] == .list and it.nest != 0) return it.evalWords(argv[1].list.items());
     if (argv.len == 2) return it.evalBody(try it.scriptOf(argv, 1, cmd), argv, &.{});
+    if (it.nest != 0) if (try joinWords(it, argv[1..])) |words| return it.evalWords(words);
     return it.evalBody(try it.scriptOfValue(.{ .str = try concat(it, argv[1..]) }, null), argv, &.{});
 }
 
