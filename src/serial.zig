@@ -145,7 +145,7 @@ const posix = struct {
         }
         if (!on_linux) return 38;
         const rc = linux.ioctl(fd, linux_req, arg);
-        return @intFromEnum(linux.errno(rc));
+        return @backingInt(linux.errno(rc));
     }
 
     fn getAttr(fd: i32) ?Termios {
@@ -386,7 +386,7 @@ fn parseMode(it: *Interp, text: []const u8) Error!Mode {
 }
 
 fn errorOf(it: *Interp, what: []const u8, code: u16) Error {
-    if (comptime on_linux or on_mac) return ztcl.fsroot.posixError(it, @enumFromInt(code), what);
+    if (comptime on_linux or on_mac) return ztcl.fsroot.posixError(it, @fromBackingInt(@intCast(code)), what);
     return it.fail("{s}error {d}", .{ what, code });
 }
 
