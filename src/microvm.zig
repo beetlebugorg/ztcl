@@ -2193,6 +2193,9 @@ const win = if (on_whp) struct {
         /// The shares are virtio-fs in the place of 9p (`ZTCL_VM_VIRTIOFS=1`,
         /// the first step of `docs/dev/virtiofs.md`).
         virtiofs: bool = false,
+        /// Each virtio-fs share has a DAX window (`ZTCL_VM_DAX=1`, step 3 of
+        /// the plan).
+        dax: bool = false,
         /// The end of the console pair that the pump has, and the end of
         /// the script, until `console` gives it as a channel.
         console_vm: i32,
@@ -2487,6 +2490,7 @@ const win = if (on_whp) struct {
         // The root folder of each share, in the file jail.
         if (g.disks.len + shares.items.len > whp.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{whp.max_disks});
         g.virtiofs = envOn("ZTCL_VM_VIRTIOFS");
+        g.dax = g.virtiofs and envOn("ZTCL_VM_DAX");
         g.shares = try ga.alloc(whp.Share, shares.items.len);
         for (g.shares) |*sh| sh.fd = -1;
         for (shares.items, g.shares) |d, *out| out.* = .{ .fd = try jailDir(it, d.path), .read_only = !d.rw };
@@ -2757,6 +2761,7 @@ const win = if (on_whp) struct {
             .disks = g.disks,
             .shares = g.shares,
             .virtiofs = g.virtiofs,
+            .dax = g.dax,
             .entropy = entropy,
             .console = .{ .ctx = g, .write = consoleWrite },
             .vsock = .{ .ctx = g, .data = streamData, .event = streamEvent },

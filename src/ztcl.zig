@@ -134,6 +134,7 @@ test {
     if (@import("builtin").os.tag == .windows) _ = @import("sys_windows.zig");
     _ = @import("vm/virtio/ninep.zig");
     _ = @import("vm/virtio/fuse.zig");
+    if (@import("builtin").os.tag == .windows) _ = @import("vm/dax_windows.zig");
     _ = @import("vm/nat/nat.zig");
     _ = @import("vm/virtio/net.zig");
     _ = @import("vm/nat/engine.zig");

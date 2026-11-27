@@ -46,7 +46,8 @@ const Mem = virtio.Mem;
 const Device = virtio.Device;
 const ninep = @import("vm/virtio/ninep.zig");
 const share_windows = @import("vm/share_windows.zig");
-const NinepState = struct { share: share_windows.Share, server: ninep.Server, fs: fuse.Server = undefined };
+const NinepState = struct { share: share_windows.Share, server: ninep.Server, fs: fuse.Server = undefined, window: ?dax_windows.Window = null };
+const dax_windows = @import("vm/dax_windows.zig");
 const fuse = @import("vm/virtio/fuse.zig");
 
 pub const supported = builtin.os.tag == .windows and builtin.cpu.arch == .x86_64;
@@ -95,6 +96,8 @@ pub const Config = struct {
     /// The shares are virtio-fs devices (`vm/virtio/fuse.zig`) in the place
     /// of 9p.
     virtiofs: bool = false,
+    /// Each virtio-fs share has a DAX window (`vm/dax_windows.zig`).
+    dax: bool = false,
     /// A virtio entropy device, after the disks and the shares.
     entropy: bool = false,
     console: ConsoleOut,
@@ -402,6 +405,7 @@ fn teardown(m: *Machine) void {
     for (m.ninep_state) |*n| {
         n.server.deinit();
         if (m.cfg.virtiofs) n.fs.deinit();
+        if (n.window) |*win| win.deinit();
     }
     if (m.ninep_state.len != 0) m.alloc.free(m.ninep_state);
     m.ninep_state = &.{};
@@ -542,6 +546,7 @@ fn makeDevices(m: *Machine) Fail!void {
     m.ninep_state = try m.alloc.alloc(NinepState, m.cfg.shares.len);
     for (m.cfg.shares, m.ninep_state, 0..) |sh, *st, i| {
         st.share = .{ .root = sh.fd, .read_only = sh.read_only };
+        st.window = null;
         st.server = ninep.Server.init(std.heap.smp_allocator, st.share.fs());
         var tag_buf: [16]u8 = undefined;
         const tag = std.fmt.bufPrint(&tag_buf, "share{d}", .{i}) catch unreachable;
@@ -549,6 +554,13 @@ fn makeDevices(m: *Machine) Fail!void {
         if (m.cfg.virtiofs) {
             st.fs = fuse.Server.init(std.heap.smp_allocator, st.share.fs());
             m.devices[k] = Device.virtiofs(irqs[k], &st.fs, tag);
+            if (m.cfg.dax) {
+                const gpa = dax_windows.base + dax_windows.window_size * i;
+                st.window = .{ .alloc = std.heap.smp_allocator, .part = m.part.?, .gpa = gpa, .lock = &m.devices[k].lock };
+                st.fs.dax = st.window.?.dax();
+                m.devices[k].shm_base = gpa;
+                m.devices[k].shm_len = dax_windows.window_size;
+            }
         } else m.devices[k] = Device.ninep(irqs[k], &st.server, tag);
     }
     if (m.cfg.entropy) m.devices[n - 1] = Device.rng(irqs[n - 1], fillRandom);
@@ -675,6 +687,26 @@ fn diskFlush(ctx: *anyopaque) void {
 // ---------------------------------------------------------------------
 // The vCPU threads
 
+/// A memory exit in a DAX window where a mapping lost its view, or a file
+/// grew past it: the window maps the view again, and the vCPU runs the
+/// instruction again on the memory, with no emulation. False for an
+/// access that stays with the emulator: outside each window, past the end
+/// of a file, or a store to a read-only mapping. `data` is the
+/// WHV_MEMORY_ACCESS_CONTEXT: the access type in the low bits of the word
+/// at 20, and the guest address at 24.
+fn daxRemap(m: *Machine, data: *const [176]u8) bool {
+    const gpa = std.mem.readInt(u64, data[24..32], .little);
+    if (gpa < dax_windows.base) return false;
+    const i = (gpa - dax_windows.base) / dax_windows.window_size;
+    if (i >= m.ninep_state.len) return false;
+    const win = if (m.ninep_state[@intCast(i)].window) |*w| w else return false;
+    const write = std.mem.readInt(u32, data[20..24], .little) & 3 == 1;
+    const d = &m.devices[2 + m.cfg.disks.len + @as(usize, @intCast(i))];
+    d.lock.lock();
+    defer d.lock.unlock();
+    return win.remap(gpa - win.gpa, write);
+}
+
 fn vcpuMain(v: *Vcpu) void {
     const m = v.machine;
     const p = m.part.?;
@@ -694,7 +726,9 @@ fn vcpuMain(v: *Vcpu) void {
         var status: u32 = 1;
         switch (ctx.reason) {
             exit_io => _ = WHvEmulatorTryIoEmulation(v.emu.?, v, &ctx.vp, &ctx.data, &status),
-            exit_memory => _ = WHvEmulatorTryMmioEmulation(v.emu.?, v, &ctx.vp, &ctx.data, &status),
+            exit_memory => if (!m.daxRemap(&ctx.data)) {
+                _ = WHvEmulatorTryMmioEmulation(v.emu.?, v, &ctx.vp, &ctx.data, &status);
+            },
             exit_halt, exit_canceled => {},
             exit_unrecoverable => return m.guestEnd(""), // a triple fault: a reboot of the guest
             exit_invalid_registers => return m.guestEnd("the registers of a vCPU are not valid"),
@@ -768,6 +802,28 @@ fn memoryCallback(ctx: ?*anyopaque, acc: *MemoryAccess) callconv(.winapi) HRESUL
         d.lock.lock();
         defer d.lock.unlock();
         if (write) d.write(&h, off, acc.data[0..len]) else d.read(off, acc.data[0..len]);
+        return 0;
+    }
+    // The RAM of the guest: the other side of an emulated `movs` with one
+    // side in a device or a window.
+    if (acc.gpa + len <= m.mem.size) {
+        const at: usize = @intCast(acc.gpa);
+        if (write) @memcpy(m.mem.base[at..][0..len], acc.data[0..len]) else @memcpy(acc.data[0..len], m.mem.base[at..][0..len]);
+        return 0;
+    }
+    // A DAX window of virtio-fs where the hypervisor has no map: the
+    // window maps the view again (`dax_windows.Window.fault`), under the
+    // lock of its device. Past each window, zeros.
+    if (acc.gpa >= dax_windows.base) {
+        const i = (acc.gpa - dax_windows.base) / dax_windows.window_size;
+        if (i < m.ninep_state.len) if (m.ninep_state[@intCast(i)].window) |*win| {
+            const d = &m.devices[2 + m.cfg.disks.len + @as(usize, @intCast(i))];
+            d.lock.lock();
+            defer d.lock.unlock();
+            win.fault(acc.gpa - win.gpa, write, acc.data[0..len]);
+            return 0;
+        };
+        if (!write) @memset(&acc.data, 0);
         return 0;
     }
     if (!write) @memset(&acc.data, 0xff);
