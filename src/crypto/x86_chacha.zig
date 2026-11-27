@@ -6,10 +6,13 @@
 //! transpose of the two 8 by 8 halves gives the key stream of each
 //! block. A rotation by 16 or 8 bits is a byte shuffle.
 //!
-//! Poly1305 is scalar, with two 64-bit limbs and a third small limb and
-//! 64 by 64 bit products. The loop of `seal` and `open` encrypts 512
-//! bytes and runs Poly1305 over 512 bytes of ciphertext in the same
-//! step, so the vector units and the multiplier work at the same time.
+//! Poly1305 of whole steps of 512 bytes runs 4 blocks at a time in AVX2,
+//! with five limbs of 26 bits and 32 by 32 bit products (VPMULUDQ), and
+//! the powers r^1 to r^4 (Goll and Gueron, "Vectorization of
+//! Poly1305 Message Authentication Code"). The rest is scalar, with two
+//! 64-bit limbs and a third small limb. The loop of `seal` and `open`
+//! encrypts 512 bytes and hashes 512 bytes of ciphertext in the same
+//! step.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -82,8 +85,8 @@ inline fn blocks8(s: *const State, out: *[512]u8) void {
     @setEvalBranchQuota(100_000);
     var x: [16]V8 = undefined;
     inline for (0..16) |i| x[i] = @splat(s[i]);
-    x[12] +%= V8{ 0, 1, 2, 3, 4, 5, 6, 7 };
-    const x0 = x;
+    const lanes = V8{ 0, 1, 2, 3, 4, 5, 6, 7 };
+    x[12] +%= lanes;
     inline for (0..10) |_| {
         quarter(&x, 0, 4, 8, 12);
         quarter(&x, 1, 5, 9, 13);
@@ -94,7 +97,10 @@ inline fn blocks8(s: *const State, out: *[512]u8) void {
         quarter(&x, 2, 7, 8, 13);
         quarter(&x, 3, 4, 9, 14);
     }
-    inline for (0..16) |i| x[i] +%= x0[i];
+    // The input words again from `s`: a broadcast from memory, so the
+    // rounds have each of the 16 vector registers.
+    inline for (0..16) |i| x[i] +%= @as(V8, @splat(s[i]));
+    x[12] +%= lanes;
     const lo = transpose(x[0..8].*);
     const hi = transpose(x[8..16].*);
     inline for (0..8) |j| {
@@ -197,6 +203,174 @@ const Poly = struct {
     }
 };
 
+const V4 = @Vector(4, u64);
+const L = [5]V4;
+const m26: u64 = 0x3ffffff;
+
+/// A field element in five limbs of 26 bits.
+fn to26(h0: u64, h1: u64, h2: u64) [5]u64 {
+    return .{ h0 & m26, (h0 >> 26) & m26, ((h0 >> 52) | (h1 << 12)) & m26, (h1 >> 14) & m26, (h1 >> 40) | (h2 << 24) };
+}
+
+/// The product of two elements in limbs of 26 bits, modulo 2^130 - 5,
+/// with each limb below 2^26 plus a small carry.
+fn mul26(a: [5]u64, b: [5]u64) [5]u64 {
+    var av: L = undefined;
+    var bv: L = undefined;
+    for (0..5) |i| {
+        av[i] = @splat(a[i]);
+        bv[i] = @splat(b[i]);
+    }
+    const r = mulv(av, bv, five(bv));
+    var out: [5]u64 = undefined;
+    for (0..5) |i| out[i] = r[i][0];
+    return out;
+}
+
+inline fn five(r: L) L {
+    var s: L = undefined;
+    inline for (0..5) |i| s[i] = r[i] * @as(V4, @splat(5));
+    return s;
+}
+
+/// Lane by lane: h * r modulo 2^130 - 5, with a carry pass. `s` is 5 * r.
+/// Each input limb is below 2^27 and each limb of r below 2^26, so each
+/// sum of five products is below 2^58.
+inline fn mulv(h: L, r: L, s: L) L {
+    const lo: V4 = @splat(0xffffffff);
+    var d: L = undefined;
+    // d[k] = sum over i + j = k of h[i] r[j], with 5 r[j] for the wrap.
+    inline for (0..5) |k| {
+        var acc: V4 = @splat(0);
+        inline for (0..5) |i| {
+            const j = (k + 5 - i) % 5;
+            const t = (h[i] & lo) * ((if (j > k) s[j] else r[j]) & lo);
+            acc +%= t;
+        }
+        d[k] = acc;
+    }
+    return carry(d);
+}
+
+/// A carry pass in two chains at a time: 0 to 1 and 3 to 4, then 1 to 2
+/// and 4 to 0, then 2 to 3 and 0 to 1, then 3 to 4. Each limb ends below
+/// 2^26 plus a small carry.
+inline fn carry(d0: L) L {
+    var d = d0;
+    const m: V4 = @splat(m26);
+    const sh: @Vector(4, u6) = @splat(26);
+    var a = d[0] >> sh;
+    var b = d[3] >> sh;
+    d[0] &= m;
+    d[3] &= m;
+    d[1] +%= a;
+    d[4] +%= b;
+    a = d[1] >> sh;
+    b = d[4] >> sh;
+    d[1] &= m;
+    d[4] &= m;
+    d[2] +%= a;
+    d[0] +%= b + (b << @splat(2));
+    a = d[2] >> sh;
+    b = d[0] >> sh;
+    d[2] &= m;
+    d[0] &= m;
+    d[3] +%= a;
+    d[1] +%= b;
+    a = d[3] >> sh;
+    d[3] &= m;
+    d[4] +%= a;
+    return d;
+}
+
+/// Poly1305 over 4 blocks at a time: lane j of `h` has the blocks j,
+/// j + 4, j + 8, and so on. Each step is h = h * r^4 + m. The end
+/// multiplies the lanes by r^4, r^3, r^2, and r, and adds them.
+const PolyV = struct {
+    h: L,
+    r4: L,
+    s4: L,
+    rl: L,
+    sl: L,
+    /// The scalar state, for the first 4 blocks.
+    start: [5]u64,
+    first: bool = true,
+
+    fn init(p: *const Poly) PolyV {
+        const r = to26(p.r0, p.r1, 0);
+        const r2 = mul26(r, r);
+        const r3 = mul26(r2, r);
+        const r4 = mul26(r2, r2);
+        var v: PolyV = .{ .h = undefined, .r4 = undefined, .s4 = undefined, .rl = undefined, .sl = undefined, .start = to26(p.h0, p.h1, p.h2) };
+        for (0..5) |i| {
+            v.r4[i] = @splat(r4[i]);
+            v.rl[i] = .{ r4[i], r3[i], r2[i], r[i] };
+        }
+        v.s4 = five(v.r4);
+        v.sl = five(v.rl);
+        return v;
+    }
+
+    /// The limbs of 4 blocks of 16 bytes, with the bit 2^128 set.
+    inline fn load(b: *const [64]u8) L {
+        const a: V4 = @bitCast(@as(@Vector(32, u8), b[0..32].*));
+        const c: V4 = @bitCast(@as(@Vector(32, u8), b[32..64].*));
+        const lo = @shuffle(u64, a, c, [4]i32{ 0, 2, -1, -3 });
+        const hi = @shuffle(u64, a, c, [4]i32{ 1, 3, -2, -4 });
+        const m: V4 = @splat(m26);
+        const S = @Vector(4, u6);
+        return .{
+            lo & m,
+            (lo >> @as(S, @splat(26))) & m,
+            ((lo >> @as(S, @splat(52))) | (hi << @as(S, @splat(12)))) & m,
+            (hi >> @as(S, @splat(14))) & m,
+            (hi >> @as(S, @splat(40))) | @as(V4, @splat(1 << 24)),
+        };
+    }
+
+    inline fn absorb(v: *PolyV, b: *const [64]u8) void {
+        const m = load(b);
+        const t = mulv(v.h, v.r4, v.s4);
+        inline for (0..5) |i| v.h[i] = t[i] +% m[i];
+    }
+
+    fn absorb512(v: *PolyV, b: *const [512]u8) void {
+        if (v.first) {
+            // The first 4 blocks, with the scalar state added to block 0.
+            v.first = false;
+            v.h = load(b[0..64]);
+            inline for (0..5) |i| v.h[i][0] +%= v.start[i];
+            inline for (1..8) |k| v.absorb(b[64 * k ..][0..64]);
+            return;
+        }
+        inline for (0..8) |k| v.absorb(b[64 * k ..][0..64]);
+    }
+
+    /// Writes the sum back to the scalar state.
+    fn finish(v: *const PolyV, p: *Poly) void {
+        if (v.first) return;
+        const t = mulv(v.h, v.rl, v.sl);
+        var l: [5]u64 = undefined;
+        for (0..5) |i| l[i] = @reduce(.Add, t[i]);
+        // A full carry pass: each limb below 2^26, the last one too.
+        inline for (0..2) |_| {
+            l[1] += l[0] >> 26;
+            l[0] &= m26;
+            l[2] += l[1] >> 26;
+            l[1] &= m26;
+            l[3] += l[2] >> 26;
+            l[2] &= m26;
+            l[4] += l[3] >> 26;
+            l[3] &= m26;
+            l[0] += (l[4] >> 26) * 5;
+            l[4] &= m26;
+        }
+        p.h0 = l[0] | (l[1] << 26) | (l[2] << 52);
+        p.h1 = (l[2] >> 12) | (l[3] << 14) | (l[4] << 40);
+        p.h2 = l[4] >> 24;
+    }
+};
+
 fn polyKey(key: *const [32]u8, nonce: *const [12]u8) Poly {
     const s = initState(key, nonce, 0);
     var ks: [512]u8 = undefined;
@@ -223,15 +397,17 @@ pub fn seal(key: *const [32]u8, dst: []u8, tag: *[16]u8, src: []const u8, extra:
     var s = initState(key, nonce, 1);
     var i: usize = 0;
     if (src.len >= 512) {
+        var v = PolyV.init(&p);
         xor8(&s, dst[0..512], src[0..512]);
         s[12] +%= 8;
         i = 512;
         while (i + 512 <= src.len) : (i += 512) {
             xor8(&s, dst[i..][0..512], src[i..][0..512]);
             s[12] +%= 8;
-            p.blocks(dst[i - 512 ..][0..512]);
+            v.absorb512(dst[i - 512 ..][0..512]);
         }
-        p.blocks(dst[i - 512 ..][0..512]);
+        v.absorb512(dst[i - 512 ..][0..512]);
+        v.finish(&p);
     }
     // The rest of `src` and then `extra`, in a buffer when `extra` has
     // bytes.
@@ -261,11 +437,13 @@ pub fn open(key: *const [32]u8, dst: []u8, src: []const u8, tag: *const [16]u8, 
     p.padded(ad);
     var s = initState(key, nonce, 1);
     var i: usize = 0;
+    var v = PolyV.init(&p);
     while (i + 512 <= src.len) : (i += 512) {
-        p.blocks(src[i..][0..512]);
+        v.absorb512(src[i..][0..512]);
         xor8(&s, dst[i..][0..512], src[i..][0..512]);
         s[12] +%= 8;
     }
+    v.finish(&p);
     p.padded(src[i..]);
     if (i < src.len) xorTail(&s, dst[i..src.len], src[i..]);
     const t = p.final(ad.len, src.len);

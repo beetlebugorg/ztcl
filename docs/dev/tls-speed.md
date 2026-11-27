@@ -20,7 +20,7 @@ Intel Core i7-6700K at 4.00 GHz (AES-NI, PCLMULQDQ, AVX2; no VAES, no AVX-512), 
 |---|---:|---:|---:|---:|---:|---:|
 | AES-128-GCM | 3,474 | 2,791 | 3,485 | 3,476 | 3,457 | 3,538 |
 | AES-256-GCM | 2,830 | 2,350 | 2,871 | 2,850 | 2,878 | 2,943 |
-| ChaCha20-Poly1305 | 1,239 | 1,151 | | | | 1,812 |
+| ChaCha20-Poly1305 | 1,382 | 1,251 | | | | 1,830 |
 
 2026-11-27, before (`std.crypto` for each AEAD, the clock read for each record):
 
@@ -38,7 +38,7 @@ With `-Dcpu=x86_64_v3`, AES-128-GCM was 51 MB/s: the x86-64-v3 level of Zig has 
 - build.zig now compiles `src/crypto/x86_avx2.zig` and `src/crypto/arm_aes.zig` as modules with more CPU features than the target. A module has its own `-mcpu`, and LLVM gives each function the features of its module, so one binary has both the baseline code and the AES-NI code. `src/tls/aead.zig` reads CPUID once and picks the code. The baseline build and the native build now have the same AES-GCM speed.
 - AES-GCM alone is at 98 percent of OpenSSL on this CPU. The loop encrypts 8 blocks and folds 8 blocks into GHASH with one reduction in each step, in one pass over the data.
 - The record `seal` of AES-GCM reads the content where it is: the content type and the padding go to the AEAD as a second input of at most 256 bytes. The record `open` is about 20 percent slower than the AEAD alone: it decrypts into a second buffer and then scans for the content type. The scan now compares 32 bytes at a time.
-- ChaCha20-Poly1305 runs 8 blocks of ChaCha20 in AVX2 and a scalar Poly1305 with 64-bit limbs in the same loop step: 1,239 MB/s in the baseline build, up from 373 with `std.crypto`, and 68 percent of OpenSSL. Poly1305 alone in `std.crypto` is about 3,200 MB/s on this CPU. The next gain is a Poly1305 with AVX2 limbs, and a key block of one block in place of 8.
+- ChaCha20-Poly1305 runs 8 blocks of ChaCha20 in AVX2 and a Poly1305 of 4 blocks at a time in AVX2 in the same loop step: 1,382 MB/s in the baseline build, up from 373 with `std.crypto`, and 75 percent of OpenSSL. With `perf stat`, the seal of 16,384 bytes alone is 1.8 cycles per byte for ChaCha20 and 1.0 for Poly1305 on this shared CPU; OpenSSL ChaCha20 alone is 2,930 MB/s. The ChaCha20 loop spills vector registers, and the key of Poly1305 costs 8 blocks of ChaCha20 for each record.
 
 ## Plan
 
@@ -47,7 +47,7 @@ In order of the gain for each change. Each step has its own PR with the bench nu
 1. Done. Runtime CPU dispatch. The AEAD code reads CPUID (x86-64) or the HWCAP bits (aarch64 Linux, always on for aarch64 macOS) once, and calls the AES-NI and PCLMUL code in a baseline build.
 2. Done for AES-NI with 128-bit vectors; the VAES path is open. Own AES-GCM for x86-64: 8 blocks of AES-NI in flight, GHASH with PCLMULQDQ on 4 to 8 blocks with one reduction (the aggregated reduction of the Intel white paper on GCM), encrypt and GHASH in one pass over the data, and the tag check in the same pass as the decrypt for `open`. A VAES and VPCLMULQDQ path with 256-bit and 512-bit vectors for CPUs that have them. Target: the OpenSSL column.
 3. Code done in `src/crypto/arm_aes.zig`; it passes the tests in QEMU (`qemu-aarch64-static`), and has no speed number on real hardware yet. AES-GCM on aarch64 with the ARMv8 crypto extensions (AESE, AESMC, PMULL), the same pipelining.
-4. AVX2 ChaCha20 done, with a scalar Poly1305. Open: NEON on aarch64, and Poly1305 with vector limbs. ChaCha20-Poly1305 with 4 and 8 blocks at a time in AVX2 (and NEON on aarch64), and Poly1305 with vector limbs.
+4. AVX2 ChaCha20 and AVX2 Poly1305 done. Open: NEON on aarch64, fewer spills, and one block for the Poly1305 key. ChaCha20-Poly1305 with 4 and 8 blocks at a time in AVX2 (and NEON on aarch64), and Poly1305 with vector limbs.
 5. Records with no copies: seal in place in the send buffer, open in place in the receive buffer, and several records in one write.
 6. io_uring: registered buffers, multishot recv with provided buffers, and `send_zc` for large writes. Measure each one, and keep only the ones that gain.
 7. kTLS on Linux (`setsockopt(TCP_ULP, "tls")` and `TLS_TX`/`TLS_RX`) after the handshake, as an option: the kernel does the record layer, and `sendfile` works on a TLS socket. It needs the kernel module `tls`; with no module, the code stays in user space.
