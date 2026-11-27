@@ -437,6 +437,36 @@ pub const Store = struct {
         return out.toOwnedSlice(a);
     }
 
+    /// A new folder of tmp/ for a download. `Temp.remove` takes it away.
+    pub fn tempDir(s: Store, a: Allocator) Error!Temp {
+        const rel = try s.tmpName(a);
+        errdefer a.free(rel);
+        try mkdirs(a, s.fd, rel);
+        const p = try parent(a, s.fd, rel);
+        defer p.close(a);
+        const rc = os.openat(p.fd, p.base, nofollow_dir, 0);
+        if (!ok(rc)) return error.Io;
+        return .{ .fd = @intCast(rc), .rel = rel };
+    }
+
+    /// The name, the counter, and the files of this architecture of the
+    /// signed manifest in the folder `dir`, before an install.
+    pub fn peek(s: Store, a: Allocator, dir: i32) Error!struct { name: []u8, counter: u64, files: [][]u8 } {
+        _ = s;
+        const manifest = try readAll(a, dir, "manifest.json", 1 << 20);
+        defer a.free(manifest);
+        const sig = try readAll(a, dir, "manifest.json.sig", 1 << 16);
+        defer a.free(sig);
+        var c = try vmimage.verify(a, manifest, sig, 0, true);
+        defer c.deinit();
+        const x = c.parsed.value.archs.map.get(host_arch) orelse return error.Missing;
+        var files: std.ArrayList([]u8) = .empty;
+        try files.append(a, try a.dupe(u8, x.kernel.file));
+        if (x.initrd) |f| try files.append(a, try a.dupe(u8, f.file));
+        for (x.disks) |d| try files.append(a, try a.dupe(u8, d.file));
+        return .{ .name = try a.dupe(u8, c.parsed.value.name), .counter = c.parsed.value.counter, .files = try files.toOwnedSlice(a) };
+    }
+
     /// Removes a release, or each release of `name` when `counter` is
     /// null, then each object that no release names.
     pub fn remove(s: Store, a: Allocator, name: []const u8, counter: ?u64) Error!void {
@@ -502,6 +532,37 @@ pub const Store = struct {
             defer a.free(p);
             unlink(a, s.fd, p, false);
         };
+    }
+};
+
+/// A folder of tmp/ of the store, for a download.
+pub const Temp = struct {
+    fd: i32,
+    rel: []u8,
+
+    /// A new file in the folder, for the bytes of a download.
+    pub fn create(t: Temp, a: Allocator, name: []const u8) Error!i32 {
+        if (std.mem.indexOfScalar(u8, name, '/') != null) return error.BadManifest;
+        const nz = try z(a, name);
+        defer a.free(nz);
+        const rc = os.openat(t.fd, nz, .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true, .NOFOLLOW = true, .CLOEXEC = true }, 0o644);
+        if (!ok(rc)) return error.Io;
+        return @intCast(rc);
+    }
+
+    /// Removes the folder and its files.
+    pub fn remove(t: Temp, a: Allocator, s: Store) void {
+        if (listDir(a, s.fd, t.rel)) |names| {
+            for (names) |n| {
+                const nz = z(a, n) catch continue;
+                defer a.free(nz);
+                _ = os.unlinkat(t.fd, nz, 0);
+            }
+            freeList(a, names);
+        } else |_| {}
+        _ = os.close(t.fd);
+        unlink(a, s.fd, t.rel, true);
+        a.free(t.rel);
     }
 };
 

@@ -561,6 +561,10 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
     it.output = .{ .ctx = out, .write = write };
     it.mem_limit = 2 << 30;
     it.vm_host.image_store = imageStore(h.gpa, h.env) catch "";
+    if (h.io != null) {
+        it.vm_host.fetch = vmFetch;
+        it.vm_host.fetch_ctx = @ptrCast(@constCast(h));
+    }
     // The runner starts the child process of an isolated thread.
     if (comptime tcl.isothread.supported) it.iso_runner = std.process.executablePathAlloc(h.io.?, arena) catch null;
     if (setup) |f| try f(&it);
@@ -913,4 +917,19 @@ fn imageStore(a: std.mem.Allocator, env: anytype) ![]const u8 {
     if (builtin.os.tag == .macos) return std.fmt.allocPrint(a, "{s}/Library/Application Support/ztcl/vm-images", .{home});
     if (env("XDG_DATA_HOME")) |x| return std.fmt.allocPrint(a, "{s}/ztcl/vm-images", .{x});
     return std.fmt.allocPrint(a, "{s}/.local/share/ztcl/vm-images", .{home});
+}
+
+/// The download of `ztcl::vm image fetch`: std.http with its TLS (until
+/// the TLS of src/tls), into the open file `fd`.
+fn vmFetch(ctx: ?*anyopaque, url: []const u8, fd: i32) tcl.microvm.FetchError!void {
+    const h: *const Host = @ptrCast(@alignCast(ctx.?));
+    const io = h.io orelse return error.Network;
+    var client: std.http.Client = .{ .allocator = h.gpa, .io = io };
+    defer client.deinit();
+    var buf: [65536]u8 = undefined;
+    const file: std.Io.File = .{ .handle = fd, .flags = .{ .nonblocking = false } };
+    var w = file.writerStreaming(io, &buf);
+    const r = client.fetch(.{ .location = .{ .url = url }, .response_writer = &w.interface }) catch return error.Network;
+    w.interface.flush() catch return error.Io;
+    if (r.status != .ok) return error.Status;
 }

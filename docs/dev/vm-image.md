@@ -7,7 +7,8 @@ A guest image release (ztcl#312) is a set of files and a manifest that lists the
 ```
 manifest.json        the manifest below
 manifest.json.sig    its SSH signature (ssh-keygen -Y sign -n ztcl-vm-image)
-<arch>/Image ...     the kernel, the initramfs, and the disks of each architecture
+<arch>-Image ...     the kernel, the initramfs, and the disks of each architecture,
+                     with flat names, as the assets of a GitHub release
 ```
 
 ## The manifest
@@ -23,15 +24,15 @@ JSON, with these fields. Hashes are lowercase hex.
   "min_ztcl": "0.1.0",
   "archs": {
     "arm64": {
-      "kernel": {"file": "arm64/Image", "sha256": "…"},
-      "initrd": {"file": "arm64/agent.cpio.gz", "sha256": "…"},
+      "kernel": {"file": "arm64-Image", "sha256": "…"},
+      "initrd": {"file": "arm64-agent.cpio.gz", "sha256": "…"},
       "cmdline": "rdinit=/sbin/agent quiet",
       "disks": [
-        {"name": "root", "file": "arm64/root.img", "sha256": "…", "size": 67108864, "read_only": true,
+        {"name": "root", "file": "arm64-root.img", "sha256": "…", "size": 67108864, "read_only": true,
          "verity": {"root_hash": "…", "salt": "…", "data_block": 4096, "hash_block": 4096, "hash_offset": 67108864}}
       ]
     },
-    "x86_64": {"kernel": {"file": "x86_64/bzImage", "sha256": "…"}, "cmdline": "…", "disks": []}
+    "x86_64": {"kernel": {"file": "x86_64-bzImage", "sha256": "…"}, "cmdline": "…", "disks": []}
   }
 }
 ```
@@ -89,6 +90,10 @@ The disk is the first virtio-blk disk of the guest (`/dev/vda`), read-only. A bl
 ## The store
 
 `src/vmstore.zig` keeps the images of a user: `objects/SHA256` for each file, `releases/NAME/COUNTER/` with the manifest and its signature, and `releases/NAME/current` and `highest`. A file comes in under `tmp/`, is checked against the manifest, and moves to `objects/` with a rename; the release folder and then `current` change with a rename too, so an update is atomic and a running guest keeps its files. Each step works through a descriptor: the release through the descriptor of its folder that the file jail opened, and the store through the descriptor of its own folder, each name opened with `O_NOFOLLOW`. A symlink in the release or in the store is an error, so a path that changes after a check cannot lead outside. `ztcl::vm image install|list|verify|remove` and `ztcl::vm create -image` use it (`docs/modules/vm.md`).
+
+## A release on GitHub
+
+The publisher puts the files of a signed image on the GitHub release `vm-image-vVERSION` of ztcl, with flat names (`manifest.json`, `manifest.json.sig`, `arm64-Image`, `arm64-root.img`, `x86_64-bzImage`, `x86_64-root.img`), and moves the release `vm-image-latest` to the same files. `ztcl::vm image fetch` reads `.../releases/download/vm-image-latest/` by default. The download goes through a hook of the embedder (`Interp.vm_host.fetch`); the runner gives one on `std.http.Client`, which moves to the TLS 1.3 of `src/tls` when that lands. A file of a download counts only after the checks of the signed manifest, so neither the hook nor the server needs trust.
 
 ## A rotation
 
