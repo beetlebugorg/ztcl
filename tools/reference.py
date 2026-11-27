@@ -162,3 +162,31 @@ def api(entries):
             "page": f"https://beetlebug.org/ztcl/reference/{slug(e['name'])}/",
         })
     return json.dumps({"version": 1, "commands": rows}, indent=1, ensure_ascii=False)
+
+
+def first_sentence(text):
+    """The first sentence of a description, with no backticks."""
+    text = text.replace("`", "")
+    m = re.match(r"^(.*?[.!?])(?: |$)", text)
+    return m.group(1) if m else text
+
+
+def shell_table(entries):
+    """src/shell/reference.txt: the synopsis, the subcommands, and the
+    options of each entry, for Tab and the hint row of the shell."""
+    out = ["# Made by `python3 -I tools/reference.py shell-table` from docs/reference/*.txt. Do not edit."]
+    for e in entries:
+        out.append("== " + " ".join(names(e)))
+        out += [f"syn: {s}" for s in e.get("syn", [])]
+        for key in ("sub", "opt"):
+            for line in e.get(key, []):
+                syn, text = split_sub(line)
+                out.append(f"{key}: {syn} | {first_sentence(text)}" if text else f"{key}: {syn}")
+    return "\n".join(out) + "\n"
+
+
+if __name__ == "__main__":
+    import sys
+    if sys.argv[1:] != ["shell-table"]:
+        raise SystemExit("usage: python3 -I tools/reference.py shell-table")
+    sys.stdout.write(shell_table(parse()))

@@ -10,4 +10,5 @@ test {
     _ = @import("editor.zig");
     _ = @import("highlight.zig");
     _ = @import("render.zig");
+    _ = @import("reftable.zig");
 }
