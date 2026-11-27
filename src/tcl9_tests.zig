@@ -237,3 +237,19 @@ test "the number forms 0d10 and 1_000 of Tcl 9.1" {
         .{ "list [string is integer 1_] [string is integer _1] [string is integer 0x_1] [string is integer 1__0]", "0 0 0 0", "0 0 0 1" },
     });
 }
+
+test "lsearch -stride of Tcl 9.1" {
+    const bad = "!bad option \"-stride\": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, or -subindices";
+    try check(0, &.{
+        .{ "lsearch -stride 2 {a 1 b 2 c 3 b 4} b", bad, "2" },
+        .{ "lsearch -stride 2 -index 1 -inline {a 1 b 2 c 3 b 4} 2", bad, "b 2" },
+        .{ "lsearch -stride 2 -all -inline {a 1 b 2 c 3 b 4} b", bad, "b 2 b 4" },
+        .{ "lsearch -stride 2 -subindices -index 1 -all {a 1 b 2 c 3 b 4} *", bad, "1 3 5 7" },
+        .{ "lsearch -stride 2 -subindices -index {1 0} {a {x y} b {z w}} z", bad, "3 0" },
+        .{ "lsearch -stride 2 -start 1 {b 1 b 2} b", bad, "0" },
+        .{ "lsearch -stride 2 -bisect -inline {a 1 b 2 c 3} bb", bad, "b 2" },
+        .{ "lsearch -stride 3 {a 1 b 2} b", bad, "!list size must be a multiple of the stride length" },
+        .{ "lsearch -stride 0 {a 1} b", bad, "!stride length must be at least 1" },
+        .{ "lsearch -stride 2 -index 2 {a 1} b", bad, "!when used with \"-stride\", the leading \"-index\" value must be within the group" },
+    });
+}
