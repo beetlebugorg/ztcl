@@ -68,7 +68,12 @@ const Args = struct {
 /// of an integer value, and `fail` for an error message. The C packages
 /// of `src/cext` have their own source.
 pub fn render(src: anytype, a: std.mem.Allocator, f: []const u8, n: usize) ![]const u8 {
-    var out: std.ArrayList(u8) = .empty;
+    // The text of the format string and about 16 bytes for each argument:
+    // one allocation for most results, in the place of a growth for each
+    // part.
+    var out: std.ArrayList(u8) = try .initCapacity(a, f.len + 16 * n);
+    // The digits of one integer conversion: 64 binary digits at most.
+    var digit_buf: [72]u8 = undefined;
     var next: usize = 0;
     var saw_pos = false;
     var saw_seq = false;
@@ -213,7 +218,7 @@ pub fn render(src: anytype, a: std.mem.Allocator, f: []const u8, n: usize) ![]co
                 var v = try src.low64(iv);
                 if (short) v = @as(i16, @truncate(v));
                 sign = if (v < 0) "-" else if (sp.plus) "+" else if (sp.space) " " else "";
-                body = try std.fmt.allocPrint(a, "{d}", .{@abs(v)});
+                body = std.fmt.bufPrint(&digit_buf, "{d}", .{@abs(v)}) catch unreachable;
             },
             'u', 'x', 'X', 'o', 'b' => {
                 const uv = try src.intArg(arg_at);
@@ -235,12 +240,12 @@ pub fn render(src: anytype, a: std.mem.Allocator, f: []const u8, n: usize) ![]co
                 var u: u64 = @bitCast(v);
                 if (short) u &= 0xffff;
                 body = switch (conv) {
-                    'u' => try std.fmt.allocPrint(a, "{d}", .{u}),
-                    'x' => try std.fmt.allocPrint(a, "{x}", .{u}),
-                    'X' => try std.fmt.allocPrint(a, "{X}", .{u}),
-                    'o' => try std.fmt.allocPrint(a, "{o}", .{u}),
-                    else => try std.fmt.allocPrint(a, "{b}", .{u}),
-                };
+                    'u' => std.fmt.bufPrint(&digit_buf, "{d}", .{u}),
+                    'x' => std.fmt.bufPrint(&digit_buf, "{x}", .{u}),
+                    'X' => std.fmt.bufPrint(&digit_buf, "{X}", .{u}),
+                    'o' => std.fmt.bufPrint(&digit_buf, "{o}", .{u}),
+                    else => std.fmt.bufPrint(&digit_buf, "{b}", .{u}),
+                } catch unreachable;
                 if (sp.alt) sign = switch (conv) {
                     'x' => "0x",
                     'X' => "0X",
@@ -256,7 +261,7 @@ pub fn render(src: anytype, a: std.mem.Allocator, f: []const u8, n: usize) ![]co
                 const neg = std.math.signbit(x) and !std.math.isNan(x);
                 sign = if (neg) "-" else if (sp.plus) "+" else if (sp.space) " " else "";
                 x = @abs(x);
-                body = try formatFloat(a, x, conv, sp.prec, sp.alt);
+                body = if (conv == 'f' and !sp.alt) fastFixed(&digit_buf, x, sp.prec orelse 6) orelse try formatFloat(a, x, conv, sp.prec, sp.alt) else try formatFloat(a, x, conv, sp.prec, sp.alt);
                 if (sp.alt and std.math.isFinite(x) and std.mem.indexOfScalar(u8, body, '.') == null) {
                     // The alternate form always has a decimal point.
                     const e = std.mem.indexOfAny(u8, body, "eE") orelse body.len;
@@ -297,8 +302,33 @@ pub fn render(src: anytype, a: std.mem.Allocator, f: []const u8, n: usize) ![]co
     return out.items;
 }
 
+const pow10 = [_]f64{ 1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15 };
+const pow10_int = [_]u64{ 1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15 };
+
+/// %f of a double `x` that is not negative and finite, with `prec`
+/// decimals, in `buf`, with no allocation, or null when `fixed` must
+/// do it. The value times 10^prec in a double is within half a unit in
+/// the last place of the exact product (10^prec is exact), so its
+/// rounding to an integer is the rounding of the exact value unless the
+/// fraction is near one half: there, and for a product of 2^53 or more,
+/// the exact path decides (with the ties to even of `fixed`).
+pub fn fastFixed(buf: []u8, x: f64, prec: usize) ?[]const u8 {
+    if (prec >= pow10.len or !(x < 1e15)) return null;
+    const y = x * pow10[prec];
+    if (!(y < 9.0e15)) return null;
+    const fl = @floor(y);
+    const fr = y - fl;
+    if (@abs(fr - 0.5) <= @max(y, 1.0) * 1e-15) return null;
+    const n: u64 = @as(u64, @intFromFloat(fl)) + @intFromBool(fr > 0.5);
+    const scale = pow10_int[prec];
+    const whole = n / scale;
+    const frac = n % scale;
+    if (prec == 0) return std.fmt.bufPrint(buf, "{d}", .{whole}) catch null;
+    return std.fmt.bufPrint(buf, "{d}.{d:0>[2]}", .{ whole, frac, prec }) catch null;
+}
+
 /// Formats a double that is not negative as %f, %e, or %g does.
-fn formatFloat(a: std.mem.Allocator, x: f64, conv: u8, prec_in: ?usize, alt: bool) std.mem.Allocator.Error![]const u8 {
+pub fn formatFloat(a: std.mem.Allocator, x: f64, conv: u8, prec_in: ?usize, alt: bool) std.mem.Allocator.Error![]const u8 {
     const upper = conv == 'E' or conv == 'G';
     if (std.math.isNan(x)) return if (upper) "NAN" else "nan";
     if (std.math.isInf(x)) return if (upper) "INF" else "inf";
