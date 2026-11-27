@@ -159,6 +159,28 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         })) })).step);
     }
+    // HPACK of RFC 7541 (task 28): the tests in `zig build test`, and the
+    // fuzz run in ReleaseSafe.
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/h2/hpack.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) })).step);
+    if (target.result.os.tag == .linux) {
+        const hpack_fuzz = b.addRunArtifact(b.addExecutable(.{ .name = "hpack-fuzz", .root_module = b.createModule(.{
+            .root_source_file = b.path("src/h2/hpack_fuzz.zig"),
+            .target = target,
+            .optimize = .safe,
+        }) }));
+        hpack_fuzz.addPassthruArgs();
+        b.step("hpack-fuzz", "Fuzz HPACK: zig build hpack-fuzz -- --seconds N").dependOn(&hpack_fuzz.step);
+        const hpack_bench = b.addRunArtifact(b.addExecutable(.{ .name = "hpack-bench", .root_module = b.createModule(.{
+            .root_source_file = b.path("src/h2/hpack_bench.zig"),
+            .target = target,
+            .optimize = .fast,
+        }) }));
+        b.step("hpack-bench", "Print the speed of HPACK").dependOn(&hpack_bench.step);
+    }
     // The I/O loop of task 06 on io_uring and epoll (Linux only). The
     // tests run on both backends.
     if (target.result.os.tag == .linux) {

@@ -730,6 +730,19 @@ The parts of a TLS stack that go wrong are the state machine, the parsers, the v
 - The server pushes no streams.
 - The conformance gate is `h2spec` with all its tests passing for the server. The client runs against `nghttpd` or a Go server in the interop matrix.
 
+### HPACK (task 28)
+
+`src/h2/hpack.zig` has the integers, the strings, the Huffman code, the static table, the dynamic table, a decoder, and an encoder. `tools/hpack-tables.py` makes `src/h2/hpack_tables.zig` from the text of RFC 7541: the static table of appendix A, the Huffman code of appendix B (it checks that the code is canonical), and the 12 examples of appendix C.3 to C.6 with the dynamic table after each block.
+
+- The decoder gives one field at a time. A plain string is a slice of the header block, an indexed field is a slice of a table, and a Huffman string goes into a scratch buffer of the caller. The fields stay valid until the next call. The decoder allocates its dynamic table once, and a field past the limit of the header list gives an error before the caller copies it.
+- The dynamic table keeps the bytes of its entries in one buffer, oldest first. An add that does not fit at the end moves the live bytes to the start, so each name and value is one slice. A literal with incremental indexing whose name comes from the dynamic table copies the name to the scratch buffer before the add, because the add can move or evict it.
+- The Huffman decoder looks up 12 bits at a time in a table of 4,096 entries made at compile time, which gives up to 2 symbols for each lookup. A longer code goes through the canonical form of the code.
+- The encoder writes an indexed field for a full match in a table, and a literal with incremental indexing otherwise, with an indexed name when the name is in a table. Strings use the Huffman code when it is shorter, or always, or never. The examples of appendix C come out byte for byte with `always` (C.4, C.6) and `never` (C.3, C.5).
+
+`zig build test` runs the examples, the integers of C.1, the fields of C.2, each byte value through the Huffman code, the bad paddings, random round trips with table sizes of 0 to 4,096 and size updates, bad blocks, and 20,000 random blocks. `zig build hpack-fuzz -- --seconds N` runs random round trips and decodes changed and random blocks in ReleaseSafe. `zig build hpack-bench` prints the speed.
+
+2026-11-27, i7-6700K (shared), a browser request of 12 fields (360 bytes of names and values): Huffman decode 386 MB/s of text and encode 1,032 MB/s; the first block of a connection (304 bytes) decodes 605,518 times a second and a later block (12 bytes) 8,757,279 times a second; the encoder makes 621,467 first blocks and 1,391,199 later blocks a second. The `hpack-test-case` corpus is not in the checks (see questions).
+
 ## HTTP/3 and QUIC (later)
 
 HTTP/3 is its own milestone after the rest. It reuses the key schedule, the AEAD, and the handshake messages of TLS 1.3. QUIC sends the TLS handshake in CRYPTO frames and uses packet protection in place of the record layer (RFC 9001).
