@@ -1,5 +1,10 @@
 //! A bundle: Tcl scripts and read-only files in a copy of ztcl.wasm.
 //!
+//! `ztcl build --component` uses the same patch on the core module of
+//! the command component of WASI 0.3.2 (`patchComponent`). Its payload
+//! is the zip archive and the manifest of a native app of
+//! `src/buildnative.zig`.
+//!
 //! `ztcl build --wasm` writes the bundle. The scripts and the files go
 //! in a new active data segment above the initial memory of the module.
 //! The patch makes the initial memory larger by the pages of the
@@ -267,6 +272,43 @@ pub fn patch(a: Allocator, base: []const u8, payload: []const u8) PatchError![]u
     return out.toOwnedSlice(a);
 }
 
+/// The header of a component of the component model.
+const component_header = "\x00asm\x0d\x00\x01\x00";
+
+/// Puts `payload` in the one core module of a component that has the
+/// slot. A component is the header and a list of sections, each an id
+/// byte, a uleb length, and the body. Section 1 is a core module. The
+/// patch writes the core module of `patch` in place of the old one,
+/// with its new length, and copies each other section as it is. A core
+/// module with no slot marker, such as a shim of `wasm-tools component
+/// new`, stays as it is.
+pub fn patchComponent(a: Allocator, base: []const u8, payload: []const u8) PatchError![]u8 {
+    if (base.len < 8 or !std.mem.eql(u8, base[0..8], component_header)) return error.NotWasm;
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(a);
+    try out.appendSlice(a, base[0..8]);
+    var c: Cursor = .{ .b = base, .pos = 8 };
+    var done = false;
+    while (c.pos < base.len) {
+        const start = c.pos;
+        const id = try c.byte();
+        const len = try c.uleb();
+        const body = c.pos;
+        try c.skip(len);
+        if (id == 1 and std.mem.indexOf(u8, base[body..c.pos], slot_marker) != null) {
+            if (done) return error.NoSlot;
+            const module = try patch(a, base[body..c.pos], payload);
+            defer a.free(module);
+            done = true;
+            try putSection(a, &out, 1, module);
+            continue;
+        }
+        try out.appendSlice(a, base[start..c.pos]);
+    }
+    if (!done) return error.NoSlot;
+    return out.toOwnedSlice(a);
+}
+
 test "a payload reads back" {
     const a = std.testing.allocator;
     const p = try encode(a, &.{
@@ -307,4 +349,26 @@ test "the patch adds a segment, grows the memory, and fills the slot" {
     try std.testing.expect(std.mem.endsWith(u8, m, payload));
     try std.testing.expectError(error.AlreadyBundle, patch(a, m, payload));
     try std.testing.expectError(error.NotWasm, patch(a, "nope", payload));
+}
+
+test "the patch of a component fills the core module with the slot" {
+    const a = std.testing.allocator;
+    const seg = "abcd" ++ slot_marker ++ "\xff\xff\xff\xff\xff\xff\xff\xff";
+    const module = "\x00asm\x01\x00\x00\x00" ++
+        "\x05\x03\x01\x00\x02" ++
+        "\x0b\x1b\x01\x00\x41\x80\x08\x0b\x14" ++ seg;
+    // A shim core module with no slot, the module, and a custom section.
+    const shim = "\x00asm\x01\x00\x00\x00";
+    const base = component_header ++ "\x01\x08" ++ shim ++ "\x01\x2a" ++ module ++ "\x00\x02\x01x";
+    const payload = "PK\x05\x06";
+    const c = try patchComponent(a, base, payload);
+    defer a.free(c);
+    try std.testing.expectEqualSlices(u8, base[0..18], c[0..18]);
+    try std.testing.expect(std.mem.endsWith(u8, c, "\x00\x02\x01x"));
+    const m = c[20 .. c.len - 4];
+    try std.testing.expectEqual(@as(usize, c[19]), m.len);
+    try std.testing.expect(std.mem.endsWith(u8, m, payload));
+    try std.testing.expectError(error.AlreadyBundle, patchComponent(a, c, payload));
+    try std.testing.expectError(error.NotWasm, patchComponent(a, module, payload));
+    try std.testing.expectError(error.NoSlot, patchComponent(a, component_header ++ "\x01\x08" ++ shim, payload));
 }

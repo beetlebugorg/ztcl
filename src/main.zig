@@ -293,7 +293,6 @@ fn runApp(init: std.process.Init, args: []const [:0]const u8, off: u64, len: u64
     var out_w: Io.File.Writer = .init(.stdout(), io, &out_buf);
     const out = &out_w.interface;
     exit_out = out;
-    const bn = tcl.buildnative;
     const exe = try std.process.executablePathAlloc(io, arena);
     const whole = Io.Dir.cwd().readFileAlloc(io, exe, arena, .unlimited) catch |e| {
         try out.print("{s}: cannot read the program file: {s}\n", .{ exe, @errorName(e) });
@@ -306,22 +305,60 @@ fn runApp(init: std.process.Init, args: []const [:0]const u8, off: u64, len: u64
         std.process.exit(70);
     }
     const payload = whole[@intCast(off)..][0..@intCast(len)];
+    var in_buf: [4096]u8 = undefined;
+    var in_r: Io.File.Reader = .init(.stdin(), io, &in_buf);
+    const words = try arena.alloc([]const u8, args.len);
+    for (args, words) |w, *d| d.* = w;
+    const h = nativeHost(init, words, out, &in_r.interface);
+    return runPayload(&h, exe, payload);
+}
 
+/// The `Host` of the native runner.
+fn nativeHost(init: std.process.Init, args: []const []const u8, out: *Io.Writer, in: *Io.Reader) Host {
+    host_io = init.io;
+    native_env = init.environ_map;
+    return .{
+        .io = init.io,
+        .gpa = init.gpa,
+        .arena = init.arena.allocator(),
+        .args = args,
+        .out = out,
+        .in = in,
+        .env = nativeEnv,
+        .read = nativeRead,
+        .exit = nativeExit,
+        .nanos = nativeNanos,
+        .clock = .{ .now = hostNow, .zone = hostZone },
+        .event = .{ .now = hostTicks, .sleep = hostSleep },
+    };
+}
+
+/// Runs the zip payload of an app: the native binary of `ztcl build`, or
+/// the component of `ztcl build --component`. `program` names the program
+/// in the messages.
+pub fn runPayload(h: *const Host, program: []const u8, payload: []const u8) !void {
+    host = h;
+    const arena = h.arena;
+    const args = h.args;
+    const out = h.out;
+    const exe = program;
+    exit_out = out;
+    const bn = tcl.buildnative;
     var it: tcl.Interp = undefined;
-    try it.init(init.gpa);
+    try it.init(h.gpa);
     it.output = .{ .ctx = out, .write = write };
     it.mem_limit = 2 << 30;
     tcl.vfs.mountBytes(&it, "app", "", payload) catch |e| {
         try out.print("{s}: the payload is not a valid zip archive: {s}\n", .{ exe, @errorName(e) });
         out.flush() catch {};
-        std.process.exit(70);
+        h.exit(70);
     };
     const z = &it.vfs.mounts.items[0].z;
     const m_entry = z.find(bn.manifest_name) orelse return error.NoManifest;
     const m = try bn.Manifest.parse(arena, try z.extract(arena, m_entry));
     const bits = (tcl.interp.Capability.parse(m.allow) orelse 0) | @backingInt(tcl.interp.Capability.embedded);
-    it.clock_host = .{ .now = hostNow, .zone = hostZone };
-    it.event_host = .{ .now = hostTicks, .sleep = hostSleep };
+    it.clock_host = h.clock;
+    it.event_host = h.event;
     if (comptime chan_ok) tcl.sys.ignorePipeSignal();
     if (comptime chan_ok) {
         if (m.root) |r| {
@@ -339,10 +376,10 @@ fn runApp(init: std.process.Init, args: []const [:0]const u8, off: u64, len: u64
     try it.register("exit", cmdExit);
     const a = it.alloc();
     var list: std.ArrayList(tcl.Value) = .empty;
-    for (args[1..]) |w| try list.append(a, .{ .str = w });
+    if (args.len > 1) for (args[1..]) |w| try list.append(a, .{ .str = w });
     try it.setVar("argv", try tcl.value.wrapList(a, list.items));
     try it.setVar("argc", .{ .int = @intCast(list.items.len) });
-    try it.setVar("argv0", .{ .str = args[0] });
+    try it.setVar("argv0", .{ .str = if (args.len > 0) args[0] else exe });
     try it.setVar("tcl_interactive", .{ .int = 0 });
     for (m.scripts) |name| {
         const path = try std.fmt.allocPrint(a, "//zipfs:/app/{s}", .{name});
@@ -410,21 +447,7 @@ pub fn runWith(init: std.process.Init, setup: ?*const fn (*tcl.Interp) anyerror!
     var in_r: Io.File.Reader = .init(.stdin(), io, &in_buf);
     const words = try arena.alloc([]const u8, args.len);
     for (args, words) |w, *d| d.* = w;
-    native_env = init.environ_map;
-    const h: Host = .{
-        .io = io,
-        .gpa = init.gpa,
-        .arena = arena,
-        .args = words,
-        .out = out,
-        .in = &in_r.interface,
-        .env = nativeEnv,
-        .read = nativeRead,
-        .exit = nativeExit,
-        .nanos = nativeNanos,
-        .clock = .{ .now = hostNow, .zone = hostZone },
-        .event = .{ .now = hostTicks, .sleep = hostSleep },
-    };
+    const h = nativeHost(init, words, out, &in_r.interface);
     return runHost(&h, setup);
 }
 
