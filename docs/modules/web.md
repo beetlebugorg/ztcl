@@ -21,6 +21,8 @@ import * as web from "./ztcl-web.mjs";
 const tcl = await Interp.create("ztcl-host.wasm", { allow: ["web:serial"], web });
 ```
 
+[Web APIs](../web/README.md) has a page for each group, with the support of each browser, and a demo of Web Serial.
+
 ## Synopsis
 
 ```tcl

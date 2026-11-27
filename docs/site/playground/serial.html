@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Web Serial · ztcl</title>
+<meta name="description" content="A Tcl script in the page sends M115 to a 3D printer over Web Serial and shows the reply.">
+<link rel="canonical" href="https://beetlebug.org/ztcl/playground/serial.html">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/site.css">
+<style>
+.demo { padding: 32px 0 56px; max-width: 52em; }
+.demo h1 { font-size: clamp(26px, 3.2vw, 34px); letter-spacing: -.02em; margin: 0 0 6px; }
+.demo p { color: var(--text-2); }
+.row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; margin: 16px 0; }
+.row label { display: grid; gap: 4px; font-size: 13px; color: var(--text-3); }
+.row select { font: 15px var(--sans); color: var(--text); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 10px; }
+.row button { font: 600 15px var(--sans); border-radius: 10px; padding: 9px 20px; border: 1px solid transparent; cursor: pointer; background: var(--accent); color: var(--accent-ink); }
+.row button:disabled { opacity: .45; cursor: default; }
+pre { margin: 0; padding: 14px 16px; font: 14px/1.55 var(--mono); background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 12px; min-height: 8em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.note { font-size: 14px; color: var(--text-3); }
+</style>
+</head>
+<body>
+<main class="wrap demo">
+<h1>Web Serial: M115 to a 3D printer</h1>
+<p>A Tcl script in this page opens a serial port with <code>web::serial::request</code>, sends the G-code <code>M115</code>, and shows each line of the reply up to <code>ok</code>. A printer with Marlin or Klipper gives its firmware name and its capabilities. The script runs in <code>ztcl-host.wasm</code> with the grants <code>dom</code>, <code>event</code>, and <code>web:serial</code>.</p>
+<p id="support" class="note"></p>
+<div id="app">
+  <div class="row">
+    <label>Baud
+      <select id="baud"><option>115200</option><option>250000</option><option>57600</option><option>9600</option></select>
+    </label>
+    <button id="go" type="button">Choose a port and send M115</button>
+  </div>
+  <pre id="out"></pre>
+</div>
+<p class="note">The browser shows its port chooser after the click. The script is below, and the <a href="../modules/web/">page of <code>web::</code></a> tells how the bridge works.</p>
+<pre id="src"></pre>
+</main>
+<script type="module">
+import { Interp } from "./ztcl.mjs";
+import * as web from "./ztcl-web.mjs";
+
+const script = `set ::out [dom query #out]
+proc show {text} {dom text $::out "[dom text $::out]$text\\n"}
+proc start {status port} {
+    if {$status eq "error"} {show $port; return}
+    set f [open $port r+]
+    set ::open($f) 1
+    fconfigure $f -mode [dom value [dom query #baud]],n,8,1 -blocking 0 -buffering line
+    fileevent $f readable [list reply $f]
+    after 5000 [list done $f "no ok after 5 s"]
+    show "> M115"
+    puts $f M115
+}
+proc reply {f} {
+    while {[gets $f line] >= 0} {
+        set line [string trimright $line \\r]
+        show $line
+        if {$line eq "ok"} {done $f ""}
+    }
+}
+proc done {f why} {
+    if {![info exists ::open($f)]} return
+    unset ::open($f)
+    if {$why ne ""} {show $why}
+    close $f
+}
+dom on [dom query #go] click {
+    dom text $::out ""
+    web::serial::request -command start
+}`;
+document.getElementById("src").textContent = script;
+const say = document.getElementById("support");
+if (!navigator.serial) {
+  say.textContent = "This browser has no Web Serial. Chrome, Edge, and Firefox 151 or later on the desktop have it.";
+  document.getElementById("go").disabled = true;
+} else {
+  const tcl = await Interp.create(new URL("ztcl-host.wasm", import.meta.url), {
+    allow: ["dom", "event", "web:serial"],
+    web,
+    domRoot: document.getElementById("app"),
+    onEvents: (r) => {
+      if (!r.ok) document.getElementById("out").textContent += `error: ${r.result}\n`;
+    },
+  });
+  const r = tcl.eval(script);
+  say.textContent = r.ok ? "Ready. Connect the printer with USB, then press the button." : `error: ${r.result}`;
+}
+</script>
+</body>
+</html>
