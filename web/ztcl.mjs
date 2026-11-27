@@ -834,6 +834,20 @@ export class Interp {
         if (rc !== 0) this._cextReply(zs, ps);
         return rc;
       },
+      // The error state of ztcl after an error, into the reply.
+      err_get: (h) => {
+        if (!z.ztcl_cext_err_get || z.ztcl_cext_err_get(h) !== 0) return 1;
+        this._cextReply(zs, pkg.side);
+        return 0;
+      },
+      // The error state of a command of the package: a list Arg.
+      err_set: (h, arg) => {
+        if (!z.ztcl_cext_err_set) return 1;
+        const ps = pkg.side, a = arg >>> 2;
+        const zb = zs.xbuf(this._argSize(ps, a, 1));
+        this._argCopy(ps, a, 1, zs, zs.reply, zb);
+        return z.ztcl_cext_err_set(h, zs.reply << 2);
+      },
       pkg_provide: (h, ptr, len, vptr, vlen) => {
         if (!z.ztcl_cext_provide) return 0;
         const zb = this._toZtcl(pkg.side, ptr, len, vlen);

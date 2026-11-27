@@ -79,6 +79,16 @@ fn ztcl_cext_var_set(h: *Handle, ptr: [*]const u8, len: usize, a: *const Arg, _:
     return zside.varSet(&h.it, ptr[0..len], a, &reply);
 }
 
+/// The error state of ztcl after an error goes to the reply.
+fn ztcl_cext_err_get(h: *Handle) callconv(.c) i32 {
+    return zside.errGet(&h.it, &reply);
+}
+
+/// The error state of a command of a package, as a list `Arg`.
+fn ztcl_cext_err_set(h: *Handle, a: *const Arg) callconv(.c) i32 {
+    return zside.errSet(&h.it, a);
+}
+
 fn ztcl_cext_delete(h: *Handle, ptr: [*]const u8, len: usize) callconv(.c) i32 {
     return zside.delete(&h.it, ptr[0..len], &reply);
 }
@@ -98,4 +108,6 @@ comptime {
     @export(&ztcl_cext_var_get, .{ .name = "ztcl_cext_var_get" });
     @export(&ztcl_cext_var_set, .{ .name = "ztcl_cext_var_set" });
     @export(&ztcl_cext_delete, .{ .name = "ztcl_cext_delete" });
+    @export(&ztcl_cext_err_get, .{ .name = "ztcl_cext_err_get" });
+    @export(&ztcl_cext_err_set, .{ .name = "ztcl_cext_err_set" });
 }

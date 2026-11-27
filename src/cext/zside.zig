@@ -100,25 +100,95 @@ pub fn fromModified(it: *Interp, s: []const u8, copy: bool) Error![]const u8 {
 /// such as `Tcl_Canceled` gives one. `resultOf` takes it.
 pub threadlocal var pending_code: ?Value = null;
 
+/// The error state that a command of a package gives with its error
+/// or its return (`errSet`). `resultOf` takes it.
+const ErrState = struct {
+    info: ?[]const u8,
+    line: u32,
+    ret_code: i64,
+    ret_level: i64,
+};
+threadlocal var pending_err: ?ErrState = null;
+
 /// The value of a command of a package with code `code` and result `r`,
 /// or the error of ztcl for the code.
 pub fn resultOf(it: *Interp, code: i32, r: Value) Error!Value {
     const pc = pending_code;
     pending_code = null;
+    const pe = pending_err;
+    pending_err = null;
     return switch (code) {
         0 => r,
         2 => blk: {
             it.result = r;
+            if (pe) |e| {
+                it.ret_code = @fromBackingInt(@intCast(@as(u32, @intCast(std.math.clamp(e.ret_code, 0, std.math.maxInt(u32))))));
+                it.ret_level = @intCast(std.math.clamp(e.ret_level, 0, std.math.maxInt(u32)));
+                if (e.ret_code == 1) setInfo(it, pc, e) catch {};
+            }
             break :blk error.TclReturn;
         },
-        3 => error.TclBreak,
-        4 => error.TclContinue,
+        // Tcl keeps the result of a break or a continue.
+        3 => blk: {
+            it.result = r;
+            break :blk error.TclBreak;
+        },
+        4 => blk: {
+            it.result = r;
+            break :blk error.TclContinue;
+        },
         else => blk: {
             it.result = r;
             it.error_code = pc orelse .{ .str = "NONE" };
+            if (pe) |e| try setInfo(it, pc, e);
             break :blk error.TclError;
         },
     };
+}
+
+/// The error info and the error line of a package. With no error info,
+/// the error info of ztcl starts again from the result.
+fn setInfo(it: *Interp, pc: ?Value, e: ErrState) Error!void {
+    if (pc) |c| it.error_code = c;
+    if (e.line != 0) it.error_line = e.line;
+    it.error_info = .empty;
+    it.in_error = false;
+    if (e.info) |t| {
+        try it.error_info.appendSlice(it.alloc(), t);
+        it.in_error = true;
+    }
+}
+
+/// The error state of ztcl after an error, for the package: the list
+/// {errorCode errorInfo errorLine}.
+pub fn errGet(it: *Interp, out: *Arg) i32 {
+    const info: []const u8 = if (it.in_error) it.error_info.items else it.str(it.result) catch "";
+    const items = [_]Value{ it.error_code, .{ .str = info }, .{ .int = it.error_line } };
+    const l = value.newList(it.alloc(), &items) catch return codeOf(it, error.OutOfMemory, out);
+    put(it, l, out);
+    return 0;
+}
+
+/// Takes the error state of a command of a package: the list
+/// {errorCode errorInfo hasInfo errorLine returnCode returnLevel}.
+pub fn errSet(it: *Interp, a: *const Arg) i32 {
+    const v = valueOf(it, a.*) catch return 1;
+    const items = if (v == .list) v.list.items() else return 1;
+    if (items.len != 6) return 1;
+    const int = struct {
+        fn f(x: *Interp, y: Value) i64 {
+            return x.int(y) catch 0;
+        }
+    }.f;
+    const empty = if (items[0] == .str) items[0].str.len == 0 else false;
+    if (!empty) pending_code = items[0];
+    pending_err = .{
+        .info = if (int(it, items[2]) != 0) (it.str(items[1]) catch null) else null,
+        .line = @intCast(std.math.clamp(int(it, items[3]), 0, std.math.maxInt(u32))),
+        .ret_code = int(it, items[4]),
+        .ret_level = int(it, items[5]),
+    };
+    return 0;
 }
 
 /// Sets `out` to `v`.

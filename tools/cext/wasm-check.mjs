@@ -12,6 +12,8 @@ import { Interp } from "../../web/ztcl.mjs";
 const [lib, script] = process.argv.slice(2);
 const tcl = await Interp.create(readFileSync(lib), {
   onOutput: (t) => process.stdout.write(t),
+  // `after`, `update`, and background errors, as check.sh allows.
+  allow: ["event"],
   // A missing file gives the text of dlopen on Linux, as tclsh does.
   packages: (file) => {
     const wasm = file.replace(/\.so$/, ".wasm");

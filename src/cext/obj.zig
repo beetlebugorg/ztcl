@@ -86,6 +86,14 @@ pub const Interp = extern struct {
     pkgs: ?*anyopaque = null,
     /// The channels of the interp: a `chan.PerInterp`.
     chans: ?*anyopaque = null,
+    /// The error code and the error info (`errors.zig`), or null.
+    err_code: ?*Obj = null,
+    err_info: ?*Obj = null,
+    /// The code and the level of a TCL_RETURN of Tcl_SetReturnOptions.
+    ret_code: c_int = 0,
+    ret_level: c_int = 1,
+    /// Tcl_AllowExceptions was called.
+    allow_exceptions: bool = false,
 };
 
 pub const OK: c_int = 0;
@@ -761,6 +769,14 @@ pub fn Tcl_GetStringResult(ip: *Interp) callconv(.c) [*:0]u8 {
 }
 
 pub fn Tcl_ResetResult(ip: *Interp) callconv(.c) void {
+    // The error state goes with the result, as in Tcl.
+    if (ip.err_code) |o| decr(o);
+    if (ip.err_info) |o| decr(o);
+    ip.err_code = null;
+    ip.err_info = null;
+    ip.error_line_dont_use = 0;
+    ip.ret_code = 0;
+    ip.ret_level = 1;
     if (ip.result) |old| {
         if (old.refCount == 1 and old.typePtr == null and old.bytes == @as([*]u8, &empty_rep)) return;
         decr(old);

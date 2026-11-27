@@ -36,6 +36,8 @@ pub fn register(sh: *cext.Shadow) Error!u32 {
         .pkg_provide = &pkgProvide,
         .cancel = &cancel,
         .canceled = &canceled,
+        .err_get = &errGet,
+        .err_set = &errSet,
     };
     setChannelHooks();
     grab();
@@ -88,6 +90,14 @@ fn eval(handle: u32, script: [*]const u8, len: usize, flags: c_int) callconv(.c)
 
 fn varGet(handle: u32, name: [*]const u8, len: usize, _: c_int) callconv(.c) i32 {
     return zside.varGet(interpOf(handle), name[0..len], &host.reply);
+}
+
+fn errGet(handle: u32) callconv(.c) i32 {
+    return zside.errGet(interpOf(handle), &host.reply);
+}
+
+fn errSet(handle: u32, a: *const Arg) callconv(.c) i32 {
+    return zside.errSet(interpOf(handle), a);
 }
 
 fn varSet(handle: u32, name: [*]const u8, len: usize, v: *const Arg, _: c_int) callconv(.c) i32 {

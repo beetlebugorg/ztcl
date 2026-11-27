@@ -94,6 +94,13 @@ pub const Host = struct {
     /// unwind, with the message in the reply. It takes the pending
     /// cancel. With `unwind_only`, a cancel with no unwind gives 0.
     canceled: ?*const fn (handle: u32, unwind_only: c_int) callconv(.c) i32 = null,
+    /// Puts the error state of ztcl after an error in the reply: the list
+    /// {errorCode errorInfo errorLine}. Null when the path has none.
+    err_get: ?*const fn (handle: u32) callconv(.c) i32 = null,
+    /// Gives ztcl the error state of a command that ends with an error or
+    /// a return: the list {errorCode errorInfo hasInfo errorLine
+    /// returnCode returnLevel}. An empty errorCode keeps the code of ztcl.
+    err_set: ?*const fn (handle: u32, a: *const Arg) callconv(.c) i32 = null,
 };
 
 const wasm_host = struct {
@@ -103,6 +110,8 @@ const wasm_host = struct {
     extern "ztcl" fn var_get(handle: u32, name: [*]const u8, len: usize, flags: c_int) i32;
     extern "ztcl" fn var_set(handle: u32, name: [*]const u8, len: usize, v: *const Arg, flags: c_int) i32;
     extern "ztcl" fn pkg_provide(handle: u32, name: [*]const u8, len: usize, version: [*]const u8, vlen: usize) i32;
+    extern "ztcl" fn err_get(handle: u32) i32;
+    extern "ztcl" fn err_set(handle: u32, a: *const Arg) i32;
 };
 
 pub fn noHost() noreturn {
@@ -116,6 +125,8 @@ pub var host: Host = if (builtin.target.cpu.arch == .wasm32) .{
     .var_get = &wasm_host.var_get,
     .var_set = &wasm_host.var_set,
     .pkg_provide = &wasm_host.pkg_provide,
+    .err_get = &wasm_host.err_get,
+    .err_set = &wasm_host.err_set,
 } else .{
     .cmd_create = struct {
         fn f(_: u32, _: u32, _: [*]const u8, _: usize) callconv(.c) i32 {
@@ -425,6 +436,7 @@ pub fn ztcl_cext_dispatch(id: u32, argc: usize) callconv(.c) i32 {
     pushFrame();
     const code = if (c.nre) |nre| runNR(ip, nre(c.cd, ip, @intCast(argc), objv.ptr)) else c.proc.?(c.cd, ip, @intCast(argc), objv.ptr);
     popFrame();
+    if (code == 1 or code == 2) @import("errors.zig").giveError(ip, code);
     reply = argOf(result(ip));
     return code;
 }
@@ -451,6 +463,8 @@ pub fn ztcl_cext_interp_free(ip: *Interp) callconv(.c) void {
     @import("chan.zig").dropInterp(ip);
     dropPkgs(ip);
     if (ip.result) |r| decr(r);
+    if (ip.err_code) |o| decr(o);
+    if (ip.err_info) |o| decr(o);
     gpa.destroy(ip);
 }
 
@@ -479,12 +493,14 @@ pub fn Tcl_EvalObjEx(ip: *Interp, o: *Obj, flags: c_int) callconv(.c) c_int {
     const s = text(o);
     const code = host.eval(ip.handle, s.ptr, s.len, flags);
     takeReply(ip);
+    if (code == 1) @import("errors.zig").takeError(ip);
     return code;
 }
 
 pub fn evalText(ip: *Interp, s: []const u8, flags: c_int) c_int {
     const code = host.eval(ip.handle, s.ptr, s.len, flags);
     takeReply(ip);
+    if (code == 1) @import("errors.zig").takeError(ip);
     return code;
 }
 
@@ -531,7 +547,10 @@ pub fn getVar(ip: *Interp, n1: []const u8, n2: ?[]const u8, flags: c_int) ?*Obj 
     defer buf.deinit(gpa);
     const n = varName(&buf, n1, n2);
     if (host.var_get(ip.handle, n.ptr, n.len, flags) != 0) {
-        if (flags & TCL_LEAVE_ERR_MSG != 0) takeReply(ip);
+        if (flags & TCL_LEAVE_ERR_MSG != 0) {
+            takeReply(ip);
+            @import("errors.zig").takeError(ip);
+        }
         return null;
     }
     return own(objOf(reply));
@@ -561,7 +580,10 @@ pub fn setVar(ip: *Interp, n1: []const u8, n2: ?[]const u8, v: *Obj, flags: c_in
     const n = varName(&buf, n1, n2);
     const a = argOf(v);
     if (host.var_set(ip.handle, n.ptr, n.len, &a, flags) != 0) {
-        if (flags & TCL_LEAVE_ERR_MSG != 0) takeReply(ip);
+        if (flags & TCL_LEAVE_ERR_MSG != 0) {
+            takeReply(ip);
+            @import("errors.zig").takeError(ip);
+        }
         return null;
     }
     return v;
