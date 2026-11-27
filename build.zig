@@ -159,10 +159,11 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         })) })).step);
     }
-    // HPACK of RFC 7541 (task 28): the tests in `zig build test`, and the
-    // fuzz run in ReleaseSafe.
+    // HPACK of RFC 7541 (task 28) and the HTTP/2 connection (task 29):
+    // the tests in `zig build test` (conn.zig has the HPACK tests too),
+    // the HPACK fuzz run in ReleaseSafe, and the h2c test server.
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("src/h2/hpack.zig"),
+        .root_source_file = b.path("src/h2/conn.zig"),
         .target = target,
         .optimize = optimize,
     }) })).step);
@@ -180,6 +181,22 @@ pub fn build(b: *std.Build) void {
             .optimize = .fast,
         }) }));
         b.step("hpack-bench", "Print the speed of HPACK").dependOn(&hpack_bench.step);
+        const h2_serve = b.addRunArtifact(b.addExecutable(.{ .name = "h2-serve", .root_module = b.createModule(.{
+            .root_source_file = b.path("src/h2/serve.zig"),
+            .target = target,
+            .optimize = .fast,
+            .imports = &.{.{ .name = "aio", .module = b.createModule(.{ .root_source_file = b.path("src/aio/aio.zig"), .target = target, .optimize = .fast }) }},
+        }) }));
+        h2_serve.addPassthruArgs();
+        b.step("h2-serve", "Run the h2c test server: zig build h2-serve -- --port N").dependOn(&h2_serve.step);
+        const h2_load = b.addRunArtifact(b.addExecutable(.{ .name = "h2-load", .root_module = b.createModule(.{
+            .root_source_file = b.path("src/h2/load.zig"),
+            .target = target,
+            .optimize = .fast,
+            .imports = &.{.{ .name = "aio", .module = b.createModule(.{ .root_source_file = b.path("src/aio/aio.zig"), .target = target, .optimize = .fast }) }},
+        }) }));
+        h2_load.addPassthruArgs();
+        b.step("h2-load", "Load an h2c server: zig build h2-load -- --port N --conns C --streams S --seconds T").dependOn(&h2_load.step);
     }
     // The I/O loop of task 06 on io_uring and epoll (Linux only). The
     // tests run on both backends.
