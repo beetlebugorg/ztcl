@@ -1161,15 +1161,19 @@ pub fn closeFd(fd: i32) void {
     } else _ = std.c.close(fd);
 }
 
-/// Makes the wake descriptor of `w` readable. The caller holds the
-/// group lock, so the descriptor stays open.
 /// Wakes the thread of `w` from a wait in its event loop or in blocked
-/// I/O, for a cancel of `Interp.cancelEval`.
+/// I/O, for a cancel of `Interp.cancelEval`. The caller does not hold
+/// the group lock.
 pub fn wakeWorker(w: *Worker) void {
+    const g = w.group;
+    g.lock.lock();
+    defer g.lock.unlock();
     w.ev.signal();
     poke(w);
 }
 
+/// Makes the wake descriptor of `w` readable. The caller holds the
+/// group lock, so the descriptor stays open.
 fn poke(w: *Worker) void {
     if (comptime !fd_os) return;
     const fd = w.wake_fd.load(.acquire);

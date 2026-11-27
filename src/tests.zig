@@ -1220,16 +1220,22 @@ test "interp cancel and the uncatchable unwind" {
     try std.testing.expectEqualStrings("1 {could not find interpreter \"nosuch\"}", try it.str(try it.eval("list [catch {interp cancel nosuch} r] $r")));
     // An embedder call from another thread, as `cancelEval` allows. A
     // cancel that comes before the script starts stops it at its first
-    // check point.
+    // check point, so the test does not catch the error in the script.
     const S = struct {
         fn run(x: *tcl.Interp) void {
             x.cancelEval(false, "from a thread") catch {};
         }
     };
     const th = try std.Thread.spawn(.{}, S.run, .{&it});
-    const r = try it.str(try it.eval("list [catch {while 1 {}} m] $m"));
+    const r = it.eval("while 1 {}");
     th.join();
-    try std.testing.expectEqualStrings("1 {from a thread}", r);
+    try std.testing.expectError(error.TclError, r);
+    try std.testing.expectEqualStrings("from a thread", try it.str(it.result));
+    // A message longer than `cancel_max` stops at the end of the buffer.
+    const long: [tcl.Interp.cancel_max + 10]u8 = @splat('x');
+    try it.cancelEval(false, &long);
+    try std.testing.expectError(error.TclError, it.eval("while 1 {}"));
+    try std.testing.expectEqual(@as(usize, tcl.Interp.cancel_max), (try it.str(it.result)).len);
 }
 
 test "a child has no more capabilities than its parent" {
