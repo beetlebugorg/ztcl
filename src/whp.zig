@@ -129,24 +129,24 @@ times: struct { setup: u64 = 0, load: u64 = 0 } = .{},
 // ---------------------------------------------------------------------
 // The calls of Windows
 
-extern "WinHvPlatform" fn WHvGetCapability(code: u32, buf: *anyopaque, size: u32, written: ?*u32) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvCreatePartition(p: *Partition) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvSetPartitionProperty(p: Partition, code: u32, value: *const anyopaque, size: u32) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvSetupPartition(p: Partition) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvDeletePartition(p: Partition) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvMapGpaRange(p: Partition, host: *anyopaque, gpa: u64, size: u64, flags: u32) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvCreateVirtualProcessor(p: Partition, index: u32, flags: u32) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvDeleteVirtualProcessor(p: Partition, index: u32) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvRunVirtualProcessor(p: Partition, index: u32, exit: *ExitContext, size: u32) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvCancelRunVirtualProcessor(p: Partition, index: u32, flags: u32) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvSetVirtualProcessorRegisters(p: Partition, index: u32, names: [*]const u32, count: u32, values: [*]const RegValue) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvGetVirtualProcessorRegisters(p: Partition, index: u32, names: [*]const u32, count: u32, values: [*]RegValue) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvTranslateGva(p: Partition, index: u32, gva: u64, flags: u32, result: *[2]u32, gpa: *u64) callconv(.winapi) HRESULT;
-extern "WinHvPlatform" fn WHvRequestInterrupt(p: Partition, ctl: *const InterruptControl, size: u32) callconv(.winapi) HRESULT;
-extern "WinHvEmulation" fn WHvEmulatorCreateEmulator(callbacks: *const EmulatorCallbacks, emu: *?*anyopaque) callconv(.winapi) HRESULT;
-extern "WinHvEmulation" fn WHvEmulatorDestroyEmulator(emu: *anyopaque) callconv(.winapi) HRESULT;
-extern "WinHvEmulation" fn WHvEmulatorTryIoEmulation(emu: *anyopaque, ctx: ?*anyopaque, vp: *const [40]u8, io: *const [176]u8, status: *u32) callconv(.winapi) HRESULT;
-extern "WinHvEmulation" fn WHvEmulatorTryMmioEmulation(emu: *anyopaque, ctx: ?*anyopaque, vp: *const [40]u8, mmio: *const [176]u8, status: *u32) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvGetCapability(code: u32, buf: *anyopaque, size: u32, written: ?*u32) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvCreatePartition(p: *Partition) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvSetPartitionProperty(p: Partition, code: u32, value: *const anyopaque, size: u32) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvSetupPartition(p: Partition) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvDeletePartition(p: Partition) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvMapGpaRange(p: Partition, host: *anyopaque, gpa: u64, size: u64, flags: u32) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvCreateVirtualProcessor(p: Partition, index: u32, flags: u32) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvDeleteVirtualProcessor(p: Partition, index: u32) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvRunVirtualProcessor(p: Partition, index: u32, exit: *ExitContext, size: u32) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvCancelRunVirtualProcessor(p: Partition, index: u32, flags: u32) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvSetVirtualProcessorRegisters(p: Partition, index: u32, names: [*]const u32, count: u32, values: [*]const RegValue) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvGetVirtualProcessorRegisters(p: Partition, index: u32, names: [*]const u32, count: u32, values: [*]RegValue) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvTranslateGva(p: Partition, index: u32, gva: u64, flags: u32, result: *[2]u32, gpa: *u64) callconv(.winapi) HRESULT;
+extern "winhvplatform" fn WHvRequestInterrupt(p: Partition, ctl: *const InterruptControl, size: u32) callconv(.winapi) HRESULT;
+extern "winhvemulation" fn WHvEmulatorCreateEmulator(callbacks: *const EmulatorCallbacks, emu: *?*anyopaque) callconv(.winapi) HRESULT;
+extern "winhvemulation" fn WHvEmulatorDestroyEmulator(emu: *anyopaque) callconv(.winapi) HRESULT;
+extern "winhvemulation" fn WHvEmulatorTryIoEmulation(emu: *anyopaque, ctx: ?*anyopaque, vp: *const [40]u8, io: *const [176]u8, status: *u32) callconv(.winapi) HRESULT;
+extern "winhvemulation" fn WHvEmulatorTryMmioEmulation(emu: *anyopaque, ctx: ?*anyopaque, vp: *const [40]u8, mmio: *const [176]u8, status: *u32) callconv(.winapi) HRESULT;
 extern "kernel32" fn VirtualAlloc(at: ?*anyopaque, size: usize, kind: u32, protect: u32) callconv(.winapi) ?*anyopaque;
 extern "kernel32" fn VirtualFree(at: *anyopaque, size: usize, kind: u32) callconv(.winapi) i32;
 extern "kernel32" fn QueryPerformanceCounter(t: *i64) callconv(.winapi) i32;
