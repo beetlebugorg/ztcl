@@ -1382,6 +1382,9 @@ const lin = if (on_kvm) struct {
 /// queue the bytes for the pump.
 const win = if (on_whp) struct {
     const vsock = @import("vm/virtio/vsock.zig");
+    /// The allocator of the guests: thread safe, and apart from an
+    /// interpreter, since a guest of the pool boots on a thread of its own.
+    const ga = std.heap.smp_allocator;
 
     const StreamState = enum { free, connecting, open, refused, closed };
 
@@ -1512,8 +1515,8 @@ const win = if (on_whp) struct {
             else => return it.failCode("ZTCL VM PATH", "\"{s}\" is not a file", .{path}),
         };
         _ = sys.seek(fd, 0, 0);
-        const buf = try it.heap.backing.alloc(u8, @intCast(end));
-        errdefer it.heap.backing.free(buf);
+        const buf = try ga.alloc(u8, @intCast(end));
+        errdefer ga.free(buf);
         var off: usize = 0;
         while (off < buf.len) {
             switch (sys.readFile(fd, buf[off..])) {
@@ -1561,6 +1564,7 @@ const win = if (on_whp) struct {
     fn create(it: *Interp, args: []const Value) Error!Value {
         const a = it.alloc();
         const b = it.heap.backing;
+        // The guest lives in `ga`, so the pool can make one on its thread.
         const host = it.vm_host;
         const s = try state(it);
         if (s.guests.items.len >= host.max_guests)
@@ -1620,14 +1624,43 @@ const win = if (on_whp) struct {
         }
         if (kernel.len == 0 and image == null) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel or -image", .{});
 
-        const g = try b.create(Guest);
+        // A guest of the image from the pool: no disk of its own and no
+        // -warm, so it is the guest that the pool boots.
+        if (image) |name| if (host.pool_size > 0 and disks.items.len == 0 and !warm) {
+            const st = try store(it);
+            const counter = st.current(a, name) catch |e| {
+                st.close();
+                return storeFail(it, e);
+            };
+            st.close();
+            if (counter) |cn| {
+                const key = try poolKey(a, name, cn, memory_mb, entropy);
+                const got = take(key);
+                refill(key, host.image_store, name, memory_mb, entropy, host.pool_size);
+                if (got) |pg| {
+                    const n = std.fmt.allocPrint(ga, "vm{d}", .{s.next}) catch |e| {
+                        destroyRaw(pg);
+                        return e;
+                    };
+                    ga.free(pg.name);
+                    pg.name = n;
+                    s.guests.append(b, pg) catch |e| {
+                        destroyRaw(pg);
+                        return e;
+                    };
+                    s.next += 1;
+                    return .{ .str = pg.name };
+                }
+            }
+        };
+        const g = try ga.create(Guest);
         g.* = .{ .name = "", .machine = undefined, .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .disk_fds = &.{}, .console_vm = -1, .console_host = -1, .warm = warm };
         var made = false;
         errdefer if (!made) freeGuest(it, g);
         // The disks of an image come first, read-only: /dev/vda is its root.
         var image_disks: []i32 = &.{};
         if (image) |name| {
-            const l = try loadImage(it, b, name);
+            const l = try loadImage(it, ga, name);
             g.kernel = l.kernel;
             g.initrd = l.initrd;
             cmdline = try std.fmt.allocPrint(a, "console=hvc0 {s}", .{l.cmdline});
@@ -1640,13 +1673,13 @@ const win = if (on_whp) struct {
             g.kernel = try readPath(it, kernel);
             if (initrd.len != 0) g.initrd = try readPath(it, initrd);
         }
-        g.cmdline = try b.dupe(u8, cmdline);
+        g.cmdline = try ga.dupe(u8, cmdline);
         const n_disks = image_disks.len + disks.items.len;
-        g.disks = b.alloc(whp.Disk, n_disks) catch |e| {
+        g.disks = ga.alloc(whp.Disk, n_disks) catch |e| {
             for (image_disks) |fd| sys.close(fd);
             return e;
         };
-        g.disk_fds = b.alloc(i32, n_disks) catch |e| {
+        g.disk_fds = ga.alloc(i32, n_disks) catch |e| {
             for (image_disks) |fd| sys.close(fd);
             return e;
         };
@@ -1660,23 +1693,12 @@ const win = if (on_whp) struct {
             fd.* = try openPath(it, d.path, d.rw);
             out.* = .{ .handle = @ptrFromInt(@as(usize, @intCast(fd.*))), .read_only = !d.rw };
         }
-        const con = pair() orelse return it.failCode("ZTCL VM WHP", "no socket pair for the console", .{});
-        g.console_vm = con[0];
-        g.console_host = con[1];
-        sys.setBlocking(g.console_vm, false);
-        g.machine = whp.init(b, .{
-            .cpus = cpus,
-            .memory_mb = memory_mb,
-            .kernel = g.kernel,
-            .initrd = g.initrd,
-            .cmdline = g.cmdline,
-            .disks = g.disks,
-            .entropy = entropy,
-            .console = .{ .ctx = g, .write = consoleWrite },
-            .vsock = .{ .ctx = g, .data = streamData, .event = streamEvent },
-        }) catch |e| return failure(it, e);
+        machineOf(g, cpus, memory_mb, entropy) catch |e| switch (e) {
+            error.Pair => return it.failCode("ZTCL VM WHP", "no socket pair for the console", .{}),
+            else => |f| return failure(it, f),
+        };
         made = true;
-        g.name = try std.fmt.allocPrint(b, "vm{d}", .{s.next});
+        g.name = try std.fmt.allocPrint(ga, "vm{d}", .{s.next});
         s.next += 1;
         s.guests.append(b, g) catch |e| {
             destroy(it, g);
@@ -1693,17 +1715,25 @@ const win = if (on_whp) struct {
     }
 
     fn start(it: *Interp, g: *Guest) Error!void {
+        if (g.machine.getState() == .running) return it.failCode("ZTCL VM STATE", "the guest {s} is running", .{g.name});
+        startRaw(g) catch |e| switch (e) {
+            error.Thread => return it.failCode("ZTCL VM WHP", "no thread for the pump of the guest", .{}),
+            else => |f| return failure(it, f),
+        };
+    }
+
+    /// Starts or resumes the guest, and its pump thread.
+    fn startRaw(g: *Guest) (whp.Fail || error{Thread})!void {
         switch (g.machine.getState()) {
             .paused => g.machine.@"resume"(),
             .created, .stopped, .failed => {
-                g.machine.start() catch |e| return failure(it, e);
+                try g.machine.start();
                 if (g.pump == null) {
                     g.stop_pump.store(false, .seq_cst);
-                    g.pump = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, pumpMain, .{g}) catch
-                        return it.failCode("ZTCL VM WHP", "no thread for the pump of the guest", .{});
+                    g.pump = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, pumpMain, .{g}) catch return error.Thread;
                 }
             },
-            .running => return it.failCode("ZTCL VM STATE", "the guest {s} is running", .{g.name}),
+            .running => {},
         }
     }
 
@@ -1894,8 +1924,193 @@ const win = if (on_whp) struct {
         return agentExec(it, g.name, &a, r);
     }
 
+    /// The console pair and the machine of a guest whose kernel, initramfs,
+    /// command line, and disks are in place.
+    fn machineOf(g: *Guest, cpus: u32, memory_mb: u32, entropy: bool) (whp.Fail || error{Pair})!void {
+        const con = pair() orelse return error.Pair;
+        g.console_vm = con[0];
+        g.console_host = con[1];
+        sys.setBlocking(g.console_vm, false);
+        g.machine = try whp.init(ga, .{
+            .cpus = cpus,
+            .memory_mb = memory_mb,
+            .kernel = g.kernel,
+            .initrd = g.initrd,
+            .cmdline = g.cmdline,
+            .disks = g.disks,
+            .entropy = entropy,
+            .console = .{ .ctx = g, .write = consoleWrite },
+            .vsock = .{ .ctx = g, .data = streamData, .event = streamEvent },
+        });
+    }
+
+    // ---- The pool of booted guests (Host.pool_size) ----
+    //
+    // As on macOS: guests of the current release of an image, booted to the
+    // agent and paused, by a key of the image, its counter, the memory, and
+    // the entropy device. `create -image` gets one and names it, `start`
+    // resumes it, and a thread boots the next one.
+
+    const Pool = struct {
+        lock: Lock = .{},
+        ready: std.StringHashMapUnmanaged(std.ArrayList(*Guest)) = .empty,
+        /// The keys with a refill that runs.
+        filling: std.StringHashMapUnmanaged(void) = .empty,
+    };
+    var the_pool: Pool = .{};
+
+    /// What a refill thread needs, in `ga`.
+    const PoolJob = struct {
+        key: []u8,
+        store: []u8,
+        name: []u8,
+        memory_mb: u32,
+        entropy: bool,
+        want: u32,
+
+        fn free(j: *PoolJob) void {
+            ga.free(j.key);
+            ga.free(j.store);
+            ga.free(j.name);
+            ga.destroy(j);
+        }
+    };
+
+    fn poolKey(a: std.mem.Allocator, name: []const u8, counter: u64, memory_mb: u32, entropy: bool) ![]u8 {
+        return std.fmt.allocPrint(a, "{s}|{d}|{d}|{}", .{ name, counter, memory_mb, entropy });
+    }
+
+    /// A guest of the current release of `j.name`, booted to the agent and
+    /// paused, or null. The store checks the kernel and the initramfs as
+    /// `loadImage` does.
+    fn warmOne(j: *const PoolJob) ?*Guest {
+        const s = vmstore.Store.open(ga, j.store) catch return null;
+        defer s.close();
+        const counter = (s.current(ga, j.name) catch return null) orelse return null;
+        var c = s.load(ga, j.name, counter) catch return null;
+        defer c.deinit();
+        const x = c.parsed.value.archs.map.get(vmstore.host_arch) orelse return null;
+        if (x.disks.len > whp.max_disks) return null;
+        const g = ga.create(Guest) catch return null;
+        g.* = .{ .name = "", .machine = undefined, .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .disk_fds = &.{}, .console_vm = -1, .console_host = -1, .warm = true };
+        var made = false;
+        const ok = blk: {
+            g.name = ga.dupe(u8, "") catch break :blk false;
+            g.kernel = s.readObject(ga, x.kernel.sha256) catch break :blk false;
+            if (x.initrd) |f| g.initrd = s.readObject(ga, f.sha256) catch break :blk false;
+            g.cmdline = std.fmt.allocPrint(ga, "console=hvc0 {s}", .{x.cmdline}) catch break :blk false;
+            g.disks = ga.alloc(whp.Disk, x.disks.len) catch break :blk false;
+            g.disk_fds = ga.alloc(i32, x.disks.len) catch break :blk false;
+            for (g.disk_fds) |*f| f.* = -1;
+            for (x.disks, g.disks, g.disk_fds) |d, *out, *fd| {
+                fd.* = s.openObject(ga, d.sha256) catch break :blk false;
+                out.* = .{ .handle = @ptrFromInt(@as(usize, @intCast(fd.*))), .read_only = true };
+            }
+            machineOf(g, 1, j.memory_mb, j.entropy) catch break :blk false;
+            made = true;
+            startRaw(g) catch break :blk false;
+            const fd = connect(g, agent_port, 10_000) orelse break :blk false;
+            sys.close(fd);
+            g.machine.pause();
+            break :blk true;
+        };
+        if (!ok) {
+            if (made) destroyRaw(g) else freeRaw(g);
+            return null;
+        }
+        return g;
+    }
+
+    fn endFill(key: []const u8) void {
+        the_pool.lock.lock();
+        if (the_pool.filling.fetchRemove(key)) |kv| ga.free(kv.key);
+        the_pool.lock.unlock();
+    }
+
+    fn countReady(key: []const u8) usize {
+        return if (the_pool.ready.getPtr(key)) |l| l.items.len else 0;
+    }
+
+    fn refillMain(j: *PoolJob) void {
+        defer j.free();
+        while (true) {
+            the_pool.lock.lock();
+            const have = countReady(j.key);
+            the_pool.lock.unlock();
+            if (have >= j.want) return endFill(j.key);
+            const g = warmOne(j) orelse return endFill(j.key);
+            the_pool.lock.lock();
+            const gop = the_pool.ready.getOrPut(ga, j.key) catch {
+                the_pool.lock.unlock();
+                destroyRaw(g);
+                return endFill(j.key);
+            };
+            if (!gop.found_existing) {
+                gop.key_ptr.* = ga.dupe(u8, j.key) catch {
+                    the_pool.ready.removeByPtr(gop.key_ptr);
+                    the_pool.lock.unlock();
+                    destroyRaw(g);
+                    return endFill(j.key);
+                };
+                gop.value_ptr.* = .empty;
+            }
+            gop.value_ptr.append(ga, g) catch {
+                the_pool.lock.unlock();
+                destroyRaw(g);
+                return endFill(j.key);
+            };
+            the_pool.lock.unlock();
+        }
+    }
+
+    /// Starts a refill of the pool of `key` to `want` guests, when none runs.
+    fn refill(key: []const u8, store_root: []const u8, name: []const u8, memory_mb: u32, entropy: bool, want: u32) void {
+        the_pool.lock.lock();
+        if (the_pool.filling.contains(key) or countReady(key) >= want) {
+            the_pool.lock.unlock();
+            return;
+        }
+        const k = ga.dupe(u8, key) catch {
+            the_pool.lock.unlock();
+            return;
+        };
+        the_pool.filling.put(ga, k, {}) catch {
+            ga.free(k);
+            the_pool.lock.unlock();
+            return;
+        };
+        the_pool.lock.unlock();
+        const j = ga.create(PoolJob) catch return endFill(key);
+        j.* = .{
+            .key = ga.dupe(u8, key) catch return endFill(key),
+            .store = ga.dupe(u8, store_root) catch return endFill(key),
+            .name = ga.dupe(u8, name) catch return endFill(key),
+            .memory_mb = memory_mb,
+            .entropy = entropy,
+            .want = want,
+        };
+        const t = std.Thread.spawn(.{}, refillMain, .{j}) catch {
+            j.free();
+            return endFill(key);
+        };
+        t.detach();
+    }
+
+    /// A guest of the pool for `key`, or null.
+    fn take(key: []const u8) ?*Guest {
+        the_pool.lock.lock();
+        defer the_pool.lock.unlock();
+        const l = the_pool.ready.getPtr(key) orelse return null;
+        return l.pop();
+    }
+
     fn freeGuest(it: *Interp, g: *Guest) void {
-        const b = it.heap.backing;
+        _ = it;
+        freeRaw(g);
+    }
+
+    fn freeRaw(g: *Guest) void {
+        const b = ga;
         for (g.disk_fds) |fd| if (fd >= 0) sys.close(fd);
         b.free(g.disk_fds);
         b.free(g.disks);
@@ -1915,12 +2130,17 @@ const win = if (on_whp) struct {
     }
 
     fn destroy(it: *Interp, g: *Guest) void {
+        _ = it;
+        destroyRaw(g);
+    }
+
+    fn destroyRaw(g: *Guest) void {
         g.machine.stop();
         g.stop_pump.store(true, .seq_cst);
         if (g.pump) |t| t.join();
         g.pump = null;
         g.machine.deinit();
-        freeGuest(it, g);
+        freeRaw(g);
     }
 
     pub fn closeAll(it: *Interp) void {
