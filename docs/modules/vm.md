@@ -112,6 +112,7 @@ foreach g [ztcl::vm create -snapshot ready.snap -count 4] {
 
 - Each clone gets its own vsock context ID. The guest gets the vsock event of a transport reset, reads its new ID, and closes the connections of the snapshot. A socket that listens, such as the one of the agent, stays.
 - The first `start` of a restore sends the agent the request `RESUME`: the agent sets the clock of the guest to the clock of the host and adds 32 random bytes of the host to the random pool of the guest kernel. So clones of one snapshot have different random numbers. Without it, the clock of the guest goes on from the time of the snapshot.
+- On KVM, each restore and each clone also gets a new generation ID (`vmgenid.device=` on the command line of the guest kernel, a 16-byte ID and an interrupt). A guest kernel with the device (ztcl-guest-kernel c303719 and later) reseeds its RNG at the interrupt and steps its clock to the time of the host. A snapshot of such a guest on a host with the TSC clocksource gets no `RESUME`, so its `start` has one vsock round trip less.
 - A guest with a `-share`, a `-disk`, or `-net` has no snapshot: their state is outside the guest memory. The disks of an image go in the snapshot as the name and the counter of the image, and the restore opens them from the store again.
 - A snapshot is for the same host and the same version of ztcl. The CPU features of the host must not change between the snapshot and the restore.
 - The file holds the memory of the guest. Keep it as private as the guest.
