@@ -10,3 +10,6 @@ dist/
 
 # The packages that zig fetch unpacks.
 zig-pkg/
+
+# The inputs, the builds, and the outputs of bench/compare/run.py.
+bench/compare/.work/

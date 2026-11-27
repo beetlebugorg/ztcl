@@ -450,6 +450,9 @@ class Build:
         self.files_of[page] = self.page_files
         body = self.md.renderer.render(tokens, self.md.options, {})
         body = body.replace("<table>", '<div class="table"><table>').replace("</table>", "</table></div>")
+        # A chart of docs/site/bench/ in a <picture> of a Markdown page goes
+        # to assets/bench/ of the site.
+        body = re.sub(r'(src|srcset)="(?:\.\./)*(?:docs/)?site/bench/', lambda m: f'{m.group(1)}="{rel(page, "")}assets/bench/', body)
         return title or src, self.alerts(body)
 
     def link(self, src, page, href):
@@ -733,6 +736,9 @@ class Build:
         for f in (ROOT / "book" / "fonts").iterdir():
             if f.suffix in (".ttf", ".txt"):
                 shutil.copy(f, out / "book" / "fonts" / f.name)
+        # The charts of bench/compare/chart.py.
+        if (SITE_DIR / "bench").is_dir():
+            shutil.copytree(SITE_DIR / "bench", out / "assets" / "bench")
         (out / "try").mkdir()
         shutil.copy(SITE_DIR / "try" / "index.html", out / "try" / "index.html")
         (out / "playground").mkdir()
