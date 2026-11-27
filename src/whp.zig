@@ -397,18 +397,25 @@ fn teardown(m: *Machine) void {
     }
     if (m.vcpus.len != 0) m.alloc.free(m.vcpus);
     m.vcpus = &.{};
+    // The shares go before the devices: the sweep thread of a DAX window
+    // takes the lock of its device, so it stops first, and then the FUSE
+    // server has no window to clear.
+    for (m.ninep_state) |*n| {
+        if (n.window) |*win| win.deinit();
+        n.window = null;
+        if (m.cfg.virtiofs) {
+            n.fs.dax = null;
+            n.fs.deinit();
+        }
+        n.server.deinit();
+    }
+    if (m.ninep_state.len != 0) m.alloc.free(m.ninep_state);
+    m.ninep_state = &.{};
     if (m.devices.len != 0) {
         m.vs.reset();
         m.alloc.free(m.devices);
     }
     m.devices = &.{};
-    for (m.ninep_state) |*n| {
-        n.server.deinit();
-        if (m.cfg.virtiofs) n.fs.deinit();
-        if (n.window) |*win| win.deinit();
-    }
-    if (m.ninep_state.len != 0) m.alloc.free(m.ninep_state);
-    m.ninep_state = &.{};
     if (m.part) |p| _ = WHvDeletePartition(p);
     m.part = null;
     if (m.mem.size != 0) _ = VirtualFree(m.mem.base, 0, 0x8000);
