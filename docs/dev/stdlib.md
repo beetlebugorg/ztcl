@@ -286,9 +286,18 @@ The stress gate on 2026-11-27 (x86-64 Linux, a shared machine, `--conns 10000 --
 
 - `kqueue.zig`: the model of `epoll.zig`. The system call runs at once. On EAGAIN, the completion waits on its side, and a one-shot EVFILT_READ or EVFILT_WRITE filter goes into a list of changes. The next `kevent` of `run` gives the list and waits in one system call. A change that fails comes back with EV_ERROR and ends the completion with its errno. `wake` triggers an EVFILT_USER event.
 - `sys.zig`: the system calls of `aio` and its tests, raw on Linux and through libc on macOS. macOS has no `accept4` and no `SOCK_NONBLOCK`, so `sys.accept` and `sys.tcpSocket` set O_NONBLOCK and FD_CLOEXEC with `fcntl`, and set SO_NOSIGPIPE.
-- `aio-stress` on macOS raises the soft limit of descriptors to 10,240, counts the open descriptors with `fcntl`, and gives the peak RSS of `getrusage` in place of the current RSS.
+- `aio-stress` on macOS raises the soft limit of descriptors to 40,000 (a finite limit above OPEN_MAX works up to `kern.maxfilesperproc`), keeps at most 100 connects in flight (macOS caps a backlog at `kern.ipc.somaxconn`, 128), counts the open descriptors with `fcntl`, and gives the peak RSS of `getrusage` in place of the current RSS.
 
-`zig build aio-test` and `zig build aio-stress` build for macOS. The checks on 2026-11-27: the tests and the stress run pass on x86-64 Linux, and the tests and `aio-stress` compile for aarch64-macos and x86_64-macos. They have not run on a Mac yet (see questions).
+`zig build aio-test` and `zig build aio-stress` build for macOS. The checks on 2026-11-27: the tests and the stress run pass on x86-64 Linux, and the tests and `aio-stress` compile for aarch64-macos and x86_64-macos. The run on a Mac (Apple M1, ReleaseFast):
+
+| Run | Result |
+|---|---|
+| `zig build aio-test` | 8 of 8 pass |
+| `--conns 1000 --seconds 20` | pass, 3,261,118 round trips, RSS 2.3 MB flat |
+| `--conns 10000 --seconds 60` | pass, 20,005 descriptors, 6,940,000 round trips, RSS 4.5 MB flat |
+| `--conns 5000 --seconds 300` (the gate) | pass, 10,005 descriptors, 35,790,000 round trips, RSS 3,248 KiB at the connects, the checkpoint, and the end |
+
+Runs back to back leave the client sockets in TIME_WAIT (about 30 s on macOS), and the 16,384 ephemeral ports run out. Wait between runs: `aio-stress` reports the connects that fail with EADDRNOTAVAIL.
 
 ### The event loop of an interpreter
 

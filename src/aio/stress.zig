@@ -1,7 +1,8 @@
 //! The stress run of `aio` (task 06): a server and `--conns` clients on
-//! 127.0.0.1 in one loop. The clients connect first, at most 256 at a
-//! time. Then each client writes 16 bytes, the server writes them back,
-//! and the client writes again, for `--seconds`.
+//! 127.0.0.1 in one loop. The clients connect first, at most
+//! `max_connecting` at a time. Then each client writes 16 bytes, the
+//! server writes them back, and the client writes again, for
+//! `--seconds`.
 //!
 //!   aio-stress [--conns N] [--seconds S] [--backend auto|uring|epoll]
 //!
@@ -11,6 +12,11 @@
 //! descriptor stays open after the close of all connections, or when the
 //! memory at the end is more than 1 MiB above the memory at the
 //! checkpoint.
+//!
+//! A run leaves the client sockets in TIME_WAIT for about a minute on
+//! Linux and 30 s on macOS. A second run in that time can find no free
+//! ephemeral port. Its connects then fail with EADDRNOTAVAIL, and the
+//! program says to wait.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -22,6 +28,17 @@ const Loop = aio.Loop;
 const Completion = aio.Completion;
 
 const msg_len = 16;
+
+/// The cap of the connects in flight, below the backlog of the
+/// listener. macOS caps a backlog at kern.ipc.somaxconn, 128 by default.
+const max_connecting: usize = if (@import("builtin").os.tag.isDarwin()) 100 else 256;
+
+/// The target of the soft limit of descriptors: 10,000 connections need
+/// 20,005. macOS takes a finite limit above OPEN_MAX (10,240) up to
+/// kern.maxfilesperproc.
+const fd_target = 40000;
+
+var addr_busy: usize = 0;
 
 const Conn = struct {
     fd: aio.fd_t = -1,
@@ -101,7 +118,10 @@ fn rssKiB() usize {
 fn clientCb(l: *Loop, c: *Completion) void {
     const k: *Conn = @fieldParentPtr("c", c);
     // A connect gives 0, a read or a write gives the count of bytes.
-    if (c.result < 0 and c.op == .connect) failed += 1;
+    if (c.result < 0 and c.op == .connect) {
+        failed += 1;
+        if (c.result == -@as(i32, @backingInt(std.posix.E.ADDRNOTAVAIL))) addr_busy += 1;
+    }
     if (c.result < 0 or (c.result == 0 and c.op != .connect)) return;
     switch (c.op) {
         .write => c.op = .{ .read = .{ .fd = k.fd, .buf = &k.cbuf } },
@@ -152,7 +172,7 @@ fn stopCb(_: *Loop, c: *Completion) void {
 fn raiseFdLimit() void {
     var lim: std.c.rlimit = undefined;
     if (std.c.getrlimit(.NOFILE, &lim) != 0) return;
-    lim.cur = @min(lim.max, 10240);
+    lim.cur = @min(lim.max, fd_target);
     _ = std.c.setrlimit(.NOFILE, &lim);
 }
 
@@ -187,7 +207,7 @@ pub fn main(init: std.process.Init) !void {
     for (conns, 0..) |*k, n| {
         // Keep the connects in progress below the backlog of the
         // listener.
-        while (n - accepted - failed > 256) _ = try l.run(std.time.ns_per_s);
+        while (n - accepted - failed > max_connecting) _ = try l.run(std.time.ns_per_s);
         k.* = .{ .stop = &stop };
         k.fd = try check(sys.tcpSocket(std.posix.AF.INET));
         k.c = .{ .op = .{ .connect = .{ .fd = k.fd, .addr = @ptrCast(&addr), .len = @sizeOf(in) } }, .callback = clientCb };
@@ -196,6 +216,7 @@ pub fn main(init: std.process.Init) !void {
     while (accepted + failed < n_conns or connected + failed < n_conns) _ = try l.run(std.time.ns_per_s);
     if (failed > 0) {
         std.debug.print("FAIL: {d} connects failed\n", .{failed});
+        if (addr_busy > 0) std.debug.print("{d} found no free ephemeral port: sockets of an earlier run wait in TIME_WAIT; wait a minute and run again\n", .{addr_busy});
         std.process.exit(1);
     }
     for (conns) |*k| {
