@@ -128,6 +128,7 @@ test {
     _ = @import("vm/boot.zig");
     if (@import("builtin").os.tag == .windows) _ = @import("whp.zig");
     _ = @import("vm/virtio/ninep.zig");
+    _ = @import("vm/nat/nat.zig");
     _ = zipwrite;
     _ = buildnative;
     _ = dbus;
