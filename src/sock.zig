@@ -384,6 +384,7 @@ pub fn cmdSocket(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         c.kind = .socket;
         c.connecting = is_async;
         c.peer_host = try a.dupe(u8, host);
+        if (@import("meter.zig").of(it)) |m| m.addConnection(host);
         return .{ .str = c.name };
     }
     return sysError(it, failure orelse .{ .name = "EADDRNOTAVAIL", .text = "can't assign requested address" }, "couldn't open socket: ");

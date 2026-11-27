@@ -210,6 +210,18 @@ fn connected(c: *Channel) void {
     if (c.blocking) sys.setBlocking(c.fd, true);
 }
 
+/// Counts the bytes of a system read or write in the meter of `it`.
+fn meterIo(it: *Interp, c: *Channel, read: bool, n: usize) void {
+    if (n == 0) return;
+    const m = @import("meter.zig");
+    const kind: m.IoKind = switch (c.kind) {
+        .socket, .server => .socket,
+        .pipe => .pipe,
+        .file => .file,
+    };
+    m.countIo(it, kind, read, n, c.peer_host);
+}
+
 fn flushOut(it: *Interp, c: *Channel) Error!void {
     if (c.wbuf.items.len == 0) return;
     settle(it, c);
@@ -229,7 +241,10 @@ fn flushOut(it: *Interp, c: *Channel) Error!void {
     var at: usize = 0;
     while (at < c.wbuf.items.len) {
         switch (sys.write(outFd(c), c.wbuf.items[at..])) {
-            .n => |n| at += n,
+            .n => |n| {
+                at += n;
+                meterIo(it, c, false, n);
+            },
             .again => {
                 if (!c.blocking) {
                     // The rest stays in the buffer. The event loop
@@ -274,6 +289,7 @@ fn fillMore(it: *Interp, c: *Channel) Error!Fill {
     const got: sys.IoResult = if (c.filter) |f| .{ .n = try f.read(f, it, c.fd, room) } else try @import("tape.zig").read(it, c.fd, room);
     switch (got) {
         .n => |n| {
+            meterIo(it, c, true, n);
             if (n == 0) {
                 c.hit_eof = true;
                 return .eof;

@@ -115,6 +115,8 @@ test {
     _ = @import("watch_tests.zig");
     _ = @import("probe_tests.zig");
     _ = @import("debug_tests.zig");
+    _ = @import("meter_tests.zig");
+    _ = @import("meter.zig");
     _ = @import("zipread.zig");
     _ = @import("inflate.zig");
     _ = @import("vfs_tests.zig");
