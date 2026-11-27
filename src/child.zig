@@ -226,6 +226,16 @@ fn dropAliases(at: *Interp, gone: *const Interp) void {
     }
     for (keys.items) |k| _ = at.commands.remove(k);
     if (keys.items.len > 0) at.epoch += 1;
+    // A hidden alias goes too: `interp expose` can make it a command again.
+    keys.clearRetainingCapacity();
+    var hid = at.hidden.iterator();
+    while (hid.next()) |e| {
+        if (e.value_ptr.*.impl == .native and e.value_ptr.*.impl.native == &aliasCall) {
+            const al: *Alias = @ptrCast(@alignCast(e.value_ptr.*.ctx.?));
+            if (inTree(gone, al.target)) keys.append(at.alloc(), e.key_ptr.*) catch {};
+        }
+    }
+    for (keys.items) |k| _ = at.hidden.remove(k);
     var kids = at.children.valueIterator();
     while (kids.next()) |c| {
         if (c.*.it != gone) dropAliases(c.*.it, gone);
