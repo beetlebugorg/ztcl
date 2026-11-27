@@ -488,7 +488,7 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
         tcl.debug.parseArgs(arena, args[2..], &opts, &keep) catch {
             try out.writeAll(tcl.debug.help);
             out.flush() catch {};
-            std.process.exit(2);
+            host.exit(2);
         };
         if (keep.items.len == 0 and !opts.mcp) {
             try out.writeAll(tcl.debug.help);
@@ -763,7 +763,7 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
         };
         it.error_line = 0;
         it.script_name = arg;
-        if (debug_opts) |d| if (!d.mcp) std.process.exit(try runDebug(&it, out, arena, text, d));
+        if (debug_opts) |d| if (!d.mcp) host.exit(try runDebug(&it, out, arena, text, d));
         if (keep_going) {
             // Run each command of the file; an error does not stop the file.
             const script = it.compile(text) catch {
