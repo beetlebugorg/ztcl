@@ -1305,6 +1305,9 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     c.w = w;
     c.caller = .{ .a = a, .out = .{ .ctx = &c, .write = Child.write }, .w = w };
     isobroker.install(&x, &c.caller) catch return 2;
+    // `-caps` with no `thread`: the child has no `thread::send` to the
+    // parent and no `tsv`.
+    if (st.caps & thread_bit == 0) thread.dropThreadCommands(&x) catch return 2;
     w.group.remote = c.remote();
     if (!jail(a, &x, st, hosts)) return 2;
     // After the sandbox, so a sandbox that refuses executable memory

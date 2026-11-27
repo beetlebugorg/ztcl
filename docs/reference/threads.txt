@@ -2,11 +2,11 @@
 # docs/reference/README.md and the guide is docs/threads.md.
 
 == thread
-syn: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?script?
+syn: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?-caps LIST? ?script?
 does: The `thread` package: a thread is one interpreter that runs a script, with its own limits. Threads talk with messages: `thread::send` runs a script in another thread. Each thread of a group gets the limits of the host, and the group has totals.
 cap: thread
 names: thread::attach thread::broadcast thread::cancel thread::cond thread::configure thread::create thread::detach thread::errorproc thread::eval thread::exists thread::exit thread::id thread::join thread::mutex thread::names thread::preserve thread::release thread::rwmutex thread::send thread::transfer thread::unwind thread::wait
-sub: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?SCRIPT? | A new thread that runs SCRIPT, and its id. With no SCRIPT, it waits for messages. `-isolation process` runs it in a child process.
+sub: thread::create ?-joinable? ?-preserved? ?-isolation LEVEL? ?-caps LIST? ?SCRIPT? | A new thread that runs SCRIPT, and its id. With no SCRIPT, it waits for messages. `-isolation process` runs it in a child process. `-caps` gives the thread only the listed capabilities of its creator.
 sub: thread::send ?-async? ?-head? ID SCRIPT ?VAR? | Runs SCRIPT in the thread and gives its result. With `-async`, it does not wait.
 sub: thread::broadcast SCRIPT | Sends SCRIPT to each other thread.
 sub: thread::wait | Runs the event loop of the thread until `thread::release`.
