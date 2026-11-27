@@ -76,11 +76,11 @@ pub const backend = (builtin.cpu.arch == .x86_64 and builtin.os.tag == .linux) o
     (builtin.cpu.arch == .x86_64 and builtin.os.tag == .freestanding);
 
 /// The calling convention of each call between Zig and the machine code:
-/// the entry, the helpers, and the tier changes. On Windows it is the
+/// the entry, the helpers, and the tier changes. On x86-64 Windows it is the
 /// System V ABI of x86-64 too, so the machine code has one convention.
 /// Zig saves `rsi`, `rdi`, and `xmm6` to `xmm15` around such a call,
 /// which the Microsoft ABI keeps and System V does not.
-pub const cc: std.builtin.CallingConvention = if (builtin.os.tag == .windows) .{ .x86_64_sysv = .{} } else .c;
+pub const cc: std.builtin.CallingConvention = if (builtin.os.tag == .windows and builtin.cpu.arch == .x86_64) .{ .x86_64_sysv = .{} } else .c;
 const t2_arm = builtin.cpu.arch == .aarch64;
 const tier2_be = if (t2_arm) @import("jit/tier2_a64.zig") else tier2_x64;
 
