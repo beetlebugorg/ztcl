@@ -3,6 +3,7 @@
 #
 #   tools/tls-interop.sh [--quick] client
 #   tools/tls-interop.sh socket
+#   tools/tls-interop.sh [--quick] server
 #
 # The script makes a CA and a leaf for each key kind (P-256, P-384,
 # Ed25519, RSA 2048) with `openssl`, in a temporary folder. The client
@@ -11,15 +12,18 @@
 # of an unknown CA, and an expired leaf. --quick runs each suite and each
 # group with the P-256 key only, and each key kind with the default
 # suite and group. `socket` runs the same server checks with the
-# `ztcl::tls socket` command of zig-out/bin/ztcl.
+# `ztcl::tls socket` command of zig-out/bin/ztcl. `server` runs the
+# server of tls-interop with each key kind but RSA (task 24), and
+# connects with `openssl s_client` and `curl` for each suite, each
+# group, ALPN, and a HelloRetryRequest. A TLS 1.2 client must fail.
 # SPDX-License-Identifier: BSD-2-Clause
 set -eu
 quick=0
 if [ "${1:-}" = --quick ]; then quick=1; shift; fi
 mode=${1:-}
-[ "$mode" = client ] || [ "$mode" = socket ] || { echo "usage: tools/tls-interop.sh [--quick] client|socket" >&2; exit 2; }
+case $mode in client|socket|server) ;; *) echo "usage: tools/tls-interop.sh [--quick] client|socket|server" >&2; exit 2 ;; esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-if [ "$mode" = client ]; then
+if [ "$mode" != socket ]; then
     zig build tls-interop >/dev/null
     bin=$root/zig-out/bin/tls-interop
 else
@@ -86,6 +90,64 @@ expect() {
         fail=$((fail + 1)); echo "FAIL $name: want $want, got: $out"
     fi
 }
+if [ "$mode" = server ]; then
+    # ours KEY [server options]: the server of tls-interop on a new port.
+    ours() {
+        k=$1
+        shift
+        [ -n "$pid" ] && { kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; }
+        port=$((port + 1))
+        cat $k.pem $k.key > srv.pem
+        "$bin" server "$port" srv.pem "$@" >server.log 2>&1 &
+        pid=$!
+        i=0
+        while ! grep -q listening server.log; do
+            i=$((i + 1)); [ $i -gt 50 ] && { echo "tls-interop server did not start"; cat server.log; exit 1; }
+            sleep 0.1
+        done
+    }
+    # check ok|fail NAME WANT COMMAND...: the output of the command must
+    # have WANT for ok, and must not for fail.
+    check() {
+        want=$1 name=$2 text=$3
+        shift 3
+        out=$(printf 'GET / HTTP/1.0\r\n\r\n' | "$@" 2>&1 || true)
+        if printf '%s' "$out" | grep -q -- "$text"; then got=ok; else got=fail; fi
+        if [ "$got" = "$want" ]; then
+            pass=$((pass + 1)); echo "pass $name"
+        else
+            fail=$((fail + 1)); echo "FAIL $name: want $want, got: $(printf '%s' "$out" | tail -n 3)"
+        fi
+    }
+    sc() { timeout 10 openssl s_client -tls1_3 -connect "127.0.0.1:$port" -servername localhost.test -CAfile ca.pem -verify_return_error -quiet "$@"; }
+    cu() { timeout 10 curl -s --tlsv1.3 --cacert ca.pem --resolve "localhost.test:$port:127.0.0.1" "$@" "https://localhost.test:$port/"; }
+    for k in p256 p384 ed25519; do
+        ours $k
+        check ok "s_client key $k" "sni=localhost.test" sc
+        check ok "curl key $k" "sni=localhost.test" cu
+        if [ $quick = 1 ] && [ $k != p256 ]; then continue; fi
+        for s in TLS_AES_128_GCM_SHA256:aes_128_gcm_sha256 TLS_AES_256_GCM_SHA384:aes_256_gcm_sha384 TLS_CHACHA20_POLY1305_SHA256:chacha20_poly1305_sha256; do
+            check ok "s_client key $k suite ${s%%:*}" "suite=${s##*:}" sc -ciphersuites "${s%%:*}"
+        done
+        for g in X25519 P-256 P-384; do
+            check ok "s_client key $k group $g" "sni=localhost.test" sc -groups "$g"
+        done
+    done
+    ours p256 --alpn h2
+    check ok "s_client alpn" "alpn=h2" sc -alpn h2,http/1.1
+    # curl offers h2 and http/1.1, and speaks HTTP/2 after h2.
+    ours p256 --alpn http/1.1
+    check ok "curl alpn" "alpn=http/1.1" cu
+    # openssl sends an X25519 share only, and the server has P-384 only.
+    ours p256 --group secp384r1
+    check ok "s_client HelloRetryRequest" "sni=localhost.test" sc -groups X25519:P-384
+    check ok "curl HelloRetryRequest" "sni=localhost.test" cu --curves X25519:P-384
+    check fail "TLS 1.2 client" "sni=localhost.test" timeout 10 curl -s --tls-max 1.2 --cacert ca.pem --resolve "localhost.test:$port:127.0.0.1" "https://localhost.test:$port/"
+    grep -q protocol_version server.log && { pass=$((pass + 1)); echo "pass TLS 1.2 client gets protocol_version"; } || { fail=$((fail + 1)); echo "FAIL TLS 1.2 client: no protocol_version alert"; }
+    echo "$pass pass, $fail fail"
+    [ $fail = 0 ]
+    exit
+fi
 if [ "$mode" = socket ]; then
     # tcl NAME WANT SCRIPT: the script gets $port and $ca, and its last
     # line of output must be WANT.

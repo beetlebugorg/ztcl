@@ -121,8 +121,15 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }) });
     b.step("tls-interop", "Build the test client of tools/tls-interop.sh").dependOn(&b.addInstallArtifact(interop, .{}).step);
+    // The server side of RFC 8448 and the client of client.zig against
+    // the server in memory. `zig build test` runs them too.
+    b.step("tls-server-test", "Run the tests of the TLS server").dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/tls/server_vectors.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) })).step);
     b.step("tls-x509-test", "Run the x509-limbo cases of the chain checks: zig build tls-x509-test -- limbo.json").dependOn(&limbo.step);
-    inline for (.{ "src/tls/der.zig", "src/tls/x509.zig", "src/tls/pem.zig", "src/tls/chain.zig", "src/tls/roots.zig", "src/tls/messages.zig", "src/tls/client_vectors.zig" }) |f| {
+    inline for (.{ "src/tls/der.zig", "src/tls/x509.zig", "src/tls/pem.zig", "src/tls/chain.zig", "src/tls/roots.zig", "src/tls/messages.zig", "src/tls/client_vectors.zig", "src/tls/server_vectors.zig" }) |f| {
         test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
             .root_source_file = b.path(f),
             .target = target,

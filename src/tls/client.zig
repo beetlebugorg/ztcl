@@ -138,44 +138,44 @@ pub const Event = union(enum) {
 
 const State = enum { start, wait_sh, wait_sh2, wait_ee, wait_cert_cr, wait_cert, wait_cv, wait_finished, connected, closed, failed };
 
-const Kind = enum { sha256, sha384 };
+pub const Kind = enum { sha256, sha384 };
 
-fn Sched(comptime k: Kind) type {
+pub fn Sched(comptime k: Kind) type {
     return if (k == .sha256) schedule.Sha256 else schedule.Sha384;
 }
 
-const Secret = struct {
+pub const Secret = struct {
     b: [48]u8 = @splat(0),
     n: usize = 0,
 
-    fn slice(s: *const Secret) []const u8 {
+    pub fn slice(s: *const Secret) []const u8 {
         return s.b[0..s.n];
     }
 
-    fn of(a: anytype) Secret {
+    pub fn of(a: anytype) Secret {
         var s: Secret = .{ .n = a.len };
         @memcpy(s.b[0..a.len], &a);
         return s;
     }
 
-    fn arr(s: *const Secret, comptime n: usize) [n]u8 {
+    pub fn arr(s: *const Secret, comptime n: usize) [n]u8 {
         return s.b[0..n].*;
     }
 };
 
-const Transcript = union(enum) {
+pub const Transcript = union(enum) {
     none,
     sha256: std.crypto.hash.sha2.Sha256,
     sha384: std.crypto.hash.sha2.Sha384,
 
-    fn add(t: *Transcript, b: []const u8) void {
+    pub fn add(t: *Transcript, b: []const u8) void {
         switch (t.*) {
             .none => unreachable,
             inline else => |*h| h.update(b),
         }
     }
 
-    fn current(t: *const Transcript) Secret {
+    pub fn current(t: *const Transcript) Secret {
         switch (t.*) {
             .none => unreachable,
             inline else => |h| {
@@ -186,7 +186,7 @@ const Transcript = union(enum) {
     }
 };
 
-const hrr_random = blk: {
+pub const hrr_random = blk: {
     @setEvalBranchQuota(10_000);
     var h: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash("HelloRetryRequest", &h, .{});
