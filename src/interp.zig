@@ -755,6 +755,12 @@ pub const Counting = struct {
     fn fits(c: *Counting, more: usize) bool {
         const root: *const Interp = @alignCast(@fieldParentPtr("counter", c));
         if (c.used +| more <= root.mem_limit +| root.mem_limit) return true;
+        // A cancel stores zero in `mem_limit` until the next check point.
+        // The cap then comes from the limit before the cancel.
+        if (root.cancel_flags.load(.acquire) != 0) {
+            const lim = @atomicLoad(usize, &root.cancel_mem, .acquire);
+            if (c.used +| more <= lim +| lim) return true;
+        }
         // A stop of a thread stores zero in `mem_limit` for a moment. The
         // cap then comes from the limit of its worker.
         if (comptime thread_mod.supported) {
@@ -1020,9 +1026,11 @@ pub const Interp = struct {
     /// gives the error of the cancel.
     cancel_flags: std.atomic.Value(u32) = .init(0),
     cancel_lock: std.atomic.Mutex = .unlocked,
-    /// The message of the cancel, or null for the default message. It is
-    /// in `std.heap.smp_allocator`, because another thread can set it.
-    cancel_text: ?[]u8 = null,
+    /// The message of the cancel in `cancel_buf`, or null for the default
+    /// message. Another thread can set it, so it uses no allocator. A
+    /// message longer than the buffer stops at its end.
+    cancel_len: ?u16 = null,
+    cancel_buf: [cancel_max]u8 = undefined,
     /// The value of `mem_limit` before the request.
     cancel_mem: usize = 0,
     /// An unwind of `interp cancel -unwind` runs: `catch` and `try` do
@@ -1522,9 +1530,10 @@ pub const Interp = struct {
         return it.counter.used;
     }
 
-    /// True above the memory limit, or after the counter refused a
-    /// request above the hard cap. In a top-level eval that started
-    /// above the limit, only the hard cap applies.
+    /// The longest message of a cancel, in bytes.
+    pub const cancel_max = 512;
+
+    /// The bits of `cancel_flags`.
     pub const cancel_bits = struct {
         pub const cancel: u32 = 1;
         pub const unwind: u32 = 2;
@@ -1537,15 +1546,18 @@ pub const Interp = struct {
     /// the message. A script that waits in the event loop of a thread
     /// wakes.
     pub fn cancelEval(it: *Interp, unwind: bool, text: ?[]const u8) Allocator.Error!void {
-        const copy: ?[]u8 = if (text) |t| try std.heap.smp_allocator.dupe(u8, t) else null;
         while (!it.cancel_lock.tryLock()) {}
-        if (it.cancel_text) |old| std.heap.smp_allocator.free(old);
-        it.cancel_text = copy;
-        const old = it.cancel_flags.fetchOr(cancel_bits.cancel | (if (unwind) cancel_bits.unwind else 0), .acq_rel);
-        if (old == 0) {
-            it.cancel_mem = @atomicLoad(usize, &it.mem_limit, .acquire);
-            @atomicStore(usize, &it.mem_limit, 0, .release);
-        }
+        if (text) |t| {
+            const n = @min(t.len, cancel_max);
+            @memcpy(it.cancel_buf[0..n], t[0..n]);
+            it.cancel_len = @intCast(n);
+        } else it.cancel_len = null;
+        // `cancel_mem` gets its value before the flags, so a reader that
+        // sees the flags in `fits` sees the limit.
+        const first = it.cancel_flags.load(.acquire) == 0;
+        if (first) @atomicStore(usize, &it.cancel_mem, @atomicLoad(usize, &it.mem_limit, .acquire), .release);
+        _ = it.cancel_flags.fetchOr(cancel_bits.cancel | (if (unwind) cancel_bits.unwind else 0), .acq_rel);
+        if (first) @atomicStore(usize, &it.mem_limit, 0, .release);
         it.cancel_lock.unlock();
         if (comptime thread_mod.supported) {
             var root = it;
@@ -1555,21 +1567,23 @@ pub const Interp = struct {
     }
 
     /// Takes a pending cancel, and gives back `mem_limit`. Gives the bits.
-    fn takeCancel(it: *Interp) struct { bits: u32, text: ?[]u8 } {
+    /// The message goes to `buf`.
+    fn takeCancel(it: *Interp, buf: *[cancel_max]u8) struct { bits: u32, text: ?[]const u8 } {
         while (!it.cancel_lock.tryLock()) {}
         defer it.cancel_lock.unlock();
         const bits = it.cancel_flags.swap(0, .acq_rel);
         if (bits != 0) @atomicStore(usize, &it.mem_limit, it.cancel_mem, .release);
-        const t = it.cancel_text;
-        it.cancel_text = null;
-        return .{ .bits = bits, .text = t };
+        const len = it.cancel_len orelse return .{ .bits = bits, .text = null };
+        it.cancel_len = null;
+        @memcpy(buf[0..len], it.cancel_buf[0..len]);
+        return .{ .bits = bits, .text = buf[0..len] };
     }
 
     /// The error of a pending cancel, at a check point.
     fn cancelPoint(it: *Interp) Error!void {
-        const c = it.takeCancel();
+        var buf: [cancel_max]u8 = undefined;
+        const c = it.takeCancel(&buf);
         if (c.bits == 0) return;
-        defer if (c.text) |t| std.heap.smp_allocator.free(t);
         const unwind = c.bits & cancel_bits.unwind != 0;
         const msg: []const u8 = c.text orelse if (unwind) "eval unwound" else "eval canceled";
         if (unwind) it.cancel_unwinding = true;
@@ -1605,9 +1619,13 @@ pub const Interp = struct {
         return 0;
     }
 
+    /// True above the memory limit, or after the counter refused a
+    /// request above the hard cap. In a top-level eval that started
+    /// above the limit, only the hard cap applies.
     pub fn overLimit(it: *const Interp) bool {
         if (it.counter.refused) return true;
         if (it.counter.used <= it.mem_limit or it.counter.over_start) return false;
+        if (it.cancel_flags.load(.acquire) != 0) return it.counter.used > @atomicLoad(usize, &it.cancel_mem, .acquire);
         // A stop of a thread stores zero in `mem_limit` for a moment.
         if (comptime thread_mod.supported) return thread_mod.overLimit(it);
         return true;
