@@ -39,6 +39,20 @@ ztcl::vm exec $vm /bin/busybox sh -c {echo written by the guest > /mnt/share/fro
 check "the file of the guest in the share" [file exists share/from-guest.txt] 1
 ztcl::vm mount $vm share0 /mnt/ro -readonly
 check "a read-only mount" [dict get [ztcl::vm exec $vm /bin/busybox sh -c {echo x > /mnt/ro/x 2>/dev/null; echo $?}] stdout] "1\n"
+proc served {ch} {
+    fconfigure $ch -translation lf -buffering line
+    puts $ch "host got: [gets $ch]"
+    close $ch
+    set ::served 1
+}
+ztcl::vm listen $vm 3000 -command served
+ztcl::vm exec $vm /bin/busybox sh -c {(echo hi | /sbin/agent connect 3000 > /tmp/out 2>&1 &)}
+after 5000 {set ::served timeout}
+vwait ::served
+after 200
+check "a connection of the guest to the host" [dict get [ztcl::vm exec $vm /bin/busybox cat /tmp/out] stdout] "host got: hi\n"
+ztcl::vm unlisten $vm 3000
+check "no connection after unlisten" [dict get [ztcl::vm exec $vm /bin/busybox sh -c {echo x | /sbin/agent connect 3000 2>/dev/null; echo $?}] stdout] "1\n"
 ztcl::vm stop $vm -force
 check "a stopped guest" [ztcl::vm status $vm] stopped
 ztcl::vm start $vm

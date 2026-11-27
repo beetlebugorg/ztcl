@@ -13,6 +13,10 @@ As process 1, the agent mounts `proc` at `/proc`, `sysfs` at `/sys`, `devtmpfs` 
 
 Each connection runs in a child process of the agent, so a long `exec` does not stop another connection. On Windows the host reaches the same ports through Hyper-V sockets (`HV_GUID_VSOCK_TEMPLATE` with the port in the first 4 bytes of the service id).
 
+## The client mode
+
+`/sbin/agent connect PORT` connects to vsock port `PORT` of the host (CID 2) and copies its standard input to the connection and the connection to its standard output, until both close. It exits 1 when the host has no listener there. The host listens with `ztcl::vm listen`; dockyard's guest proxy relays the connections of `127.0.0.1:3128` in the guest this way.
+
 ## Frames
 
 Each message in each direction is one frame:

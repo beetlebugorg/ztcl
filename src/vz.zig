@@ -41,6 +41,9 @@ const Rt = struct {
     get_class: *const fn ([*:0]const u8) callconv(.c) ?Class,
     sel: *const fn ([*:0]const u8) callconv(.c) Sel,
     stack_block: *anyopaque,
+    alloc_class: *const fn (super: Class, name: [*:0]const u8, extra: usize) callconv(.c) ?Class,
+    add_method: *const fn (cls: Class, name: Sel, imp: *const anyopaque, types: [*:0]const u8) callconv(.c) bool,
+    register_class: *const fn (cls: Class) callconv(.c) void,
 };
 
 var rt: ?Rt = null;
@@ -58,6 +61,9 @@ pub fn load() Error!void {
         .get_class = @ptrCast(@alignCast(dlsym(objc, "objc_getClass") orelse return error.Unavailable)),
         .sel = @ptrCast(@alignCast(dlsym(objc, "sel_registerName") orelse return error.Unavailable)),
         .stack_block = dlsym(system, "_NSConcreteStackBlock") orelse return error.Unavailable,
+        .alloc_class = @ptrCast(@alignCast(dlsym(objc, "objc_allocateClassPair") orelse return error.Unavailable)),
+        .add_method = @ptrCast(@alignCast(dlsym(objc, "class_addMethod") orelse return error.Unavailable)),
+        .register_class = @ptrCast(@alignCast(dlsym(objc, "objc_registerClassPair") orelse return error.Unavailable)),
     };
 }
 
@@ -457,6 +463,130 @@ pub const Machine = struct {
         return error.Framework;
     }
 };
+
+// ---- Connections of the guest to the host (VZVirtioSocketListener) ----
+
+/// A listener of the host on a vsock port of a guest. The delegate of the
+/// framework runs on the queue of the machine: it takes a copy of the
+/// descriptor of each new connection, keeps it in `pending`, and writes
+/// its number to `pipe_w`, so the thread of the interpreter hears of it.
+/// `take` gives a descriptor only once, and only one that `pending` has.
+pub const Listener = struct {
+    m: *Machine,
+    port: u32,
+    pipe_w: c_int,
+    delegate: Id = undefined,
+    listener: Id = undefined,
+    lock: @import("thread.zig").Lock = .{},
+    pending: [64]c_int = @splat(-1),
+
+    /// Takes the descriptor `fd` that the delegate kept, or false.
+    pub fn take(l: *Listener, fd: c_int) bool {
+        l.lock.lock();
+        defer l.lock.unlock();
+        for (&l.pending) |*p| if (p.* == fd and fd >= 0) {
+            p.* = -1;
+            return true;
+        };
+        return false;
+    }
+};
+
+var listeners_lock: @import("thread.zig").Lock = .{};
+var listeners: std.ArrayList(*Listener) = .empty;
+
+fn listenerOf(delegate: Id) ?*Listener {
+    listeners_lock.lock();
+    defer listeners_lock.unlock();
+    for (listeners.items) |l| if (l.delegate == delegate) return l;
+    return null;
+}
+
+fn onAccept(delegate: Id, _: Sel, _: Id, conn: Id, _: Id) callconv(.c) bool {
+    const l = listenerOf(delegate) orelse return false;
+    const fd = dup(call(fn (Id, Sel) callconv(.c) c_int, conn, "fileDescriptor", .{}));
+    if (fd < 0) return false;
+    l.lock.lock();
+    const slot: ?*c_int = for (&l.pending) |*p| {
+        if (p.* < 0) break p;
+    } else null;
+    if (slot) |p| p.* = fd;
+    l.lock.unlock();
+    if (slot == null) {
+        _ = close(fd);
+        return false;
+    }
+    var n: c_int = fd;
+    _ = write(l.pipe_w, std.mem.asBytes(&n), @sizeOf(c_int));
+    return true;
+}
+
+extern "c" fn dup(fd: c_int) c_int;
+extern "c" fn close(fd: c_int) c_int;
+extern "c" fn write(fd: c_int, buf: [*]const u8, n: usize) isize;
+
+var delegate_class: ?Class = null;
+
+fn delegateClass() Error!Class {
+    if (delegate_class) |c| return c;
+    if (rt.?.get_class("ZtclVsockListener")) |c| {
+        delegate_class = c;
+        return c;
+    }
+    const cls = rt.?.alloc_class(try class("NSObject"), "ZtclVsockListener", 0) orelse return error.Unavailable;
+    _ = rt.?.add_method(cls, rt.?.sel("listener:shouldAcceptNewConnection:fromSocketDevice:"), @ptrCast(&onAccept), "c@:@@@");
+    rt.?.register_class(cls);
+    delegate_class = cls;
+    return cls;
+}
+
+/// Listens on `port` of the guest of `m`. A new connection writes its
+/// descriptor to `pipe_w`. The caller owns the listener: `unlisten`.
+pub fn listen(gpa: std.mem.Allocator, m: *Machine, port: u32, pipe_w: c_int) Error!*Listener {
+    const l = gpa.create(Listener) catch return error.Framework;
+    l.* = .{ .m = m, .port = port, .pipe_w = pipe_w };
+    l.delegate = send0(send0(try delegateClass(), "alloc"), "init");
+    l.listener = try new("VZVirtioSocketListener");
+    setter(l.listener, "setDelegate:", l.delegate);
+    listeners_lock.lock();
+    listeners.append(std.heap.c_allocator, l) catch {
+        listeners_lock.unlock();
+        release(l.listener);
+        release(l.delegate);
+        gpa.destroy(l);
+        return error.Framework;
+    };
+    listeners_lock.unlock();
+    onQueue(m.q, Listener, l, struct {
+        fn f(x: *Listener) void {
+            const dev = send0(send0(x.m.vm, "socketDevices"), "firstObject");
+            call(fn (Id, Sel, Id, u32) callconv(.c) void, dev, "setSocketListener:forPort:", .{ x.listener, x.port });
+        }
+    }.f);
+    return l;
+}
+
+/// Stops a listener and closes each connection that no script took.
+pub fn unlisten(gpa: std.mem.Allocator, l: *Listener) void {
+    onQueue(l.m.q, Listener, l, struct {
+        fn f(x: *Listener) void {
+            const dev = send0(send0(x.m.vm, "socketDevices"), "firstObject");
+            call(fn (Id, Sel, u32) callconv(.c) void, dev, "removeSocketListenerForPort:", .{x.port});
+        }
+    }.f);
+    listeners_lock.lock();
+    for (listeners.items, 0..) |x, i| if (x == l) {
+        _ = listeners.swapRemove(i);
+        break;
+    };
+    listeners_lock.unlock();
+    for (l.pending) |fd| if (fd >= 0) {
+        _ = close(fd);
+    };
+    release(l.listener);
+    release(l.delegate);
+    gpa.destroy(l);
+}
 
 /// Checks that a configuration can save and restore its state.
 pub fn checkSaveRestore(vc: Id, why: *[]const u8) bool {
