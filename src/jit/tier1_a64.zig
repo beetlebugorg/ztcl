@@ -613,6 +613,13 @@ pub const Emitter = struct {
         try e.emptyAddr(rax);
         s.bind(have);
         try e.copy(abi.stack, (d - 2) * l.value_size, rax, 0);
+        // An item that is a list now has a second holder: its stamp goes to
+        // 0, as in `vm.opLindex`.
+        const keep = try s.newLabel();
+        try e.stackTag(d - 2, l.tag_list, keep);
+        try e.ldr(rdx, abi.stack, e.stackOff(d - 2, l.value_payload));
+        try e.str(.zr, rdx, l.obj_own_stamp);
+        s.bind(keep);
     }
 
     fn lappend(e: *Emitter, pc: u32) Error!void {

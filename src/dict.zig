@@ -450,6 +450,9 @@ const Before = struct {
         const now = c.target();
         if (now.v == .val and isMarked(now.v.val) and (b.was_owned or now.v.val.list.obj != b.old)) {
             const v = now.v.val;
+            // The general write can give an inner buffer to another
+            // place, so the stamps of the inner buffers end.
+            v.list.obj.own_stamp = value.newOwnStamp();
             now.v = .{ .owned = v };
         }
     }

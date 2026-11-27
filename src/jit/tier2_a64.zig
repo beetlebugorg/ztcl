@@ -1184,6 +1184,14 @@ const Emitter = struct {
         try e.ldr(rax, rax, @offsetOf(jit.EnterCtx, "empty"));
         s.bind(have);
         try e.copy(abi.stack, @as(i64, list) * l.value_size, rax, 0);
+        // An item that is a list now has a second holder: its stamp goes to
+        // 0, as in `vm.opLindex`.
+        const keep = try s.newLabel();
+        try e.cmpByte(abi.stack, e.stackOff(list, l.value_tag), l.tag_list);
+        try s.bcond(.ne, keep);
+        try e.ldr(rcx, abi.stack, e.stackOff(list, l.value_payload));
+        try e.str(.zr, rcx, l.obj_own_stamp);
+        s.bind(keep);
         return true;
     }
 

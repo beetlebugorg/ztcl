@@ -2753,6 +2753,7 @@ pub const Interp = struct {
         const items = try it.list(cur);
         const l = try value.allocList(it.alloc(), items.len);
         @memcpy(l.obj.buf, items);
+        l.obj.own_stamp = value.newOwnStamp();
         cell.v = .{ .owned = .{ .list = l } };
         return l.obj.buf;
     }

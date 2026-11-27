@@ -194,3 +194,79 @@ show [cond 1] [cond 0] [cond 1] [cond 0]
 proc q1 {x} { set y 1; return [info locals] }
 proc q2 {x} { set z 1; return [info locals] }
 show [q1 1] [q2 1] [q1 1] [q2 1]
+# An `lset` with two or more indexes writes the inner lists in place.
+# Each case reads an inner list into one more place, at each level, and
+# then writes through the outer variable.
+proc nest {} {
+    set m {{1 2} {3 4} {5 6}}
+    for {set i 0} {$i < 3} {incr i} { lset m $i 1 x$i }
+    set r [lindex $m 1]
+    lset m 1 0 y
+    set d [dict get {a {7 8}} a]
+    set m [list $d {9 9}]
+    lset m 0 0 z
+    list $m $r $d
+}
+show [nest] [nest]
+proc deep {} {
+    set m {{{1 2} {3 4}} {{5 6} {7 8}}}
+    lset m 0 1 0 a
+    set r [lindex $m 0]
+    set g [lindex $r 1]
+    lset m 0 1 1 b
+    set c $m
+    lset m 1 0 0 c
+    set s "$m"
+    lset m 1 0 1 d
+    set h [lindex $m 1 0]
+    lset m 1 0 0 e
+    foreach row $m { lappend f $row }
+    lset m 0 0 0 f
+    lassign $m p q
+    lset m 1 1 1 g
+    list $m $r $g $c $s $h $f $p $q
+}
+show [deep] [deep]
+proc rows {n} {
+    set m {}
+    for {set i 0} {$i < $n} {incr i} { lappend m [lrepeat $n 0] }
+    set keep {}
+    for {set k 0} {$k < 3} {incr k} {
+        for {set i 0} {$i < $n} {incr i} {
+            for {set j 0} {$j < $n} {incr j} { lset m $i $j [expr {$i * $j + $k}] }
+            if {$i == $k} { lappend keep [lindex $m $i] }
+        }
+    }
+    list $m $keep
+}
+show [rows 4]
+proc dicts {} {
+    set m [list {a 1 b 2} {a 3 b 4}]
+    lset m 0 1 10
+    set e [dict get [lindex $m 0] a]
+    set r [lindex $m 0]
+    lset m 0 3 20
+    list $m $e $r [dict get $r b]
+}
+show [dicts] [dicts]
+proc other {l} { lset l 0 0 q; return $l }
+proc pass {} {
+    set m {{1 2} {3 4}}
+    lset m 0 0 a
+    set o [other $m]
+    lset m 0 1 b
+    set o2 [other [lindex $m 1]]
+    lset m 1 0 c
+    list $m $o $o2
+}
+show [pass] [pass]
+proc shared {} {
+    set m {{1 2} {3 4}}
+    lset m 0 0 a
+    upvar 0 m al
+    set x [lindex $al 0]
+    lset al 0 1 b
+    lset m 0 0 c
+    list $m $x
+}
+show [shared] [shared]

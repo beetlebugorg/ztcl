@@ -12,6 +12,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 
 pub const Value = union(enum) {
@@ -177,7 +178,39 @@ pub const ListObj = struct {
     /// The hash table of the keys in `buf[0..dict_len]`, made at the
     /// first lookup in a large dict.
     index: ?*DictIndex = null,
+    /// The stamp of the owned buffer that holds this buffer, or 0. A
+    /// cell that owns its list gives the outer buffer a new stamp
+    /// (`newOwnStamp`). A write through the cell copies an inner buffer
+    /// one time and gives the copy the stamp of the outer buffer. When
+    /// each buffer on the path has that stamp, only the path holds the
+    /// buffer, and the write goes in place. A read that gives an inner
+    /// buffer to another place sets its stamp to 0 (`dropStamp`).
+    own_stamp: u64 = 0,
 };
+
+var own_clock: u64 = 1;
+/// wasm32 has no atomic operation on 64 bits, so a threaded wasm build
+/// takes this lock around the counter.
+var own_lock: std.atomic.Mutex = .unlocked;
+
+/// A stamp that no other buffer of the process has had.
+pub fn newOwnStamp() u64 {
+    if (comptime !builtin.single_threaded and !builtin.cpu.arch.isWasm()) {
+        return @atomicRmw(u64, &own_clock, .Add, 1, .monotonic);
+    }
+    if (comptime !builtin.single_threaded) {
+        while (!own_lock.tryLock()) {}
+    }
+    defer if (comptime !builtin.single_threaded) own_lock.unlock();
+    own_clock += 1;
+    return own_clock - 1;
+}
+
+/// Ends the single holder of the buffer of `v`, when `v` is a list: a
+/// read gave it to another place.
+pub inline fn dropStamp(v: Value) void {
+    if (v == .list) v.list.obj.own_stamp = 0;
+}
 
 /// One place of a dict hash table: the hash of a key and the position
 /// of the key in the buffer.
