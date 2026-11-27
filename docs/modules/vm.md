@@ -10,6 +10,8 @@ puts [ztcl::vm exec $vm /bin/busybox uname -m]   ;# exit 0 stdout {aarch64\n} st
 ztcl::vm delete $vm
 ```
 
+[Linux guests](../vm.md) is the guide: the hypervisor of each system, the images, the start times, and the security model.
+
 The command is not a package: it exists when the embedder turns on the capability `vm`, and it is absent otherwise. A child interp never has it, so the limits count the guests of one interpreter. The paths of a guest also need the capability `file`, and the channels of a guest need `channels`.
 
 The backends: Virtualization.framework on macOS 12 and later, the KVM monitor of ztcl on x86-64 Linux, and the monitor of ztcl on the Windows Hypervisor Platform on x86-64 Windows. On Linux and Windows a guest has no share yet (`ZTCL VM SHARE`), and on Windows it has one CPU. Windows needs its hypervisor, which runs with Virtualization-based Security or the feature Windows Hypervisor Platform, and no elevation. On another platform each command gives `ZTCL VM UNAVAILABLE`. The plan of the backends, the guest agent, and the base image is in `docs/dev/vm.md`.
