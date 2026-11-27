@@ -17,4 +17,4 @@ cd "$dir"
 # The runner gives a script no environment, so the name of the kernel
 # goes in a file.
 printf %s "${KERNEL:-bzImage}" > kernel.name
-exec "$here/../../zig-out/bin/ztcl" --root . --allow vm,file,channels,clock,event "$here/test-kvm.tcl"
+exec "$here/../../zig-out/bin/ztcl" --root . --allow vm,file,channels,clock,event,socket "$here/test-kvm.tcl"

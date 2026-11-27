@@ -133,6 +133,8 @@ test {
     _ = @import("vm/virtio/ninep.zig");
     _ = @import("vm/virtio/fuse.zig");
     _ = @import("vm/nat/nat.zig");
+    _ = @import("vm/virtio/net.zig");
+    _ = @import("vm/nat/engine.zig");
     _ = zipwrite;
     _ = buildnative;
     _ = dbus;

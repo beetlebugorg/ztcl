@@ -57,6 +57,7 @@ const more = @import("more.zig");
 const chan = @import("chan.zig");
 const fsroot = @import("fsroot.zig");
 const sys = @import("sys.zig");
+const nat_engine = @import("vm/nat/engine.zig");
 const Interp = interp.Interp;
 const Value = value.Value;
 const Error = interp.Error;
@@ -1318,6 +1319,7 @@ const lin = if (on_kvm) struct {
         var warm = false;
         var image: ?[]const u8 = null;
         var own_boot = false;
+        var dns = true;
         var i: usize = 0;
         while (i < args.len) : (i += 2) {
             const opt = try it.str(args[i]);
@@ -1339,6 +1341,17 @@ const lin = if (on_kvm) struct {
                 cfg.entropy = try it.int(v) != 0;
             } else if (std.mem.eql(u8, opt, "-warm")) {
                 warm = try it.int(v) != 0;
+            } else if (std.mem.eql(u8, opt, "-net")) {
+                const kind = try it.str(v);
+                if (std.mem.eql(u8, kind, "none")) {
+                    cfg.net = null;
+                } else if (std.mem.eql(u8, kind, "nat")) {
+                    if (it.capabilities & @backingInt(interp.Capability.socket) == 0)
+                        return it.failCode("ZTCL VM NONET", "-net nat needs the socket capability", .{});
+                    cfg.net = .{ .policy = netPolicy, .policy_ctx = it };
+                } else return it.fail("bad network \"{s}\": must be nat or none", .{kind});
+            } else if (std.mem.eql(u8, opt, "-dns")) {
+                dns = try it.int(v) != 0;
             } else if (std.mem.eql(u8, opt, "-disk")) {
                 const l = try it.readList(v);
                 if (l.len < 1 or l.len > 2) return it.fail("a disk is {{file ?rw?}}", .{});
@@ -1349,15 +1362,17 @@ const lin = if (on_kvm) struct {
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 if (disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{kvm.max_disks});
                 try shares.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 3 and try isRw(it, l[2]) });
-            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -image, -initrd, -kernel, -memory, -share, or -warm", .{opt});
+            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -dns, -entropy, -image, -initrd, -kernel, -memory, -net, -share, or -warm", .{opt});
         }
+        if (cfg.net) |*nc| nc.dns = dns;
+        if (cfg.net != null and disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest with -net nat has at most {d} disks and shares", .{kvm.max_disks - 1});
         if (image != null and own_boot) return it.fail("-image gives the kernel, the initramfs, and the command line: no -kernel, -initrd, or -cmdline with it", .{});
         if (image == null and kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel or -image", .{});
 
         // A guest of the image from the pool: no share and no disk of its
         // own, so its configuration is the one of the pool.
         var fp: ?[]const u8 = null;
-        if (image != null and host.pool_size > 0 and shares.items.len == 0 and disks.items.len == 0 and !warm) {
+        if (image != null and host.pool_size > 0 and shares.items.len == 0 and disks.items.len == 0 and !warm and cfg.net == null) {
             const st = try store(it);
             defer st.close();
             const counter = (st.current(a, image.?) catch |e| return storeFail(it, e)) orelse
@@ -1443,6 +1458,16 @@ const lin = if (on_kvm) struct {
             g.machine.pause();
         }
         return .{ .str = g.name };
+    }
+
+    /// The network policy of the interpreter for each host address of
+    /// the NAT of a guest, on the thread of the NAT. The policy of an
+    /// interpreter does not change after the embedder sets it.
+    fn netPolicy(ctx: ?*anyopaque, _: nat_engine.Proto, a: nat_engine.Ip4, port: u16) bool {
+        const it: *Interp = @ptrCast(@alignCast(ctx.?));
+        var addr: sys.Addr = .{ .port = port };
+        @memcpy(addr.bytes[0..4], &a);
+        return @import("sock.zig").permits(it.net, addr, port, null);
     }
 
     fn start(it: *Interp, g: *Guest) Error!void {

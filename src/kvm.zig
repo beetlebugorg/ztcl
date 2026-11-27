@@ -226,6 +226,9 @@ pub const Config = struct {
     shares: []const Share = &.{},
     /// A virtio entropy device, after the disks and the shares.
     entropy: bool = false,
+    /// `-net nat`: a virtio-net device, last, on the NAT of
+    /// `vm/nat/engine.zig` with this configuration.
+    net: ?nat_engine.Config = null,
     /// The descriptor of the console (a socket): the output of the
     /// guest goes to it, and its input goes to the guest.
     console: i32,
@@ -283,6 +286,9 @@ const virtio = @import("vm/virtio/mmio.zig");
 const boot = @import("vm/boot.zig");
 const ninep = @import("vm/virtio/ninep.zig");
 const share_linux = @import("vm/share_linux.zig");
+const vnet = @import("vm/virtio/net.zig");
+const nat_engine = @import("vm/nat/engine.zig");
+const nat_stack = @import("vm/nat/nat.zig");
 
 const NinepState = struct {
     share: share_linux.Share,
@@ -347,6 +353,15 @@ vs_call: [2]i32 = .{ -1, -1 },
 vs_running: bool = false,
 /// The ioeventfd of InterruptACK of vsock.
 vs_ack: i32 = -1,
+/// `-net nat`: the device, its engine, and the ioeventfds of the
+/// notify of its receive and transmit queues. The engine thread runs
+/// both queues; `net_in_tx` is true while it holds the lock of the
+/// device for the transmit queue, so a frame for the guest in that
+/// time needs no second lock.
+net: vnet.Net = undefined,
+nat: ?*nat_engine.Nat = null,
+net_kick: [2]i32 = .{ -1, -1 },
+net_in_tx: bool = false,
 /// The text of a failure of a vCPU.
 fail_text: []const u8 = "",
 /// The guest address of the 64-bit entry point of the kernel.
@@ -356,7 +371,7 @@ entry: u64 = 0,
 /// `cfg` with no copy, so the caller keeps them until `deinit`.
 pub fn init(alloc: std.mem.Allocator, cfg: Config) Fail!*Machine {
     try probe();
-    if (cfg.disks.len + cfg.shares.len > max_disks) {
+    if (cfg.disks.len + cfg.shares.len + @intFromBool(cfg.net != null) > max_disks) {
         why = "too many disks and shares";
         return error.Setup;
     }
@@ -451,6 +466,9 @@ fn teardown(m: *Machine) void {
         t.join();
         m.con_thread = null;
     }
+    if (m.nat) |n| n.deinit();
+    m.nat = null;
+    for (&m.net_kick) |*f| closeFd(f);
     for (m.vcpus) |*v| {
         if (v.run_size != 0) _ = linux.munmap(v.run, v.run_size);
         closeFd(&v.fd);
@@ -611,7 +629,11 @@ fn eventfd() Fail!i32 {
 }
 
 fn deviceCount(m: *const Machine) usize {
-    return 2 + m.cfg.disks.len + m.cfg.shares.len + @intFromBool(m.cfg.entropy);
+    return 2 + m.cfg.disks.len + m.cfg.shares.len + @intFromBool(m.cfg.entropy) + @intFromBool(m.cfg.net != null);
+}
+
+fn entropyIndex(m: *const Machine) usize {
+    return 2 + m.cfg.disks.len + m.cfg.shares.len;
 }
 
 fn makeDevices(m: *Machine) Fail!void {
@@ -637,7 +659,8 @@ fn makeDevices(m: *Machine) Fail!void {
         const k = 2 + m.cfg.disks.len + i;
         m.devices[k] = Device.ninep(irqs[k], &st.server, tag);
     }
-    if (m.cfg.entropy) m.devices[n - 1] = Device.rng(irqs[n - 1], fillRandom);
+    if (m.cfg.entropy) m.devices[m.entropyIndex()] = Device.rng(irqs[m.entropyIndex()], fillRandom);
+    if (m.cfg.net) |nc| try m.makeNet(n - 1, nc);
     m.con_stop = try eventfd();
     m.con_wake = try eventfd();
 
@@ -681,6 +704,84 @@ fn makeDevices(m: *Machine) Fail!void {
     m.vs_ack = try eventfd();
     var ack: Ioeventfd = .{ .datamatch = 0, .addr = mmio_base + mmio_size * 1 + 0x64, .len = 4, .fd = m.vs_ack, .flags = 0 };
     _ = try check(ioctl(m.vm, KVM_IOEVENTFD, @intFromPtr(&ack)), "KVM_IOEVENTFD");
+}
+
+/// The virtio-net device at index `k` and its NAT engine. The notify of
+/// each queue goes to an ioeventfd that the engine thread waits on, so
+/// a notify of the guest costs no exit to user space.
+fn makeNet(m: *Machine, k: usize, nc: nat_engine.Config) Fail!void {
+    m.net = .{ .mac = nat_stack.guest_mac, .ctx = m, .kick = netKick };
+    m.devices[k] = Device.net(irqs[k], &m.net);
+    m.nat = nat_engine.Nat.init(m.alloc, nc, .{ .ctx = m, .deliver = netDeliver, .flush = netFlush }) catch {
+        why = "no NAT engine";
+        return error.Setup;
+    };
+    const calls = [2]*const fn (*anyopaque) void{ netRx, netTx };
+    for (0..2) |q| {
+        m.net_kick[q] = try eventfd();
+        var io: Ioeventfd = .{ .datamatch = q, .addr = mmio_base + mmio_size * k + 0x50, .len = 4, .fd = m.net_kick[q], .flags = ioeventfd_datamatch };
+        _ = try check(ioctl(m.vm, KVM_IOEVENTFD, @intFromPtr(&io)), "KVM_IOEVENTFD");
+        m.nat.?.watch(m.net_kick[q], m, calls[q]) catch {
+            why = "the NAT engine";
+            return error.Setup;
+        };
+    }
+    m.nat.?.start() catch {
+        why = "no thread for the NAT";
+        return error.Setup;
+    };
+}
+
+fn netDev(m: *Machine) *Device {
+    return &m.devices[m.devices.len - 1];
+}
+
+/// A notify that did not go to an ioeventfd.
+fn netKick(ctx: *anyopaque, qi: u32) void {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
+    if (qi < 2) {
+        const one: u64 = 1;
+        _ = linux.write(m.net_kick[qi], std.mem.asBytes(&one), 8);
+    }
+}
+
+fn netTx(ctx: *anyopaque) void {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
+    const d = m.netDev();
+    const h = m.host();
+    d.lock.lock();
+    defer d.lock.unlock();
+    m.net_in_tx = true;
+    defer m.net_in_tx = false;
+    _ = m.net.tx(d, &h, m.nat.?.sink());
+}
+
+fn netRx(ctx: *anyopaque) void {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
+    m.nat.?.rxSpace();
+}
+
+fn netDeliver(ctx: *anyopaque, hdr: vnet.Hdr, parts: []const []const u8) bool {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
+    const d = m.netDev();
+    const h = m.host();
+    if (!m.net_in_tx) d.lock.lock();
+    defer if (!m.net_in_tx) d.lock.unlock();
+    while (true) {
+        if (m.net.deliver(d, &h, hdr, parts)) return true;
+        // No room: ask the driver for a notify when it adds buffers,
+        // and try again when it added some in the meantime.
+        if (!m.net.rxArm(d, &h)) return false;
+    }
+}
+
+fn netFlush(ctx: *anyopaque) void {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
+    const d = m.netDev();
+    const h = m.host();
+    if (!m.net_in_tx) d.lock.lock();
+    defer if (!m.net_in_tx) d.lock.unlock();
+    m.net.rxDone(d, &h);
 }
 
 fn host(m: *Machine) virtio.Host {

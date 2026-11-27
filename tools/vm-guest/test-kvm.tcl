@@ -92,6 +92,27 @@ check "listen: no connection after unlisten" [dict get [ztcl::vm exec $vm /bin/b
 check "unlisten: no listener" [lrange [list [catch {ztcl::vm unlisten $vm 3000}] $::errorCode] 0 1] {1 {ZTCL VM LISTEN}}
 ztcl::vm delete $vm
 
+# -net nat: udhcpc of BusyBox gets the lease of the NAT, and its script
+# sets the address and the route. Then ICMP echo to the gateway. A
+# kernel with no virtio-net has no eth0, and the test skips.
+set vm [ztcl::vm create {*}$boot -net nat]
+ztcl::vm start $vm
+set dhcp {b=/bin/busybox
+$b ip link set eth0 up 2>/dev/null || exit 9
+printf '#!/bin/busybox sh\n[ "$1" = bound ] || exit 0\n/bin/busybox ifconfig $interface $ip netmask $subnet up\n/bin/busybox route add default gw $router\n' > /tmp/dhcp.sh
+$b chmod +x /tmp/dhcp.sh
+$b udhcpc -i eth0 -n -q -f -t 5 -T 1 -s /tmp/dhcp.sh 2>&1 | $b grep -o "lease of [0-9.]* obtained"}
+set r [ztcl::vm exec $vm /bin/busybox sh -c $dhcp]
+if {[dict get $r exit] == 9} {
+    puts "skip: the kernel has no virtio-net"
+} else {
+    check "net: a DHCP lease" [dict get $r stdout] "lease of 10.0.2.15 obtained\n"
+    check "net: the route" [string match "*10.0.2.2*" [dict get [ztcl::vm exec $vm /bin/busybox route -n] stdout]] 1
+    check "net: ping the gateway" [dict get [ztcl::vm exec $vm /bin/busybox sh -c {/bin/busybox ping -c 3 -W 2 10.0.2.2 > /dev/null; echo $?}] stdout] "0\n"
+}
+ztcl::vm delete $vm
+check "net: a bad network" [catch {ztcl::vm create {*}$boot -net tap}] 1
+
 # Shares with 9p: share0 at /mnt/share (rw), share1 read-only.
 file delete -force share ro
 file mkdir share/sub ro
