@@ -68,6 +68,9 @@ fn bootNs() u64 {
 
 var times: [2]u64 = .{ 0, 0 };
 
+/// The options of a 9p share of virtio.
+const nine_p_options: [*:0]const u8 = "trans=virtio,version=9p2000.L";
+
 // ---- The start ----
 
 fn mkdirs(path: [*:0]const u8) void {
@@ -94,7 +97,9 @@ fn mounts() void {
     _ = linux.mount("dev", "/dev", "devtmpfs", 0, 0);
     _ = linux.mount("tmp", "/tmp", "tmpfs", 0, 0);
     mkdirs("/mnt/share");
-    _ = linux.mount("share0", "/mnt/share", "virtiofs", 0, 0);
+    // virtio-fs on Virtualization.framework, 9p on the KVM monitor.
+    if (linux.errno(linux.mount("share0", "/mnt/share", "virtiofs", 0, 0)) != .SUCCESS)
+        _ = linux.mount("share0", "/mnt/share", "9p", 0, @intFromPtr(nine_p_options));
 }
 
 fn listenOn(port: u32) ?i32 {
@@ -299,7 +304,11 @@ fn mount(c: i32, r: *Reader) void {
     const flags = r.int(u8) orelse 0;
     mkdirs(path);
     const ro: u32 = if (flags & 1 != 0) linux.MS.RDONLY else 0;
-    const rc = linux.mount(tag, path, "virtiofs", ro, 0);
+    // Bit 1: a 9p share (the KVM monitor) in the place of virtio-fs.
+    const rc = if (flags & 2 != 0)
+        linux.mount(tag, path, "9p", ro, @intFromPtr(nine_p_options))
+    else
+        linux.mount(tag, path, "virtiofs", ro, 0);
     if (linux.errno(rc) != .SUCCESS) return sendError(c, errnoOf(rc), "mount failed");
     send(c, t_ok, "");
 }

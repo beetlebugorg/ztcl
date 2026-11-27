@@ -482,7 +482,7 @@ const mac = if (on_mac) struct {
         if (ro and !std.mem.eql(u8, try it.str(args[2]), "-readonly")) return it.wrongArgs(use);
         var a = try agent(it, g, 5000);
         defer _ = c.close(a.fd);
-        vmagent.mount(&a, it.alloc(), try it.str(args[0]), try it.str(args[1]), ro) catch |e| return agentFail(it, g, &a, e);
+        vmagent.mount(&a, it.alloc(), try it.str(args[0]), try it.str(args[1]), ro, .virtiofs) catch |e| return agentFail(it, g, &a, e);
         return .{ .str = "" };
     }
 
