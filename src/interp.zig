@@ -1826,6 +1826,8 @@ pub const Interp = struct {
         if (new & @backingInt(Capability.package) != 0) {
             try it.register("package", @import("pkg.zig").cmdPackage);
             _ = it.eval("package provide TclOO 1.1.0") catch {};
+            // auto_path, the pkgIndex.tcl search, auto_load, and history.
+            _ = it.eval(@embedFile("library.tcl")) catch {};
         }
         if (new & @backingInt(Capability.interp) != 0) try it.register("interp", @import("child.zig").cmdInterp);
         if (new & @backingInt(Capability.clock) != 0) try @import("clock.zig").register(it);

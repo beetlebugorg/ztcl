@@ -208,7 +208,16 @@ pub fn posixError(it: *Interp, e: sys.Errno, what: []const u8) Error {
 pub fn normal(it: *Interp, path: []const u8) Error!?[]const u8 {
     const a = it.alloc();
     // In host mode the normal form is the absolute path of the host.
-    if (it.fs.host) return if (comptime on_win) try joinWindows(a, it.fs.cwd, path) else try joinPosix(a, it.fs.cwd, path);
+    if (it.fs.host) {
+        // As in Tcl 8.6, ~ at the start is the folder of $env(HOME).
+        var p = path;
+        if (p.len > 0 and p[0] == '~' and (p.len == 1 or p[1] == '/')) {
+            if (it.getVar("::env(HOME)")) |home| {
+                p = try std.mem.concat(a, u8, &.{ try it.str(home), p[1..] });
+            } else |_| {}
+        }
+        return if (comptime on_win) try joinWindows(a, it.fs.cwd, p) else try joinPosix(a, it.fs.cwd, p);
+    }
     var parts: std.ArrayList([]const u8) = .empty;
     const absolute = path.len > 0 and path[0] == '/';
     if (!absolute and it.fs.cwd.len > 0) {
