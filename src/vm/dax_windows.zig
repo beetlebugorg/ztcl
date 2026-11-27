@@ -1,7 +1,7 @@
 //! The DAX window of a virtio-fs share on the Windows Hypervisor Platform
 //! (`whp.zig`, the plan in `docs/dev/virtiofs.md`). The window is a range
 //! of guest addresses above the RAM and the devices, with no memory of
-//! the host until the guest asks for a mapping.
+//! the host until a FUSE_SETUPMAPPING of the guest.
 //!
 //! FUSE_SETUPMAPPING gives a range of a file and an offset in the window.
 //! The window keeps a handle of the file for the mapping, and maps a view:
@@ -14,7 +14,7 @@
 //! shows on the other at once. FUSE_REMOVEMAPPING undoes each step.
 //!
 //! A view ends at the end of the file when the mapping is made. Windows
-//! refuses to truncate a file with a section, and a view does not grow
+//! truncates no file with a section, and a view does not grow
 //! with the file. So a mapping can lose its view and keep its range: the
 //! server drops the views of a file before it changes the size of the file
 //! and when the guest releases the file, and a file that the guest has no
@@ -76,7 +76,7 @@ var advise_fn: ?*const anyopaque = null;
 
 const Map = struct {
     moffset: u64,
-    /// The length of the range that the guest asked for.
+    /// The length of the range of the FUSE_SETUPMAPPING.
     len: u64,
     foffset: u64,
     write: bool,
