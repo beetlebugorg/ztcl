@@ -1545,6 +1545,10 @@ pub const Interp = struct {
     regex_cache: [@import("regex.zig").cache_size]@import("regex.zig").CacheEntry = @splat(.{}),
     /// The failed spans of the current regular expression search.
     re_memo: std.AutoHashMapUnmanaged(u64, void) = .empty,
+    /// The same failed spans as a bit table, for a match of a short
+    /// span (`regex.Matcher.memoBits`), and the words with a set bit.
+    re_bits: std.ArrayList(u64) = .empty,
+    re_dirty: std.ArrayList(u32) = .empty,
     /// The strings that `append` can extend in place.
     tails: [4]StrTail = @splat(.{}),
     next_tail: u8 = 0,

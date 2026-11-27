@@ -25,3 +25,16 @@ proc run {pats texts} {
     return $r
 }
 puts [join [run $pats $texts] \n]
+# The groups of a match of a short span keep their failed spans in a
+# bit table, and of a long span in the hash map.
+proc groups {line} {
+    set r {}
+    foreach t [list [string repeat ab 60]c [string repeat ab 200]c] {
+        lappend r [regexp -inline {((a|b)*)((a|b)*)(c)} $t] [regexp -inline {(.*)(.*)(.*)c} $t]
+    }
+    lappend r [regexp -inline {^(\S+) (.*) (\d+)$} $line] [regexp -all -inline {(\w)(\w*)} $line]
+    lappend r [regexp -inline {^(\S+) \S+ \S+ \[([^\]]+)\] "(\S+) (\S+) [^"]*" (\d+) (\d+)} $line]
+    return $r
+}
+puts [groups $line]
+puts [groups $line]
