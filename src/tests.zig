@@ -3273,6 +3273,7 @@ test "ztcl::vm: the capability, the jail of its paths, and the limits" {
     try std.testing.expectEqualStrings("POSIX EACCES {permission denied}", try it.str(try it.eval("catch {ztcl::vm create -kernel ../../build.zig}; set ::errorCode")));
     if (on_kvm or on_whp) {
         if (on_kvm) {
+            try std.testing.expectEqualStrings("-image gives the kernel, the initramfs, and the command line: no -kernel, -initrd, or -cmdline with it", try it.str(try it.eval("catch {ztcl::vm create -image x -kernel Image} m; set m")));
             // A share is a folder below the root folder.
             _ = try it.eval("ztcl::vm delete [ztcl::vm create -kernel Image -share {share /mnt rw}]");
             try std.testing.expectEqualStrings("ENOTDIR", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {Image /mnt}}; lindex $::errorCode 1")));

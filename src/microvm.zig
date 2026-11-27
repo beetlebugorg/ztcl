@@ -1192,11 +1192,16 @@ const lin = if (on_kvm) struct {
         var disks: std.ArrayList(struct { path: []const u8, rw: bool }) = .empty;
         var shares: std.ArrayList(struct { path: []const u8, rw: bool }) = .empty;
         var warm = false;
+        var image: ?[]const u8 = null;
+        var own_boot = false;
         var i: usize = 0;
         while (i < args.len) : (i += 2) {
             const opt = try it.str(args[i]);
             const v = args[i + 1];
-            if (std.mem.eql(u8, opt, "-cpus")) {
+            if (std.mem.eql(u8, opt, "-kernel") or std.mem.eql(u8, opt, "-initrd") or std.mem.eql(u8, opt, "-cmdline")) own_boot = true;
+            if (std.mem.eql(u8, opt, "-image")) {
+                image = try it.str(v);
+            } else if (std.mem.eql(u8, opt, "-cpus")) {
                 cfg.cpus = try limit(it, v, "CPU count", host.max_cpus);
             } else if (std.mem.eql(u8, opt, "-memory")) {
                 cfg.memory_mb = try limit(it, v, "memory in MB", host.max_memory_mb);
@@ -1220,20 +1225,39 @@ const lin = if (on_kvm) struct {
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 if (disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{kvm.max_disks});
                 try shares.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 3 and try isRw(it, l[2]) });
-            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -initrd, -kernel, -memory, -share, or -warm", .{opt});
+            } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -image, -initrd, -kernel, -memory, -share, or -warm", .{opt});
         }
-        if (kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel until the base image of the plan", .{});
+        if (image != null and own_boot) return it.fail("-image gives the kernel, the initramfs, and the command line: no -kernel, -initrd, or -cmdline with it", .{});
+        if (image == null and kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel or -image", .{});
 
         const g = try b.create(Guest);
         g.* = .{ .name = "", .machine = undefined, .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .shares = &.{}, .console_vm = -1, .console_host = -1, .warm = warm };
         var made = false;
         errdefer if (!made) freeGuest(it, g);
-        g.kernel = try readPath(it, kernel);
-        if (initrd.len != 0) g.initrd = try readPath(it, initrd);
-        g.cmdline = try b.dupe(u8, cfg.cmdline);
-        g.disks = try b.alloc(kvm.Disk, disks.items.len);
-        for (g.disks) |*d| d.fd = -1;
-        for (disks.items, g.disks) |d, *out| out.* = .{ .fd = try openPath(it, d.path, d.rw), .read_only = !d.rw };
+        // The disks of an image come first, read-only: /dev/vda is its
+        // root, which the command line of the manifest gives to dm-verity.
+        var image_disks: []const i32 = &.{};
+        if (image) |name| {
+            const l = try loadImage(it, b, name);
+            g.kernel = l.kernel;
+            g.initrd = l.initrd;
+            image_disks = l.disks;
+            g.disks = b.alloc(kvm.Disk, l.disks.len + disks.items.len) catch |e| {
+                for (l.disks) |fd| sys.close(fd);
+                return e;
+            };
+            for (g.disks) |*d| d.fd = -1;
+            for (l.disks, g.disks[0..l.disks.len]) |fd, *out| out.* = .{ .fd = fd, .read_only = true };
+            if (g.disks.len + shares.items.len > kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{kvm.max_disks});
+            g.cmdline = try std.fmt.allocPrint(b, "console=hvc0 {s}", .{l.cmdline});
+        } else {
+            g.kernel = try readPath(it, kernel);
+            if (initrd.len != 0) g.initrd = try readPath(it, initrd);
+            g.cmdline = try b.dupe(u8, cfg.cmdline);
+            g.disks = try b.alloc(kvm.Disk, disks.items.len);
+            for (g.disks) |*d| d.fd = -1;
+        }
+        for (disks.items, g.disks[image_disks.len..]) |d, *out| out.* = .{ .fd = try openPath(it, d.path, d.rw), .read_only = !d.rw };
         g.shares = try b.alloc(kvm.Share, shares.items.len);
         for (g.shares) |*d| d.fd = -1;
         for (shares.items, g.shares) |d, *out| out.* = .{ .fd = try openDir(it, d.path), .read_only = !d.rw };
