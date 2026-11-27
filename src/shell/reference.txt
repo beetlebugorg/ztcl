@@ -581,6 +581,10 @@ sub: clock add SECONDS ?COUNT UNIT ...? ?-gmt BOOL? ?-timezone ZONE? | The secon
 syn: http::geturl url ?-option value ...?
 == tcl::OptProc tcl::OptKeyRegister tcl::OptKeyDelete tcl::OptKeyParse tcl::OptKeyError tcl::OptParse tcl::OptProcArgGiven tcl::OptCheckType tcl::Lempty tcl::Lget tcl::Lvarset tcl::Lvarset1 tcl::Lvarincr tcl::Lvarpop tcl::Lassign tcl::SetMax tcl::SetMin
 syn: tcl::OptProc name description body
+== platform::generic platform::identify platform::patterns
+syn: platform::generic
+syn: platform::identify
+syn: platform::patterns identifier
 == msgcat msgcat::mc msgcat::mclocale msgcat::mcmset msgcat::mcset msgcat::mcexists msgcat::mcload msgcat::mcmax msgcat::mcpreferences
 syn: msgcat::mc src ?arg ...?
 == exec
