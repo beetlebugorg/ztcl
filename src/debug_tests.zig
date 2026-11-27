@@ -338,3 +338,94 @@ test "the DAP server stops at a breakpoint, steps, and gives the stack" {
     try has(text, "\"category\":\"stdout\",\"output\":\"6\\n\"");
     try has(text, "\"event\":\"exited\",\"body\":{\"exitCode\":0}");
 }
+
+const dap_loop_script =
+    \\set n 0
+    \\while {$n < 3} {
+    \\    incr n
+    \\}
+    \\catch {error boom}
+    \\puts $n
+;
+
+fn dapReadLoop(_: ?*anyopaque, _: []const u8, a: std.mem.Allocator) anyerror![]u8 {
+    return a.dupe(u8, dap_loop_script);
+}
+
+/// A poll that says a request waits after the first lines of the run.
+fn pollLater(ctx: ?*anyopaque) bool {
+    const n: *u32 = @ptrCast(@alignCast(ctx.?));
+    n.* += 1;
+    return n.* == 2;
+}
+
+test "the DAP server stops in a loop body of the top level, at an error, and at a pause" {
+    if (!options.mod_probe) return error.SkipZigTest;
+    const a = std.testing.allocator;
+    var it: tcl.Interp = undefined;
+    try it.init(a);
+    defer it.deinit();
+    var in: std.ArrayList(u8) = .empty;
+    defer in.deinit(a);
+    const reqs = [_][]const u8{
+        \\{"seq":1,"type":"request","command":"initialize","arguments":{"adapterID":"ztcl"}}
+        ,
+        \\{"seq":2,"type":"request","command":"launch","arguments":{"program":"/w/l.tcl"}}
+        ,
+        \\{"seq":3,"type":"request","command":"setBreakpoints","arguments":{"source":{"path":"/w/l.tcl"},"breakpoints":[{"line":3,"condition":"$n == 1"}]}}
+        ,
+        \\{"seq":4,"type":"request","command":"setExceptionBreakpoints","arguments":{"filters":["error"]}}
+        ,
+        \\{"seq":5,"type":"request","command":"configurationDone"}
+        ,
+        \\{"seq":6,"type":"request","command":"stackTrace","arguments":{"threadId":1}}
+        ,
+        \\{"seq":7,"type":"request","command":"continue","arguments":{"threadId":1}}
+        ,
+        \\{"seq":8,"type":"request","command":"stackTrace","arguments":{"threadId":1}}
+        ,
+        \\{"seq":9,"type":"request","command":"continue","arguments":{"threadId":1}}
+        ,
+    };
+    for (reqs) |r| try frame(a, &in, r);
+    var reader: std.Io.Reader = .fixed(in.items);
+    var out: std.Io.Writer.Allocating = .init(a);
+    defer out.deinit();
+    var server: tcl.dap.Server = .{ .it = &it, .gpa = a, .in = &reader, .out = &out.writer, .read = dapReadLoop };
+    try tcl.dap.serve(&server);
+    const text = out.written();
+    try has(text, "\"exceptionBreakpointFilters\":[{\"filter\":\"error\"");
+    // Line 3 is in the body of the while. The condition holds at the second pass.
+    try has(text, "\"reason\":\"breakpoint\"");
+    try has(text, "{\"id\":0,\"name\":\"<top>\",\"line\":3");
+    // The caught error stops, and the run goes on after it.
+    try has(text, "\"reason\":\"exception\",\"threadId\":1,\"allThreadsStopped\":true,\"description\":\"boom\"");
+    try has(text, "{\"id\":0,\"name\":\"<top>\",\"line\":5");
+    try has(text, "\"output\":\"3\\n\"");
+
+    // A pause in a run of the loop.
+    var it2: tcl.Interp = undefined;
+    try it2.init(a);
+    defer it2.deinit();
+    var in2: std.ArrayList(u8) = .empty;
+    defer in2.deinit(a);
+    const reqs2 = [_][]const u8{
+        \\{"seq":1,"type":"request","command":"launch","arguments":{"program":"/w/l.tcl"}}
+        ,
+        \\{"seq":2,"type":"request","command":"configurationDone"}
+        ,
+        \\{"seq":3,"type":"request","command":"pause","arguments":{"threadId":1}}
+        ,
+        \\{"seq":4,"type":"request","command":"continue","arguments":{"threadId":1}}
+        ,
+    };
+    for (reqs2) |r| try frame(a, &in2, r);
+    var reader2: std.Io.Reader = .fixed(in2.items);
+    var out2: std.Io.Writer.Allocating = .init(a);
+    defer out2.deinit();
+    var polls: u32 = 0;
+    var server2: tcl.dap.Server = .{ .it = &it2, .gpa = a, .in = &reader2, .out = &out2.writer, .read = dapReadLoop, .poll = pollLater, .poll_ctx = &polls, .poll_every = 1 };
+    try tcl.dap.serve(&server2);
+    try has(out2.written(), "\"reason\":\"pause\"");
+    try has(out2.written(), "\"event\":\"exited\",\"body\":{\"exitCode\":0}");
+}

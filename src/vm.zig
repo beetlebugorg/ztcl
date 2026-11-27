@@ -177,6 +177,9 @@ pub const Code = struct {
     /// The proc of a body with `probe` instructions. The JIT does not
     /// compile such a body.
     probed: ?*interp.Proc = null,
+    /// A body of the top level of the program of the debugger, with a
+    /// `probe` instruction at each line (`probe.topBase`).
+    probe_top: bool = false,
 };
 
 // ---- The guard ----
@@ -1342,8 +1345,10 @@ pub fn compileNamed(it: *Interp, s: *interp.Script) Error!*Code {
     // A script of a proc body with probes gets the probes of its lines.
     const of = if (probe_on and it.probes != null) @import("probe.zig").scriptOf(it, s) else null;
     const lines = if (of) |e| try @import("probe.zig").linesFor(it, e.proc) else null;
-    defer if (lines) |l| {
-        @import("probe.zig").embedderAlloc(it).free(l);
+    // A body of the top level of the program of the debugger.
+    const top_base = if (probe_on and of == null and it.probes != null) @import("probe.zig").topBase(it, s) else null;
+    defer if (lines != null or top_base != null) {
+        if (lines) |l| @import("probe.zig").embedderAlloc(it).free(l);
         c.bases.deinit(@import("probe.zig").embedderAlloc(it));
     };
     if (lines) |l| {
@@ -1351,6 +1356,10 @@ pub fn compileNamed(it: *Interp, s: *interp.Script) Error!*Code {
         c.line_base = of.?.base;
         // The command of the body, such as `catch`, is on the first line.
         c.outer_line = of.?.base;
+    } else if (top_base) |b| {
+        c.probe_lines = &top_lines;
+        c.line_base = b;
+        c.outer_line = b;
     }
     try c.compileScript(s);
     _ = try c.emit(.{ .op = .ret });
@@ -1372,9 +1381,13 @@ pub fn compileNamed(it: *Interp, s: *interp.Script) Error!*Code {
         .named = true,
         .hints = hints,
         .probed = if (lines != null) of.?.proc else null,
+        .probe_top = top_base != null,
     };
     return code;
 }
+
+/// The lines of a body of the top level: each line.
+const top_lines = [_]u32{std.math.maxInt(u32)};
 
 // ---- The executor ----
 
@@ -1852,7 +1865,7 @@ pub inline fn opGuard(comptime named: bool, it: *Interp, f: *Frame, code: *const
 
 pub inline fn opProbe(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
     _ = .{ named, f, stack, sp };
-    @import("probe.zig").fireLine(it, code.probed.?, i.a);
+    if (code.probed) |p| @import("probe.zig").fireLine(it, p, i.a) else @import("probe.zig").fireTopLine(it, i.a);
 }
 
 pub inline fn opStep(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
@@ -2347,7 +2360,7 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                 continue :sw i.op;
             },
             .step => try opStep(named, it, f, code, stack, sp, i),
-            .probe => @import("probe.zig").fireLine(it, code.probed.?, i.a),
+            .probe => if (code.probed) |p| @import("probe.zig").fireLine(it, p, i.a) else @import("probe.zig").fireTopLine(it, i.a),
             .jump => {
                 pc = i.a;
                 continue;

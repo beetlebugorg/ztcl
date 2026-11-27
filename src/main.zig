@@ -209,8 +209,21 @@ fn runDebug(it: *tcl.Interp, out: *Io.Writer, a: std.mem.Allocator, text: []cons
 }
 
 fn serveDap(it: *tcl.Interp, h: anytype, out: *Io.Writer, program: ?[]const u8, text: []const u8) !void {
-    var server: tcl.dap.Server = .{ .it = it, .gpa = h.gpa, .in = h.in, .out = out, .read = mcpRead, .program = program, .text = text };
+    var server: tcl.dap.Server = .{ .it = it, .gpa = h.gpa, .in = h.in, .out = out, .read = mcpRead, .program = program, .text = text, .poll = stdinReady, .poll_ctx = h.in };
     try tcl.dap.serve(&server);
+}
+
+/// True when a request of the client waits on stdin, for `pause` in a run.
+fn stdinReady(ctx: ?*anyopaque) bool {
+    const r: *Io.Reader = @ptrCast(@alignCast(ctx.?));
+    if (r.bufferedLen() > 0) return true;
+    const h = Io.File.stdin().handle;
+    const fd: tcl.sys.Fd = if (builtin.os.tag == .windows) (tcl.sys.win.fdOfHandle(h) orelse return false) else h;
+    var w = [1]tcl.sys.Want{.{ .fd = fd, .read = true }};
+    var buf: [256]u8 = undefined;
+    var fba: std.heap.FixedBufferAllocator = .init(&buf);
+    tcl.sys.poll(fba.allocator(), &w, 0);
+    return w[0].can_read;
 }
 
 fn mcpRead(_: ?*anyopaque, path: []const u8, a: std.mem.Allocator) anyerror![]u8 {

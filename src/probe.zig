@@ -174,6 +174,10 @@ pub const State = struct {
     line_hook: ?LineHook = null,
     /// The script of the program file, and its command that runs now.
     top: ?*interp.Script = null,
+    /// The text of `top`. A body in it, such as the body of a `while` of
+    /// the top level, gets a `probe` instruction at each line
+    /// (`topBase`).
+    top_text: []const u8 = "",
     top_cmd: ?*interp.Cmd = null,
     /// The line of the program file of line 1 of the body of each proc
     /// that a command of `top` defined.
@@ -186,7 +190,34 @@ pub const State = struct {
 pub const LineHook = struct {
     ctx: ?*anyopaque = null,
     f: *const fn (ctx: ?*anyopaque, it: *Interp, p: ?*interp.Proc, line: u32) void,
+    /// At the start of each error, also an error that `catch` catches.
+    /// `cmd` is the text of the command that failed.
+    err: ?*const fn (ctx: ?*anyopaque, it: *Interp, cmd: []const u8) void = null,
 };
+
+/// The line of the program file of line 1 of `script`, when the line
+/// hook is on and `script` is a body in the text of the program file,
+/// such as the body of a loop of the top level.
+pub fn topBase(it: *Interp, script: *const interp.Script) ?u32 {
+    if (comptime !enabled) return null;
+    const s = it.probes orelse return null;
+    if (s.line_hook == null or s.top == null or s.top == script or script.cmds.len == 0) return null;
+    const c = script.cmds[0];
+    const start = @intFromPtr(s.top_text.ptr);
+    const at = @intFromPtr(c.text.ptr);
+    if (at < start or at >= start + s.top_text.len) return null;
+    const line: u32 = 1 + @as(u32, @intCast(std.mem.count(u8, s.top_text[0 .. at - start], "\n")));
+    return line + 1 - @min(c.line, line);
+}
+
+/// The `probe` instruction of a body of the top level: line `line` of
+/// the program file starts.
+pub fn fireTopLine(it: *Interp, line: u32) void {
+    if (comptime !enabled) return;
+    const s = it.probes orelse return;
+    if (s.busy) return;
+    if (s.line_hook) |h| h.f(h.ctx, it, null, line);
+}
 
 /// The mark at the start of the result of `linesFor` for a proc that
 /// gets a `probe` instruction at each line.
@@ -555,6 +586,7 @@ pub fn fireError(it: *Interp, text: []const u8) void {
     if (comptime !enabled) return;
     const s = it.probes orelse return;
     if (s.busy) return;
+    if (s.line_hook) |h| if (h.err) |f| f(h.ctx, it, text);
     for (s.probes.items) |pr| {
         if (pr.spec.kind != .@"error") continue;
         var fields: [4]Field = .{
@@ -577,7 +609,7 @@ fn wordsText(it: *Interp, argv: []const Value) []const u8 {
 }
 
 /// The state of the interpreter that a probe must not change.
-const Saved = struct {
+pub const Saved = struct {
     result: Value,
     ret_code: interp.ReturnCode,
     ret_level: u32,
@@ -593,7 +625,7 @@ const Saved = struct {
     pending_during: ?Value,
     tail_words: ?[]const Value,
 
-    fn take(it: *Interp) Saved {
+    pub fn take(it: *Interp) Saved {
         const sv: Saved = .{
             .result = it.result,
             .ret_code = it.ret_code,
@@ -617,7 +649,7 @@ const Saved = struct {
         return sv;
     }
 
-    fn back(sv: Saved, it: *Interp) void {
+    pub fn back(sv: Saved, it: *Interp) void {
         it.result = sv.result;
         it.ret_code = sv.ret_code;
         it.ret_level = sv.ret_level;
