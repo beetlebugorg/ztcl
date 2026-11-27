@@ -87,6 +87,12 @@ With the default order, the guest kernel reports no free page of its boot, only 
 
 The start of a vm thread from a clone is as fast as the start of a process thread. The scripts run 10% to 50% slower in the guest. The guest kernel has no transparent huge pages and a periodic tick at 1000 Hz (the configuration of run 45991768972), so each page of the heap is a 4 KB page in the guest and each tick is an exit to the host. The questions to the guest kernel are in the plan below. Before the chunks of a snapshot with no data went to an anonymous mapping with THP on the host, `strs` was 62.75 ms and `dicts` 95.91 ms in the guest.
 
+### The boot bytes of a pool
+
+A pool of `create -image` keeps the kernel and the initramfs of its image once, in a memfd with the seals `F_SEAL_WRITE`, `F_SEAL_SHRINK`, `F_SEAL_GROW`, and `F_SEAL_SEAL`. Each guest of the pool maps it read only with `MAP_PRIVATE`, so the guests share its pages. Before, each guest of the pool had its own heap copy of the two. The seals keep the bytes that the image store checked: a mapping of the store file itself gets the changes of a later write to the file.
+
+The runner with `ZTCL_VM_POOL=4` and the test image of the vm-guest workflow (a kernel of 2.8 MB, no initramfs), 20 s after the first `create -image`, three runs: the growth of `VmRSS` for each guest of the pool is 9.9 MB to 10.8 MB before (`RssAnon` 9.8 MB to 10.7 MB) and 7.8 MB to 9.2 MB after (`RssAnon` 7.0 MB to 8.3 MB, and 3.1 MB of `RssShmem` for the four mappings of one memfd).
+
 ## 2. Tcl in a VM: `thread::create -isolation vm`
 
 The plan:

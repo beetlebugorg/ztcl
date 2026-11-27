@@ -1607,6 +1607,9 @@ const lin = if (on_kvm) struct {
         image_disks: usize = 0,
         /// A guest of a snapshot before its first start: the start
         /// sends the agent the time and new entropy.
+        /// The mapping of the boot bytes of a guest of the pool
+        /// (`Pooled.boot_map`), or empty.
+        boot_map: []align(std.heap.page_size_min) u8 = &.{},
         restored: bool = false,
     };
 
@@ -1856,7 +1859,7 @@ const lin = if (on_kvm) struct {
                     dropPooled(p);
                     return e;
                 };
-                g.* = .{ .name = "", .machine = p.machine, .kernel = p.kernel, .initrd = p.initrd, .cmdline = p.cmdline, .disks = p.disks, .shares = &.{}, .console_vm = p.console_vm, .console_host = p.console_host, .warm = true, .pooled = true, .restored = p.restored };
+                g.* = .{ .name = "", .machine = p.machine, .kernel = p.kernel, .initrd = p.initrd, .cmdline = p.cmdline, .disks = p.disks, .shares = &.{}, .console_vm = p.console_vm, .console_host = p.console_host, .warm = true, .pooled = true, .restored = p.restored, .boot_map = p.boot_map };
                 g.name = std.fmt.allocPrint(b, "vm{d}", .{s.next}) catch |e| {
                     destroy(it, g);
                     return e;
@@ -2217,8 +2220,12 @@ const lin = if (on_kvm) struct {
         b.free(g.disks);
         for (g.shares) |d| if (d.fd >= 0) sys.close(d.fd);
         b.free(g.shares);
-        b.free(g.kernel);
-        b.free(g.initrd);
+        if (g.boot_map.len != 0) {
+            _ = linux.munmap(g.boot_map.ptr, g.boot_map.len);
+        } else {
+            b.free(g.kernel);
+            b.free(g.initrd);
+        }
         b.free(g.cmdline);
         b.free(g.image_tag);
         if (g.console_vm >= 0) sys.close(g.console_vm);
@@ -2231,11 +2238,15 @@ const lin = if (on_kvm) struct {
     // ---- The pool of booted guests (Host.pool_size) ----
 
     /// A guest of the pool: booted to the agent, then paused.
-    const Pooled = struct { machine: *kvm, kernel: []u8, initrd: []u8, cmdline: []u8, disks: []kvm.Disk, console_vm: i32, console_host: i32, restored: bool = false };
+    /// `boot_map` is the mapping of the sealed memfd of the template
+    /// that holds `kernel` and `initrd`, or empty when they are on the
+    /// heap.
+    const Pooled = struct { machine: *kvm, kernel: []u8, initrd: []u8, cmdline: []u8, disks: []kvm.Disk, console_vm: i32, console_host: i32, restored: bool = false, boot_map: []align(std.heap.page_size_min) u8 = &.{} };
 
     /// The configuration of the pool of one fingerprint: copies of the
     /// bytes of the image and of the descriptors of its disks. Each guest
-    /// of the pool gets copies of these.
+    /// of the pool gets copies of the descriptors and a read-only
+    /// mapping of `boot_fd`.
     const Template = struct {
         kernel: []u8,
         initrd: []u8,
@@ -2251,6 +2262,12 @@ const lin = if (on_kvm) struct {
         /// later guest is a restore of it, a clone that shares the pages
         /// that it does not write. -1 until the first guest is ready.
         snap_fd: i32 = -1,
+        /// A sealed memfd with the kernel at 0 and the initramfs at
+        /// `initrd_off`: the guests of the pool map it with
+        /// `MAP_PRIVATE` and read only, so they share its pages. -1 when
+        /// the memfd failed: each guest then gets heap copies.
+        boot_fd: i32 = -1,
+        initrd_off: usize = 0,
     };
     const thread_lock = @import("thread.zig").Lock;
     var pool_lock: thread_lock = .{};
@@ -2298,11 +2315,71 @@ const lin = if (on_kvm) struct {
         t.disks = try pa.alloc(i32, cfg.disks.len);
         @memset(t.disks, -1);
         for (cfg.disks, t.disks) |d, *fd| fd.* = try dupFd(d.fd);
+        t.boot_fd = bootMemfd(t);
         return t;
+    }
+
+    /// The memfd of the boot bytes of a template, sealed against writes
+    /// and size changes, so a mapping of it holds the bytes that the
+    /// image store checked. Gives -1 on a failure.
+    fn bootMemfd(t: *Template) i32 {
+        const page = std.heap.page_size_min;
+        t.initrd_off = std.mem.alignForward(usize, t.kernel.len, page);
+        const total = t.initrd_off + t.initrd.len;
+        if (total == 0) return -1;
+        const rc = linux.memfd_create("ztcl-vm-boot", linux.MFD.CLOEXEC | linux.MFD.ALLOW_SEALING);
+        if (linux.errno(rc) != .SUCCESS) return -1;
+        const fd: i32 = @intCast(rc);
+        const good = blk: {
+            if (linux.errno(linux.ftruncate(fd, @intCast(total))) != .SUCCESS) break :blk false;
+            for ([_]struct { b: []const u8, off: usize }{ .{ .b = t.kernel, .off = 0 }, .{ .b = t.initrd, .off = t.initrd_off } }) |part| {
+                var done: usize = 0;
+                while (done < part.b.len) {
+                    const n = linux.pwrite(fd, part.b[done..].ptr, part.b.len - done, @intCast(part.off + done));
+                    if (linux.errno(n) != .SUCCESS or n == 0) break :blk false;
+                    done += n;
+                }
+            }
+            const seals = linux.F.SEAL_SEAL | linux.F.SEAL_SHRINK | linux.F.SEAL_GROW | linux.F.SEAL_WRITE;
+            break :blk linux.errno(linux.fcntl(fd, linux.F.ADD_SEALS, seals)) == .SUCCESS;
+        };
+        if (good) return fd;
+        sys.close(fd);
+        return -1;
+    }
+
+    /// The boot bytes of a guest of the pool: a read-only mapping of the
+    /// memfd of the template, or heap copies without it.
+    fn poolBoot(t: *Template, p: *Pooled) bool {
+        if (t.boot_fd >= 0) {
+            const total = t.initrd_off + t.initrd.len;
+            const raw = linux.mmap(null, total, .{ .READ = true }, .{ .TYPE = .PRIVATE }, t.boot_fd, 0);
+            if (linux.errno(raw) == .SUCCESS) {
+                const base: [*]align(std.heap.page_size_min) u8 = @ptrFromInt(raw);
+                p.boot_map = base[0..total];
+                p.kernel = base[0..t.kernel.len];
+                p.initrd = base[t.initrd_off..][0..t.initrd.len];
+                return true;
+            }
+        }
+        p.kernel = pa.dupe(u8, t.kernel) catch return false;
+        p.initrd = pa.dupe(u8, t.initrd) catch return false;
+        return true;
+    }
+
+    /// Frees the boot bytes of a guest of the pool.
+    fn freeBoot(boot_map: []align(std.heap.page_size_min) u8, kernel: []u8, initrd: []u8) void {
+        if (boot_map.len != 0) {
+            _ = linux.munmap(boot_map.ptr, boot_map.len);
+            return;
+        }
+        pa.free(kernel);
+        pa.free(initrd);
     }
 
     fn freeTemplate(t: *Template) void {
         if (t.snap_fd >= 0) sys.close(t.snap_fd);
+        if (t.boot_fd >= 0) sys.close(t.boot_fd);
         for (t.disks) |fd| if (fd >= 0) sys.close(fd);
         pa.free(t.disks);
         pa.free(t.kernel);
@@ -2322,8 +2399,7 @@ const lin = if (on_kvm) struct {
         var p: Pooled = .{ .machine = undefined, .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .console_vm = -1, .console_host = -1 };
         var made = false;
         const good = blk: {
-            p.kernel = pa.dupe(u8, t.kernel) catch break :blk false;
-            p.initrd = pa.dupe(u8, t.initrd) catch break :blk false;
+            if (!poolBoot(t, &p)) break :blk false;
             p.cmdline = pa.dupe(u8, t.cmdline) catch break :blk false;
             p.disks = pa.alloc(kvm.Disk, t.disks.len) catch break :blk false;
             for (p.disks) |*d| d.* = .{ .fd = -1, .read_only = true };
@@ -2464,8 +2540,7 @@ const lin = if (on_kvm) struct {
     fn dropBytes(p: Pooled) void {
         for (p.disks) |d| if (d.fd >= 0) sys.close(d.fd);
         pa.free(p.disks);
-        pa.free(p.kernel);
-        pa.free(p.initrd);
+        freeBoot(p.boot_map, p.kernel, p.initrd);
         pa.free(p.cmdline);
         if (p.console_vm >= 0) sys.close(p.console_vm);
         if (p.console_host >= 0) sys.close(p.console_host);
