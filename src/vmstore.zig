@@ -591,9 +591,8 @@ pub const Store = struct {
         try mkdirs(a, s.fd, rel);
         const p = try parent(a, s.fd, rel);
         defer p.close(a);
-        const rc = os.openat(p.fd, p.base, nofollow_dir, 0);
-        if (!ok(rc)) return error.Io;
-        return .{ .fd = @intCast(rc), .rel = rel };
+        const fd = fs.openDir(p.fd, p.base) catch return error.Io;
+        return .{ .fd = fd, .rel = rel };
     }
 
     /// The name, the counter, and the files of this architecture of the
@@ -689,12 +688,10 @@ pub const Temp = struct {
 
     /// A new file in the folder, for the bytes of a download.
     pub fn create(t: Temp, a: Allocator, name: []const u8) Error!i32 {
-        if (std.mem.indexOfScalar(u8, name, '/') != null) return error.BadManifest;
+        if (std.mem.indexOfScalar(u8, name, '/') != null or badName(name)) return error.BadManifest;
         const nz = try z(a, name);
         defer a.free(nz);
-        const rc = os.openat(t.fd, nz, .{ .ACCMODE = .WRONLY, .CREAT = true, .EXCL = true, .NOFOLLOW = true, .CLOEXEC = true }, 0o644);
-        if (!ok(rc)) return error.Io;
-        return @intCast(rc);
+        return fs.createNew(t.fd, nz);
     }
 
     /// Removes the folder and its files.
@@ -703,11 +700,11 @@ pub const Temp = struct {
             for (names) |n| {
                 const nz = z(a, n) catch continue;
                 defer a.free(nz);
-                _ = os.unlinkat(t.fd, nz, 0);
+                fs.unlink(t.fd, nz, false);
             }
             freeList(a, names);
         } else |_| {}
-        _ = os.close(t.fd);
+        fs.close(t.fd);
         unlink(a, s.fd, t.rel, true);
         a.free(t.rel);
     }

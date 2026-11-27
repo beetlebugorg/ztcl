@@ -342,7 +342,7 @@ fn fetchCmd(it: *Interp, args: []const Value, update: bool) Error!Value {
 
 fn download(it: *Interp, hook: anytype, t: vmstore.Temp, a: std.mem.Allocator, root: []const u8, name: []const u8) Error!void {
     const fd = t.create(a, name) catch |e| return storeFail(it, e);
-    defer _ = sys.os.close(fd);
+    defer sys.close(fd);
     const url = try std.fmt.allocPrint(a, "{s}{s}", .{ root, name });
     hook(it.vm_host.fetch_ctx, url, fd) catch |e| return it.failCode("ZTCL VM FETCH", "the download of {s} failed: {s}", .{ url, @errorName(e) });
 }
