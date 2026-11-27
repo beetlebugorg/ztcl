@@ -382,6 +382,14 @@ pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
                 if (sc.ready(w.it, w.name)) try soft_ready.append(a, w);
             }
             if (soft_ready.items.len > 0) timeout = 0;
+            // The channels of C packages with buffered input.
+            var ext_ready: std.ArrayList(Watch) = .empty;
+            if (comptime chan_ok) {
+                for (s.watches.items) |w| {
+                    if (@import("chan.zig").extReady(w.it, w.name)) try ext_ready.append(a, w);
+                }
+            }
+            if (ext_ready.items.len > 0) timeout = 0;
             if (wait and timeout < 0 and wants.items.len == 0) {
                 // A thread waits for a message while another thread can
                 // send one.
@@ -452,6 +460,16 @@ pub fn doOne(it: *Interp, wait: bool, idle_only: bool) Error!bool {
                 }
                 if (!live) continue;
                 if (try o.it.soft_chans.?.serve(it, o.it, o.name)) ran = true;
+            }
+            if (comptime chan_ok) {
+                for (ext_ready.items) |o| {
+                    var live = false;
+                    for (s.watches.items) |x| {
+                        if (x.it == o.it and eql(x.name, o.name)) live = true;
+                    }
+                    if (!live) continue;
+                    if (try @import("chan.zig").extServe(it, o.it, o.name)) ran = true;
+                }
             }
         }
         if (!ran and s.idles.items.len > 0) {

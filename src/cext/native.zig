@@ -125,6 +125,7 @@ fn canceled(handle: u32, unwind_only: c_int) callconv(.c) i32 {
 const chan_ok = @import("../sys.zig").supported;
 const zchan = if (chan_ok) @import("../chan.zig") else struct {};
 const cchan = @import("chan.zig");
+const event = if (chan_ok) @import("../event.zig") else struct {};
 const obj = @import("obj.zig");
 
 const TCL_READABLE: c_int = 1 << 1;
@@ -139,6 +140,83 @@ fn setChannelHooks() void {
     if (comptime !chan_ok) return;
     cchan.hooks = .{ .register = &hookRegister, .unregister = &hookUnregister, .stack = &hookStack, .unstack = &hookUnstack, .adopt = &hookAdopt };
     zchan.ext_op = &extOp;
+    zchan.ext_events = .{ .ready = &extReady, .serve = &extServe };
+}
+
+// ---- fileevent ----
+//
+// A script of `fileevent` on a channel of a C package is a channel
+// handler of the channel, as in Tcl: Tcl_NotifyChannel of the driver
+// runs it at once. While the channel has buffered input, the loop of
+// ztcl sends readable events, as the generic layer of Tcl does.
+
+/// The interp that runs the loop during `extServe`.
+threadlocal var loop_it: ?*Interp = null;
+
+fn onEvent(cd: ?*anyopaque, mask: c_int) callconv(.c) void {
+    const st: *cchan.State = @ptrCast(@alignCast(cd.?));
+    const it: *Interp = @ptrCast(@alignCast(st.ev_it orelse return));
+    const zc: *zchan.Channel = @ptrCast(@alignCast(st.ev_chan orelse return));
+    const cur = loop_it orelse it;
+    const name = zc.name;
+    inline for (.{ TCL_READABLE, TCL_WRITABLE }) |bit| {
+        if (mask & bit != 0) {
+            const slot = if (bit == TCL_READABLE) &zc.on_read else &zc.on_write;
+            if (slot.*) |script| {
+                const ran = event.runHandler(cur, it, script) catch return;
+                if (ran == .gone or zchan.lookup(it, name) != zc) return;
+                // A failed script goes, as in Tcl.
+                if (ran == .failed) {
+                    slot.* = null;
+                    updateEvents(it, zc, st);
+                }
+            }
+        }
+    }
+}
+
+/// Makes the channel handler of the scripts of `zc` match them.
+fn updateEvents(it: *Interp, zc: *zchan.Channel, st: *cchan.State) void {
+    var mask: c_int = 0;
+    if (zc.on_read != null) mask |= TCL_READABLE;
+    if (zc.on_write != null) mask |= TCL_WRITABLE;
+    if (mask == 0) {
+        cchan.Tcl_DeleteChannelHandler(st.top, &onEvent, st);
+        st.ev_it = null;
+        st.ev_chan = null;
+        event.unwatch(it, zc.name);
+        return;
+    }
+    st.ev_it = it;
+    st.ev_chan = zc;
+    cchan.Tcl_CreateChannelHandler(st.top, mask, &onEvent, st);
+    event.watch(it, zc.name) catch {};
+}
+
+fn fileevent(it: *Interp, zc: *zchan.Channel, st: *cchan.State, args: []const Value) Error!Value {
+    const readable = eql(try it.str(args[0]), "readable");
+    if (readable and st.mask & TCL_READABLE == 0) return it.fail("channel is not readable", .{});
+    if (!readable and st.mask & TCL_WRITABLE == 0) return it.fail("channel is not writable", .{});
+    const slot = if (readable) &zc.on_read else &zc.on_write;
+    if (args.len == 1) return .{ .str = slot.* orelse "" };
+    const script = try it.str(args[1]);
+    slot.* = if (script.len == 0) null else try it.alloc().dupe(u8, script);
+    updateEvents(it, zc, st);
+    return Value.empty;
+}
+
+fn extReady(_: *Interp, zc: *zchan.Channel) bool {
+    const st: *cchan.State = @ptrCast(@alignCast(zc.ext.?));
+    return zc.on_read != null and cchan.Tcl_InputBuffered(st.top) > 0;
+}
+
+fn extServe(cur: *Interp, _: *Interp, zc: *zchan.Channel) Error!bool {
+    const st: *cchan.State = @ptrCast(@alignCast(zc.ext.?));
+    const saved = loop_it;
+    loop_it = cur;
+    defer loop_it = saved;
+    cchan.Tcl_NotifyChannel(st.top, TCL_READABLE);
+    return true;
 }
 
 fn extChannel(it: *Interp, name: []const u8, st: *cchan.State) Error!void {
@@ -254,6 +332,7 @@ fn extOp(it: *Interp, zc: *zchan.Channel, op: []const u8, args: []const Value) E
         return Value.empty;
     }
     if (eql(op, "eof")) return .{ .int = cchan.Tcl_Eof(ch) };
+    if (eql(op, "fileevent")) return fileevent(it, zc, st, args);
     if (eql(op, "fblocked")) {
         if (!rd) return it.fail("channel \"{s}\" wasn't opened for reading", .{name});
         return .{ .int = cchan.Tcl_InputBlocked(ch) };
