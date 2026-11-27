@@ -691,7 +691,14 @@ export class Interp {
         if (rc !== 0) this._cextReply(zs, ps);
         return rc;
       },
-      pkg_provide: () => 0,
+      pkg_provide: (h, ptr, len, vptr, vlen) => {
+        if (!z.ztcl_cext_provide) return 0;
+        const zb = this._toZtcl(pkg.side, ptr, len, vlen);
+        zs.view().u8.set(pkg.side.view().u8.subarray(vptr, vptr + vlen), zb + len);
+        const rc = z.ztcl_cext_provide(h, zb, len, zb + len, vlen);
+        if (rc !== 0) this._cextReply(zs, pkg.side);
+        return rc;
+      },
     };
   }
 
@@ -732,6 +739,8 @@ export class Interp {
         else pu8.set(zu8.subarray(a, a + len), off);
         dst[di + 2] = off; dst[di + 3] = 0;
         off += len;
+      } else if (k === 3) {
+        off = this._argCopy(this._zside, si, 1, ps, di, off);
       } else {
         dst[di + 2] = src[si + 2]; dst[di + 3] = src[si + 3];
       }
@@ -739,8 +748,6 @@ export class Interp {
     const rc = ps.x.ztcl_cext_dispatch(id, argc);
     this._cextReply(ps, this._zside);
     return rc;
-      } else if (k === 3) {
-        off = this._argCopy(this._zside, si, 1, ps, di, off);
   }
 
   _text(ptr, len) {
@@ -857,13 +864,6 @@ function initName(file, prefix) {
 
 // The text of a double for a JavaScript command. A whole number keeps
 // its ".0", as in Tcl.
-function doubleText(d) {
-  if (Number.isNaN(d)) return "NaN";
-  if (!Number.isFinite(d)) return d > 0 ? "Inf" : "-Inf";
-  const s = String(d);
-  return /^-?\d+$/.test(s) ? s + ".0" : s;
-}
-
 // The text of the modified UTF-8 of Tcl, where U+0000 is C0 80.
 function tclDecode(bytes) {
   if (!bytes.includes(0xc0)) return decoder.decode(bytes);
@@ -906,6 +906,13 @@ function tclElement(s, first) {
     else out += names[c] ?? c;
   }
   return out;
+}
+
+function doubleText(d) {
+  if (Number.isNaN(d)) return "NaN";
+  if (!Number.isFinite(d)) return d > 0 ? "Inf" : "-Inf";
+  const s = String(d);
+  return /^-?\d+$/.test(s) ? s + ".0" : s;
 }
 
 function noWasi(pkg) {

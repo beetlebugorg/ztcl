@@ -83,7 +83,14 @@ fn ztcl_cext_delete(h: *Handle, ptr: [*]const u8, len: usize) callconv(.c) i32 {
     return zside.delete(&h.it, ptr[0..len], &reply);
 }
 
+/// Provides package `name` at `version`. The name and the version are
+/// next to each other in the exchange buffer.
+fn ztcl_cext_provide(h: *Handle, ptr: [*]const u8, len: usize, vptr: [*]const u8, vlen: usize) callconv(.c) i32 {
+    return zside.provide(&h.it, ptr[0..len], vptr[0..vlen], &reply);
+}
+
 comptime {
+    @export(&ztcl_cext_provide, .{ .name = "ztcl_cext_provide" });
     @export(&ztcl_cext_reply, .{ .name = "ztcl_cext_reply" });
     @export(&ztcl_cext_buf, .{ .name = "ztcl_cext_buf" });
     @export(&ztcl_cext_command, .{ .name = "ztcl_cext_command" });
