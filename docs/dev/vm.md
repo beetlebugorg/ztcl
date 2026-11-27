@@ -152,7 +152,8 @@ What the numbers show:
 The monitors that give the guest its devices on virtio-mmio (KVM, and the Windows Hypervisor Platform) share the transport and the devices that run in ztcl. They are in `src/vm/virtio/`, with no system calls:
 
 - `queue.zig`: `Mem` (the guest memory as one host range from guest address 0, with a bounds check of each address and length of the guest), `Queue` (the split virtqueue), and `Chain` (a chain of descriptors as host slices).
-- `mmio.zig`: `Device`, the registers of the virtio-mmio transport, version 2, and the devices: `Device.console`, `Device.blk`, `Device.rng`, and `Device.external` for a device that the hypervisor runs (vhost-vsock on KVM).
+- `mmio.zig`: `Device`, the registers of the virtio-mmio transport, version 2, and the devices: `Device.console`, `Device.blk`, `Device.rng`, `Device.vsock`, and `Device.external` for a device that the hypervisor runs (vhost-vsock on KVM).
+- `vsock.zig`: `Vsock`, the vsock device of section 5.10 of virtio 1.2 in ztcl, for a monitor with no vsock of its host kernel.
 
 A backend implements this interface:
 
@@ -165,8 +166,9 @@ A backend implements this interface:
 | `Disk` | Gives `size`, `read_only`, and `read`, `write`, and `flush` at a byte offset. Each read or write is in full or gives false. |
 | `rng` | Gives a function that fills a buffer with random bytes and gives the count. |
 | `External` | Gives the virtio ID and the hooks `driverOk(ctx, dev)` and `reset(ctx, dev)`. The transport keeps the registers, and InterruptStatus always reads 1 (the device raises its own interrupts). |
+| `Vsock` | Gives a `Sink`: `data(ctx, conn, bytes)` for the bytes of the guest on a stream, and `event(ctx, conn, e)` for `connected`, `refused`, and `closed`. The backend calls `connect(dev, &host, port)`, `send`, and `close` with `Device.lock` held; `send` gives the count of bytes that went in. |
 
-vsock on KVM is vhost-vsock, an external device. A monitor without vhost (WHP) needs a vsock device in ztcl, with the queues of section 5.10 of virtio 1.2, the next device for `src/vm/virtio/`.
+vsock on KVM is vhost-vsock, an external device. A monitor without vhost (WHP) uses `Vsock`, with the host as CID 2. A stream starts with a `connect` of the host to a port of the guest. The host sends no more than the credit of the guest (its `buf_alloc` less the bytes in flight), and gives each byte of the guest to the sink at once, so its own credit is its `fwd_cnt`. A REQUEST of the guest gets RST until the host can listen. KVM can use `Vsock` in the place of vhost-vsock.
 
 ## Windows: the Host Compute Service
 
