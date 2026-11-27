@@ -4,7 +4,9 @@
 # Zig target of the agent (aarch64-linux-musl, or x86_64-linux-musl for
 # KVM):
 #   out/initramfs.cpio.gz  BusyBox, init (a shell script), and the agent
-#   out/agent.cpio         the agent alone, as /sbin/agent, uncompressed
+#   out/agent.cpio         the agent as /sbin/agent (the first process,
+#                          with rdinit=/sbin/agent) and BusyBox as
+#                          /bin/busybox, uncompressed
 #   out/agent.cpio.gz      the same, with gzip
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
@@ -13,10 +15,10 @@ root=$(mktemp -d)
 mkdir -p "$root/bin" "$root/sbin" "$root/dev" "$root/mnt/share"
 zig build-exe -target "${TARGET:-aarch64-linux-musl}" -OReleaseSmall -fstrip "$here/agent.zig" -femit-bin="$root/sbin/agent"
 rm -f "$root/sbin/agent.o"
-(cd "$root" && find . | cpio -o -H newc 2>/dev/null) > "$out/agent.cpio"
-gzip -9 < "$out/agent.cpio" > "$out/agent.cpio.gz"
 cp "$out/busybox" "$root/bin/busybox"
 chmod +x "$root/bin/busybox"
+(cd "$root" && find . | cpio -o -H newc 2>/dev/null) > "$out/agent.cpio"
+gzip -9 < "$out/agent.cpio" > "$out/agent.cpio.gz"
 cp "$here/init" "$root/init"
 (cd "$root" && find . | cpio -o -H newc 2>/dev/null) | gzip -9 > "$out/initramfs.cpio.gz"
 rm -rf "$root"

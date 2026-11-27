@@ -2,7 +2,7 @@
 //!
 //!   spike check GUESTDIR
 //!       Boots Image and initramfs.cpio.gz (BusyBox and init), waits for
-//!       "ztvm: ready" on the console, echoes a line over vsock port 1024,
+//!       "ztvm: ready" on the console, echoes a line over vsock port 1025 (the probe of the agent),
 //!       and checks the file that the guest writes in GUESTDIR/share.
 //!   spike bench GUESTDIR N INITRD MEMORY_MB CMDLINE
 //!       Boots N times and prints the time of each phase, and the best.
@@ -76,7 +76,7 @@ fn connectSoon(m: *vz.Machine, seconds: u64) vz.Machine.Conn {
     var why: []const u8 = "";
     const end = now() + seconds * std.time.ns_per_s;
     while (true) {
-        return m.connect(1024, &why) catch {
+        return m.connect(1025, &why) catch {
             if (now() > end) fail("vsock: {s}", .{why});
             continue;
         };

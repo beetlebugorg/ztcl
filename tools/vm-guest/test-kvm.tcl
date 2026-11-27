@@ -1,5 +1,5 @@
 # The boot test of ztcl::vm on Linux with KVM (test-kvm.sh runs it): the
-# x86-64 guest of tools/vm-guest boots, the agent echoes over vsock, the
+# x86-64 guest of tools/vm-guest boots, the probe of the agent echoes over vsock (port 1025), the
 # guest reads a disk, a stopped guest starts again, and a warm guest
 # answers after start. Then the times of a start, best of 10.
 proc check {what got want} {
@@ -19,7 +19,7 @@ set vm [ztcl::vm create {*}$boot]
 check "a new guest" [ztcl::vm status $vm] created
 ztcl::vm start $vm
 check "a started guest" [ztcl::vm status $vm] running
-set ch [ztcl::vm vsock $vm 1024]
+set ch [ztcl::vm vsock $vm 1025]
 hello $ch
 puts -nonewline $ch "hello from tcl\n"
 flush $ch
@@ -29,13 +29,13 @@ ztcl::vm stop $vm -force
 check "a stopped guest" [ztcl::vm status $vm] stopped
 ztcl::vm start $vm
 check "a guest that started again" [ztcl::vm status $vm] running
-close [ztcl::vm vsock $vm 1024]
+close [ztcl::vm vsock $vm 1025]
 ztcl::vm delete $vm
 
 # The kernel log of a guest, from the agent: a first byte of 1 asks
 # for it.
 proc dmesg {vm} {
-    set ch [ztcl::vm vsock $vm 1024]
+    set ch [ztcl::vm vsock $vm 1025]
     read $ch 16
     puts -nonewline $ch "\x01"
     flush $ch
@@ -71,7 +71,7 @@ ztcl::vm delete $vm
 set vm [ztcl::vm create {*}[lreplace $boot 5 5 "rdinit=/sbin/agent console=hvc0"]]
 set con [ztcl::vm console $vm]
 ztcl::vm start $vm
-close [ztcl::vm vsock $vm 1024]
+close [ztcl::vm vsock $vm 1025]
 fconfigure $con -blocking 0
 check "the kernel log on the console" [string match "*Run /sbin/agent*" [read $con]] 1
 ztcl::vm delete $vm
@@ -80,7 +80,7 @@ set w [ztcl::vm create {*}$boot -warm 1]
 check "a warm guest" [ztcl::vm status $w] paused
 set t [clock microseconds]
 ztcl::vm start $w
-set ch [ztcl::vm vsock $w 1024]
+set ch [ztcl::vm vsock $w 1025]
 read $ch 16
 set ms [expr {([clock microseconds] - $t) / 1000.0}]
 close $ch
@@ -97,7 +97,7 @@ for {set i 0} {$i < 10} {incr i} {
     set t0 [clock microseconds]
     ztcl::vm start $vm
     set t1 [clock microseconds]
-    set ch [ztcl::vm vsock $vm 1024]
+    set ch [ztcl::vm vsock $vm 1025]
     set main [hello $ch]
     set t2 [clock microseconds]
     close $ch
@@ -108,7 +108,7 @@ for {set i 0} {$i < 10} {incr i} {
     set w [ztcl::vm create {*}$boot -warm 1]
     set t0 [clock microseconds]
     ztcl::vm start $w
-    set ch [ztcl::vm vsock $w 1024]
+    set ch [ztcl::vm vsock $w 1025]
     read $ch 16
     lappend warms [expr {([clock microseconds] - $t0) / 1000.0}]
     close $ch
