@@ -23,6 +23,7 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 | `python3 -I tools/bench.py --tclsh tclsh` | Compares the scripts in `bench/` with a tclsh. |
 | `zig build wasm` | Builds the WebAssembly library. |
 | `node tools/wasm-web.mjs zig-out/lib/ztcl.wasm` | Tests `web/ztcl.mjs` and the Node.js example. |
+| `node tools/web-api.mjs zig-out/lib/ztcl.wasm zig-out/lib/ztcl-host.wasm` | Tests the commands `web::` of `ztcl-host.wasm` with a fake `navigator.serial`. |
 | `zig build wasm-shell` | Builds `zig-out/lib/ztcl-shell.wasm`: the library with the shell, for the site. |
 | `node tools/wasm-shell.mjs zig-out/lib/ztcl-shell.wasm` | Tests that shell through `web/ztcl-shell.mjs`. |
 | `node tools/site-shell.mjs chromium URL` | Tests the shell of a page of the built site in a headless Chromium. |

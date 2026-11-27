@@ -119,6 +119,7 @@ test {
     _ = @import("vfs_tests.zig");
     _ = @import("tcl9_tests.zig");
     _ = @import("math9.zig");
+    _ = @import("wasmweb.zig");
     if (@import("builtin").os.tag == .linux) _ = @import("kvm.zig");
     if (@import("builtin").os.tag == .linux) _ = @import("vm/share_linux.zig");
     _ = @import("vm/virtio/mmio.zig");

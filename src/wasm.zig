@@ -248,8 +248,26 @@ fn ztcl_dom_event(h: *Handle, sptr: [*]const u8, slen: usize, vptr: [*]const u8,
     }
 }
 
+// ---- The Web APIs of the page (`wasmweb.zig`, #251) ----
+
+/// Adds the commands `web::` to the interpreter, in `ztcl-host.wasm`
+/// only. The host calls it for an `allow` of a group `web:...`. Gives 0,
+/// or 1 when the memory is full.
+fn ztcl_web_allow(h: *Handle) callconv(.c) i32 {
+    @import("wasmweb.zig").Commands(gpa).register(&h.it) catch return 1;
+    return 0;
+}
+
+/// Splits a Tcl list for the conversions of the host. See
+/// `wasmweb.split`.
+fn ztcl_web_split(ptr: [*]const u8, len: usize) callconv(.c) i32 {
+    return @import("wasmweb.zig").split(gpa, ptr[0..len]);
+}
+
 comptime {
     if (host_imports) {
+        @export(&ztcl_web_allow, .{ .name = "ztcl_web_allow" });
+        @export(&ztcl_web_split, .{ .name = "ztcl_web_split" });
         @export(&ztcl_dom_event, .{ .name = "ztcl_dom_event" });
         @export(&ztcl_dom_allow, .{ .name = "ztcl_dom_allow" });
         @export(&ztcl_clock_allow, .{ .name = "ztcl_clock_allow" });

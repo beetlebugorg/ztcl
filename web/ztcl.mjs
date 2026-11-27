@@ -71,7 +71,9 @@ export class Interp {
   /// Options: computeLimit (compute units for each eval, null for no limit),
   /// memLimit (bytes), onOutput (a function that gets the `puts` text),
   /// allow (a list of capabilities: "file" for the files of a bundle;
-  /// "clock", "event", "dom", and "dom-html" with ztcl-host.wasm),
+  /// "clock", "event", "dom", "dom-html", and the groups of the Web
+  /// APIs, for example "web:serial", with ztcl-host.wasm), webRoot (the
+  /// global object of `web::root`, globalThis by default),
   /// onEvents (a function that gets the result of each run of the
   /// events of a timer), point (true adds `point proc` and the output commands), and
   /// packages (a function of a file name for the `load` command of the C
@@ -89,6 +91,7 @@ export class Interp {
       imports.ztcl_host = {
         output: (ptr, len) => self._live(ptr, len),
         dom: (op, h, a, aLen, b, bLen) => self._dom(op, h, a, aLen, b, bLen),
+        web: (op, h, a, aLen, b, bLen) => self._web.call(op, h, a, aLen, b, bLen),
         now_ms: () => self._now(),
         zone: (ptr, len) => self._zone(ptr, len),
       };
@@ -99,11 +102,14 @@ export class Interp {
       imports.ztcl_cext = { call: (pkg, id, argc, argv, prec) => self._cextCall(pkg, id, argc, argv, prec) };
     }
     const instance = await WebAssembly.instantiate(mod, imports);
+    // The bridge of the Web APIs (web/ztcl-web.mjs) loads only for a
+    // group of `web:`.
+    if ((options.allow ?? []).some((c) => c.startsWith("web:"))) options = { ...options, webBridge: await import("./ztcl-web.mjs") };
     self = new Interp(instance, options);
     return self;
   }
 
-  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = "8.6", onEvents = null, domComputeLimit = 1000000 } = {}) {
+  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = "8.6", onEvents = null, domComputeLimit = 1000000, webRoot = globalThis, webBridge = null } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
@@ -164,6 +170,14 @@ export class Interp {
       allow = allow.filter((c) => c !== "dom-html");
       if (this.x.ztcl_dom_allow(this.h) !== 0) throw new Error("ztcl_dom_allow: out of memory");
       allow = allow.filter((c) => c !== "dom");
+    }
+    const groups = allow.filter((c) => c.startsWith("web:"));
+    if (groups.length) {
+      if (!this.x.ztcl_web_allow) throw new Error(`${groups[0]}: this module has no Web API bridge (use ztcl-host.wasm)`);
+      if (!webBridge) throw new Error(`${groups[0]}: no bridge of the Web APIs (use Interp.create)`);
+      this._web = new webBridge.Bridge(this, { groups: groups.map((c) => c.slice(4)), root: webRoot });
+      if (this.x.ztcl_web_allow(this.h) !== 0) throw new Error("ztcl_web_allow: out of memory");
+      allow = allow.filter((c) => !c.startsWith("web:"));
     }
     if (allow.length) {
       const bad = allow.filter((c) => c !== "file");

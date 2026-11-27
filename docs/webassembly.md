@@ -74,7 +74,8 @@ tcl.close();
 | `interp.computeLimit`, `interp.memLimit` | Change the limits for the next `eval`. |
 | `interp.memorySize` | The size of the linear memory in bytes. The memory never shrinks, so this is the peak. |
 | `interp.close()` | Frees the interpreter. |
-| `options.allow` | A list of capabilities. `ztcl.wasm` has only `"file"`, for the files of a bundle. See [Bundle a script](#bundle-a-script). |
+| `options.allow` | A list of capabilities. `ztcl.wasm` has only `"file"`, for the files of a bundle. See [Bundle a script](#bundle-a-script). With `ztcl-host.wasm`, a group of the Web APIs such as `"web:serial"` turns on the commands [`web::`](modules/web.md). |
+| `options.webRoot` | The global object of the paths of `web::root`, `globalThis` by default. |
 | `interp.runEvents(now)` | With `ztcl-host.wasm` and `allow: ["event"]`: runs the events (`after`, `after idle`) that are due at `now`, as `update` runs them. `now` is in milliseconds on the clock of `options.now` (`Date.now` by default), and it can be left out. Returns `{ ok, result, output }`. After each `eval` and each run, a timer of `setTimeout` calls it at the time of the next event. `vwait` and `after ms` with no script give an error, because a call into wasm cannot wait for the page. |
 | `options.onEvents(r)` | Gets the `{ ok, result, output }` of each run of the events from the timer. |
 | `interp.run()` | Runs the scripts of a bundle. Returns `{ ok, result, output }`. |
