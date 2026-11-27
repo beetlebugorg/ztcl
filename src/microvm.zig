@@ -518,7 +518,11 @@ const mac = if (on_mac) struct {
         console_host: c_int,
         warm: bool,
         started: bool = false,
+        /// The listeners of `listen`, each with the write end of its pipe.
+        listens: std.ArrayListUnmanaged(Listen) = .empty,
     };
+
+    const Listen = struct { port: u32, l: *vz.Listener, pipe_w: c_int, chan: []const u8 };
 
     const State = struct {
         guests: std.ArrayList(*Guest) = .empty,
@@ -571,6 +575,9 @@ const mac = if (on_mac) struct {
         }
         if (std.mem.eql(u8, sub, "vsock")) return vsock(it, g, args[3..]);
         if (std.mem.eql(u8, sub, "exec")) return execCmd(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "listen")) return listenCmd(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "unlisten")) return unlistenCmd(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "accept")) return acceptCmd(it, g, args[3..]);
         if (std.mem.eql(u8, sub, "mount")) return mountCmd(it, g, args[3..]);
         if (std.mem.eql(u8, sub, "console")) {
             if (args.len != 3) return it.wrongArgs("ztcl::vm console vm");
@@ -984,6 +991,91 @@ const mac = if (on_mac) struct {
         return binaryChannel(it, "vsock", fd);
     }
 
+    // ---- Connections of the guest to the host (`listen`) ----
+
+    /// The glue of `listen`: the pipe gives the number of each new
+    /// descriptor, and `accept` turns it into a channel for the script.
+    const listen_glue =
+        \\namespace eval ::ztcl::vmpriv {
+        \\    proc accept {vm port pipe cmd} {
+        \\        set b [read $pipe 4]
+        \\        if {[string length $b] != 4} { return }
+        \\        binary scan $b i fd
+        \\        set ch [::ztcl::vm accept $vm $port $fd]
+        \\        uplevel #0 [linsert $cmd end $ch]
+        \\    }
+        \\}
+    ;
+
+    fn findListen(g: *Guest, port: u32) ?usize {
+        for (g.listens.items, 0..) |x, i| if (x.port == port) return i;
+        return null;
+    }
+
+    fn dropListen(it: *Interp, x: Listen) void {
+        vz.unlisten(it.heap.backing, x.l);
+        _ = c.close(x.pipe_w);
+        const script = std.fmt.allocPrint(it.alloc(), "catch {{close {{{s}}}}}", .{x.chan}) catch return;
+        _ = it.eval(script) catch {};
+        it.heap.backing.free(x.chan);
+    }
+
+    /// `listen VM PORT -command SCRIPT`: a program of the guest connects
+    /// to the host on `PORT`, and the event loop calls `SCRIPT` with a
+    /// channel of the connection appended.
+    fn listenCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        const use = "ztcl::vm listen vm port -command script";
+        if (args.len != 3 or !std.mem.eql(u8, try it.str(args[1]), "-command")) return it.wrongArgs(use);
+        const port = try it.int(args[0]);
+        if (port < 1 or port > std.math.maxInt(u32)) return it.fail("bad port \"{d}\"", .{port});
+        if (it.findCommand("fileevent") == null) return it.failCode("ZTCL VM NOEVENT", "ztcl::vm listen needs the event capability", .{});
+        if (findListen(g, @intCast(port)) != null) return it.failCode("ZTCL VM LISTEN", "the guest {s} has a listener on port {d} already", .{ g.name, port });
+        var pipe: [2]c_int = undefined;
+        if (c.pipe(&pipe) != 0) return it.failCode("ZTCL VM FRAMEWORK", "no pipe for the listener", .{});
+        _ = c.fcntl(pipe[0], c.F.SETFD, @as(c_int, c.FD_CLOEXEC));
+        _ = c.fcntl(pipe[1], c.F.SETFD, @as(c_int, c.FD_CLOEXEC));
+        const ch = binaryChannel(it, "vmlisten", pipe[0]) catch |e| {
+            _ = c.close(pipe[0]);
+            _ = c.close(pipe[1]);
+            return e;
+        };
+        const l = vz.listen(it.heap.backing, &g.machine, @intCast(port), pipe[1]) catch {
+            _ = c.close(pipe[1]);
+            return it.failCode("ZTCL VM FRAMEWORK", "the guest {s} cannot listen on port {d}", .{ g.name, port });
+        };
+        const name = try it.heap.backing.dupe(u8, try it.str(ch));
+        try g.listens.append(it.heap.backing, .{ .port = @intCast(port), .l = l, .pipe_w = pipe[1], .chan = name });
+        if (it.findCommand("::ztcl::vmpriv::accept") == null) _ = try it.eval(listen_glue);
+        var words = [_]Value{ .{ .str = "::ztcl::vmpriv::accept" }, .{ .str = g.name }, .{ .int = port }, ch, args[2] };
+        const handler = try value.wrapList(it.alloc(), try it.alloc().dupe(Value, &words));
+        var fe = [_]Value{ .{ .str = "fileevent" }, ch, .{ .str = "readable" }, handler };
+        _ = try it.evalWords(&fe);
+        return .{ .str = "" };
+    }
+
+    fn unlistenCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        if (args.len != 1) return it.wrongArgs("ztcl::vm unlisten vm port");
+        const port = try it.int(args[0]);
+        const i = (if (port >= 0 and port <= std.math.maxInt(u32)) findListen(g, @intCast(port)) else null) orelse
+            return it.failCode("ZTCL VM LISTEN", "the guest {s} has no listener on port {d}", .{ g.name, port });
+        dropListen(it, g.listens.swapRemove(i));
+        return .{ .str = "" };
+    }
+
+    /// `accept VM PORT FD`: the channel of a connection that the listener
+    /// kept. The glue of `listen` calls it; a descriptor that the
+    /// listener did not keep is an error.
+    fn acceptCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        if (args.len != 2) return it.wrongArgs("ztcl::vm accept vm port fd");
+        const port = try it.int(args[0]);
+        const fd = try it.int(args[1]);
+        const i = (if (port >= 0 and port <= std.math.maxInt(u32)) findListen(g, @intCast(port)) else null) orelse
+            return it.failCode("ZTCL VM LISTEN", "the guest {s} has no listener on port {d}", .{ g.name, port });
+        if (fd < 0 or fd > std.math.maxInt(c_int) or !g.listens.items[i].l.take(@intCast(fd)))
+            return it.failCode("ZTCL VM LISTEN", "no connection {d} waits on port {d}", .{ fd, port });
+        return binaryChannel(it, "vsock", @intCast(fd));
+    }
+
     /// A connection to the agent, after its `HELLO`.
     fn agent(it: *Interp, g: *Guest, timeout: u32) Error!vmagent.Conn {
         if (g.machine.state() != .running) return it.failCode("ZTCL VM STATE", "the guest {s} is {s}", .{ g.name, status(g) });
@@ -1022,6 +1114,8 @@ const mac = if (on_mac) struct {
     }
 
     fn destroy(it: *Interp, g: *Guest) void {
+        for (g.listens.items) |x| dropListen(it, x);
+        g.listens.deinit(it.heap.backing);
         stop(g, true);
         g.machine.deinit();
         vz.release(g.config);

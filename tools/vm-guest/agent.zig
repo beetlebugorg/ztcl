@@ -129,7 +129,14 @@ fn listenOn(port: u32) ?i32 {
     return null;
 }
 
-pub fn main() void {
+pub fn main(init: std.process.Init.Minimal) void {
+    // `agent connect PORT`: a client of the host on vsock, for the tests
+    // of `ztcl::vm listen` and for a relay of a program of the guest.
+    const argv = init.args.vector;
+    if (argv.len == 3 and std.mem.eql(u8, std.mem.sliceTo(argv[1], 0), "connect")) {
+        const port = std.fmt.parseInt(u32, std.mem.sliceTo(argv[2], 0), 10) catch return say("agent: bad port\n");
+        return relay(port);
+    }
     times[0] = bootNs();
     if (linux.getpid() == 1) mounts();
     // The children of the connections, and each orphan when the agent is
@@ -462,4 +469,41 @@ fn exec(c: i32, in: *In, payload: []const u8) !void {
     var ex: [4]u8 = undefined;
     std.mem.writeInt(i32, &ex, code, .little);
     if (conn_open) send(c, t_exit, &ex);
+}
+
+fn fail(text: []const u8) noreturn {
+    say(text);
+    linux.exit_group(1);
+}
+
+/// The CID of the host.
+const VMADDR_CID_HOST: u32 = 2;
+
+/// Connects to `port` of the host and copies stdin to the connection and
+/// the connection to stdout, until both ends close.
+fn relay(port: u32) void {
+    const fd: i32 = @intCast(ok(linux.socket(AF_VSOCK, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0)) orelse fail("agent: no vsock\n"));
+    var addr: SockaddrVm = .{ .port = port, .cid = VMADDR_CID_HOST };
+    _ = ok(linux.connect(fd, @ptrCast(&addr), @sizeOf(SockaddrVm))) orelse fail("agent: no connection to the host\n");
+    var in_open = true;
+    var buf: [65536]u8 = undefined;
+    while (true) {
+        var fds = [2]linux.pollfd{
+            .{ .fd = if (in_open) 0 else -1, .events = linux.POLL.IN, .revents = 0 },
+            .{ .fd = fd, .events = linux.POLL.IN, .revents = 0 },
+        };
+        _ = ok(linux.poll(&fds, 2, -1)) orelse continue;
+        if (fds[0].revents != 0) {
+            const n = ok(linux.read(0, &buf, buf.len)) orelse 0;
+            if (n == 0) {
+                in_open = false;
+                _ = linux.shutdown(fd, linux.SHUT.WR);
+            } else writeAll(fd, buf[0..n]);
+        }
+        if (fds[1].revents != 0) {
+            const n = ok(linux.read(fd, &buf, buf.len)) orelse 0;
+            if (n == 0) return;
+            writeAll(1, buf[0..n]);
+        }
+    }
 }
