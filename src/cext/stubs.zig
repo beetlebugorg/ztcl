@@ -35,6 +35,9 @@ const groups = .{
     @import("parse.zig").slots,
     @import("errors.zig").slots,
     @import("strings.zig").slots,
+    @import("encoding.zig").slots,
+    @import("regexp.zig").slots,
+    @import("lists.zig").slots,
 };
 
 /// `TclStubHooks` of `tclDecls.h`.
