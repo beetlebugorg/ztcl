@@ -53,6 +53,43 @@ check "exec: -cwd and -env" [dict get [ztcl::vm exec $vm -cwd /tmp -env {Z=1} /b
 check "exec: a missing program" [catch {ztcl::vm exec $vm /nope}] 1
 check "exec: its error code" [lrange $::errorCode 0 2] {ZTCL VM AGENT}
 check "mount: a missing share" [catch {ztcl::vm mount $vm share9 /mnt/x}] 1
+# listen: a program of the guest connects to the host (CID 2).
+proc served {ch} {
+    fconfigure $ch -translation lf -buffering line
+    puts $ch "host got: [gets $ch]"
+    close $ch
+    set ::served 1
+}
+ztcl::vm listen $vm 3000 -command served
+check "listen: a second listener on the port" [catch {ztcl::vm listen $vm 3000 -command served}] 1
+check "accept: a descriptor of no connection" [catch {ztcl::vm accept $vm 3000 0}] 1
+ztcl::vm exec $vm /bin/busybox sh -c {(echo hi | /sbin/agent connect 3000 > /tmp/out 2>&1 &)}
+set ::served timeout
+after 5000 {set ::served timeout}
+vwait ::served
+check "listen: the handler ran" $::served 1
+after 200
+check "listen: a connection of the guest to the host" [dict get [ztcl::vm exec $vm /bin/busybox cat /tmp/out] stdout] "host got: hi\n"
+# A second guest listens on the same port of the host, and each
+# connection goes to the listener of its own guest.
+set vm2 [ztcl::vm create {*}$boot]
+ztcl::vm start $vm2
+proc served2 {ch} {
+    fconfigure $ch -translation lf -buffering line
+    puts $ch "second got: [gets $ch]"
+    close $ch
+    set ::served 2
+}
+ztcl::vm listen $vm2 3000 -command served2
+ztcl::vm exec $vm2 /bin/busybox sh -c {(echo hi | /sbin/agent connect 3000 > /tmp/out 2>&1 &)}
+set ::served timeout
+after 5000 {set ::served timeout}
+vwait ::served
+check "listen: the listener of the second guest" $::served 2
+ztcl::vm delete $vm2
+ztcl::vm unlisten $vm 3000
+check "listen: no connection after unlisten" [dict get [ztcl::vm exec $vm /bin/busybox sh -c {echo x | /sbin/agent connect 3000 2>/dev/null; echo $?}] stdout] "1\n"
+check "unlisten: no listener" [lrange [list [catch {ztcl::vm unlisten $vm 3000}] $::errorCode] 0 1] {1 {ZTCL VM LISTEN}}
 ztcl::vm delete $vm
 
 # Shares with 9p: share0 at /mnt/share (rw), share1 read-only.
