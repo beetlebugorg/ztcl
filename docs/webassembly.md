@@ -2,7 +2,7 @@
 
 `zig build wasm` builds the interpreter for the browser and for Node.js. The module runs Tcl scripts with an exact compute limit and a memory limit, so a page can run scripts that its users write. [The playground](https://beetlebug.org/ztcl/playground/) uses this build.
 
-The WebAssembly build has the interpreter only, with no JIT. It has no command that reaches the host, and it has no capability that an embedder can turn on: no files, sockets, `exec`, `clock`, `interp`, or event loop. `coroutine` is present and returns an error. The `point` command is not installed.
+The WebAssembly build has the interpreter only, with no JIT. It has no command that reaches the host, and it has no capability that an embedder can turn on: no files, sockets, `exec`, `clock`, `interp`, or event loop. `coroutine` is present and returns an error. The `point` command is not installed. The build `ztcl-host.wasm` adds `clock`, the event loop, and `dom` when the page allows them: [Tcl in a web page](dom.md) has a live example.
 
 ## Install from npm
 
