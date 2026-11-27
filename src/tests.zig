@@ -2589,8 +2589,27 @@ test "switch: the guard and the cases of the general path" {
         .{ "namespace eval n {proc switch {args} {return ns}}; proc t {x} {switch -- $x {a {return A}}}; t a", "A" },
         .{ "proc t {x} {switch -- $x {a {error boom}}}; catch {t a} m; set m", "boom" },
         .{ "proc t {x} {switch -glob -- $x {a* {return glob}}}; t abc", "glob" },
-        .{ "proc t {x} {switch $x {a {return A}}}; catch {t -x} m; set m", "bad option \"-x\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --" },
+        .{ "proc t {x} {switch $x {a {return A}}}; catch {t -x} m; set m", "" },
+        .{ "catch {switch -x y {a {return A}}} m; set m", "bad option \"-x\": must be -exact, -glob, -indexvar, -matchvar, -nocase, -regexp, or --" },
+        .{ "catch {switch -- x} m; set m", "extra switch pattern with no body" },
+        .{ "catch {switch x {}} m; set m", "wrong # args: should be \"switch ?-option ...? string {?pattern body ...? ?default body?}\"" },
         .{ "proc t {x} {switch -- $x {a}}; catch {t a} m; set m", "extra switch pattern with no body" },
+    });
+}
+
+test "messages of Tcl 8.6.16 from the suite" {
+    try check(&.{
+        .{ "set l {# 1 2 3}; lappend l", "# 1 2 3" },
+        .{ "unset -nocomplain q; list [lappend q] [info exists q]", "{} 1" },
+        .{ "set l \"1 \\{ 2\"; catch {lappend l} m; set m", "unmatched open brace in list" },
+        .{ "catch {lmap {} {} {}} m; set m", "lmap varlist is empty" },
+        .{ "catch {foreach {} {} {}} m; set m", "foreach varlist is empty" },
+        .{ "catch {apply {x {} NO::SUCH} 1} m; set m", "namespace \"::NO::SUCH\" not found" },
+        .{ "catch {dict incr d k 1 2} m; set m", "wrong # args: should be \"dict incr dictVarName key ?increment?\"" },
+        .{ "catch {lsearch -index end+1 {a} a} m; set m", "index \"end+1\" cannot select an element from any list" },
+        .{ "catch {lsort -index -1 {}} m; set m", "index \"-1\" cannot select an element from any list" },
+        .{ "catch {lsearch -index end-5 {a} a} m; set m", "element -5 missing from sublist \"a\"" },
+        .{ "catch {lsort -index 5 {{1 . c}}} m; set m", "element 5 missing from sublist \"1 . c\"" },
     });
 }
 

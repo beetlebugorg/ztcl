@@ -4,9 +4,9 @@ aaa_exit.test	exit-1.2	pass	pass
 append.test	append-1.1	pass	pass		
 append.test	append-1.2	pass	pass		
 append.test	append-1.3	pass	pass		
-append.test	append-10.1	fail	fail	bug	code 0/0,2: {#} 1 2 3 \| want: # 1 2 3
+append.test	append-10.1	pass	pass		
 append.test	append-10.2	pass	pass		
-append.test	append-10.3	fail	fail	bug	code 0/0,2: {#} 1 2 3 \| want: # 1 2 3
+append.test	append-10.3	pass	pass		
 append.test	append-10.4	pass	pass		
 append.test	append-2.1	pass	pass		
 append.test	append-3.1	pass	pass		
@@ -49,9 +49,9 @@ append.test	append-9.3	pass	pass
 appendComp.test	appendComp-1.1	pass	pass		
 appendComp.test	appendComp-1.2	pass	pass		
 appendComp.test	appendComp-1.3	pass	pass		
-appendComp.test	appendComp-10.1	fail	fail	bug	code 0/0,2: {#} 1 2 3 \| want: # 1 2 3
+appendComp.test	appendComp-10.1	pass	pass		
 appendComp.test	appendComp-10.2	pass	pass		
-appendComp.test	appendComp-10.3	fail	fail	bug	code 0/0,2: {#} 1 2 3 \| want: # 1 2 3
+appendComp.test	appendComp-10.3	pass	pass		
 appendComp.test	appendComp-10.4	pass	pass		
 appendComp.test	appendComp-2.1	pass	pass		
 appendComp.test	appendComp-3.1	pass	pass		
@@ -104,8 +104,8 @@ apply.test	apply-2.4	pass	pass
 apply.test	apply-2.5	pass	pass		
 apply.test	apply-3.1	pass	pass		
 apply.test	apply-3.2	pass	pass		
-apply.test	apply-3.3	fail	fail	message	code 1/1: namespace "NONEXIST::FOR::SURE" not found \| want: namespace "::NONEXIST::FOR::SURE" not found
-apply.test	apply-3.4	fail	fail	message	code 1/1: namespace "NONEXIST::FOR::SURE" not found \| want: namespace "::NONEXIST::FOR::SURE" not found
+apply.test	apply-3.3	pass	pass		
+apply.test	apply-3.4	pass	pass		
 apply.test	apply-4.1	pass	pass		
 apply.test	apply-4.2	pass	pass		
 apply.test	apply-4.3	fail	fail	message	code 1/1: wrong # args: should be "::apply lambdaExpr x" \| want: wrong # args: should be "foo x"
@@ -1370,7 +1370,7 @@ chan.test	chan-4.5	fail	fail	bug	code 0/1:  \| want: bad value for -eofchar:*
 chan.test	chan-4.6	pass	pass		
 chan.test	chan-5.1	fail	fail	message	code 1/1: wrong # args: should be "fcopy input output ?-size size? ?-command callback?" \| want: wrong # args: should be "chan copy input output ?-size size? ?-command callback?"
 chan.test	chan-6.1	fail	fail	message	code 1/1: wrong # args: should be "eof channelId" \| want: wrong # args: should be "chan eof channelId"
-chan.test	chan-7.1	fail	fail	message	code 1/1: wrong # args: should be "fileevent channelId event ?script?" \| want: wrong # args: should be "chan event channelId event ?script?"
+chan.test	chan-7.1	pass	pass		
 chan.test	chan-8.1	fail	fail	message	code 1/1: wrong # args: should be "flush channelId" \| want: wrong # args: should be "chan flush channelId"
 chan.test	chan-9.1	fail	fail	message	code 1/1: wrong # args: should be "gets channelId ?varName?" \| want: wrong # args: should be "chan gets channelId ?varName?"
 chanio.test	chan-io-1.5	skip	skip	tcl	emptyTest
@@ -1569,8 +1569,8 @@ chanio.test	chan-io-32.3	pass	pass
 chanio.test	chan-io-32.4	pass	pass		
 chanio.test	chan-io-32.5	pass	pass		
 chanio.test	chan-io-32.6	pass	pass		
-chanio.test	chan-io-32.7	skip	skip	untriaged	nonBlockFiles
-chanio.test	chan-io-32.8	skip	skip	untriaged	nonBlockFiles
+chanio.test	chan-io-32.7	pass	pass		
+chanio.test	chan-io-32.8	pass	pass		
 chanio.test	chan-io-32.9	pass	pass		
 chanio.test	chan-io-33.1	pass	pass		
 chanio.test	chan-io-33.10	pass	pass		
@@ -1601,7 +1601,7 @@ chanio.test	chan-io-34.4	pass	pass
 chanio.test	chan-io-34.5	pass	pass		
 chanio.test	chan-io-34.6	pass	pass		
 chanio.test	chan-io-34.7	pass	pass		
-chanio.test	chan-io-34.8	fail	fail	message	code 1/1: error during seek on "file431": input/output error \| want: error during seek on "*": invalid argument
+chanio.test	chan-io-34.8	fail	fail	message	code 1/1: error during seek on "file433": input/output error \| want: error during seek on "*": invalid argument
 chanio.test	chan-io-34.9	pass	pass		
 chanio.test	chan-io-35.1	pass	pass		
 chanio.test	chan-io-35.10	fail	fail	bug	code 0/0,2: 10 8 1 \| want: 11 8 1
@@ -1614,7 +1614,7 @@ chanio.test	chan-io-35.16	fail	fail	bug	code 0/0,2: 21 17 1 \| want: 21 8 1
 chanio.test	chan-io-35.17	fail	fail	bug	code 0/0,2: 21 17 1 \| want: 21 8 1
 chanio.test	chan-io-35.2	pass	pass		
 chanio.test	chan-io-35.3	pass	pass		
-chanio.test	chan-io-35.4	skip	skip	untriaged	nonBlockFiles
+chanio.test	chan-io-35.4	pass	pass		
 chanio.test	chan-io-35.5	pass	pass		
 chanio.test	chan-io-35.6	fail	fail	bug	code 0/0,2: 8 8 1 \| want: 9 8 1
 chanio.test	chan-io-35.7	fail	fail	bug	code 0/0,2: 8 8 1 \| want: 9 8 1
@@ -1624,13 +1624,13 @@ chanio.test	chan-io-36.1	pass	pass
 chanio.test	chan-io-36.2	pass	pass		
 chanio.test	chan-io-36.3	pass	pass		
 chanio.test	chan-io-36.4	pass	pass		
-chanio.test	chan-io-36.5	skip	skip	untriaged	nonBlockFiles
-chanio.test	chan-io-36.6	skip	skip	untriaged	nonBlockFiles
+chanio.test	chan-io-36.5	pass	pass		
+chanio.test	chan-io-36.6	pass	pass		
 chanio.test	chan-io-37.1	skip	skip	internals	testchannel
 chanio.test	chan-io-37.2	skip	skip	internals	testchannel
 chanio.test	chan-io-38.1	pass	pass		
 chanio.test	chan-io-38.2	pass	pass		
-chanio.test	chan-io-38.3	fail	fail	bug	code 1/0,2: error reading "file495": illegal operation on a directory \| want: 
+chanio.test	chan-io-38.3	fail	fail	bug	code 1/0,2: error reading "file503": illegal operation on a directory \| want: 
 chanio.test	chan-io-39.1	pass	pass		
 chanio.test	chan-io-39.10	pass	pass		
 chanio.test	chan-io-39.11	pass	pass		
@@ -1655,7 +1655,7 @@ chanio.test	chan-io-39.5	pass	pass
 chanio.test	chan-io-39.6	pass	pass		
 chanio.test	chan-io-39.7	pass	pass		
 chanio.test	chan-io-39.8	pass	pass		
-chanio.test	chan-io-39.9	skip	skip	untriaged	nonBlockFiles
+chanio.test	chan-io-39.9	pass	pass		
 chanio.test	chan-io-4.1	pass	pass		
 chanio.test	chan-io-4.2	pass	pass		
 chanio.test	chan-io-4.3	pass	pass		
@@ -1678,8 +1678,8 @@ chanio.test	chan-io-40.6	pass	pass
 chanio.test	chan-io-40.7	pass	pass		
 chanio.test	chan-io-40.8	pass	pass		
 chanio.test	chan-io-40.9	skip	skip	tcl	nonPortable
-chanio.test	chan-io-41.1	fail	fail	message	code 1/1: wrong # args: should be "fileevent channelId event ?script?" \| want: wrong # args: should be "chan event channelId event ?script?"
-chanio.test	chan-io-41.2	fail	fail	message	code 1/1: wrong # args: should be "fileevent channelId event ?script?" \| want: wrong # args: should be "chan event channelId event ?script?"
+chanio.test	chan-io-41.1	pass	pass		
+chanio.test	chan-io-41.2	pass	pass		
 chanio.test	chan-io-41.3	pass	pass		
 chanio.test	chan-io-41.4	pass	pass		
 chanio.test	chan-io-41.5	pass	pass		
@@ -1712,8 +1712,8 @@ chanio.test	chan-io-48.12	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| w
 chanio.test	chan-io-48.13	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
 chanio.test	chan-io-48.14	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
 chanio.test	chan-io-48.15	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
-chanio.test	chan-io-48.2	skip	skip	untriaged	nonBlockFiles
-chanio.test	chan-io-48.3	skip	skip	untriaged	nonBlockFiles
+chanio.test	chan-io-48.2	pass	pass		
+chanio.test	chan-io-48.3	pass	pass		
 chanio.test	chan-io-48.4	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
 chanio.test	chan-io-48.5	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
 chanio.test	chan-io-48.6	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
@@ -1739,13 +1739,13 @@ chanio.test	chan-io-50.6	skip	skip	internals	testchannelevent
 chanio.test	chan-io-51.1	pass	pass		
 chanio.test	chan-io-52.1	fail	fail	message	code 1/1: fcopy -command is not available \| want: channel "*" is busy
 chanio.test	chan-io-52.2	fail	fail	message	code 1/1: fcopy -command is not available \| want: channel "*" is busy
-chanio.test	chan-io-52.3	fail	fail	bug	code 1/0,2: error reading "file606": illegal operation on a directory \| want: 0 0 ok
-chanio.test	chan-io-52.4	fail	fail	bug	code 1/0,2: error reading "file608": illegal operation on a directory \| want: 0 0 40
-chanio.test	chan-io-52.5	fail	fail	bug	code 1/0,2: error reading "file610": illegal operation on a directory \| want: 0 0 ok
-chanio.test	chan-io-52.5a	fail	fail	bug	code 1/0,2: error reading "file612": illegal operation on a directory \| want: 0 0 ok
-chanio.test	chan-io-52.5b	fail	fail	bug	code 1/0,2: error reading "file614": illegal operation on a directory \| want: 0 0 ok
-chanio.test	chan-io-52.6	fail	fail	bug	code 1/0,2: error reading "file616": illegal operation on a directory \| want: 0 0 ok
-chanio.test	chan-io-52.7	fail	fail	bug	code 1/0,2: error reading "file618": illegal operation on a directory \| want: 0 0 ok
+chanio.test	chan-io-52.3	fail	fail	bug	code 1/0,2: error reading "file621": illegal operation on a directory \| want: 0 0 ok
+chanio.test	chan-io-52.4	fail	fail	bug	code 1/0,2: error reading "file623": illegal operation on a directory \| want: 0 0 40
+chanio.test	chan-io-52.5	fail	fail	bug	code 1/0,2: error reading "file625": illegal operation on a directory \| want: 0 0 ok
+chanio.test	chan-io-52.5a	fail	fail	bug	code 1/0,2: error reading "file627": illegal operation on a directory \| want: 0 0 ok
+chanio.test	chan-io-52.5b	fail	fail	bug	code 1/0,2: error reading "file629": illegal operation on a directory \| want: 0 0 ok
+chanio.test	chan-io-52.6	fail	fail	bug	code 1/0,2: error reading "file631": illegal operation on a directory \| want: 0 0 ok
+chanio.test	chan-io-52.7	fail	fail	bug	code 1/0,2: error reading "file633": illegal operation on a directory \| want: 0 0 ok
 chanio.test	chan-io-52.8	fail	fail	bug	code 0/0,2: 0 0 \| want: 40 40
 chanio.test	chan-io-6.1	pass	pass		
 chanio.test	chan-io-6.10	pass	pass		
@@ -10696,8 +10696,8 @@ cmdIL.test	cmdIL-1.34	pass	pass
 cmdIL.test	cmdIL-1.35	pass	pass		
 cmdIL.test	cmdIL-1.36	pass	pass		
 cmdIL.test	cmdIL-1.4	pass	pass		
-cmdIL.test	cmdIL-1.41	fail	fail	message	code 1/1: when used with "-stride", the leading "-index" value must be within the group \| want: index "-2" cannot select an element from any list
-cmdIL.test	cmdIL-1.42	fail	fail	message	code 1/1: when used with "-stride", the leading "-index" value must be within the group \| want: index "-1-1" cannot select an element from any list
+cmdIL.test	cmdIL-1.41	pass	pass		
+cmdIL.test	cmdIL-1.42	pass	pass		
 cmdIL.test	cmdIL-1.5	pass	pass		
 cmdIL.test	cmdIL-1.6	pass	pass		
 cmdIL.test	cmdIL-1.7	pass	pass		
@@ -10720,15 +10720,15 @@ cmdIL.test	cmdIL-3.3	pass	pass
 cmdIL.test	cmdIL-3.4	pass	pass		
 cmdIL.test	cmdIL-3.4.1	pass	pass		
 cmdIL.test	cmdIL-3.5	pass	pass		
-cmdIL.test	cmdIL-3.5.1	fail	fail	message	code 1/1: element 1+3 missing from sublist "1 . c" \| want: element 4 missing from sublist "1 . c"
-cmdIL.test	cmdIL-3.5.2	fail	fail	message	code 1/1: element -1-1 missing from sublist "1 . c" \| want: index "-1-1" cannot select an element from any list
-cmdIL.test	cmdIL-3.5.3	fail	fail	message	code 1/1: element -2 missing from sublist "1 . c" \| want: index "-2" cannot select an element from any list
-cmdIL.test	cmdIL-3.5.4	fail	fail	message	code 1/1: element end-4 missing from sublist "1 . c" \| want: element -2 missing from sublist "1 . c"
+cmdIL.test	cmdIL-3.5.1	pass	pass		
+cmdIL.test	cmdIL-3.5.2	pass	pass		
+cmdIL.test	cmdIL-3.5.3	pass	pass		
+cmdIL.test	cmdIL-3.5.4	pass	pass		
 cmdIL.test	cmdIL-3.5.5	pass	pass		
 cmdIL.test	cmdIL-3.5.6	pass	pass		
-cmdIL.test	cmdIL-3.5.7	fail	fail	message	code 1/1: element end--1 missing from sublist "1 . c" \| want: index "end--1" cannot select an element from any list
-cmdIL.test	cmdIL-3.5.8	fail	fail	message	code 1/1: element end+1 missing from sublist "1 . c" \| want: index "end+1" cannot select an element from any list
-cmdIL.test	cmdIL-3.5.9	fail	fail	message	code 1/1: element end+2 missing from sublist "1 . c" \| want: index "end+2" cannot select an element from any list
+cmdIL.test	cmdIL-3.5.7	pass	pass		
+cmdIL.test	cmdIL-3.5.8	pass	pass		
+cmdIL.test	cmdIL-3.5.9	pass	pass		
 cmdIL.test	cmdIL-3.6	pass	pass		
 cmdIL.test	cmdIL-3.7	pass	pass		
 cmdIL.test	cmdIL-3.8	pass	pass		
@@ -11451,8 +11451,8 @@ dict.test	dict-11.1	pass	pass
 dict.test	dict-11.10	pass	pass		
 dict.test	dict-11.11	pass	pass		
 dict.test	dict-11.12	pass	pass		
-dict.test	dict-11.13	fail	fail	message	code 1/1: wrong # args: should be "dict incr dictVarName key ?value ...?" \| want: wrong # args: should be "dict incr dictVarName key ?increment?"
-dict.test	dict-11.14	fail	fail	message	code 1/1: wrong # args: should be "dict incr dictVarName key ?value ...?" \| want: wrong # args: should be "dict incr dictVarName key ?increment?"
+dict.test	dict-11.13	pass	pass		
+dict.test	dict-11.14	pass	pass		
 dict.test	dict-11.15	pass	pass		
 dict.test	dict-11.16	pass	pass		
 dict.test	dict-11.17	pass	pass		
@@ -27509,8 +27509,8 @@ fileName.test	filename-11.1	fail	fail	message	code 1/1: wrong # args: should be 
 fileName.test	filename-11.10	skip	skip	internals	testsetplatform
 fileName.test	filename-11.11	skip	skip	internals	testsetplatform
 fileName.test	filename-11.12	skip	skip	internals	testsetplatform
-fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3583633/globTest
-fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3583633/globTest
+fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3763082/globTest
+fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3763082/globTest
 fileName.test	filename-11.16	pass	pass		
 fileName.test	filename-11.17	pass	pass		
 fileName.test	filename-11.17.1	skip	skip	platform	win
@@ -27559,7 +27559,7 @@ fileName.test	filename-11.41	fail	fail	bug	code 1/0,2: bad option "-dir": must b
 fileName.test	filename-11.42	fail	fail	bug	code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: equal
 fileName.test	filename-11.43	fail	fail	message	code 1/1: bad option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: ambiguous option "-t": must be -directory, -join, -nocomplain, -path, -tails, -types, or --
 fileName.test	filename-11.44	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: "-directory" cannot be used with "-path"
-fileName.test	filename-11.45	fail	fail	bug	code 0/0,2: {} {all.tcl httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcl3583633 tcltests.tcl ztclsh} \| want: equal
+fileName.test	filename-11.45	fail	fail	bug	code 0/0,2: {} {all.tcl httpTest.tcl httpTestScript.tcl httpd httpd11.tcl internals.tcl pkgIndex.tcl remote.tcl tcl3763082 tcltests.tcl ztclsh} \| want: equal
 fileName.test	filename-11.46	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: bad argument to "-types": abcde
 fileName.test	filename-11.47	fail	fail	message	code 1/1: no files matched glob pattern "*" \| want: bad argument to "-types": abcde
 fileName.test	filename-11.48	fail	fail	message	code 1/1: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -types, or -- \| want: bad argument to "-types": abcde
@@ -27607,7 +27607,7 @@ fileName.test	filename-14.1	pass	pass
 fileName.test	filename-14.11	pass	pass		
 fileName.test	filename-14.13	pass	pass		
 fileName.test	filename-14.15	fail	fail	bug	code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c \| want: globTest/a1/ globTest/a2/ globTest/a3/
-fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3583633/globTest/z1.c
+fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3763082/globTest/z1.c
 fileName.test	filename-14.18	pass	pass		
 fileName.test	filename-14.20	pass	pass		
 fileName.test	filename-14.21	pass	pass		
@@ -27848,7 +27848,7 @@ fileSystem.test	filesystem-6.12	pass	pass
 fileSystem.test	filesystem-6.13	pass	pass		
 fileSystem.test	filesystem-6.14	fail	fail	design	code 1/1: could not link: links are not available in the root folder \| want: could not read link "": no such file or directory
 fileSystem.test	filesystem-6.15	fail	fail	bug	code 0/1:  \| want: could not read "": no such file or directory
-fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795742600 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795743997 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.17	fail	fail	feature	code 1/1: file mtime with a new time is not available \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.18	fail	fail	bug	code 0/1:  \| want: can't create directory "": no such file or directory
 fileSystem.test	filesystem-6.19	pass	pass		
@@ -27863,7 +27863,7 @@ fileSystem.test	filesystem-6.26	pass	pass
 fileSystem.test	filesystem-6.27	fail	fail	bug	code 0/1: / \| want: unrecognised path
 fileSystem.test	filesystem-6.28	fail	fail	bug	code 0/1: 260 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.29	pass	pass		
-fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795742600 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795743997 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.30	fail	fail	bug	code 0/1: native root \| want: unrecognised path
 fileSystem.test	filesystem-6.31	pass	pass		
 fileSystem.test	filesystem-6.32	fail	fail	bug	code 0/1: directory \| want: could not read "": no such file or directory
@@ -29479,10 +29479,10 @@ io.test	io-27.2	pass	pass
 io.test	io-27.3	pass	pass		
 io.test	io-27.4	fail	fail	bug	code 0/0,2: 0 0 72 \| want: 0 60 72
 io.test	io-27.5	fail	fail	bug	code 0/0,2: 0 0 72 \| want: 0 60 72
-io.test	io-27.6	skip	skip	untriaged	asyncPipeClose
+io.test	io-27.6	pass	pass		
 io.test	io-28.1	skip	skip	internals	testchannel
 io.test	io-28.2	fail	fail	feature	code 1/0,2: bad option "share": must be alias, aliases, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, \| want: abcdef
-io.test	io-28.3	skip	skip	untriaged	asyncPipeClose
+io.test	io-28.3	skip	skip	tcl	nonPortable
 io.test	io-28.4	skip	skip	internals	testchannel
 io.test	io-28.5	skip	skip	internals	testchannel
 io.test	io-29.1	fail	fail	bug	code 0/0,2: 1 {can not find channel named "stdin"} \| want: 1 {channel "stdin" wasn't opened for writing}
@@ -29510,7 +29510,7 @@ io.test	io-29.29	pass	pass
 io.test	io-29.3	pass	pass		
 io.test	io-29.30	pass	pass		
 io.test	io-29.31	pass	pass		
-io.test	io-29.32	skip	skip	untriaged	asyncPipeClose
+io.test	io-29.32	pass	pass		
 io.test	io-29.33	pass	pass		
 io.test	io-29.33b	pass	pass		
 io.test	io-29.34	pass	pass		
@@ -29607,8 +29607,8 @@ io.test	io-32.3	pass	pass
 io.test	io-32.4	pass	pass		
 io.test	io-32.5	pass	pass		
 io.test	io-32.6	pass	pass		
-io.test	io-32.7	skip	skip	untriaged	nonBlockFiles
-io.test	io-32.8	skip	skip	untriaged	nonBlockFiles
+io.test	io-32.7	pass	pass		
+io.test	io-32.8	pass	pass		
 io.test	io-32.9	pass	pass		
 io.test	io-33.1	pass	pass		
 io.test	io-33.10	pass	pass		
@@ -29661,7 +29661,7 @@ io.test	io-35.19	fail	fail	bug	code 0/0,2: 17 17 1 13 \| want: 17 8 1 13
 io.test	io-35.2	pass	pass		
 io.test	io-35.20	fail	fail	bug	code 0/0,2: 9 9 1 13 \| want: 9 1 1 13
 io.test	io-35.3	pass	pass		
-io.test	io-35.4	skip	skip	untriaged	nonBlockFiles
+io.test	io-35.4	pass	pass		
 io.test	io-35.5	pass	pass		
 io.test	io-35.6	fail	fail	bug	code 0/0,2: 8 8 1 \| want: 9 8 1
 io.test	io-35.7	fail	fail	bug	code 0/0,2: 8 8 1 \| want: 9 8 1
@@ -29672,13 +29672,13 @@ io.test	io-36.1.1	pass	pass
 io.test	io-36.2	pass	pass		
 io.test	io-36.3	pass	pass		
 io.test	io-36.4	pass	pass		
-io.test	io-36.5	skip	skip	untriaged	nonBlockFiles
-io.test	io-36.6	skip	skip	untriaged	nonBlockFiles
+io.test	io-36.5	pass	pass		
+io.test	io-36.6	pass	pass		
 io.test	io-37.1	skip	skip	internals	testchannel
 io.test	io-37.2	skip	skip	internals	testchannel
 io.test	io-38.1	pass	pass		
 io.test	io-38.2	pass	pass		
-io.test	io-38.3	fail	fail	bug	code 1/0,2: error reading "file527": illegal operation on a directory \| want: 
+io.test	io-38.3	fail	fail	bug	code 1/0,2: error reading "file541": illegal operation on a directory \| want: 
 io.test	io-39.1	pass	pass		
 io.test	io-39.10	pass	pass		
 io.test	io-39.11	pass	pass		
@@ -29704,7 +29704,7 @@ io.test	io-39.5	pass	pass
 io.test	io-39.6	pass	pass		
 io.test	io-39.7	pass	pass		
 io.test	io-39.8	pass	pass		
-io.test	io-39.9	skip	skip	untriaged	nonBlockFiles
+io.test	io-39.9	pass	pass		
 io.test	io-4.1	pass	pass		
 io.test	io-4.2	pass	pass		
 io.test	io-4.3	pass	pass		
@@ -29761,8 +29761,8 @@ io.test	io-48.12	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {a
 io.test	io-48.13	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
 io.test	io-48.14	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
 io.test	io-48.15	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
-io.test	io-48.2	skip	skip	untriaged	nonBlockFiles
-io.test	io-48.3	skip	skip	untriaged	nonBlockFiles
+io.test	io-48.2	pass	pass		
+io.test	io-48.3	pass	pass		
 io.test	io-48.4	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
 io.test	io-48.5	fail	fail	bug	code 0/0,2: 5 {abc def foo bar {}} \| want: 3 {abc def {}}
 io.test	io-48.6	fail	fail	bug	code 0/0,2: 3 {abc def } \| want: 3 {abc def {}}
@@ -29788,14 +29788,14 @@ io.test	io-50.6	skip	skip	internals	testchannelevent
 io.test	io-51.1	pass	pass		
 io.test	io-52.1	fail	fail	bug	code 1/0,2: fcopy -command is not available \| want: 0
 io.test	io-52.2	fail	fail	bug	code 1/0,2: fcopy -command is not available \| want: 0
-io.test	io-52.3	fail	fail	bug	code 1/0,2: error reading "file639": illegal operation on a directory \| want: 0 0 ok
-io.test	io-52.4	fail	fail	bug	code 1/0,2: error reading "file641": illegal operation on a directory \| want: 0 0 0 40
-io.test	io-52.4.1	fail	fail	bug	code 1/0,2: error reading "file643": illegal operation on a directory \| want: 0 0 0 40
-io.test	io-52.5	fail	fail	bug	code 1/0,2: error reading "file645": illegal operation on a directory \| want: 0 0 ok
-io.test	io-52.5a	fail	fail	bug	code 1/0,2: error reading "file647": illegal operation on a directory \| want: 0 0 ok
-io.test	io-52.5b	fail	fail	bug	code 1/0,2: error reading "file649": illegal operation on a directory \| want: 0 0 ok
-io.test	io-52.6	fail	fail	bug	code 1/0,2: error reading "file651": illegal operation on a directory \| want: 0 0 ok
-io.test	io-52.7	fail	fail	bug	code 1/0,2: error reading "file653": illegal operation on a directory \| want: 0 0 ok
+io.test	io-52.3	fail	fail	bug	code 1/0,2: error reading "file660": illegal operation on a directory \| want: 0 0 ok
+io.test	io-52.4	fail	fail	bug	code 1/0,2: error reading "file662": illegal operation on a directory \| want: 0 0 0 40
+io.test	io-52.4.1	fail	fail	bug	code 1/0,2: error reading "file664": illegal operation on a directory \| want: 0 0 0 40
+io.test	io-52.5	fail	fail	bug	code 1/0,2: error reading "file666": illegal operation on a directory \| want: 0 0 ok
+io.test	io-52.5a	fail	fail	bug	code 1/0,2: error reading "file668": illegal operation on a directory \| want: 0 0 ok
+io.test	io-52.5b	fail	fail	bug	code 1/0,2: error reading "file670": illegal operation on a directory \| want: 0 0 ok
+io.test	io-52.6	fail	fail	bug	code 1/0,2: error reading "file672": illegal operation on a directory \| want: 0 0 ok
+io.test	io-52.7	fail	fail	bug	code 1/0,2: error reading "file674": illegal operation on a directory \| want: 0 0 ok
 io.test	io-52.8	fail	fail	bug	code 0/0,2: 0 0 \| want: 40 40
 io.test	io-6.1	pass	pass		
 io.test	io-6.10	pass	pass		
@@ -30624,7 +30624,7 @@ lmap.test	lmap-1.12	pass	pass
 lmap.test	lmap-1.13	pass	pass		
 lmap.test	lmap-1.14	pass	pass		
 lmap.test	lmap-1.15	fail	fail	bug	code 0/0,2: 1 {can't set "a": variable is array} {can't set "a": variable is array     while executing "lmap a {1 2 3} {}"} \| want: 1 {can't set "a": variable is array} {can't set "a": variable is...
-lmap.test	lmap-1.16	fail	fail	message	code 1/1: foreach varlist is empty \| want: lmap varlist is empty
+lmap.test	lmap-1.16	pass	pass		
 lmap.test	lmap-1.2	pass	pass		
 lmap.test	lmap-1.2a	pass	pass		
 lmap.test	lmap-1.4	pass	pass		
@@ -30651,7 +30651,7 @@ lmap.test	lmap-4.12	pass	pass
 lmap.test	lmap-4.13	pass	pass		
 lmap.test	lmap-4.14	pass	pass		
 lmap.test	lmap-4.15	pass	pass		
-lmap.test	lmap-4.16	fail	fail	message	code 1/1: foreach varlist is empty \| want: lmap varlist is empty
+lmap.test	lmap-4.16	pass	pass		
 lmap.test	lmap-4.2	pass	pass		
 lmap.test	lmap-4.2a	pass	pass		
 lmap.test	lmap-4.4	pass	pass		
@@ -30675,7 +30675,7 @@ lmap.test	lmap-7.1	pass	pass
 lmap.test	lmap-7.2	pass	pass		
 lmap.test	lmap-7.3	pass	pass		
 lmap.test	lmap-7.4	pass	pass		
-lmap.test	lmap-7.5	fail	fail	message	code 1/1: foreach varlist is empty \| want: lmap varlist is empty
+lmap.test	lmap-7.5	pass	pass		
 lmap.test	lmap-7.6	pass	pass		
 lmap.test	lmap-7.7	pass	pass		
 lmap.test	lmap-7.8	pass	pass		
@@ -32583,11 +32583,11 @@ lsearch.test	lsearch-16.2	pass	pass
 lsearch.test	lsearch-17.1	pass	pass		
 lsearch.test	lsearch-17.10	pass	pass		
 lsearch.test	lsearch-17.11	pass	pass		
-lsearch.test	lsearch-17.12	fail	fail	message	code 1/1: element -2 missing from sublist "a" \| want: index "-2" cannot select an element from any list
-lsearch.test	lsearch-17.13	fail	fail	message	code 1/1: element -1-1 missing from sublist "a" \| want: index "-1-1" cannot select an element from any list
-lsearch.test	lsearch-17.14	fail	fail	message	code 1/1: element end--1 missing from sublist "a" \| want: index "end--1" cannot select an element from any list
-lsearch.test	lsearch-17.15	fail	fail	message	code 1/1: element end+1 missing from sublist "a" \| want: index "end+1" cannot select an element from any list
-lsearch.test	lsearch-17.16	fail	fail	message	code 1/1: element end+2 missing from sublist "a" \| want: index "end+2" cannot select an element from any list
+lsearch.test	lsearch-17.12	pass	pass		
+lsearch.test	lsearch-17.13	pass	pass		
+lsearch.test	lsearch-17.14	pass	pass		
+lsearch.test	lsearch-17.15	pass	pass		
+lsearch.test	lsearch-17.16	pass	pass		
 lsearch.test	lsearch-17.2	pass	pass		
 lsearch.test	lsearch-17.3	pass	pass		
 lsearch.test	lsearch-17.4	pass	pass		
@@ -34816,7 +34816,7 @@ package.test	package-3.13	pass	pass
 package.test	package-3.14	pass	pass		
 package.test	package-3.15	fail	fail	bug	code 2/0,2: {a b} \| want: {a b} 0-
 package.test	package-3.16	fail	fail	bug	code 0/0,2: 1 {testing package unknown} {testing package unknown     while executing "error "testing package unknown""     (procedure "pkgUnknown" line  \| want: 1 {testing package unknown} {testin...
-package.test	package-3.17	fail	fail	bug	code 0/0,2: 1 {can't find package t 1.5} {t 1.5-1.5} \| want: 1 {can't find package t exactly 1.5} {t 1.5-1.5}
+package.test	package-3.17	pass	pass		
 package.test	package-3.18	pass	pass		
 package.test	package-3.19	pass	pass		
 package.test	package-3.2	pass	pass		
@@ -34824,7 +34824,7 @@ package.test	package-3.20	pass	pass
 package.test	package-3.21	pass	pass		
 package.test	package-3.22	pass	pass		
 package.test	package-3.23	pass	pass		
-package.test	package-3.24	fail	fail	message	code 1/1: version conflict for package "t": have 2.3, need 2.2 \| want: version conflict for package "t": have 2.3, need exactly 2.2
+package.test	package-3.24	pass	pass		
 package.test	package-3.25	fail	fail	bug	code 0/0,2: 1 {attempt to provide package t 2.1 failed: ifneeded test} {EI     invoked from within "package require t 2.1"} \| want: 1 {ifneeded test} {EI     ("package ifneeded*" script)     invok...
 package.test	package-3.26	fail	fail	bug	code 0/0,2: 1 {attempt to provide package t 2.1 failed: ifneeded test} {EI     invoked from within "foreach x 1 {error "ifneeded test" EI}"     invoked  \| want: 1 {ifneeded test} {EI     ("foreach...
 package.test	package-3.27	fail	fail	message	code 1/1: attempt to provide package foo 1 failed: attempt to provide package foo 1 failed: attempt to provide package foo 1 failed: attempt to provid \| want: circular package dependency:*
@@ -34849,7 +34849,7 @@ package.test	package-3.40	fail	fail	message	code 1/1: wrong # args: should be "b
 package.test	package-3.41	fail	fail	message	code 1/1: wrong # args: should be "continue" \| want: bad return code:*
 package.test	package-3.42	fail	fail	bug	code 2/1: ;# \| want: bad return code:*
 package.test	package-3.43	fail	fail	bug	code 10/1: ;# \| want: bad return code:*
-package.test	package-3.44	fail	fail	message	code 1/1: version conflict for package "demo": have 1.2.3, need 1.2 \| want: version conflict for package "demo": have 1.2.3, need exactly 1.2
+package.test	package-3.44	pass	pass		
 package.test	package-3.5	pass	pass		
 package.test	package-3.50	pass	pass		
 package.test	package-3.51	pass	pass		
@@ -34857,7 +34857,7 @@ package.test	package-3.52	pass	pass
 package.test	package-3.54	pass	pass		
 package.test	package-3.6	pass	pass		
 package.test	package-3.7	pass	pass		
-package.test	package-3.8	fail	fail	message	code 1/1: can't find package t 1.3 \| want: can't find package t exactly 1.3
+package.test	package-3.8	pass	pass		
 package.test	package-3.9	pass	pass		
 package.test	package-4.1	pass	pass		
 package.test	package-4.10	pass	pass		
@@ -34944,7 +34944,7 @@ package.test	package-8.3	pass	pass
 package.test	package-8.4	pass	pass		
 package.test	package-8.5	pass	pass		
 package.test	package-8.6	pass	pass		
-package.test	package-8.7	fail	fail	message	code 1/1: version conflict for package "t": have 2.4, need 2.3 \| want: version conflict for package "t": have 2.4, need exactly 2.3
+package.test	package-8.7	pass	pass		
 package.test	package-8.8	pass	pass		
 package.test	package-8.9	pass	pass		
 package.test	package-9.0	pass	pass		
@@ -38167,7 +38167,7 @@ socket.test	socket_inet-11.9	pass	pass
 socket.test	socket_inet-12.1	pass	pass		
 socket.test	socket_inet-12.2	pass	pass		
 socket.test	socket_inet-12.3	pass	pass		
-socket.test	socket_inet-13.1	pass	pass		
+socket.test	socket_inet-13.1	pass	fail		
 socket.test	socket_inet-13.2.cl1	pass	pass		
 socket.test	socket_inet-13.2.cl2	pass	pass		
 socket.test	socket_inet-13.2.tr1	pass	pass		
@@ -40105,9 +40105,9 @@ switch.test	switch-8.2	pass	pass
 switch.test	switch-8.3	pass	pass		
 switch.test	switch-9.1	pass	pass		
 switch.test	switch-9.10	pass	pass		
-switch.test	switch-9.2	fail	fail	message	code 1/1: wrong # args: should be "switch ?-option ...? string ?pattern body ...? ?default body?" \| want: extra switch pattern with no body
-switch.test	switch-9.3	fail	fail	message	code 1/1: wrong # args: should be "switch ?-option ...? string ?pattern body ...? ?default body?" \| want: wrong # args: should be "switch ?-option ...? string {?pattern body ...? ?default body?}"
-switch.test	switch-9.4	fail	fail	message	code 1/1: wrong # args: should be "switch ?-option ...? string ?pattern body ...? ?default body?" \| want: wrong # args: should be "switch ?-option ...? string {?pattern body ...? ?default body?}"
+switch.test	switch-9.2	pass	pass		
+switch.test	switch-9.3	pass	pass		
+switch.test	switch-9.4	pass	pass		
 switch.test	switch-9.5	pass	pass		
 switch.test	switch-9.6	pass	pass		
 switch.test	switch-9.7	pass	pass		
@@ -40673,7 +40673,7 @@ unixFile.test	unixFile-1.6	skip	skip	internals	testfindexecutable
 unixFile.test	unixFile-1.7	skip	skip	internals	testfindexecutable
 unixForkEvent.test	unixforkevent-1.1	skip	skip	internals	testfork
 unixInit.test	unixInit-1.1	pass	pass		
-unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 46175', Got '' \| want: OK
+unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 38689', Got '' \| want: OK
 unixInit.test	unixInit-3.1	pass	pass		
 unixInit.test	unixInit-3.2	fail	fail	bug	code 0/0,2: 1 \| want: 0
 unixInit.test	unixInit-4.1	fail	fail	bug	code 1/0,2: can't read "tcl_pkgPath": no such variable \| want: unix

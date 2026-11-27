@@ -637,7 +637,10 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
             return wrapDict(it, try pairs(it, try value.wrapList(a, out.items)));
         },
         .incr, .lappend, .append => {
-            if (args.len < 2 or (sub == .incr and args.len > 3)) return it.fail("wrong # args: should be \"dict {s} dictVarName key ?value ...?\"", .{name});
+            if (args.len < 2 or (sub == .incr and args.len > 3)) {
+                if (sub == .incr) return it.wrongArgs("dict incr dictVarName key ?increment?");
+                return it.failCode("TCL WRONGARGS", "wrong # args: should be \"dict {s} dictVarName key ?value ...?\"", .{name});
+            }
             const var_name = try it.str(args[0]);
             const cur = try it.getVarOpt(var_name) orelse Value.empty;
             const items = try readPairs(it, cur);

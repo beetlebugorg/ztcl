@@ -602,7 +602,11 @@ pub fn serve(cur: *Interp, it: *Interp, name: []const u8, can_read: bool, can_wr
 }
 
 pub fn cmdFileevent(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
-    if (argv.len != 3 and argv.len != 4) return it.wrongArgs("fileevent channelId event ?script?");
+    if (argv.len != 3 and argv.len != 4) {
+        // `chan event` calls this with the word "event" first.
+        if (eql(try it.str(argv[0]), "event")) return it.wrongArgs("chan event channelId event ?script?");
+        return it.wrongArgs("fileevent channelId event ?script?");
+    }
     const ev = try it.str(argv[2]);
     const readable = eql(ev, "readable");
     if (!readable and !eql(ev, "writable")) return it.failCode("TCL LOOKUP INDEX {event name}", "bad event name \"{s}\": must be readable or writable", .{ev});

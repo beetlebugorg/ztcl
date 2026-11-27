@@ -220,6 +220,7 @@ pub fn cmdLsort(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (oi + 1 >= last) return it.fail("\"-index\" option must be followed by list index", .{});
             oi += 1;
             idx = try it.list(argv[oi]);
+            try cmds.checkSelect(it, idx);
         } else if (eql(s, "-command")) {
             if (oi + 1 >= last) return it.fail("\"-command\" option must be followed by comparison command", .{});
             oi += 1;
@@ -257,7 +258,7 @@ pub fn cmdLsort(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         for (path) |ix| {
             const sub = try it.list(kv);
             const n = try cmds.index(it, ix, sub.len);
-            if (n < 0 or n >= sub.len) return it.fail("element {s} missing from sublist \"{s}\"", .{ try it.str(ix), try it.str(kv) });
+            if (n < 0 or n >= sub.len) return it.fail("element {d} missing from sublist \"{s}\"", .{ n, try it.str(kv) });
             kv = sub[@intCast(n)];
         }
         k.* = .{ .pos = g, .v = kv };
