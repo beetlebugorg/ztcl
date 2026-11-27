@@ -19,6 +19,15 @@ ztcl has its own TLS 1.3 code, for the client and for the server, on the primiti
 6. Secrets stay in fixed buffers of the connection.
 7. Each part has its test vectors: RFC 8448 for the key schedule and the records, RFC 5869 for HKDF, RFC 8439 for ChaCha20-Poly1305, and the Wycheproof sets for each primitive.
 
+## State
+
+| Part | State |
+|---|---|
+| The primitives, the key schedule, and the record layer | In `src/tls/`, with the checks of this page |
+| X.509: the parse, the chain checks, PEM keys, and the root stores | Coming: pull request [#391](https://github.com/beetlebugorg/ztcl/pull/391) |
+| The client handshake, checked with RFC 8448 and `openssl s_server` | Coming: pull request [#395](https://github.com/beetlebugorg/ztcl/pull/395) |
+| A TLS socket command, https in the HTTP client, and the server | Coming: issue [#27](https://github.com/beetlebugorg/ztcl/issues/27) |
+
 ## The parts that exist
 
 | File | What it has |
