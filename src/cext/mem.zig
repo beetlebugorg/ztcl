@@ -17,8 +17,10 @@
 const std = @import("std");
 
 const VaList = std.builtin.VaList;
+const VaArg = @import("obj.zig").VaArg;
+const vaList = @import("obj.zig").vaList;
 
-extern "c" fn vfprintf(f: *anyopaque, fmt: [*:0]const u8, ap: *VaList) c_int;
+extern "c" fn vfprintf(f: *anyopaque, fmt: [*:0]const u8, ap: VaArg) c_int;
 extern "c" fn fprintf(f: *anyopaque, fmt: [*:0]const u8, ...) c_int;
 extern "c" fn fflush(f: ?*anyopaque) c_int;
 /// The `stderr` of the C library. macOS names it `__stderrp`.
@@ -76,7 +78,7 @@ fn panicVA(fmt: [*:0]const u8, ap: *VaList) callconv(.c) noreturn {
         for (&w) |*x| x.* = @cVaArg(ap, usize);
         p(fmt, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
     } else {
-        _ = vfprintf(stderr(), fmt, ap);
+        _ = vfprintf(stderr(), fmt, if (VaArg == VaList) ap.* else ap);
         _ = fprintf(stderr(), "\n");
         _ = fflush(stderr());
     }
@@ -138,8 +140,9 @@ pub const slots = struct {
         panicVA(fmt, &ap);
     }
 
-    pub fn Tcl_PanicVA(fmt: [*:0]const u8, ap: *VaList) callconv(.c) noreturn {
-        panicVA(fmt, ap);
+    pub fn Tcl_PanicVA(fmt: [*:0]const u8, va: VaArg) callconv(.c) noreturn {
+        var arg = va;
+        panicVA(fmt, vaList(&arg));
     }
 
     pub fn Tcl_SetPanicProc(p: ?PanicProc) callconv(.c) void {

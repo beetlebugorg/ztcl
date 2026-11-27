@@ -301,7 +301,7 @@ pub fn toObj(it: *Interp, v: Value) Error!*obj.Obj {
 
 /// The value of `o`, in the memory of the interpreter.
 pub fn fromObj(it: *Interp, o: *obj.Obj) Error!Value {
-    if (o.typePtr == &obj.wide_type) return .{ .int = o.rep.wide };
+    if (obj.isInt(o)) return .{ .int = o.rep.wide };
     if (o.typePtr == &obj.double_type) return .{ .double = o.rep.double };
     if (o.typePtr == &obj.list_type) {
         const items = obj.listRep(o).items.items;

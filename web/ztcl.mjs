@@ -563,11 +563,13 @@ export class Interp {
   /// of preopened folders.
   async loadPackage(source, { init, wasi = null } = {}) {
     const mod = source instanceof WebAssembly.Module ? source : await WebAssembly.compile(source);
-    this._loadModule(mod, init, wasi);
+    const r = this._loadModule(mod, init, wasi);
+    if (!r.ok) throw new Error(`${init}: ${r.result}`);
   }
 
   // Makes an instance of the package module `mod` and runs `init`. The
-  // instance is made at once, so the `load` command can call it.
+  // instance is made at once, so the `load` command can call it. Gives
+  // { ok, result } with the result of the init function.
   _loadModule(mod, init, wasi) {
     if (!this.x.ztcl_cext_command) throw new Error("loadPackage: this module has no C packages (build with -Dcext-wasm)");
     if (!init) throw new Error("loadPackage: no init function");
@@ -584,10 +586,9 @@ export class Interp {
     const ip = pkg.x.ztcl_cext_interp(this.h);
     pkg.ip = ip;
     const rc = pkg.x[init](ip);
-    if (rc !== 0) {
-      const r = new Uint32Array(pkg.x.memory.buffer, pkg.x.ztcl_cext_result(ip), 4);
-      throw new Error(`${init}: ${decoder.decode(new Uint8Array(pkg.x.memory.buffer, r[2], r[1]))}`);
-    }
+    // ztcl_cext_result can grow the memory, so the view comes after it.
+    const r = pkg.x.ztcl_cext_result(ip);
+    return { ok: rc === 0, result: this._argText(pkg.side, r >>> 2, 0) };
   }
 
   /// Makes command `name` that runs `fn(args)` in JavaScript. The module
@@ -610,15 +611,31 @@ export class Interp {
   // option `packages`. packages(file) gives a WebAssembly.Module, bytes,
   // or { module, wasi }, or null for no package.
   _addLoad(packages) {
+    // The prefix of each loaded file. A file loads one time per interp.
+    const loaded = new Map();
     this.defineCommand("load", (args) => {
       if (args.length < 1 || args.length > 3) throw new Error('wrong # args: should be "load fileName ?prefix? ?interp?"');
       const file = args[0];
-      let got = packages(file);
+      const init = initName(file, args[1]);
+      const prefix = init.slice(0, -5);
+      const had = loaded.get(file);
+      if (had !== undefined) {
+        if (!args[1] || had.toLowerCase() === prefix.toLowerCase()) return "";
+        throw new Error(`file "${file}" is already loaded for package "${had}"`);
+      }
+      let got;
+      try {
+        got = packages(file);
+      } catch (e) {
+        throw new Error(`couldn't load file "${file}": ${e?.message ?? e}`);
+      }
       if (!got) throw new Error(`couldn't load file "${file}": no such package`);
       if (got instanceof WebAssembly.Module || ArrayBuffer.isView(got) || got instanceof ArrayBuffer) got = { module: got };
       const mod = got.module instanceof WebAssembly.Module ? got.module : new WebAssembly.Module(got.module);
-      this._loadModule(mod, initName(file, args[1]), got.wasi ?? null);
-      return "";
+      const r = this._loadModule(mod, init, got.wasi ?? null);
+      if (!r.ok) throw new Error(r.result);
+      loaded.set(file, prefix);
+      return r.result;
     });
   }
 
