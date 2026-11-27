@@ -96,6 +96,28 @@ pub fn build(b: *std.Build) void {
     }) }));
     wp.addPassthruArgs();
     b.step("tls-wycheproof", "Run the Wycheproof sets of the TLS primitives: zig build tls-wycheproof -- DIR").dependOn(&wp.step);
+    // The x509-limbo cases of the chain checks, from tools/fetch-x509-limbo.sh.
+    const limbo = b.addRunArtifact(b.addExecutable(.{ .name = "tls-x509-test", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/tls/limbo.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) }));
+    limbo.addPassthruArgs();
+    const x509_fuzz = b.addRunArtifact(b.addExecutable(.{ .name = "x509-fuzz", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/tls/x509_fuzz.zig"),
+        .target = target,
+        .optimize = .safe,
+    }) }));
+    x509_fuzz.addPassthruArgs();
+    b.step("x509-fuzz", "Fuzz the DER, X.509, PEM, and chain code: zig build x509-fuzz -- --seconds N").dependOn(&x509_fuzz.step);
+    b.step("tls-x509-test", "Run the x509-limbo cases of the chain checks: zig build tls-x509-test -- limbo.json").dependOn(&limbo.step);
+    inline for (.{ "src/tls/der.zig", "src/tls/x509.zig", "src/tls/pem.zig", "src/tls/chain.zig", "src/tls/roots.zig" }) |f| {
+        test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+            .root_source_file = b.path(f),
+            .target = target,
+            .optimize = optimize,
+        }) })).step);
+    }
     // The tests of C packages only, for a build with `-Dcext=true`.
     const cext_tests = b.addTest(.{ .root_module = ztcl, .filters = &.{"cext:"} });
     b.step("test-cext-native", "Run the tests of the native loader of C packages").dependOn(&b.addRunArtifact(cext_tests).step);
