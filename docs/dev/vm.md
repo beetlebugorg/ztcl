@@ -147,6 +147,17 @@ What the numbers show:
 - In the boot of the guest, the probe of the console device is 6 ms and the probe of vsock 3.4 ms (`initcall_debug`). These are the next levers, with the copy of the kernel (a copy-on-write mapping of the file instead).
 - A warm start is 0.12 ms to the answer of the agent: the threads leave the futex and enter `KVM_RUN` again.
 
+Two cuts of the host (2026-11-27): the guest memory starts on a 2 MB boundary with `MADV_HUGEPAGE`, so the first write to each 2 MB of the guest is one fault of the host, and each vCPU gets bit 0 (fast strings) of `IA32_MISC_ENABLE`, which KVM gives clear. The kernel is the 6.12.119 build of beetlebugorg/ztcl-guest-kernel (the artifact `guest-kernel-x86_64`), best of 10, the host with a load average of 6:
+
+| Kernel | Monitor | `start` | start to answer | guest: boot to agent |
+|---|---|---|---|---|
+| bzImage | before | 6.30 to 6.36 | 31.80 to 32.35 | 8.05 to 8.47 |
+| bzImage | with the cuts | 4.38 to 4.41 | 16.32 to 18.54 | 4.19 to 4.25 |
+| ELF `vmlinux` | before | 5.26 to 5.36 | 13.73 to 13.79 | 4.28 to 4.29 |
+| ELF `vmlinux` | with the cuts | 5.34 to 5.36 | 13.66 to 14.51 | 4.27 to 4.30 |
+
+The cuts halve the time to the answer for the bzImage, whose decompression in the guest writes the full kernel to new memory. The `vmlinux` has no decompression, and its time does not change.
+
 ## The shared virtio devices
 
 The monitors that give the guest its devices on virtio-mmio (KVM, and the Windows Hypervisor Platform) share the transport and the devices that run in ztcl. They are in `src/vm/virtio/`, with no system calls:

@@ -14,4 +14,7 @@ for dev in /dev/kvm /dev/vhost-vsock; do
     fi
 done
 cd "$dir"
+# The runner gives a script no environment, so the name of the kernel
+# goes in a file.
+printf %s "${KERNEL:-bzImage}" > kernel.name
 exec "$here/../../zig-out/bin/ztcl" --root . --allow vm,file,channels,clock "$here/test-kvm.tcl"

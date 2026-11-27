@@ -6,7 +6,12 @@ proc check {what got want} {
     if {$got ne $want} { error "$what: got \"$got\", want \"$want\"" }
     puts "ok: $what"
 }
-set kernel [expr {[info exists env(KERNEL)] ? $env(KERNEL) : "bzImage"}]
+# test-kvm.sh writes the name of the kernel (KERNEL) to kernel.name.
+set kernel bzImage
+if {[file exists kernel.name]} {
+    set f [open kernel.name]; set kernel [read $f]; close $f
+}
+puts "kernel: $kernel"
 set boot [list -kernel $kernel -initrd agent.cpio -cmdline "rdinit=/sbin/agent quiet" -memory 64]
 
 # The boot time of the guest, in ns, from the 16 bytes of the agent.

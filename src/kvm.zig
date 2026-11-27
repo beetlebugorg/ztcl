@@ -73,6 +73,8 @@ const KVM_RUN = IOCTL.IO(KVMIO, 0x80);
 const KVM_SET_REGS = IOCTL.IOW(KVMIO, 0x82, Regs);
 const KVM_GET_SREGS = IOCTL.IOR(KVMIO, 0x83, Sregs);
 const KVM_SET_SREGS = IOCTL.IOW(KVMIO, 0x84, Sregs);
+const KVM_GET_MSRS = IOCTL.IOWR(KVMIO, 0x88, MsrsHead);
+const KVM_SET_MSRS = IOCTL.IOW(KVMIO, 0x89, MsrsHead);
 const KVM_SET_CPUID2 = IOCTL.IOW(KVMIO, 0x90, Cpuid2);
 
 // The ioctls of /dev/vhost-vsock (VHOST_VIRTIO is 0xAF).
@@ -90,6 +92,15 @@ const VHOST_VSOCK_SET_GUEST_CID = IOCTL.IOW(VHOST, 0x60, u64);
 const VHOST_VSOCK_SET_RUNNING = IOCTL.IOW(VHOST, 0x61, c_int);
 
 const MemoryRegion = extern struct { slot: u32, flags: u32, guest_phys_addr: u64, memory_size: u64, userspace_addr: u64 };
+const MsrsHead = extern struct { nmsrs: u32, pad: u32 = 0 };
+/// `struct kvm_msrs` with one entry.
+const Msr1 = extern struct { head: MsrsHead = .{ .nmsrs = 1 }, index: u32, reserved: u32 = 0, data: u64 = 0 };
+/// IA32_MISC_ENABLE and its bit 0, fast strings: with it set, the guest
+/// uses `rep movsb` and `rep stosb` for its copies.
+const msr_misc_enable = 0x1a0;
+const misc_fast_strings: u64 = 1;
+const huge_page: usize = 2 << 20;
+const madv_hugepage = 14;
 const IrqLevel = extern struct { irq: u32, level: u32 };
 const Irqfd = extern struct { fd: u32, gsi: u32, flags: u32, resamplefd: u32, pad: [16]u8 = @splat(0) };
 const PitConfig = extern struct { flags: u32, pad: [15]u32 = @splat(0) };
@@ -281,6 +292,9 @@ cid: u64 = 0,
 mem: Mem = .{ .base = undefined, .size = 0 },
 vcpus: []Vcpu = &.{},
 devices: []Device = &.{},
+/// The host mapping that holds the guest memory, with room for the
+/// alignment to 2 MB.
+mem_map: struct { addr: usize = 0, len: usize = 0 } = .{},
 want: std.atomic.Value(u32) = .init(want_run),
 parked: std.atomic.Value(u32) = .init(0),
 state: std.atomic.Value(State) = .init(.created),
@@ -421,7 +435,8 @@ fn teardown(m: *Machine) void {
     closeFd(&m.con_stop);
     closeFd(&m.con_wake);
     m.con_pending_len = 0;
-    if (m.mem.size != 0) _ = linux.munmap(m.mem.base, @intCast(m.mem.size));
+    if (m.mem_map.len != 0) _ = linux.munmap(@ptrFromInt(m.mem_map.addr), m.mem_map.len);
+    m.mem_map = .{};
     m.mem = .{ .base = undefined, .size = 0 };
 }
 
@@ -450,11 +465,18 @@ fn setup(m: *Machine) Fail!void {
     _ = try check(ioctl(m.vm, KVM_CREATE_PIT2, @intFromPtr(&pit)), "KVM_CREATE_PIT2");
 
     const size: u64 = @as(u64, m.cfg.memory_mb) << 20;
-    const p = linux.mmap(null, @intCast(size), .{ .READ = true, .WRITE = true }, .{ .TYPE = .PRIVATE, .ANONYMOUS = true, .NORESERVE = true }, -1, 0);
-    if (ok(p) == null) {
+    // The guest memory starts on a 2 MB boundary and asks for
+    // transparent huge pages, so the first write to each 2 MB of the
+    // guest is one fault of the host.
+    const map_len: usize = @intCast(size + huge_page);
+    const raw = linux.mmap(null, map_len, .{ .READ = true, .WRITE = true }, .{ .TYPE = .PRIVATE, .ANONYMOUS = true, .NORESERVE = true }, -1, 0);
+    if (ok(raw) == null) {
         why = "no host memory for the guest";
         return error.Memory;
     }
+    m.mem_map = .{ .addr = raw, .len = map_len };
+    const p = std.mem.alignForward(usize, raw, huge_page);
+    _ = linux.madvise(@ptrFromInt(p), @intCast(size), madv_hugepage);
     m.mem = .{ .base = @ptrFromInt(p), .size = size };
     var region: MemoryRegion = .{ .slot = 0, .flags = 0, .guest_phys_addr = 0, .memory_size = size, .userspace_addr = p };
     _ = try check(ioctl(m.vm, KVM_SET_USER_MEMORY_REGION, @intFromPtr(&region)), "KVM_SET_USER_MEMORY_REGION");
@@ -508,6 +530,13 @@ fn makeVcpus(m: *Machine) Fail!void {
             else => {},
         };
         _ = try check(ioctl(v.fd, KVM_SET_CPUID2, @intFromPtr(&c)), "KVM_SET_CPUID2");
+
+        // KVM gives IA32_MISC_ENABLE with fast strings off.
+        var msr: Msr1 = .{ .index = msr_misc_enable };
+        if (ioctl(v.fd, KVM_GET_MSRS, @intFromPtr(&msr)) == 1) {
+            msr.data |= misc_fast_strings;
+            _ = ioctl(v.fd, KVM_SET_MSRS, @intFromPtr(&msr));
+        }
 
         if (i != 0) continue;
         // The boot CPU starts in 64-bit mode; the others wait for the
