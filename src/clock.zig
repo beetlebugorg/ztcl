@@ -1308,7 +1308,11 @@ fn cmdTime(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     const script = try it.scriptOf(argv, 1, cmd);
     const start = try nowMicros(it);
     var i: i64 = 0;
-    while (i < count) : (i += 1) _ = try it.evalScript(script);
+    // Tcl does not compile `time`: its script is an evaluation.
+    while (i < count) : (i += 1) _ = it.evalScript(script) catch |e| {
+        if (e == error.TclError) it.endEvaluation();
+        return e;
+    };
     const total = (try nowMicros(it)) - start;
     const a = it.alloc();
     if (count <= 0) return .{ .str = "0 microseconds per iteration" };
@@ -1352,7 +1356,10 @@ fn cmdTimerate(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         _ = it.evalScript(script) catch |e| switch (e) {
             error.TclBreak => break,
             error.TclContinue => {},
-            else => return e,
+            else => {
+                if (e == error.TclError) it.endEvaluation();
+                return e;
+            },
         };
         if ((try nowMicros(it)) - start >= limit_ms * 1000) break;
     }

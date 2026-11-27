@@ -610,7 +610,7 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
             const v = it.evalScript(body) catch |e| switch (e) {
                 error.TclBreak => return Value.empty,
                 error.TclContinue => continue,
-                else => return e,
+                else => return cmds.bodyContext(it, e, cmd, 4, true, "(\"dict map\" body line {d})"),
             };
             try out.append(a, items[i]);
             try out.append(a, v);
@@ -648,7 +648,7 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
             const v = it.evalScript(body) catch |e| switch (e) {
                 error.TclBreak => break,
                 error.TclContinue => continue,
-                else => return e,
+                else => return cmds.bodyContext(it, e, cmd, 5, true, "(\"dict filter\" script line {d})"),
             };
             if (try expr.truthy(it, v)) try out.appendSlice(a, items[i .. i + 2]);
         }
@@ -664,7 +664,7 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
         while (i + 1 < args.len) : (i += 2) {
             if (try lookup(it, dv, items, args[i])) |at| try it.setVar(try it.str(args[i + 1]), items[at + 1]);
         }
-        const res = it.evalScript(try it.scriptOf(argv, argv.len - 1, cmd));
+        const res = it.evalScript(try it.scriptOf(argv, argv.len - 1, cmd)) catch |e| cmds.bodyContext(it, e, cmd, argv.len - 1, true, "(body of \"dict update\")");
         // Write the variables back, also after an error of the script.
         const saved = it.result;
         if (try it.getVarOpt(var_name)) |now| {
@@ -683,7 +683,7 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
         const inner = try pairs(it, try getIn(it, try it.getVar(var_name), path));
         var i: usize = 0;
         while (i < inner.len) : (i += 2) try it.setVar(try it.str(inner[i]), inner[i + 1]);
-        const res = it.evalScript(try it.scriptOf(argv, argv.len - 1, cmd));
+        const res = it.evalScript(try it.scriptOf(argv, argv.len - 1, cmd)) catch |e| cmds.bodyContext(it, e, cmd, argv.len - 1, true, "(body of \"dict with\")");
         const saved = it.result;
         if (try it.getVarOpt(var_name)) |now| {
             const base = try pairs(it, try getIn(it, now, path));
@@ -819,7 +819,7 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
                 _ = it.evalScript(body) catch |e| switch (e) {
                     error.TclBreak => break,
                     error.TclContinue => continue,
-                    else => return e,
+                    else => return cmds.bodyContext(it, e, cmd, 4, true, "(\"dict for\" body line {d})"),
                 };
             }
             return Value.empty;

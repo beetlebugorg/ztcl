@@ -668,6 +668,9 @@ pub const Command = struct {
     /// the namespace `tsv`, the count of shadows of `Commands` does not
     /// count it.
     tsv_op: bool = false,
+    /// Runs when a script deletes the command: the delete proc of a
+    /// command of a C package.
+    on_delete: ?*const fn (it: *Interp, c: *Command) void = null,
 };
 
 /// The command table: a hash map from the full name to the command. It
@@ -1305,8 +1308,32 @@ pub const Interp = struct {
     /// True after `error msg info`: the trace starts with the given
     /// text, and the `error` command adds no line of its own.
     skip_info: bool = false,
-    /// The line of the last failed command in its own script.
+    /// The line of the logged command of the current error, in the
+    /// script of the last command of the unwind.
     proc_line: u32 = 0,
+    /// The length of `error_info` after the last logged command. Tcl
+    /// logs one command for each evaluation, and the commands around it
+    /// in the same evaluation add no line. A context line, such as
+    /// `(procedure "p" line 1)`, changes the length, so the next command
+    /// logs again.
+    logged_len: usize = std.math.maxInt(usize),
+    /// The last command of the unwind, for the line of `proc_line`.
+    log_cmd: ?*const Cmd = null,
+    /// The words of `-errorstack` of the current error: "INNER" and the
+    /// failed command, then "CALL" and the words for each proc and "UP"
+    /// and the levels for each `uplevel` that the error leaves.
+    error_stack: std.ArrayList(Value) = .empty,
+    /// The `-errorstack` of the last error that ended: `info errorstack`.
+    last_stack: Value = Value.empty,
+    /// True after `return -errorstack`: the next error keeps the stack.
+    keep_stack: bool = false,
+    /// The frame of the last `catch` of an error, for the line of a
+    /// later `error msg info` in the same frame.
+    caught_frame: ?*Frame = null,
+    /// The frame of the caller of the outermost running `uplevel`, or
+    /// null. A catch in the frame of an `uplevel` adds "UP" and the count
+    /// of levels to `-errorstack`.
+    up_from: ?*Frame = null,
     /// The compute units left. Each command and each loop pass uses one
     /// compute unit. Work on large data uses one unit for each 4,096 bytes.
     compute_limit: u64 = std.math.maxInt(u64),
@@ -2794,10 +2821,63 @@ pub const Interp = struct {
         const e = it.limitError(raw);
         if (e != error.TclError) return e;
         if (it.error_line == 0) it.error_line = c.line;
-        it.proc_line = c.line;
+        if (it.in_error and it.error_info.items.len == it.logged_len) {
+            // A command around the logged one in the same evaluation.
+            it.proc_line = it.outerLine(c);
+            it.log_cmd = c;
+            return e;
+        }
+        // After `error msg info` in the frame of a caught error, the line
+        // stays the line of that error, as in Tcl.
+        if (it.skip_info and it.caught_frame == it.frame) {
+            it.log_cmd = null;
+        } else {
+            it.proc_line = c.line;
+            it.log_cmd = c;
+        }
         // The end of the compute limit leaves no trace: the unwind stays cheap.
         if (it.compute_limit != 0 and !it.overLimit()) it.addErrorInfo(c) catch {};
         return e;
+    }
+
+    /// The line in the script of `c` of the last command of the unwind.
+    /// A command in a literal body word of `c` has its line in that body.
+    fn outerLine(it: *Interp, c: *const Cmd) u32 {
+        const inner = it.log_cmd orelse return c.line;
+        const at = @intFromPtr(inner);
+        for (c.cache, 0..) |slot, k| {
+            const sc = slot.script orelse continue;
+            if (k >= c.words.len or sc.cmds.len == 0) continue;
+            const lo = @intFromPtr(sc.cmds.ptr);
+            if (at >= lo and at < lo + sc.cmds.len * @sizeOf(Cmd)) return c.words[k].line + it.proc_line -| 1;
+        }
+        return it.proc_line;
+    }
+
+    /// Makes the next command of the unwind log a line. Call it where an
+    /// error leaves an evaluation that adds no context line.
+    pub fn endEvaluation(it: *Interp) void {
+        it.logged_len = std.math.maxInt(usize);
+    }
+
+    /// Adds the context line of an evaluation, such as
+    /// `("eval" body line 1)`, for an error that leaves it.
+    pub fn addContext(it: *Interp, comptime fmt: []const u8, args: anytype) void {
+        if (!it.in_error) return;
+        it.error_info.print(it.alloc(), fmt, args) catch {};
+        it.endEvaluation();
+    }
+
+    /// Starts the trace of a new error with the message and a context
+    /// line, such as `(reading increment)`. The command logs next.
+    pub fn startContext(it: *Interp, comptime fmt: []const u8, args: anytype) void {
+        if (it.in_error) return;
+        const a = it.alloc();
+        it.error_info = .empty;
+        it.error_info.appendSlice(a, it.str(it.result) catch return) catch return;
+        it.error_info.print(a, fmt, args) catch return;
+        it.in_error = true;
+        it.endEvaluation();
     }
 
     /// Adds one command to the trace of the current error.
@@ -2808,6 +2888,10 @@ pub const Interp = struct {
     /// Adds the text of one command to the trace of the current error.
     fn addErrorText(it: *Interp, text: []const u8) Allocator.Error!void {
         const a = it.alloc();
+        defer it.logged_len = it.error_info.items.len;
+        if (!it.in_error and !it.keep_stack) it.error_stack = .empty;
+        it.keep_stack = false;
+        if (it.error_stack.items.len == 0) try it.error_stack.appendSlice(a, &.{ .{ .str = "INNER" }, .{ .str = text } });
         if (it.skip_info) {
             it.skip_info = false;
             return;
@@ -2834,6 +2918,10 @@ pub const Interp = struct {
         const info: Value = .{ .str = if (it.in_error) it.error_info.items else try it.str(it.result) };
         it.in_error = false;
         it.error_info = .empty;
+        it.logged_len = std.math.maxInt(usize);
+        it.log_cmd = null;
+        it.last_stack = try value.newList(it.alloc(), it.error_stack.items);
+        it.error_stack = .empty;
         it.last_info = info;
         const code = it.error_code;
         try it.storeGlobal("errorInfo", info);
@@ -2995,6 +3083,8 @@ pub const Interp = struct {
         if (e != error.TclError) return e;
         if (it.error_line == 0) it.error_line = 1;
         it.proc_line = 1;
+        it.log_cmd = null;
+        if (it.in_error and it.error_info.items.len == it.logged_len) return e;
         if (it.compute_limit != 0 and !it.overLimit()) {
             const text = value.listToString(it.alloc(), argv) catch return e;
             it.addErrorText(text) catch {};
@@ -3243,7 +3333,14 @@ pub const Interp = struct {
                 it.ret_opts = &.{};
                 return switch (code) {
                     .ok => it.result,
-                    .@"error" => error.TclError,
+                    .@"error" => blk: {
+                        // A given -errorinfo ends at the proc: the call logs a line.
+                        if (it.in_error) {
+                            it.skip_info = false;
+                            it.endEvaluation();
+                        }
+                        break :blk error.TclError;
+                    },
                     .@"return" => error.TclReturn,
                     .@"break" => error.TclBreak,
                     .@"continue" => error.TclContinue,
@@ -3257,6 +3354,7 @@ pub const Interp = struct {
             error.TclContinue => return it.fail("invoked \"continue\" outside of a loop", .{}),
             error.TclError => {
                 if (it.in_error) {
+                    it.error_stack.appendSlice(it.alloc(), &.{ .{ .str = "CALL" }, value.newList(it.alloc(), argv) catch return e }) catch {};
                     if (lambda) |l| {
                         it.error_info.print(it.alloc(), "\n    (lambda term \"{s}\" line {d})", .{ try it.str(l), it.proc_line }) catch {};
                     } else it.error_info.print(it.alloc(), "\n    (procedure \"{s}\" line {d})", .{ try it.str(argv[0]), it.proc_line }) catch {};
@@ -3621,7 +3719,12 @@ pub const Interp = struct {
     pub fn setVar(it: *Interp, full: []const u8, v: Value) Error!void {
         it.dropElem();
         const name, const idx = splitName(full);
-        const cell = (try it.findVar(it.frame, name, true)).?;
+        const cell = if (std.mem.indexOf(u8, name, "::") == null)
+            (try it.findVar(it.frame, name, true)).?
+        else if (try it.findVar(it.frame, name, false)) |c| c else blk: {
+            if (!it.parentNsExists(name)) return it.fail("can't set \"{s}\": parent namespace doesn't exist", .{full});
+            break :blk (try it.findVar(it.frame, name, true)).?;
+        };
         if (idx == null and cell.plainStore()) {
             cell.v = .{ .val = v };
             return;
@@ -3648,6 +3751,23 @@ pub const Interp = struct {
         }
         if (cell.v == .arr) return it.fail("can't set \"{s}\": variable is array", .{full});
         cell.v = .{ .val = v };
+    }
+
+    /// True when the namespace of a qualified variable name exists. A
+    /// relative name looks in the current namespace, then in the global
+    /// namespace, as in Tcl 8.6.
+    pub fn parentNsExists(it: *Interp, name: []const u8) bool {
+        const at = std.mem.lastIndexOf(u8, name, "::") orelse return true;
+        var space = std.mem.trimEnd(u8, name[0..at], ":");
+        if (std.mem.startsWith(u8, name, "::")) {
+            space = std.mem.trimStart(u8, space, ":");
+            return space.len == 0 or it.namespaces.contains(space);
+        }
+        if (it.namespaces.contains(space)) return true;
+        if (it.ns.len == 0) return false;
+        var buf: [512]u8 = undefined;
+        const full = std.fmt.bufPrint(&buf, "{s}::{s}", .{ it.ns, space }) catch return true;
+        return it.namespaces.contains(full);
     }
 
     /// Removes a variable. Returns false when there is none.

@@ -218,13 +218,14 @@ pub fn codeOf(it: *Interp, e: Error, out: *Arg) i32 {
 }
 
 /// Makes command `name` with the function `f` and the data `ctx`.
-pub fn command(it: *Interp, name: []const u8, f: interp_mod.NativeFn, ctx: ?*anyopaque) Error!void {
+pub fn command(it: *Interp, name: []const u8, f: interp_mod.NativeFn, ctx: ?*anyopaque) Error!*interp_mod.Command {
     const a = it.alloc();
     const n = try a.dupe(u8, name);
     const c = try a.create(interp_mod.Command);
     c.* = .{ .name = n, .impl = .{ .native = f }, .ctx = ctx };
     try it.commands.put(a, n, c);
     it.epoch += 1;
+    return c;
 }
 
 /// Runs a script in the current frame, or at the global level with

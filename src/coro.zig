@@ -340,6 +340,7 @@ pub fn commandGone(it: *Interp, command: *interp.Command) void {
     it.in_error = false;
     it.error_info = .empty;
     it.result = saved;
+    it.endEvaluation();
 }
 
 /// True when a kill unwinds the current coroutine: `catch` cannot stop it.

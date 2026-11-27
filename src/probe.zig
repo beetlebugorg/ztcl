@@ -669,6 +669,8 @@ pub const Saved = struct {
     error_code: Value,
     skip_info: bool,
     proc_line: u32,
+    logged_len: usize,
+    log_cmd: ?*const interp.Cmd,
     compute_limit: u64,
     last_info: Value,
     pending_during: ?Value,
@@ -686,6 +688,8 @@ pub const Saved = struct {
             .error_code = it.error_code,
             .skip_info = it.skip_info,
             .proc_line = it.proc_line,
+            .logged_len = it.logged_len,
+            .log_cmd = it.log_cmd,
             .compute_limit = it.compute_limit,
             .last_info = it.last_info,
             .pending_during = it.pending_during,
@@ -709,6 +713,8 @@ pub const Saved = struct {
         it.error_code = sv.error_code;
         it.skip_info = sv.skip_info;
         it.proc_line = sv.proc_line;
+        it.logged_len = sv.logged_len;
+        it.log_cmd = sv.log_cmd;
         it.compute_limit = sv.compute_limit;
         it.last_info = sv.last_info;
         it.pending_during = sv.pending_during;

@@ -64,7 +64,7 @@ fn ztcl_cext_command(h: u32, pkg: u32, id: u32, ptr: [*]const u8, len: usize) ca
     const it = itOf(h) orelse return 1;
     const t = it.alloc().create(Target) catch return 1;
     t.* = .{ .pkg = pkg, .id = id };
-    zside.command(it, ptr[0..len], cextCmd, t) catch return 1;
+    _ = zside.command(it, ptr[0..len], cextCmd, t) catch return 1;
     return 0;
 }
 

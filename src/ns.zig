@@ -17,6 +17,7 @@ const Allocator = std.mem.Allocator;
 const interp = @import("interp.zig");
 const value = @import("value.zig");
 const cmds = @import("cmds.zig");
+const trace = @import("trace.zig");
 const Value = value.Value;
 const Interp = interp.Interp;
 const Cmd = interp.Cmd;
@@ -84,7 +85,19 @@ fn ensembleOption(it: *Interp, e: *Ensemble, o: []const u8, v: Value) Error!void
         while (k < l.len) : (k += 2) {
             if ((try it.list(l[k])).len == 0) return it.fail("ensemble subcommand implementations must be non-empty lists", .{});
         }
-        e.map = l;
+        // A target name that is not absolute is qualified in the
+        // namespace of the ensemble, as in Tcl.
+        const out = try it.alloc().dupe(Value, l);
+        k = 1;
+        while (k < out.len) : (k += 2) {
+            const words = try it.list(out[k]);
+            const first = try it.str(words[0]);
+            if (std.mem.startsWith(u8, first, "::")) continue;
+            const w = try it.alloc().dupe(Value, words);
+            w[0] = .{ .str = if (e.ns.len == 0) try std.fmt.allocPrint(it.alloc(), "::{s}", .{first}) else try std.fmt.allocPrint(it.alloc(), "::{s}::{s}", .{ e.ns, first }) };
+            out[k] = try value.newList(it.alloc(), w);
+        }
+        e.map = out;
     } else if (eql(o, "-subcommands")) {
         const l = try it.list(v);
         e.subs = if (l.len == 0) null else l;
@@ -519,7 +532,12 @@ pub fn cmdNamespace(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             var gone: std.ArrayList([]const u8) = .empty;
             var iter = it.commands.keyIterator();
             while (iter.next()) |k| if (std.mem.startsWith(u8, k.*, prefix)) try gone.append(a, k.*);
-            for (gone.items) |k| _ = it.commands.remove(k);
+            for (gone.items) |k| {
+                const c = it.commands.fetchRemove(k) orelse continue;
+                // As in Tcl, the delete traces and the delete proc run.
+                trace.commandEvent(it, c.value, k, "", 2) catch |e| if (e == error.OutOfMemory) return e;
+                if (c.value.on_delete) |f| f(it, c.value);
+            }
             for (it.global.vars.items) |e| if (std.mem.startsWith(u8, e.name, prefix)) {
                 e.cell.v = .undef;
             };

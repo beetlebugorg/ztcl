@@ -141,7 +141,10 @@ fn cmdUnset(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 pub fn cmdIncr(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2 and argv.len != 3) return it.wrongArgs("incr varName ?increment?");
     const name = try it.str(argv[1]);
-    const by: Value = if (argv.len == 3) try expr.intArg(it, argv[2]) else .{ .int = 1 };
+    const by: Value = if (argv.len == 3) expr.intArg(it, argv[2]) catch |e| {
+        if (e == error.TclError) it.startContext("\n    (reading increment)", .{});
+        return e;
+    } else .{ .int = 1 };
     const cur: Value = if (try it.getVarOpt(name)) |v| try expr.intArg(it, v) else .{ .int = 0 };
     const out = try expr.addInts(it, cur, by);
     try it.setVar(name, out);
@@ -240,10 +243,17 @@ fn cmdUplevel(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     }
     // The frame of the caller is not in the chain of `frame`.
     const keep = [_]usize{ @intFromPtr(saved), @intFromPtr(saved_ns.ptr) };
+    const saved_up = it.up_from;
+    if (it.up_from == null) it.up_from = saved;
+    defer it.up_from = saved_up;
+    return evalContext(it, upRun(it, argv, cmd, i, &keep), "uplevel");
+}
+
+fn upRun(it: *Interp, argv: []const Value, cmd: ?*Cmd, i: usize, keep: []const usize) Error!Value {
     if (i == argv.len - 1 and argv[i] == .list and it.nest != 0) return it.evalWords(argv[i].list.items());
-    if (i == argv.len - 1) return it.evalBody(try it.scriptOf(argv, i, cmd), argv, &keep);
+    if (i == argv.len - 1) return it.evalBody(try it.scriptOf(argv, i, cmd), argv, keep);
     if (it.nest != 0) if (try joinWords(it, argv[i..])) |words| return it.evalWords(words);
-    return it.evalBody(try it.scriptOfValue(.{ .str = try concat(it, argv[i..]) }, null), argv, &keep);
+    return it.evalBody(try it.scriptOfValue(.{ .str = try concat(it, argv[i..]) }, null), argv, keep);
 }
 
 /// The words of the `concat` of `args` when each one is a list, an
@@ -315,8 +325,39 @@ fn cmdIf(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         if (!done) chosen = i;
         break;
     }
-    if (chosen) |k| return it.evalScript(try it.scriptOf(argv, k, cmd));
+    if (chosen) |k| return it.evalScript(try it.scriptOf(argv, k, cmd)) catch |e| {
+        // A body that is not a literal is an evaluation with no line.
+        if (e == error.TclError and !literalWord(cmd, k)) it.endEvaluation();
+        return e;
+    };
     return Value.empty;
+}
+
+/// True when the frame is the frame of a proc: Tcl compiles a body
+/// that needs variables of a frame only there.
+pub fn inProc(it: *Interp) bool {
+    return it.frame != &it.global and it.frame.ns == null;
+}
+
+/// True when Tcl compiles word `i` of the command into the bytecode of
+/// the caller: the name of the command and the word are literals.
+pub fn literalWord(cmd: ?*Cmd, i: usize) bool {
+    const c = cmd orelse return false;
+    return !c.has_expand and i < c.words.len and c.words[0].kind == .lit and c.words[i].kind == .lit;
+}
+
+/// Adds the context line of a body that Tcl does not compile into the
+/// bytecode of the caller: a word that is not a literal, or a body of a
+/// command that needs a proc (`need_proc`) outside one. `line` is a
+/// format with one `{d}` for the line of the body.
+pub fn bodyContext(it: *Interp, e: Error, cmd: ?*Cmd, i: usize, need_proc: bool, comptime line: []const u8) Error {
+    if (e != error.TclError) return e;
+    if (!literalWord(cmd, i) or (need_proc and !inProc(it))) {
+        if (comptime std.mem.indexOf(u8, line, "{d}") != null) {
+            it.addContext("\n    " ++ line, .{it.proc_line});
+        } else it.addContext("\n    " ++ line, .{});
+    }
+    return e;
 }
 
 pub fn step(it: *Interp) Error!void {
@@ -334,7 +375,7 @@ fn cmdWhile(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         _ = it.evalScript(body) catch |e| switch (e) {
             error.TclBreak => break,
             error.TclContinue => continue,
-            else => return e,
+            else => return bodyContext(it, e, cmd, 2, false, "(\"while\" body line {d})"),
         };
     }
     return Value.empty;
@@ -342,7 +383,7 @@ fn cmdWhile(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
 
 fn cmdFor(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len != 5) return it.wrongArgs("for start test next command");
-    _ = try it.evalScript(try it.scriptOf(argv, 1, cmd));
+    _ = it.evalScript(try it.scriptOf(argv, 1, cmd)) catch |e| return bodyContext(it, e, cmd, 1, false, "(\"for\" initial command)");
     const cond = try it.exprOf(argv, 2, cmd);
     const next = try it.scriptOf(argv, 3, cmd);
     const body = try it.scriptOf(argv, 4, cmd);
@@ -351,11 +392,11 @@ fn cmdFor(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         _ = it.evalScript(body) catch |e| switch (e) {
             error.TclBreak => break,
             error.TclContinue => {},
-            else => return e,
+            else => return bodyContext(it, e, cmd, 4, false, "(\"for\" body line {d})"),
         };
         _ = it.evalScript(next) catch |e| switch (e) {
             error.TclBreak => break,
-            else => return e,
+            else => return bodyContext(it, e, cmd, 3, false, "(\"for\" loop-end command)"),
         };
     }
     return Value.empty;
@@ -404,13 +445,21 @@ fn loop(it: *Interp, argv: []const Value, cmd: ?*Cmd, mode: enum { each, map, fi
         for (0..n) |k| {
             for (names[k], 0..) |name, j| {
                 const idx = pass * names[k].len + j;
-                try it.setVar(try it.str(name), if (idx < lists[k].len) lists[k][idx] else Value.empty);
+                it.setVar(try it.str(name), if (idx < lists[k].len) lists[k][idx] else Value.empty) catch |e| {
+                    // A compiled loop in a proc adds no line.
+                    if (e == error.TclError and !(inProc(it) and literalWord(cmd, argv.len - 1))) it.startContext("\n    (setting {s} loop variable \"{s}\")", .{ try it.str(argv[0]), try it.str(name) });
+                    return e;
+                };
             }
         }
         const v = it.evalScript(body) catch |e| switch (e) {
             error.TclBreak => break,
             error.TclContinue => continue,
-            else => return e,
+            else => return switch (mode) {
+                .each => bodyContext(it, e, cmd, argv.len - 1, true, "(\"foreach\" body line {d})"),
+                .map => bodyContext(it, e, cmd, argv.len - 1, true, "(\"lmap\" body line {d})"),
+                .filter => bodyContext(it, e, cmd, argv.len - 1, true, "(\"lfilter\" body line {d})"),
+            },
         };
         switch (mode) {
             .map => try out.append(a, v),
@@ -452,6 +501,7 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     var match_var: ?Value = null;
     var index_var: ?Value = null;
     var mode_word: ?[]const u8 = null;
+    var dashes = false;
     // As in Tcl, the options end two words before the end, so the last
     // two words are always the string and the patterns.
     while (i + 2 < argv.len) : (i += 1) {
@@ -459,6 +509,7 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         if (s.len == 0 or s[0] != '-') break;
         if (eql(s, "--")) {
             i += 1;
+            dashes = true;
             break;
         }
         var opt: []const u8 = s;
@@ -553,8 +604,14 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         if (!hit) continue;
         // A body of "-" means the body of the next arm.
         while (k + 2 < arms.len and eql(try it.str(arms[k + 1]), "-")) k += 2;
-        if (one_list) return it.evalScript(try it.scriptOfValue(arms[k + 1], null));
-        return it.evalScript(try it.scriptOf(argv, i + k + 1, cmd));
+        const r = if (one_list) it.evalScript(try it.scriptOfValue(arms[k + 1], null)) else it.evalScript(try it.scriptOf(argv, i + k + 1, cmd));
+        return r catch |e| {
+            // Tcl compiles an exact match of a literal list, or of literal
+            // arms after "--". Each other form adds the line of the arm.
+            const compiled = match == .exact and !nocase and (one_list or dashes) and literalWord(cmd, if (one_list) i else i + k + 1);
+            if (e == error.TclError and !compiled) it.addContext("\n    (\"{s}\" arm line {d})", .{ try it.str(arms[k]), it.proc_line });
+            return e;
+        };
     }
     return Value.empty;
 }
@@ -687,6 +744,7 @@ fn cmdRename(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     it.epoch += 1;
     if (new.len == 0) {
         try trace.commandEvent(it, kv.value, old, "", 2);
+        if (kv.value.on_delete) |f| f(it, kv.value);
         coro.commandGone(it, kv.value);
         if (comptime features.on("oo")) @import("oo.zig").commandGone(it, kv.value);
         // The imports of a deleted command go away.
@@ -722,6 +780,7 @@ fn cmdReturn(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var level: u32 = 1;
     var ecode: ?Value = null;
     var einfo: ?Value = null;
+    var estack: ?Value = null;
     var i: usize = 1;
     // The pairs of the options. `-options` adds the pairs of its dict.
     var pairs: std.ArrayList(Value) = .empty;
@@ -756,12 +815,21 @@ fn cmdReturn(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             ecode = v;
         } else if (eql(opt, "-errorinfo")) {
             einfo = v;
+        } else if (eql(opt, "-errorstack")) {
+            estack = v;
         }
     }
     it.result = if (i < argv.len) argv[i] else Value.empty;
     if (code == .@"error") {
         it.error_code = ecode orelse .{ .str = "NONE" };
         if (einfo) |info| try startInfo(it, info);
+        if (estack) |v| {
+            // A given -errorstack replaces the stack of the error.
+            it.error_stack = .empty;
+            try it.error_stack.appendSlice(it.alloc(), try it.list(v));
+            it.keep_stack = true;
+            it.last_stack = v;
+        }
     }
     // A forged tail code must not run tail call words that a `catch`
     // stopped earlier.
@@ -805,6 +873,7 @@ fn startInfo(it: *Interp, info: Value) Error!void {
     it.error_info = .empty;
     try it.error_info.appendSlice(it.alloc(), text);
     it.skip_info = true;
+    it.endEvaluation();
 }
 
 fn cmdError(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
@@ -834,6 +903,7 @@ pub const Caught = struct {
     ret_opts: []const Value = &.{},
     error_code: Value = .{ .str = "NONE" },
     error_info: Value = Value.empty,
+    error_stack: Value = Value.empty,
     error_line: u32 = 0,
     /// The options of the exception that this one replaced in `try`.
     during: ?Value = null,
@@ -841,24 +911,26 @@ pub const Caught = struct {
     /// The options dict: the third argument of `catch`.
     pub fn options(c: Caught, it: *Interp) Error!Value {
         if (c.code == 2 and c.ret_opts.len > 0) return c.returnOptions(it);
-        var o: [12]Value = undefined;
+        var o: [14]Value = undefined;
         o[0] = .{ .str = "-code" };
         o[1] = .{ .int = if (c.code == 2) @backingInt(c.ret_code) else c.code };
         o[2] = .{ .str = "-level" };
         o[3] = .{ .int = if (c.code == 2) c.ret_level else 0 };
         if (c.code != 1) return value.newList(it.alloc(), o[0..4]);
-        o[4] = .{ .str = "-errorcode" };
-        o[5] = c.error_code;
-        o[6] = .{ .str = "-errorinfo" };
-        o[7] = c.error_info;
-        o[8] = .{ .str = "-errorline" };
-        o[9] = .{ .int = c.error_line };
+        o[4] = .{ .str = "-errorstack" };
+        o[5] = c.error_stack;
+        o[6] = .{ .str = "-errorcode" };
+        o[7] = c.error_code;
+        o[8] = .{ .str = "-errorinfo" };
+        o[9] = c.error_info;
+        o[10] = .{ .str = "-errorline" };
+        o[11] = .{ .int = c.error_line };
         if (c.during) |d| {
-            o[10] = .{ .str = "-during" };
-            o[11] = d;
+            o[12] = .{ .str = "-during" };
+            o[13] = d;
             return value.newList(it.alloc(), &o);
         }
-        return value.newList(it.alloc(), o[0..10]);
+        return value.newList(it.alloc(), o[0..12]);
     }
 
     /// The options dict of a caught `return` with options: its options
@@ -894,6 +966,12 @@ pub const Caught = struct {
                 it.error_code = c.error_code;
                 try startInfo(it, c.error_info);
                 it.skip_info = false;
+                // The trace is complete for this evaluation.
+                it.logged_len = it.error_info.items.len;
+                it.error_stack = .empty;
+                try it.error_stack.appendSlice(it.alloc(), try it.list(c.error_stack));
+                it.proc_line = c.error_line;
+                it.log_cmd = null;
                 it.pending_during = c.during;
                 return error.TclError;
             },
@@ -951,10 +1029,19 @@ fn runCaughtBody(it: *Interp, script: Error!*interp.Script, argv: []const Value,
         // A script cannot catch the end of its compute limit or of its memory.
         if (it.uncatchable() or coro.unwinding(it)) return error.TclError;
         c.error_line = it.proc_line;
-        if (site) |s| if (it.in_error) try it.addErrorInfo(s);
+        // A catch in the frame of an `uplevel` ends the stack with the
+        // count of levels up, as in Tcl.
+        if (it.up_from) |from| if (it.in_error and from.level > it.frame.level) {
+            try it.error_stack.appendSlice(it.alloc(), &.{ .{ .str = "UP" }, .{ .int = @as(i64, from.level) - @as(i64, it.frame.level) } });
+        };
+        if (site) |s| if (it.in_error) {
+            it.endEvaluation();
+            try it.addErrorInfo(s);
+        };
         try it.finishError();
         c.error_code = it.error_code;
         c.error_info = it.last_info;
+        c.error_stack = it.last_stack;
         c.during = it.last_during;
     }
     std.debug.assert(it.depth == depth and it.frame == frame);
@@ -993,6 +1080,12 @@ fn cmdCatch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     const r = runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv, site);
     leaveCatch(it, counted);
     const c = try r;
+    // The line of the error stays for a later `error msg info`, as a
+    // line of the script around the `catch`.
+    if (c.code == 1 and literalWord(cmd, 1)) {
+        it.proc_line = cmd.?.words[1].line + c.error_line -| 1;
+        it.caught_frame = it.frame;
+    }
     if (argv.len >= 3) try it.setVar(try it.str(argv[2]), c.res);
     if (argv.len == 4) try it.setVar(try it.str(argv[3]), try c.options(it));
     return .{ .int = c.code };
@@ -1039,7 +1132,8 @@ fn cmdTry(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (end > 2 and eql(try it.str(argv[end - 1]), "-")) return it.fail("last non-finally clause must not have a body of \"-\"", .{});
 
     const counted = catches and enterCatch(it);
-    const first = runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv, null);
+    // A body that is not a literal word adds the `try` command.
+    const first = runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv, if (literalWord(cmd, 1)) null else cmd);
     leaveCatch(it, counted);
     var out = try first;
     h = 2;
@@ -1067,7 +1161,12 @@ fn cmdTry(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             if (vars.len >= 1) it.setVar(try it.str(vars[0]), res) catch |e| break :blk try runCaught(it, e);
             if (vars.len == 2) it.setVar(try it.str(vars[1]), opts) catch |e| break :blk try runCaught(it, e);
             var next = try runCaught(it, it.scriptOf(argv, body, cmd));
-            if (next.code == 1) next.during = opts;
+            if (next.code == 1) {
+                next.during = opts;
+                if (!literalWord(cmd, body) or !inProc(it)) {
+                    next.error_info = .{ .str = try std.fmt.allocPrint(it.alloc(), "{s}\n    (\"try ... {s}\" handler line {d})", .{ try it.str(next.error_info), kind, next.error_line }) };
+                }
+            }
             break :blk next;
         };
         break;
@@ -1102,6 +1201,19 @@ fn cmdExpr(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
 
 fn cmdEval(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("eval arg ?arg ...?");
+    return evalContext(it, evalRun(it, argv, cmd), "eval");
+}
+
+/// Adds the context line `("NAME" body line N)` to an error that leaves
+/// the body of `eval`, `uplevel`, or a loop that Tcl does not compile.
+pub fn evalContext(it: *Interp, r: Error!Value, comptime name: []const u8) Error!Value {
+    return r catch |e| {
+        if (e == error.TclError) it.addContext("\n    (\"" ++ name ++ "\" body line {d})", .{it.proc_line});
+        return e;
+    };
+}
+
+fn evalRun(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     // A list value has its words already, as in Tcl: no text, no parse.
     if (argv.len == 2 and argv[1] == .list and it.nest != 0) return it.evalWords(argv[1].list.items());
     if (argv.len == 2) return it.evalBody(try it.scriptOf(argv, 1, cmd), argv, &.{});
@@ -2750,7 +2862,18 @@ fn infoSub(word: []const u8) ?InfoSub {
     return found;
 }
 
-const InfoSub = enum { args, body, class, cmdcount, commands, complete, coroutine, default, exists, functions, globals, level, library, loaded, locals, nameofexecutable, object, patchlevel, procs, script, sharedlibextension, tclversion, vars };
+/// The name of the host, as `info hostname` gives it.
+fn hostName(it: *Interp) Error!Value {
+    const builtin = @import("builtin");
+    if (comptime builtin.os.tag == .linux or builtin.os.tag.isDarwin() or builtin.os.tag == .freebsd) {
+        const u = std.posix.uname();
+        const name = std.mem.sliceTo(&u.nodename, 0);
+        return .{ .str = try it.alloc().dupe(u8, name) };
+    }
+    return it.fail("info hostname: not supported by ztcl on this system", .{});
+}
+
+const InfoSub = enum { args, body, class, cmdcount, commands, complete, coroutine, default, errorstack, exists, frame, functions, globals, hostname, level, library, loaded, locals, nameofexecutable, object, patchlevel, procs, script, sharedlibextension, tclversion, vars };
 
 fn cmdInfo(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("info subcommand ?arg ...?");
@@ -2771,6 +2894,16 @@ fn cmdInfo(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         return coro.current(it);
     }
     if (which == .sharedlibextension) return .{ .str = ".so" };
+    if (which == .hostname) {
+        if (argv.len != 2) return it.wrongArgs("info hostname");
+        return hostName(it);
+    }
+    if (which == .errorstack) {
+        if (argv.len > 3) return it.wrongArgs("info errorstack ?interp?");
+        if (argv.len == 3 and pattern.?.len > 0) return it.failCode("TCL LOOKUP INTERP", "could not find interpreter \"{s}\"", .{pattern.?});
+        return it.last_stack;
+    }
+    if (which == .frame) return it.fail("info {s}: not supported by ztcl", .{sub});
     if (which == .library) {
         return (try it.getVarOpt("::tcl_library")) orelse it.fail("no library has been specified for Tcl", .{});
     }
@@ -2926,7 +3059,7 @@ fn cmdInfo(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     } else if (which == .nameofexecutable) {
         return .{ .str = it.exe_name };
     }
-    return it.failCode("TCL LOOKUP INDEX subcommand", "unknown or ambiguous subcommand \"{s}\": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, library, loaded, locals, nameofexecutable, patchlevel, procs, script, sharedlibextension, tclversion, or vars", .{word});
+    return it.failCode("TCL LOOKUP INDEX subcommand", "unknown or ambiguous subcommand \"{s}\": must be args, body, class, cmdcount, commands, complete, coroutine, default, errorstack, exists, frame, functions, globals, hostname, level, library, loaded, locals, nameofexecutable, object, patchlevel, procs, script, sharedlibextension, tclversion, or vars", .{word});
 }
 
 pub fn cmdPuts(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
