@@ -21,6 +21,7 @@ These files are the plans, the task lists, the reviews, and the test results of 
 | [wasm-aot.md](wasm-aot.md) | The design and the state of procs compiled to WebAssembly functions (`ztcl compile --wasm`). |
 | [wasm-host-tasks/](wasm-host-tasks/README.md) | The tasks of the WebAssembly host API: point procs from JavaScript, live output, and capabilities of the page (#26). |
 | [dom-tasks/](dom-tasks/README.md) | The tasks of the capability `dom`: DOM access for Tcl in the browser (#85). |
+| [web-api-tasks/](web-api-tasks/README.md) | The tasks of the bridge to the Web APIs from their Web IDL, and of Web Serial as a channel (#251). |
 | [static-build.md](static-build.md) | The plan of static binaries with embedded files, the virtual file system, and cross-compiling (`ztcl build`). |
 | [exec-windows.md](exec-windows.md) | The plan of `exec`, `pid`, and pipelines on Windows: the paths of the programs, the command line, the Job Object of each pipeline, and ConPTY. |
 | [enclave.md](enclave.md) | The plan of ztcl in enclaves and confidential VMs (ztcl#180): the Windows part with VBS enclaves, the image, the host calls, `ztcl::enclave`, attestation, and signing. |
