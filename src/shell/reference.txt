@@ -451,6 +451,8 @@ sub: package vcompare V1 V2 | -1, 0, or 1.
 sub: package vsatisfies VERSION REQ ?REQ ...? | 1 when VERSION fits a requirement such as 1.2, 1.2-, or 1.2-2.0.
 sub: package prefer ?latest|stable? | Which versions require picks.
 sub: package unknown ?CMD? | The command that runs for a missing package.
+== safe::interpCreate safe::interpInit safe::interpConfigure safe::interpDelete safe::interpAddToAccessPath safe::interpFindInAccessPath safe::setLogCmd
+syn: safe::interpCreate ?child? ?-accessPath LIST? ?-statics BOOL? ?-noStatics? ?-nested BOOL? ?-nestedLoadOk? ?-deleteHook SCRIPT?
 == tclPkgUnknown tclPkgUnknown tclPkgSetup tclLog
 syn: tclPkgUnknown name ?version ...?
 == auto_load auto_load auto_load_index auto_reset auto_qualify auto_import auto_execok

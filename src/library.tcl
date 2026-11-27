@@ -52,10 +52,11 @@ proc ::auto_load {cmd {namespace {}}} {
     variable ::auto_index
     for {set round 0} {$round < 2} {incr round} {
         foreach name [::auto_qualify $cmd $namespace] {
-            foreach key [list $name ::$name] {
+            set bare [string trimleft $name :]
+            foreach key [list $name ::$bare $bare] {
                 if {[info exists auto_index($key)]} {
                     uplevel #0 $auto_index($key)
-                    if {[info commands ::$name] ne ""} {return 1}
+                    if {[info commands ::$bare] ne ""} {return 1}
                 }
             }
         }
@@ -99,24 +100,64 @@ proc ::tclPkgSetup {dir pkg version files} {
 rename ::unknown ::tcl::UnknownBuiltin
 proc ::unknown {cmd args} {
     if {[::auto_load $cmd [uplevel 1 {namespace current}]]} {
-        return [uplevel 1 [list $cmd {*}$args]]
+        return [uplevel 1 [list [regsub -all {:::+} $cmd ::] {*}$args]]
     }
     return -code error -errorcode [list TCL LOOKUP COMMAND $cmd] "invalid command name \"$cmd\""
 }
 
+# The commands of the library packages that load on their first call,
+# as the tclIndex of the Tcl library gives them.
+proc ::tcl::LibraryIndex {} {
+    foreach c {interpCreate interpInit interpConfigure interpDelete
+            interpAddToAccessPath interpFindInAccessPath setLogCmd} {
+        set ::auto_index(::safe::$c) {package forget safe; package require safe}
+    }
+    set ::auto_index(parray) {
+        # Prints the elements of an array, one on each line, with the
+        # signs = in one column.
+        proc ::parray {a {pattern *}} {
+            upvar 1 $a array
+            if {![array exists array]} {
+                return -code error "\"$a\" isn't an array"
+            }
+            set names [lsort [array names array $pattern]]
+            set width 0
+            foreach name $names {
+                set n [string length "${a}($name)"]
+                if {$n > $width} {set width $n}
+            }
+            foreach name $names {
+                puts stdout [format "%-*s = %s" $width "${a}($name)" $array($name)]
+            }
+        }
+    }
+}
+::tcl::LibraryIndex
+
 proc ::auto_reset {} {
     variable ::auto_index
     array unset auto_index
+    ::tcl::LibraryIndex
     set ::tcl::pkgScanned {}
     unset -nocomplain ::tcl::autoIndexPath
 }
 
-# The names to look up for a command: the name in the namespace and the
-# global name, as Tcl searches them.
+# The names to look up for a command, as Tcl searches them. A run of
+# colons counts as one separator. A name with a leading :: is global,
+# and else the name in the namespace comes first.
 proc ::auto_qualify {cmd namespace} {
-    if {[string match ::* $cmd]} {return [list [string range $cmd 2 end]]}
-    if {$namespace eq "" || $namespace eq "::"} {return [list $cmd]}
-    return [list [string trimleft ${namespace}::$cmd :] $cmd]
+    regsub -all {:::+} $cmd :: cmd
+    if {[string match ::* $cmd]} {
+        set rest [string range $cmd 2 end]
+        if {[string first :: $rest] >= 0} {return [list $cmd]}
+        return [list $rest]
+    }
+    if {[string first :: $cmd] >= 0} {
+        if {$namespace eq "::" || $namespace eq ""} {return [list ::$cmd]}
+        return [list ${namespace}::$cmd ::$cmd]
+    }
+    if {$namespace eq "::" || $namespace eq ""} {return [list $cmd]}
+    return [list ${namespace}::$cmd $cmd]
 }
 
 proc ::auto_import {pattern} {}
