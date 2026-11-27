@@ -70,6 +70,24 @@ The same benchmark as above, on WHP, Release build:
 - `ls -lR` and `find` of 2,000 files: within 2 times the RAM disk of the guest, from the times of the cache.
 - create and delete of 2,000 files: below 9p, with the cost of NTFS as the floor.
 
+## Step 2, measured
+
+The device and the FUSE server with no DAX, on WHP, Release build, in a guest of 1 GB on Linux 7.3.6, two runs of each. `ZTCL_VM_VIRTIOFS=1` in the environment of `ztcl::vm create` makes the shares virtio-fs, until step 6 makes it the default.
+
+| Phase | 9p share, with #475 | virtio-fs share | The RAM disk of the guest |
+|---|---|---|---|
+| create 2,000 small files | 1,294 to 1,323 ms | 1,197 to 1,204 ms | 16 ms |
+| `ls -lR` of them | 330 to 333 ms | 23 to 34 ms | 8 to 9 ms |
+| `find` of them | 325 to 327 ms | 16 to 22 ms | 7 to 8 ms |
+| read 2,000 small files | 1,369 to 1,406 ms | 437 to 440 ms | 11 to 14 ms |
+| write 256 MB | 2,621 to 2,785 ms | 929 to 930 ms | 858 to 909 ms |
+| read 256 MB, cold | 2,622 to 2,806 ms | 221 to 253 ms | 45 to 57 ms |
+| delete 2,000 files | 1,323 to 1,492 ms | 465 to 493 ms | 19 to 30 ms |
+
+- A cold read of 256 MB runs at about 1,100 MB/s, in messages of 1 MiB, and a write of 256 MB is as fast as the RAM disk of the guest.
+- `ls -lR` and `find` keep the names and the attributes for 1 s, so they are within 4 times the RAM disk of the guest.
+- The run found a fault of the backend of Windows: `readdir` read the folder again from its start at each offset, so a guest that deletes names as it reads them (`rm -r`) skipped names. The 9p client of Linux reads a folder of 2,000 names in one message, and the FUSE client reads 4 KiB at a time. The backend now reads the names of a folder at offset 0 and gives later offsets from that list.
+
 ## Questions
 
 1. The size of the window. Default: 1 GiB of guest addresses, with no memory of the host until a mapping. The guest picks the ranges.
