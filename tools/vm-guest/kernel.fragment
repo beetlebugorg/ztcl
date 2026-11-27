@@ -1,5 +1,8 @@
-# The kernel of the spike guest of ztcl::vm (ztcl#203): tinyconfig, then
-# these options. Each driver is built in, so the guest needs no modules.
+# The kernel of the guest of ztcl::vm (ztcl#203): tinyconfig, then these
+# options, then kernel-ARCH.fragment. Each driver is built in, so the
+# guest needs no modules. Virtio comes on PCI (Virtualization.framework)
+# and on MMIO (the VMM of the KVM part of the plan), with the devices of
+# MMIO from the command line (virtio_mmio.device=SIZE@ADDR:IRQ).
 CONFIG_64BIT=y
 CONFIG_SMP=y
 CONFIG_NR_CPUS=8
@@ -35,6 +38,8 @@ CONFIG_PCI_HOST_GENERIC=y
 CONFIG_VIRTIO_MENU=y
 CONFIG_VIRTIO=y
 CONFIG_VIRTIO_PCI=y
+CONFIG_VIRTIO_MMIO=y
+CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES=y
 CONFIG_VIRTIO_CONSOLE=y
 CONFIG_HW_RANDOM=y
 CONFIG_HW_RANDOM_VIRTIO=y

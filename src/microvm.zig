@@ -5,7 +5,12 @@
 //!                   ?-disk {F ?rw?}? ... ?-share {HOST GUEST ?rw?}? ... ?-entropy 0|1? ?-warm 0|1?
 //!   ztcl::vm start|stop ?-force?|status|delete VM
 //!   ztcl::vm vsock VM PORT ?-timeout MS?
+//!   ztcl::vm exec VM ?-stdin DATA? ?-env LIST? ?-cwd DIR? ?-timeout MS? ?--? PROGRAM ?ARG ...?
+//!   ztcl::vm mount VM TAG PATH ?-readonly?
 //!   ztcl::vm console VM
+//!
+//! `exec` and `mount` speak to the guest agent on port 1024
+//! (`vmagent.zig`, `docs/dev/vm-agent.md`), on macOS in this version.
 //!
 //! macOS has Virtualization.framework through `vz.zig`, and x86-64
 //! Linux has the KVM monitor of `kvm.zig`. On another platform each
@@ -64,7 +69,8 @@ pub const Host = struct {
 /// the guest accepts a connection on it.
 pub const agent_port: u32 = 1024;
 
-const usage = "ztcl::vm create|start|stop|status|vsock|console|delete ?arg ...?";
+const usage = "ztcl::vm create|start|stop|status|vsock|exec|mount|console|delete ?arg ...?";
+const vmagent = @import("vmagent.zig");
 
 pub fn register(it: *Interp) std.mem.Allocator.Error!void {
     try it.register("ztcl::vm", cmdVm);
@@ -199,6 +205,8 @@ const mac = if (on_mac) struct {
             return .{ .str = status(g) };
         }
         if (std.mem.eql(u8, sub, "vsock")) return vsock(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "exec")) return execCmd(it, g, args[3..]);
+        if (std.mem.eql(u8, sub, "mount")) return mountCmd(it, g, args[3..]);
         if (std.mem.eql(u8, sub, "console")) {
             if (args.len != 3) return it.wrongArgs("ztcl::vm console vm");
             return console(it, g);
@@ -213,7 +221,7 @@ const mac = if (on_mac) struct {
             destroy(it, g);
             return .{ .str = "" };
         }
-        return it.fail("bad option \"{s}\": must be console, create, delete, start, status, stop, or vsock", .{sub});
+        return it.fail("bad option \"{s}\": must be console, create, delete, exec, mount, start, status, stop, or vsock", .{sub});
     }
 
     /// The host path of a path of the script, below the root folder.
@@ -392,6 +400,90 @@ const mac = if (on_mac) struct {
         conn.close();
         if (fd < 0) return it.failCode("ZTCL VM CONNECT", "no descriptor for the connection", .{});
         return binaryChannel(it, "vsock", fd);
+    }
+
+    /// A connection to the agent, after its `HELLO`.
+    fn agent(it: *Interp, g: *Guest, timeout: u32) Error!vmagent.Conn {
+        if (g.machine.state() != .running) return it.failCode("ZTCL VM STATE", "the guest {s} is {s}", .{ g.name, status(g) });
+        const conn = connect(&g.machine, vmagent.port, timeout) orelse
+            return it.failCode("ZTCL VM AGENT", "the agent of the guest {s} did not answer on port {d}", .{ g.name, vmagent.port });
+        const fd = c.dup(conn.fd);
+        conn.close();
+        if (fd < 0) return it.failCode("ZTCL VM CONNECT", "no descriptor for the connection", .{});
+        var a: vmagent.Conn = .{ .fd = fd, .timeout_ms = @intCast(@min(timeout, std.math.maxInt(i32))) };
+        _ = a.hello(it.alloc()) catch |e| {
+            _ = c.close(fd);
+            return agentFail(it, g, &a, e);
+        };
+        return a;
+    }
+
+    fn agentFail(it: *Interp, g: *Guest, a: *vmagent.Conn, e: vmagent.Error) Error {
+        return switch (e) {
+            error.OutOfMemory => error.OutOfMemory,
+            error.Timeout => it.failCode("ZTCL VM TIMEOUT", "the guest {s} gave no answer in time", .{g.name}),
+            error.Version => it.failCode("ZTCL VM AGENT", "the agent of the guest {s} has another version of the protocol", .{g.name}),
+            error.Agent => it.failCode("ZTCL VM AGENT", "{s} (errno {d})", .{ a.last_error.message[0..a.last_error.len], a.last_error.errno }),
+            else => it.failCode("ZTCL VM AGENT", "the connection to the agent of the guest {s} failed: {s}", .{ g.name, @errorName(e) }),
+        };
+    }
+
+    /// `exec`: a dict of `exit`, `stdout`, and `stderr`.
+    fn execCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        const use = "ztcl::vm exec vm ?-stdin data? ?-env list? ?-cwd dir? ?-timeout ms? ?--? program ?arg ...?";
+        var stdin: ?[]const u8 = null;
+        var env: []const []const u8 = &.{};
+        var cwd: []const u8 = "";
+        var timeout: u32 = 30000;
+        var i: usize = 0;
+        while (i < args.len) {
+            const o = try it.str(args[i]);
+            if (std.mem.eql(u8, o, "--")) {
+                i += 1;
+                break;
+            }
+            if (o.len == 0 or o[0] != '-') break;
+            if (i + 1 >= args.len) return it.wrongArgs(use);
+            const v = args[i + 1];
+            if (std.mem.eql(u8, o, "-stdin")) {
+                stdin = try it.str(v);
+            } else if (std.mem.eql(u8, o, "-cwd")) {
+                cwd = try it.str(v);
+            } else if (std.mem.eql(u8, o, "-timeout")) {
+                const t = try it.int(v);
+                if (t < 1) return it.fail("bad timeout \"{d}\"", .{t});
+                timeout = @intCast(@min(t, std.math.maxInt(i32)));
+            } else if (std.mem.eql(u8, o, "-env")) {
+                const items = try it.list(v);
+                const e = try it.alloc().alloc([]const u8, items.len);
+                for (items, e) |x, *y| y.* = try it.str(x);
+                env = e;
+            } else return it.fail("bad option \"{s}\": must be -cwd, -env, -stdin, or -timeout", .{o});
+            i += 2;
+        }
+        if (i >= args.len) return it.wrongArgs(use);
+        const argv = try it.alloc().alloc([]const u8, args.len - i);
+        for (args[i..], argv) |x, *y| y.* = try it.str(x);
+        var a = try agent(it, g, timeout);
+        defer _ = c.close(a.fd);
+        const r = vmagent.exec(&a, it.alloc(), argv, env, cwd, stdin, 64 << 20) catch |e| return agentFail(it, g, &a, e);
+        var items = [6]Value{
+            .{ .str = "exit" },   .{ .int = r.code },
+            .{ .str = "stdout" }, .{ .str = r.stdout },
+            .{ .str = "stderr" }, .{ .str = r.stderr },
+        };
+        return value.wrapList(it.alloc(), try it.alloc().dupe(Value, &items));
+    }
+
+    fn mountCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        const use = "ztcl::vm mount vm tag path ?-readonly?";
+        if (args.len != 2 and args.len != 3) return it.wrongArgs(use);
+        const ro = args.len == 3;
+        if (ro and !std.mem.eql(u8, try it.str(args[2]), "-readonly")) return it.wrongArgs(use);
+        var a = try agent(it, g, 5000);
+        defer _ = c.close(a.fd);
+        vmagent.mount(&a, it.alloc(), try it.str(args[0]), try it.str(args[1]), ro) catch |e| return agentFail(it, g, &a, e);
+        return .{ .str = "" };
     }
 
     fn console(it: *Interp, g: *Guest) Error!Value {

@@ -6,10 +6,7 @@
 set vm [ztcl::vm create -kernel Image -initrd agent.cpio -cmdline "rdinit=/sbin/agent quiet" \
         -memory 64 -share {work /mnt/share rw}]
 ztcl::vm start $vm
-set ch [ztcl::vm vsock $vm 1024]
-puts $ch hello; flush $ch
-puts [gets $ch]
-close $ch
+puts [ztcl::vm exec $vm /bin/busybox uname -m]   ;# exit 0 stdout {aarch64\n} stderr {}
 ztcl::vm delete $vm
 ```
 
@@ -25,6 +22,8 @@ ztcl::vm start VM
 ztcl::vm stop VM ?-force?
 ztcl::vm status VM
 ztcl::vm vsock VM PORT ?-timeout MS?
+ztcl::vm exec VM ?-stdin DATA? ?-env LIST? ?-cwd DIR? ?-timeout MS? ?--? PROGRAM ?ARG ...?
+ztcl::vm mount VM TAG PATH ?-readonly?
 ztcl::vm console VM
 ztcl::vm delete VM
 ```
@@ -52,6 +51,8 @@ Each path is a path below the root folder of `file`. The framework gets the fina
 - `stop` asks the guest to power off and waits up to 5 seconds, then stops it at once. `-force` stops it at once. A stopped guest can start again, with a new boot. The request is a press of the power button of the guest: a kernel with no driver for it, such as the spike guest of `tools/vm-guest`, ignores it, so `stop` waits the full 5 seconds. Use `-force` for such a guest.
 - `status` gives `created`, `starting`, `running`, `pausing`, `paused`, `stopping`, `stopped`, or `error`.
 - `vsock` connects to a port of the running guest and gives a channel, readable and writable, in binary translation. A refused connection is tried again at once until `-timeout` ms pass: 5,000 by default, and 0 for one try.
+- `exec` runs a program in the guest through the guest agent (`tools/vm-guest/agent.zig`, the first process of the guest image) and waits for its end. It gives a dict: `exit` (the exit code, or minus the number of the signal that ended the program), `stdout`, and `stderr`, each output up to 64 MiB. `PROGRAM` is a path in the guest: there is no search of `PATH` and no shell, so a shell is `/bin/busybox sh -c {...}` in the guest image. `-stdin` gives the bytes of its input, which then ends; without it the input is empty. `-env` is a list of `NAME=value`, and the program gets no other variable. `-cwd` is its folder, `/` by default. `-timeout` is the most milliseconds of a wait for the agent with no output, 30,000 by default: past it, the connection closes and the agent ends the program.
+- `mount` mounts the share with the tag `TAG` (`share0` for the first `-share`) at `PATH` in the guest, read-only with `-readonly`. The agent mounts `share0` at `/mnt/share` when the guest starts.
 - `console` gives the console of the guest (`hvc0`) as a channel, one time for each guest.
 - `delete` stops the guest at once and frees it. The end of the interpreter deletes each guest.
 
@@ -93,7 +94,8 @@ A start of a guest with 1 CPU and 64 MB is about 100 ms on an M1 Mac, and 86 ms 
 | `ZTCL VM NAME` | `no guest named "vm9"` |
 | `ZTCL VM STATE` | `the guest vm1 is stopping` |
 | `ZTCL VM CONNECT` | `no program of the guest vm1 accepted a connection on port 1024` |
-| `ZTCL VM AGENT` | `no program of the guest accepted a connection on port 1024`, for `-warm 1` after 10 seconds |
+| `ZTCL VM AGENT` | `no program of the guest accepted a connection on port 1024`, for `-warm 1` after 10 seconds; `exec failed (errno 2)` and the other errors of the agent; `the agent of the guest vm1 did not answer on port 1024` |
+| `ZTCL VM TIMEOUT` | `the guest vm1 gave no answer in time`, for `exec` past `-timeout` |
 | `ZTCL VM CONSOLE` | `the console of the guest vm1 is a channel already` |
 | `ZTCL VM FRAMEWORK` | The text of the framework, such as for a kernel file that it cannot boot |
 | `POSIX EACCES` | `couldn't open "../x": permission denied`, for a path outside the root folder |
