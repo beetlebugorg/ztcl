@@ -115,7 +115,10 @@ pub fn missing(k: stubs.Kind, i: usize) void {
     const first = bit < 1024 and !S.told.isSet(bit);
     if (bit < 1024) S.told.set(bit);
     S.lock.unlock();
-    if (first) std.debug.print("ztcl: a C package called {s} (slot {d} of the {s} stubs table), which ztcl does not have\n", .{ nm, i, k.label() });
+    // The test of a missing slot writes no line. The Zig test runner
+    // shows any text on the standard error under "failed command", with
+    // no test name, also when each test passes.
+    if (first and !builtin.is_test) std.debug.print("ztcl: a C package called {s} (slot {d} of the {s} stubs table), which ztcl does not have\n", .{ nm, i, k.label() });
     if (current) |sh| {
         if (sh.state.missing == null) sh.state.missing = .{ .kind = k, .slot = i };
     }
