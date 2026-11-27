@@ -129,6 +129,21 @@ class El {
   querySelector(sel) {
     return this.querySelectorAll(sel)[0] ?? null;
   }
+  get nodeType() {
+    return 1;
+  }
+  addEventListener(type, fn) {
+    (this.on ??= {})[type] = fn;
+  }
+  removeEventListener(type, fn) {
+    if (this.on?.[type] === fn) delete this.on[type];
+  }
+  // A DOM event of the test: it goes to the listeners of the element
+  // and of each parent.
+  fire(type, props = {}) {
+    const ev = { type, target: this, ...props };
+    for (let e = this; e; e = e.parent) e.on?.[type]?.(ev);
+  }
 }
 const root = new El("div").add(new El("p", { id: "msg", class: "note" }, "hello"), new El("p", { class: "note" }, "second"));
 const outside = new El("div").add(new El("p", { id: "secret" }, "outside"));
@@ -251,6 +266,44 @@ ev5.eval("after 20 {puts tick; set w 3}");
 const r5 = await ran;
 check(r5.ok && r5.output === "tick\n" && ev5.eval("set w").result === "3", `setTimeout runs the events (got ${JSON.stringify(r5)})`);
 ev5.close();
+
+// #85 task 03: `dom on` and `dom off`. The script of each event runs
+// from runEvents with its own compute limit.
+{
+  const box = new El("div");
+  const btn = new El("button", { id: "go" }, "Go");
+  box.add(btn);
+  const top = new El("div").add(box);
+  const dq = await Interp.create(host, { allow: ["dom"], domRoot: top, domComputeLimit: 5000 });
+  const evq = (s) => dq.eval(s);
+  check(evq("set b [dom query #go]; set box [dom query div]; dom on $b click {lappend got [list %x %y %target 100%%]}; dom on $box keydown {lappend keys %key}").ok, "dom on adds a script");
+  btn.fire("click", { clientX: 3, clientY: 4 });
+  check(evq("info exists got").result === "0", "the script waits for runEvents");
+  const r1 = dq.runEvents();
+  check(r1.ok && evq("set got").result === `{3 4 ${evq("set b").result} 100%}`, `a click runs the script with the substitutions (got ${evq("set got").result})`);
+  btn.fire("keydown", { key: "a b" });
+  dq.runEvents();
+  check(evq("set keys").result === "{a b}", `%key is one word (got ${evq("set keys").result})`);
+  evq("dom off $b click");
+  btn.fire("click", { clientX: 5, clientY: 6 });
+  dq.runEvents();
+  check(evq("llength $got").result === "1", "dom off ends the script");
+  evq("dom on $b click {while 1 {}}");
+  btn.fire("click", {});
+  const r2 = dq.runEvents();
+  check(!r2.ok && r2.result === "compute limit reached", `a callback stops at domComputeLimit (got ${r2.result})`);
+  check(evq("expr {1 + 1}").result === "2", "the interpreter runs after a callback at its limit");
+  check(!evq("dom on $b {bad name} {}").ok, "dom on checks the event name");
+  // The timer of setTimeout runs the queue.
+  evq("dom on $b click {set fired 1}");
+  const done = new Promise((resolve) => { dq.onEvents = resolve; });
+  btn.fire("click", {});
+  const r3 = await done;
+  check(r3.ok && evq("set fired").result === "1", "setTimeout runs the DOM events");
+  evq("dom remove $b");
+  check(!btn.on?.click, "dom remove ends the scripts of the element");
+  dq.close();
+}
 
 if (failed) process.exit(1);
 console.log("wasm host ok");

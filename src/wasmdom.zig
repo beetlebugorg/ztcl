@@ -15,6 +15,8 @@
 //!   dom append parent child        puts child at the end of parent
 //!   dom remove el                  takes the element out; the handle ends
 //!   dom html el ?value?            the inner HTML; a set needs `dom-html`
+//!   dom on el event script         runs script for each event of el
+//!   dom off el event               ends the script of `dom on`
 //!
 //! An element is a handle `domN`. A tree of new elements is in scope
 //! before `dom append` puts it below the root. The host gives an error
@@ -30,6 +32,12 @@
 //! that each handle is in scope. Each call costs one compute
 //! unit. The command exists only after `ztcl_dom_allow`, so it is absent
 //! by default and in `ztcl.wasm`.
+//!
+//! The host keeps the scripts of `dom on` and puts each event in a
+//! queue. `Interp.runEvents` of `web/ztcl.mjs` gives each event of the
+//! queue to `runEvent`, which puts the values of the event in place of
+//! `%x`, `%y`, `%key`, `%value`, and `%target` (`%%` is one `%`) and
+//! runs the script at the global level.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -57,7 +65,55 @@ pub const Op = enum(u32) {
     remove = 15,
     html_get = 16,
     html_set = 17,
+    on = 18,
+    off = 19,
 };
+
+/// The names of the substitutions of `dom on`, in the order of the
+/// values of `runEvent`.
+pub const subs = [_][]const u8{ "x", "y", "key", "value", "target" };
+
+/// Gives `script` with each `%name` of `subs` replaced by its value as
+/// one list element, and `%%` replaced by `%`.
+pub fn substitute(a: std.mem.Allocator, script: []const u8, vals: [subs.len][]const u8) std.mem.Allocator.Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    var k: usize = 0;
+    outer: while (k < script.len) {
+        if (script[k] == '%' and k + 1 < script.len) {
+            if (script[k + 1] == '%') {
+                try out.append(a, '%');
+                k += 2;
+                continue;
+            }
+            // The longest name first: `%key` and `%x` do not share a start.
+            for (subs, 0..) |n, j| {
+                if (std.mem.startsWith(u8, script[k + 1 ..], n)) {
+                    try ztcl.value.appendElement(a, &out, vals[j], true);
+                    k += 1 + n.len;
+                    continue :outer;
+                }
+            }
+        }
+        try out.append(a, script[k]);
+        k += 1;
+    }
+    return out.toOwnedSlice(a);
+}
+
+/// Runs the script of one DOM event with the values of `subs`, at the
+/// global level.
+pub fn runEvent(it: *Interp, script: []const u8, vals: [subs.len][]const u8) Error!Value {
+    const text = try substitute(it.alloc(), script, vals);
+    const frame = it.frame;
+    const ns = it.ns;
+    it.frame = &it.global;
+    it.ns = "";
+    defer {
+        it.frame = frame;
+        it.ns = ns;
+    }
+    return it.eval(text);
+}
 
 const host = struct {
     extern "ztcl_host" fn dom(op: u32, handle: i32, a: [*]const u8, a_len: usize, b: [*]const u8, b_len: usize) i32;
@@ -205,7 +261,17 @@ pub fn Commands(comptime gpa: std.mem.Allocator) type {
                 }
                 return .{ .str = (try call(it, gpa, .html_get, el, "", "")).text };
             }
-            return it.fail("bad subcommand \"{s}\": must be append, attr, class, create, focus, html, query, queryAll, remove, style, text, or value", .{sub});
+            if (std.mem.eql(u8, sub, "on")) {
+                if (args.len != 3) return it.wrongArgs("dom on el event script");
+                _ = try call(it, gpa, .on, try handleOf(it, args[0]), try it.str(args[1]), try it.str(args[2]));
+                return Value.empty;
+            }
+            if (std.mem.eql(u8, sub, "off")) {
+                if (args.len != 2) return it.wrongArgs("dom off el event");
+                _ = try call(it, gpa, .off, try handleOf(it, args[0]), try it.str(args[1]), "");
+                return Value.empty;
+            }
+            return it.fail("bad subcommand \"{s}\": must be append, attr, class, create, focus, html, off, on, query, queryAll, remove, style, text, or value", .{sub});
         }
 
         pub fn register(it: *Interp) std.mem.Allocator.Error!void {

@@ -231,8 +231,26 @@ fn ztcl_dom_allow(h: *Handle) callconv(.c) i32 {
     return 0;
 }
 
+/// Runs the script of one DOM event of `dom on`. `vals` has the values
+/// of `%x`, `%y`, `%key`, `%value`, and `%target`, each one followed by
+/// a zero byte. Gives 0, or 1 with the error in the result.
+fn ztcl_dom_event(h: *Handle, sptr: [*]const u8, slen: usize, vptr: [*]const u8, vlen: usize) callconv(.c) i32 {
+    const dom = @import("wasmdom.zig");
+    var vals: [dom.subs.len][]const u8 = @splat("");
+    var parts = std.mem.splitScalar(u8, vptr[0..vlen], 0);
+    for (&vals) |*v| v.* = parts.next() orelse "";
+    if (dom.runEvent(&h.it, sptr[0..slen], vals)) |v| {
+        h.result = h.it.str(v) catch "out of memory";
+        return 0;
+    } else |e| {
+        h.result = if (e == error.TclError) h.it.str(h.it.result) catch "out of memory" else @errorName(e);
+        return 1;
+    }
+}
+
 comptime {
     if (host_imports) {
+        @export(&ztcl_dom_event, .{ .name = "ztcl_dom_event" });
         @export(&ztcl_dom_allow, .{ .name = "ztcl_dom_allow" });
         @export(&ztcl_clock_allow, .{ .name = "ztcl_clock_allow" });
         @export(&ztcl_events_allow, .{ .name = "ztcl_events_allow" });

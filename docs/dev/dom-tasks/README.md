@@ -41,5 +41,8 @@ The commands go into `ztcl-host.wasm`, the module with imports of [the host API 
 |---|---|
 | 01 | merged |
 | 02 | merged (#298) |
+| 03 | done: `dom on` and `dom off` |
 
 Task 02 also closes a gap of task 01: `dom attr el onclick SCRIPT` set an event attribute, so a click ran JavaScript. Now the host gives an error for each attribute whose name starts with `on`, for `srcdoc` and `is`, and for a value that starts with `javascript:` or `vbscript:` after the removal of white space and control characters. `dom create` gives an error for `script`, `iframe`, `frame`, `frameset`, `object`, `embed`, `base`, `link`, `meta`, and `template`, and for a tag name that is not letters, digits, and `-`. `dom append` has no form for the root as the parent: a script appends to an element below the root.
+
+Task 03: `dom on el event script` adds a listener in `web/ztcl.mjs`, and `dom off el event` removes it. `dom remove` removes the listeners of the element. The listener puts the event in a queue, and a timer of `setTimeout` calls `runEvents`. `runEvents` gives each event of the queue to the export `ztcl_dom_event`, which puts the values in place of `%x`, `%y` (`clientX`, `clientY`), `%key`, `%value` (0 or 1 for a checkbox or a radio button), and `%target` (a handle, or "" for an element out of scope), and `%%` is one `%`. Each value is one list element. The script runs at the global level with the compute limit `domComputeLimit` (1,000,000 by default). `tools/wasm-host.mjs` checks the substitutions, `dom off`, the compute limit of a callback, and the timer.
