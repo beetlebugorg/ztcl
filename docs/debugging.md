@@ -7,6 +7,8 @@ ztcl has four tools to find a bug:
 - `ztcl debug --mcp` gives the same tools to an agent over the Model Context Protocol.
 - `ztcl debug --dap` is a debugger for an editor: breakpoints, steps, the stack, the locals, watches, and hot reload.
 
+The lesson [Debug a script](learn/91-debug-a-script.md) finds two bugs with a probe and with `ztcl debug`, in the shell of the page.
+
 ## Probes in a running program
 
 A probe is a `puts` that you add from outside the code. The shell below has the proc `average` with a bug: the second call divides by zero. Run the commands of the box, then `ztcl::probe records -where {x < 0}`.
