@@ -189,6 +189,11 @@ pub const Server = struct {
     alloc: std.mem.Allocator,
     fs: Fs,
     fids: std.AutoHashMapUnmanaged(u32, Fid) = .empty,
+    /// The counts of the chains that got no answer (malformed) and of
+    /// the requests that got an Rlerror before their parse (too long for
+    /// msize, or no memory).
+    bad_chains: u32 = 0,
+    bad_requests: u32 = 0,
     msize: u32 = 8192,
     req: []u8 = &.{},
     rep: []u8 = &.{},
@@ -244,13 +249,20 @@ pub const Server = struct {
 
     /// Runs one chain, and gives the count of bytes of its answer.
     fn one(s: *Server, q: *Queue, mem: Mem, head: u16) u32 {
-        const c = Chain.read(q, mem, head) orelse return 0;
+        const c = Chain.read(q, mem, head) orelse {
+            // A malformed chain has no buffer to put an Rlerror in.
+            s.bad_chains += 1;
+            return 0;
+        };
         var in_len: usize = 0;
         var out_len: usize = 0;
         for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| {
             if (w) out_len += b.len else in_len += b.len;
         }
-        if (in_len < 7) return 0;
+        if (in_len < 7) {
+            s.bad_chains += 1;
+            return 0;
+        }
         // The buffers: the size of a Tversion first, then the msize.
         const cap = @max(s.msize, 8192);
         if (s.req.len < cap) {
@@ -258,8 +270,8 @@ pub const Server = struct {
             s.alloc.free(s.rep);
             s.req = &.{};
             s.rep = &.{};
-            s.req = s.alloc.alloc(u8, cap) catch return 0;
-            s.rep = s.alloc.alloc(u8, cap) catch return 0;
+            s.req = s.alloc.alloc(u8, cap) catch return s.refuse(&c, E.NOMEM);
+            s.rep = s.alloc.alloc(u8, cap) catch return s.refuse(&c, E.NOMEM);
         }
         var n: usize = 0;
         for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| {
@@ -269,7 +281,7 @@ pub const Server = struct {
             n += k;
         }
         const size = std.mem.readInt(u32, s.req[0..4], .little);
-        if (size < 7 or size > n) return 0;
+        if (size < 7 or size > n) return s.refuse(&c, E.INVAL);
         const room: usize = @min(out_len, s.rep.len);
         const len = s.handle(s.req[0..size], s.rep[0..room]);
         var off: usize = 0;
@@ -280,6 +292,34 @@ pub const Server = struct {
             off += k;
         }
         return @intCast(len);
+    }
+
+    /// Answers the request of `c` with an Rlerror of `errno`, with the
+    /// tag of the first 7 bytes of its readable part, and gives the
+    /// length. The guest sees the error, and its request ends.
+    fn refuse(s: *Server, c: *const Chain, errno: u32) u32 {
+        s.bad_requests += 1;
+        var head: [7]u8 = @splat(0);
+        var n: usize = 0;
+        for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| {
+            if (w or n == head.len) continue;
+            const k = @min(b.len, head.len - n);
+            @memcpy(head[n..][0..k], b[0..k]);
+            n += k;
+        }
+        var ans: [11]u8 = undefined;
+        std.mem.writeInt(u32, ans[0..4], 11, .little);
+        ans[4] = r_lerror;
+        @memcpy(ans[5..7], head[5..7]);
+        std.mem.writeInt(u32, ans[7..11], errno, .little);
+        var off: usize = 0;
+        for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| {
+            if (!w or off >= ans.len) continue;
+            const k = @min(b.len, ans.len - off);
+            @memcpy(b[0..k], ans[off..][0..k]);
+            off += k;
+        }
+        return @intCast(off);
     }
 
     /// Answers one T-message in `out`, and gives the length of the
@@ -1004,6 +1044,62 @@ test "ninep: version, attach, walk, open, and read" {
     r = call(&s, m.u32_(1).done(), &out);
     try std.testing.expectEqual(@as(u8, t_clunk + 1), r[4]);
     try std.testing.expectEqual(@as(u32, 0), fs.opens);
+}
+
+test "ninep: a chain of msize 262,144 through the queue" {
+    var fs: MemFs = .{};
+    var s = testServer(&fs, false);
+    defer s.deinit();
+    var out: [512]u8 = undefined;
+    var m = Msg.init(t_version);
+    _ = call(&s, m.u32_(max_msize).str("9P2000.L").done(), &out);
+    try std.testing.expectEqual(max_msize, s.msize);
+    m = Msg.init(t_attach);
+    _ = call(&s, m.u32_(0).u32_(~@as(u32, 0)).str("root").str("").u32_(0).done(), &out);
+    m = Msg.init(t_walk);
+    _ = call(&s, m.u32_(0).u32_(1).u16_(1).str("a").done(), &out);
+    m = Msg.init(t_lopen);
+    _ = call(&s, m.u32_(1).u32_(O.RDONLY).done(), &out);
+    // The guest memory: the descriptors at 0, the available ring at
+    // 0x2000, the used ring at 0x3000, the request at 0x4000, and 66
+    // writable pages from 0x10000, as the guest gives them for an Rread
+    // of msize 262,144.
+    const mem_buf = try std.testing.allocator.alignedAlloc(u8, .@"8", 0x10000 + 66 * 4096);
+    defer std.testing.allocator.free(mem_buf);
+    @memset(mem_buf, 0);
+    const mem: Mem = .{ .base = mem_buf.ptr, .size = mem_buf.len };
+    var q: Queue = .{ .num = 256, .ready = true, .desc = 0, .avail = 0x2000, .used = 0x3000 };
+    const Case = struct { msg: []const u8, kind: u8 };
+    var big = Msg.init(t_read);
+    var bad = Msg.init(t_read);
+    for ([_]Case{
+        .{ .msg = big.u32_(1).u64_(0).u32_(max_msize - 11).done(), .kind = t_read + 1 },
+        // A size larger than the request: an Rlerror with its tag.
+        .{ .msg = bad.u32_(1).u64_(0).u32_(100).done(), .kind = r_lerror },
+    }, 0..) |c, round| {
+        @memcpy(mem_buf[0x4000..][0..c.msg.len], c.msg);
+        if (c.kind == r_lerror) std.mem.writeInt(u32, mem_buf[0x4000..][0..4], @intCast(c.msg.len + 100), .little);
+        const n_desc = 67;
+        for (0..n_desc) |i| {
+            const at = 16 * i;
+            const addr: u64 = if (i == 0) 0x4000 else 0x10000 + 4096 * (i - 1);
+            const len: u32 = if (i == 0) @intCast(c.msg.len) else 4096;
+            mem.put(u64, at, addr);
+            mem.put(u32, at + 8, len);
+            const next: u16 = if (i + 1 < n_desc) 1 else 0;
+            mem.put(u16, at + 12, next | (if (i == 0) @as(u16, 0) else 2));
+            mem.put(u16, at + 14, @intCast(i + 1));
+        }
+        mem.put(u16, 0x2004 + 2 * round, 0);
+        mem.put(u16, 0x2002, @intCast(round + 1));
+        try std.testing.expect(s.run(&q, mem));
+        const len = std.mem.readInt(u32, mem_buf[0x3000 + 4 + 8 * round + 4 ..][0..4], .little);
+        try std.testing.expect(len >= 11);
+        try std.testing.expectEqual(c.kind, mem_buf[0x10000 + 4]);
+        try std.testing.expectEqual(@as(u16, 1), std.mem.readInt(u16, mem_buf[0x10000 + 5 ..][0..2], .little));
+    }
+    try std.testing.expectEqual(@as(u32, 0), s.bad_chains);
+    try std.testing.expectEqual(@as(u32, 1), s.bad_requests);
 }
 
 test "ninep: readdir in small pieces" {

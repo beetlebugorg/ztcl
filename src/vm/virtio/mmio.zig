@@ -342,10 +342,16 @@ const blk_unsupp = 2;
 /// Runs one block request and gives the count of bytes that it wrote to
 /// the guest, with the status byte.
 fn blkOne(disk: Disk, q: *Queue, mem: Mem, head: u16) u32 {
+    // A malformed chain has no status byte to write.
     const c = Chain.read(q, mem, head) orelse return 0;
-    if (c.n < 2 or c.bufs[0].len < 16 or c.writable[0]) return 0;
     const last = c.bufs[c.n - 1];
     if (!c.writable[c.n - 1] or last.len < 1) return 0;
+    // A request with no valid header gets an error status, so that the
+    // request of the guest ends.
+    if (c.n < 2 or c.bufs[0].len < 16 or c.writable[0]) {
+        last[last.len - 1] = blk_ioerr;
+        return 1;
+    }
     const kind = std.mem.readInt(u32, c.bufs[0][0..4], .little);
     const sector = std.mem.readInt(u64, c.bufs[0][8..16], .little);
     var status: u8 = blk_ok;
