@@ -208,6 +208,10 @@ fn effect(code: *const Code, pc: u32) ?Effect {
             if (i.a < 1) return null;
             return .{ .need = i.a, .push = 1 };
         },
+        .mathfunc => {
+            if (i.a < 1 or i.x >= @typeInfo(@import("../expr.zig").Func).@"enum".field_names.len) return null;
+            return .{ .need = i.a, .push = 1 };
+        },
         .append => {
             if (i.a >= slots or i.b < 1 or i.b > 8) return null;
             return .{ .need = i.b, .push = 1 };

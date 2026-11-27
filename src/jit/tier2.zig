@@ -518,6 +518,8 @@ pub fn runsNoScript(i: vm.Ins) bool {
         .access => true,
         // The string of the joined values.
         .concat => true,
+        // A built-in function of `expr`: math on values, no command.
+        .mathfunc => true,
         // An operator of `expr` on two values or one value. `expr`
         // functions are nodes, so no operator calls a command.
         .binary, .unary => true,

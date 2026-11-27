@@ -129,6 +129,11 @@ pub const Op = enum(u8) {
     /// `info exists name` of slot `a`: pushes 1 when the variable is
     /// there, 0 when it is not. Reads no trace.
     var_exists,
+    /// The built-in function `x` (`expr.Func`) of `expr` on the `a`
+    /// values on the stack: pops them and pushes the result. The parser
+    /// made the call a built-in only when no script replaced the
+    /// function, as for the `func` node.
+    mathfunc,
 };
 
 pub const Ins = extern struct {
@@ -577,7 +582,17 @@ const Compiler = struct {
                 try c.compileNode(t[2]);
                 c.patch(end);
             },
-            .parts, .func, .call => try c.fallbackNode(n),
+            .func => |*fc| {
+                // The arguments as bytecode and one instruction for the
+                // function: no tree walk for each run, and the JIT sees
+                // the call.
+                if (fc.args.len == 0 or fc.args.len > 64) return c.fallbackNode(n);
+                for (fc.args) |arg| try c.compileNode(arg);
+                _ = try c.emit(.{ .op = .mathfunc, .a = @intCast(fc.args.len), .x = @intCast(@backingInt(fc.f)) });
+                c.depth -= @intCast(fc.args.len);
+                c.push(1);
+            },
+            .parts, .call => try c.fallbackNode(n),
         }
     }
 
@@ -2120,6 +2135,11 @@ pub inline fn opNode(comptime named: bool, it: *Interp, f: *Frame, code: *const 
     stack[sp] = try expr.eval(it, code.nodes[i.a]);
 }
 
+pub inline fn opMathFunc(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code };
+    stack[sp - i.a] = try expr.applyFunc(it, @fromBackingInt(@intCast(i.x)), stack[sp - i.a .. sp]);
+}
+
 pub inline fn opConcat(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
     _ = .{ named, f, code };
     stack[sp - i.a] = try concatValues(it, stack[sp - i.a .. sp]);
@@ -2548,6 +2568,13 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
             .node => {
                 try opNode(named, it, f, code, stack, sp, i);
                 sp += 1;
+                pc += 1;
+                i = &ins[pc];
+                continue :sw i.op;
+            },
+            .mathfunc => {
+                try opMathFunc(named, it, f, code, stack, sp, i);
+                sp = sp - i.a + 1;
                 pc += 1;
                 i = &ins[pc];
                 continue :sw i.op;

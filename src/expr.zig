@@ -936,19 +936,40 @@ pub fn nextRand(it: *Interp) f64 {
 }
 
 pub fn callFunc(it: *Interp, f: Func, args: []const *Node) Error!Value {
+    var small: [8]Value = undefined;
+    const vals = if (args.len <= small.len) small[0..args.len] else try it.alloc().alloc(Value, args.len);
+    for (args, vals) |a, *v| v.* = try eval(it, a);
+    return applyFunc(it, f, vals);
+}
+
+/// A number argument of the function `f`. The name of `f` is only for
+/// the message of an error, so the common case does not make it.
+inline fn numOf(it: *Interp, v: Value, f: Func) Error!Value {
+    switch (v) {
+        .int => return v,
+        .double => |d| if (!std.math.isNan(d)) return v,
+        else => {},
+    }
+    return num(it, v, @tagName(f));
+}
+
+/// The built-in function `f` of `expr` on the values of its arguments,
+/// for the tree of an expression (`callFunc`) and the bytecode
+/// (`vm.opMathFunc`). The parser checked the count of the arguments.
+pub fn applyFunc(it: *Interp, f: Func, vals: []const Value) Error!Value {
     var buf: [3]Value = undefined;
-    const name = @tagName(f);
     if (f == .max or f == .min) {
-        var best = try num(it, try eval(it, args[0]), name);
-        for (args[1..]) |a| {
-            const v = try num(it, try eval(it, a), name);
+        var best = try numOf(it, vals[0], f);
+        for (vals[1..]) |a| {
+            const v = try numOf(it, a, f);
             const o = try orderOf(it, v, best) orelse continue;
             if (o == (if (f == .min) std.math.Order.lt else std.math.Order.gt)) best = v;
         }
         return best;
     }
-    if (f == .bool) return b2v(try truthy(it, try eval(it, args[0])));
-    for (args, 0..) |a, i| buf[i] = try num(it, try eval(it, a), name);
+    if (f == .bool) return b2v(try truthy(it, vals[0]));
+    const args = vals;
+    for (vals, 0..) |a, i| buf[i] = try numOf(it, a, f);
     const x = if (args.len > 0) buf[0] else Value{ .int = 0 };
     const fx = toF(x);
     const d: f64 = switch (f) {
