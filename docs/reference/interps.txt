@@ -72,6 +72,14 @@ flags: --allow package
 names: tcl::tm::roots tcl::tm::UnknownHandler
 ex: foreach p [tcl::tm::path list] {tcl::tm::path remove $p}; tcl::tm::path add /a /b; tcl::tm::path list => /b /a
 
+== pkg_mkIndex
+syn: pkg_mkIndex ?-direct? ?-lazy? ?-load PATTERN? ?-verbose? ?--? dir ?pattern ...?
+does: Writes the `pkgIndex.tcl` file of a folder, as Tcl does. Each file of the patterns (the default is `*.tcl` and the files of shared libraries) goes into a new child interpreter, which notes the packages that the file provides and the commands that it makes. A file that fails goes again after the others, with the packages that the others provide. `-direct` (the default) gives an ifneeded script that sources the files, and `-lazy` one that puts the commands in `auto_index` through `tclPkgSetup`. `pkg::create` gives one line of such an index.
+cap: package
+flags: --allow package,interp,file,channels
+names: pkg::create tcl::Pkg::CompareExtension tcl::Pkg::Index
+ex: pkg::create -name foo -version 1.0 -source foo.tcl => package ifneeded foo 1.0 [list source [file join $dir foo.tcl]]
+
 == auto_load
 syn: auto_load command ?namespace?
 does: Defines a command from `auto_index`, which the `tclIndex` files of `auto_path` and `tclPkgSetup` (the lazy `pkgIndex.tcl` form) fill. Gives 1 when the command exists after it. The `unknown` command calls it for a missing command.
