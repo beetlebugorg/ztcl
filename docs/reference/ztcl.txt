@@ -19,6 +19,19 @@ syn: ztcl::probe subcommand ?arg ...?
 does: Records the values of a running script at a proc, a line, a command, a variable, or an error, with no change to the script, and gives the records back as dicts or JSON.
 page: modules/probe.md
 
+== ztcl::tls
+syn: ztcl::tls socket ?-servername name? ?-alpn protocols? ?-cadata pem? ?-verify boolean? host port
+does: A TLS 1.3 client: connects to `host` on `port`, runs the handshake, checks the certificate chain and the host name, and gives a channel. Load it with `package require ztcl::tls`.
+sub: socket ?option value ...? host port | Opens the connection and gives the name of the channel. A failed handshake closes the connection and gives an error.
+opt: -servername name | The DNS name for SNI and for the check of the certificate. The default is `host`.
+opt: -alpn protocols | A list of up to 8 ALPN protocols.
+opt: -cadata pem | The trust anchors as PEM text, in place of the store of the system.
+opt: -verify boolean | With 0, the chain and the host name are not checked. The default is 1.
+cap: socket
+flags: --allow socket,channels
+page: modules/tls.md
+names: ztcl::tls::socket
+
 == ztcl::pty
 syn: ztcl::pty subcommand ?arg ...?
 does: Runs a program in a pseudo terminal, for `ztcl::vt` and for tests of terminal apps.

@@ -4,7 +4,7 @@
 # the module table and the small `package`. The row "hello" is the test
 # module of task 01.
 row	bytes	note
-table	10000	module table and package require
+table	14000	module table and package require, and the code that more than one module uses; measured 7,408 before ztcl::tls and 12,768 with it
 hello	12000	test modules ztcl::hello and ztcl::hellonet; while hello is the only module, its row also has the module table
 probe	100000	ztcl::probe: the engine, the command, and the tape of ztcl debug, measured 102,080 (native, with the tape; 82,240 before it); a build without the module has no probe code, and ztcl.wasm leaves it out
 json	115000	ztcl::json and the tcllib json names; task 05 measured 104 480 (two forms of the walk, the writer, and the tcllib names)

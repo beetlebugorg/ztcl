@@ -2,6 +2,7 @@
 # Runs the ztcl TLS client against `openssl s_server` on 127.0.0.1.
 #
 #   tools/tls-interop.sh [--quick] client
+#   tools/tls-interop.sh socket
 #
 # The script makes a CA and a leaf for each key kind (P-256, P-384,
 # Ed25519, RSA 2048) with `openssl`, in a temporary folder. The client
@@ -9,15 +10,22 @@
 # and with a HelloRetryRequest. It must refuse a wrong host name, a leaf
 # of an unknown CA, and an expired leaf. --quick runs each suite and each
 # group with the P-256 key only, and each key kind with the default
-# suite and group.
+# suite and group. `socket` runs the same server checks with the
+# `ztcl::tls socket` command of zig-out/bin/ztcl.
 # SPDX-License-Identifier: BSD-2-Clause
 set -eu
 quick=0
 if [ "${1:-}" = --quick ]; then quick=1; shift; fi
-[ "${1:-}" = client ] || { echo "usage: tools/tls-interop.sh [--quick] client" >&2; exit 2; }
+mode=${1:-}
+[ "$mode" = client ] || [ "$mode" = socket ] || { echo "usage: tools/tls-interop.sh [--quick] client|socket" >&2; exit 2; }
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-zig build tls-interop >/dev/null
-bin=$root/zig-out/bin/tls-interop
+if [ "$mode" = client ]; then
+    zig build tls-interop >/dev/null
+    bin=$root/zig-out/bin/tls-interop
+else
+    zig build >/dev/null
+    ztcl=$root/zig-out/bin/ztcl
+fi
 tmp=$(mktemp -d)
 pid=
 cleanup() {
@@ -78,6 +86,43 @@ expect() {
         fail=$((fail + 1)); echo "FAIL $name: want $want, got: $out"
     fi
 }
+if [ "$mode" = socket ]; then
+    # tcl NAME WANT SCRIPT: the script gets $port and $ca, and its last
+    # line of output must be WANT.
+    tcl() {
+        printf 'package require ztcl::tls\nset port %s\nset f [open ca.pem]\nset ca [read $f]\nclose $f\n%s\n' "$port" "$3" > case.tcl
+        out=$("$ztcl" --allow socket,channels,file case.tcl 2>&1 | tail -n 1)
+        if [ "$out" = "$2" ]; then
+            pass=$((pass + 1)); echo "pass $1: $out"
+        else
+            fail=$((fail + 1)); echo "FAIL $1: want $2, got: $out"
+        fi
+    }
+    get='set s [ztcl::tls socket -servername localhost.test -cadata $ca 127.0.0.1 $port]
+puts -nonewline $s "GET / HTTP/1.0\r\n\r\n"
+flush $s
+set line [gets $s]
+read $s
+close $s
+puts $line'
+    for k in p256 p384 ed25519 rsa; do
+        serve $k.pem $k.key
+        tcl "key $k" "HTTP/1.0 200 ok" "$get"
+    done
+    serve p256.pem p256.key -alpn h2,http/1.1
+    tcl "alpn" "HTTP/1.0 200 ok" "$(printf '%s' "$get" | sed 's/-cadata/-alpn {h2 http\/1.1} -cadata/')"
+    tcl "wrong host" "ZTCL TLS CERTIFICATE HostName" 'catch {ztcl::tls socket -servername other.test -cadata $ca 127.0.0.1 $port} m o; puts [dict get $o -errorcode]'
+    tcl "unknown CA" "ZTCL TLS CERTIFICATE UnknownIssuer" 'set f [open other.pem]; set o2 [read $f]; close $f; catch {ztcl::tls socket -servername localhost.test -cadata $o2 127.0.0.1 $port} m o; puts [dict get $o -errorcode]'
+    tcl "no verify" "HTTP/1.0 200 ok" "$(printf '%s' "$get" | sed 's/-cadata \$ca/-verify 0/')"
+    tcl "large write" "HTTP/1.0 200 ok" "$(printf '%s' "$get" | sed 's/GET \/ HTTP\/1.0\\r\\n/GET \/ HTTP\/1.0\\r\\nX: [string repeat a 40000]\\r\\n/')"
+    if [ $expired = 1 ]; then
+        serve expired.pem p256.key
+        tcl "expired leaf" "ZTCL TLS CERTIFICATE Expired" 'catch {ztcl::tls socket -servername localhost.test -cadata $ca 127.0.0.1 $port} m o; puts [dict get $o -errorcode]'
+    fi
+    echo "$pass pass, $fail fail"
+    [ $fail = 0 ]
+    exit
+fi
 for k in p256 p384 ed25519 rsa; do
     serve $k.pem $k.key
     expect ok "key $k" ca.pem localhost.test

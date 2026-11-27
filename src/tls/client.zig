@@ -202,6 +202,10 @@ pub const Client = struct {
     write_closed: bool = false,
     /// The alert of the last error of the client.
     sent_alert: ?Alert = null,
+    /// The fatal alert of the server, as its code.
+    got_alert: ?u8 = null,
+    /// The error of `chain.verify`, for the error text of a caller.
+    chain_error: ?chain.Error = null,
     /// The group of the HelloRetryRequest.
     hrr_group: ?Group = null,
     suite: Suite = .aes_128_gcm_sha256,
@@ -427,6 +431,7 @@ pub const Client = struct {
                     return .closed;
                 }
                 c.state = .failed;
+                c.got_alert = data[1];
                 return error.AlertReceived;
             },
             .application_data => {
@@ -705,13 +710,16 @@ pub const Client = struct {
         const leaf = &certs[0];
         const skip = builtin.is_test and c.opts.test_skip_signature;
         if (c.opts.verify_chain and !skip) {
-            chain.verify(leaf, certs[1..n], c.opts.roots, .{ .now = c.opts.now, .host = c.opts.host }) catch |e| return c.fail(w, switch (e) {
-                error.UnknownIssuer => .unknown_ca,
-                error.Expired => .certificate_expired,
-                error.Unsupported => .unsupported_certificate,
-                error.HostName, error.BadUsage, error.NameConstraint => .certificate_unknown,
-                else => .bad_certificate,
-            });
+            chain.verify(leaf, certs[1..n], c.opts.roots, .{ .now = c.opts.now, .host = c.opts.host }) catch |e| {
+                c.chain_error = e;
+                return c.fail(w, switch (e) {
+                    error.UnknownIssuer => .unknown_ca,
+                    error.Expired => .certificate_expired,
+                    error.Unsupported => .unsupported_certificate,
+                    error.HostName, error.BadUsage, error.NameConstraint => .certificate_unknown,
+                    else => .bad_certificate,
+                });
+            };
         }
         c.leaf_kind = leaf.key_kind orelse return c.fail(w, .unsupported_certificate);
         if (leaf.key.len > c.leaf_key.len) return c.fail(w, .unsupported_certificate);

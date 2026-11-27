@@ -1259,6 +1259,67 @@ test "a module that needs a capability gives an error" {
     )));
 }
 
+test "ztcl::tls needs socket and channels" {
+    if (modules.find("ztcl::tls") == null) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try std.testing.expectEqualStrings("1 {ZT PACKAGE CAPABILITY channels}", try it.str(try it.eval(
+        \\list [catch {package require ztcl::tls} m o] [dict get $o -errorcode]
+    )));
+    try it.allow(@backingInt(tcl.interp.Capability.socket) | @backingInt(tcl.interp.Capability.channels));
+    try std.testing.expectEqualStrings("0.1", try it.str(try it.eval("package require ztcl::tls")));
+    // The default network policy allows loopback only.
+    try std.testing.expectEqualStrings("1 {ZTCL NET DENIED}", try it.str(try it.eval(
+        \\list [catch {ztcl::tls socket 192.0.2.1 443} m o] [dict get $o -errorcode]
+    )));
+    try std.testing.expectEqualStrings("1 {bad option \"-x\": must be -alpn, -cadata, -servername, or -verify}", try it.str(try it.eval(
+        \\list [catch {ztcl::tls socket -x 1 127.0.0.1 443} m] $m
+    )));
+    try std.testing.expectEqualStrings("1 {-cadata has no certificate}", try it.str(try it.eval(
+        \\list [catch {ztcl::tls socket -cadata junk 127.0.0.1 443} m] $m
+    )));
+}
+
+/// A TCP server on loopback that reads the ClientHello, answers with
+/// bytes that are not TLS, and closes.
+const NotTls = struct {
+    server: std.Io.net.Server,
+
+    fn run(n: *NotTls) void {
+        const io = std.testing.io;
+        const s = n.server.accept(io) catch return;
+        defer s.close(io);
+        var buf: [512]u8 = undefined;
+        var r = s.reader(io, &buf);
+        _ = r.interface.peek(5) catch return;
+        var wb: [64]u8 = undefined;
+        var w = s.writer(io, &wb);
+        w.interface.writeAll("HTTP/1.0 400 Bad Request\r\n\r\n") catch return;
+        w.interface.flush() catch return;
+    }
+};
+
+test "ztcl::tls socket closes the channel after a failed handshake" {
+    if (modules.find("ztcl::tls") == null) return error.SkipZigTest;
+    const io = std.testing.io;
+    const addr = try std.Io.net.IpAddress.parse("127.0.0.1", 0);
+    var n: NotTls = .{ .server = try addr.listen(io, .{}) };
+    defer n.server.deinit(io);
+    const th = try std.Thread.spawn(.{}, NotTls.run, .{&n});
+    defer th.join();
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.socket) | @backingInt(tcl.interp.Capability.channels));
+    const script = try std.fmt.allocPrint(std.testing.allocator,
+        \\package require ztcl::tls
+        \\list [catch {{ztcl::tls socket -verify 0 127.0.0.1 {d}}} m o] [lrange [dict get $o -errorcode] 0 1] [llength [lsearch -all [chan names] sock*]]
+    , .{n.server.socket.address.getPort()});
+    defer std.testing.allocator.free(script);
+    try std.testing.expectEqualStrings("1 {ZTCL TLS} 0", try it.str(try it.eval(script)));
+}
+
 test "package provides Tcl at the patch level" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);

@@ -81,6 +81,7 @@ PAGES = [
     ("docs/modules/disasm.md", "modules/disasm/", "Modules", "ztcl::disasm"),
     ("docs/modules/pty.md", "modules/pty/", "Modules", "ztcl::pty"),
     ("docs/modules/watch.md", "modules/watch/", "Modules", "ztcl::watch"),
+    ("docs/modules/tls.md", "modules/tls/", "Modules", "ztcl::tls"),
     ("docs/modules/open.md", "modules/open/", "Modules", "ztcl::open"),
     ("docs/modules/notify.md", "modules/notify/", "Modules", "ztcl::notify"),
     ("docs/modules/vm.md", "modules/vm/", "Modules", "ztcl::vm"),

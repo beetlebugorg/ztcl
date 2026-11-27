@@ -565,6 +565,13 @@ syn: ztcl::json subcommand ?arg ...?
 syn: ztcl::vt subcommand ?arg ...?
 == ztcl::probe
 syn: ztcl::probe subcommand ?arg ...?
+== ztcl::tls ztcl::tls::socket
+syn: ztcl::tls socket ?-servername name? ?-alpn protocols? ?-cadata pem? ?-verify boolean? host port
+sub: socket ?option value ...? host port | Opens the connection and gives the name of the channel.
+opt: -servername name | The DNS name for SNI and for the check of the certificate.
+opt: -alpn protocols | A list of up to 8 ALPN protocols.
+opt: -cadata pem | The trust anchors as PEM text, in place of the store of the system.
+opt: -verify boolean | With 0, the chain and the host name are not checked.
 == ztcl::pty
 syn: ztcl::pty subcommand ?arg ...?
 == ztcl::watch
