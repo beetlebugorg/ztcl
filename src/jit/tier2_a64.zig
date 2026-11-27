@@ -1445,6 +1445,15 @@ pub fn assemble(a: Allocator, s: *Asm, code: *const vm.Code, info: *const verify
             // used.
             try e.cmpWord(abi.it, l.it_compute_limit, pt.steps);
             try s.bcond(.lo, try e.exit(pc, 0));
+            // The memory check of a step, as in tier 1: a stop of the
+            // thread (`thread.stopWorker`) stores zero in `mem_limit`, and
+            // a loop with no call sees it only here. `x16` and `x17` are
+            // free here, and `x14` can hold a value of the instruction
+            // before.
+            try e.ldr(tmp, abi.it, l.it_mem_trip);
+            try e.ldr(t16, abi.it, l.it_mem_limit);
+            try s.cmpR(tmp, t16, .lsl, 0);
+            try s.bcond(.hs, try e.exit(pc, 0));
             try e.addWord(abi.it, l.it_compute_limit, -@as(i64, pt.steps));
         }
         if (!p.seen[k]) {
