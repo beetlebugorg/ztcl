@@ -20,6 +20,8 @@ With a virtio-net device on the bus (virtio device id 1, from `-net nat`), the a
 
 ## The client mode
 
+`/sbin/agent connect -framed PORT` is the framed relay, for a listener with `-framed 1` (`src/vmrelay.zig` on the host). It sends the preamble `ZTRELAY1`, then frames in each direction: a kind byte (0 data, 1 end), a length (u32, little-endian, at most 65,536), and the data. The end of its input is an end frame, and an end frame of the host closes its output, so a half-close needs no shutdown of vsock, which Virtualization.framework loses when its buffer to the host holds data. The host turns the frames into a stream socket for the script. A connection with no preamble closes.
+
 `/sbin/agent connect PORT` connects to vsock port `PORT` of the host (CID 2) and copies its standard input to the connection and the connection to its standard output, until both close. It exits 1 when the host has no listener there. The host listens with `ztcl::vm listen`; dockyard's guest proxy relays the connections of `127.0.0.1:3128` in the guest this way.
 
 ## Frames
@@ -34,7 +36,7 @@ Numbers are little endian. `len` counts the type byte and the payload, and is at
 
 ## A connection
 
-1. The agent sends `HELLO`: `version u16` (1), `features u32` (bit 0 `exec`, bit 1 `mount`, bit 2 `log`, bit 3 `resume`), `boot_main u64`, `boot_listen u64`.
+1. The agent sends `HELLO`: `version u16` (1), `features u32` (bit 0 `exec`, bit 1 `mount`, bit 2 `log`, bit 3 `resume`, bit 4 the framed relay), `boot_main u64`, `boot_listen u64`.
 2. The host sends one request: `EXEC`, `MOUNT`, `LOG`, `PING`, or `RESUME`.
 3. The agent answers as below, and closes the connection after its last frame. A new request takes a new connection.
 

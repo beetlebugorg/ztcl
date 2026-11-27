@@ -52,6 +52,28 @@ vwait ::served
 after 200
 check "a connection of the guest to the host" [dict get [ztcl::vm exec $vm /bin/busybox cat /tmp/out] stdout] "host got: hi\n"
 ztcl::vm unlisten $vm 3000
+
+# -framed 1: 256 KiB and the end of the stream, which a shutdown of vsock
+# loses on Virtualization.framework, and the answer of the host after it.
+proc framed {ch} { fconfigure $ch -translation binary -blocking 0; fileevent $ch readable [list framedRead $ch] }
+proc framedRead {ch} {
+    append ::framed_in [read $ch]
+    if {[eof $ch]} {
+        fconfigure $ch -blocking 1
+        puts -nonewline $ch "got [string length $::framed_in]"
+        close $ch
+        set ::framed_done 1
+    }
+}
+set ::framed_in ""
+ztcl::vm listen $vm 3001 -command framed -framed 1
+ztcl::vm exec $vm /bin/busybox sh -c {(/bin/busybox dd if=/dev/zero bs=65536 count=4 2>/dev/null | /sbin/agent connect -framed 3001) > /tmp/framed 2>&1 </dev/null &}
+after 5000 {set ::framed_done timeout}
+vwait ::framed_done
+after 200
+check "-framed: the end of 256 KiB" $::framed_done 1
+check "-framed: the answer after the end" [dict get [ztcl::vm exec $vm /bin/busybox cat /tmp/framed] stdout] "got 262144"
+ztcl::vm unlisten $vm 3001
 check "no connection after unlisten" [dict get [ztcl::vm exec $vm /bin/busybox sh -c {echo x | /sbin/agent connect 3000 2>/dev/null; echo $?}] stdout] "1\n"
 ztcl::vm stop $vm -force
 check "a stopped guest" [ztcl::vm status $vm] stopped

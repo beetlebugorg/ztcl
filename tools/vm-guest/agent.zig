@@ -23,7 +23,9 @@ const port_probe: u32 = 1025;
 /// The port of the resume prelude, served with no fork (see `resumePort`).
 const port_resume: u32 = 1027;
 const version: u16 = 1;
-const features: u32 = 0b1111;
+/// Bit 0 exec, bit 1 mount, bit 2 log, bit 3 resume, bit 4 the framed
+/// relay of `agent connect -framed` (docs/dev/vm-agent.md).
+const features: u32 = 0b11111;
 const max_frame = (1 << 20) + 1;
 
 const t_hello = 0x01;
@@ -139,9 +141,11 @@ pub fn main(init: std.process.Init.Minimal) void {
     // `agent connect PORT`: a client of the host on vsock, for the tests
     // of `ztcl::vm listen` and for a relay of a program of the guest.
     const argv = init.args.vector;
-    if (argv.len == 3 and std.mem.eql(u8, std.mem.sliceTo(argv[1], 0), "connect")) {
-        const port = std.fmt.parseInt(u32, std.mem.sliceTo(argv[2], 0), 10) catch return say("agent: bad port\n");
-        return relay(port);
+    if (argv.len >= 3 and std.mem.eql(u8, std.mem.sliceTo(argv[1], 0), "connect")) {
+        const framed = argv.len == 4 and std.mem.eql(u8, std.mem.sliceTo(argv[2], 0), "-framed");
+        if (argv.len != 3 and !framed) return say("agent: usage: agent connect ?-framed? PORT\n");
+        const port = std.fmt.parseInt(u32, std.mem.sliceTo(argv[argv.len - 1], 0), 10) catch return say("agent: bad port\n");
+        return if (framed) relayFramed(port) else relay(port);
     }
     times[0] = bootNs();
     if (linux.getpid() == 1) {
@@ -568,10 +572,15 @@ const VMADDR_CID_HOST: u32 = 2;
 
 /// Connects to `port` of the host and copies stdin to the connection and
 /// the connection to stdout, until both ends close.
-fn relay(port: u32) void {
+fn connectHost(port: u32) i32 {
     const fd: i32 = @intCast(ok(linux.socket(AF_VSOCK, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0)) orelse fail("agent: no vsock\n"));
     var addr: SockaddrVm = .{ .port = port, .cid = VMADDR_CID_HOST };
     _ = ok(linux.connect(fd, @ptrCast(&addr), @sizeOf(SockaddrVm))) orelse fail("agent: no connection to the host\n");
+    return fd;
+}
+
+fn relay(port: u32) void {
+    const fd = connectHost(port);
     var in_open = true;
     var buf: [65536]u8 = undefined;
     while (true) {
@@ -834,3 +843,75 @@ const net = struct {
         return if (kind == want) l else null;
     }
 };
+
+/// The framed relay (`agent connect -framed PORT`): the preamble
+/// `ZTRELAY1`, then in each direction frames of a kind byte (0 data, 1 end)
+/// and a length (u32, little-endian), the data after it. The end of
+/// stdin is an end frame, and an end frame of the host closes stdout, so
+/// a half-close works with no shutdown of vsock, which
+/// Virtualization.framework loses when its buffer to the host holds data.
+const relay_preamble = "ZTRELAY1";
+const relay_data = 0;
+const relay_end = 1;
+
+fn sendRelay(fd: i32, kind: u8, payload: []const u8) void {
+    var head: [5]u8 = undefined;
+    head[0] = kind;
+    std.mem.writeInt(u32, head[1..5], @intCast(payload.len), .little);
+    var iov = [2]std.posix.iovec_const{ .{ .base = &head, .len = 5 }, .{ .base = payload.ptr, .len = payload.len } };
+    const total = 5 + payload.len;
+    const n = ok(linux.writev(fd, &iov, 2)) orelse return;
+    if (n == total) return;
+    if (n < 5) {
+        writeAll(fd, head[n..]);
+        writeAll(fd, payload);
+    } else writeAll(fd, payload[n - 5 ..]);
+}
+
+fn relayFramed(port: u32) void {
+    const fd = connectHost(port);
+    writeAll(fd, relay_preamble);
+    var in_open = true;
+    var out_open = true;
+    var buf: [65536]u8 = undefined;
+    // The frames of the host: a header, then its data.
+    var rbuf: [65536 + 5]u8 = undefined;
+    var have: usize = 0;
+    while (in_open or out_open) {
+        var fds = [2]linux.pollfd{
+            .{ .fd = if (in_open) 0 else -1, .events = linux.POLL.IN, .revents = 0 },
+            .{ .fd = fd, .events = linux.POLL.IN, .revents = 0 },
+        };
+        _ = ok(linux.poll(&fds, 2, -1)) orelse continue;
+        if (fds[0].revents != 0) {
+            const n = ok(linux.read(0, &buf, buf.len)) orelse 0;
+            if (n == 0) {
+                in_open = false;
+                sendRelay(fd, relay_end, "");
+            } else sendRelay(fd, relay_data, buf[0..n]);
+        }
+        if (fds[1].revents != 0) {
+            const n = ok(linux.read(fd, rbuf[have..].ptr, rbuf.len - have)) orelse 0;
+            if (n == 0) break;
+            have += n;
+            var at: usize = 0;
+            while (have - at >= 5) {
+                const len = std.mem.readInt(u32, rbuf[at + 1 ..][0..4], .little);
+                if (len > 65536) fail("agent: bad relay frame\n");
+                if (have - at < 5 + len) break;
+                switch (rbuf[at]) {
+                    relay_data => if (out_open) writeAll(1, rbuf[at + 5 ..][0..len]),
+                    relay_end => if (out_open) {
+                        out_open = false;
+                        _ = linux.close(1);
+                    },
+                    else => fail("agent: bad relay frame\n"),
+                }
+                at += 5 + len;
+            }
+            std.mem.copyForwards(u8, rbuf[0 .. have - at], rbuf[at..have]);
+            have -= at;
+        }
+    }
+    _ = linux.close(fd);
+}
