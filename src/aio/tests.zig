@@ -62,7 +62,7 @@ const Log = struct {
 
 fn noop(_: *Loop, _: *Completion) void {}
 
-test "accept, connect, write, and read on loopback" {
+test "accept, connect, write, writev, and read on loopback" {
     for (backends) |b| {
         var l = (try open(b)) orelse continue;
         defer l.deinit();
@@ -88,6 +88,15 @@ test "accept, connect, write, and read on loopback" {
         try l.runAll();
         try std.testing.expectEqual(@as(i32, 5), wr.result);
         try std.testing.expectEqualStrings("hello", buf[0..@intCast(rd.result)]);
+        // A writev sends its buffers in order.
+        const iov = [_]std.posix.iovec_const{ .{ .base = "ab", .len = 2 }, .{ .base = "cde", .len = 3 } };
+        rd = .{ .op = .{ .read = .{ .fd = sfd, .buf = &buf } }, .callback = noop };
+        try l.submit(&rd);
+        wr = .{ .op = .{ .writev = .{ .fd = cfd, .iov = &iov } }, .callback = noop };
+        try l.submit(&wr);
+        try l.runAll();
+        try std.testing.expectEqual(@as(i32, 5), wr.result);
+        try std.testing.expectEqualStrings("abcde", buf[0..@intCast(rd.result)]);
         // The end of the stream reads as 0.
         sys.shutdownWrite(cfd);
         rd = .{ .op = .{ .read = .{ .fd = sfd, .buf = &buf } }, .callback = noop };

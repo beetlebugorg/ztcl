@@ -265,7 +265,7 @@ The interface of `aio` is open (see questions). An implementation of `std.Io` ne
 
 ### The aio loop on Linux (task 06)
 
-`src/aio/` has the completion interface of the paragraph above, for Linux. A `Completion` has an operation (accept, connect, read, write, or a timer), a callback, and a result: the count of bytes, the new descriptor, or 0, and a negative errno for an error. `Loop.submit` starts the operation, `Loop.run` waits with an optional time limit and runs the callbacks, `Loop.cancel` ends an operation with `-ECANCELED`, and `Loop.wake` ends a wait from another thread. The loop has no interpreter and no `std.Io`. `src/event.zig` does not use it yet.
+`src/aio/` has the completion interface of the paragraph above, for Linux. A `Completion` has an operation (accept, connect, read, write, writev, or a timer), a callback, and a result: the count of bytes, the new descriptor, or 0, and a negative errno for an error. `Loop.submit` starts the operation, `Loop.run` waits with an optional time limit and runs the callbacks, `Loop.cancel` ends an operation with `-ECANCELED`, and `Loop.wake` ends a wait from another thread. The loop has no interpreter and no `std.Io`. `src/event.zig` does not use it yet.
 
 - `uring.zig`: one SQE for each operation on `std.os.linux.IoUring`. A wait with a time limit adds a timeout with a count of one, so no timeout stays in the ring after the wait.
 - `epoll.zig`: the system call at once, then a level-triggered wait for the read side or the write side of the descriptor. Timers are a list sorted by deadline. One operation can wait on each side of a descriptor.
@@ -795,11 +795,14 @@ The RSS of the server stayed under 3 MB.
 | 1 | 1 | 13 bytes | 22,381 | 18,446 | 1.21 |
 | 4 | 32 | 13 bytes | 317,872 | 140,625 | 2.26 |
 | 64 | 100 | 13 bytes | 307,522 | 105,771 | 2.91 |
-| 8 | 8 | 65,536 bytes | 17,725 | 16,798 | 1.06 |
+| 8 | 8 | 65,536 bytes, a copy of the body (`--copy on`) | 17,725 | 16,798 | 1.06 |
+| 8 | 8 | 65,536 bytes, no copy (`respondRef`, the default) | 28,088 | 16,586 | 1.69 |
 
 - nghttpd sends more header fields (`server`, `date`, `content-length`, `last-modified`) than `h2-serve`, so a row of small bodies is part HPACK work.
 - With `-t 1`, h2load itself is the limit near 320,000 requests/s: `zig build h2-load` gets 1,176,542 requests/s from the same server (the table above).
-- With a body of 64 KiB, the two servers are equal: the copy of the body into the output buffer is the cost. The next step removes it (a write of the body slice, with no copy).
+- With a copy of a body of 64 KiB, the two servers are equal: the copy into the output buffer is the cost. `Conn.respondRef` removes it. The DATA frames point at the body of the caller, `Conn.pendingVecs` gives the frame headers and the body slices as iovecs, and `h2-serve` sends them with the `writev` op of `aio`. A run of the copy and the no-copy server in the same minute gave 19,182 and 28,088 requests/s.
+- `respondRef` copies a piece of a body under 1 KiB: one more iovec costs more than the copy. Before that rule, the row of 4 connections and 32 streams fell from 317,872 to 261,786 requests/s; with it, the row gives 335,236.
+- The body of `respondRef` must stay valid and unchanged until the end of the connection. The HTTP server of task 12 needs a release callback for each response, for bodies that do not live that long.
 
 #### Conformance
 
@@ -819,7 +822,7 @@ The sizes of all the blocks of the `raw-data` stories, for each encoder of the c
 | `hpack.zig`, no Huffman | 455,386 |
 | go-hpack | 993,735 |
 
-The next parts: `h2` over `ztcl::tls` with ALPN, writes of a response body with no copy, and the HTTP server of task 12.
+The next parts: `h2` over `ztcl::tls` with ALPN, and the HTTP server of task 12.
 
 ## HTTP/3 and QUIC (later)
 
