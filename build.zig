@@ -89,7 +89,6 @@ pub fn build(b: *std.Build) void {
         .link_libc = libc,
     });
     ztcl.addOptions("build_options", gc_options);
-    addCrypto(b, ztcl);
     addVt(b, ztcl, target, optimize);
 
     const tests = b.addTest(.{ .root_module = ztcl });
@@ -342,7 +341,6 @@ pub fn build(b: *std.Build) void {
     const p3_lib = b.createModule(.{ .root_source_file = b.path("src/ztcl.zig"), .target = p3_target, .optimize = .ReleaseFast });
     p3_lib.addOptions("build_options", gc_options);
     addVt(b, p3_lib, p3_target, .ReleaseFast);
-    addCrypto(b, p3_lib);
     const p3_core = b.addExecutable(.{ .name = "ztcl-p3", .root_module = b.createModule(.{
         .root_source_file = b.path("src/wasi/run.zig"),
         .target = p3_target,
@@ -388,7 +386,6 @@ pub fn build(b: *std.Build) void {
     });
     fast.addOptions("build_options", gc_options);
     addVt(b, fast, target, runner_optimize);
-    addCrypto(b, fast);
 
     const exe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -439,7 +436,6 @@ pub fn build(b: *std.Build) void {
         const lib = b.createModule(.{ .root_source_file = b.path("src/ztcl.zig"), .target = rt, .optimize = .small });
         lib.addOptions("build_options", opts);
         addVt(b, lib, rt, .small);
-        addCrypto(b, lib);
         rt_mods[ri] = lib;
         const rexe = b.addExecutable(.{ .name = "ztcl", .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
@@ -778,7 +774,11 @@ fn addCextStubs(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.b
     return m;
 }
 
+/// Gives a module of the interpreter the VT module and the modules of
+/// src/crypto (addCrypto), so each module that can reach src/tls has
+/// them.
 fn addVt(b: *std.Build, m: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    addCrypto(b, m);
     const dep = b.dependency("ghostty", .{ .target = target, .optimize = optimize, .simd = false, .@"emit-lib-vt" = true, .@"vt-features" = @as([]const u8, "-kitty_graphics") });
     m.addImport("ghostty-vt", dep.module("ghostty-vt"));
 }
