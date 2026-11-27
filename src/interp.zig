@@ -834,6 +834,18 @@ pub const Counting = struct {
         return false;
     }
 
+    /// The check of a growth in place to `new_len` bytes. The check uses
+    /// the full new length, as the copy to a new block does. The child
+    /// allocator grows a block in place only when the next addresses are
+    /// free, and the JIT regions and the system change those addresses.
+    /// So a check of only the added bytes stops a script at a different
+    /// point with the JIT on and off.
+    fn fitsGrowth(c: *Counting, new_len: usize) bool {
+        if (!c.fits(new_len)) return false;
+        c.mem_peak = @max(c.mem_peak, c.used +| new_len);
+        return true;
+    }
+
     /// Clears `refused` after the error reached the top level.
     pub fn clearRefused(c: *Counting) void {
         if (!c.refused) return;
@@ -896,7 +908,7 @@ pub const Counting = struct {
 
     fn resize(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ra: usize) bool {
         const c: *Counting = @ptrCast(@alignCast(ctx));
-        if (new_len > memory.len and !c.fits(new_len - memory.len)) return false;
+        if (new_len > memory.len and !c.fitsGrowth(new_len)) return false;
         if (!c.child.rawResize(memory, alignment, new_len, ra)) return false;
         c.used = c.used - memory.len + new_len;
         c.sync();
@@ -905,7 +917,7 @@ pub const Counting = struct {
 
     fn remap(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ra: usize) ?[*]u8 {
         const c: *Counting = @ptrCast(@alignCast(ctx));
-        if (new_len > memory.len and !c.fits(new_len - memory.len)) return null;
+        if (new_len > memory.len and !c.fitsGrowth(new_len)) return null;
         const p = c.child.rawRemap(memory, alignment, new_len, ra) orelse return null;
         c.used = c.used - memory.len + new_len;
         c.sync();

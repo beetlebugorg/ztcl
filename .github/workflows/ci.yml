@@ -259,6 +259,12 @@ jobs:
           done
       - name: Differential test of the JIT
         run: tools/jit-diff.sh -t
+      # Each program also runs at 4 random memory limits.
+      - name: Fuzzer of the JIT
+        run: |
+          for f in tests/jit/replay/*.tcl; do zig build jit-fuzz -- --replay "$f"; done
+          zig build jit-fuzz -- --seconds 600 --mem-runs 4
+          zig build jit-fuzz -- --seconds 600 --mem-runs 4 --tier2
 
   # The JIT on arm64 Linux, on each pull request: the unit tests, the
   # differential test, and the fuzzer for a bounded time. arm64 Linux has
@@ -289,11 +295,16 @@ jobs:
           zig build suite-runner
           tools/jit-diff.sh
           tools/jit-diff.sh -t
+      # Each program also runs at 4 random memory limits. A scheduled run
+      # fuzzes for longer.
       - name: Fuzzer of the JIT
+        env:
+          FUZZ_SECONDS: ${{ github.event_name == 'pull_request' && '120' || '900' }}
         run: |
           ulimit -v 6000000
-          zig build jit-fuzz -- --seconds 120
-          zig build jit-fuzz -- --seconds 120 --tier2
+          for f in tests/jit/replay/*.tcl; do zig build jit-fuzz -- --replay "$f"; done
+          zig build jit-fuzz -- --seconds "$FUZZ_SECONDS" --mem-runs 4
+          zig build jit-fuzz -- --seconds "$FUZZ_SECONDS" --mem-runs 4 --tier2
       # The wall times for docs/jit.md: the best of 5 runs of each script.
       - name: Time the JIT
         run: |

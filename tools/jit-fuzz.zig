@@ -2,7 +2,7 @@
 //!
 //!   zig build jit-fuzz -- [--seed N] [--count N] [--seconds N] [--tier2]
 //!                         [--stress N] [--expect-diff] [--out DIR]
-//!                         [--corpus DIR ...]
+//!                         [--corpus DIR ...] [--replay FILE] [--mem-runs N]
 //!
 //! A seed gives one random Tcl program. A small generator of
 //! pseudo-random numbers (splitmix64) gives the choices, so the same seed
@@ -36,6 +36,14 @@
 //! The compute limit of this mode is 200 000. `tests/jit/corpus/` has
 //! scripts of the review of milestone 1, and `tests/jit/found/` has each
 //! program that found a bug.
+//!
+//! `--mem-runs N` gives each program N runs with a random memory limit in
+//! place of one. The runs after the first use each JIT mode in turn.
+//!
+//! `--replay FILE` runs a file of `--out` again: the reference and the
+//! mode of its first line, with the compute limit, the memory limit, and
+//! the stress of that line. A difference prints the two results and ends
+//! with code 1. `tests/jit/replay/` has files of this form.
 //!
 //! `--asm FILE` reads rows of `tools/jit-asm-golden.sh --random N`. Each
 //! row has an instruction form, its operands, and the bytes of `zig cc`.
@@ -1009,6 +1017,10 @@ const Fuzz = struct {
     cfg: Config,
     out_dir: []const u8,
     expect_diff: bool,
+    /// The count of runs with a random memory limit for each program.
+    mem_runs: u32 = 1,
+    /// The runs with a random memory limit that stopped at the limit.
+    mem_stops: u64 = 0,
     ref: std.ArrayList(u8) = .empty,
     got: std.ArrayList(u8) = .empty,
     programs: u64 = 0,
@@ -1104,10 +1116,15 @@ const Fuzz = struct {
         var c = f.cfg;
         c.steps = r.below(x.steps + 1);
         if (!try f.pair(text, jm, c)) return f.report(text, seed, label, jm, c);
-        c = f.cfg;
         const base: usize = 64 << 10;
-        c.mem = base + @as(usize, @intCast(r.below(@max(x.peak, base) - base + 1)));
-        if (!try f.pair(text, jm, c)) return f.report(text, seed, label, jm, c);
+        for (0..f.mem_runs) |k| {
+            c = f.cfg;
+            c.mem = base + @as(usize, @intCast(r.below(@max(x.peak, base) - base + 1)));
+            // The later runs use each JIT mode in turn.
+            const mm = if (k == 0) jm else f.modes[1 + k % (f.modes.len - 1)];
+            if (!try f.pair(text, mm, c)) return f.report(text, seed, label, mm, c);
+            if (std.mem.indexOf(u8, f.ref.items, "too much memory") != null) f.mem_stops += 1;
+        }
         return true;
     }
 
@@ -1147,6 +1164,7 @@ const Fuzz = struct {
         const pf: f64 = @floatFromInt(f.programs);
         std.debug.print("mean bytecode instructions compiled at threshold 0: {d:.1} in {d:.2} functions\n", .{ @as(f64, @floatFromInt(f.ins)) / pf, @as(f64, @floatFromInt(f.compiled)) / pf });
         std.debug.print("programs that reached the compute limit: {d}, the memory limit: {d}, the nesting limit (depth not compared): {d}\n", .{ f.stopped_steps, f.stopped_mem, f.deep });
+        std.debug.print("runs with a random memory limit that stopped at the limit: {d}\n", .{f.mem_stops});
         std.debug.print("runs that reached the cap of 256 MiB (not compared): {d}\n", .{f.capped});
         if (f.t2_runs > 0) std.debug.print("tier 2: {d} loops compiled in {d} of {d} runs of the tier 2 modes, {d} exits\n", .{ f.t2_loops, f.t2_hit, f.t2_runs, f.t2_exits });
         if (f.marked == 0) return;
@@ -1171,7 +1189,8 @@ const usage =
     \\usage: jit-fuzz [--seed N] [--count N] [--seconds N] [--tier2] [--stress N]
     \\                [--expect-diff] [--out DIR] [--print N] [--verbose]
     \\                [--asm FILE] [--asm-a64 FILE] [--verify]
-    \\                [--corpus DIR ...] [--write DIR]
+    \\                [--corpus DIR ...] [--write DIR] [--replay FILE]
+    \\                [--mem-runs N]
     \\
 ;
 
@@ -1194,6 +1213,8 @@ pub fn main(init: std.process.Init) !void {
     var asm_a64_file: ?[]const u8 = null;
     var verify_mode = false;
     var write_dir: ?[]const u8 = null;
+    var replay_file: ?[]const u8 = null;
+    var mem_runs: u32 = 1;
     var k: usize = 1;
     while (k < args.len) : (k += 1) {
         const arg: []const u8 = args[k];
@@ -1231,6 +1252,12 @@ pub fn main(init: std.process.Init) !void {
         } else if (std.mem.eql(u8, arg, "--write") and has_value) {
             k += 1;
             write_dir = args[k];
+        } else if (std.mem.eql(u8, arg, "--mem-runs") and has_value) {
+            k += 1;
+            mem_runs = try std.fmt.parseInt(u32, args[k], 10);
+        } else if (std.mem.eql(u8, arg, "--replay") and has_value) {
+            k += 1;
+            replay_file = args[k];
         } else if (std.mem.eql(u8, arg, "--verify")) {
             verify_mode = true;
         } else if (std.mem.eql(u8, arg, "--verbose")) {
@@ -1262,6 +1289,7 @@ pub fn main(init: std.process.Init) !void {
         .cfg = .{ .stress = stress },
         .out_dir = out_dir,
         .expect_diff = expect_diff,
+        .mem_runs = mem_runs,
     };
     defer f.ref.deinit(a);
     defer f.got.deinit(a);
@@ -1269,6 +1297,10 @@ pub fn main(init: std.process.Init) !void {
     if (verify_mode) {
         const opts: tcl.jit.Options = .{ .threshold = 0, .tier2 = tier2, .tier2_count = 1, .stress = stress };
         return verifyFuzz(a, io, seed, count, seconds, start, verbose, opts);
+    }
+    if (replay_file) |path| {
+        if (!try replay(&f, path)) std.process.exit(1);
+        return;
     }
     var ok = true;
     if (corpus.items.len > 0) {
@@ -1320,6 +1352,59 @@ fn writePrograms(a: Allocator, io: Io, dir: []const u8, seed: u64, count: u64) !
         const path = try std.fmt.bufPrint(&buf, "{s}/prog-{d}.tcl", .{ dir, s });
         try Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = text });
     }
+}
+
+/// Runs a file that `report` wrote again: the reference and the mode of
+/// its first line, with the limits of that line. Prints the two results
+/// when they differ.
+fn replay(f: *Fuzz, path: []const u8) !bool {
+    const text = Io.Dir.cwd().readFileAlloc(f.io, path, f.a, .limited(1 << 20)) catch |e| {
+        std.debug.print("cannot read {s}: {t}\n", .{ path, e });
+        return false;
+    };
+    defer f.a.free(text);
+    const nl = std.mem.indexOfScalar(u8, text, '\n') orelse text.len;
+    const head = text[0..nl];
+    const prefix = "# jit-fuzz: ";
+    if (!std.mem.startsWith(u8, head, prefix)) {
+        std.debug.print("{s}: the first line is not a jit-fuzz line\n", .{path});
+        return false;
+    }
+    var mode: ?Mode = null;
+    var c = f.cfg;
+    var fields = std.mem.splitSequence(u8, head[prefix.len..], ", ");
+    while (fields.next()) |field| {
+        const sp = std.mem.lastIndexOfScalar(u8, field, ' ') orelse continue;
+        const key = field[0..sp];
+        const val = field[sp + 1 ..];
+        if (std.mem.eql(u8, key, "mode")) {
+            for (tier2_modes) |m| if (std.mem.eql(u8, m.name, val)) {
+                mode = m;
+            };
+        } else if (std.mem.eql(u8, key, "compute limit")) {
+            c.steps = try std.fmt.parseInt(u64, val, 10);
+        } else if (std.mem.eql(u8, key, "memory limit")) {
+            c.mem = try std.fmt.parseInt(usize, val, 10);
+        } else if (std.mem.eql(u8, key, "stress")) {
+            c.stress = try std.fmt.parseInt(u32, val, 10);
+        } else if (std.mem.eql(u8, key, "first failed allocation")) {
+            c.fail_from = try std.fmt.parseInt(u32, val, 10);
+        }
+    }
+    const m = mode orelse {
+        std.debug.print("{s}: no known mode in the first line\n", .{path});
+        return false;
+    };
+    const end = std.mem.indexOf(u8, text, "\n# The reference:\n") orelse text.len;
+    const prog = text[@min(nl + 1, end)..end];
+    if (!try f.pair(prog, m, c)) {
+        std.debug.print("DIFF {s}: mode {s}\n# The reference:\n{s}\n# The mode:\n{s}\n", .{ path, m.name, f.ref.items, f.got.items });
+        return false;
+    }
+    const at = std.mem.indexOf(u8, f.ref.items, "steps: ") orelse 0;
+    const stop = std.mem.indexOf(u8, f.ref.items, "\noutput:") orelse at;
+    std.debug.print("{s}: mode {s} is equal to the reference ({s})\n", .{ path, m.name, f.ref.items[at..stop] });
+    return true;
 }
 
 fn runCorpus(f: *Fuzz, dirs: []const []const u8) !bool {
