@@ -89,11 +89,18 @@ pub const Queue = struct {
 /// A chain of descriptors as host slices: the readable part, then the
 /// writable part.
 pub const Chain = struct {
-    const max = 64;
+    /// A chain has at most one descriptor for each entry of its queue
+    /// (virtio 1.2, 2.7.13), so a longer walk has a loop. With 64, a 9p
+    /// request of msize 262,144 (64 pages and the headers) did not fit:
+    /// the device answered with no bytes, and the request of the guest
+    /// waited forever.
+    pub const max = max_queue;
     bufs: [max][]u8 = undefined,
     writable: [max]bool = undefined,
     n: usize = 0,
 
+    /// The chain at `head`, or null when it is malformed: a descriptor
+    /// outside the guest memory or the queue, or a loop.
     pub fn read(q: *Queue, m: Mem, head: u16) ?Chain {
         var c: Chain = .{};
         var i = head;
