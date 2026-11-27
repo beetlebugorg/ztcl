@@ -67,3 +67,38 @@ Zig 0.17.0 has `-fincremental`. It is a flag of the build runner, so it applies 
 | No change, again | 378 | pass |
 
 The incremental state gave a broken object file on a build with no change, and the builds after a change were not much faster than a build from an empty cache. A fallback to a full build after a failure would add a full build to each such run. The CI jobs do not use `-fincremental`. Check it again with the next version of Zig.
+
+## Areas of a pull request (2026-11-27)
+
+Measured over the 278 CI runs of 2026-11-25 to 2026-11-27: a pull request run took 26.2 minutes from the push to the end of its last job (median; 52.9 at the 90th percentile). A job waited 7 minutes in the queue (median), because each run started about 13 jobs and many pull requests ran at the same time. The JIT job on arm64 Linux took 14.4 minutes, and it used the most job time (2,724 of 12,061 job-minutes).
+
+`tools/ci-changes.sh` puts each changed file of a pull request in the first area that it matches. A file that matches no area is in the area core. A change of a workflow, `build.zig`, `build.zig.zon`, or `tools/ci-changes.sh` runs each job. Pushes to main and the full runs run each job.
+
+| Area | Files |
+|---|---|
+| docs | `docs/`, the `.md` files at the top, `licenses/`, `specs/`, the tools of the site and of the reference pages |
+| jit | `src/jit/`, `src/jit.zig`, `src/disasm.zig`, `tests/jit/`, `tools/jit-*` |
+| vm | `src/vm/` (virtio, NAT), `src/kvm.zig`, `src/microvm.zig`, the other files of the microVMs, `src/uk/`, `tools/vm-guest/` |
+| wasm engine | `src/wasmrt/`, `src/wasm_spec.zig`, `src/wasm_fuzz.zig`, `tests/wasm/` |
+| cext | `src/cext/`, libztcl, the stubs, `tests/cext/`, `tools/cext/`, `tools/libztcl/` |
+| web | `web/`, `npm/`, `wit/`, `enclave/`, the wasm and WASI files of `src/`, `tests/web/`, `tests/point/`, the wasm tools |
+| stdlib | `src/tls/`, `src/crypto/`, `src/h2/`, `src/json/`, `src/text/` and their tools |
+| native | the files of one host OS, the unit test files, `src/shell/reference.txt`, `packaging/` |
+| core | each other file (the interpreter, `src/vm.zig`, channels, aio, `tools/`) |
+
+| Job | Runs when these areas change |
+|---|---|
+| Test, ztcl build, WebAssembly | each area except docs |
+| JIT (ubuntu-24.04-arm), unit tests | core, jit, vm, wasm engine, cext, stdlib, native |
+| JIT (ubuntu-24.04-arm), differential test and fuzzer | core, jit |
+| Tcl 8.6.16 suite | core, jit |
+| C packages (Linux) | core, jit, cext |
+| C packages (WebAssembly) | core, cext, web |
+| WebAssembly, compiled procs and point procs | core, jit, web |
+| WASI | core, web, stdlib, cext |
+| wasm engine | core, wasm engine, cext |
+| docs (the site, the examples of the pages, the format check) | docs |
+
+The JIT job on arm64 also skips the times of the JIT on pull requests: that step checks nothing.
+
+The job `Linux ok` needs each job of the run. It passes when each job passed or was skipped, and it fails when a job failed or was cancelled. Merge tools look at this one check.

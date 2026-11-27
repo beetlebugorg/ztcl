@@ -28,33 +28,40 @@ env:
 jobs:
   # Which parts of the repository changed: a pull request that touches
   # only docs and site files skips the build and test jobs of the code.
+  # Which parts of the repository changed. tools/ci-changes.sh maps each
+  # changed file of a pull request to an area, and each job runs only
+  # when an area that it tests changed (docs/dev/ci.md has the table).
+  # Pushes to main and the full runs run each job.
   changes:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.f.outputs.code }}
       docs: ${{ steps.f.outputs.docs }}
+      test: ${{ steps.f.outputs.test }}
+      native: ${{ steps.f.outputs.native }}
+      suite: ${{ steps.f.outputs.suite }}
+      jit: ${{ steps.f.outputs.jit }}
+      cext: ${{ steps.f.outputs.cext }}
+      cext_wasm: ${{ steps.f.outputs.cext_wasm }}
       wasm: ${{ steps.f.outputs.wasm }}
+      wasm_compile: ${{ steps.f.outputs.wasm_compile }}
+      wasi: ${{ steps.f.outputs.wasi }}
+      wasm_engine: ${{ steps.f.outputs.wasm_engine }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
+      # The checkout of a pull request is its merge commit, so the diff
+      # against the base commit has the changes of the pull request only.
       - id: f
         shell: bash
         run: |
           if [ "${{ github.event_name }}" != pull_request ]; then
-            echo code=true >> "$GITHUB_OUTPUT"; echo docs=true >> "$GITHUB_OUTPUT"; echo wasm=true >> "$GITHUB_OUTPUT"; exit 0
+            tools/ci-changes.sh --all | tee -a "$GITHUB_OUTPUT"; exit 0
           fi
-          files=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD)
-          printf '%s\n' "$files"
-          docs_re='^(docs/|README\.md|CHANGELOG\.md|CONTRIBUTING\.md|SECURITY\.md|WRITING\.md|AGENTS\.md|tools/build-docs\.py|tools/docs-requirements\.txt|licenses/)'
-          if printf '%s\n' "$files" | grep -qvE "$docs_re"; then code=true; else code=false; fi
-          if printf '%s\n' "$files" | grep -qE "$docs_re"; then docs=true; else docs=false; fi
-          echo "code=$code" >> "$GITHUB_OUTPUT"; echo "docs=$docs" >> "$GITHUB_OUTPUT"
-          # The files that the WebAssembly and WASI jobs build or run. A
-          # pull request that changes none of them skips those jobs.
-          wasm_re='^(src/|build\.zig|build\.zig\.zon|wit/|web/|npm/|enclave/|bench/|examples/web/|tests/(jit|mem|point|thread|web)/|tools/(wasm|point|wasi|jit-fuzz|fetch-|tcltest|suite|thread-tests|witgen|web-)|docs/site/playground/|\.github/workflows/ci\.yml)'
-          if printf '%s\n' "$files" | grep -qE "$wasm_re"; then wasm=true; else wasm=false; fi
-          echo "wasm=$wasm" >> "$GITHUB_OUTPUT"
+          git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD > "$RUNNER_TEMP/files"
+          cat "$RUNNER_TEMP/files"
+          tools/ci-changes.sh < "$RUNNER_TEMP/files" | tee -a "$GITHUB_OUTPUT"
 
   # The module map of src/ (docs/dev/architecture.md): a report of the
   # imports, the cycles, and the layering breaks. The job is a report:
@@ -84,7 +91,7 @@ jobs:
   test:
     name: Test (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.test == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -212,7 +219,7 @@ jobs:
   cext:
     name: C packages (Linux)
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.cext == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -244,7 +251,7 @@ jobs:
   cext-wasm:
     name: C packages (WebAssembly)
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.cext_wasm == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -270,7 +277,7 @@ jobs:
   build-native:
     name: ztcl build (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.test == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -369,7 +376,7 @@ jobs:
   jit-arm64-linux:
     name: JIT (ubuntu-24.04-arm)
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.native == 'true'
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -382,7 +389,10 @@ jobs:
           zig build
           zig build jit-probe
           zig build test
+      # A pull request that changes neither the JIT nor the core runs the
+      # unit tests only.
       - name: Differential test of the JIT
+        if: needs.changes.outputs.jit == 'true'
         run: |
           ulimit -v 6000000
           zig build suite-runner
@@ -391,6 +401,7 @@ jobs:
       # Each program also runs at 4 random memory limits. A scheduled run
       # fuzzes for longer.
       - name: Fuzzer of the JIT
+        if: needs.changes.outputs.jit == 'true'
         env:
           FUZZ_SECONDS: ${{ github.event_name == 'pull_request' && '120' || '900' }}
         run: |
@@ -399,7 +410,9 @@ jobs:
           zig build jit-fuzz -- --seconds "$FUZZ_SECONDS" --mem-runs 4
           zig build jit-fuzz -- --seconds "$FUZZ_SECONDS" --mem-runs 4 --tier2
       # The wall times for docs/jit.md: the best of 5 runs of each script.
+      # The step checks nothing, so pull requests skip it.
       - name: Time the JIT
+        if: github.event_name != 'pull_request'
         run: |
           zig build -Doptimize=ReleaseFast -p rel
           for f in bench/sum.tcl bench/dsum.tcl bench/nested.tcl bench/foreach.tcl bench/fib.tcl; do
@@ -416,7 +429,7 @@ jobs:
   suite:
     name: Tcl 8.6.16 suite
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.suite == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -475,7 +488,7 @@ jobs:
   wasm-aot:
     name: WebAssembly, compiled procs
     needs: changes
-    if: needs.changes.outputs.wasm == 'true'
+    if: needs.changes.outputs.wasm_compile == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -500,7 +513,7 @@ jobs:
   wasm-point:
     name: WebAssembly, point procs
     needs: changes
-    if: needs.changes.outputs.wasm == 'true'
+    if: needs.changes.outputs.wasm_compile == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -524,7 +537,7 @@ jobs:
   wasi:
     name: WASI
     needs: changes
-    if: needs.changes.outputs.wasm == 'true'
+    if: needs.changes.outputs.wasi == 'true'
     runs-on: ubuntu-latest
     env:
       WASMTIME_VERSION: "50.0.0"
@@ -588,7 +601,7 @@ jobs:
   wasm-engine:
     name: wasm engine
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.wasm_engine == 'true'
     runs-on: ubuntu-latest
     env:
       WASM_TOOLS_VERSION: "1.261.0"
@@ -708,10 +721,38 @@ jobs:
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: ${{ env.ZIG_VERSION }}
-      - run: zig build wasm wasm-threads wasm-shell wasm-host
+      - run: zig build install wasm wasm-threads wasm-shell wasm-host
+      # The checks of the pages against the runner, also for a pull
+      # request that changes the docs only.
+      - name: Run the examples of the module pages
+        run: |
+          python3 -I tools/doc-examples.py zig-out/bin/ztcl --reference docs/modules/vt.md docs/modules/watch.md docs/learn/*.md
+          python3 -I tools/ref-coverage.py zig-out/bin/ztcl
+          python3 -I tools/reference.py shell-table | diff - src/shell/reference.txt
+          python3 -I tools/doc-coverage.py
+      - name: Check the format
+        run: zig fmt --check build.zig src
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: python -m pip install -r tools/docs-requirements.txt
       - run: python tools/build-docs.py site
       - run: sh tests/targets.sh
+
+  # The one check for the merge: it passes when each job of the run
+  # passed or was skipped, and fails when a job failed or was
+  # cancelled.
+  linux-ok:
+    name: Linux ok
+    if: always()
+    needs: [changes, test, cext, cext-wasm, build-native, jit-arm64-linux, suite, wasm, wasm-aot, wasm-point, wasi, wasm-engine, docs]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the results of the jobs
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do
+            case $r in success|skipped) ;; *) exit 1 ;; esac
+          done
