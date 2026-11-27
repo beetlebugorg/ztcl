@@ -1,6 +1,14 @@
 # The JIT
 
-ztcl has a compiler from bytecode to machine code for x86-64 Linux, x86-64 Windows, arm64 Linux, and arm64 macOS. It is on by default where the build and the system have it. [Targets](targets.md) lists the JIT of each target. A script gives the same output, the same counts of compute units, and the same memory count with the JIT on and off.
+ztcl has a compiler from bytecode to machine code for x86-64 Linux, x86-64 Windows, arm64 Linux, and arm64 macOS. It is on by default where the build and the system have it. [Targets](targets.md) lists the JIT of each target.
+
+| Target | JIT |
+|---|---|
+| x86-64 Linux, arm64 Linux, arm64 macOS, x86-64 Windows | On by default: tier 1 and tier 2 |
+| x86-64 macOS, arm64 Windows | None: the interpreter runs each script |
+| WebAssembly and WASI | None |
+
+A script gives the same output, the same counts of compute units, and the same memory count with the JIT on and off.
 
 ## Turn it off
 
@@ -9,6 +17,7 @@ ztcl script.tcl                        # tier 1 and tier 2
 ztcl --no-jit-tier2 script.tcl         # tier 1
 ztcl --no-jit script.tcl               # the interpreter
 ZTCL_JIT=off ztcl script.tcl           # the interpreter
+ztcl build --no-jit -o app main.tcl    # a program with no JIT
 ztcl --jit-stats script.tcl            # the counts and the state of the JIT
 ```
 

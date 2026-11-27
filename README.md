@@ -1,6 +1,6 @@
 # ztcl
 
-A fast, sandboxed Tcl interpreter in Zig. ztcl runs Tcl 8.6 scripts with exact compute and memory limits, an optional JIT compiler, real threads, and a WebAssembly build for the browser.
+A fast, sandboxed Tcl interpreter in Zig. ztcl runs Tcl 8.6 scripts with exact compute and memory limits, a JIT compiler that is on by default, real threads, and a WebAssembly build for the browser.
 
 **Docs:** https://beetlebug.org/ztcl/ · **Playground:** https://beetlebug.org/ztcl/playground/
 
