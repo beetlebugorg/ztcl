@@ -290,17 +290,12 @@ jobs:
           zig build jit-fuzz -- --seconds 600 --mem-runs 4 --tier2
 
   # The JIT on arm64 Linux, on each pull request: the unit tests, the
-  # differential test, and the fuzzer for a bounded time. arm64 Linux has
-  # no coroutines yet, so the interpreter output of coroutine.tcl and
-  # owned_lists.tcl differs from tclsh there. jit-diff.sh still compares
-  # the modes of those scripts.
+  # differential test, and the fuzzer for a bounded time.
   jit-arm64-linux:
     name: JIT (ubuntu-24.04-arm)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04-arm
-    env:
-      JIT_DIFF_NO_OUT: coroutine.tcl owned_lists.tcl
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
