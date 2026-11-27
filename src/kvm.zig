@@ -1,22 +1,15 @@
 //! A small virtual machine monitor on the KVM ioctls of Linux, for
 //! `ztcl::vm` (ztcl#203). It boots an x86-64 Linux guest and gives it
 //! its devices on virtio-mmio. The sources are the KVM API document of
-//! the kernel (Documentation/virt/kvm/api.rst), the x86 boot protocol
-//! (Documentation/arch/x86/boot.rst and zero-page.rst), the virtio 1.2
-//! specification of OASIS, and the Intel MultiProcessor Specification 1.4.
+//! the kernel (Documentation/virt/kvm/api.rst) and the virtio 1.2
+//! specification of OASIS.
 //!
 //! The guest memory is one anonymous mapping with `MAP_NORESERVE`, so the
-//! host gives a page only when the guest touches it. The layout of the
-//! guest physical memory:
-//!
-//!   0x0500   the GDT: a 64-bit code segment 0x10 and a data segment 0x18
-//!   0x7000   the boot parameters (the "zero page")
-//!   0x9000   the page tables: an identity map of the first 4 GB in 2 MB pages
-//!   0x20000  the kernel command line
-//!   0x9fc00  the MP table: the CPUs, the I/O APIC, and the ISA interrupts
-//!   0x100000 the kernel: the protected-mode part of a bzImage, or the
-//!            segments of an ELF vmlinux at their physical addresses
-//!   the top  the initramfs
+//! host gives a page only when the guest touches it. `vm/boot.zig`, the
+//! direct boot that the Windows Hypervisor Platform monitor uses too,
+//! loads the kernel and the initramfs and writes the boot parameters, the
+//! command line, the GDT, the page tables, and the MP table; its header
+//! has the layout of the guest memory.
 //!
 //! The vCPUs start in 64-bit mode at the 64-bit entry point of the boot
 //! protocol (the load address + 0x200 for a bzImage, the ELF entry for a
@@ -170,22 +163,16 @@ const run_exit_reason = 8;
 const run_union = 32;
 
 // The guest physical layout.
-const gdt_addr = 0x500;
-const zero_page = 0x7000;
-const pml4_addr = 0x9000;
-const cmdline_addr = 0x20000;
-const cmdline_max = 4096;
-const mptable_addr = 0x9fc00;
-const kernel_addr = 0x100000;
-const low_ram_end = 0x9fc00;
+const gdt_addr = boot.gdt_addr;
+const zero_page = boot.zero_page;
+const pml4_addr = boot.pml4_addr;
+const cmdline_max = boot.cmdline_max;
 pub const mmio_base: u64 = 0xd0000000;
 const mmio_size: u64 = 0x1000;
 /// The ISA interrupts of the virtio devices, in order. 3 and 4 are the
 /// serial ports, 8 is the clock, and 13 is the FPU.
 const irqs = [_]u8{ 5, 6, 7, 9, 10, 11, 12, 14, 15 };
 pub const max_disks = irqs.len - 3;
-const ioapic_addr = 0xfec00000;
-const lapic_addr = 0xfee00000;
 
 /// The signal that kicks a vCPU thread out of `KVM_RUN`. Its handler
 /// is empty.
@@ -260,6 +247,7 @@ pub fn nowNs() u64 {
 }
 
 const virtio = @import("vm/virtio/mmio.zig");
+const boot = @import("vm/boot.zig");
 const Mem = virtio.Mem;
 const Device = virtio.Device;
 const virtio_f_version_1 = virtio.f_version_1;
@@ -473,127 +461,7 @@ fn setup(m: *Machine) Fail!void {
 }
 
 // ---------------------------------------------------------------------
-// The boot (Documentation/arch/x86/boot.rst, the 64-bit boot protocol)
-
-fn kernelFail(text: []const u8) Fail {
-    why = text;
-    return error.Kernel;
-}
-
-fn le(comptime T: type, b: []const u8, off: usize) T {
-    return std.mem.readInt(T, b[off..][0..@sizeOf(T)], .little);
-}
-
-/// Loads the kernel and the initramfs, and writes the boot parameters,
-/// the command line, the GDT, the page tables, and the MP table.
-/// Gives the guest address of the 64-bit entry point.
-fn loadKernel(m: *Machine) Fail!u64 {
-    const mem = m.mem;
-    const k = m.cfg.kernel;
-    const zp = mem.slice(zero_page, 4096).?;
-    @memset(zp, 0);
-    var entry: u64 = 0;
-    var kernel_end: u64 = kernel_addr;
-    var initrd_max: u64 = 0x37ffffff;
-    if (k.len >= 64 and std.mem.eql(u8, k[0..4], "\x7fELF")) {
-        // An ELF vmlinux: each PT_LOAD at its physical address.
-        if (k[4] != 2 or le(u16, k, 0x12) != 0x3e) return kernelFail("the ELF kernel is not x86-64");
-        const e_entry = le(u64, k, 0x18);
-        const phoff = le(u64, k, 0x20);
-        const phentsize = le(u16, k, 0x36);
-        const phnum = le(u16, k, 0x38);
-        var i: usize = 0;
-        while (i < phnum) : (i += 1) {
-            const off = phoff + i * phentsize;
-            if (off + 56 > k.len) return kernelFail("the ELF kernel is cut short");
-            if (le(u32, k, off) != 1) continue;
-            const p_offset = le(u64, k, off + 0x08);
-            const p_vaddr = le(u64, k, off + 0x10);
-            const p_paddr = le(u64, k, off + 0x18);
-            const p_filesz = le(u64, k, off + 0x20);
-            const p_memsz = le(u64, k, off + 0x28);
-            if (p_filesz > p_memsz or p_offset > k.len or p_filesz > k.len - p_offset)
-                return kernelFail("a segment of the ELF kernel is outside the file");
-            const dst = mem.slice(p_paddr, p_memsz) orelse return kernelFail("the kernel is larger than the guest memory");
-            @memcpy(dst[0..@intCast(p_filesz)], k[@intCast(p_offset)..@intCast(p_offset + p_filesz)]);
-            kernel_end = @max(kernel_end, p_paddr + p_memsz);
-            if (e_entry >= p_vaddr and e_entry < p_vaddr + p_memsz) entry = e_entry - p_vaddr + p_paddr;
-        }
-        if (entry == 0) entry = e_entry;
-        // The fields of the setup header that the kernel reads.
-        mem.put(u16, zero_page + 0x1fe, 0xaa55);
-        mem.put(u32, zero_page + 0x202, 0x53726448);
-        mem.put(u32, zero_page + 0x230, 0x1000000);
-    } else {
-        // A bzImage: the setup header at 0x1f1, the protected-mode kernel
-        // after the setup sectors.
-        if (k.len < 0x264 or le(u32, k, 0x202) != 0x53726448) return kernelFail("the kernel is not a bzImage or an ELF vmlinux");
-        if (le(u16, k, 0x206) < 0x020c or le(u16, k, 0x236) & 1 == 0) return kernelFail("the bzImage has no 64-bit entry point");
-        var setup_sects: usize = k[0x1f1];
-        if (setup_sects == 0) setup_sects = 4;
-        const pm = (setup_sects + 1) * 512;
-        if (pm >= k.len) return kernelFail("the bzImage is cut short");
-        const hdr_end = 0x202 + @as(usize, k[0x201]);
-        @memcpy(zp[0x1f1..hdr_end], k[0x1f1..hdr_end]);
-        const body = k[pm..];
-        const init_size = le(u32, k, 0x260);
-        const dst = mem.slice(kernel_addr, @max(body.len, init_size)) orelse return kernelFail("the kernel is larger than the guest memory");
-        @memcpy(dst[0..body.len], body);
-        kernel_end = kernel_addr + @max(body.len, init_size);
-        entry = kernel_addr + 0x200;
-        initrd_max = le(u32, k, 0x22c);
-    }
-    mem.put(u16, zero_page + 0x1fa, 0xffff); // vid_mode: normal
-    zp[0x210] = 0xff; // type_of_loader: undefined
-    zp[0x211] |= 0x01 | 0x80; // loadflags: LOADED_HIGH, CAN_USE_HEAP
-    mem.put(u16, zero_page + 0x224, 0xfe00); // heap_end_ptr
-
-    // The command line.
-    const cl = m.cmdline();
-    if (cl.len + 1 > cmdline_max) return kernelFail("the command line is longer than 4,095 bytes");
-    const cdst = mem.slice(cmdline_addr, cl.len + 1).?;
-    @memcpy(cdst[0..cl.len], cl);
-    cdst[cl.len] = 0;
-    mem.put(u32, zero_page + 0x228, cmdline_addr);
-
-    // The initramfs, at the top of the memory below its limit.
-    if (m.cfg.initrd.len != 0) {
-        const top = @min(mem.size, initrd_max + 1);
-        const len: u64 = m.cfg.initrd.len;
-        if (len + kernel_end > top) return kernelFail("the initramfs does not fit in the guest memory");
-        const addr = (top - len) & ~@as(u64, 0xfff);
-        if (addr < kernel_end) return kernelFail("the initramfs does not fit in the guest memory");
-        @memcpy(mem.slice(addr, len).?, m.cfg.initrd);
-        mem.put(u32, zero_page + 0x218, @intCast(addr));
-        mem.put(u32, zero_page + 0x21c, @intCast(len));
-    }
-
-    // The memory map: the low 639 KB and the memory above 1 MB.
-    const e820 = [_][2]u64{ .{ 0, low_ram_end }, .{ kernel_addr, mem.size - kernel_addr } };
-    for (e820, 0..) |e, i| {
-        const at = zero_page + 0x2d0 + 20 * i;
-        mem.put(u64, at, e[0]);
-        mem.put(u64, at + 8, e[1]);
-        mem.put(u32, at + 16, 1);
-    }
-    zp[0x1e8] = e820.len;
-
-    // The GDT: null, null, code 0x10, data 0x18.
-    const gdt = [_]u64{ 0, 0, 0x00af9b000000ffff, 0x00cf93000000ffff };
-    for (gdt, 0..) |g, i| mem.put(u64, gdt_addr + 8 * i, g);
-
-    // The identity map of the first 4 GB: PML4, PDPT, and 4 PDs.
-    const pdpt = pml4_addr + 0x1000;
-    const pd = pml4_addr + 0x2000;
-    @memset(mem.slice(pml4_addr, 0x6000).?, 0);
-    mem.put(u64, pml4_addr, pdpt | 3);
-    for (0..4) |i| {
-        mem.put(u64, pdpt + 8 * i, (pd + 0x1000 * i) | 3);
-        for (0..512) |j| mem.put(u64, pd + 0x1000 * i + 8 * j, ((i << 30) | (j << 21)) | 0x83);
-    }
-    m.writeMpTable();
-    return entry;
-}
+// The boot: the shared direct boot of `vm/boot.zig`
 
 /// The command line of the guest: the one of the configuration, then the
 /// options of this monitor and the list of the virtio-mmio devices.
@@ -607,97 +475,11 @@ fn cmdline(m: *Machine) []const u8 {
     return w.buffered();
 }
 
-/// The MP table of the MultiProcessor Specification 1.4: the floating
-/// pointer, then the configuration table with the CPUs, the ISA bus, the
-/// I/O APIC, an entry for each ISA interrupt, and the local interrupts.
-fn writeMpTable(m: *Machine) void {
-    const mem = m.mem;
-    const n: u32 = @intCast(m.cfg.cpus);
-    const ioapic_id: u8 = @intCast(n);
-    const table = mptable_addr + 16;
-    var at: u64 = table + 44;
-    var count: u16 = 0;
-    for (0..n) |i| {
-        const e = mem.slice(at, 20).?;
-        @memset(e, 0);
-        e[0] = 0; // processor
-        e[1] = @intCast(i);
-        e[2] = 0x14;
-        e[3] = if (i == 0) 3 else 1; // enabled, and the boot CPU
-        std.mem.writeInt(u32, e[4..8], 0x600, .little);
-        std.mem.writeInt(u32, e[8..12], 0x201, .little); // FPU, APIC
-        at += 20;
-        count += 1;
-    }
-    const bus = mem.slice(at, 8).?;
-    bus[0] = 1;
-    bus[1] = 0;
-    @memcpy(bus[2..8], "ISA   ");
-    at += 8;
-    count += 1;
-    const io = mem.slice(at, 8).?;
-    io[0] = 2;
-    io[1] = ioapic_id;
-    io[2] = 0x11;
-    io[3] = 1;
-    std.mem.writeInt(u32, io[4..8], ioapic_addr, .little);
-    at += 8;
-    count += 1;
-    for (0..16) |irq| {
-        if (irq == 2) continue;
-        const e = mem.slice(at, 8).?;
-        e[0] = 3; // I/O interrupt
-        e[1] = 0; // INT
-        e[2] = 0;
-        e[3] = 0; // flags: conforms to the bus
-        e[4] = 0; // bus 0
-        e[5] = @intCast(irq);
-        e[6] = ioapic_id;
-        e[7] = @intCast(irq);
-        at += 8;
-        count += 1;
-    }
-    for ([_]u8{ 3, 1 }, 0..) |kind, lint| {
-        const e = mem.slice(at, 8).?;
-        e[0] = 4; // local interrupt
-        e[1] = kind; // ExtINT on LINT0, NMI on LINT1
-        e[2] = 0;
-        e[3] = 0;
-        e[4] = 0;
-        e[5] = 0;
-        e[6] = 0xff; // each local APIC
-        e[7] = @intCast(lint);
-        at += 8;
-        count += 1;
-    }
-    const len: u16 = @intCast(at - table);
-    const h = mem.slice(table, 44).?;
-    @memset(h, 0);
-    @memcpy(h[0..4], "PCMP");
-    std.mem.writeInt(u16, h[4..6], len, .little);
-    h[6] = 4;
-    @memcpy(h[8..16], "ZTCL    ");
-    @memcpy(h[16..28], "ZTCLVM      ");
-    std.mem.writeInt(u16, h[34..36], count, .little);
-    std.mem.writeInt(u32, h[36..40], lapic_addr, .little);
-    h[7] = checksum(mem.slice(table, len).?);
-    const fp = mem.slice(mptable_addr, 16).?;
-    @memset(fp, 0);
-    @memcpy(fp[0..4], "_MP_");
-    std.mem.writeInt(u32, fp[4..8], @intCast(table), .little);
-    fp[8] = 1;
-    fp[9] = 4;
-    fp[10] = checksum(fp);
-}
-
-fn checksum(b: []const u8) u8 {
-    var s: u8 = 0;
-    for (b) |x| s +%= x;
-    return 0 -% s;
-}
-
 fn load(m: *Machine) Fail!void {
-    m.entry = try m.loadKernel();
+    m.entry = boot.load(m.mem, .{ .kernel = m.cfg.kernel, .initrd = m.cfg.initrd, .cmdline = m.cmdline(), .cpus = m.cfg.cpus }) catch {
+        why = boot.why;
+        return error.Kernel;
+    };
 }
 
 fn makeVcpus(m: *Machine) Fail!void {
@@ -1090,20 +872,9 @@ fn mmio(m: *Machine, v: *Vcpu) void {
     if (write) d.write(&h, off, data[0..len]) else d.read(off, data[0..len]);
 }
 
-test "kvm: the MP table and the command line" {
+test "kvm: the command line" {
     if (comptime !supported) return;
-    var buf: [1 << 20]u8 align(4096) = undefined;
     var m: Machine = .{ .alloc = std.testing.allocator, .cfg = .{ .kernel = "", .cmdline = "console=hvc0", .console = -1, .cpus = 2, .disks = &.{.{ .fd = -1, .read_only = true }} } };
-    m.mem = .{ .base = &buf, .size = buf.len };
-    m.writeMpTable();
-    try std.testing.expectEqualStrings("_MP_", buf[mptable_addr..][0..4]);
-    var s: u8 = 0;
-    for (buf[mptable_addr..][0..16]) |x| s +%= x;
-    try std.testing.expectEqual(@as(u8, 0), s);
-    const len = std.mem.readInt(u16, buf[mptable_addr + 16 + 4 ..][0..2], .little);
-    s = 0;
-    for (buf[mptable_addr + 16 ..][0..len]) |x| s +%= x;
-    try std.testing.expectEqual(@as(u8, 0), s);
     try std.testing.expectEqualStrings(
         "console=hvc0 reboot=k panic=-1 nomodule virtio_mmio.device=4K@0xd0000000:5 virtio_mmio.device=4K@0xd0001000:6 virtio_mmio.device=4K@0xd0002000:7",
         m.cmdline(),
