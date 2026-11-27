@@ -2148,7 +2148,10 @@ pub inline fn opIncrDrop(comptime named: bool, it: *Interp, f: *Frame, code: *co
 
 pub inline fn opIncrValue(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
     const found = readCell(named, it, f, code, i.a);
-    const by = stack[sp - 1];
+    // A string step, such as an item of `split`, gets its integer here
+    // with the parse of `cmdIncr`, so a plain cell needs no lookup by
+    // name. `cmdIncr` reads the step first too, so an error is the same.
+    const by = if (stack[sp - 1] == .str) try expr.intArg(it, stack[sp - 1]) else stack[sp - 1];
     if (by == .int and found != null and found.?.v == .val and found.?.v.val == .int and addFits(found.?.v.val.int, by.int)) {
         const cell = found.?;
         const out: Value = .{ .int = cell.v.val.int + by.int };
