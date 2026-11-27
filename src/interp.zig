@@ -96,6 +96,11 @@ pub const Cmd = struct {
     dyn_name: []const u8 = "",
     dyn_epoch: u32 = 0,
     dyn_ns: [*]const u8 = "",
+    /// The subcommand of a native ensemble at this site: the address of
+    /// the command function that wrote it, or 0, and the value of its
+    /// enum. See `cmds.subOf`.
+    sub_fn: usize = 0,
+    sub: u16 = 0,
 };
 
 /// The commands that run with no word stack. `evalCmd` selects the
