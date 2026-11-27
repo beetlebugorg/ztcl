@@ -145,6 +145,41 @@ r = ev("web::get web99 connected");
 check(!r.ok && r.result === 'invalid web handle "web99"', `an unknown handle (got ${r.result})`);
 t.close();
 
+// Task 02: promises. The script of -command runs from runEvents with
+// "ok" and the value, or "error" and the message.
+const runs = [];
+t = await Interp.create(host, { allow: ["web:serial"], web, webRoot, onEvents: (r) => runs.push(r) });
+const tick = () => new Promise((res) => setTimeout(res, 5));
+r = t.eval(`set s [web::root navigator.serial]
+proc got {what status value} {lappend ::got $what $status $value}
+web::call $s getPorts -command {got ports}`);
+check(r.ok && r.result === "", `-command gives an empty result (got ${r.result})`);
+await tick();
+r = t.eval("set got");
+check(r.ok && r.result === "ports ok web2", `a promise that resolves (got ${r.result})`);
+check(runs.length === 1 && runs[0].ok, "onEvents gets the run");
+serial.requestPort = () => {
+  const e = new Error("No port selected by the user.");
+  e.name = "NotFoundError";
+  return Promise.reject(e);
+};
+t.eval("set got {}; web::call $s requestPort {filters {{usbVendorId 9025}}} -command {got req}");
+await tick();
+r = t.eval("set got");
+check(r.ok && r.result === "req error {web: NotFoundError: No port selected by the user.}", `a promise that rejects (got ${r.result})`);
+r = t.eval("web::call web2 getInfo -command {got x}");
+check(!r.ok && /gives no promise/.test(r.result), `-command for a method with no promise (got ${r.result})`);
+r = t.eval("web::call $s requestPort {filters {{usbVendorId x}}} -command {got req}");
+check(!r.ok && /expected integer/.test(r.result), `a bad argument fails at the call (got ${r.result})`);
+// Each script has its own compute limit.
+t.webComputeLimit = 1000;
+t.eval("web::call $s getPorts -command {apply {args {while 1 {}}}}");
+await tick();
+check(runs.length === 3 && !runs[2].ok && /compute limit/.test(runs[2].result), `the compute limit of a script (got ${JSON.stringify(runs[2])})`);
+r = t.eval("set got");
+check(r.ok, "the interpreter runs after the limit");
+t.close();
+
 if (failed) {
   console.error(`${failed} failed`);
   process.exit(1);

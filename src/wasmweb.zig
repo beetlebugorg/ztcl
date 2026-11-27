@@ -5,7 +5,9 @@
 //!   web::root name                   a root object, for example navigator.serial
 //!   web::get obj attr                the value of an attribute
 //!   web::set obj attr value          sets an attribute
-//!   web::call obj method ?arg ...?   calls a method
+//!   web::call obj method ?arg ...? ?-command script?
+//!                                    calls a method; for a promise, the
+//!                                    script gets the result later
 //!   web::release obj                 ends the handle
 //!
 //! An object of the page is a handle `webN` in a table of
@@ -24,6 +26,12 @@
 //! a value it puts one word or list into the memory of the module
 //! (`ztcl_alloc`) and its address and length into `ztcl_web_reply`. A
 //! negative integer is an error, with the message as a word of the reply.
+//! A method that gives a promise needs `-command script`. The host puts
+//! the result into a queue, and `Interp.runEvents` of `web/ztcl.mjs`
+//! gives each one to `ztcl_web_event`, which runs the script at the
+//! global level with two words appended: `ok` and the value, or `error`
+//! and the message.
+//!
 //! The commands exist only after `ztcl_web_allow`, so they are absent by
 //! default and in `ztcl.wasm`.
 //!
@@ -41,6 +49,7 @@ pub const Op = enum(u32) {
     set = 3,
     call = 4,
     release = 5,
+    call_async = 6,
 };
 
 const host = struct {
@@ -136,7 +145,15 @@ pub fn Commands(comptime gpa: std.mem.Allocator) type {
         }
 
         fn cmdCall(it: *Interp, argv: []const Value, _: ?*ztcl.interp.Cmd) Error!Value {
-            if (argv.len < 3) return it.wrongArgs("web::call obj method ?arg ...?");
+            if (argv.len < 3) return it.wrongArgs("web::call obj method ?arg ...? ?-command script?");
+            const n = argv.len;
+            if (n >= 5 and std.mem.eql(u8, try it.str(argv[n - 2]), "-command")) {
+                var out: std.ArrayList(u8) = .empty;
+                try putWord(it.alloc(), &out, try it.str(argv[n - 1]));
+                try out.appendSlice(it.alloc(), try words(it, argv[3 .. n - 2]));
+                _ = try call(it, gpa, .call_async, try handleOf(it, argv[1]), try it.str(argv[2]), out.items);
+                return Value.empty;
+            }
             return (try call(it, gpa, .call, try handleOf(it, argv[1]), try it.str(argv[2]), try words(it, argv[3..]))).value;
         }
 
@@ -154,6 +171,35 @@ pub fn Commands(comptime gpa: std.mem.Allocator) type {
             try it.register("web::release", cmdRelease);
         }
     };
+}
+
+/// Gives `script` with each value of `vals` appended as one list
+/// element.
+pub fn appendWords(a: std.mem.Allocator, script: []const u8, vals: []const Value) std.mem.Allocator.Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    try out.appendSlice(a, script);
+    for (vals) |v| {
+        try out.append(a, ' ');
+        try ztcl.value.appendElement(a, &out, try v.toStr(a), false);
+    }
+    return out.toOwnedSlice(a);
+}
+
+/// Runs the script of one event of the host at the global level. `vals`
+/// is a list in the form of the replies.
+pub fn runEvent(it: *Interp, script: []const u8, vals: []const u8) Error!Value {
+    var at: usize = 0;
+    const list = (try readValue(it.alloc(), vals, &at)) orelse return it.fail("web: a bad event of the host", .{});
+    const text = try appendWords(it.alloc(), script, try it.readList(list));
+    const frame = it.frame;
+    const ns = it.ns;
+    it.frame = &it.global;
+    it.ns = "";
+    defer {
+        it.frame = frame;
+        it.ns = ns;
+    }
+    return it.eval(text);
 }
 
 /// Splits the Tcl list `text` for the host, which converts a sequence
@@ -174,6 +220,14 @@ pub fn split(gpa: std.mem.Allocator, text: []const u8) i32 {
     const bytes = out.toOwnedSlice(gpa) catch return -2;
     ztcl_web_reply = .{ @intCast(@intFromPtr(bytes.ptr)), @intCast(bytes.len) };
     return @intCast(items.len);
+}
+
+test "the words of a promise go after the script as list elements" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const aa = arena.allocator();
+    const vals = [_]Value{ .{ .str = "ok" }, .{ .str = "a b" } };
+    try std.testing.expectEqualStrings("done x ok {a b}", try appendWords(aa, "done x", &vals));
 }
 
 test "a reply of words and lists reads as a Tcl list" {
