@@ -1,14 +1,22 @@
 name: VM guest
 
-# Builds the kernel and BusyBox of the spike guest of ztcl::vm (ztcl#203)
-# on an arm64 runner and an x86-64 runner (tools/vm-guest/build.sh), and
-# keeps them as the artifacts vm-guest (arm64, for macOS) and
-# vm-guest-x86_64 (for KVM). On x86-64 it then runs the boot test of
-# the KVM monitor (tools/vm-guest/test-kvm.sh), when the runner has
-# /dev/kvm. The proper guest image comes from the
-# build of dockyard#13.
+# Builds the guest of ztcl::vm (ztcl#203, ztcl#312) on an arm64 runner
+# and an x86-64 runner: the kernel and BusyBox (tools/vm-guest/build.sh),
+# the initramfs with the agent (pack.sh), and the read-only root disk with
+# dm-verity and the entry of the manifest (image.sh), as the artifacts
+# vm-guest (arm64) and vm-guest-x86_64. On x86-64 it then runs the boot
+# test of the KVM monitor (tools/vm-guest/test-kvm.sh), when the runner
+# has /dev/kvm. Then the manifest of both, signed:
+# - on each run, with the test key, under the name ztcl-guest-test
+#   (artifact vm-image-test);
+# - on a tag vm-image-v*, or a run by hand from main, with the current
+#   release key in the environment vm-release (artifact vm-image).
+# Each manifest is checked with the verifier of ztcl before the upload.
+# docs/dev/vm-image.md has the format, the keys, and the rotation.
 on:
   push:
+    tags: ["vm-image-v*"]
+  pull_request:
     paths:
       - "tools/vm-guest/build.sh"
       - "tools/vm-guest/kernel.fragment"
@@ -19,6 +27,9 @@ on:
       - "src/kvm.zig"
       - "src/vm/**"
       - "src/microvm.zig"
+      - "src/vmimage.zig"
+      - "tools/vm-guest/image.sh"
+      - "tools/vm-guest/manifest.sh"
       - ".github/workflows/vm-guest.yml"
   workflow_dispatch:
 
@@ -37,13 +48,17 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - run: sudo apt-get update && sudo apt-get install -y build-essential flex bison bc libelf-dev libssl-dev cpio
+      - run: sudo apt-get update && sudo apt-get install -y build-essential flex bison bc libelf-dev libssl-dev cpio squashfs-tools cryptsetup-bin
       - run: tools/vm-guest/build.sh
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: "0.17.0"
       # The initramfs with the agent and BusyBox, for each architecture.
       - run: TARGET=$(uname -m)-linux-musl tools/vm-guest/pack.sh
+      # The read-only root disk with dm-verity, and the entry of the
+      # manifest. It prints the SHA-256 of the kernel and of the disk, and
+      # the root hash, so anyone can compare them with a build of their own.
+      - run: ARCH=$(uname -m | sed s/aarch64/arm64/) tools/vm-guest/image.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.name }}
@@ -63,3 +78,87 @@ jobs:
           zig build -j4
           tools/vm-guest/test-kvm.sh tools/vm-guest/out
           KERNEL=vmlinux tools/vm-guest/test-kvm.sh tools/vm-guest/out
+
+  # The manifest with the test key, for each run.
+  manifest-test:
+    needs: guest
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: "0.17.0"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: in
+      - name: Lay out the release
+        run: |
+          mkdir -p rel/arm64 rel/x86_64
+          cp in/vm-guest/Image in/vm-guest/root.img in/vm-guest/agent.cpio.gz rel/arm64/
+          cp in/vm-guest-x86_64/bzImage in/vm-guest-x86_64/root.img in/vm-guest-x86_64/agent.cpio.gz rel/x86_64/
+          tools/vm-guest/manifest.sh ztcl-guest-test "0.0.0-${GITHUB_SHA::12}" "${GITHUB_RUN_NUMBER}" 0.1.0 \
+            in/vm-guest/arm64.json in/vm-guest-x86_64/x86_64.json > rel/manifest.json
+      - name: Sign with the test key
+        run: |
+          key=$(mktemp)
+          cp tools/vm-guest/testkey/test_ed25519 "$key"
+          chmod 600 "$key"
+          ssh-keygen -q -Y sign -f "$key" -n ztcl-vm-image rel/manifest.json
+          rm -f "$key"
+      - name: Check with the verifier of ztcl
+        run: zig build vm-image-verify -Dvm-test-key -- "$PWD/rel"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vm-image-test
+          path: rel/
+
+  # The manifest with the current release key: a tag vm-image-v*, or a
+  # run by hand from main. The owner approves the first such run.
+  manifest-release:
+    needs: guest
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/vm-image-v')) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    environment: vm-release
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: "0.17.0"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: in
+      - name: Lay out the release
+        run: |
+          mkdir -p rel/arm64 rel/x86_64
+          cp in/vm-guest/Image in/vm-guest/root.img in/vm-guest/agent.cpio.gz rel/arm64/
+          cp in/vm-guest-x86_64/bzImage in/vm-guest-x86_64/root.img in/vm-guest-x86_64/agent.cpio.gz rel/x86_64/
+          version=${GITHUB_REF_NAME#vm-image-v}
+          [ "$GITHUB_REF_TYPE" = tag ] || version="0.0.0-${GITHUB_SHA::12}"
+          tools/vm-guest/manifest.sh ztcl-guest "$version" "${GITHUB_RUN_NUMBER}" 0.1.0 \
+            in/vm-guest/arm64.json in/vm-guest-x86_64/x86_64.json > rel/manifest.json
+      # The key keeps its passphrase. ssh-add reads the passphrase from an
+      # askpass script that prints the environment variable, with no
+      # terminal; ssh-keygen then signs through the agent with the public
+      # key. No step prints either secret, and the files go at the end.
+      - name: Sign with the current release key
+        env:
+          VM_IMAGE_SIGNING_KEY: ${{ secrets.VM_IMAGE_SIGNING_KEY }}
+          VM_IMAGE_SIGNING_PASSPHRASE: ${{ secrets.VM_IMAGE_SIGNING_PASSPHRASE }}
+        run: |
+          set -eu
+          umask 077
+          work=$(mktemp -d)
+          trap 'ssh-agent -k >/dev/null 2>&1 || true; shred -u "$work"/key 2>/dev/null || true; rm -rf "$work"' EXIT
+          printf '%s\n' "$VM_IMAGE_SIGNING_KEY" > "$work/key"
+          printf '#!/bin/sh\nprintf "%%s\\n" "$VM_IMAGE_SIGNING_PASSPHRASE"\n' > "$work/askpass"
+          chmod 700 "$work/askpass"
+          eval "$(ssh-agent -s)" >/dev/null
+          SSH_ASKPASS="$work/askpass" SSH_ASKPASS_REQUIRE=force DISPLAY=none setsid -w ssh-add -q "$work/key" < /dev/null
+          shred -u "$work/key"
+          ssh-keygen -q -Y sign -f tools/vm-guest/keys/current.pub -n ztcl-vm-image rel/manifest.json
+      - name: Check with the verifier of ztcl
+        run: zig build vm-image-verify -- "$PWD/rel"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vm-image
+          path: rel/

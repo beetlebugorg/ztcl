@@ -51,3 +51,13 @@ CONFIG_VSOCKETS=y
 CONFIG_VIRTIO_VSOCKETS=y
 CONFIG_FUSE_FS=y
 CONFIG_VIRTIO_FS=y
+# The read-only root disk of a signed image: squashfs, checked block by
+# block by dm-verity with the root hash of the signed manifest, which
+# the command line gives (dm-mod.create).
+CONFIG_MD=y
+CONFIG_BLK_DEV_DM=y
+CONFIG_DM_INIT=y
+CONFIG_DM_VERITY=y
+CONFIG_CRYPTO_SHA256=y
+CONFIG_SQUASHFS=y
+CONFIG_SQUASHFS_ZLIB=y

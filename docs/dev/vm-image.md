@@ -73,7 +73,18 @@ The private half of the test key is in the repository, so anyone can sign with i
 
 ## Signing in CI
 
-The workflow of the image (`.github/workflows/vm-guest.yml`) signs the manifest with the test key on each branch and pull request. On a version tag, or a run by hand from `main`, a job in the environment `vm-release` signs with the current key: it writes the key to a file of mode 0600, adds it to an `ssh-agent` of the job with an askpass script that gives the passphrase from the environment, signs through the agent, then ends the agent and erases the files. It checks the signature with ztcl itself before it uploads `manifest.json.sig`. The first run with the current key waits on the owner.
+The workflow of the image (`.github/workflows/vm-guest.yml`) builds each architecture on a runner of its own (`build.sh`, `pack.sh`, `image.sh`), then signs the manifest of both (`manifest.sh`) with the test key, under the name `ztcl-guest-test`, on each pull request that changes the guest. On a tag `vm-image-vVERSION`, or a run by hand from `main`, the job `manifest-release` in the environment `vm-release` signs the manifest under the name `ztcl-guest` with the current key (`tools/vm-guest/keys/current.pub`): it writes the key to a file of mode 0600, adds it to an `ssh-agent` of the job with an askpass script that gives the passphrase from the environment, signs through the agent, then ends the agent and erases the files. It checks the signature with ztcl itself before it uploads `manifest.json.sig`. The first run with the current key waits on the owner.
+
+## The build
+
+`image.sh` makes the read-only root disk of each architecture: a squashfs of BusyBox and the agent, padded to whole 4 KiB blocks, then the `dm-verity` hash tree after the data (`veritysetup format --no-superblock`, with a salt that comes from the name of the architecture). The command line of the manifest boots it with no initramfs:
+
+```
+init=/sbin/agent root=/dev/dm-0 rootfstype=squashfs ro dm-mod.waitfor=/dev/vda
+dm-mod.create="root,,,ro,0 SECTORS verity 1 /dev/vda /dev/vda 4096 4096 BLOCKS BLOCKS sha256 ROOT_HASH SALT"
+```
+
+The disk is the first virtio-blk disk of the guest (`/dev/vda`), read-only. A block that does not match the tree gives an error of read in the guest. The build is reproducible: the kernel and BusyBox get a fixed time, user, and host (`SOURCE_DATE_EPOCH`, `KBUILD_BUILD_*`), and squashfs gets fixed times and owners. The log of `image.sh` prints the SHA-256 of the kernel and of the disk, and the root hash, of each architecture.
 
 ## A rotation
 

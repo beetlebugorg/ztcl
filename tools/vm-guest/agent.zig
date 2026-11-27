@@ -96,6 +96,10 @@ fn mounts() void {
     _ = linux.mount("sys", "/sys", "sysfs", 0, 0);
     _ = linux.mount("dev", "/dev", "devtmpfs", 0, 0);
     _ = linux.mount("tmp", "/tmp", "tmpfs", 0, 0);
+    // On the read-only root disk of a signed image, /mnt is a tmpfs, so
+    // a mount point can be made there.
+    mkdirs("/mnt");
+    _ = linux.mount("mnt", "/mnt", "tmpfs", 0, 0);
     mkdirs("/mnt/share");
     // virtio-fs on Virtualization.framework, 9p on the KVM monitor.
     if (linux.errno(linux.mount("share0", "/mnt/share", "virtiofs", 0, 0)) != .SUCCESS)

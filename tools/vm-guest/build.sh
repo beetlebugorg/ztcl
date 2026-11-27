@@ -8,6 +8,10 @@
 # and out/busybox (static).
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
+# The same sources give the same bytes: no time, user, or host of the
+# build in the kernel or in BusyBox.
+export SOURCE_DATE_EPOCH=0 KBUILD_BUILD_TIMESTAMP='1970-01-01 00:00:00 UTC'
+export KBUILD_BUILD_USER=ztcl KBUILD_BUILD_HOST=ztcl KCONFIG_NOTIMESTAMP=1
 KERNEL=${KERNEL:-6.12.10}
 BUSYBOX=${BUSYBOX:-1.37.0}
 # The SHA-256 of each archive, from the first build.
