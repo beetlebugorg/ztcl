@@ -300,3 +300,17 @@ test "an unknown scheme and group give Unsupported" {
     var out: [max_secret]u8 = undefined;
     try std.testing.expectError(error.Unsupported, sharedSecret(@fromBackingInt(@intCast(0x0100)), "", "", &out));
 }
+
+// The key and the two signatures of docs/dev/zig-std/pss_padding.zig.
+// The bad signature has one non-zero byte in the PS of DB. The PSS
+// check of std.crypto.Certificate.rsa accepts it.
+test "a PSS signature with a non-zero byte in PS gives BadSignature" {
+    var key: [270]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&key, "3082010a0282010100" ++ "e1b7a2fe1530c665230b3cf8b2a7c22d3f979c1d06c5ca6df484b78e67a9b357c836a6cb8593cd2036d7add53845974147dd1a7458478ea92f9e9289075d1fc6bc57a357db035cf90598a1d01be385de4232980fb72f06f7664c767504422be1801d68158fccd555d5fe27de20523a27f270f0adc377d78eb2ed377e91cf1ae9db230bf9a72b4723aa16c37c1898ea6dd216ddd5d6697c3c97c58e3c7334c05b1f66ad18e951e64d01421ed3e4a4c7257ea86d2381a5ea3c600dbec26d6ba81986c5b76ef0e41bd0e0a9c6daf27357c45e628c0fe2caa0b8e1ac0c7a11559a837982175fafd96889f087957b1881e59714b9ec7e253762e0c171c7c029a6c73f" ++ "0203010001");
+    var bad: [256]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&bad, "ba79a3d6211a0d5e858c11c7c13cd77be3bc03d65db4c321dac48e55bfc7ef794a4cc0edc4d52d144f121642bb487e1334531cdab77a34fd7db8b60bb91da02ab23d2c898db704ab7ecfac67f522c8f4c36772823e089a3cf10f685f934cf312edd55830c0ea584bd8e199023e2f046c19f50ae0e82178dfb17f2d142eab9dd07f10d1915058bdbc42df5ef663ebba76ef9d62b838064c310d830370922c14ed53e528628d43c6e811b111892079fe7fc8985a7c4c21cba5e806c5374a0a7080cc741bb0fcd70ac099b675ec945a2daa2b135047d92203a424810db3960798ab93c54dcefae7961798db82a92444c8c17441d3d6a77900c6e7f4bea1be6d8ef1");
+    var good: [256]u8 = undefined;
+    _ = try std.fmt.hexToBytes(&good, "c88f40de1e7338eaedd4431c11208a06793db2066dd0a5452582a2db8752c67b9940a4c4e8657ac1f07b44be6113894f9086f9e7a63a5e51fdfa11ed04c8d8296503ecc4d30bf2112dc82f659b8221c6f98c406392be9fb02edba52d0f1b84b18b3eac9c1f651a3df8b80d0c04789f9cd42782a8ae1b6cd45c1a980df08ddee3fc62cf9a530f1fed18971d766a279e0b48bf070d1a9a535886d0435eb159902cfb1f9579887d7d2470719b735c6b535778cd6c644975441f96cc47345f26fedf3ecfd1ee53a825fca1b1eefc43ed245717bb0df993f2e7a6e3f9e2d1ecfb3d1e75b3c44299e6fb215463ba789a621caac36bcf2e2cc28221c8728cb43bd36b87");
+    try verify(.rsa_pss_rsae_sha256, &key, "zig std pss", &good);
+    try std.testing.expectError(error.BadSignature, verify(.rsa_pss_rsae_sha256, &key, "zig std pss", &bad));
+}
