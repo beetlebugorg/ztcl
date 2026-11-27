@@ -156,7 +156,7 @@ pub fn build(b: *std.Build) void {
         const run = b.addRunArtifact(signer);
         run.addArtifactArg(exe);
         const signed = run.addOutputFileArg("ztcl");
-        run.addArgs(&.{ "ztcl", "com.apple.security.virtualization" });
+        run.addArgs(&.{ "ztcl", "com.apple.security.virtualization", "com.apple.security.cs.allow-jit" });
         b.getInstallStep().dependOn(&b.addInstallBinFile(signed, "ztcl").step);
     } else b.installArtifact(exe);
 

@@ -72,7 +72,7 @@ codesign --force --options runtime --sign "Developer ID Application: NAME" hello
 xcrun notarytool submit hello-mac.zip --keychain-profile PROFILE --wait
 ```
 
-The JIT needs writable and executable memory, so a binary with the hardened runtime (`--options runtime`) and `--jit` needs the entitlement `com.apple.security.cs.allow-jit`. This is not tested.
+The JIT needs writable and executable memory (`MAP_JIT`). The ad hoc signature of `ztcl build` has the entitlement `com.apple.security.cs.allow-jit`, and so does the `ztcl` of `zig build`. A signature of your own with the hardened runtime (`--options runtime`) needs it too: pass it in the file of `--entitlements`. Without it the JIT gets no memory, and the scripts run in the interpreter with no error.
 
 A binary for Windows has no signature. Sign it after the build with `signtool` or `osslsigncode`.
 

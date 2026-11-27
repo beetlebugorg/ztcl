@@ -213,7 +213,7 @@ fn build(a: Allocator, bin: []const u8, payload: []const u8, slot: ?usize, ident
     const n_pages = (s_off + page - 1) / page;
     const ident_len = ident.len + 1;
     const hash_off = 88 + ident_len + n_special * 32;
-    const cd_len = hash_off + n_pages * 32;
+    const cd_len: usize = @intCast(hash_off + n_pages * 32);
     const head_len = 12 + 8 * n_blobs;
     const sig_len = head_len + cd_len + if (with_ents) req_len + xml_len + der_len else 0;
     const total = s_off + sig_len;
