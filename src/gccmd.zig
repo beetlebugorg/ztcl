@@ -26,6 +26,9 @@
 //! - uptime_ns: the time since the start of the counts.
 //! - rss, rss_peak: the resident set of the process and its peak, from
 //!   the system (`procmem.zig`), or 0 where the system gives none.
+//! - returned: the bytes of free pages that the heap gave back to the
+//!   system (`pagepool.zig`), and retained: the bytes of free pages that
+//!   it keeps for its next spans. 0 with no page pool.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -87,6 +90,8 @@ pub fn cmdGc(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         .{ "uptime_ns", up },
         .{ "rss", pm.rss },
         .{ "rss_peak", pm.peak },
+        .{ "returned", if (h.pool) |p| p.returned else 0 },
+        .{ "retained", if (h.pool) |p| p.free_committed else 0 },
     };
     const a = it.alloc();
     const out = try a.alloc(Value, kv.len * 2);

@@ -40,7 +40,7 @@ puts "|[string repeat {---|} [llength $head]]"
 foreach script $scripts {
     set rows {}
     for {set r 0} {$r < $runs} {incr r} {
-        set out [exec $ztcl --allow meter,file,clock,channels --tclsh [file join $here measure.tcl] $script]
+        set out [exec $ztcl --allow meter,file,clock,channels,event --tclsh [file join $here measure.tcl] $script]
         set line [lsearch -inline [split $out \n] {GCSTATS *}]
         if {$line eq ""} { error "no counts from $script" }
         lassign [lrange $line 1 2] s wall
@@ -55,7 +55,8 @@ foreach script $scripts {
         dict set row heap_mb [expr {[dict get $s heap_bytes] / $mb}]
         dict set row rss_mb [expr {[dict get $s rss] / $mb}]
         dict set row rss_peak_mb [expr {[dict get $s rss_peak] / $mb}]
-        dict set row rate_mbs [expr {[dict get $s alloc_rate] / $mb}]
+        # The rate over the wall time of the script, with no wait of measure.tcl.
+        dict set row rate_mbs [expr {[dict get $s allocated] / $mb / ($wall / 1e9)}]
         lappend rows $row
     }
     set cells [list [file rootname [file tail $script]]]

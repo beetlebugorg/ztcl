@@ -621,7 +621,7 @@ syn: ztcl::open target
 syn: ztcl::notify ?-option value ...? title ?body?
 == ztcl::gc
 syn: ztcl::gc subcommand
-sub: ztcl::gc stats | A dict of the counts: collections, gc_ns, mark_ns, sweep_ns, pause_p50_ns, pause_p99_ns, pause_max_ns, heap_bytes, heap_peak, live_bytes, used_bytes, threshold, allocated, freed, alloc_rate, uptime_ns, rss, and rss_peak.
+sub: ztcl::gc stats | A dict of the counts: collections, gc_ns, mark_ns, sweep_ns, pause_p50_ns, pause_p99_ns, pause_max_ns, heap_bytes, heap_peak, live_bytes, used_bytes, threshold, allocated, freed, alloc_rate, uptime_ns, rss, rss_peak, returned, and retained.
 sub: ztcl::gc collect | Runs a collection now, where the build can collect.
 sub: ztcl::gc reset | Starts the counts again.
 == ztcl::meter
