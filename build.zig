@@ -199,6 +199,16 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }) })).step);
+    // HTTP/2 over TLS: src/tls/h2.zig with the module `h2`.
+    const h2_mod = b.createModule(.{ .root_source_file = b.path("src/h2/conn.zig"), .target = target, .optimize = optimize });
+    const h2_tls_test = b.addRunArtifact(b.addTest(.{ .root_module = withCrypto(b, b.createModule(.{
+        .root_source_file = b.path("src/tls/h2.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "h2", .module = h2_mod }},
+    })) }));
+    test_step.dependOn(&h2_tls_test.step);
+    b.step("h2-tls-test", "Run the tests of HTTP/2 over TLS").dependOn(&h2_tls_test.step);
     if (target.result.os.tag == .linux) {
         const hpack_fuzz = b.addRunArtifact(b.addExecutable(.{ .name = "hpack-fuzz", .root_module = b.createModule(.{
             .root_source_file = b.path("src/h2/hpack_fuzz.zig"),
@@ -220,14 +230,24 @@ pub fn build(b: *std.Build) void {
             .optimize = .fast,
         }) }));
         b.step("hpack-bench", "Print the speed of HPACK").dependOn(&hpack_bench.step);
+        const h2_fast = b.createModule(.{ .root_source_file = b.path("src/h2/conn.zig"), .target = target, .optimize = .fast });
         const h2_serve = b.addRunArtifact(b.addExecutable(.{ .name = "h2-serve", .root_module = b.createModule(.{
             .root_source_file = b.path("src/h2/serve.zig"),
             .target = target,
             .optimize = .fast,
-            .imports = &.{.{ .name = "aio", .module = b.createModule(.{ .root_source_file = b.path("src/aio/aio.zig"), .target = target, .optimize = .fast }) }},
+            .imports = &.{
+                .{ .name = "aio", .module = b.createModule(.{ .root_source_file = b.path("src/aio/aio.zig"), .target = target, .optimize = .fast }) },
+                .{ .name = "h2", .module = h2_fast },
+                .{ .name = "tls_h2", .module = withCrypto(b, b.createModule(.{
+                    .root_source_file = b.path("src/tls/h2.zig"),
+                    .target = target,
+                    .optimize = .fast,
+                    .imports = &.{.{ .name = "h2", .module = h2_fast }},
+                })) },
+            },
         }) }));
         h2_serve.addPassthruArgs();
-        b.step("h2-serve", "Run the h2c test server: zig build h2-serve -- --port N").dependOn(&h2_serve.step);
+        b.step("h2-serve", "Run the HTTP/2 test server: zig build h2-serve -- --port N [--tls PEM]").dependOn(&h2_serve.step);
         const h2_load = b.addRunArtifact(b.addExecutable(.{ .name = "h2-load", .root_module = b.createModule(.{
             .root_source_file = b.path("src/h2/load.zig"),
             .target = target,

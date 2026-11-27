@@ -836,7 +836,29 @@ The sizes of all the blocks of the `raw-data` stories, for each encoder of the c
 | `hpack.zig`, no Huffman | 455,386 |
 | go-hpack | 993,735 |
 
-The next parts: `h2` over `ztcl::tls` with ALPN, and the HTTP server of task 12.
+#### HTTP/2 over TLS
+
+`src/tls/h2.zig` puts a TLS server of `server.zig` in front of a `Conn`, with no I/O of its own, as `conn.zig` has none.
+
+- `feed` opens each whole record in place in the read buffer (`Server.handleRecordInPlace`, on `Protection.openInPlace`), and `conn.zig` reads the frames from there. Only a frame that goes on in the next record is copied.
+- For the output, the pieces of `Conn.pending` (the frame bytes and the body slices of `respondRef`) go into the output buffer after a record header, and `Protection.seal` seals them there in place (`Server.sealer` gives the key, and sends a KeyUpdate first near the key limit). So a body byte is read once by the copy and once by the cipher. kTLS can remove the copy later.
+- ALPN must give `h2` (RFC 9113 section 3.2). A client with no `h2` in its list gets the `no_application_protocol` alert, and a client with no ALPN gets close_notify.
+- A GOAWAY of the client no longer closes the connection at once: the open streams and PING go on until the client closes (RFC 9113 section 6.8). Before, `h2-serve` closed a socket with unread bytes, and the reset of the kernel failed one h2spec test over TLS.
+
+`zig build h2-tls-test` (also in `zig build test`) runs a GET with the client of `client.zig` in memory, with a body of 40,000 bytes from `respondRef`, and the two ALPN failures. `zig build h2-serve -- --tls PEM` serves h2 over TLS: curl 8.23.0 `--http2 -k` gets 200, and h2spec `-t -k` gives 146 of 146, and 147 of 147 with `-S`.
+
+2026-11-27, the same machine at a load of 14, h2load 1.71.0 `-t 1 --tls13-ciphers=TLS_AES_128_GCM_SHA256` against `h2-serve --tls` and nghttpd 1.71.0 (OpenSSL), both with a P-256 certificate. Without the cipher option, nghttpd picks AES-256-GCM and `h2-serve` AES-128-GCM. Medians of three runs:
+
+| Connections | Streams each | Body | `h2-serve` requests/s | nghttpd requests/s | Ratio |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 1 | 13 bytes | 16,331 | 12,512 | 1.31 |
+| 4 | 32 | 13 bytes | 261,773 | 112,114 | 2.33 |
+| 64 | 100 | 13 bytes | 229,104 | 83,560 | 2.74 |
+| 8 | 8 | 65,536 bytes | 9,596 | 3,565 | 2.69 |
+
+The rows of 64 connections vary by a factor of 2 between runs on the shared machine (157,416 to 318,181 for `h2-serve`). The handshakes are in the rows: each connection makes one.
+
+The next parts: the HTTP server of task 12 on `conn.zig` and `src/tls/h2.zig`, a release callback for the bodies of `respondRef`, and kTLS.
 
 ## HTTP/3 and QUIC (later)
 

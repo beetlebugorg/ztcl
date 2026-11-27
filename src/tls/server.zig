@@ -30,11 +30,11 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const record = @import("record.zig");
+pub const record = @import("record.zig");
 const tcrypto = @import("crypto.zig");
 const msg = @import("messages.zig");
-const pem = @import("pem.zig");
-const client = @import("client.zig");
+pub const pem = @import("pem.zig");
+pub const client = @import("client.zig");
 
 const Writer = std.Io.Writer;
 const Suite = record.Suite;
@@ -195,6 +195,16 @@ pub const Server = struct {
 
     /// Handles one whole record of the client.
     pub fn handleRecord(s: *Server, w: *Writer, rec: []const u8) Error!Event {
+        return s.handle(w, rec, null);
+    }
+
+    /// `handleRecord` that opens a protected record in place: the data
+    /// of the event is a slice of `rec`, with no copy.
+    pub fn handleRecordInPlace(s: *Server, w: *Writer, rec: []u8) Error!Event {
+        return s.handle(w, rec, rec);
+    }
+
+    fn handle(s: *Server, w: *Writer, rec: []const u8, mut: ?[]u8) Error!Event {
         switch (s.state) {
             .closed, .failed => return error.BadState,
             else => {},
@@ -213,7 +223,8 @@ pub const Server = struct {
         var ct = h.type;
         var data: []const u8 = body;
         if (s.read) |*p| {
-            const pl = p.open(&s.plain, rec) catch |e| {
+            const opened = if (mut) |m| p.openInPlace(m) else p.open(&s.plain, rec);
+            const pl = opened catch |e| {
                 // Section 4.2.10: 0-RTT data that the server skips.
                 if (s.state == .wait_finished and s.early_left >= rec.len and h.type == .application_data) {
                     s.early_left -= rec.len;
@@ -648,6 +659,15 @@ pub const Server = struct {
             rest = rest[n..];
             if (rest.len == 0) break;
         }
+    }
+
+    /// The protection of the application data that the server sends,
+    /// for a caller that seals records itself (in place, with no copy).
+    /// It sends a KeyUpdate first when the key is near its limit.
+    pub fn sealer(s: *Server, w: *Writer) Error!*record.Protection {
+        if ((s.state != .connected and s.state != .wait_finished) or s.write_closed) return error.BadState;
+        if (s.write_p.?.needsUpdate()) try s.sendKeyUpdate(w);
+        return &s.write_p.?;
     }
 
     /// Sends close_notify.
