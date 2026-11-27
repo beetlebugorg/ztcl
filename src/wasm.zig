@@ -264,11 +264,12 @@ fn ztcl_web_split(ptr: [*]const u8, len: usize) callconv(.c) i32 {
     return @import("wasmweb.zig").split(gpa, ptr[0..len]);
 }
 
-/// Runs the script of one event of `web::` (the result of a promise).
-/// `vptr` has a list of values in the form of `wasmweb.readValue`. Gives
-/// 0, or 1 with the error in the result.
-fn ztcl_web_event(h: *Handle, sptr: [*]const u8, slen: usize, vptr: [*]const u8, vlen: usize) callconv(.c) i32 {
-    if (@import("wasmweb.zig").runEvent(&h.it, sptr[0..slen], vptr[0..vlen])) |v| {
+/// Runs the script of one event of `web::`: the result of a promise
+/// (`subst` 0) or an event of `web::on` (`subst` 1). `vptr` has a list
+/// of values in the form of `wasmweb.readValue`. Gives 0, or 1 with the
+/// error in the result.
+fn ztcl_web_event(h: *Handle, sptr: [*]const u8, slen: usize, vptr: [*]const u8, vlen: usize, subst: i32) callconv(.c) i32 {
+    if (@import("wasmweb.zig").runEvent(&h.it, sptr[0..slen], vptr[0..vlen], subst != 0)) |v| {
         h.result = h.it.str(v) catch "out of memory";
         return 0;
     } else |e| {

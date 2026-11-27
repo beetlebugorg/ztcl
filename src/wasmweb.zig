@@ -8,6 +8,8 @@
 //!   web::call obj method ?arg ...? ?-command script?
 //!                                    calls a method; for a promise, the
 //!                                    script gets the result later
+//!   web::on obj event script         runs script for each event of obj
+//!   web::off obj event               ends the script of `web::on`
 //!   web::release obj                 ends the handle
 //!
 //! An object of the page is a handle `webN` in a table of
@@ -32,6 +34,11 @@
 //! global level with two words appended: `ok` and the value, or `error`
 //! and the message.
 //!
+//! `web::on` needs the attribute `on<event>` of the type `EventHandler`
+//! in the table. The host puts each event into the same queue, and
+//! `ztcl_web_event` puts the values of the event in place of `%type`,
+//! `%target`, and `%detail` (`%%` is one `%`).
+//!
 //! The commands exist only after `ztcl_web_allow`, so they are absent by
 //! default and in `ztcl.wasm`.
 //!
@@ -50,7 +57,13 @@ pub const Op = enum(u32) {
     call = 4,
     release = 5,
     call_async = 6,
+    on = 7,
+    off = 8,
 };
+
+/// The names of the substitutions of `web::on`, in the order of the
+/// values of an event.
+pub const subs = [_][]const u8{ "type", "target", "detail" };
 
 const host = struct {
     extern "ztcl_host" fn web(op: u32, handle: i32, a: [*]const u8, a_len: usize, b: [*]const u8, b_len: usize) i32;
@@ -157,6 +170,20 @@ pub fn Commands(comptime gpa: std.mem.Allocator) type {
             return (try call(it, gpa, .call, try handleOf(it, argv[1]), try it.str(argv[2]), try words(it, argv[3..]))).value;
         }
 
+        fn cmdOn(it: *Interp, argv: []const Value, _: ?*ztcl.interp.Cmd) Error!Value {
+            if (argv.len != 4) return it.wrongArgs("web::on obj event script");
+            var out: std.ArrayList(u8) = .empty;
+            try putWord(it.alloc(), &out, try it.str(argv[3]));
+            _ = try call(it, gpa, .on, try handleOf(it, argv[1]), try it.str(argv[2]), out.items);
+            return Value.empty;
+        }
+
+        fn cmdOff(it: *Interp, argv: []const Value, _: ?*ztcl.interp.Cmd) Error!Value {
+            if (argv.len != 3) return it.wrongArgs("web::off obj event");
+            _ = try call(it, gpa, .off, try handleOf(it, argv[1]), try it.str(argv[2]), "");
+            return Value.empty;
+        }
+
         fn cmdRelease(it: *Interp, argv: []const Value, _: ?*ztcl.interp.Cmd) Error!Value {
             if (argv.len != 2) return it.wrongArgs("web::release obj");
             _ = try call(it, gpa, .release, try handleOf(it, argv[1]), "", "");
@@ -168,6 +195,8 @@ pub fn Commands(comptime gpa: std.mem.Allocator) type {
             try it.register("web::get", cmdGet);
             try it.register("web::set", cmdSet);
             try it.register("web::call", cmdCall);
+            try it.register("web::on", cmdOn);
+            try it.register("web::off", cmdOff);
             try it.register("web::release", cmdRelease);
         }
     };
@@ -185,12 +214,42 @@ pub fn appendWords(a: std.mem.Allocator, script: []const u8, vals: []const Value
     return out.toOwnedSlice(a);
 }
 
+/// Gives `script` with each `%name` of `subs` replaced by its value of
+/// `vals` as one list element, and `%%` replaced by `%`.
+pub fn substitute(a: std.mem.Allocator, script: []const u8, vals: []const Value) std.mem.Allocator.Error![]u8 {
+    var out: std.ArrayList(u8) = .empty;
+    var k: usize = 0;
+    outer: while (k < script.len) {
+        if (script[k] == '%' and k + 1 < script.len) {
+            if (script[k + 1] == '%') {
+                try out.append(a, '%');
+                k += 2;
+                continue;
+            }
+            for (subs, 0..) |n, j| {
+                if (std.mem.startsWith(u8, script[k + 1 ..], n)) {
+                    const v = if (j < vals.len) try vals[j].toStr(a) else "";
+                    try ztcl.value.appendElement(a, &out, v, true);
+                    k += 1 + n.len;
+                    continue :outer;
+                }
+            }
+        }
+        try out.append(a, script[k]);
+        k += 1;
+    }
+    return out.toOwnedSlice(a);
+}
+
 /// Runs the script of one event of the host at the global level. `vals`
-/// is a list in the form of the replies.
-pub fn runEvent(it: *Interp, script: []const u8, vals: []const u8) Error!Value {
+/// is a list in the form of the replies. For a result of a promise
+/// (`subst` false) the values go after the script. For an event of
+/// `web::on` they go in place of the names of `subs`.
+pub fn runEvent(it: *Interp, script: []const u8, vals: []const u8, subst: bool) Error!Value {
     var at: usize = 0;
     const list = (try readValue(it.alloc(), vals, &at)) orelse return it.fail("web: a bad event of the host", .{});
-    const text = try appendWords(it.alloc(), script, try it.readList(list));
+    const items = try it.readList(list);
+    const text = if (subst) try substitute(it.alloc(), script, items) else try appendWords(it.alloc(), script, items);
     const frame = it.frame;
     const ns = it.ns;
     it.frame = &it.global;
@@ -228,6 +287,14 @@ test "the words of a promise go after the script as list elements" {
     const aa = arena.allocator();
     const vals = [_]Value{ .{ .str = "ok" }, .{ .str = "a b" } };
     try std.testing.expectEqualStrings("done x ok {a b}", try appendWords(aa, "done x", &vals));
+}
+
+test "web::on puts the values of an event in place of %type, %target, and %detail" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const aa = arena.allocator();
+    const vals = [_]Value{ .{ .str = "connect" }, .{ .str = "web4" }, .{ .str = "" } };
+    try std.testing.expectEqualStrings("got connect web4 {} 100%", try substitute(aa, "got %type %target %detail 100%%", &vals));
 }
 
 test "a reply of words and lists reads as a Tcl list" {

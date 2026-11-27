@@ -126,12 +126,21 @@ export class Bridge {
     this.next = 1;
     // The results of the promises of `-command`, for runEvents.
     this.queue = [];
+    // The listeners of `web::on` by "handle:event".
+    this.listeners = new Map();
+  }
+
+  // The interface of an object of an event: the name of its class when
+  // the table has it.
+  typeOf(obj, fallback) {
+    const n = obj?.constructor?.name;
+    return n && this.table.interfaces[n] ? n : fallback;
   }
 
   // Puts the script of a result into the queue and asks the Interp for
   // a run of the events.
-  push(script, vals) {
-    this.queue.push({ script, vals });
+  push(script, vals, subst = false) {
+    this.queue.push({ script, vals, subst });
     this.interp._kick();
   }
 
@@ -391,6 +400,31 @@ export class Bridge {
           );
           return 0;
         }
+        case 7: {
+          // on: `sa` is the event type and the first word the script.
+          const o = this.obj(h);
+          if (!/^[a-z][a-z0-9_-]*$/.test(sa)) fail(`web::on: bad event "${sa}"`);
+          const m = this.member(o.type, "attributes", `on${sa}`);
+          if (m.type !== "EventHandler") fail(`web: the interface "${o.type}" has no event "${sa}"`);
+          const key = `${h}:${sa}`;
+          this.off(key);
+          const script = args[0];
+          const fn = (ev) => {
+            if (!this.objs.has(h)) return;
+            const t = ev.target;
+            const target = t && t !== o.obj ? this.wrap(t, this.typeOf(t, "EventTarget")) : t ? `web${h}` : "";
+            let detail = "";
+            if (ev.detail !== undefined && ev.detail !== null) detail = typeof ev.detail === "object" ? "" : String(ev.detail);
+            this.push(script, [String(ev.type), target, detail], true);
+          };
+          o.obj.addEventListener(sa, fn);
+          this.listeners.set(key, { obj: o.obj, type: sa, fn });
+          return 0;
+        }
+        case 8:
+          this.obj(h);
+          this.off(`${h}:${sa}`);
+          return 0;
       }
       return fail(`web: unknown operation ${op}`);
     } catch (e) {
@@ -410,8 +444,15 @@ export class Bridge {
     return words.map((w, i) => this.toJS(m.args[Math.min(i, m.args.length - 1)].type, w));
   }
 
+  off(key) {
+    const old = this.listeners.get(key);
+    if (old) old.obj.removeEventListener(old.type, old.fn);
+    this.listeners.delete(key);
+  }
+
   release(h) {
     const o = this.obj(h);
+    for (const key of [...this.listeners.keys()]) if (key.startsWith(`${h}:`)) this.off(key);
     this.objs.delete(h);
     this.ids.delete(o.obj);
   }

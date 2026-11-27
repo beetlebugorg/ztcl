@@ -12,6 +12,7 @@ proc ports {status value} {
 }
 set serial [web::root navigator.serial]
 web::call $serial getPorts -command ports
+web::on $serial connect {puts "connect: [web::call %target getInfo]"}
 ```
 
 ```js
@@ -27,6 +28,8 @@ web::root name
 web::get obj attr
 web::set obj attr value
 web::call obj method ?arg ...? ?-command script?
+web::on obj event script
+web::off obj event
 web::release obj
 ```
 
@@ -37,7 +40,9 @@ web::release obj
 | `web::set obj attr value` | Sets an attribute and gives an empty string. |
 | `web::call obj method ?arg ...?` | Calls a method and gives its value. |
 | `web::call obj method ?arg ...? -command script` | Calls a method that gives a promise, and gives an empty string. The script gets the result later. |
-| `web::release obj` | Ends the handle. |
+| `web::on obj event script` | Runs the script for each event of the type `event` of `obj`. A second `web::on` of the same event replaces the script. |
+| `web::off obj event` | Ends the script of `web::on`. |
+| `web::release obj` | Ends the handle and the scripts of `web::on` of the object. |
 
 An object of the page is a handle `webN`. The same object gives the same handle. A handle stays until `web::release` or the end of the interpreter.
 
@@ -46,6 +51,17 @@ An object of the page is a handle `webN`. The same object gives the same handle.
 A call into wasm cannot wait for a promise, so a method that gives a promise needs `-command script`. When the promise ends, the result goes into a queue. `runEvents` of the page runs the script at the global level with two words appended: `ok` and the value, or `error` and the message. A timer of `setTimeout` calls `runEvents` for each result, and `onEvents` gets the result of each run. An error of a bad argument comes at the time of the call.
 
 Each script of a result has its own compute limit: the option `webComputeLimit` of `Interp.create` (1,000,000 compute units by default).
+
+## Events
+
+`web::on` needs an attribute `on<event>` of the type `EventHandler` in the table, for example `onconnect` of `Serial`. Each event goes into the queue of the results of the promises, and `runEvents` runs the script at the global level, with its own compute limit. Before the run, these names in the script get the values of the event, each one as one list element:
+
+| Name | Value |
+|---|---|
+| `%type` | The type of the event, for example `connect`. |
+| `%target` | The handle of the target of the event. For `connect` of `navigator.serial`, it is the port. |
+| `%detail` | The `detail` of a `CustomEvent` when it is a string or a number, or an empty string. |
+| `%%` | One `%`. |
 
 ## Values
 
