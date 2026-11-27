@@ -1,8 +1,8 @@
 //! The virtio-mmio transport of virtio 1.2 (section 4.2) and the devices
-//! of `ztcl::vm` that run in ztcl: the console (5.3), block (5.2), and
-//! entropy (5.4). A device that the hypervisor runs, such as vhost-vsock
-//! on KVM, is an `External` device: the transport keeps its registers and
-//! calls the hooks of the backend.
+//! of `ztcl::vm` that run in ztcl: the console (5.3), block (5.2),
+//! entropy (5.4), and vsock (5.10, `vsock.zig`). A device that the
+//! hypervisor runs, such as vhost-vsock on KVM, is an `External` device:
+//! the transport keeps its registers and calls the hooks of the backend.
 //!
 //! A backend (src/kvm.zig, and the Windows Hypervisor Platform later)
 //! gives each device a 4 KB window and an interrupt, and implements
@@ -94,7 +94,12 @@ pub const Backend = union(enum) {
     blk: Disk,
     rng: *const fn (buf: []u8) usize,
     external: External,
+    /// The vsock device of ztcl (`vsock.zig`), for a monitor with no
+    /// vsock of its host kernel.
+    vsock: *vsock_mod.Vsock,
 };
+
+const vsock_mod = @import("vsock.zig");
 
 /// A spin lock for the registers of a device: the vCPU threads and the
 /// console thread of the backend take it for a short time.
@@ -138,6 +143,14 @@ pub const Device = struct {
         return .{ .backend = .{ .rng = fill }, .irq = irq, .features = f_version_1, .nqueues = 1 };
     }
 
+    /// The vsock device of ztcl, with the CID of the guest in its
+    /// configuration.
+    pub fn vsock(irq: u32, v: *vsock_mod.Vsock) Device {
+        var d: Device = .{ .backend = .{ .vsock = v }, .irq = irq, .features = f_version_1, .nqueues = 3, .config_len = 8 };
+        std.mem.writeInt(u64, d.config[0..8], v.guest_cid, .little);
+        return d;
+    }
+
     /// An external device with `features` (with VIRTIO_F_VERSION_1),
     /// `nqueues` queues, and the bytes of its configuration.
     pub fn external(irq: u32, e: External, features: u64, nqueues: u8, config: []const u8) Device {
@@ -152,6 +165,7 @@ pub const Device = struct {
             .blk => 2,
             .rng => 4,
             .external => |e| e.id,
+            .vsock => vsock_mod.id,
         };
     }
 
@@ -235,6 +249,7 @@ pub const Device = struct {
 
     fn reset(d: *Device) void {
         if (d.backend == .external) d.backend.external.reset(d.backend.external.ctx, d);
+        if (d.backend == .vsock) d.backend.vsock.reset();
         d.status = 0;
         d.dev_sel = 0;
         d.drv_sel = 0;
@@ -251,6 +266,7 @@ pub const Device = struct {
             .blk => |disk| if (qi == 0) d.blkRequests(host, disk),
             .rng => |fill| if (qi == 0) d.rngFill(host, fill),
             .external => {},
+            .vsock => |v| if (qi == 1) v.tx(d, host) else if (qi == 0) v.rxReady(d, host),
         }
     }
 

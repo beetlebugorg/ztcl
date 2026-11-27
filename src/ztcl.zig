@@ -116,6 +116,7 @@ test {
     _ = @import("tcl9_tests.zig");
     if (@import("builtin").os.tag == .linux) _ = @import("kvm.zig");
     _ = @import("vm/virtio/mmio.zig");
+    _ = @import("vm/virtio/vsock.zig");
     _ = zipwrite;
     _ = buildnative;
     _ = dbus;
