@@ -56,6 +56,9 @@ pub const max_conns = 64;
 /// The most bytes of the host that wait in one stream for the credit of
 /// the guest.
 pub const tx_max = 256 * 1024;
+/// The most RST packets that wait for receive buffers. A packet of no
+/// stream past that gets no RST.
+pub const max_refusals = 256;
 
 pub const Op = enum(u16) { invalid = 0, request = 1, response = 2, rst = 3, shutdown = 4, rw = 5, credit_update = 6, credit_request = 7, _ };
 
@@ -261,7 +264,7 @@ pub const Vsock = struct {
         const k = v.find(dst_port, src_port) orelse {
             if (op == .request and v.acceptRequest(dst_port, src_port, peer_buf, peer_fwd)) return;
             // A packet of no stream: RST, unless it is RST.
-            if (op != .rst) v.refusals.append(v.gpa, .{ dst_port, src_port }) catch {};
+            if (op != .rst and v.refusals.items.len < max_refusals) v.refusals.append(v.gpa, .{ dst_port, src_port }) catch {};
             return;
         };
         const c = &v.conns[k];
@@ -647,6 +650,21 @@ test "vsock: no program listens on the port" {
     f.txPacket(&d, &h, 0x6000, .{ .src_cid = 9, .src_port = 5001, .dst_port = 81, .op = .request });
     f.rxBuffer(&d, &h, 0xa000);
     try std.testing.expect(f.rxNext() == null);
+}
+
+test "vsock: the RST packets that wait for receive buffers have a cap" {
+    var f: Fake = .{};
+    const h = f.host();
+    var v = Vsock.init(std.testing.allocator, 3, f.sink());
+    defer v.deinit();
+    var d = Device.vsock(7, &v);
+    Fake.start(&d, &h);
+    // A guest that sends packets of no stream and gives no receive
+    // buffer.
+    for (0..4 * max_refusals) |i| {
+        f.txPacket(&d, &h, 0x6000, .{ .src_port = @intCast(6000 + i), .dst_port = 80, .op = .rw });
+    }
+    try std.testing.expectEqual(@as(usize, max_refusals), v.refusals.items.len);
 }
 
 test "vsock: the host sends no more than the credit of the guest" {

@@ -61,6 +61,11 @@ pub const Queue = struct {
         const idx_p = m.ptr(u16, q.avail + 2) orelse return null;
         const idx = @atomicLoad(u16, @as(*u16, @ptrCast(@alignCast(idx_p))), .acquire);
         if (idx == q.last_avail) return null;
+        // The driver has at most `num` chains available (section 2.7.6):
+        // a larger count is an index of a broken or hostile driver, and
+        // the device takes no chain, so one notify cannot make it walk
+        // 65,535 chains.
+        if (idx -% q.last_avail > q.num) return null;
         const slot = q.avail + 4 + 2 * @as(u64, q.last_avail % q.num);
         const head = (m.ptr(u16, slot) orelse return null).*;
         q.last_avail +%= 1;
@@ -75,6 +80,7 @@ pub const Queue = struct {
 
     /// Puts a chain in the used ring with `len` bytes written.
     pub fn putUsed(q: *Queue, m: Mem, head: u16, len: u32) void {
+        if (!q.ready) return;
         const idx_p = m.ptr(u16, q.used + 2) orelse return;
         const idx: *u16 = @ptrCast(@alignCast(idx_p));
         const cur = idx.*;
@@ -85,7 +91,10 @@ pub const Queue = struct {
         @atomicStore(u16, idx, cur +% 1, .release);
     }
 
+    /// The used index, for a ready queue only: `valid` checked the
+    /// alignment of its rings.
     fn usedIdx(q: *Queue, m: Mem) ?*u16 {
+        if (!q.ready) return null;
         const p = m.ptr(u16, q.used + 2) orelse return null;
         return @ptrCast(@alignCast(p));
     }
@@ -136,13 +145,17 @@ pub const Queue = struct {
     /// driver made a chain available in the meantime. The device then
     /// reads the ring again, so no notify is lost.
     pub fn arm(q: *Queue, m: Mem) bool {
+        if (!q.ready) return false;
         if (q.event_idx) {
             const at = q.used + 4 + 8 * @as(u64, q.num);
             const p = m.ptr(u16, at) orelse return false;
             @atomicStore(u16, @as(*u16, @ptrCast(@alignCast(p))), q.last_avail, .seq_cst);
         }
         const ip = m.ptr(u16, q.avail + 2) orelse return false;
-        return @atomicLoad(u16, @as(*u16, @ptrCast(@alignCast(ip))), .seq_cst) != q.last_avail;
+        const idx = @atomicLoad(u16, @as(*u16, @ptrCast(@alignCast(ip))), .seq_cst);
+        // A count past `num` gives no chain in `next`, so it is no new
+        // chain here: a loop of `next` and `arm` ends.
+        return idx != q.last_avail and idx -% q.last_avail <= q.num;
     }
 
     /// As `arm`, for a device that needs more than `have` chains (it
@@ -165,10 +178,13 @@ pub const Queue = struct {
         q.last_avail -%= k;
     }
 
-    /// Checks that the rings fit in the guest memory, when the driver
-    /// sets the queue ready.
+    /// Checks that the rings fit in the guest memory and have the
+    /// alignment of section 2.7 (16, 2, and 4 bytes), and that the size
+    /// is a power of 2, when the driver sets the queue ready. The atomic
+    /// access to the ring indexes needs the alignment.
     pub fn valid(q: *const Queue, m: Mem) bool {
-        if (q.num == 0 or q.num > max_queue) return false;
+        if (q.num == 0 or q.num > max_queue or !std.math.isPowerOfTwo(q.num)) return false;
+        if (q.desc % 16 != 0 or q.avail % 2 != 0 or q.used % 4 != 0) return false;
         return m.slice(q.desc, 16 * @as(u64, q.num)) != null and
             m.slice(q.avail, 6 + 2 * @as(u64, q.num)) != null and
             m.slice(q.used, 6 + 8 * @as(u64, q.num)) != null;
@@ -211,4 +227,24 @@ test "virtio: a guest address outside the memory" {
     try std.testing.expect(mem.slice(4000, 96) != null);
     try std.testing.expect(mem.slice(4000, 97) == null);
     try std.testing.expect(mem.slice(std.math.maxInt(u64), 2) == null);
+}
+
+test "virtio: a queue with rings out of alignment or a bad size is not valid" {
+    var buf: [65536]u8 = undefined;
+    const mem: Mem = .{ .base = &buf, .size = buf.len };
+    var q: Queue = .{ .num = 8, .desc = 0x1000, .avail = 0x2000, .used = 0x3000 };
+    try std.testing.expect(q.valid(mem));
+    q.avail = 0x2001;
+    try std.testing.expect(!q.valid(mem));
+    q.avail = 0x2000;
+    q.used = 0x3002;
+    try std.testing.expect(!q.valid(mem));
+    q.used = 0x3000;
+    q.desc = 0x1008;
+    try std.testing.expect(!q.valid(mem));
+    q.desc = 0x1000;
+    q.num = 6;
+    try std.testing.expect(!q.valid(mem));
+    q.num = 0;
+    try std.testing.expect(!q.valid(mem));
 }
