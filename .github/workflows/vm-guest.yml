@@ -9,13 +9,30 @@ name: VM guest
 # has /dev/kvm. Then the manifest of both, signed:
 # - on each run, with the test key, under the name ztcl-guest-test
 #   (artifact vm-image-test);
-# - on a tag vm-image-v*, or a run by hand from main, with the current
-#   release key in the environment vm-release (artifact vm-image).
+# - when vm-image-release.yml calls it (a tag vm-image-v*, or a run by
+#   hand from main), also with the current release key in the
+#   environment vm-release (artifact vm-image).
 # Each manifest is checked with the verifier of ztcl before the upload.
 # docs/dev/vm-image.md has the format, the keys, and the rotation.
 on:
+  # A push to main that changes the guest keeps a fresh test release on
+  # main: tools/vm-guest/fetch-test-image.sh downloads it.
   push:
-    tags: ["vm-image-v*"]
+    branches: [main]
+    paths:
+      - "tools/vm-guest/build.sh"
+      - "tools/vm-guest/kernel.fragment"
+      - "tools/vm-guest/kernel-x86_64.fragment"
+      - "tools/vm-guest/agent.zig"
+      - "tools/vm-guest/pack.sh"
+      - "tools/vm-guest/test-kvm.*"
+      - "src/kvm.zig"
+      - "src/vm/**"
+      - "src/microvm.zig"
+      - "src/vmimage.zig"
+      - "tools/vm-guest/image.sh"
+      - "tools/vm-guest/manifest.sh"
+      - ".github/workflows/vm-guest.yml"
   pull_request:
     paths:
       - "tools/vm-guest/build.sh"
@@ -31,7 +48,9 @@ on:
       - "tools/vm-guest/image.sh"
       - "tools/vm-guest/manifest.sh"
       - ".github/workflows/vm-guest.yml"
-  workflow_dispatch:
+  # The release: vm-image-release.yml calls this workflow on a tag
+  # vm-image-v* or a run by hand from main.
+  workflow_call:
 
 permissions:
   contents: read
