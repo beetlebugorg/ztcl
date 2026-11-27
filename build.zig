@@ -152,6 +152,13 @@ pub fn build(b: *std.Build) void {
         .optimize = .safe,
     })) }));
     x509_fuzz.addPassthruArgs();
+    const virtio_fuzz = b.addRunArtifact(b.addExecutable(.{ .name = "virtio-fuzz", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/vm/virtio_fuzz.zig"),
+        .target = target,
+        .optimize = .safe,
+    }) }));
+    virtio_fuzz.addPassthruArgs();
+    b.step("virtio-fuzz", "Fuzz the virtio devices of ztcl::vm as a hostile guest: zig build virtio-fuzz -- --seconds N").dependOn(&virtio_fuzz.step);
     b.step("x509-fuzz", "Fuzz the DER, X.509, PEM, and chain code: zig build x509-fuzz -- --seconds N").dependOn(&x509_fuzz.step);
     // The test client of tools/tls-interop.sh.
     const interop = b.addExecutable(.{ .name = "tls-interop", .root_module = withCrypto(b, b.createModule(.{

@@ -55,6 +55,8 @@ pub const hdr_len = 12;
 /// The most receive chains of one frame: a frame of 64 KB in buffers
 /// of 1,500 bytes needs 44.
 pub const max_bufs = 64;
+/// The most writable buffers of the chains of one frame.
+pub const max_wbufs = 256;
 
 /// The most descriptors of one frame of the guest.
 pub const max_parts = Chain.max;
@@ -204,6 +206,12 @@ pub const Net = struct {
         var taken: u16 = 0;
         var heads: [max_bufs]u16 = undefined;
         var lens: [max_bufs]u32 = undefined;
+        // The writable buffers of the chains, from one read of each
+        // descriptor: the guest can change a descriptor at any time, so
+        // the copy uses these slices and reads no descriptor again.
+        var wbufs: [max_wbufs][]u8 = undefined;
+        var nw: usize = 0;
+        var ends: [max_bufs]usize = undefined;
         var room: usize = 0;
         // First count the chains that the frame needs, then copy, so
         // that a frame that does not fit leaves the ring as it was.
@@ -227,21 +235,29 @@ pub const Net = struct {
                 continue;
             };
             for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| {
-                if (w) room += b.len;
+                if (!w or b.len == 0) continue;
+                if (nw == max_wbufs) {
+                    // Too many small buffers for one frame.
+                    q.unget(taken + 1);
+                    n.drop();
+                    return true;
+                }
+                wbufs[nw] = b;
+                nw += 1;
+                room += b.len;
             }
             heads[taken] = head;
+            ends[taken] = nw;
             taken += 1;
         }
         hdr.num_buffers = if (mrg) taken else 0;
         hb = hdr.encode();
         var hput: usize = 0;
-        for (heads[0..taken], lens[0..taken]) |head, *len| {
-            // The chain was read in the first pass, so it reads again.
-            const c = Chain.read(q, m, head).?;
+        var wi: usize = 0;
+        for (lens[0..taken], ends[0..taken]) |*len, e| {
             var put: u32 = 0;
-            for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| {
-                if (!w) continue;
-                var dst = b;
+            while (wi < e) : (wi += 1) {
+                var dst = wbufs[wi];
                 if (hput < hdr_len) {
                     // The header can span the first buffers of a chain.
                     const k = @min(dst.len, hdr_len - hput);

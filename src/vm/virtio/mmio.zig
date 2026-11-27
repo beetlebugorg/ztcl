@@ -283,7 +283,9 @@ pub const Device = struct {
             },
             0x024 => d.drv_sel = v,
             0x030 => d.queue_sel = v,
-            0x038 => if (qok) {
+            // The size and the addresses of a ready queue do not change
+            // (section 4.2.2.2): `Queue.valid` checked them at ready.
+            0x038 => if (qok and !q.ready) {
                 q.num = @min(v, queue.max_queue);
             },
             0x044 => if (qok) {
@@ -304,12 +306,12 @@ pub const Device = struct {
                     else => {},
                 };
             },
-            0x080 => if (qok) setLow(&q.desc, v),
-            0x084 => if (qok) setHigh(&q.desc, v),
-            0x090 => if (qok) setLow(&q.avail, v),
-            0x094 => if (qok) setHigh(&q.avail, v),
-            0x0a0 => if (qok) setLow(&q.used, v),
-            0x0a4 => if (qok) setHigh(&q.used, v),
+            0x080 => if (qok and !q.ready) setLow(&q.desc, v),
+            0x084 => if (qok and !q.ready) setHigh(&q.desc, v),
+            0x090 => if (qok and !q.ready) setLow(&q.avail, v),
+            0x094 => if (qok and !q.ready) setHigh(&q.avail, v),
+            0x0a0 => if (qok and !q.ready) setLow(&q.used, v),
+            0x0a4 => if (qok and !q.ready) setHigh(&q.used, v),
             0x0ac => d.shm_sel = v,
             else => {},
         }
@@ -367,7 +369,8 @@ pub const Device = struct {
             var put: u32 = 0;
             if (Chain.read(q, host.mem, head)) |c| {
                 for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| {
-                    if (w) put += @intCast(fill(b));
+                    // 256 large buffers add up to more than a u32.
+                    if (w) put +|= @intCast(fill(b));
                 }
             }
             q.putUsed(host.mem, head, put);
@@ -439,7 +442,7 @@ fn blkOne(disk: Disk, q: *Queue, mem: Mem, head: u16) u32 {
                         status = blk_ioerr;
                         break;
                     }
-                    if (kind == blk_in) written += @intCast(b.len);
+                    if (kind == blk_in) written +|= @intCast(b.len);
                     pos += b.len;
                 }
             }
@@ -458,7 +461,7 @@ fn blkOne(disk: Disk, q: *Queue, mem: Mem, head: u16) u32 {
         else => status = blk_unsupp,
     }
     last[last.len - 1] = status;
-    return written + 1;
+    return written +| 1;
 }
 
 // The tests run a device against a fake guest memory with one queue.
@@ -530,11 +533,36 @@ test "virtio: the registers of a device" {
     d.read(0x010, &b);
     try std.testing.expectEqual(@as(u32, 1), std.mem.readInt(u32, &b, .little));
     // A queue whose rings are outside the guest memory is not ready.
+    Fake.reg(&d, &h, 0x044, 0);
     Fake.reg(&d, &h, 0x038, 8);
     Fake.reg(&d, &h, 0x080, 0xfff0);
     Fake.reg(&d, &h, 0x044, 1);
     d.read(0x044, &b);
     try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, &b, .little));
+}
+
+test "virtio: the size and the rings of a ready queue do not change" {
+    var f: Fake = .{};
+    const h = f.host();
+    var d = Device.console(5, .{ .ctx = &f, .write = Fake.write, .rx_ready = Fake.noop });
+    Fake.ready(&d, &h, 1);
+    Fake.reg(&d, &h, 0x038, 0);
+    Fake.reg(&d, &h, 0x080, 0xfff1);
+    Fake.reg(&d, &h, 0x090, 0x2001);
+    Fake.reg(&d, &h, 0x0a0, 0x3003);
+    try std.testing.expectEqual(@as(u32, 8), d.queues[1].num);
+    try std.testing.expectEqual(@as(u64, 0x1000), d.queues[1].desc);
+    try std.testing.expectEqual(@as(u64, 0x2000), d.queues[1].avail);
+    try std.testing.expectEqual(@as(u64, 0x3000), d.queues[1].used);
+    // A chain still runs.
+    @memcpy(f.mem[0x4000..0x4002], "ok");
+    f.offer(&.{.{ 0x4000, 2, false }});
+    Fake.reg(&d, &h, 0x050, 1);
+    try std.testing.expectEqualStrings("ok", f.out[0..f.out_len]);
+    // An available index more than the size ahead gives no chain.
+    std.mem.writeInt(u16, f.mem[0x2002..0x2004], 1 + 9, .little);
+    Fake.reg(&d, &h, 0x050, 1);
+    try std.testing.expectEqual(@as(u16, 1), d.queues[1].last_avail);
 }
 
 test "virtio: the console sends the bytes of the driver" {

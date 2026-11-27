@@ -249,6 +249,14 @@ jobs:
           ulimit -v 6000000
           zig build tls-x509-test -Doptimize=ReleaseSafe -- "$(tools/fetch-x509-limbo.sh)"
           zig build x509-fuzz -- --seconds 60
+      - name: Fuzz the virtio devices as a hostile guest
+        if: runner.os == 'Linux'
+        run: |
+          ulimit -v 6000000
+          # A scheduled or manual run fuzzes for 15 minutes.
+          secs=30
+          if [ "${{ github.event_name }}" = schedule ] || [ "${{ github.event_name }}" = workflow_dispatch ]; then secs=900; fi
+          zig build virtio-fuzz -- --seconds "$secs" --seed "$GITHUB_RUN_ID"
       - name: Run the TLS client against openssl s_server
         if: runner.os == 'Linux'
         run: |

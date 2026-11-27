@@ -159,9 +159,13 @@ pub const Stack = struct {
                 i += 1;
                 continue;
             }
-            if (i + 1 >= d.len or i + 2 + d[i + 1] > d.len) return n.drop();
-            if (d[i] == 53 and d[i + 1] == 1) kind = d[i + 2];
-            i += 2 + d[i + 1];
+            // Each byte is read once: the frame can be in guest memory.
+            const code = d[i];
+            if (i + 1 >= d.len) return n.drop();
+            const olen: usize = d[i + 1];
+            if (i + 2 + olen > d.len) return n.drop();
+            if (code == 53 and olen == 1) kind = d[i + 2];
+            i += 2 + olen;
         }
         const answer: u8 = switch (kind) {
             1 => 2, // DISCOVER: OFFER
