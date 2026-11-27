@@ -103,7 +103,7 @@ export class Interp {
     return self;
   }
 
-  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = "8.6", onEvents = null } = {}) {
+  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = "8.6", onEvents = null, domComputeLimit = 1000000 } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
@@ -155,6 +155,12 @@ export class Interp {
       // `dom append`.
       this._made = new WeakSet();
       this._domHtml = allow.includes("dom-html");
+      // The scripts of `dom on` by "handle:event", and the events that
+      // wait for runEvents. Each script has its own compute limit.
+      this._listeners = new Map();
+      this._domQueue = [];
+      this._kickTimer = null;
+      this.domComputeLimit = domComputeLimit;
       allow = allow.filter((c) => c !== "dom-html");
       if (this.x.ztcl_dom_allow(this.h) !== 0) throw new Error("ztcl_dom_allow: out of memory");
       allow = allow.filter((c) => c !== "dom");
@@ -223,10 +229,51 @@ export class Interp {
   /// output }. A timer of setTimeout calls it for each due event, so a
   /// page calls it only to run the events at a time of its own.
   runEvents(now = this._now()) {
-    if (!this._events) throw new Error("runEvents: no allow: [\"event\"]");
-    const r = this._call(() => this.x.ztcl_run_events(this.h, now));
-    this._schedule();
+    if (!this._events && !this._listeners) throw new Error('runEvents: no allow: ["event"] or ["dom"]');
+    const r = { ok: true, result: "", output: "" };
+    const add = (one) => {
+      if (!one.ok && r.ok) [r.ok, r.result] = [false, one.result];
+      else if (r.ok) r.result = one.result;
+      r.output += one.output;
+    };
+    // The DOM events of `dom on`, in the order of the page.
+    const queue = this._domQueue ?? [];
+    if (queue.length) this._domQueue = [];
+    for (const ev of queue) add(this._domEvent(ev));
+    if (this._events) {
+      add(this._call(() => this.x.ztcl_run_events(this.h, now)));
+      this._schedule();
+    }
     return r;
+  }
+
+  // Runs the script of one DOM event with its own compute limit.
+  _domEvent({ script, vals }) {
+    const x = this.x;
+    return this._call(() => {
+      const s = encoder.encode(script);
+      const v = encoder.encode(vals.join("\0"));
+      const sp = x.ztcl_alloc(s.length || 1);
+      const vp = x.ztcl_alloc(v.length || 1);
+      if (!sp || !vp) throw new Error("ztcl_alloc: out of memory");
+      new Uint8Array(x.memory.buffer, sp, s.length).set(s);
+      new Uint8Array(x.memory.buffer, vp, v.length).set(v);
+      const rc = x.ztcl_dom_event(this.h, sp, s.length, vp, v.length);
+      x.ztcl_free(sp, s.length || 1);
+      x.ztcl_free(vp, v.length || 1);
+      return rc;
+    }, this.domComputeLimit);
+  }
+
+  // Runs the queue of DOM events from a timer of setTimeout.
+  _kick() {
+    if (this._kickTimer !== null || !this.h) return;
+    this._kickTimer = setTimeout(() => {
+      this._kickTimer = null;
+      if (!this.h) return;
+      const r = this.runEvents();
+      if (this.onEvents) this.onEvents(r);
+    }, 0);
   }
 
   // Sets the timer for the next event, or clears it when no event exists.
@@ -442,6 +489,11 @@ export class Interp {
           if (el === root) return fail("dom remove: the root stays");
           // The tree of the element leaves the scope with it.
           el.remove();
+          for (const [k, l] of this._listeners) {
+            if (l.el !== el) continue;
+            el.removeEventListener(l.type, l.fn);
+            this._listeners.delete(k);
+          }
           this._made.delete(el);
           this._handles.delete(h);
           this._ids.delete(el);
@@ -453,6 +505,33 @@ export class Interp {
           if (!this._domHtml) return fail('dom html: setting HTML needs the grant "dom-html"');
           el.innerHTML = sa;
           return 0;
+        case 18: {
+          // on: `sa` is the event type and `sb` the script.
+          if (!/^[a-z][a-z0-9_-]*$/.test(sa)) return fail(`dom on: bad event "${sa}"`);
+          const key = `${h}:${sa}`;
+          const old = this._listeners.get(key);
+          if (old) el.removeEventListener(sa, old.fn);
+          const fn = (ev) => {
+            // An element that left the scope runs no script.
+            if (!inScope(el)) return;
+            const t = ev.target;
+            const value = t && (t.type === "checkbox" || t.type === "radio") ? (t.checked ? "1" : "0") : String(t?.value ?? "");
+            const target = t && t.nodeType === 1 && inScope(t) ? `dom${handle(t)}` : "";
+            const num = (n) => (typeof n === "number" ? String(n) : "");
+            this._domQueue.push({ script: sb, vals: [num(ev.clientX), num(ev.clientY), String(ev.key ?? ""), value, target] });
+            this._kick();
+          };
+          el.addEventListener(sa, fn);
+          this._listeners.set(key, { el, type: sa, fn });
+          return 0;
+        }
+        case 19: {
+          const key = `${h}:${sa}`;
+          const old = this._listeners.get(key);
+          if (old) el.removeEventListener(sa, old.fn);
+          this._listeners.delete(key);
+          return 0;
+        }
       }
       return fail(`dom: unknown operation ${op}`);
     } catch (e) {
@@ -460,10 +539,10 @@ export class Interp {
     }
   }
 
-  _call(f) {
+  _call(f, limit = this.computeLimit) {
     const x = this.x;
     if (!this.h) throw new Error("the interpreter is closed");
-    const units = this.computeLimit == null ? NO_LIMIT : BigInt(this.computeLimit);
+    const units = limit == null ? NO_LIMIT : BigInt(limit);
     x.ztcl_set_compute_limit(this.h, units);
     this._liveOut = "";
     const rc = f();
@@ -638,6 +717,10 @@ export class Interp {
   close() {
     if (this._timer !== null) clearTimeout(this._timer);
     this._timer = null;
+    if (this._kickTimer) clearTimeout(this._kickTimer);
+    this._kickTimer = null;
+    for (const l of this._listeners?.values() ?? []) l.el.removeEventListener(l.type, l.fn);
+    this._listeners?.clear();
     // The interp of each package goes first, so the delete procs of its
     // assoc data run.
     for (const pkg of this._pkgs ?? []) if (pkg.ip) pkg.x.ztcl_cext_interp_free(pkg.ip);
