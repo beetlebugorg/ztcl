@@ -170,15 +170,31 @@ A backend implements this interface:
 
 vsock on KVM is vhost-vsock, an external device. A monitor without vhost (WHP) uses `Vsock`, with the host as CID 2. A stream starts with a `connect` of the host to a port of the guest. The host sends no more than the credit of the guest (its `buf_alloc` less the bytes in flight), and gives each byte of the guest to the sink at once, so its own credit is its `fwd_cnt`. A REQUEST of the guest gets RST until the host can listen. KVM can use `Vsock` in the place of vhost-vsock.
 
-## Windows: the Host Compute Service
+## Windows: the Windows Hypervisor Platform
 
-- HCS (`computecore.dll`): `HcsCreateComputeSystem` with a JSON document for a Linux utility VM, the same kind of VM as WSL 2 and the Linux containers of Windows. The kernel and the initramfs boot directly.
-- vsock is a Hyper-V socket on the host (`AF_HYPERV` with the VM id and a service id made from the port), and `AF_VSOCK` in the guest. The guest kernel needs `CONFIG_HYPERV_VSOCKETS`.
-- A share is a Plan 9 share of HCS, mounted in the guest with `9p` over vsock. The guest kernel needs `CONFIG_NET_9P` and `CONFIG_9P_FS`.
-- The Windows Hypervisor Platform (`WHvCreatePartition`) is the fallback, the same shape as KVM with our own devices, for a Windows edition without HCS.
-- A service of a Hyper-V socket of a normal VM needs a key under `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\GuestCommunicationServices`, which needs an administrator. The JSON schema of HCS has `HvSocketConfig` with a table of services for one compute system, with no change to the registry: the spike of the Windows part checks that route first. Port 1024 of vsock is the service GUID `00000400-FACB-11E6-BD58-64006A7986D3`.
-- HCS needs the feature Virtual Machine Platform (the one of WSL 2), which Windows 11 Home has. The calls of HCS likely need an administrator, so the Windows part may need a service: the spike checks it.
-- The bootstrap secret of `docs/dev/isolation.md` goes on the command line of the kernel, which HCS gives with `LinuxKernelDirect`.
+The Windows part runs on the Windows Hypervisor Platform (`WinHvPlatform.dll`), with our own devices, the same shape as the KVM part. The user chose it on 2026-11-26.
+
+- The Host Compute Service needs the feature Virtual Machine Platform and its service `vmcompute`. On the Windows 11 Home host of the port the feature is off: `HcsEnumerateComputeSystems` gives `0x80370114`, and turning the feature on needs an administrator and a restart. The Windows Hypervisor Platform needs no change there: a process of a user, with no elevation, creates and sets up a partition, because the hypervisor of Virtualization-based Security already runs.
+- The host side: one partition for each guest, its memory from `VirtualAlloc` mapped at guest address 0 (`WHvMapGpaRange`), one virtual processor for each CPU with a host thread that calls `WHvRunVirtualProcessor`, and the local APIC of the hypervisor (xAPIC emulation). The kernel boots with the 64-bit boot protocol of Linux, as `tools/vm-guest/whp-spike.zig` does.
+- The devices are our own, on virtio-mmio from the command line of the kernel (`virtio_mmio.device=`): the console, entropy, block, and vsock. The KVM part writes them in files of no hypervisor, with an interface for each backend (guest memory, interrupt injection, MMIO dispatch), and the Windows part uses that interface. A guest interrupt is `WHvRequestInterrupt` to the local APIC. A virtio-mmio device needs an interrupt line, so the host also needs a small I/O APIC or MSI. The vsock of the host side is a connection of the device to a host channel, with no Hyper-V socket and no key in the registry.
+- A share is virtio-9p first, as on Linux (question 4), with the 9p server of the KVM part in the file jail.
+- The bootstrap secret of `docs/dev/isolation.md` goes on the command line of the kernel.
+- HCS stays a later choice for a host where Virtual Machine Platform is on: it gives Hyper-V sockets and Plan 9 shares of the system. `HvSocketConfig` of its JSON schema gives a table of services with no key in the registry. Port 1024 of vsock is the service GUID `00000400-FACB-11E6-BD58-64006A7986D3`.
+
+### The spike (Windows)
+
+`tools/vm-guest/whp-spike.zig` boots the x86-64 guest of `build.sh` (the artifact `vm-guest-x86_64` of the workflow VM guest) in a partition and prints its serial console until the ready line of the init of the guest.
+
+```sh
+zig build-exe -OReleaseSafe tools/vm-guest/whp-spike.zig
+whp-spike out/bzImage out/busybox tools/vm-guest/init 256
+```
+
+- The boot: the protected-mode part of the bzImage at 1 MiB, a zero page with the setup header of the file, the command line, and an e820 table, page tables that map 1 GiB with 2 MiB pages, a GDT with the segments 0x10 and 0x18, a busy TSS in TR, and the CPU in long mode at the 64-bit entry with RSI at the zero page. `WHV_REGISTER_VALUE` is 16-byte aligned, and an array of 8-byte alignment fails inside `WHvSetVirtualProcessorRegisters`.
+- The guest has no ACPI, no PCI, and no PIT, so the command line gives `acpi=off noapic pci=off` and the rate of the TSC (`tsc_early_khz`, which the spike measures on the host). The kernel finds the TSC deadline timer of the local APIC.
+- The console is an 8250 at 0x3f8 with the registers that the probe of the driver reads back. The kernel writes its log to it with no interrupt. The TTY of `ttyS0` waits for the interrupt of the transmitter, and the host has no interrupt controller yet, so the spike gives the output of init to `/dev/kmsg`, and the console writes it with the kernel log. The initramfs is a cpio archive (newc) that the spike makes, with `/dev/console` for the first process.
+- The result on an Intel Core i7-1165G7 with Windows 11 Home 25H2 and 256 MB: the ready line of init 956 ms to 981 ms after the start, in three runs, with about 29,700 exits, nearly all of them a byte of the console. The timestamps of the kernel stay at 0.094 s from the start of the timers to 0.76 s, so a wait of about 670 ms likely has no timer interrupt until its timeout. The probe of the uncore PMU reads the MSR 0x396 and gives a warning with a trace.
+- Next: the I/O APIC or MSI for the interrupts, which also ends the wait of 670 ms, then virtio-mmio with the console and vsock, shared with the KVM part.
 
 ## Tests
 
@@ -193,7 +209,7 @@ vsock on KVM is vhost-vsock, an external device. A monitor without vhost (WHP) u
 3. The entitlements in the Zig signer (done): `src/macho.zig` writes the requirements, the XML, and the DER blobs with their special slots. `zig build` signs the macOS `ztcl` with `tools/macho-sign`, and `ztcl build` signs an app with `vm` in `--allow`.
 4. The agent with `exec` and `mount` (done): the protocol is `docs/dev/vm-agent.md`, the host side `src/vmagent.zig`, and `ztcl::vm exec` and `mount` on macOS. The image builds for arm64 and x86-64 (`tools/vm-guest`, the artifacts `vm-guest` and `vm-guest-x86_64`). The signed image is ztcl#312.
 5. The KVM part on x86-64 (done, except the shares): `src/kvm.zig`. arm64 later.
-6. The HCS part.
+6. The Windows part on the Windows Hypervisor Platform: the spike (done), the interrupts, then the devices of the KVM part.
 7. The docs page `docs/modules/vm.md` (#172).
 
 ## Questions
