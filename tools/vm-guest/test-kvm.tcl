@@ -109,6 +109,8 @@ ztcl::vm start $vm
 set log [dmesg $vm]
 check "the disk in the log" [string match "*vda*128 512-byte*" $log] 1
 check "the entropy device" [string match "*virtio-mmio.3 at 0xd0003000*" $log] 1
+check "the bytes of the disk" [dict get [ztcl::vm exec $vm /bin/busybox head -c 32 /dev/vda] stdout] [string repeat "ztcl disk block\n" 2]
+check "random bytes" [dict get [ztcl::vm exec $vm /bin/busybox sh -c {/bin/busybox head -c 16 /dev/hwrng | /bin/busybox wc -c}] stdout] "16\n"
 ztcl::vm delete $vm
 
 # The console: the kernel log of a guest on hvc0.

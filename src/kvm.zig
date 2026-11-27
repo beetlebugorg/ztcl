@@ -38,7 +38,10 @@
 //! - Entropy (ID 4), last, with `-entropy 1`: bytes of `getrandom`.
 //!
 //! An access of a vCPU to a register of a device exits `KVM_RUN` on that
-//! vCPU thread, and the thread runs the device code.
+//! vCPU thread, and the thread runs the device code. The register
+//! InterruptACK of vsock has no state, so a write of the guest to it goes
+//! to an ioeventfd with no reader, and each vsock interrupt has one exit
+//! to this process less.
 //!
 //! An 8250 UART at port 0x3f8 writes the output of the guest kernel
 //! (`console=ttyS0`) to the console descriptor too. A write of 0xfe to
@@ -342,6 +345,8 @@ times: struct { setup: u64 = 0, load: u64 = 0 } = .{},
 vs_kick: [2]i32 = .{ -1, -1 },
 vs_call: [2]i32 = .{ -1, -1 },
 vs_running: bool = false,
+/// The ioeventfd of InterruptACK of vsock.
+vs_ack: i32 = -1,
 /// The text of a failure of a vCPU.
 fail_text: []const u8 = "",
 /// The guest address of the 64-bit entry point of the kernel.
@@ -454,6 +459,7 @@ fn teardown(m: *Machine) void {
     m.vcpus = &.{};
     for (&m.vs_kick) |*f| closeFd(f);
     for (&m.vs_call) |*f| closeFd(f);
+    closeFd(&m.vs_ack);
     m.vs_running = false;
     if (m.devices.len != 0) m.alloc.free(m.devices);
     m.devices = &.{};
@@ -672,6 +678,9 @@ fn makeDevices(m: *Machine) Fail!void {
         var irq: Irqfd = .{ .fd = @intCast(m.vs_call[q]), .gsi = irqs[1], .flags = 0, .resamplefd = 0 };
         _ = try check(ioctl(m.vm, KVM_IRQFD, @intFromPtr(&irq)), "KVM_IRQFD");
     }
+    m.vs_ack = try eventfd();
+    var ack: Ioeventfd = .{ .datamatch = 0, .addr = mmio_base + mmio_size * 1 + 0x64, .len = 4, .fd = m.vs_ack, .flags = 0 };
+    _ = try check(ioctl(m.vm, KVM_IOEVENTFD, @intFromPtr(&ack)), "KVM_IOEVENTFD");
 }
 
 fn host(m: *Machine) virtio.Host {
