@@ -7,6 +7,7 @@ does: The commands for dicts. A dict is a list of keys and values with each key 
 sub: dict create ?KEY VALUE ...? | A new dict.
 sub: dict get DICT ?KEY ...? | The value at the path of keys. A missing key is an error. With no key, the whole dict.
 sub: dict getdef DICT ?KEY ...? KEY DEFAULT | The value at the path of keys, or DEFAULT when a key is missing. `dict getwithdefault` is the same command. Tcl 9.1 only.
+sub: dict getwithdefault DICT ?KEY ...? KEY DEFAULT | The same command as `dict getdef`. Tcl 9.1 only.
 sub: dict exists DICT KEY ?KEY ...? | 1 when the path of keys exists.
 sub: dict set VAR KEY ?KEY ...? VALUE | Sets the value at the path in the dict of a variable, and gives the new dict.
 sub: dict unset VAR KEY ?KEY ...? | Removes a key in the dict of a variable.

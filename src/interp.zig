@@ -1058,8 +1058,10 @@ pub const SoftChans = struct {
 };
 
 /// The Tcl release whose behavior an interpreter follows. Each command
-/// whose behavior differs between the releases reads `Interp.tcl`. 8.6
-/// is the default: most published Tcl code targets it.
+/// whose behavior differs between the releases reads `Interp.tcl`.
+/// `Interp.init` gives 8.6, the release of the C API of libztcl
+/// (`Tcl_CreateInterp`). The hosts of ztcl (the runner, the programs of
+/// `ztcl build`, and the wasm builds) start at `host_default`.
 pub const TclVersion = enum {
     v8_6,
     v9_1,
@@ -1071,6 +1073,10 @@ pub const TclVersion = enum {
         if (std.mem.eql(u8, text, "9.1")) return .v9_1;
         return null;
     }
+
+    /// The release of an interpreter of a host of ztcl, with no `--tcl`
+    /// option and no `ZTCL_TCL`.
+    pub const host_default: TclVersion = .v9_1;
 
     /// The value of `info tclversion`.
     pub fn version(v: TclVersion) []const u8 {

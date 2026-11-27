@@ -39,7 +39,7 @@ ex: string equal [string reverse -grapheme "ae\u0301"] "e\u0301a" => 1
 ex: string map {a 1 b 2} abcab => 12c12
 ex: string is integer -strict "" => 0
 ex: string first k "buy milk" => 7
-err: string nope x | unknown or ambiguous subcommand "nope": must be bytelength, cat, compare, equal, first, index, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, trimright, wordend, or wordstart
+err: string nope x | unknown or ambiguous subcommand "nope": must be cat, compare, equal, first, index, insert, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, trimright, wordend, or wordstart
 
 == tcl::prefix
 syn: tcl::prefix subcommand ?arg ...?

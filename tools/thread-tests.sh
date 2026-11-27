@@ -51,9 +51,9 @@ for f in "$@"; do
         fi
         # shellcheck disable=SC2086
         if [ -n "$root" ]; then
-            out=$(cd "$root" && timeout 120 "$tcl" --allow thread,event,package,clock $flags --root "$root" $extra lib.tcl $prelude_here "${f##*/}" 2>&1)
+            out=$(cd "$root" && timeout 120 "$tcl" --tcl 8.6 --allow thread,event,package,clock $flags --root "$root" $extra lib.tcl $prelude_here "${f##*/}" 2>&1)
         else
-            out=$(timeout 120 "$tcl" --allow thread,event,package,clock $extra "$dir/lib.tcl" ${prelude:+"$dir/$prelude"} "$f" 2>&1)
+            out=$(timeout 120 "$tcl" --tcl 8.6 --allow thread,event,package,clock $extra "$dir/lib.tcl" ${prelude:+"$dir/$prelude"} "$f" 2>&1)
         fi
         rc=$?
         [ -n "$root" ] && rm -rf -- "$root"

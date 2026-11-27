@@ -462,6 +462,7 @@ pub fn runPayload(h: *const Host, program: []const u8, payload: []const u8) !voi
             tcl.fsroot.setHost(&it) catch {};
         }
     }
+    try it.setTclVersion(m.tcl);
     try it.allow(bits);
     if (!m.jit) it.disableJit();
     if (comptime chan_ok) {
@@ -626,6 +627,16 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
     }
     // The runner starts the child process of an isolated thread.
     if (comptime tcl.isothread.supported) it.iso_runner = std.process.executablePathAlloc(h.io.?, arena) catch null;
+    // Tcl 9.1 unless ZTCL_TCL names another release; `--tcl` wins.
+    try it.setTclVersion(tcl.interp.TclVersion.host_default);
+    if (h.env("ZTCL_TCL")) |v| {
+        const ver = tcl.interp.TclVersion.parse(v) orelse {
+            try out.print("ZTCL_TCL needs 8.6 or 9.1\n", .{});
+            out.flush() catch {};
+            host.exit(2);
+        };
+        try it.setTclVersion(ver);
+    }
     if (setup) |f| try f(&it);
     if (h.env("ZTCL_JIT")) |v| {
         if (std.mem.eql(u8, v, "off")) it.disableJit();

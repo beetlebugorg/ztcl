@@ -18,7 +18,9 @@
 //!     "ZTB1" count
 //!     count times: kind name_len data_len name data
 //!
-//! `kind` is one byte: 0 for a script and 1 for a file.
+//! `kind` is one byte: 0 for a script, 1 for a file, and 2 for a
+//! setting of the module: a name and its value. The setting `tcl` with
+//! the value `8.6` makes the interpreters of the module follow Tcl 8.6.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -37,7 +39,7 @@ comptime {
     std.debug.assert(std.mem.eql(u8, std.mem.asBytes(&slot_words)[0..8], slot_marker));
 }
 
-pub const Kind = enum(u8) { script = 0, file = 1 };
+pub const Kind = enum(u8) { script = 0, file = 1, setting = 2 };
 
 pub const Entry = struct {
     kind: Kind,

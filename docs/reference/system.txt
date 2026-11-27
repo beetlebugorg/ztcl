@@ -18,8 +18,8 @@ sub: info complete SCRIPT | 1 when the script has no open brace, bracket, or quo
 sub: info script ?NAME? | The file of the script that `source` runs.
 sub: info functions ?PATTERN? | The names of the math functions.
 sub: info cmdcount | The count of commands that ran.
-sub: info patchlevel | The version of Tcl that ztcl follows: 8.6.16.
-sub: info tclversion | 8.6.
+sub: info patchlevel | The version of Tcl that ztcl follows: 9.1.0, or 8.6.16 with `--tcl 8.6`.
+sub: info tclversion | 9.1, or 8.6 with `--tcl 8.6`.
 sub: info library | The folder of the Tcl library: empty in ztcl.
 sub: info loaded | The loaded binary packages.
 sub: info nameofexecutable | The path of the program.
@@ -32,7 +32,7 @@ sub: info object SUBCOMMAND OBJECT ?arg ...? | Facts about a TclOO object, as `i
 diff: `info frame` is not in ztcl in this version: it gives the error "not supported by ztcl". The first word pair of `info errorstack` is INNER and the text of the failed command, where Tcl has the words of its bytecode instruction.
 ex: proc f {a {b 2}} {}; info args f => a b
 ex: info complete "set x \{" => 0
-ex: info patchlevel => 8.6.16
+ex: info patchlevel => 9.1.0
 
 == clock
 syn: clock subcommand ?arg ...?

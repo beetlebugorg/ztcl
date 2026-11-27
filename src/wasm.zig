@@ -55,6 +55,15 @@ fn payload() []const u8 {
     return @as([*]const u8, @ptrFromInt(ptr))[0..slot[3]];
 }
 
+/// The release of the setting `tcl` of the bundle, or 9.1.
+fn bundleTcl() ztcl.interp.TclVersion {
+    var r: wasmbundle.Reader = .init(payload());
+    while (r.next()) |e| {
+        if (e.kind == .setting and std.mem.eql(u8, e.name, "tcl")) return ztcl.interp.TclVersion.parse(e.data) orelse continue;
+    }
+    return ztcl.interp.TclVersion.host_default;
+}
+
 /// True for `ztcl-host.wasm`, the form with the imports of the module
 /// `ztcl_host`. `ztcl.wasm` has no imports.
 const host_imports = @hasDecl(build_options, "wasm_host") and build_options.wasm_host;
@@ -158,11 +167,18 @@ export fn ztcl_free(ptr: [*]u8, len: usize) void {
     gpa.free(ptr[0..len]);
 }
 
-/// Makes an interpreter with a memory limit of 2 GiB and no compute limit.
+/// Makes an interpreter with a memory limit of 2 GiB and no compute
+/// limit. It follows Tcl 9.1, or the release of the setting `tcl` of the
+/// bundle; `ztcl_set_tcl_version` changes it.
 export fn ztcl_new() ?*Handle {
     const h = gpa.create(Handle) catch return null;
     h.* = .{ .it = undefined };
     h.it.init(gpa) catch {
+        gpa.destroy(h);
+        return null;
+    };
+    h.it.setTclVersion(bundleTcl()) catch {
+        h.it.deinit();
         gpa.destroy(h);
         return null;
     };

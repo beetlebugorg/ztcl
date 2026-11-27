@@ -32,10 +32,10 @@ const wb = tcl.wasmbundle;
 
 const usage =
     \\usage: ztcl build [--target T] [--runtime FILE] [--allow LIST] [--root PATH] [--no-jit]
-    \\                  [--compress] [--embed PATH]... -o OUT script.tcl...
+    \\                  [--tcl 8.6] [--compress] [--embed PATH]... -o OUT script.tcl...
     \\       ztcl build --strip [--keep LIST] [--drop-module LIST] [--trust-scan] [--check] [--profile]
     \\                  [--test FILE]... [--strip-manifest FILE] [--src DIR] [other options] -o OUT script.tcl...
-    \\       ztcl build --wasm [--base ztcl.wasm] [--embed PATH]... -o OUT.wasm script.tcl...
+    \\       ztcl build --wasm [--base ztcl.wasm] [--tcl 8.6] [--embed PATH]... -o OUT.wasm script.tcl...
     \\       ztcl build --component [--base ztcl.component.wasm] [--allow LIST] [--root PATH]
     \\                  [--compress] [--embed PATH]... -o OUT.wasm script.tcl...
     \\
@@ -82,6 +82,12 @@ pub fn run(io: Io, a: std.mem.Allocator, env: anytype, args: []const [:0]const u
             nat.root = args[i];
         } else if (std.mem.eql(u8, arg, "--no-jit")) {
             nat.jit = false;
+        } else if (std.mem.eql(u8, arg, "--tcl") and has_value) {
+            i += 1;
+            nat.tcl = tcl.interp.TclVersion.parse(args[i]) orelse {
+                try out.writeAll("ztcl build: --tcl needs 8.6 or 9.1\n");
+                return 2;
+            };
         } else if (std.mem.eql(u8, arg, "--compress")) {
             nat.compress = true;
         } else if (std.mem.eql(u8, arg, "-o") and has_value) {
@@ -183,6 +189,7 @@ pub fn run(io: Io, a: std.mem.Allocator, env: anytype, args: []const [:0]const u
         };
     }
     if (!wasm) return native(io, a, env, nat, entries.items, output.?, out);
+    if (nat.tcl != tcl.interp.TclVersion.host_default) try entries.append(a, .{ .kind = .setting, .name = "tcl", .data = nat.tcl.version() });
     const payload = try wb.encode(a, entries.items);
     const module = wb.patch(a, base_final, payload) catch |e| {
         try out.print("ztcl build: {s}: {s}\n", .{ base_path_s, switch (e) {
@@ -267,6 +274,8 @@ const Native = struct {
     root: ?[]const u8 = null,
     jit: bool = true,
     compress: bool = false,
+    /// The Tcl release of the program.
+    tcl: tcl.interp.TclVersion = tcl.interp.TclVersion.host_default,
 };
 
 /// The zip archive of the entries and the manifest. Gives null after a
@@ -282,7 +291,7 @@ fn appPayload(a: std.mem.Allocator, nat: Native, entries: []const wb.Entry, out:
         try zips.append(a, .{ .name = e.name, .data = e.data });
         if (e.kind == .script) try names.append(a, e.name);
     }
-    const manifest: bn.Manifest = .{ .scripts = names.items, .allow = nat.allow, .root = nat.root, .jit = nat.jit };
+    const manifest: bn.Manifest = .{ .scripts = names.items, .allow = nat.allow, .root = nat.root, .jit = nat.jit, .tcl = nat.tcl };
     try zips.append(a, .{ .name = bn.manifest_name, .data = try manifest.write(a) });
     const payload = tcl.zipwrite.write(a, zips.items, nat.compress) catch |e| {
         try out.print("ztcl build: the payload: {s}\n", .{@errorName(e)});
