@@ -361,6 +361,19 @@ pub fn build(b: *std.Build) void {
     fuzz_run.addPassthruArgs();
     b.step("jit-fuzz", "Run the differential fuzzer of the JIT").dependOn(&fuzz_run.step);
 
+    // `zig build vm-image-verify -- DIR`: the check of a guest image
+    // release with the verifier of ztcl (tools/vm-image-verify).
+    const vmiv_exe = b.addExecutable(.{ .name = "vm-image-verify", .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/vm-image-verify/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "ztcl", .module = ztcl }},
+    }) });
+    const vmiv_run = b.addRunArtifact(vmiv_exe);
+    vmiv_run.addPassthruArgs();
+    b.step("vm-image-verify", "Check a signed guest image release").dependOn(&vmiv_run.step);
+    b.step("vm-image-verify-exe", "Build vm-image-verify").dependOn(&b.addInstallArtifact(vmiv_exe, .{}).step);
+
     // The JSON tools: JSONTestSuite and the fuzzer. They use the mode of
     // -Doptimize.
     inline for (.{ .{ "json-test", "tools/json-test.zig", "Run the files of JSONTestSuite: zig build json-test -- DIR" }, .{ "json-fuzz", "tools/json-fuzz.zig", "Run the fuzzer of the JSON parser" } }) |jt| {
