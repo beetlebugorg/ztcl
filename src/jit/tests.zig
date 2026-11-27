@@ -224,14 +224,14 @@ test "the region has no page that is writable and executable" {
     // The rest of the last page of each function is `int3`.
     for (f1.ptr[f1.len..page]) |b| try testing.expectEqual(mem.trap_byte, b);
     for (f2.ptr[f2.len .. 2 * page]) |b| try testing.expectEqual(mem.trap_byte, b);
-    const c1: *const fn () callconv(.c) u32 = @ptrCast(f1.ptr);
-    const c2: *const fn () callconv(.c) u32 = @ptrCast(f2.ptr);
+    const c1: *const fn () callconv(jit.cc) u32 = @ptrCast(f1.ptr);
+    const c2: *const fn () callconv(jit.cc) u32 = @ptrCast(f2.ptr);
     try testing.expectEqual(@as(u32, 42), c1());
     try testing.expectEqual(@as(u32, 7), c2());
 }
 
 test "a full region returns null and keeps its functions" {
-    if (!jit.built or builtin.os.tag != .linux) return error.SkipZigTest;
+    if (!jit.built or (builtin.os.tag != .linux and builtin.os.tag != .windows)) return error.SkipZigTest;
     const page = std.heap.pageSize();
     var r = mem.Region.init(2 * page) orelse return error.NoRegion;
     defer r.deinit();
@@ -242,7 +242,7 @@ test "a full region returns null and keeps its functions" {
     try testing.expect(r.append(&big) == null);
     _ = r.append(&ret42).?;
     try testing.expect(r.append(&ret42) == null);
-    const c1: *const fn () callconv(.c) u32 = @ptrCast(f1.ptr);
+    const c1: *const fn () callconv(jit.cc) u32 = @ptrCast(f1.ptr);
     try testing.expectEqual(@as(u32, 42), c1());
 }
 
@@ -303,6 +303,118 @@ test "a read of a guard page of the region faults" {
     try testing.expect(!try readFaults(@intFromPtr(f.ptr) + page - 1));
 }
 
+// ---- Executable memory on Windows ----
+
+const MemInfo = extern struct {
+    base: ?*anyopaque,
+    alloc_base: ?*anyopaque,
+    alloc_protect: u32,
+    partition: u16,
+    region_size: usize,
+    state: u32,
+    protect: u32,
+    kind: u32,
+};
+extern "kernel32" fn VirtualQuery(at: ?*const anyopaque, info: *MemInfo, len: usize) callconv(.winapi) usize;
+
+test "the region on Windows has no page that is writable and executable" {
+    if (!jit.built or builtin.os.tag != .windows) return error.SkipZigTest;
+    const page = std.heap.pageSize();
+    var r = mem.Region.init(8 * page) orelse return error.NoRegion;
+    defer r.deinit();
+    const ret42 = [_]u8{ 0xB8, 0x2A, 0x00, 0x00, 0x00, 0xC3 };
+    _ = r.append(&ret42).?;
+    var big: [5000]u8 = undefined;
+    @memset(&big, 0x90);
+    _ = r.append(&big).?;
+    try testing.expectEqual(3 * page, r.usedBytes());
+    const mem_commit = 0x1000;
+    const mem_reserve = 0x2000;
+    const page_execute_read = 0x20;
+    // The guard page before, the pages of the functions, the free pages,
+    // and the guard page after.
+    var off: usize = 0;
+    while (off < r.limit + 2 * page) : (off += page) {
+        var info: MemInfo = undefined;
+        try testing.expect(VirtualQuery(r.base - page + off, &info, @sizeOf(MemInfo)) != 0);
+        const used = off >= page and off < page + r.usedBytes();
+        if (used) {
+            try testing.expectEqual(@as(u32, mem_commit), info.state);
+            try testing.expectEqual(@as(u32, page_execute_read), info.protect);
+        } else {
+            // A reserved page has no access, so a read faults.
+            try testing.expectEqual(@as(u32, mem_reserve), info.state);
+        }
+    }
+}
+
+/// The return addresses of the stack from the caller of `walk`, with
+/// `RtlLookupFunctionEntry` and `RtlVirtualUnwind`, as an exception and a
+/// debugger walk it. A frame with no function entry is a leaf.
+noinline fn walk(out: []?*anyopaque) u16 {
+    const w = std.os.windows;
+    var ctx: w.CONTEXT = undefined;
+    w.ntdll.RtlCaptureContext(&ctx);
+    var n: u16 = 0;
+    while (n < out.len) {
+        var base: usize = 0;
+        var history = std.mem.zeroes(w.UNWIND_HISTORY_TABLE);
+        if (w.ntdll.RtlLookupFunctionEntry(ctx.Rip, &base, &history)) |entry| {
+            var data: ?*anyopaque = null;
+            var frame: usize = 0;
+            _ = w.ntdll.RtlVirtualUnwind(0, base, ctx.Rip, entry, &ctx, &data, &frame, null);
+        } else {
+            ctx.Rip = @as(*const usize, @ptrFromInt(ctx.Rsp)).*;
+            ctx.Rsp += 8;
+        }
+        if (ctx.Rip == 0) break;
+        out[n] = @ptrFromInt(ctx.Rip);
+        n += 1;
+    }
+    return n;
+}
+
+var walk_frames: [32]?*anyopaque = undefined;
+var walk_count: u16 = 0;
+
+fn walkHelper() callconv(jit.cc) u32 {
+    walk_count = walk(&walk_frames);
+    return 7;
+}
+
+test "the unwinder of Windows walks through a JIT frame" {
+    if (!jit.built or builtin.os.tag != .windows) return error.SkipZigTest;
+    const page = std.heap.pageSize();
+    var r = mem.Region.init(4 * page) orelse return error.NoRegion;
+    defer r.deinit();
+    // The prologue of tier 1, a call of the helper in the context slot,
+    // and the epilogue of tier 1.
+    const code = [_]u8{
+        0x55, 0x48, 0x89, 0xE5, // push rbp; mov rbp, rsp
+        0x53, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57, // push rbx, r12, r13, r14, r15
+        0x57, // push rdi: the context slot
+        0xFF, 0x14, 0x24, // call [rsp]
+        0x48, 0x83, 0xC4, 0x08, // add rsp, 8
+        0x41, 0x5F, 0x41, 0x5E, 0x41, 0x5D, 0x41, 0x5C, 0x5B, 0x5D, 0xC3, // pop r15 to rbx, rbp; ret
+    };
+    const f = r.append(&code).?;
+    const func: *const fn (*const anyopaque) callconv(jit.cc) u32 = @ptrCast(@alignCast(f.ptr));
+    var mine: [32]?*anyopaque = undefined;
+    const n = walk(&mine);
+    try testing.expectEqual(@as(u32, 7), func(@ptrCast(&walkHelper)));
+    // The walk from the helper reaches the JIT function, and past it
+    // the callers of this test.
+    const lo = @intFromPtr(f.ptr);
+    var in_jit = false;
+    for (walk_frames[0..walk_count]) |p| {
+        const a = @intFromPtr(p);
+        if (a >= lo and a < lo + f.len) in_jit = true;
+    }
+    try testing.expect(in_jit);
+    try testing.expect(n >= 2 and walk_count >= n + 1);
+    for (mine[1..n], walk_frames[walk_count - (n - 1) .. walk_count]) |a, b| try testing.expectEqual(a, b);
+}
+
 // ---- Executable memory on arm64 macOS ----
 
 const darwin_arm = builtin.os.tag == .macos and builtin.cpu.arch == .aarch64;
@@ -351,8 +463,8 @@ fn checkDarwinRegion(pages: bool) !void {
     try testing.expectEqual(2 * step, r.usedBytes());
     // The fill after each function is zero words (udf).
     for (f1.ptr[f1.len..step]) |b| try testing.expectEqual(@as(u8, 0), b);
-    const c1: *const fn () callconv(.c) u32 = @ptrCast(@alignCast(f1.ptr));
-    const c2: *const fn () callconv(.c) u32 = @ptrCast(@alignCast(f2.ptr));
+    const c1: *const fn () callconv(jit.cc) u32 = @ptrCast(@alignCast(f1.ptr));
+    const c2: *const fn () callconv(jit.cc) u32 = @ptrCast(@alignCast(f2.ptr));
     mem.checkClosed();
     try testing.expectEqual(@as(u32, 42), c1());
     try testing.expectEqual(@as(u32, 7), c2());
@@ -405,7 +517,7 @@ fn childSignal(body: *const fn (*mem.Region) void, r: *mem.Region) !u32 {
 }
 
 fn jumpFree(r: *mem.Region) void {
-    const f: *const fn () callconv(.c) u32 = @ptrCast(@alignCast(r.base + r.used));
+    const f: *const fn () callconv(jit.cc) u32 = @ptrCast(@alignCast(r.base + r.used));
     _ = f();
 }
 
@@ -689,7 +801,7 @@ fn runA64(code: []const u8) ?u64 {
     var r = mem.Region.init(std.heap.pageSize()) orelse return null;
     defer r.deinit();
     const f = r.append(code) orelse return null;
-    const func: *const fn () callconv(.c) u64 = @ptrCast(@alignCast(f.ptr));
+    const func: *const fn () callconv(jit.cc) u64 = @ptrCast(@alignCast(f.ptr));
     return func();
 }
 
@@ -798,7 +910,7 @@ fn verifies(code: *const vm.Code) !bool {
 }
 
 test "the verifier passes each proc of the benchmarks" {
-    if (builtin.os.tag != .linux) return error.SkipZigTest;
+    if (builtin.os.tag != .linux and builtin.os.tag != .windows) return error.SkipZigTest;
     const names = [_][*:0]const u8{ "bench/sum.tcl", "bench/fib.tcl", "bench/nested.tcl", "bench/strbuild.tcl", "bench/foreach.tcl", "bench/dict.tcl", "bench/dictgrow.tcl", "bench/readloop.tcl" };
     var foreach_seen: usize = 0;
     for (names) |path| {

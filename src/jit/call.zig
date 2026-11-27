@@ -49,7 +49,7 @@ fn fail(ctx: *EnterCtx, e: Error) u32 {
 }
 
 /// The helper `call_direct`.
-pub fn direct(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
+pub fn direct(ctx: *EnterCtx, pc: u32, sp: u32) callconv(jit.cc) u32 {
     const it = ctx.it;
     const code = ctx.code;
     const i = &code.ins[pc];
@@ -84,7 +84,7 @@ pub fn direct(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
         .counters = f.counters.ptr,
         .func = f,
     };
-    const func: *const fn (*EnterCtx) callconv(.c) u32 = @ptrCast(@alignCast(f.base));
+    const func: *const fn (*EnterCtx) callconv(jit.cc) u32 = @ptrCast(@alignCast(f.base));
     mem.checkClosed();
     const raw = func(&c);
     if (raw != tier1.status_done) {

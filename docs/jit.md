@@ -1,6 +1,6 @@
 # The JIT
 
-ztcl has a compiler from bytecode to machine code for x86-64 Linux and arm64 macOS. It is on by default where the build and the system have it. [Targets](targets.md) lists the JIT of each target. A script gives the same output, the same counts of compute units, and the same memory count with the JIT on and off.
+ztcl has a compiler from bytecode to machine code for x86-64 Linux, x86-64 Windows, and arm64 macOS. It is on by default where the build and the system have it. [Targets](targets.md) lists the JIT of each target. A script gives the same output, the same counts of compute units, and the same memory count with the JIT on and off.
 
 ## Turn it off
 
@@ -57,6 +57,14 @@ User CPU instructions of the whole process, in millions, from `perf stat -e inst
 | `foreach.tcl` | 206.9 | 80.4 | 40.6 | 387.1 |
 | `fib.tcl` | 151.0 | 106.0 | 106.0 | 600.9 |
 
+x86-64 Windows, the same 10-million-pass loop, `ReleaseFast`, wall time of the whole process, best of 5, on an Intel Core i7-1165G7, 2026-11-26. A script with no command runs in 43 ms there, most of it the start of the process:
+
+| Run | Time |
+|---|---|
+| ztcl `--no-jit` | 153 ms |
+| ztcl `--no-jit-tier2` | 96 ms |
+| ztcl (the default, tier 1 and tier 2) | 59 ms |
+
 [Performance](performance.md#the-jit) has all scripts and the larger programs.
 
 ## Safety
@@ -66,5 +74,6 @@ User CPU instructions of the whole process, in millions, from `perf stat -e inst
 - No value from a script goes into the machine code as a constant.
 - The compute limit and the memory limit hold in machine code, exactly as in the interpreter.
 - A script cannot turn the JIT on or off, or detect it.
+- On Windows each function gets a commit with read and write, the copy, and then read and execute (`VirtualProtect`), and an entry in a growable function table for the unwinder. ztcl builds with no Control Flow Guard, so a call into JIT code needs no valid target of CFG. A host program with CFG on needs `SetProcessValidCallTargets` for the region, which ztcl does not call yet.
 
 The tests compare the JIT with the interpreter on the whole Tcl test suite, on random programs from a differential fuzzer (`zig build jit-fuzz`), and in stress modes that force the rare paths. One difference stays: an endless recursion can go deeper before the nesting error, because a JIT call uses less native stack.

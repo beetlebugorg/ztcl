@@ -19,7 +19,7 @@ const call = @import("call.zig");
 const EnterCtx = jit.EnterCtx;
 const Error = interp.Error;
 
-pub const Fn = *const fn (ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32;
+pub const Fn = *const fn (ctx: *EnterCtx, pc: u32, sp: u32) callconv(jit.cc) u32;
 
 pub const done: u32 = 0;
 pub const yes: u32 = 1;
@@ -168,7 +168,7 @@ fn fail(ctx: *EnterCtx, e: Error) u32 {
 
 pub fn wrap(comptime h: Helper, comptime named: bool) Fn {
     if (h == .recheck) return &struct {
-        fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
+        fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(jit.cc) u32 {
             _ = .{ pc, sp };
             return @intFromBool(vm.guardJumps(ctx.it));
         }
@@ -177,27 +177,27 @@ pub fn wrap(comptime h: Helper, comptime named: bool) Fn {
     if (h == .resume_at) return @ptrCast(&jit.resumeAt);
     if (h == .call_direct) return &call.direct;
     if (h == .call_cached) return &struct {
-        fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
+        fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(jit.cc) u32 {
             const code = ctx.code;
             vm.opInvokeCached(ctx.it, code, ctx.stack, sp, &code.ins[pc]) catch |e| return fail(ctx, e);
             return done;
         }
     }.f;
     if (h == .str_bytes_eq) return &struct {
-        fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
+        fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(jit.cc) u32 {
             const code = ctx.code;
             return @intFromBool(std.mem.eql(u8, ctx.stack[sp - 1].str, code.lits[code.ins[pc].a].str));
         }
     }.f;
     if (comptime isBranch(h)) return &struct {
-        fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
+        fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(jit.cc) u32 {
             const code = ctx.code;
             const t = branchOf(h)(named, ctx.it, ctx.frame, code, ctx.stack, sp, &code.ins[pc]) catch |e| return fail(ctx, e);
             return @intFromBool(t);
         }
     }.f;
     return &struct {
-        fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(.c) u32 {
+        fn f(ctx: *EnterCtx, pc: u32, sp: u32) callconv(jit.cc) u32 {
             const code = ctx.code;
             opOf(h)(named, ctx.it, ctx.frame, code, ctx.stack, sp, &code.ins[pc]) catch |e| return fail(ctx, e);
             return done;

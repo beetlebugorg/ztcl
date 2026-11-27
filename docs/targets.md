@@ -12,7 +12,7 @@ This page lists each target of ztcl. For each target it gives what `ztcl build` 
 | `aarch64-linux` | 2,014,696 bytes | no | no | yes | yes |
 | `x86_64-macos` | 2,292,412 bytes | no | no | yes | no |
 | `aarch64-macos` | 2,256,584 bytes | tier 1 and tier 2 | yes | yes | no |
-| `x86_64-windows` | 2,691,584 bytes | no | yes | yes | yes |
+| `x86_64-windows` | 2,691,584 bytes | tier 1 and tier 2 | yes | yes | yes |
 | `aarch64-windows` | 2,144,256 bytes | no | no | no | no |
 
 - **JIT**: tier 1 compiles the bytecode of a proc, and tier 2 compiles a hot loop. [The JIT](jit.md) has the details. The JIT is on by default. On a target with no JIT, `--no-jit` has no effect, and `enableJit` returns false. A binary of `ztcl build` has no machine code compiled at build time yet. See "Code compiled ahead of time" below.
@@ -20,6 +20,7 @@ This page lists each target of ztcl. For each target it gives what `ztcl build` 
 - **`exec` and `ztcl::pty`**: [Run programs](processes.md) and [ztcl::pty](modules/pty.md) list the differences of Linux, macOS, and Windows.
 - **`ztcl::watch`**: Linux has inotify and x86-64 Windows has `ReadDirectoryChangesW`. On macOS, `add` gives the error `ZTCL WATCH UNAVAILABLE`. [ztcl::watch](modules/watch.md#platforms) has the details.
 - **Isolated threads**: the level `process` of `thread::create -isolation` runs on Linux, macOS, and Windows. [Isolated threads](isolation.md) has the sandbox of each system.
+- **The JIT on x86-64 Windows**: the machine code is the code of x86-64 Linux, and each call between Zig and that code uses the System V ABI, so the machine code keeps one calling convention. The region registers each function in a growable function table, so an exception and a debugger walk through JIT frames.
 - **`ztcl::open` and `ztcl::notify`**: these modules use the system on macOS and Windows, and on Linux they need a host callback. [ztcl::open](modules/open.md) and [ztcl::notify](modules/notify.md) have the tables.
 - **arm64 Windows**: the system layer of ztcl (`src/sys.zig`) has no port to arm64 Windows yet, so `exec` and `ztcl::pty` are absent there.
 
