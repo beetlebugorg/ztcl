@@ -31,8 +31,8 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
-const frame = @import("frame.zig");
-const hpack = @import("hpack.zig");
+pub const frame = @import("frame.zig");
+pub const hpack = @import("hpack.zig");
 const Code = frame.Code;
 
 pub const Limits = struct {
@@ -125,6 +125,8 @@ pub const Conn = struct {
     last_stream: u31 = 0,
     /// GOAWAY went out: no more frames are read.
     closed: bool = false,
+    /// The peer sent GOAWAY.
+    peer_goaway: bool = false,
     send_window: i64 = frame.default_window,
     peer_initial_window: i64 = frame.default_window,
     peer_max_frame: u32 = frame.default_max_frame,
@@ -378,7 +380,11 @@ pub const Conn = struct {
             },
             .goaway => {
                 if (h.stream != 0) return c.goaway(.protocol_error);
-                c.closed = true;
+                // The peer starts no new streams, but frames of the open
+                // streams and PING still come (RFC 9113 6.8). The
+                // connection ends when the peer closes it.
+                if (p.len < 8) return c.goaway(.frame_size_error);
+                c.peer_goaway = true;
             },
             .window_update => try c.onWindowUpdate(h, p),
             .push_promise => return c.goaway(.protocol_error),
