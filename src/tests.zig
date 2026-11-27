@@ -546,6 +546,61 @@ test "the memory limit stops a script, and reset frees the script data" {
     try std.testing.expectEqual(@as(?i64, 0), v.asInt());
 }
 
+/// A child allocator that grows a block in place only when `in_place`
+/// is true. Otherwise each growth is a copy to a new block.
+const MoveAlloc = struct {
+    child: std.mem.Allocator,
+    in_place: bool,
+
+    fn allocator(m: *MoveAlloc) std.mem.Allocator {
+        return .{ .ptr = m, .vtable = &.{ .alloc = alloc, .resize = resize, .remap = remap, .free = free } };
+    }
+    fn alloc(ctx: *anyopaque, len: usize, a: std.mem.Alignment, ra: usize) ?[*]u8 {
+        const m: *MoveAlloc = @ptrCast(@alignCast(ctx));
+        return m.child.rawAlloc(len, a, ra);
+    }
+    fn resize(ctx: *anyopaque, mem: []u8, a: std.mem.Alignment, n: usize, ra: usize) bool {
+        const m: *MoveAlloc = @ptrCast(@alignCast(ctx));
+        if (n > mem.len and !m.in_place) return false;
+        return m.child.rawResize(mem, a, n, ra);
+    }
+    fn remap(ctx: *anyopaque, mem: []u8, a: std.mem.Alignment, n: usize, ra: usize) ?[*]u8 {
+        const m: *MoveAlloc = @ptrCast(@alignCast(ctx));
+        if (n > mem.len and !m.in_place) return null;
+        return m.child.rawRemap(mem, a, n, ra);
+    }
+    fn free(ctx: *anyopaque, mem: []u8, a: std.mem.Alignment, ra: usize) void {
+        const m: *MoveAlloc = @ptrCast(@alignCast(ctx));
+        m.child.rawFree(mem, a, ra);
+    }
+};
+
+/// The compute units, the memory count, and the peak of one run at the
+/// memory limit `limit`, with the collector off.
+fn moveRun(in_place: bool, limit: usize) ![3]usize {
+    // On Linux, `page_allocator` grows a block with `mremap`.
+    var m: MoveAlloc = .{ .child = std.heap.page_allocator, .in_place = in_place };
+    var it: tcl.Interp = undefined;
+    try it.init(m.allocator());
+    defer it.deinit();
+    it.gc_on = false;
+    it.mem_limit = limit;
+    it.compute_limit = 1_000_000;
+    _ = it.eval("set n 1000; while 1 {set l [split [string repeat \"ab\\n\" $n] \\n]; incr n 1000}") catch {};
+    return .{ 1_000_000 - @as(usize, @intCast(it.compute_limit)), it.memUsed(), it.counter.mem_peak };
+}
+
+test "the memory limit stops a script at the same point when the allocator grows a block in place or copies it" {
+    // The JIT regions change the free addresses of the child allocator,
+    // and so the growths that it does in place.
+    var limit: usize = 200_000;
+    while (limit < 1_000_000) : (limit += 997) {
+        const a = try moveRun(true, limit);
+        const b = try moveRun(false, limit);
+        try std.testing.expectEqual(a, b);
+    }
+}
+
 test "a request above twice the memory limit stops the script, and catch cannot catch it" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
