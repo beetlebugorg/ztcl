@@ -2,11 +2,11 @@
 # SPDX-License-Identifier: BSD-2-Clause
 """Compares the pass counts of a full suite run with docs/dev/suite-counts.tsv.
 
-    python3 -I tools/suite-check.py files.tsv files-jit.tsv
+    python3 -I tools/suite-check.py files.tsv files-jit.tsv [counts.tsv]
 
 The two files are logs of `tools/suite.sh -a -o` with the suite runner,
 without and with -j. The pass count of each file must be at least the
-count in docs/dev/suite-counts.tsv. The timing tests of socket.test,
+count in docs/dev/suite-counts.tsv, or in counts.tsv when it is given. The timing tests of socket.test,
 io.test, and chanio.test change between runs, so their counts can be
 lower by 2. Prints a Markdown table of the counts and exits with
 status 1 when a count dropped.
@@ -29,7 +29,8 @@ def load(path):
 
 
 base = {}
-with open(os.path.join(here, "../docs/dev/suite-counts.tsv")) as f:
+# A third argument is another file of counts, such as the counts of Tcl 9.1.
+with open(sys.argv[3] if len(sys.argv) > 3 else os.path.join(here, "../docs/dev/suite-counts.tsv")) as f:
     for line in f:
         if line.startswith("#") or not line.strip():
             continue
