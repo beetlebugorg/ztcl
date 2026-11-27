@@ -1573,7 +1573,32 @@ fn cmdSplit(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const a = it.alloc();
     if (s.len == 0) return Value.empty;
     if (seps.len == 0) {
-        for (0..s.len) |i| try out.append(a, .{ .str = s[i .. i + 1] });
+        // Each character is one element.
+        var i: usize = 0;
+        while (i < s.len) {
+            const n = ucd.next(s, i).len;
+            try out.append(a, .{ .str = s[i .. i + n] });
+            i += n;
+        }
+    } else if (!isAscii(seps)) {
+        // A split character above ASCII: compare whole characters.
+        var start: usize = 0;
+        var i: usize = 0;
+        while (i < s.len) {
+            const d = ucd.next(s, i);
+            var j: usize = 0;
+            const hit = while (j < seps.len) {
+                const e = ucd.next(seps, j);
+                if (e.len == d.len and std.mem.eql(u8, seps[j .. j + e.len], s[i .. i + d.len])) break true;
+                j += e.len;
+            } else false;
+            if (hit) {
+                try out.append(a, .{ .str = s[start..i] });
+                start = i + d.len;
+            }
+            i += d.len;
+        }
+        try out.append(a, .{ .str = s[start..] });
     } else {
         // A bitmap of the split bytes makes the test of each byte one
         // lookup, so the work is linear in both lengths.
@@ -1589,6 +1614,11 @@ fn cmdSplit(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         try out.append(a, .{ .str = s[start..] });
     }
     return value.wrapList(a, out.items);
+}
+
+fn isAscii(s: []const u8) bool {
+    for (s) |c| if (c >= 0x80) return false;
+    return true;
 }
 
 pub fn concat(it: *Interp, args: []const Value) Error![]const u8 {
@@ -2486,14 +2516,72 @@ fn namesList(it: *Interp, frame: *interp.Frame, pattern: ?[]const u8, links: boo
     var out: std.ArrayList(Value) = .empty;
     try chargeEntries(it, frame.vars.items.len);
     for (frame.vars.items) |e| {
-        var c = e.cell;
-        if (c.v == .link and !links) continue;
-        while (c.v == .link) c = c.v.link;
-        if (c.v == .undef or (c.v == .traced and c.v.traced.inner == .undef)) continue;
+        // The global frame also has the variables of the namespaces, by
+        // their qualified names. They are not global variables.
+        if (frame == &it.global and std.mem.indexOf(u8, e.name, "::") != null) continue;
+        if (!isSet(e.cell, links)) continue;
         if (pattern) |p| if (!try globSteps(it, p, e.name, false)) continue;
         try out.append(it.alloc(), .{ .str = e.name });
     }
     return value.wrapList(it.alloc(), out.items);
+}
+
+fn isSet(cell: *interp.Var, links: bool) bool {
+    var c = cell;
+    if (c.v == .link and !links) return false;
+    while (c.v == .link) c = c.v.link;
+    return !(c.v == .undef or (c.v == .traced and c.v.traced.inner == .undef));
+}
+
+/// The variables of the namespace `space` (no leading "::", "" for the
+/// global namespace) whose names match `pattern`. With `full`, each name
+/// has the full form "::space::name".
+fn nsVarNames(it: *Interp, space: []const u8, pattern: []const u8, full: bool, out: *std.ArrayList(Value)) Error!void {
+    try chargeEntries(it, it.global.vars.items.len);
+    for (it.global.vars.items) |e| {
+        var name = e.name;
+        if (space.len > 0) {
+            if (!std.mem.startsWith(u8, name, space) or !std.mem.startsWith(u8, name[space.len..], "::")) continue;
+            name = name[space.len + 2 ..];
+        }
+        if (std.mem.indexOf(u8, name, "::") != null) continue;
+        if (!isSet(e.cell, true)) continue;
+        if (!try globSteps(it, pattern, name, false)) continue;
+        const v: Value = if (!full) .{ .str = name } else if (space.len > 0) .{ .str = try std.fmt.allocPrint(it.alloc(), "::{s}::{s}", .{ space, name }) } else .{ .str = try std.fmt.allocPrint(it.alloc(), "::{s}", .{name}) };
+        try out.append(it.alloc(), v);
+    }
+}
+
+/// `info vars`: a pattern with "::" lists the variables of that
+/// namespace by their full names. In a frame of `namespace eval`, the
+/// list has the variables of the namespace and the global variables.
+fn infoVars(it: *Interp, pattern: ?[]const u8) Error!Value {
+    var out: std.ArrayList(Value) = .empty;
+    if (pattern) |p| if (std.mem.indexOf(u8, p, "::") != null) {
+        const q = ns.qualifiers(p);
+        var space: []const u8 = undefined;
+        if (std.mem.startsWith(u8, p, "::")) {
+            space = std.mem.trim(u8, q, ":");
+        } else if (it.ns.len > 0) {
+            space = try std.fmt.allocPrint(it.alloc(), "{s}::{s}", .{ it.ns, q });
+            if (!it.namespaces.contains(space)) space = q;
+        } else space = q;
+        try nsVarNames(it, space, ns.tail(p), true, &out);
+        return value.wrapList(it.alloc(), out.items);
+    };
+    if (it.frame.ns) |space| {
+        const pat = pattern orelse "*";
+        try nsVarNames(it, space, pat, false, &out);
+        var globals: std.ArrayList(Value) = .empty;
+        try nsVarNames(it, "", pat, false, &globals);
+        for (globals.items) |g| {
+            for (out.items) |o| {
+                if (eql(o.str, g.str)) break;
+            } else try out.append(it.alloc(), g);
+        }
+        return value.wrapList(it.alloc(), out.items);
+    }
+    return namesList(it, it.frame, pattern, true);
 }
 
 /// The subcommand of `info` that `word` names or is a unique prefix of.
@@ -2651,7 +2739,7 @@ fn cmdInfo(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         while (f.level > target) f = f.parent.?;
         return value.newList(a, f.argv);
     } else if (which == .vars) {
-        return namesList(it, it.frame, pattern, true);
+        return infoVars(it, pattern);
     } else if (which == .locals) {
         if (it.frame == &it.global) return Value.empty;
         return namesList(it, it.frame, pattern, false);
