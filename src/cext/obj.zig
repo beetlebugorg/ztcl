@@ -70,6 +70,8 @@ pub const Interp = extern struct {
     result: ?*Obj = null,
     /// The id of the interp of ztcl in the WebAssembly path.
     handle: u32 = 0,
+    /// The assoc data of the interp: a list of `hash.Assoc`.
+    assoc: ?*anyopaque = null,
 };
 
 pub const OK: c_int = 0;

@@ -31,6 +31,7 @@ const groups = .{
     @import("obj.zig").slots,
     @import("chan.zig").slots,
     @import("host.zig").slots,
+    @import("hash.zig").slots,
 };
 
 /// `TclStubHooks` of `tclDecls.h`.
