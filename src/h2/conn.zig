@@ -268,6 +268,8 @@ pub const Conn = struct {
             .priority => {
                 if (h.stream == 0) return c.goaway(.protocol_error);
                 if (p.len != 5) return c.rst(h.stream, .frame_size_error);
+                // RFC 9113 5.3.1: a stream that depends on itself is a stream error.
+                if (std.mem.readInt(u32, p[0..4], .big) & 0x7fffffff == h.stream) return c.rst(h.stream, .protocol_error);
             },
             .rst_stream => {
                 if (h.stream == 0 or h.stream > c.last_stream) return c.goaway(.protocol_error);
@@ -476,7 +478,7 @@ pub const Conn = struct {
             };
             try spans.append(c.gpa, sp);
         }
-        if (bad or pseudo[0] == null or pseudo[1] == null or pseudo[3] == null) return c.rst(id, .protocol_error);
+        if (bad or pseudo[0] == null or pseudo[1] == null or pseudo[3] == null or pseudo[3].?.value_len == 0) return c.rst(id, .protocol_error);
         if (c.streams.count() >= c.limits.max_streams) return c.rst(id, .refused_stream);
         const gop = try c.streams.getOrPut(c.gpa, id);
         gop.value_ptr.* = .{ .send_window = c.peer_initial_window, .content_length = content_length };
