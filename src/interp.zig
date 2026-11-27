@@ -905,6 +905,18 @@ pub const Counting = struct {
         return true;
     }
 
+    /// The charge of a span of the page pool of the heap (`Heap.Charge`):
+    /// the same count and the same check as an allocation of the bytes.
+    pub fn chargeSpan(ctx: *anyopaque, len: usize, add: bool) bool {
+        const c: *Counting = @ptrCast(@alignCast(ctx));
+        if (add) {
+            if (!c.fits(len)) return false;
+            c.used += len;
+        } else c.used -= len;
+        c.sync();
+        return true;
+    }
+
     /// Clears `refused` after the error reached the top level.
     pub fn clearRefused(c: *Counting) void {
         if (!c.refused) return;
@@ -1572,6 +1584,7 @@ pub const Interp = struct {
     pub fn init(it: *Interp, gpa: Allocator) Allocator.Error!void {
         it.* = .{ .counter = .{ .child = gpa }, .own_heap = undefined, .heap = undefined };
         it.own_heap = Heap.init(it.counter.allocator());
+        it.own_heap.usePool(.{ .ctx = &it.counter, .func = Counting.chargeSpan });
         it.heap = &it.own_heap;
         it.setRoots();
         try it.start();

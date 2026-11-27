@@ -37,6 +37,7 @@ ztcl::gc reset
 | `alloc_rate` | The allocated bytes a second since the start of the counts. |
 | `uptime_ns` | The time since the start of the counts. |
 | `rss`, `rss_peak` | The resident set of the process and its peak, from the system: the working set on Windows, `VmRSS` and `VmHWM` on Linux, and the resident size of `task_info` on macOS. 0 on a target with no count. |
+| `returned`, `retained` | The bytes of free pages that the heap gave back to the system, and the bytes of free pages that it keeps for its next spans. After a sweep the heap keeps the free pages that it fills before its next collection (its threshold less the bytes of its spans), and at least 4 MiB. The pages of an arena with none in use go back on a thread of their own, so they leave the resident set a moment after the collection. 0 on WebAssembly, where the heap has no page pool. |
 
 The times come from a clock that does not go back. The collector reads it only at the start of a collection, at the end of its mark, and at the end of its sweep, so an allocation costs no more. The count of allocated bytes comes from the collections too: the blocks in use before a sweep, less the live bytes after the last one.
 

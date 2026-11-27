@@ -41,6 +41,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const Alignment = std.mem.Alignment;
+const pagepool = @import("pagepool.zig");
 
 /// The bytes of a page. A small heap uses pages of 4 KiB and at least
 /// four blocks, so a short script holds little memory. A larger heap
@@ -99,6 +100,8 @@ pub const Span = struct {
     noscan: bool,
     large: bool,
     alignment: Alignment = .@"16",
+    /// True for a span of the page pool of the heap.
+    pooled: bool = false,
     next: ?*Span = null,
     /// A set bit: the block is free.
     free: []u64,
@@ -140,6 +143,10 @@ pub const Heap = struct {
     collections: u64 = 0,
     /// The counts of the collections, for `ztcl::gc stats`.
     stats: Stats = .{},
+    /// The pages of the spans, from the system (`pagepool.zig`), when the
+    /// embedder gave `charge` (`usePool`). Null: the backing allocator.
+    pool: ?pagepool.Pool = null,
+    charge: ?Charge = null,
     /// The bytes in use after the last sweep or `resetStats`: the base of
     /// the count of allocated bytes.
     alloc_base: usize = 0,
@@ -244,9 +251,38 @@ pub const Heap = struct {
         return .{ .backing = backing };
     }
 
+    /// The charge of the bytes of a span of the pool to the counter of the
+    /// interpreter: `add` true for a new span, which can fail at the memory
+    /// limit, and false for a freed one.
+    pub const Charge = struct {
+        ctx: *anyopaque,
+        func: *const fn (ctx: *anyopaque, len: usize, add: bool) bool,
+    };
+
+    /// Gets the pages of the spans from the system, with their bytes
+    /// charged to `c`, where the target has a page pool. Call it before the
+    /// first allocation.
+    pub fn usePool(h: *Heap, c: Charge) void {
+        if (comptime !pagepool.supported) return;
+        std.debug.assert(h.spans.items.len == 0);
+        h.pool = pagepool.Pool.init(h.backing);
+        h.charge = c;
+    }
+
+    /// The bytes of free pages that the pool keeps after a sweep: the pages
+    /// that the heap fills before its next collection (the threshold less
+    /// the bytes of its spans), and at least 4 MiB. A heap at a steady
+    /// size then gives back no page, and a heap after a peak gives back
+    /// the pages above its new threshold.
+    fn keepFree(h: *const Heap) usize {
+        return @max(4 << 20, h.threshold -| h.bytes);
+    }
+
     /// Frees all memory of the heap.
     pub fn deinit(h: *Heap) void {
         h.reset();
+        if (h.pool) |*p| p.deinit();
+        h.pool = null;
         h.spans.deinit(h.backing);
         h.work.deinit(h.backing);
         h.backing.free(h.table);
@@ -259,6 +295,7 @@ pub const Heap = struct {
     /// Frees each span and keeps the heap usable.
     pub fn reset(h: *Heap) void {
         for (h.spans.items) |s| h.freeSpan(s);
+        if (h.pool) |*p| _ = p.trim(4 << 20);
         h.spans.clearRetainingCapacity();
         h.cur = @splat(null);
         h.partial = @splat(null);
@@ -312,9 +349,39 @@ pub const Heap = struct {
     }
 
     fn freeSpan(h: *Heap, s: *Span) void {
-        const base: [*]u8 = @ptrFromInt(s.base);
-        h.backing.rawFree(base[0..s.len], s.alignment, 0);
+        h.spanFree(@ptrFromInt(s.base), s.len, s.alignment, s.pooled);
         h.freeMeta(s);
+    }
+
+    const SpanMem = struct { mem: [*]u8, pooled: bool };
+
+    /// The memory of a span of `len` bytes: from the page pool when the
+    /// heap has one and the alignment is at most a page, else from the
+    /// backing allocator. The pool rounds the run up to whole pages, and
+    /// the span and the counter keep `len`, so the threshold and the memory
+    /// limit see the same bytes as with the allocator of the embedder.
+    fn spanMem(h: *Heap, len: usize, a: Alignment) ?SpanMem {
+        if (h.pool) |*pool| if (a.toByteUnits() <= pagepool.page) {
+            const c = h.charge.?;
+            if (!c.func(c.ctx, len, true)) return null;
+            const mem = pool.alloc(std.mem.alignForward(usize, len, pagepool.page)) orelse {
+                _ = c.func(c.ctx, len, false);
+                return null;
+            };
+            return .{ .mem = mem, .pooled = true };
+        };
+        const mem = h.backing.rawAlloc(len, a, 0) orelse return null;
+        return .{ .mem = mem, .pooled = false };
+    }
+
+    fn spanFree(h: *Heap, mem: [*]u8, len: usize, a: Alignment, pooled: bool) void {
+        if (pooled) {
+            h.pool.?.free(mem, std.mem.alignForward(usize, len, pagepool.page));
+            const c = h.charge.?;
+            _ = c.func(c.ctx, len, false);
+            return;
+        }
+        h.backing.rawFree(mem[0..len], a, 0);
     }
 
     /// The index in `spans` of the first span that ends above `addr`.
@@ -397,10 +464,12 @@ pub const Heap = struct {
         const size = class_size[class];
         const page = pageBytes(size, h.bytes);
         const count: usize = page / size;
-        const mem = h.backing.rawAlloc(page, span_align, 0) orelse return null;
+        const got = h.spanMem(page, span_align) orelse return null;
+        const mem = got.mem;
         const s = h.makeSpan((count + 63) / 64, .{
             .base = @intFromPtr(mem),
             .len = page,
+            .pooled = got.pooled,
             .size = size,
             .count = @intCast(count),
             .nwords = 0,
@@ -411,7 +480,7 @@ pub const Heap = struct {
             .free = &.{},
             .mark = &.{},
         }) orelse {
-            h.backing.rawFree(mem[0..page], span_align, 0);
+            h.spanFree(mem, page, span_align, got.pooled);
             return null;
         };
         var i: usize = 0;
@@ -426,10 +495,12 @@ pub const Heap = struct {
     fn allocLarge(h: *Heap, len: usize, alignment: Alignment) ?[*]u8 {
         const a = alignment.max(span_align);
         const size = std.mem.alignForward(usize, len, 16);
-        const mem = h.backing.rawAlloc(size, a, 0) orelse return null;
+        const got = h.spanMem(size, a) orelse return null;
+        const mem = got.mem;
         const s = h.makeSpan(1, .{
             .base = @intFromPtr(mem),
             .len = size,
+            .pooled = got.pooled,
             .size = @intCast(@min(size, std.math.maxInt(u32))),
             .count = 1,
             .nwords = 0,
@@ -440,7 +511,7 @@ pub const Heap = struct {
             .free = &.{},
             .mark = &.{},
         }) orelse {
-            h.backing.rawFree(mem[0..size], a, 0);
+            h.spanFree(mem, size, a, got.pooled);
             return null;
         };
         h.insert(s) catch {
@@ -752,6 +823,9 @@ fn sweep(h: *Heap) void {
     h.stats.freed += used_before -| live_bytes;
     h.alloc_base = live_bytes;
     h.threshold = @max(min_threshold, (if (grew) @as(usize, 4) else 2) *| live_bytes);
+    // The free pages above what the heap fills before its next collection
+    // go back to the system.
+    if (h.pool) |*p| _ = p.trim(h.keepFree());
     // The bounds may be wider than the spans. That is safe.
 }
 
@@ -855,4 +929,58 @@ test "reset frees all pages" {
     h.reset();
     try std.testing.expectEqual(@as(usize, 0), h.bytes);
     _ = try a.alloc(u64, 4);
+}
+
+fn noRoots(_: *anyopaque, _: *Heap) bool {
+    return true;
+}
+
+const TestCharge = struct {
+    used: usize = 0,
+    limit: usize = std.math.maxInt(usize),
+    fn func(ctx: *anyopaque, len: usize, add: bool) bool {
+        const c: *TestCharge = @ptrCast(@alignCast(ctx));
+        if (add) {
+            if (c.used + len > c.limit) return false;
+            c.used += len;
+        } else c.used -= len;
+        return true;
+    }
+};
+
+test "the page pool charges each span, and a sweep gives the free pages back" {
+    if (!pagepool.supported) return error.SkipZigTest;
+    var h = Heap.init(std.testing.allocator);
+    defer h.deinit();
+    var charge: TestCharge = .{};
+    h.usePool(.{ .ctx = &charge, .func = TestCharge.func });
+    const a = h.allocator();
+    // 64 MiB of blocks of 1,000 bytes, and one large block.
+    for (0..64 * 1024) |_| {
+        const p = try a.alloc(u8, 1000);
+        @memset(p, 0x5a);
+    }
+    _ = try a.alloc(u8, 3 << 20);
+    try std.testing.expectEqual(h.bytes, charge.used);
+    // No root: the sweep frees each span, and the pool keeps at most the
+    // pages of the next threshold.
+    var ctx: u8 = 0;
+    h.roots_ctx = &ctx;
+    h.roots_fn = noRoots;
+    collect(&h);
+    try std.testing.expectEqual(@as(usize, 0), h.bytes);
+    try std.testing.expectEqual(@as(usize, 0), charge.used);
+    const pool = &h.pool.?;
+    try std.testing.expect(pool.returned >= 32 << 20);
+    try std.testing.expect(pool.free_committed <= h.keepFree());
+    // The pages come again and hold data.
+    for (0..1024) |_| {
+        const p = try a.alloc(u8, 1000);
+        @memset(p, 0x77);
+        try std.testing.expectEqual(@as(u8, 0x77), p[999]);
+    }
+    try std.testing.expectEqual(h.bytes, charge.used);
+    // A charge that fails is an allocation that fails.
+    charge.limit = charge.used;
+    try std.testing.expectError(error.OutOfMemory, a.alloc(u8, 5 << 20));
 }
