@@ -23,4 +23,5 @@ pub const Lib = struct {
 pub const table = [_]Lib{
     .{ .name = "http", .version = "2.9.8", .script = @embedFile("lib/http.tcl") },
     .{ .name = "http", .version = "1.0", .script = @embedFile("lib/http1.tcl") },
+    .{ .name = "opt", .version = "0.4.9", .script = @embedFile("lib/opt.tcl") },
 };

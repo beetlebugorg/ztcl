@@ -1393,6 +1393,18 @@ test "the http package of the Tcl library" {
     )));
 }
 
+test "the opt package of the Tcl library" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.package));
+    try std.testing.expectEqualStrings("0.4.9 {a 0 3} {b 1 4} 1", try it.str(try it.eval(
+        \\package require opt
+        \\::tcl::OptProc p {{x -string "a word"} {-flag} {?n? 3 "a count"}} {list $x $flag $n}
+        \\list [package present opt] [p a] [p b -FL 4] [catch {p -x}]
+    )));
+}
+
 test "package provides Tcl at the patch level" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);

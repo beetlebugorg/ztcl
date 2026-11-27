@@ -59,6 +59,15 @@ ex: package require http => 2.9.8
 ex: http::formatQuery name "a b" x & => name=a%20b&x=%26
 diff: The requests on one persistent socket go one after the other, so `-pipeline` does not change the order on the socket. The codings gzip, deflate, and compress need the `zlib` command, so the default Accept-Encoding is identity.
 
+== tcl::OptProc
+syn: tcl::OptProc name description body
+does: The opt package 0.4.9 of the Tcl library, with `package require opt`: a proc whose words are checked against a description of flags and parameters. Each item of the description is a flag (`-name`) or a parameter (`name`, or `?name?` when it is optional), with a type (`-int`, `-float`, `-boolean`, `-string`, `-list`, `-choice LIST`, `-any`), a default value, and a help text. A flag can be a prefix of its name in any case. The body sees a variable for each item. `-help` gives a table of the items, and a missing, bad, or extra word gives an error with that table.
+cap: package
+flags: --allow package
+names: tcl::OptKeyRegister tcl::OptKeyDelete tcl::OptKeyParse tcl::OptKeyError tcl::OptParse tcl::OptProcArgGiven tcl::OptCheckType tcl::Lempty tcl::Lget tcl::Lvarset tcl::Lvarset1 tcl::Lvarincr tcl::Lvarpop tcl::Lassign tcl::SetMax tcl::SetMin
+ex: package require opt => 0.4.9
+ex: tcl::OptProc greet {{name -string "who"} {-loud}} {list $name $loud}; greet Ann -l => Ann 1
+
 == msgcat
 syn: msgcat::mc src ?arg ...?
 does: Message catalogs for text in more than one language. `mcset` adds a translation for a locale, `mclocale` sets the locale, and `mc` gives the text for the current locale, with `format` on the arguments, or calls `mcunknown`. `mcload` sources the `.msg` file of each preferred locale of a folder, `mcpreferences` gives the locale and its parents, `mcexists` tests for a translation, and `mcmax` gives the longest translation.
