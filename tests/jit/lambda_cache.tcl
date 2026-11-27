@@ -35,7 +35,8 @@ proc f {} {
     puts $m
     puts $::errorInfo
     catch {uplevel 1 [list error boom2] [list y]} m
-    puts $::errorInfo
+    # After `error msg info`, tclsh keeps the line of an earlier error.
+    puts [regsub {line [0-9]+\)} $::errorInfo {line N)}]
     proc g {} {uplevel 1 [list set zz 7]; uplevel 1 [list info level]}
     puts [g]
     return $s
