@@ -71,7 +71,7 @@ Each command can use 10,000,000 compute units.
   <div class="wrap">
     <p class="eyebrow">Speed and the JIT</p>
     <h2>A bytecode VM, and a JIT compiler for hot loops.</h2>
-    <p class="lede">The interpreter compiles each script to bytecode. On x86-64 Linux, arm64 Linux, and arm64 macOS, the JIT, on by default, compiles hot procs to machine code, and tier 2 keeps integer and double loop variables in registers. tclsh 8.6 and 9 have no JIT. The JIT is experimental and off by default.</p>
+    <p class="lede">The interpreter compiles each script to bytecode. On x86-64 Linux, x86-64 Windows, arm64 Linux, and arm64 macOS, the JIT is on by default. It compiles hot procs to machine code, and tier 2 keeps integer and double loop variables in registers. <code>--no-jit</code> or <code>ZTCL_JIT=off</code> turns it off. tclsh 8.6 and 9 have no JIT.</p>
 
     <div class="split">
       <figure class="chart">

@@ -1,6 +1,6 @@
 # Install
 
-The latest release is on the [releases page](https://github.com/beetlebugorg/ztcl/releases). Some features of these docs are on `main` only: the interactive shell, `ztcl::json`, the JIT on arm64 macOS, and threads in WebAssembly. [Build from source](#build-from-source) to get them now. The [changelog](../CHANGELOG.md) lists them under "Unreleased".
+The latest release is on the [releases page](https://github.com/beetlebugorg/ztcl/releases). Some features of these docs are on `main` only: the interactive shell, `ztcl::json`, the JIT on x86-64 Windows and arm64 Linux, the JIT on by default, and threads in WebAssembly. [Build from source](#build-from-source) to get them now. The [changelog](../CHANGELOG.md) lists them under "Unreleased".
 
 [Targets](targets.md) lists the platforms of ztcl and the features of each.
 

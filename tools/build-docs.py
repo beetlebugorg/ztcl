@@ -442,7 +442,7 @@ class Build:
             script += f'\n<script type="module" src="{root}assets/shell.js"></script>'
         if 'class="zhelper"' in body:
             script += f'\n<script type="module" src="{root}assets/helper.js"></script>'
-        desc = "A sandboxed Tcl interpreter in Zig, with a bytecode VM and an optional JIT."
+        desc = "A sandboxed Tcl interpreter in Zig, with a bytecode VM and a JIT."
         return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
