@@ -1,7 +1,11 @@
 #!/bin/sh
 # Builds the kernel and BusyBox of the spike guest of ztcl::vm (ztcl#203)
-# on arm64 Linux: out/Image (an uncompressed arm64 kernel, the format of
-# VZLinuxBootLoader) and out/busybox (static).
+# on Linux, for the architecture of the host:
+#   arm64:  out/Image (an uncompressed kernel, the format of
+#           VZLinuxBootLoader)
+#   x86-64: out/bzImage (LZ4) and out/vmlinux (the uncompressed ELF),
+#           with the options of kernel-x86_64.fragment, for KVM
+# and out/busybox (static).
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 KERNEL=${KERNEL:-6.12.10}
@@ -22,14 +26,25 @@ tar xf "busybox-$BUSYBOX.tar.bz2"
 
 cd "linux-$KERNEL"
 make tinyconfig
-./scripts/kconfig/merge_config.sh -m .config "$here/kernel.fragment"
+arch=$(uname -m)
+frags="$here/kernel.fragment"
+[ "$arch" = x86_64 ] && frags="$frags $here/kernel-x86_64.fragment"
+# shellcheck disable=SC2086
+./scripts/kconfig/merge_config.sh -m .config $frags
 make olddefconfig
 # The options of the fragment that the merge dropped, for the log.
-grep -v '^#' "$here/kernel.fragment" | grep . | while read -r opt; do
+# shellcheck disable=SC2086
+cat $frags | grep -v '^#' | grep . | while read -r opt; do
     grep -qx "$opt" .config || echo "missing: $opt"
 done
-make -j"$(nproc)" Image
-cp arch/arm64/boot/Image "$out/Image"
+if [ "$arch" = x86_64 ]; then
+    make -j"$(nproc)" bzImage
+    cp arch/x86/boot/bzImage "$out/bzImage"
+    strip -o "$out/vmlinux" vmlinux
+else
+    make -j"$(nproc)" Image
+    cp arch/arm64/boot/Image "$out/Image"
+fi
 cp .config "$out/kernel.config"
 cd ..
 
