@@ -93,6 +93,9 @@ const hosts_event: u8 = 2;
 /// The debugger of the parent debugs the child: a DEBUG frame follows
 /// START, before READY. An older child ignores the bit and the frame.
 const hosts_debug: u8 = 4;
+/// The parent follows Tcl 9.1, so the child does too. Without the bit,
+/// the child follows 8.6.
+const hosts_tcl91: u8 = 8;
 
 // ---- Payloads ----
 
@@ -649,7 +652,7 @@ pub fn prepare(it: *Interp, w: *Worker, st: anytype, host_files: bool, vm: bool,
         .w = w,
         .runner = root.iso_runner,
         .spawner = if (vm) vm_spawner else root.iso_spawn,
-        .hosts = (if (st.clock_host != null) hosts_clock else 0) | (if (st.event_host != null) hosts_event else 0),
+        .hosts = (if (st.clock_host != null) hosts_clock else 0) | (if (st.event_host != null) hosts_event else 0) | (if (st.tcl == .v9_1) hosts_tcl91 else 0),
         .caps = if (vm) st.caps & ~vm_masked else st.caps,
         .root = if (vm) "" else st.fs_path,
         .cwd = if (vm) "" else st.fs_cwd,
@@ -1495,6 +1498,7 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     // `Interp.init` turns the JIT on. The jit byte of START turns it on
     // again after the sandbox.
     x.disableJit();
+    if (st.hosts & hosts_tcl91 != 0) x.setTclVersion(.v9_1) catch return 2;
     x.compute_limit = st.compute;
     x.mem_limit = @intCast(@min(st.mem, std.math.maxInt(usize)));
     x.output = .{ .ctx = &c, .write = Child.outWrite };

@@ -20,6 +20,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const TclVersion = @import("interp.zig").TclVersion;
 
 pub const slot_len = 32;
 
@@ -110,6 +111,9 @@ pub const Manifest = struct {
     root: ?[]const u8 = null,
     /// The JIT is on unless the manifest has `jit off`.
     jit: bool = true,
+    /// The Tcl release of the program: `tcl 8.6` in the manifest, or
+    /// 9.1.
+    tcl: TclVersion = TclVersion.host_default,
 
     pub fn write(m: Manifest, a: Allocator) Allocator.Error![]u8 {
         var out: std.ArrayList(u8) = .empty;
@@ -117,6 +121,7 @@ pub const Manifest = struct {
         if (m.allow.len > 0) try out.print(a, "allow {s}\n", .{m.allow});
         if (m.root) |r| try out.print(a, "root {s}\n", .{r});
         if (!m.jit) try out.appendSlice(a, "jit off\n");
+        if (m.tcl != TclVersion.host_default) try out.print(a, "tcl {s}\n", .{m.tcl.version()});
         return out.items;
     }
 
@@ -133,6 +138,7 @@ pub const Manifest = struct {
             if (std.mem.eql(u8, key, "allow")) m.allow = val;
             if (std.mem.eql(u8, key, "root")) m.root = val;
             if (std.mem.eql(u8, key, "jit")) m.jit = !std.mem.eql(u8, val, "off");
+            if (std.mem.eql(u8, key, "tcl")) m.tcl = TclVersion.parse(val) orelse m.tcl;
         }
         m.scripts = scripts.items;
         return m;
@@ -172,4 +178,10 @@ test "buildnative: the manifest" {
     try std.testing.expect(!back.jit);
     const dflt = try Manifest.parse(arena.allocator(), "script main.tcl\n");
     try std.testing.expect(dflt.jit);
+    try std.testing.expectEqual(TclVersion.v9_1, dflt.tcl);
+    // The release 8.6 is a line of its own, and 9.1 needs none.
+    const old: Manifest = .{ .scripts = &.{"main.tcl"}, .tcl = .v8_6 };
+    const old_text = try old.write(arena.allocator());
+    try std.testing.expectEqualStrings("script main.tcl\ntcl 8.6\n", old_text);
+    try std.testing.expectEqual(TclVersion.v8_6, (try Manifest.parse(arena.allocator(), old_text)).tcl);
 }

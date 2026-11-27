@@ -115,11 +115,13 @@ export class Interp {
     return self;
   }
 
-  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = "8.6", onEvents = null, domComputeLimit = 1000000, webComputeLimit = 1000000, webRoot = globalThis, web = null } = {}) {
+  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = null, onEvents = null, domComputeLimit = 1000000, webComputeLimit = 1000000, webRoot = globalThis, web = null } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
-    if (tcl !== "8.6") {
+    // Without the option, the module follows Tcl 9.1, or the release that
+    // its bundle names.
+    if (tcl != null) {
       const t = encoder.encode(String(tcl));
       const p = this.x.ztcl_alloc(t.length || 1);
       if (!p) throw new Error("ztcl_alloc: out of memory");
