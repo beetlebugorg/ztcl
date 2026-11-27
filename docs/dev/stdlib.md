@@ -250,6 +250,19 @@ One module, `src/aio/`, gives the event loop, the sockets, the files of channels
 - Windows: IOCP. std has no evented backend for Windows. `src/aio/iocp.zig` implements the vtable subset on `CreateIoCompletionPort`, `AcceptEx`, `ConnectEx`, `WSARecv`, `WSASend`, and `GetQueuedCompletionStatusEx`. Files use `Io.Threaded`.
 - WebAssembly: no `aio`. The event loop of the host drives the module (see "WebAssembly").
 
+### The test of `std.Io.Uring` (task 06)
+
+On 2026-11-26, a probe program used `std.Io.Uring` of Zig 0.17.0 on x86-64 Linux for the operations of task 06. The result:
+
+- A program that calls `Uring.io()` does not compile. The vtable of `Uring.zig` sets `processReplacePath`, and `Io.VTable` has no field of that name (`Uring.zig:759`).
+- `net.Stream.read` does not compile on any `Io` (`net.zig:1286`: "type 'Io.net.Stream.ReadResult' cannot be destructured").
+- These vtable entries of `Uring` return `error.Unimplemented`: `netListenIp`, `netAccept`, `netConnectIp`, `netListenUnix`, `netConnectUnix`, `netSocketCreatePair`, `netWriteFile` (`sendfile`), `netInterfaceNameResolve`, `netInterfaceName`, and `netLookup`.
+- The `net_write` operation is `@panic("TODO implement net_write operation")` (`Uring.zig:2120`). The batch forms of `net_receive`, `net_send`, `net_read`, and `net_write` are `@panic` too.
+
+So ztcl uses no part of `std.Io.Uring`. `src/aio/uring.zig` implements each operation of task 06 on `std.os.linux.IoUring`, which has `accept`, `connect`, `read`, `write`, `recv`, `send`, `splice`, `timeout`, `link_timeout`, `poll_add`, and `cancel`.
+
+The interface of `aio` is open (see questions). An implementation of `std.Io` needs `async`, `await`, `cancel`, and the futex calls on fibers of its own, and 110 vtable entries. ztcl writes its own TLS and HTTP code. The std TLS 1.2 client of decision 7 reads and writes an `Io.Reader` and an `Io.Writer` (`std.crypto.tls.Client.init`), and a buffer of a connection of `aio` can give these two interfaces with no `std.Io`. A completion interface of its own (submit an operation with a callback or a coroutine to resume, and run the loop) is smaller, and `src/event.zig` and the coroutines of ztcl can use it directly.
+
 ### The event loop of an interpreter
 
 `src/event.zig` keeps its Tcl behavior: `after`, `vwait`, `update`, `fileevent`, the order of timers, and the idle scripts. Its wait changes from `poll` to the `aio` loop. The test files `event.test`, `socket.test`, `timer.test`, and `ioCmd.test` must keep their pass counts.
