@@ -37,7 +37,7 @@ Linux on x86-64 is first. macOS uses the same `dlopen` and the same table. The p
 
 ## Notes for step 3
 
-`src/cext/host.zig` has the slots of commands, scripts, results, variables, and the non-recursive engine for both paths. `src/cext/native.zig` gives them the interpreter through `src/cext/zside.zig`, and `src/wasm_cext.zig` uses the same functions. `tests/cext/cxcmd.c` checks them against tclsh. A value crosses as an `Arg`, so a list goes as its text. The rest of the area scripts and results is the next PR.
+`src/cext/host.zig` has the slots of commands, scripts, results, variables, and the non-recursive engine for both paths. `src/cext/native.zig` gives them the interpreter through `src/cext/zside.zig`, and `src/wasm_cext.zig` uses the same functions. `tests/cext/cxcmd.c` checks them against tclsh. A value crosses as an `Arg`. A list crosses as an array of `Arg`s, one for each element, and text crosses in modified UTF-8 (U+0000 is C0 80). The rest of the area scripts and results is the next PR.
 
 ## Notes for step 2
 
