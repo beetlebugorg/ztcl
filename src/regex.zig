@@ -36,6 +36,10 @@ const Error = interp.Error;
 const inf = std.math.maxInt(u32);
 const max_prog = 40000;
 const max_memo = 1 << 20;
+/// The most bits of the bit table of the failed spans. The count of
+/// entries of the table stays under `max_memo`, so the table and the
+/// hash map keep the same spans.
+const max_memo_bits = 1 << 18;
 
 pub const Syntax = enum { are, ere, bre, literal };
 
@@ -1257,6 +1261,11 @@ pub const Matcher = struct {
     frames: std.ArrayList(RepFrame) = .empty,
     /// The position where the current search started.
     from: usize = 0,
+    /// With `bits_w` set, the failed spans of `dissect` are in the bit
+    /// table `it.re_bits`: the bit of node `id`, `lo`, and `hi` is
+    /// `(id * bits_w + lo - bits_lo) * bits_w + hi - bits_lo`.
+    bits_lo: usize = 0,
+    bits_w: usize = 0,
     const RepFrame = struct { pos: usize, next: usize };
 
     pub fn init(it: *Interp, re: *Regex, s: []const u8) Error!Matcher {
@@ -1737,7 +1746,7 @@ pub const Matcher = struct {
         }
         const memo = !m.re.has_backref;
         const key = @as(u64, n.id) << 44 | @as(u64, lo) << 22 | hi;
-        if (memo and hi < 1 << 22 and m.it.re_memo.contains(key)) return false;
+        if (memo and hi < 1 << 22 and m.memoHas(n.id, lo, hi, key)) return false;
         const ok = switch (n.kind) {
             .group => |g| blk: {
                 if (!try m.dissect(g.sub, lo, hi)) break :blk false;
@@ -1758,10 +1767,49 @@ pub const Matcher = struct {
             .repeat => |r| try m.repeat(n, r.sub, r.min, r.max, r.greedy, lo, hi),
             else => unreachable,
         };
-        if (!ok and memo and hi < 1 << 22 and m.it.re_memo.count() < max_memo) {
-            try m.it.re_memo.put(m.it.alloc(), key, {});
-        }
+        if (!ok and memo and hi < 1 << 22) try m.memoAdd(n.id, lo, hi, key);
         return ok;
+    }
+
+    fn memoBit(m: *const Matcher, id: u32, lo: usize, hi: usize) usize {
+        return (@as(usize, id) * m.bits_w + lo - m.bits_lo) * m.bits_w + hi - m.bits_lo;
+    }
+
+    fn memoHas(m: *const Matcher, id: u32, lo: usize, hi: usize, key: u64) bool {
+        if (m.bits_w == 0) return m.it.re_memo.contains(key);
+        const b = m.memoBit(id, lo, hi);
+        return m.it.re_bits.items[b >> 6] >> @intCast(b & 63) & 1 != 0;
+    }
+
+    fn memoAdd(m: *Matcher, id: u32, lo: usize, hi: usize, key: u64) Error!void {
+        if (m.bits_w == 0) {
+            if (m.it.re_memo.count() < max_memo) try m.it.re_memo.put(m.it.alloc(), key, {});
+            return;
+        }
+        const b = m.memoBit(id, lo, hi);
+        const w = &m.it.re_bits.items[b >> 6];
+        if (w.* == 0) try m.it.re_dirty.append(m.it.alloc(), @intCast(b >> 6));
+        w.* |= @as(u64, 1) << @intCast(b & 63);
+    }
+
+    /// Uses the bit table for the failed spans of the match `b` when the
+    /// table of each node and each pair of positions in `b` is small.
+    /// Else the spans go in the hash map `it.re_memo`.
+    fn memoBits(m: *Matcher, b: [2]usize) Error!void {
+        m.bits_w = 0;
+        for (m.it.re_dirty.items) |w| m.it.re_bits.items[w] = 0;
+        m.it.re_dirty.clearRetainingCapacity();
+        const w = b[1] - b[0] + 1;
+        const need = @as(u64, m.re.nodes) * w * w;
+        if (need > max_memo_bits) return;
+        const words: usize = @intCast((need + 63) / 64);
+        if (m.it.re_bits.items.len < words) {
+            const old = m.it.re_bits.items.len;
+            try m.it.re_bits.resize(m.it.alloc(), words);
+            @memset(m.it.re_bits.items[old..], 0);
+        }
+        m.bits_lo = b[0];
+        m.bits_w = w;
     }
 
     fn catFrom(m: *Matcher, items: []const *Node, lo: usize, hi: usize) Error!bool {
@@ -1872,6 +1920,7 @@ pub const Matcher = struct {
             span = try m.simulate(from);
             if (span) |b| {
                 if (m.re.ncap > 1) {
+                    try m.memoBits(b);
                     if (!try m.dissect(m.re.root, b[0], b[1])) @memset(m.spans, null);
                 }
             }

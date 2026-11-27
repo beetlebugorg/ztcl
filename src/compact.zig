@@ -361,6 +361,8 @@ pub fn run(it: *Interp, roots: []Value, opts: Options) Error!void {
     it.ns_paths = ns_paths;
     it.script_name = "";
     it.re_memo = .empty;
+    it.re_bits = .empty;
+    it.re_dirty = .empty;
     it.coro_stacks = .empty;
     // The address of each held value changes, and the embedder has only
     // the old one. A value that must stay goes in `roots`.
