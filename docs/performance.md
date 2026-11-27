@@ -28,7 +28,7 @@ The two `tclsh` builds can differ in compiler flags.
 
 User CPU instructions of the whole process, in millions, from `perf stat -e instructions:u`, 2026-11-24. Instruction counts do not change with the load of the machine.
 
-| Script | Interpreter | `--jit` | `--jit --jit-tier2` | tclsh 8.6.16 |
+| Script | `--no-jit` | `--no-jit-tier2` | default | tclsh 8.6.16 |
 |---|---|---|---|---|
 | `sum.tcl` | 283.8 | 90.9 | 15.0 | 684.3 |
 | `dsum.tcl` | 688.8 | 555.9 | 16.6 | 1212.5 |
@@ -44,7 +44,7 @@ User CPU instructions of the whole process, in millions, from `perf stat -e inst
 
 Three programs of [kostya/benchmarks](https://github.com/kostya/benchmarks): the brainfuck interpreter `bf.tcl`, its TclOO form `bf_oo.tcl`, and `base64`. Each output of ztcl equals the output of `tclsh`. Wall time in seconds, best of 5 runs, each run pinned to one core with `taskset`. `bf` uses `small.b`, a shorter form of `bench.b`. Other jobs shared the machine, so these times are rough.
 
-| Program | Interpreter | `--jit` | `--jit --jit-tier2` | tclsh 8.6.16 |
+| Program | `--no-jit` | `--no-jit-tier2` | default | tclsh 8.6.16 |
 |---|---|---|---|---|
 | `bf.tcl small.b` | 0.84 | 0.65 | 0.65 | 2.73 |
 | `bf_oo.tcl small.b` | 4.22 | 3.40 | 3.70 | 8.17 |

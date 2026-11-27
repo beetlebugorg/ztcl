@@ -15,7 +15,7 @@ This page lists each target of ztcl. For each target it gives what `ztcl build` 
 | `x86_64-windows` | 2,691,584 bytes | no | yes | yes | yes |
 | `aarch64-windows` | 2,144,256 bytes | no | no | no | no |
 
-- **JIT**: tier 1 compiles the bytecode of a proc, and tier 2 compiles a hot loop. [The JIT](jit.md) has the details. On a target with no JIT, `--jit` has no effect, and `enableJit` returns false. A binary of `ztcl build` has no machine code compiled at build time yet. See "Code compiled ahead of time" below.
+- **JIT**: tier 1 compiles the bytecode of a proc, and tier 2 compiles a hot loop. [The JIT](jit.md) has the details. The JIT is on by default. On a target with no JIT, `--no-jit` has no effect, and `enableJit` returns false. A binary of `ztcl build` has no machine code compiled at build time yet. See "Code compiled ahead of time" below.
 - **`coroutine`**: on a target with no coroutines, `coroutine` gives the error `coroutine is not available on this target`.
 - **`exec` and `ztcl::pty`**: [Run programs](processes.md) and [ztcl::pty](modules/pty.md) list the differences of Linux, macOS, and Windows.
 - **`ztcl::watch`**: Linux has inotify and x86-64 Windows has `ReadDirectoryChangesW`. On macOS, `add` gives the error `ZTCL WATCH UNAVAILABLE`. [ztcl::watch](modules/watch.md#platforms) has the details.

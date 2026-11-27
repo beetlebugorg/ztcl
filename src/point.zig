@@ -1041,6 +1041,7 @@ fn expectSameJit(script: []const u8, name: []const u8, n: usize, jit: bool) !voi
     try it.init(std.testing.allocator);
     defer it.deinit();
     try install(&it, &state);
+    if (!jit) it.disableJit();
     if (jit and !it.enableJit(.{ .threshold = 0, .tier2 = true, .tier2_count = 2 })) return error.SkipZigTest;
     _ = it.eval(script) catch |e| {
         std.debug.print("{s}\n", .{try it.str(it.result)});

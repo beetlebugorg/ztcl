@@ -128,8 +128,8 @@ The largest groups of tests that still fail in scope: `info frame`, step traces,
 | Command | What it checks |
 |---|---|
 | `zig build test` and `zig build test -Djit=false` | The unit tests with and without the JIT code. `src/jit/tests.zig` runs scripts in both modes and compares the output, the error, `errorInfo`, the steps, and the memory count. |
-| `tools/jit-diff.sh` | Each script of `tests/jit/`, `tests/mem/`, and `bench/` in three modes (no JIT, `--jit --jit-threshold 0`, `--jit`) with `--gc off`: the output, the exit code, the steps, and the memory count. The interpreter output of `tests/jit/` equals the `.out` file from tclsh. Then the compute limit sweep of `tests/jit/sweep/`, and the native stack of 500 proc calls with the suite runner. `-x "--gc-stress 1"` adds the stress mode. |
-| `tools/suite.sh -j` | The suite with `--jit --jit-threshold 0`. Each file has the pass count of the run without `-j`. |
+| `tools/jit-diff.sh` | Each script of `tests/jit/`, `tests/mem/`, and `bench/` in three modes (`--no-jit`, `--jit-threshold 0 --no-jit-tier2`, `--no-jit-tier2`) with `--gc off`: the output, the exit code, the steps, and the memory count. The interpreter output of `tests/jit/` equals the `.out` file from tclsh. Then the compute limit sweep of `tests/jit/sweep/`, and the native stack of 500 proc calls with the suite runner. `-x "--gc-stress 1"` adds the stress mode. |
+| `tools/suite.sh -j` and `-n` | The suite with `--jit-threshold 0 --no-jit-tier2`, and with `--no-jit`. Each file has the pass count of the default run. |
 | `tools/jit-perf.sh --check off` and `--check jit` | The instruction counts of `puts hi` and `bench/` against `bench/jit-baseline.tsv` (at most 1 % above) and `bench/jit-gates.tsv`. |
 | `tools/jit-asm-golden.sh --check` | The golden table of the assembler is the output of `zig cc` today. |
 | `tools/gc-fuzz.py -r <runner> -j` | The collector fuzzer with the JIT at threshold 0 in the stress run. |

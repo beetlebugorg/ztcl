@@ -30,7 +30,7 @@ ztcl build --allow file,channels -o jot --embed jot.tcl main.tcl
 
 ## The JIT and threads, in short
 
-- `ztcl --jit` compiles hot procs to machine code. The results, the errors, and the compute units are the same as in the interpreter. [The JIT](../jit.md) has the numbers.
+- The JIT is on by default. It compiles hot procs to machine code, and `--no-jit` turns it off. The results, the errors, and the compute units are the same as in the interpreter. [The JIT](../jit.md) has the numbers.
 - `thread::create` runs a script in its own interpreter, with its own limits. Threads share data with messages and `tsv`. [Threads](../threads.md) has the isolation levels.
 
 ## Reading code an agent wrote
@@ -46,5 +46,5 @@ ztcl build --allow file,channels -o jot --embed jot.tcl main.tcl
 ## Try this
 
 - Build a program with no `--allow`, and read the error of its first `open`.
-- Build `jot` with `--jit`, and run it again.
+- Build `jot` with `--no-jit`, and compare the time of a run with the default build.
 - Go on to the advanced track: [Write a package](90-write-a-package.md).

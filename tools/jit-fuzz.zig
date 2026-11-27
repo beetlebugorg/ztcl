@@ -981,7 +981,7 @@ fn runOnce(a: Allocator, text: []const u8, mode: Mode, cfg: Config, out: *std.Ar
     if (mode.jit) {
         const opts: tcl.jit.Options = .{ .threshold = mode.threshold, .tier2 = mode.tier2, .tier2_count = mode.tier2_count, .stress = cfg.stress, .fail_from = cfg.fail_from };
         if (!it.enableJit(opts)) return error.NoJit;
-    }
+    } else it.disableJit();
     if (it.eval(text)) |v| {
         try out.print(a, "result: {s}\n", .{it.str(v) catch "?"});
     } else |e| {
@@ -1514,6 +1514,8 @@ const VSide = struct {
     fn init(vs: *VSide, a: Allocator) !void {
         vs.sink = .{ .buf = .empty, .a = a };
         try vs.it.init(a);
+        // The side of the JIT turns it on with the options of the run.
+        vs.it.disableJit();
         vs.it.gc_on = false;
         vs.it.output = .{ .ctx = &vs.sink, .write = collect };
     }

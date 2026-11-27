@@ -125,6 +125,14 @@ jobs:
           echo $$ | sudo tee /sys/fs/cgroup/ztcl-ci/leaf/cgroup.procs
           ulimit -v 6000000
           zig build test -Dgc-precise=true
+      # The JIT is on by default. A build with no JIT code is the other
+      # path.
+      - name: Test the build with no JIT
+        if: runner.os == 'Linux'
+        run: |
+          echo $$ | sudo tee /sys/fs/cgroup/ztcl-ci/leaf/cgroup.procs
+          ulimit -v 6000000
+          zig build test -Djit=false
 
   # C packages: the build with -Dcext, its unit tests, and the test
   # packages of tests/cext, each one compared with tclsh.
@@ -226,7 +234,7 @@ jobs:
           # The file system of macOS ignores case, so the names of the
           # counts files differ in more than case.
           for m in none tier1 tier2; do
-            case $m in none) f= ;; tier1) f=-j ;; tier2) f=-J ;; esac
+            case $m in none) f=-n ;; tier1) f=-j ;; tier2) f=-J ;; esac
             tools/suite.sh -a $f -o suite-$m.tsv | tail -1
           done
           loose='^(socket|io|chanio)\.test'
@@ -259,6 +267,12 @@ jobs:
           zig build
           tools/suite.sh -t core-8-6-16 | tee suite.txt
           awk '$1 == "total" { found = 1; ok = ($3 >= 19241) } END { exit !(found && ok) }' suite.txt
+      # The runner with the JIT on (the default) and off.
+      - name: Run the suite with no JIT
+        run: |
+          ulimit -v 6000000
+          tools/suite.sh -n -t core-8-6-16 | tee suite-off.txt
+          awk '$1 == "total" { found = 1; ok = ($3 >= 19241) } END { exit !(found && ok) }' suite-off.txt
 
   wasm:
     name: WebAssembly

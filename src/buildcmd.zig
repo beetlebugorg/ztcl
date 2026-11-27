@@ -25,7 +25,7 @@ const tcl = @import("ztcl");
 const wb = tcl.wasmbundle;
 
 const usage =
-    \\usage: ztcl build [--target T] [--runtime FILE] [--allow LIST] [--root PATH] [--jit]
+    \\usage: ztcl build [--target T] [--runtime FILE] [--allow LIST] [--root PATH] [--no-jit]
     \\                  [--compress] [--embed PATH]... -o OUT script.tcl...
     \\       ztcl build --wasm [--base ztcl.wasm] [--embed PATH]... -o OUT.wasm script.tcl...
     \\
@@ -64,8 +64,8 @@ pub fn run(io: Io, a: std.mem.Allocator, env: anytype, args: []const [:0]const u
         } else if (std.mem.eql(u8, arg, "--root") and has_value) {
             i += 1;
             nat.root = args[i];
-        } else if (std.mem.eql(u8, arg, "--jit")) {
-            nat.jit = true;
+        } else if (std.mem.eql(u8, arg, "--no-jit")) {
+            nat.jit = false;
         } else if (std.mem.eql(u8, arg, "--compress")) {
             nat.compress = true;
         } else if (std.mem.eql(u8, arg, "-o") and has_value) {
@@ -182,7 +182,7 @@ const Native = struct {
     runtime: ?[]const u8 = null,
     allow: []const u8 = "",
     root: ?[]const u8 = null,
-    jit: bool = false,
+    jit: bool = true,
     compress: bool = false,
 };
 

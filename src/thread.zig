@@ -920,7 +920,9 @@ fn setup(w: *Worker, x: *Interp, st: Start) Allocator.Error!void {
     x.noise_seed = st.noise_seed;
     x.gc_on = st.gc_on;
     if (st.gc_stress != 0) x.setGcStress(st.gc_stress);
-    if (st.jit) |o| _ = x.enableJit(o);
+    if (st.jit) |o| {
+        _ = x.enableJit(o);
+    } else x.disableJit();
     if (comptime fd_os) {
         if (st.fs_fd >= 0) {
             x.fs.fd = st.fs_fd;

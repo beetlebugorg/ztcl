@@ -1,7 +1,7 @@
 #!/bin/sh
 # Runs test files of the Tcl source on ztcl and prints the counts.
 #
-#   tools/suite.sh [-a] [-j] [-g N] [-o file] [-p file] [-r runner]
+#   tools/suite.sh [-a] [-j | -J | -n] [-g N] [-o file] [-p file] [-r runner]
 #                  [-t tag | -s tests-dir]
 #                  [file.test ...]
 #
@@ -11,7 +11,11 @@
 #   -s  A folder of Tcl test files. It replaces -t.
 #   -a  Runs each .test file of the folder.
 #   -g  A count N: the runner starts a collection at each Nth allocation.
-#   -j  Runs with the JIT, and compiles each proc before its first run.
+#   The JIT is on with its default options.
+#   -j  Compiles each proc before its first run, with tier 1 only.
+#   -J  Compiles each proc before its first run, and each loop after two
+#       passes.
+#   -n  Runs with no JIT.
 #   -o  Writes one line for each file and skip reason to this file:
 #       `file<TAB>pass<TAB>fail<TAB>skip<TAB>status`, then
 #       `file<TAB>skipped<TAB>reason<TAB>count`.
@@ -26,15 +30,16 @@
 # SPDX-License-Identifier: BSD-2-Clause
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 tcl="$here/../zig-out/bin/ztcl"; tag=core-8-6-16; tests=; all=; log=; plog=; gc=
-while getopts ajJr:t:s:o:p:g: o; do
+while getopts ajJnr:t:s:o:p:g: o; do
     case $o in
     r) tcl=$OPTARG ;;
     t) tag=$OPTARG ;;
     s) tests=$OPTARG ;;
     a) all=1 ;;
     g) gc="$gc --gc-stress $OPTARG" ;;
-    j) gc="$gc --jit --jit-threshold 0" ;;
-    J) gc="$gc --jit --jit-threshold 0 --jit-tier2 --jit-tier2-count 2" ;;
+    j) gc="$gc --jit-threshold 0 --no-jit-tier2" ;;
+    J) gc="$gc --jit-threshold 0 --jit-tier2-count 2" ;;
+    n) gc="$gc --no-jit" ;;
     o) log=$OPTARG; : > "$log" ;;
     p) plog=$OPTARG; : > "$plog" ;;
     *) exit 2 ;;

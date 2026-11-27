@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Turns the JIT on by default, with tier 1 and tier 2, where the build and the system have it: in the runner, in `Interp.init`, in programs of `ztcl build`, and in threads of a creator with the JIT. A system that refuses executable memory runs the interpreter with no error. `--no-jit`, `--no-jit-tier2`, `ZTCL_JIT=off`, `Interp.disableJit`, and `ztcl build --no-jit` turn it off. `Interp.jitState` and the `state` field of `--jit-stats` give the reason. Removes the runner flags `--jit` and `--jit-tier2` and the flag `ztcl build --jit`.
 - Adds the module `ztcl::vt`: the state of a terminal on libghostty-vt 1.0.2, which the build compiles from source with `-Dsimd=false` and links statically. A script feeds it bytes and reads back the rows, the cells, the cursor, the modes, and the dirty rows. It needs no capability. `-Dmod-vt=false` leaves it out. See `docs/modules/vt.md`.
 - Adds `ztcl::pty` on Windows with a pseudo console (ConPTY): `spawn`, `resize`, `size`, `status`, `kill`, and `close`, with the program in the Job Object of `exec`. `kill` with `INT` writes Ctrl-C, and each other signal ends the job.
 

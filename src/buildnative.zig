@@ -108,14 +108,15 @@ pub const Manifest = struct {
     scripts: []const []const u8 = &.{},
     allow: []const u8 = "",
     root: ?[]const u8 = null,
-    jit: bool = false,
+    /// The JIT is on unless the manifest has `jit off`.
+    jit: bool = true,
 
     pub fn write(m: Manifest, a: Allocator) Allocator.Error![]u8 {
         var out: std.ArrayList(u8) = .empty;
         for (m.scripts) |s| try out.print(a, "script {s}\n", .{s});
         if (m.allow.len > 0) try out.print(a, "allow {s}\n", .{m.allow});
         if (m.root) |r| try out.print(a, "root {s}\n", .{r});
-        if (m.jit) try out.appendSlice(a, "jit on\n");
+        if (!m.jit) try out.appendSlice(a, "jit off\n");
         return out.items;
     }
 
@@ -131,7 +132,7 @@ pub const Manifest = struct {
             if (std.mem.eql(u8, key, "script")) try scripts.append(a, val);
             if (std.mem.eql(u8, key, "allow")) m.allow = val;
             if (std.mem.eql(u8, key, "root")) m.root = val;
-            if (std.mem.eql(u8, key, "jit")) m.jit = std.mem.eql(u8, val, "on");
+            if (std.mem.eql(u8, key, "jit")) m.jit = !std.mem.eql(u8, val, "off");
         }
         m.scripts = scripts.items;
         return m;
@@ -162,11 +163,13 @@ test "buildnative: the manifest" {
     const a = std.testing.allocator;
     var arena = std.heap.ArenaAllocator.init(a);
     defer arena.deinit();
-    const m: Manifest = .{ .scripts = &.{ "main.tcl", "lib/a.tcl" }, .allow = "embedded,clock", .jit = true };
+    const m: Manifest = .{ .scripts = &.{ "main.tcl", "lib/a.tcl" }, .allow = "embedded,clock", .jit = false };
     const text = try m.write(arena.allocator());
-    try std.testing.expectEqualStrings("script main.tcl\nscript lib/a.tcl\nallow embedded,clock\njit on\n", text);
+    try std.testing.expectEqualStrings("script main.tcl\nscript lib/a.tcl\nallow embedded,clock\njit off\n", text);
     const back = try Manifest.parse(arena.allocator(), text);
     try std.testing.expectEqual(@as(usize, 2), back.scripts.len);
     try std.testing.expectEqualStrings("lib/a.tcl", back.scripts[1]);
-    try std.testing.expect(back.jit);
+    try std.testing.expect(!back.jit);
+    const dflt = try Manifest.parse(arena.allocator(), "script main.tcl\n");
+    try std.testing.expect(dflt.jit);
 }

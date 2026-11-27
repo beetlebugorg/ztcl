@@ -95,7 +95,7 @@ Thu Jan 01 00:00:00 GMT 1970
 |---|---|
 | `--allow LIST` | The capabilities of the program, with the names of `ztcl --allow` (see [Limits and capabilities](limits.md)). `embedded` is always on. |
 | `--root PATH` | The root folder of `file` and channels at run time, a jail that `..` and symlinks cannot leave. Without it, a program with `file` uses the real paths of the host, as the `ztcl` runner does. |
-| `--jit` | Turns on the JIT at start, on a target with a JIT. |
+| `--no-jit` | Turns the JIT off. The JIT is on by default on a target with a JIT. |
 | `--compress` | Stores each file with deflate when that is smaller. The default stores each file as it is. |
 
 ## The files of a program

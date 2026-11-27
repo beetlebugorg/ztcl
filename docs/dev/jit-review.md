@@ -59,7 +59,7 @@ The reviewer runs the acceptance commands of the task again, under the memory ca
 - [ ] The JIT adds no command, no capability, and no host access. The test that each capability is absent by default still passes.
 - [ ] A script cannot turn the JIT on, and cannot read if it is on.
 - [ ] A child interpreter has the JIT only when its parent has it.
-- [ ] The default is off in the library and in the runner.
+- [ ] The default is on in the library and in the runner, and `--no-jit`, `ZTCL_JIT=off`, and `disableJit` turn it off. A system that refuses executable memory runs the interpreter with no error.
 - [ ] The WebAssembly build has no JIT code.
 - [ ] With the JIT on, the output of a script is equal to the output with the JIT off. Rule 4 of AGENTS.md.
 

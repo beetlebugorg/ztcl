@@ -31,6 +31,8 @@ fn newInterp() !*Interp {
     o.sa = .init(std.heap.page_allocator, .{ .stack_trace_frames = 0, .check_write_after_free = true });
     errdefer _ = o.sa.deinit();
     try o.it.init(o.sa.allocator());
+    // Each test turns the JIT on with its own options.
+    o.it.disableJit();
     return &o.it;
 }
 
@@ -43,12 +45,20 @@ fn freeInterp(it: *Interp) void {
     if (leaks != 0) std.debug.panic("an interp of the JIT tests leaked {d} allocations", .{leaks});
 }
 
-test "the default interpreter has no JIT state" {
-    const it = try newInterp();
-    defer freeInterp(it);
-    try testing.expect(it.jit == null);
+test "the JIT is on by default when the build and the system have it" {
+    var it: Interp = undefined;
+    try it.init(testing.allocator);
+    defer it.deinit();
+    const want = jit.built and !tcl.gc.precise and mem.selfTest();
+    try testing.expectEqual(want, it.jit != null);
+    try testing.expectEqual(if (want) jit.Availability.on else if (jit.built and !tcl.gc.precise) jit.Availability.refused else jit.Availability.not_built, it.jitState());
+    if (want) try testing.expect(it.jit.?.options.tier2);
     _ = try it.eval("proc f {x} {expr {$x + 1}}; f 1; f 2");
+    it.disableJit();
     try testing.expect(it.jit == null);
+    if (want) try testing.expectEqual(jit.Availability.off, it.jitState());
+    const v = try it.eval("f 41");
+    try testing.expectEqual(@as(i64, 42), v.asInt().?);
 }
 
 test "enableJit follows the build, and reset keeps the state" {

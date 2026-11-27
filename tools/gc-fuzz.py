@@ -155,10 +155,10 @@ def main():
             text = Gen(seed).program()
             with open(path, "w") as f:
                 f.write(text)
-            ref = run([o.b or o.r, "--gc", "off"] + base, path, o.t)
-            jit = ["--jit", "--jit-threshold", "0"] if o.j else []
+            ref = run([o.b or o.r, "--gc", "off", "--no-jit"] + base, path, o.t)
+            jit = ["--jit-threshold", "0", "--no-jit-tier2"] if o.j else ["--no-jit"]
             if o.j and o.T:
-                jit += ["--jit-tier2", "--jit-tier2-count", "2"]
+                jit = ["--jit-threshold", "0", "--jit-tier2-count", "2"]
             got = run([o.r, "--gc-stress", str(o.g)] + jit + base, path, o.t * 5)
             if ref is None or got is None:
                 slow += 1
