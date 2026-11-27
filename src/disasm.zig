@@ -174,7 +174,7 @@ fn instruction(it: *Interp, out: *std.ArrayList(u8), code: *const vm.Code, i: *c
             try short(a, out, code.sites[i.a].text);
         },
         .jump, .jump_false, .jump_true => try out.print(a, "  # to {d}", .{i.a}),
-        .str_eq_jump => try out.print(a, "  # to {d}", .{i.b}),
+        .str_eq_jump => try out.print(a, "  # to {d}{s}", .{ i.b, if (i.x != 0) " glob" else "" }),
         .jf_vv, .jf_vi => try out.print(a, "  # to {d}", .{i.c}),
         .probe => try out.print(a, "  # line {d}", .{i.a}),
         else => {},
