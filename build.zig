@@ -161,6 +161,10 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("tools/witgen/witgen.zig"),
         .target = b.graph.host,
     }) })).step);
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/wasm-pack.zig"),
+        .target = b.graph.host,
+    }) })).step);
     // The check of the bindings: a component that imports each function
     // of src/wasi/p3.zig (needs wasm-tools).
     const bind_mod = b.createModule(.{
@@ -382,27 +386,26 @@ pub fn build(b: *std.Build) void {
 
     // The WebAssembly library: zig-out/lib/ztcl.wasm.
     const wasm = addWasm(b, "ztcl", .none, gc_precise, size_plant, on, false, false);
-    const wasm_install = b.addInstallArtifact(wasm, .{ .dest_dir = .{ .override = .lib } });
-    b.step("wasm", "Build the WebAssembly library").dependOn(&wasm_install.step);
+    b.step("wasm", "Build the WebAssembly library").dependOn(installWasm(b, wasm));
 
     // The library with the shell of the runner (src/wasm_shell.zig):
     // zig-out/lib/ztcl-shell.wasm, for the shell of the site.
     const wasm_shell = addWasm(b, "ztcl-shell", .none, gc_precise, size_plant, on, false, true);
-    b.step("wasm-shell", "Build the WebAssembly library with the shell").dependOn(&b.addInstallArtifact(wasm_shell, .{ .dest_dir = .{ .override = .lib } }).step);
+    b.step("wasm-shell", "Build the WebAssembly library with the shell").dependOn(installWasm(b, wasm_shell));
 
     // The library with wasm SIMD: zig-out/lib/ztcl-simd.wasm. `ztcl.wasm`
     // stays the strict form for a runtime with no SIMD.
     const wasm_simd = addWasmSimd(b, "ztcl-simd", .none, gc_precise, size_plant, on, false, false, true);
-    b.step("wasm-simd", "Build the WebAssembly library with SIMD").dependOn(&b.addInstallArtifact(wasm_simd, .{ .dest_dir = .{ .override = .lib } }).step);
+    b.step("wasm-simd", "Build the WebAssembly library with SIMD").dependOn(installWasm(b, wasm_simd));
 
     // The library with the imports of the host: zig-out/lib/ztcl-host.wasm.
     const wasm_host = addWasmForm(b, "ztcl-host", .none, gc_precise, size_plant, on, false, false, false, true);
-    b.step("wasm-host", "Build the WebAssembly library with the imports of the host").dependOn(&b.addInstallArtifact(wasm_host, .{ .dest_dir = .{ .override = .lib } }).step);
+    b.step("wasm-host", "Build the WebAssembly library with the imports of the host").dependOn(installWasm(b, wasm_host));
 
     // The runtime of `ztcl compile --wasm`: zig-out/lib/ztcl-aot.wasm.
     // It is the library with the helpers of the JIT as exports.
     const wasm_aot = addWasm(b, "ztcl-aot", .none, gc_precise, size_plant, on, true, false);
-    b.step("wasm-aot", "Build the runtime of ztcl compile --wasm").dependOn(&b.addInstallArtifact(wasm_aot, .{ .dest_dir = .{ .override = .lib } }).step);
+    b.step("wasm-aot", "Build the runtime of ztcl compile --wasm").dependOn(installWasm(b, wasm_aot));
 
     // The core of the VBS enclave of Windows: zig-out/lib/ztcl-enclave-core.lib.
     // See docs/dev/enclave.md.
@@ -415,8 +418,36 @@ pub fn build(b: *std.Build) void {
     const threads_step = b.step("wasm-threads", "Build the WebAssembly libraries with threads");
     for ([_]struct { []const u8, WebThreads }{ .{ "ztcl-threads", .shared }, .{ "ztcl-async", .async } }) |wt| {
         const w = addWasm(b, wt[0], wt[1], gc_precise, size_plant, on, false, false);
-        threads_step.dependOn(&b.addInstallArtifact(w, .{ .dest_dir = .{ .override = .lib } }).step);
+        threads_step.dependOn(installWasm(b, w));
     }
+}
+
+/// The host program of tools/wasm-pack.zig, made on the first call of
+/// `installWasm`.
+var wasm_pack_exe: ?*std.Build.Step.Compile = null;
+var wasm_pack_on: ?bool = null;
+
+/// Installs a WebAssembly library to zig-out/lib after the pass of
+/// tools/wasm-pack.zig, which writes the numbers of the code section in
+/// their shortest form (#294). `-Dwasm-pack=false` installs the output
+/// of the linker.
+fn installWasm(b: *std.Build, wasm: *std.Build.Step.Compile) *std.Build.Step {
+    if (wasm_pack_on == null) wasm_pack_on = b.option(bool, "wasm-pack", "Write short numbers in the code of the WebAssembly libraries (default true)") orelse true;
+    if (!wasm_pack_on.?) return &b.addInstallArtifact(wasm, .{ .dest_dir = .{ .override = .lib } }).step;
+    const exe = wasm_pack_exe orelse blk: {
+        const e = b.addExecutable(.{ .name = "wasm-pack", .root_module = b.createModule(.{
+            .root_source_file = b.path("tools/wasm-pack.zig"),
+            .target = b.graph.host,
+            .optimize = .ReleaseSafe,
+        }) });
+        wasm_pack_exe = e;
+        break :blk e;
+    };
+    const run = b.addRunArtifact(exe);
+    run.addArtifactArg(wasm);
+    const name = b.fmt("{s}.wasm", .{wasm.name});
+    const out = run.addOutputFileArg(name);
+    return &b.addInstallFileWithDir(out, .lib, name).step;
 }
 
 /// The runtime of compiled point procs: `src/point_rt.zig` for wasm32

@@ -214,6 +214,17 @@ Measured: 70,097 bytes (4.8 %), 7,245 bytes with gzip (1.4 %), 3,830 with Brotli
 
 Medium for a pass of our own: a wrong operand table makes a module that does not validate, and the browser refuses it at load. The check mode and the tests find that. Low for a linker option.
 
+### Status
+
+Done in #294. Zig 0.17.0 has no option for the linker that compresses the relocated numbers, so `tools/wasm-pack.zig` is the pass. `installWasm` in `build.zig` runs it on each library of `zig-out/lib`, and `-Dwasm-pack=false` installs the output of the linker. The pass also writes the size of each section and of each body in the shortest form. Each build packs the output a second time and compares the bytes. An opcode that is not in the table fails the build.
+
+Measured on commit `43cda77`, 2026-11-27:
+
+| Form | Bytes | gzip -9 | Brotli 11 |
+|---|---|---|---|
+| `ztcl.wasm` from the linker | 1,488,640 | 507,742 | 379,762 |
+| `ztcl.wasm` after the pass | 1,417,631 | 501,986 | 375,905 |
+
 ## 5. Error messages with no format code at each call
 
 ### Evidence
