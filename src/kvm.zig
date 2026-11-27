@@ -758,7 +758,7 @@ fn makeNet(m: *Machine, k: usize, nc: nat_engine.Config) Fail!void {
     // the engine sends it frames of up to 64 KB.
     m.net = .{ .mac = nat_stack.guest_mac, .ctx = m, .kick = netKick, .offloads = vnet.f_csum | vnet.f_guest_csum | vnet.f_host_tso4 | vnet.f_guest_tso4 };
     m.devices[k] = Device.net(irqs[k], &m.net);
-    m.nat = nat_engine.Nat.init(m.alloc, nc, .{ .ctx = m, .deliver = netDeliver, .flush = netFlush, .features = netFeatures }) catch {
+    m.nat = nat_engine.Nat.init(m.alloc, nc, .{ .ctx = m, .deliver = netDeliver, .flush = netFlush, .features = netFeatures, .deliverFill = netDeliverFill }) catch {
         why = "no NAT engine";
         return error.Setup;
     };
@@ -825,6 +825,19 @@ fn netDeliver(ctx: *anyopaque, hdr: vnet.Hdr, parts: []const []const u8) bool {
 fn netFeatures(ctx: *anyopaque) u64 {
     const m: *Machine = @ptrCast(@alignCast(ctx));
     return @atomicLoad(u64, &m.netDev().driver_features, .monotonic);
+}
+
+fn netDeliverFill(ctx: *anyopaque, head: []u8, max: usize, min: usize, f: vnet.Net.Fill) vnet.Net.Filled {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
+    const d = m.netDev();
+    const h = m.host();
+    if (!m.net_in_tx) d.lock.lock();
+    defer if (!m.net_in_tx) d.lock.unlock();
+    while (true) {
+        const r = m.net.deliverFill(d, &h, head, max, min, f);
+        if (r != .no_room) return r;
+        if (!m.net.rxArm(d, &h)) return r;
+    }
 }
 
 fn netFlush(ctx: *anyopaque) void {

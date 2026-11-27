@@ -58,7 +58,14 @@ Each step publishes its numbers in this file. Each number is measured on the sam
 | Connections each second | 701 | 1,508 |
 
   On this shared host the numbers move by about 30 % from run to run. A profile of the host to guest run (a Debug build) has 57 % of the user time of ztcl in `memcpy`: the copy from the `in` ring to the receive buffers.
-  The data path of this step: TSO both ways (`HOST_TSO4` and `GUEST_TSO4`), `sendmsg` over the descriptors in guest memory toward the host, and one copy toward the guest (from the `in` ring of a connection to the receive buffers). The receive side has one copy more than it needs: `recvmsg` straight into receive buffers needs the retransmit data elsewhere (`MSG_PEEK` with `SO_PEEK_OFF` keeps it in the host socket). That, io_uring, and `send_zc` are the next measured changes. No reference program ran yet.
+- Step 5a, receive in place, KVM, 2026-11-27, load average 10 to 14, ReleaseFast. Toward the guest, the engine now leaves the bytes of the host in the socket until the guest acknowledges them, and each segment is one `recvmsg` with `MSG_PEEK` (at the offset of `SO_PEEK_OFF`) straight into the receive buffers of the guest (`vnet.Net.deliverFill`). An ACK drops the bytes with `MSG_TRUNC`. So there is one copy, from the socket to the guest, and no ring in the engine. The host socket gets a receive buffer of 4 MB, because the bytes in flight stay in it: with the default size, one stream fell to 1.6 Gbit/s. Two runs of each build, back to back:
+
+| Host to guest | Ring of the engine (step 3) | Receive in place |
+|---|---|---|
+| 1 stream | 4.03 and 5.44 Gbit/s | 7.85 and 7.53 Gbit/s |
+| 4 streams | 6.25 and 5.90 Gbit/s | 8.80 and 8.17 Gbit/s |
+
+  The frame socket of macOS and a guest with no checksum offload keep the ring.
 
 ## Steps
 
