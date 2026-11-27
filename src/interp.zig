@@ -1147,42 +1147,95 @@ const list_cache_size = 1 << list_cache_bits;
 /// The empty string parses with no allocation.
 const list_cache_min = 1;
 
-/// The parse cache of the strings that a command reads as a list
-/// (`Interp.cachedList`). The hit or the miss of a string depends only
-/// on the bytes of the strings that the script read before, never on an
-/// address. So the allocations, and the memory count, are the same in
-/// each run of a script, with the JIT on and off.
-const ListCache = struct {
-    /// The entries by the hash of the text.
-    entries: [list_cache_size]Entry = @splat(.{}),
-    /// A shortcut by address to an entry: no hash and no compare of the
-    /// text. It changes only the speed of a lookup.
-    places: [list_cache_size]Place = @splat(.{}),
-    /// The count of stores to `entries`, for `Place.gen`.
-    gen: u32 = 0,
-
-    const Entry = struct {
-        hash: u64 = 0,
-        /// The copy of the text, and its items. Null items with a hash
-        /// mark a text that came one time.
-        text: []const u8 = &.{},
-        items: ?[]const Value = null,
+/// A parse cache of strings by their text: the lists of
+/// `Interp.cachedList`, and the templates of `subst`. The hit or the
+/// miss of a string depends only on the bytes of the strings that the
+/// script read before, never on an address. So the allocations, and the
+/// memory count, are the same in each run of a script, with the JIT on
+/// and off. A collection empties each cache (`gc.dropAddressCaches`),
+/// so the entries hold no block.
+fn ParseCache(comptime T: type) type {
+    return struct {
+        const C = @This();
+        /// The entries by the hash of the text.
+        entries: [list_cache_size]Entry = @splat(.{}),
+        /// A shortcut by address to an entry: no hash and no compare of
+        /// the text. It changes only the speed of a lookup.
+        places: [list_cache_size]Place = @splat(.{}),
+        /// The count of stores to `entries`, for `Place.gen`.
         gen: u32 = 0,
-    };
 
-    /// A string in a block of the heap that has the text of entry
-    /// `slot`, checked after the collection `gc`. Between two
-    /// collections no block is freed, and the bytes of a value do not
-    /// change, so the same address and length name the same text, as
-    /// for `script_cache`.
-    const Place = struct {
-        ptr: ?[*]const u8 = null,
-        len: usize = 0,
-        gc: u64 = 0,
-        slot: u16 = 0,
-        gen: u32 = 0,
+        const Entry = struct {
+            hash: u64 = 0,
+            /// The copy of the text, and its parse. A null parse with a
+            /// hash marks a text that came one time, or a text with no
+            /// parse when `none` is set.
+            text: []const u8 = &.{},
+            val: ?T = null,
+            none: bool = false,
+            gen: u32 = 0,
+        };
+
+        /// A string in a block of the heap that has the text of entry
+        /// `slot`, checked after the collection `gc`. Between two
+        /// collections no block is freed, and the bytes of a value do
+        /// not change, so the same address and length name the same
+        /// text, as for `script_cache`.
+        const Place = struct {
+            ptr: ?[*]const u8 = null,
+            len: usize = 0,
+            gc: u64 = 0,
+            slot: u16 = 0,
+            gen: u32 = 0,
+        };
+
+        /// The cached parse of `s` with the options `salt`. A text that
+        /// comes a second time gets a copy and a parse by `make`. This
+        /// gives null at the first read, and for a text that `make`
+        /// gives null for. Then the caller parses `s` itself.
+        pub fn find(
+            c: *C,
+            it: *Interp,
+            s: []const u8,
+            salt: u64,
+            comptime make: fn (*Interp, []const u8, u64) Error!?T,
+        ) Error!?T {
+            const where = ((@as(u64, @intFromPtr(s.ptr)) >> 3 ^ s.len) +% salt) *% 0x9e3779b97f4a7c15;
+            const p = &c.places[@intCast(where >> (64 - list_cache_bits))];
+            if (p.ptr == s.ptr and p.len == s.len and p.gc == it.heap.collections) {
+                const e = &c.entries[p.slot];
+                if (e.gen == p.gen) if (e.val) |v| return v;
+            }
+            const h = std.hash.Wyhash.hash(salt, s);
+            const slot: u16 = @intCast(h >> (64 - list_cache_bits));
+            const e = &c.entries[slot];
+            if (e.hash != h or ((e.val != null or e.none) and !std.mem.eql(u8, e.text, s))) {
+                e.* = .{ .hash = h };
+                return null;
+            }
+            if (e.none) return null;
+            if (e.val == null) {
+                const text = try it.alloc().dupe(u8, s);
+                const v = try make(it, text, salt) orelse {
+                    e.* = .{ .hash = h, .text = text, .none = true };
+                    return null;
+                };
+                c.gen +%= 1;
+                e.* = .{ .hash = h, .text = text, .val = v, .gen = c.gen };
+            }
+            if (it.heap.find(@intFromPtr(s.ptr)) != null) {
+                p.* = .{ .ptr = s.ptr, .len = s.len, .gc = it.heap.collections, .slot = slot, .gen = e.gen };
+            }
+            return e.val.?;
+        }
     };
-};
+}
+
+const ListCache = ParseCache([]const Value);
+
+/// The parts of the text of `subst`: literal bytes after the
+/// backslashes, variables, and command scripts.
+pub const SubstCache = ParseCache([]const Part);
 
 /// The count of entries of the text cache.
 const text_cache_size = 32;
@@ -1317,6 +1370,7 @@ pub const Interp = struct {
     text_cache_used: usize = 0,
     /// The parsed form of strings that a read command sees again.
     list_cache: ListCache = .{},
+    subst_cache: SubstCache = .{},
     /// The stack of command words.
     chunks: std.ArrayList([]Value) = .empty,
     chunk: usize = 0,
@@ -2184,35 +2238,13 @@ pub const Interp = struct {
     }
 
     /// The items of the string `s` through the parse cache
-    /// (`ListCache`). A text that comes a second time gets a copy and a
-    /// cached parse, and each later read of the same text has the items.
-    /// Each caller only reads the items. A collection empties the cache
-    /// (`gc.dropAddressCaches`), so the entries hold no block.
+    /// (`ListCache`). Each caller only reads the items.
     fn cachedList(it: *Interp, s: []const u8) Error![]const Value {
-        const c = &it.list_cache;
-        const where = (@as(u64, @intFromPtr(s.ptr)) >> 3 ^ s.len) *% 0x9e3779b97f4a7c15;
-        const p = &c.places[@intCast(where >> (64 - list_cache_bits))];
-        if (p.ptr == s.ptr and p.len == s.len and p.gc == it.heap.collections) {
-            const e = &c.entries[p.slot];
-            if (e.gen == p.gen) if (e.items) |items| return items;
-        }
-        const h = std.hash.Wyhash.hash(0, s);
-        const slot: u16 = @intCast(h >> (64 - list_cache_bits));
-        const e = &c.entries[slot];
-        if (e.hash != h or (e.items != null and !std.mem.eql(u8, e.text, s))) {
-            e.* = .{ .hash = h };
-            return it.parseList(.{ .str = s });
-        }
-        if (e.items == null) {
-            const text = try it.alloc().dupe(u8, s);
-            const items = try it.parseList(.{ .str = text });
-            c.gen +%= 1;
-            e.* = .{ .hash = h, .text = text, .items = items, .gen = c.gen };
-        }
-        if (it.heap.find(@intFromPtr(s.ptr)) != null) {
-            p.* = .{ .ptr = s.ptr, .len = s.len, .gc = it.heap.collections, .slot = slot, .gen = e.gen };
-        }
-        return e.items.?;
+        return try it.list_cache.find(it, s, 0, makeList) orelse it.parseList(.{ .str = s });
+    }
+
+    fn makeList(it: *Interp, text: []const u8, _: u64) Error!?[]const Value {
+        return try it.parseList(.{ .str = text });
     }
 
     pub fn int(it: *Interp, v: Value) Error!i64 {

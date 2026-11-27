@@ -207,6 +207,7 @@ fn markInterpWords(it: *const Interp, h: *Heap) void {
 /// Forgets what an address names. Each cache here compares an address.
 fn dropAddressCaches(it: *Interp) void {
     it.list_cache = .{};
+    it.subst_cache = .{};
     it.tails = @splat(.{});
     it.next_tail = 0;
 }
