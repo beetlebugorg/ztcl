@@ -3275,6 +3275,18 @@ test "ztcl::vm on Windows: a guest boots, and vsock and exec reach its agent" {
     _ = try ev(&it, "ztcl::vm stop vm1");
     try std.testing.expectEqualStrings("stopped", try ev(&it, "ztcl::vm status vm1"));
     _ = try ev(&it, "ztcl::vm delete vm1");
+    // A 9p share of a folder of the root, read and written in the guest.
+    _ = try ev(&it, "file delete -force share-test; file mkdir share-test/sub; set f [open share-test/sub/in.txt w]; puts -nonewline $f {from the host}; close $f");
+    _ = try ev(&it, "set v [ztcl::vm create -kernel bzImage -initrd initramfs.cpio.gz -memory 128 -share {share-test /mnt rw}]; ztcl::vm start $v");
+    _ = try ev(&it, "close [ztcl::vm vsock $v 1025 -timeout 10000]; ztcl::vm mount $v share0 /mnt");
+    try std.testing.expectEqualStrings("from the host", try ev(&it, "dict get [ztcl::vm exec $v /bin/busybox cat /mnt/sub/in.txt] stdout"));
+    try std.testing.expectEqualStrings("0", try ev(&it, "dict get [ztcl::vm exec $v /bin/busybox sh -c {echo -n from the guest > /mnt/out.txt && /bin/busybox mkdir /mnt/made && /bin/busybox mv /mnt/sub/in.txt /mnt/made/moved.txt}] exit"));
+    try std.testing.expectEqualStrings("in.txt made out.txt sub", try ev(&it, "lsort [list in.txt {*}[lmap x [glob -tails -directory share-test *] {set x}]]"));
+    try std.testing.expectEqualStrings("from the guest", try ev(&it, "set f [open share-test/out.txt]; set t [read $f]; close $f; set t"));
+    try std.testing.expectEqualStrings("from the host", try ev(&it, "set f [open share-test/made/moved.txt]; set t [read $f]; close $f; set t"));
+    const ls = try ev(&it, "dict get [ztcl::vm exec $v /bin/busybox ls -l /mnt/out.txt] stdout");
+    try std.testing.expect(std.mem.indexOf(u8, ls, " 14 ") != null);
+    _ = try ev(&it, "ztcl::vm stop $v; ztcl::vm delete $v; file delete -force share-test");
 }
 
 test "ztcl::vm image: install, list, and create -image through the store" {
@@ -3424,13 +3436,11 @@ test "ztcl::vm: the capability, the jail of its paths, and the limits" {
     try tcl.fsroot.setRoot(&it, ".zig-cache/ztcl-vm-test");
     try std.testing.expectEqualStrings("POSIX EACCES {permission denied}", try it.str(try it.eval("catch {ztcl::vm create -kernel ../../build.zig}; set ::errorCode")));
     if (on_kvm or on_whp) {
-        if (on_kvm) {
+        {
             try std.testing.expectEqualStrings("-image gives the kernel, the initramfs, and the command line: no -kernel, -initrd, or -cmdline with it", try it.str(try it.eval("catch {ztcl::vm create -image x -kernel Image} m; set m")));
             // A share is a folder below the root folder.
             _ = try it.eval("ztcl::vm delete [ztcl::vm create -kernel Image -share {share /mnt rw}]");
             try std.testing.expectEqualStrings("ENOTDIR", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {Image /mnt}}; lindex $::errorCode 1")));
-        } else {
-            try std.testing.expectEqualStrings("ZTCL VM SHARE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {share /mnt}}; set ::errorCode")));
         }
         try std.testing.expectEqualStrings("bad mode \"rx\": must be ro or rw", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -disk {Image rx}} m; set m")));
         // An empty kernel fails at the start, and the guest stays.

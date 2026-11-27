@@ -1430,6 +1430,8 @@ const win = if (on_whp) struct {
         cmdline: []u8,
         disks: []whp.Disk,
         disk_fds: []i32,
+        /// The 9p shares, with the descriptors of their root folders.
+        shares: []whp.Share = &.{},
         /// The end of the console pair that the pump has, and the end of
         /// the script, until `console` gives it as a channel.
         console_vm: i32,
@@ -1496,7 +1498,7 @@ const win = if (on_whp) struct {
         }
         if (std.mem.eql(u8, sub, "vsock")) return vsockCmd(it, g, args[3..]);
         if (std.mem.eql(u8, sub, "exec")) return execCmd(it, g, args[3..]);
-        if (std.mem.eql(u8, sub, "mount")) return it.failCode("ZTCL VM SHARE", "a share is not available on Windows yet", .{});
+        if (std.mem.eql(u8, sub, "mount")) return mountCmd(it, g, args[3..]);
         if (std.mem.eql(u8, sub, "console")) {
             if (args.len != 3) return it.wrongArgs("ztcl::vm console vm");
             if (g.console_host < 0) return it.failCode("ZTCL VM CONSOLE", "the console of the guest {s} is a channel already", .{g.name});
@@ -1602,6 +1604,7 @@ const win = if (on_whp) struct {
         var kernel: []const u8 = "";
         var initrd: []const u8 = "";
         var disks: std.ArrayList(struct { path: []const u8, rw: bool }) = .empty;
+        var shares: std.ArrayList(struct { path: []const u8, rw: bool }) = .empty;
         var warm = false;
         var image: ?[]const u8 = null;
         {
@@ -1643,14 +1646,17 @@ const win = if (on_whp) struct {
                 if (disks.items.len >= whp.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks", .{whp.max_disks});
                 try disks.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 2 and try isRw(it, l[1]) });
             } else if (std.mem.eql(u8, opt, "-share")) {
-                return it.failCode("ZTCL VM SHARE", "a share is not available on Windows yet", .{});
+                const l = try it.readList(v);
+                if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
+                if (disks.items.len + shares.items.len >= whp.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{whp.max_disks});
+                try shares.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 3 and try isRw(it, l[2]) });
             } else return it.fail("bad option \"{s}\": must be -cmdline, -cpus, -disk, -entropy, -image, -initrd, -kernel, -memory, -share, or -warm", .{opt});
         }
         if (kernel.len == 0 and image == null) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel or -image", .{});
 
         // A guest of the image from the pool: no disk of its own and no
         // -warm, so it is the guest that the pool boots.
-        if (image) |name| if (host.pool_size > 0 and disks.items.len == 0 and !warm) {
+        if (image) |name| if (host.pool_size > 0 and disks.items.len == 0 and shares.items.len == 0 and !warm) {
             const st = try store(it);
             const counter = st.current(a, name) catch |e| {
                 st.close();
@@ -1717,6 +1723,11 @@ const win = if (on_whp) struct {
             fd.* = try openPath(it, d.path, d.rw);
             out.* = .{ .handle = @ptrFromInt(@as(usize, @intCast(fd.*))), .read_only = !d.rw };
         }
+        // The root folder of each share, in the file jail.
+        if (g.disks.len + shares.items.len > whp.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{whp.max_disks});
+        g.shares = try ga.alloc(whp.Share, shares.items.len);
+        for (g.shares) |*sh| sh.fd = -1;
+        for (shares.items, g.shares) |d, *out| out.* = .{ .fd = try jailDir(it, d.path), .read_only = !d.rw };
         machineOf(g, cpus, memory_mb, entropy) catch |e| switch (e) {
             error.Pair => return it.failCode("ZTCL VM WHP", "no socket pair for the console", .{}),
             else => |f| return failure(it, f),
@@ -1948,6 +1959,19 @@ const win = if (on_whp) struct {
         return agentExec(it, g.name, &a, r);
     }
 
+    /// `mount` through the agent: the 9p share of the tag at a path of the
+    /// guest.
+    fn mountCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
+        const r = try mountArgs(it, args);
+        if (g.machine.getState() != .running) return it.failCode("ZTCL VM STATE", "the guest {s} is {s}", .{ g.name, status(g) });
+        const fd = connect(g, vmagent.port, 5000) orelse
+            return it.failCode("ZTCL VM AGENT", "the agent of the guest {s} did not answer on port {d}", .{ g.name, vmagent.port });
+        defer sys.close(fd);
+        var a: vmagent.Conn = .{ .fd = fd, .timeout_ms = 5000 };
+        _ = a.hello(it.alloc()) catch |e| return agentFail(it, g.name, &a, e);
+        return agentMount(it, g.name, &a, r, .nine_p);
+    }
+
     /// The console pair and the machine of a guest whose kernel, initramfs,
     /// command line, and disks are in place.
     fn machineOf(g: *Guest, cpus: u32, memory_mb: u32, entropy: bool) (whp.Fail || error{Pair})!void {
@@ -1962,6 +1986,7 @@ const win = if (on_whp) struct {
             .initrd = g.initrd,
             .cmdline = g.cmdline,
             .disks = g.disks,
+            .shares = g.shares,
             .entropy = entropy,
             .console = .{ .ctx = g, .write = consoleWrite },
             .vsock = .{ .ctx = g, .data = streamData, .event = streamEvent },
@@ -2138,6 +2163,8 @@ const win = if (on_whp) struct {
         for (g.disk_fds) |fd| if (fd >= 0) sys.close(fd);
         b.free(g.disk_fds);
         b.free(g.disks);
+        for (g.shares) |sh| if (sh.fd >= 0) sys.close(sh.fd);
+        b.free(g.shares);
         b.free(g.kernel);
         b.free(g.initrd);
         b.free(g.cmdline);
