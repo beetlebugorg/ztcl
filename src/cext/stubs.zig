@@ -41,6 +41,7 @@ pub const groups = .{
     @import("vars.zig").slots,
     @import("app.zig").slots,
     @import("interps.zig").slots,
+    @import("namespaces.zig").slots,
 };
 
 /// `TclStubHooks` of `tclDecls.h`.

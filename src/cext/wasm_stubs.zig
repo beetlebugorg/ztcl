@@ -134,6 +134,7 @@ const groups = .{
     @import("lists.zig").slots,
     @import("vars.zig").slots,
     @import("interps.zig").slots,
+    @import("namespaces.zig").slots,
 };
 
 fn missingFn(comptime k: tables.Kind, comptime n: usize) *const anyopaque {
