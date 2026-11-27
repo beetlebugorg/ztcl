@@ -75,6 +75,27 @@ jobs:
           version: "0.17.0"
       # The initramfs with the agent and BusyBox, for each architecture.
       - run: TARGET=$(uname -m)-linux-musl tools/vm-guest/pack.sh
+      # The kernel of the image: Linux 7.3.6 of beetlebugorg/ztcl-guest-kernel,
+      # its run 45991768972 of main, in the place of the kernel of build.sh.
+      # The artifact is checked by its SHA-256 and by its SHA256SUMS, and
+      # expires on 2027-02-25; a release keeps its own copy of the kernel.
+      - name: Take the kernel of ztcl-guest-kernel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT: ${{ matrix.name == 'vm-guest' && '15194181662' || '15193833236' }}
+          ZIP_SHA: ${{ matrix.name == 'vm-guest' && '1e38036d6d7e41eeabd5ae6b221f6bcc34b74f32d64328ca26367bf4d7cce4d8' || '7b7290f9a576f0c1389ad2fa656223e4c4e64dc242b0b3f2698ed8b7bc063607' }}
+        run: |
+          set -eu
+          d="$RUNNER_TEMP/rk"
+          mkdir -p "$d"
+          gh api "repos/beetlebugorg/ztcl-guest-kernel/actions/artifacts/$ARTIFACT/zip" > "$d/k.zip"
+          echo "$ZIP_SHA  $d/k.zip" | sha256sum -c
+          (cd "$d" && unzip -q k.zip && sha256sum -c SHA256SUMS)
+          for f in Image bzImage vmlinux; do
+            if [ -e "$d/$f" ]; then cp "$d/$f" "tools/vm-guest/out/$f"; fi
+          done
+          sed -n 's|^# Linux/[^ ]* \([^ ]*\) Kernel Configuration$|\1|p' "$d/kernel.config" > tools/vm-guest/out/kernel-version
+          echo "kernel $(cat tools/vm-guest/out/kernel-version)"
       # The read-only root disk with dm-verity, and the entry of the
       # manifest. It prints the SHA-256 of the kernel and of the disk, and
       # the root hash, so anyone can compare them with a build of their own.

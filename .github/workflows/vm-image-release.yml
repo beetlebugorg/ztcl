@@ -4,7 +4,10 @@ name: VM image release
 # tag vm-image-v*, or a run by hand from main, the workflow of the guest
 # builds the image and its job manifest-release signs it with the current
 # release key in the environment vm-release. A push of the tag or a run
-# by hand waits for the owner.
+# by hand waits for the owner. For a tag, the job publish then makes the
+# GitHub release vm-image-vN, a pre-release, with the signed manifest and
+# its files as assets: `ztcl::vm image fetch` reads those assets, and the
+# artifacts of a run expire after 90 days.
 on:
   push:
     tags: ["vm-image-v*"]
@@ -17,3 +20,58 @@ jobs:
   image:
     uses: ./.github/workflows/vm-guest.yml
     secrets: inherit
+
+  publish:
+    needs: image
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/vm-image-v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: "0.17.0"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vm-image
+          path: rel
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vm-guest
+          path: arm64
+      # The verifier of ztcl checks the files once more, as a client does,
+      # before they are public.
+      - name: Check with the verifier of ztcl
+        run: zig build vm-image-verify -- "$PWD/rel"
+      - name: Write the notes
+        run: |
+          set -eu
+          m=rel/manifest.json
+          kv=$(cat arm64/kernel-version)
+          {
+            echo "The signed guest image of \`ztcl::vm\`, version $(jq -r .version $m), counter $(jq -r .counter $m), for ztcl $(jq -r .min_ztcl $m) and later."
+            echo
+            echo "- Kernel: Linux $kv of beetlebugorg/ztcl-guest-kernel."
+            echo "- Signed with the current release key \`$(ssh-keygen -lf tools/vm-guest/keys/current.pub | cut -d' ' -f2)\`. The next key is \`$(ssh-keygen -lf tools/vm-guest/keys/next.pub | cut -d' ' -f2)\`."
+            echo
+            echo "| arch | file | SHA-256 |"
+            echo "|---|---|---|"
+            for a in arm64 x86_64; do
+              jq -r --arg a "$a" '.archs[$a] | "| \($a) | \(.kernel.file) | \(.kernel.sha256) |", (.disks[] | "| \($a) | \(.file) | \(.sha256) |")' $m
+            done
+            echo
+            for a in arm64 x86_64; do
+              echo "- $a dm-verity root hash: \`$(jq -r --arg a "$a" '.archs[$a].disks[0].verity.root_hash' $m)\`"
+            done
+            echo
+            echo "Fetch and check: \`ztcl::vm image fetch\`, then \`ztcl::vm image verify\`."
+          } > notes.md
+          cat notes.md
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --verify-tag --prerelease \
+            --title "ztcl guest image ${GITHUB_REF_NAME#vm-image-v}" --notes-file notes.md \
+            rel/manifest.json rel/manifest.json.sig rel/arm64-Image rel/arm64-root.img rel/x86_64-bzImage rel/x86_64-root.img
