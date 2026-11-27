@@ -1928,6 +1928,7 @@ inline fn lsetOp(comptime drop: bool, it: *Interp, f: *Frame, code: *const Code,
 /// A write to an element of a plain array, or of an unset variable,
 /// needs no full name. Other cells go through `Interp.setVar`.
 pub inline fn opStoreElem(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    it.dropElem();
     const v = stack[sp - 1];
     const idx = try it.str(stack[sp - 2]);
     const cell = try writeCell(named, it, f, code, i.a);

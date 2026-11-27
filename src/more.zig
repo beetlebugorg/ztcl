@@ -122,6 +122,15 @@ pub fn cmdLset(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     // One index word is a list of indexes.
     var idxs = argv[2 .. argv.len - 1];
     if (idxs.len == 1) idxs = try it.list(idxs[0]);
+    if (idxs.len >= 1 and dropped) {
+        // An array element owns its list as a plain cell does.
+        if (try it.elemPlace(name)) |p| {
+            var ep = p;
+            const done = if (idxs.len == 1) try lsetOwned(it, &ep.cell, idxs[0], argv[argv.len - 1]) else try lsetOwnedPath(it, &ep.cell, idxs, argv[argv.len - 1]);
+            ep.finish(it);
+            if (done) return Value.empty;
+        }
+    }
     if (idxs.len >= 1) {
         if (try lsetPlain(it, name, idxs, argv[argv.len - 1], dropped)) |out| return out;
     }
