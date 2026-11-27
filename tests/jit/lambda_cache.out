@@ -1,0 +1,25 @@
+44850
+ns
+5
+10
+1 3 5 9
+wrong # args: should be "apply lambdaExpr a a b"
+namespace "::nosuch" not found
+bad
+    while executing
+"error bad"
+    (lambda term "{x} {error bad}" line 1)
+    invoked from within
+"apply {{x} {error bad}} 1"
+namespace "::ns" not found
+9
+9 9
+boom
+x
+    invoked from within
+"eval [list error boom] [list x]"
+y
+    invoked from within
+"uplevel 1 [list error boom2] [list y]"
+1
+100.5

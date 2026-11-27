@@ -595,6 +595,9 @@ pub const Proc = struct {
     /// The bytecode of the body. The first call makes it.
     code: ?*vm.Code = null,
     params_text: Value,
+    /// The namespace word of a lambda from a string, for a hit of
+    /// `lambda_cache`. A lambda from a list reads its third item.
+    lambda_ns: ?Value = null,
 };
 
 pub const Command = struct {
@@ -1177,6 +1180,11 @@ pub const Interp = struct {
     /// keeps an entry while its text is live (see `gc.zig`).
     script_cache: std.AutoHashMapUnmanaged(SliceKey, *Script) = .empty,
     expr_cache: std.AutoHashMapUnmanaged(SliceKey, *expr.Node) = .empty,
+    /// The procs of the lambdas of `apply`. The key is the bytes of a
+    /// string, or the items of a list with `lambda_list_bit` in the
+    /// length. The collector keeps an entry while its key is live, as for
+    /// `script_cache`.
+    lambda_cache: std.AutoHashMapUnmanaged(SliceKey, *Proc) = .empty,
     /// The scripts of texts that come again at a new address, such as
     /// event scripts and the joined words of `eval`. The key is the text.
     /// The entries are in the interpreter, so a collection marks each
@@ -1360,7 +1368,8 @@ pub const Interp = struct {
     thread_limits: thread_mod.Limits = .{},
 
     const StrTail = struct { end: usize = 0, limit: usize = 0 };
-    const SliceKey = struct { ptr: usize, len: usize };
+    pub const SliceKey = struct { ptr: usize, len: usize };
+    pub const lambda_list_bit: usize = 1 << (@bitSizeOf(usize) - 1);
     const chunk_size = 16 * 1024;
 
     /// Makes an interpreter with the core commands. Call `deinit` to
@@ -1574,8 +1583,10 @@ pub const Interp = struct {
     pub fn freeCaches(it: *Interp) void {
         it.script_cache.deinit(it.heap.backing);
         it.expr_cache.deinit(it.heap.backing);
+        it.lambda_cache.deinit(it.heap.backing);
         it.script_cache = .empty;
         it.expr_cache = .empty;
+        it.lambda_cache = .empty;
         it.text_cache = @splat(.{});
         it.text_cache_hand = 0;
         it.text_cache_used = 0;
