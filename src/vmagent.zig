@@ -19,6 +19,7 @@ pub const t_hello = 0x01;
 pub const t_exec = 0x10;
 pub const t_mount = 0x11;
 pub const t_ping = 0x13;
+pub const t_resume = 0x14;
 pub const t_started = 0x20;
 pub const t_stdout = 0x21;
 pub const t_stderr = 0x22;
@@ -26,6 +27,8 @@ pub const t_stdin = 0x23;
 pub const t_exit = 0x25;
 pub const t_ok = 0x30;
 pub const t_error = 0x3f;
+/// The feature bit of the request `RESUME`.
+pub const f_resume: u32 = 1 << 3;
 
 pub const Error = error{ Io, Closed, Timeout, Protocol, Version, Agent } || Allocator.Error;
 
@@ -297,6 +300,23 @@ pub fn mount(c: *Conn, a: Allocator, tag: []const u8, path: []const u8, read_onl
     try putStr(a, &req, path);
     try req.append(a, @as(u8, if (read_only) 1 else 0) | @as(u8, if (kind == .nine_p) 2 else 0));
     try c.send(t_mount, req.items);
+    const f = try c.read(a);
+    defer a.free(f.payload);
+    switch (f.kind) {
+        t_ok => return,
+        t_error => return c.agentError(f.payload),
+        else => return error.Protocol,
+    }
+}
+
+/// `RESUME`, after the restore of a snapshot: the agent sets the clock of
+/// the guest to `realtime_ns` (ns since 1970) and writes `seed`, 32
+/// random bytes of the host, to the random pool of the guest.
+pub fn resumeGuest(c: *Conn, a: Allocator, realtime_ns: u64, seed: *const [32]u8) Error!void {
+    var req: [40]u8 = undefined;
+    std.mem.writeInt(u64, req[0..8], realtime_ns, .little);
+    @memcpy(req[8..], seed);
+    try c.send(t_resume, &req);
     const f = try c.read(a);
     defer a.free(f.payload);
     switch (f.kind) {

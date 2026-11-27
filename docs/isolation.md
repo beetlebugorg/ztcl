@@ -13,7 +13,8 @@ The script of the thread is the same at each level. `thread::send`, `tsv`, the m
 
 - `interp`, the default: the thread has an interpreter of its own in the same process. It shares no interpreter data, but a crash or a bad C package ends the whole process. Each target with threads has it.
 - `process`: the thread runs in a child process, in the sandbox of the system. A crash, a memory error, or a bad C package ends only the child. Linux, macOS, and Windows have it.
-- `wasm` (another instance of the wasm engine), `vm`, and `vm-confidential` (a guest of the hypervisor) are planned. They give `ZTCL ISOLATION LEVEL` in this version.
+- `vm`: the thread runs in a guest of `ztcl::vm` with its own Linux kernel, on Linux with KVM in this version. The guest has one program, the ztcl runner (`tools/vm-guest/pack-iso.sh` makes its initramfs), and no files, sockets, or programs of the host: the thread gets the capabilities of its creator less `file`, `channels`, `socket`, `exec`, `env`, `sqlite`, `launch`, `registry`, `keychain`, `defaults`, `notify`, and `vm`. The creator needs the capability `vm`, and the embedder gives the kernel and the initramfs of the guest (`Host.iso_kernel` and `iso_initrd`; the `ztcl` runner reads `ZTCL_VM_ISO_KERNEL` and `ZTCL_VM_ISO_INITRD`). The first `vm` thread boots the guest and takes a snapshot of it; each later one is a clone of that snapshot (see [ztcl::vm](modules/vm.md#snapshots)).
+- `wasm` (another instance of the wasm engine) and `vm-confidential` are planned. They give `ZTCL ISOLATION LEVEL` in this version.
 
 Use `process` for code that you did not read, such as the code of an agent or a C package from another project, and for work that can crash. Each message to a `process` thread costs a round trip between two processes, so keep the messages large and few.
 

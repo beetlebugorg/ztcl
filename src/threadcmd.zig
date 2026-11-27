@@ -57,9 +57,9 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             i += 1;
             const l = try it.str(argv[i]);
             level = std.meta.stringToEnum(thread.Isolation, l) orelse {
-                if (eql(l, "wasm") or eql(l, "vm") or eql(l, "vm-confidential"))
+                if (eql(l, "wasm") or eql(l, "vm-confidential"))
                     return it.failCode("ZTCL ISOLATION LEVEL", "the isolation level {s} is not available yet", .{l});
-                return it.fail("bad isolation level \"{s}\": must be interp or process", .{l});
+                return it.fail("bad isolation level \"{s}\": must be interp, process, or vm", .{l});
             };
         } else if (eql(o, "-files") and i + 1 < argv.len) {
             i += 1;
@@ -89,7 +89,7 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const script = if (i < argv.len) try it.str(argv[i]) else "";
     // The files of the host are a part of the isolation of a child: a
     // thread of the level interp has the files of its creator already.
-    if (host_files and level == .interp) return it.fail("-files host needs -isolation process", .{});
+    if (host_files and level != .process) return it.fail("-files host needs -isolation process", .{});
     const mt = @import("meter.zig");
     const m: ?*mt.Meter = if (meter_name) |n| try (try mt.registry(it)).obtain(n) else null;
     defer if (m) |x| x.release();

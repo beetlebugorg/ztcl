@@ -23,6 +23,7 @@ ztcl::vm create ?option value ...?
 ztcl::vm start VM
 ztcl::vm stop VM ?-force?
 ztcl::vm status VM
+ztcl::vm snapshot VM FILE
 ztcl::vm vsock VM PORT ?-timeout MS?
 ztcl::vm exec VM ?-stdin DATA? ?-binary BOOL? ?-env LIST? ?-cwd DIR? ?-timeout MS? ?--? PROGRAM ?ARG ...?
 ztcl::vm mount VM TAG PATH ?-readonly?
@@ -46,6 +47,9 @@ ztcl::vm delete VM
 | `-entropy 0\|1` | A virtio entropy device. Its driver adds 1 ms to 8 ms to the boot. | 0 |
 | `-net nat\|none` | Linux with KVM, and macOS: a virtio-net device `eth0` on the user-mode NAT of ztcl. It needs the `socket` capability, and each host address of the NAT must pass the network policy of the interpreter (`loopback` by default). The guest is 10.0.2.15/24: the host gives it on the command line of the kernel (`ztcl.net=`) on macOS, and the agent sets it before it listens, about 0.5 ms, or asks with DHCP when the option is absent; and the gateway 10.0.2.2 goes to 127.0.0.1 of the host. This version has ARP, DHCP, ICMP echo to the gateway, and UDP. The guest configures `eth0` itself, for example with `udhcpc` of BusyBox. A guest with `-net nat` comes from no pool. | none |
 | `-dns 0\|1` | With `-net nat`: UDP to port 53 of 10.0.2.3 goes to the first IPv4 name server of `/etc/resolv.conf` of the host. With 0, 10.0.2.3 gives no answer. | 1 |
+| `-balloon 0\|1` | Linux (KVM) only: a virtio memory balloon with free page reporting. The guest kernel reports its free memory in blocks of 2 MB, and the host frees those pages. The guest kernel needs `CONFIG_VIRTIO_BALLOON` and `CONFIG_PAGE_REPORTING`; a kernel without them ignores the device. The balloon is the last device and needs a free interrupt: a guest with the most disks, shares, entropy, and `-net` has none. | 1 |
+| `-snapshot F` | Linux (KVM) only: restores the guest of the snapshot file `F` (see [Snapshots](#snapshots)). The only other option is `-count`. | none |
+| `-count N` | With `-snapshot`: makes N clones of the snapshot, and `create` gives the list of their names. | 1 |
 | `-warm 0\|1` | Boots the guest at once, waits for a program of the guest to accept a connection on vsock port 1024, and pauses it. `start` then resumes it in under 1 ms. A paused guest keeps its process and the memory that it touched. | 0 |
 
 Each path is a path below the root folder of `file`. The framework gets the final path of the open file, so a link in the root folder cannot point the guest outside it.
@@ -87,6 +91,28 @@ ztcl::vm exec $vm /bin/busybox uname -m
 
 The store is a folder of the user: `ZTCL_VM_IMAGES`, or `~/Library/Application Support/ztcl/vm-images` on macOS, `$XDG_DATA_HOME/ztcl/vm-images` (`~/.local/share/...`) on Linux, and `%LOCALAPPDATA%\ztcl\vm-images` on Windows. `create -image` works on macOS and on Windows. On Windows the monitor reads the kernel and the initramfs through the store into memory, and checks the SHA-256 of those bytes. A script names an image, never a path of the store.
 
+## Snapshots
+
+On Linux with KVM, `snapshot` writes the state of a guest to a file: the registers of each vCPU, the interrupt controllers, the clock, the state of each virtio device and of its queues, and the memory of the guest. A running guest pauses for the snapshot and then runs again. It gives the bytes of guest memory in the file. Only the pages that are not all zero go in the file, so the file is sparse.
+
+`create -snapshot F` restores the guest of the file, paused, and `start` runs it. The restore maps the memory of the file copy-on-write: a page of the guest comes from the file at its first read, and the guest gets its own copy at its first write. So a restore copies no memory, and the clones of one file (`-count N`) share each page that none of them writes. The file stays the same.
+
+```tcl
+set vm [ztcl::vm create -image ztcl-guest -memory 128 -warm 1]
+ztcl::vm snapshot $vm ready.snap
+foreach g [ztcl::vm create -snapshot ready.snap -count 4] {
+    ztcl::vm start $g
+    puts [ztcl::vm exec $g /bin/busybox uname -n]
+}
+```
+
+- Each clone gets its own vsock context ID. The guest gets the vsock event of a transport reset, reads its new ID, and closes the connections of the snapshot. A socket that listens, such as the one of the agent, stays.
+- The first `start` of a restore sends the agent the request `RESUME`: the agent sets the clock of the guest to the clock of the host and adds 32 random bytes of the host to the random pool of the guest kernel. So clones of one snapshot have different random numbers. Without it, the clock of the guest goes on from the time of the snapshot.
+- A guest with a `-share`, a `-disk`, or `-net` has no snapshot: their state is outside the guest memory. The disks of an image go in the snapshot as the name and the counter of the image, and the restore opens them from the store again.
+- A snapshot is for the same host and the same version of ztcl. The CPU features of the host must not change between the snapshot and the restore.
+- The file holds the memory of the guest. Keep it as private as the guest.
+- With the pool on (`Host.pool_size`), the interpreter keeps prepared machines (a VM, its memory slot, its devices, and its vCPU threads) for `create -snapshot`, and a restore is about 0.5 ms; the pool of `create -image` makes its guests as clones of a snapshot of its first guest. `docs/dev/vm-turbo.md` has the measurements.
+
 ## Limits
 
 The embedder sets `Interp.vm_host`:
@@ -121,6 +147,7 @@ A start of a guest with 1 CPU and 64 MB is about 100 ms on an M1 Mac, and 86 ms 
 | `ZTCL VM WHP` | The step of the Windows Hypervisor Platform that failed, such as `WHvSetupPartition failed` |
 | `ZTCL VM ENTITLEMENT` | `ztcl::vm needs the entitlement com.apple.security.virtualization in the signature of this program` |
 | `ZTCL VM KERNEL` | `a guest needs -kernel until the base image of the plan` |
+| `ZTCL VM SNAPSHOT` | `the guest vm1 has a share: a guest with a share has no snapshot`, or `"F" is not a snapshot of this version of ztcl::vm` |
 | `ZTCL VM NOFILE` | `a path of ztcl::vm needs the file capability` |
 | `ZTCL VM LIMIT` | `the memory in MB of a guest is more than the limit of 2048` (and for the CPU count), or `the interpreter has 4 guests, the limit` |
 | `ZTCL VM NAME` | `no guest named "vm9"` |

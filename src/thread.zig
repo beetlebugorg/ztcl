@@ -789,7 +789,7 @@ pub const Opts = struct {
     compute: ?u64 = null,
 };
 
-pub const Isolation = enum { interp, process };
+pub const Isolation = enum { interp, process, vm };
 
 /// The platforms of isolated threads (`isothread.zig`).
 const iso_ok = @import("isothread.zig").supported;
@@ -853,7 +853,7 @@ pub fn createOpts(it: *Interp, script: []const u8, o: Opts) Error!u64 {
         }
         return it.failCode("ZTCL ISOLATION LEVEL", "the level process is not available on this platform yet", .{});
     }
-    const iso = if (comptime iso_ok) (if (o.isolation != .interp) @import("isothread.zig").prepare(it, w, st, o.host_files) catch |e| {
+    const iso = if (comptime iso_ok) (if (o.isolation != .interp) @import("isothread.zig").prepare(it, w, st, o.host_files, o.isolation == .vm) catch |e| {
         if (g.limits.total_compute != std.math.maxInt(u64)) g.compute_left += steps;
         g.lock.unlock();
         g.alloc().free(text);

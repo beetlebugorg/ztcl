@@ -76,6 +76,13 @@ pub const Spawner = struct {
     spawn: *const fn (ctx: ?*anyopaque) ?Fd,
 };
 
+/// The capabilities that a thread of the level vm does not get.
+const vm_masked: u32 = blk: {
+    var m: u32 = 0;
+    for (.{ .channels, .file, .socket, .exec, .env, .sqlite, .launch, .registry, .keychain, .defaults, .notify, .vm }) |c| m |= @backingInt(@as(interp.Capability, c));
+    break :blk m;
+};
+
 const flag_reply: u8 = 1;
 const flag_head: u8 = 2;
 const hosts_clock: u8 = 1;
@@ -601,18 +608,29 @@ fn rootOf(it: *Interp) *Interp {
 
 /// Makes the bridge of a new isolated thread. The caller holds the
 /// group lock, so this only allocates.
-pub fn prepare(it: *Interp, w: *Worker, st: anytype, host_files: bool) Error!*Bridge {
+/// With `vm`, the child is the runner in a guest of `ztcl::vm`
+/// (`isovm.zig`, Linux with KVM): the thread gets no capability that
+/// reaches the host (`vm_masked`), since the guest has no files, sockets,
+/// or processes of the host.
+pub fn prepare(it: *Interp, w: *Worker, st: anytype, host_files: bool, vm: bool) Error!*Bridge {
     if (comptime !supported) return it.failCode("ZTCL ISOLATION LEVEL", "the level process is not available on this platform yet", .{});
     const root = rootOf(it);
-    if (root.iso_spawn == null and !spawns_runner)
+    var vm_spawner: ?Spawner = null;
+    if (vm) {
+        if (it.capabilities & @backingInt(interp.Capability.vm) == 0)
+            return it.failCode("ZTCL ISOLATION LEVEL", "the level vm needs the vm capability", .{});
+        vm_spawner = @import("microvm.zig").isoSpawner(root) orelse
+            return it.failCode("ZTCL ISOLATION LEVEL", "the level vm needs ztcl::vm on Linux with KVM and a guest of the runner (Host.iso_kernel and iso_initrd)", .{});
+    }
+    if (!vm and root.iso_spawn == null and !spawns_runner)
         return it.failCode("ZTCL ISOLATION LEVEL", "the level process is not available on this platform yet", .{});
-    if (root.iso_runner == null and root.iso_spawn == null)
+    if (!vm and root.iso_runner == null and root.iso_spawn == null)
         return it.failCode("ZTCL ISOLATION RUNNER", "the embedder gives no runner for isolated threads", .{});
     // The sandbox of a child gives it no folder of the user, so host mode
     // with no `-files host` gives it only errors of access later. A
     // creator with a root folder has no files of the host to give.
     const file_bits = @backingInt(interp.Capability.file) | @backingInt(interp.Capability.channels);
-    if (root.fs.host and st.caps & file_bits != 0 and !host_files)
+    if (!vm and root.fs.host and st.caps & file_bits != 0 and !host_files)
         return it.failCode("ZTCL ISOLATION HOSTFILES", "host file mode is not available in an isolated thread: give the thread a root folder, or pass -files host", .{});
     if (host_files and !root.fs.host)
         return it.failCode("ZTCL ISOLATION HOSTFILES", "-files host needs a creator in host mode", .{});
@@ -622,11 +640,11 @@ pub fn prepare(it: *Interp, w: *Worker, st: anytype, host_files: bool) Error!*Br
         .gpa = g.gpa,
         .w = w,
         .runner = root.iso_runner,
-        .spawner = root.iso_spawn,
+        .spawner = if (vm) vm_spawner else root.iso_spawn,
         .hosts = (if (st.clock_host != null) hosts_clock else 0) | (if (st.event_host != null) hosts_event else 0),
-        .caps = st.caps,
-        .root = st.fs_path,
-        .cwd = st.fs_cwd,
+        .caps = if (vm) st.caps & ~vm_masked else st.caps,
+        .root = if (vm) "" else st.fs_path,
+        .cwd = if (vm) "" else st.fs_cwd,
         .host_files = host_files and st.caps & file_bits != 0,
         .jit = st.jit != null,
         .mem_limit = st.mem_limit,

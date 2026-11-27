@@ -20,8 +20,10 @@ const AF_VSOCK = 40;
 const VMADDR_CID_ANY: u32 = 0xffff_ffff;
 const port_agent: u32 = 1024;
 const port_probe: u32 = 1025;
+/// The port of the resume prelude, served with no fork (see `resumePort`).
+const port_resume: u32 = 1027;
 const version: u16 = 1;
-const features: u32 = 0b111;
+const features: u32 = 0b1111;
 const max_frame = (1 << 20) + 1;
 
 const t_hello = 0x01;
@@ -29,6 +31,10 @@ const t_exec = 0x10;
 const t_mount = 0x11;
 const t_log = 0x12;
 const t_ping = 0x13;
+const t_resume = 0x14;
+/// The ioctls of /dev/urandom: RNDADDENTROPY and RNDRESEEDCRNG.
+const rnd_add_entropy = linux.IOCTL.IOW('R', 0x03, [2]i32);
+const rnd_reseed_crng = linux.IOCTL.IO('R', 0x07);
 const t_started = 0x20;
 const t_stdout = 0x21;
 const t_stderr = 0x22;
@@ -150,20 +156,28 @@ pub fn main(init: std.process.Init.Minimal) void {
     _ = linux.sigaction(linux.SIG.CHLD, &sa, null);
     const a = listenOn(port_agent) orelse return say("agent: no vsock on 1024\n");
     const p = listenOn(port_probe) orelse return say("agent: no vsock on 1025\n");
+    const r = listenOn(port_resume) orelse -1;
     times[1] = bootNs();
     while (true) {
-        var fds = [2]linux.pollfd{
+        var fds = [3]linux.pollfd{
             .{ .fd = a, .events = linux.POLL.IN, .revents = 0 },
             .{ .fd = p, .events = linux.POLL.IN, .revents = 0 },
+            .{ .fd = r, .events = linux.POLL.IN, .revents = 0 },
         };
-        _ = ok(linux.poll(&fds, 2, -1)) orelse continue;
+        _ = ok(linux.poll(&fds, 3, -1)) orelse continue;
         for (fds) |f| {
             if (f.revents == 0) continue;
             const c: i32 = @intCast(ok(linux.accept4(f.fd, null, null, linux.SOCK.CLOEXEC)) orelse continue);
+            if (f.fd == r) {
+                resumePort(c);
+                _ = linux.close(c);
+                continue;
+            }
             const pid = linux.fork();
             if (pid == 0) {
                 _ = linux.close(a);
                 _ = linux.close(p);
+                if (r >= 0) _ = linux.close(r);
                 var dfl: linux.Sigaction = .{ .handler = .{ .handler = linux.SIG.DFL }, .mask = linux.sigemptyset(), .flags = 0 };
                 _ = linux.sigaction(linux.SIG.CHLD, &dfl, null);
                 if (f.fd == a) serve(c) else probe(c);
@@ -304,6 +318,7 @@ fn serve(c: i32) void {
             send(c, t_ok, "");
         },
         t_mount => mount(c, &r),
+        t_resume => resumeGuest(c, &r),
         t_exec => exec(c, &in, req) catch sendError(c, 22, "bad exec request"),
         else => sendError(c, 95, "unknown request"),
     }
@@ -334,6 +349,52 @@ fn putZ(area: []u8, at: *usize, s: []const u8) ?[*:0]u8 {
     p[s.len] = 0;
     at.* += s.len + 1;
     return @ptrCast(p.ptr);
+}
+
+/// Port 1027, after the restore of a snapshot: 48 bytes of the host, the
+/// magic `ZTISOVM1`, the clock of the host in ns, and 32 random bytes,
+/// then one byte back. The agent serves it with no fork, so a guest of a
+/// snapshot is ready in one round trip.
+fn resumePort(c: i32) void {
+    var b: [48]u8 = undefined;
+    var off: usize = 0;
+    var p = [1]linux.pollfd{.{ .fd = c, .events = linux.POLL.IN, .revents = 0 }};
+    while (off < b.len) {
+        if ((ok(linux.poll(&p, 1, 1000)) orelse 0) == 0) return;
+        const n = ok(linux.read(c, b[off..].ptr, b.len - off)) orelse return;
+        if (n == 0) return;
+        off += n;
+    }
+    if (!std.mem.eql(u8, b[0..8], "ZTISOVM1")) return;
+    if (!setClockSeed(std.mem.readInt(u64, b[8..16], .little), b[16..48])) return;
+    _ = linux.write(c, "k", 1);
+}
+
+/// `RESUME` (after the restore of a snapshot): the clock of the host, and
+/// 32 random bytes of the host for the random pool.
+fn resumeGuest(c: i32, r: *Reader) void {
+    const ns = r.int(u64) orelse return sendError(c, 22, "bad resume request");
+    if (r.b.len - r.i < 32) return sendError(c, 22, "bad resume request");
+    const seed = r.b[r.i..][0..32];
+    if (!setClockSeed(ns, seed)) return sendError(c, 1, "clock_settime failed");
+    send(c, t_ok, "");
+}
+
+fn setClockSeed(ns: u64, seed: *const [32]u8) bool {
+    const ts: linux.timespec = .{ .sec = @intCast(ns / 1_000_000_000), .nsec = @intCast(ns % 1_000_000_000) };
+    const rc = linux.clock_settime(.REALTIME, &ts);
+    if (linux.errno(rc) != .SUCCESS) return false;
+    // RNDADDENTROPY adds the bytes to the pool of the kernel with 256
+    // bits of credit, and RNDRESEEDCRNG makes the generator take them at
+    // once (random(4)).
+    if (ok(linux.open("/dev/urandom", .{ .ACCMODE = .WRONLY }, 0))) |fd| {
+        var info: extern struct { count: i32 = 256, size: i32 = 32, buf: [32]u8 } = .{ .buf = seed.* };
+        if (ok(linux.ioctl(@intCast(fd), rnd_add_entropy, @intFromPtr(&info))) == null)
+            _ = linux.write(@intCast(fd), seed.ptr, seed.len);
+        _ = linux.ioctl(@intCast(fd), rnd_reseed_crng, 0);
+        _ = linux.close(@intCast(fd));
+    }
+    return true;
 }
 
 fn mount(c: i32, r: *Reader) void {
