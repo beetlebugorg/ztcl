@@ -419,11 +419,13 @@ fn loop(it: *Interp, argv: []const Value, cmd: ?*Cmd, mode: enum { each, map, fi
 
 fn cmdBreak(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 1) return it.wrongArgs("break");
+    it.result = Value.empty;
     return error.TclBreak;
 }
 
 fn cmdContinue(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 1) return it.wrongArgs("continue");
+    it.result = Value.empty;
     return error.TclContinue;
 }
 
@@ -724,10 +726,20 @@ fn cmdReturn(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             try pairs.appendSlice(it.alloc(), try it.list(argv[i + 1]));
         } else try pairs.appendSlice(it.alloc(), argv[i .. i + 2]);
     }
+    // The options other than -code and -level, as a dict: a key keeps
+    // the place of its first pair and the value of its last pair.
+    var extra: std.ArrayList(Value) = .empty;
     var k: usize = 0;
     while (k + 1 < pairs.items.len) : (k += 2) {
         const opt = try it.str(pairs.items[k]);
         const v = pairs.items[k + 1];
+        if (!eql(opt, "-code") and !eql(opt, "-level")) {
+            var j: usize = 0;
+            while (j < extra.items.len) : (j += 2) {
+                if (eql(try it.str(extra.items[j]), opt)) break;
+            }
+            if (j < extra.items.len) extra.items[j + 1] = v else try extra.appendSlice(it.alloc(), &.{ pairs.items[k], v });
+        }
         if (eql(opt, "-code")) {
             code = try codeOf(it, v);
         } else if (eql(opt, "-level")) {
@@ -756,6 +768,7 @@ fn cmdReturn(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             .@"return" => blk: {
                 it.ret_code = .ok;
                 it.ret_level = 1;
+                it.ret_opts = &.{};
                 break :blk error.TclReturn;
             },
             .@"break" => error.TclBreak,
@@ -766,8 +779,15 @@ fn cmdReturn(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             },
         };
     }
+    // `-code return` with a level of n is the code ok with a level of
+    // n + 1, as in Tcl.
+    if (code == .@"return") {
+        code = .ok;
+        level += 1;
+    }
     it.ret_code = code;
     it.ret_level = level;
+    it.ret_opts = extra.items;
     return error.TclReturn;
 }
 
@@ -804,6 +824,8 @@ pub const Caught = struct {
     /// The code and the level of a caught `return`.
     ret_code: interp.ReturnCode = .ok,
     ret_level: u32 = 1,
+    /// The other options of a caught `return`, as pairs.
+    ret_opts: []const Value = &.{},
     error_code: Value = .{ .str = "NONE" },
     error_info: Value = Value.empty,
     error_line: u32 = 0,
@@ -812,6 +834,7 @@ pub const Caught = struct {
 
     /// The options dict: the third argument of `catch`.
     pub fn options(c: Caught, it: *Interp) Error!Value {
+        if (c.code == 2 and c.ret_opts.len > 0) return c.returnOptions(it);
         var o: [12]Value = undefined;
         o[0] = .{ .str = "-code" };
         o[1] = .{ .int = if (c.code == 2) @backingInt(c.ret_code) else c.code };
@@ -832,6 +855,30 @@ pub const Caught = struct {
         return value.newList(it.alloc(), o[0..10]);
     }
 
+    /// The options dict of a caught `return` with options: its options
+    /// in their order, then `-code` and `-level`. With `-code error` and
+    /// `-errorinfo`, Tcl also adds `-errorcode NONE` and `-errorline 1`
+    /// when they are absent.
+    fn returnOptions(c: Caught, it: *Interp) Error!Value {
+        const a = it.alloc();
+        var o: std.ArrayList(Value) = .empty;
+        try o.appendSlice(a, c.ret_opts);
+        try o.appendSlice(a, &.{ .{ .str = "-code" }, .{ .int = @backingInt(c.ret_code) }, .{ .str = "-level" }, .{ .int = c.ret_level } });
+        if (c.ret_code == .@"error" and try hasKey(it, c.ret_opts, "-errorinfo")) {
+            if (!try hasKey(it, c.ret_opts, "-errorcode")) try o.appendSlice(a, &.{ .{ .str = "-errorcode" }, .{ .str = "NONE" } });
+            if (!try hasKey(it, c.ret_opts, "-errorline")) try o.appendSlice(a, &.{ .{ .str = "-errorline" }, .{ .int = 1 } });
+        }
+        return value.newList(a, o.items);
+    }
+
+    fn hasKey(it: *Interp, pairs: []const Value, key: []const u8) Error!bool {
+        var k: usize = 0;
+        while (k + 1 < pairs.len) : (k += 2) {
+            if (eql(try it.str(pairs[k]), key)) return true;
+        }
+        return false;
+    }
+
     /// Gives the end of the script again to the caller.
     pub fn raise(c: Caught, it: *Interp) Error!Value {
         it.result = c.res;
@@ -847,6 +894,7 @@ pub const Caught = struct {
             2 => {
                 it.ret_code = c.ret_code;
                 it.ret_level = c.ret_level;
+                it.ret_opts = c.ret_opts;
                 return error.TclReturn;
             },
             3 => return error.TclBreak,
@@ -862,11 +910,12 @@ pub const Caught = struct {
 /// Runs a script and catches its end. The end of the compute limit is not
 /// caught: it stays an error.
 pub fn runCaught(it: *Interp, script: Error!*interp.Script) Error!Caught {
-    return runCaughtBody(it, script, &.{});
+    return runCaughtBody(it, script, &.{}, null);
 }
 
 /// `runCaught` for the body of a command with the words `argv`.
-fn runCaughtBody(it: *Interp, script: Error!*interp.Script, argv: []const Value) Error!Caught {
+/// With `site`, an error gets that command in its trace before the catch.
+fn runCaughtBody(it: *Interp, script: Error!*interp.Script, argv: []const Value, site: ?*Cmd) Error!Caught {
     const depth = it.depth;
     const frame = it.frame;
     var c: Caught = .{};
@@ -882,16 +931,21 @@ fn runCaughtBody(it: *Interp, script: Error!*interp.Script, argv: []const Value)
             error.TclContinue => 4,
             error.TclCustom => it.custom_code,
         };
-        c.res = if (c.code == 3 or c.code == 4) Value.empty else it.result;
+        // `break` and `continue` leave an empty result, and
+        // `return -level 0 -code break VALUE` leaves VALUE.
+        c.res = it.result;
         if (c.code == 2) {
             c.ret_code = it.ret_code;
             c.ret_level = it.ret_level;
+            c.ret_opts = it.ret_opts;
+            it.ret_opts = &.{};
         }
     }
     if (c.code == 1) {
         // A script cannot catch the end of its compute limit or of its memory.
         if (it.uncatchable() or coro.unwinding(it)) return error.TclError;
         c.error_line = it.proc_line;
+        if (site) |s| if (it.in_error) try it.addErrorInfo(s);
         try it.finishError();
         c.error_code = it.error_code;
         c.error_info = it.last_info;
@@ -904,7 +958,16 @@ fn runCaughtBody(it: *Interp, script: Error!*interp.Script, argv: []const Value)
 
 fn cmdCatch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2 or argv.len > 4) return it.wrongArgs("catch script ?resultVarName? ?optionVarName?");
-    const c = try runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv);
+    // Tcl compiles `catch` in a proc body, and also outside one when it
+    // has no variables. A compiled `catch` of a script that is not a
+    // literal word adds the `catch` command to the error trace.
+    var site: ?*Cmd = null;
+    if (cmd) |c| {
+        const in_proc = it.frame != &it.global and it.frame.ns == null;
+        const literal = !c.has_expand and c.words.len > 1 and c.words[1].kind == .lit;
+        if (!literal and (in_proc or argv.len == 2)) site = c;
+    }
+    const c = try runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv, site);
     if (argv.len >= 3) try it.setVar(try it.str(argv[2]), c.res);
     if (argv.len == 4) try it.setVar(try it.str(argv[3]), try c.options(it));
     return .{ .int = c.code };
@@ -947,7 +1010,7 @@ fn cmdTry(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     }
     if (end > 2 and eql(try it.str(argv[end - 1]), "-")) return it.fail("last non-finally clause must not have a body of \"-\"", .{});
 
-    var out = try runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv);
+    var out = try runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv, null);
     h = 2;
     while (h < end) : (h += 4) {
         const kind = try it.str(argv[h]);
@@ -1122,6 +1185,7 @@ fn substCode(it: *Interp, e: Error) SubstAction {
         error.TclReturn => {
             it.ret_code = .ok;
             it.ret_level = 1;
+            it.ret_opts = &.{};
             return .use;
         },
         error.TclCustom => return .use,

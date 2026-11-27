@@ -1656,10 +1656,17 @@ pub fn applyReply(it: *Interp, r: *Msg) Error!Value {
             it.result = v;
             it.ret_code = .ok;
             it.ret_level = 1;
+            it.ret_opts = &.{};
             return error.TclReturn;
         },
-        3 => return error.TclBreak,
-        4 => return error.TclContinue,
+        3 => {
+            it.result = v;
+            return error.TclBreak;
+        },
+        4 => {
+            it.result = v;
+            return error.TclContinue;
+        },
         else => {
             it.result = v;
             it.custom_code = @intCast(@min(r.code, std.math.maxInt(u32)));
