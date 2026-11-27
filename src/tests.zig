@@ -3062,6 +3062,31 @@ test "isolated threads: tsv and the locks through the broker" {
     try std.testing.expectEqualStrings("ok", try it.str(try it.eval("thread::mutex lock $m; thread::mutex unlock $m; set _ ok")));
 }
 
+test "isolated threads: thread::transfer moves a channel across the processes" {
+    if (comptime !tcl.isothread.supported) return error.SkipZigTest;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var buf: [256]u8 = undefined;
+    const root = try std.fmt.bufPrint(&buf, ".zig-cache/tmp/{s}", .{tmp.sub_path});
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    it.iso_spawn = .{ .spawn = isoSpawn };
+    try it.allow(@backingInt(tcl.interp.Capability.thread) | @backingInt(tcl.interp.Capability.file) | @backingInt(tcl.interp.Capability.channels));
+    try tcl.fsroot.setRoot(&it, root);
+    _ = try it.eval("set w [open d.txt w]; puts $w one\\ntwo\\nthree; close $w");
+    _ = try it.eval("set t [thread::create -isolation process -joinable {thread::wait}]; set f [open d.txt]; gets $f");
+    if (comptime !tcl.isoproto.passes_fds) {
+        try std.testing.expectEqualStrings("ZTCL ISOLATION TRANSFER", try it.str(try it.eval("catch {thread::transfer $t $f}; set ::errorCode")));
+        try std.testing.expectEqualStrings("two", try it.str(try it.eval("gets $f")));
+        return;
+    }
+    // The buffered input goes along with the descriptor.
+    try std.testing.expectEqualStrings("0 two", try it.str(try it.eval("thread::transfer $t $f; list [expr {$f in [file channels]}] [thread::send $t \"gets $f\"]")));
+    try std.testing.expectEqualStrings("three", try it.str(try it.eval("thread::send $t \"thread::transfer [thread::id] $f\"; gets $f")));
+    _ = try it.eval("close $f; thread::release $t; thread::join $t");
+}
+
 test "isolated threads: no runner gives an error" {
     if (comptime !tcl.isothread.supported or !tcl.isothread.spawns_runner) return error.SkipZigTest;
     var it: tcl.Interp = undefined;

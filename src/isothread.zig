@@ -219,7 +219,78 @@ const Link = struct {
         l.conn.writeMessage(a, kind, stream, payload) catch return false;
         return true;
     }
+
+    fn writeFds(l: *Link, a: Allocator, kind: iso.Kind, payload: []const u8, fds: []const i32) bool {
+        if (comptime !iso.passes_fds) return false;
+        l.wlock.lock();
+        defer l.wlock.unlock();
+        l.conn.writeFrameFds(a, kind, 0, payload, fds) catch return false;
+        return true;
+    }
 };
+
+// ---- Channels (`thread::transfer`) ----
+
+/// The payload of `FD`: to u64, the count of descriptors u8, and the
+/// record of `tchan.shipOut`. The descriptors come with the frame.
+fn fdPayload(a: Allocator, to: u64, n: usize, bytes: []const u8) ?[]u8 {
+    const p = a.alloc(u8, 9 + bytes.len) catch return null;
+    std.mem.writeInt(u64, p[0..8], to, .little);
+    p[8] = @intCast(n);
+    @memcpy(p[9..], bytes);
+    return p;
+}
+
+/// Sends a channel of `tchan.shipOut` toward the thread `to`: to its
+/// child when `to` is an isolated thread, or to the parent from a child.
+/// The descriptors stay open here.
+pub fn sendChannel(g: *Group, to: u64, bytes: []const u8, fds: []const i32) bool {
+    if (comptime !iso.passes_fds) return false;
+    const a = g.gpa;
+    const p = fdPayload(a, to, fds.len, bytes) orelse return false;
+    defer a.free(p);
+    g.lock.lock();
+    defer g.lock.unlock();
+    if (g.find(to)) |t| {
+        const b: *Bridge = @ptrCast(@alignCast(t.bridge orelse return false));
+        return b.link.writeFds(a, .fd, p, fds);
+    }
+    const r = g.remote orelse return false;
+    if (r.send != Child.rSend) return false;
+    const c: *Child = @ptrCast(@alignCast(r.ctx));
+    return c.link.writeFds(c.a, .fd, p, fds);
+}
+
+/// Takes an `FD` frame: its descriptors from the transport, then the
+/// channel goes to the detached list of `g`, or on to another isolated
+/// thread of the parent.
+fn takeChannel(g: *Group, l: *Link, payload: []const u8, from_child: bool) void {
+    if (comptime !iso.passes_fds) return;
+    if (payload.len < 9) return;
+    const to = std.mem.readInt(u64, payload[0..8], .little);
+    const n = @min(payload[8], iso.max_fds);
+    var fds: [iso.max_fds]i32 = undefined;
+    var k: usize = 0;
+    while (k < n) : (k += 1) fds[k] = l.t.takeFd() orelse break;
+    if (k != payload[8]) {
+        for (fds[0..k]) |f| _ = @import("sys.zig").os.close(f);
+        return;
+    }
+    if (from_child) {
+        // From one isolated thread to another: on to its child.
+        g.lock.lock();
+        const other = if (g.find(to)) |t| t.bridge else null;
+        if (other) |ob| {
+            const b: *Bridge = @ptrCast(@alignCast(ob));
+            _ = b.link.writeFds(g.gpa, .fd, payload, fds[0..k]);
+            g.lock.unlock();
+            for (fds[0..k]) |f| _ = @import("sys.zig").os.close(f);
+            return;
+        }
+        g.lock.unlock();
+    }
+    _ = @import("tchan.zig").shipIn(g, payload[9..], fds[0..k]);
+}
 
 /// Reads a whole message: the frames of one stream with the flag `more`
 /// make one payload. A frame of another stream between them is an
@@ -729,6 +800,7 @@ fn readerMain(b: *Bridge) void {
             },
             .bgerror => bgReport(w, f.payload),
             .tsv, .lock, .unlock, .cancel => toBroker(a, f, &b.broker),
+            .fd => takeChannel(g, &b.link, f.payload, true),
             .exit => {
                 var r: iso.Reader = .{ .b = f.payload };
                 b.status = r.int(i64) catch 1;
@@ -916,6 +988,7 @@ fn childReader(c: *Child) void {
                 const p = c.a.dupe(u8, f.payload) catch continue;
                 c.caller.deliver(f.stream, p);
             },
+            .fd => takeChannel(g, c.link, f.payload, false),
             .goodbye => break,
             else => {},
         }
@@ -1022,6 +1095,14 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     w.is_main = false;
     w.mem_limit = x.mem_limit;
     w.group.next_id = st.id + 1;
+    // The channel names of the child start in a range of its own, so a
+    // channel that `thread::transfer` moves keeps a name that no other
+    // process of the group has.
+    if (comptime thread.chan_names_ok) {
+        const base: u32 = @truncate(st.id << 16);
+        w.group.chan_names.next.store(base, .monotonic);
+        w.group.chan_names.next_sock.store(base, .monotonic);
+    }
     c.w = w;
     c.caller = .{ .a = a, .out = .{ .ctx = &c, .write = Child.write }, .w = w };
     isobroker.install(&x, &c.caller) catch return 2;
