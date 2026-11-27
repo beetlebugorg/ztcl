@@ -133,12 +133,12 @@ apply.test	apply-8.6	pass	pass
 apply.test	apply-8.7	pass	pass		
 apply.test	apply-8.8	pass	pass		
 apply.test	apply-8.9	pass	pass		
-apply.test	apply-9.1	skip	skip	internals	memory
-apply.test	apply-9.2	skip	skip	internals	memory
-apply.test	apply-9.3	skip	skip	internals	memory
+apply.test	apply-9.1	fail	fail	design	code 0/0,2: 32 \| want: 0
+apply.test	apply-9.2	fail	fail	design	code 0/0,2: -448 \| want: 0
+apply.test	apply-9.3	fail	pass	design	code 0/0,2: -96 \| want: 0
 assemble.test	assemble-1.1	fail	fail	design	code 1/1: invalid command name "assemble" \| want: wrong # args*
 assemble.test	assemble-1.2	fail	fail	design	code 1/1: invalid command name "assemble" \| want: wrong # args*
-assemble.test	assemble-1.3	fail	fail	design	code 0/0,2: 1 {invalid command name "assemble"} {invalid command name "assemble"     while executing "assemble {   # bad opcode   rubbish      }"     in \| want: 1 {bad instruction "rubbish":*} {ba...
+assemble.test	assemble-1.3	fail	fail	design	code 0/0,2: 1 {invalid command name "assemble"} {invalid command name "assemble"     while executing "assemble {   # bad opcode   rubbish      }"     (" \| want: 1 {bad instruction "rubbish":*} {ba...
 assemble.test	assemble-1.4	fail	fail	design	code 1/0,2: invalid command name "assemble" \| want: this is a test
 assemble.test	assemble-10.1	fail	fail	design	code 1/1: invalid command name "assemble" \| want: wrong # args*
 assemble.test	assemble-10.2	fail	fail	design	code 1/1: invalid command name "assemble" \| want: wrong # args*
@@ -333,10 +333,10 @@ assemble.test	assemble-5.2	fail	fail	design	code 0/0,2: 1 {invalid command name 
 assemble.test	assemble-5.3	fail	fail	design	code 0/0,2: 1 {invalid command name "assemble"} {TCL LOOKUP COMMAND assemble} \| want: 1 {assembly code may not contain substitutions} {TCL ASSEM NOSUBST}
 assemble.test	assemble-5.4	fail	fail	design	code 1/0,2: invalid command name "assemble" \| want: hello world
 assemble.test	assemble-50.1	fail	fail	design	code 1/0,2: invalid command name "assemble" \| want: 1 2 16 4 16 16 52 8 52 16 52 16 40 52 160 16 52 52 88 20 64 52 160 24 88 40 9232 52 88
-assemble.test	assemble-51.1	skip	skip	internals	memory
-assemble.test	assemble-51.2	skip	skip	internals	memory
-assemble.test	assemble-51.3	skip	skip	internals	memory
-assemble.test	assemble-51.4	skip	skip	internals	memory
+assemble.test	assemble-51.1	fail	fail	design	code 1/0,2: invalid command name "assemble" \| want: 0
+assemble.test	assemble-51.2	fail	fail	design	code 1/0,2: invalid command name "assemble" \| want: 0
+assemble.test	assemble-51.3	fail	fail	design	code 1/0,2: invalid command name "assemble" \| want: 0
+assemble.test	assemble-51.4	fail	fail	design	code 0/0,2: 544 \| want: 0
 assemble.test	assemble-52.1	fail	fail	design	code 1/0,2: invalid command name "::tcl::unsupported::assemble" \| want: 
 assemble.test	assemble-6.1	fail	fail	design	code 1/1: invalid command name "assemble" \| want: wrong # args*
 assemble.test	assemble-6.2	fail	fail	design	code 1/1: invalid command name "assemble" \| want: wrong # args*
@@ -556,8 +556,8 @@ basic.test	basic-48.14.0	pass	pass
 basic.test	basic-48.14.1	pass	pass		
 basic.test	basic-48.15.0	pass	pass		
 basic.test	basic-48.15.1	pass	pass		
-basic.test	basic-48.16.0	skip	skip	internals	memory
-basic.test	basic-48.16.1	skip	skip	internals	memory
+basic.test	basic-48.16.0	fail	fail	design	code 0/0,2: 32 \| want: 0
+basic.test	basic-48.16.1	fail	fail	design	code 0/0,2: -9200 \| want: 0
 basic.test	basic-48.17.0	pass	pass		
 basic.test	basic-48.17.1	pass	pass		
 basic.test	basic-48.18.0	pass	pass		
@@ -1620,7 +1620,7 @@ chanio.test	chan-io-35.6	pass	pass
 chanio.test	chan-io-35.7	pass	pass		
 chanio.test	chan-io-35.8	pass	pass		
 chanio.test	chan-io-35.9	pass	pass		
-chanio.test	chan-io-36.1	pass	pass		
+chanio.test	chan-io-36.1	pass	fail		
 chanio.test	chan-io-36.2	pass	pass		
 chanio.test	chan-io-36.3	pass	pass		
 chanio.test	chan-io-36.4	pass	pass		
@@ -10684,8 +10684,8 @@ cmdAH.test	cmdAH-0.2	pass	pass
 cmdAH.test	cmdAH-1.1	pass	pass		
 cmdAH.test	cmdAH-1.2	pass	pass		
 cmdAH.test	cmdAH-1.3	pass	pass		
-cmdAH.test	cmdAH-1.4	fail	fail	bug	code 0/0,2: 0 \| want: 1
-cmdAH.test	cmdAH-1.5	fail	fail	bug	code 0/0,2: 0 \| want: 1
+cmdAH.test	cmdAH-1.4	pass	pass		
+cmdAH.test	cmdAH-1.5	pass	pass		
 cmdAH.test	cmdAH-10.1	pass	pass		
 cmdAH.test	cmdAH-10.10	skip	skip	internals	testsetplatform
 cmdAH.test	cmdAH-10.2	skip	skip	internals	testsetplatform
@@ -11116,7 +11116,7 @@ cmdIL.test	cmdIL-5.7	skip	skip	internals	testWithLimit
 cmdIL.test	cmdIL-6.1	pass	pass		
 cmdIL.test	cmdIL-6.10	pass	pass		
 cmdIL.test	cmdIL-6.11	pass	pass		
-cmdIL.test	cmdIL-6.12	skip	skip	internals	memory
+cmdIL.test	cmdIL-6.12	fail	fail	design	code 0/0,2: -160 \| want: 0
 cmdIL.test	cmdIL-6.13	pass	pass		
 cmdIL.test	cmdIL-6.14	pass	pass		
 cmdIL.test	cmdIL-6.15	pass	pass		
@@ -11129,7 +11129,7 @@ cmdIL.test	cmdIL-6.20	pass	pass
 cmdIL.test	cmdIL-6.21	pass	pass		
 cmdIL.test	cmdIL-6.22	pass	pass		
 cmdIL.test	cmdIL-6.23	pass	pass		
-cmdIL.test	cmdIL-6.24	skip	skip	internals	memory
+cmdIL.test	cmdIL-6.24	fail	fail	design	code 0/0,2: -208 \| want: 0
 cmdIL.test	cmdIL-6.25	pass	pass		
 cmdIL.test	cmdIL-6.26	pass	pass		
 cmdIL.test	cmdIL-6.3	pass	pass		
@@ -11219,7 +11219,7 @@ cmdMZ.test	cmdMZ-return-1.4	pass	pass
 cmdMZ.test	cmdMZ-return-1.5	pass	pass		
 cmdMZ.test	cmdMZ-return-2.0	pass	pass		
 cmdMZ.test	cmdMZ-return-2.1	pass	pass		
-cmdMZ.test	cmdMZ-return-2.10	fail	fail	bug	code 0/0,2: 1 {-code 1 -errorcode NONE -errorinfo {     while executing "return -level 0 -code error"} -errorline 1 -level 0} \| want: 1 {-code 1 -errorcode NONE -errorinfo {     while executing "r...
+cmdMZ.test	cmdMZ-return-2.10	pass	pass		
 cmdMZ.test	cmdMZ-return-2.11	pass	pass		
 cmdMZ.test	cmdMZ-return-2.12	pass	pass		
 cmdMZ.test	cmdMZ-return-2.13	pass	pass		
@@ -11227,7 +11227,7 @@ cmdMZ.test	cmdMZ-return-2.14	fail	fail	bug	code 1/3: bad completion code "foo": 
 cmdMZ.test	cmdMZ-return-2.15	pass	pass		
 cmdMZ.test	cmdMZ-return-2.16	pass	pass		
 cmdMZ.test	cmdMZ-return-2.17	pass	pass		
-cmdMZ.test	cmdMZ-return-2.18	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level,  \| want: 2 {-code 1 -errorcode NONE -errorst...
+cmdMZ.test	cmdMZ-return-2.18	fail	fail	bug	code 0/0,2: 2 {-code 1 -errorstack {CALL a CALL b} -level 1} {CALL a CALL b} \| want: 2 {-code 1 -errorcode NONE -errorstack {CALL a CALL b} -level 1} {CALL a CALL b}
 cmdMZ.test	cmdMZ-return-2.2	pass	pass		
 cmdMZ.test	cmdMZ-return-2.3	pass	pass		
 cmdMZ.test	cmdMZ-return-2.4	pass	pass		
@@ -11244,12 +11244,12 @@ cmdMZ.test	cmdMZ-return-3.12	pass	pass
 cmdMZ.test	cmdMZ-return-3.12.1	pass	pass		
 cmdMZ.test	cmdMZ-return-3.13	pass	pass		
 cmdMZ.test	cmdMZ-return-3.14	pass	pass		
-cmdMZ.test	cmdMZ-return-3.2	pass	pass		
+cmdMZ.test	cmdMZ-return-3.2	fail	fail	bug	code 0/0,2: 0 \| want: 1
 cmdMZ.test	cmdMZ-return-3.3	pass	pass		
-cmdMZ.test	cmdMZ-return-3.4	pass	pass		
-cmdMZ.test	cmdMZ-return-3.5	pass	pass		
-cmdMZ.test	cmdMZ-return-3.6	pass	pass		
-cmdMZ.test	cmdMZ-return-3.7	pass	pass		
+cmdMZ.test	cmdMZ-return-3.4	fail	fail	bug	code 0/0,2: 0 \| want: 1
+cmdMZ.test	cmdMZ-return-3.5	fail	fail	bug	code 0/0,2: 0 \| want: 1
+cmdMZ.test	cmdMZ-return-3.6	fail	fail	bug	code 0/0,2: 0 \| want: 1
+cmdMZ.test	cmdMZ-return-3.7	fail	fail	bug	code 0/0,2: 0 \| want: 1
 cmdMZ.test	cmdMZ-return-3.8	pass	pass		
 cmdMZ.test	cmdMZ-return-3.9	pass	pass		
 compExpr-old.test	compExpr-old-1.1	pass	pass		
@@ -11520,8 +11520,8 @@ compExpr.test	compExpr-5.7	pass	pass
 compExpr.test	compExpr-5.8	pass	pass		
 compExpr.test	compExpr-5.9	pass	pass		
 compExpr.test	compExpr-6.1	pass	pass		
-compExpr.test	compExpr-7.1	skip	skip	internals	memory
-compExpr.test	compExpr-7.2	skip	skip	internals	memory
+compExpr.test	compExpr-7.1	fail	fail	design	code 0/0,2: 399024 \| want: 0
+compExpr.test	compExpr-7.2	fail	fail	design	code 0/0,2: 320 \| want: 0
 compile.test	compile-1.1	pass	pass		
 compile.test	compile-1.2	pass	pass		
 compile.test	compile-10.1	pass	pass		
@@ -11534,8 +11534,8 @@ compile.test	compile-11.6	pass	pass
 compile.test	compile-11.7	pass	pass		
 compile.test	compile-11.8	pass	pass		
 compile.test	compile-11.9	pass	pass		
-compile.test	compile-12.1	skip	skip	internals	memory
-compile.test	compile-12.2	skip	skip	internals	memory
+compile.test	compile-12.1	fail	fail	design	code 0/0,2: 405424 \| want: 0
+compile.test	compile-12.2	pass	pass		
 compile.test	compile-12.3	pass	pass		
 compile.test	compile-12.4	pass	pass		
 compile.test	compile-13.1	pass	pass		
@@ -11725,7 +11725,7 @@ coroutine.test	coroutine-1.6	pass	pass
 coroutine.test	coroutine-1.7	pass	pass		
 coroutine.test	coroutine-1.8	pass	pass		
 coroutine.test	coroutine-1.9	pass	pass		
-coroutine.test	coroutine-10.1	fail	fail	bug	code 1/0,2: namespace "tcl::unsupported" not found in "::" \| want: ok ok {abc ::cbody1} {{1 2 3} ::cbody2} ok ok {{abc def} ::cbody1} {{1 2 3 4 5 6} ::cbody2} {abc def} {1 2 3 4 5 6}
+coroutine.test	coroutine-10.1	fail	fail	bug	code 1/0,2: invalid command name "corotype" \| want: ok ok {abc ::cbody1} {{1 2 3} ::cbody2} ok ok {{abc def} ::cbody1} {{1 2 3 4 5 6} ::cbody2} {abc def} {1 2 3 4 5 6}
 coroutine.test	coroutine-2.1	pass	pass		
 coroutine.test	coroutine-2.2	pass	pass		
 coroutine.test	coroutine-2.3	pass	pass		
@@ -11733,17 +11733,17 @@ coroutine.test	coroutine-2.4	pass	pass
 coroutine.test	coroutine-2.5	pass	pass		
 coroutine.test	coroutine-2.6	pass	pass		
 coroutine.test	coroutine-3.1	pass	pass		
-coroutine.test	coroutine-3.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
+coroutine.test	coroutine-3.2	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
 coroutine.test	coroutine-3.3	pass	pass		
 coroutine.test	coroutine-3.4	pass	pass		
 coroutine.test	coroutine-3.5	fail	fail	bug	code 0/0,2: ::foo \| want: 
-coroutine.test	coroutine-3.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 
-coroutine.test	coroutine-3.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: coroutine X coroutine Y info frame 0
+coroutine.test	coroutine-3.6	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 
+coroutine.test	coroutine-3.7	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: coroutine X coroutine Y info frame 0
 coroutine.test	coroutine-4.1	pass	pass		
 coroutine.test	coroutine-4.2	pass	pass		
 coroutine.test	coroutine-4.3	pass	pass		
 coroutine.test	coroutine-4.4	fail	fail	bug	code 0/0,2: global \| want: local
-coroutine.test	coroutine-4.5	skip	skip	internals	memory
+coroutine.test	coroutine-4.5	fail	fail	design	code 0/0,2: 1077360 \| want: 0
 coroutine.test	coroutine-4.6	pass	pass		
 coroutine.test	coroutine-4.7	pass	pass		
 coroutine.test	coroutine-5.1	skip	skip	internals	testnrelevels
@@ -11826,7 +11826,7 @@ dict.test	dict-13.9	pass	pass
 dict.test	dict-14.1	pass	pass		
 dict.test	dict-14.10	pass	pass		
 dict.test	dict-14.11	pass	pass		
-dict.test	dict-14.12	fail	fail	bug	code 0/0,2: 1 test 1 {test     while executing "error test"     invoked from within "dict for {k v} {a a b b} {      incr times      error test  }"} \| want: 1 test 1 {test     while executing "err...
+dict.test	dict-14.12	pass	pass		
 dict.test	dict-14.13	pass	pass		
 dict.test	dict-14.14	pass	pass		
 dict.test	dict-14.15	pass	pass		
@@ -11880,7 +11880,7 @@ dict.test	dict-17.1	pass	pass
 dict.test	dict-17.10	pass	pass		
 dict.test	dict-17.11	pass	pass		
 dict.test	dict-17.12	pass	pass		
-dict.test	dict-17.13	fail	fail	bug	code 0/0,2: 1 x {x     while executing "error x"     invoked from within "dict filter {a b} script {k v} {error x}"} \| want: 1 x {x     while executing "error x"     ("dict filter" script line 1) ...
+dict.test	dict-17.13	pass	pass		
 dict.test	dict-17.14	pass	pass		
 dict.test	dict-17.15	pass	pass		
 dict.test	dict-17.16	pass	pass		
@@ -11906,8 +11906,8 @@ dict.test	dict-18.2	pass	pass
 dict.test	dict-18.3	pass	pass		
 dict.test	dict-18.4	pass	pass		
 dict.test	dict-19.1	pass	pass		
-dict.test	dict-19.2	skip	skip	internals	memory
-dict.test	dict-19.3	skip	skip	internals	memory
+dict.test	dict-19.2	fail	pass	design	code 0/0,2: 480 \| want: 0
+dict.test	dict-19.3	fail	pass	design	code 0/0,2: 480 \| want: 0
 dict.test	dict-2.1	pass	pass		
 dict.test	dict-2.10	pass	pass		
 dict.test	dict-2.11	pass	pass		
@@ -11987,24 +11987,24 @@ dict.test	dict-22.6	pass	pass
 dict.test	dict-22.7	pass	pass		
 dict.test	dict-22.8	pass	pass		
 dict.test	dict-22.9	pass	pass		
-dict.test	dict-23.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 5
-dict.test	dict-23.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
-dict.test	dict-23.11	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
-dict.test	dict-23.12	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
-dict.test	dict-23.13	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
-dict.test	dict-23.14	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
-dict.test	dict-23.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 5
+dict.test	dict-23.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 5
+dict.test	dict-23.10	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
+dict.test	dict-23.11	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
+dict.test	dict-23.12	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
+dict.test	dict-23.13	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
+dict.test	dict-23.14	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
+dict.test	dict-23.2	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 5
 dict.test	dict-23.3	fail	fail	bug	code 1/0,2: invalid command name "tcl::dict::lappend" \| want: bar baz
-dict.test	dict-23.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
+dict.test	dict-23.4	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
 dict.test	dict-23.5	fail	fail	bug	code 1/0,2: invalid command name "tcl::dict::incr" \| want: bar 1
-dict.test	dict-23.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
-dict.test	dict-23.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 2
-dict.test	dict-23.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
-dict.test	dict-23.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
+dict.test	dict-23.6	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
+dict.test	dict-23.7	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 2
+dict.test	dict-23.8	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
+dict.test	dict-23.9	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
 dict.test	dict-24.1	pass	pass		
 dict.test	dict-24.10	pass	pass		
 dict.test	dict-24.11	pass	pass		
-dict.test	dict-24.12	fail	fail	bug	code 0/0,2: 1 test 1 {test     while executing "error test"     invoked from within "dict map {k v} {a a b b} {      incr times      error test  }"} \| want: 1 test 1 {test     while executing "err...
+dict.test	dict-24.12	pass	pass		
 dict.test	dict-24.13	pass	pass		
 dict.test	dict-24.14	pass	pass		
 dict.test	dict-24.14a	pass	pass		
@@ -12016,8 +12016,8 @@ dict.test	dict-24.18	pass	pass
 dict.test	dict-24.19	pass	pass		
 dict.test	dict-24.2	pass	pass		
 dict.test	dict-24.20	pass	pass		
-dict.test	dict-24.20.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 5
-dict.test	dict-24.21	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 5
+dict.test	dict-24.20.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 5
+dict.test	dict-24.21	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 5
 dict.test	dict-24.22	pass	pass		
 dict.test	dict-24.23	pass	pass		
 dict.test	dict-24.23a	pass	pass		
@@ -12219,7 +12219,7 @@ encoding.test	encoding-24.1	pass	pass
 encoding.test	encoding-24.10	pass	pass		
 encoding.test	encoding-24.11	pass	pass		
 encoding.test	encoding-24.2	pass	pass		
-encoding.test	encoding-24.3	fail	fail	bug	code 0/0,2: 9 { (\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000)} \| want: 3 {乎乞也 (\u4E4E\u4E5E\u4E5F)}
+encoding.test	encoding-24.3	pass	pass		
 encoding.test	encoding-24.4	pass	pass		
 encoding.test	encoding-24.5	pass	pass		
 encoding.test	encoding-24.6	pass	pass		
@@ -12291,7 +12291,7 @@ env.test	env-9.0	skip	skip	platform	win
 env.test	env-9.1	skip	skip	platform	win
 error.test	error-1.1	pass	pass		
 error.test	error-1.2	pass	pass		
-error.test	error-1.3	fail	fail	bug	code 0/0,2: wrong # args: should be "string index string charIndex"     while executing "string index"     invoked from within "format [string index]" \| want: wrong # args: should be "string index...
+error.test	error-1.3	pass	pass		
 error.test	error-1.4	pass	pass		
 error.test	error-1.5	pass	pass		
 error.test	error-1.6	pass	pass		
@@ -12553,17 +12553,17 @@ error.test	error-2.2	pass	pass
 error.test	error-2.3	pass	pass		
 error.test	error-2.4	pass	pass		
 error.test	error-2.5	pass	pass		
-error.test	error-2.6	fail	fail	bug	code 0/0,2: glorp2     while executing "error glorp2"     invoked from within "format [error glorp2]"     (procedure "foo2" line 4)     invoked from wit \| want: glorp2     while executing "error g...
+error.test	error-2.6	pass	pass		
 error.test	error-20.1	pass	pass		
 error.test	error-20.2	fail	fail	bug	code 0/1: a b c \| want: bad completion code "34985723094872345": must be ok, error, return, break, continue*, or an integer
-error.test	error-21.1	skip	skip	internals	memory
-error.test	error-21.2	skip	skip	internals	memory
-error.test	error-21.3	skip	skip	internals	memory
-error.test	error-21.4	skip	skip	internals	memory
-error.test	error-21.5	skip	skip	internals	memory
-error.test	error-21.6	skip	skip	internals	memory
-error.test	error-21.7	skip	skip	internals	memory
-error.test	error-21.8	skip	skip	internals	memory
+error.test	error-21.1	fail	fail	design	code 0/0,2: 976 \| want: 0
+error.test	error-21.2	fail	fail	design	code 0/0,2: 784 \| want: 0
+error.test	error-21.3	fail	fail	design	code 0/0,2: 656 \| want: 0
+error.test	error-21.4	fail	fail	design	code 0/0,2: 960 \| want: 0
+error.test	error-21.5	fail	fail	design	code 0/0,2: 640 \| want: 0
+error.test	error-21.6	fail	fail	design	code 0/0,2: 960 \| want: 0
+error.test	error-21.7	fail	fail	design	code 0/0,2: 640 \| want: 0
+error.test	error-21.8	fail	fail	design	code 0/0,2: 672 \| want: 0
 error.test	error-21.9	pass	pass		
 error.test	error-3.1	pass	pass		
 error.test	error-3.2	pass	pass		
@@ -12573,13 +12573,13 @@ error.test	error-4.2	pass	pass
 error.test	error-4.3	pass	pass		
 error.test	error-4.4	pass	pass		
 error.test	error-4.5	pass	pass		
-error.test	error-4.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level,  \| want: INNER * CALL {g 1212} CALL {f 12} UP 1
-error.test	error-4.7	fail	fail	bug	code 1/0,2: key "-errorstack" not known in dictionary \| want: INNER * CALL {g 1212} CALL {f 12} UP 1
-error.test	error-4.8	fail	fail	bug	code 1/0,2: key "-errorstack" not known in dictionary \| want: INNER {error bar} CALL goo UP 1
+error.test	error-4.6	pass	pass		
+error.test	error-4.7	pass	pass		
+error.test	error-4.8	fail	fail	bug	code 0/0,2: INNER foo CALL goo UP 1 \| want: INNER {error bar} CALL goo UP 1
 error.test	error-5.1	pass	pass		
 error.test	error-5.2	pass	pass		
 error.test	error-6.1	pass	pass		
-error.test	error-6.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "errorstack": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level,  \| want: {INNER * CALL {g 1212} CALL {f 12} ...
+error.test	error-6.10	pass	pass		
 error.test	error-6.2	pass	pass		
 error.test	error-6.3	pass	pass		
 error.test	error-6.4	pass	pass		
@@ -12613,7 +12613,7 @@ eval.test	eval-2.1	pass	pass
 eval.test	eval-2.2	pass	pass		
 eval.test	eval-2.3	pass	pass		
 eval.test	eval-2.4	pass	pass		
-eval.test	eval-2.5	fail	fail	bug	code 0/0,2: test error     while executing "error "test error""     invoked from within "eval {  set a 1  error "test error"     }" \| want: test error     while executing "error "test error""     ...
+eval.test	eval-2.5	pass	pass		
 eval.test	eval-3.1	pass	pass		
 eval.test	eval-3.2	pass	pass		
 eval.test	eval-3.3	pass	pass		
@@ -12936,8 +12936,8 @@ execute.test	execute-7.9	pass	pass
 execute.test	execute-8.1	pass	pass		
 execute.test	execute-8.2	pass	pass		
 execute.test	execute-8.3	pass	pass		
-execute.test	execute-8.4	fail	fail	bug	code 0/0,2: These differ: bar     while executing "error bar"     (procedure "foo" line 2)     invoked from within "foo" bar     while executing "error  \| want: 
-execute.test	execute-8.5	fail	fail	bug	code 0/0,2: -code 1 -level 0 -errorcode NONE -errorinfo {FOO     while executing "error FOO"     invoked from within "catch [list error FOO] m o"} -erro \| want: -code 1 -level 0 -errorstack * -err...
+execute.test	execute-8.4	pass	pass		
+execute.test	execute-8.5	fail	fail	bug	code 0/0,2: -code 1 -level 0 -errorstack {INNER {error FOO}} -errorcode NONE -errorinfo {FOO     while executing "error FOO"     invoked from within "ca \| want: -code 1 -level 0 -errorstack * -err...
 execute.test	execute-8.6	fail	fail	bug	setup: can't find package tcltest 2.5
 execute.test	execute-8.7	fail	fail	bug	setup: can't find package tcltest 2.5
 execute.test	execute-9.1	pass	pass		
@@ -27882,8 +27882,8 @@ fileName.test	filename-11.1	fail	fail	message	code 1/1: wrong # args: should be 
 fileName.test	filename-11.10	skip	skip	internals	testsetplatform
 fileName.test	filename-11.11	skip	skip	internals	testsetplatform
 fileName.test	filename-11.12	skip	skip	internals	testsetplatform
-fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl4160309/globTest
-fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl4160309/globTest
+fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl1468248/globTest
+fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl1468248/globTest
 fileName.test	filename-11.16	pass	pass		
 fileName.test	filename-11.17	pass	pass		
 fileName.test	filename-11.17.1	skip	skip	platform	win
@@ -27980,7 +27980,7 @@ fileName.test	filename-14.1	pass	pass
 fileName.test	filename-14.11	pass	pass		
 fileName.test	filename-14.13	pass	pass		
 fileName.test	filename-14.15	fail	fail	bug	code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c \| want: globTest/a1/ globTest/a2/ globTest/a3/
-fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl4160309/globTest/z1.c
+fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl1468248/globTest/z1.c
 fileName.test	filename-14.18	pass	pass		
 fileName.test	filename-14.20	pass	pass		
 fileName.test	filename-14.21	pass	pass		
@@ -28012,6 +28012,8 @@ fileName.test	filename-15.7	skip	skip	platform	win
 fileName.test	filename-16.1	skip	skip	platform	win
 fileName.test	filename-16.10	skip	skip	platform	win
 fileName.test	filename-16.11	skip	skip	platform	win
+fileName.test	filename-16.12	skip	skip	platform	win
+fileName.test	filename-16.13	skip	skip	platform	win
 fileName.test	filename-16.14	skip	skip	platform	win
 fileName.test	filename-16.15	skip	skip	platform	win
 fileName.test	filename-16.16	skip	skip	platform	win
@@ -28221,7 +28223,7 @@ fileSystem.test	filesystem-6.12	pass	pass
 fileSystem.test	filesystem-6.13	pass	pass		
 fileSystem.test	filesystem-6.14	fail	fail	design	code 1/1: could not link: links are not available in the root folder \| want: could not read link "": no such file or directory
 fileSystem.test	filesystem-6.15	fail	fail	bug	code 0/1:  \| want: could not read "": no such file or directory
-fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795777729 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795789363 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.17	fail	fail	feature	code 1/1: file mtime with a new time is not available \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.18	fail	fail	bug	code 0/1:  \| want: can't create directory "": no such file or directory
 fileSystem.test	filesystem-6.19	pass	pass		
@@ -28234,9 +28236,9 @@ fileSystem.test	filesystem-6.24	fail	fail	design	code 1/1: could not readlink: l
 fileSystem.test	filesystem-6.25	fail	fail	message	code 1/1: error renaming "" to "": target file exists \| want: error renaming "": no such file or directory
 fileSystem.test	filesystem-6.26	pass	pass		
 fileSystem.test	filesystem-6.27	fail	fail	bug	code 0/1: / \| want: unrecognised path
-fileSystem.test	filesystem-6.28	fail	fail	bug	code 0/1: 280 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.28	fail	fail	bug	code 0/1: 260 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.29	pass	pass		
-fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795777729 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795789363 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.30	fail	fail	bug	code 0/1: native root \| want: unrecognised path
 fileSystem.test	filesystem-6.31	pass	pass		
 fileSystem.test	filesystem-6.32	fail	fail	bug	code 0/1: directory \| want: could not read "": no such file or directory
@@ -28320,7 +28322,7 @@ for.test	for-6.1	pass	pass
 for.test	for-6.10	pass	pass		
 for.test	for-6.11	pass	pass		
 for.test	for-6.12	pass	pass		
-for.test	for-6.13	fail	fail	bug	code 0/0,2: wrong # args: should be "set varName ?newValue?"     while executing "set"     invoked from within "$z {set i 0} {$i < 5} {set} {set j 4}" \| want: wrong # args: should be "set varName ...
+for.test	for-6.13	pass	pass		
 for.test	for-6.14	pass	pass		
 for.test	for-6.15	pass	pass		
 for.test	for-6.16	pass	pass		
@@ -28330,34 +28332,34 @@ for.test	for-6.2	pass	pass
 for.test	for-6.3	pass	pass		
 for.test	for-6.4	pass	pass		
 for.test	for-6.5	pass	pass		
-for.test	for-6.6	fail	fail	bug	code 0/0,2: 1 {wrong # args: should be "set varName ?newValue?"} {wrong # args: should be "set varName ?newValue?"     while executing "set"     invoked \| want: 1 {wrong # args: should be "set var...
+for.test	for-6.6	pass	pass		
 for.test	for-6.7	pass	pass		
 for.test	for-6.8	pass	pass		
-for.test	for-6.9	fail	fail	bug	code 0/0,2: wrong # args: should be "set varName ?newValue?"     while executing "set"     invoked from within "$z {set i 0} {$i < 5} {incr i} {set}" \| want: wrong # args: should be "set varName ?...
-for.test	for-7.1	skip	skip	internals	memory
-for.test	for-7.10	skip	skip	internals	memory
-for.test	for-7.11	skip	skip	internals	memory
-for.test	for-7.12	skip	skip	internals	memory
-for.test	for-7.13	skip	skip	internals	memory
-for.test	for-7.14	skip	skip	internals	memory
-for.test	for-7.15	skip	skip	internals	memory
-for.test	for-7.16	skip	skip	internals	memory
-for.test	for-7.17	skip	skip	internals	memory
-for.test	for-7.18	skip	skip	internals	memory
-for.test	for-7.19	skip	skip	internals	memory
-for.test	for-7.2	skip	skip	internals	memory
-for.test	for-7.20	skip	skip	internals	memory
-for.test	for-7.21	skip	skip	internals	memory
-for.test	for-7.22	skip	skip	internals	memory
-for.test	for-7.23	skip	skip	internals	memory
-for.test	for-7.24	skip	skip	internals	memory
-for.test	for-7.3	skip	skip	internals	memory
-for.test	for-7.4	skip	skip	internals	memory
-for.test	for-7.5	skip	skip	internals	memory
-for.test	for-7.6	skip	skip	internals	memory
-for.test	for-7.7	skip	skip	internals	memory
-for.test	for-7.8	skip	skip	internals	memory
-for.test	for-7.9	skip	skip	internals	memory
+for.test	for-6.9	pass	pass		
+for.test	for-7.1	fail	fail	design	code 0/0,2: -384 \| want: 0
+for.test	for-7.10	pass	fail		
+for.test	for-7.11	fail	fail	design	code 0/0,2: 160 \| want: 0
+for.test	for-7.12	pass	pass		
+for.test	for-7.13	fail	pass	design	code 0/0,2: 6144 \| want: 0
+for.test	for-7.14	pass	pass		
+for.test	for-7.15	fail	pass	design	code 0/0,2: 160 \| want: 0
+for.test	for-7.16	fail	pass	design	code 0/0,2: 160 \| want: 0
+for.test	for-7.17	fail	fail	design	code 0/0,2: 320 \| want: 0
+for.test	for-7.18	fail	fail	design	code 0/0,2: -960 \| want: 0
+for.test	for-7.19	pass	pass		
+for.test	for-7.2	fail	fail	design	code 0/0,2: -384 \| want: 0
+for.test	for-7.20	pass	fail		
+for.test	for-7.21	fail	pass	design	code 0/0,2: 6144 \| want: 0
+for.test	for-7.22	pass	pass		
+for.test	for-7.23	pass	pass		
+for.test	for-7.24	pass	pass		
+for.test	for-7.3	fail	fail	design	code 0/0,2: -160 \| want: 0
+for.test	for-7.4	pass	pass		
+for.test	for-7.5	fail	pass	design	code 0/0,2: 6144 \| want: 0
+for.test	for-7.6	pass	pass		
+for.test	for-7.7	pass	fail		
+for.test	for-7.8	pass	fail		
+for.test	for-7.9	pass	fail		
 for.test	for-8.0	pass	pass		
 for.test	for-8.1	pass	pass		
 for.test	for-8.10	pass	pass		
@@ -28376,7 +28378,7 @@ foreach.test	foreach-1.10	pass	pass
 foreach.test	foreach-1.11	pass	pass		
 foreach.test	foreach-1.12	pass	pass		
 foreach.test	foreach-1.13	pass	pass		
-foreach.test	foreach-1.14	fail	fail	bug	code 0/0,2: 1 {can't set "a": variable is array} {can't set "a": variable is array     while executing "foreach a {1 2 3} {}"} \| want: 1 {can't set "a": variable is array} {can't set "a": variable...
+foreach.test	foreach-1.14	pass	pass		
 foreach.test	foreach-1.15	pass	pass		
 foreach.test	foreach-1.2	pass	pass		
 foreach.test	foreach-1.3	pass	pass		
@@ -28413,7 +28415,7 @@ foreach.test	foreach-6.5	pass	pass
 foreach.test	foreach-7.1	pass	pass		
 foreach.test	foreach-8.1	pass	pass		
 foreach.test	foreach-9.1	pass	pass		
-foreach.test	foreach-9.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
+foreach.test	foreach-9.2	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
 format.test	format-1.1	pass	pass		
 format.test	format-1.10	skip	skip	platform	longIs32bit
 format.test	format-1.10.1	pass	pass		
@@ -29028,7 +29030,7 @@ incr-old.test	incr-old-2.10	pass	pass
 incr-old.test	incr-old-2.2	pass	pass		
 incr-old.test	incr-old-2.3	pass	pass		
 incr-old.test	incr-old-2.4	pass	pass		
-incr-old.test	incr-old-2.5	fail	fail	bug	code 0/0,2: 1 {expected integer but got "1a"} {expected integer but got "1a"     while executing "incr x 1a"} \| want: 1 {expected integer but got "1a"} {expected integer but got "1a"     (reading ...
+incr-old.test	incr-old-2.5	pass	pass		
 incr-old.test	incr-old-2.6	fail	fail	bug	code 0/0,2: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-only     while executing "incr x 1"} \| want: 1 {can't set "x": variable is read-only} {*variable is read-only ...
 incr-old.test	incr-old-2.7	pass	pass		
 incr-old.test	incr-old-2.8	pass	pass		
@@ -29088,8 +29090,8 @@ incr.test	incr-2.27	pass	pass
 incr.test	incr-2.28	fail	fail	bug	code 0/0,2: 1 {can't set "x": variable is read-only} {can't set "x": variable is read-only     while executing "$z x 1"} \| want: 1 {can't set "x": variable is read-only} {*variable is read-only   ...
 incr.test	incr-2.29	pass	pass		
 incr.test	incr-2.3	pass	pass		
-incr.test	incr-2.30	fail	fail	bug	code 0/0,2: 1 {expected integer but got "1a"} {expected integer but got "1a"     while executing "$z x 1a"} \| want: 1 {expected integer but got "1a"} {expected integer but got "1a"     (reading in...
-incr.test	incr-2.31	fail	fail	bug	code 0/0,2: 1 {expected integer but got "1a"} {expected integer but got "1a"     while executing "incr x 1a"} \| want: 1 {expected integer but got "1a"} {expected integer but got "1a"     (reading ...
+incr.test	incr-2.30	pass	pass		
+incr.test	incr-2.31	pass	pass		
 incr.test	incr-2.4	pass	pass		
 incr.test	incr-2.5	pass	pass		
 incr.test	incr-2.6	pass	pass		
@@ -29208,164 +29210,164 @@ info.test	info-20.3	pass	pass
 info.test	info-20.4	pass	pass		
 info.test	info-20.5	pass	pass		
 info.test	info-21.1	pass	pass		
-info.test	info-21.2	fail	fail	message	code 1/1: unknown or ambiguous subcommand "gorp": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, librar \| want: unknown or ambiguous subcommand "gorp...
-info.test	info-21.3	fail	fail	message	code 1/1: unknown or ambiguous subcommand "c": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, library,  \| want: unknown or ambiguous subcommand "c": ...
-info.test	info-21.4	fail	fail	message	code 1/1: unknown or ambiguous subcommand "l": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, library,  \| want: unknown or ambiguous subcommand "l": ...
-info.test	info-21.5	fail	fail	message	code 1/1: unknown or ambiguous subcommand "s": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, library,  \| want: unknown or ambiguous subcommand "s": ...
-info.test	info-22.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 7
-info.test	info-22.1	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: bad level "-8"
-info.test	info-22.2	fail	fail	feature	code 0/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: bad level "9"
-info.test	info-22.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 750 file */info.te...
+info.test	info-21.2	pass	pass		
+info.test	info-21.3	pass	pass		
+info.test	info-21.4	pass	pass		
+info.test	info-21.5	pass	pass		
+info.test	info-22.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 7
+info.test	info-22.1	fail	fail	bug	code 0/0,2: info frame: not supported by ztcl \| want: bad level "-8"
+info.test	info-22.2	fail	fail	bug	code 0/0,2: info frame: not supported by ztcl \| want: bad level "9"
+info.test	info-22.3	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 750 file */info.test cmd {info frame 0} proc ::tcltest::RunTest
 info.test	info-22.4	fail	fail	feature	cleanup: can't unset "res": no such variable
-info.test	info-22.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 756 file info.test...
-info.test	info-22.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 758 file info.test...
-info.test	info-22.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 761 file info.test...
-info.test	info-22.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
-info.test	info-23.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1 2
-info.test	info-23.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 2
-info.test	info-23.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 2
-info.test	info-23.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 793 file * cmd {in...
-info.test	info-23.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type eval line 1 cmd {info frame 0}...
-info.test	info-23.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type eval line 1 cmd {info frame 0}...
-info.test	info-23.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
-info.test	info-24.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 825 file info.test...
-info.test	info-24.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 839 file info.test...
-info.test	info-24.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 853 file info.test...
-info.test	info-24.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 867 file info.test...
-info.test	info-24.4	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 880 file info.test...
-info.test	info-24.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 894 file info.test...
-info.test	info-24.6.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 910 file info.test...
-info.test	info-24.6.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 926 file info.test...
-info.test	info-24.6.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type proc line 1 cmd {info frame 0}...
-info.test	info-24.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 955 file info.test...
-info.test	info-24.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 969 file info.test...
-info.test	info-24.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 983 file info.test...
-info.test	info-25.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 997 file info.test...
-info.test	info-25.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1005 file info.tes...
+info.test	info-22.5	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 756 file info.test cmd {info frame 7} proc ::tcltest::RunTest
+info.test	info-22.6	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 758 file info.test cmd test\ info-22.6\ \{info\ frame,\ global,\ relative\}\ \{!singleTestInter level 0
+info.test	info-22.7	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 761 file info.test cmd test\ info-22.7\ \{info\ frame,\ global,\ absolute\}\ \{!singleTestInter level 0
+info.test	info-22.8	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: * {type source line 730 file info.test cmd {info frame $level} proc ::etrace level 0} * {type source line 765 file info.test cmd etrace proc
+info.test	info-23.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1 2
+info.test	info-23.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 2
+info.test	info-23.2	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 2
+info.test	info-23.3	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 793 file * cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-23.4	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type eval line 1 cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-23.5	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type eval line 1 cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-23.6	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: * {type source line 730 file info.test cmd {info frame $level} proc ::etrace level 0} * {type eval line 1 cmd etrace proc ::tcltest::RunTest
+info.test	info-24.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 825 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-24.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 839 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-24.2	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 853 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-24.3	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 867 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-24.4	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 880 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-24.5	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 894 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-24.6.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 910 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-24.6.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 926 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-24.6.2	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type proc line 1 cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-24.7	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 955 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-24.8	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 969 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-24.9	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 983 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-25.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 997 file info.test cmd {info frame 0} proc ::bar level 0
+info.test	info-25.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1005 file info.test cmd {info frame 0} proc ::bar level 0
 info.test	info-3.1	fail	fail	bug	code 0/0,2: 3 \| want: 4
 info.test	info-3.2	fail	fail	bug	code 0/0,2: 3 \| want: 4
 info.test	info-3.3	fail	fail	bug	code 0/0,2: 3 \| want: 4
 info.test	info-3.4	pass	pass		
 info.test	info-30.0	fail	fail	feature	cleanup: can't unset "res": no such variable
-info.test	info-30.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1446 file info.tes...
+info.test	info-30.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1446 file info.test cmd {info frame 0} proc ::abra level 0
 info.test	info-30.10	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-30.11	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-30.12	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-30.13	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-30.14	fail	fail	bug	code 1/0,2: interpreter named "sub" already exists, cannot create \| want:  type source line 1562 file info.test cmd {info frame 0} proc ::abra
-info.test	info-30.15	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1574 file info.tes...
-info.test	info-30.16	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1587 file info.te...
-info.test	info-30.17	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1601 file info.tes...
-info.test	info-30.18	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type eval line 3 cmd {info frame 0...
-info.test	info-30.19	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1624 file info.te...
-info.test	info-30.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1457 file info.tes...
-info.test	info-30.20	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1643 file info.tes...
-info.test	info-30.21	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1652 file info.te...
-info.test	info-30.22	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1668 file info.te...
-info.test	info-30.23	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1680 file info.te...
-info.test	info-30.24	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1696 file info.te...
-info.test	info-30.25	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1712 file info.tes...
-info.test	info-30.26	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1716 file info.tes...
-info.test	info-30.27	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1720 file info.te...
-info.test	info-30.28	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1725 file info.te...
-info.test	info-30.29	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: foo type source line 1729 file info...
-info.test	info-30.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1464 file info.tes...
-info.test	info-30.30	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: foo type source line 1733 file info...
-info.test	info-30.31	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1737 file info.tes...
-info.test	info-30.32	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1741 file info.tes...
-info.test	info-30.33	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1745 file info.tes...
-info.test	info-30.34	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1749 file info.tes...
-info.test	info-30.35	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1754 file info.te...
-info.test	info-30.36	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1759 file info.te...
-info.test	info-30.37	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:   type source line 1765 file info.t...
-info.test	info-30.38	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1771 file info.te...
-info.test	info-30.39	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:   type source line 1776 file info.t...
+info.test	info-30.15	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1574 file info.test cmd {info frame 0} proc ::b level 0
+info.test	info-30.16	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1587 file info.test cmd {info frame 0} proc ::a level 0 type source line 1589 file info.test cmd {info frame 0} proc ::a l
+info.test	info-30.17	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1601 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.18	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type eval line 3 cmd {info frame 0} proc ::abra
+info.test	info-30.19	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1624 file info.test cmd {info frame 0} proc ::a level 0 type source line 1628 file info.test cmd {info frame 0} proc ::a l
+info.test	info-30.2	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1457 file info.test cmd {info frame 0} level 0
+info.test	info-30.20	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1643 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.21	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1652 file info.test cmd {info frame 0} proc ::a level 0 type source line 1653 file info.test cmd {info frame 0} proc ::a l
+info.test	info-30.22	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1668 file info.test cmd {info frame 0} proc ::a level 0
+info.test	info-30.23	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1680 file info.test cmd {info frame 0} proc ::a level 0 type source line 1682 file info.test cmd {info frame 0} proc ::a l
+info.test	info-30.24	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1696 file info.test cmd {info frame 0} proc ::a level 0 type source line 1700 file info.test cmd {info frame 0} proc ::a l
+info.test	info-30.25	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1712 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.26	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1716 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.27	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1720 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.28	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1725 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.29	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: foo type source line 1729 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.3	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1464 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.30	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: foo type source line 1733 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.31	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1737 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.32	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1741 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.33	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1745 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.34	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1749 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.35	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1754 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.36	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1759 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.37	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:   type source line 1765 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.38	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1771 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.39	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:   type source line 1776 file info.test cmd {info frame 0} proc ::tcltest::RunTest
 info.test	info-30.4	fail	fail	feature	cleanup: can't unset "res": no such variable
-info.test	info-30.40	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1782 file info.tes...
-info.test	info-30.41	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1791 file info.te...
-info.test	info-30.42	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1800 file info.te...
-info.test	info-30.43	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1808 file info.tes...
-info.test	info-30.44	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1814 file info.tes...
-info.test	info-30.45	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1820 file info.tes...
-info.test	info-30.46	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: YES
-info.test	info-30.47	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: YES
-info.test	info-30.48	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type eval line 2 cmd {info frame 0}...
+info.test	info-30.40	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1782 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.41	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1791 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.42	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1800 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.43	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1808 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.44	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1814 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.45	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1820 file info.test cmd {info frame 0} proc ::tcltest::RunTest
+info.test	info-30.46	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: YES
+info.test	info-30.47	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: YES
+info.test	info-30.48	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type eval line 2 cmd {info frame 0} proc ::tcltest::RunTest
 info.test	info-30.5	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-30.6	fail	fail	feature	cleanup: can't unset "res": no such variable
-info.test	info-30.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want:  type source line 1495 file info.te...
+info.test	info-30.7	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want:  type source line 1495 file info.test cmd {info frame 0} proc ::abra level 0
 info.test	info-30.8	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-30.9	fail	fail	feature	cleanup: can't unset "res": no such variable
-info.test	info-31.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type eval line 3 cmd {info frame 0}...
+info.test	info-31.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type eval line 3 cmd {info frame 0} level 0
 info.test	info-31.1	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-31.1a	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-31.2	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-31.4	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-31.5	fail	fail	feature	cleanup: can't unset "res": no such variable
 info.test	info-31.6	fail	fail	feature	cleanup: can't unset "res": no such variable
-info.test	info-31.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type proc line 1 cmd {info frame 0}...
-info.test	info-32.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type proc line 1 cmd {info frame 0}...
-info.test	info-33.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1115 file info.tes...
-info.test	info-33.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1130 file info.tes...
-info.test	info-33.10	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2058 file info.tes...
-info.test	info-33.11	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2073 file info.tes...
-info.test	info-33.12	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2088 file info.tes...
-info.test	info-33.13	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2101 file info.tes...
-info.test	info-33.14	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2115 file info.tes...
-info.test	info-33.15	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2130 file info.tes...
-info.test	info-33.16	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2144 file info.tes...
-info.test	info-33.17	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2156 file info.tes...
-info.test	info-33.18	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2168 file info.tes...
-info.test	info-33.19	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2181 file info.tes...
-info.test	info-33.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1144 file info.tes...
-info.test	info-33.20	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2193 file info.tes...
-info.test	info-33.21	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2205 file info.tes...
-info.test	info-33.22	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2218 file info.tes...
-info.test	info-33.23	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2231 file info.tes...
-info.test	info-33.24	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2245 file info.tes...
-info.test	info-33.25	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2259 file info.tes...
-info.test	info-33.26	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2273 file info.tes...
-info.test	info-33.27	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2287 file info.tes...
-info.test	info-33.28	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2300 file info.tes...
-info.test	info-33.29	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2313 file info.tes...
-info.test	info-33.2a	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type proc line 1 cmd {info frame 0}...
-info.test	info-33.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1169 file info.tes...
-info.test	info-33.30	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2326 file info.tes...
-info.test	info-33.31	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2339 file info.tes...
-info.test	info-33.32	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2352 file info.tes...
-info.test	info-33.33	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2365 file info.tes...
-info.test	info-33.34	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2377 file info.tes...
-info.test	info-33.35	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2389 file info.tes...
-info.test	info-33.3a	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type eval line 1 cmd {info frame 0}...
-info.test	info-33.4	fail	fail	bug	code 1/0,2: dict element in quotes followed by ":" instead of space \| want: type source line 1968 file info.test cmd {info frame 0} proc ::foo::bar level 0
-info.test	info-33.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1983 file info.tes...
-info.test	info-33.6	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1998 file info.tes...
-info.test	info-33.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2013 file info.tes...
-info.test	info-33.8	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2027 file info.tes...
-info.test	info-33.9	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 2043 file info.tes...
-info.test	info-34.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type proc line 2 cmd {info frame 0}...
-info.test	info-34.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type eval line 1 cmd {info frame 0}...
-info.test	info-35.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1231 file info.tes...
-info.test	info-35.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type proc line 1 cmd {info frame 0}...
-info.test	info-36.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1259 file info.tes...
-info.test	info-36.1.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1275 file info.tes...
-info.test	info-36.1.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1291 file info.tes...
+info.test	info-31.7	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type proc line 1 cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-32.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type proc line 1 cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1115 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1130 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.10	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2058 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.11	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2073 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.12	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2088 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.13	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2101 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.14	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2115 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.15	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2130 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.16	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2144 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.17	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2156 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.18	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2168 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.19	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2181 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.2	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1144 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.20	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2193 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.21	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2205 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.22	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2218 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.23	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2231 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.24	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2245 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.25	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2259 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.26	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2273 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.27	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2287 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.28	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2300 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.29	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2313 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.2a	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type proc line 1 cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.3	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1169 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.30	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2326 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.31	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2339 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.32	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2352 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.33	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2365 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.34	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2377 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.35	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2389 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.3a	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type eval line 1 cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.4	fail	fail	bug	code 1/0,2: key "cmd" not known in dictionary \| want: type source line 1968 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.5	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1983 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.6	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1998 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.7	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2013 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.8	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2027 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-33.9	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 2043 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-34.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type proc line 2 cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-34.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type eval line 1 cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-35.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1231 file info.test cmd {info frame 0} lambda {  {x y}  {info frame 0}     } level 0
+info.test	info-35.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type proc line 1 cmd {info frame 0} lambda {     {x y}     {info frame 0} } level 0
+info.test	info-36.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1259 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-36.1.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1275 file info.test cmd {info frame 0} proc ::foo::bar level 0
+info.test	info-36.1.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1291 file info.test cmd {info frame 0} proc ::foo::bar level 0
 info.test	info-37.0	fail	fail	feature	cleanup: can't unset "res": no such variable
-info.test	info-38.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
+info.test	info-38.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: * {type source line 730 file info.test cmd {info frame $level} proc ::etrace level 0} * {type eval line 3 cmd etrace proc ::tcltest::RunTest
 info.test	info-38.2	fail	fail	feature	setup: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, recursionlimit, slaves, or target
-info.test	info-38.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
+info.test	info-38.3	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: * {type source line 730 file info.test cmd {info frame $level} proc ::etrace level 0} * {type eval line 3 cmd etrace proc ::control} * {type
 info.test	info-38.4	fail	fail	feature	setup: bad option "debug": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, marktrusted, recursionlimit, slaves, or target
-info.test	info-38.5	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
+info.test	info-38.5	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: * {type source line 730 file info.test cmd {info frame $level} proc ::etrace level 0} * {type eval line 3 cmd etrace proc ::control} * {type
 info.test	info-38.6	fail	fail	bug	setup: interpreter named "sub" already exists, cannot create
-info.test	info-38.7	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * {type source line 730 file info.t...
+info.test	info-38.7	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: * {type source line 730 file info.test cmd {info frame \$level} proc ::etrace level 0} * {type eval line 1 cmd etrace proc ::tcltest::RunTes
 info.test	info-39.0	fail	fail	feature	cleanup: can't unset "res": no such variable
-info.test	info-39.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: type source line 1854 file info.tes...
-info.test	info-39.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 3
+info.test	info-39.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: type source line 1854 file info.test cmd print_one proc ::test_info_frame level 1 type source line 1859 file info.test cmd print_one proc ::
+info.test	info-39.2	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 3
 info.test	info-4.1	pass	pass		
 info.test	info-4.2	pass	pass		
 info.test	info-4.3	pass	pass		
 info.test	info-4.4	pass	pass		
 info.test	info-4.5	pass	pass		
-info.test	info-41.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1 {type precompiled} {type precompi...
+info.test	info-41.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1 {type precompiled} {type precompiled} 1 {bad level "-1"} 1 {bad level "2"}
 info.test	info-5.1	pass	pass		
 info.test	info-5.2	pass	pass		
 info.test	info-5.3	pass	pass		
@@ -29445,7 +29447,7 @@ init.test	init-4.5.1	pass	pass
 init.test	init-4.6.0	pass	pass		
 init.test	init-4.6.1	pass	pass		
 init.test	init-4.7	pass	pass		
-init.test	init-5.0	fail	fail	bug	code 0/0,2: 1 xxx {-code 1 -level 0 -errorcode NONE -errorinfo {xxx     while executing "::xxx"} -errorline 1} 2 xxx {-code 1 -level 1} \| want: 2 xxx {-errorcode NONE -code 1 -level 1} 2 xxx {-cod...
+init.test	init-5.0	fail	fail	bug	code 0/0,2: 1 xxx {-code 1 -level 0 -errorstack {INNER ::xxx UP 1} -errorcode NONE -errorinfo {xxx     while executing "::xxx"} -errorline 1} 2 xxx {-co \| want: 2 xxx {-errorcode NONE -code 1 -lev...
 interp.test	interp-1.1	pass	pass		
 interp.test	interp-1.10	pass	pass		
 interp.test	interp-1.2	fail	fail	message	code 1/1: bad option "frobox": must be alias, aliases, cancel, children, create, delete, eval, exists, expose, hide, hidden, invokehidden, issafe, mar \| want: bad option "frobox": must be alias, a...
@@ -30067,7 +30069,7 @@ io.test	io-35.7	pass	pass
 io.test	io-35.8	pass	pass		
 io.test	io-35.9	pass	pass		
 io.test	io-36.1	pass	pass		
-io.test	io-36.1.1	pass	pass		
+io.test	io-36.1.1	pass	fail		
 io.test	io-36.2	pass	pass		
 io.test	io-36.3	pass	pass		
 io.test	io-36.4	pass	pass		
@@ -31386,7 +31388,7 @@ lmap.test	lmap-1.11	pass	pass
 lmap.test	lmap-1.12	pass	pass		
 lmap.test	lmap-1.13	pass	pass		
 lmap.test	lmap-1.14	pass	pass		
-lmap.test	lmap-1.15	fail	fail	bug	code 0/0,2: 1 {can't set "a": variable is array} {can't set "a": variable is array     while executing "lmap a {1 2 3} {}"} \| want: 1 {can't set "a": variable is array} {can't set "a": variable is...
+lmap.test	lmap-1.15	pass	pass		
 lmap.test	lmap-1.16	pass	pass		
 lmap.test	lmap-1.2	pass	pass		
 lmap.test	lmap-1.2a	pass	pass		
@@ -34775,7 +34777,7 @@ namespace.test	namespace-53.6	pass	pass
 namespace.test	namespace-53.7	fail	fail	bug	code 0/0,2: 1 {wrong # args: should be "ns p1 subcommand ?arg ...?"} 1 {wrong # args: should be "ns p1 subcommand ?arg ...?"} 1 {wrong # args: should be \| want: 1 {wrong # args: should be "ns p1 s...
 namespace.test	namespace-53.8	fail	fail	bug	code 0/0,2: 0 {1 x2} {} 1 {unknown or ambiguous subcommand "x2": must be Magic, or x1} p1 1 {unknown or ambiguous subcommand "x3": must be Magic, or x1} \| want: 0 {1 x2} {} 0 {1 x2} p1 1 {unknown ...
 namespace.test	namespace-53.9	fail	fail	bug	code 0/0,2: 0 {1 x2} {} 1 {unknown or ambiguous subcommand "x2": must be Magic, or x1} {p1 p2 p3 p4 p5} 0 {1 {a1 a2 a3 a4 a5}} {p1 p2 p3 p4 p5} \| want: 0 {1 x2} {} 1 {wrong # args: should be "ns p...
-namespace.test	namespace-54.1	skip	skip	internals	memory
+namespace.test	namespace-54.1	fail	fail	design	code 0/0,2: 256 \| want: 0
 namespace.test	namespace-55.1	pass	pass		
 namespace.test	namespace-55.2	fail	fail	design	code 1/0,2: invalid command name "::tcl::unsupported::disassemble" \| want: 1 1 1 *
 namespace.test	namespace-56.1	pass	pass		
@@ -34959,13 +34961,13 @@ obj.test	obj-8.4	skip	skip	internals	testobj
 obj.test	obj-9.1	skip	skip	internals	testobj
 oo.test	oo-0.1	pass	pass		
 oo.test	oo-0.2	fail	fail	bug	code 1/0,2: unknown namespace "::" in namespace delete command \| want: 
-oo.test	oo-0.3	skip	skip	internals	memory
-oo.test	oo-0.4	skip	skip	internals	memory
-oo.test	oo-0.5.1	skip	skip	internals	memory
-oo.test	oo-0.5.2	skip	skip	internals	memory
+oo.test	oo-0.3	fail	fail	design	code 0/0,2: 960 \| want: 0
+oo.test	oo-0.4	fail	fail	design	code 0/0,2: 1664 \| want: 0
+oo.test	oo-0.5.1	fail	fail	design	code 0/0,2: -512 \| want: 0
+oo.test	oo-0.5.2	fail	fail	design	code 0/0,2: 394928 \| want: 0
 oo.test	oo-0.6	pass	pass		
 oo.test	oo-0.7	pass	pass		
-oo.test	oo-0.8	skip	skip	internals	memory
+oo.test	oo-0.8	fail	fail	design	code 0/0,2: 656 \| want: 0
 oo.test	oo-0.9	fail	fail	bug	code 0/0,2: TclOO 1.1.0 0 \| want: TclOO 1.1.0 1
 oo.test	oo-1.1	pass	pass		
 oo.test	oo-1.10	pass	pass		
@@ -34977,8 +34979,8 @@ oo.test	oo-1.15	pass	pass
 oo.test	oo-1.16	pass	pass		
 oo.test	oo-1.17	pass	pass		
 oo.test	oo-1.18	pass	pass		
-oo.test	oo-1.18.1	skip	skip	internals	memory
-oo.test	oo-1.18.2	skip	skip	internals	memory
+oo.test	oo-1.18.1	fail	pass	design	code 0/0,2: -224 \| want: 0
+oo.test	oo-1.18.2	fail	fail	design	code 0/0,2: 5760 \| want: 0
 oo.test	oo-1.18.3	pass	pass		
 oo.test	oo-1.18.4	pass	pass		
 oo.test	oo-1.18.5	pass	pass		
@@ -35009,9 +35011,9 @@ oo.test	oo-11.2	pass	pass
 oo.test	oo-11.3	pass	pass		
 oo.test	oo-11.4	pass	pass		
 oo.test	oo-11.5	pass	pass		
-oo.test	oo-11.6.1	skip	skip	internals	memory
-oo.test	oo-11.6.2	skip	skip	internals	memory
-oo.test	oo-11.6.3	skip	skip	internals	memory
+oo.test	oo-11.6.1	fail	fail	design	code 0/0,2: 320 \| want: 0
+oo.test	oo-11.6.2	fail	fail	design	code 0/0,2: -544 \| want: 0
+oo.test	oo-11.6.3	fail	pass	design	code 0/0,2: 411616 \| want: 0
 oo.test	oo-11.6.4	pass	pass		
 oo.test	oo-11.7	pass	pass		
 oo.test	oo-12.1	pass	pass		
@@ -35094,7 +35096,7 @@ oo.test	oo-18.12	fail	fail	bug	code 1/0,2: self may only be called from inside a
 oo.test	oo-18.2	fail	fail	bug	code 0/0,2: 1 foo {foo     while executing "error foo"     (in namespace eval "::oo::define" script line 1)     invoked from within "oo::define oo::obje \| want: 1 foo {foo     while executing "oo:...
 oo.test	oo-18.3	pass	pass		
 oo.test	oo-18.3a	pass	pass		
-oo.test	oo-18.3b	fail	fail	bug	code 0/0,2: 1 bar {bar     while executing "error bar"     invoked from within "eval error bar"     invoked from within "eval eval error bar"     (in de \| want: 1 bar {bar     while executing "err...
+oo.test	oo-18.3b	pass	pass		
 oo.test	oo-18.4	pass	pass		
 oo.test	oo-18.5	fail	fail	bug	code 0/0,2: 1 foo {foo     while executing "error foo"     (in "my eval" script line 1)     invoked from within "next $script"     (class "::cls" method \| want: 1 foo {foo     while executing "err...
 oo.test	oo-18.6	fail	fail	bug	code 0/0,2: foo     while executing "::error foo"     (in definition script for class "::abc" line 4)     invoked from within "oo::class create abc {    \| want: foo     while executing "::error fo...
@@ -35122,7 +35124,7 @@ oo.test	oo-20.12	pass	pass
 oo.test	oo-20.13	pass	pass		
 oo.test	oo-20.14	pass	pass		
 oo.test	oo-20.15	pass	pass		
-oo.test	oo-20.16	skip	skip	internals	memory
+oo.test	oo-20.16	fail	fail	design	code 0/0,2: 1344 \| want: 0
 oo.test	oo-20.2	pass	pass		
 oo.test	oo-20.3	fail	fail	bug	code 0/1:  \| want: can't define "a(b)": name refers to an element in an array
 oo.test	oo-20.4	fail	fail	bug	code 0/1:  \| want: can't define "a(b)": name refers to an element in an array
@@ -35134,13 +35136,13 @@ oo.test	oo-21.1	pass	pass
 oo.test	oo-21.2	pass	pass		
 oo.test	oo-21.3	pass	pass		
 oo.test	oo-21.4	pass	pass		
-oo.test	oo-22.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1 {{* cmd {info frame 0} method fra...
-oo.test	oo-22.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: * cmd {info frame 0} method test cl...
+oo.test	oo-22.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1 {{* cmd {info frame 0} method frames class ::c level 0} {* cmd {info frame 0} method frames object ::i level 0}} ::c
+oo.test	oo-22.2	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: * cmd {info frame 0} method test class ::c level 0
 oo.test	oo-22.3	fail	fail	bug	code 1/0,2: invalid command name "my" \| want: {* method Work class ::A *} {* method Work class ::A *}
 oo.test	oo-22.4	fail	fail	bug	code 1/0,2: invalid command name "my" \| want: {* method Work class ::B *} {* method Work class ::B *}
 oo.test	oo-22.5	fail	fail	bug	code 1/0,2: invalid command name "my" \| want: {* method Work class ::B *} {* method Work class ::B *}
 oo.test	oo-22.6	fail	fail	bug	code 1/0,2: invalid command name "my" \| want: {* method Work class ::A *} {* method Work class ::A *}
-oo.test	oo-23.1	fail	fail	bug	code 1/0,2: ::oo::Obj461 does not refer to an object \| want: 1 1,2 1,2,3 1,2,3,4 1,x,3,4
+oo.test	oo-23.1	fail	fail	bug	code 1/0,2: ::oo::Obj493 does not refer to an object \| want: 1 1,2 1,2,3 1,2,3,4 1,x,3,4
 oo.test	oo-24.1	fail	fail	message	code 1/1: unknown method "foo": must be destroy or dummy \| want: unknown method "foo": must be destroy, dummy or unknown
 oo.test	oo-24.2	fail	fail	message	code 1/1: unknown method "foo": must be destroy, dummy or dummy2 \| want: unknown method "foo": must be destroy, dummy, dummy2 or unknown
 oo.test	oo-24.3	pass	pass		
@@ -35152,7 +35154,7 @@ oo.test	oo-26.3	pass	pass
 oo.test	oo-27.1	pass	pass		
 oo.test	oo-27.10	pass	pass		
 oo.test	oo-27.11	pass	pass		
-oo.test	oo-27.12	skip	skip	internals	memory
+oo.test	oo-27.12	fail	fail	design	code 0/0,2: 992 \| want: 0
 oo.test	oo-27.13	pass	pass		
 oo.test	oo-27.14	pass	pass		
 oo.test	oo-27.15	pass	pass		
@@ -35180,9 +35182,9 @@ oo.test	oo-3.11	pass	pass
 oo.test	oo-3.12	pass	pass		
 oo.test	oo-3.2	pass	pass		
 oo.test	oo-3.3	pass	pass		
-oo.test	oo-3.4	fail	fail	bug	code 0/0,2: 0 ok ::oo::Obj66::state ::oo::Obj66::localcmdexists {} \| want: 0 ok *::state localcmdexists {}
-oo.test	oo-3.4a	fail	fail	bug	code 0/0,2: 0 ok ::oo::Obj68::state ::oo::Obj68::localcmdexists {} \| want: 0 ok *::state localcmdexists {}
-oo.test	oo-3.5	fail	fail	bug	code 0/0,2: 0 ok ::oo::Obj70::state ::oo::Obj70::localcmdexists {} \| want: 0 ok *::state localcmdexists {}
+oo.test	oo-3.4	fail	fail	bug	code 0/0,2: 0 ok ::oo::Obj91::state ::oo::Obj91::localcmdexists {} \| want: 0 ok *::state localcmdexists {}
+oo.test	oo-3.4a	fail	fail	bug	code 0/0,2: 0 ok ::oo::Obj93::state ::oo::Obj93::localcmdexists {} \| want: 0 ok *::state localcmdexists {}
+oo.test	oo-3.5	fail	fail	bug	code 0/0,2: 0 ok ::oo::Obj95::state ::oo::Obj95::localcmdexists {} \| want: 0 ok *::state localcmdexists {}
 oo.test	oo-3.5a	fail	fail	bug	code 1/0,2: can't read "result": no such variable \| want: ::obj ok localcmdexists ::obj2 ok localcmdexists
 oo.test	oo-3.6	pass	pass		
 oo.test	oo-3.7	pass	pass		
@@ -35190,8 +35192,8 @@ oo.test	oo-3.8	pass	pass
 oo.test	oo-3.9	pass	pass		
 oo.test	oo-30.1	pass	pass		
 oo.test	oo-30.2	pass	pass		
-oo.test	oo-31.1	skip	skip	internals	memory
-oo.test	oo-31.2	skip	skip	internals	memory
+oo.test	oo-31.1	fail	fail	bug	code 1/0,2: invalid command name "my" \| want: 0 {}
+oo.test	oo-31.2	fail	fail	bug	code 1/0,2: invalid command name "my" \| want: 0 {}
 oo.test	oo-32.1	fail	fail	feature	setup: class "oo::Slot" does not exist
 oo.test	oo-32.2	fail	fail	feature	setup: class "oo::Slot" does not exist
 oo.test	oo-32.3	fail	fail	feature	setup: class "oo::Slot" does not exist
@@ -35216,8 +35218,8 @@ oo.test	oo-35.3	pass	pass
 oo.test	oo-35.4	pass	pass		
 oo.test	oo-35.5	fail	fail	bug	code 1/0,2: can't create object "D": command already exists with that name \| want: {c d e} {c d e}
 oo.test	oo-35.6	pass	pass		
-oo.test	oo-35.7.1	fail	fail	bug	code 0/0,2: can't delete "o": command doesn't exist invalid command name "::oo::Obj563" \| want: impossible to invoke method "write": no defined method or unknown method
-oo.test	oo-35.7.2	fail	fail	bug	code 0/0,2: Destroyed invalid command name "::oo::Obj568" \| want: Destroyed impossible to invoke method "write": no defined method or unknown method
+oo.test	oo-35.7.1	fail	fail	bug	code 0/0,2: can't delete "o": command doesn't exist can't delete "coro": command doesn't exist invalid command name "::oo::Obj603" \| want: impossible to invoke method "write": no defined method or...
+oo.test	oo-35.7.2	fail	fail	bug	code 0/0,2: Destroyed invalid command name "::oo::Obj608" \| want: Destroyed impossible to invoke method "write": no defined method or unknown method
 oo.test	oo-35.7.3	pass	pass		
 oo.test	oo-4.1	pass	pass		
 oo.test	oo-4.2	pass	pass		
@@ -35284,8 +35286,8 @@ ooNext2.test	oo-call-1.14	pass	pass
 ooNext2.test	oo-call-1.15	pass	pass		
 ooNext2.test	oo-call-1.16	pass	pass		
 ooNext2.test	oo-call-1.17	pass	pass		
-ooNext2.test	oo-call-1.18	skip	skip	internals	memory
-ooNext2.test	oo-call-1.19	skip	skip	internals	memory
+ooNext2.test	oo-call-1.18	fail	fail	design	code 0/0,2: 592 \| want: 0
+ooNext2.test	oo-call-1.19	fail	fail	design	code 0/0,2: 976 \| want: 0
 ooNext2.test	oo-call-1.2	pass	pass		
 ooNext2.test	oo-call-1.20	pass	pass		
 ooNext2.test	oo-call-1.21	pass	pass		
@@ -35300,8 +35302,8 @@ ooNext2.test	oo-call-2.1	pass	pass
 ooNext2.test	oo-call-2.10	fail	fail	message	code 1/1: a does not refer to an object \| want: wrong # args: should be "info class call className methodName"
 ooNext2.test	oo-call-2.11	pass	pass		
 ooNext2.test	oo-call-2.12	pass	pass		
-ooNext2.test	oo-call-2.13	skip	skip	internals	memory
-ooNext2.test	oo-call-2.14	skip	skip	internals	memory
+ooNext2.test	oo-call-2.13	fail	fail	design	code 0/0,2: 1856 \| want: 0
+ooNext2.test	oo-call-2.14	fail	fail	design	code 0/0,2: -1024 \| want: 0
 ooNext2.test	oo-call-2.2	pass	pass		
 ooNext2.test	oo-call-2.3	pass	pass		
 ooNext2.test	oo-call-2.4	pass	pass		
@@ -35311,7 +35313,7 @@ ooNext2.test	oo-call-2.7	pass	pass
 ooNext2.test	oo-call-2.8	fail	fail	message	code 1/1: wrong # args: should be "info class subcommand ?arg ...?" \| want: wrong # args: should be "info class call className methodName"
 ooNext2.test	oo-call-2.9	fail	fail	message	code 1/1: a does not refer to an object \| want: wrong # args: should be "info class call className methodName"
 ooNext2.test	oo-call-3.1	pass	pass		
-ooNext2.test	oo-call-3.2	skip	skip	internals	memory
+ooNext2.test	oo-call-3.2	fail	fail	design	code 0/0,2: 2496 \| want: 0
 ooNext2.test	oo-call-3.3	fail	fail	bug	code 2/0,2: {{{method <constructor> object method} {method <constructor> object method}} 0} {{{method <constructor> object method} {method <constructor> \| want: {{{method <constructor> ::B method}...
 ooNext2.test	oo-call-3.4	fail	fail	bug	code 2/0,2: {{{method <destructor> object method} {method <destructor> object method}} 0} {{{method <destructor> object method} {method <destructor> obj \| want: {{{method <destructor> ::B method} ...
 ooNext2.test	oo-nextto-1.1	pass	pass		
@@ -35596,7 +35598,7 @@ package.test	package-3.22	pass	pass
 package.test	package-3.23	pass	pass		
 package.test	package-3.24	pass	pass		
 package.test	package-3.25	pass	pass		
-package.test	package-3.26	fail	fail	bug	code 0/0,2: 1 {ifneeded test} {EI     invoked from within "foreach x 1 {error "ifneeded test" EI}"     ("package ifneeded t 2.1" script)     invoked fro \| want: 1 {ifneeded test} {EI     ("foreach...
+package.test	package-3.26	fail	fail	bug	code 0/0,2: 1 {ifneeded test} {EI     ("foreach" body line 3)     invoked from within "foreach x 1 {error "ifneeded test" EI}"     ("package ifneeded t  \| want: 1 {ifneeded test} {EI     ("foreach...
 package.test	package-3.27	pass	pass		
 package.test	package-3.28	pass	pass		
 package.test	package-3.29	pass	pass		
@@ -35824,7 +35826,7 @@ parse.test	parse-13.2	skip	skip	internals	testparsevar
 parse.test	parse-13.3	skip	skip	internals	testparsevar
 parse.test	parse-13.4	skip	skip	internals	testparsevar
 parse.test	parse-13.5	skip	skip	internals	testparsevar
-parse.test	parse-13.6	skip	skip	internals	memory
+parse.test	parse-13.6	fail	fail	internals	code 1/0,2: invalid command name "testparsevar" \| want: 0
 parse.test	parse-14.1	skip	skip	internals	testparser
 parse.test	parse-14.10	skip	skip	internals	testparser
 parse.test	parse-14.11	skip	skip	internals	testparser
@@ -36026,7 +36028,7 @@ parse.test	parse-8.5	skip	skip	internals	testevalobjv
 parse.test	parse-8.7	skip	skip	internals	testevalobjv
 parse.test	parse-8.8	skip	skip	internals	testevalobjv
 parse.test	parse-8.9	skip	skip	internals	testevalobjv
-parse.test	parse-9.1	fail	fail	bug	code 0/0,2: 1 {can't read "x": no such variable     while executing "set x"     invoked from within "for {} 1 {} {    # asdf  set x     }"     invoked f \| want: 1 {can't read "x": no such variable...
+parse.test	parse-9.1	fail	fail	bug	code 0/0,2: 1 {can't read "x": no such variable     while executing "set x"} \| want: 1 {can't read "x": no such variable     while executing "set x"     ("for" body line 5)     invoked from within...
 parse.test	parse-9.2	pass	pass		
 parseExpr.test	parseExpr-1.1	skip	skip	internals	testexprparser
 parseExpr.test	parseExpr-1.2	skip	skip	internals	testexprparser
@@ -36553,7 +36555,7 @@ proc-old.test	proc-old-5.12	pass	pass
 proc-old.test	proc-old-5.13	pass	pass		
 proc-old.test	proc-old-5.14	fail	fail	bug	code 0/0,2: invoked "break" outside of a loop     while executing "tproc" \| want: invoked "break" outside of a loop     (procedure "tproc" line 1)     invoked from within "tproc"
 proc-old.test	proc-old-5.15	fail	fail	bug	code 0/0,2: invoked "continue" outside of a loop     while executing "tproc" \| want: invoked "continue" outside of a loop     (procedure "tproc" line 1)     invoked from within "tproc"
-proc-old.test	proc-old-5.16	fail	fail	bug	code 0/0,2: 1 {Nested error} {Nested error     while executing "error "Nested error""     invoked from within "while {$x < 100} {      error "Nested err \| want: 1 {Nested error} {Nested error     ...
+proc-old.test	proc-old-5.16	pass	pass		
 proc-old.test	proc-old-5.2	pass	pass		
 proc-old.test	proc-old-5.3	pass	pass		
 proc-old.test	proc-old-5.4	pass	pass		
@@ -38363,7 +38365,7 @@ result.test	result-6.0	skip	skip	internals	testreturn
 result.test	result-6.1	skip	skip	internals	testreturn
 result.test	result-6.2	pass	pass		
 result.test	result-6.3	fail	fail	internals	code 0/0,2: eek \| want: bad -errorcode value: expected a list but got "{}a"
-result.test	result-6.4	fail	fail	internals	code 1/0,2: key "-errorcode" not known in dictionary \| want: {bad -errorstack value: expected a list but got "{}a"} {TCL RESULT NONLIST_ERRORSTACK} {INNER * UP 1}
+result.test	result-6.4	fail	fail	internals	code 0/0,2: {list element in braces followed by "a" instead of space} {TCL VALUE LIST JUNK} {INNER {return -code error -errorstack {{}a} eek} UP 1} \| want: {bad -errorstack value: expected a list ...
 result.test	result-6.5	fail	fail	internals	code 1/0,2: key "-errorcode" not known in dictionary \| want: {forbidden odd-sized list for -errorstack: "a"} {TCL RESULT ODDSIZEDLIST_ERRORSTACK} {INNER * UP 1}
 safe-stock.test	safe-stock-7.1	fail	fail	feature	code 1/0,2: invalid command name "safe::interpCreate" \| want: 2.*
 safe-stock.test	safe-stock-7.2	fail	fail	feature	code 1/0,2: invalid command name "safe::interpCreate" \| want: {$p(:0:)} {$p(:*:)} -- 1 {can't find package http 1} -- {TCLLIB */dummy/unixlike/test/path} -- {}
@@ -38903,7 +38905,7 @@ socket.test	socket-15.1.2	pass	pass
 socket.test	socket-15.1.3	pass	pass		
 socket.test	socket-15.1.4	pass	pass		
 socket.test	socket-15.1.5	pass	pass		
-socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2842 \| want: couldn't open socket: connection refused
+socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2843 \| want: couldn't open socket: connection refused
 socket.test	socket-15.1.7	pass	pass		
 socket.test	socket-15.1.8	pass	pass		
 socket.test	socket_inet-1.1	pass	pass		
@@ -38937,7 +38939,7 @@ socket.test	socket_inet-11.9	pass	pass
 socket.test	socket_inet-12.1	pass	pass		
 socket.test	socket_inet-12.2	pass	pass		
 socket.test	socket_inet-12.3	pass	pass		
-socket.test	socket_inet-13.1	pass	fail		
+socket.test	socket_inet-13.1	pass	pass		
 socket.test	socket_inet-13.2.cl1	pass	pass		
 socket.test	socket_inet-13.2.cl2	pass	pass		
 socket.test	socket_inet-13.2.tr1	pass	pass		
@@ -38956,7 +38958,7 @@ socket.test	socket_inet-2.7	pass	pass
 socket.test	socket_inet-2.8	pass	pass		
 socket.test	socket_inet-2.9	pass	pass		
 socket.test	socket_inet-3.1	pass	pass		
-socket.test	socket_inet-3.2	fail	fail	bug	code 0/0,2: ready timed_out \| want: ready done
+socket.test	socket_inet-3.2	pass	fail		
 socket.test	socket_inet-4.1	pass	pass		
 socket.test	socket_inet-4.2	pass	pass		
 socket.test	socket_inet-5.1	pass	pass		
@@ -39006,7 +39008,7 @@ socket.test	socket_inet6-11.9	pass	pass
 socket.test	socket_inet6-12.1	pass	pass		
 socket.test	socket_inet6-12.2	pass	pass		
 socket.test	socket_inet6-12.3	pass	pass		
-socket.test	socket_inet6-13.1	pass	fail		
+socket.test	socket_inet6-13.1	fail	pass	bug	code 1/0,2: thread "tid0x7" does not exist \| want: hello 1
 socket.test	socket_inet6-13.2.cl1	pass	pass		
 socket.test	socket_inet6-13.2.cl2	pass	pass		
 socket.test	socket_inet6-13.2.tr1	pass	pass		
@@ -39057,7 +39059,7 @@ source.test	source-3.2	fail	fail	bug	code 2/3: Silly result \| want: Silly resul
 source.test	source-3.3	fail	fail	bug	code 0/0,2: 2 {Simulated error} {couldn't read file "/_non_existent_": no such file or directory     while executing "source $sourcefile"} {POSIX ENOENT \| want: 1 {Simulated error} {Simulated erro...
 source.test	source-3.4	fail	fail	bug	code 0/0,2: 2 {} {couldn't read file "/_non_existent_": no such file or directory     while executing "source $sourcefile"} {POSIX ENOENT {no such file  \| want: 1 {} {Simulated errorInfo stuff    ...
 source.test	source-3.5	fail	fail	bug	code 0/0,2: 2 {} {couldn't read file "/_non_existent_": no such file or directory     while executing "source $sourcefile"} {POSIX ENOENT {no such file  \| want: 1 {} {Simulated errorInfo stuff    ...
-source.test	source-4.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: source: 3 4 5
+source.test	source-4.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: source: 3 4 5
 source.test	source-6.1	pass	pass		
 source.test	source-6.2	pass	pass		
 source.test	source-7.1	pass	pass		
@@ -39761,12 +39763,12 @@ string.test	string-26.10.0	pass	pass
 string.test	string-26.10.1	pass	pass		
 string.test	string-26.10.1.0	pass	pass		
 string.test	string-26.10.1.1	pass	pass		
-string.test	string-26.11.0	skip	skip	internals	memory
-string.test	string-26.11.1	skip	skip	internals	memory
-string.test	string-26.12.0	skip	skip	internals	memory
-string.test	string-26.12.1	skip	skip	internals	memory
-string.test	string-26.13.0	skip	skip	internals	memory
-string.test	string-26.13.1	skip	skip	internals	memory
+string.test	string-26.11.0	fail	fail	bug	code 0/0,2: -176 -480 5376 \| want: 0 0 0
+string.test	string-26.11.1	fail	fail	bug	code 0/0,2: 304 6048 2384 \| want: 0 0 0
+string.test	string-26.12.0	fail	fail	design	code 0/0,2: -16 \| want: 0
+string.test	string-26.12.1	fail	fail	design	code 0/0,2: -10896 \| want: 0
+string.test	string-26.13.0	fail	fail	design	code 0/0,2: 1248 \| want: 0
+string.test	string-26.13.1	fail	fail	design	code 0/0,2: 7216 \| want: 0
 string.test	string-26.2.0	pass	pass		
 string.test	string-26.2.1	pass	pass		
 string.test	string-26.2.1.0	pass	pass		
@@ -40412,7 +40414,7 @@ stringComp.test	stringComp-11.8	pass	pass
 stringComp.test	stringComp-11.9	pass	pass		
 stringComp.test	stringComp-12.1	pass	pass		
 stringComp.test	stringComp-14.1	pass	pass		
-stringComp.test	stringComp-14.2	skip	skip	internals	memory
+stringComp.test	stringComp-14.2	fail	fail	design	code 0/0,2: 960 \| want: 0
 stringComp.test	stringComp-14.3	pass	pass		
 stringComp.test	stringComp-14.4	pass	pass		
 stringComp.test	stringComp-14.5	pass	pass		
@@ -40858,11 +40860,11 @@ switch.test	switch-3.6	pass	pass
 switch.test	switch-3.7	pass	pass		
 switch.test	switch-3.8	pass	pass		
 switch.test	switch-3.9	pass	pass		
-switch.test	switch-4.1	fail	fail	bug	code 0/0,2: 1 {Just a test} {Just a test     while executing "error "Just a test""     invoked from within "switch a a {error "Just a test"} default {su \| want: 1 {Just a test} {Just a test     wh...
+switch.test	switch-4.1	pass	pass		
 switch.test	switch-4.2	pass	pass		
 switch.test	switch-4.3	pass	pass		
 switch.test	switch-4.4	pass	pass		
-switch.test	switch-4.5	fail	fail	bug	code 0/0,2: 1 switch2 {switch2     while executing "error switch2"     invoked from within "switch foo a {error switch1} b {error switch 3}  default {er \| want: 1 switch2 {switch2     while execut...
+switch.test	switch-4.5	pass	pass		
 switch.test	switch-5.1	pass	pass		
 switch.test	switch-6.1	pass	pass		
 switch.test	switch-6.2	pass	pass		
@@ -41124,9 +41126,9 @@ trace.test	trace-12.6	pass	pass
 trace.test	trace-12.7	pass	pass		
 trace.test	trace-12.8	fail	fail	bug	code 0/0,2: 0 {} \| want: 1 {can't trace "x(0)": variable isn't array}
 trace.test	trace-13.1	pass	pass		
-trace.test	trace-13.2	skip	skip	internals	memory
-trace.test	trace-13.3	skip	skip	internals	memory
-trace.test	trace-13.4	skip	skip	internals	memory
+trace.test	trace-13.2	fail	fail	design	code 0/0,2: 1296 \| want: 0
+trace.test	trace-13.3	fail	fail	design	code 0/0,2: 1232 \| want: 0
+trace.test	trace-13.4	fail	pass	design	code 0/0,2: -576 \| want: 0
 trace.test	trace-14.0.1	pass	pass		
 trace.test	trace-14.0.10	pass	pass		
 trace.test	trace-14.0.11	pass	pass		
@@ -41443,7 +41445,7 @@ unixFile.test	unixFile-1.6	skip	skip	internals	testfindexecutable
 unixFile.test	unixFile-1.7	skip	skip	internals	testfindexecutable
 unixForkEvent.test	unixforkevent-1.1	skip	skip	internals	testfork
 unixInit.test	unixInit-1.1	pass	pass		
-unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 34993', Got '' \| want: OK
+unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 38573', Got '' \| want: OK
 unixInit.test	unixInit-3.1	pass	pass		
 unixInit.test	unixInit-3.2	fail	fail	bug	code 0/0,2: 1 \| want: 0
 unixInit.test	unixInit-4.1	pass	pass		
@@ -41550,7 +41552,7 @@ upvar.test	upvar-1.2	pass	pass
 upvar.test	upvar-1.3	pass	pass		
 upvar.test	upvar-1.4	pass	pass		
 upvar.test	upvar-1.5	pass	pass		
-upvar.test	upvar-10.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
+upvar.test	upvar-10.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
 upvar.test	upvar-2.1	pass	pass		
 upvar.test	upvar-2.2	pass	pass		
 upvar.test	upvar-2.3	pass	pass		
@@ -41607,9 +41609,9 @@ upvar.test	upvar-NS-1.8	pass	pass
 upvar.test	upvar-NS-1.9	fail	fail	message	code 1/1: can't read "w": no such variable \| want: namespace "test_ns_0" not found in "::test_ns_1"
 upvar.test	upvar-NS-2.1	pass	pass		
 upvar.test	upvar-NS-2.2	pass	pass		
-upvar.test	upvar-NS-3.1	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
-upvar.test	upvar-NS-3.2	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
-upvar.test	upvar-NS-3.3	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
+upvar.test	upvar-NS-3.1	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
+upvar.test	upvar-NS-3.2	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
+upvar.test	upvar-NS-3.3	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
 utf.test	getunichar-1.1	skip	skip	internals	testgetunichar
 utf.test	getunichar-1.10	skip	skip	internals	testgetunichar
 utf.test	getunichar-1.11	skip	skip	internals	testgetunichar
@@ -44401,8 +44403,8 @@ util.test	util-9.9.0	pass	pass
 util.test	util-9.9.1	pass	pass		
 var.test	var-1.1	pass	pass		
 var.test	var-1.10	pass	pass		
-var.test	var-1.11	fail	fail	bug	code 0/1: 314159 \| want: can't set "::test_ns_var::foo::bar": parent namespace doesn't exist
-var.test	var-1.12	fail	fail	bug	code 0/1: 1997 \| want: can't set "::test_ns_var::foo::": parent namespace doesn't exist
+var.test	var-1.11	pass	pass		
+var.test	var-1.12	pass	pass		
 var.test	var-1.13	pass	pass		
 var.test	var-1.14	pass	pass		
 var.test	var-1.15	fail	fail	bug	code 0/0,2: 0 2 0 3 1 {can't set "foo(3)": variable isn't array} \| want: 0 2 1 {can't set "foo": upvar refers to variable in deleted namespace} 1 {can't set "foo(3)": upvar refers to variable in d...
@@ -44451,9 +44453,9 @@ var.test	var-20.6	pass	pass
 var.test	var-20.7	pass	pass		
 var.test	var-20.8	pass	pass		
 var.test	var-20.9	pass	pass		
-var.test	var-21.0	fail	fail	feature	code 1/0,2: unknown or ambiguous subcommand "frame": must be args, body, cmdcount, commands, complete, default, exists, functions, globals, level, libra \| want: 1
-var.test	var-22.0	skip	skip	internals	memory
-var.test	var-22.1	skip	skip	internals	memory
+var.test	var-21.0	fail	fail	bug	code 1/0,2: info frame: not supported by ztcl \| want: 1
+var.test	var-22.0	fail	fail	design	code 0/0,2: 176 \| want: 0
+var.test	var-22.1	fail	fail	design	code 0/0,2: -160 \| want: 0
 var.test	var-3.1	pass	pass		
 var.test	var-3.10	fail	fail	bug	code 0/0,2: 0 1 \| want: 1 1
 var.test	var-3.11	fail	fail	bug	code 0/1:  \| want: bad variable name "foo(bar)": can't create a scalar variable that looks like an array element
@@ -44496,7 +44498,7 @@ var.test	var-7.8	pass	pass
 var.test	var-7.9	fail	fail	bug	code 0/0,2: ::test_ns_var2::x 1 0 0 {1 {can't read "test_ns_var2::y": no such variable}} ::test_ns_var2::x 0 0 hello 1 0 {0 {}} ::test_ns_var2::x 0 0 {1 \| want: {::test_ns_var2::x ::test_ns_var2::...
 var.test	var-8.1	pass	pass		
 var.test	var-8.2	fail	fail	bug	code 0/0,2: {} {} \| want: {} {::test_ns_var::v {} unset}
-var.test	var-8.3	skip	skip	internals	memory
+var.test	var-8.3	fail	fail	design	code 0/0,2: -4416 \| want: 0
 var.test	var-9.1	skip	skip	internals	testsetnoerr
 var.test	var-9.10	skip	skip	internals	testsetnoerr
 var.test	var-9.11	skip	skip	internals	testsetnoerr
@@ -44521,7 +44523,7 @@ while-old.test	while-old-4.2	pass	pass
 while-old.test	while-old-4.3	pass	pass		
 while-old.test	while-old-4.4	pass	pass		
 while-old.test	while-old-4.5	pass	pass		
-while-old.test	while-old-4.6	fail	fail	bug	code 0/0,2: 1 {loop aborted} {loop aborted     while executing "error "loop aborted""     invoked from within "while {1} {error "loop aborted"}"} \| want: 1 {loop aborted} {loop aborted     while e...
+while-old.test	while-old-4.6	pass	pass		
 while-old.test	while-old-5.1	pass	pass		
 while-old.test	while-old-5.2	pass	pass		
 while.test	while-1.1	pass	pass		
@@ -44559,7 +44561,7 @@ while.test	while-4.5	pass	pass
 while.test	while-4.6	pass	pass		
 while.test	while-4.7	pass	pass		
 while.test	while-4.8	pass	pass		
-while.test	while-4.9	fail	fail	bug	code 0/0,2: wrong # args: should be "set varName ?newValue?"     while executing "set"     invoked from within "$z {$i < 5} {set}" \| want: wrong # args: should be "set varName ?newValue?"     whil...
+while.test	while-4.9	pass	pass		
 while.test	while-5.1	pass	pass		
 while.test	while-5.2	pass	pass		
 while.test	while-5.3	pass	pass		

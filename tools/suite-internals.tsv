@@ -1,0 +1,30 @@
+# The test commands of the Tcl test binary that block the tests of the
+# bucket `internals`. tools/suite-md.py counts the tests of each one.
+# Columns: command, path, what the tests check.
+# Paths: `C package` (Tcl's own test command, built as a C package on
+# the stubs of ztcl), `runner` (a stand-in in tools/suite_cmds.zig),
+# `design` (the tests check the internal layout of Tcl and stay out).
+testchannel	C package	The state of the channel layer: buffered bytes, queued output, reference counts, and the cut and splice of a channel between threads.
+testhashsystemhash	C package	Hash tables of the C API with a custom key type.
+testsetplatform	runner	The file name rules of Windows on Unix: `file join`, `file split`, and `glob` of another platform.
+testobj	C package	Tcl_Obj types, reference counts, and shimmering through the C API.
+testexprparser	C package	The token tree of Tcl_ParseExpr.
+testutfnext	C package	Tcl_UtfNext on bytes that are not valid UTF-8.
+testutfprev	C package	Tcl_UtfPrev on bytes that are not valid UTF-8.
+testdoubledigits	C package	The digit generation of TclDoubleDigits, an internal stub.
+testparser	C package	The token tree of Tcl_ParseCommand.
+memory	runner	The `memory` command of a build with TCL_MEM_DEBUG. The leak tests compare `memory info` before and after a script.
+testdstring	C package	Tcl_DString of the C API.
+testbytestring	C package	Byte arrays with bytes that are not valid UTF-8.
+Tcltest	C package	A test that needs any command of the Tcl test binary.
+testindexobj	C package	Tcl_GetIndexFromObj and its cache in the Tcl_Obj.
+testnrelevels	design	The depth of the native C stack of Tcl's non-recursive engine (NRE). ztcl has no NRE.
+testlink	C package	Tcl_LinkVar of C variables.
+testevent	C package	Tcl_QueueEvent at the head, the tail, or a mark of the queue.
+testchmod	runner	A change of the permission bits of a file, for the setup of a test.
+testfilehandler	C package	Tcl_CreateFileHandler on pipes.
+testmathfunctions	C package	Math functions that C code makes with Tcl_CreateMathFunc.
+pkgua.soRequired	C package	The C test package pkgua for `load` and `unload`.
+testfevent	C package	Events that run in a second interpreter.
+drainEventQueue	C package	The event queue of the main thread, through `testthread event` of the Tcl test binary.
+testregexp	runner	`testregexp` exists in tools/suite_cmds.zig. The flag REG_EXPECT, the place where a partial match ends, has no stand-in.

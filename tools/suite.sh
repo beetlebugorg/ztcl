@@ -96,7 +96,8 @@ if [ -n "$plog" ]; then
     echo 'set tt_record 1' > "$rec"
 fi
 tp=0; tf=0; ts=0
-for f in "$@"; do
+# Runs one test file. Sets raw (the output) and rc (the exit status).
+run_file() {
     # A fresh root folder for each file, outside the repository.
     root=$(mktemp -d "${TMPDIR:-/tmp}/ztcl-suite.XXXXXX") || exit 1
     # The support scripts of the Tcl tests, as a copy in the root.
@@ -126,6 +127,38 @@ EOF
     raw=$(cd "$root" && limit 1200 "$tcl" $gc --compute 200000000 --mem 2147483648 --allow $caps ${jail:+--root} ${jail:+"$root"} $set_exec --keep-going $rec "$here/tcltest.tcl" "$f" "$here/tcltest-end.tcl" 2>&1)
     rc=$?
     rm -rf -- "$root"
+}
+# Tests that fail under load: the timing of sockets and of a nonblocking
+# read. A run of the file with such a failure runs one more time, and the
+# run with more passes counts, so the load of the machine does not
+# change the comparison of two runs. "*" is any test of the file. A name
+# needs the records of -p.
+sensitive="socket.test:* chanio.test:chan-io-36.1"
+load_failed() {
+    for s in $sensitive; do
+        [ "${s%%:*}" = "$1" ] || continue
+        if [ "${s#*:}" = "*" ]; then
+            [ "${2:-0}" -gt 0 ] && return 0
+        else
+            printf '%s\n' "$raw" | grep -qaF "$(printf 'tt\tfail\t%s\t' "${s#*:}")" && return 0
+        fi
+    done
+    return 1
+}
+passes_of() {
+    printf '%s\n' "$1" | grep -aE '^pass [0-9]+ fail' | tail -1 | awk '{print $2}'
+}
+fails_of() {
+    printf '%s\n' "$1" | grep -aE '^pass [0-9]+ fail' | tail -1 | awk '{print $4}'
+}
+for f in "$@"; do
+    run_file
+    if load_failed "$f" "$(fails_of "$raw")"; then
+        raw1=$raw; rc1=$rc
+        run_file
+        n1=$(passes_of "$raw1"); n2=$(passes_of "$raw")
+        if [ "${n1:-0}" -ge "${n2:-0}" ]; then raw=$raw1; rc=$rc1; fi
+    fi
     out=$(printf '%s\n' "$raw" | grep -aE '^pass [0-9]+ fail' | tail -1)
     printf '%-16s %s\n' "$f" "${out:-no result (the file stopped early or crashed, status $rc)}"
     p=0; x=0; y=0

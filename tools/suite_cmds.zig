@@ -32,6 +32,49 @@ fn setup(it: *Interp) anyerror!void {
     try it.register("testexprstring", exprCmd(.string));
     try it.register("testexprlongobj", exprCmd(.long_obj));
     try it.register("testexprdoubleobj", exprCmd(.double_obj));
+    try it.register("memory", cmdMemory);
+}
+
+/// The most live bytes that `memory info` saw.
+var max_live: usize = 0;
+
+/// `memory option ?arg ...?`: the command of a Tcl build with
+/// TCL_MEM_DEBUG, over the heap of ztcl. `memory info` runs a collection
+/// and gives the live bytes of the heap as "current bytes allocated".
+/// The heap does not count each allocation and each free, so the counts
+/// of mallocs, frees, and packets are 0. The other options check their
+/// words and change nothing: the heap has no guard zones, tags, or
+/// trace of each allocation.
+fn cmdMemory(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
+    if (argv.len < 2) return it.wrongArgs("memory option [args..]");
+    const opt = try it.str(argv[1]);
+    if (eql(opt, "info")) {
+        if (argv.len != 2) return it.wrongArgs("memory info");
+        it.collect();
+        const live = it.heap.live_bytes;
+        max_live = @max(max_live, live);
+        const text = try std.fmt.allocPrint(it.alloc(), "{s:<25} {d:>10}\n{s:<25} {d:>10}\n{s:<25} {d:>10}\n{s:<25} {d:>10}\n{s:<25} {d:>10}\n{s:<25} {d:>10}\n", .{
+            "total mallocs",             0,
+            "total frees",               0,
+            "current packets allocated", 0,
+            "current bytes allocated",   live,
+            "maximum packets allocated", 0,
+            "maximum bytes allocated",   max_live,
+        });
+        return .{ .str = text };
+    }
+    const one_word = [_][]const u8{ "active", "onexit", "tag", "break_on_malloc", "trace_on_at_malloc", "objs" };
+    const on_off = [_][]const u8{ "trace", "validate", "init" };
+    for (one_word) |name| if (eql(opt, name)) {
+        if (argv.len != 3) return it.fail("wrong # args: should be \"memory {s} arg\"", .{name});
+        return Value.empty;
+    };
+    for (on_off) |name| if (eql(opt, name)) {
+        if (argv.len != 3) return it.fail("wrong # args: should be \"memory {s} on|off\"", .{name});
+        _ = try tcl.expr.truthy(it, argv[2]);
+        return Value.empty;
+    };
+    return it.fail("bad option \"{s}\": should be active, break_on_malloc, info, init, objs, onexit, tag, trace, trace_on_at_malloc, or validate", .{opt});
 }
 
 /// `testnativedepth`: the bytes of native stack between the outermost
