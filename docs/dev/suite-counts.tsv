@@ -109,7 +109,7 @@ resolver.test	0	0
 result.test	1	1
 safe-stock.test	0	0
 safe.test	2	2
-scan.test	162	162
+scan.test	180	180
 security.test	1	1
 set-old.test	142	142
 set.test	61	61
@@ -151,4 +151,4 @@ winPipe.test	0	0
 winTime.test	0	0
 word.test	45	45
 zlib.test	0	0
-total	37982	37982
+total	38000	38000

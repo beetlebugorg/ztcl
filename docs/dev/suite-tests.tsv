@@ -27882,8 +27882,8 @@ fileName.test	filename-11.1	fail	fail	message	code 1/1: wrong # args: should be 
 fileName.test	filename-11.10	skip	skip	internals	testsetplatform
 fileName.test	filename-11.11	skip	skip	internals	testsetplatform
 fileName.test	filename-11.12	skip	skip	internals	testsetplatform
-fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl2639770/globTest
-fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl2639770/globTest
+fileName.test	filename-11.14	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3101497/globTest
+fileName.test	filename-11.15	fail	fail	bug	code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3101497/globTest
 fileName.test	filename-11.16	pass	pass		
 fileName.test	filename-11.17	pass	pass		
 fileName.test	filename-11.17.1	skip	skip	platform	win
@@ -27980,7 +27980,7 @@ fileName.test	filename-14.1	pass	pass
 fileName.test	filename-14.11	pass	pass		
 fileName.test	filename-14.13	pass	pass		
 fileName.test	filename-14.15	fail	fail	bug	code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird name.c} globTest/x,z1.c globTest/x1.c globTest/y1.c globTest/z1.c \| want: globTest/a1/ globTest/a2/ globTest/a3/
-fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl2639770/globTest/z1.c
+fileName.test	filename-14.17	fail	fail	bug	code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3101497/globTest/z1.c
 fileName.test	filename-14.18	pass	pass		
 fileName.test	filename-14.20	pass	pass		
 fileName.test	filename-14.21	pass	pass		
@@ -28221,7 +28221,7 @@ fileSystem.test	filesystem-6.12	pass	pass
 fileSystem.test	filesystem-6.13	pass	pass		
 fileSystem.test	filesystem-6.14	fail	fail	design	code 1/1: could not link: links are not available in the root folder \| want: could not read link "": no such file or directory
 fileSystem.test	filesystem-6.15	fail	fail	bug	code 0/1:  \| want: could not read "": no such file or directory
-fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795766993 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.16	fail	fail	bug	code 0/1: 1795770627 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.17	fail	fail	feature	code 1/1: file mtime with a new time is not available \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.18	fail	fail	bug	code 0/1:  \| want: can't create directory "": no such file or directory
 fileSystem.test	filesystem-6.19	pass	pass		
@@ -28236,7 +28236,7 @@ fileSystem.test	filesystem-6.26	pass	pass
 fileSystem.test	filesystem-6.27	fail	fail	bug	code 0/1: / \| want: unrecognised path
 fileSystem.test	filesystem-6.28	fail	fail	bug	code 0/1: 280 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.29	pass	pass		
-fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795766993 \| want: could not read "": no such file or directory
+fileSystem.test	filesystem-6.3	fail	fail	bug	code 0/1: 1795770627 \| want: could not read "": no such file or directory
 fileSystem.test	filesystem-6.30	fail	fail	bug	code 0/1: native root \| want: unrecognised path
 fileSystem.test	filesystem-6.31	pass	pass		
 fileSystem.test	filesystem-6.32	fail	fail	bug	code 0/1: directory \| want: could not read "": no such file or directory
@@ -38502,13 +38502,13 @@ scan.test	scan-13.1	pass	pass
 scan.test	scan-13.2	pass	pass		
 scan.test	scan-13.3	pass	pass		
 scan.test	scan-13.4	pass	pass		
-scan.test	scan-13.5	fail	fail	bug	code 1/0,2: "%n$" argument index out of range \| want: 
-scan.test	scan-13.6	fail	fail	bug	code 0/0,2: 6 {"%n$" argument index out of range} \| want: 10 {{} {} {} {} {} {} {} {} {} {}}
-scan.test	scan-13.7	fail	fail	bug	code 1/0,2: "%n$" argument index out of range \| want: 190 180 170 160 150 140 130 120 110 100 90 80 70 60 50 40 30 20 {} 10
-scan.test	scan-13.8	fail	fail	bug	code 1/0,2: "%n$" argument index out of range \| want: 200 10 20 30
+scan.test	scan-13.5	pass	pass		
+scan.test	scan-13.6	pass	pass		
+scan.test	scan-13.7	pass	pass		
+scan.test	scan-13.8	pass	pass		
 scan.test	scan-13.9	pass	pass		
-scan.test	scan-14.1	fail	fail	bug	code 2/0,2:  \| want: Inf
-scan.test	scan-14.2	fail	fail	bug	code 2/0,2:  \| want: -Inf
+scan.test	scan-14.1	pass	pass		
+scan.test	scan-14.2	pass	pass		
 scan.test	scan-2.1	pass	pass		
 scan.test	scan-2.2	pass	pass		
 scan.test	scan-3.1	pass	pass		
@@ -38530,7 +38530,7 @@ scan.test	scan-4.11	pass	pass
 scan.test	scan-4.12	pass	pass		
 scan.test	scan-4.13	pass	pass		
 scan.test	scan-4.14	pass	pass		
-scan.test	scan-4.15	fail	fail	bug	code 0/0,2: 0 {} \| want: -1 {}
+scan.test	scan-4.15	pass	pass		
 scan.test	scan-4.16	pass	pass		
 scan.test	scan-4.17	pass	pass		
 scan.test	scan-4.18	pass	pass		
@@ -38561,13 +38561,13 @@ scan.test	scan-4.4	pass	pass
 scan.test	scan-4.40	pass	pass		
 scan.test	scan-4.40.1	pass	pass		
 scan.test	scan-4.40.2	pass	pass		
-scan.test	scan-4.40.3	fail	fail	bug	code 0/0,2: 2 9 0 0 \| want: 3 9 5 340282366920938463463374607431768211456
-scan.test	scan-4.41	fail	fail	bug	code 0/0,2: 4 10 8 16 2 \| want: 4 10 8 16 0
+scan.test	scan-4.40.3	pass	pass		
+scan.test	scan-4.41	pass	pass		
 scan.test	scan-4.42	pass	pass		
 scan.test	scan-4.43	pass	pass		
-scan.test	scan-4.44	fail	fail	bug	code 0/0,2: 0 {} \| want: -1 {}
-scan.test	scan-4.45	fail	fail	bug	code 0/0,2: 1 0 8 \| want: 2 0 x
-scan.test	scan-4.46	fail	fail	bug	code 0/0,2: 1 0 8 \| want: 2 0 X
+scan.test	scan-4.44	pass	pass		
+scan.test	scan-4.45	pass	pass		
+scan.test	scan-4.46	pass	pass		
 scan.test	scan-4.47	pass	pass		
 scan.test	scan-4.48	pass	pass		
 scan.test	scan-4.49	pass	pass		
@@ -38579,13 +38579,13 @@ scan.test	scan-4.51	pass	pass
 scan.test	scan-4.52	pass	pass		
 scan.test	scan-4.53	pass	pass		
 scan.test	scan-4.54	pass	pass		
-scan.test	scan-4.55	fail	fail	bug	code 0/0,2: 0 {} \| want: -1 {}
+scan.test	scan-4.55	pass	pass		
 scan.test	scan-4.56	pass	pass		
 scan.test	scan-4.57	pass	pass		
 scan.test	scan-4.58	pass	pass		
 scan.test	scan-4.59	pass	pass		
 scan.test	scan-4.6	pass	pass		
-scan.test	scan-4.60	fail	fail	bug	code 0/0,2: 1 {can't set "z": variable is array} abc {} \| want: 1 {can't set "z": variable is array} abc ghi
+scan.test	scan-4.60	pass	pass		
 scan.test	scan-4.61	pass	pass		
 scan.test	scan-4.62	pass	pass		
 scan.test	scan-4.63	pass	pass		
@@ -38601,9 +38601,9 @@ scan.test	scan-5.13	pass	pass
 scan.test	scan-5.14	pass	pass		
 scan.test	scan-5.15	pass	pass		
 scan.test	scan-5.16	pass	pass		
-scan.test	scan-5.17	fail	fail	bug	code 0/0,2: 3 81985529216486895 81985529216486895 81985529216486895 \| want: 3 207698809136909011942886895 207698809136909011942886895 207698809136909011942886895
-scan.test	scan-5.18	fail	fail	bug	code 0/1: 1 -81985529216486895 \| want: unsigned bignum scans are invalid
-scan.test	scan-5.19	fail	fail	bug	code 0/1: 1 81985529216486895 \| want: unsigned bignum scans are invalid
+scan.test	scan-5.17	pass	pass		
+scan.test	scan-5.18	pass	pass		
+scan.test	scan-5.19	pass	pass		
 scan.test	scan-5.2	pass	pass		
 scan.test	scan-5.3	pass	pass		
 scan.test	scan-5.4	pass	pass		
@@ -38625,7 +38625,7 @@ scan.test	scan-7.2	pass	pass
 scan.test	scan-7.3	pass	pass		
 scan.test	scan-7.4	pass	pass		
 scan.test	scan-7.5	pass	pass		
-scan.test	scan-7.6	fail	fail	bug	code 0/0,2: 4 abc dÇ fghijk dum \| want: 4 abc dÇf ghijk dum
+scan.test	scan-7.6	pass	pass		
 scan.test	scan-7.7	pass	pass		
 scan.test	scan-7.8	pass	pass		
 scan.test	scan-8.1	pass	pass		
@@ -38903,7 +38903,7 @@ socket.test	socket-15.1.2	pass	pass
 socket.test	socket-15.1.3	pass	pass		
 socket.test	socket-15.1.4	pass	pass		
 socket.test	socket-15.1.5	pass	pass		
-socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2844 \| want: couldn't open socket: connection refused
+socket.test	socket-15.1.6	fail	fail	bug	code 0/1: sock2842 \| want: couldn't open socket: connection refused
 socket.test	socket-15.1.7	pass	pass		
 socket.test	socket-15.1.8	pass	pass		
 socket.test	socket_inet-1.1	pass	pass		
@@ -41443,7 +41443,7 @@ unixFile.test	unixFile-1.6	skip	skip	internals	testfindexecutable
 unixFile.test	unixFile-1.7	skip	skip	internals	testfindexecutable
 unixForkEvent.test	unixforkevent-1.1	skip	skip	internals	testfork
 unixInit.test	unixInit-1.1	pass	pass		
-unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 33409', Got '' \| want: OK
+unixInit.test	unixInit-1.2	fail	fail	bug	code 0/0,2: Expected: '127.0.0.1 localhost 40005', Got '' \| want: OK
 unixInit.test	unixInit-3.1	pass	pass		
 unixInit.test	unixInit-3.2	fail	fail	bug	code 0/0,2: 1 \| want: 0
 unixInit.test	unixInit-4.1	pass	pass		
