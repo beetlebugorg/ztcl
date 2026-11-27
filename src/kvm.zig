@@ -32,6 +32,9 @@
 //!   data of a vsock connection does not pass through this process.
 //! - Block devices (ID 2): `pread` and `pwrite` on the descriptor of the
 //!   disk.
+//! - 9p (ID 9), after the disks: a share with the tag `share<n>`, a
+//!   server of 9P2000.L (`vm/virtio/ninep.zig`) on the files of its root
+//!   folder (`vm/share_linux.zig`).
 //! - Entropy (ID 4), last, with `-entropy 1`: bytes of `getrandom`.
 //!
 //! An access of a vCPU to a register of a device exits `KVM_RUN` on that
@@ -194,6 +197,13 @@ pub const Disk = struct {
     read_only: bool,
 };
 
+/// A 9p share: the descriptor of its root folder (`O_PATH`). Share n
+/// has the tag `share<n>`.
+pub const Share = struct {
+    fd: i32,
+    read_only: bool,
+};
+
 pub const Config = struct {
     cpus: u32 = 1,
     memory_mb: u32 = 256,
@@ -202,7 +212,9 @@ pub const Config = struct {
     initrd: []const u8 = "",
     cmdline: []const u8,
     disks: []const Disk = &.{},
-    /// A virtio entropy device, after the disks.
+    /// The 9p shares, after the disks.
+    shares: []const Share = &.{},
+    /// A virtio entropy device, after the disks and the shares.
     entropy: bool = false,
     /// The descriptor of the console (a socket): the output of the
     /// guest goes to it, and its input goes to the guest.
@@ -259,6 +271,13 @@ pub fn nowNs() u64 {
 
 const virtio = @import("vm/virtio/mmio.zig");
 const boot = @import("vm/boot.zig");
+const ninep = @import("vm/virtio/ninep.zig");
+const share_linux = @import("vm/share_linux.zig");
+
+const NinepState = struct {
+    share: share_linux.Share,
+    server: ninep.Server,
+};
 const Mem = virtio.Mem;
 const Device = virtio.Device;
 const virtio_f_version_1 = virtio.f_version_1;
@@ -295,6 +314,8 @@ devices: []Device = &.{},
 /// The host mapping that holds the guest memory, with room for the
 /// alignment to 2 MB.
 mem_map: struct { addr: usize = 0, len: usize = 0 } = .{},
+/// The 9p servers of the shares.
+ninep_state: []NinepState = &.{},
 want: std.atomic.Value(u32) = .init(want_run),
 parked: std.atomic.Value(u32) = .init(0),
 state: std.atomic.Value(State) = .init(.created),
@@ -323,8 +344,8 @@ entry: u64 = 0,
 /// `cfg` with no copy, so the caller keeps them until `deinit`.
 pub fn init(alloc: std.mem.Allocator, cfg: Config) Fail!*Machine {
     try probe();
-    if (cfg.disks.len > max_disks) {
-        why = "too many disks";
+    if (cfg.disks.len + cfg.shares.len > max_disks) {
+        why = "too many disks and shares";
         return error.Setup;
     }
     const m = try alloc.create(Machine);
@@ -429,6 +450,9 @@ fn teardown(m: *Machine) void {
     m.vs_running = false;
     if (m.devices.len != 0) m.alloc.free(m.devices);
     m.devices = &.{};
+    for (m.ninep_state) |*n| n.server.deinit();
+    if (m.ninep_state.len != 0) m.alloc.free(m.ninep_state);
+    m.ninep_state = &.{};
     closeFd(&m.vhost);
     closeFd(&m.vm);
     closeFd(&m.kvm);
@@ -574,7 +598,7 @@ fn eventfd() Fail!i32 {
 }
 
 fn deviceCount(m: *const Machine) usize {
-    return 2 + m.cfg.disks.len + @intFromBool(m.cfg.entropy);
+    return 2 + m.cfg.disks.len + m.cfg.shares.len + @intFromBool(m.cfg.entropy);
 }
 
 fn makeDevices(m: *Machine) Fail!void {
@@ -588,6 +612,17 @@ fn makeDevices(m: *Machine) Fail!void {
             return error.Setup;
         }
         m.devices[2 + i] = Device.blk(irqs[2 + i], .{ .ctx = @constCast(d), .size = size, .read_only = d.read_only, .read = diskRead, .write = diskWrite, .flush = diskFlush });
+    }
+    // The 9p servers run on the vCPU threads, so they use an allocator
+    // that is safe across threads.
+    m.ninep_state = try m.alloc.alloc(NinepState, m.cfg.shares.len);
+    for (m.cfg.shares, m.ninep_state, 0..) |sh, *st, i| {
+        st.share = .{ .root = sh.fd, .read_only = sh.read_only };
+        st.server = ninep.Server.init(std.heap.smp_allocator, st.share.fs());
+        var tag_buf: [16]u8 = undefined;
+        const tag = std.fmt.bufPrint(&tag_buf, "share{d}", .{i}) catch unreachable;
+        const k = 2 + m.cfg.disks.len + i;
+        m.devices[k] = Device.ninep(irqs[k], &st.server, tag);
     }
     if (m.cfg.entropy) m.devices[n - 1] = Device.rng(irqs[n - 1], fillRandom);
     m.con_stop = try eventfd();

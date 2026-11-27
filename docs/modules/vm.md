@@ -14,7 +14,7 @@ ztcl::vm delete $vm
 
 The command is not a package: it exists when the embedder turns on the capability `vm`, and it is absent otherwise. A child interp never has it, so the limits count the guests of one interpreter. The paths of a guest also need the capability `file`, and the channels of a guest need `channels`.
 
-The backends: Virtualization.framework on macOS 12 and later, the KVM monitor of ztcl on x86-64 Linux, and the monitor of ztcl on the Windows Hypervisor Platform on x86-64 Windows. On Linux and Windows a guest has no share yet (`ZTCL VM SHARE`), and on Windows it has one CPU. Windows needs its hypervisor, which runs with Virtualization-based Security or the feature Windows Hypervisor Platform, and no elevation. On another platform each command gives `ZTCL VM UNAVAILABLE`. The plan of the backends, the guest agent, and the base image is in `docs/dev/vm.md`.
+The backends: Virtualization.framework on macOS 12 and later, the KVM monitor of ztcl on x86-64 Linux, and the monitor of ztcl on the Windows Hypervisor Platform on x86-64 Windows. On Linux a share is a 9p share, and the agent mounts it with 9p. On Windows a guest has no share yet (`ZTCL VM SHARE`), and it has one CPU. Windows needs its hypervisor, which runs with Virtualization-based Security or the feature Windows Hypervisor Platform, and no elevation. On another platform each command gives `ZTCL VM UNAVAILABLE`. The plan of the backends, the guest agent, and the base image is in `docs/dev/vm.md`.
 
 ## Commands
 
@@ -40,7 +40,7 @@ ztcl::vm delete VM
 | `-cpus N` | The CPUs of the guest. | 1 |
 | `-memory MB` | The memory of the guest, in MB. | 256 |
 | `-disk {F ?rw?}` | A disk image file, as a virtio block device: `/dev/vda` for the first `-disk`, `/dev/vdb` for the second, and so on. Read-only unless the list ends in `rw`. | none |
-| `-share {HOST GUEST ?rw?}` | A folder of the host, as virtio-fs: the tag `share0` for the first `-share`, `share1` for the second, and so on. `GUEST` is the folder of the guest for the agent of a later version; until then the guest mounts the tag itself (`mount -t virtiofs share0 /mnt/share`). Read-only unless the list ends in `rw`. | none |
+| `-share {HOST GUEST ?rw?}` | A folder of the host, as virtio-fs on macOS and 9p on Linux: the tag `share0` for the first `-share`, `share1` for the second, and so on. `GUEST` is the folder of the guest for the agent of a later version; until then the agent mounts `share0` at `/mnt/share`, and `ztcl::vm mount` mounts the others. Read-only unless the list ends in `rw`. | none |
 | `-entropy 0\|1` | A virtio entropy device. Its driver adds 1 ms to 8 ms to the boot. | 0 |
 | `-warm 0\|1` | Boots the guest at once, waits for a program of the guest to accept a connection on vsock port 1024, and pauses it. `start` then resumes it in under 1 ms. A paused guest keeps its process and the memory that it touched. | 0 |
 
@@ -111,7 +111,7 @@ A start of a guest with 1 CPU and 64 MB is about 100 ms on an M1 Mac, and 86 ms 
 | `-errorcode` | Message |
 |---|---|
 | `ZTCL VM UNAVAILABLE` | `ztcl::vm is not available on this platform yet`, `this macOS has no Virtualization.framework`, the fix for a Linux with no access to `/dev/kvm`, or the fix for a Windows with no hypervisor |
-| `ZTCL VM SHARE` | `a share is not available on Windows yet` (and for Linux) |
+| `ZTCL VM SHARE` | `a share is not available on Windows yet` |
 | `ZTCL VM WHP` | The step of the Windows Hypervisor Platform that failed, such as `WHvSetupPartition failed` |
 | `ZTCL VM ENTITLEMENT` | `ztcl::vm needs the entitlement com.apple.security.virtualization in the signature of this program` |
 | `ZTCL VM KERNEL` | `a guest needs -kernel until the base image of the plan` |

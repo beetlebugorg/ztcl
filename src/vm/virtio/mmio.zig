@@ -1,8 +1,9 @@
 //! The virtio-mmio transport of virtio 1.2 (section 4.2) and the devices
 //! of `ztcl::vm` that run in ztcl: the console (5.3), block (5.2),
-//! entropy (5.4), and vsock (5.10, `vsock.zig`). A device that the
-//! hypervisor runs, such as vhost-vsock on KVM, is an `External` device:
-//! the transport keeps its registers and calls the hooks of the backend.
+//! entropy (5.4), vsock (5.10, `vsock.zig`), and 9p (`ninep.zig`). A
+//! device that the hypervisor runs, such as vhost-vsock on KVM, is an
+//! `External` device: the transport keeps its registers and calls the
+//! hooks of the backend.
 //!
 //! A backend (src/kvm.zig, and the Windows Hypervisor Platform later)
 //! gives each device a 4 KB window and an interrupt, and implements
@@ -97,9 +98,12 @@ pub const Backend = union(enum) {
     /// The vsock device of ztcl (`vsock.zig`), for a monitor with no
     /// vsock of its host kernel.
     vsock: *vsock_mod.Vsock,
+    /// The 9p device (`ninep.zig`): a share of a folder of the host.
+    ninep: *ninep_mod.Server,
 };
 
 const vsock_mod = @import("vsock.zig");
+const ninep_mod = @import("ninep.zig");
 
 /// A spin lock for the registers of a device: the vCPU threads and the
 /// console thread of the backend take it for a short time.
@@ -151,6 +155,13 @@ pub const Device = struct {
         return d;
     }
 
+    /// The 9p device of a share, with its tag in the configuration.
+    pub fn ninep(irq: u32, server: *ninep_mod.Server, tag: []const u8) Device {
+        var d: Device = .{ .backend = .{ .ninep = server }, .irq = irq, .features = f_version_1 | ninep_mod.f_mount_tag, .nqueues = 1 };
+        d.config_len = ninep_mod.Server.config(tag, &d.config);
+        return d;
+    }
+
     /// An external device with `features` (with VIRTIO_F_VERSION_1),
     /// `nqueues` queues, and the bytes of its configuration.
     pub fn external(irq: u32, e: External, features: u64, nqueues: u8, config: []const u8) Device {
@@ -166,6 +177,7 @@ pub const Device = struct {
             .rng => 4,
             .external => |e| e.id,
             .vsock => vsock_mod.id,
+            .ninep => ninep_mod.id,
         };
     }
 
@@ -250,6 +262,7 @@ pub const Device = struct {
     fn reset(d: *Device) void {
         if (d.backend == .external) d.backend.external.reset(d.backend.external.ctx, d);
         if (d.backend == .vsock) d.backend.vsock.reset();
+        if (d.backend == .ninep) d.backend.ninep.reset();
         d.status = 0;
         d.dev_sel = 0;
         d.drv_sel = 0;
@@ -267,6 +280,7 @@ pub const Device = struct {
             .rng => |fill| if (qi == 0) d.rngFill(host, fill),
             .external => {},
             .vsock => |v| if (qi == 1) v.tx(d, host) else if (qi == 0) v.rxReady(d, host),
+            .ninep => |srv| if (qi == 0 and srv.run(&d.queues[0], host.mem)) d.raise(host),
         }
     }
 

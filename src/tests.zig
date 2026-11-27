@@ -3139,13 +3139,19 @@ test "ztcl::vm: the capability, the jail of its paths, and the limits" {
     try tcl.fsroot.setRoot(&it, ".zig-cache/ztcl-vm-test");
     try std.testing.expectEqualStrings("POSIX EACCES {permission denied}", try it.str(try it.eval("catch {ztcl::vm create -kernel ../../build.zig}; set ::errorCode")));
     if (on_kvm or on_whp) {
-        try std.testing.expectEqualStrings("ZTCL VM SHARE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {share /mnt}}; set ::errorCode")));
+        if (on_kvm) {
+            // A share is a folder below the root folder.
+            _ = try it.eval("ztcl::vm delete [ztcl::vm create -kernel Image -share {share /mnt rw}]");
+            try std.testing.expectEqualStrings("ENOTDIR", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {Image /mnt}}; lindex $::errorCode 1")));
+        } else {
+            try std.testing.expectEqualStrings("ZTCL VM SHARE", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {share /mnt}}; set ::errorCode")));
+        }
         try std.testing.expectEqualStrings("bad mode \"rx\": must be ro or rw", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -disk {Image rx}} m; set m")));
         // An empty kernel fails at the start, and the guest stays.
-        try std.testing.expectEqualStrings("vm1", try it.str(try it.eval("ztcl::vm create -kernel Image")));
-        try std.testing.expectEqualStrings("ZTCL VM KERNEL", try it.str(try it.eval("catch {ztcl::vm start vm1}; set ::errorCode")));
-        try std.testing.expectEqualStrings("created", try it.str(try it.eval("ztcl::vm status vm1")));
-        _ = try it.eval("ztcl::vm delete vm1");
+        _ = try it.eval("set v [ztcl::vm create -kernel Image]");
+        try std.testing.expectEqualStrings("ZTCL VM KERNEL", try it.str(try it.eval("catch {ztcl::vm start $v}; set ::errorCode")));
+        try std.testing.expectEqualStrings("created", try it.str(try it.eval("ztcl::vm status $v")));
+        _ = try it.eval("ztcl::vm delete $v");
         return;
     }
     try std.testing.expectEqualStrings("bad mode \"rx\": must be ro or rw", try it.str(try it.eval("catch {ztcl::vm create -kernel Image -share {share /mnt rx}} m; set m")));

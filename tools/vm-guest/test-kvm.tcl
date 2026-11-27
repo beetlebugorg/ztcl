@@ -48,6 +48,34 @@ check "exec: its error code" [lrange $::errorCode 0 2] {ZTCL VM AGENT}
 check "mount: a missing share" [catch {ztcl::vm mount $vm share9 /mnt/x}] 1
 ztcl::vm delete $vm
 
+# Shares with 9p: share0 at /mnt/share (rw), share1 read-only.
+file delete -force share ro
+file mkdir share/sub ro
+set f [open share/hello.txt w]; puts -nonewline $f "from the host"; close $f
+set f [open ro/x.txt w]; puts -nonewline $f "read only"; close $f
+set vm [ztcl::vm create {*}$boot -share {share /mnt/share rw} -share {ro /mnt/ro}]
+ztcl::vm start $vm
+set sh {/bin/busybox sh -c}
+check "the share at /mnt/share" [dict get [ztcl::vm exec $vm /bin/busybox cat /mnt/share/hello.txt] stdout] "from the host"
+ztcl::vm exec $vm {*}$sh {echo written by the guest > /mnt/share/sub/from-guest.txt}
+set f [open share/sub/from-guest.txt]; set got [read $f]; close $f
+check "a file of the guest on the host" $got "written by the guest\n"
+check "a listing of the share" [dict get [ztcl::vm exec $vm /bin/busybox ls /mnt/share] stdout] "hello.txt\nsub\n"
+# The image has BusyBox with no links of its applets.
+set r [ztcl::vm exec $vm {*}$sh {b=/bin/busybox; cd /mnt/share && $b mkdir d && $b mv sub/from-guest.txt d/f && $b ln -s f d/l && $b cat d/l > d/copy && $b rm -r sub && $b chmod 600 d/copy && $b truncate -s 3 d/copy}]
+check "the work of the guest" [dict get $r exit]:[dict get $r stderr] 0:
+check "the work of the guest on the host" [lsort [glob -tails -directory share/d *]] {copy f l}
+check "a truncated file" [file size share/d/copy] 3
+check "a link stays a link" [dict get [ztcl::vm exec $vm /bin/busybox readlink /mnt/share/d/l] stdout] "f\n"
+ztcl::vm exec $vm /bin/busybox ln -s .. /mnt/share/up
+check "a link out of the share goes to the guest" [dict get [ztcl::vm exec $vm /bin/busybox ls /mnt/share/up] stdout] "share\n"
+ztcl::vm mount $vm share1 /mnt/ro -readonly
+check "the read-only share" [dict get [ztcl::vm exec $vm /bin/busybox cat /mnt/ro/x.txt] stdout] "read only"
+check "a write to the read-only share" [dict get [ztcl::vm exec $vm {*}$sh {echo x > /mnt/ro/y 2>/dev/null; echo $?}] stdout] "1\n"
+ztcl::vm delete $vm
+check "no write reached the read-only folder" [glob -tails -directory ro *] x.txt
+file delete -force share ro
+
 # The kernel log of a guest, from the agent: a first byte of 1 asks
 # for it.
 proc dmesg {vm} {
