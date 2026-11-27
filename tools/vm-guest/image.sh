@@ -23,7 +23,10 @@ esac
 # fixed one keeps the build reproducible.
 salt=$(printf 'ztcl-guest-%s' "$arch" | sha256sum | cut -c1-64)
 root=$(mktemp -d)
-mkdir -p "$root/bin" "$root/sbin" "$root/dev" "$root/proc" "$root/sys" "$root/tmp" "$root/mnt"
+mkdir -p "$root/bin" "$root/sbin" "$root/dev" "$root/proc" "$root/sys" "$root/tmp" "$root/mnt" "$root/run" "$root/etc"
+# The root is read-only: the agent writes the name server of -net nat in
+# /run, a tmpfs, and /etc/resolv.conf points there.
+ln -s /run/resolv.conf "$root/etc/resolv.conf"
 zig build-exe -target $zt-linux-musl -OReleaseSmall -fstrip "$here/agent.zig" -femit-bin="$root/sbin/agent"
 rm -f "$root/sbin/agent.o"
 cp "$out/busybox" "$root/bin/busybox"

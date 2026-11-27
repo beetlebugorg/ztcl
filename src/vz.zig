@@ -220,6 +220,12 @@ pub const Config = struct {
     disks: []const Disk = &.{},
     vsock: bool = true,
     entropy: bool = true,
+    /// One end of a `socketpair(AF_UNIX, SOCK_DGRAM)` for a virtio-net
+    /// device: each datagram is one Ethernet frame (the NAT of ztcl#461).
+    /// No network device when null.
+    net_fd: ?c_int = null,
+    /// The MAC address of the network device, as `52:54:00:12:34:56`.
+    net_mac: []const u8 = "52:54:00:12:34:56",
     /// The `VZGenericMachineIdentifier` of the platform. A saved state
     /// restores only on a machine with the same identifier. Null gives a
     /// new one.
@@ -260,6 +266,20 @@ pub fn configure(c: Config, why: *[]const u8) Error!Id {
         const rng = try new("VZVirtioEntropyDeviceConfiguration");
         setter(vc, "setEntropyDevices:", try array1(rng));
         release(rng);
+    }
+
+    if (c.net_fd) |fd| {
+        const fh = call(fn (Id, Sel, c_int) callconv(.c) Id, try alloc("NSFileHandle"), "initWithFileDescriptor:", .{fd});
+        const att = send1(try alloc("VZFileHandleNetworkDeviceAttachment"), "initWithFileHandle:", fh);
+        release(fh);
+        const net = try new("VZVirtioNetworkDeviceConfiguration");
+        setter(net, "setAttachment:", att);
+        release(att);
+        const mac = send1(try alloc("VZMACAddress"), "initWithString:", try string(c.net_mac));
+        setter(net, "setMACAddress:", mac);
+        release(mac);
+        setter(vc, "setNetworkDevices:", try array1(net));
+        release(net);
     }
 
     if (c.vsock) {

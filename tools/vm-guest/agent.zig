@@ -138,7 +138,12 @@ pub fn main(init: std.process.Init.Minimal) void {
         return relay(port);
     }
     times[0] = bootNs();
-    if (linux.getpid() == 1) mounts();
+    if (linux.getpid() == 1) {
+        mounts();
+        // A guest of `-net nat` has a virtio-net device; the kernel has
+        // no IP autoconfiguration, so the agent asks the NAT with DHCP.
+        if (hasVirtioDevice(1)) net.up();
+    }
     // The children of the connections, and each orphan when the agent is
     // the first process, end with no wait.
     var sa: linux.Sigaction = .{ .handler = .{ .handler = linux.SIG.IGN }, .mask = linux.sigemptyset(), .flags = 0 };
@@ -507,3 +512,243 @@ fn relay(port: u32) void {
         }
     }
 }
+
+/// Whether the virtio bus has a device of the virtio device id `id`
+/// (1 network, 9 9p, 26 virtio-fs). Each probe of the devices ends before
+/// init starts: the root disk waits for them, and the kernel probes
+/// before it runs the init of an initrd.
+fn hasVirtioDevice(id: u32) bool {
+    const dir = ok(linux.open("/sys/bus/virtio/devices", .{ .DIRECTORY = true, .CLOEXEC = true }, 0)) orelse return false;
+    defer _ = linux.close(@intCast(dir));
+    var buf: [2048]u8 align(8) = undefined;
+    while (true) {
+        const n = ok(linux.getdents64(@intCast(dir), &buf, buf.len)) orelse return false;
+        if (n == 0) return false;
+        var at: usize = 0;
+        while (at < n) {
+            const reclen = std.mem.readInt(u16, buf[at + 16 ..][0..2], .little);
+            const name = std.mem.sliceTo(buf[at + 19 .. at + reclen], 0);
+            at += reclen;
+            if (!std.mem.startsWith(u8, name, "virtio")) continue;
+            var path: [96]u8 = undefined;
+            const p = std.fmt.bufPrint(&path, "/sys/bus/virtio/devices/{s}/device\x00", .{name}) catch continue;
+            const fd = ok(linux.open(@ptrCast(p.ptr), .{ .CLOEXEC = true }, 0)) orelse continue;
+            var text: [16]u8 = undefined;
+            const len = ok(linux.read(@intCast(fd), &text, text.len)) orelse 0;
+            _ = linux.close(@intCast(fd));
+            const v = std.fmt.parseInt(u32, std.mem.trim(u8, text[0..len], " \n"), 0) catch continue;
+            if (v == id) return true;
+        }
+    }
+}
+
+/// The network of `-net nat`: eth0 up, its address from DHCP (RFC 2131,
+/// RFC 2132), and the default route through the gateway of the answer.
+const net = struct {
+    const SIOCGIFFLAGS = 0x8913;
+    const SIOCSIFFLAGS = 0x8914;
+    const SIOCSIFADDR = 0x8916;
+    const SIOCSIFNETMASK = 0x891c;
+    const SIOCADDRT = 0x890b;
+    const IFF_UP = 1;
+    const RTF_UP = 1;
+    const RTF_GATEWAY = 2;
+    const SO_BINDTODEVICE = 25;
+    const magic = 0x63825363;
+
+    const SockaddrIn = extern struct { family: u16 = linux.AF.INET, port: u16 = 0, addr: [4]u8 = @splat(0), zero: [8]u8 = @splat(0) };
+    const Ifreq = extern struct { name: [16]u8, u: extern union { addr: SockaddrIn, flags: i16, pad: [24]u8 } };
+    const Rtentry = extern struct {
+        pad1: usize = 0,
+        dst: SockaddrIn = .{},
+        gateway: SockaddrIn = .{},
+        genmask: SockaddrIn = .{},
+        flags: u16 = 0,
+        pad2: i16 = 0,
+        pad3: usize = 0,
+        pad4: ?*anyopaque = null,
+        metric: i16 = 0,
+        dev: ?[*:0]const u8 = null,
+        mtu: usize = 0,
+        window: usize = 0,
+        irtt: u16 = 0,
+    };
+
+    const Lease = struct { ip: [4]u8, mask: [4]u8 = .{ 255, 255, 255, 0 }, router: ?[4]u8 = null, server: [4]u8 = @splat(0), dns: ?[4]u8 = null };
+
+    fn ifreq(name: []const u8) Ifreq {
+        var r: Ifreq = .{ .name = @splat(0), .u = .{ .pad = @splat(0) } };
+        @memcpy(r.name[0..name.len], name);
+        return r;
+    }
+
+    fn setUp(s: i32, name: []const u8) void {
+        var r = ifreq(name);
+        if (ok(linux.ioctl(s, SIOCGIFFLAGS, @intFromPtr(&r))) == null) return;
+        r.u.flags |= IFF_UP;
+        _ = linux.ioctl(s, SIOCSIFFLAGS, @intFromPtr(&r));
+    }
+
+    fn up() void {
+        const s: i32 = @intCast(ok(linux.socket(linux.AF.INET, linux.SOCK.DGRAM | linux.SOCK.CLOEXEC, 0)) orelse return say("agent: no socket for the network\n"));
+        defer _ = linux.close(s);
+        setUp(s, "lo");
+        setUp(s, "eth0");
+        const lease = fromCmdline() orelse dhcp() orelse return say("agent: no DHCP answer on eth0\n");
+        var r = ifreq("eth0");
+        r.u = .{ .addr = .{ .addr = lease.ip } };
+        _ = linux.ioctl(s, SIOCSIFADDR, @intFromPtr(&r));
+        r.u = .{ .addr = .{ .addr = lease.mask } };
+        _ = linux.ioctl(s, SIOCSIFNETMASK, @intFromPtr(&r));
+        if (lease.router) |gw| {
+            var rt: Rtentry = .{ .gateway = .{ .addr = gw }, .flags = RTF_UP | RTF_GATEWAY, .dev = "eth0" };
+            _ = linux.ioctl(s, SIOCADDRT, @intFromPtr(&rt));
+        }
+        if (lease.dns) |d| resolvConf(d);
+    }
+
+    /// /run/resolv.conf with the name server, on a tmpfs at /run: the root
+    /// of an image is read-only, and its /etc/resolv.conf points here.
+    fn resolvConf(d: [4]u8) void {
+        mkdirs("/run");
+        _ = linux.mount("run", "/run", "tmpfs", linux.MS.NOSUID | linux.MS.NODEV, @intFromPtr("mode=0755"));
+        var b: [40]u8 = undefined;
+        const text = std.fmt.bufPrint(&b, "nameserver {d}.{d}.{d}.{d}\n", .{ d[0], d[1], d[2], d[3] }) catch return;
+        const fd: i32 = @intCast(ok(linux.open("/run/resolv.conf", .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true, .CLOEXEC = true }, 0o644)) orelse return);
+        defer _ = linux.close(fd);
+        writeAll(fd, text);
+    }
+
+    /// The network of `ztcl.net=ADDRESS/PREFIX,GATEWAY,DNS` on the command
+    /// line of the kernel, which the host gives when it knows it: no DHCP.
+    fn fromCmdline() ?Lease {
+        const fd = ok(linux.open("/proc/cmdline", .{ .CLOEXEC = true }, 0)) orelse return null;
+        defer _ = linux.close(@intCast(fd));
+        var buf: [4096]u8 = undefined;
+        const n = ok(linux.read(@intCast(fd), &buf, buf.len)) orelse return null;
+        var words = std.mem.tokenizeAny(u8, buf[0..n], " \n");
+        while (words.next()) |w| {
+            if (!std.mem.startsWith(u8, w, "ztcl.net=")) continue;
+            var parts = std.mem.splitScalar(u8, w["ztcl.net=".len..], ',');
+            const cidr = parts.next() orelse return null;
+            const slash = std.mem.indexOfScalar(u8, cidr, '/') orelse return null;
+            const prefix = std.fmt.parseInt(u6, cidr[slash + 1 ..], 10) catch return null;
+            if (prefix > 32) return null;
+            const mask: u32 = if (prefix == 0) 0 else ~@as(u32, 0) << @intCast(32 - @as(u32, prefix));
+            var l: Lease = .{ .ip = ip4(cidr[0..slash]) orelse return null, .mask = std.mem.toBytes(std.mem.nativeToBig(u32, mask)) };
+            if (parts.next()) |gw| l.router = ip4(gw) orelse return null;
+            if (parts.next()) |d| l.dns = ip4(d) orelse return null;
+            return l;
+        }
+        return null;
+    }
+
+    fn ip4(text: []const u8) ?[4]u8 {
+        var r: [4]u8 = undefined;
+        var parts = std.mem.splitScalar(u8, text, '.');
+        for (&r) |*b| b.* = std.fmt.parseInt(u8, parts.next() orelse return null, 10) catch return null;
+        if (parts.next() != null) return null;
+        return r;
+    }
+
+    /// DISCOVER and REQUEST from 0.0.0.0:68 to the broadcast address, with
+    /// the broadcast flag, so the answers come to the broadcast address
+    /// before eth0 has its own. Three tries of 500 ms each.
+    fn dhcp() ?Lease {
+        const s: i32 = @intCast(ok(linux.socket(linux.AF.INET, linux.SOCK.DGRAM | linux.SOCK.CLOEXEC, 0)) orelse return null);
+        defer _ = linux.close(s);
+        const one: i32 = 1;
+        _ = linux.setsockopt(s, linux.SOL.SOCKET, linux.SO.BROADCAST, std.mem.asBytes(&one), 4);
+        _ = linux.setsockopt(s, linux.SOL.SOCKET, linux.SO.REUSEADDR, std.mem.asBytes(&one), 4);
+        _ = linux.setsockopt(s, linux.SOL.SOCKET, SO_BINDTODEVICE, "eth0", 4);
+        var local: SockaddrIn = .{ .port = std.mem.nativeToBig(u16, 68) };
+        if (ok(linux.bind(s, @ptrCast(&local), @sizeOf(SockaddrIn))) == null) return null;
+        const xid: u32 = @truncate(bootNs());
+        // INIT-REBOOT (RFC 2131 4.3.2): a REQUEST of the address that the
+        // NAT gives each guest, with no DISCOVER, saves one exchange. The
+        // full exchange follows when it gets no ACK.
+        if (exchange(s, xid, 3, .{ .ip = .{ 10, 0, 2, 15 } })) |ack| return ack;
+        var tries: u32 = 0;
+        while (tries < 3) : (tries += 1) {
+            const offer = exchange(s, xid, 1, null) orelse continue;
+            const ack = exchange(s, xid, 3, offer) orelse continue;
+            return ack;
+        }
+        return null;
+    }
+
+    /// Sends a DHCP message of `kind` (1 DISCOVER, 3 REQUEST) and waits for
+    /// its answer (2 OFFER, 5 ACK).
+    fn exchange(s: i32, xid: u32, kind: u8, offer: ?Lease) ?Lease {
+        var m: [300]u8 = @splat(0);
+        m[0] = 1;
+        m[1] = 1;
+        m[2] = 6;
+        std.mem.writeInt(u32, m[4..8], xid, .big);
+        std.mem.writeInt(u16, m[10..12], 0x8000, .big);
+        // The MAC address of the device of the NAT (docs/dev/vm.md).
+        @memcpy(m[28..34], &[6]u8{ 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 });
+        std.mem.writeInt(u32, m[236..240], magic, .big);
+        var o: usize = 240;
+        for ([_]u8{ 53, 1, kind }) |b| {
+            m[o] = b;
+            o += 1;
+        }
+        if (offer) |l| {
+            for ([_]u8{ 50, 4 } ++ l.ip) |b| {
+                m[o] = b;
+                o += 1;
+            }
+            // The server id is in a REQUEST that answers an offer only.
+            if (!std.mem.eql(u8, &l.server, &[4]u8{ 0, 0, 0, 0 })) for ([_]u8{ 54, 4 } ++ l.server) |b| {
+                m[o] = b;
+                o += 1;
+            };
+        }
+        m[o] = 255;
+        var to: SockaddrIn = .{ .port = std.mem.nativeToBig(u16, 67), .addr = .{ 255, 255, 255, 255 } };
+        if (ok(linux.sendto(s, &m, m.len, 0, @ptrCast(&to), @sizeOf(SockaddrIn))) == null) return null;
+        var buf: [1024]u8 = undefined;
+        while (true) {
+            var fds = [1]linux.pollfd{.{ .fd = s, .events = linux.POLL.IN, .revents = 0 }};
+            if ((ok(linux.poll(&fds, 1, 500)) orelse return null) == 0) return null;
+            const n = ok(linux.recvfrom(s, &buf, buf.len, 0, null, null)) orelse return null;
+            if (parse(buf[0..n], xid, if (kind == 1) 2 else 5)) |l| return l;
+        }
+    }
+
+    fn parse(d: []const u8, xid: u32, want: u8) ?Lease {
+        if (d.len < 240 or d[0] != 2 or std.mem.readInt(u32, d[4..8], .big) != xid or std.mem.readInt(u32, d[236..240], .big) != magic) return null;
+        var l: Lease = .{ .ip = d[16..20].* };
+        var kind: u8 = 0;
+        var i: usize = 240;
+        while (i < d.len and d[i] != 255) {
+            if (d[i] == 0) {
+                i += 1;
+                continue;
+            }
+            if (i + 1 >= d.len or i + 2 + d[i + 1] > d.len) return null;
+            const v = d[i + 2 ..][0..d[i + 1]];
+            switch (d[i]) {
+                53 => if (v.len == 1) {
+                    kind = v[0];
+                },
+                1 => if (v.len == 4) {
+                    l.mask = v[0..4].*;
+                },
+                3 => if (v.len >= 4) {
+                    l.router = v[0..4].*;
+                },
+                54 => if (v.len == 4) {
+                    l.server = v[0..4].*;
+                },
+                6 => if (v.len >= 4) {
+                    l.dns = v[0..4].*;
+                },
+                else => {},
+            }
+            i += 2 + d[i + 1];
+        }
+        return if (kind == want) l else null;
+    }
+};

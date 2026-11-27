@@ -8,4 +8,4 @@ dir=${1:?usage: test.sh GUESTDIR}
 bin=$dir/ztcl-vm
 cp "$here/../../zig-out/bin/ztcl" "$bin"
 cd "$dir"
-exec ./ztcl-vm --root . --allow vm,file,channels,clock,event "$here/test.tcl"
+exec ./ztcl-vm --root . --allow vm,file,channels,clock,event,socket "$here/test.tcl"
