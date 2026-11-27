@@ -94,6 +94,7 @@ cap: exec
 opt: -ignorestderr | Output on the error stream is not an error.
 opt: -keepnewline | Keeps the last newline of the output.
 opt: -vm VM | Runs the pipeline in the running guest VM of `ztcl::vm`, through its agent, and needs the `vm` capability. Each program of the pipeline runs in that one guest, and a bare name goes through the `PATH` of the guest. A redirection to a file opens the file on the host under the file policy of the interpreter, and the host copies the bytes. With no file capability, a redirection to a file is an error. `&` gives the process ids of the guest.
+opt: -isolation LEVEL | `none` (the default) runs host programs. `vm` runs the pipeline in a new guest of `ztcl::vm` for this call only, as `-vm` does, and deletes the guest after it. The options `-image`, `-snapshot`, `-memory`, `-cpus`, `-net`, `-share`, `-kernel`, `-initrd`, and `-cmdline` go to `ztcl::vm create`. With no `-image`, `-snapshot`, or `-kernel`, the guest is of the image `ztcl-guest`. A guest of an image comes from the pool of booted guests when the embedder has one. It needs the `vm` capability.
 opt: -- | Ends the options.
 
 == pid

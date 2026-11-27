@@ -176,6 +176,7 @@ pub const Job = struct {
     done: std.atomic.Value(bool) = .init(false),
     end: proc.End = .{},
     timeout_ms: u32 = 0,
+    fresh: ?Fresh = null,
 
     fn errSink(j: *Job) *Sink {
         return if (j.err_to_out) &j.out else &j.err;
@@ -483,11 +484,25 @@ fn startOne(it: *Interp, connect: Connect, vm: []const u8, r: *const proc.Remote
 /// Starts the programs of `r` in the guest `vm` and gives the job. Each
 /// error before the last `STARTED` is a Tcl error, and the programs that
 /// started end.
+/// A guest of `-isolation vm`: the free of the job deletes it, on the
+/// thread of the interpreter.
+pub const Fresh = struct {
+    it: *Interp,
+    /// The name of the guest, in the page allocator.
+    name: []u8,
+    drop: *const fn (it: *Interp, name: []const u8) void,
+};
+
 pub fn start(it: *Interp, connect: Connect, vm: []const u8, r: *const proc.Remote) Error!proc.Job {
+    return startFresh(it, connect, vm, r, null);
+}
+
+/// As `start`, and the job owns the guest `fresh`.
+pub fn startFresh(it: *Interp, connect: Connect, vm: []const u8, r: *const proc.Remote, fresh: ?Fresh) Error!proc.Job {
     const n = r.stages.len;
     if (n > 64) return it.fail("too many programs in one pipeline of a guest", .{});
     const j = try pa.create(Job);
-    j.* = .{ .links = try pa.alloc(Link, n), .pids = try pa.alloc(i32, n), .err_to_out = r.err_to_out, .timeout_ms = r.timeout_ms };
+    j.* = .{ .links = try pa.alloc(Link, n), .pids = try pa.alloc(i32, n), .err_to_out = r.err_to_out, .timeout_ms = r.timeout_ms, .fresh = fresh };
     var made: usize = 0;
     errdefer {
         for (j.links[0..made]) |*l| {
@@ -566,6 +581,10 @@ fn free(ctx: *anyopaque) void {
     j.out.buf.deinit(pa);
     j.err.buf.deinit(pa);
     pa.free(j.end.codes);
+    if (j.fresh) |f| {
+        f.drop(f.it, f.name);
+        pa.free(f.name);
+    }
     pa.free(j.links);
     pa.free(j.pids);
     pa.destroy(j);

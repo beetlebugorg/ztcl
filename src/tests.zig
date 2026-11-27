@@ -3800,10 +3800,17 @@ test "exec -vm needs the vm capability, and open |-vm too" {
     const cap = tcl.interp.Capability;
     try it.allow(@backingInt(cap.exec) | @backingInt(cap.channels));
     try std.testing.expectError(error.TclError, it.eval("exec -vm vm1 /bin/true"));
-    try std.testing.expectEqualStrings("exec -vm needs the vm capability", try it.str(it.result));
+    try std.testing.expectEqualStrings("exec -vm and -isolation vm need the vm capability", try it.str(it.result));
     try std.testing.expectError(error.TclError, it.eval("open {|-vm vm1 /bin/true}"));
-    try std.testing.expectEqualStrings("exec -vm needs the vm capability", try it.str(it.result));
+    try std.testing.expectEqualStrings("exec -vm and -isolation vm need the vm capability", try it.str(it.result));
     try std.testing.expectError(error.TclError, it.eval("exec -vm"));
+    try std.testing.expectError(error.TclError, it.eval("exec -isolation vm /bin/true"));
+    try std.testing.expectEqualStrings("exec -vm and -isolation vm need the vm capability", try it.str(it.result));
+    try std.testing.expectError(error.TclError, it.eval("exec -memory 64 /bin/true"));
+    try std.testing.expectEqualStrings("option \"-memory\" needs -isolation vm", try it.str(it.result));
+    try std.testing.expectError(error.TclError, it.eval("exec -isolation cloud /bin/true"));
+    try std.testing.expectEqualStrings("bad isolation \"cloud\": must be none or vm", try it.str(it.result));
+    try std.testing.expectEqualStrings("x", try it.str(try it.eval("exec -isolation none /bin/echo x")));
     try std.testing.expectError(error.TclError, it.eval("exec -bogus true"));
-    try std.testing.expectEqualStrings("bad option \"-bogus\": must be -ignorestderr, -keepnewline, -vm, or --", try it.str(it.result));
+    try std.testing.expectEqualStrings("bad option \"-bogus\": must be -ignorestderr, -isolation, -keepnewline, -vm, or --", try it.str(it.result));
 }

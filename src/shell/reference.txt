@@ -595,6 +595,7 @@ syn: exec ?-option ...? arg ?arg ...?
 opt: -ignorestderr | Output on the error stream is not an error.
 opt: -keepnewline | Keeps the last newline of the output.
 opt: -vm VM | Runs the pipeline in the running guest VM of ztcl::vm, through its agent, and needs the vm capability.
+opt: -isolation LEVEL | none (the default) runs host programs.
 opt: -- | Ends the options.
 == pid
 syn: pid ?fileId?
