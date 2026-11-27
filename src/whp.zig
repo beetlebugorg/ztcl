@@ -1070,7 +1070,7 @@ const TestHost = struct {
         const t: *TestHost = @ptrCast(@alignCast(ctx));
         t.lock.lock();
         defer t.lock.unlock();
-        if (e == .connected) t.connected = true else t.ended = true;
+        if (e == .connected) t.connected = true else if (e != .eof) t.ended = true;
     }
 
     /// Waits up to `ms` for `cond`.
