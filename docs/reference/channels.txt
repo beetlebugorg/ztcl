@@ -4,7 +4,7 @@
 
 == open
 syn: open fileName ?access? ?permissions?
-does: Opens a file and gives a channel name. access is `r` (the default), `w` (a new file), `a` (add at the end), `r+`, `w+`, or `a+`, or a list of flags such as `{WRONLY CREAT}`. permissions is the mode of a new file, 0666 by default.
+does: Opens a file and gives a channel name. access is `r` (the default), `w` (a new file), `a` (add at the end), `r+`, `w+`, or `a+`, or a list of flags such as `{WRONLY CREAT}`. permissions is the mode of a new file, 0666 by default. A name that starts with `|` is a command pipeline, as for `exec`, with the capability `exec`. The words `-vm VM` at the start of the pipeline run it in a guest of `ztcl::vm`, as `exec -vm` does.
 cap: channels
 flags: --root . --allow channels,file
 ex: set f [open notes.txt w]; puts $f "buy milk"; close $f =>

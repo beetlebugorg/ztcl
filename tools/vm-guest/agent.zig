@@ -186,6 +186,10 @@ pub fn main(init: std.process.Init.Minimal) void {
                 if (r >= 0) _ = linux.close(r);
                 var dfl: linux.Sigaction = .{ .handler = .{ .handler = linux.SIG.DFL }, .mask = linux.sigemptyset(), .flags = 0 };
                 _ = linux.sigaction(linux.SIG.CHLD, &dfl, null);
+                // A write to the input of a program that ended gives EPIPE,
+                // and the connection goes on to its EXIT.
+                var ign: linux.Sigaction = .{ .handler = .{ .handler = linux.SIG.IGN }, .mask = linux.sigemptyset(), .flags = 0 };
+                _ = linux.sigaction(linux.SIG.PIPE, &ign, null);
                 if (f.fd == a) serve(c) else probe(c);
                 linux.exit_group(0);
             }
@@ -503,6 +507,9 @@ fn exec(c: i32, in: *In, payload: []const u8) !void {
     const pstat = pipe() orelse return sendError(c, 24, "no pipe");
     const pid = linux.fork();
     if (pid == 0) {
+        // The program gets SIGPIPE as a program of a shell does.
+        var dfl: linux.Sigaction = .{ .handler = .{ .handler = linux.SIG.DFL }, .mask = linux.sigemptyset(), .flags = 0 };
+        _ = linux.sigaction(linux.SIG.PIPE, &dfl, null);
         _ = linux.dup3(if (flags & 1 != 0) pin[0] else devNull(), 0, 0);
         _ = linux.dup3(pout[1], 1, 0);
         _ = linux.dup3(perr[1], 2, 0);

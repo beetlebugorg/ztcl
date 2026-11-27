@@ -85,7 +85,66 @@ pub const Host = struct {
 pub const State = struct {
     /// The trees of the pipelines that can still have a process.
     groups: std.ArrayList(Group) = .empty,
+    /// The start of a pipeline in a guest of `ztcl::vm` (`-vm`), which
+    /// `microvm.zig` sets when the interpreter has the `vm` capability.
+    remote: ?RemoteFn = null,
+    /// The pipelines of `-vm` in the background that can still run.
+    jobs: std.ArrayList(Job) = .empty,
 };
+
+/// One program of a pipeline that runs outside the host: its words, and
+/// true when its error output goes to the next program (`|&`).
+pub const Stage = struct { argv: []const []const u8, err_too: bool = false };
+
+/// A pipeline for `State.remote`. Each descriptor is one of the parent,
+/// and the job copies each of them. -1 is no target: the output of the
+/// last program and the error output go to the buffers of `End`, and the
+/// first program reads the end of its input at once.
+pub const Remote = struct {
+    stages: []const Stage,
+    env: []const []const u8 = &.{},
+    cwd: []const u8 = "",
+    in_fd: i32 = -1,
+    out_fd: i32 = -1,
+    err_fd: i32 = -1,
+    /// `2>@1`: the error output goes where the output goes.
+    err_to_out: bool = false,
+    timeout_ms: u32 = 0,
+};
+
+/// The result of a job: for each program its exit code, or minus the
+/// number of the signal that ended it.
+pub const End = struct {
+    codes: []const i32 = &.{},
+    pids: []const i32 = &.{},
+    out: []const u8 = "",
+    err: []const u8 = "",
+    timed_out: bool = false,
+    timeout_ms: u32 = 0,
+};
+
+/// A pipeline that runs outside the host, in the background or for a
+/// channel.
+pub const Job = struct {
+    ctx: *anyopaque,
+    pids: []const i32,
+    vt: *const VTable,
+
+    pub const VTable = struct {
+        /// Runs the job on a thread of its own. False when no thread
+        /// started.
+        detach: *const fn (*anyopaque) bool,
+        /// Runs the job to its end, or joins its thread.
+        wait: *const fn (*anyopaque) *const End,
+        /// Ends each program of the job.
+        kill: *const fn (*anyopaque) void,
+        done: *const fn (*anyopaque) bool,
+        /// Waits for the job and frees it.
+        free: *const fn (*anyopaque) void,
+    };
+};
+
+pub const RemoteFn = *const fn (it: *Interp, vm: []const u8, r: *const Remote) Error!Job;
 
 const Group = struct { tree: Tree, pids: []const i32, start: i64 };
 
@@ -129,6 +188,9 @@ const Plan = struct {
     background: bool = false,
     ignore_err: bool = false,
     keep_newline: bool = false,
+    /// True for a pipeline outside the host (`-vm`): a redirection to a
+    /// file follows the file policy of the interpreter.
+    isolated: bool = false,
 };
 
 fn closeTarget(t: Target) void {
@@ -324,6 +386,8 @@ fn parse(it: *Interp, words: []const []const u8, plan: *Plan) Error!void {
             t = .{ .owned = try memFile(it, arg) };
         } else if (f[f.len - 1] == '@') {
             t = .{ .fd = try chanFd(it, arg, !is_in) };
+        } else if (plan.isolated and !it.fs_ok()) {
+            return it.failCode("ZTCL EXEC POLICY", "couldn't open file \"{s}\": a redirection of an isolated exec needs the file capability", .{arg});
         } else if (is_in) {
             t = .{ .owned = try openFile(it, arg, .{}, "read") };
         } else {
@@ -1100,10 +1164,113 @@ fn stripNewline(text: []const u8) []const u8 {
     return if (text.len > 0 and text[text.len - 1] == '\n') text[0 .. text.len - 1] else text;
 }
 
+fn noVm(it: *Interp) Error {
+    return it.failCode("ZTCL EXEC NOVM", "exec -vm needs the vm capability", .{});
+}
+
+fn targetFd(t: Target) i32 {
+    return switch (t) {
+        .fd, .owned => |x| x,
+        else => -1,
+    };
+}
+
+/// The plan as a pipeline of `State.remote`. `in_fd` and `out_fd` are
+/// the pipes of a channel, or -1.
+fn remotePlan(it: *Interp, plan: *const Plan, in_fd: i32, out_fd: i32) Error!Remote {
+    const a = it.alloc();
+    const stages = try a.alloc(Stage, plan.cmds.items.len);
+    for (plan.cmds.items, stages) |c, *s| {
+        try noTilde(it, c.words.items[0]);
+        s.* = .{ .argv = c.words.items, .err_too = c.err_too };
+    }
+    var r: Remote = .{ .stages = stages, .timeout_ms = it.exec_host.timeout_ms };
+    r.in_fd = if (plan.in == .none) in_fd else targetFd(plan.in);
+    r.out_fd = if (plan.out == .none) out_fd else targetFd(plan.out);
+    r.err_to_out = plan.err == .to_out;
+    r.err_fd = targetFd(plan.err);
+    // In the background the outputs with no target go to the outputs of
+    // the host, as for a process of the host.
+    if (plan.background) {
+        if (r.out_fd < 0) r.out_fd = 1;
+        if (r.err_fd < 0 and !r.err_to_out) r.err_fd = 2;
+    }
+    return r;
+}
+
+/// The error text and code of Tcl for the end of a job. Gives true when
+/// the pipeline failed. `text` gets the error output.
+fn remoteFailed(it: *Interp, end: *const End, text: *std.ArrayList(u8), ignore_err: bool) Error!bool {
+    const a = it.alloc();
+    var failed = false;
+    var any_info = false;
+    var code: ?[]const u8 = null;
+    for (end.codes, 0..) |c, k| {
+        const pid = if (k < end.pids.len) end.pids[k] else 0;
+        if (c > 0) {
+            failed = true;
+            code = try std.fmt.allocPrint(a, "CHILDSTATUS {d} {d}", .{ pid, c });
+        } else if (c < 0) {
+            failed = true;
+            const name, const msg = signalName(@intCast(-c));
+            code = try std.fmt.allocPrint(a, "CHILDKILLED {d} {s} {{{s}}}", .{ pid, name, msg });
+            if (end.timed_out) {
+                try text.print(a, "child killed: the time limit of {d} ms ended\n", .{end.timeout_ms});
+            } else try text.print(a, "child killed: {s}\n", .{msg});
+            any_info = true;
+        }
+    }
+    if (end.err.len > 0 and !ignore_err) {
+        try text.appendSlice(a, end.err);
+        any_info = true;
+        failed = true;
+    }
+    if (failed and !any_info) try text.appendSlice(a, "child process exited abnormally\n");
+    if (failed) it.error_code = .{ .str = code orelse "NONE" };
+    return failed;
+}
+
+fn pidList(it: *Interp, pids: []const i32) Error!Value {
+    var out: std.ArrayList(Value) = .empty;
+    for (pids) |p| try out.append(it.alloc(), .{ .int = p });
+    return value.wrapList(it.alloc(), out.items);
+}
+
+/// `exec -vm VM`: the pipeline in the guest VM.
+fn runRemote(it: *Interp, vm: []const u8, plan: *Plan) Error!Value {
+    const a = it.alloc();
+    const f = it.execs.remote orelse return noVm(it);
+    const r = try remotePlan(it, plan, -1, -1);
+    const job = try f(it, vm, &r);
+    closePlan(plan);
+    if (plan.background) {
+        if (!job.vt.detach(job.ctx)) {
+            job.vt.kill(job.ctx);
+            job.vt.free(job.ctx);
+            return it.fail("couldn't start a thread for the pipeline", .{});
+        }
+        try it.execs.jobs.append(a, job);
+        return pidList(it, job.pids);
+    }
+    defer job.vt.free(job.ctx);
+    const end = job.vt.wait(job.ctx);
+    var text: std.ArrayList(u8) = .empty;
+    try text.appendSlice(a, end.out);
+    if (it.overLimit()) return it.memError();
+    const failed = try remoteFailed(it, end, &text, plan.ignore_err);
+    const res = if (plan.keep_newline) text.items else stripNewline(text.items);
+    if (failed) {
+        it.result = .{ .str = res };
+        return error.TclError;
+    }
+    return .{ .str = res };
+}
+
 fn cmdExec(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const a = it.alloc();
     sweep(it);
     var plan: Plan = .{};
+    var vm: ?[]const u8 = null;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
         const o = try it.str(argv[i]);
@@ -1112,19 +1279,26 @@ fn cmdExec(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             plan.ignore_err = true;
         } else if (eql(o, "-keepnewline")) {
             plan.keep_newline = true;
+        } else if (eql(o, "-vm")) {
+            i += 1;
+            if (i >= argv.len) return it.wrongArgs("exec ?-option ...? arg ?arg ...?");
+            vm = try it.str(argv[i]);
         } else if (eql(o, "--")) {
             i += 1;
             break;
-        } else return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -ignorestderr, -keepnewline, or --", .{o});
+        } else return it.failCode("TCL LOOKUP INDEX option", "bad option \"{s}\": must be -ignorestderr, -keepnewline, -vm, or --", .{o});
     }
     if (i >= argv.len) return it.wrongArgs("exec ?-option ...? arg ?arg ...?");
     const words = try a.alloc([]const u8, argv.len - i);
     for (argv[i..], words) |v, *w| w.* = try it.str(v);
+    plan.isolated = vm != null;
+    if (vm != null and it.execs.remote == null) return noVm(it);
     parse(it, words, &plan) catch |e| {
         closePlan(&plan);
         return e;
     };
     errdefer closePlan(&plan);
+    if (vm) |name| return runRemote(it, name, &plan);
     if (plan.background) {
         const st = try start(it, &plan, false, false);
         try it.execs.groups.append(a, .{ .tree = st.tree, .pids = st.pids, .start = st.start });
@@ -1181,9 +1355,24 @@ pub fn openPipeline(it: *Interp, command: []const u8, readable: bool, writable: 
     sweep(it);
     const list = try it.list(.{ .str = command });
     if (list.len == 0) return it.fail("illegal use of | or |& in command", .{});
-    const words = try a.alloc([]const u8, list.len);
-    for (list, words) |v, *w| w.* = try it.str(v);
-    var plan: Plan = .{};
+    var all = try a.alloc([]const u8, list.len);
+    for (list, all) |v, *w| w.* = try it.str(v);
+    // The options of ztcl before the words: `-vm VM`, and `--`.
+    var vm: ?[]const u8 = null;
+    while (all.len > 0) {
+        if (eql(all[0], "-vm")) {
+            if (all.len < 3) return it.fail("can't specify \"-vm\" with no guest and program", .{});
+            vm = all[1];
+            all = all[2..];
+        } else if (eql(all[0], "--")) {
+            all = all[1..];
+            break;
+        } else break;
+    }
+    if (all.len == 0) return it.fail("illegal use of | or |& in command", .{});
+    const words = all;
+    var plan: Plan = .{ .isolated = vm != null };
+    if (vm != null and it.execs.remote == null) return noVm(it);
     parse(it, words, &plan) catch |e| {
         closePlan(&plan);
         return e;
@@ -1192,6 +1381,7 @@ pub fn openPipeline(it: *Interp, command: []const u8, readable: bool, writable: 
     if (plan.background) return it.fail("illegal use of & in a command pipeline", .{});
     if (readable and plan.out != .none) return it.fail("can't read output from command: standard output was redirected", .{});
     if (writable and plan.in != .none) return it.fail("can't write input to command: standard input was redirected", .{});
+    if (vm) |name| return openRemote(it, name, &plan, readable, writable);
     const st = try start(it, &plan, readable, writable);
     const c = try chan.adopt(it, "file", if (readable) st.out else st.in, readable, writable);
     c.kind = .pipe;
@@ -1203,8 +1393,58 @@ pub fn openPipeline(it: *Interp, command: []const u8, readable: bool, writable: 
     return .{ .str = c.name };
 }
 
+/// `open "|-vm VM ..."`: a channel on a pipeline in a guest. The
+/// channel has the host end of a pipe, and the thread of the job copies
+/// between the other end and the programs.
+fn openRemote(it: *Interp, vm: []const u8, plan: *Plan, readable: bool, writable: bool) Error!Value {
+    const f = it.execs.remote orelse return noVm(it);
+    var out_p: [2]i32 = .{ -1, -1 };
+    var in_p: [2]i32 = .{ -1, -1 };
+    if (readable) out_p = try pipe(it);
+    errdefer for (out_p) |x| if (x >= 0) sys.close(x);
+    if (writable) in_p = try pipe(it);
+    errdefer for (in_p) |x| if (x >= 0) sys.close(x);
+    const r = try remotePlan(it, plan, in_p[0], out_p[1]);
+    const job = try f(it, vm, &r);
+    closePlan(plan);
+    // The job has its own copies of the ends of the programs.
+    if (out_p[1] >= 0) sys.close(out_p[1]);
+    if (in_p[0] >= 0) sys.close(in_p[0]);
+    out_p[1] = -1;
+    in_p[0] = -1;
+    if (!job.vt.detach(job.ctx)) {
+        job.vt.kill(job.ctx);
+        job.vt.free(job.ctx);
+        return it.fail("couldn't start a thread for the pipeline", .{});
+    }
+    const c = try chan.adopt(it, "file", if (readable) out_p[0] else in_p[1], readable, writable);
+    c.kind = .pipe;
+    if (readable and writable) c.wfd = in_p[1];
+    c.pids = job.pids;
+    c.job = job;
+    c.started = nowMs();
+    return .{ .str = c.name };
+}
+
+/// Waits for the job of a pipeline channel that closed.
+fn reapRemote(it: *Interp, c: *chan.Channel, job: Job) Error!void {
+    c.job = null;
+    if (!c.blocking) {
+        try it.execs.jobs.append(it.alloc(), job);
+        return;
+    }
+    defer job.vt.free(job.ctx);
+    const end = job.vt.wait(job.ctx);
+    var text: std.ArrayList(u8) = .empty;
+    if (try remoteFailed(it, end, &text, false)) {
+        it.result = .{ .str = stripNewline(text.items) };
+        return error.TclError;
+    }
+}
+
 /// Waits for the processes of a pipeline channel that closed.
 pub fn reap(it: *Interp, c: *chan.Channel) Error!void {
+    if (c.job) |job| return reapRemote(it, c, job);
     var text: std.ArrayList(u8) = .empty;
     const st: Started = .{ .pids = @constCast(c.pids), .err = c.err_fd, .start = c.started, .tree = c.tree };
     // A channel that does not block does not wait for its processes.
@@ -1226,6 +1466,12 @@ pub fn reap(it: *Interp, c: *chan.Channel) Error!void {
 
 /// Ends the processes of a pipeline channel with no wait for output.
 pub fn abandon(c: *chan.Channel) void {
+    if (c.job) |job| {
+        job.vt.kill(job.ctx);
+        job.vt.free(job.ctx);
+        c.job = null;
+        return;
+    }
     treeKill(&c.tree, c.pids);
     for (c.pids) |p| _ = waitPid(p, true);
     treeClose(&c.tree);
@@ -1235,6 +1481,14 @@ pub fn abandon(c: *chan.Channel) void {
 /// Collects the trees that ended, and kills each tree that is past the
 /// time limit.
 pub fn sweep(it: *Interp) void {
+    var k: usize = 0;
+    while (k < it.execs.jobs.items.len) {
+        const j = it.execs.jobs.items[k];
+        if (j.vt.done(j.ctx)) {
+            j.vt.free(j.ctx);
+            _ = it.execs.jobs.orderedRemove(k);
+        } else k += 1;
+    }
     var i: usize = 0;
     while (i < it.execs.groups.items.len) {
         const g = &it.execs.groups.items[i];
@@ -1260,6 +1514,11 @@ pub fn sweep(it: *Interp) void {
 
 /// Kills each tree when the interpreter ends.
 pub fn abandonAll(it: *Interp) void {
+    for (it.execs.jobs.items) |j| {
+        j.vt.kill(j.ctx);
+        j.vt.free(j.ctx);
+    }
+    it.execs.jobs = .empty;
     for (it.execs.groups.items) |*g| {
         treeKill(&g.tree, g.pids);
         for (g.pids) |p| _ = waitPid(p, true);

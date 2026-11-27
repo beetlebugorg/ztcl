@@ -72,6 +72,10 @@ Each path is a path below the root folder of `file`. The framework gets the fina
 - `console` gives the console of the guest (`hvc0`) as a channel, one time for each guest.
 - `delete` stops the guest at once and frees it. The end of the interpreter deletes each guest.
 
+### `exec -vm`
+
+With the capabilities `vm` and `exec`, the `exec` command and `open "|..."` run a pipeline in a running guest: `exec -vm $vm /bin/busybox ls / | /bin/busybox wc -l`, or `open "|-vm $vm /bin/busybox cat" r+`. Each program of the pipeline runs in that one guest, on its own connection to the agent, and the host copies the output of each program to the input of the next. A bare name goes through the `PATH` of the guest (`/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`). The guest gets no environment of the host. The result, the errors (`CHILDSTATUS`, `CHILDKILLED`, the error output), `-ignorestderr`, `-keepnewline`, `2>@1`, and `|&` are as for a program of the host. A redirection (`< file`, `> file`, `2>@ chan`) opens the file or uses the channel on the host, and the host copies the bytes: the guest gets no path of the host, and a redirection to a file needs the file capability and follows its root folder. `exec -vm ... &` gives the process ids of the guest, and `pid` of a channel gives them too. The time limit of `exec` ends the programs of the guest, and so does the end of the interpreter. A small `exec -vm $vm /bin/busybox true` runs in about 0.94 ms on KVM (best of 20 on one Linux host).
+
 ## Images
 
 A signed guest image comes from the release of the image (ztcl#312): a manifest of its files, signed with a key that ztcl has built in, the kernel, and a read-only root disk with `dm-verity`. `docs/dev/vm-image.md` has the format and the keys.
@@ -163,6 +167,8 @@ A start of a guest with 1 CPU and 64 MB is about 100 ms on an M1 Mac, and 86 ms 
 | `ZTCL VM LISTEN` | `the guest vm1 has a listener on port 3000 already`, `no listener` for `unlisten`, and on KVM `vsock port 3000 of the host is in use` |
 | `ZTCL VM NOEVENT` | `ztcl::vm listen needs the event capability` |
 | `ZTCL VM TIMEOUT` | `the guest vm1 gave no answer in time`, for `exec` past `-timeout` |
+| `ZTCL EXEC NOVM` | `exec -vm needs the vm capability` |
+| `ZTCL EXEC POLICY` | `couldn't open file "x": a redirection of an isolated exec needs the file capability` |
 | `ZTCL VM CONSOLE` | `the console of the guest vm1 is a channel already` |
 | `ZTCL VM STORE` | `no store of images: the embedder gives no folder` |
 | `ZTCL VM IMAGE SIGNATURE` | `the manifest is not signed by a key that this ztcl trusts`, and the other failures of the signature |

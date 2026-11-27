@@ -91,6 +91,10 @@ ex: msgcat::mclocale fr; msgcat::mcset fr Hello Bonjour; msgcat::mc Hello => Bon
 syn: exec ?-option ...? arg ?arg ...?
 does: Runs a program and gives its output. `|` makes a pipeline, `<` and `>` redirect, and `&` runs it in the background. A process of `exec` is outside the root folder and each limit, with the full power of the user. Turn it on only for scripts that you trust.
 cap: exec
+opt: -ignorestderr | Output on the error stream is not an error.
+opt: -keepnewline | Keeps the last newline of the output.
+opt: -vm VM | Runs the pipeline in the running guest VM of `ztcl::vm`, through its agent, and needs the `vm` capability. Each program of the pipeline runs in that one guest, and a bare name goes through the `PATH` of the guest. A redirection to a file opens the file on the host under the file policy of the interpreter, and the host copies the bytes. With no file capability, a redirection to a file is an error. `&` gives the process ids of the guest.
+opt: -- | Ends the options.
 
 == pid
 syn: pid ?fileId?
