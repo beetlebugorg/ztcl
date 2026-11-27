@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Web Bluetooth · ztcl</title>
+<meta name="description" content="A Tcl script in the page reads a Bluetooth heart-rate monitor with web::bluetooth and shows the rate.">
+<link rel="canonical" href="https://beetlebug.org/ztcl/playground/bluetooth.html">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="demo.css">
+</head>
+<body>
+<main class="wrap demo">
+<h1>Web Bluetooth: a heart-rate monitor</h1>
+<p>A Tcl script in this page asks for a Bluetooth device with the Heart Rate service, connects to it, and turns on the notifications of the Heart Rate Measurement characteristic. Each notification shows the rate. Chest straps, watches in a broadcast mode, and fitness trackers have this service. The script runs in <code>ztcl-host.wasm</code> with the grants <code>dom</code>, <code>event</code>, and <code>web:bluetooth</code>.</p>
+<p id="support" class="note"></p>
+<div id="app">
+  <div class="row">
+    <button id="go" type="button">Choose a heart-rate monitor</button>
+    <button id="stop" class="second" type="button">Disconnect</button>
+  </div>
+  <div class="big"><span id="bpm">--</span><small>bpm</small></div>
+  <pre id="out"></pre>
+</div>
+<p class="note">The browser shows its device chooser after the click. The script is below, and the <a href="../web/bluetooth/">guide to Web Bluetooth</a> tells how it works.</p>
+<pre id="src"></pre>
+</main>
+<script type="module">
+import { runDemo } from "./demo.mjs";
+await runDemo({
+  script: "bluetooth.tcl",
+  allow: ["web:bluetooth"],
+  supported: () => !!navigator.bluetooth,
+  missing: "This browser has no Web Bluetooth. Chrome and Edge on the desktop and Chrome on Android have it.",
+  ready: "Ready. Put on the monitor, then press the button.",
+});
+</script>
+</body>
+</html>

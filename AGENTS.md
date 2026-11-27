@@ -26,6 +26,8 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 | `node tools/wasm-web.mjs zig-out/lib/ztcl.wasm` | Tests `web/ztcl.mjs` and the Node.js example. |
 | `zig build webidl` | Writes `web/webidl-table.mjs` from the Web IDL files of `tools/webidl/idl/`. |
 | `node tools/web-api.mjs zig-out/lib/ztcl.wasm zig-out/lib/ztcl-host.wasm` | Tests the commands `web::` of `ztcl-host.wasm` with a fake `navigator.serial`. |
+| `node tools/web-groups.mjs zig-out/lib/ztcl-host.wasm` | Tests the Tcl wrappers of the groups of `web::` (`src/web/`) and the demo scripts of the playground with fake device APIs. |
+| `node tools/web-demos.mjs /usr/bin/chromium` | Runs the demo pages of the Web APIs (`docs/site/playground/`) in a headless Chromium with fake device APIs. Build with `zig build wasm-host` first. |
 | `zig build wasm-shell` | Builds `zig-out/lib/ztcl-shell.wasm`: the library with the shell, for the site. |
 | `node tools/wasm-shell.mjs zig-out/lib/ztcl-shell.wasm` | Tests that shell through `web/ztcl-shell.mjs`. |
 | `node tools/site-shell.mjs chromium URL` | Tests the shell of a page of the built site in a headless Chromium. |

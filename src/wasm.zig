@@ -271,6 +271,31 @@ fn ztcl_web_serial_allow(h: *Handle) callconv(.c) i32 {
     return 0;
 }
 
+/// The Tcl wrappers of the groups of `web::` (src/web/). The helpers of
+/// `common.tcl` run before each one, and a second run of them defines
+/// the same procs again.
+const web_libs = [_]struct { group: []const u8, script: []const u8 }{
+    .{ .group = "bluetooth", .script = @embedFile("web/bluetooth.tcl") },
+};
+
+/// Runs the Tcl wrapper of the group `ptr[0..len]`, such as
+/// `bluetooth`, at the global level. The host calls it for each granted
+/// group, after `ztcl_web_allow`. Gives 0, 1 with the error in the
+/// result, or 2 for a group with no wrapper.
+fn ztcl_web_lib(h: *Handle, ptr: [*]const u8, len: usize) callconv(.c) i32 {
+    for (web_libs) |lib| {
+        if (!std.mem.eql(u8, lib.group, ptr[0..len])) continue;
+        for ([_][]const u8{ @embedFile("web/common.tcl"), lib.script }) |script| {
+            _ = h.it.eval(script) catch |e| {
+                h.result = if (e == error.TclError) h.it.str(h.it.result) catch "out of memory" else @errorName(e);
+                return 1;
+            };
+        }
+        return 0;
+    }
+    return 2;
+}
+
 /// Adds the port `webserialN` for the port `id` of the host. Gives 0, or
 /// 1 when the memory is full.
 fn ztcl_web_serial_port(h: *Handle, id: u32) callconv(.c) i32 {
@@ -314,6 +339,7 @@ comptime {
         @export(&ztcl_web_event, .{ .name = "ztcl_web_event" });
         @export(&ztcl_web_split, .{ .name = "ztcl_web_split" });
         @export(&ztcl_web_serial_allow, .{ .name = "ztcl_web_serial_allow" });
+        @export(&ztcl_web_lib, .{ .name = "ztcl_web_lib" });
         @export(&ztcl_web_serial_port, .{ .name = "ztcl_web_serial_port" });
         @export(&ztcl_web_serial_data, .{ .name = "ztcl_web_serial_data" });
         @export(&ztcl_dom_event, .{ .name = "ztcl_dom_event" });
