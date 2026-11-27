@@ -900,6 +900,9 @@ const mac = if (on_mac) struct {
         listens: std.ArrayListUnmanaged(Listen) = .empty,
         /// The network of `-net nat`.
         net: ?*Net = null,
+        /// The connection to the agent that the last request left open
+        /// (keepalive), for the next request.
+        idle: ?vmagent.Conn = null,
     };
 
     const Listen = struct { port: u32, l: *vz.Listener, pipe_w: c_int, chan: []const u8, framed: bool = false };
@@ -1219,6 +1222,7 @@ const mac = if (on_mac) struct {
     /// Asks the guest to power off and waits up to 5 seconds, then
     /// stops it at once. `force` stops it at once.
     fn stop(g: *Guest, force: bool) void {
+        dropIdle(g);
         const st = g.machine.state();
         if (st == .stopped or st == .@"error") return;
         if (!force and st == .running and g.machine.requestStop()) {
@@ -1520,6 +1524,17 @@ const mac = if (on_mac) struct {
     /// A connection to the agent, after its `HELLO`.
     fn agent(it: *Interp, g: *Guest, timeout: u32) Error!vmagent.Conn {
         if (g.machine.state() != .running) return it.failCode("ZTCL VM STATE", "the guest {s} is {s}", .{ g.name, status(g) });
+        // The connection of the last request, when the agent keeps it: no
+        // connect of vsock (about 120 us of the framework) and no HELLO.
+        if (g.idle) |*kept| {
+            var a = kept.*;
+            g.idle = null;
+            if (a.idleOpen()) {
+                a.timeout_ms = @intCast(@min(timeout, std.math.maxInt(i32)));
+                return a;
+            }
+            _ = c.close(a.fd);
+        }
         const conn = connect(&g.machine, vmagent.port, timeout) orelse
             return it.failCode("ZTCL VM AGENT", "the agent of the guest {s} did not answer on port {d}", .{ g.name, vmagent.port });
         const fd = c.dup(conn.fd);
@@ -1536,15 +1551,37 @@ const mac = if (on_mac) struct {
     fn execCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
         const r = try execArgs(it, args);
         var a = try agent(it, g, r.timeout);
-        defer _ = c.close(a.fd);
-        return agentExec(it, g.name, &a, r);
+        const v = agentExec(it, g.name, &a, r) catch |e| {
+            _ = c.close(a.fd);
+            return e;
+        };
+        keepConn(g, &a);
+        return v;
     }
 
     fn mountCmd(it: *Interp, g: *Guest, args: []const Value) Error!Value {
         const r = try mountArgs(it, args);
         var a = try agent(it, g, 5000);
-        defer _ = c.close(a.fd);
-        return agentMount(it, g.name, &a, r, .virtiofs);
+        const v = agentMount(it, g.name, &a, r, .virtiofs) catch |e| {
+            _ = c.close(a.fd);
+            return e;
+        };
+        keepConn(g, &a);
+        return v;
+    }
+
+    /// Keeps the connection of a request that ended well for the next
+    /// request, when the agent takes more on it; else closes it.
+    fn keepConn(g: *Guest, a: *vmagent.Conn) void {
+        if (g.idle) |old| _ = c.close(old.fd);
+        g.idle = null;
+        if (a.reusable()) g.idle = a.* else _ = c.close(a.fd);
+    }
+
+    /// Closes the kept connection: the guest stops, restarts, or goes.
+    fn dropIdle(g: *Guest) void {
+        if (g.idle) |old| _ = c.close(old.fd);
+        g.idle = null;
     }
 
     fn console(it: *Interp, g: *Guest) Error!Value {

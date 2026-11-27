@@ -32,6 +32,10 @@ pub const f_resume: u32 = 1 << 3;
 
 pub const Error = error{ Io, Closed, Timeout, Protocol, Version, Agent } || Allocator.Error;
 
+/// Bit 5 of the features of HELLO: the agent serves more requests on one
+/// connection.
+pub const feature_keepalive: u32 = 1 << 5;
+
 pub const Hello = struct { version: u16, features: u32, boot_main: u64, boot_listen: u64 };
 
 /// The `ERROR` frame of the agent, after `error.Agent`.
@@ -57,6 +61,26 @@ pub const Conn = struct {
     rbuf: [65536]u8 = undefined,
     rpos: usize = 0,
     rend: usize = 0,
+    /// The agent takes more requests on this connection (bit 5 of its
+    /// features), so the host can keep it for the next one.
+    keepalive: bool = false,
+
+    /// Whether the connection can take the next request: the agent keeps
+    /// connections, and the answer was read to its end.
+    pub fn reusable(c: *const Conn) bool {
+        return c.keepalive and c.rpos == c.rend;
+    }
+
+    /// Whether a kept connection is still open: an idle connection has no
+    /// byte to read, so a readable one ended (the guest stopped, or its
+    /// agent went) or holds data that no request asked for.
+    pub fn idleOpen(c: *Conn) bool {
+        if (comptime on_win) return false;
+        var fds = [1]posix.pollfd{.{ .fd = c.fd, .events = posix.POLL.IN, .revents = 0 }};
+        const rc = posix.poll(&fds, 1, 0);
+        if (posix.errno(rc) != .SUCCESS) return false;
+        return rc == 0;
+    }
 
     fn waitRead(c: *Conn) Error!void {
         if (comptime on_win) {
@@ -235,6 +259,7 @@ pub const Conn = struct {
             .boot_listen = std.mem.readInt(u64, f.payload[14..22], .little),
         };
         if (h.version != version) return error.Version;
+        c.keepalive = h.features & feature_keepalive != 0;
         return h;
     }
 };
