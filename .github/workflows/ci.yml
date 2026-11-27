@@ -16,10 +16,10 @@ permissions:
 
 # A new push to a pull request cancels the run of its old commit. Runs
 # on main do not cancel each other: each one completes and saves the Zig
-# cache. A scheduled run has a group of its own, so a push to main does
-# not cancel the full run.
+# cache. A scheduled or manual run has a group of its own, so a push to
+# main does not cancel the full run while it waits.
 concurrency:
-  group: ci-${{ github.event_name == 'schedule' && 'schedule' || github.ref }}
+  group: ci-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'full' || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
