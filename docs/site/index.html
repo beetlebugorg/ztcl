@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ztcl · Tcl, compiled</title>
-<meta name="description" content="A Tcl 8.6 interpreter in Zig with an optional JIT, exact compute and memory limits, real threads, fast JSON, one static binary, and a WebAssembly build. Up to 50 times as fast as tclsh on an integer loop.">
+<meta name="description" content="A Tcl 8.6 interpreter in Zig with a JIT, exact compute and memory limits, real threads, fast JSON, one static binary, and a WebAssembly build. Up to 50 times as fast as tclsh on an integer loop.">
 <link rel="canonical" href="https://beetlebug.org/ztcl/">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="assets/site.css">
@@ -235,6 +235,7 @@ Each command can use 10,000,000 compute units.
       <div class="card"><span class="tag">Shipped</span><h3>A JIT for hot loops</h3><p class="muted">Up to 50 times as fast as tclsh 8.6.16 on an integer loop. The JIT gives the same results, errors, and compute units as the interpreter on the whole Tcl test suite. <a href="jit/">The JIT</a>.</p></div>
       <div class="card"><span class="tag">Shipped</span><h3>WebAssembly: ztcl as a guest</h3><p class="muted">The same interpreter runs in a browser, in Node.js, and under WASI with the same limits. The <a href="playground/">playground</a> runs here with no server.</p></div>
       <div class="card"><span class="tag">Shipped</span><h3>Threads in their own process</h3><p class="muted"><code>thread::create -isolation process</code> runs a thread in a child process in the sandbox of Linux, macOS, or Windows: a crash or a bad C package ends only the child. <code>thread::transfer</code> gives the child one file or connection. <a href="isolation/">Isolated threads</a>.</p></div>
+      <div class="card"><span class="tag">Shipped</span><h3>Linux guests on your hypervisor</h3><p class="muted"><code>ztcl::vm</code> boots a small Linux guest on Virtualization.framework, KVM, or the Windows Hypervisor Platform, with no QEMU, and runs programs in it. A warm guest answers in under 1 ms. <a href="vm/">Linux guests</a>.</p></div>
       <div class="card"><span class="tag">Shipped</span><h3>Made for review</h3><p class="muted">The <a href="learn/01-read-a-command/">Learn course</a> teaches Tcl to read, judge, and steer code from an agent. The <a href="reference/">command reference</a>, <a href="reference/api.json">api.json</a>, and <a href="llms.txt">llms.txt</a> give an agent the exact synopsis, errors, and capability of each command.</p></div>
       <div class="card"><span class="tag">Shipped</span><h3>Debug with no puts</h3><p class="muted">Probes record values in a running script. <code>ztcl debug</code> explains an error, records and replays a run, serves MCP tools to an agent, and is a DAP debugger for your editor. <a href="debugging/">Debugging</a>.</p></div>
       <div class="card"><span class="tag">Shipped</span><h3>GUI apps that an agent can see</h3><p class="muted"><a href="https://beetlebug.org/ztk/">ztk</a> runs Tk scripts on ztcl. An agent reads the widget tree and drives the window that it built.</p></div>
