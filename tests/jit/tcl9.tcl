@@ -25,6 +25,9 @@ proc names {} {
     set acc {}
     array set A {a 1 b 2 c 3}
     array for {k v} A { lappend acc $k[string insert $v 0 =] }
+    array default set A 0
+    incr A(n)
+    lappend acc $A(n) $A(none)
     dict getdef {a {b 2}} a b 0
     return $acc
 }

@@ -1983,8 +1983,7 @@ pub inline fn opStoreElem(comptime named: bool, it: *Interp, f: *Frame, code: *c
     const cell = try writeCell(named, it, f, code, i.a);
     switch (cell.v) {
         .undef => {
-            const m = try it.alloc().create(interp.ArrayMap);
-            m.* = .empty;
+            const m = try interp.newArray(it.alloc());
             cell.v = .{ .arr = m };
         },
         .arr => {},

@@ -247,7 +247,7 @@ fn peek(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!Value
     if (cell.v != .traced) {
         if (idx) |i| {
             if (cell.v == .arr) {
-                if (cell.v.arr.get(i)) |v| return v;
+                if (interp.elemOrDefault(cell.v.arr, i)) |v| return v;
                 return it.fail("can't read \"{s}({s})\": no such element in array", .{ name, i });
             }
             return it.fail("can't read \"{s}({s})\": no such variable", .{ name, i });
@@ -259,7 +259,7 @@ fn peek(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Error!Value
     const t = cell.v.traced;
     if (idx) |i| switch (t.inner) {
         .arr => |m| {
-            if (m.get(i)) |v| return v;
+            if (interp.elemOrDefault(m, i)) |v| return v;
             return it.fail("can't read \"{s}({s})\": no such element in array", .{ name, i });
         },
         .val => return it.fail("can't read \"{s}({s})\": variable isn't array", .{ name, i }),
@@ -282,7 +282,7 @@ pub fn readOpt(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8) Erro
     if (cell.v != .traced) return null;
     return switch (t.inner) {
         .val => |v| if (idx == null) v else null,
-        .arr => |m| if (idx) |i| m.get(i) else null,
+        .arr => |m| if (idx) |i| interp.elemOrDefault(m, i) else null,
         .undef => null,
     };
 }
@@ -293,8 +293,7 @@ pub fn write(it: *Interp, cell: *Var, name: []const u8, idx: ?[]const u8, v: Val
     if (idx) |i| {
         switch (t.inner) {
             .undef => {
-                const m = try it.alloc().create(interp.ArrayMap);
-                m.* = .empty;
+                const m = try interp.newArray(it.alloc());
                 t.inner = .{ .arr = m };
             },
             .arr => {},
