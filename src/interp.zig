@@ -2312,6 +2312,9 @@ pub const Interp = struct {
         };
         try it.checkNative();
         if (s.code) |bc| return vm.run(it, bc);
+        // A body of the top level of the program of the debugger compiles
+        // at its first run, so its lines get `probe` instructions.
+        if (@import("probe.zig").enabled and s.runs == 0 and it.probes != null and @import("probe.zig").topBase(it, s) != null) s.runs = 1;
         // A script that runs one time stays on the general path.
         if (s.runs > 0) {
             s.code = try vm.compileNamed(it, s);

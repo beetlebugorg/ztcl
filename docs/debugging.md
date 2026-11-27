@@ -184,9 +184,11 @@ The debugger has these parts:
 | The stack, with the line of each frame. | `stackTrace` |
 | The locals of each frame, and the globals. | `scopes`, `variables` |
 | Tcl code in a frame: a watch, a hover, or a command of the console. | `evaluate` |
+| Error breakpoints: with the exception filter `error`, the run stops at the start of each error, also an error that `catch` or `try` catches. The stop has the message and the command. The error goes on after `continue`. | `setExceptionBreakpoints` |
+| Pause: the run stops at its next line. A request in a run is read within 256 lines, so `setBreakpoints` works in a run too. A long native command, such as `after 5000` or `vwait`, ends first. | `pause` |
 | Hot reload: the debugger reads the program file again and runs each `proc` command of its top level. A frame that runs keeps the old body until it returns. | `ztclReload` (a custom request, with an optional `path`) |
 
-A stop happens at each line of a proc and at each command of the top level of the program file. The body of a loop at the top level has no stops. Put the loop in a proc to step through it. The output of `puts` goes to the event `output`, because stdout has the protocol. An editor gets the debugger with a launch entry that starts `ztcl debug --dap`. In VS Code, an extension of the type `ztcl` with this entry in `package.json` is enough:
+A stop happens at each line of a proc, at each command of the top level of the program file, and at each line of a body of the top level, such as the body of a `while` or a `foreach`. Such a body runs in the bytecode interpreter while the debugger runs. The output of `puts` goes to the event `output`, because stdout has the protocol. An editor gets the debugger with a launch entry that starts `ztcl debug --dap`. In VS Code, an extension of the type `ztcl` with this entry in `package.json` is enough:
 
 ```json
 {"debuggers": [{"type": "ztcl", "label": "ztcl", "program": "ztcl", "args": ["debug", "--dap"]}]}

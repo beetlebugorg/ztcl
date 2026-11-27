@@ -362,7 +362,7 @@ pub fn prepare(it: *Interp, code: *vm.Code) ?*Fn {
     }
     // A body with probes stays in the interpreter. The body compiles
     // again with no probe when the last probe goes.
-    if (code.probed != null) {
+    if (code.probed != null or code.probe_top) {
         code.jit_state = .failed;
         return null;
     }

@@ -6,15 +6,20 @@
 //! `setBreakpoints`, `setFunctionBreakpoints`,
 //! `setExceptionBreakpoints`, `configurationDone`, `threads`,
 //! `stackTrace`, `scopes`, `variables`, `continue`, `next`, `stepIn`,
-//! `stepOut`, `evaluate`, `disconnect`, and `terminate`. The custom
-//! request `ztclReload` defines the procs of the program file again.
+//! `stepOut`, `pause`, `evaluate`, `disconnect`, and `terminate`. The
+//! custom request `ztclReload` defines the procs of the program file
+//! again.
 //!
 //! The run starts at `configurationDone`. The debugger uses the line
 //! hook of `probe.zig`: each line of a proc and each command of the top
 //! level of the program file calls `onLine`. At a stop, `onLine` sends
 //! the event `stopped` and reads requests until a request continues the
 //! run. A stop is a breakpoint, a function breakpoint at the entry of a
-//! proc, or the next line of a step. The output of `puts` goes to the
+//! proc, the next line of a step, an error with the exception filter
+//! `error`, or a `pause`. A body of the top level, such as the body of a
+//! `while`, has a stop at each line too. While the program runs, `poll`
+//! tells when a request waits: `onLine` then reads it, so `pause` and
+//! `setBreakpoints` work in a run. The output of `puts` goes to the
 //! event `output`, because stdout has the protocol.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
@@ -66,6 +71,18 @@ pub const Server = struct {
     frames: std.ArrayList(*interp.Frame) = .empty,
     /// The client sent `disconnect` or `terminate`, or stdin closed.
     done: bool = false,
+    /// Stop at the start of each error (the exception filter `error`).
+    break_errors: bool = false,
+    /// A `pause` came while the program ran: the next line stops.
+    pause: bool = false,
+    /// True when a request waits on `in`. Null: the server reads
+    /// requests only at a stop.
+    poll: ?*const fn (ctx: ?*anyopaque) bool = null,
+    poll_ctx: ?*anyopaque = null,
+    /// The lines since the last call of `poll`, and the lines between
+    /// two calls: a poll is a system call.
+    ticks: u32 = 0,
+    poll_every: u32 = 256,
     exit_code: i64 = 0,
 };
 
@@ -194,6 +211,9 @@ fn handle(s: *Server, a: Allocator, req: json.ObjectMap, stopped: bool) !bool {
             .supportsConditionalBreakpoints = true,
             .supportsEvaluateForHovers = true,
             .supportsTerminateRequest = true,
+            .exceptionBreakpointFilters = &[_]struct { filter: []const u8, label: []const u8, description: []const u8, default: bool }{
+                .{ .filter = "error", .label = "Errors", .description = "Stop at the start of each error, also an error that catch or try catches.", .default = false },
+            },
         });
         try event(s, a, "initialized", null);
     } else if (eql(cmd, "launch")) {
@@ -240,7 +260,15 @@ fn handle(s: *Server, a: Allocator, req: json.ObjectMap, stopped: bool) !bool {
         }
         try respond(s, a, req, true, null, .{ .breakpoints = shown.items });
     } else if (eql(cmd, "setExceptionBreakpoints")) {
-        try respond(s, a, req, true, null, .{ .breakpoints = &[_]u8{} });
+        s.break_errors = false;
+        for (listOf(ar, "filters")) |f| {
+            if (f == .string and eql(f.string, "error")) s.break_errors = true;
+        }
+        try respond(s, a, req, true, null, null);
+    } else if (eql(cmd, "pause")) {
+        // At a stop, the program is paused already.
+        if (!stopped) s.pause = true;
+        try respond(s, a, req, true, null, null);
     } else if (eql(cmd, "threads")) {
         try respond(s, a, req, true, null, .{ .threads = &[_]struct { id: u32, name: []const u8 }{.{ .id = 1, .name = "main" }} });
     } else if (eql(cmd, "stackTrace")) {
@@ -302,7 +330,7 @@ fn samePath(x: []const u8, y: []const u8) bool {
 fn runProgram(s: *Server, a: Allocator) !void {
     const it = s.it;
     const st = try probe.state(it);
-    st.line_hook = .{ .ctx = s, .f = onLine };
+    st.line_hook = .{ .ctx = s, .f = onLine, .err = onError };
     defer st.line_hook = null;
     if (s.stop_on_entry) s.mode = .step_in;
     const script = it.compile(s.text) catch {
@@ -311,7 +339,11 @@ fn runProgram(s: *Server, a: Allocator) !void {
         return finish(s, a);
     };
     st.top = script;
-    defer st.top = null;
+    st.top_text = s.text;
+    defer {
+        st.top = null;
+        st.top_text = "";
+    }
     const prev = it.script_name;
     it.script_name = s.program orelse "";
     defer it.script_name = prev;
@@ -340,6 +372,7 @@ fn onLine(ctx: ?*anyopaque, it: *Interp, p: ?*interp.Proc, line: u32) void {
     const s: *Server = @ptrCast(@alignCast(ctx.?));
     if (s.done) return;
     const st = it.probes orelse return;
+    readWaiting(s, it);
     const place: Place = if (p) |pp| (if (st.bases.get(pp)) |b| .{ .line = b + @max(line, 1) - 1, .in_file = true } else .{ .line = line, .in_file = false }) else .{ .line = line, .in_file = true };
     const reason: ?[]const u8 = why(s, it, p, line, place) catch null;
     if (line != 0) s.places.put(s.gpa, it.frame, place) catch {};
@@ -350,8 +383,57 @@ fn onLine(ctx: ?*anyopaque, it: *Interp, p: ?*interp.Proc, line: u32) void {
     };
 }
 
+/// Answers the requests that wait while the program runs.
+fn readWaiting(s: *Server, it: *Interp) void {
+    const poll = s.poll orelse return;
+    s.ticks += 1;
+    if (s.ticks < s.poll_every) return;
+    s.ticks = 0;
+    while (!s.done and poll(s.poll_ctx)) {
+        var arena: std.heap.ArenaAllocator = .init(s.gpa);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const body = (readMessage(s, a) catch null) orelse {
+            s.done = true;
+            it.cancelEval(true, "the debugger ended the run") catch {};
+            return;
+        };
+        const req = json.parseFromSliceLeaky(json.Value, a, body, .{}) catch continue;
+        if (req != .object) continue;
+        _ = handle(s, a, req.object, false) catch {
+            s.done = true;
+            return;
+        };
+    }
+}
+
+/// The error hook: an error starts. With the filter `error`, the run
+/// stops in the frame of the error.
+fn onError(ctx: ?*anyopaque, it: *Interp, cmd: []const u8) void {
+    const s: *Server = @ptrCast(@alignCast(ctx.?));
+    if (s.done or !s.break_errors) return;
+    const st = it.probes orelse return;
+    var buf: [400]u8 = undefined;
+    var msg_buf: [200]u8 = undefined;
+    const full = it.str(it.result) catch "";
+    const msg = msg_buf[0..@min(full.len, msg_buf.len)];
+    @memcpy(msg, full[0..msg.len]);
+    const text = std.fmt.bufPrint(&buf, "{s}\n    while executing \"{s}\"", .{ msg, cmd[0..@min(cmd.len, 150)] }) catch msg;
+    // The error goes on after the stop: the requests of the stop must
+    // not change its message, its trace, or its code.
+    const saved = probe.Saved.take(it);
+    defer saved.back(it);
+    stopWith(s, it, st, "exception", msg, text) catch {
+        s.done = true;
+    };
+}
+
 fn why(s: *Server, it: *Interp, p: ?*interp.Proc, line: u32, place: Place) !?[]const u8 {
     const level = it.frame.level;
+    if (s.pause and line != 0) {
+        s.pause = false;
+        return "pause";
+    }
     if (line == 0) {
         if (p == null or it.frame.argv.len == 0) return null;
         const name = std.mem.trimStart(u8, try it.str(it.frame.argv[0]), ":");
@@ -375,13 +457,20 @@ fn why(s: *Server, it: *Interp, p: ?*interp.Proc, line: u32, place: Place) !?[]c
 }
 
 fn stop(s: *Server, it: *Interp, st: *probe.State, reason: []const u8) !void {
+    return stopWith(s, it, st, reason, null, null);
+}
+
+/// A stop. `description` and `text` are for an exception: the message,
+/// and the message with the command.
+fn stopWith(s: *Server, it: *Interp, st: *probe.State, reason: []const u8, description: ?[]const u8, text: ?[]const u8) !void {
     var arena: std.heap.ArenaAllocator = .init(s.gpa);
     defer arena.deinit();
     s.mode = .run;
+    s.pause = false;
     s.frames.clearRetainingCapacity();
     var f: ?*interp.Frame = it.frame;
     while (f) |fr| : (f = fr.parent) try s.frames.append(s.gpa, fr);
-    try event(s, arena.allocator(), "stopped", .{ .reason = reason, .threadId = 1, .allThreadsStopped = true });
+    try event(s, arena.allocator(), "stopped", .{ .reason = reason, .threadId = 1, .allThreadsStopped = true, .description = description, .text = text });
     // A line of an evaluation in the stop does not stop.
     const busy = st.busy;
     st.busy = true;
