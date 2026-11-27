@@ -120,10 +120,15 @@ test "the M115 script of tools/web-api.mjs against a PTY" {
     // The reply of the printer waits in the PTY before the script runs.
     // The write comes after `open`, which turns off the change of \r to \n.
     try std.testing.expect(tcl.sys.write(m, "FIRMWARE_NAME:Marlin 2.1.2\r\nok\r\n") == .n);
-    _ = try ev(&it, "m115 $f; after 3000 {set ::done 3}; vwait ::done; close $f");
+    _ = try ev(&it, "m115 $f; after 3000 {set ::done 3}; vwait ::done");
     try std.testing.expectEqualStrings("1", try ev(&it, "set ::done"));
     try std.testing.expectEqualStrings("{FIRMWARE_NAME:Marlin 2.1.2} ok", try ev(&it, "set ::reply"));
+    // The command of the script, read while the channel is open: on macOS
+    // the last close of the slave side ends the master side at once, and
+    // the master reads the end of the stream in the place of the bytes
+    // that wait (Linux gives the bytes first).
     var got: [16]u8 = undefined;
     const r = tcl.sys.read(m, &got);
+    _ = try ev(&it, "close $f");
     try std.testing.expect(r == .n and std.mem.eql(u8, got[0..r.n], "M115\n"));
 }
