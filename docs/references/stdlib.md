@@ -52,6 +52,7 @@ The JSON parser of ztcl implements the simdjson algorithm in Zig. The code in `s
 - Shay Gueron and Michael E. Kounavis, "Intel Carry-Less Multiplication Instruction and its Usage for Computing the GCM Mode", Intel white paper 323640 (2010). **What ztcl takes:** in `src/crypto/x86_avx2.zig`, the GHASH of the byte-reversed blocks with the key shifted left by one bit, the reduction with two carry-less multiplications, the aggregated reduction of 8 blocks with the powers H^1 to H^8, and the AES-128 and AES-256 key expansion with AESKEYGENASSIST. The code is new.
 - Zig 0.17.0, `lib/std/crypto/ghash_polyval.zig` (MIT, [licenses/zig-std-MIT.txt](../../licenses/zig-std-MIT.txt)). **What ztcl takes:** the same GHASH method as above, in `std.crypto`; `src/crypto/x86_avx2.zig` uses its order of the operations of the reduction and its constant 0xC2 << 56.
 - RFC 8439 sections 2.1 to 2.8 for `src/crypto/x86_chacha.zig`. The Poly1305 with two 64-bit limbs and the fold of the bits from 2^130 up with a multiply by 5 is the method of the scalar Poly1305 of `std.crypto` of Zig 0.17.0 (MIT); the code is new.
+- Martin Goll and Shay Gueron, "Vectorization of Poly1305 Message Authentication Code", ITNG 2015. **What ztcl takes:** in `src/crypto/x86_chacha.zig`, the 4 lanes of five 26-bit limbs, the step h = h * r^4 + m, and the end with the powers r^4 to r^1. The code is new.
 - Intel 64 and IA-32 Architectures Software Developer's Manual, volume 2: CPUID leaves 1 and 7 and XGETBV, for the run-time check of `src/tls/aead.zig`.
 
 ## QUIC and HTTP/3
