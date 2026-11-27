@@ -73,6 +73,9 @@ fn cmdCreate(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     if (argv.len - i > 1) return it.wrongArgs("thread::create ?-joinable? ?script?");
     const script = if (i < argv.len) try it.str(argv[i]) else "";
+    // The files of the host are a part of the isolation of a child: a
+    // thread of the level interp has the files of its creator already.
+    if (host_files and level == .interp) return it.fail("-files host needs -isolation process", .{});
     const id = try thread.createOpts(it, script, .{ .joinable = joinable, .preserved = preserved, .isolation = level, .host_files = host_files });
     return thread.idValue(it, id);
 }

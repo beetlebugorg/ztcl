@@ -3034,6 +3034,7 @@ test "isolated threads: a creator in host mode with files gets an error" {
     try std.testing.expectEqualStrings("ZTCL ISOLATION HOSTFILES", try it.str(try it.eval("catch {thread::create -isolation process {}}; set ::errorCode")));
     try std.testing.expectEqualStrings("host file mode is not available in an isolated thread: give the thread a root folder, or pass -files host", try it.str(try it.eval("catch {thread::create -isolation process {}} m; set m")));
     try std.testing.expectEqualStrings("bad files mode \"x\": must be host or root", try it.str(try it.eval("catch {thread::create -isolation process -files x {}} m; set m")));
+    try std.testing.expectEqualStrings("-files host needs -isolation process", try it.str(try it.eval("catch {thread::create -files host {}} m; set m")));
     // A creator with a root folder has no files of the host to give.
     try tcl.fsroot.setRoot(&it, ".zig-cache");
     try std.testing.expectEqualStrings("-files host needs a creator in host mode", try it.str(try it.eval("catch {thread::create -isolation process -files host {}} m; set m")));
