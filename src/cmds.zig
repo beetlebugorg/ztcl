@@ -2113,7 +2113,10 @@ pub fn charCount(s: []const u8) usize {
 pub fn charCountOf(it: *Interp, s: []const u8) usize {
     if (s.len < 256) return charCount(s);
     if (it.heap.cachedCount(s)) |n| return n;
-    const n = charCount(s);
+    // An ASCII start has one character for each byte: a test of the top
+    // bits of 4 vectors at a time, with no count.
+    const ascii = @import("more.zig").asciiPrefix(s);
+    const n = ascii + charCount(s[ascii..]);
     it.heap.putCount(s, n);
     return n;
 }

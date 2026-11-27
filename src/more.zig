@@ -356,9 +356,16 @@ pub fn cmdLsort(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 
 // ---- binary ----
 
+/// The count of bytes at the start of `s` that `b64_simd.asciiPrefix`
+/// finds with no top bit: 0 when the vector loops do not run here.
+pub fn asciiPrefix(s: []const u8) usize {
+    return if (simd64()) b64_simd.asciiPrefix(s) else 0;
+}
+
 /// True when no byte has the top bit. The scan reads 8 bytes at a time.
 fn isAscii(s: []const u8) bool {
     var i: usize = 0;
+    if (s.len >= 256 and simd64()) i = b64_simd.asciiPrefix(s);
     while (i + 8 <= s.len) : (i += 8) {
         if (std.mem.readInt(u64, s[i..][0..8], .little) & 0x8080808080808080 != 0) return false;
     }
@@ -366,43 +373,66 @@ fn isAscii(s: []const u8) bool {
     return true;
 }
 
-/// The bytes of a string: each character below 256 is one byte.
+/// The bytes of a string: each character below 256 is one byte. One
+/// allocation: a string has at least one byte for each character.
 pub fn toBytes(it: *Interp, s: []const u8) Error![]const u8 {
     if (isAscii(s)) return s;
-    var out: std.ArrayList(u8) = .empty;
+    const out = try it.alloc().alloc(u8, s.len);
+    var o: usize = 0;
     var i: usize = 0;
     while (i < s.len) {
-        const n = std.unicode.utf8ByteSequenceLength(s[i]) catch 1;
+        const c = s[i];
+        if (c < 0x80) {
+            out[o] = c;
+            o += 1;
+            i += 1;
+            continue;
+        }
+        // U+0080 to U+00FF, the common case of binary data.
+        if ((c == 0xC2 or c == 0xC3) and i + 1 < s.len and s[i + 1] & 0xC0 == 0x80) {
+            out[o] = (c & 0x1F) << 6 | (s[i + 1] & 0x3F);
+            o += 1;
+            i += 2;
+            continue;
+        }
+        const n = std.unicode.utf8ByteSequenceLength(c) catch 1;
         if (n == 1 or i + n > s.len) {
-            try out.append(it.alloc(), s[i]);
+            out[o] = c;
+            o += 1;
             i += 1;
             continue;
         }
         const cp = std.unicode.utf8Decode(s[i .. i + n]) catch {
-            try out.append(it.alloc(), s[i]);
+            out[o] = c;
+            o += 1;
             i += 1;
             continue;
         };
-        try out.append(it.alloc(), @truncate(cp));
+        out[o] = @truncate(cp);
+        o += 1;
         i += n;
     }
-    return out.items;
+    return out[0..o];
 }
 
 /// The string of bytes: a byte above 127 becomes the character with
-/// that number.
+/// that number. One allocation of the exact size.
 pub fn fromBytes(it: *Interp, b: []const u8) Error![]const u8 {
     if (isAscii(b)) return b;
-    var out: std.ArrayList(u8) = .empty;
+    var high: usize = 0;
+    for (b) |c| high += c >> 7;
+    const out = try it.alloc().alloc(u8, b.len + high);
+    var o: usize = 0;
     for (b) |c| {
         if (c < 0x80) {
-            try out.append(it.alloc(), c);
+            out[o] = c;
+            o += 1;
         } else {
-            try out.append(it.alloc(), 0xC0 | (c >> 6));
-            try out.append(it.alloc(), 0x80 | (c & 0x3F));
+            out[o..][0..2].* = .{ 0xC0 | (c >> 6), 0x80 | (c & 0x3F) };
+            o += 2;
         }
     }
-    return out.items;
+    return out;
 }
 
 const Field = struct { type: u8, unsigned: bool, count: ?usize, star: bool };
@@ -722,6 +752,19 @@ fn uuCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
 
 const b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
+const b64_simd = @import("b64_simd");
+
+/// True when the vector loops of `b64_simd` run on this CPU. On x86-64
+/// the module has the AVX2 features of src/crypto, so it needs the
+/// check of `aead.impl`.
+fn simd64() bool {
+    if (!b64_simd.enabled) return false;
+    if (@import("builtin").cpu.arch != .x86_64) return true;
+    return @import("tls/aead.zig").impl() == .x86_avx2;
+}
+
+const hex_digits = "0123456789abcdef";
+
 /// `binary encode` and `binary decode` for hex and base64.
 fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
     const a = it.alloc();
@@ -760,45 +803,48 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
     if (encode) {
         const bytes = try toBytes(it, data);
         if (is_hex) {
-            for (bytes) |b| {
-                try out.append(a, "0123456789abcdef"[b >> 4]);
-                try out.append(a, "0123456789abcdef"[b & 15]);
-            }
-            return .{ .str = out.items };
+            const hex = try a.alloc(u8, bytes.len * 2);
+            const did = if (simd64()) b64_simd.hexEncode(hex, bytes) else 0;
+            for (bytes[did..], did..) |b, k| hex[2 * k ..][0..2].* = .{ hex_digits[b >> 4], hex_digits[b & 15] };
+            return .{ .str = hex };
         }
-        if (maxlen == 0) return .{ .str = try encode64(a, bytes) };
-        var col: usize = 0;
+        const text = try encode64(a, bytes);
+        if (maxlen == 0 or text.len <= maxlen) return .{ .str = text };
+        // The lines of `maxlen` characters, with `wrap` after each full
+        // line but the last.
+        const breaks = (text.len - 1) / maxlen;
+        const wrapped = try a.alloc(u8, text.len + breaks * wrap.len);
+        var o: usize = 0;
         var k: usize = 0;
-        while (k < bytes.len) : (k += 3) {
-            const n = @min(3, bytes.len - k);
-            const b0: u32 = bytes[k];
-            const b1: u32 = if (n > 1) bytes[k + 1] else 0;
-            const b2: u32 = if (n > 2) bytes[k + 2] else 0;
-            const v = b0 << 16 | b1 << 8 | b2;
-            const quad = [4]u8{ b64[v >> 18], b64[(v >> 12) & 63], if (n > 1) b64[(v >> 6) & 63] else '=', if (n > 2) b64[v & 63] else '=' };
-            for (quad) |ch| {
-                if (maxlen > 0 and col == maxlen) {
-                    try out.appendSlice(a, wrap);
-                    col = 0;
-                }
-                try out.append(a, ch);
-                col += 1;
+        while (k < text.len) : (k += maxlen) {
+            const line = text[k..@min(text.len, k + maxlen)];
+            @memcpy(wrapped[o..][0..line.len], line);
+            o += line.len;
+            if (k + maxlen < text.len) {
+                @memcpy(wrapped[o..][0..wrap.len], wrap);
+                o += wrap.len;
             }
         }
-        return .{ .str = out.items };
+        return .{ .str = wrapped };
     }
     if (is_hex) {
+        const hbuf = try a.alloc(u8, data.len / 2);
+        // Whole blocks of hex digits; the loop below does the rest.
+        const did = if (simd64()) b64_simd.hexDecode(hbuf, data) else 0;
+        var made: usize = did / 2;
         var half: ?u8 = null;
-        for (data, 0..) |ch, pos| {
+        for (data[did..], did..) |ch, pos| {
             const d = std.fmt.charToDigit(ch, 16) catch {
                 if (!strict and std.ascii.isWhitespace(ch)) continue;
                 return it.fail("invalid hexadecimal digit \"{c}\" at position {d}", .{ ch, pos });
             };
             if (half) |h| {
-                try out.append(a, h << 4 | d);
+                hbuf[made] = h << 4 | d;
+                made += 1;
                 half = null;
             } else half = d;
         }
+        out.items = hbuf[0..made];
         if (half != null and strict) return it.fail("invalid hexadecimal digit \"\" at position {d}", .{data.len});
         return .{ .str = try fromBytes(it, out.items) };
     }
@@ -811,6 +857,10 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
     // Groups of four valid characters give three bytes each. The first
     // other character ends this loop, and the loop below goes on from it.
     var start: usize = 0;
+    if (simd64()) {
+        start = b64_simd.decode(buf, data);
+        made = start / 4 * 3;
+    }
     while (start + 4 <= data.len) : (start += 4) {
         const d0 = b64_value[data[start]];
         const d1 = b64_value[data[start + 1]];
@@ -866,6 +916,10 @@ fn encode64(a: std.mem.Allocator, bytes: []const u8) Error![]const u8 {
     const out = try a.alloc(u8, (bytes.len + 2) / 3 * 4);
     var o: usize = 0;
     var k: usize = 0;
+    if (simd64()) {
+        k = b64_simd.encode(out, bytes);
+        o = k / 3 * 4;
+    }
     // Two characters for each 12 bits, from one table.
     while (k + 3 <= bytes.len) : (k += 3) {
         const v = @as(u32, bytes[k]) << 16 | @as(u32, bytes[k + 1]) << 8 | bytes[k + 2];
