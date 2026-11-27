@@ -2,7 +2,7 @@
 
 This page is for a reader who knows Tcl: what ztcl has, what it does not have, and how it differs from tclsh. To learn Tcl from the start, read [Learn Tcl](learn/01-read-a-command.md).
 
-ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: lists, strings, dicts, arrays, `expr`, `format`, `scan`, `binary`, `regexp`, namespaces, `try`, `apply`, `lmap`, `upvar`, `uplevel`, coroutines, and TclOO. It passes 37,413 of the 46,494 tests of the Tcl 8.6.16 suite. The status of each command below comes from its test file. [The full results](dev/compatibility.md) have all 152 files.
+ztcl follows the 12 language rules of Tcl and the core commands of Tcl 8.6: lists, strings, dicts, arrays, `expr`, `format`, `scan`, `binary`, `regexp`, namespaces, `try`, `apply`, `lmap`, `upvar`, `uplevel`, coroutines, and TclOO. It passes 38,054 of the 47,133 tests of the Tcl 8.6.16 suite. The status of each command below comes from its test file. [The full results](dev/compatibility.md) have all 152 files.
 
 ## Commands
 

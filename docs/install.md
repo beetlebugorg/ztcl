@@ -1,6 +1,6 @@
 # Install
 
-The latest release is on the [releases page](https://github.com/beetlebugorg/ztcl/releases). Some features of these docs are on `main` only: the interactive shell, `ztcl::json`, the JIT on x86-64 Windows and arm64 Linux, the JIT on by default, and threads in WebAssembly. [Build from source](#build-from-source) to get them now. The [changelog](../CHANGELOG.md) lists them under "Unreleased".
+The latest release is on the [releases page](https://github.com/beetlebugorg/ztcl/releases). Some features of these docs are on `main` only: the interactive shell, `ztcl::json`, the JIT on x86-64 Windows and arm64 Linux, the JIT on by default, threads in WebAssembly, `ztcl::vm`, isolated threads, `ztcl::tls`, Tcl 9.1, `ztcl debug`, and libztcl. [Build from source](#build-from-source) to get them now. The [changelog](../CHANGELOG.md) lists them under "Unreleased".
 
 [Targets](targets.md) lists the platforms of ztcl and the features of each.
 
@@ -12,6 +12,17 @@ ztcl --compute 1000000 script.tcl
 ```
 
 The formula works on macOS and Linux.
+
+## Arch Linux
+
+`packaging/arch/ztcl-git` has a PKGBUILD. It builds `main` with the `zig` package of Arch (0.17), runs a short check, and installs `/usr/bin/ztcl`.
+
+```sh
+git clone https://github.com/beetlebugorg/ztcl
+cd ztcl/packaging/arch/ztcl-git && makepkg -si
+```
+
+The package is not on the AUR yet ([#169](https://github.com/beetlebugorg/ztcl/issues/169)).
 
 ## Release binaries
 
