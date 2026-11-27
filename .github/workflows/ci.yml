@@ -354,6 +354,15 @@ jobs:
             out=$(timeout 10 wasmtime run $c)
             case $out in "ztcl: a WASI 0.3.2 stream"*) ;; *) echo "wrong output: $out"; exit 1;; esac
           done
+      # The bindings of WASI 0.3.2 (docs/dev/wasi-tasks/05-wit-bindings.md).
+      # `component new` compares each core import with its WIT function.
+      - name: WASI 0.3 bindings
+        run: |
+          wasm-tools component wit wit/ > /dev/null
+          zig build witgen
+          git diff --exit-code src/wasi/p3.zig
+          zig build wasi-bindings
+          wasm-tools validate --features component-model,cm-async zig-out/bin/wasi-bindings.component.wasm
 
   # A failure of the scheduled full run opens an issue, so it is fixed
   # in the next batch of work.

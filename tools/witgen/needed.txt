@@ -1,0 +1,53 @@
+# The WASI 0.3.2 functions that ztcl imports: the interface and the name
+# of the core import. `zig build witgen` writes src/wasi/p3.zig from this
+# list and the WIT files of wit/.
+
+wasi:cli/environment@0.3.2 get-environment
+wasi:cli/environment@0.3.2 get-arguments
+wasi:cli/environment@0.3.2 get-initial-cwd
+wasi:cli/exit@0.3.2 exit
+wasi:cli/stdin@0.3.2 read-via-stream
+wasi:cli/stdout@0.3.2 write-via-stream
+wasi:cli/stderr@0.3.2 write-via-stream
+
+wasi:clocks/monotonic-clock@0.3.2 now
+wasi:clocks/monotonic-clock@0.3.2 wait-for
+wasi:clocks/monotonic-clock@0.3.2 wait-until
+wasi:clocks/system-clock@0.3.2 now
+
+wasi:random/random@0.3.2 get-random-bytes
+wasi:random/random@0.3.2 get-random-u64
+
+wasi:filesystem/preopens@0.3.2 get-directories
+wasi:filesystem/types@0.3.2 [method]descriptor.read-via-stream
+wasi:filesystem/types@0.3.2 [method]descriptor.write-via-stream
+wasi:filesystem/types@0.3.2 [method]descriptor.append-via-stream
+wasi:filesystem/types@0.3.2 [method]descriptor.get-flags
+wasi:filesystem/types@0.3.2 [method]descriptor.get-type
+wasi:filesystem/types@0.3.2 [method]descriptor.set-size
+wasi:filesystem/types@0.3.2 [method]descriptor.read-directory
+wasi:filesystem/types@0.3.2 [method]descriptor.sync
+wasi:filesystem/types@0.3.2 [method]descriptor.create-directory-at
+wasi:filesystem/types@0.3.2 [method]descriptor.stat
+wasi:filesystem/types@0.3.2 [method]descriptor.stat-at
+wasi:filesystem/types@0.3.2 [method]descriptor.open-at
+wasi:filesystem/types@0.3.2 [method]descriptor.readlink-at
+wasi:filesystem/types@0.3.2 [method]descriptor.remove-directory-at
+wasi:filesystem/types@0.3.2 [method]descriptor.rename-at
+wasi:filesystem/types@0.3.2 [method]descriptor.unlink-file-at
+wasi:filesystem/types@0.3.2 [resource-drop]descriptor
+
+wasi:sockets/ip-name-lookup@0.3.2 resolve-addresses
+wasi:sockets/types@0.3.2 [static]tcp-socket.create
+wasi:sockets/types@0.3.2 [method]tcp-socket.bind
+wasi:sockets/types@0.3.2 [method]tcp-socket.connect
+wasi:sockets/types@0.3.2 [method]tcp-socket.listen
+wasi:sockets/types@0.3.2 [method]tcp-socket.send
+wasi:sockets/types@0.3.2 [method]tcp-socket.receive
+wasi:sockets/types@0.3.2 [method]tcp-socket.get-local-address
+wasi:sockets/types@0.3.2 [method]tcp-socket.get-remote-address
+wasi:sockets/types@0.3.2 [resource-drop]tcp-socket
+wasi:sockets/types@0.3.2 [static]udp-socket.create
+wasi:sockets/types@0.3.2 [method]udp-socket.send
+wasi:sockets/types@0.3.2 [method]udp-socket.receive
+wasi:sockets/types@0.3.2 [resource-drop]udp-socket

@@ -1,0 +1,8 @@
+package ztcl:cli;
+
+// The world of the `ztcl` command component (docs/dev/wasi.md): the WASI
+// 0.3.2 imports of a command and the export `run`.
+world command {
+  include wasi:cli/imports@0.3.2;
+  export wasi:cli/run@0.3.2;
+}

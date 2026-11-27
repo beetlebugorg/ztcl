@@ -120,6 +120,50 @@ pub fn build(b: *std.Build) void {
     b.step("wasi-spike", "Build zig-out/bin/wasi-spike.component.wasm, the check of WASI 0.3 (needs wasm-tools)")
         .dependOn(&b.addInstallBinFile(component, "wasi-spike.component.wasm").step);
 
+    // The bindings generator of WASI 0.3 (docs/dev/wasi-tasks/05-wit-bindings.md).
+    // `zig build witgen` writes src/wasi/p3.zig, and `zig build test` checks
+    // that the file is the output of the generator.
+    const witgen_exe = b.addExecutable(.{ .name = "witgen", .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/witgen/main.zig"),
+        .target = b.graph.host,
+        .optimize = .Debug,
+    }) });
+    const witgen_run = b.addRunArtifact(witgen_exe);
+    witgen_run.setCwd(b.path("."));
+    witgen_run.addArgs(&.{ "wit", "tools/witgen/needed.txt", "src/wasi/p3.zig" });
+    b.step("witgen", "Write src/wasi/p3.zig from wit/ and tools/witgen/needed.txt").dependOn(&witgen_run.step);
+    const witgen_check = b.addRunArtifact(witgen_exe);
+    witgen_check.setCwd(b.path("."));
+    witgen_check.addArgs(&.{ "--check", "wit", "tools/witgen/needed.txt", "src/wasi/p3.zig" });
+    witgen_check.has_side_effects = true;
+    test_step.dependOn(&witgen_check.step);
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("tools/witgen/witgen.zig"),
+        .target = b.graph.host,
+    }) })).step);
+    // The check of the bindings: a component that imports each function
+    // of src/wasi/p3.zig (needs wasm-tools).
+    const bind_mod = b.createModule(.{
+        .root_source_file = b.path("tools/witgen/check.zig"),
+        .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .freestanding }),
+        .optimize = .ReleaseSmall,
+    });
+    bind_mod.addImport("p3", b.createModule(.{ .root_source_file = b.path("src/wasi/p3.zig") }));
+    const bind_core = b.addExecutable(.{ .name = "wasi-bindings", .root_module = bind_mod });
+    bind_core.entry = .disabled;
+    bind_core.root_module.export_symbol_names = &.{ "wasi:cli/run@0.3.2#run", "cabi_realloc" };
+    const bind_embed = b.addSystemCommand(&.{ "wasm-tools", "component", "embed", "--world", "ztcl:cli/command" });
+    bind_embed.addDirectoryArg(b.path("wit"));
+    bind_embed.addArtifactArg(bind_core);
+    bind_embed.addArg("-o");
+    const bind_embedded = bind_embed.addOutputFileArg("wasi-bindings.embed.wasm");
+    const bind_new = b.addSystemCommand(&.{ "wasm-tools", "component", "new" });
+    bind_new.addFileArg(bind_embedded);
+    bind_new.addArg("-o");
+    const bind_component = bind_new.addOutputFileArg("wasi-bindings.component.wasm");
+    b.step("wasi-bindings", "Build zig-out/bin/wasi-bindings.component.wasm, the check of src/wasi/p3.zig (needs wasm-tools)")
+        .dependOn(&b.addInstallBinFile(bind_component, "wasi-bindings.component.wasm").step);
+
     // The runner and the benchmark always build in ReleaseFast.
     const fast = b.createModule(.{
         .root_source_file = b.path("src/ztcl.zig"),
