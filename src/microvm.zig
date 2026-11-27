@@ -75,9 +75,10 @@ pub const Host = struct {
     /// of the host. Empty: `ztcl::vm image` gives ZTCL VM STORE.
     image_store: []const u8 = "",
     /// The guests of each image that wait, booted to the agent and
-    /// paused, for `create -image` (macOS). Virtualization.framework
-    /// starts each guest in a new process, about 86 ms; a guest of the
-    /// pool resumes in under 1 ms. 0 turns the pool off. Each guest of
+    /// paused, for `create -image` (macOS, Windows, and KVM).
+    /// Virtualization.framework starts each guest in a new process, about
+    /// 86 ms, and a KVM guest of an image answers its first exec after
+    /// about 85 ms; a guest of the pool resumes in under 1 ms. 0 turns the pool off. Each guest of
     /// the pool holds the memory that it touched.
     pool_size: u32 = 0,
     /// Downloads `url` (HTTPS) into the open file `fd`, for `ztcl::vm
@@ -1046,6 +1047,9 @@ const lin = if (on_kvm) struct {
         console_vm: i32,
         console_host: i32,
         warm: bool,
+        /// A guest of the pool: its bytes, its disks, and its machine
+        /// use `pa`.
+        pooled: bool = false,
     };
 
     const State = struct {
@@ -1238,6 +1242,34 @@ const lin = if (on_kvm) struct {
         if (image != null and own_boot) return it.fail("-image gives the kernel, the initramfs, and the command line: no -kernel, -initrd, or -cmdline with it", .{});
         if (image == null and kernel.len == 0) return it.failCode("ZTCL VM KERNEL", "a guest needs -kernel or -image", .{});
 
+        // A guest of the image from the pool: no share and no disk of its
+        // own, so its configuration is the one of the pool.
+        var fp: ?[]const u8 = null;
+        if (image != null and host.pool_size > 0 and shares.items.len == 0 and disks.items.len == 0 and !warm) {
+            const st = try store(it);
+            defer st.close();
+            const counter = (st.current(a, image.?) catch |e| return storeFail(it, e)) orelse
+                return it.failCode("ZTCL VM IMAGE NAME", "no image named \"{s}\" in the store: install it with ztcl::vm image install", .{image.?});
+            fp = try std.fmt.allocPrint(a, "{s}|{d}|{d}|{d}|{d}", .{ image.?, counter, cfg.cpus, cfg.memory_mb, @intFromBool(cfg.entropy) });
+            if (take(fp.?, host.pool_size)) |p| {
+                const g = b.create(Guest) catch |e| {
+                    dropPooled(p);
+                    return e;
+                };
+                g.* = .{ .name = "", .machine = p.machine, .kernel = p.kernel, .initrd = p.initrd, .cmdline = p.cmdline, .disks = p.disks, .shares = &.{}, .console_vm = p.console_vm, .console_host = p.console_host, .warm = true, .pooled = true };
+                g.name = std.fmt.allocPrint(b, "vm{d}", .{s.next}) catch |e| {
+                    destroy(it, g);
+                    return e;
+                };
+                s.next += 1;
+                s.guests.append(b, g) catch |e| {
+                    destroy(it, g);
+                    return e;
+                };
+                return .{ .str = g.name };
+            }
+        }
+
         const g = try b.create(Guest);
         g.* = .{ .name = "", .machine = undefined, .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .shares = &.{}, .console_vm = -1, .console_host = -1, .warm = warm };
         var made = false;
@@ -1282,6 +1314,9 @@ const lin = if (on_kvm) struct {
         cfg.console = g.console_vm;
         g.machine = kvm.init(b, cfg) catch |e| return failure(it, e);
         made = true;
+        // The first guest of an image for the pool: its bytes and disks
+        // become the template of the pool, and a thread boots its guests.
+        if (fp) |key| seed(key, cfg, host.pool_size);
         g.name = try std.fmt.allocPrint(b, "vm{d}", .{s.next});
         s.next += 1;
         s.guests.append(b, g) catch |e| {
@@ -1377,7 +1412,7 @@ const lin = if (on_kvm) struct {
     }
 
     fn freeGuest(it: *Interp, g: *Guest) void {
-        const b = it.heap.backing;
+        const b = if (g.pooled) pa else it.heap.backing;
         for (g.disks) |d| if (d.fd >= 0) sys.close(d.fd);
         b.free(g.disks);
         for (g.shares) |d| if (d.fd >= 0) sys.close(d.fd);
@@ -1387,8 +1422,202 @@ const lin = if (on_kvm) struct {
         b.free(g.cmdline);
         if (g.console_vm >= 0) sys.close(g.console_vm);
         if (g.console_host >= 0) sys.close(g.console_host);
-        b.free(g.name);
-        b.destroy(g);
+        it.heap.backing.free(g.name);
+        it.heap.backing.destroy(g);
+    }
+
+    // ---- The pool of booted guests (Host.pool_size) ----
+
+    /// A guest of the pool: booted to the agent, then paused.
+    const Pooled = struct { machine: *kvm, kernel: []u8, initrd: []u8, cmdline: []u8, disks: []kvm.Disk, console_vm: i32, console_host: i32 };
+
+    /// The configuration of the pool of one fingerprint: copies of the
+    /// bytes of the image and of the descriptors of its disks. Each guest
+    /// of the pool gets copies of these.
+    const Template = struct {
+        kernel: []u8,
+        initrd: []u8,
+        cmdline: []u8,
+        disks: []i32,
+        cpus: u32,
+        memory_mb: u32,
+        entropy: bool,
+        size: u32,
+        ready: std.ArrayList(Pooled) = .empty,
+        filling: bool = false,
+    };
+    const thread_lock = @import("thread.zig").Lock;
+    var pool_lock: thread_lock = .{};
+    /// The templates by fingerprint: the name and the counter of the
+    /// image, the CPU count, the memory, and the entropy device.
+    var pools: std.StringHashMapUnmanaged(*Template) = .empty;
+    const pa = std.heap.smp_allocator;
+
+    /// Makes the template of `fp` from the configuration of a guest of
+    /// the image, when it has none, and starts a refill.
+    fn seed(fp: []const u8, cfg: kvm.Config, size: u32) void {
+        pool_lock.lock();
+        const have = pools.get(fp);
+        pool_lock.unlock();
+        if (have) |t| return refill(t, size);
+        const t = makeTemplate(cfg, size) catch return;
+        pool_lock.lock();
+        const key = pa.dupe(u8, fp) catch {
+            pool_lock.unlock();
+            return freeTemplate(t);
+        };
+        const gop = pools.getOrPut(pa, key) catch {
+            pool_lock.unlock();
+            pa.free(key);
+            return freeTemplate(t);
+        };
+        if (gop.found_existing) {
+            pool_lock.unlock();
+            pa.free(key);
+            freeTemplate(t);
+            return;
+        }
+        gop.value_ptr.* = t;
+        pool_lock.unlock();
+        refill(t, size);
+    }
+
+    fn makeTemplate(cfg: kvm.Config, size: u32) !*Template {
+        const t = try pa.create(Template);
+        t.* = .{ .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .cpus = cfg.cpus, .memory_mb = cfg.memory_mb, .entropy = cfg.entropy, .size = size };
+        errdefer freeTemplate(t);
+        t.kernel = try pa.dupe(u8, cfg.kernel);
+        t.initrd = try pa.dupe(u8, cfg.initrd);
+        t.cmdline = try pa.dupe(u8, cfg.cmdline);
+        t.disks = try pa.alloc(i32, cfg.disks.len);
+        @memset(t.disks, -1);
+        for (cfg.disks, t.disks) |d, *fd| fd.* = try dupFd(d.fd);
+        return t;
+    }
+
+    fn freeTemplate(t: *Template) void {
+        for (t.disks) |fd| if (fd >= 0) sys.close(fd);
+        pa.free(t.disks);
+        pa.free(t.kernel);
+        pa.free(t.initrd);
+        pa.free(t.cmdline);
+        pa.destroy(t);
+    }
+
+    fn dupFd(fd: i32) !i32 {
+        const rc = linux.fcntl(fd, linux.F.DUPFD_CLOEXEC, 0);
+        if (linux.errno(rc) != .SUCCESS) return error.NoDescriptor;
+        return @intCast(rc);
+    }
+
+    /// Boots one guest of the template to the agent and pauses it.
+    fn warmOne(t: *Template) ?Pooled {
+        var p: Pooled = .{ .machine = undefined, .kernel = &.{}, .initrd = &.{}, .cmdline = &.{}, .disks = &.{}, .console_vm = -1, .console_host = -1 };
+        var made = false;
+        const good = blk: {
+            p.kernel = pa.dupe(u8, t.kernel) catch break :blk false;
+            p.initrd = pa.dupe(u8, t.initrd) catch break :blk false;
+            p.cmdline = pa.dupe(u8, t.cmdline) catch break :blk false;
+            p.disks = pa.alloc(kvm.Disk, t.disks.len) catch break :blk false;
+            for (p.disks) |*d| d.* = .{ .fd = -1, .read_only = true };
+            for (t.disks, p.disks) |fd, *d| d.fd = dupFd(fd) catch break :blk false;
+            var pair: [2]i32 = undefined;
+            if (linux.errno(linux.socketpair(linux.AF.UNIX, linux.SOCK.STREAM | linux.SOCK.CLOEXEC, 0, &pair)) != .SUCCESS) break :blk false;
+            p.console_vm = pair[0];
+            p.console_host = pair[1];
+            p.machine = kvm.init(pa, .{ .cpus = t.cpus, .memory_mb = t.memory_mb, .kernel = p.kernel, .initrd = p.initrd, .cmdline = p.cmdline, .disks = p.disks, .entropy = t.entropy, .console = p.console_vm }) catch break :blk false;
+            made = true;
+            p.machine.start() catch break :blk false;
+            const fd = connect(p.machine, agent_port, 10_000) orelse break :blk false;
+            // One program of the image runs before the pause, so its
+            // pages are in the page cache of the guest: the first exec of
+            // a guest of the pool does not read them from the root disk
+            // through dm-verity. An image without /bin/busybox only skips
+            // this.
+            var arena = std.heap.ArenaAllocator.init(pa);
+            defer arena.deinit();
+            var conn: vmagent.Conn = .{ .fd = fd, .timeout_ms = 10_000 };
+            if (conn.hello(arena.allocator())) |_| {
+                _ = vmagent.exec(&conn, arena.allocator(), &.{ "/bin/busybox", "true" }, &.{}, "/", null, 4096) catch {};
+            } else |_| {}
+            _ = linux.close(fd);
+            p.machine.pause();
+            break :blk true;
+        };
+        if (good) return p;
+        if (made) p.machine.deinit();
+        dropBytes(p);
+        return null;
+    }
+
+    fn dropBytes(p: Pooled) void {
+        for (p.disks) |d| if (d.fd >= 0) sys.close(d.fd);
+        pa.free(p.disks);
+        pa.free(p.kernel);
+        pa.free(p.initrd);
+        pa.free(p.cmdline);
+        if (p.console_vm >= 0) sys.close(p.console_vm);
+        if (p.console_host >= 0) sys.close(p.console_host);
+    }
+
+    fn dropPooled(p: Pooled) void {
+        p.machine.deinit();
+        dropBytes(p);
+    }
+
+    fn refillMain(t: *Template) void {
+        while (true) {
+            pool_lock.lock();
+            if (t.ready.items.len >= t.size) {
+                t.filling = false;
+                pool_lock.unlock();
+                return;
+            }
+            pool_lock.unlock();
+            const p = warmOne(t) orelse break;
+            pool_lock.lock();
+            t.ready.append(pa, p) catch {
+                pool_lock.unlock();
+                dropPooled(p);
+                break;
+            };
+            pool_lock.unlock();
+        }
+        pool_lock.lock();
+        t.filling = false;
+        pool_lock.unlock();
+    }
+
+    /// Starts a refill of the pool to `size` guests, when none runs.
+    fn refill(t: *Template, size: u32) void {
+        pool_lock.lock();
+        t.size = size;
+        if (t.filling or t.ready.items.len >= size) {
+            pool_lock.unlock();
+            return;
+        }
+        t.filling = true;
+        pool_lock.unlock();
+        const th = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, refillMain, .{t}) catch {
+            pool_lock.lock();
+            t.filling = false;
+            pool_lock.unlock();
+            return;
+        };
+        th.detach();
+    }
+
+    /// A guest of the pool for `fp`, or null. Starts a refill either way.
+    fn take(fp: []const u8, size: u32) ?Pooled {
+        pool_lock.lock();
+        const t = pools.get(fp) orelse {
+            pool_lock.unlock();
+            return null;
+        };
+        const p = t.ready.pop();
+        pool_lock.unlock();
+        refill(t, size);
+        return p;
     }
 
     fn destroy(it: *Interp, g: *Guest) void {
