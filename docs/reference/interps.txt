@@ -13,6 +13,7 @@ sub: interp aliases ?PATH? | The aliases of a child.
 sub: interp delete ?PATH ...? | Removes children.
 sub: interp exists PATH | 1 when the child exists.
 sub: interp children ?PATH? | The children.
+sub: interp cancel ?-unwind? ?--? ?PATH? ?RESULT? | Stops the script of the interp with the error "eval canceled", or RESULT. With -unwind, `catch` does not stop the error.
 sub: interp slaves ?PATH? | The old name of `children`.
 sub: interp issafe ?PATH? | 1 for a safe interpreter.
 sub: interp hide PATH CMD ?NAME? | Hides a command from the scripts of the child.
