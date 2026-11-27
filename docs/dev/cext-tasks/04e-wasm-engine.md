@@ -44,6 +44,10 @@ The imports of the module `ztcl` are the 6 functions of task 04w: `cmd_create`, 
 | 4 | The test files of task 02 give the same counts in native ztcl as in Node.js. |
 | 5 | The cost: `bench.tcl` against tclsh and against Node.js. With the interpreter of step 1, the `sql-only` part is slower than in Node.js. The JIT tier of #202 is the plan for it. |
 
+## State
+
+Steps 1 and 2 are done with `ztcl::wasm package FILE ?prefix?` (`src/wasmrt/cext.zig`, docs/dev/wasm-engine.md). `tools/cext/engine-check.sh` runs the test packages of task 04w through the engine, and each one gives the output of tclsh. Step 3 (WASI on the capabilities) is in `src/wasmrt/wasi.zig`. The command `load FILE.wasm` is next.
+
 ## Open questions
 
 - The cost of an interpreter of WebAssembly for SQLite. A rough guess is 10 to 30 times the native code for `sql-only`, before the JIT tier. Step 5 measures it.

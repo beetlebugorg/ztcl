@@ -563,6 +563,20 @@ syn: exit ?returnCode?
 syn: ztcl::json subcommand ?arg ...?
 == ztcl::vt
 syn: ztcl::vt subcommand ?arg ...?
+== ztcl::wasm
+syn: ztcl::wasm subcommand ?arg ...?
+sub: load fileName | Reads, decodes, and validates a module file, and gives a module handle.
+sub: new bytes | Decodes and validates the bytes of a module, and gives a module handle.
+sub: instantiate module ?option value ...? | Links the imports (-imports, -link, -wasi), runs the start function, and gives an instance handle.
+sub: call instance function ?-limit units? ?-raw? ?--? ?arg ...? | Calls an export and gives its result, a list of its results, or an empty string.
+sub: package fileName ?prefix? ?-wasi dict? | Loads a Tcl C package built for wasm32-wasi with libztclstubs.a and runs its init function.
+sub: run module|fileName ?option value ...? | Runs a WASI command (_start) and gives its exit code.
+sub: memory instance size|grow|read|write|string ?arg ...? | Reads, writes, and grows the linear memory of an instance.
+sub: global instance name ?value? | Reads or sets an exported global.
+sub: exports module|instance | A list of name, kind, and type for each export.
+sub: imports module | A list of module, name, kind, and type for each import.
+sub: info module | A dict of the counts and the features of a module.
+sub: delete handle ?handle ...? | Deletes modules and instances.
 == ztcl::probe
 syn: ztcl::probe subcommand ?arg ...?
 == ztcl::tls ztcl::tls::socket

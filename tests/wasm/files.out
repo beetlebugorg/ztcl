@@ -1,0 +1,7 @@
+lines 3, at 5: one
+size 29
+entry moved.txt
+rmdir 0
+escape refused
+missing No such file or directory
+exit 0
