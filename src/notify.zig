@@ -9,9 +9,9 @@
 //! `UNUserNotificationCenter` there, and the tests record the calls.
 //! With no host, macOS runs `osascript` with `display notification`. The
 //! texts go to the script as its arguments (`on run argv`), so no text
-//! of the caller is AppleScript code. The other platforms have no
-//! backend yet: with no host, the command gives the error
-//! `ZTCL NOTIFY UNAVAILABLE`.
+//! of the caller is AppleScript code. Windows shows a toast of the
+//! notification center (`notify_windows.zig`). Linux has no backend yet:
+//! with no host, the command gives the error `ZTCL NOTIFY UNAVAILABLE`.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 const std = @import("std");
@@ -22,6 +22,9 @@ const Interp = interp.Interp;
 const Value = value.Value;
 const Error = interp.Error;
 const on_mac = builtin.os.tag == .macos;
+const on_win = builtin.os.tag == .windows;
+/// The toasts of Windows.
+pub const win = if (on_win) @import("notify_windows.zig") else struct {};
 
 /// One notification. The texts are UTF-8 and valid during the call.
 pub const Note = struct {
@@ -71,6 +74,10 @@ fn cmdNotify(it: *Interp, args: []const Value, _: ?*interp.Cmd) Error!Value {
     try checkText(it, "body", note.body, max_body);
     if (it.notify_host) |h| {
         if (!h.show(h.ctx, &note)) return failed(it);
+        return .{ .str = "" };
+    }
+    if (comptime on_win) {
+        if (!win.show(it.alloc(), &note)) return failed(it);
         return .{ .str = "" };
     }
     if (comptime !on_mac) return unavailable(it);

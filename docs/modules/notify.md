@@ -74,7 +74,7 @@ The notifier is the first of these that exists:
 | Platform | System notifier |
 |---|---|
 | macOS | `/usr/bin/osascript` with `display notification`. The notification shows under the name of Script Editor. A program in an app bundle uses `notify_host` to show it under the name of the app. |
-| Windows | None in this version. With no host, the command gives `ZTCL NOTIFY UNAVAILABLE`. |
+| Windows | A toast of the notification center, through `Windows.UI.Notifications` of WinRT: a `ToastGeneric` toast with the title, the subtitle, and the body as its texts. The toast shows under the name `ztcl`. An unpackaged program needs an app user model ID for a toast, so the first notification writes the key `HKCU\Software\Classes\AppUserModelId\ztcl.ztcl` with its `DisplayName`, and a program in a package or a ztk app can give `notify_host`. |
 | Linux | None in this version. With no host, the command gives `ZTCL NOTIFY UNAVAILABLE`. |
 | WASI, the web | The command needs a host. |
 
@@ -98,7 +98,7 @@ So no text of the caller is AppleScript code. The standard input, output, and er
 | `ZTCL NOTIFY TEXT` | `the body of a notification has a NUL byte` (and for the title and the subtitle) |
 | `ZTCL NOTIFY TEXT` | `the title of a notification is not UTF-8` (and for the subtitle and the body) |
 | `ZTCL NOTIFY LENGTH` | `the title of a notification has more than 256 bytes`, and `... more than 4096 bytes` for the body |
-| `ZTCL NOTIFY FAILED` | `the system did not show the notification`: the host gave false, or `osascript` ended with a status other than 0 |
+| `ZTCL NOTIFY FAILED` | `the system did not show the notification`: the host gave false, `osascript` ended with a status other than 0, or a call of WinRT for the toast failed |
 | `ZTCL NOTIFY UNAVAILABLE` | `ztcl::notify is not available on Linux yet` (or Windows): no host, and no system notifier |
 
 ```tcl

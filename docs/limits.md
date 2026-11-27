@@ -66,7 +66,7 @@ The default interpreter has no command that reaches the host. `puts` writes to a
 | `registry` | `ztcl::win::registry` | The keys of a list (`--registry-allow KEY,KEY`) and the keys below them, on Windows. An empty list reaches no key. A key such as `Run` starts a program at the next login, so list only the keys of your app. |
 | `keychain` | `ztcl::mac::keychain` | The generic passwords of the login keychain of macOS, for the services of a list (`--keychain-allow S,S`) only. An empty list reaches none. A secret goes to the script as a string. |
 | `defaults` | `ztcl::mac::defaults` | The string values of the user defaults of macOS, for the domains of a list (`--defaults-allow D,D`) only. An empty list reaches none. |
-| `notify` | `ztcl::notify` | A notification of the system with a title, a subtitle, and a body: at most 256 bytes for the title and the subtitle and 4,096 for the body, in UTF-8. macOS shows it with `osascript`, and the texts are arguments of the script. The other platforms need `notify_host` in this version. |
+| `notify` | `ztcl::notify` | A notification of the system with a title, a subtitle, and a body: at most 256 bytes for the title and the subtitle and 4,096 for the body, in UTF-8. macOS shows it with `osascript`, and the texts are arguments of the script. Windows shows a toast of the notification center. Linux needs `notify_host` in this version. |
 | `vm` | `ztcl::vm` | A small Linux guest on the hypervisor of the host (macOS in this version). The limits of `Interp.vm_host`: 4 CPUs, 2,048 MB, and 4 guests by default. Its paths also need `file` and stay below the root folder. A share or a disk is read-only unless it says `rw`. A child interp never has it. See [ztcl::vm](modules/vm.md). |
 
 > [!WARNING]

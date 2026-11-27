@@ -91,6 +91,7 @@ pub const Error = interp.Error;
 pub const Output = interp.Output;
 
 test {
+    _ = @import("notify_windows.zig");
     _ = value;
     _ = interp;
     _ = expr;
