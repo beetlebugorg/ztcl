@@ -52,6 +52,13 @@
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 const std = @import("std");
+
+/// The stack of a vCPU thread and of the console thread. With glibc, the
+/// stack of a new thread also holds the static TLS of the program, and
+/// pthread_create gives EINVAL when the TLS does not fit. An embedder
+/// with a large TLS (dockyard: 266 KB) needs more than 256 KB. The pages
+/// that a thread does not touch take no memory.
+const thread_stack = 2 * 1024 * 1024;
 const builtin = @import("builtin");
 const linux = std.os.linux;
 const IOCTL = linux.IOCTL;
@@ -379,11 +386,11 @@ pub fn start(m: *Machine) Fail!void {
     try m.makeVcpus();
     m.times = .{ .setup = t1 - t0, .load = nowNs() - t1 };
     m.state.store(.running, .release);
-    for (m.vcpus) |*v| v.thread = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, vcpuMain, .{v}) catch {
+    for (m.vcpus) |*v| v.thread = std.Thread.spawn(.{ .stack_size = thread_stack }, vcpuMain, .{v}) catch {
         why = "no thread for a vCPU";
         return error.Setup;
     };
-    m.con_thread = std.Thread.spawn(.{ .stack_size = 64 * 1024 }, consoleMain, .{m}) catch null;
+    m.con_thread = std.Thread.spawn(.{ .stack_size = thread_stack }, consoleMain, .{m}) catch null;
 }
 
 /// Stops each vCPU and frees the VM. The machine can start again.
