@@ -326,9 +326,10 @@ fn memFile(it: *Interp, text: []const u8) Error!i32 {
     return fd;
 }
 
-/// A path of the form `~user` is an error: no user lookup exists.
+/// In Tcl 8.6 a path of the form `~user` is an error: no user lookup
+/// exists. Tcl 9.1 has no tilde expansion, so the path is a name.
 pub fn noTilde(it: *Interp, path: []const u8) Error!void {
-    if (path.len < 2 or path[0] != '~' or path[1] == '/') return;
+    if (it.tcl != .v8_6 or path.len < 2 or path[0] != '~' or path[1] == '/') return;
     const end = std.mem.indexOfScalar(u8, path, '/') orelse path.len;
     return it.fail("user \"{s}\" doesn't exist", .{path[1..end]});
 }

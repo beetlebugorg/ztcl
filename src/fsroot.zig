@@ -211,9 +211,10 @@ pub fn normal(it: *Interp, path: []const u8) Error!?[]const u8 {
     if (it.fs.host) {
         // An empty path names no file, as in Tcl: it is not the current folder.
         if (path.len == 0) return "";
-        // As in Tcl 8.6, ~ at the start is the folder of $env(HOME).
+        // In Tcl 8.6, ~ at the start is the folder of $env(HOME). Tcl
+        // 9.1 has no tilde expansion: ~ is a character of the name.
         var p = path;
-        if (p.len > 0 and p[0] == '~' and (p.len == 1 or p[1] == '/')) {
+        if (it.tcl == .v8_6 and p.len > 0 and p[0] == '~' and (p.len == 1 or p[1] == '/')) {
             if (it.getVar("::env(HOME)")) |home| {
                 p = try std.mem.concat(a, u8, &.{ try it.str(home), p[1..] });
             } else |_| {}
