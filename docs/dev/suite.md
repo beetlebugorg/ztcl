@@ -1,6 +1,6 @@
 # Tcl 8.6.16 suite results
 
-`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-26 at commit `6cf8590`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
+`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-26 at commit `4825bb6`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
 
 A test is applicable when it is outside the buckets `design`, `platform`, `internals`, and `tcl`. The goal of issue 244 is a pass for each applicable test.
 
@@ -8,8 +8,8 @@ A test is applicable when it is outside the buckets `design`, `platform`, `inter
 
 | Run | Total | Pass | Fail | Skip | Unreached |
 |---|---|---|---|---|---|
-| Interpreter | 46,494 | 37,426 | 3,027 | 3,784 | 2,257 |
-| JIT (`-j`) | 46,494 | 37,426 | 3,027 | 3,784 | 2,257 |
+| Interpreter | 46,494 | 37,480 | 2,991 | 3,766 | 2,257 |
+| JIT (`-j`) | 46,494 | 37,479 | 2,992 | 3,766 | 2,257 |
 
 Unreached is the test count of `tools/suite-scope.tsv` minus the tests that ran: the file stopped before them.
 
@@ -19,29 +19,33 @@ The tests of the interpreter run that do not pass, by bucket.
 
 | Bucket | Meaning | Tests |
 |---|---|---|
-| `bug` | A bug in ztcl | 1,302 |
+| `bug` | A bug in ztcl | 1,297 |
 | `feature` | A missing feature or option | 3,324 |
-| `message` | An error message or -errorcode differs | 241 |
+| `message` | An error message or -errorcode differs | 210 |
 | `internals` | Needs Tcl internals (C test commands, memory debugging) | 2,618 |
 | `design` | Absent by design | 438 |
 | `platform` | Platform only | 736 |
-| `tcl` | Skipped by tclsh too (knownBug, emptyTest, and others) | 254 |
-| `untriaged` | Not triaged yet | 155 |
+| `tcl` | Skipped by tclsh too (knownBug, emptyTest, and others) | 255 |
+| `untriaged` | Not triaged yet | 136 |
 
-Applicable tests: 42,448. Pass rate of the applicable tests: 88.2 %.
+Applicable tests: 42,447. Pass rate of the applicable tests: 88.3 %.
 
 ## JIT differences
 
-Each test has the same result in the two runs.
+Tests with a different result in the JIT run. `socket.test`, `io.test`, and `chanio.test` have timing tests that can change between two runs of one mode.
+
+| File | Test | Interpreter | JIT |
+|---|---|---|---|
+| socket.test | socket_inet-13.1 | pass | fail |
 
 ## Files
 
 | File | Scope | Total | Pass | Fail | Skip | Unreached | JIT pass | JIT fail | JIT skip |
 |---|---|---|---|---|---|---|---|---|---|
 | aaa_exit.test | decide | 2 | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
-| append.test | in | 45 | 42 | 3 | 0 | 0 | 42 | 3 | 0 |
-| appendComp.test | in | 48 | 40 | 3 | 5 | 0 | 40 | 3 | 5 |
-| apply.test | in | 42 | 33 | 5 | 4 | 0 | 33 | 5 | 4 |
+| append.test | in | 45 | 44 | 1 | 0 | 0 | 44 | 1 | 0 |
+| appendComp.test | in | 48 | 42 | 1 | 5 | 0 | 42 | 1 | 5 |
+| apply.test | in | 42 | 35 | 3 | 4 | 0 | 35 | 3 | 4 |
 | assemble.test | na | 284 | 0 | 280 | 4 | 0 | 0 | 280 | 4 |
 | assocd.test | na | 11 | 0 | 0 | 11 | 0 | 0 | 0 | 11 |
 | async.test | na | 12 | 0 | 0 | 12 | 0 | 0 | 0 | 12 |
@@ -49,11 +53,11 @@ Each test has the same result in the two runs.
 | basic.test | in | 146 | 100 | 12 | 34 | 0 | 100 | 12 | 34 |
 | binary.test | in | 717 | 602 | 36 | 79 | 0 | 602 | 36 | 79 |
 | case.test | in | 15 | 15 | 0 | 0 | 0 | 15 | 0 | 0 |
-| chan.test | decide | 41 | 14 | 27 | 0 | 0 | 14 | 27 | 0 |
-| chanio.test | decide | 471 | 229 | 130 | 83 | 29 | 229 | 130 | 83 |
+| chan.test | decide | 41 | 15 | 26 | 0 | 0 | 15 | 26 | 0 |
+| chanio.test | decide | 471 | 239 | 128 | 75 | 29 | 239 | 128 | 75 |
 | clock.test | decide | 8,532 | 8,390 | 132 | 7 | 3 | 8,390 | 132 | 7 |
 | cmdAH.test | decide | 323 | 93 | 48 | 182 | 0 | 93 | 48 | 182 |
-| cmdIL.test | in | 146 | 128 | 12 | 6 | 0 | 128 | 12 | 6 |
+| cmdIL.test | in | 146 | 137 | 3 | 6 | 0 | 137 | 3 | 6 |
 | cmdInfo.test | na | 12 | 0 | 0 | 12 | 0 | 0 | 0 | 12 |
 | cmdMZ.test | in | 92 | 82 | 9 | 1 | 0 | 82 | 9 | 1 |
 | compExpr-old.test | in | 190 | 183 | 0 | 7 | 0 | 183 | 0 | 7 |
@@ -63,7 +67,7 @@ Each test has the same result in the two runs.
 | config.test | decide | 9 | 0 | 9 | 0 | 0 | 0 | 9 | 0 |
 | coroutine.test | in | 59 | 37 | 19 | 3 | 0 | 37 | 19 | 3 |
 | dcall.test | na | 6 | 0 | 0 | 6 | 0 | 0 | 0 | 6 |
-| dict.test | in | 342 | 311 | 29 | 2 | 0 | 311 | 29 | 2 |
+| dict.test | in | 342 | 313 | 27 | 2 | 0 | 313 | 27 | 2 |
 | dstring.test | na | 44 | 0 | 0 | 44 | 0 | 0 | 0 | 44 |
 | encoding.test | decide | 86 | 11 | 40 | 12 | 23 | 11 | 40 | 12 |
 | env.test | decide | 26 | 8 | 14 | 4 | 0 | 8 | 14 | 4 |
@@ -96,7 +100,7 @@ Each test has the same result in the two runs.
 | info.test | in | 266 | 98 | 165 | 3 | 0 | 98 | 165 | 3 |
 | init.test | decide | 24 | 0 | 10 | 0 | 14 | 0 | 10 | 0 |
 | interp.test | decide | 352 | 198 | 141 | 13 | 0 | 198 | 141 | 13 |
-| io.test | decide | 524 | 239 | 144 | 83 | 58 | 239 | 144 | 83 |
+| io.test | decide | 524 | 249 | 144 | 73 | 58 | 249 | 144 | 73 |
 | ioCmd.test | decide | 348 | 78 | 168 | 102 | 0 | 78 | 168 | 102 |
 | ioTrans.test | decide | 106 | 2 | 67 | 37 | 0 | 2 | 67 | 37 |
 | iogt.test | decide | 17 | 0 | 0 | 17 | 0 | 0 | 0 | 17 |
@@ -107,12 +111,12 @@ Each test has the same result in the two runs.
 | list.test | in | 78 | 77 | 1 | 0 | 0 | 77 | 1 | 0 |
 | listObj.test | in | 47 | 42 | 0 | 5 | 0 | 42 | 0 | 5 |
 | llength.test | in | 6 | 6 | 0 | 0 | 0 | 6 | 0 | 0 |
-| lmap.test | in | 66 | 62 | 4 | 0 | 0 | 62 | 4 | 0 |
+| lmap.test | in | 66 | 65 | 1 | 0 | 0 | 65 | 1 | 0 |
 | load.test | decide | 30 | 0 | 8 | 22 | 0 | 0 | 8 | 22 |
 | lrange.test | in | 34 | 32 | 0 | 2 | 0 | 32 | 0 | 2 |
 | lrepeat.test | in | 12 | 12 | 0 | 0 | 0 | 12 | 0 | 0 |
 | lreplace.test | in | 1,787 | 1,787 | 0 | 0 | 0 | 1,787 | 0 | 0 |
-| lsearch.test | in | 118 | 111 | 7 | 0 | 0 | 111 | 7 | 0 |
+| lsearch.test | in | 118 | 116 | 2 | 0 | 0 | 116 | 2 | 0 |
 | lset.test | in | 89 | 83 | 5 | 1 | 0 | 83 | 5 | 1 |
 | lsetComp.test | in | 19 | 19 | 0 | 0 | 0 | 19 | 0 | 0 |
 | macOSXFCmd.test | na | 14 | 0 | 0 | 14 | 0 | 0 | 0 | 14 |
@@ -129,7 +133,7 @@ Each test has the same result in the two runs.
 | oo.test | in | 306 | 214 | 74 | 17 | 1 | 214 | 74 | 17 |
 | ooNext2.test | in | 62 | 50 | 7 | 5 | 0 | 50 | 7 | 5 |
 | opt.test | decide | 31 | 0 | 30 | 0 | 1 | 0 | 30 | 0 |
-| package.test | decide | 402 | 352 | 50 | 0 | 0 | 352 | 50 | 0 |
+| package.test | decide | 402 | 357 | 45 | 0 | 0 | 357 | 45 | 0 |
 | parse.test | in | 271 | 114 | 5 | 152 | 0 | 114 | 5 | 152 |
 | parseExpr.test | in | 284 | 13 | 54 | 217 | 0 | 13 | 54 | 217 |
 | parseOld.test | in | 158 | 154 | 1 | 3 | 0 | 154 | 1 | 3 |
@@ -152,7 +156,7 @@ Each test has the same result in the two runs.
 | security.test | decide | 1 | 1 | 0 | 0 | 0 | 1 | 0 | 0 |
 | set-old.test | in | 153 | 142 | 11 | 0 | 0 | 142 | 11 | 0 |
 | set.test | in | 64 | 61 | 2 | 1 | 0 | 61 | 2 | 1 |
-| socket.test | decide | 175 | 157 | 7 | 11 | 0 | 157 | 7 | 11 |
+| socket.test | decide | 175 | 157 | 7 | 11 | 0 | 156 | 8 | 11 |
 | source.test | decide | 23 | 13 | 10 | 0 | 0 | 13 | 10 | 0 |
 | split.test | in | 17 | 16 | 1 | 0 | 0 | 16 | 1 | 0 |
 | stack.test | decide | 3 | 1 | 2 | 0 | 0 | 1 | 2 | 0 |
@@ -160,7 +164,7 @@ Each test has the same result in the two runs.
 | stringComp.test | in | 279 | 278 | 0 | 1 | 0 | 278 | 0 | 1 |
 | stringObj.test | na | 75 | 0 | 0 | 75 | 0 | 0 | 0 | 75 |
 | subst.test | in | 63 | 60 | 2 | 1 | 0 | 60 | 2 | 1 |
-| switch.test | in | 113 | 106 | 7 | 0 | 0 | 106 | 7 | 0 |
+| switch.test | in | 113 | 109 | 4 | 0 | 0 | 109 | 4 | 0 |
 | tailcall.test | in | 37 | 20 | 9 | 8 | 0 | 20 | 9 | 8 |
 | tcltest.test | decide | 159 | 2 | 40 | 1 | 116 | 2 | 40 | 1 |
 | thread.test | decide | 52 | 18 | 0 | 34 | 0 | 18 | 0 | 34 |
@@ -199,16 +203,12 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| append-10.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {#} 1 2 3 \| want: # 1 2 3 |
-| append-10.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {#} 1 2 3 \| want: # 1 2 3 |
 | append-9.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read "myvar(key)": no such variable} \| want: 0 {{new value}} |
 
 ### appendComp.test
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| appendComp-10.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {#} 1 2 3 \| want: # 1 2 3 |
-| appendComp-10.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {#} 1 2 3 \| want: # 1 2 3 |
 | appendComp-9.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't read "::myvar(key)": BOOM. no such variable} \| want: 0 {{new value}} |
 
 | Skipped by | Tests | Bucket |
@@ -219,8 +219,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| apply-3.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: namespace "NONEXIST::FOR::SURE" not found \| want: namespace "::NONEXIST::FOR... |
-| apply-3.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: namespace "NONEXIST::FOR::SURE" not found \| want: namespace "::NONEXIST::FOR... |
 | apply-4.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::apply lambdaExpr x" \| want: wrong # args: should ... |
 | apply-4.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::apply lambdaExpr x" \| want: wrong # args: should ... |
 | apply-4.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "::apply lambdaExpr self x" \| want: wrong # args: sh... |
@@ -650,7 +648,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | chan-4.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: bad value for -eofchar:* |
 | chan-5.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fcopy input output ?-size size? ?-command callback?"... |
 | chan-6.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "eof channelId" \| want: wrong # args: should be "cha... |
-| chan-7.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fileevent channelId event ?script?" \| want: wrong #... |
 | chan-8.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "flush channelId" \| want: wrong # args: should be "c... |
 | chan-9.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "gets channelId ?varName?" \| want: wrong # args: sho... |
 
@@ -722,7 +719,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | chan-io-32.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can not find channel named "stdin" \| want:  |
 | chan-io-34.12 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad origin "cur": must be start, current, or end \| want: 14 {xyz 123 xyzzy... |
 | chan-io-34.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 54 |
-| chan-io-34.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: error during seek on "file431": input/output error \| want: error during seek... |
+| chan-io-34.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: error during seek on "file433": input/output error \| want: error during seek... |
 | chan-io-35.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 10 8 1 \| want: 11 8 1 |
 | chan-io-35.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 10 8 1 \| want: 11 8 1 |
 | chan-io-35.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 17 17 1 \| want: 17 8 1 |
@@ -735,7 +732,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | chan-io-35.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
 | chan-io-35.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
 | chan-io-35.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
-| chan-io-38.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file495": illegal operation on a directory \| want:  |
+| chan-io-38.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file503": illegal operation on a directory \| want:  |
 | chan-io-39.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ç¦ \| want: 牦 |
 | chan-io-39.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: auto lf \| want: auto crlf |
 | chan-io-39.22 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {} {} \| want: {{} {}} {O G} {D D} |
@@ -744,8 +741,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | chan-io-39.24 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} lf \| want: {{}} auto |
 | chan-io-4.4 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {1234567          A} \| want: {1234567         } {1234567          A} |
 | chan-io-40.17 | `design`: the suite runs without the 'env' capability, so 'env' is ... | setup: can't read "::env(HOME)": no such variable |
-| chan-io-41.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fileevent channelId event ?script?" \| want: wrong #... |
-| chan-io-41.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "fileevent channelId event ?script?" \| want: wrong #... |
 | chan-io-42.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad event name "r": must be readable or writable \| want: {first script} {n... |
 | chan-io-42.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad event name "r": must be readable or writable \| want: 13 11 12 {} |
 | chan-io-43.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad event name "r": must be readable or writable \| want: {} {} {} {chan re... |
@@ -768,13 +763,13 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | chan-io-5.4 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: {1234567890 1234567890} {1234567890 12345... |
 | chan-io-52.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: fcopy -command is not available \| want: channel "*" is busy |
 | chan-io-52.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: fcopy -command is not available \| want: channel "*" is busy |
-| chan-io-52.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file606": illegal operation on a directory \| want: 0 0 ok |
-| chan-io-52.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file608": illegal operation on a directory \| want: 0 0 40 |
-| chan-io-52.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file610": illegal operation on a directory \| want: 0 0 ok |
-| chan-io-52.5a | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file612": illegal operation on a directory \| want: 0 0 ok |
-| chan-io-52.5b | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file614": illegal operation on a directory \| want: 0 0 ok |
-| chan-io-52.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file616": illegal operation on a directory \| want: 0 0 ok |
-| chan-io-52.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file618": illegal operation on a directory \| want: 0 0 ok |
+| chan-io-52.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file621": illegal operation on a directory \| want: 0 0 ok |
+| chan-io-52.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file623": illegal operation on a directory \| want: 0 0 40 |
+| chan-io-52.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file625": illegal operation on a directory \| want: 0 0 ok |
+| chan-io-52.5a | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file627": illegal operation on a directory \| want: 0 0 ok |
+| chan-io-52.5b | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file629": illegal operation on a directory \| want: 0 0 ok |
+| chan-io-52.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file631": illegal operation on a directory \| want: 0 0 ok |
+| chan-io-52.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file633": illegal operation on a directory \| want: 0 0 ok |
 | chan-io-52.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 \| want: 40 40 |
 | chan-io-6.17 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} -1 {} \| want: 1 { } -1 {} |
 | chan-io-6.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 abcd 4 efgh 4 ijkl 0 {} \| want: 9 {abcd efgh} 4 ijkl 5 { mnop} -1 {} |
@@ -795,7 +790,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | testchannel | 44 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | testfevent | 9 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | emptyTest | 8 | `tcl`: tclsh skips it too |
-| nonBlockFiles | 8 | `untriaged` |
 | testchannelevent | 6 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | asyncPipeChan | 3 | `tcl`: the test file sets the constraint false, or it is false in tclsh 8.6 on Linux |
 | win | 2 | `platform`: a constraint of another platform or word size |
@@ -1010,16 +1004,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| cmdIL-1.41 | `message`: an error where tclsh also gives one, with another message | code 1/1: when used with "-stride", the leading "-index" value must be within the group... |
-| cmdIL-1.42 | `message`: an error where tclsh also gives one, with another message | code 1/1: when used with "-stride", the leading "-index" value must be within the group... |
 | cmdIL-3.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {comparison error} {comparison error     while executing "error "comparis... |
-| cmdIL-3.5.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: element 1+3 missing from sublist "1 . c" \| want: element 4 missing from subl... |
-| cmdIL-3.5.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: element -1-1 missing from sublist "1 . c" \| want: index "-1-1" cannot select... |
-| cmdIL-3.5.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: element -2 missing from sublist "1 . c" \| want: index "-2" cannot select an ... |
-| cmdIL-3.5.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end-4 missing from sublist "1 . c" \| want: element -2 missing from s... |
-| cmdIL-3.5.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end--1 missing from sublist "1 . c" \| want: index "end--1" cannot se... |
-| cmdIL-3.5.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end+1 missing from sublist "1 . c" \| want: index "end+1" cannot sele... |
-| cmdIL-3.5.9 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end+2 missing from sublist "1 . c" \| want: index "end+2" cannot sele... |
 | cmdIL-4.36 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 256 32 257 \| want: 257 32 256 |
 | info-20.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
 
@@ -1201,8 +1186,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | dict-10.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "info": must be append, create, exists, filte... |
 | dict-10.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "info": must be append, create, exists, filte... |
 | dict-10.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: unknown or ambiguous subcommand "info": must be append, create, exists, filte... |
-| dict-11.13 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "dict incr dictVarName key ?value ...?" \| want: wron... |
-| dict-11.14 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "dict incr dictVarName key ?value ...?" \| want: wron... |
 | dict-14.12 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 test 1 {test     while executing "error test"     invoked from within "di... |
 | dict-17.13 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 x {x     while executing "error x"     invoked from within "dict filter {... |
 | dict-20.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: a b c d \| want:  a b c d  |
@@ -1552,8 +1535,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | fileName-20.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ~test \| want: ./~test |
 | fileName-20.9 | `bug`: the result differs from tclsh 8.6.16 | setup: couldn't open "~/test": no such file or directory |
 | filename-11.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "glob ?switches? name ?name ...?" \| want: no files m... |
-| filename-11.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3583633/globTest |
-| filename-11.15 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3583633/globTest |
+| filename-11.14 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3763082/globTest |
+| filename-11.15 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3763082/globTest |
 | filename-11.17.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.3 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.4 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
@@ -1608,7 +1591,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filename-13.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/{\}" \| want: unmatched open-brace in... |
 | filename-13.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/}" \| want: unmatched close-brace in ... |
 | filename-14.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
-| filename-14.17 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3583633/globTest/z1.c |
+| filename-14.17 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3763082/globTest/z1.c |
 | filename-14.22 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "goo/*" \| want: no files matched glob patterns... |
 | filename-14.25 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
 | filename-14.26 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: bad option "-dir": must be -directory, -join, -nocomplain, -path, -tails, -... |
@@ -1646,7 +1629,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.11 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
 | filesystem-6.14 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
 | filesystem-6.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: could not read "": no such file or directory |
-| filesystem-6.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1795742600 \| want: could not read "": no such file or directory |
+| filesystem-6.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1795743997 \| want: could not read "": no such file or directory |
 | filesystem-6.17 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/1: file mtime with a new time is not available \| want: could not read "": no su... |
 | filesystem-6.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: can't create directory "": no such file or directory |
 | filesystem-6.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/1:  \| want: could not read "": no such file or directory |
@@ -1657,7 +1640,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.25 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "" to "": target file exists \| want: error renaming "": no su... |
 | filesystem-6.27 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: / \| want: unrecognised path |
 | filesystem-6.28 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 260 \| want: could not read "": no such file or directory |
-| filesystem-6.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1795742600 \| want: could not read "": no such file or directory |
+| filesystem-6.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1795743997 \| want: could not read "": no such file or directory |
 | filesystem-6.30 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: native root \| want: unrecognised path |
 | filesystem-6.32 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: directory \| want: could not read "": no such file or directory |
 | filesystem-6.33 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
@@ -2364,7 +2347,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | io-35.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
 | io-35.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
 | io-35.9 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 8 8 1 \| want: 9 8 1 |
-| io-38.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file527": illegal operation on a directory \| want:  |
+| io-38.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file541": illegal operation on a directory \| want:  |
 | io-39.14 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ç¦ \| want: 牦 |
 | io-39.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: auto lf \| want: auto crlf |
 | io-39.22 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {} {} \| want: {{} {}} {O G} {D D} |
@@ -2395,14 +2378,14 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | io-5.4 | `feature`: an encoding that ztcl does not have | code 1/0,2: unknown encoding "ascii" \| want: {1234567890 1234567890} {1234567890 12345... |
 | io-52.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: fcopy -command is not available \| want: 0 |
 | io-52.2 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: fcopy -command is not available \| want: 0 |
-| io-52.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file639": illegal operation on a directory \| want: 0 0 ok |
-| io-52.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file641": illegal operation on a directory \| want: 0 0 0 40 |
-| io-52.4.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file643": illegal operation on a directory \| want: 0 0 0 40 |
-| io-52.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file645": illegal operation on a directory \| want: 0 0 ok |
-| io-52.5a | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file647": illegal operation on a directory \| want: 0 0 ok |
-| io-52.5b | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file649": illegal operation on a directory \| want: 0 0 ok |
-| io-52.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file651": illegal operation on a directory \| want: 0 0 ok |
-| io-52.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file653": illegal operation on a directory \| want: 0 0 ok |
+| io-52.3 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file660": illegal operation on a directory \| want: 0 0 ok |
+| io-52.4 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file662": illegal operation on a directory \| want: 0 0 0 40 |
+| io-52.4.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file664": illegal operation on a directory \| want: 0 0 0 40 |
+| io-52.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file666": illegal operation on a directory \| want: 0 0 ok |
+| io-52.5a | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file668": illegal operation on a directory \| want: 0 0 ok |
+| io-52.5b | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file670": illegal operation on a directory \| want: 0 0 ok |
+| io-52.6 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file672": illegal operation on a directory \| want: 0 0 ok |
+| io-52.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: error reading "file674": illegal operation on a directory \| want: 0 0 ok |
 | io-52.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 0 \| want: 40 40 |
 | io-6.17 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} -1 {} \| want: 1 { } -1 {} |
 | io-6.21 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 abcd 4 efgh 4 ijkl 0 {} \| want: 9 {abcd efgh} 4 ijkl 5 { mnop} -1 {} |
@@ -2423,13 +2406,11 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | testchannel | 44 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | testfevent | 9 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
 | emptyTest | 8 | `tcl`: tclsh skips it too |
-| nonBlockFiles | 8 | `untriaged` |
 | testchannelevent | 6 | `internals`: a C test command of the Tcl test binary, with no stand-in yet |
-| asyncPipeClose | 3 | `untriaged` |
+| nonPortable | 2 | `tcl`: tclsh skips it too |
 | win | 2 | `platform`: a constraint of another platform or word size |
 | extensive | 1 | `tcl`: tclsh skips it too |
 | makeFileInHome | 1 | `platform`: a property of the host: a second device, a writable home, IPv6 on localhost, ... |
-| nonPortable | 1 | `tcl`: tclsh skips it too |
 
 ### ioCmd.test
 
@@ -2723,9 +2704,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | Test | Bucket | Result (start) |
 |---|---|---|
 | lmap-1.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "a": variable is array} {can't set "a": variable is array     ... |
-| lmap-1.16 | `message`: an error where tclsh also gives one, with another message | code 1/1: foreach varlist is empty \| want: lmap varlist is empty |
-| lmap-4.16 | `message`: an error where tclsh also gives one, with another message | code 1/1: foreach varlist is empty \| want: lmap varlist is empty |
-| lmap-7.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: foreach varlist is empty \| want: lmap varlist is empty |
 
 ### load.test
 
@@ -2756,11 +2734,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| lsearch-17.12 | `message`: an error where tclsh also gives one, with another message | code 1/1: element -2 missing from sublist "a" \| want: index "-2" cannot select an elem... |
-| lsearch-17.13 | `message`: an error where tclsh also gives one, with another message | code 1/1: element -1-1 missing from sublist "a" \| want: index "-1-1" cannot select an ... |
-| lsearch-17.14 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end--1 missing from sublist "a" \| want: index "end--1" cannot select... |
-| lsearch-17.15 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end+1 missing from sublist "a" \| want: index "end+1" cannot select a... |
-| lsearch-17.16 | `message`: an error where tclsh also gives one, with another message | code 1/1: element end+2 missing from sublist "a" \| want: index "end+2" cannot select a... |
 | lsearch-19.7 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 end \| want: 0 1 |
 | lsearch-19.8 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {0 end} \| want: {0 1} |
 
@@ -3235,8 +3208,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | package-3.10 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {attempt to provide package t 2.1 failed: ifneeded test} {ifneeded test  ... |
 | package-3.15 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2: {a b} \| want: {a b} 0- |
 | package-3.16 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {testing package unknown} {testing package unknown     while executing "e... |
-| package-3.17 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't find package t 1.5} {t 1.5-1.5} \| want: 1 {can't find package t e... |
-| package-3.24 | `message`: an error where tclsh also gives one, with another message | code 1/1: version conflict for package "t": have 2.3, need 2.2 \| want: version conflic... |
 | package-3.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {attempt to provide package t 2.1 failed: ifneeded test} {EI     invoked ... |
 | package-3.26 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {attempt to provide package t 2.1 failed: ifneeded test} {EI     invoked ... |
 | package-3.27 | `message`: an error where tclsh also gives one, with another message | code 1/1: attempt to provide package foo 1 failed: attempt to provide package foo 1 fai... |
@@ -3250,12 +3221,9 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | package-3.41 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "continue" \| want: bad return code:* |
 | package-3.42 | `bug`: the result differs from tclsh 8.6.16 | code 2/1: ;# \| want: bad return code:* |
 | package-3.43 | `bug`: the result differs from tclsh 8.6.16 | code 10/1: ;# \| want: bad return code:* |
-| package-3.44 | `message`: an error where tclsh also gives one, with another message | code 1/1: version conflict for package "demo": have 1.2.3, need 1.2 \| want: version co... |
-| package-3.8 | `message`: an error where tclsh also gives one, with another message | code 1/1: can't find package t 1.3 \| want: can't find package t exactly 1.3 |
 | package-4.32 | `message`: an error where tclsh also gives one, with another message | code 1/1: attempt to provide package t 2.3 failed: synthetic error \| want: synthetic e... |
 | package-4.55 | `message`: an error where tclsh also gives one, with another message | code 1/1: expected versionMin-versionMax but got "3.2-x.y" \| want: expected version nu... |
 | package-4.56 | `message`: an error where tclsh also gives one, with another message | code 1/1: expected versionMin-versionMax but got "x.y-3.2" \| want: expected version nu... |
-| package-8.7 | `message`: an error where tclsh also gives one, with another message | code 1/1: version conflict for package "t": have 2.4, need 2.3 \| want: version conflic... |
 | package-9.24 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
 | package-9.25 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 \| want: 1 |
 
@@ -3862,9 +3830,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | switch-13.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 - - {can't set "y(y)": variable isn't array} \| want: 1 {{0 0}} - {can't ... |
 | switch-4.1 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {Just a test} {Just a test     while executing "error "Just a test""     ... |
 | switch-4.5 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 switch2 {switch2     while executing "error switch2"     invoked from wit... |
-| switch-9.2 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "switch ?-option ...? string ?pattern body ...? ?defa... |
-| switch-9.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "switch ?-option ...? string ?pattern body ...? ?defa... |
-| switch-9.4 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "switch ?-option ...? string ?pattern body ...? ?defa... |
 
 ### tailcall.test
 
@@ -4106,7 +4071,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 46175', Got '' \| want: OK |
+| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 38689', Got '' \| want: OK |
 | unixInit-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
 | unixInit-4.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: can't read "tcl_pkgPath": no such variable \| want: unix |
 | unixInit-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0: couldn't open "/dev/null": no such file or directory \| want:  |

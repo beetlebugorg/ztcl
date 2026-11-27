@@ -150,7 +150,7 @@ fn require(it: *Interp, name: []const u8, reqs: []const Value, exact: bool) Erro
         const p = try entry(it, name);
         if (p.version) |have| {
             if (try meetsAny(it, try version(it, .{ .str = have }), words)) return .{ .str = have };
-            return it.failCode("TCL PACKAGE VERSIONCONFLICT", "version conflict for package \"{s}\": have {s}, need {s}", .{ name, have, try it.str(try value.newList(a, reqs)) });
+            return it.failCode("TCL PACKAGE VERSIONCONFLICT", "version conflict for package \"{s}\": have {s}, need {s}{s}", .{ name, have, if (exact) "exactly " else "", try it.str(try value.newList(a, reqs)) });
         }
         // The best script: the highest stable version, then any.
         var best: ?[2]Value = null;
@@ -212,7 +212,7 @@ fn require(it: *Interp, name: []const u8, reqs: []const Value, exact: bool) Erro
             continue;
         }
         if (reqs.len == 0) return it.failCode("TCL PACKAGE UNFOUND", "can't find package {s}", .{name});
-        return it.failCode("TCL PACKAGE UNFOUND", "can't find package {s} {s}", .{ name, try it.str(try value.newList(a, reqs)) });
+        return it.failCode("TCL PACKAGE UNFOUND", "can't find package {s} {s}{s}", .{ name, if (exact) "exactly " else "", try it.str(try value.newList(a, reqs)) });
     }
 }
 
@@ -341,7 +341,7 @@ pub fn cmdPackage(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             words = try a.dupe(Value, &.{.{ .str = try std.fmt.allocPrint(a, "{s}-{s}", .{ r, r }) }});
         }
         if (!try meetsAny(it, try version(it, .{ .str = have }), words)) {
-            return it.failCode("TCL PACKAGE VERSIONCONFLICT", "version conflict for package \"{s}\": have {s}, need {s}", .{ name, have, try it.str(try value.newList(a, reqs)) });
+            return it.failCode("TCL PACKAGE VERSIONCONFLICT", "version conflict for package \"{s}\": have {s}, need {s}{s}", .{ name, have, if (exact) "exactly " else "", try it.str(try value.newList(a, reqs)) });
         }
         return .{ .str = have };
     }

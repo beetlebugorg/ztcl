@@ -51,6 +51,7 @@ array set tt_cons {
     unixOrPc 1 macOrPc 0 macOrUnix 1 unixOrWin 1 macOrWin 0 pc 0 nt 0 root 0
     tempNotPc 1 tempNotWin 1 tempNotMac 1 tempNotUnix 0
     unixCrash 0 winCrash 1 pcCrash 1 macCrash 1
+    nonBlockFiles 1 asyncPipeClose 1
 }
 
 # A constraint for a command is true only when ztcl has the command.

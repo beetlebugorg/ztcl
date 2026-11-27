@@ -340,7 +340,7 @@ fn cmdForeach(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     for (0..n) |k| {
         names[k] = try it.list(argv[1 + 2 * k]);
         lists[k] = try it.list(argv[2 + 2 * k]);
-        if (names[k].len == 0) return it.fail("foreach varlist is empty", .{});
+        if (names[k].len == 0) return it.fail("{s} varlist is empty", .{if (is_map) "lmap" else "foreach"});
         passes = @max(passes, (lists[k].len + names[k].len - 1) / names[k].len);
     }
     const body = try it.scriptOf(argv, argv.len - 1, cmd);
@@ -383,7 +383,9 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     var match_var: ?Value = null;
     var index_var: ?Value = null;
     var mode_word: ?[]const u8 = null;
-    while (i < argv.len) : (i += 1) {
+    // As in Tcl, the options end two words before the end, so the last
+    // two words are always the string and the patterns.
+    while (i + 2 < argv.len) : (i += 1) {
         const s = try it.str(argv[i]);
         if (s.len == 0 or s[0] != '-') break;
         if (eql(s, "--")) {
@@ -407,7 +409,7 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             nocase = true;
         } else {
             i += 1;
-            if (i >= argv.len) return it.fail("missing variable name argument to {s} option", .{opt});
+            if (i + 2 >= argv.len) return it.fail("missing variable name argument to {s} option", .{opt});
             if (eql(opt, "-matchvar")) match_var = argv[i] else index_var = argv[i];
         }
     }
@@ -419,7 +421,7 @@ fn cmdSwitch(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     var arms = argv[i..];
     const one_list = arms.len == 1;
     if (one_list) arms = try it.list(arms[0]);
-    if (arms.len == 0) return it.wrongArgs("switch ?-option ...? string ?pattern body ...? ?default body?");
+    if (arms.len == 0) return it.wrongArgs("switch ?-option ...? string {{?pattern body ...? ?default body?}}");
     if (arms.len % 2 != 0) {
         // A comment in a braced body is a common cause of this error.
         if (one_list) for (arms) |w| {
@@ -529,9 +531,11 @@ fn cmdApply(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     };
     p.ns = "";
     if (lambda.len == 3) {
-        const given = try it.str(lambda[2]);
-        const space = std.mem.trim(u8, given, ":");
+        const raw = try it.str(lambda[2]);
+        const space = std.mem.trim(u8, raw, ":");
         if (space.len > 0 and !it.namespaces.contains(space)) {
+            // Tcl names the namespace of a lambda from the global one.
+            const given = if (std.mem.startsWith(u8, raw, "::")) raw else try std.fmt.allocPrint(it.alloc(), "::{s}", .{raw});
             return it.failCode(try std.fmt.allocPrint(it.alloc(), "TCL LOOKUP NAMESPACE {s}", .{given}), "namespace \"{s}\" not found", .{given});
         }
         p.ns = try it.internNs(space);
@@ -1035,6 +1039,21 @@ pub fn index(it: *Interp, v: Value, len: usize) Error!i64 {
     return if (rest[0] == '+') base +% off else base -% off;
 }
 
+/// Checks the indices of `-index` of lsearch and lsort, as Tcl does when
+/// it parses the option: an index before the start (such as -1) or after
+/// the end (such as end+1) is an error for any list. Two lengths give
+/// the form of the index: the value of an index from the end changes
+/// with the length.
+pub fn checkSelect(it: *Interp, ixs: []const Value) Error!void {
+    for (ixs) |ix| {
+        const a = try index(it, ix, 0);
+        const b = try index(it, ix, 1 << 20);
+        if ((a == b and a < 0) or (a != b and a >= 0)) {
+            return it.fail("index \"{s}\" cannot select an element from any list", .{try it.str(ix)});
+        }
+    }
+}
+
 /// An integer of an index. Tcl 8.6 keeps the low 32 bits of an index.
 fn indexInt(t: []const u8) ?i64 {
     if (t.len == 0) return null;
@@ -1082,7 +1101,21 @@ fn cmdLlength(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 pub fn cmdLappend(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("lappend varName ?value ...?");
     const name = try it.str(argv[1]);
-    const cur = try it.getVarOpt(name) orelse Value.empty;
+    const old = try it.getVarOpt(name);
+    if (argv.len == 2) {
+        // With no values, as in Tcl: the value stays as it is, after a
+        // check that it is a list. A missing variable is set to "".
+        const v = old orelse {
+            try it.setVar(name, Value.empty);
+            return Value.empty;
+        };
+        _ = v.toList(it.alloc()) catch |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.BadList => return it.listError(v),
+        };
+        return v;
+    }
+    const cur = old orelse Value.empty;
     var l = cur.toList(it.alloc()) catch |e| switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
         error.BadList => return it.listError(cur),
@@ -1218,6 +1251,7 @@ fn cmdLsearch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             if (oi + 1 >= last) return it.fail("\"-index\" option must be followed by list index", .{});
             oi += 1;
             path = try it.list(argv[oi]);
+            try checkSelect(it, path.?);
         } else return it.fail("bad option \"{s}\": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, or -subindices", .{s});
     }
     if (subindices and path == null) return it.fail("-subindices cannot be used without -index option", .{});
@@ -1250,7 +1284,7 @@ fn cmdLsearch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (path) |p| for (p) |ix| {
             const sub = try it.list(key);
             const n = try index(it, ix, sub.len);
-            if (n < 0 or n >= sub.len) return it.fail("element {s} missing from sublist \"{s}\"", .{ try it.str(ix), try it.str(key) });
+            if (n < 0 or n >= sub.len) return it.fail("element {d} missing from sublist \"{s}\"", .{ n, try it.str(key) });
             key = sub[@intCast(n)];
         };
         var order: std.math.Order = .eq;
