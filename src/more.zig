@@ -376,6 +376,8 @@ fn isAscii(s: []const u8) bool {
 /// The bytes of a string: each character below 256 is one byte. One
 /// allocation: a string has at least one byte for each character.
 pub fn toBytes(it: *Interp, s: []const u8) Error![]const u8 {
+    // A string that `binary` made or read before has its byte form.
+    if (s.len >= bytes_form_min) if (it.heap.cachedBytes(s)) |b| return b;
     if (isAscii(s)) return s;
     const out = try it.alloc().alloc(u8, s.len);
     var o: usize = 0;
@@ -412,7 +414,21 @@ pub fn toBytes(it: *Interp, s: []const u8) Error![]const u8 {
         o += 1;
         i += n;
     }
+    if (s.len >= bytes_form_min) it.heap.putBytes(s, out[0..o]);
     return out[0..o];
+}
+
+/// A shorter string gets no byte form: its conversion costs less than
+/// the lookup.
+const bytes_form_min = 256;
+
+/// `fromBytes` for a result of `binary`: `b` does not change after the
+/// call, so the string keeps it as its byte form, and a later `toBytes`
+/// of the string has no conversion.
+fn fromBytesKept(it: *Interp, b: []const u8) Error![]const u8 {
+    const s = try fromBytes(it, b);
+    if (s.ptr != b.ptr and s.len >= bytes_form_min) it.heap.putBytes(s, b);
+    return s;
 }
 
 /// The string of bytes: a byte above 127 becomes the character with
@@ -421,18 +437,19 @@ pub fn fromBytes(it: *Interp, b: []const u8) Error![]const u8 {
     if (isAscii(b)) return b;
     var high: usize = 0;
     for (b) |c| high += c >> 7;
-    const out = try it.alloc().alloc(u8, b.len + high);
+    // One byte more for the store of the second byte after the last
+    // character. Each byte writes two bytes with no branch, and the
+    // place moves by one or two: binary data has no pattern for the
+    // branch predictor.
+    const out = try it.alloc().alloc(u8, b.len + high + 1);
     var o: usize = 0;
     for (b) |c| {
-        if (c < 0x80) {
-            out[o] = c;
-            o += 1;
-        } else {
-            out[o..][0..2].* = .{ 0xC0 | (c >> 6), 0x80 | (c & 0x3F) };
-            o += 2;
-        }
+        const hi = c >> 7;
+        out[o] = if (hi != 0) 0xC0 | (c >> 6) else c;
+        out[o + 1] = 0x80 | (c & 0x3F);
+        o += 1 + hi;
     }
-    return out;
+    return out[0 .. b.len + high];
 }
 
 const Field = struct { type: u8, unsigned: bool, count: ?usize, star: bool };
@@ -553,7 +570,7 @@ fn binaryFormat(it: *Interp, argv: []const Value) Error!Value {
             }
         }
     }
-    return .{ .str = try fromBytes(it, out.items) };
+    return .{ .str = try fromBytesKept(it, out.items) };
 }
 
 fn binaryScan(it: *Interp, argv: []const Value) Error!Value {
@@ -747,7 +764,7 @@ fn uuCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
             if (strict and (data[pos] < ' ' or data[pos] > '`')) return it.fail("invalid uuencode character \"{c}\" at position {d}", .{ data[pos], pos });
         }
     }
-    return .{ .str = try fromBytes(it, out.items) };
+    return .{ .str = try fromBytesKept(it, out.items) };
 }
 
 const b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -846,7 +863,7 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
         }
         out.items = hbuf[0..made];
         if (half != null and strict) return it.fail("invalid hexadecimal digit \"\" at position {d}", .{data.len});
-        return .{ .str = try fromBytes(it, out.items) };
+        return .{ .str = try fromBytesKept(it, out.items) };
     }
     var acc: u32 = 0;
     var have: u32 = 0;
@@ -893,7 +910,7 @@ fn binaryCode(it: *Interp, argv: []const Value, encode: bool) Error!Value {
         if (d >= 64 and !strict and std.ascii.isWhitespace(ch)) continue;
         return it.fail("invalid base64 character \"{c}\" at position {d}", .{ ch, pos });
     }
-    return .{ .str = try fromBytes(it, buf[0..made]) };
+    return .{ .str = try fromBytesKept(it, buf[0..made]) };
 }
 
 /// The value of each base64 character, and 255 for any other byte.

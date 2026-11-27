@@ -199,12 +199,19 @@ pub const Heap = struct {
     /// an entry stays true until a sweep or a reset frees blocks.
     counts: [4]Count = @splat(.{}),
     next_count: u8 = 0,
+    /// The bytes of the last long strings that `binary` read or made: the
+    /// byte form beside the string (src/more.zig `toBytes`). An entry
+    /// stays true until a sweep or a reset, as for `counts`, and a sweep
+    /// drops the entries before it frees a block.
+    bytes_of: [4]BytesOf = @splat(.{}),
+    next_bytes: u8 = 0,
     /// The grapheme marks of the last long strings (src/text/cmd.zig).
     /// The marks are in a heap block, so the same rule holds.
     graphemes: [2]Graphemes = @splat(.{}),
     next_grapheme: u8 = 0,
 
     pub const Count = struct { ptr: usize = 0, len: usize = 0, n: usize = 0 };
+    pub const BytesOf = struct { ptr: usize = 0, len: usize = 0, bytes: []const u8 = &.{} };
     pub const Graphemes = struct { ptr: usize = 0, len: usize = 0, n: usize = 0, marks: []const u32 = &.{} };
 
     /// The counts of the collections. The times come from a clock that
@@ -340,6 +347,7 @@ pub const Heap = struct {
         h.threshold = min_threshold;
         h.alloc_base = 0;
         h.counts = @splat(.{});
+        h.bytes_of = @splat(.{});
         h.graphemes = @splat(.{});
     }
 
@@ -357,6 +365,22 @@ pub const Heap = struct {
         if (h.find(@intFromPtr(s.ptr)) == null) return;
         h.counts[h.next_count] = .{ .ptr = @intFromPtr(s.ptr), .len = s.len, .n = n };
         h.next_count = @intCast((h.next_count + 1) % h.counts.len);
+    }
+
+    /// The stored byte form of `s`, or null.
+    pub inline fn cachedBytes(h: *const Heap, s: []const u8) ?[]const u8 {
+        for (&h.bytes_of) |*e| {
+            if (e.ptr == @intFromPtr(s.ptr) and e.len == s.len) return e.bytes;
+        }
+        return null;
+    }
+
+    /// Stores `b` as the byte form of `s`, a string in a block of this
+    /// heap. `b` must not change while `s` lives.
+    pub fn putBytes(h: *Heap, s: []const u8, b: []const u8) void {
+        if (h.find(@intFromPtr(s.ptr)) == null) return;
+        h.bytes_of[h.next_bytes] = .{ .ptr = @intFromPtr(s.ptr), .len = s.len, .bytes = b };
+        h.next_bytes = @intCast((h.next_bytes + 1) % h.bytes_of.len);
     }
 
     /// The stored grapheme marks of `s`, or null.
@@ -1184,6 +1208,7 @@ fn sweep(h: *Heap) void {
     h.partial = @splat(null);
     h.last = null;
     h.counts = @splat(.{});
+    h.bytes_of = @splat(.{});
     h.graphemes = @splat(.{});
     // The stress mode poisons in each build, so a suite run in
     // ReleaseFast also shows a use of a freed block.
