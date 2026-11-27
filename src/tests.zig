@@ -3757,3 +3757,37 @@ test "a long source collects, also with the precise roots" {
     it.mem_limit = std.math.maxInt(usize);
     _ = try it.eval("file delete -force .zig-cache/ztcl-source-gc");
 }
+
+test "format: the fast %f gives the digits of the exact path" {
+    const fmt_mod = @import("format.zig");
+    var rng = std.Random.DefaultPrng.init(0x5eed);
+    const r = rng.random();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var buf: [72]u8 = undefined;
+    var fast: usize = 0;
+    var i: usize = 0;
+    while (i < 200_000) : (i += 1) {
+        const prec = r.uintLessThan(usize, 10);
+        // Values of each scale, and values on a grid of halves, where
+        // the ties are.
+        const x: f64 = switch (r.uintLessThan(u8, 4)) {
+            0 => r.float(f64) * 100,
+            1 => r.float(f64) * 1e12,
+            2 => @as(f64, @floatFromInt(r.uintLessThan(u64, 1_000_000))) / std.math.pow(f64, 10, @floatFromInt(prec + 1)),
+            else => @as(f64, @floatFromInt(r.uintLessThan(u64, 1_000_000))) / 8.0,
+        };
+        _ = arena.reset(.retain_capacity);
+        const a = arena.allocator();
+        const slow = try fmt_mod.formatFloat(a, x, 'f', prec, false);
+        if (fmt_mod.fastFixed(&buf, x, prec)) |got| {
+            fast += 1;
+            std.testing.expectEqualStrings(slow, got) catch |e| {
+                std.debug.print("x={e} prec={d}\n", .{ x, prec });
+                return e;
+            };
+        }
+    }
+    // Most values take the fast path.
+    try std.testing.expect(fast > 150_000);
+}
