@@ -101,9 +101,42 @@ fn mounts() void {
     mkdirs("/mnt");
     _ = linux.mount("mnt", "/mnt", "tmpfs", 0, 0);
     mkdirs("/mnt/share");
-    // virtio-fs on Virtualization.framework, 9p on the KVM monitor.
-    if (linux.errno(linux.mount("share0", "/mnt/share", "virtiofs", 0, 0)) != .SUCCESS)
-        _ = linux.mount("share0", "/mnt/share", "9p", 0, @intFromPtr(nine_p_options));
+    // virtio-fs on Virtualization.framework, 9p on the KVM monitor. A
+    // failed virtio-fs mount ends at once, but a failed 9p mount costs
+    // about a millisecond before the agent listens, so 9p waits for a 9p
+    // device on the bus.
+    if (linux.errno(linux.mount("share0", "/mnt/share", "virtiofs", 0, 0)) == .SUCCESS) return;
+    if (hasNinePDevice()) _ = linux.mount("share0", "/mnt/share", "9p", 0, @intFromPtr(nine_p_options));
+}
+
+/// Whether the virtio bus has a 9p device. Each probe of the devices ends
+/// before init starts: the root of a disk waits for them, and the kernel
+/// probes before it runs the init of an initrd.
+fn hasNinePDevice() bool {
+    const dir = ok(linux.open("/sys/bus/virtio/devices", .{ .DIRECTORY = true, .CLOEXEC = true }, 0)) orelse return true;
+    defer _ = linux.close(@intCast(dir));
+    var buf: [2048]u8 align(8) = undefined;
+    while (true) {
+        const n = ok(linux.getdents64(@intCast(dir), &buf, buf.len)) orelse break;
+        if (n == 0) break;
+        var at: usize = 0;
+        while (at < n) {
+            const reclen = std.mem.readInt(u16, buf[at + 16 ..][0..2], .little);
+            const name = std.mem.sliceTo(buf[at + 19 .. at + reclen], 0);
+            at += reclen;
+            if (!std.mem.startsWith(u8, name, "virtio")) continue;
+            var path: [96]u8 = undefined;
+            const p = std.fmt.bufPrint(&path, "/sys/bus/virtio/devices/{s}/device\x00", .{name}) catch continue;
+            const fd = ok(linux.open(@ptrCast(p.ptr), .{ .CLOEXEC = true }, 0)) orelse continue;
+            var id: [16]u8 = undefined;
+            const len = ok(linux.read(@intCast(fd), &id, id.len)) orelse 0;
+            _ = linux.close(@intCast(fd));
+            // The virtio device id of 9p.
+            const v = std.fmt.parseInt(u32, std.mem.trim(u8, id[0..len], " \n"), 0) catch continue;
+            if (v == 9) return true;
+        }
+    }
+    return false;
 }
 
 fn listenOnce(port: u32) ?i32 {
