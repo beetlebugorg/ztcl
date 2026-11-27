@@ -1,6 +1,6 @@
 # Tcl 8.6.16 suite results
 
-`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-27 at commit `a4712c8`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
+`tools/suite-run.sh` makes this page with `tools/suite-md.py`. Do not edit it by hand. Run on 2026-11-27 at commit `97e76ee`, with the suite runner `zig-out/bin/ztcl-suite` (ReleaseSafe) on all 152 test files. `docs/dev/suite-tests.tsv` has one line for each test.
 
 A test is applicable when it is outside the buckets `design`, `platform`, `internals`, and `tcl`. The goal of issue 244 is a pass for each applicable test.
 
@@ -8,8 +8,8 @@ A test is applicable when it is outside the buckets `design`, `platform`, `inter
 
 | Run | Total | Pass | Fail | Skip | Unreached |
 |---|---|---|---|---|---|
-| Interpreter | 47,133 | 37,982 | 2,688 | 4,337 | 2,126 |
-| JIT (`-j`) | 47,133 | 37,982 | 2,688 | 4,337 | 2,126 |
+| Interpreter | 47,133 | 38,000 | 2,670 | 4,337 | 2,126 |
+| JIT (`-j`) | 47,133 | 38,000 | 2,670 | 4,337 | 2,126 |
 
 Unreached is the test count of `tools/suite-scope.tsv` minus the tests that ran: the file stopped before them.
 
@@ -28,7 +28,7 @@ The tests of the interpreter run that do not pass, by bucket.
 
 | Bucket | Meaning | Tests |
 |---|---|---|
-| `bug` | A bug in ztcl | 1,087 |
+| `bug` | A bug in ztcl | 1,069 |
 | `feature` | A missing feature or option | 3,233 |
 | `message` | An error message or -errorcode differs | 147 |
 | `internals` | Needs Tcl internals (C test commands, memory debugging) | 3,254 |
@@ -45,7 +45,7 @@ The tests of the buckets `bug`, `feature`, `message`, and `untriaged`, by the re
 
 | Bucket | Reason | Tests |
 |---|---|---|
-| `bug` | the result differs from tclsh 8.6.16 | 360 |
+| `bug` | the result differs from tclsh 8.6.16 | 342 |
 | `bug` | channels: the result differs | 144 |
 | `bug` | namespaces: the result differs | 79 |
 | `bug` | file names and 'glob': the result differs | 71 |
@@ -206,7 +206,7 @@ Each test has the same result in the two runs.
 | result.test | na | 26 | 1 | 3 | 22 | 0 | 1 | 3 | 22 |
 | safe-stock.test | decide | 4 | 0 | 4 | 0 | 0 | 0 | 4 | 0 |
 | safe.test | decide | 102 | 2 | 91 | 8 | 1 | 2 | 91 | 8 |
-| scan.test | in | 181 | 162 | 18 | 1 | 0 | 162 | 18 | 1 |
+| scan.test | in | 181 | 180 | 0 | 1 | 0 | 180 | 0 | 1 |
 | security.test | decide | 1 | 1 | 0 | 0 | 0 | 1 | 0 | 0 |
 | set-old.test | in | 153 | 142 | 11 | 0 | 0 | 142 | 11 | 0 |
 | set.test | in | 64 | 61 | 2 | 1 | 0 | 61 | 2 | 1 |
@@ -1447,8 +1447,8 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | fileName-20.8 | `bug`: file names and 'glob': the result differs | code 0/0,2: ~test \| want: ./~test |
 | fileName-20.9 | `bug`: file names and 'glob': the result differs | setup: couldn't open "~/test": no such file or directory |
 | filename-11.1 | `message`: an error where tclsh also gives one, with another message | code 1/1: wrong # args: should be "glob ?switches? name ?name ...?" \| want: no files m... |
-| filename-11.14 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl2639770/globTest |
-| filename-11.15 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl2639770/globTest |
+| filename-11.14 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/globTest" \| want: /tcl3101497/globTest |
+| filename-11.15 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~\/globTest" \| want: /tcl3101497/globTest |
 | filename-11.17.2 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.3 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
 | filename-11.17.4 | `design`: 'file link' is outside the root folder model of the file ... | code 1/0,2: could not link: links are not available in the root folder \| want: globTes... |
@@ -1496,7 +1496,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filename-13.3 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/{\}" \| want: unmatched open-brace in... |
 | filename-13.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "globTest/}" \| want: unmatched close-brace in ... |
 | filename-14.15 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
-| filename-14.17 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl2639770/globTest/z1.c |
+| filename-14.17 | `bug`: file names and 'glob': the result differs | code 1/0,2: no files matched glob pattern "~/z*" \| want: /tcl3101497/globTest/z1.c |
 | filename-14.22 | `message`: an error where tclsh also gives one, with another message | code 1/1: no files matched glob pattern "goo/*" \| want: no files matched glob patterns... |
 | filename-14.26 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 globTest/a2 globTest/a3 globTest/nonexistent {globTest/weird na... |
 | filename-14.30 | `bug`: file names and 'glob': the result differs | code 0/0,2: globTest/a1 \| want: globTest/a1/ |
@@ -1532,7 +1532,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.11 | `bug`: file names and 'glob': the result differs | code 0/0,2: 1 \| want: 0 |
 | filesystem-6.14 | `design`: 'file link' is outside the root folder model of the file ... | code 1/1: could not link: links are not available in the root folder \| want: could not... |
 | filesystem-6.15 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: could not read "": no such file or directory |
-| filesystem-6.16 | `bug`: file names and 'glob': the result differs | code 0/1: 1795766993 \| want: could not read "": no such file or directory |
+| filesystem-6.16 | `bug`: file names and 'glob': the result differs | code 0/1: 1795770627 \| want: could not read "": no such file or directory |
 | filesystem-6.17 | `feature`: 'file mtime' and 'file atime' with a new time | code 1/1: file mtime with a new time is not available \| want: could not read "": no su... |
 | filesystem-6.18 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: can't create directory "": no such file or directory |
 | filesystem-6.2 | `bug`: file names and 'glob': the result differs | code 0/1:  \| want: could not read "": no such file or directory |
@@ -1543,7 +1543,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | filesystem-6.25 | `message`: an error where tclsh also gives one, with another message | code 1/1: error renaming "" to "": target file exists \| want: error renaming "": no su... |
 | filesystem-6.27 | `bug`: file names and 'glob': the result differs | code 0/1: / \| want: unrecognised path |
 | filesystem-6.28 | `bug`: file names and 'glob': the result differs | code 0/1: 280 \| want: could not read "": no such file or directory |
-| filesystem-6.3 | `bug`: file names and 'glob': the result differs | code 0/1: 1795766993 \| want: could not read "": no such file or directory |
+| filesystem-6.3 | `bug`: file names and 'glob': the result differs | code 0/1: 1795770627 \| want: could not read "": no such file or directory |
 | filesystem-6.30 | `bug`: file names and 'glob': the result differs | code 0/1: native root \| want: unrecognised path |
 | filesystem-6.32 | `bug`: file names and 'glob': the result differs | code 0/1: directory \| want: could not read "": no such file or directory |
 | filesystem-6.33 | `bug`: file names and 'glob': the result differs | code 0/0,2: 1 \| want: 0 |
@@ -3437,27 +3437,6 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 ### scan.test
 
-| Test | Bucket | Result (start) |
-|---|---|---|
-| scan-13.5 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: "%n$" argument index out of range \| want:  |
-| scan-13.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 6 {"%n$" argument index out of range} \| want: 10 {{} {} {} {} {} {} {} {} ... |
-| scan-13.7 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: "%n$" argument index out of range \| want: 190 180 170 160 150 140 130 120 ... |
-| scan-13.8 | `bug`: the result differs from tclsh 8.6.16 | code 1/0,2: "%n$" argument index out of range \| want: 200 10 20 30 |
-| scan-14.1 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2:  \| want: Inf |
-| scan-14.2 | `bug`: the result differs from tclsh 8.6.16 | code 2/0,2:  \| want: -Inf |
-| scan-4.15 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: -1 {} |
-| scan-4.40.3 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 2 9 0 0 \| want: 3 9 5 340282366920938463463374607431768211456 |
-| scan-4.41 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 10 8 16 2 \| want: 4 10 8 16 0 |
-| scan-4.44 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: -1 {} |
-| scan-4.45 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 0 8 \| want: 2 0 x |
-| scan-4.46 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 0 8 \| want: 2 0 X |
-| scan-4.55 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 0 {} \| want: -1 {} |
-| scan-4.60 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 {can't set "z": variable is array} abc {} \| want: 1 {can't set "z": vari... |
-| scan-5.17 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 3 81985529216486895 81985529216486895 81985529216486895 \| want: 3 20769880... |
-| scan-5.18 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1 -81985529216486895 \| want: unsigned bignum scans are invalid |
-| scan-5.19 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: 1 81985529216486895 \| want: unsigned bignum scans are invalid |
-| scan-7.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 4 abc dÇ fghijk dum \| want: 4 abc dÇf ghijk dum |
-
 | Skipped by | Tests | Bucket |
 |---|---|---|
 | nonPortable | 1 | `tcl`: tclsh skips it too |
@@ -3497,7 +3476,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 | socket-14.5 | `message`: an error where tclsh also gives one, with another message | code 1/1: couldn't open socket: the network policy does not allow the address "192.0.2.... |
 | socket-14.8.0 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2:  \| want: ok |
 | socket-14.8.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: {} {connection refused} {} \| want: {error reading "sock*": socket is not c... |
-| socket-15.1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: sock2844 \| want: couldn't open socket: connection refused |
+| socket-15.1.6 | `bug`: the result differs from tclsh 8.6.16 | code 0/1: sock2842 \| want: couldn't open socket: connection refused |
 | socket_inet-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ready timed_out \| want: ready done |
 | socket_inet6-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: ready timed_out \| want: ready done |
 
@@ -3816,7 +3795,7 @@ Each failure has its own line. Skips are grouped by the constraint that stopped 
 
 | Test | Bucket | Result (start) |
 |---|---|---|
-| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 33409', Got '' \| want: OK |
+| unixInit-1.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: Expected: '127.0.0.1 localhost 40005', Got '' \| want: OK |
 | unixInit-3.2 | `bug`: the result differs from tclsh 8.6.16 | code 0/0,2: 1 \| want: 0 |
 | unixInit-7.1 | `bug`: the result differs from tclsh 8.6.16 | code 1/0: couldn't open "/dev/null": no such file or directory \| want:  |
 
