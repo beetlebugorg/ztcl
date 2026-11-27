@@ -198,7 +198,7 @@ fn storeFail(it: *Interp, e: vmstore.Error) Error {
         error.BadSignature => it.failCode("ZTCL VM IMAGE SIGNATURE", "the signature of the manifest is not good", .{}),
         error.Untrusted => it.failCode("ZTCL VM IMAGE SIGNATURE", "the manifest is not signed by a key that this ztcl trusts", .{}),
         error.Namespace => it.failCode("ZTCL VM IMAGE SIGNATURE", "the signature is not for ztcl-vm-image", .{}),
-        error.Rollback => it.failCode("ZTCL VM IMAGE ROLLBACK", "the store has a newer release of the image: pass -force to install an older one", .{}),
+        error.Rollback => it.failCode("ZTCL VM IMAGE ROLLBACK", "the store has a newer release of the image: an older one needs -allow-downgrade and the vm_downgrade capability", .{}),
         error.Hash => it.failCode("ZTCL VM IMAGE HASH", "a file of the image does not have the SHA-256 of its manifest", .{}),
         error.BadManifest => it.failCode("ZTCL VM IMAGE MANIFEST", "the manifest of the image is not valid", .{}),
         error.Missing => it.failCode("ZTCL VM IMAGE MISSING", "the image has no files for {s}", .{vmstore.host_arch}),
@@ -288,14 +288,15 @@ fn imageCmd(it: *Interp, args: []const Value) Error!Value {
     const sub = try it.str(args[0]);
     const a = it.alloc();
     if (std.mem.eql(u8, sub, "install")) {
-        // ztcl::vm image install DIR ?-force?: a folder of the file jail.
-        const force = args.len == 3 and std.mem.eql(u8, try it.str(args[2]), "-force");
-        if (args.len != 2 and !force) return it.wrongArgs("ztcl::vm image install dir ?-force?");
+        // ztcl::vm image install DIR ?-allow-downgrade?: a folder of the file jail.
+        const down = args.len == 3 and std.mem.eql(u8, try it.str(args[2]), "-allow-downgrade");
+        if (args.len != 2 and !down) return it.wrongArgs("ztcl::vm image install dir ?-allow-downgrade?");
+        if (down) try needDowngrade(it);
         const dir = try jailDir(it, try it.str(args[1]));
         defer sys.close(dir);
         const s = try store(it);
         defer s.close();
-        const r = s.install(a, dir, vmstore.host_arch, force) catch |e| return storeFail(it, e);
+        const r = s.install(a, dir, vmstore.host_arch, down) catch |e| return storeFail(it, e);
         var items = [6]Value{ .{ .str = "name" }, .{ .str = r.name }, .{ .str = "counter" }, .{ .int = @intCast(r.counter) }, .{ .str = "key" }, .{ .str = r.key } };
         return value.wrapList(a, try a.dupe(Value, &items));
     }
@@ -340,12 +341,20 @@ fn imageCmd(it: *Interp, args: []const Value) Error!Value {
     return it.fail("bad option \"{s}\": must be fetch, install, list, remove, update, or verify", .{sub});
 }
 
-/// `image fetch ?-version V? ?-url BASE? ?-force?` and `image update`:
+/// An older release than the highest of the store needs the capability
+/// `vm_downgrade`: a downgrade changes the image of each program that
+/// uses the store.
+fn needDowngrade(it: *Interp) Error!void {
+    if (it.capabilities & @backingInt(interp.Capability.vm_downgrade) == 0)
+        return it.failCode("ZTCL VM DOWNGRADE", "-allow-downgrade needs the vm_downgrade capability", .{});
+}
+
+/// `image fetch ?-version V? ?-url BASE? ?-force? ?-allow-downgrade?` and `image update`:
 /// the manifest and its signature first, then the files of this
 /// architecture, into a folder of tmp/ of the store, then `install`.
 fn fetchCmd(it: *Interp, args: []const Value, update: bool) Error!Value {
     const use_update = "ztcl::vm image update ?-url base?";
-    const use_fetch = "ztcl::vm image fetch ?-version v? ?-url base? ?-force?";
+    const use_fetch = "ztcl::vm image fetch ?-version v? ?-url base? ?-force? ?-allow-downgrade?";
     if (it.capabilities & @backingInt(interp.Capability.socket) == 0)
         return it.failCode("ZTCL VM NONET", "ztcl::vm image {s} needs the socket capability", .{if (update) "update" else "fetch"});
     const hook = it.vm_host.fetch orelse return it.failCode("ZTCL VM UNAVAILABLE", "this program gives ztcl::vm no download", .{});
@@ -353,11 +362,18 @@ fn fetchCmd(it: *Interp, args: []const Value, update: bool) Error!Value {
     var version: ?[]const u8 = null;
     var base: ?[]const u8 = null;
     var force = false;
+    var down = false;
     var i: usize = 1;
     while (i < args.len) {
         const o = try it.str(args[i]);
         if (std.mem.eql(u8, o, "-force") and !update) {
             force = true;
+            i += 1;
+            continue;
+        }
+        if (std.mem.eql(u8, o, "-allow-downgrade") and !update) {
+            try needDowngrade(it);
+            down = true;
             i += 1;
             continue;
         }
@@ -371,8 +387,8 @@ fn fetchCmd(it: *Interp, args: []const Value, update: bool) Error!Value {
     }
     const s = try store(it);
     defer s.close();
-    if (base) |b| return fetchFrom(it, hook, s, a, if (std.mem.endsWith(u8, b, "/")) b else try std.fmt.allocPrint(a, "{s}/", .{b}), force);
-    if (version) |v| return fetchFrom(it, hook, s, a, try std.fmt.allocPrint(a, "{s}vm-image-v{s}/", .{ image_base, v }), force);
+    if (base) |b| return fetchFrom(it, hook, s, a, if (std.mem.endsWith(u8, b, "/")) b else try std.fmt.allocPrint(a, "{s}/", .{b}), force, down);
+    if (version) |v| return fetchFrom(it, hook, s, a, try std.fmt.allocPrint(a, "{s}vm-image-v{s}/", .{ image_base, v }), force, down);
     // No -version: the releases vm-image-vN of ztcl, the highest version
     // first. A release that fails (no download, or a check of install)
     // gives way to the next, and with none the error of the highest.
@@ -386,7 +402,7 @@ fn fetchCmd(it: *Interp, args: []const Value, update: bool) Error!Value {
     if (tags.len == 0) return it.failCode("ZTCL VM FETCH", "ztcl has no release vm-image-vN", .{});
     var first: ?struct { result: Value, code: Value } = null;
     for (tags) |tag| {
-        const r = fetchFrom(it, hook, s, a, try std.fmt.allocPrint(a, "{s}{s}/", .{ image_base, tag }), force) catch |e| {
+        const r = fetchFrom(it, hook, s, a, try std.fmt.allocPrint(a, "{s}{s}/", .{ image_base, tag }), force, down) catch |e| {
             if (e != error.TclError) return e;
             if (first == null) first = .{ .result = it.result, .code = it.error_code };
             continue;
@@ -463,7 +479,7 @@ test "a release over plain HTTP comes from 127.0.0.1 only" {
 
 /// A fetch of the release at the folder `root`: the manifest and its
 /// signature, then the files of this architecture, then `install`.
-fn fetchFrom(it: *Interp, hook: anytype, s: vmstore.Store, a: std.mem.Allocator, root: []const u8, force: bool) Error!Value {
+fn fetchFrom(it: *Interp, hook: anytype, s: vmstore.Store, a: std.mem.Allocator, root: []const u8, force: bool, down: bool) Error!Value {
     if (!std.mem.startsWith(u8, root, "https://") and !isLoopbackHttp(root))
         return it.fail("a release is fetched over https", .{});
     var t = s.tempDir(a) catch |e| return storeFail(it, e);
@@ -480,7 +496,7 @@ fn fetchFrom(it: *Interp, hook: anytype, s: vmstore.Store, a: std.mem.Allocator,
         if (std.mem.indexOfAny(u8, f, "/\\") != null or std.mem.startsWith(u8, f, ".")) return storeFail(it, error.BadManifest);
         try download(it, hook, t, a, root, f);
     }
-    const r = s.install(a, t.fd, vmstore.host_arch, force) catch |e| return storeFail(it, e);
+    const r = s.install(a, t.fd, vmstore.host_arch, down) catch |e| return storeFail(it, e);
     var items = [8]Value{ .{ .str = "name" }, .{ .str = r.name }, .{ .str = "counter" }, .{ .int = @intCast(r.counter) }, .{ .str = "key" }, .{ .str = r.key }, .{ .str = "status" }, .{ .str = "installed" } };
     return value.wrapList(a, try a.dupe(Value, &items));
 }

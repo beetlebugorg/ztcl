@@ -1154,6 +1154,10 @@ pub const Capability = enum(u32) {
     /// create`: the counts of compute units, time, memory, and I/O of
     /// ztcl#243. The counts of time depend on the host.
     meter = 2097152,
+    /// `-allow-downgrade` of `ztcl::vm image install` and `fetch`: a
+    /// release with a counter below the highest of the store. Each program
+    /// that uses the store then boots the older image.
+    vm_downgrade = 4194304,
 
     /// The bits of a list of names such as "package,interp".
     pub fn parse(text: []const u8) ?u32 {
