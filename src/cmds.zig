@@ -2614,9 +2614,10 @@ fn cmdInfo(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             return .{ .int = @intFromBool(std.mem.indexOf(u8, p.message, "missing") == null) };
         }
     } else if (which == .tclversion) {
-        return it.getVar("::tcl_version");
+        // The message names the variable with no `::`, as in Tcl.
+        return (try it.getVarOpt("::tcl_version")) orelse it.fail("can't read \"tcl_version\": no such variable", .{});
     } else if (which == .patchlevel) {
-        return it.getVar("::tcl_patchLevel");
+        return (try it.getVarOpt("::tcl_patchLevel")) orelse it.fail("can't read \"tcl_patchLevel\": no such variable", .{});
     } else if (which == .script) {
         if (argv.len > 3) return it.wrongArgs("info script ?filename?");
         if (argv.len == 3) it.script_name = try a.dupe(u8, pattern.?);

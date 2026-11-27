@@ -1381,12 +1381,42 @@ fn sourceText(it: *Interp, path: []const u8, text: []const u8) Error!Value {
     };
 }
 
+/// Puts `chan SUB` in place of the command name in a usage message of a
+/// command that `chan SUB` runs, as in Tcl.
+fn usageOfChan(it: *Interp, sub: []const u8) Error!void {
+    const head = "wrong # args: should be \"";
+    const msg = try it.str(it.result);
+    if (!std.mem.startsWith(u8, msg, head)) return;
+    const rest = msg[head.len..];
+    if (std.mem.startsWith(u8, rest, "chan ")) return;
+    const end = std.mem.indexOfAny(u8, rest, " \"") orelse return;
+    if (end == 0) return;
+    // Each form of the usage starts with the name, as in `"read ..." or
+    // "read ..."`.
+    const a = it.alloc();
+    var out: std.ArrayList(u8) = .empty;
+    var i: usize = 0;
+    while (std.mem.indexOfPos(u8, msg, i, rest[0..end])) |k| {
+        const after = k + end;
+        if (k > 0 and msg[k - 1] == '"' and after < msg.len and (msg[after] == ' ' or msg[after] == '"')) {
+            try out.appendSlice(a, msg[i..k]);
+            try out.print(a, "chan {s}", .{sub});
+        } else try out.appendSlice(a, msg[i..after]);
+        i = after;
+    }
+    try out.appendSlice(a, msg[i..]);
+    it.result = .{ .str = out.items };
+}
+
 fn cmdChan(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("chan subcommand ?arg ...?");
     const sub = try it.str(argv[1]);
     const forward = struct {
         fn f(x: *Interp, g: interp.NativeFn, v: []const Value, c: ?*Cmd) Error!Value {
-            return g(x, v[1..], c);
+            return g(x, v[1..], c) catch |e| {
+                if (e == error.TclError) try usageOfChan(x, try x.str(v[1]));
+                return e;
+            };
         }
     }.f;
     if (eql(sub, "close")) return forward(it, cmdClose, argv, cmd);
@@ -1405,7 +1435,8 @@ fn cmdChan(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         return it.failCode("TCL LOOKUP INDEX mode", "bad mode \"{s}\": must be input or output", .{mode});
     }
     if (eql(sub, "pipe")) {
-        if (argv.len != 2) return it.wrongArgs("chan pipe");
+        // The space at the end is in the message of Tcl too.
+        if (argv.len != 2) return it.wrongArgs("chan pipe ");
         const fds = sys.pipe() orelse return it.fail("couldn't create pipe: chan pipe is not available on this system", .{});
         const r = try adopt(it, "file", fds[0], true, false);
         r.kind = .pipe;
@@ -1422,6 +1453,7 @@ fn cmdChan(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     // command `puts`, as in Tcl.
     if (eql(sub, "puts")) return forward(it, cmds.cmdPuts, argv, cmd);
     if (eql(sub, "names")) {
+        if (argv.len > 3) return it.wrongArgs("chan names ?pattern?");
         var out: std.ArrayList(Value) = .empty;
         for ([_][]const u8{ "stderr", "stdin", "stdout" }) |n| {
             if (it.chans.table.get(n) == null) try out.append(it.alloc(), .{ .str = n });
