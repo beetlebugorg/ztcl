@@ -36,6 +36,7 @@ The JSON parser of ztcl implements the simdjson algorithm in Zig. The code in `s
 - RFC 9110 (semantics), RFC 9112 (HTTP/1.1), RFC 9113 (HTTP/2), RFC 7541 (HPACK), RFC 9218 (priorities), RFC 6455 (WebSockets), RFC 8441 (WebSockets over HTTP/2), RFC 7301 (ALPN), and the HTML standard section on server-sent events.
 - h2spec, https://github.com/summerwind/h2spec. The HTTP/2 conformance gate.
 - `hpack-test-case`, https://github.com/http2jp/hpack-test-case.
+- `src/h2/hpack_tables.zig` has the static table (appendix A), the Huffman code (appendix B), and the examples of appendix C.3 to C.6 of RFC 7541, from the text of the RFC by `tools/hpack-tables.py`.
 - The Autobahn test suite, https://github.com/crossbario/autobahn-testsuite. The WebSocket gate.
 - TechEmpower Framework Benchmarks, the plaintext and JSON test rules, https://www.techempower.com/benchmarks/.
 - The WHATWG URL standard and its `urltestdata.json`, https://url.spec.whatwg.org.
