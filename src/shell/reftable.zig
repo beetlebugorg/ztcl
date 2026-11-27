@@ -24,7 +24,9 @@ pub fn entry(name: []const u8) ?[]const u8 {
         const h = at + 4;
         const eol = std.mem.indexOfScalarPos(u8, table, h, '\n') orelse table.len;
         const next = std.mem.indexOfPos(u8, table, eol, "\n== ") orelse table.len;
-        var names = std.mem.tokenizeScalar(u8, table[h..eol], ' ');
+        // A checkout with CRLF line ends, as Git gives on Windows, ends
+        // each line with `\r`.
+        var names = std.mem.tokenizeAny(u8, table[h..eol], " \r");
         while (names.next()) |n| {
             if (std.mem.eql(u8, n, want)) return table[@min(eol + 1, next)..next];
         }
@@ -39,7 +41,8 @@ pub const Lines = struct {
     key: []const u8,
 
     pub fn next(l: *Lines) ?[]const u8 {
-        while (l.rest.next()) |line| {
+        while (l.rest.next()) |raw| {
+            const line = std.mem.trimEnd(u8, raw, "\r");
             if (line.len > l.key.len + 2 and std.mem.startsWith(u8, line, l.key) and std.mem.startsWith(u8, line[l.key.len..], ": ")) return line[l.key.len + 2 ..];
         }
         return null;
