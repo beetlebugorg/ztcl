@@ -258,6 +258,36 @@ fn ztcl_web_allow(h: *Handle) callconv(.c) i32 {
     return 0;
 }
 
+/// Adds the ports of Web Serial: `web::serial::request`,
+/// `web::serial::ports`, and the channel commands of the streams of
+/// `wasmfiles.zig`. The host calls it for `allow: ["web:serial"]`, after
+/// `ztcl_web_allow`. Gives 0, or 1 when the memory is full.
+fn ztcl_web_serial_allow(h: *Handle) callconv(.c) i32 {
+    const web = @import("wasmweb.zig").Commands(gpa);
+    h.files.stream_host = &web.stream_host;
+    h.files.on = true;
+    wasmfiles.Commands(filesOf, gpa, false).registerStreams(&h.it) catch return 1;
+    web.registerSerial(&h.it) catch return 1;
+    return 0;
+}
+
+/// Adds the port `webserialN` for the port `id` of the host. Gives 0, or
+/// 1 when the memory is full.
+fn ztcl_web_serial_port(h: *Handle, id: u32) callconv(.c) i32 {
+    var buf: [24]u8 = undefined;
+    const name = std.fmt.bufPrint(&buf, "webserial{d}", .{id}) catch unreachable;
+    h.files.addPort(gpa, name, id) catch return 1;
+    return 0;
+}
+
+/// Puts the bytes of the port `id` into its channel: data (`kind` 0),
+/// the end (1), or an error (2, with the message). Gives 0, 1 when the
+/// memory is full, or 2 for an unknown port.
+fn ztcl_web_serial_data(h: *Handle, id: u32, ptr: [*]const u8, len: usize, kind: u32) callconv(.c) i32 {
+    const known = h.files.feed(gpa, id, ptr[0..len], kind) catch return 1;
+    return if (known) 0 else 2;
+}
+
 /// Splits a Tcl list for the conversions of the host. See
 /// `wasmweb.split`.
 fn ztcl_web_split(ptr: [*]const u8, len: usize) callconv(.c) i32 {
@@ -283,6 +313,9 @@ comptime {
         @export(&ztcl_web_allow, .{ .name = "ztcl_web_allow" });
         @export(&ztcl_web_event, .{ .name = "ztcl_web_event" });
         @export(&ztcl_web_split, .{ .name = "ztcl_web_split" });
+        @export(&ztcl_web_serial_allow, .{ .name = "ztcl_web_serial_allow" });
+        @export(&ztcl_web_serial_port, .{ .name = "ztcl_web_serial_port" });
+        @export(&ztcl_web_serial_data, .{ .name = "ztcl_web_serial_data" });
         @export(&ztcl_dom_event, .{ .name = "ztcl_dom_event" });
         @export(&ztcl_dom_allow, .{ .name = "ztcl_dom_allow" });
         @export(&ztcl_clock_allow, .{ .name = "ztcl_clock_allow" });
@@ -460,8 +493,11 @@ pub fn filesOf(it: *ztcl.Interp) *wasmfiles.State {
 fn ztcl_allow_plain(h: *Handle, bits: u32) callconv(.c) i32 {
     const file = @backingInt(Capability.file);
     if (bits & ~file != 0) return 2;
-    if (bits == 0 or h.files.on) return 0;
-    h.files = .{ .payload = payload(), .on = true };
+    if (bits == 0) return 0;
+    // The ports of Web Serial can turn the commands on first.
+    h.files.payload = payload();
+    if (h.files.on) return 0;
+    h.files.on = true;
     wasmfiles.Commands(filesOf, gpa, false).register(&h.it) catch return 1;
     return 0;
 }

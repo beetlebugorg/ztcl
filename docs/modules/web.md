@@ -63,6 +63,33 @@ Each script of a result has its own compute limit: the option `webComputeLimit` 
 | `%detail` | The `detail` of a `CustomEvent` when it is a string or a number, or an empty string. |
 | `%%` | One `%`. |
 
+## Web Serial
+
+`web::serial::request` and `web::serial::ports` give a serial port of Web Serial as a channel, with the commands of a native serial port:
+
+```tcl
+web::serial::request -filters {{usbVendorId 9025}} -command {apply {{status port} {
+    if {$status eq "error"} {puts $port; return}
+    set f [open $port r+]
+    fconfigure $f -mode 115200,n,8,1 -blocking 0 -buffering line
+    fileevent $f readable [list apply {{f} {
+        while {[gets $f line] >= 0} {puts $line}
+    }} $f]
+    puts $f M115
+}}}
+```
+
+| Command | Result |
+|---|---|
+| `web::serial::request ?-filters list? -command script` | Shows the port chooser of the browser (`requestPort`). The script gets `ok` and the name of the port, such as `webserial1`, or `error` and the message. A browser shows the chooser only after a gesture of the user, so call it from a script of `dom on` for a click. |
+| `web::serial::ports -command script` | The ports that the user granted before (`getPorts`). The script gets `ok` and a list of names. |
+
+`open` of the name with `r` or `r+` gives a channel, and `fconfigure $f -mode baud,parity,data,stop` opens the port at that baud. A second `-mode` closes the port and opens it again. `-handshake rtscts` sets the flow control `hardware` for the next `-mode`, and `-ttycontrol {DTR 1 RTS 0 BREAK 0}` sets the signals. `close` closes the port, and a later `open` of the name opens it again.
+
+The bytes of the `ReadableStream` of the port go into the channel as they come, so `gets`, `read`, `eof`, and `fileevent readable` work. A read gives only the bytes that are there, as with `-blocking 0` on a native port, because a call into wasm cannot wait. `fileevent readable` runs once for each chunk of bytes. The output goes to the `WritableStream` at each flush, in order. An error of the browser after the call, such as a lost device, ends the input of the channel, and the next read gives the error. At most 1 MiB waits in a channel. More input ends it with an error.
+
+Web Serial has no mark or space parity, no 5 or 6 data bits, and no `xonxoff`, so these values of `-mode` and `-handshake` give an error. `-ttystatus` and `-xchar` are absent. The same script works with a native port, such as `open /dev/ttyUSB0 r+`. The unit tests run one script against a pseudo-terminal and against a fake port in Node.js (`src/serial_testdata/m115.tcl`).
+
 ## Values
 
 | Web IDL type | Tcl value |
@@ -98,6 +125,7 @@ The table is `web/webidl-table.mjs`. The generator `tools/webidl/` writes it fro
 - A member out of the table: `web: the interface "Serial" has no method "eval"`.
 - An error of the browser, such as a `DOMException`: `web: NotFoundError: No port selected by the user.`
 - A method that gives a promise, with no `-command`: `web: the method "getPorts" gives a promise: use -command`.
+- A write to a port before `-mode`: `web: the port is not open: set -mode first`.
 - An attribute of an event handler, such as `onconnect`, gives an error for `web::get` and `web::set`.
 
 ## Capability

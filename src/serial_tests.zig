@@ -92,3 +92,38 @@ test "a PTY as a serial port: -mode, -handshake, -xchar, and the bytes" {
     try std.testing.expectEqualStrings("-1", try ev(&it, "lsearch [fconfigure $g] -mode"));
     _ = try ev(&it, "close $g");
 }
+
+fn now(_: ?*anyopaque) i64 {
+    return tcl.proc.nowMs() * 1000;
+}
+
+fn sleep(_: ?*anyopaque, micros: i64) void {
+    tcl.proc.sleepMs(@intCast(@max(1, @divFloor(micros, 1000))));
+}
+
+test "the M115 script of tools/web-api.mjs against a PTY" {
+    if (!on_linux and !on_mac) return error.SkipZigTest;
+    var name: [128]u8 = undefined;
+    const m = try openMaster(&name);
+    defer tcl.sys.close(m);
+    const path = std.mem.sliceTo(&name, 0);
+
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try tcl.fsroot.setHost(&it);
+    try it.allow(@backingInt(cap.channels) | @backingInt(cap.file) | @backingInt(cap.event));
+    it.event_host = .{ .now = now, .sleep = sleep };
+    _ = try ev(&it, @embedFile("serial_testdata/m115.tcl"));
+    var buf: [256]u8 = undefined;
+    _ = try ev(&it, try std.fmt.bufPrint(&buf, "set f [open {{{s}}} r+]", .{path}));
+    // The reply of the printer waits in the PTY before the script runs.
+    // The write comes after `open`, which turns off the change of \r to \n.
+    try std.testing.expect(tcl.sys.write(m, "FIRMWARE_NAME:Marlin 2.1.2\r\nok\r\n") == .n);
+    _ = try ev(&it, "m115 $f; after 3000 {set ::done 3}; vwait ::done; close $f");
+    try std.testing.expectEqualStrings("1", try ev(&it, "set ::done"));
+    try std.testing.expectEqualStrings("{FIRMWARE_NAME:Marlin 2.1.2} ok", try ev(&it, "set ::reply"));
+    var got: [16]u8 = undefined;
+    const r = tcl.sys.read(m, &got);
+    try std.testing.expect(r == .n and std.mem.eql(u8, got[0..r.n], "M115\n"));
+}

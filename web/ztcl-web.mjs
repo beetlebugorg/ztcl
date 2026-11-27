@@ -128,6 +128,137 @@ export class Bridge {
     this.queue = [];
     // The listeners of `web::on` by "handle:event".
     this.listeners = new Map();
+    // The ports of Web Serial by their id: { port, options, chain, open, reader }.
+    this.ports = new Map();
+    this.portIds = new Map(); // SerialPort -> id
+    this.nextPort = 1;
+  }
+
+  // The name of the channel of a SerialPort, `webserialN`.
+  portName(port) {
+    let id = this.portIds.get(port);
+    if (id === undefined) {
+      id = this.nextPort++;
+      this.portIds.set(port, id);
+      this.ports.set(id, { port, options: { flowControl: "none" }, chain: Promise.resolve(), open: false, reader: null, mode: false });
+      if (this.x.ztcl_web_serial_port(this.interp.h, id) !== 0) fail("web: out of memory");
+    }
+    return `webserial${id}`;
+  }
+
+  // Puts bytes, the end (kind 1), or an error (kind 2) into the channel
+  // of the port `id`, and asks for a run of the events.
+  feed(id, bytes, kind = 0) {
+    const x = this.x;
+    if (!this.interp.h) return;
+    const p = x.ztcl_alloc(bytes.length || 1);
+    if (!p) return;
+    new Uint8Array(x.memory.buffer, p, bytes.length).set(bytes);
+    x.ztcl_web_serial_data(this.interp.h, id, p, bytes.length, kind);
+    x.ztcl_free(p, bytes.length || 1);
+    this.interp._kick();
+  }
+
+  // Runs `step` after the earlier steps of the port. An error of a step
+  // ends the input of the channel with the message.
+  step(id, step) {
+    const s = this.ports.get(id);
+    s.chain = s.chain.then(step).catch((e) => this.feed(id, encoder.encode(errorText(e)), 2));
+  }
+
+  // Reads the ReadableStream of the port into its channel.
+  async readLoop(id, s) {
+    while (s.open && s.port.readable) {
+      const reader = s.port.readable.getReader();
+      s.reader = reader;
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value?.length) this.feed(id, value);
+        }
+      } catch (e) {
+        if (s.open) this.feed(id, encoder.encode(errorText(e)), 2);
+        return;
+      } finally {
+        reader.releaseLock();
+        s.reader = null;
+      }
+      if (!s.open) return;
+    }
+  }
+
+  // Closes the port, after the earlier steps.
+  async closePort(s) {
+    if (!s.open) return;
+    s.open = false;
+    if (s.reader) await s.reader.cancel().catch(() => {});
+    await s.port.close();
+  }
+
+  // The calls of the channel of a port (src/wasmfiles.zig StreamOp).
+  serial(op, id, data) {
+    const s = this.ports.get(id);
+    if (!s) fail(`web: no port ${id}`);
+    const text = decoder.decode(data);
+    switch (op) {
+      case 10: {
+        if (!s.mode) fail("web: the port is not open: set -mode first");
+        const bytes = data.slice();
+        this.step(id, async () => {
+          const w = s.port.writable.getWriter();
+          try {
+            await w.write(bytes);
+          } finally {
+            w.releaseLock();
+          }
+        });
+        return;
+      }
+      case 11: {
+        const m = /^(\d+),([noems]),([5-8]),([12])$/i.exec(text.trim());
+        if (!m) fail("bad value for -mode: should be baud,parity,data,stop");
+        const parity = { n: "none", e: "even", o: "odd" }[m[2].toLowerCase()];
+        if (!parity) fail("bad value for -mode parity: Web Serial has no mark or space parity");
+        if (Number(m[3]) < 7) fail("bad value for -mode data: Web Serial has 7 or 8 data bits");
+        const options = { ...s.options, baudRate: Number(m[1]), parity, dataBits: Number(m[3]), stopBits: Number(m[4]) };
+        s.mode = true;
+        this.step(id, async () => {
+          await this.closePort(s);
+          await s.port.open(options);
+          s.open = true;
+          this.readLoop(id, s);
+        });
+        return;
+      }
+      case 12:
+        s.mode = false;
+        this.step(id, () => this.closePort(s));
+        return;
+      case 13: {
+        const h = text.trim().toLowerCase();
+        if (h === "none") s.options.flowControl = "none";
+        else if (h === "rtscts") s.options.flowControl = "hardware";
+        else if (h === "xonxoff" || h === "dtrdsr") fail(`bad value for -handshake: Web Serial has only none and rtscts`);
+        else fail("bad value for -handshake: must be one of xonxoff, rtscts, dtrdsr, or none");
+        return;
+      }
+      case 14: {
+        const words = this.split(text);
+        if (words.length % 2) fail("bad value for -ttycontrol: should be a list of signal,value pairs");
+        const signals = {};
+        const names = { dtr: "dataTerminalReady", rts: "requestToSend", break: "break" };
+        for (let i = 0; i < words.length; i += 2) {
+          const n = names[words[i].toLowerCase()];
+          if (!n) fail(`bad signal "${words[i]}" for -ttycontrol: must be DTR, RTS or BREAK`);
+          signals[n] = tclBool(words[i + 1]);
+        }
+        if (!s.mode) fail("web: the port is not open: set -mode first");
+        this.step(id, () => s.port.setSignals(signals));
+        return;
+      }
+    }
+    fail(`web: unknown operation ${op}`);
   }
 
   // The interface of an object of an event: the name of its class when
@@ -341,7 +472,7 @@ export class Bridge {
     };
     try {
       const sa = decoder.decode(new Uint8Array(x.memory.buffer, a, aLen));
-      const args = decodeWords(new Uint8Array(x.memory.buffer, b, bLen).slice());
+      const args = op >= 10 && op <= 14 ? [] : decodeWords(new Uint8Array(x.memory.buffer, b, bLen).slice());
       switch (op) {
         case 1: {
           const type = this.table.roots[sa];
@@ -403,6 +534,37 @@ export class Bridge {
           );
           return 0;
         }
+        case 9: {
+          // web::serial::request: the script and the filters.
+          if (!this.groups.has("serial")) fail('web: the group "serial" is not allowed');
+          const serial = this.root.navigator?.serial;
+          if (!serial) fail("web: this browser has no navigator.serial");
+          const [script, filters] = args;
+          const options = filters ? this.toJS("SerialPortRequestOptions", `filters {${filters}}`) : {};
+          Promise.resolve(serial.requestPort(options)).then(
+            (port) => this.push(script, ["ok", this.portName(port)]),
+            (e) => this.push(script, ["error", errorText(e)]),
+          );
+          return 0;
+        }
+        case 15: {
+          if (!this.groups.has("serial")) fail('web: the group "serial" is not allowed');
+          const serial = this.root.navigator?.serial;
+          if (!serial) fail("web: this browser has no navigator.serial");
+          const [script] = args;
+          Promise.resolve(serial.getPorts()).then(
+            (ports) => this.push(script, ["ok", ports.map((p) => this.portName(p))]),
+            (e) => this.push(script, ["error", errorText(e)]),
+          );
+          return 0;
+        }
+        case 10:
+        case 11:
+        case 12:
+        case 13:
+        case 14:
+          this.serial(op, h, new Uint8Array(x.memory.buffer, b, bLen).slice());
+          return 0;
         case 7: {
           // on: `sa` is the event type and the first word the script.
           const o = this.obj(h);

@@ -6,6 +6,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 import { compile, Interp } from "../web/ztcl.mjs";
 import * as web from "../web/ztcl-web.mjs";
+import fs from "node:fs";
 
 const [strictPath, hostPath] = process.argv.slice(2);
 let failed = 0;
@@ -232,6 +233,67 @@ const { interfaces, roots } = await import("../web/webidl-table.mjs");
 const groups = new Set(Object.values(interfaces).map((i) => i.group));
 for (const g of ["serial", "usb", "bluetooth", "hid", "midi", "gamepad"]) check(groups.has(g), `the table has the group ${g}`);
 check(roots["navigator.serial"] === "Serial" && roots["navigator.usb"] === "USB", "the roots of Navigator");
+
+// Task 06: Web Serial as a channel. A fake port answers M115 as a 3D
+// printer does. The script is the one of the PTY test in
+// src/serial_tests.zig.
+class FakePort extends SerialPort {
+  constructor() {
+    super({ usbVendorId: 0x2341 });
+    this.written = "";
+    this.readable = null;
+    this.writable = null;
+  }
+  open(options) {
+    this.opened = options;
+    let ctl;
+    this.readable = new ReadableStream({ start: (c) => (ctl = c) });
+    this.writable = new WritableStream({
+      write: (chunk) => {
+        this.written += new TextDecoder().decode(chunk);
+        if (this.written.endsWith("M115\n")) {
+          // The reply comes in two chunks, with a line split between them.
+          ctl.enqueue(new TextEncoder().encode("FIRMWARE_NAME:Mar"));
+          setTimeout(() => ctl.enqueue(new TextEncoder().encode("lin 2.1.2\r\nok\r\n")), 2);
+        }
+      },
+    });
+    return Promise.resolve();
+  }
+  close() {
+    this.closed = true;
+    return Promise.resolve();
+  }
+}
+const printer = new FakePort();
+const serial2 = new Serial();
+serial2.ports = [printer];
+serial2.requestPort = () => Promise.resolve(printer);
+const m115 = fs.readFileSync(new URL("../src/serial_testdata/m115.tcl", import.meta.url), "utf8");
+t = await Interp.create(host, { allow: ["web:serial", "event"], web, webRoot: { navigator: { serial: serial2 } } });
+r = t.eval(m115 + "\nweb::serial::request -filters {{usbVendorId 9025}} -command {apply {{status name} {set ::port $name}}}");
+check(r.ok, `web::serial::request (got ${r.result})`);
+await tick();
+r = t.eval("set f [open $::port r+]; m115 $f; set f");
+check(r.ok && r.result === "serial0", `open of the port (got ${r.result})`);
+for (let i = 0; i < 20 && t.eval("set ::done").result === "0"; i++) await tick();
+r = t.eval("list $::done $::reply [fconfigure $f -mode]");
+check(r.ok && r.result === "1 {{FIRMWARE_NAME:Marlin 2.1.2} ok} 115200,n,8,1", `the M115 reply (got ${r.result})`);
+check(printer.written === "M115\n" && printer.opened.baudRate === 115200 && printer.opened.parity === "none", `the write and the open options (got ${JSON.stringify([printer.written, printer.opened])})`);
+r = t.eval("catch {fconfigure $f -mode 9600,m,8,1} m; set m");
+check(r.result === "bad value for -mode parity: Web Serial has no mark or space parity", `mark parity (got ${r.result})`);
+r = t.eval("catch {open $::port r+} m; set m");
+check(/the port is open/.test(r.result), `a second open (got ${r.result})`);
+r = t.eval("close $f");
+await tick();
+check(r.ok && printer.closed, "close closes the port");
+r = t.eval("web::serial::ports -command {apply {{status names} {set ::names $names}}}");
+await tick();
+check(t.eval("set ::names").result === "webserial1", `web::serial::ports (got ${t.eval("set ::names").result})`);
+t.close();
+t = await Interp.create(host, { allow: ["web:usb"], web, webRoot: { navigator: { serial: serial2 } } });
+check(!t.eval("web::serial::request -command x").ok, "no web::serial without web:serial");
+t.close();
 
 if (failed) {
   console.error(`${failed} failed`);
