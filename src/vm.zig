@@ -189,7 +189,7 @@ const inline_names = [_][]const u8{
 };
 
 /// The read forms of the `access` instruction.
-const Access = enum(u8) { llength, lindex, string_length, string_index };
+const Access = enum(u8) { llength, lindex, string_length, string_index, dict_get, dict_exists, dict_size };
 
 /// True when each inlined name is the original core command, in the
 /// global namespace, and no namespace has a command of the same name.
@@ -754,18 +754,31 @@ const Compiler = struct {
         } else if (eql(u8, name, "string") and n == 4 and isWord(cmd.words[1], "index")) {
             kind = .string_index;
             first = 2;
+        } else if (eql(u8, name, "dict") and n == 4 and isWord(cmd.words[1], "get")) {
+            kind = .dict_get;
+            first = 2;
+        } else if (eql(u8, name, "dict") and n == 4 and isWord(cmd.words[1], "exists")) {
+            kind = .dict_exists;
+            first = 2;
+        } else if (eql(u8, name, "dict") and n == 3 and isWord(cmd.words[1], "size")) {
+            kind = .dict_size;
+            first = 2;
         } else return false;
         const base = c.depth;
         const g = try c.emit(.{ .op = .guard });
         const start = c.here();
-        if (!c.named and (kind == .llength or kind == .lindex) and peekable(cmd)) {
+        const keeps = switch (kind) {
+            .string_length, .string_index => false,
+            else => true,
+        };
+        if (!c.named and keeps and peekable(cmd, first)) {
             // The list in an owned cell stays owned: the guard turns
             // the inline forms off while a variable has a trace, so the
-            // load of a plain index runs no script.
-            const v = cmd.words[1].kind.single.variable;
+            // load of a plain index or key runs no script.
+            const v = cmd.words[first].kind.single.variable;
             _ = try c.emit(.{ .op = .load, .x = 1, .a = try c.slot(v.name) });
             c.push(1);
-            for (cmd.words[2..]) |*w| try c.compileWord(w);
+            for (cmd.words[first + 1 ..]) |*w| try c.compileWord(w);
         } else {
             for (cmd.words[first..]) |*w| try c.compileWord(w);
         }
@@ -774,18 +787,32 @@ const Compiler = struct {
         return true;
     }
 
-    /// The list word of `llength` or `lindex` is one plain variable, and
-    /// the index of `lindex` is a literal or one plain variable.
-    fn peekable(cmd: *Cmd) bool {
-        const w = cmd.words[1];
+    /// The list or dict word `at` is one plain variable, and the word
+    /// after it (the index of `lindex`, the key of `dict get` and `dict
+    /// exists`) has only literal text and plain variables, such as
+    /// `$x,$y`. So the loads between the peek and the access run no
+    /// script.
+    fn peekable(cmd: *Cmd, at: usize) bool {
+        const w = cmd.words[at];
         if (w.kind != .single or w.kind.single != .variable) return false;
         const v = w.kind.single.variable;
         if (v.index != null or !plain(v.name)) return false;
-        if (cmd.words.len == 2) return true;
-        return switch (cmd.words[2].kind) {
+        if (cmd.words.len == at + 1) return true;
+        return switch (cmd.words[at + 1].kind) {
             .lit => true,
-            .single => |p| p == .variable and p.variable.index == null and plain(p.variable.name),
-            .multi => false,
+            .single => |*p| loadPart(p),
+            .multi => |parts| for (parts) |*p| {
+                if (!loadPart(p)) break false;
+            } else true,
+        };
+    }
+
+    /// A literal part, or a plain variable with no index.
+    fn loadPart(p: *const Part) bool {
+        return switch (p.*) {
+            .lit => true,
+            .variable => |*v| v.index == null and plain(v.name),
+            .script => false,
         };
     }
 
@@ -1789,6 +1816,24 @@ pub inline fn opStringIndex(comptime named: bool, it: *Interp, f: *Frame, code: 
     stack[sp - 2] = try cmds.cmdString(it, &argv, null);
 }
 
+/// `dict get $d $key`: the result, the error text, and the error code
+/// of `cmdDict`. The result is a copy of an item, so it holds no part of
+/// the buffer of an owned dict.
+pub inline fn opDictGet(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code, i };
+    stack[sp - 2] = try dict.getOne(it, stack[sp - 2], stack[sp - 1]);
+}
+
+pub inline fn opDictExists(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code, i };
+    stack[sp - 2] = try dict.existsOne(it, stack[sp - 2], stack[sp - 1]);
+}
+
+pub inline fn opDictSize(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
+    _ = .{ named, f, code, i };
+    stack[sp - 1] = try dict.sizeOf(it, stack[sp - 1]);
+}
+
 /// True when a core command changed: the guard then jumps to the
 /// general path, and uses no step.
 pub inline fn guardJumps(it: *Interp) bool {
@@ -2280,6 +2325,15 @@ fn exec(comptime named: bool, it: *Interp, code: *const Code, stack: [*]Value, p
                     try opStringIndex(named, it, f, code, stack, sp, i);
                     sp -= 1;
                 },
+                .dict_get => {
+                    try opDictGet(named, it, f, code, stack, sp, i);
+                    sp -= 1;
+                },
+                .dict_exists => {
+                    try opDictExists(named, it, f, code, stack, sp, i);
+                    sp -= 1;
+                },
+                .dict_size => try opDictSize(named, it, f, code, stack, sp, i),
             },
             .guard => {
                 // The two parts of `opGuard`.
