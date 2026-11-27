@@ -63,6 +63,15 @@ inline fn prefixXor(x: u64) u64 {
         // A carry-less multiply by all ones is the prefix XOR.
         const a: @Vector(2, u64) = .{ x, 0 };
         const b: @Vector(2, u64) = .{ ~@as(u64, 0), 0 };
+        // With AVX, the VEX form: the legacy SSE form after 256-bit
+        // instructions waits for the upper halves of the registers.
+        if (comptime has_avx2) {
+            return (asm ("vpclmulqdq $0, %[b], %[a], %[ret]"
+                : [ret] "=x" (-> @Vector(2, u64)),
+                : [a] "x" (a),
+                  [b] "x" (b),
+            ))[0];
+        }
         const r = asm ("pclmulqdq $0, %[b], %[a]"
             : [ret] "=x" (-> @Vector(2, u64)),
             : [a] "0" (a),
