@@ -1,6 +1,6 @@
 # The boot test of ztcl::vm on Linux with KVM (test-kvm.sh runs it): the
 # x86-64 guest of tools/vm-guest boots, the probe of the agent echoes over vsock (port 1025), the
-# guest reads a disk, a stopped guest starts again, and a warm guest
+# agent runs programs, the guest reads a disk, a stopped guest starts again, and a warm guest
 # answers after start. Then the times of a start, best of 10.
 proc check {what got want} {
     if {$got ne $want} { error "$what: got \"$got\", want \"$want\"" }
@@ -30,6 +30,17 @@ check "a stopped guest" [ztcl::vm status $vm] stopped
 ztcl::vm start $vm
 check "a guest that started again" [ztcl::vm status $vm] running
 close [ztcl::vm vsock $vm 1025]
+
+# The agent on port 1024 runs programs.
+set r [ztcl::vm exec $vm /bin/busybox sh -c {echo out; echo err >&2; exit 3}]
+check "exec: the exit code" [dict get $r exit] 3
+check "exec: stdout" [dict get $r stdout] "out\n"
+check "exec: stderr" [dict get $r stderr] "err\n"
+check "exec: stdin" [dict get [ztcl::vm exec $vm -stdin "a b c" /bin/busybox wc -w] stdout] "3\n"
+check "exec: -cwd and -env" [dict get [ztcl::vm exec $vm -cwd /tmp -env {Z=1} /bin/busybox sh -c {echo $PWD $Z}] stdout] "/tmp 1\n"
+check "exec: a missing program" [catch {ztcl::vm exec $vm /nope}] 1
+check "exec: its error code" [lrange $::errorCode 0 2] {ZTCL VM AGENT}
+check "mount: a missing share" [catch {ztcl::vm mount $vm share9 /mnt/x}] 1
 ztcl::vm delete $vm
 
 # The kernel log of a guest, from the agent: a first byte of 1 asks
