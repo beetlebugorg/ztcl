@@ -25,23 +25,24 @@
 //! KVM has the interrupt controllers (`KVM_CREATE_IRQCHIP`) and the PIT.
 //! Each virtio device is a 4 KB window at 0xd0000000 + 0x1000 * n with
 //! ISA interrupt `irqs[n]`, given to the guest on the command line
-//! (`virtio_mmio.device=`). The devices:
+//! (`virtio_mmio.device=`). The transport and the devices that run in
+//! ztcl are the shared ones of `vm/virtio/mmio.zig`; this file is their
+//! `Host` (the guest memory, and `KVM_IRQ_LINE` for an interrupt). The
+//! devices:
 //!
 //! - The console (virtio ID 3): the transmit queue goes to the console
 //!   descriptor, and a thread puts the bytes of that descriptor in the
 //!   receive queue.
-//! - vsock (ID 19): vhost-vsock of the host kernel through
-//!   `/dev/vhost-vsock`. An ioeventfd on the notify register kicks
-//!   vhost, and an irqfd gives its interrupts to the guest, so the data
-//!   of a vsock connection does not pass through this process.
-//! - Block devices (ID 2): requests of the vCPU thread, with `pread` and
-//!   `pwrite` on the descriptor of the disk.
+//! - vsock (ID 19): an external device, vhost-vsock of the host kernel
+//!   through `/dev/vhost-vsock`. An ioeventfd on the notify register
+//!   kicks vhost, and an irqfd gives its interrupts to the guest, so the
+//!   data of a vsock connection does not pass through this process.
+//! - Block devices (ID 2): `pread` and `pwrite` on the descriptor of the
+//!   disk.
 //! - Entropy (ID 4), last, with `-entropy 1`: bytes of `getrandom`.
 //!
 //! An access of a vCPU to a register of a device exits `KVM_RUN` on that
-//! vCPU thread, and the thread runs the device code. The guest is not
-//! trusted: each address and length of the guest is checked against the
-//! guest memory before use.
+//! vCPU thread, and the thread runs the device code.
 //!
 //! An 8250 UART at port 0x3f8 writes the output of the guest kernel
 //! (`console=ttyS0`) to the console descriptor too. A write of 0xfe to
@@ -258,155 +259,10 @@ pub fn nowNs() u64 {
     return @as(u64, @intCast(ts.sec)) * std.time.ns_per_s + @as(u64, @intCast(ts.nsec));
 }
 
-// ---------------------------------------------------------------------
-// Guest memory
-
-const Mem = struct {
-    base: [*]u8,
-    size: u64,
-
-    /// The bytes at a guest address, or null if a byte is outside the
-    /// memory.
-    fn slice(m: Mem, gpa: u64, len: u64) ?[]u8 {
-        if (gpa > m.size or len > m.size - gpa) return null;
-        return m.base[@intCast(gpa)..@intCast(gpa + len)];
-    }
-
-    fn ptr(m: Mem, comptime T: type, gpa: u64) ?*align(1) T {
-        const s = m.slice(gpa, @sizeOf(T)) orelse return null;
-        return @ptrCast(s.ptr);
-    }
-
-    fn put(m: Mem, comptime T: type, gpa: u64, v: T) void {
-        std.mem.writeInt(T, m.base[@intCast(gpa)..][0..@sizeOf(T)], v, .little);
-    }
-};
-
-// ---------------------------------------------------------------------
-// Split virtqueues (virtio 1.2, section 2.7)
-
-const desc_f_next = 1;
-const desc_f_write = 2;
-const max_queue = 256;
-
-const Queue = struct {
-    num: u32 = 0,
-    ready: bool = false,
-    desc: u64 = 0,
-    avail: u64 = 0,
-    used: u64 = 0,
-    last_avail: u16 = 0,
-
-    const Desc = extern struct { addr: u64, len: u32, flags: u16, next: u16 };
-
-    /// The index of the next chain that the driver made available, or
-    /// null when there is none.
-    fn next(q: *Queue, m: Mem) ?u16 {
-        if (!q.ready or q.num == 0) return null;
-        const idx_p = m.ptr(u16, q.avail + 2) orelse return null;
-        const idx = @atomicLoad(u16, @as(*u16, @ptrCast(@alignCast(idx_p))), .acquire);
-        if (idx == q.last_avail) return null;
-        const slot = q.avail + 4 + 2 * @as(u64, q.last_avail % q.num);
-        const head = (m.ptr(u16, slot) orelse return null).*;
-        q.last_avail +%= 1;
-        return head;
-    }
-
-    fn descAt(q: *Queue, m: Mem, i: u16) ?Desc {
-        if (i >= q.num) return null;
-        const d = m.ptr(Desc, q.desc + 16 * @as(u64, i)) orelse return null;
-        return d.*;
-    }
-
-    /// Puts a chain in the used ring with `len` bytes written.
-    fn putUsed(q: *Queue, m: Mem, head: u16, len: u32) void {
-        const idx_p = m.ptr(u16, q.used + 2) orelse return;
-        const idx: *u16 = @ptrCast(@alignCast(idx_p));
-        const cur = idx.*;
-        const elem = q.used + 4 + 8 * @as(u64, cur % q.num);
-        if (m.slice(elem, 8) == null) return;
-        m.put(u32, elem, head);
-        m.put(u32, elem + 4, len);
-        @atomicStore(u16, idx, cur +% 1, .release);
-    }
-
-    /// Checks that the rings fit in the guest memory, when the driver
-    /// sets the queue ready.
-    fn valid(q: *const Queue, m: Mem) bool {
-        if (q.num == 0 or q.num > max_queue) return false;
-        return m.slice(q.desc, 16 * @as(u64, q.num)) != null and
-            m.slice(q.avail, 6 + 2 * @as(u64, q.num)) != null and
-            m.slice(q.used, 6 + 8 * @as(u64, q.num)) != null;
-    }
-};
-
-/// A chain of descriptors as host slices: the readable part, then the
-/// writable part.
-const Chain = struct {
-    const max = 64;
-    bufs: [max][]u8 = undefined,
-    writable: [max]bool = undefined,
-    n: usize = 0,
-
-    fn read(q: *Queue, m: Mem, head: u16) ?Chain {
-        var c: Chain = .{};
-        var i = head;
-        while (c.n < max) {
-            const d = q.descAt(m, i) orelse return null;
-            c.bufs[c.n] = m.slice(d.addr, d.len) orelse return null;
-            c.writable[c.n] = d.flags & desc_f_write != 0;
-            c.n += 1;
-            if (d.flags & desc_f_next == 0) return c;
-            i = d.next;
-        }
-        return null;
-    }
-};
-
-// ---------------------------------------------------------------------
-// virtio-mmio devices (virtio 1.2, section 4.2)
-
-const virtio_f_version_1: u64 = 1 << 32;
-const blk_f_ro: u64 = 1 << 5;
-const status_driver_ok = 4;
-const int_vring = 1;
-
-const Kind = enum { console, vsock, blk, rng };
-
-const Lock = struct {
-    m: std.atomic.Mutex = .unlocked,
-    fn lock(l: *Lock) void {
-        while (!l.m.tryLock()) _ = linux.sched_yield();
-    }
-    fn unlock(l: *Lock) void {
-        l.m.unlock();
-    }
-};
-
-const Device = struct {
-    kind: Kind,
-    irq: u8,
-    features: u64,
-    config: [16]u8 = @splat(0),
-    config_len: u8 = 0,
-    nqueues: u8,
-    lock: Lock = .{},
-    status: u32 = 0,
-    dev_sel: u32 = 0,
-    drv_sel: u32 = 0,
-    driver_features: u64 = 0,
-    queue_sel: u32 = 0,
-    queues: [3]Queue = @splat(.{}),
-    int_status: u32 = 0,
-    /// Block: the descriptor of the disk and its size in bytes.
-    fd: i32 = -1,
-    read_only: bool = true,
-    size: u64 = 0,
-    /// vsock: eventfds of the kick and the call of queues 0 and 1.
-    kick: [2]i32 = .{ -1, -1 },
-    call: [2]i32 = .{ -1, -1 },
-    running: bool = false,
-};
+const virtio = @import("vm/virtio/mmio.zig");
+const Mem = virtio.Mem;
+const Device = virtio.Device;
+const virtio_f_version_1 = virtio.f_version_1;
 
 const Machine = @This();
 
@@ -447,12 +303,15 @@ con_stop: i32 = -1,
 con_wake: i32 = -1,
 con_pending: [4096]u8 = undefined,
 con_pending_len: usize = 0,
-con_lock: Lock = .{},
 /// The UART registers.
 uart: [8]u8 = @splat(0),
-uart_lock: Lock = .{},
+uart_lock: virtio.Lock = .{},
 /// The time of each phase of the last start, in ns.
 times: struct { setup: u64 = 0, load: u64 = 0 } = .{},
+/// vsock: the eventfds of the kick and the call of queues 0 and 1.
+vs_kick: [2]i32 = .{ -1, -1 },
+vs_call: [2]i32 = .{ -1, -1 },
+vs_running: bool = false,
 /// The text of a failure of a vCPU.
 fail_text: []const u8 = "",
 /// The guest address of the 64-bit entry point of the kernel.
@@ -563,10 +422,9 @@ fn teardown(m: *Machine) void {
     }
     if (m.vcpus.len != 0) m.alloc.free(m.vcpus);
     m.vcpus = &.{};
-    for (m.devices) |*d| {
-        for (&d.kick) |*f| closeFd(f);
-        for (&d.call) |*f| closeFd(f);
-    }
+    for (&m.vs_kick) |*f| closeFd(f);
+    for (&m.vs_call) |*f| closeFd(f);
+    m.vs_running = false;
     if (m.devices.len != 0) m.alloc.free(m.devices);
     m.devices = &.{};
     closeFd(&m.vhost);
@@ -911,19 +769,16 @@ fn deviceCount(m: *const Machine) usize {
 fn makeDevices(m: *Machine) Fail!void {
     const n = m.deviceCount();
     m.devices = try m.alloc.alloc(Device, n);
-    if (m.cfg.entropy) m.devices[n - 1] = .{ .kind = .rng, .irq = irqs[n - 1], .features = virtio_f_version_1, .nqueues = 1 };
-    m.devices[0] = .{ .kind = .console, .irq = irqs[0], .features = virtio_f_version_1, .nqueues = 2, .config_len = 12 };
-    m.devices[1] = .{ .kind = .vsock, .irq = irqs[1], .features = virtio_f_version_1, .nqueues = 3, .config_len = 8 };
-    for (m.cfg.disks, 0..) |d, i| {
+    m.devices[0] = Device.console(irqs[0], .{ .ctx = m, .write = consoleWrite, .rx_ready = consoleReady });
+    for (m.cfg.disks, 0..) |*d, i| {
         const size = linux.lseek(d.fd, 0, linux.SEEK.END);
         if (@as(i64, @bitCast(size)) < 0) {
             why = "the size of a disk";
             return error.Setup;
         }
-        var dev: Device = .{ .kind = .blk, .irq = irqs[2 + i], .features = virtio_f_version_1 | (if (d.read_only) blk_f_ro else 0), .nqueues = 1, .config_len = 8, .fd = d.fd, .read_only = d.read_only, .size = size };
-        std.mem.writeInt(u64, dev.config[0..8], size / 512, .little);
-        m.devices[2 + i] = dev;
+        m.devices[2 + i] = Device.blk(irqs[2 + i], .{ .ctx = @constCast(d), .size = size, .read_only = d.read_only, .read = diskRead, .write = diskWrite, .flush = diskFlush });
     }
+    if (m.cfg.entropy) m.devices[n - 1] = Device.rng(irqs[n - 1], fillRandom);
     m.con_stop = try eventfd();
     m.con_wake = try eventfd();
 
@@ -953,20 +808,35 @@ fn makeDevices(m: *Machine) Fail!void {
             return error.Setup;
         }
     }
-    const dev = &m.devices[1];
-    std.mem.writeInt(u64, dev.config[0..8], m.cid, .little);
+    var config: [8]u8 = undefined;
+    std.mem.writeInt(u64, &config, m.cid, .little);
+    m.devices[1] = Device.external(irqs[1], .{ .id = 19, .ctx = m, .driverOk = vhostStart, .reset = vhostStop }, virtio_f_version_1, 3, &config);
     for (0..2) |q| {
-        dev.kick[q] = try eventfd();
-        dev.call[q] = try eventfd();
-        var io: Ioeventfd = .{ .datamatch = q, .addr = mmio_base + mmio_size * 1 + 0x50, .len = 4, .fd = dev.kick[q], .flags = ioeventfd_datamatch };
+        m.vs_kick[q] = try eventfd();
+        m.vs_call[q] = try eventfd();
+        var io: Ioeventfd = .{ .datamatch = q, .addr = mmio_base + mmio_size * 1 + 0x50, .len = 4, .fd = m.vs_kick[q], .flags = ioeventfd_datamatch };
         _ = try check(ioctl(m.vm, KVM_IOEVENTFD, @intFromPtr(&io)), "KVM_IOEVENTFD");
-        var irq: Irqfd = .{ .fd = @intCast(dev.call[q]), .gsi = dev.irq, .flags = 0, .resamplefd = 0 };
+        var irq: Irqfd = .{ .fd = @intCast(m.vs_call[q]), .gsi = irqs[1], .flags = 0, .resamplefd = 0 };
         _ = try check(ioctl(m.vm, KVM_IRQFD, @intFromPtr(&irq)), "KVM_IRQFD");
     }
 }
 
+fn host(m: *Machine) virtio.Host {
+    return .{ .ctx = m, .mem = m.mem, .interrupt = irqEdge };
+}
+
+/// An edge on an ISA interrupt line of the guest.
+fn irqEdge(ctx: *anyopaque, irq: u32) void {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
+    var hi: IrqLevel = .{ .irq = irq, .level = 1 };
+    _ = ioctl(m.vm, KVM_IRQ_LINE, @intFromPtr(&hi));
+    var lo: IrqLevel = .{ .irq = irq, .level = 0 };
+    _ = ioctl(m.vm, KVM_IRQ_LINE, @intFromPtr(&lo));
+}
+
 /// Gives vhost the memory and the two queues of vsock, and starts it.
-fn vhostStart(m: *Machine, d: *Device) bool {
+fn vhostStart(ctx: *anyopaque, d: *Device) bool {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
     const feats: u64 = d.driver_features & virtio_f_version_1;
     if (ok(ioctl(m.vhost, VHOST_SET_FEATURES, @intFromPtr(&feats))) == null) return false;
     var table: extern struct { head: VhostMemory, region: VhostRegion } = .{
@@ -982,8 +852,8 @@ fn vhostStart(m: *Machine, d: *Device) bool {
         var num: VringState = .{ .index = idx, .num = q.num };
         var start_at: VringState = .{ .index = idx, .num = 0 };
         var addr: VringAddr = .{ .index = idx, .flags = 0, .desc_user_addr = base + q.desc, .used_user_addr = base + q.used, .avail_user_addr = base + q.avail, .log_guest_addr = 0 };
-        var kick: VringFile = .{ .index = idx, .fd = d.kick[i] };
-        var call: VringFile = .{ .index = idx, .fd = d.call[i] };
+        var kick: VringFile = .{ .index = idx, .fd = m.vs_kick[i] };
+        var call: VringFile = .{ .index = idx, .fd = m.vs_call[i] };
         if (ok(ioctl(m.vhost, VHOST_SET_VRING_NUM, @intFromPtr(&num))) == null) return false;
         if (ok(ioctl(m.vhost, VHOST_SET_VRING_BASE, @intFromPtr(&start_at))) == null) return false;
         if (ok(ioctl(m.vhost, VHOST_SET_VRING_ADDR, @intFromPtr(&addr))) == null) return false;
@@ -992,139 +862,29 @@ fn vhostStart(m: *Machine, d: *Device) bool {
     }
     var on: c_int = 1;
     if (ok(ioctl(m.vhost, VHOST_VSOCK_SET_RUNNING, @intFromPtr(&on))) == null) return false;
-    d.running = true;
+    m.vs_running = true;
     return true;
 }
 
-fn vhostStop(m: *Machine, d: *Device) void {
-    if (!d.running) return;
+fn vhostStop(ctx: *anyopaque, _: *Device) void {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
+    if (!m.vs_running) return;
     var off: c_int = 0;
     _ = ioctl(m.vhost, VHOST_VSOCK_SET_RUNNING, @intFromPtr(&off));
-    d.running = false;
+    m.vs_running = false;
 }
 
-fn interrupt(m: *Machine, d: *Device) void {
-    d.int_status |= int_vring;
-    var hi: IrqLevel = .{ .irq = d.irq, .level = 1 };
-    _ = ioctl(m.vm, KVM_IRQ_LINE, @intFromPtr(&hi));
-    var lo: IrqLevel = .{ .irq = d.irq, .level = 0 };
-    _ = ioctl(m.vm, KVM_IRQ_LINE, @intFromPtr(&lo));
+fn consoleWrite(ctx: *anyopaque, bytes: []const u8) void {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
+    writeAll(m.cfg.console, bytes);
 }
 
-fn mmioRead(m: *Machine, d: *Device, off: u64, out: []u8) void {
-    @memset(out, 0);
-    if (off >= 0x100) {
-        const c = off - 0x100;
-        if (c < d.config_len and c + out.len <= d.config_len) @memcpy(out, d.config[@intCast(c)..][0..out.len]);
-        return;
-    }
-    if (out.len != 4) return;
-    const q = &d.queues[@min(d.queue_sel, 2)];
-    const qok = d.queue_sel < d.nqueues;
-    const v: u32 = switch (off) {
-        0x000 => 0x74726976, // "virt"
-        0x004 => 2,
-        0x008 => switch (d.kind) {
-            .console => 3,
-            .vsock => 19,
-            .blk => 2,
-            .rng => 4,
-        },
-        0x00c => 0x4c54375a, // "Z7TL"
-        0x010 => if (d.dev_sel == 0) @truncate(d.features) else if (d.dev_sel == 1) @truncate(d.features >> 32) else 0,
-        0x034 => if (qok) max_queue else 0,
-        0x044 => @intFromBool(qok and q.ready),
-        // vsock: the interrupts come from vhost through the irqfd, so
-        // the status always has the bit of a used buffer.
-        0x060 => if (d.kind == .vsock) int_vring else d.int_status,
-        0x070 => d.status,
-        0x0fc => 0,
-        else => 0,
-    };
-    _ = m;
-    std.mem.writeInt(u32, out[0..4], v, .little);
-}
-
-fn mmioWrite(m: *Machine, d: *Device, off: u64, data: []const u8) void {
-    if (data.len != 4 or off >= 0x100) return;
-    const v = std.mem.readInt(u32, data[0..4], .little);
-    const qok = d.queue_sel < d.nqueues;
-    const q = &d.queues[@min(d.queue_sel, 2)];
-    switch (off) {
-        0x014 => d.dev_sel = v,
-        0x020 => {
-            if (d.drv_sel == 0) d.driver_features = (d.driver_features & ~@as(u64, 0xffffffff)) | v;
-            if (d.drv_sel == 1) d.driver_features = (d.driver_features & 0xffffffff) | (@as(u64, v) << 32);
-            d.driver_features &= d.features;
-        },
-        0x024 => d.drv_sel = v,
-        0x030 => d.queue_sel = v,
-        0x038 => if (qok) {
-            q.num = @min(v, max_queue);
-        },
-        0x044 => if (qok) {
-            q.ready = v == 1 and q.valid(m.mem);
-            q.last_avail = 0;
-        },
-        0x050 => m.notify(d, v),
-        0x064 => d.int_status &= ~v,
-        0x070 => {
-            if (v == 0) {
-                if (d.kind == .vsock) vhostStop(m, d);
-                const keep = d.*;
-                d.* = .{ .kind = keep.kind, .irq = keep.irq, .features = keep.features, .config = keep.config, .config_len = keep.config_len, .nqueues = keep.nqueues, .fd = keep.fd, .read_only = keep.read_only, .size = keep.size, .kick = keep.kick, .call = keep.call };
-                return;
-            }
-            const was = d.status;
-            d.status = v;
-            if (d.kind == .vsock and v & status_driver_ok != 0 and was & status_driver_ok == 0) {
-                if (!m.vhostStart(d)) d.status |= 0x40; // DEVICE_NEEDS_RESET
-            }
-        },
-        0x080 => if (qok) setLow(&q.desc, v),
-        0x084 => if (qok) setHigh(&q.desc, v),
-        0x090 => if (qok) setLow(&q.avail, v),
-        0x094 => if (qok) setHigh(&q.avail, v),
-        0x0a0 => if (qok) setLow(&q.used, v),
-        0x0a4 => if (qok) setHigh(&q.used, v),
-        else => {},
-    }
-}
-
-fn setLow(x: *u64, v: u32) void {
-    x.* = (x.* & ~@as(u64, 0xffffffff)) | v;
-}
-fn setHigh(x: *u64, v: u32) void {
-    x.* = (x.* & 0xffffffff) | (@as(u64, v) << 32);
-}
-
-/// A notification of the driver for queue `qi` of a device (vsock goes
-/// to vhost through the ioeventfd and does not get here).
-fn notify(m: *Machine, d: *Device, qi: u32) void {
-    switch (d.kind) {
-        .console => if (qi == 1) m.consoleTx(d) else if (qi == 0) {
-            const one: u64 = 1;
-            _ = linux.write(m.con_wake, std.mem.asBytes(&one), 8);
-        },
-        .blk => if (qi == 0) m.blkRequests(d),
-        .rng => if (qi == 0) m.rngFill(d),
-        .vsock => {},
-    }
-}
-
-fn consoleTx(m: *Machine, d: *Device) void {
-    const q = &d.queues[1];
-    var any = false;
-    while (q.next(m.mem)) |head| {
-        any = true;
-        const c = Chain.read(q, m.mem, head) orelse {
-            q.putUsed(m.mem, head, 0);
-            continue;
-        };
-        for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| if (!w) writeAll(m.cfg.console, b);
-        q.putUsed(m.mem, head, 0);
-    }
-    if (any) m.interrupt(d);
+/// The driver added receive buffers: the console thread pushes its
+/// pending input.
+fn consoleReady(ctx: *anyopaque) void {
+    const m: *Machine = @ptrCast(@alignCast(ctx));
+    const one: u64 = 1;
+    _ = linux.write(m.con_wake, std.mem.asBytes(&one), 8);
 }
 
 fn writeAll(fd: i32, b: []const u8) void {
@@ -1139,34 +899,15 @@ fn writeAll(fd: i32, b: []const u8) void {
     }
 }
 
-/// Puts the pending input of the console in the receive queue. Gives
-/// true when the input all went in.
-fn consoleRx(m: *Machine) bool {
+/// Puts the pending input of the console in the receive queue.
+fn consoleRx(m: *Machine) void {
     const d = &m.devices[0];
+    const h = m.host();
     d.lock.lock();
-    defer d.lock.unlock();
-    const q = &d.queues[0];
-    var off: usize = 0;
-    var any = false;
-    while (off < m.con_pending_len) {
-        const head = q.next(m.mem) orelse break;
-        any = true;
-        var put: u32 = 0;
-        if (Chain.read(q, m.mem, head)) |c| {
-            for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| {
-                if (!w or off >= m.con_pending_len) continue;
-                const k = @min(b.len, m.con_pending_len - off);
-                @memcpy(b[0..k], m.con_pending[off..][0..k]);
-                off += k;
-                put += @intCast(k);
-            }
-        }
-        q.putUsed(m.mem, head, put);
-    }
-    std.mem.copyForwards(u8, m.con_pending[0 .. m.con_pending_len - off], m.con_pending[off..m.con_pending_len]);
-    m.con_pending_len -= off;
-    if (any) m.interrupt(d);
-    return m.con_pending_len == 0;
+    const took = virtio.Console.push(d, &h, m.con_pending[0..m.con_pending_len]);
+    d.lock.unlock();
+    std.mem.copyForwards(u8, m.con_pending[0 .. m.con_pending_len - took], m.con_pending[took..m.con_pending_len]);
+    m.con_pending_len -= took;
 }
 
 /// The console thread: reads the console descriptor into the receive
@@ -1186,118 +927,38 @@ fn consoleMain(m: *Machine) void {
         if (fds[2].revents & linux.POLL.IN != 0) {
             const n = linux.read(m.cfg.console, &m.con_pending, m.con_pending.len);
             if (ok(n)) |k| {
-                if (k == 0) {
-                    // The script closed its end: wait only for the stop.
-                    var stop_fd = [_]linux.pollfd{.{ .fd = m.con_stop, .events = linux.POLL.IN, .revents = 0 }};
-                    _ = linux.poll(&stop_fd, 1, -1);
-                    return;
-                }
+                if (k == 0) return m.waitStop();
                 m.con_pending_len = k;
             }
-        } else if (fds[2].revents != 0) {
-            var stop_fd = [_]linux.pollfd{.{ .fd = m.con_stop, .events = linux.POLL.IN, .revents = 0 }};
-            _ = linux.poll(&stop_fd, 1, -1);
-            return;
-        }
-        if (m.con_pending_len != 0 and m.devices[0].status & status_driver_ok != 0) _ = m.consoleRx();
+        } else if (fds[2].revents != 0) return m.waitStop();
+        if (m.con_pending_len != 0 and m.devices[0].status & virtio.status_driver_ok != 0) m.consoleRx();
     }
 }
 
-/// virtio-rng (virtio 1.2, section 5.4): each writable buffer gets
-/// bytes of `getrandom`.
-fn rngFill(m: *Machine, d: *Device) void {
-    const q = &d.queues[0];
-    var any = false;
-    while (q.next(m.mem)) |head| {
-        any = true;
-        var put: u32 = 0;
-        if (Chain.read(q, m.mem, head)) |c| {
-            for (c.bufs[0..c.n], c.writable[0..c.n]) |b, w| {
-                if (!w) continue;
-                const rc = linux.getrandom(b.ptr, b.len, 0);
-                if (ok(rc)) |k| put += @intCast(k);
-            }
-        }
-        q.putUsed(m.mem, head, put);
-    }
-    if (any) m.interrupt(d);
+/// The script closed its end of the console: waits only for the stop.
+fn waitStop(m: *Machine) void {
+    var stop_fd = [_]linux.pollfd{.{ .fd = m.con_stop, .events = linux.POLL.IN, .revents = 0 }};
+    _ = linux.poll(&stop_fd, 1, -1);
 }
 
-// virtio-blk (virtio 1.2, section 5.2)
-const blk_in = 0;
-const blk_out = 1;
-const blk_flush = 4;
-const blk_get_id = 8;
-const blk_ok = 0;
-const blk_ioerr = 1;
-const blk_unsupp = 2;
-
-fn blkRequests(m: *Machine, d: *Device) void {
-    const q = &d.queues[0];
-    var any = false;
-    while (q.next(m.mem)) |head| {
-        any = true;
-        const written = m.blkOne(d, q, head);
-        q.putUsed(m.mem, head, written);
-    }
-    if (any) m.interrupt(d);
+fn fillRandom(buf: []u8) usize {
+    const rc = linux.getrandom(buf.ptr, buf.len, 0);
+    return ok(rc) orelse 0;
 }
 
-/// Runs one request and gives the count of bytes that it wrote to the
-/// guest, with the status byte.
-fn blkOne(m: *Machine, d: *Device, q: *Queue, head: u16) u32 {
-    const c = Chain.read(q, m.mem, head) orelse return 0;
-    if (c.n < 2 or c.bufs[0].len < 16 or c.writable[0]) return 0;
-    const last = c.bufs[c.n - 1];
-    if (!c.writable[c.n - 1] or last.len < 1) return 0;
-    const kind = std.mem.readInt(u32, c.bufs[0][0..4], .little);
-    const sector = std.mem.readInt(u64, c.bufs[0][8..16], .little);
-    var status: u8 = blk_ok;
-    var written: u32 = 0;
-    var pos: u64 = sector *% 512;
-    const data = c.bufs[1 .. c.n - 1];
-    const data_w = c.writable[1 .. c.n - 1];
-    switch (kind) {
-        blk_in, blk_out => for (data, data_w) |b, w| {
-            if (sector > d.size / 512 or b.len > d.size - @min(pos, d.size)) {
-                status = blk_ioerr;
-                break;
-            }
-            if (kind == blk_in) {
-                if (!w or !fullIo(d.fd, b, pos, false)) {
-                    status = blk_ioerr;
-                    break;
-                }
-                written += @intCast(b.len);
-            } else {
-                if (d.read_only or w) {
-                    status = blk_ioerr;
-                    break;
-                }
-                if (!fullIo(d.fd, b, pos, true)) {
-                    status = blk_ioerr;
-                    break;
-                }
-            }
-            pos += b.len;
-        },
-        blk_flush => if (!d.read_only) {
-            _ = linux.fsync(d.fd);
-        },
-        blk_get_id => {
-            if (data.len >= 1 and data_w[0]) {
-                const id = "ztcl-vm-disk";
-                const b = data[0];
-                @memset(b[0..@min(b.len, 20)], 0);
-                const k = @min(b.len, id.len);
-                @memcpy(b[0..k], id[0..k]);
-                written += @intCast(@min(b.len, 20));
-            } else status = blk_ioerr;
-        },
-        else => status = blk_unsupp,
-    }
-    last[last.len - 1] = status;
-    return written + 1;
+fn diskRead(ctx: *anyopaque, buf: []u8, off: u64) bool {
+    const d: *const Disk = @ptrCast(@alignCast(ctx));
+    return fullIo(d.fd, buf, off, false);
+}
+
+fn diskWrite(ctx: *anyopaque, buf: []const u8, off: u64) bool {
+    const d: *const Disk = @ptrCast(@alignCast(ctx));
+    return fullIo(d.fd, @constCast(buf), off, true);
+}
+
+fn diskFlush(ctx: *anyopaque) void {
+    const d: *const Disk = @ptrCast(@alignCast(ctx));
+    _ = linux.fsync(d.fd);
 }
 
 fn fullIo(fd: i32, b: []u8, pos: u64, write: bool) bool {
@@ -1423,9 +1084,10 @@ fn mmio(m: *Machine, v: *Vcpu) void {
     }
     const d = &m.devices[@intCast((addr - mmio_base) / mmio_size)];
     const off = (addr - mmio_base) % mmio_size;
+    const h = m.host();
     d.lock.lock();
     defer d.lock.unlock();
-    if (write) m.mmioWrite(d, off, data[0..len]) else m.mmioRead(d, off, data[0..len]);
+    if (write) d.write(&h, off, data[0..len]) else d.read(off, data[0..len]);
 }
 
 test "kvm: the MP table and the command line" {
@@ -1446,12 +1108,4 @@ test "kvm: the MP table and the command line" {
         "console=hvc0 reboot=k panic=-1 nomodule virtio_mmio.device=4K@0xd0000000:5 virtio_mmio.device=4K@0xd0001000:6 virtio_mmio.device=4K@0xd0002000:7",
         m.cmdline(),
     );
-}
-
-test "kvm: a guest address outside the memory" {
-    var buf: [4096]u8 = undefined;
-    const mem: Mem = .{ .base = &buf, .size = buf.len };
-    try std.testing.expect(mem.slice(4000, 96) != null);
-    try std.testing.expect(mem.slice(4000, 97) == null);
-    try std.testing.expect(mem.slice(std.math.maxInt(u64), 2) == null);
 }

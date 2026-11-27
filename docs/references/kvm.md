@@ -1,6 +1,6 @@
 # References for the KVM monitor
 
-`src/kvm.zig`, the Linux part of `ztcl::vm` (ztcl#203), uses these sources. ztcl has no code of any of them. The work is clean-room: no source code of QEMU, Firecracker, crosvm, cloud-hypervisor, or the Linux kernel was read.
+`src/kvm.zig`, the Linux part of `ztcl::vm` (ztcl#203), and the shared virtio devices of `src/vm/virtio/` use these sources. ztcl has no code of any of them. The work is clean-room: no source code of QEMU, Firecracker, crosvm, cloud-hypervisor, or the Linux kernel was read.
 
 ## The KVM API
 

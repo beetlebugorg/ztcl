@@ -17,6 +17,7 @@ on:
       - "tools/vm-guest/pack.sh"
       - "tools/vm-guest/test-kvm.*"
       - "src/kvm.zig"
+      - "src/vm/**"
       - "src/microvm.zig"
       - ".github/workflows/vm-guest.yml"
   workflow_dispatch:
