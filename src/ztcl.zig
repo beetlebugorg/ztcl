@@ -129,6 +129,7 @@ test {
     _ = @import("vm/virtio/vsock.zig");
     _ = @import("vm/boot.zig");
     if (@import("builtin").os.tag == .windows) _ = @import("whp.zig");
+    if (@import("builtin").os.tag == .windows) _ = @import("sys_windows.zig");
     _ = @import("vm/virtio/ninep.zig");
     _ = @import("vm/virtio/fuse.zig");
     _ = @import("vm/nat/nat.zig");

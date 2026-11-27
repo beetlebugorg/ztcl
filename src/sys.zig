@@ -381,7 +381,8 @@ pub fn close(fd: Fd) void {
 /// A pipe for `chan pipe`: the read end, then the write end. Null on
 /// Windows and WASI, and when the system has no free descriptor.
 pub fn pipe() ?[2]Fd {
-    if (comptime is_win or is_wasi) return null;
+    if (comptime is_win) return win.pipe();
+    if (comptime is_wasi) return null;
     var fds: [2]i32 = undefined;
     if (os.errno(os.pipe2(&fds, .{ .CLOEXEC = true })) != .SUCCESS) return null;
     return fds;
