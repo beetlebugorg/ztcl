@@ -166,7 +166,7 @@ fn instruction(it: *Interp, out: *std.ArrayList(u8), code: *const vm.Code, i: *c
             try out.appendSlice(a, "  # ");
             try short(a, out, try it.str(code.lits[i.a]));
         },
-        .load, .store, .store_pop, .incr, .incr_drop, .append, .lappend, .store_elem => if (i.a < code.names.len) {
+        .load, .store, .store_pop, .incr, .incr_drop, .append, .lappend, .store_elem, .var_exists => if (i.a < code.names.len) {
             try out.print(a, "  # ${s}", .{code.names[i.a]});
         },
         .invoke, .eval_cmd => if (i.a < code.sites.len) {

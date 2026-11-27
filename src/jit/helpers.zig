@@ -94,6 +94,7 @@ pub const Helper = enum(u8) {
     /// The probes of a line. `jit.prepare` does not compile a body with
     /// probes, so no machine code calls it.
     probe,
+    var_exists,
 };
 
 pub const count = @typeInfo(Helper).@"enum".field_names.len;
@@ -142,6 +143,7 @@ fn opOf(comptime h: Helper) @TypeOf(vm.opLoad) {
         .append => vm.opAppend,
         .foreach_init => vm.opForeachInit,
         .lmap_add => vm.opLmapAdd,
+        .var_exists => vm.opVarExists,
         else => unreachable,
     };
 }

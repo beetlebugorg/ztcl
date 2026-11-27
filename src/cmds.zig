@@ -2649,19 +2649,14 @@ fn cmdInfo(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         if (argv.len != 3) return it.wrongArgs("info exists varName");
         const name, const idx = Interp.splitName(pattern.?);
         const cell = try it.findVar(it.frame, name, false) orelse return .{ .int = 0 };
-        if (cell.v == .elem) {
-            const e = cell.v.elem;
-            if (e.array.v == .arr) return .{ .int = @intFromBool(e.array.v.arr.contains(e.index)) };
-            if (e.array.v == .traced and e.array.v.traced.inner == .arr) return .{ .int = @intFromBool(e.array.v.traced.inner.arr.contains(e.index)) };
-            return .{ .int = 0 };
-        }
+        if (cell.v == .elem) return .{ .int = @intFromBool(cell.exists()) };
         if (cell.v == .traced) {
             const inner = cell.v.traced.inner;
             if (idx) |i| return .{ .int = @intFromBool(inner == .arr and inner.arr.contains(i)) };
             return .{ .int = @intFromBool(inner != .undef) };
         }
         if (idx) |i| return .{ .int = @intFromBool(cell.v == .arr and cell.v.arr.contains(i)) };
-        return .{ .int = @intFromBool(cell.v == .val or cell.v == .arr) };
+        return .{ .int = @intFromBool(cell.exists()) };
     } else if (which == .commands or which == .procs) {
         var out: std.ArrayList(Value) = .empty;
         const only_procs = which == .procs;

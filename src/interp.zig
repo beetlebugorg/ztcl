@@ -515,6 +515,21 @@ pub const Var = struct {
         while (c.v == .link) c = c.v.link;
         return c;
     }
+
+    /// The result of `info exists` for the cell at the end of the links.
+    /// Reads no trace and keeps the ownership.
+    pub fn exists(c: *const Var) bool {
+        return switch (c.v) {
+            .undef, .link => false,
+            .val, .owned, .arr => true,
+            .traced => |t| t.inner != .undef,
+            .elem => |e| switch (e.array.v) {
+                .arr => |m| m.contains(e.index),
+                .traced => |t| t.inner == .arr and t.inner.arr.contains(e.index),
+                else => false,
+            },
+        };
+    }
 };
 
 pub const ElemLink = struct {
