@@ -92,6 +92,10 @@ pub const json = struct {
     pub const build = @import("json/build.zig");
 };
 
+/// The exports of libztcl for a library built on it (`src/libtcl.zig`).
+/// Only a build with `-Dcext=true` has it.
+pub const libtcl = if (@hasDecl(@import("build_options"), "cext") and @import("build_options").cext) @import("libtcl.zig") else struct {};
+
 pub const Value = value.Value;
 pub const Interp = interp.Interp;
 pub const Error = interp.Error;
