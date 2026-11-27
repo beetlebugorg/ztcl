@@ -19,7 +19,8 @@
 //! byte form of `isoproto.zig` over the shared form of `thread.zig`):
 //!
 //!   START   id u64, caps u32, compute u64, memory u64, hosts u8, script,
-//!           root path, current folder, files u8 (1: host mode)
+//!           root path, current folder, files u8 (1: host mode),
+//!           jit u8 (1: the JIT on, when the platform allows it)
 //!   SEND    from u64, to u64, flags u8 (1 reply, 2 head), var name, script
 //!   RESULT  kind u8 (0 reply, 1 async result), to u64, code i64, value,
 //!           error info, error code value, var name
@@ -256,6 +257,8 @@ pub const Bridge = struct {
     root: []const u8 = "",
     cwd: []const u8 = "",
     host_files: bool = false,
+    /// True when the creator has the JIT on, so the child turns it on.
+    jit: bool = false,
     /// The memory limit of the thread, for the watch of the parent.
     mem_limit: u64 = 0,
     mem_killed: bool = false,
@@ -328,6 +331,7 @@ pub fn prepare(it: *Interp, w: *Worker, st: anytype, host_files: bool) Error!*Br
         .root = st.fs_path,
         .cwd = st.fs_cwd,
         .host_files = host_files and st.caps & file_bits != 0,
+        .jit = st.jit != null,
         .mem_limit = st.mem_limit,
     };
     return b;
@@ -575,10 +579,17 @@ fn sendStart(b: *Bridge, st: anytype) bool {
     o.int(u64, st.mem_limit) catch return false;
     o.list.append(a, b.hosts) catch return false;
     o.str(b.w.script) catch return false;
-    o.str(b.root) catch return false;
-    o.str(b.cwd) catch return false;
-    o.list.append(a, if (b.host_files) 1 else 0) catch return false;
+    startTail(&o, b.root, b.cwd, b.host_files, b.jit) catch return false;
     return b.link.write(a, .start, 0, o.list.items);
+}
+
+/// The fields of `START` after the script: the root folder, the current
+/// folder, `files`, and `jit`.
+fn startTail(o: *Out, root: []const u8, cwd: []const u8, host_files: bool, jit_on: bool) !void {
+    try o.str(root);
+    try o.str(cwd);
+    try o.list.append(o.a, if (host_files) 1 else 0);
+    try o.list.append(o.a, if (jit_on) 1 else 0);
 }
 
 /// Forwards the queue of the worker to the child until the child ends.
@@ -916,7 +927,7 @@ fn childReader(c: *Child) void {
     g.lock.unlock();
 }
 
-const StartIn = struct { id: u64, caps: u32, compute: u64, mem: u64, hosts: u8, script: []const u8, root: []const u8, cwd: []const u8, files: u8 };
+const StartIn = struct { id: u64, caps: u32, compute: u64, mem: u64, hosts: u8, script: []const u8, root: []const u8, cwd: []const u8, files: u8, jit: u8 };
 
 fn readStart(payload: []const u8) iso.Error!StartIn {
     var r: iso.Reader = .{ .b = payload };
@@ -930,6 +941,7 @@ fn readStart(payload: []const u8) iso.Error!StartIn {
         .root = try readStr(&r),
         .cwd = try readStr(&r),
         .files = (try r.take(1))[0],
+        .jit = (try r.take(1))[0],
     };
     try r.done();
     return s;
@@ -1012,6 +1024,9 @@ pub fn childMain(a: Allocator, t: iso.Transport, hosts: Hosts) u8 {
     isobroker.install(&x, &c.caller) catch return 2;
     w.group.remote = c.remote();
     if (!jail(a, &x, st, hosts)) return 2;
+    // After the sandbox, so a sandbox that refuses executable memory
+    // leaves the interpreter with no JIT.
+    if (st.jit == 1) _ = x.enableJit(.{});
     if (!link.write(a, .ready, 0, "")) return 2;
 
     const reader = std.Thread.spawn(.{}, childReader, .{&c}) catch return 2;
@@ -1033,4 +1048,25 @@ pub fn childProcess(a: Allocator, fd: Fd, hosts: Hosts) u8 {
     if (comptime !supported) return 2;
     const t = iso.Transport.init(fd) catch return 2;
     return childMain(a, t, hosts);
+}
+
+test "START gives the jit byte after files" {
+    const a = std.testing.allocator;
+    for ([_]bool{ false, true }) |on| {
+        var o: Out = .{ .a = a };
+        defer o.deinit();
+        try o.int(u64, 7);
+        try o.int(u32, 0);
+        try o.int(u64, 100);
+        try o.int(u64, 1 << 20);
+        try o.list.append(a, 0);
+        try o.str("thread::wait");
+        try startTail(&o, "/root", "src", true, on);
+        const st = try readStart(o.list.items);
+        try std.testing.expectEqual(@as(u64, 7), st.id);
+        try std.testing.expectEqualStrings("/root", st.root);
+        try std.testing.expectEqualStrings("src", st.cwd);
+        try std.testing.expectEqual(@as(u8, 1), st.files);
+        try std.testing.expectEqual(@as(u8, @intFromBool(on)), st.jit);
+    }
 }
