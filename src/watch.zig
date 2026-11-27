@@ -15,6 +15,9 @@
 //! Windows uses `ReadDirectoryChangesW` on a completion port
 //! (`watch_windows.zig`), with the same kinds, merges, and overflow.
 //!
+//! macOS uses an FSEvents stream with the events of each file
+//! (`watch_macos.zig`), with the same kinds, merges, and overflow.
+//!
 //! On the other platforms, `add` gives an error. The designs are in the
 //! plan.
 //!
@@ -32,9 +35,11 @@ const Cmd = interp.Cmd;
 const Error = interp.Error;
 
 /// True on the platforms where `add` watches a folder.
-pub const supported = builtin.os.tag == .linux or on_win;
+pub const supported = builtin.os.tag == .linux or on_win or on_mac;
 const on_win = builtin.os.tag == .windows;
+const on_mac = builtin.os.tag == .macos;
 const ww = @import("watch_windows.zig");
+const wm = @import("watch_macos.zig");
 
 const max_changes = 4096;
 
@@ -53,6 +58,8 @@ const Watcher = struct {
     overflow: bool = false,
     /// The folder of the watch on Windows, and its read.
     win: if (on_win) ww.Win else void = undefined,
+    /// The stream of the watch on macOS.
+    mac: if (on_mac) *wm.Mac else void = undefined,
     base: []const u8 = "",
 };
 
@@ -106,7 +113,7 @@ fn addDir(it: *Interp, w: *Watcher, rel: []const u8) Error!void {
 }
 
 fn add(it: *Interp, argv: []const Value) Error!Value {
-    if (comptime !supported) return it.failCode("ZTCL WATCH UNAVAILABLE", "ztcl::watch is not available on {s} yet", .{if (builtin.os.tag == .macos) "macOS" else "this platform"});
+    if (comptime !supported) return it.failCode("ZTCL WATCH UNAVAILABLE", "ztcl::watch is not available on this platform yet", .{});
     const linux = std.os.linux;
     var recursive = false;
     var i: usize = 2;
@@ -116,6 +123,18 @@ fn add(it: *Interp, argv: []const Value) Error!Value {
     }
     if (i + 1 != argv.len) return it.wrongArgs("ztcl::watch add ?-recursive? path");
     const rel = try fsroot.need(it, try it.str(argv[i]));
+    if (comptime on_mac) {
+        const w = try it.alloc().create(Watcher);
+        w.* = .{ .id = it.watches.next, .fd = -1, .recursive = recursive, .base = try it.alloc().dupe(u8, rel) };
+        w.mac = try wm.open(it, rel, recursive);
+        w.fd = w.mac.waitHandle();
+        it.watches.next += 1;
+        it.watches.list.append(it.alloc(), w) catch |e| {
+            wm.close(w.mac);
+            return e;
+        };
+        return .{ .str = try std.fmt.allocPrint(it.alloc(), "watch{d}", .{w.id}) };
+    }
     if (comptime on_win) {
         const w = try it.alloc().create(Watcher);
         w.* = .{ .id = it.watches.next, .fd = -1, .recursive = recursive, .base = try it.alloc().dupe(u8, rel) };
@@ -156,6 +175,7 @@ fn note(it: *Interp, w: *Watcher, kind: Kind, path: []const u8) Error!void {
 /// Reads the events that wait on the descriptor.
 fn drain(it: *Interp, w: *Watcher) Error!void {
     if (comptime on_win) return drainWin(it, w);
+    if (comptime on_mac) return drainMac(it, w);
     const linux = std.os.linux;
     var buf: [8192]u8 align(@alignOf(linux.inotify_event)) = undefined;
     while (true) {
@@ -220,6 +240,28 @@ fn drainWin(it: *Interp, w: *Watcher) Error!void {
     }
 }
 
+/// The changes of the stream on macOS.
+fn drainMac(it: *Interp, w: *Watcher) Error!void {
+    var got: std.ArrayList(wm.Event) = .empty;
+    try wm.drain(it, w.mac, &got);
+    for (got.items) |e| {
+        if (e.kind == .overflow) {
+            w.overflow = false;
+            try note(it, w, .overflow, "/");
+            w.overflow = true;
+            continue;
+        }
+        const kind: Kind = switch (e.kind) {
+            .created => .created,
+            .modified => .modified,
+            .deleted => .deleted,
+            .moved => .moved,
+            .overflow => unreachable,
+        };
+        try note(it, w, kind, try fsroot.shown(it, try child(it.alloc(), w.base, e.name)));
+    }
+}
+
 fn changes(it: *Interp, w: *Watcher) Error!Value {
     try drain(it, w);
     var out: std.ArrayList(Value) = .empty;
@@ -255,6 +297,8 @@ fn cmdWatch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 fn closeOne(it: *Interp, w: *Watcher) void {
     if (comptime on_win) {
         ww.close(it, &w.win);
+    } else if (comptime on_mac) {
+        wm.close(w.mac);
     } else sys.close(w.fd);
 }
 

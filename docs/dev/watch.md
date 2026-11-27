@@ -22,7 +22,7 @@ ztcl::watch fd $w           ;# for an embedder loop: a descriptor that is readab
 | Platform | Form | First PR |
 |---|---|---|
 | Linux | inotify with `IN_CLOEXEC` and `IN_NONBLOCK`, one watch for each folder, the root folder descriptor for the path check | Done (step 2) |
-| macOS | kqueue with `EVFILT_VNODE` on each folder and file, or FSEvents through the CoreServices framework | Error "ztcl::watch is not available on macOS yet" |
+| macOS | FSEvents with the events of each file, through CoreServices with `dlopen`, on a dispatch queue (`src/watch_macos.zig`) | Done (ztcl#255) |
 | Windows | `ReadDirectoryChangesW` with an overlapped read on the folder handle and a completion port, the subtree for `-recursive` (`src/watch_windows.zig`) | Done (ztcl#255) |
 | WASI, the web | No watch API | The command is absent |
 
