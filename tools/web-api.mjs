@@ -77,8 +77,10 @@ const ev = (s) => t.eval(s);
 r = ev("set s [web::root navigator.serial]");
 check(r.ok && r.result === "web1", `web::root (got ${r.result})`);
 check(ev("web::root navigator.serial").result === "web1", "the same object gives the same handle");
+r = ev("web::root navigator.secret");
+check(!r.ok && /no root "navigator.secret"/.test(r.result), `an unknown root (got ${r.result})`);
 r = ev("web::root navigator.usb");
-check(!r.ok && /no root "navigator.usb"/.test(r.result), `an unknown root (got ${r.result})`);
+check(!r.ok && r.result === 'web: the group "usb" is not allowed', `a root of an ungranted group (got ${r.result})`);
 
 // A member out of the table.
 r = ev("web::get $s secret");
@@ -213,6 +215,23 @@ t = await Interp.create(host, { allow: ["web:usb"], web, webRoot });
 r = t.eval("web::on web1 connect {}");
 check(!r.ok && /invalid web handle/.test(r.result), `web::on of an unknown handle (got ${r.result})`);
 t.close();
+
+// Task 04: the generated table has the groups of the first table. A
+// member of a partial Navigator has the group of its spec.
+const gp = { id: "pad", index: 0, connected: true, axes: [0, 0.5], buttons: [] };
+const nav = { serial, getGamepads: () => [gp, null] };
+t = await Interp.create(host, { allow: ["web:serial"], web, webRoot: { navigator: nav } });
+r = t.eval("web::call [web::root navigator] getGamepads");
+check(!r.ok && r.result === 'web: the group "gamepad" is not allowed', `a Navigator member of an ungranted group (got ${r.result})`);
+t.close();
+t = await Interp.create(host, { allow: ["web:gamepad"], web, webRoot: { navigator: nav } });
+r = t.eval("set pads [web::call [web::root navigator] getGamepads]; list [web::get [lindex $pads 0] id] [web::get [lindex $pads 0] axes] [lindex $pads 1]");
+check(r.ok && r.result === "pad {0 0.5} {}", `getGamepads (got ${r.result})`);
+t.close();
+const { interfaces, roots } = await import("../web/webidl-table.mjs");
+const groups = new Set(Object.values(interfaces).map((i) => i.group));
+for (const g of ["serial", "usb", "bluetooth", "hid", "midi", "gamepad"]) check(groups.has(g), `the table has the group ${g}`);
+check(roots["navigator.serial"] === "Serial" && roots["navigator.usb"] === "USB", "the roots of Navigator");
 
 if (failed) {
   console.error(`${failed} failed`);
