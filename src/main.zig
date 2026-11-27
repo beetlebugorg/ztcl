@@ -525,7 +525,7 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
             const v = tcl.interp.TclVersion.parse(args[i]) orelse {
                 try out.print("--tcl needs 8.6 or 9.1\n", .{});
                 out.flush() catch {};
-                std.process.exit(2);
+                host.exit(2);
             };
             try it.setTclVersion(v);
             continue;
