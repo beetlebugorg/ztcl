@@ -17,7 +17,7 @@ The shares are 9p today (`vm/virtio/ninep.zig`, #385 and #460). Measured on WHP 
 - The 9p client of Linux sends one page (4 KiB) in each `Tread` and `Twrite`, at each msize from 16 KiB to 128 KiB, on Linux 6.12 and 7.3.6. A large read is 65,536 messages for 256 MB, so 9p stops near 105 MB/s at about 35 µs a message.
 - With `cache=loose` the guest keeps the attributes and the names, and `ls -lR` is 22 ms. Its pages can be old after a change on the host, so it is not the default.
 
-virtio-fs answers both. A FUSE `READ` or `WRITE` has up to `max_pages` pages (256 pages, 1 MiB), the replies give the guest a time to keep each name and each set of attributes, and with the DAX window a read or a write needs no message. The guest kernel of ztcl (Linux 7.3.6, ztcl-guest-kernel run 45991768972) has the virtio-fs driver with DAX built in, and the agent prefers `virtiofs` to `9p` when it mounts a tag.
+virtio-fs answers both. A FUSE `READ` or `WRITE` has up to `max_pages` pages (256 pages, 1 MiB), the replies give the guest a time to keep each name and each set of attributes, and with the DAX window a read or a write needs no message. The guest kernel of ztcl (Linux 7.3.6, ztcl-guest-kernel run 46020516028) has the virtio-fs driver with DAX built in, and the agent prefers `virtiofs` to `9p` when it mounts a tag.
 
 ## The device
 
