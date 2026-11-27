@@ -1820,7 +1820,7 @@ pub inline fn opStorePop(comptime named: bool, it: *Interp, f: *Frame, code: *co
 pub inline fn opLlength(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
     _ = .{ named, f, code, i };
     const v = stack[sp - 1];
-    const n = if (v == .list) v.list.len else (try it.readList(v)).len;
+    const n = if (v == .list) v.list.len else (try it.list(v)).len;
     stack[sp - 1] = .{ .int = @intCast(n) };
 }
 
@@ -1829,7 +1829,7 @@ pub inline fn opLindex(comptime named: bool, it: *Interp, f: *Frame, code: *cons
     const l = stack[sp - 2];
     const at = stack[sp - 1];
     if (at == .int) {
-        const items = try it.readList(l);
+        const items = try it.list(l);
         stack[sp - 2] = if (at.int >= 0 and at.int < items.len) items[@intCast(at.int)] else Value.empty;
     } else {
         const argv = [_]Value{ .{ .str = "lindex" }, l, at };

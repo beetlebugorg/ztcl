@@ -745,11 +745,11 @@ const mac = if (on_mac) struct {
             } else if (std.mem.eql(u8, opt, "-warm")) {
                 warm = try it.int(v) != 0;
             } else if (std.mem.eql(u8, opt, "-disk")) {
-                const l = try it.readList(v);
+                const l = try it.list(v);
                 if (l.len < 1 or l.len > 2) return it.fail("a disk is {{file ?rw?}}", .{});
                 try disks.append(a, .{ .path = try hostPath(it, try it.str(l[0]), false), .read_only = !(l.len == 2 and try isRw(it, l[1])) });
             } else if (std.mem.eql(u8, opt, "-share")) {
-                const l = try it.readList(v);
+                const l = try it.list(v);
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 const tag = try std.fmt.allocPrint(a, "share{d}", .{shares.items.len});
                 try shares.append(a, .{ .path = try hostPath(it, try it.str(l[0]), true), .tag = tag, .read_only = !(l.len == 3 and try isRw(it, l[2])) });
@@ -1425,12 +1425,12 @@ const lin = if (on_kvm) struct {
             } else if (std.mem.eql(u8, opt, "-dns")) {
                 dns = try it.int(v) != 0;
             } else if (std.mem.eql(u8, opt, "-disk")) {
-                const l = try it.readList(v);
+                const l = try it.list(v);
                 if (l.len < 1 or l.len > 2) return it.fail("a disk is {{file ?rw?}}", .{});
                 if (disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{kvm.max_disks});
                 try disks.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 2 and try isRw(it, l[1]) });
             } else if (std.mem.eql(u8, opt, "-share")) {
-                const l = try it.readList(v);
+                const l = try it.list(v);
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 if (disks.items.len + shares.items.len >= kvm.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{kvm.max_disks});
                 try shares.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 3 and try isRw(it, l[2]) });
@@ -2309,12 +2309,12 @@ const win = if (on_whp) struct {
             } else if (std.mem.eql(u8, opt, "-warm")) {
                 warm = try it.int(v) != 0;
             } else if (std.mem.eql(u8, opt, "-disk")) {
-                const l = try it.readList(v);
+                const l = try it.list(v);
                 if (l.len < 1 or l.len > 2) return it.fail("a disk is {{file ?rw?}}", .{});
                 if (disks.items.len >= whp.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks", .{whp.max_disks});
                 try disks.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 2 and try isRw(it, l[1]) });
             } else if (std.mem.eql(u8, opt, "-share")) {
-                const l = try it.readList(v);
+                const l = try it.list(v);
                 if (l.len < 2 or l.len > 3) return it.fail("a share is {{host guest ?rw?}}", .{});
                 if (disks.items.len + shares.items.len >= whp.max_disks) return it.failCode("ZTCL VM LIMIT", "a guest has at most {d} disks and shares", .{whp.max_disks});
                 try shares.append(a, .{ .path = try it.str(l[0]), .rw = l.len == 3 and try isRw(it, l[2]) });

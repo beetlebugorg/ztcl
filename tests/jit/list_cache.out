@@ -1,0 +1,5 @@
+{a  b {c d}} {k 1 k 2 j {x y}} 10 {3 {c d} {a b} 2 2 a b {c d} 1 {a,b,c d} {a b {c d}} {a  b {c d} a  b {c d}} {{c d} b a} A 3 {c d} {a b} 2 2 a b {c d} 1 {a,b,c d} {a b {c d}} {a  b {c d} a  b {c d}} {{c d} b a} A 3 {c d} {a b} 2 2 a b {c d} 1 {a,b,c d} {a b {c d}} {a  b {c d} a  b {c d}} {{c d} b a} A}
+x0 4 0 x1 4 1 x2 4 2 x3 4 3 x4 4 4
+3 7 7 {set v 7}
+1 {unmatched open brace in list} 1 {unmatched open brace in list} 2
+2 3 5 3 8 3
