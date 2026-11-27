@@ -14,9 +14,8 @@
 //! `Tcl_EvalTokensStandard` gets a variable and runs a command through
 //! the variable and script functions of `host.zig`.
 //!
-//! A syntax error of `Tcl_ParseExpr` sets the result text of Tcl. The
-//! error code and the error info are not set: the error slots are not
-//! in this file.
+//! A syntax error of `Tcl_ParseExpr` sets the result text and the error
+//! code {TCL PARSE EXPR ...} of Tcl.
 //!
 //! SPDX-License-Identifier: BSD-2-Clause
 
@@ -1428,6 +1427,8 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
     var msg: Msg = .{};
     defer msg.buf.deinit(gpa);
     var post: Msg = .{};
+    // The last words of the error code {TCL PARSE EXPR ...} of Tcl.
+    var ecode: struct { ?[]const u8, ?[]const u8 } = .{ null, null };
     defer post.buf.deinit(gpa);
     var scanned: usize = 0;
     var insert_mark = false;
@@ -1448,10 +1449,12 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
                 switch (lexeme) {
                     INVALID => {
                         msg.print("invalid character \"{s}\"", .{start[0..scanned]});
+                        ecode = .{ "BADCHAR", null };
                         break :err;
                     },
                     INCOMPLETE => {
                         msg.print("incomplete operator \"{s}\"", .{start[0..scanned]});
+                        ecode = .{ "PARTOP", null };
                         break :err;
                     },
                     BAREWORD => {
@@ -1464,6 +1467,7 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
                         } else {
                             const w = cut(word);
                             msg.print("invalid bareword \"{s}{s}\"", .{ w[0], w[1] });
+                            ecode = .{ "BAREWORD", null };
                             post.print("should be \"${s}{s}\" or \"{{{s}{s}}}\" or \"{s}{s}(...)\" or ...", .{ w[0], w[1], w[0], w[1], w[0], w[1] });
                             if (start[0] == '0') {
                                 const num = scanNumber(word);
@@ -1474,14 +1478,17 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
                                         'b' => {
                                             post.print(" (invalid binary number?)", .{});
                                             p.errorType = PARSE_BAD_NUMBER;
+                                            ecode = .{ "BADNUMBER", "BINARY" };
                                         },
                                         'o' => {
                                             post.print(" (invalid octal number?)", .{});
                                             p.errorType = PARSE_BAD_NUMBER;
+                                            ecode = .{ "BADNUMBER", "OCTAL" };
                                         },
                                         else => if (std.ascii.isDigit(c1)) {
                                             post.print(" (invalid octal number?)", .{});
                                             p.errorType = PARSE_BAD_NUMBER;
+                                            ecode = .{ "BADNUMBER", "OCTAL" };
                                         },
                                     }
                                 }
@@ -1497,6 +1504,7 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
                 LEAF => {
                     if (!isOperator(last)) {
                         msg.print("missing operator at {s}", .{mark});
+                        ecode = .{ "MISSING", null };
                         scanned = 0;
                         insert_mark = true;
                         break :err;
@@ -1529,6 +1537,7 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
                             code = Tcl_ParseVarName(null, start, cint(n), p, 1);
                             if (code == OK and tok(p, wi + 1).type != TOKEN_VARIABLE) {
                                 msg.print("invalid character \"$\"", .{});
+                                ecode = .{ "BADCHAR", null };
                                 break :err;
                             }
                             scanned = @intCast(tok(p, wi + 1).size);
@@ -1552,6 +1561,7 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
                                 if (@intFromPtr(nested.term) < @intFromPtr(end) and nested.term[0] == ']' and nested.incomplete == 0) break;
                                 if (s == end) {
                                     msg.print("missing close-bracket", .{});
+                                    ecode = .{ "UNBALANCED", null };
                                     p.term = tok(p, ci).start;
                                     p.errorType = PARSE_MISSING_BRACKET;
                                     p.incomplete = 1;
@@ -1579,6 +1589,7 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
                 UNARY => {
                     if (!isOperator(last)) {
                         msg.print("missing operator at {s}", .{mark});
+                        ecode = .{ "MISSING", null };
                         scanned = 0;
                         insert_mark = true;
                         break :err;
@@ -1602,6 +1613,7 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
                                 continue;
                             }
                             msg.print("empty subexpression at {s}", .{mark});
+                            ecode = .{ "EMPTY", null };
                             scanned = 0;
                             insert_mark = true;
                             break :err;
@@ -1609,23 +1621,29 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
                         if (items[u - 1].precedence > precedence) {
                             if (items[u - 1].lexeme == OPEN_PAREN) {
                                 msg.print("unbalanced open paren", .{});
+                                ecode = .{ "UNBALANCED", null };
                                 p.errorType = PARSE_MISSING_PAREN;
                             } else if (items[u - 1].lexeme == COMMA) {
                                 msg.print("missing function argument at {s}", .{mark});
+                                ecode = .{ "MISSING", null };
                                 scanned = 0;
                                 insert_mark = true;
                             } else if (items[u - 1].lexeme == START) {
                                 msg.print("empty expression", .{});
+                                ecode = .{ "EMPTY", null };
                             }
                         } else if (lexeme == CLOSE_PAREN) {
                             msg.print("unbalanced close paren", .{});
+                            ecode = .{ "UNBALANCED", null };
                         } else if (lexeme == COMMA and items[u - 1].lexeme == OPEN_PAREN and items[u - 2].lexeme == FUNCTION) {
                             msg.print("missing function argument at {s}", .{mark});
+                            ecode = .{ "UNBALANCED", null };
                             scanned = 0;
                             insert_mark = true;
                         }
                         if (!msg.set) {
                             msg.print("missing operand at {s}", .{mark});
+                            ecode = .{ "MISSING", null };
                             scanned = 0;
                             insert_mark = true;
                         }
@@ -1642,17 +1660,20 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
                         }
                         if (inc.lexeme == OPEN_PAREN and lexeme != CLOSE_PAREN) {
                             msg.print("unbalanced open paren", .{});
+                            ecode = .{ "UNBALANCED", null };
                             p.errorType = PARSE_MISSING_PAREN;
                             break :err;
                         }
                         if (inc.lexeme == QUESTION and (!isOperator(complete) or items[@intCast(complete)].lexeme != COLON)) {
                             msg.print("missing operator \":\" at {s}", .{mark});
+                            ecode = .{ "MISSING", null };
                             scanned = 0;
                             insert_mark = true;
                             break :err;
                         }
                         if (isOperator(complete) and items[@intCast(complete)].lexeme == COLON and inc.lexeme != QUESTION) {
                             msg.print("unexpected operator \":\" without preceding \"?\"", .{});
+                            ecode = .{ "SURPRISE", null };
                             break :err;
                         }
                         inc.right = complete;
@@ -1664,6 +1685,7 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
                     }
                     if (lexeme == CLOSE_PAREN and inc.lexeme != OPEN_PAREN) {
                         msg.print("unbalanced close paren", .{});
+                        ecode = .{ "UNBALANCED", null };
                         break :err;
                     }
                     if (lexeme == COMMA) {
@@ -1671,11 +1693,13 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
                         const idx = ii / @sizeOf(OpNode);
                         if (inc.lexeme != OPEN_PAREN or idx == 0 or items[idx - 1].lexeme != FUNCTION) {
                             msg.print("unexpected \",\" outside function argument list", .{});
+                            ecode = .{ "SURPRISE", null };
                             break :err;
                         }
                     }
                     if (isOperator(complete) and items[@intCast(complete)].lexeme == COLON) {
                         msg.print("unexpected operator \":\" without preceding \"?\"", .{});
+                        ecode = .{ "SURPRISE", null };
                         break :err;
                     }
                     if (lexeme != CLOSE_PAREN) {
@@ -1710,6 +1734,23 @@ fn parseExpr(ip: ?*Interp, start0: [*]const u8, n0: usize, nodes: *Nodes, p: *Pa
     }) catch obj.panicText("out of memory");
     if (post.set) out.print(gpa, ";\n{s}", .{post.buf.items}) catch obj.panicText("out of memory");
     obj.setResultText(i, out.items);
+    // An error of a nested word (a quote, a brace, a variable) is
+    // UNBALANCED in Tcl.
+    if (!msg.set and ecode[0] == null) ecode = .{ "UNBALANCED", null };
+    var words: [5][]const u8 = .{ "TCL", "PARSE", "EXPR", "", "" };
+    var nw: usize = 3;
+    inline for (0..2) |k| if (ecode[k]) |w| {
+        words[nw] = w;
+        nw += 1;
+    };
+    const errors = @import("errors.zig");
+    errors.setErrorCodeWords(i, words[0..nw]);
+    const all = p.string[0..diff(p.end, p.string)];
+    const w = cut(all);
+    var info: std.ArrayList(u8) = .empty;
+    defer info.deinit(gpa);
+    info.print(gpa, "\n    (parsing expression \"{s}{s}\")", .{ w[0], w[1] }) catch obj.panicText("out of memory");
+    errors.Tcl_AddObjErrorInfo(i, info.items.ptr, @intCast(info.items.len));
     return ERROR;
 }
 

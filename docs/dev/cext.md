@@ -39,6 +39,7 @@ The two paths use one implementation of each slot. `src/cext/obj.zig` has the ob
 | Packages and helpers | 5 | 5 of 5, and `Tcl_PkgProvide`, `Tcl_PkgRequire`, `Tcl_PkgPresentEx`, `Tcl_PkgPresent` (shared) | as in the WebAssembly path, and the startup slots of `pkgs.zig` |
 | Hash tables | 0 | the area hash tables (shared). `close()` of `web/ztcl.mjs` frees the interp of each package, so the delete procs of its assoc data run. | the area hash tables (shared) |
 | Channels | 4 | the area channels (shared, `src/cext/chan.zig`): the generic layer of a channel type of C, with the buffers, the translation, the encodings `utf-8`, `iso8859-1`, and `binary`, the options, stacked transforms, the channel handlers, and the close handlers. A channel of ztcl (`stdout`, a channel of `open`) is reached through scripts of ztcl. The WebAssembly library has no channel commands, so only C code reaches a channel of a package. | as in the WebAssembly path. A registered channel of a package is also a channel of the interp of ztcl, so `puts`, `gets`, `read`, `seek`, `fconfigure`, and `close` of a script reach it. A transform stacks on a channel of `open`. A script of `fileevent` on a channel of a package is a channel handler: `Tcl_NotifyChannel` of the driver runs it, and buffered input gives readable events, as in Tcl. `fcopy` with a channel of a package copies characters: the size and the count are in characters. `fcopy -command` is not available on any channel yet. |
+| Errors | 0 | the area errors (shared, `src/cext/errors.zig`). The interp of a package keeps its error code, error info, and error line, and Tcl_ResetResult clears them. After a script or a variable of ztcl fails, the host call `err_get` gives the package the error state of ztcl. A command that ends with TCL_ERROR or TCL_RETURN gives its state to ztcl with `err_set`. Tcl_ParseExpr sets {TCL PARSE EXPR ...} and the error info of Tcl. Tcl_BackgroundException queues the error for the bgerror handler of ztcl. Tcl_SignalId and Tcl_SignalMsg give "unknown signal": WASI has no signals. | as in the WebAssembly path, with the signal names of the host. |
 
 ## The shape of the Tcl_Obj bridge
 
@@ -145,7 +146,7 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | channels | 92 | 92 | 92 | none |
 | strings and encodings | 86 | 10 | 10 | 76 slots |
 | lists and dicts | 28 | 9 | 9 | 19 slots |
-| errors | 25 | 8 | 8 | 17 slots |
+| errors | 25 | 25 | 25 | none |
 | interps and commands | 64 | 3 | 3 | 61 slots |
 | hash tables | 13 | 13 | 13 | none |
 | variables | 21 | 8 | 8 | 13 slots |
@@ -154,7 +155,7 @@ The preprocessor stops at a file that needs a header of its configure step, so t
 | threads | 15 | 0 | 0 | 15 slots |
 | filesystem | 63 | 1 | 1 | 62 slots |
 | zlib | 13 | 0 | 0 | 13 slots |
-| **public, all** | **630** | **282** (44%) | **277** (43%) | |
+| **public, all** | **630** | **299** (47%) | **294** (46%) | |
 | **internal** | **173** | **0** | **0** | |
 | **internal platform** | **23** | **0** | **0** | |
 | **platform** | **0** | **0** | **0** | |
