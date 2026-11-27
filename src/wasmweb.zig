@@ -37,7 +37,8 @@
 //! `web::on` needs the attribute `on<event>` of the type `EventHandler`
 //! in the table. The host puts each event into the same queue, and
 //! `ztcl_web_event` puts the values of the event in place of `%type`,
-//! `%target`, `%detail`, `%value`, and `%data` (`%%` is one `%`).
+//! `%target`, `%detail`, `%value`, `%data`, and `%event` (`%%` is one
+//! `%`).
 //!
 //! Web Serial (task 06) gives a port as a channel of `wasmfiles.zig`:
 //!
@@ -80,11 +81,12 @@ pub const Op = enum(u32) {
     serial_handshake = 13,
     serial_ttycontrol = 14,
     serial_ports = 15,
+    gamepads = 16,
 };
 
 /// The names of the substitutions of `web::on`, in the order of the
 /// values of an event.
-pub const subs = [_][]const u8{ "type", "target", "detail", "value", "data" };
+pub const subs = [_][]const u8{ "type", "target", "detail", "value", "data", "event" };
 
 const host = struct {
     extern "ztcl_host" fn web(op: u32, handle: i32, a: [*]const u8, a_len: usize, b: [*]const u8, b_len: usize) i32;
@@ -240,6 +242,15 @@ pub fn Commands(comptime gpa: std.mem.Allocator) type {
             return Value.empty;
         }
 
+        /// `web::gamepad::Snapshot`: the state of each pad of
+        /// `navigator.getGamepads()` in one call of the host, as a list
+        /// of `index id mapping connected timestamp axes values pressed`.
+        /// The Tcl of `src/web/gamepad.tcl` makes the dicts.
+        fn cmdGamepads(it: *Interp, argv: []const Value, _: ?*ztcl.interp.Cmd) Error!Value {
+            if (argv.len != 1) return it.wrongArgs("web::gamepad::Snapshot");
+            return (try call(it, gpa, .gamepads, 0, "", "")).value;
+        }
+
         /// The calls of the channels of the ports to the host.
         fn streamCall(it: *Interp, op: wasmfiles.StreamOp, id: u32, data: []const u8) Error!void {
             _ = try call(it, gpa, @fromBackingInt(@intCast(@backingInt(op))), @intCast(id), "", data);
@@ -261,6 +272,7 @@ pub fn Commands(comptime gpa: std.mem.Allocator) type {
             try it.register("web::on", cmdOn);
             try it.register("web::off", cmdOff);
             try it.register("web::release", cmdRelease);
+            try it.register("web::gamepad::Snapshot", cmdGamepads);
         }
     };
 }

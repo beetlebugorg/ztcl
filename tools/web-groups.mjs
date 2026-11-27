@@ -292,6 +292,127 @@ web::bluetooth::write $::cp \\x03 -response yes`);
   t.close();
 }
 
+// ---- Gamepad ----
+
+class GamepadButton {
+  constructor(v) {
+    Object.assign(this, { value: v, pressed: v > 0.5, touched: v > 0 });
+  }
+}
+class GamepadHapticActuator {
+  constructor() {
+    this.effects = ["dual-rumble"];
+    this.played = [];
+  }
+  playEffect(type, params) {
+    this.played.push([type, params]);
+    return Promise.resolve("complete");
+  }
+}
+const actuator = new GamepadHapticActuator();
+// A new object for each read, as Chrome gives.
+class Gamepad {
+  constructor(index, axes, buttons) {
+    Object.assign(this, { id: "Fake Pad (STANDARD GAMEPAD)", index, connected: true, timestamp: 12.5, mapping: "standard", axes, buttons: buttons.map((v) => new GamepadButton(v)), touches: [], vibrationActuator: actuator });
+  }
+}
+class GamepadEvent extends Event {
+  constructor(type, gamepad) {
+    super(type);
+    this.gamepad = gamepad;
+  }
+}
+class Window extends EventTarget {}
+function padRoot() {
+  const w = new Window();
+  w.pad = { axes: [0.5, -1], buttons: [1, 0, 0.25] };
+  w.navigator = { getGamepads: () => [null, w.pad ? new Gamepad(1, w.pad.axes, w.pad.buttons) : null, null, null] };
+  return w;
+}
+
+{
+  const w = padRoot();
+  const { t, out } = await session(["web:gamepad"], w);
+  const ev = (s) => t.eval(s);
+  let r = ev("web::gamepad::list");
+  check(r.ok && r.result === "1", `list (got ${r.result})`);
+  r = ev("web::gamepad::state 1");
+  check(r.ok && r.result === "index 1 id {Fake Pad (STANDARD GAMEPAD)} mapping standard connected 1 timestamp 12.5 axes {0.5 -1} buttons {1 0 0.25} pressed {1 0 0}", `state (got ${r.result})`);
+  r = ev("llength [web::gamepad::state]");
+  check(r.ok && r.result === "1", `state of each pad (got ${r.result})`);
+  r = ev("web::gamepad::state 0");
+  check(!r.ok && r.result === "web::gamepad: no pad 0", `state of a free slot (got ${r.result})`);
+  // The commands release each handle that they read.
+  const before = t._web.objs.size;
+  ev("web::gamepad::state 1; web::gamepad::list");
+  check(t._web.objs.size === before, `no handles stay after state (got ${t._web.objs.size - before} more)`);
+
+  r = ev("web::gamepad::onconnect {apply {{i id} {puts \"connect $i $id\"}}}; web::gamepad::ondisconnect {apply {{i id} {puts \"gone $i\"}}}");
+  check(r.ok, `onconnect (got ${r.result})`);
+  const withWindow = t._web.objs.size;
+  w.dispatchEvent(new GamepadEvent("gamepadconnected", new Gamepad(1, [0, 0], [])));
+  w.dispatchEvent(new GamepadEvent("gamepaddisconnected", new Gamepad(1, [0, 0], [])));
+  await until(() => out().includes("gone"));
+  check(out() === "connect 1 Fake Pad (STANDARD GAMEPAD)\ngone 1\n", `connect events (got ${JSON.stringify(out())})`);
+  check(t._web.objs.size === withWindow, `no handles stay after the events (got ${t._web.objs.size - withWindow} more)`);
+  ev("web::gamepad::ondisconnect {}");
+
+  r = ev("web::gamepad::poll -command {}");
+  check(r.ok, `poll with an empty script and no poll (got ${r.result})`);
+  r = ev("set n 0; web::gamepad::poll -interval 5 -command {apply {{pads} {incr ::n; set ::last [lindex [dict get [lindex $pads 0] axes] 0]}}}");
+  check(r.ok, `poll (got ${r.result})`);
+  await until(() => Number(ev("set n").result) >= 3);
+  w.pad.axes = [-0.25, 0];
+  await until(() => ev("set last").result === "-0.25");
+  check(ev("set last").result === "-0.25", `poll sees a new state (got ${ev("set last").result})`);
+  ev("web::gamepad::poll -command {}");
+  const n = ev("set n").result;
+  await new Promise((res) => setTimeout(res, 40));
+  check(ev("set n").result === n, "poll with an empty script stops");
+  r = ev("web::gamepad::poll -interval 0 -command puts");
+  check(!r.ok && /positive integer/.test(r.result), `poll -interval 0 (got ${r.result})`);
+
+  r = ev("web::gamepad::rumble 1 -duration 300 -strong 0.5 -command {apply {{s v} {puts \"rumble $s $v\"}}}");
+  check(r.ok, `rumble (got ${r.result})`);
+  await until(() => out().includes("rumble"));
+  check(out().includes("rumble ok complete") && JSON.stringify(actuator.played[0]) === JSON.stringify(["dual-rumble", { duration: 300, strongMagnitude: 0.5, weakMagnitude: 1 }]), `rumble effect (got ${JSON.stringify(actuator.played)})`);
+  t.close();
+}
+
+// The gamepad without the event loop, and a browser without the API.
+{
+  const { t } = await session([], padRoot(), { allow: ["web:gamepad"] });
+  let r = t.eval("web::gamepad::poll -command puts");
+  check(!r.ok && /no event loop: grant "event"/.test(r.result), `poll without event (got ${r.result})`);
+  t.close();
+  const s = await session(["web:gamepad"], { navigator: {} });
+  r = s.t.eval("web::gamepad::list");
+  check(!r.ok && r.result === "web::gamepad: this browser has no Gamepad API", `a browser without the Gamepad API (got ${r.result})`);
+  s.t.close();
+}
+
+// The gamepad demo of the playground.
+{
+  const w = padRoot();
+  w.pad.axes = [1, 0];
+  const els = Object.fromEntries(["go", "stop", "ball", "buttons", "out"].map((id) => [id, new FakeEl(id)]));
+  for (const e of Object.values(els)) e.style = { props: {}, setProperty(k, v) { this.props[k] = v; }, getPropertyValue(k) { return this.props[k] ?? ""; } };
+  const app = new FakeEl("app", Object.values(els));
+  const { t, out } = await session(["dom", "web:gamepad"], w, { domRoot: app });
+  const r = t.eval(playground("gamepad.tcl"));
+  check(r.ok, `the gamepad demo script (got ${r.result})`);
+  els.go.dispatchEvent(new Event("click"));
+  await until(() => parseFloat(els.ball.style.props.left) >= 60);
+  check(parseFloat(els.ball.style.props.left) >= 60 && els.ball.style.props.top === "50.0%", `the stick moves the ball (got ${JSON.stringify(els.ball.style.props)})`);
+  check(els.buttons.textContent === "0" && els.ball.style.props.scale === "2", `the buttons (got ${els.buttons.textContent} ${els.ball.style.props.scale})`);
+  els.stop.dispatchEvent(new Event("click"));
+  await tick();
+  const left = els.ball.style.props.left;
+  await new Promise((res) => setTimeout(res, 60));
+  check(els.ball.style.props.left === left, `stop ends the poll (got ${left} then ${els.ball.style.props.left}) ${out()}`);
+  t.close();
+}
+
 if (failed) {
   console.error(`${failed} failed`);
   process.exit(1);
