@@ -638,6 +638,13 @@ pub const Emitter = struct {
         try e.emptyAddr(.rax);
         s.bind(have);
         try e.copy(abi.stack, (d - 2) * l.value_size, .rax, 0);
+        // An item that is a list now has a second holder: its stamp goes to
+        // 0, as in `vm.opLindex`.
+        const keep = try s.newLabel();
+        try e.stackTag(d - 2, l.tag_list, keep);
+        try s.movRM(.rdx, try e.stackAt(d - 2, l.value_payload));
+        try s.movMI(try x64.at(.rdx, l.obj_own_stamp), 0);
+        s.bind(keep);
     }
 
     /// `lappend` of one value to a list with room at its end: the value

@@ -50,14 +50,64 @@ pub fn lsetOwned(it: *Interp, cell: *interp.Var, index: Value, v: Value) Error!b
     return true;
 }
 
-/// `lset` with one index on a plain variable: the general command writes
-/// through `lsetOwned`. It then ends the ownership, because it returns
-/// the list, unless the bytecode drops the result (`dropped`). The
-/// result is then an empty string, and the cell keeps the list.
-fn lsetPlain(it: *Interp, name: []const u8, index: Value, v: Value, dropped: bool) Error!?Value {
+/// Writes `v` at the path `idxs` (two or more indexes) of the list in a
+/// plain cell. The cell owns the outer list, as in `lsetOwned`. An inner
+/// list goes in place when it and each list above it on the path have
+/// the stamp of the outer list. Each other inner list on the path gets a
+/// copy with that stamp, and each list below a copy gets a copy too: a
+/// copied list can share its items with another holder. Returns false
+/// before any write for a case that needs the general path.
+pub fn lsetOwnedPath(it: *Interp, cell: *interp.Var, idxs: []const Value, v: Value) Error!bool {
+    const c = cell.target();
+    if (c.v != .val and c.v != .owned) return false;
+    // Each check comes before the first write.
+    var cur = if (c.v == .val) c.v.val else c.v.owned;
+    for (idxs, 0..) |ix, k| {
+        const items = it.list(cur) catch return false;
+        const at = cmds.index(it, ix, items.len) catch return false;
+        if (at < 0 or at >= items.len) return false;
+        if (k + 1 < idxs.len) cur = items[@intCast(at)];
+    }
+    var items = (try it.ownList(c)).?;
+    var obj = c.v.owned.list.obj;
+    const stamp = obj.own_stamp;
+    var copied = stamp == 0;
+    for (idxs, 0..) |ix, k| {
+        // The write changes the keys of a dict, so its marks go.
+        obj.dict_len = 0;
+        obj.index = null;
+        const at: usize = @intCast(try cmds.index(it, ix, items.len));
+        if (k + 1 == idxs.len) {
+            items[at] = v;
+            break;
+        }
+        const child = items[at];
+        if (!copied and child == .list and child.list.obj.own_stamp == stamp) {
+            obj = child.list.obj;
+            items = @constCast(child.list.items());
+            continue;
+        }
+        const from = try it.list(child);
+        const l = try value.allocList(it.alloc(), from.len);
+        @memcpy(l.obj.buf, from);
+        l.obj.own_stamp = stamp;
+        items[at] = .{ .list = l };
+        copied = true;
+        obj = l.obj;
+        items = l.obj.buf;
+    }
+    return true;
+}
+
+/// `lset` on a plain variable: the general command writes through
+/// `lsetOwned` or `lsetOwnedPath`. It then ends the ownership, because it
+/// returns the list, unless the bytecode drops the result (`dropped`).
+/// The result is then an empty string, and the cell keeps the list.
+fn lsetPlain(it: *Interp, name: []const u8, idxs: []const Value, v: Value, dropped: bool) Error!?Value {
     if (std.mem.indexOfScalar(u8, name, '(') != null) return null;
     const cell = (if (dropped) try it.findOwnedVar(it.frame, name) else try it.findVar(it.frame, name, false)) orelse return null;
-    if (!try lsetOwned(it, cell, index, v)) return null;
+    const done = if (idxs.len == 1) try lsetOwned(it, cell, idxs[0], v) else try lsetOwnedPath(it, cell, idxs, v);
+    if (!done) return null;
     if (dropped) return Value.empty;
     const c = cell.target();
     const out = c.v.owned;
@@ -72,8 +122,8 @@ pub fn cmdLset(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     // One index word is a list of indexes.
     var idxs = argv[2 .. argv.len - 1];
     if (idxs.len == 1) idxs = try it.list(idxs[0]);
-    if (idxs.len == 1) {
-        if (try lsetPlain(it, name, idxs[0], argv[argv.len - 1], dropped)) |out| return out;
+    if (idxs.len >= 1) {
+        if (try lsetPlain(it, name, idxs, argv[argv.len - 1], dropped)) |out| return out;
     }
     const old = try it.getVar(name);
     const out = try lsetRec(it, old, idxs, argv[argv.len - 1]);

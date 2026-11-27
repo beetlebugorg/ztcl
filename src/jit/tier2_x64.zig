@@ -1320,6 +1320,14 @@ const Emitter = struct {
         try s.movRM(.rax, .{ .base = .rax, .disp = @offsetOf(jit.EnterCtx, "empty") });
         s.bind(have);
         try e.copy(abi.stack, @as(i64, list) * l.value_size, .rax, 0);
+        // An item that is a list now has a second holder: its stamp goes to
+        // 0, as in `vm.opLindex`.
+        const keep = try s.newLabel();
+        try s.cmpMI8(try e.stackAt(list, l.value_tag), @intCast(l.tag_list));
+        try s.jcc(.ne, keep);
+        try s.movRM(.rcx, try e.stackAt(list, l.value_payload));
+        try s.movMI(try x64.at(.rcx, l.obj_own_stamp), 0);
+        s.bind(keep);
         return true;
     }
 

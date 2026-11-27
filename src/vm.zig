@@ -1816,6 +1816,8 @@ pub inline fn opLindex(comptime named: bool, it: *Interp, f: *Frame, code: *cons
         const argv = [_]Value{ .{ .str = "lindex" }, l, at };
         stack[sp - 2] = try cmds.cmdLindex(it, &argv, null);
     }
+    // The item now has a second holder.
+    value.dropStamp(stack[sp - 2]);
 }
 
 pub inline fn opStringLength(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
@@ -1838,6 +1840,8 @@ pub inline fn opStringIndex(comptime named: bool, it: *Interp, f: *Frame, code: 
 pub inline fn opDictGet(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
     _ = .{ named, f, code, i };
     stack[sp - 2] = try dict.getOne(it, stack[sp - 2], stack[sp - 1]);
+    // The item now has a second holder.
+    value.dropStamp(stack[sp - 2]);
 }
 
 pub inline fn opDictExists(comptime named: bool, it: *Interp, f: *Frame, code: *const Code, stack: [*]Value, sp: u32, i: *const Ins) Error!void {
@@ -2238,6 +2242,9 @@ pub inline fn opDictUpdateDrop(comptime named: bool, it: *Interp, f: *Frame, cod
         const now = f.vars.items[i.a].cell.target();
         if (now.v == .val and dict.isMarked(now.v.val) and (was_owned or now.v.val.list.obj != old)) {
             const v = now.v.val;
+            // The general write can give an inner buffer to another
+            // place, so the stamps of the inner buffers end.
+            v.list.obj.own_stamp = value.newOwnStamp();
             now.v = .{ .owned = v };
         }
     }

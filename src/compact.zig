@@ -84,6 +84,7 @@ pub const Copier = struct {
             .buf = try c.a.dupe(Value, old.buf[0..old.used]),
             .used = old.used,
             .dict_len = old.dict_len,
+            .own_stamp = old.own_stamp,
         };
         gop.value_ptr.* = obj;
         try c.list_work.append(c.temp, obj);

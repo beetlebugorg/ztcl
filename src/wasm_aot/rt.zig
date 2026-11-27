@@ -170,6 +170,7 @@ fn staticLayout() layout.Layout {
     l.obj_used = @offsetOf(value.ListObj, "used");
     l.obj_dict_len = @offsetOf(value.ListObj, "dict_len");
     l.obj_index = @offsetOf(value.ListObj, "index");
+    l.obj_own_stamp = @offsetOf(value.ListObj, "own_stamp");
     l.it_epoch = @offsetOf(Interp, "epoch");
     l.it_safe_epoch = @offsetOf(Interp, "safe_epoch");
     l.it_compute_limit = @offsetOf(Interp, "compute_limit");

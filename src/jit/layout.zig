@@ -62,6 +62,7 @@ pub const Layout = struct {
     obj_used: u32,
     obj_dict_len: u32,
     obj_index: u32,
+    obj_own_stamp: u32,
     // Offsets in `Interp`.
     it_epoch: u32,
     it_safe_epoch: u32,
@@ -210,7 +211,8 @@ pub fn probe() ?Layout {
     l.obj_used = @offsetOf(value.ListObj, "used");
     l.obj_dict_len = @offsetOf(value.ListObj, "dict_len");
     l.obj_index = @offsetOf(value.ListObj, "index");
-    if (@sizeOf(@FieldType(value.ListObj, "index")) != word or @sizeOf(@FieldType(value.ListObj, "dict_len")) != word) return null;
+    l.obj_own_stamp = @offsetOf(value.ListObj, "own_stamp");
+    if (@sizeOf(@FieldType(value.ListObj, "index")) != word or @sizeOf(@FieldType(value.ListObj, "dict_len")) != word or @sizeOf(@FieldType(value.ListObj, "own_stamp")) != 8) return null;
     l.it_epoch = @offsetOf(Interp, "epoch");
     l.it_safe_epoch = @offsetOf(Interp, "safe_epoch");
     l.it_compute_limit = @offsetOf(Interp, "compute_limit");
