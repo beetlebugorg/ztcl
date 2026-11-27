@@ -150,6 +150,7 @@ pub const Resolved = struct { kernel: []u8, initrd: ?[]u8, cmdline: []const u8, 
 
 pub fn resolveImage(it: *Interp, name: []const u8) Error!Resolved {
     const s = try store(it);
+    defer s.close();
     const a = it.alloc();
     const counter = (s.current(a, name) catch |e| return storeFail(it, e)) orelse
         return it.failCode("ZTCL VM IMAGE NAME", "no image named \"{s}\" in the store: install it with ztcl::vm image install", .{name});
@@ -178,8 +179,10 @@ fn imageCmd(it: *Interp, args: []const Value) Error!Value {
         // ztcl::vm image install DIR ?-force?: a folder of the file jail.
         const force = args.len == 3 and std.mem.eql(u8, try it.str(args[2]), "-force");
         if (args.len != 2 and !force) return it.wrongArgs("ztcl::vm image install dir ?-force?");
-        const dir = try jailPath(it, try it.str(args[1]));
+        const dir = try jailDir(it, try it.str(args[1]));
+        defer _ = sys.os.close(dir);
         const s = try store(it);
+        defer s.close();
         const r = s.install(a, dir, vmstore.host_arch, force) catch |e| return storeFail(it, e);
         var items = [6]Value{ .{ .str = "name" }, .{ .str = r.name }, .{ .str = "counter" }, .{ .int = @intCast(r.counter) }, .{ .str = "key" }, .{ .str = r.key } };
         return value.wrapList(a, try a.dupe(Value, &items));
@@ -187,6 +190,7 @@ fn imageCmd(it: *Interp, args: []const Value) Error!Value {
     if (std.mem.eql(u8, sub, "list")) {
         if (args.len != 1) return it.wrongArgs("ztcl::vm image list");
         const s = try store(it);
+        defer s.close();
         const entries = s.list(a) catch |e| return storeFail(it, e);
         var out: std.ArrayList(Value) = .empty;
         for (entries) |e| {
@@ -201,6 +205,7 @@ fn imageCmd(it: *Interp, args: []const Value) Error!Value {
         if (args.len != 2) return it.wrongArgs("ztcl::vm image verify name");
         const name = try it.str(args[1]);
         const s = try store(it);
+        defer s.close();
         const counter = (s.current(a, name) catch |e| return storeFail(it, e)) orelse return storeFail(it, error.NotFound);
         var c = s.load(a, name, counter) catch |e| return storeFail(it, e);
         const key = c.key.name;
@@ -215,34 +220,24 @@ fn imageCmd(it: *Interp, args: []const Value) Error!Value {
         const name = try it.str(args[1]);
         const counter: ?u64 = if (args.len == 3) @intCast(@max(0, try it.int(args[2]))) else null;
         const s = try store(it);
+        defer s.close();
         s.remove(a, name, counter) catch |e| return storeFail(it, e);
         return .{ .str = "" };
     }
     return it.fail("bad option \"{s}\": must be install, list, remove, or verify", .{sub});
 }
 
-/// The host path of a folder of the script, below the root folder.
-fn jailPath(it: *Interp, path: []const u8) Error![]const u8 {
+/// A descriptor of a folder of the script, below the root folder,
+/// opened through the jail. The store reads the release through it with
+/// no symlink, so no swap of a path after the check of the jail counts.
+fn jailDir(it: *Interp, path: []const u8) Error!i32 {
     if (it.capabilities & @backingInt(interp.Capability.file) == 0 or !it.fs_ok())
         return it.failCode("ZTCL VM NOFILE", "a path of ztcl::vm needs the file capability", .{});
     const rel = try fsroot.need(it, path);
-    const fd = switch (try fsroot.openRel(it, rel, .{ .directory = true }, 0)) {
+    return switch (try fsroot.openRel(it, rel, .{ .directory = true }, 0)) {
         .fd => |f| f,
-        .err => |e| return fsroot.posixError(it, e, "couldn't open the folder: "),
+        .err => |e| fsroot.posixError(it, e, "couldn't open the folder: "),
     };
-    defer _ = sys.os.close(fd);
-    if (comptime builtin.os.tag == .macos) {
-        var buf: [1024]u8 = @splat(0);
-        if (std.c.fcntl(fd, std.c.F.GETPATH, &buf) < 0) return it.fail("couldn't open the folder: no path", .{});
-        return it.alloc().dupe(u8, std.mem.sliceTo(&buf, 0));
-    }
-    // /proc/self/fd/N names the folder that the jail opened.
-    var link: [32]u8 = undefined;
-    const lp = std.fmt.bufPrintSentinel(&link, "/proc/self/fd/{d}", .{fd}, 0) catch unreachable;
-    var buf: [4096]u8 = undefined;
-    const n = std.os.linux.readlink(lp, &buf, buf.len);
-    if (std.os.linux.errno(n) != .SUCCESS) return it.fail("couldn't open the folder: no path", .{});
-    return it.alloc().dupe(u8, buf[0..n]);
 }
 
 fn isRw(it: *Interp, v: Value) Error!bool {
