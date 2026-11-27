@@ -8,6 +8,7 @@ table	14000	module table and package require, and the code that more than one mo
 hello	12000	test modules ztcl::hello and ztcl::hellonet; while hello is the only module, its row also has the module table
 probe	120000	ztcl::probe: the engine, the command, the tape of ztcl debug, and the DAP server with threads, measured 119,776 (native; 102,080 before the threads of the debugger, 82,240 before the tape); a build without the module has no probe code, and ztcl.wasm leaves it out
 json	115000	ztcl::json and the tcllib json names; task 05 measured 104 480 (two forms of the walk, the writer, and the tcllib names)
+agent	30000	ztcl::agent: the Tcl text of the host loop, the core of the thread, the schema procs, and the HTTP client, measured 27,232
 formats	90000	csv, toml, msgpack, cbor, url, encode
 compress	270000	flate and zstd
 crypto	200000	hashes, HMAC, argon2, AEAD, signatures, random

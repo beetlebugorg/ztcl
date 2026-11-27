@@ -50,6 +50,10 @@ pub const table: []const Module = blk: {
     // TLS needs the TCP sockets of `sys.zig` (not on aarch64 Windows)
     // and the entropy and clock of the host.
     if (options.mod_tls and @import("sys.zig").supported and !@import("builtin").cpu.arch.isWasm()) list = list ++ @import("tls/cmd.zig").modules;
+    // The agent loop is Tcl code on ztcl::json. In a build without json
+    // its `package require ztcl::json` fails, and the size rows of the
+    // two stay apart.
+    if (options.mod_agent) list = list ++ @import("agent.zig").modules;
     break :blk list;
 };
 

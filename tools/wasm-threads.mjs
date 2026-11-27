@@ -33,8 +33,8 @@ let failed = 0;
 // The files that need a channel, a file, or a socket. The web builds
 // have none of these capabilities.
 // meter.tcl needs the capability meter, which ztcl-threads.mjs does not
-// give yet.
-const skip = new Set(["lib.tcl", "chan.tcl", "collect.tcl", "meter.tcl"]);
+// give yet, and agent.tcl needs sockets.
+const skip = new Set(["lib.tcl", "chan.tcl", "collect.tcl", "meter.tcl", "agent.tcl"]);
 const webDir = path.join(root, "tests/web");
 
 // The limits and capabilities of the line `# thread-tests-flags:`, as

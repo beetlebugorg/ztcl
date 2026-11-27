@@ -591,3 +591,11 @@ sub: ztcl::meter run NAME SCRIPT | Runs SCRIPT in the current interpreter and co
 sub: ztcl::meter record NAME ?-tenant TEXT? ?-script TEXT? ?-sign? ?-key SEED? | The usage record of NAME: one line of JSON with the SHA-256 of the record before it.
 sub: ztcl::meter verify RECORD PUBLICKEY | 1 when the signature of RECORD matches the hex public key, else 0.
 sub: ztcl::meter pubkey SEED | The hex public key of a hex seed.
+== ztcl::agent
+syn: ztcl::agent subcommand ?arg ...?
+sub: ztcl::agent run ?-option value ...? | Runs the loop.
+sub: ztcl::agent doc NAME TEXT ?ARG TYPE ...? | Sets the text of the tool NAME and the types of its arguments.
+sub: ztcl::agent describe NAME | The spec of the command NAME as a tool: name, text, JSON schema, and parameters.
+sub: ztcl::agent check SCHEMA VALUE | VALUE when it matches the result schema SCHEMA, else the error ZTCL AGENT RESULT.
+sub: ztcl::agent schema SCHEMA | The JSON schema of a result schema.
+sub: ztcl::agent post URL HEADERS BODY | One HTTP/1.1 POST of a JSON body.

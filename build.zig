@@ -775,6 +775,7 @@ const all_modules = [_]Mod{
     .{ .name = "probe", .std = true },
     .{ .name = "disasm", .std = true },
     .{ .name = "tls", .std = true },
+    .{ .name = "agent", .std = true },
 };
 
 /// The flag of each module after the preset, the flags, and the rule
