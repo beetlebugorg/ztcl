@@ -560,6 +560,7 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
     defer report(&it);
     it.output = .{ .ctx = out, .write = write };
     it.mem_limit = 2 << 30;
+    it.vm_host.image_store = imageStore(h.gpa, h.env) catch "";
     // The runner starts the child process of an isolated thread.
     if (comptime tcl.isothread.supported) it.iso_runner = std.process.executablePathAlloc(h.io.?, arena) catch null;
     if (setup) |f| try f(&it);
@@ -902,4 +903,14 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
             try out.print("error: {s}\n", .{msg});
         }
     }
+}
+
+/// The folder of the store of signed guest images (`ztcl::vm image`):
+/// ZTCL_VM_IMAGES, or the data folder of the user.
+fn imageStore(a: std.mem.Allocator, env: anytype) ![]const u8 {
+    if (env("ZTCL_VM_IMAGES")) |p| return p;
+    const home = env("HOME") orelse return "";
+    if (builtin.os.tag == .macos) return std.fmt.allocPrint(a, "{s}/Library/Application Support/ztcl/vm-images", .{home});
+    if (env("XDG_DATA_HOME")) |x| return std.fmt.allocPrint(a, "{s}/ztcl/vm-images", .{x});
+    return std.fmt.allocPrint(a, "{s}/.local/share/ztcl/vm-images", .{home});
 }

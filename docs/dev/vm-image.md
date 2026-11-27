@@ -86,6 +86,10 @@ dm-mod.create="root,,,ro,0 SECTORS verity 1 /dev/vda /dev/vda 4096 4096 BLOCKS B
 
 The disk is the first virtio-blk disk of the guest (`/dev/vda`), read-only. A block that does not match the tree gives an error of read in the guest. The build is reproducible: the kernel and BusyBox get a fixed time, user, and host (`SOURCE_DATE_EPOCH`, `KBUILD_BUILD_*`), and squashfs gets fixed times and owners. The log of `image.sh` prints the SHA-256 of the kernel and of the disk, and the root hash, of each architecture.
 
+## The store
+
+`src/vmstore.zig` keeps the images of a user: `objects/SHA256` for each file, `releases/NAME/COUNTER/` with the manifest and its signature, and `releases/NAME/current` and `highest`. A file comes in under `tmp/`, is checked against the manifest, and moves to `objects/` with a rename; the release folder and then `current` change with a rename too, so an update is atomic and a running guest keeps its files. `ztcl::vm image install|list|verify|remove` and `ztcl::vm create -image` use it (`docs/modules/vm.md`).
+
 ## A rotation
 
 When the current key may be known to someone else (a leak of the secret, or a compromise of a workflow or of the repository):

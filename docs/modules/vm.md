@@ -56,6 +56,25 @@ Each path is a path below the root folder of `file`. The framework gets the fina
 - `console` gives the console of the guest (`hvc0`) as a channel, one time for each guest.
 - `delete` stops the guest at once and frees it. The end of the interpreter deletes each guest.
 
+## Images
+
+A signed guest image comes from the release of the image (ztcl#312): a manifest of its files, signed with a key that ztcl has built in, the kernel, and a read-only root disk with `dm-verity`. `docs/dev/vm-image.md` has the format and the keys.
+
+```tcl
+ztcl::vm image install ./ztcl-guest            ;# name ztcl-guest counter 7 key current
+set vm [ztcl::vm create -image ztcl-guest -memory 128]
+ztcl::vm start $vm
+ztcl::vm exec $vm /bin/busybox uname -m
+```
+
+- `image install DIR ?-force?` checks the signature of `DIR/manifest.json` and the SHA-256 of each file, copies the files of this architecture (and of each other one that `DIR` has) into the store, and makes the release the current one. `DIR` is a folder below the root folder. A release with a counter below the highest that the store has seen is a rollback, refused without `-force`. It gives a dict: `name`, `counter`, and `key` (the key that signed it).
+- `image list` gives a dict for each image: `name`, `releases` (the counters in the store), and `current`.
+- `image verify NAME` checks the signature of the current release and the SHA-256 of each of its files in the store again.
+- `image remove NAME ?COUNTER?` removes a release, or each release of the image, and each file that no release needs. The highest counter stays, so a removal does not open the door to an older release.
+- `create -image NAME` boots the current release: its kernel, its initramfs, its command line, and its disks, read-only and first (`/dev/vda` is the root). It checks the SHA-256 of the kernel and the initramfs at each `create`; a disk with `dm-verity` checks each block when the guest reads it. It takes no `-kernel`, `-initrd`, or `-cmdline`.
+
+The store is a folder of the user: `ZTCL_VM_IMAGES`, or `~/Library/Application Support/ztcl/vm-images` on macOS and `$XDG_DATA_HOME/ztcl/vm-images` (`~/.local/share/...`) on Linux. A script names an image, never a path of the store. `image fetch` and `image update` (a download of a release of GitHub) come later.
+
 ## Limits
 
 The embedder sets `Interp.vm_host`:
@@ -99,5 +118,11 @@ A start of a guest with 1 CPU and 64 MB is about 100 ms on an M1 Mac, and 86 ms 
 | `ZTCL VM AGENT` | `no program of the guest accepted a connection on port 1024`, for `-warm 1` after 10 seconds; `exec failed (errno 2)` and the other errors of the agent; `the agent of the guest vm1 did not answer on port 1024` |
 | `ZTCL VM TIMEOUT` | `the guest vm1 gave no answer in time`, for `exec` past `-timeout` |
 | `ZTCL VM CONSOLE` | `the console of the guest vm1 is a channel already` |
+| `ZTCL VM STORE` | `no store of images: the embedder gives no folder` |
+| `ZTCL VM IMAGE SIGNATURE` | `the manifest is not signed by a key that this ztcl trusts`, and the other failures of the signature |
+| `ZTCL VM IMAGE ROLLBACK` | `the store has a newer release of the image: pass -force to install an older one` |
+| `ZTCL VM IMAGE HASH` | `a file of the image does not have the SHA-256 of its manifest` |
+| `ZTCL VM IMAGE MISSING` | `the image has no files for arm64` |
+| `ZTCL VM IMAGE NAME` | `no image named "x" in the store: install it with ztcl::vm image install` |
 | `ZTCL VM FRAMEWORK` | The text of the framework, such as for a kernel file that it cannot boot |
 | `POSIX EACCES` | `couldn't open "../x": permission denied`, for a path outside the root folder |
