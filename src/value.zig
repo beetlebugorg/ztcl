@@ -335,7 +335,7 @@ pub threadlocal var precision: u8 = 0;
 /// The double is m * 2^e. For e >= 0 the integer m * 2^e is exact. For
 /// e < 0 the integer m * 5^-e has the same digits as m * 2^e, with the
 /// decimal point -e places from the right.
-fn exactDigits(x: f64, p: usize, out: []u8) i32 {
+pub fn exactDigits(x: f64, p: usize, out: []u8) i32 {
     const bits: u64 = @bitCast(x);
     const raw_exp: i32 = @intCast((bits >> 52) & 0x7ff);
     var m: u64 = bits & ((@as(u64, 1) << 52) - 1);
