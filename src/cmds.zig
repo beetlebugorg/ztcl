@@ -1330,6 +1330,8 @@ fn cmdLsearch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var subindices = false;
     var start_v: ?Value = null;
     var path: ?[]const Value = null;
+    // The groups of -stride (Tcl 9.1, TIP 351). A stride of 1 is no group.
+    var stride: usize = 1;
     if (argv.len < 3) return it.wrongArgs("lsearch ?-option value ...? list pattern");
     const last = argv.len - 2;
     var oi: usize = 1;
@@ -1377,11 +1379,30 @@ fn cmdLsearch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             oi += 1;
             path = try it.list(argv[oi]);
             try checkSelect(it, path.?);
+        } else if (it.tcl9() and eql(s, "-stride")) {
+            if (oi + 1 >= last) return it.fail("\"-stride\" option must be followed by stride length", .{});
+            oi += 1;
+            const n = try it.int(argv[oi]);
+            if (n < 1) return it.fail("stride length must be at least 1", .{});
+            stride = std.math.cast(usize, n) orelse return it.fail("list size must be a multiple of the stride length", .{});
+        } else if (it.tcl9()) {
+            return it.fail("bad option \"{s}\": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, -stride, or -subindices", .{s});
         } else return it.fail("bad option \"{s}\": must be -all, -ascii, -bisect, -decreasing, -dictionary, -exact, -glob, -increasing, -index, -inline, -integer, -nocase, -not, -real, -regexp, -sorted, -start, or -subindices", .{s});
     }
     if (subindices and path == null) return it.fail("-subindices cannot be used without -index option", .{});
     if (bisect and (all or not)) return it.fail("-bisect is not compatible with -all or -not", .{});
     const items = try it.list(argv[argv.len - 2]);
+    if (items.len % stride != 0) return it.fail("list size must be a multiple of the stride length", .{});
+    // With groups, the first index of -index picks the element of the
+    // group, and the rest of the indexes apply to that element.
+    var lead: usize = 0;
+    if (stride > 1) if (path) |p| {
+        const n = try index(it, p[0], stride);
+        if (n < 0) return it.fail("index \"{s}\" out of range", .{try it.str(p[0])});
+        if (n >= stride) return it.fail("when used with \"-stride\", the leading \"-index\" value must be within the group", .{});
+        lead = @intCast(n);
+        path = p[1..];
+    };
     const pat_v = argv[argv.len - 1];
     const pat = try it.str(pat_v);
     const typed = match == .exact or match == .sorted;
@@ -1391,10 +1412,12 @@ fn cmdLsearch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (start_v) |sv| {
         const n = try index(it, sv, items.len);
         first = if (n < 0) 0 else @intCast(n);
+        // A start in a group starts at the group.
+        first -= first % stride;
     }
     // The first exact match needs only equality. A string item of
     // another length fails with one compare.
-    if (match == .exact and kind == .ascii and !nocase and path == null and !all and !not) {
+    if (match == .exact and kind == .ascii and !nocase and path == null and !all and !not and stride == 1) {
         for (items[@min(first, items.len)..], @min(first, items.len)..) |key, k| {
             const text = if (key == .str) key.str else try it.str(key);
             if (text.len == pat.len and std.mem.eql(u8, text, pat)) return if (inl) key else .{ .int = @intCast(k) };
@@ -1404,8 +1427,8 @@ fn cmdLsearch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var out: std.ArrayList(Value) = .empty;
     var best: i64 = -1;
     var i = first;
-    while (i < items.len) : (i += 1) {
-        var key = items[i];
+    while (i < items.len) : (i += stride) {
+        var key = items[i + lead];
         if (path) |p| for (p) |ix| {
             const sub = try it.list(key);
             const n = try index(it, ix, sub.len);
@@ -1434,17 +1457,30 @@ fn cmdLsearch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         if (hit == not) continue;
         var v: Value = .{ .int = @intCast(i) };
         if (inl) {
+            if (!subindices and stride > 1) {
+                if (!all) return value.wrapList(it.alloc(), try it.alloc().dupe(Value, items[i .. i + stride]));
+                try out.appendSlice(it.alloc(), items[i .. i + stride]);
+                continue;
+            }
             v = if (subindices) key else items[i];
         } else if (subindices) {
-            const full = try it.alloc().alloc(Value, path.?.len + 1);
-            full[0] = v;
-            @memcpy(full[1..], path.?);
-            v = try value.wrapList(it.alloc(), full);
+            v = .{ .int = @intCast(i + lead) };
+            if (path.?.len > 0) {
+                const full = try it.alloc().alloc(Value, path.?.len + 1);
+                full[0] = v;
+                @memcpy(full[1..], path.?);
+                v = try value.wrapList(it.alloc(), full);
+            }
         }
         if (!all) return v;
         try out.append(it.alloc(), v);
     }
-    if (bisect) return if (inl) (if (best >= 0) items[@intCast(best)] else Value.empty) else .{ .int = best };
+    if (bisect) {
+        if (!inl) return .{ .int = best };
+        if (best < 0) return Value.empty;
+        const b: usize = @intCast(best);
+        return if (stride > 1) value.wrapList(it.alloc(), try it.alloc().dupe(Value, items[b .. b + stride])) else items[b];
+    }
     if (all) return value.wrapList(it.alloc(), out.items);
     return if (inl) Value.empty else .{ .int = -1 };
 }

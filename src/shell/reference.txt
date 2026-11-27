@@ -122,6 +122,7 @@ opt: -nocase | Matches letters with no case.
 opt: -index INDEX | Compares element INDEX of each element.
 opt: -sorted | The list is sorted, and the search is a binary search.
 opt: -start INDEX | Starts at INDEX.
+opt: -stride N | Tcl 9.1 only: the list is groups of N elements.
 == lsort
 syn: lsort ?-option value ...? list
 opt: -ascii | Compares the text (the default).

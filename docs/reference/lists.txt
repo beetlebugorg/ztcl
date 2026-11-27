@@ -109,6 +109,7 @@ opt: -nocase | Matches letters with no case.
 opt: -index INDEX | Compares element INDEX of each element.
 opt: -sorted | The list is sorted, and the search is a binary search.
 opt: -start INDEX | Starts at INDEX.
+opt: -stride N | Tcl 9.1 only: the list is groups of N elements. The search compares the first element of each group, or the element of -index in the group, and gives the index of the group. With -inline it gives the group.
 ex: lsearch {a b c} c => 2
 ex: lsearch -all -inline {apple box ant} a* => apple ant
 ex: lsearch -index 0 {{x 1} {y 2}} y => 1
