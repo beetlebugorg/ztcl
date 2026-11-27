@@ -96,7 +96,9 @@ pub const Host = struct {
     /// embedder with no network leaves it null, and fetch then gives
     /// ZTCL VM UNAVAILABLE. A file passes the checks of the signed
     /// manifest before it counts, so the hook needs no trust.
-    fetch: ?*const fn (ctx: ?*anyopaque, url: []const u8, fd: i32) FetchError!void = null,
+    /// The hook stops with `error.TooLarge` after `max` bytes, so a mirror
+    /// cannot fill the disk.
+    fetch: ?*const fn (ctx: ?*anyopaque, url: []const u8, fd: i32, max: u64) FetchError!void = null,
     fetch_ctx: ?*anyopaque = null,
     /// The image keys of the embedder, trusted with the keys of ztcl.
     /// An embedder signs its own images (a guest with its own tools)
@@ -114,7 +116,7 @@ pub const Host = struct {
 /// memory.
 const thread_stack = 2 * 1024 * 1024;
 
-pub const FetchError = error{ Network, Status, Io, OutOfMemory };
+pub const FetchError = error{ Network, Status, Io, OutOfMemory, TooLarge };
 
 /// The runner gives the download of `image fetch` (`zig build -Dvm-fetch`).
 pub const runner_fetch = @hasDecl(@import("build_options"), "vm_fetch") and @import("build_options").vm_fetch;
@@ -395,7 +397,7 @@ fn fetchCmd(it: *Interp, args: []const Value, update: bool) Error!Value {
     const list = blk: {
         var t = s.tempDir(a) catch |e| return storeFail(it, e);
         defer t.remove(a, s);
-        try download(it, hook, t, a, "", releases_api);
+        try download(it, hook, t, a, "", releases_api, 16 << 20);
         break :blk vmstore.readAll(a, t.fd, "releases.json", 16 << 20) catch |e| return storeFail(it, e);
     };
     const tags = imageTags(a, list) catch return it.failCode("ZTCL VM FETCH", "the list of releases of {s} is not JSON", .{releases_api});
@@ -484,7 +486,7 @@ fn fetchFrom(it: *Interp, hook: anytype, s: vmstore.Store, a: std.mem.Allocator,
         return it.fail("a release is fetched over https", .{});
     var t = s.tempDir(a) catch |e| return storeFail(it, e);
     defer t.remove(a, s);
-    for ([_][]const u8{ "manifest.json", "manifest.json.sig" }) |name| try download(it, hook, t, a, root, name);
+    for ([_][]const u8{ "manifest.json", "manifest.json.sig" }, [_]u64{ 1 << 20, 1 << 16 }) |name, max| try download(it, hook, t, a, root, name, max);
     // The manifest first: its signature, and whether it is new.
     const pre = (s.peek(a, t.fd) catch |e| return storeFail(it, e));
     const cur = s.current(a, pre.name) catch |e| return storeFail(it, e);
@@ -494,7 +496,7 @@ fn fetchFrom(it: *Interp, hook: anytype, s: vmstore.Store, a: std.mem.Allocator,
     };
     for (pre.files) |f| {
         if (std.mem.indexOfAny(u8, f, "/\\") != null or std.mem.startsWith(u8, f, ".")) return storeFail(it, error.BadManifest);
-        try download(it, hook, t, a, root, f);
+        try download(it, hook, t, a, root, f, vmstore.max_object);
     }
     const r = s.install(a, t.fd, vmstore.host_arch, down) catch |e| return storeFail(it, e);
     var items = [8]Value{ .{ .str = "name" }, .{ .str = r.name }, .{ .str = "counter" }, .{ .int = @intCast(r.counter) }, .{ .str = "key" }, .{ .str = r.key }, .{ .str = "status" }, .{ .str = "installed" } };
@@ -503,11 +505,11 @@ fn fetchFrom(it: *Interp, hook: anytype, s: vmstore.Store, a: std.mem.Allocator,
 
 /// Downloads `root` + `name` into the file `name` of `t`, or, with an
 /// empty `root`, the URL `name` into the file releases.json.
-fn download(it: *Interp, hook: anytype, t: vmstore.Temp, a: std.mem.Allocator, root: []const u8, name: []const u8) Error!void {
+fn download(it: *Interp, hook: anytype, t: vmstore.Temp, a: std.mem.Allocator, root: []const u8, name: []const u8, max: u64) Error!void {
     const fd = t.create(a, if (root.len == 0) "releases.json" else name) catch |e| return storeFail(it, e);
     defer sys.close(fd);
     const url = try std.fmt.allocPrint(a, "{s}{s}", .{ root, name });
-    hook(it.vm_host.fetch_ctx, url, fd) catch |e| return it.failCode("ZTCL VM FETCH", "the download of {s} failed: {s}", .{ url, @errorName(e) });
+    hook(it.vm_host.fetch_ctx, url, fd, max) catch |e| return it.failCode("ZTCL VM FETCH", "the download of {s} failed: {s}", .{ url, @errorName(e) });
 }
 
 /// A descriptor of a folder of the script, below the root folder,

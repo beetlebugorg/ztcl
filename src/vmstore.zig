@@ -302,6 +302,38 @@ pub fn readAll(a: Allocator, dir: i32, path: []const u8, max: usize) Error![]u8 
     return out.toOwnedSlice(a);
 }
 
+/// The most bytes of one file of a release.
+pub const max_object: u64 = 8 << 30;
+
+/// The SHA-256 of the file `path` below `dir`, in lowercase hex, read in
+/// parts of 64 KiB. With `copy`, each part also goes to that descriptor.
+/// A file of more than `max_object` bytes is an error.
+fn hashFile(a: Allocator, dir: i32, path: []const u8, copy: ?i32) Error![64]u8 {
+    const p = try parent(a, dir, path);
+    defer p.close(a);
+    const fd = try fs.openRead(p.fd, p.base);
+    defer fs.close(fd);
+    var h = std.crypto.hash.sha2.Sha256.init(.{});
+    var buf: [65536]u8 = undefined;
+    var total: u64 = 0;
+    while (true) {
+        const n = fs.read(fd, &buf) orelse return error.Io;
+        if (n == 0) break;
+        total += n;
+        if (total > max_object) return error.Io;
+        h.update(buf[0..n]);
+        if (copy) |out| {
+            var off: usize = 0;
+            while (off < n) {
+                const w = fs.write(out, buf[off..n]) orelse return error.Io;
+                if (w == 0) return error.Io;
+                off += w;
+            }
+        }
+    }
+    return std.fmt.bytesToHex(h.finalResult(), .lower);
+}
+
 /// Writes `data` to `path` through a file of tmp/ and a rename.
 fn writeAtomic(a: Allocator, s: Store, path: []const u8, data: []const u8) Error!void {
     const tmp = try s.tmpName(a);
@@ -407,7 +439,7 @@ pub const Store = struct {
     pub fn readObject(s: Store, a: Allocator, sha: []const u8) Error![]u8 {
         const p = try objectRel(a, sha);
         defer a.free(p);
-        const data = readAll(a, s.fd, p, 8 << 30) catch |e| return if (e == error.NotFound) error.Missing else e;
+        const data = readAll(a, s.fd, p, max_object) catch |e| return if (e == error.NotFound) error.Missing else e;
         errdefer a.free(data);
         try vmimage.checkHash(data, sha);
         return data;
@@ -442,14 +474,29 @@ pub const Store = struct {
         return s.counterFile(a, name, "current");
     }
 
-    /// Copies one file of a release into objects/ after a check of its
-    /// SHA-256. A file that is there already stays.
-    fn addObject(s: Store, a: Allocator, data: []const u8, sha: []const u8) Error!void {
-        try vmimage.checkHash(data, sha);
+    /// Copies the file `path` below `src` into objects/ in parts, with
+    /// the SHA-256 of the parts, and renames it into place when the hash is
+    /// `sha`. A file that is there already stays.
+    fn addObject(s: Store, a: Allocator, src: i32, path: []const u8, sha: []const u8) Error!void {
         const dest = try objectRel(a, sha);
         defer a.free(dest);
         if (exists(a, s.fd, dest)) return;
-        try writeAtomic(a, s, dest, data);
+        const tmp = try s.tmpName(a);
+        defer a.free(tmp);
+        const tp = try parent(a, s.fd, tmp);
+        defer tp.close(a);
+        const out = try fs.createNew(tp.fd, tp.base);
+        const got = hashFile(a, src, path, out) catch |e| {
+            fs.close(out);
+            fs.unlink(tp.fd, tp.base, false);
+            return e;
+        };
+        fs.close(out);
+        if (!std.mem.eql(u8, &got, sha)) {
+            fs.unlink(tp.fd, tp.base, false);
+            return error.Hash;
+        }
+        try rename(a, s.fd, tmp, dest);
     }
 
     /// Installs the release in the folder `src` (a manifest, its
@@ -480,12 +527,10 @@ pub const Store = struct {
             for (x.disks) |d| try files.append(a, .{ .file = d.file, .sha256 = d.sha256 });
             for (files.items) |f| {
                 if (std.mem.indexOf(u8, f.file, "..") != null) return error.BadManifest;
-                const data = readAll(a, src, f.file, 8 << 30) catch |e| switch (e) {
+                s.addObject(a, src, f.file, f.sha256) catch |e| switch (e) {
                     error.NotFound => if (required) return error.Missing else continue,
                     else => return e,
                 };
-                defer a.free(data);
-                try s.addObject(a, data, f.sha256);
             }
         }
         // The release folder, then `highest` and `current`.
@@ -547,9 +592,8 @@ pub const Store = struct {
         for (files.items) |f| {
             const p = try objectRel(a, f.sha256);
             defer a.free(p);
-            const data = readAll(a, s.fd, p, 8 << 30) catch |e| return if (e == error.NotFound) error.Missing else e;
-            defer a.free(data);
-            try vmimage.checkHash(data, f.sha256);
+            const got = hashFile(a, s.fd, p, null) catch |e| return if (e == error.NotFound) error.Missing else e;
+            if (!std.mem.eql(u8, &got, f.sha256)) return error.Hash;
             n += 1;
         }
         return n;
@@ -854,6 +898,35 @@ test "vmstore: install, list, check, rollback, and remove" {
     try std.testing.expect(!exists(a, s.fd, obj));
     try std.testing.expectEqual(@as(?u64, null), try s.current(a, r.name));
     try std.testing.expectError(error.NotFound, s.remove(a, r.name, 3));
+}
+
+test "vmstore: a file with the wrong bytes leaves no object and no file in tmp" {
+    if (comptime !supported) return error.SkipZigTest;
+    const a = std.testing.allocator;
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const base = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path});
+    defer a.free(base);
+    const bfd = try openDirFd(a, base);
+    defer fs.close(bfd);
+    try mkdirs(a, bfd, "src");
+    try writeNew(a, bfd, "src/manifest.json", @embedFile("vmimage_fixtures/manifest.json"));
+    try writeNew(a, bfd, "src/manifest.json.sig", @embedFile("vmimage_fixtures/manifest.json.sig.good"));
+    try writeNew(a, bfd, "src/Image", "tesT");
+    const src = try join(a, &.{ base, "src" });
+    defer a.free(src);
+    const sfd = try openDirFd(a, src);
+    defer fs.close(sfd);
+    const root = try join(a, &.{ base, "store" });
+    defer a.free(root);
+    const s = try Store.open(a, root);
+    defer s.close();
+    try std.testing.expectError(error.Hash, s.install(a, sfd, "arm64", false));
+    for ([_][]const u8{ "objects", "tmp" }) |d| {
+        const l = try listDir(a, s.fd, d);
+        defer freeList(a, l);
+        try std.testing.expectEqual(@as(usize, 0), l.len);
+    }
 }
 
 test "vmstore: a symlink in the release or in the store is refused" {
