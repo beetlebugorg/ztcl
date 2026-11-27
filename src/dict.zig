@@ -392,6 +392,26 @@ fn getIn(it: *Interp, d: Value, keys: []const Value) Error!Value {
     return cur;
 }
 
+/// `dict get $d $key` with one key. The `access` form `dict_get` of the
+/// bytecode calls it too, so both paths give the same result and error.
+pub fn getOne(it: *Interp, d: Value, key: Value) Error!Value {
+    return getIn(it, d, &.{key});
+}
+
+/// `dict exists $d $key` with one key.
+pub fn existsOne(it: *Interp, d: Value, key: Value) Error!Value {
+    const items = readPairs(it, d) catch |e| {
+        if (e != error.TclError) return e;
+        return .{ .int = 0 };
+    };
+    return .{ .int = @intFromBool(try lookup(it, d, items, key) != null) };
+}
+
+/// `dict size $d`.
+pub fn sizeOf(it: *Interp, d: Value) Error!Value {
+    return .{ .int = @intCast((try readPairs(it, d)).len / 2) };
+}
+
 fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
@@ -582,10 +602,12 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
                 if (isChecked(args[0])) return args[0];
                 return wrapDict(it, try pairs(it, args[0]));
             }
+            if (args.len == 2) return getOne(it, args[0], args[1]);
             return getIn(it, args[0], args[1..]);
         },
         .exists => {
             if (args.len < 2) return it.wrongArgs("dict exists dictionary key ?key ...?");
+            if (args.len == 2) return existsOne(it, args[0], args[1]);
             var cur = args[0];
             for (args[1..]) |k| {
                 const items = readPairs(it, cur) catch |e| {
@@ -628,7 +650,7 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
         },
         .size => {
             if (args.len != 1) return it.wrongArgs("dict size dictionary");
-            return .{ .int = @intCast((try readPairs(it, args[0])).len / 2) };
+            return sizeOf(it, args[0]);
         },
         .@"for" => {
             if (args.len != 3) return it.wrongArgs("dict for {{keyVarName valueVarName}} dictionary script");

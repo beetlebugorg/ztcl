@@ -1,0 +1,12 @@
+1548 {k0 49 k1 43 k2 44 k3 45 k4 46 k5 47 k6 48}
+10
+{a 10 b 2} {a 20 b 2} 10 20
+{1 {a 1 b 2}} {a 3 b 2}
+2 {a 1 b 2 z 2} 1
+{0 1 read read 2 read read 3} {a 3}
+1 {key "nosuch" not known in dictionary} NONE 0 1 {unmatched open brace in dict}
+5 1 0 3
+1 {missing value to go with key} 0 1 {missing value to go with key}
+2 1 2
+{a 1} {a 3 b 9} {a 3 b 9} {a 4 b 9}
+18 12 c
