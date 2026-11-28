@@ -17,7 +17,7 @@ command chan {
     }
     returns {The result of the subcommand.}
     see {open close gets read puts fconfigure {file channels}}
-    difference {`chan` has no `create`, `push`, `pop`, or `postevent`, so the message of an unknown subcommand does not list them ([issue 690](https://github.com/beetlebugorg/ztcl/issues/690)).}
+    difference {`chan` has no `push` or `pop`, so the message of an unknown subcommand does not list them ([issue 690](https://github.com/beetlebugorg/ztcl/issues/690)).}
     release {In Tcl 9.1 the messages of a wrong count of arguments name the channel `channel`, and in Tcl 8.6 `channelId`.}
     example {
         set f [open a.txt w]; chan puts $f hello; chan close $f
@@ -27,9 +27,9 @@ command chan {
         set line
     } hello
     example {lsort [chan names std*]} {stderr stdin stdout}
-    error {chan bogus} {unknown or ambiguous subcommand "bogus": must be blocked, close, configure, copy, eof, event, flush, gets, names, pending, pipe, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus} -tcl 8.6
-    error {chan bogus} {unknown or ambiguous subcommand "bogus": must be blocked, close, configure, copy, eof, event, flush, gets, isbinary, names, pending, pipe, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus} -tcl 9.1
-    error {chan p} {unknown or ambiguous subcommand "p": must be blocked, close, configure, copy, eof, event, flush, gets, names, pending, pipe, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND p} -tcl 8.6
+    error {chan bogus} {unknown or ambiguous subcommand "bogus": must be blocked, close, configure, copy, create, eof, event, flush, gets, names, pending, pipe, postevent, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus} -tcl 8.6
+    error {chan bogus} {unknown or ambiguous subcommand "bogus": must be blocked, close, configure, copy, create, eof, event, flush, gets, isbinary, names, pending, pipe, postevent, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND bogus} -tcl 9.1
+    error {chan p} {unknown or ambiguous subcommand "p": must be blocked, close, configure, copy, create, eof, event, flush, gets, names, pending, pipe, postevent, puts, read, seek, tell, or truncate} {TCL LOOKUP SUBCOMMAND p} -tcl 8.6
     error {chan blocked} {wrong # args: should be "chan blocked channelId"} {TCL WRONGARGS} -tcl 8.6
     error {chan blocked} {wrong # args: should be "chan blocked channel"} {TCL WRONGARGS} -tcl 9.1
     error {chan close nochan} {can not find channel named "nochan"} {TCL LOOKUP CHANNEL nochan}
@@ -241,6 +241,115 @@ command chan {
             set t
         } 2
         error {chan tell nochan} {can not find channel named "nochan"} {TCL LOOKUP CHANNEL nochan}
+    }
+
+    subcommand create {
+        synopsis {chan create MODE CMDPREFIX}
+        summary {Makes a channel whose driver is a Tcl command.}
+        description {
+            Makes a reflected channel with the name `rcN` and gives the name. MODE is a list of `read` and `write`. Each operation of the channel calls CMDPREFIX with the name of a method, the name of the channel, and the arguments of the method:
+
+            - `initialize CHAN MODE` gives the list of the methods of the handler. `initialize`, `finalize`, and `watch` are required, `read` for the mode `read`, and `write` for the mode `write`. `cget` and `cgetall` come as a pair.
+            - `finalize CHAN` runs at the close. Its error is the error of `close`.
+            - `read CHAN COUNT` gives at most COUNT bytes, and an empty string at the end of the data.
+            - `write CHAN BYTES` gives the count of the bytes that it wrote, 1 or more. The channel calls it again with the rest.
+            - `seek CHAN OFFSET BASE` gives the new place, for `seek` and `tell`. BASE is `start`, `current`, or `end`.
+            - `watch CHAN EVENTS` gets the events with a handler, a list of `read` and `write`, each time the list changes.
+            - `configure CHAN OPTION VALUE`, `cget CHAN OPTION`, and `cgetall CHAN` handle the options that are not standard options of `fconfigure`.
+            - `blocking CHAN MODE` gets 0 or 1 at a change of `-blocking`.
+
+            The buffers, the encoding, and the translation of the channel work as for each other channel. The events of the channel come from `chan postevent`. A `read` that fails with `EAGAIN` is an error: tclsh reads it as a channel with no data yet.
+        }
+        returns {The name of the channel.}
+        see {{chan postevent} {chan configure}}
+        argument MODE {
+            type {list of read and write}
+            summary {The directions of the channel.}
+        }
+        argument CMDPREFIX {
+            type {command prefix}
+            summary {The handler of the channel.}
+        }
+        example {
+            proc drv {cmd c args} {
+                switch $cmd {
+                    initialize {return {initialize finalize watch read}}
+                    read {
+                        set n [lindex $args 0]
+                        set d [string range $::data 0 [expr {$n - 1}]]
+                        set ::data [string range $::data $n end]
+                        return $d
+                    }
+                }
+            }
+            set ::data "one\ntwo\n"
+            set c [chan create read drv]
+            set r [list [chan gets $c] [chan read $c] [chan eof $c]]
+            chan close $c
+            set r
+        } {one {two
+} 1}
+        example {
+            proc out {cmd c args} {
+                switch $cmd {
+                    initialize {return {initialize finalize watch write}}
+                    write {append ::out [lindex $args 0]; return [string length [lindex $args 0]]}
+                }
+            }
+            set ::out ""
+            set c [chan create write out]
+            chan puts -nonewline $c hello
+            chan close $c
+            set ::out
+        } hello
+        error {
+            proc d2 {cmd c args} {if {$cmd eq "initialize"} {return {initialize finalize watch}}}
+            chan create read d2
+        } {chan handler "d2" lacks a "read" method} NONE
+        error {
+            proc d3 {cmd c args} {if {$cmd eq "initialize"} {return {finalize watch read}}}
+            chan create read d3
+        } {chan handler "d3" does not support all required methods} NONE
+        error {
+            proc d1 {cmd c args} {if {$cmd eq "initialize"} {return {initialize finalize watch read bogus}}}
+            chan create read d1
+        } {chan handler "d1 initialize" returned bad method "bogus": must be blocking, cget, cgetall, configure, finalize, initialize, read, seek, watch, or write} {TCL LOOKUP INDEX method bogus}
+        error {chan create bogus x} {bad mode "bogus": must be read or write} {TCL LOOKUP INDEX mode bogus}
+        error {chan create} {wrong # args: should be "chan create mode cmdprefix"} {TCL WRONGARGS}
+    }
+
+    subcommand postevent {
+        synopsis {chan postevent CHAN EVENTS}
+        summary {Posts events of a reflected channel to the event loop.}
+        description {Posts the events of the list EVENTS, `read` and `write`, for the reflected channel CHAN of `chan create`. The next pass of the event loop runs the handler of `chan event` for each event. Each event must be in the last `watch` of the channel.}
+        returns {An empty string.}
+        see {{chan create} {chan event}}
+        argument CHAN {
+            type channel
+            summary {A channel of `chan create`.}
+        }
+        argument EVENTS {
+            type {list of read and write}
+            summary {The events.}
+        }
+        example {
+            proc drv {cmd c args} {if {$cmd eq "initialize"} {return {initialize finalize watch read}}}
+            set c [chan create read drv]
+            chan event $c readable {set ::fired 1}
+            chan postevent $c read
+            update
+            chan close $c
+            set ::fired
+        } 1
+        error {
+            proc drv {cmd c args} {if {$cmd eq "initialize"} {return {initialize finalize watch read}}}
+            set c [chan create read drv]
+            catch {chan postevent $c read} m
+            chan close $c
+            error [string map [list $c rcN] $m]
+        } {tried to post events channel "rcN" is not interested in} NONE
+        error {chan postevent stdout read} {can not find reflected channel named "stdout"} {TCL LOOKUP CHANNEL stdout}
+        error {chan postevent} {wrong # args: should be "chan postevent channel eventspec"} {TCL WRONGARGS}
     }
 
     subcommand truncate {

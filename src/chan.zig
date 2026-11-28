@@ -28,6 +28,7 @@ const proc_ok = proc_mod.supported;
 const ProcTree = if (proc_ok) proc_mod.Tree else struct {};
 const ProcJob = if (proc_ok and @hasDecl(proc_mod, "Job")) proc_mod.Job else void;
 const event = @import("event.zig");
+const refl_mod = @import("chanrefl.zig");
 
 pub const Translation = enum { auto, lf, cr, crlf, binary };
 /// The line end of the output of a file of the platform, as in Tcl:
@@ -131,6 +132,9 @@ pub const Channel = struct {
     /// commands of a script on it go to `ext_op`.
     ext: ?*anyopaque = null,
     filter: ?*Filter = null,
+    /// The handler of a reflected channel of `chan create`
+    /// (`chanrefl.zig`), or null.
+    refl: ?*refl_mod.Refl = null,
 };
 
 /// Runs the command `op` of a script on a channel of a C package, with
@@ -148,6 +152,7 @@ pub var ext_events: ?ExtEvents = null;
 /// True when the channel `name` of a C package has an event to serve.
 pub fn extReady(it: *Interp, name: []const u8) bool {
     const c = it.chans.table.get(name) orelse return false;
+    if (c.refl) |r| return refl_mod.ready(r);
     if (c.ext == null) return false;
     const e = ext_events orelse return false;
     return e.ready(it, c);
@@ -156,6 +161,7 @@ pub fn extReady(it: *Interp, name: []const u8) bool {
 /// Serves the events of the channel `name` of a C package.
 pub fn extServe(cur: *Interp, it: *Interp, name: []const u8) Error!bool {
     const c = it.chans.table.get(name) orelse return false;
+    if (c.refl) |r| return refl_mod.serve(cur, it, r);
     if (c.ext == null) return false;
     const e = ext_events orelse return false;
     return e.serve(cur, it, c);
@@ -170,6 +176,8 @@ pub const State = struct {
     table: std.StringArrayHashMapUnmanaged(*Channel) = .empty,
     next: u32 = 3,
     next_sock: u32 = 0,
+    /// The number of the next name `rcN` of `chan create`.
+    next_rc: u32 = 0,
     /// The counters of the names of a thread group. With them, each
     /// channel of the group has its own name, so a channel can move to
     /// another thread (`tchan.zig`).
@@ -858,8 +866,9 @@ pub fn lookup(it: *Interp, name: []const u8) ?*Channel {
 /// What the event loop waits for on a channel, or null.
 pub fn wanted(it: *Interp, name: []const u8) ?struct { fd: i32, wfd: i32, read: bool, write: bool, ready: bool } {
     const c = it.chans.table.get(name) orelse return null;
-    // A channel of a C package has no descriptor: see `extReady`.
-    if (c.ext != null) return null;
+    // A channel of a C package or a reflected channel has no
+    // descriptor: see `extReady`.
+    if (c.ext != null or c.refl != null) return null;
     if (c.kind == .server) return .{ .fd = c.fd, .wfd = c.fd, .read = true, .write = false, .ready = false };
     const r = c.on_read != null;
     const pending = c.wbuf.items.len > 0 and !c.blocking;
@@ -961,6 +970,7 @@ pub fn cmdFileevent(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         slot.* = try it.alloc().dupe(u8, script);
         try event.watch(it, c.name);
     }
+    if (c.refl) |r| try refl_mod.rewatch(r);
     return Value.empty;
 }
 
@@ -999,7 +1009,14 @@ fn cmdClose(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             return Value.empty;
         }
     }
+    const r = c.refl;
     try closeChan(it, c);
+    // An error of `finalize` is the error of `close`.
+    if (r) |x| if (x.fin_error) |fe| {
+        it.result = fe.result;
+        it.error_code = fe.code;
+        return error.TclError;
+    };
     return Value.empty;
 }
 
@@ -1185,6 +1202,17 @@ fn cmdSeek(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             return it.failCode("TCL LOOKUP INDEX origin", "bad origin \"{s}\": must be start, current, or end", .{o});
         }
     }
+    if (c.refl) |r| {
+        try flushOut(it, c);
+        _ = try refl_mod.seek(it, r, off + adjust, whence) orelse
+            return it.failCode("POSIX EINVAL {invalid argument}", "error during seek on \"{s}\": invalid argument", .{c.name});
+        c.rbuf.clearRetainingCapacity();
+        c.rpos = 0;
+        c.at_eof = false;
+        c.hit_eof = false;
+        c.eof_drop = 0;
+        return Value.empty;
+    }
     if (c.mem) return memSeek(it, c, off, whence);
     try flushOut(it, c);
     switch (sys.seek(c.fd, off + adjust, @intCast(whence))) {
@@ -1218,6 +1246,10 @@ fn cmdTell(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2) return it.wrongArgs("tell channelId");
     const c = try find(it, argv[1]);
     if (c.ext != null) return extCall(it, c, "tell", argv[2..]);
+    if (c.refl) |r| {
+        const at = try refl_mod.seek(it, r, 0, 1) orelse return .{ .int = -1 };
+        return .{ .int = at - @as(i64, @intCast(c.rbuf.items.len - c.rpos)) + @as(i64, @intCast(c.wbuf.items.len)) };
+    }
     if (c.mem) return .{ .int = @intCast(c.rpos) };
     const at: i64 = switch (sys.seek(c.fd, 0, 1)) {
         .at => |x| x,
@@ -1279,6 +1311,11 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         }
         if (c.kind == .socket or c.kind == .server) try @import("sock.zig").options(it, c, &out);
         if (c.kind == .file and !c.mem) try serial.options(it, c.fd, &out);
+        if (c.refl) |r| if (r.has(.cgetall)) {
+            // The options of the handler come after -translation.
+            try out.appendSlice(a, try it.list(try r.call(.cgetall, &.{})));
+            return value.wrapList(a, out.items);
+        };
         // The list is in the order of Tcl: -translation is last.
         const n = out.items.len;
         const t = 2 * (base.len - 1);
@@ -1308,7 +1345,9 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }.f;
     if (opts.len == 1) {
         const o = try full(it, opts[0], &names);
-        return (try get(it, c, o)) orelse it.fail("bad option \"{s}\": should be one of {s}", .{ o, known });
+        if (try get(it, c, o)) |v| return v;
+        if (c.refl) |r| if (r.has(.cget)) return r.call(.cget, &.{.{ .str = o }});
+        return it.fail("bad option \"{s}\": should be one of {s}", .{ o, known });
     }
     if (opts.len % 2 != 0) return it.wrongArgs("fconfigure channelId ?-option value ...?");
     var i: usize = 0;
@@ -1317,6 +1356,11 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const v = opts[i + 1];
         if (eql(o, "-blocking")) {
             const b = try @import("expr.zig").truthy(it, v);
+            if (c.refl) |r| {
+                if (r.has(.blocking)) _ = try r.call(.blocking, &.{.{ .int = @intFromBool(b) }});
+                c.blocking = b;
+                continue;
+            }
             if (!b and c.filter != null) return it.fail("-blocking 0 is not supported on a TLS channel", .{});
             c.blocking = b;
             if (!c.connecting) {
@@ -1370,6 +1414,8 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             c.profile = try enc.parseProfile(it, v);
         } else if (c.kind == .file and !c.mem and try serial.set(it, c.fd, o, v)) {
             // An option of a serial port.
+        } else if (c.refl != null and c.refl.?.has(.configure)) {
+            _ = try c.refl.?.call(.configure, &.{ .{ .str = o }, v });
         } else {
             return it.fail("bad option \"{s}\": should be one of {s}", .{ o, known });
         }
@@ -1589,12 +1635,10 @@ fn usageOfChan(it: *Interp, sub: []const u8) Error!void {
 
 /// The subcommands of `chan`. `isbinary` is in Tcl 9.1 only. A unique
 /// prefix names a subcommand, as in an ensemble of Tcl.
-/// `create`, `push`, `pop`, and `postevent` (reflected channels and
-/// transforms, issue 690) are not here yet. They need a channel whose
-/// driver is a Tcl command (`create`), a stack of transforms on a
-/// channel that each read and write go through (`push`, `pop`), and
-/// the events of such a driver (`postevent`).
-const ChanSub = enum { blocked, close, configure, copy, eof, event, flush, gets, isbinary, names, pending, pipe, puts, read, seek, tell, truncate };
+/// `create` and `postevent` are in `chanrefl.zig`. `push` and `pop`
+/// (transforms, issue 690) are not here yet: they need a stack of
+/// transforms on a channel that each read and write go through.
+const ChanSub = enum { blocked, close, configure, copy, create, eof, event, flush, gets, isbinary, names, pending, pipe, postevent, puts, read, seek, tell, truncate };
 
 fn cmdChan(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     return chanSub(it, argv, cmd) catch |e| {
@@ -1626,6 +1670,8 @@ fn chanSub(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         }
     }.f;
     if (eql(sub, "truncate")) return chanTruncate(it, argv);
+    if (eql(sub, "create")) return refl_mod.create(it, argv);
+    if (eql(sub, "postevent")) return refl_mod.postevent(it, argv);
     if (eql(sub, "isbinary")) {
         if (argv.len != 3) return it.wrongArgs("chan isbinary channelId");
         const c = try find(it, argv[2]);
