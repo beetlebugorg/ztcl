@@ -175,5 +175,15 @@ test "ztcl::gc stats counts a collection, and reset starts the counts again" {
     try testing.expectEqual(@as(i64, 0), try evalInt(&it, "dict get [ztcl::gc stats] collections"));
     try testing.expectEqual(@as(i64, 0), try evalInt(&it, "dict get [ztcl::gc stats] freed"));
     try testing.expectEqualStrings("wrong # args: should be \"ztcl::gc stats|collect|reset\"", try evalStr(&it, "catch {ztcl::gc} m; set m"));
-    try testing.expectEqualStrings("bad option \"x\": must be collect, reset, or stats", try evalStr(&it, "catch {ztcl::gc x} m; set m"));
+    try testing.expectEqualStrings("unknown or ambiguous subcommand \"x\": must be collect, reset, or stats", try evalStr(&it, "catch {ztcl::gc x} m; set m"));
+}
+
+test "ztcl::gc and ztcl::meter take a unique prefix and name an unknown word in the code" {
+    var it: tcl.Interp = undefined;
+    try host(&it, false);
+    defer it.deinit();
+    try testing.expectEqualStrings("{unknown or ambiguous subcommand \"nope\": must be collect, reset, or stats} {TCL LOOKUP SUBCOMMAND nope}", try evalStr(&it, "catch {ztcl::gc nope} m o; list $m [dict get $o -errorcode]"));
+    try testing.expectEqualStrings("1", try evalStr(&it, "dict exists [ztcl::gc s] collections"));
+    try testing.expectEqualStrings("{unknown or ambiguous subcommand \"r\": must be create, delete, get, list, pubkey, record, reset, run, or verify} {TCL LOOKUP SUBCOMMAND r}", try evalStr(&it, "catch {ztcl::meter r x} m o; list $m [dict get $o -errorcode]"));
+    try testing.expectEqualStrings("x", try evalStr(&it, "ztcl::meter cr x"));
 }

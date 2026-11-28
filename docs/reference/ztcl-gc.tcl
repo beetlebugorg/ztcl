@@ -13,7 +13,7 @@ command ztcl::gc {
 
         The command is not a package: it exists when the embedder turns on the capability `meter`, as `ztcl::meter` does, and it is absent otherwise. The counts of time and of the resident set depend on the host, so the capability is off by default, as the clock is. The examples of this page run with `--allow meter`.
 
-        A subcommand has no short form. An unknown subcommand gives the message `bad option` with `-errorcode NONE` ([issue 720](https://github.com/beetlebugorg/ztcl/issues/720)).
+        A unique prefix of a subcommand names the subcommand. An unknown or ambiguous subcommand gives `-errorcode` `TCL LOOKUP SUBCOMMAND` with the word at the end.
     }
     returns {The result of the subcommand.}
     page modules/gc/
@@ -23,8 +23,8 @@ command ztcl::gc {
         dict get [ztcl::gc stats] collections
     } 0
     example {dict size [ztcl::gc stats]} 20
-    error {ztcl::gc nope} {bad option "nope": must be collect, reset, or stats} NONE
-    error {ztcl::gc s} {bad option "s": must be collect, reset, or stats} NONE
+    example {dict exists [ztcl::gc s] collections} 1
+    error {ztcl::gc nope} {unknown or ambiguous subcommand "nope": must be collect, reset, or stats} {TCL LOOKUP SUBCOMMAND nope}
     error {ztcl::gc} {wrong # args: should be "ztcl::gc stats|collect|reset"} {TCL WRONGARGS}
 
     subcommand stats {

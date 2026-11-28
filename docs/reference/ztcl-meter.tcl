@@ -14,7 +14,7 @@ command ztcl::meter {
 
         The command is not a package: it exists when the embedder turns on the capability `meter`, and it is absent otherwise. The same capability turns on the option `-meter` of `thread::create` and of `interp create`, which make the meter when it does not exist. The counts of time depend on the host, so the capability is off by default, as the clock is. All the threads of a thread group share the names of the meters.
 
-        A subcommand has no short form. An error of the module has a code that starts with `ZTCL METER`: `NAME` for a name with no meter, `BUSY` for `run` in an interpreter that already counts in a meter, and `KEY` for a seed or a public key that is not 64 hex digits, or `-sign` with no key of the host. An unknown subcommand gives `TCL LOOKUP SUBCOMMAND` with no name after it ([issue 720](https://github.com/beetlebugorg/ztcl/issues/720)).
+        A unique prefix of a subcommand names the subcommand. An error of the module has a code that starts with `ZTCL METER`: `NAME` for a name with no meter, `BUSY` for `run` in an interpreter that already counts in a meter, and `KEY` for a seed or a public key that is not 64 hex digits, or `-sign` with no key of the host. An unknown or ambiguous subcommand gives `TCL LOOKUP SUBCOMMAND` with the word at the end.
 
         The examples of this page run with `--allow meter,interp`, and the setup loads `ztcl::json` to read the records.
     }
@@ -32,8 +32,8 @@ command ztcl::meter {
         catch {ztcl::meter run small {while 1 {}}} msg
         set msg
     } {compute limit reached}
-    error {ztcl::meter nope} {unknown or ambiguous subcommand "nope": must be create, delete, get, list, pubkey, record, reset, run, or verify} {TCL LOOKUP SUBCOMMAND}
-    error {ztcl::meter cr x} {unknown or ambiguous subcommand "cr": must be create, delete, get, list, pubkey, record, reset, run, or verify} {TCL LOOKUP SUBCOMMAND}
+    error {ztcl::meter nope} {unknown or ambiguous subcommand "nope": must be create, delete, get, list, pubkey, record, reset, run, or verify} {TCL LOOKUP SUBCOMMAND nope}
+    error {ztcl::meter r x} {unknown or ambiguous subcommand "r": must be create, delete, get, list, pubkey, record, reset, run, or verify} {TCL LOOKUP SUBCOMMAND r}
     error {ztcl::meter} {wrong # args: should be "ztcl::meter subcommand ?arg ...?"} {TCL WRONGARGS}
 
     subcommand create {
