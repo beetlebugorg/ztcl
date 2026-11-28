@@ -1468,6 +1468,12 @@ pub const Interp = struct {
     /// The running coroutine, the count of live ones, and free stacks.
     coro: ?*coro.Coro = null,
     coro_count: u32 = 0,
+    /// For each deleted namespace, the count of `namespace delete` at its
+    /// last delete. `yieldto` in a namespace deleted after the start of
+    /// its coroutine is an error, as in Tcl, even when a new namespace of
+    /// the same name exists.
+    ns_gone: std.StringHashMapUnmanaged(u64) = .empty,
+    ns_deletes: u64 = 0,
     coro_stacks: std.ArrayList([]u8) = .empty,
     /// The size of a new chunk of the word stack, in values.
     word_chunk: usize = chunk_size,

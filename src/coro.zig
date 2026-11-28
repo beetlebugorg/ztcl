@@ -76,6 +76,12 @@ pub const Coro = struct {
     yield_words: ?[]const Value = null,
     /// True when the next resume takes any count of arguments.
     many_args: bool = false,
+    /// The count of native commands that run a script on the stack of
+    /// the coroutine and cannot be left, such as the compare command of
+    /// `lsort`. `yield` in one of them is an error, as in Tcl.
+    held: u32 = 0,
+    /// `Interp.ns_deletes` at the start.
+    deletes_at_start: u64 = 0,
     prev: ?*Coro = null,
     it: *Interp,
 };
@@ -239,17 +245,13 @@ fn swap(from: *usize, to: usize) void {
 
 fn entry(c: *Coro) callconv(.c) noreturn {
     const it = c.it;
+    // Each end of the command goes to the resumer with its code, as
+    // `return -level 0 -code return` does.
     if (it.callWords(c.words)) |v| {
         c.transfer = v;
     } else |e| {
-        if (e == error.TclReturn and it.ret_code == .ok) {
-            it.ret_level = 1;
-            it.ret_opts = &.{};
-            c.transfer = it.result;
-        } else {
-            c.failure = e;
-            c.transfer = it.result;
-        }
+        c.failure = e;
+        c.transfer = it.result;
     }
     c.done = true;
     swap(&c.sp, c.caller_sp);
@@ -367,6 +369,7 @@ fn cmdCoroutine(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         .stack = stack,
         .it = it,
         .words = try a.dupe(Value, argv[2..]),
+        .deletes_at_start = it.ns_deletes,
         .saved = .{
             .frame = &it.global,
             .ns = "",
@@ -411,6 +414,8 @@ fn cmdCoroutine(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         slots[6] = if (supported) @intFromPtr(&ztcl_coro_start) else 0;
         c.sp = top - 56;
     }
+    // The command resolves in the namespace of `coroutine`.
+    @constCast(c.words)[0] = try qualified(it, c.words[0]);
     const command = try a.create(interp.Command);
     command.* = .{ .name = name, .impl = .{ .native = resumeCmd }, .ctx = c };
     try it.commands.put(a, name, command);
@@ -420,7 +425,15 @@ fn cmdCoroutine(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     return outcome(it, c);
 }
 
+/// Adds `n` (1 or -1) to the count of held native frames of the running
+/// coroutine.
+pub fn hold(it: *Interp, n: i2) void {
+    const c = it.coro orelse return;
+    if (n > 0) c.held += 1 else c.held -= 1;
+}
+
 fn suspendHere(it: *Interp, c: *Coro) Error!Value {
+    if (c.held > 0) return it.fail("cannot yield: C stack busy", .{});
     swap(&c.sp, c.caller_sp);
     if (c.killing) return it.fail("coroutine deleted", .{});
     return c.transfer;
@@ -437,6 +450,9 @@ fn cmdYield(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 fn cmdYieldTo(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("yieldto command ?arg ...?");
     const c = it.coro orelse return it.failCode("TCL COROUTINE ILLEGAL_YIELD", "yieldto can only be called in a coroutine", .{});
+    if (it.ns_gone.get(it.ns)) |at| {
+        if (at > c.deletes_at_start) return it.fail("yieldto called in deleted namespace", .{});
+    }
     const words = try it.alloc().dupe(Value, argv[1..]);
     words[0] = try qualified(it, words[0]);
     c.yield_words = words;
@@ -469,6 +485,8 @@ fn cmdTailcall(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 /// The name of the running coroutine, for `info coroutine`.
 pub fn current(it: *Interp) Error!Value {
     const c = it.coro orelse return Value.empty;
+    // A coroutine whose command is gone has no name.
+    if (c.deleted) return Value.empty;
     return .{ .str = try std.fmt.allocPrint(it.alloc(), "::{s}", .{c.name}) };
 }
 
