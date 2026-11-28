@@ -90,11 +90,15 @@ def scripts():
     return out
 
 def flags_of(path):
+    # The `.out` files come from tclsh 8.6.16, so a script follows 8.6
+    # unless its flags name a release.
+    flags = []
     for line in open(os.path.join(root, path)):
         m = re.match(r"# jit-diff-flags: (.*)", line)
         if m:
-            return m.group(1).split()
-    return []
+            flags = m.group(1).split()
+            break
+    return flags if "--tcl" in flags else ["--tcl", "8.6"] + flags
 
 def run(path, mode, limit=None):
     args = [runner] + base + flags_of(path) + mode
