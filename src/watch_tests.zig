@@ -108,7 +108,13 @@ test "ztcl::watch reports the changes of a folder" {
     try std.testing.expectEqualStrings("{created /src/new/d.tcl}", try settled(&it));
     // A path outside the root and a bad name are errors.
     try std.testing.expectEqualStrings("1", try ev(&it, "catch {ztcl::watch add /../..}"));
-    try std.testing.expectEqualStrings("can not find watcher named \"watch99\"", try ev(&it, "catch {ztcl::watch changes watch99} m; set m"));
+    try std.testing.expectEqualStrings("{can not find watcher named \"watch99\"} {ZTCL WATCH HANDLE}", try ev(&it, "catch {ztcl::watch changes watch99} m o; list $m [dict get $o -errorcode]"));
+    // The name of the subcommand is checked before the count and the
+    // handle (#725).
+    for ([_][]const u8{ "ztcl::watch bogus", "ztcl::watch bogus watch9", "ztcl::watch bogus $w" }) |c| {
+        const script = try std.fmt.allocPrint(it.alloc(), "catch {{{s}}} m o; list $m [dict get $o -errorcode]", .{c});
+        try std.testing.expectEqualStrings("{unknown subcommand \"bogus\": must be add, changes, fd, or remove} {TCL LOOKUP SUBCOMMAND bogus}", try ev(&it, script));
+    }
     _ = try ev(&it, "ztcl::watch remove $w");
     try std.testing.expectEqualStrings("1", try ev(&it, "catch {ztcl::watch changes $w}"));
 }

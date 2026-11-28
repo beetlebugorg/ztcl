@@ -141,8 +141,8 @@ helper::watch build dir rec act
 | Error code | Message | Cause |
 |---|---|---|
 | `TCL WRONGARGS` | `wrong # args: should be "ztcl::watch add ?-recursive? path"` | A subcommand got the wrong count of arguments. |
-| `NONE` | `bad option "X": must be add, changes, fd, or remove` | An unknown subcommand. |
-| `NONE` | `can not find watcher named "X"` | A handle that `add` did not give, or a removed handle. |
+| `TCL LOOKUP SUBCOMMAND X` | `unknown subcommand "X": must be add, changes, fd, or remove` | An unknown subcommand. The name is checked before the count of arguments and the handle. |
+| `ZTCL WATCH HANDLE` | `can not find watcher named "X"` | A handle that `add` did not give, or a removed handle. |
 | `POSIX ENOENT ...` | `couldn't watch the folder: no such file or directory` | `PATH` is not a folder. Each other error of the system has its POSIX code. |
 | `POSIX EACCES ...` | `couldn't access "PATH": permission denied` | With a root folder, `PATH` is outside the root. |
 | `ZTCL WATCH UNAVAILABLE` | `ztcl::watch is not available on this platform yet` | `add` on a platform with no backend. |
@@ -167,6 +167,6 @@ can not find watcher named "watch9"
 ## Platforms
 
 - Linux: inotify, in the runner and in each embedder that turns on `file`.
-- Windows: `ReadDirectoryChangesW`, with `-recursive` as the watch of the subtree, so a new folder needs no step of its own. A change of the time of a folder, which Windows gives for each change in the folder, is no event, as on Linux. The file system keeps the changes between two calls of `changes` in a buffer, and a full buffer (64 KiB of records: more than 1,000 changes of names of 20 characters) gives `{overflow /}`.
+- Windows: `ReadDirectoryChangesW`, with `-recursive` as the watch of the subtree, so a new folder needs no step of its own. A change of the time of a folder, which Windows gives for each change in the folder, is no event, as on Linux. The file system keeps the changes between two calls of `changes` in a buffer, and a full buffer (64 KiB of records: more than 1,000 changes of names of 20 characters) gives `{overflow /}`. Windows reports a move out of the watched folder as a removal, so such a move gives `deleted`.
 - macOS: an FSEvents stream with the events of each file, on the real path of the folder, so a new folder needs no step of its own. FSEvents delivers a change some milliseconds after it (the stream asks for 50 ms at most), so `changes` right after a write can give nothing yet: a script that waits for a change calls `changes` again, or waits on `fd`. FSEvents merges the flags of one path, so the kind comes from the flags and the file: a path that was there before the watch and changes is `modified`. A dropped event of the system gives `{overflow /}`. CoreServices loads on the first `add`.
 - WebAssembly and WASI: `add` gives `ZTCL WATCH UNAVAILABLE`, and `changes`, `fd`, and `remove` give `can not find watcher named "W"`.
