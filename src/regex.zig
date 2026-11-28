@@ -1262,6 +1262,14 @@ pub const Matcher = struct {
     frames: std.ArrayList(RepFrame) = .empty,
     /// The position where the current search started.
     from: usize = 0,
+    /// The start of the search is not the start of a line.
+    notbol: bool = false,
+    /// The index of `-start` is after the end of the text: the search
+    /// starts at the end, and that place is not the start of a line.
+    past_end: bool = false,
+    /// The count of characters from the end of the text to that index.
+    /// Tcl adds it to each index that `regexp -indices` gives.
+    shift: usize = 0,
     /// With `bits_w` set, the failed spans of `dissect` are in the bit
     /// table `it.re_bits`: the bit of node `id`, `lo`, and `hi` is
     /// `(id * bits_w + lo - bits_lo) * bits_w + hi - bits_lo`.
@@ -1374,13 +1382,16 @@ pub const Matcher = struct {
     }
 
     fn assertOk(m: *const Matcher, a: Assert, i: usize) bool {
-        const before = i > 0 and ucd.isWordChar(m.ch(i - 1));
+        // The text of a search starts at `from`, as in Tcl: the matcher
+        // does not see the characters before it.
+        const before = i > m.from and ucd.isWordChar(m.ch(i - 1));
         const after = m.wordAt(i);
         const opts = m.re.opts;
+        const bol = i == m.from and !m.notbol;
         return switch (a) {
-            .bol => i == 0 and !opts.notbol,
+            .bol => bol,
             .eol => i == m.n and !opts.noteol,
-            .line_bol => (i == 0 and !opts.notbol) or (i > 0 and m.ch(i - 1) == '\n'),
+            .line_bol => bol or (i > m.from and m.ch(i - 1) == '\n'),
             .line_eol => (i == m.n and !opts.noteol) or (i < m.n and m.ch(i) == '\n'),
             .text_start => i == m.from,
             .text_end => i == m.n,
@@ -1912,6 +1923,9 @@ pub const Matcher = struct {
     pub fn search(m: *Matcher, from_byte: usize) Error!bool {
         const from = m.charAt(from_byte);
         m.from = from;
+        // A search from the middle of the text starts a line only after
+        // a newline, as in Tcl.
+        m.notbol = m.re.opts.notbol or m.past_end or (from > 0 and m.ch(from - 1) != '\n');
         @memset(m.spans, null);
         @memset(m.caps, null);
         m.run_node = inf;
@@ -1971,7 +1985,8 @@ pub fn capValue(it: *Interp, m: *const Matcher, k: usize, indices: bool) Error!V
         return value.newList(it.alloc(), &.{ .{ .int = -1 }, .{ .int = -1 } });
     }
     if (!indices) return .{ .str = m.s[m.byteAt(lo.?)..m.byteAt(hi.?)] };
-    return value.newList(it.alloc(), &.{ .{ .int = @intCast(lo.?) }, .{ .int = @as(i64, @intCast(hi.?)) - 1 } });
+    const shift: i64 = @intCast(m.shift);
+    return value.newList(it.alloc(), &.{ .{ .int = @as(i64, @intCast(lo.?)) + shift }, .{ .int = @as(i64, @intCast(hi.?)) - 1 + shift } });
 }
 
 /// The list that `regexp -about` gives: the group count and the names
@@ -2082,7 +2097,13 @@ pub fn cmdRegexp(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     var out: std.ArrayList(Value) = .empty;
     var count: i64 = 0;
     var at: usize = 0;
-    if (start_word) |w| at = try startOffset(it, w, s) orelse s.len + 1;
+    if (start_word) |w| at = try startOffset(it, w, s) orelse blk: {
+        // Tcl searches from the end of the text for an index after it.
+        const n = cmds.charCount(s);
+        m.past_end = true;
+        m.shift = @intCast(try cmds.index(it, w, n + 1) - @as(i64, @intCast(n)));
+        break :blk s.len;
+    };
     while (at <= s.len) {
         if (!try m.search(at)) break;
         count += 1;

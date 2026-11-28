@@ -714,6 +714,17 @@ test "regexp, regsub, and the -regexp options" {
         .{ "regexp {(a*)*b} aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac", "0" },
         .{ "regexp {(} x", "!couldn't compile regular expression pattern: parentheses () not balanced" },
         .{ "regsub -all {a} banana A", "bAnAnA" },
+        // An empty match at the end of the text, and a start index at
+        // the end or after it, as in Tcl.
+        .{ "regexp -start 2 {a*} {}", "1" },
+        .{ "regexp -inline -indices -start 2 {a*} a", "{2 1}" },
+        .{ "regexp -nocase -start 1 {^.*$} \"\\n\"", "1" },
+        .{ "regsub -all {^.*$} \"\\n\" <&>", "<\n><>" },
+        .{ "regexp -all -inline -indices ^ \"\\na\"", "{0 -1} {1 0}" },
+        .{ "regexp -start 1 ^ ab", "0" },
+        .{ "regexp -start 2 ^ a", "0" },
+        .{ "regsub -start 2 {a*} a <&>", "a" },
+        .{ "regexp -start 1 {\\mb} ab", "1" },
         .{ "regsub {(\\w+) (\\w+)} {hello world} {\\2 \\1}", "world hello" },
         .{ "regsub -all {\\s+} {a  b   c} { } v; set v", "a b c" },
         .{ "regsub -all {x*} abc -", "-a-b-c-" },
