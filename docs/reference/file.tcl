@@ -98,10 +98,9 @@ command file {
     subcommand extension {
         synopsis {file extension NAME}
         summary {Gives the extension of the last part of a path, with its dot.}
-        description {Gives the text from the last dot of the last part of NAME to its end, such as `.json`. A last part with no dot gives an empty string, and so does a dot in a folder name only. In ztcl a name that starts with a dot and has no other dot, such as `.hidden`, has no extension.}
+        description {Gives the text from the last dot of the last part of NAME to its end, such as `.json`. A last part with no dot gives an empty string, and so does a dot in a folder name only. A last part that starts with its only dot, such as `.hidden`, is all extension.}
         returns {The extension with its dot, or an empty string.}
         see {{file rootname} {file tail}}
-        difference {Tcl 8.6.16 and 9.0.4 give `.hidden` for `file extension .hidden` ([issue 682](https://github.com/beetlebugorg/ztcl/issues/682)).}
         argument NAME {
             type path
             summary {The path.}
@@ -109,7 +108,7 @@ command file {
         example {file extension notes.json} .json
         example {file extension notes.tar.gz} .gz
         example {file extension a.b/c} {}
-        example {file extension .hidden} {}
+        example {file extension .hidden} .hidden
         error {file extension} {wrong # args: should be "file extension name"} {TCL WRONGARGS}
     }
 
@@ -119,13 +118,13 @@ command file {
         description {Gives NAME with the extension of `file extension` removed. A name with no extension stays as it is.}
         returns {The path with no extension.}
         see {{file extension} {file tail}}
-        difference {Tcl 8.6.16 and 9.0.4 give an empty string for `file rootname .hidden`, and ztcl gives `.hidden` ([issue 682](https://github.com/beetlebugorg/ztcl/issues/682)).}
         argument NAME {
             type path
             summary {The path.}
         }
         example {file rootname notes.tar.gz} notes.tar
         example {file rootname a.b/c} a.b/c
+        example {file rootname .hidden} {}
         error {file rootname} {wrong # args: should be "file rootname name"} {TCL WRONGARGS}
     }
 

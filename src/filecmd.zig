@@ -77,8 +77,9 @@ fn tailOf(p: []const u8) []const u8 {
 
 fn extOf(p: []const u8) []const u8 {
     const t = tailOf(p);
+    // A tail that starts with its only dot, such as `.hidden`, is all
+    // extension, as in tclsh.
     const k = std.mem.lastIndexOfScalar(u8, t, '.') orelse return "";
-    if (k == 0) return "";
     return t[k..];
 }
 
