@@ -43,7 +43,7 @@ fn eql(a: []const u8, b: []const u8) bool {
 pub const Method = enum { blocking, cget, cgetall, configure, finalize, initialize, read, seek, watch, write };
 
 fn bit(m: Method) u16 {
-    return @as(u16, 1) << @intFromEnum(m);
+    return @as(u16, 1) << @backingInt(m);
 }
 
 pub const Refl = struct {
