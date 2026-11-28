@@ -1,12 +1,6 @@
 # The command reference: the ztcl modules. Each has its own full page in
 # docs/modules/. The format is in docs/reference/README.md.
 
-== ztcl::notify
-syn: ztcl::notify ?-option value ...? title ?body?
-does: Shows a notification of the system.
-cap: notify
-page: modules/notify.md
-
 == ztcl::agent
 syn: ztcl::agent subcommand ?arg ...?
 does: Runs an LLM agent loop in an isolated thread with no capability, which holds only the data and the tools that the host gives it. The host posts each request to its one endpoint with its own headers, runs only its own tools, and checks the result against a schema. Load it with `package require ztcl::agent`.
