@@ -426,6 +426,168 @@ fn statList(it: *Interp, st: fsroot.Info) Error!Value {
 }
 
 const file_subs = [_][]const u8{ "atime", "attributes", "channels", "copy", "delete", "dirname", "executable", "exists", "extension", "isdirectory", "isfile", "join", "link", "lstat", "mkdir", "mtime", "nativename", "normalize", "owned", "pathtype", "readable", "readlink", "rename", "rootname", "separator", "size", "split", "stat", "system", "tail", "tempfile", "type", "volumes", "writable" };
+/// The subcommands of Tcl 9.1: those of 8.6 and `home`, `tempdir`, and
+/// `tildeexpand`.
+const file_subs9 = [_][]const u8{ "atime", "attributes", "channels", "copy", "delete", "dirname", "executable", "exists", "extension", "home", "isdirectory", "isfile", "join", "link", "lstat", "mkdir", "mtime", "nativename", "normalize", "owned", "pathtype", "readable", "readlink", "rename", "rootname", "separator", "size", "split", "stat", "system", "tail", "tempdir", "tempfile", "tildeexpand", "type", "volumes", "writable" };
+
+// ---- home, tildeexpand, and tempdir of Tcl 9.1 ----
+
+/// The home folder of `user`, or of the current user for an empty name,
+/// as `file home` of Tcl 9 gives it. In host mode the current user has
+/// `$env(HOME)` and another user has the folder of `/etc/passwd`. In the
+/// root folder the home folder of the current user is `/`.
+fn homeOf(it: *Interp, user: []const u8) Error![]const u8 {
+    if (user.len == 0) {
+        if (!it.fs.host) return "/";
+        // Tcl 9 on Windows sets HOME from USERPROFILE when it is not set.
+        for ([_][]const u8{ "::env(HOME)", if (on_win) "::env(USERPROFILE)" else "::env(HOME)" }) |name| {
+            const home = it.getVarOpt(name) catch null;
+            if (home) |h| return it.str(h);
+        }
+        // The `ztcl` program sets no `env`: the line of the user ID in
+        // `/etc/passwd` gives the folder on Linux.
+        if (@import("builtin").os.tag == .linux) {
+            var id: [16]u8 = undefined;
+            const uid = std.fmt.bufPrint(&id, "{d}", .{std.os.linux.getuid()}) catch unreachable;
+            if (try passwdHome(it, uid, 2)) |h| return h;
+        }
+        return it.failCode("TCL VALUE PATH HOMELESS", "couldn't find HOME environment variable to expand path", .{});
+    }
+    if (it.fs.host and !on_win) {
+        if (try passwdHome(it, user, 0)) |h| return h;
+    }
+    return it.failCode("TCL VALUE PATH NOUSER", "user \"{s}\" doesn't exist", .{user});
+}
+
+const on_win = @import("builtin").os.tag == .windows;
+
+/// The home folder in `/etc/passwd`: the sixth field of the first line
+/// whose field `at` is `key`, the name (field 0) or the user ID (field
+/// 2). Null when no line has it.
+fn passwdHome(it: *Interp, key: []const u8, at: usize) Error!?[]const u8 {
+    const rel = (try fsroot.normal(it, "/etc/passwd")) orelse return null;
+    const fd = switch (try fsroot.openRel(it, rel, .{}, 0)) {
+        .fd => |x| x,
+        .err => return null,
+    };
+    defer sys.close(fd);
+    var text: std.ArrayList(u8) = .empty;
+    var buf: [4096]u8 = undefined;
+    while (text.items.len < 1 << 22) {
+        const n = switch (sys.readFile(fd, &buf)) {
+            .n => |x| x,
+            .err => return null,
+        };
+        if (n == 0) break;
+        try text.appendSlice(it.alloc(), buf[0..n]);
+    }
+    var lines = std.mem.splitScalar(u8, text.items, '\n');
+    while (lines.next()) |line| {
+        var fields: [7][]const u8 = @splat("");
+        var parts = std.mem.splitScalar(u8, line, ':');
+        var k: usize = 0;
+        while (parts.next()) |f| : (k += 1) {
+            if (k < fields.len) fields[k] = f;
+        }
+        if (k < 6 or !eql(fields[at], key)) continue;
+        return try it.alloc().dupe(u8, fields[5]);
+    }
+    return null;
+}
+
+/// `file tildeexpand`: a leading `~` or `~user` becomes the home folder,
+/// and the rest of the path joins it. Another path stays as it is.
+fn tildeExpand(it: *Interp, path: []const u8) Error![]const u8 {
+    if (path.len == 0 or path[0] != '~') return path;
+    const slash = std.mem.indexOfScalar(u8, path, '/') orelse path.len;
+    const home = try homeOf(it, path[1..slash]);
+    const rest = std.mem.trimStart(u8, path[slash..], "/");
+    if (rest.len == 0) return home;
+    if (std.mem.endsWith(u8, home, "/")) return std.fmt.allocPrint(it.alloc(), "{s}{s}", .{ home, rest });
+    return std.fmt.allocPrint(it.alloc(), "{s}/{s}", .{ home, rest });
+}
+
+/// `file tempdir ?template?`: makes a new folder with mode 0700 and gives
+/// its path. The name is the base of the template (`tcl` by default) and
+/// `_` with 6 random letters and digits, as in Tcl 9. The folder of the
+/// template, or else `$env(TMPDIR)` or `/tmp` in host mode and `/tmp` in
+/// the root folder, holds it. The root folder gets `/tmp` when it is not
+/// there.
+fn tempDir(it: *Interp, template: []const u8) Error![]const u8 {
+    const a = it.alloc();
+    var dir: []const u8 = "";
+    var base: []const u8 = "tcl";
+    if (template.len > 0) {
+        if (std.mem.indexOfScalar(u8, template, '/') == null) {
+            base = template;
+        } else if (template[template.len - 1] == '/') {
+            dir = template;
+        } else {
+            dir = dirname(template);
+            base = tailOf(template);
+        }
+        if (base.len == 0) base = "tcl";
+    }
+    if (dir.len == 0) {
+        dir = "/tmp";
+        if (it.fs.host) {
+            const names: []const []const u8 = if (on_win) &.{ "::env(TEMP)", "::env(TMP)" } else &.{"::env(TMPDIR)"};
+            for (names) |name| {
+                if (it.getVarOpt(name) catch null) |t| {
+                    const v = try it.str(t);
+                    if (v.len > 0) {
+                        dir = v;
+                        break;
+                    }
+                }
+            }
+        } else {
+            const rel = try fsroot.need(it, dir);
+            try mkdirAll(it, rel, dir);
+        }
+    }
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    var tries: u32 = 0;
+    while (tries < 100) : (tries += 1) {
+        var raw: [6]u8 = undefined;
+        randomBytes(it, &raw);
+        var suffix: [6]u8 = undefined;
+        for (raw, &suffix) |r, *c| c.* = chars[r % chars.len];
+        const name = if (std.mem.endsWith(u8, dir, "/"))
+            try std.fmt.allocPrint(a, "{s}{s}_{s}", .{ dir, base, &suffix })
+        else
+            try std.fmt.allocPrint(a, "{s}/{s}_{s}", .{ dir, base, &suffix });
+        const rel = try fsroot.need(it, name);
+        const p = switch (try fsroot.parentOf(it, rel)) {
+            .ok => |x| x,
+            .err => |e| return fsroot.posixError(it, e, "can't create temporary directory: "),
+        };
+        defer sys.close(p.fd);
+        const e = fsroot.mkdirAtMode(p, 0o700) orelse return fsroot.shown(it, rel);
+        if (e != .EXIST) return fsroot.posixError(it, e, "can't create temporary directory: ");
+    }
+    return it.failCode("POSIX EEXIST {file already exists}", "can't create temporary directory: file already exists", .{});
+}
+
+/// Bytes of the random source of the system where one is at hand, and
+/// of a counter of the interpreter on other targets. A name of
+/// `file tempdir` needs no secret: `mkdirat` fails for a name that
+/// exists, and the next name runs.
+fn randomBytes(it: *Interp, out: []u8) void {
+    switch (@import("builtin").os.tag) {
+        .linux, .macos, .windows => @import("isoproto.zig").entropy(out),
+        else => {
+            var x: u64 = 0x9e3779b97f4a7c15 *% (@as(u64, it.temp_next) + 1);
+            it.temp_next +%= 1;
+            for (out) |*b| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                b.* = @truncate(x);
+            }
+        },
+    }
+}
 
 pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("file subcommand ?arg ...?");
@@ -433,7 +595,8 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     const word = try it.str(argv[1]);
     var sub: ?[]const u8 = null;
     var hits: usize = 0;
-    for (file_subs) |n| {
+    const subs: []const []const u8 = if (it.tcl9()) &file_subs9 else &file_subs;
+    for (subs) |n| {
         if (eql(n, word)) {
             sub = n;
             hits = 1;
@@ -447,9 +610,9 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (hits != 1) {
         var m: std.ArrayList(u8) = .empty;
         try m.print(a, "unknown or ambiguous subcommand \"{s}\": must be ", .{word});
-        for (file_subs, 0..) |n, k| {
+        for (subs, 0..) |n, k| {
             if (k > 0) try m.appendSlice(a, ", ");
-            if (k == file_subs.len - 1) try m.appendSlice(a, "or ");
+            if (k == subs.len - 1) try m.appendSlice(a, "or ");
             try m.appendSlice(a, n);
         }
         it.result = .{ .str = m.items };
@@ -464,6 +627,15 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             return x.str(ar[0]);
         }
     }.f;
+    if (eql(s, "home")) {
+        if (args.len > 1) return it.wrongArgs("file home ?user?");
+        return .{ .str = try homeOf(it, if (args.len == 1) try it.str(args[0]) else "") };
+    }
+    if (eql(s, "tildeexpand")) return .{ .str = try tildeExpand(it, try one(it, s, args)) };
+    if (eql(s, "tempdir")) {
+        if (args.len > 1) return it.wrongArgs("file tempdir ?template?");
+        return .{ .str = try tempDir(it, if (args.len == 1) try it.str(args[0]) else "") };
+    }
     if (eql(s, "join")) {
         if (args.len < 1) return it.wrongArgs("file join name ?name ...?");
         return .{ .str = try joinPath(it, args) };
