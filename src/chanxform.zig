@@ -118,7 +118,7 @@ pub const Xform = struct {
 };
 
 fn of(f: *chan.Filter) *Xform {
-    return @fieldParentPtr("filter", f);
+    return @alignCast(@fieldParentPtr("filter", f));
 }
 
 fn fRead(f: *chan.Filter, it: *Interp, _: i32, buf: []u8) Error!usize {
