@@ -301,6 +301,30 @@ fn report(it: *const tcl.Interp) void {
     if (std.debug.runtime_safety) std.debug.print("gc collections={d}\n", .{it.gcCount()});
 }
 
+/// The line in the file of the command that failed. The unwind keeps
+/// the line of each command of a literal body, such as the body of a
+/// `for`, as a line of the file, as `source` gives it in its trace.
+fn fileLine(it: *const tcl.Interp, e: tcl.Error) u32 {
+    if (e == error.TclError and it.proc_line > 0) return it.proc_line;
+    return it.error_line;
+}
+
+/// Writes the trace of an error of the script to stderr, as tclsh does,
+/// after the message: the commands of the unwind and their context lines,
+/// with the line of the file at the end.
+fn traceOut(it: *tcl.Interp, path: []const u8, msg: []const u8) void {
+    if (comptime !chan_ok) return;
+    // `evalTop` ended the error: its trace is in `last_info`.
+    const info = it.str(it.last_info) catch return;
+    if (!std.mem.startsWith(u8, info, msg) or info.len == msg.len) return;
+    // The first line of the message is on stdout already.
+    _ = tcl.sys.write(2, info[msg.len + 1 ..]);
+    var buf: [64]u8 = undefined;
+    _ = tcl.sys.write(2, "\n    (file \"");
+    _ = tcl.sys.write(2, path);
+    _ = tcl.sys.write(2, std.fmt.bufPrint(&buf, "\" line {d})\n", .{it.proc_line}) catch "\")\n");
+}
+
 fn threadFlag(arg: []const u8) bool {
     for ([_][]const u8{ "--threads", "--thread-compute", "--thread-mem", "--threads-compute", "--threads-mem" }) |f| {
         if (std.mem.eql(u8, arg, f)) return true;
@@ -961,8 +985,15 @@ pub fn runHost(h: *const Host, setup: ?*const fn (*tcl.Interp) anyerror!void) !v
             const start = h.nanos();
             _ = it.eval(text) catch |e| {
                 const msg = if (e == error.TclError) it.str(it.result) catch "out of memory" else @errorName(e);
-                try out.print("{s}:{d}: {s}\n", .{ arg, it.error_line, msg });
+                try out.print("{s}:{d}: {s}\n", .{ arg, fileLine(&it, e), msg });
                 out.flush() catch {};
+                if (e == error.TclError) traceOut(&it, arg, msg);
+                if (e == error.TclError and !it.tcl9()) {
+                    if (tcl.tcl9.hint86(arena, msg) catch null) |hint| {
+                        try out.print("hint: {s}\n", .{hint});
+                        out.flush() catch {};
+                    }
+                }
                 report(&it);
                 host.exit(1);
             };

@@ -337,3 +337,68 @@ fn cmdLedit(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     try it.setVar(name, out);
     return out;
 }
+
+/// A hint for an error of Tcl 8.6 mode whose script uses a form of Tcl
+/// 9.1, or null. The `ztcl` program prints it after the error, so the
+/// message stays the message of tclsh 8.6.16.
+pub fn hint86(a: std.mem.Allocator, msg: []const u8) std.mem.Allocator.Error!?[]const u8 {
+    const run = ": run with --tcl 9.1 (or interp create -tcl 9.1)";
+    if (quoted(msg, "invalid bareword \"")) |w| {
+        if (eqlAny(w, &.{ "lt", "le", "gt", "ge" })) return try std.fmt.allocPrint(a, "the string order operator \"{s}\" needs Tcl 9{s}", .{ w, run });
+        if (w.len > 2 and w[0] == '0' and (w[1] == 'd' or w[1] == 'D') and separated(w[2..])) return try std.fmt.allocPrint(a, "the 0d prefix of \"{s}\" needs Tcl 9{s}", .{ w, run });
+        if (std.mem.indexOfScalar(u8, w, '_') != null and separated(w)) return try std.fmt.allocPrint(a, "digit separators in \"{s}\" need Tcl 9{s}", .{ w, run });
+        return null;
+    }
+    if (std.mem.startsWith(u8, msg, "invalid character \"#\"\nin expression ")) return try std.fmt.allocPrint(a, "a comment in an expression needs Tcl 9{s}", .{run});
+    if (quoted(msg, "invalid command name \"")) |w| {
+        for (commands) |c| if (std.mem.eql(u8, c.name, w)) return try std.fmt.allocPrint(a, "the command \"{s}\" needs Tcl 9{s}", .{ w, run });
+    }
+    return null;
+}
+
+/// The word in quotes after `head` at the start of `msg`.
+fn quoted(msg: []const u8, head: []const u8) ?[]const u8 {
+    if (!std.mem.startsWith(u8, msg, head)) return null;
+    const rest = msg[head.len..];
+    const end = std.mem.indexOfScalar(u8, rest, '"') orelse return null;
+    return rest[0..end];
+}
+
+fn eqlAny(w: []const u8, words: []const []const u8) bool {
+    for (words) |x| if (std.mem.eql(u8, w, x)) return true;
+    return false;
+}
+
+/// True for digits with single `_` between them, such as `100_000`.
+fn separated(w: []const u8) bool {
+    if (w.len == 0 or !std.ascii.isDigit(w[0]) or !std.ascii.isDigit(w[w.len - 1])) return false;
+    var prev_us = false;
+    for (w) |ch| {
+        if (ch == '_') {
+            if (prev_us) return false;
+            prev_us = true;
+        } else if (std.ascii.isDigit(ch)) {
+            prev_us = false;
+        } else return false;
+    }
+    return true;
+}
+
+test "hint86 names the form of Tcl 9.1 of an error in 8.6 mode" {
+    const a = std.testing.allocator;
+    const cases = [_][2][]const u8{
+        .{ "invalid bareword \"100_000_000\"\nin expression \"$i < 100_000_000\";\nshould be ...", "digit separators in \"100_000_000\" need Tcl 9: run with --tcl 9.1 (or interp create -tcl 9.1)" },
+        .{ "invalid bareword \"0d10\"\nin expression \"0d10\";", "the 0d prefix of \"0d10\" needs Tcl 9: run with --tcl 9.1 (or interp create -tcl 9.1)" },
+        .{ "invalid bareword \"lt\"\nin expression \"\"a\" lt \"b\"\";", "the string order operator \"lt\" needs Tcl 9: run with --tcl 9.1 (or interp create -tcl 9.1)" },
+        .{ "invalid character \"#\"\nin expression \"1 # c\n\"", "a comment in an expression needs Tcl 9: run with --tcl 9.1 (or interp create -tcl 9.1)" },
+        .{ "invalid command name \"lpop\"", "the command \"lpop\" needs Tcl 9: run with --tcl 9.1 (or interp create -tcl 9.1)" },
+    };
+    for (cases) |c| {
+        const h = (try hint86(a, c[0])).?;
+        defer a.free(h);
+        try std.testing.expectEqualStrings(c[1], h);
+    }
+    for ([_][]const u8{ "invalid bareword \"abc\"\nin expression", "invalid bareword \"1__0\"", "invalid command name \"nope\"", "boom" }) |m| {
+        try std.testing.expect((try hint86(a, m)) == null);
+    }
+}

@@ -1156,6 +1156,13 @@ fn cmdTry(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
     const first = runCaughtBody(it, it.scriptOf(argv, 1, cmd), argv, if (literalWord(cmd, 1)) null else cmd);
     leaveCatch(it, counted);
     var out = try first;
+    // An error of a literal body has its line in the script of `try`, as
+    // in Tcl, unless a handler or the finally script replaces it.
+    var body_line = false;
+    if (out.code == 1 and literalWord(cmd, 1)) {
+        out.error_line = cmd.?.words[1].line + out.error_line -| 1;
+        body_line = true;
+    }
     h = 2;
     while (h < end) : (h += 4) {
         const kind = try it.str(argv[h]);
@@ -1189,6 +1196,7 @@ fn cmdTry(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
             }
             break :blk next;
         };
+        body_line = false;
         break;
     }
     if (finally) |f| {
@@ -1196,9 +1204,12 @@ fn cmdTry(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         if (fin.code != 0) {
             if (fin.code == 1) fin.during = try out.options(it);
             out = fin;
+            body_line = false;
         }
     }
-    return out.raise(it);
+    const r = out.raise(it);
+    if (body_line) it.line_known = true;
+    return r;
 }
 
 fn tryCode(it: *Interp, v: Value) Error!i64 {
