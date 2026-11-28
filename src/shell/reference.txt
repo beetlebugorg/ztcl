@@ -646,6 +646,13 @@ sub: ztcl::json bool B | Writes a JSON true or false.
 sub: ztcl::json null | Writes a JSON null.
 sub: ztcl::json raw JSON | Checks a JSON text and gives it as it is.
 sub: ztcl::json pretty ?-indent N? TEXT | Lays out a JSON text with one member on each line.
+== ztcl::text ztcl::text::graphemes ztcl::text::words ztcl::text::sentences ztcl::text::width ztcl::text::bounds
+syn: ztcl::text SUBCOMMAND ?ARG ...?
+sub: ztcl::text graphemes STRING | Gives the list of the grapheme clusters of a string.
+sub: ztcl::text words ?-all? STRING | Gives the list of the words of a string.
+sub: ztcl::text sentences STRING | Gives the list of the sentences of a string.
+sub: ztcl::text width ?-ambiguous narrow|wide? STRING | Gives the count of columns of a string in a terminal or a monospace font.
+sub: ztcl::text bounds ?-unit grapheme|word|sentence? STRING | Gives the character index of each boundary of a string.
 == ztcl::vt
 syn: ztcl::vt subcommand ?arg ...?
 == ztcl::wasm
@@ -663,13 +670,6 @@ sub: imports module | A list of module, name, kind, and type for each import.
 sub: info module | A dict of the counts and the features of a module.
 sub: delete handle ?handle ...? | Deletes modules and instances.
 sub: jit ?boolean? | Reads or sets the use of the JIT tier for the calls of the interpreter.
-== ztcl::text ztcl::text::graphemes ztcl::text::words ztcl::text::sentences ztcl::text::width ztcl::text::bounds
-syn: ztcl::text subcommand ?arg ...?
-sub: graphemes STRING | The list of the grapheme clusters: the characters that a user sees, such as an emoji with a skin tone or a letter with accents.
-sub: words ?-all? STRING | The list of the word segments that have a letter or a number.
-sub: sentences STRING | The list of the sentences, each with its spaces and line end.
-sub: width ?-ambiguous narrow|wide? STRING | The count of columns of the string in a terminal or a monospace font.
-sub: bounds ?-unit grapheme|word|sentence? STRING | The list of the character index of each boundary, from 0 to the length of the string.
 == ztcl::probe
 syn: ztcl::probe subcommand ?arg ...?
 == ztcl::tls ztcl::tls::socket
