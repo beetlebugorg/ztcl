@@ -12,7 +12,7 @@ command ztcl::vt {
 
         Load the module with `package require ztcl::vt`. It needs no capability, reads no file, and starts no process, and its memory counts toward the memory limit of the interpreter. It serves tests of terminal output, a terminal widget, and tools that read the screen of a program on a `ztcl::pty`.
 
-        `new` gives a handle such as `vt0`, and the first argument of each other subcommand is a handle. A handle is valid in the interpreter that made it, until `delete` or the end of the interpreter. The handle is looked up first, so `ztcl::vt size vt99 x` gives the error of the handle, and the name of the subcommand and the count of its arguments are checked after it ([issue 713](https://github.com/beetlebugorg/ztcl/issues/713)). The examples of this page have the terminal `$vt` from `ztcl::vt new`. A subcommand has no short form, and `ztcl::vt` with fewer than two arguments, other than `ztcl::vt new`, gives the message of a wrong count of arguments with the list of the subcommands.
+        `new` gives a handle such as `vt0`, and the first argument of each other subcommand is a handle. A handle is valid in the interpreter that made it, until `delete` or the end of the interpreter. The name of the subcommand and the count of its arguments are checked first, and then the handle is looked up, so `ztcl::vt size vt99 x` gives the error of the count. The examples of this page have the terminal `$vt` from `ztcl::vt new`. A subcommand has no short form. An unknown subcommand gives `-errorcode` `TCL LOOKUP SUBCOMMAND` with the word at the end.
 
         An error of the module has a code that starts with `ZTCL VT`: `HANDLE` for a handle that `new` did not give or that `delete` freed, `SIZE` for a size outside 1 to 4,096, and `SCROLLBACK` for a scrollback outside 0 to 1,000,000. A terminal that needs more memory than the memory limit stops the script with the memory error of the interpreter.
     }
@@ -26,9 +26,10 @@ command ztcl::vt {
         ztcl::vt delete $t
         set r
     } {{hello bold} {4 1}}
-    error {ztcl::vt g $vt} {unknown subcommand "g": must be new, feed, resize, size, cursor, modes, rows, cells, dirty, scrollback, title, bells, or delete} {TCL LOOKUP SUBCOMMAND}
+    error {ztcl::vt g $vt} {unknown subcommand "g": must be new, feed, resize, size, cursor, modes, rows, cells, dirty, scrollback, title, bells, or delete} {TCL LOOKUP SUBCOMMAND g}
     error {ztcl::vt} {wrong # args: should be "ztcl::vt new|feed|resize|size|cursor|modes|rows|cells|dirty|scrollback|title|bells|delete ?arg ...?"} {TCL WRONGARGS}
-    error {ztcl::vt bogus} {wrong # args: should be "ztcl::vt new|feed|resize|size|cursor|modes|rows|cells|dirty|scrollback|title|bells|delete ?arg ...?"} {TCL WRONGARGS}
+    error {ztcl::vt bogus} {unknown subcommand "bogus": must be new, feed, resize, size, cursor, modes, rows, cells, dirty, scrollback, title, bells, or delete} {TCL LOOKUP SUBCOMMAND bogus}
+    error {ztcl::vt g vt0} {unknown subcommand "g": must be new, feed, resize, size, cursor, modes, rows, cells, dirty, scrollback, title, bells, or delete} {TCL LOOKUP SUBCOMMAND g}
 
     subcommand new {
         synopsis {ztcl::vt new ?-size {COLS ROWS}? ?-scrollback LINES?}
@@ -161,6 +162,7 @@ command ztcl::vt {
         error {ztcl::vt resize $vt 0 2} {the size 0 is outside 1 to 4096} {ZTCL VT SIZE}
         error {ztcl::vt resize $vt a 2} {expected integer but got "a"} {TCL VALUE NUMBER}
         error {ztcl::vt resize $vt 10} {wrong # args: should be "ztcl::vt resize handle cols rows"} {TCL WRONGARGS}
+        error {ztcl::vt resize vt99 10} {wrong # args: should be "ztcl::vt resize handle cols rows"} {TCL WRONGARGS}
     }
 
     subcommand size {
@@ -181,6 +183,8 @@ command ztcl::vt {
         } {20 4}
         error {ztcl::vt size vt99} {can not find terminal "vt99"} {ZTCL VT HANDLE}
         error {ztcl::vt size $vt x} {wrong # args: should be "ztcl::vt size handle"} {TCL WRONGARGS}
+        error {ztcl::vt size vt99 x} {wrong # args: should be "ztcl::vt size handle"} {TCL WRONGARGS}
+        error {ztcl::vt size} {wrong # args: should be "ztcl::vt size handle"} {TCL WRONGARGS}
     }
 
     subcommand cursor {

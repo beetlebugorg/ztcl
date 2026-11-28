@@ -370,15 +370,42 @@ fn list(it: *Interp, items: []const Value) interp.Error!Value {
     return value.wrapList(it.alloc(), try it.alloc().dupe(Value, items));
 }
 
+/// The subcommands that take a handle, and the count of words of each
+/// call. A count of 0 is 3 to 5 words, for `rows` and `cells`.
+const handle_subs = [_]struct { name: []const u8, words: usize, use: []const u8 }{
+    .{ .name = "feed", .words = 4, .use = "ztcl::vt feed handle bytes" },
+    .{ .name = "resize", .words = 5, .use = "ztcl::vt resize handle cols rows" },
+    .{ .name = "size", .words = 3, .use = "ztcl::vt size handle" },
+    .{ .name = "cursor", .words = 3, .use = "ztcl::vt cursor handle" },
+    .{ .name = "modes", .words = 3, .use = "ztcl::vt modes handle" },
+    .{ .name = "rows", .words = 0, .use = "ztcl::vt rows|cells handle ?first? ?last?" },
+    .{ .name = "cells", .words = 0, .use = "ztcl::vt rows|cells handle ?first? ?last?" },
+    .{ .name = "dirty", .words = 3, .use = "ztcl::vt dirty handle" },
+    .{ .name = "scrollback", .words = 3, .use = "ztcl::vt scrollback handle" },
+    .{ .name = "title", .words = 3, .use = "ztcl::vt title handle" },
+    .{ .name = "bells", .words = 3, .use = "ztcl::vt bells handle" },
+    .{ .name = "delete", .words = 3, .use = "ztcl::vt delete handle" },
+};
+
 fn cmd(it: *Interp, argv: []const Value, _: ?*interp.Cmd) interp.Error!Value {
     if (argv.len < 2) return it.wrongArgs(usage);
     const sub = try it.str(argv[1]);
     const a = it.alloc();
     if (std.mem.eql(u8, sub, "new")) return cmdNew(it, argv);
-    if (argv.len < 3) return it.wrongArgs(usage);
+    // The name of the subcommand and the count of words are checked
+    // before the handle is looked up.
+    for (handle_subs) |h| {
+        if (!std.mem.eql(u8, sub, h.name)) continue;
+        const bad = if (h.words == 0) argv.len > 5 else argv.len != h.words;
+        if (argv.len < 3 or bad) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"{s}\"", .{h.use});
+        break;
+    } else {
+        it.result = .{ .str = try std.fmt.allocPrint(a, "unknown subcommand \"{s}\": must be new, feed, resize, size, cursor, modes, rows, cells, dirty, scrollback, title, bells, or delete", .{sub}) };
+        it.error_code = try value.newList(a, &.{ .{ .str = "TCL" }, .{ .str = "LOOKUP" }, .{ .str = "SUBCOMMAND" }, .{ .str = sub } });
+        return error.TclError;
+    }
     const t = try lookup(it, argv[2]);
     if (std.mem.eql(u8, sub, "feed")) {
-        if (argv.len != 4) return it.wrongArgs("ztcl::vt feed handle bytes");
         t.write(try it.str(argv[3]));
         const r = try a.dupe(u8, t.reply.items);
         t.reply.clearRetainingCapacity();
@@ -389,21 +416,17 @@ fn cmd(it: *Interp, argv: []const Value, _: ?*interp.Cmd) interp.Error!Value {
         return .{ .str = r };
     }
     if (std.mem.eql(u8, sub, "resize")) {
-        if (argv.len != 5) return it.wrongArgs("ztcl::vt resize handle cols rows");
         t.resize(try size16(it, argv[3]), try size16(it, argv[4])) catch return error.OutOfMemory;
         return Value.empty;
     }
     if (std.mem.eql(u8, sub, "size")) {
-        if (argv.len != 3) return it.wrongArgs("ztcl::vt size handle");
         return list(it, &.{ .{ .int = t.colCount() }, .{ .int = t.rowCount() } });
     }
     if (std.mem.eql(u8, sub, "cursor")) {
-        if (argv.len != 3) return it.wrongArgs("ztcl::vt cursor handle");
         const c = t.cursor();
         return list(it, &.{ .{ .int = c.x }, .{ .int = c.y } });
     }
     if (std.mem.eql(u8, sub, "modes")) {
-        if (argv.len != 3) return it.wrongArgs("ztcl::vt modes handle");
         const m = t.modes();
         var out: [18]Value = undefined;
         var n: usize = 0;
@@ -420,7 +443,6 @@ fn cmd(it: *Interp, argv: []const Value, _: ?*interp.Cmd) interp.Error!Value {
     }
     if (std.mem.eql(u8, sub, "rows") or std.mem.eql(u8, sub, "cells")) return cmdRows(it, argv, t, sub[0] == 'c');
     if (std.mem.eql(u8, sub, "dirty")) {
-        if (argv.len != 3) return it.wrongArgs("ztcl::vt dirty handle");
         var ys: std.ArrayList(u16) = .empty;
         t.dirty(&ys, a) catch return error.OutOfMemory;
         const out = try a.alloc(Value, ys.items.len);
@@ -428,19 +450,15 @@ fn cmd(it: *Interp, argv: []const Value, _: ?*interp.Cmd) interp.Error!Value {
         return value.wrapList(a, out);
     }
     if (std.mem.eql(u8, sub, "scrollback")) {
-        if (argv.len != 3) return it.wrongArgs("ztcl::vt scrollback handle");
         return .{ .int = @intCast(t.scrollbackLen()) };
     }
     if (std.mem.eql(u8, sub, "title")) {
-        if (argv.len != 3) return it.wrongArgs("ztcl::vt title handle");
         return .{ .str = try a.dupe(u8, t.title()) };
     }
     if (std.mem.eql(u8, sub, "bells")) {
-        if (argv.len != 3) return it.wrongArgs("ztcl::vt bells handle");
         return .{ .int = t.bells };
     }
     if (std.mem.eql(u8, sub, "delete")) {
-        if (argv.len != 3) return it.wrongArgs("ztcl::vt delete handle");
         const s = try state(it);
         for (s.terms.items) |*p| if (p.* == t) {
             p.* = null;
@@ -448,7 +466,7 @@ fn cmd(it: *Interp, argv: []const Value, _: ?*interp.Cmd) interp.Error!Value {
         t.destroy();
         return Value.empty;
     }
-    return it.failCode("TCL LOOKUP SUBCOMMAND", "unknown subcommand \"{s}\": must be new, feed, resize, size, cursor, modes, rows, cells, dirty, scrollback, title, bells, or delete", .{sub});
+    unreachable;
 }
 
 fn cmdNew(it: *Interp, argv: []const Value) interp.Error!Value {

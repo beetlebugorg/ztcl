@@ -1265,6 +1265,27 @@ test "ztcl::vt keeps a terminal state with no capability" {
     try std.testing.expectEqualStrings("can not find terminal \"vt0\"", try it.str(try it.eval("ztcl::vt delete vt0; catch {ztcl::vt size vt0} m; set m")));
 }
 
+test "ztcl::vt checks the subcommand and the count before the handle (#713)" {
+    if (modules.find("ztcl::vt") == null) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    _ = try it.eval("package require ztcl::vt");
+    const cases = [_][2][]const u8{
+        .{ "ztcl::vt g vt0", "{unknown subcommand \"g\": must be new, feed, resize, size, cursor, modes, rows, cells, dirty, scrollback, title, bells, or delete} {TCL LOOKUP SUBCOMMAND g}" },
+        .{ "ztcl::vt bogus", "{unknown subcommand \"bogus\": must be new, feed, resize, size, cursor, modes, rows, cells, dirty, scrollback, title, bells, or delete} {TCL LOOKUP SUBCOMMAND bogus}" },
+        .{ "ztcl::vt size vt99 x", "{wrong # args: should be \"ztcl::vt size handle\"} {TCL WRONGARGS}" },
+        .{ "ztcl::vt size", "{wrong # args: should be \"ztcl::vt size handle\"} {TCL WRONGARGS}" },
+        .{ "ztcl::vt resize vt99 10", "{wrong # args: should be \"ztcl::vt resize handle cols rows\"} {TCL WRONGARGS}" },
+        .{ "ztcl::vt rows vt99 0 1 2", "{wrong # args: should be \"ztcl::vt rows|cells handle ?first? ?last?\"} {TCL WRONGARGS}" },
+        .{ "ztcl::vt rows vt99 0 1", "{can not find terminal \"vt99\"} {ZTCL VT HANDLE}" },
+    };
+    for (cases) |c| {
+        const script = try std.fmt.allocPrint(it.alloc(), "catch {{{s}}} m o; list $m [dict get $o -errorcode]", .{c[0]});
+        try std.testing.expectEqualStrings(c[1], try it.str(try it.eval(script)));
+    }
+}
+
 test "a built-in module installs once and runs with the limits" {
     if (modules.find("ztcl::hello") == null) return error.SkipZigTest;
     var it: tcl.Interp = undefined;
