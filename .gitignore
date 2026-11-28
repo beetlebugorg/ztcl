@@ -13,3 +13,6 @@ zig-pkg/
 
 # The inputs, the builds, and the outputs of bench/compare/run.py.
 bench/compare/.work/
+
+# The bytecode that Python writes when a tool imports a module.
+__pycache__/
