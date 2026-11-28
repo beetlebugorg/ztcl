@@ -84,6 +84,7 @@ namespace eval refdoc {
     variable N
     variable stack {}
     variable seq 0
+    variable runs 0
 }
 
 # ---------------------------------------------------------------------------
@@ -454,12 +455,24 @@ proc refdoc::run {runner flags release items} {
         append script "puts -nonewline \"\\x1f\$::__c\\x1f\$::__v\\x1f\[expr {\[dict exists \$::__o -errorcode\] ? \[dict get \$::__o -errorcode\] : {}}\]\\x1e\"\n"
     }
     append script [dict get [settings] epilog] "\n"
-    set f [file tempfile path]
-    close $f
+    # Each run has a new empty folder of zig-out/ as its working folder, so
+    # an example that makes files, also with `--root .`, makes them there.
+    variable root
+    variable runs
+    set dir [file join $root zig-out refdoc-run [incr runs]]
+    file delete -force $dir
+    file mkdir $dir
+    set path [file join $dir examples.tcl]
     writefile $path $script
     set args [concat [dict get [settings] flags] [dict get $release flags] $flags [list $path]]
-    catch {exec -ignorestderr -- $runner {*}$args} out
-    file delete $path
+    set here [pwd]
+    cd $dir
+    try {
+        catch {exec -ignorestderr -- $runner {*}$args} out
+    } finally {
+        cd $here
+        file delete -force $dir
+    }
     set got {}
     foreach chunk [lrange [split $out "\x1d"] 1 end] {
         if {[regexp {^(.*)\x1f(\d+)\x1f(.*)\x1f(.*)\x1e} $chunk -> o c v ec]} {
@@ -1125,6 +1138,9 @@ proc refdoc::lambda1 {e} {
 # selftest: a file of an entry cannot run a command.
 
 proc refdoc::selftest {} {
+    variable root
+    file mkdir [file join $root zig-out]
+    set path [file join $root zig-out refdoc-selftest.tcl]
     set fails 0
     set bad {
         exec {command x { summary [exec cmd.exe /c echo hi] }}
@@ -1136,8 +1152,6 @@ proc refdoc::selftest {} {
         nested {command x { subcommand y { description [file delete x] } }}
     }
     foreach {what script} $bad {
-        set f [file tempfile path]
-        close $f
         writefile $path $script
         variable N
         if {[catch {loadfile $path} msg]} {
@@ -1153,8 +1167,6 @@ proc refdoc::selftest {} {
         }
         file delete $path
     }
-    set f [file tempfile path]
-    close $f
     writefile $path {command x { summary {A command.}; example {x} {} }}
     if {[catch {loadfile $path} id]} {
         puts "FAIL a file of declarations does not load: $id"
