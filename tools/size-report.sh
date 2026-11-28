@@ -57,7 +57,7 @@ size_of() {
 }
 build() { # name, flags...
     n=$1; shift
-    zig build -Dstrip=true -Dsize-plant="$plant" --prefix "$out/$n" "$@" >"$out/$n.log" 2>&1 || {
+    zig build -Doptimize=ReleaseFast -Dstrip=true -Dsize-plant="$plant" --prefix "$out/$n" "$@" >"$out/$n.log" 2>&1 || {
         echo "the build $n failed:" >&2; cat "$out/$n.log" >&2; exit 1; }
     size_of "$out/$n/bin/$exe"
 }

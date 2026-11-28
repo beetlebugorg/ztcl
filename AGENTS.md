@@ -17,7 +17,9 @@ systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- <command>
 
 | Command | What it does |
 |---|---|
-| `zig build` | Builds the runner. |
+| `zig build` | Builds the runner in Debug: fast to compile, with every safety check. Use this for work and tests. |
+| `zig build -Doptimize=ReleaseFast` | Builds the release runner. Use it only for releases, benchmarks, and size numbers. |
+| `zig build -Doptimize=ReleaseSafe suite-runner` | Builds the suite runner for the Tcl suites: optimized, with safety checks. |
 | `zig build test` | Runs the unit tests. |
 | `zig build run -- script.tcl` | Runs a script. |
 | `zig build bench` | Runs the point proc benchmark. |
@@ -66,3 +68,6 @@ A new `ztcl::` command goes in with its page in `docs/modules/` and a row in `do
 - Follow the commit rules in WRITING.md.
 - Add no attribution lines, co-author lines, or session links.
 - Merge by rebase only. Keep merge commits out of PR branches.
+
+
+Build jobs: `zig build` runs as many steps at once as the CPU has cores. With few agents on a host, use the default (no `-j`). Lower `-j` only when memory is short (each LLVM compile of the runner uses 3 to 4 GB).
