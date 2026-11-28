@@ -14,6 +14,9 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$here/../..
 tclsh=${TCLSH:-tclsh}
 zig=${ZIG:-zig}
+# The C compiler of the native packages for tclsh: cc, or zig cc when
+# the host has no cc (the container of the self-hosted runner).
+if [ -n "${CC:-}" ]; then cc_cmd=$CC; elif command -v cc > /dev/null; then cc_cmd=cc; else cc_cmd="${ZIG:-zig} cc"; fi
 ztcl=${ZTCL:-$root/zig-out/bin/ztcl}
 cfg=$(echo 'puts [info library]' | "$tclsh")/tclConfig.sh
 for c in "$cfg" /usr/lib/tclConfig.sh /usr/lib/tcl8.6/tclConfig.sh /usr/lib/x86_64-linux-gnu/tcl8.6/tclConfig.sh /usr/local/lib/tclConfig.sh /opt/homebrew/lib/tclConfig.sh; do
@@ -43,7 +46,7 @@ for n in $names; do
   "$zig" cc -target wasm32-wasi -O1 -DUSE_TCL_STUBS -I"$out/inc" -mexec-model=reactor \
     "$root/tests/cext/$n.c" "$root/zig-out/lib/libztclstubs.a" -Wl,--export="$init" $exports -o "$out/$n.wasm"
   # shellcheck disable=SC2086
-  cc -shared -fPIC -O1 -DUSE_TCL_STUBS $TCL_INCLUDE_SPEC "$root/tests/cext/$n.c" -o "$out/$n.so" $TCL_STUB_LIB_SPEC
+  $cc_cmd -shared -fPIC -O1 -DUSE_TCL_STUBS $TCL_INCLUDE_SPEC "$root/tests/cext/$n.c" -o "$out/$n.so" $TCL_STUB_LIB_SPEC
   { echo "set dir $out"; cat "$root/tests/cext/$n.tcl"; } > "$out/$n.tcl"
   "$tclsh" "$out/$n.tcl" > "$out/$n.want" 2>&1 || true
   {
