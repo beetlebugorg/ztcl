@@ -53,7 +53,8 @@ fn int(v: u64) Value {
 
 pub fn cmdGc(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len != 2) return it.wrongArgs("ztcl::gc stats|collect|reset");
-    const sub = try it.str(argv[1]);
+    const Sub = enum { collect, reset, stats };
+    const sub = @tagName(try @import("tcl9.zig").pick(it, Sub, try it.str(argv[1]), .{ .code = "TCL LOOKUP SUBCOMMAND" }));
     const h = it.heap;
     if (eql(sub, "collect")) {
         it.collect();
@@ -63,7 +64,6 @@ pub fn cmdGc(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         h.resetStats(meter.monoNs());
         return Value.empty;
     }
-    if (!eql(sub, "stats")) return it.fail("bad option \"{s}\": must be collect, reset, or stats", .{sub});
     const st = &h.stats;
     var scratch: [heap_mod.Heap.Stats.pause_ring]u32 = undefined;
     const now = meter.monoNs();

@@ -29,11 +29,11 @@ fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 
-const subs = "create, delete, get, list, pubkey, record, reset, run, or verify";
 
 pub fn cmdMeter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("ztcl::meter subcommand ?arg ...?");
-    const sub = try it.str(argv[1]);
+    const Sub = enum { create, delete, get, list, pubkey, record, reset, run, verify };
+    const sub = @tagName(try @import("tcl9.zig").pick(it, Sub, try it.str(argv[1]), .{ .code = "TCL LOOKUP SUBCOMMAND" }));
     const args = argv[2..];
     if (eql(sub, "create")) return create(it, args);
     if (eql(sub, "get")) {
@@ -96,7 +96,7 @@ pub fn cmdMeter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         const kp = try keyOf(it, args[0]);
         return .{ .str = try it.alloc().dupe(u8, &std.fmt.bytesToHex(kp.public_key.toBytes(), .lower)) };
     }
-    return it.failCode("TCL LOOKUP SUBCOMMAND", "unknown or ambiguous subcommand \"{s}\": must be " ++ subs, .{sub});
+    unreachable;
 }
 
 fn noMeter(it: *Interp, name: []const u8) Error {
