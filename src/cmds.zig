@@ -1774,7 +1774,10 @@ fn cmdLsearch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 try out.appendSlice(it.alloc(), items[i .. i + stride]);
                 continue;
             }
-            v = if (subindices) key else items[i];
+            // Tcl 8.6 gives the whole element for -subindices -inline
+            // with no -all, and the subelement with -all. Tcl 9 gives the
+            // subelement in both cases.
+            v = if (subindices and (all or it.tcl9())) key else items[i];
         } else if (subindices) {
             v = .{ .int = @intCast(i + lead) };
             if (path.?.len > 0) {
