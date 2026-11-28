@@ -450,7 +450,24 @@ pub fn stat(it: *Interp, rel: []const u8) Error!StatResult {
     return @import("tape.zig").stat(it, rel, statHost);
 }
 
+/// `stat` that follows no symbolic link in host mode too, as `lstat`:
+/// for `file type` and `file lstat`. The root folder follows none in
+/// each call.
+pub fn lstat(it: *Interp, rel: []const u8) Error!StatResult {
+    return @import("tape.zig").stat(it, rel, lstatHost);
+}
+
 fn statHost(it: *Interp, rel: []const u8) Error!StatResult {
+    return statOf(it, rel, it.fs.host);
+}
+
+fn lstatHost(it: *Interp, rel: []const u8) Error!StatResult {
+    return statOf(it, rel, false);
+}
+
+/// The data of `rel`. With `follow`, a symbolic link gives the data of
+/// its target on Linux.
+fn statOf(it: *Interp, rel: []const u8, follow: bool) Error!StatResult {
     if (it.fs.host and comptime on_win) return win.hostStat(it, rel);
     if (comptime on_win) return win.stat(it, rel);
     if (comptime on_wasi) return wfs.stat(it, rel);
@@ -493,8 +510,8 @@ fn statHost(it: *Interp, rel: []const u8) Error!StatResult {
         };
         defer _ = linux.close(p.fd);
         // The jail follows no symlink (AT_SYMLINK_NOFOLLOW), and host mode
-        // follows them, as the stat of tclsh does.
-        rc = linux.statx(p.fd, p.base, if (it.fs.host) 0 else 0x100, statx_mask, &st);
+        // follows them, as the stat of tclsh does, except for an lstat.
+        rc = linux.statx(p.fd, p.base, if (follow) 0 else 0x100, statx_mask, &st);
     }
     const e = linux.errno(rc);
     if (e != .SUCCESS) return .{ .err = e };

@@ -4173,3 +4173,19 @@ test "file home, file tildeexpand, and file tempdir of Tcl 9.1 in the root folde
     try std.testing.expectError(error.TclError, it.eval("file home"));
     try std.testing.expect(std.mem.startsWith(u8, try it.str(it.result), "unknown or ambiguous subcommand \"home\""));
 }
+
+test "file type and file lstat of a symbolic link in host mode give the link, as in tclsh" {
+    if (!tcl.fsroot.supported or @import("builtin").os.tag != .linux) return error.SkipZigTest;
+    const linux = tcl.sys.os;
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setHost(&it);
+    _ = try it.eval("set d [file join [pwd] .zig-cache ztcl-lstat-test]; file delete -force $d; file mkdir $d; close [open $d/n.txt w]");
+    defer _ = it.eval("file delete -force $d") catch {};
+    const lnk = try std.fmt.allocPrintSentinel(std.testing.allocator, "{s}/lnk", .{try it.str(try it.eval("set d"))}, 0);
+    defer std.testing.allocator.free(lnk);
+    try std.testing.expectEqual(linux.E.SUCCESS, linux.errno(linux.symlinkat("n.txt", linux.AT.FDCWD, lnk)));
+    try std.testing.expectEqualStrings("link file link file", try it.str(try it.eval("file lstat $d/lnk l; file stat $d/lnk s; list [file type $d/lnk] [file type $d/n.txt] $l(type) $s(type)")));
+}

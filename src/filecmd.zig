@@ -93,11 +93,17 @@ fn statInfo(it: *Interp, p: []const u8) Error!?fsroot.Info {
 }
 
 fn needInfo(it: *Interp, p: []const u8, verb: []const u8) Error!fsroot.Info {
+    return needInfoOf(it, p, verb, true);
+}
+
+/// `needInfo` with no symbolic link followed when `follow` is false, for
+/// `file type` and `file lstat`, as in tclsh.
+fn needInfoOf(it: *Interp, p: []const u8, verb: []const u8, follow: bool) Error!fsroot.Info {
     if (try vfs.gate(it, p, .file, "could not read")) |h| {
         return vfs.stat(it, h) orelse it.failCode("POSIX ENOENT {no such file or directory}", "could not {s} \"{s}\": no such file or directory", .{ verb, p });
     }
     const rel = try fsroot.need(it, p);
-    return switch (try fsroot.stat(it, rel)) {
+    return switch (try if (follow) fsroot.stat(it, rel) else fsroot.lstat(it, rel)) {
         .ok => |x| x,
         .err => |e| fsroot.posixError(it, e, try std.fmt.allocPrint(it.alloc(), "could not {s} \"{s}\": ", .{ verb, p })),
     };
@@ -706,7 +712,7 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         return .{ .int = @intFromBool(b) };
     }
     if (eql(s, "size")) return .{ .int = @intCast((try needInfo(it, try one(it, s, args), "read")).size) };
-    if (eql(s, "type")) return .{ .str = typeName((try needInfo(it, try one(it, s, args), "read")).mode) };
+    if (eql(s, "type")) return .{ .str = typeName((try needInfoOf(it, try one(it, s, args), "read", false)).mode) };
     if (eql(s, "mtime") or eql(s, "atime")) {
         if (args.len != 1) return it.fail("file {s} with a new time is not available", .{s});
         const st = try needInfo(it, try one(it, s, args), "read");
@@ -715,9 +721,10 @@ pub fn cmdFile(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (eql(s, "stat") or eql(s, "lstat")) {
         // Tcl 9 gives the dictionary of the fields for a call with no
         // variable.
-        if (it.tcl9() and args.len == 1) return statList(it, try needInfo(it, try it.str(args[0]), "read"));
+        const follow = eql(s, "stat");
+        if (it.tcl9() and args.len == 1) return statList(it, try needInfoOf(it, try it.str(args[0]), "read", follow));
         if (args.len != 2) return it.failCode("TCL WRONGARGS", "wrong # args: should be \"file {s} name {s}\"", .{ s, if (it.tcl9()) "?varName?" else "varName" });
-        const st = try needInfo(it, try it.str(args[0]), "read");
+        const st = try needInfoOf(it, try it.str(args[0]), "read", follow);
         const name = try it.str(args[1]);
         const l = try it.list(try statList(it, st));
         var k: usize = 0;
