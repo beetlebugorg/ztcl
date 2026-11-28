@@ -353,3 +353,14 @@ test "dict map, dict incr, and string map -nocase as in Tcl" {
         .{ "string map -nocase {\u{e9} E} a\u{e9}\u{c9}b", "aEEb", "aEEb" },
     });
 }
+
+test "the messages of an operand of the wrong type name the value and the side in 9.1" {
+    try check(0, &.{
+        .{ "catch {expr {\"ten\" + 1}} m o; list $m [dict get $o -errorcode]", "{can't use non-numeric string as operand of \"+\"} {ARITH DOMAIN {non-numeric string}}", "{cannot use non-numeric string \"ten\" as left operand of \"+\"} {ARITH DOMAIN {non-numeric string}}" },
+        .{ "catch {expr {1 - \"ten\"}} m; set m", "can't use non-numeric string as operand of \"-\"", "cannot use non-numeric string \"ten\" as right operand of \"-\"" },
+        .{ "catch {expr {!\"x\"}} m; set m", "can't use non-numeric string as operand of \"!\"", "cannot use non-numeric string \"x\" as operand of \"!\"" },
+        .{ "catch {expr {7.0 % 2}} m o; list $m [dict get $o -errorcode]", "{can't use floating-point value as operand of \"%\"} {ARITH DOMAIN {floating-point value}}", "{cannot use floating-point value \"7.0\" as left operand of \"%\"} {ARITH DOMAIN {floating-point value}}" },
+        .{ "set a {1 + 1}; catch {expr {$a * 2}} m o; list $m [dict get $o -errorcode]", "{can't use non-numeric string as operand of \"*\"} {ARITH DOMAIN {non-numeric string}}", "{cannot use a list as left operand of \"*\"} {ARITH DOMAIN list}" },
+        .{ "catch {expr {\"\" + 1}} m; set m", "can't use empty string as operand of \"+\"", "cannot use non-numeric string \"\" as left operand of \"+\"" },
+    });
+}
