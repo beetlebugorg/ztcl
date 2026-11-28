@@ -41,7 +41,7 @@ const Channel = chan.Channel;
 const Method = enum { clear, drain, finalize, flush, initialize, @"limit?", read, write };
 
 fn bit(m: Method) u16 {
-    return @as(u16, 1) << @intFromEnum(m);
+    return @as(u16, 1) << @backingInt(m);
 }
 
 pub const Xform = struct {
