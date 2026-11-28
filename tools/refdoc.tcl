@@ -415,6 +415,12 @@ proc refdoc::tclword {text} {
 # The groups of examples that run in one process: the command, then each
 # subcommand with the examples of its options. Each item is
 # {where kind dict}.
+# An example of an option of one release runs only in that release.
+proc refdoc::inherit {x o} {
+    if {[has $o tcl] && ![dict exists $x tcl]} { dict set x tcl [get $o tcl] }
+    return $x
+}
+
 proc refdoc::groups {e} {
     set out {}
     foreach t [list $e {*}[get $e subs]] {
@@ -424,13 +430,13 @@ proc refdoc::groups {e} {
         foreach x [get $t examples] { lappend items [list "$where example [incr n]" example $x] }
         foreach o [get $t options] {
             set n 0
-            foreach x [get $o examples] { lappend items [list "$where [get $o name] example [incr n]" example $x] }
+            foreach x [get $o examples] { lappend items [list "$where [get $o name] example [incr n]" example [inherit $x $o]] }
         }
         set n 0
         foreach x [get $t errors] { lappend items [list "$where error [incr n]" error $x] }
         foreach o [get $t options] {
             set n 0
-            foreach x [get $o errors] { lappend items [list "$where [get $o name] error [incr n]" error $x] }
+            foreach x [get $o errors] { lappend items [list "$where [get $o name] error [incr n]" error [inherit $x $o]] }
         }
         set tcl [get $t tcl [get $e tcl]]
         set flags [concat [get $e flags] [expr {$t eq $e ? {} : [get $t flags]}]]

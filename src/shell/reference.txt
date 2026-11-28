@@ -101,8 +101,43 @@ syn: lrepeat COUNT ?ELEMENT ...?
 syn: lreplace LIST FIRST LAST ?ELEMENT ...?
 == lreverse
 syn: lreverse LIST
+== lsearch
+syn: lsearch ?OPTION ...? LIST PATTERN
+opt: -glob | Matches PATTERN as a glob pattern; the default.
+opt: -exact | Matches an element that equals PATTERN.
+opt: -regexp | Matches PATTERN as a regular expression.
+opt: -sorted | Searches a sorted list with a binary search.
+opt: -bisect | Gives the index of the last element at or before PATTERN in a sorted list.
+opt: -all | Gives each match in place of the first one.
+opt: -inline | Gives the matching elements in place of their indexes.
+opt: -not | Finds the elements that do not match.
+opt: -start INDEX | Starts the search at an index.
+opt: -ascii | Compares the elements as text; the default type.
+opt: -dictionary | Compares the elements in dictionary order.
+opt: -integer | Compares the elements as integers.
+opt: -real | Compares the elements as floating-point numbers.
+opt: -nocase | Matches letters with no regard to case.
+opt: -increasing | Says that a sorted list is in increasing order; the default.
+opt: -decreasing | Says that a sorted list is in decreasing order.
+opt: -index INDEX | Compares an element of each element in place of the whole element.
+opt: -subindices | With -index, gives the path of the match or the subelement.
+opt: -stride N | Reads the list as groups of N elements.
 == lset
 syn: lset VAR ?INDEX ...? VALUE
+== lsort
+syn: lsort ?OPTION ...? LIST
+opt: -ascii | Compares the elements as text; the default type.
+opt: -dictionary | Compares the elements in dictionary order: no case, and runs of digits as numbers.
+opt: -integer | Compares the elements as integers.
+opt: -real | Compares the elements as floating-point numbers.
+opt: -command SCRIPT | Compares two elements with a command.
+opt: -increasing | Sorts from the smallest element to the largest; the default.
+opt: -decreasing | Sorts from the largest element to the smallest.
+opt: -nocase | Compares the text with no regard to case.
+opt: -unique | Keeps one element of each group of equal elements.
+opt: -indices | Gives the indexes of the elements in sorted order.
+opt: -index INDEX | Compares an element of each element in place of the whole element.
+opt: -stride N | Sorts groups of N elements.
 == lseq
 syn: lseq count
 syn: lseq start ?to|..? end ??by? step?
@@ -115,31 +150,6 @@ syn: lremove list ?index ...?
 syn: ledit listVar first last ?element ...?
 == lfilter
 syn: lfilter varList list ?varList list ...? command
-== lsearch
-syn: lsearch ?-option value ...? list pattern
-opt: -exact | The element equals the pattern.
-opt: -glob | A glob pattern (the default).
-opt: -regexp | A regular expression.
-opt: -all | Gives each index that matches.
-opt: -inline | Gives the elements in place of the indexes.
-opt: -not | Finds the elements that do not match.
-opt: -nocase | Matches letters with no case.
-opt: -index INDEX | Compares element INDEX of each element.
-opt: -sorted | The list is sorted, and the search is a binary search.
-opt: -start INDEX | Starts at INDEX.
-opt: -stride N | Tcl 9.1 only: the list is groups of N elements.
-== lsort
-syn: lsort ?-option value ...? list
-opt: -ascii | Compares the text (the default).
-opt: -dictionary | Compares the text with no case, and runs of digits as numbers: a2 before a10.
-opt: -integer | Compares integers.
-opt: -real | Compares floats.
-opt: -command CMD | Calls CMD with two elements.
-opt: -increasing | The smallest first (the default).
-opt: -decreasing | The largest first.
-opt: -index INDEX | Compares element INDEX of each element.
-opt: -unique | Keeps one of each run of equal elements.
-opt: -nocase | Compares letters with no case.
 == lmap
 syn: lmap varList list ?varList list ...? command
 == foreach
