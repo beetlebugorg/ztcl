@@ -1417,7 +1417,7 @@ pub const Matcher = struct {
                 .char => |c| if (at < m.n and m.ch(at) == c) try todo.append(a, key(pc + 1, at + 1)),
                 .set => |s| if (at < m.n and s.has(m.ch(at))) try todo.append(a, key(pc + 1, at + 1)),
                 .assert => |as| if (m.assertOk(as, at)) try todo.append(a, key(pc + 1, at)),
-                .look => |l| if ((try m.lookRun(l.start, at)) != l.negate) try todo.append(a, key(pc + 2, at)),
+                .look => |l| if ((try m.lookRun(l.start, at)) != l.negate) try todo.append(a, key(pc + 1, at)),
             }
         }
         return false;
@@ -1448,7 +1448,7 @@ pub const Matcher = struct {
                     try m.work.append(a, sp.first);
                 },
                 .assert => |as| if (m.assertOk(as, pos)) try m.work.append(a, pc + 1),
-                .look => |l| if (dry) unreachable else if ((try m.lookRun(l.start, pos)) != l.negate) try m.work.append(a, pc + 2),
+                .look => |l| if (dry) unreachable else if ((try m.lookRun(l.start, pos)) != l.negate) try m.work.append(a, pc + 1),
                 .match => matched = true,
                 else => {
                     list[count.*] = .{ .pc = pc, .start = start };

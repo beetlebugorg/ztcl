@@ -717,6 +717,13 @@ test "regexp, regsub, and the -regexp options" {
         .{ "regexp {(a*)*b} aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaac", "0" },
         .{ "regexp {(} x", "!couldn't compile regular expression pattern: parentheses () not balanced" },
         .{ "regsub -all {a} banana A", "bAnAnA" },
+        // A lookahead adds no text to the match.
+        .{ "regexp -inline {x(?=a)} xa", "x" },
+        .{ "regexp -inline -indices {(?=a)} a", "{0 -1}" },
+        .{ "regexp -inline {x(?!a)} xaxb", "x" },
+        .{ "regexp -inline -indices {x(?!a)} xaxb", "{2 2}" },
+        .{ "regsub -all {\\w+(?=,)} {a,b,c} <&>", "<a>,<b>,c" },
+        .{ "regexp -inline {(?=a(?=b))a} ab", "a" },
         .{ "regsub {(\\w+) (\\w+)} {hello world} {\\2 \\1}", "world hello" },
         .{ "regsub -all {\\s+} {a  b   c} { } v; set v", "a b c" },
         .{ "regsub -all {x*} abc -", "-a-b-c-" },
