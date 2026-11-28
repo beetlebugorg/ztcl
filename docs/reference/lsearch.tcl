@@ -38,7 +38,7 @@ command lsearch {
     release {Tcl 9.1 has the option `-stride`.}
     difference {Most errors have `-errorcode NONE`, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL LOOKUP INDEX option` or `TCL VALUE INDEX` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
     difference {In Tcl 9.0.4 the message of a bad regular expression starts with `cannot compile` ([issue 668](https://github.com/beetlebugorg/ztcl/issues/668)).}
-    difference {With `-subindices -inline` and no `-all`, Tcl 8.6.16 gives the whole element, where ztcl gives the subelement in both releases, as Tcl 9.0.4 does ([issue 669](https://github.com/beetlebugorg/ztcl/issues/669)).}
+    release {With `-subindices -inline` and no `-all`, Tcl 8.6 gives the whole element and Tcl 9.1 gives the subelement. With `-all` both give the subelements.}
 
     option -glob {
         type flag
@@ -190,9 +190,10 @@ command lsearch {
     option -subindices {
         type flag
         summary {With -index, gives the path of the match or the subelement.}
-        description {With `-index`, the result of a match is the index of the element followed by the indexes of `-index`: a path for `lindex`. With `-inline` it is the subelement at that path in place of the whole element.}
+        description {With `-index`, the result of a match is the index of the element followed by the indexes of `-index`: a path for `lindex`. With `-inline` it is the subelement at that path in place of the whole element, except in Tcl 8.6 with no `-all`: there it is the whole element.}
         example {lsearch -subindices -index 1 {{x 1} {y 2}} 2} {1 1}
-        example {lsearch -subindices -index 1 -inline {{x 1} {y 2}} 2} 2
+        example {lsearch -subindices -index 1 -inline {{x 1} {y 2}} 2} 2 -tcl 9.1
+        example {lsearch -subindices -index 1 -inline {{x 1} {y 2}} 2} {y 2} -tcl 8.6
         example {lsearch -subindices -index 1 -all -inline {{x 1} {y 2}} *} {1 2}
         error {lsearch -subindices -index 5 {{x 1}} 2} {element 5 missing from sublist "x 1"} NONE
     }

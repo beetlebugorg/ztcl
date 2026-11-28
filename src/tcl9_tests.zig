@@ -264,6 +264,15 @@ test "lsearch -stride of Tcl 9.1" {
     });
 }
 
+test "lsearch -subindices -inline gives the whole element in 8.6 with no -all" {
+    try check(0, &.{
+        .{ "lsearch -subindices -index 1 -inline {{x 1} {y 2}} 2", "y 2", "2" },
+        .{ "lsearch -subindices -index {1 0} -inline {{x {1 a}}} 1", "x {1 a}", "1" },
+        .{ "lsearch -subindices -index 1 -all -inline {{x 1} {y 2}} *", "1 2", "1 2" },
+        .{ "lsearch -subindices -index 1 {{x 1} {y 2}} 2", "1 1", "1 1" },
+    });
+}
+
 test "a \\u escape of each surrogate half is one character in 9.1" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
