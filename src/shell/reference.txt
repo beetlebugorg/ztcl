@@ -324,6 +324,44 @@ syn: throw type message
 syn: catch script ?resultVarName? ?optionVarName?
 == try
 syn: try body ?handler ...? ?finally script?
+== file
+syn: file SUBCOMMAND ?ARG ...?
+sub: file join NAME ?NAME ...? | Joins parts into one path.
+sub: file split NAME | Gives the parts of a path as a list.
+sub: file dirname NAME | Gives a path with no last part.
+sub: file tail NAME | Gives the last part of a path.
+sub: file extension NAME | Gives the extension of the last part of a path, with its dot.
+sub: file rootname NAME | Gives a path with no extension.
+sub: file pathtype NAME | Gives the kind of a path: absolute, relative, or volumerelative.
+sub: file normalize NAME | Gives the full path with each .
+sub: file nativename NAME | Gives a path in the form of the platform.
+sub: file separator ?NAME? | Gives the separator of paths.
+sub: file mkdir ?DIR ...? | Makes folders, with each missing parent folder.
+sub: file exists NAME | Tests whether a file or a folder exists.
+sub: file isfile NAME | Tests whether a path is a file.
+sub: file isdirectory NAME | Tests whether a path is a folder.
+sub: file readable NAME | Tests whether a file can be read.
+sub: file writable NAME | Tests whether a file can be written.
+sub: file executable NAME | Tests whether a file has a permission to run.
+sub: file owned NAME | Tests whether a file exists and is of the user.
+sub: file size NAME | Gives the size of a file in bytes.
+sub: file type NAME | Gives the kind of an entry of the file system: file, directory, link, and others.
+sub: file mtime NAME | Gives the time of the last change of a file, in seconds.
+sub: file atime NAME | Gives the time of the last read of a file, in seconds.
+sub: file stat NAME VAR | Puts the facts of a file in an array.
+sub: file lstat NAME VAR | Puts the facts of a file in an array, for a link itself.
+sub: file attributes NAME ?OPTION ?VALUE ...?? | Gives or sets the attributes of the platform of a file; not available in ztcl.
+sub: file copy ?-force? ?--? SOURCE TARGET | Copies files and folders.
+sub: file copy ?-force? ?--? SOURCE ?SOURCE ...? DIR | Copies files and folders.
+sub: file rename ?-force? ?--? SOURCE TARGET | Moves or renames files and folders.
+sub: file rename ?-force? ?--? SOURCE ?SOURCE ...? DIR | Moves or renames files and folders.
+sub: file delete ?-force? ?--? ?NAME ...? | Removes files and folders.
+sub: file link ?-symbolic|-hard? LINK ?TARGET? | Makes a link, or gives the target of a link; not available in ztcl.
+sub: file readlink NAME | Gives the target of a symbolic link; not available in ztcl.
+sub: file tempfile ?VAR? ?TEMPLATE? | Opens a new temporary file and gives its channel.
+sub: file channels ?PATTERN? | Gives the names of the open channels.
+sub: file system NAME | Gives the file system of a path.
+sub: file volumes | Gives the volumes of the file system.
 == open
 syn: open fileName ?access? ?permissions?
 == close
@@ -370,42 +408,6 @@ sub: chan seek CHAN OFFSET ?ORIGIN? | As seek.
 sub: chan tell CHAN | As tell.
 == source
 syn: source ?-encoding name? fileName
-== file
-syn: file subcommand ?arg ...?
-sub: file join NAME ?NAME ...? | One path from parts.
-sub: file split NAME | The parts of a path.
-sub: file dirname NAME | The path without its last part.
-sub: file tail NAME | The last part.
-sub: file extension NAME | The extension with its dot, such as .json.
-sub: file rootname NAME | The path without its extension.
-sub: file normalize NAME | The full path with .
-sub: file pathtype NAME | absolute, relative, or volumerelative.
-sub: file nativename NAME | The path with the separator of the platform.
-sub: file separator ?NAME? | The separator of paths.
-sub: file exists NAME | 1 when the file exists.
-sub: file isfile NAME | 1 for a file.
-sub: file isdirectory NAME | 1 for a folder.
-sub: file readable NAME | 1 when the file can be read.
-sub: file writable NAME | 1 when the file can be written.
-sub: file executable NAME | 1 when the file can run.
-sub: file owned NAME | 1 when the user owns the file.
-sub: file size NAME | The size in bytes.
-sub: file mtime NAME ?TIME? | The time of the last change, in seconds.
-sub: file atime NAME ?TIME? | The time of the last read, in seconds.
-sub: file stat NAME VAR | Puts the facts of the file in an array.
-sub: file lstat NAME VAR | As stat, for a link itself.
-sub: file type NAME | file, directory, link, and others.
-sub: file attributes NAME ?OPTION ?VALUE ...?? | The attributes of the platform, such as -permissions.
-sub: file mkdir ?DIR ...? | Makes folders, with each missing parent.
-sub: file copy ?-force? ?--? SOURCE ?SOURCE ...? TARGET | Copies files and folders.
-sub: file rename ?-force? ?--? SOURCE ?SOURCE ...? TARGET | Moves files and folders.
-sub: file delete ?-force? ?--? ?NAME ...? | Removes files, and folders with -force.
-sub: file link ?-symbolic|-hard? LINK ?TARGET? | Makes a link, or gives its target.
-sub: file readlink NAME | The target of a symbolic link.
-sub: file tempfile ?VAR? ?TEMPLATE? | Opens a new temporary file and gives its channel.
-sub: file channels ?PATTERN? | The names of the open channels.
-sub: file system NAME | The file system of a path.
-sub: file volumes | The volumes, such as /.
 == glob
 syn: glob ?switches? name ?name ...?
 opt: -nocomplain | No match gives an empty list.
