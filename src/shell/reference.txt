@@ -1,34 +1,34 @@
 # Made by `python3 -I tools/reference.py shell-table` from docs/reference/*.txt. Do not edit.
 == string
-syn: string subcommand ?arg ...?
-sub: string length STRING | The count of characters.
-sub: string length -grapheme STRING | The count of characters.
-sub: string bytelength STRING | The count of bytes of the UTF-8 form.
-sub: string insert STRING INDEX TEXT | STRING with TEXT before the character at INDEX.
-sub: string index STRING INDEX | The character at INDEX, or an empty string past the end.
-sub: string index -grapheme STRING INDEX | The character at INDEX, or an empty string past the end.
-sub: string range STRING FIRST LAST | The characters from FIRST to LAST.
-sub: string range -grapheme STRING FIRST LAST | The characters from FIRST to LAST.
-sub: string first NEEDLE HAYSTACK ?START? | The index of the first NEEDLE from START, or -1.
-sub: string last NEEDLE HAYSTACK ?LAST? | The index of the last NEEDLE at or before LAST, or -1.
-sub: string compare ?-nocase? ?-length N? A B | -1, 0, or 1 in the order of the characters.
-sub: string equal ?-nocase? ?-length N? A B | 1 when the strings are the same, else 0.
-sub: string match ?-nocase? PATTERN STRING | 1 when the glob PATTERN matches all of STRING.
-sub: string map ?-nocase? MAPPING STRING | Replaces each key of the key and value list MAPPING with its value.
-sub: string repeat STRING COUNT | STRING COUNT times.
-sub: string replace STRING FIRST LAST ?NEW? | STRING with the characters from FIRST to LAST replaced by NEW.
-sub: string reverse STRING | The characters in the reverse order.
-sub: string reverse -grapheme STRING | The characters in the reverse order.
-sub: string tolower STRING ?FIRST? ?LAST? | Lowercase.
-sub: string toupper STRING ?FIRST? ?LAST? | Uppercase.
-sub: string totitle STRING ?FIRST? ?LAST? | The first character uppercase and the rest lowercase.
-sub: string trim STRING ?CHARS? | STRING with the CHARS (white space by default) removed at both ends.
-sub: string trimleft STRING ?CHARS? | The same at the start only.
-sub: string trimright STRING ?CHARS? | The same at the end only.
-sub: string is CLASS ?-strict? ?-failindex VAR? STRING | 1 when each character is of CLASS: alnum, alpha, ascii, boolean, digit, double, integer, wideinteger, list, lower, upper, space, xdigit, and others.
-sub: string cat ?STRING ...? | The strings joined with no separator.
-sub: string wordstart STRING INDEX | The index of the first character of the word at INDEX.
-sub: string wordend STRING INDEX | The index after the last character of the word at INDEX.
+syn: string SUBCOMMAND ?ARG ...?
+sub: string length STRING | Gives the count of characters of a string.
+sub: string length -grapheme STRING | Counts grapheme clusters in place of characters.
+sub: string bytelength STRING | Gives the count of bytes of the UTF-8 form of a string.
+sub: string insert STRING INDEX TEXT | Gives a string with text put before the character at an index.
+sub: string index STRING INDEX | Gives the character at an index of a string.
+sub: string index -grapheme STRING INDEX | Counts INDEX in grapheme clusters, and gives a whole cluster.
+sub: string range STRING FIRST LAST | Gives the characters of a string from one index to another.
+sub: string range -grapheme STRING FIRST LAST | Counts FIRST and LAST in grapheme clusters.
+sub: string first NEEDLE HAYSTACK ?START? | Gives the index of the first match of a substring.
+sub: string last NEEDLE HAYSTACK ?LAST? | Gives the index of the last match of a substring.
+sub: string compare ?-nocase? ?-length N? A B | Compares two strings character by character.
+sub: string equal ?-nocase? ?-length N? A B | Tests whether two strings are the same text.
+sub: string match ?-nocase? PATTERN STRING | Tests whether a glob pattern matches the whole of a string.
+sub: string map ?-nocase? MAPPING STRING | Replaces each key of a list of keys and values with its value.
+sub: string repeat STRING COUNT | Gives a string repeated a number of times.
+sub: string replace STRING FIRST LAST ?NEW? | Gives a string with a range of characters replaced by other text.
+sub: string reverse STRING | Gives the characters of a string in the reverse order.
+sub: string reverse -grapheme STRING | Reverses the order of the grapheme clusters, each with its characters in order.
+sub: string tolower STRING ?FIRST? ?LAST? | Gives a string with its letters in lowercase.
+sub: string toupper STRING ?FIRST? ?LAST? | Gives a string with its letters in uppercase.
+sub: string totitle STRING ?FIRST? ?LAST? | Gives a string with its first character in title case and the rest in lowercase.
+sub: string trim STRING ?CHARS? | Gives a string with given characters removed at both ends.
+sub: string trimleft STRING ?CHARS? | Gives a string with given characters removed at the start.
+sub: string trimright STRING ?CHARS? | Gives a string with given characters removed at the end.
+sub: string is CLASS ?-strict? ?-failindex VAR? STRING | Tests whether a string is of a class, such as integer or alpha.
+sub: string cat ?STRING ...? | Joins strings with no separator.
+sub: string wordstart STRING INDEX | Gives the index of the first character of the word at an index.
+sub: string wordend STRING INDEX | Gives the index after the last character of the word at an index.
 == tcl::prefix
 syn: tcl::prefix subcommand ?arg ...?
 sub: tcl::prefix match ?-exact? ?-message TEXT? ?-error OPTIONS? TABLE STRING | The entry of TABLE that STRING is a unique prefix of, or an error.
@@ -145,29 +145,31 @@ syn: lmap varList list ?varList list ...? command
 == foreach
 syn: foreach varList list ?varList list ...? command
 == dict
-syn: dict subcommand ?arg ...?
-sub: dict create ?KEY VALUE ...? | A new dict.
-sub: dict get DICT ?KEY ...? | The value at the path of keys.
-sub: dict getdef DICT ?KEY ...? KEY DEFAULT | The value at the path of keys, or DEFAULT when a key is missing.
-sub: dict getwithdefault DICT ?KEY ...? KEY DEFAULT | The same command as dict getdef.
-sub: dict exists DICT KEY ?KEY ...? | 1 when the path of keys exists.
-sub: dict set VAR KEY ?KEY ...? VALUE | Sets the value at the path in the dict of a variable, and gives the new dict.
-sub: dict unset VAR KEY ?KEY ...? | Removes a key in the dict of a variable.
-sub: dict keys DICT ?PATTERN? | The keys, or the keys that match a glob pattern.
-sub: dict values DICT ?PATTERN? | The values.
-sub: dict size DICT | The count of keys.
-sub: dict for {KEYVAR VALUEVAR} DICT BODY | Runs BODY for each key and value.
-sub: dict map {KEYVAR VALUEVAR} DICT BODY | A new dict with the same keys and the results of BODY as values.
-sub: dict filter DICT key|value|script ... | The keys and values that match a pattern, or a script that gives true.
-sub: dict merge ?DICT ...? | One dict.
-sub: dict remove DICT ?KEY ...? | A copy with no such keys.
-sub: dict replace DICT ?KEY VALUE ...? | A copy with the new values.
-sub: dict incr VAR KEY ?INCREMENT? | Adds to an integer value in the dict of a variable.
-sub: dict append VAR KEY ?STRING ...? | Adds text to a value in the dict of a variable.
-sub: dict lappend VAR KEY ?VALUE ...? | Adds elements to a list value in the dict of a variable.
-sub: dict update VAR KEY VARNAME ?KEY VARNAME ...? BODY | Links variables to keys while BODY runs, and writes them back after it.
-sub: dict with VAR ?KEY ...? BODY | Makes a variable of each key while BODY runs, and writes them back after it.
-sub: dict info DICT | Text for people with the count of entries of the dict.
+syn: dict SUBCOMMAND ?ARG ...?
+sub: dict create ?KEY VALUE ...? | Makes a dict from keys and values.
+sub: dict get DICT ?KEY ...? | Gives the value at a path of keys.
+sub: dict getdef DICT ?KEY ...? KEY DEFAULT | Gives the value at a path of keys, or a default when a key is missing.
+sub: dict getwithdefault DICT ?KEY ...? KEY DEFAULT | Gives the value at a path of keys, or a default: the same command as dict getdef.
+sub: dict exists DICT KEY ?KEY ...? | Tests whether a path of keys exists.
+sub: dict set VAR KEY ?KEY ...? VALUE | Sets the value at a path of keys in the dict of a variable.
+sub: dict unset VAR KEY ?KEY ...? | Removes the key at the end of a path from the dict of a variable.
+sub: dict keys DICT ?PATTERN? | Gives the keys of a dict, or the keys that match a glob pattern.
+sub: dict values DICT ?PATTERN? | Gives the values of a dict, or the values that match a glob pattern.
+sub: dict size DICT | Gives the count of keys of a dict.
+sub: dict for {KEYVAR VALUEVAR} DICT BODY | Runs a script for each key and value of a dict.
+sub: dict map {KEYVAR VALUEVAR} DICT BODY | Makes a dict with the same keys and the results of a script as values.
+sub: dict filter DICT key ?PATTERN ...? | Gives the keys and values of a dict that pass a test.
+sub: dict filter DICT value ?PATTERN ...? | Gives the keys and values of a dict that pass a test.
+sub: dict filter DICT script {KEYVAR VALUEVAR} BODY | Gives the keys and values of a dict that pass a test.
+sub: dict merge ?DICT ...? | Joins dicts into one, with the value of a later dict for a key in both.
+sub: dict remove DICT ?KEY ...? | Gives a copy of a dict with some keys removed.
+sub: dict replace DICT ?KEY VALUE ...? | Gives a copy of a dict with new values for some keys.
+sub: dict incr VAR KEY ?INCREMENT? | Adds an integer to the value of a key in the dict of a variable.
+sub: dict append VAR KEY ?STRING ...? | Adds text to the end of the value of a key in the dict of a variable.
+sub: dict lappend VAR KEY ?VALUE ...? | Adds elements to the list value of a key in the dict of a variable.
+sub: dict update VAR KEY VARNAME ?KEY VARNAME ...? BODY | Runs a script with variables linked to keys of the dict of a variable.
+sub: dict with VAR ?KEY ...? BODY | Runs a script with a variable for each key of the dict of a variable.
+sub: dict info DICT | Gives text for people with the count of entries of a dict.
 == array
 syn: array subcommand ?arg ...?
 sub: array set NAME LIST | Sets the elements from a list of names and values.
