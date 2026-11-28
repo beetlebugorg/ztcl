@@ -969,6 +969,25 @@ pub const Caught = struct {
         return value.newList(a, o.items);
     }
 
+    /// Sets the error state of a caught `return -code error` again, as
+    /// `return` set it: a script that ran after the catch can change it.
+    fn returnError(c: Caught, it: *Interp) Error!void {
+        it.error_code = c.error_code;
+        var k: usize = 0;
+        while (k + 1 < c.ret_opts.len) : (k += 2) {
+            const opt = try it.str(c.ret_opts[k]);
+            const v = c.ret_opts[k + 1];
+            if (eql(opt, "-errorinfo")) {
+                try startInfo(it, v);
+            } else if (eql(opt, "-errorstack")) {
+                it.error_stack = .empty;
+                try it.error_stack.appendSlice(it.alloc(), try it.list(v));
+                it.keep_stack = true;
+                it.last_stack = v;
+            }
+        }
+    }
+
     fn hasKey(it: *Interp, pairs: []const Value, key: []const u8) Error!bool {
         var k: usize = 0;
         while (k + 1 < pairs.len) : (k += 2) {
@@ -999,6 +1018,7 @@ pub const Caught = struct {
                 it.ret_code = c.ret_code;
                 it.ret_level = c.ret_level;
                 it.ret_opts = c.ret_opts;
+                if (c.ret_code == .@"error") try c.returnError(it);
                 return error.TclReturn;
             },
             3 => return error.TclBreak,
@@ -1043,6 +1063,9 @@ fn runCaughtBody(it: *Interp, script: Error!*interp.Script, argv: []const Value,
             c.ret_level = it.ret_level;
             c.ret_opts = it.ret_opts;
             it.ret_opts = &.{};
+            // The error code of `return -code error` stays in the
+            // interp. A later `catch` replaces it, so keep it here.
+            if (c.ret_code == .@"error") c.error_code = it.error_code;
         }
     }
     if (c.code == 1) {
