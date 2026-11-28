@@ -19,7 +19,7 @@ set note "buy milk"
 
 The type of the result comes from the operands. An integer divided by an integer is an integer: [`expr {7 / 2}`](run: "3"). One float operand makes a float: [`expr {7 / 2.0}`](run: "3.5"). Integer division rounds down, also for a negative number: [`expr {-7 / 2}`](run: "-4"). In C and in Go the result is -3.
 
-A string that is a number works as a number: [`expr {"10" + 1}`](run: "11"). Another string is an error: [`expr {"ten" + 1}`](run: "error: can't use non-numeric string as operand of \"+\"").
+A string that is a number works as a number: [`expr {"10" + 1}`](run: "11"). Another string is an error: [`expr {"ten" + 1}`](run: "error: cannot use non-numeric string \"ten\" as left operand of \"+\"").
 
 ## Compare numbers and strings
 
