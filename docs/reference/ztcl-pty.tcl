@@ -85,7 +85,7 @@ command ztcl::pty {
                 set r
             } {100 30}
             error {ztcl::pty spawn -size 5 x} {bad size "5": must be {cols rows}} NONE
-            error {ztcl::pty spawn -size {a b} x} {expected integer but got "a"} NONE
+            error {ztcl::pty spawn -size {a b} x} {expected integer but got "a"} {TCL VALUE NUMBER}
             error {ztcl::pty spawn -size} {value for "-size" missing} NONE
         }
         option -cwd {
@@ -162,7 +162,7 @@ command ztcl::pty {
             catch {ztcl::pty resize $t a 5} m o
             close $t
             return -options $o $m
-        } {expected integer but got "a"} NONE
+        } {expected integer but got "a"} {TCL VALUE NUMBER}
         error {ztcl::pty resize stdout} {wrong # args: should be "ztcl::pty resize channel cols rows"} {TCL WRONGARGS}
     }
 
@@ -242,7 +242,7 @@ command ztcl::pty {
             catch {ztcl::pty kill $t 99} m o
             close $t
             return -options $o $m
-        } {bad signal "99": must be HUP, INT, QUIT, KILL, TERM, CONT, STOP, WINCH, or a number} NONE
+        } {bad signal "99"} NONE
         error {ztcl::pty kill stdout} {channel "stdout" is not a pty} NONE
         error {ztcl::pty kill} {wrong # args: should be "ztcl::pty kill channel ?signal?"} {TCL WRONGARGS}
     }

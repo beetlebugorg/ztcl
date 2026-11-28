@@ -31,8 +31,8 @@ command ztcl::probe {
         f 3
         dict get [lindex [ztcl::probe records -probe $p] 0] values
     } {n 3}
-    error {ztcl::probe bogus} {unknown subcommand "bogus": must be add, clear, configure, list, records, or remove} {TCL LOOKUP SUBCOMMAND}
-    error {ztcl::probe a -proc f} {unknown subcommand "a": must be add, clear, configure, list, records, or remove} {TCL LOOKUP SUBCOMMAND}
+    error {ztcl::probe bogus} {unknown subcommand "bogus": must be add, clear, configure, list, records, or remove} {TCL LOOKUP SUBCOMMAND bogus}
+    error {ztcl::probe a -proc f} {unknown subcommand "a": must be add, clear, configure, list, records, or remove} {TCL LOOKUP SUBCOMMAND a}
     error {ztcl::probe} {wrong # args: should be "ztcl::probe add|configure|clear|list|records|remove ?arg ...?"} {TCL WRONGARGS}
 
     subcommand add {
@@ -57,8 +57,8 @@ command ztcl::probe {
         } {active h}
         error {ztcl::probe add} {wrong # args: should be "ztcl::probe add -proc name ?-line n? | -command name | -var name | -error ?option value ...?"} {TCL WRONGARGS}
         error {ztcl::probe add -line 2} {wrong # args: should be "ztcl::probe add -proc name ?-line n? | -command name | -var name | -error ?option value ...?"} {TCL WRONGARGS}
-        error {ztcl::probe add -proc f -bogus 1} {bad option "-bogus": must be -capture, -command, -count, -error, -every, -if, -leave, -line, -locals, -ops, -proc, -rate, -stack, or -var} NONE
-        error {ztcl::probe add -bogus} {option "-bogus" needs a value} NONE
+        error {ztcl::probe add -proc f -bogus 1} {bad option "-bogus": must be -capture, -command, -count, -error, -every, -if, -leave, -line, -locals, -ops, -proc, -rate, -stack, or -var} {TCL LOOKUP INDEX option}
+        error {ztcl::probe add -bogus} {bad option "-bogus": must be -capture, -command, -count, -error, -every, -if, -leave, -line, -locals, -ops, -proc, -rate, -stack, or -var} {TCL LOOKUP INDEX option}
         option -proc {
             value NAME
             type {proc name}
@@ -69,7 +69,7 @@ command ztcl::probe {
                 f 1; f 2
                 lmap r [ztcl::probe records -probe $p] {dict get $r words}
             } {{g 1} {g 2}}
-            error {ztcl::probe add -proc} {option "-proc" needs a value} NONE
+            error {ztcl::probe add -proc} {option "-proc" needs a value} {TCL VALUE}
         }
         option -line {
             value N
@@ -83,7 +83,7 @@ command ztcl::probe {
                 list [dict get $r kind] [dict get $r line] [dict get $r values]
             } {line 3 {x aa}}
             error {ztcl::probe add -proc f -line x} {expected integer but got "x"} {TCL VALUE NUMBER}
-            error {ztcl::probe add -proc f -line -1} {-line must be 0 or more} NONE
+            error {ztcl::probe add -proc f -line -1} {-line must be 1 or more} {TCL VALUE}
         }
         option -command {
             value NAME
@@ -95,7 +95,7 @@ command ztcl::probe {
                 string length abc
                 dict get [lindex [ztcl::probe records -probe $p] 0] words
             } {string length abc}
-            error {ztcl::probe add -command} {option "-command" needs a value} NONE
+            error {ztcl::probe add -command} {option "-command" needs a value} {TCL VALUE}
         }
         option -leave {
             type flag
@@ -107,7 +107,7 @@ command ztcl::probe {
                 set r [lindex [ztcl::probe records -probe $p] 0]
                 list [dict get $r code] [dict get $r result]
             } {0 3}
-            error {ztcl::probe add -proc f -leave} {-leave needs -command} NONE
+            error {ztcl::probe add -proc f -leave} {-leave needs -command} {TCL VALUE}
         }
         option -var {
             value NAME
@@ -126,7 +126,7 @@ command ztcl::probe {
                 unset v
                 dict get [lindex [ztcl::probe list] end] state
             } waiting
-            error {ztcl::probe add -var} {option "-var" needs a value} NONE
+            error {ztcl::probe add -var} {option "-var" needs a value} {TCL VALUE}
         }
         option -ops {
             value LIST
@@ -139,7 +139,7 @@ command ztcl::probe {
                 set w 5; set y $w
                 lmap r [ztcl::probe records -probe $p] {dict get $r op}
             } {write read}
-            error {ztcl::probe add -var v -ops bogus} {bad operation "bogus": must be read, unset, or write} NONE
+            error {ztcl::probe add -var v -ops bogus} {bad operation "bogus": must be read, unset, or write} {TCL LOOKUP INDEX operation}
         }
         option -error {
             type flag
@@ -169,7 +169,7 @@ command ztcl::probe {
                 g 1
                 dict exists [lindex [ztcl::probe records -probe $p] 0] probe_error
             } 1
-            error {ztcl::probe add -proc f -if} {option "-if" needs a value} NONE
+            error {ztcl::probe add -proc f -if} {option "-if" needs a value} {TCL VALUE}
         }
         option -capture {
             value LIST
@@ -186,7 +186,7 @@ command ztcl::probe {
                 g 5
                 dict get [lindex [ztcl::probe records -probe $p] 0] values
             } {{[expr {1/0}]} {<error: divide by zero>}}
-            error {ztcl::probe add -proc f -capture} {option "-capture" needs a value} NONE
+            error {ztcl::probe add -proc f -capture} {option "-capture" needs a value} {TCL VALUE}
         }
         option -stack {
             type flag
@@ -244,7 +244,7 @@ command ztcl::probe {
                 f 1; f 2; f 3
                 llength [ztcl::probe records -probe $p]
             } 1
-            error {ztcl::probe add -proc f -rate x} {-rate needs a list of two numbers: records and compute units} NONE
+            error {ztcl::probe add -proc f -rate x} {-rate needs a list of two numbers: records and compute units} {TCL VALUE}
         }
     }
 
@@ -270,9 +270,9 @@ command ztcl::probe {
             g 7
             dict keys [lindex [ztcl::probe records -probe $p] 0]
         } {seq units thread probe kind proc words values}
-        error {ztcl::probe records -probe nope} {bad probe id "nope"} NONE
-        error {ztcl::probe records -bogus 1} {bad option "-bogus": must be -first, -json, -last, -probe, -since, or -where} NONE
-        error {ztcl::probe records -bogus} {option "-bogus" needs a value} NONE
+        error {ztcl::probe records -probe nope} {bad probe id "nope"} {ZTCL PROBE ID}
+        error {ztcl::probe records -bogus 1} {bad option "-bogus": must be -first, -json, -last, -probe, -since, or -where} {TCL LOOKUP INDEX option}
+        error {ztcl::probe records -bogus} {bad option "-bogus": must be -first, -json, -last, -probe, -since, or -where} {TCL LOOKUP INDEX option}
         option -probe {
             value ID
             type {probe id}
@@ -284,7 +284,7 @@ command ztcl::probe {
                 ztcl::probe remove $p
                 llength [ztcl::probe records -probe $p]
             } 1
-            error {ztcl::probe records -probe} {option "-probe" needs a value} NONE
+            error {ztcl::probe records -probe} {option "-probe" needs a value} {TCL VALUE}
         }
         option -since {
             value SEQ
@@ -384,8 +384,8 @@ command ztcl::probe {
             ztcl::probe remove all
             ztcl::probe list
         } {}
-        error {ztcl::probe remove p99} {no probe "p99"} NONE
-        error {ztcl::probe remove nope} {bad probe id "nope"} NONE
+        error {ztcl::probe remove p99} {no probe "p99"} {ZTCL PROBE ID}
+        error {ztcl::probe remove nope} {bad probe id "nope"} {ZTCL PROBE ID}
         error {ztcl::probe remove} {wrong # args: should be "ztcl::probe remove id|all"} {TCL WRONGARGS}
     }
 
@@ -411,7 +411,7 @@ command ztcl::probe {
         returns {The dict of the settings, or an empty string.}
         see {{ztcl::probe records}}
         example {ztcl::probe configure} {-size 1000 -budget 100000 -maxlen 256}
-        error {ztcl::probe configure -bogus 1} {bad option "-bogus": must be -budget, -maxlen, or -size} NONE
+        error {ztcl::probe configure -bogus 1} {bad option "-bogus": must be -budget, -maxlen, or -size} {TCL LOOKUP INDEX option}
         error {ztcl::probe configure -size} {wrong # args: should be "ztcl::probe configure ?-size n? ?-budget n? ?-maxlen n?"} {TCL WRONGARGS}
         option -size {
             value N
@@ -425,8 +425,8 @@ command ztcl::probe {
                 ztcl::probe configure -size 2
                 lmap r [ztcl::probe records -probe $p] {dict get $r values n}
             } {2 3}
-            error {ztcl::probe configure -size 2000000} {-size must be at most 1000000} NONE
-            error {ztcl::probe configure -size -1} {-size must be 0 or more} NONE
+            error {ztcl::probe configure -size 2000000} {-size must be at most 1000000} {TCL VALUE}
+            error {ztcl::probe configure -size -1} {-size must be 0 or more} {TCL VALUE}
         }
         option -budget {
             value N
@@ -438,7 +438,7 @@ command ztcl::probe {
                 ztcl::probe configure -budget 500
                 dict get [ztcl::probe configure] -budget
             } 500
-            error {ztcl::probe configure -budget 0} {-budget must be 1 or more} NONE
+            error {ztcl::probe configure -budget 0} {-budget must be 1 or more} {TCL VALUE}
             error {ztcl::probe configure -budget x} {expected integer but got "x"} {TCL VALUE NUMBER}
         }
         option -maxlen {
@@ -453,7 +453,7 @@ command ztcl::probe {
                 f 40
                 dict get [lindex [ztcl::probe records -probe $p] 0] values
             } {x {aaaaaaaaaaaaaaaa... (40 bytes)}}
-            error {ztcl::probe configure -maxlen 4} {-maxlen must be 16 or more} NONE
+            error {ztcl::probe configure -maxlen 4} {-maxlen must be 16 or more} {TCL VALUE}
         }
     }
 }
