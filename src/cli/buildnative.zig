@@ -20,7 +20,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const TclVersion = @import("interp.zig").TclVersion;
+const TclVersion = @import("../interp.zig").TclVersion;
 
 pub const slot_len = 32;
 
