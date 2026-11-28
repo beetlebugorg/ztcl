@@ -7,9 +7,10 @@ It writes FAMILY-light.svg and FAMILY-dark.svg for each task family to
 OUT_DIR (default: docs/site/bench/). Each chart has one panel for each
 task, with one bar for each language. A bar is the median, and the
 whisker is the interquartile range. A pale bar with a dashed edge is a noisy value: its
-interquartile range is more than 10 % of its median. A panel uses a log
-scale only when its largest bar is more than 30 times its smallest, and
-its axis says so. It uses only the standard library of Python.
+interquartile range is more than 10 % of its median. Each axis is linear
+and starts at 0. When the largest bar is more than 5 times the next one,
+the axis fits the other bars, and the largest bar is cut with a break
+mark and its value. It uses only the standard library of Python.
 """
 import math
 import os
@@ -106,13 +107,17 @@ def tick(v):
     return ("%.2f" % v).rstrip("0").rstrip(".") or "0"
 
 
-def nice_max(v):
-    e = math.floor(math.log10(v))
-    for m in (1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10):
-        top = m * 10 ** e
-        if top >= v * 1.08:
-            return top
-    return 10 ** (e + 1)
+def nice_axis(v):
+    """The top and the step of a linear axis: at most 7 steps of 1, 2,
+    2.5, or 5 times a power of 10, with the top just above v."""
+    e = math.floor(math.log10(v)) - 1
+    while True:
+        for m in (1, 2, 2.5, 5):
+            step = m * 10 ** e
+            n = math.ceil(v * 1.04 / step)
+            if n <= 7:
+                return n * step, step
+        e += 1
 
 
 def panel(x0, y0, task, data, missing, t):
@@ -122,26 +127,20 @@ def panel(x0, y0, task, data, missing, t):
     width, height = W - 2 * MARGIN - PAD_L - PAD_R, PH - PAD_T - PAD_B
     vals = [d["med"] for d in data.values()]
     hi_all = max(max(d["q3"] for d in data.values()), max(vals))
-    log = max(vals) / max(min(vals), 1e-9) > 30
     better = "higher is better" if unit == "req/s" else "lower is better"
     axis = ("requests per second" if unit == "req/s" else "wall clock ms") + ", " + better
-    if log:
-        axis += ", log scale"
+    # One bar far above the rest gets cut, so the others stay readable.
+    order = sorted(data.items(), key=lambda kv: kv[1]["med"], reverse=True)
+    cut = None
+    if len(order) > 1 and order[0][1]["med"] > 5 * order[1][1]["med"]:
+        cut = order[0][0]
+        hi_all = max(max(d["q3"], d["med"]) for k, d in data.items() if k != cut) * 1.3
     out.append(f'<text x="{x0}" y="{y0 + 18}" font-size="15" font-weight="600" fill="{t["fg"]}">{esc(TITLES.get(task, task))}</text>')
     out.append(f'<text x="{x0}" y="{y0 + 36}" font-size="12" fill="{t["muted"]}">{esc(axis)}</text>')
-    if log:
-        lo = 10 ** math.floor(math.log10(min(vals)))
-        if min(vals) / lo < 3:
-            lo /= 10
-        hi = 10 ** math.ceil(math.log10(hi_all * 1.05))
-        def py(v):
-            return top + height - height * (math.log10(max(v, lo)) - math.log10(lo)) / (math.log10(hi) - math.log10(lo))
-        ticks = [lo * 10 ** k for k in range(int(round(math.log10(hi / lo))) + 1)]
-    else:
-        hi = nice_max(hi_all)
-        def py(v):
-            return top + height - height * v / hi
-        ticks = [hi * k / 4 for k in range(5)]
+    hi, step = nice_axis(hi_all)
+    def py(v):
+        return top + height - height * min(v, hi) / hi
+    ticks = [step * k for k in range(int(round(hi / step)) + 1)]
     for v in ticks:
         y = py(v)
         out.append(f'<line x1="{left}" y1="{y:.1f}" x2="{left + width}" y2="{y:.1f}" stroke="{t["grid"]}" stroke-width="1"/>')
@@ -160,12 +159,20 @@ def panel(x0, y0, task, data, missing, t):
             continue
         y = py(d["med"])
         base = top + height
-        noisy = (d["q3"] - d["q1"]) / d["med"] > NOISY
         h = max(base - y, 1.5)
+        # A dashed edge on a very short bar looks like a dotted line.
+        noisy = (d["q3"] - d["q1"]) / d["med"] > NOISY and h >= 8
         if noisy:
             out.append(f'<rect x="{cx - bw / 2:.1f}" y="{base - h:.1f}" width="{bw:.1f}" height="{h:.1f}" fill="{color}" fill-opacity="0.35" stroke="{color}" stroke-width="2" stroke-dasharray="4 3"/>')
         else:
             out.append(f'<rect x="{cx - bw / 2:.1f}" y="{base - h:.1f}" width="{bw:.1f}" height="{h:.1f}" fill="{color}"/>')
+        if lang == cut:
+            # The break mark: two slanted lines in the colour of the page.
+            for dy in (14, 22):
+                yy = top + dy
+                out.append(f'<line x1="{cx - bw / 2 - 3:.1f}" y1="{yy + 4:.1f}" x2="{cx + bw / 2 + 3:.1f}" y2="{yy - 4:.1f}" stroke="{t["bg"]}" stroke-width="4"/>')
+            out.append(f'<text x="{cx:.1f}" y="{top - 6:.1f}" font-size="12" font-weight="600" text-anchor="middle" fill="{t["fg"]}">{fmt(d["med"])}</text>')
+            continue
         y1, y3 = py(d["q1"]), py(d["q3"])
         if y1 - y3 > 2:
             out.append(f'<line x1="{cx:.1f}" y1="{y1:.1f}" x2="{cx:.1f}" y2="{y3:.1f}" stroke="{t["fg"]}" stroke-width="1.5"/>')

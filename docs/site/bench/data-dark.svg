@@ -8,142 +8,156 @@
 <text x="20" y="126" font-size="12" fill="#9198a1">wall clock ms, lower is better</text>
 <line x1="82" y1="300.0" x2="568" y2="300.0" stroke="#3d444d" stroke-width="1"/>
 <text x="76" y="304.0" font-size="11" text-anchor="end" fill="#9198a1">0</text>
-<line x1="82" y1="262.0" x2="568" y2="262.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="266.0" font-size="11" text-anchor="end" fill="#9198a1">100</text>
-<line x1="82" y1="224.0" x2="568" y2="224.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="228.0" font-size="11" text-anchor="end" fill="#9198a1">200</text>
-<line x1="82" y1="186.0" x2="568" y2="186.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="190.0" font-size="11" text-anchor="end" fill="#9198a1">300</text>
+<line x1="82" y1="278.3" x2="568" y2="278.3" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="282.3" font-size="11" text-anchor="end" fill="#9198a1">50</text>
+<line x1="82" y1="256.6" x2="568" y2="256.6" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="260.6" font-size="11" text-anchor="end" fill="#9198a1">100</text>
+<line x1="82" y1="234.9" x2="568" y2="234.9" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="238.9" font-size="11" text-anchor="end" fill="#9198a1">150</text>
+<line x1="82" y1="213.1" x2="568" y2="213.1" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="217.1" font-size="11" text-anchor="end" fill="#9198a1">200</text>
+<line x1="82" y1="191.4" x2="568" y2="191.4" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="195.4" font-size="11" text-anchor="end" fill="#9198a1">250</text>
+<line x1="82" y1="169.7" x2="568" y2="169.7" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="173.7" font-size="11" text-anchor="end" fill="#9198a1">300</text>
 <line x1="82" y1="148.0" x2="568" y2="148.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="152.0" font-size="11" text-anchor="end" fill="#9198a1">400</text>
+<text x="76" y="152.0" font-size="11" text-anchor="end" fill="#9198a1">350</text>
 <text x="122.5" y="316" font-size="12" text-anchor="middle" fill="#f0f6fc">ztcl</text>
-<rect x="97.4" y="203.0" width="50.2" height="97.0" fill="#4493f8" fill-opacity="0.35" stroke="#4493f8" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="122.5" y1="210.5" x2="122.5" y2="187.5" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="117.5" y1="210.5" x2="127.5" y2="210.5" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="117.5" y1="187.5" x2="127.5" y2="187.5" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="122.5" y="181.5" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">255</text>
+<rect x="97.4" y="189.2" width="50.2" height="110.8" fill="#4493f8" fill-opacity="0.35" stroke="#4493f8" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="122.5" y1="197.7" x2="122.5" y2="171.5" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="117.5" y1="197.7" x2="127.5" y2="197.7" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="117.5" y1="171.5" x2="127.5" y2="171.5" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="122.5" y="165.5" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">255</text>
 <text x="203.5" y="316" font-size="12" text-anchor="middle" fill="#f0f6fc">ztcl no JIT</text>
-<rect x="178.4" y="210.7" width="50.2" height="89.3" fill="#a5d6ff" fill-opacity="0.35" stroke="#a5d6ff" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="203.5" y1="214.0" x2="203.5" y2="191.2" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="198.5" y1="214.0" x2="208.5" y2="214.0" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="198.5" y1="191.2" x2="208.5" y2="191.2" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="203.5" y="185.2" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">235</text>
+<rect x="178.4" y="197.9" width="50.2" height="102.1" fill="#a5d6ff" fill-opacity="0.35" stroke="#a5d6ff" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="203.5" y1="201.7" x2="203.5" y2="175.7" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="198.5" y1="201.7" x2="208.5" y2="201.7" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="198.5" y1="175.7" x2="208.5" y2="175.7" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="203.5" y="169.7" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">235</text>
 <text x="284.5" y="316" font-size="12" text-anchor="middle" fill="#f0f6fc">tclsh 8.6</text>
-<rect x="259.4" y="222.1" width="50.2" height="77.9" fill="#9198a1" fill-opacity="0.35" stroke="#9198a1" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="284.5" y1="228.2" x2="284.5" y2="219.4" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="279.5" y1="228.2" x2="289.5" y2="228.2" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="279.5" y1="219.4" x2="289.5" y2="219.4" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="284.5" y="213.4" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">205</text>
+<rect x="259.4" y="210.9" width="50.2" height="89.1" fill="#9198a1" fill-opacity="0.35" stroke="#9198a1" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="284.5" y1="218.0" x2="284.5" y2="207.8" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="279.5" y1="218.0" x2="289.5" y2="218.0" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="279.5" y1="207.8" x2="289.5" y2="207.8" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="284.5" y="201.8" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">205</text>
 <text x="365.5" y="316" font-size="12" text-anchor="middle" fill="#f0f6fc">Python</text>
-<rect x="340.4" y="265.8" width="50.2" height="34.2" fill="#d29922" fill-opacity="0.35" stroke="#d29922" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="365.5" y1="268.8" x2="365.5" y2="259.5" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="360.5" y1="268.8" x2="370.5" y2="268.8" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="360.5" y1="259.5" x2="370.5" y2="259.5" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="365.5" y="253.5" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">90.1</text>
+<rect x="340.4" y="260.9" width="50.2" height="39.1" fill="#d29922" fill-opacity="0.35" stroke="#d29922" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="365.5" y1="264.4" x2="365.5" y2="253.7" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="360.5" y1="264.4" x2="370.5" y2="264.4" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="360.5" y1="253.7" x2="370.5" y2="253.7" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="365.5" y="247.7" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">90.1</text>
 <text x="446.5" y="316" font-size="12" text-anchor="middle" fill="#f0f6fc">Go</text>
-<rect x="421.4" y="279.8" width="50.2" height="20.2" fill="#3fb950" fill-opacity="0.35" stroke="#3fb950" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="446.5" y1="281.5" x2="446.5" y2="265.8" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="441.5" y1="281.5" x2="451.5" y2="281.5" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="441.5" y1="265.8" x2="451.5" y2="265.8" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="446.5" y="259.8" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">53.1</text>
+<rect x="421.4" y="276.9" width="50.2" height="23.1" fill="#3fb950" fill-opacity="0.35" stroke="#3fb950" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="446.5" y1="278.8" x2="446.5" y2="260.9" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="441.5" y1="278.8" x2="451.5" y2="278.8" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="441.5" y1="260.9" x2="451.5" y2="260.9" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="446.5" y="254.9" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">53.1</text>
 <text x="527.5" y="316" font-size="12" text-anchor="middle" fill="#f0f6fc">Zig</text>
-<rect x="502.4" y="287.7" width="50.2" height="12.3" fill="#f0883e" fill-opacity="0.35" stroke="#f0883e" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="527.5" y1="290.3" x2="527.5" y2="283.0" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="522.5" y1="290.3" x2="532.5" y2="290.3" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="522.5" y1="283.0" x2="532.5" y2="283.0" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="527.5" y="277.0" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">32.3</text>
+<rect x="502.4" y="286.0" width="50.2" height="14.0" fill="#f0883e" fill-opacity="0.35" stroke="#f0883e" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="527.5" y1="288.9" x2="527.5" y2="280.6" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="522.5" y1="288.9" x2="532.5" y2="288.9" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="522.5" y1="280.6" x2="532.5" y2="280.6" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="527.5" y="274.6" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">32.3</text>
 <text x="20" y="380" font-size="15" font-weight="600" fill="#f0f6fc">JSON parse and write again, 25 MB</text>
 <text x="20" y="398" font-size="12" fill="#9198a1">wall clock ms, lower is better</text>
 <line x1="82" y1="572.0" x2="568" y2="572.0" stroke="#3d444d" stroke-width="1"/>
 <text x="76" y="576.0" font-size="11" text-anchor="end" fill="#9198a1">0</text>
-<line x1="82" y1="534.0" x2="568" y2="534.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="538.0" font-size="11" text-anchor="end" fill="#9198a1">200</text>
-<line x1="82" y1="496.0" x2="568" y2="496.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="500.0" font-size="11" text-anchor="end" fill="#9198a1">400</text>
-<line x1="82" y1="458.0" x2="568" y2="458.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="462.0" font-size="11" text-anchor="end" fill="#9198a1">600</text>
+<line x1="82" y1="550.3" x2="568" y2="550.3" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="554.3" font-size="11" text-anchor="end" fill="#9198a1">100</text>
+<line x1="82" y1="528.6" x2="568" y2="528.6" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="532.6" font-size="11" text-anchor="end" fill="#9198a1">200</text>
+<line x1="82" y1="506.9" x2="568" y2="506.9" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="510.9" font-size="11" text-anchor="end" fill="#9198a1">300</text>
+<line x1="82" y1="485.1" x2="568" y2="485.1" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="489.1" font-size="11" text-anchor="end" fill="#9198a1">400</text>
+<line x1="82" y1="463.4" x2="568" y2="463.4" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="467.4" font-size="11" text-anchor="end" fill="#9198a1">500</text>
+<line x1="82" y1="441.7" x2="568" y2="441.7" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="445.7" font-size="11" text-anchor="end" fill="#9198a1">600</text>
 <line x1="82" y1="420.0" x2="568" y2="420.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="424.0" font-size="11" text-anchor="end" fill="#9198a1">800</text>
+<text x="76" y="424.0" font-size="11" text-anchor="end" fill="#9198a1">700</text>
 <text x="122.5" y="588" font-size="12" text-anchor="middle" fill="#f0f6fc">ztcl</text>
-<rect x="97.4" y="516.5" width="50.2" height="55.5" fill="#4493f8" fill-opacity="0.35" stroke="#4493f8" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="122.5" y1="518.6" x2="122.5" y2="496.5" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="117.5" y1="518.6" x2="127.5" y2="518.6" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="117.5" y1="496.5" x2="127.5" y2="496.5" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="122.5" y="490.5" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">292</text>
+<rect x="97.4" y="508.6" width="50.2" height="63.4" fill="#4493f8" fill-opacity="0.35" stroke="#4493f8" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="122.5" y1="511.0" x2="122.5" y2="485.7" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="117.5" y1="511.0" x2="127.5" y2="511.0" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="117.5" y1="485.7" x2="127.5" y2="485.7" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="122.5" y="479.7" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">292</text>
 <text x="203.5" y="588" font-size="12" text-anchor="middle" fill="#f0f6fc">ztcl no JIT</text>
-<rect x="178.4" y="511.6" width="50.2" height="60.4" fill="#a5d6ff" fill-opacity="0.35" stroke="#a5d6ff" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="203.5" y1="519.0" x2="203.5" y2="494.9" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="198.5" y1="519.0" x2="208.5" y2="519.0" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="198.5" y1="494.9" x2="208.5" y2="494.9" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="203.5" y="488.9" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">318</text>
+<rect x="178.4" y="502.9" width="50.2" height="69.1" fill="#a5d6ff" fill-opacity="0.35" stroke="#a5d6ff" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="203.5" y1="511.5" x2="203.5" y2="483.9" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="198.5" y1="511.5" x2="208.5" y2="511.5" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="198.5" y1="483.9" x2="208.5" y2="483.9" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="203.5" y="477.9" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">318</text>
 <text x="284.5" y="588" font-size="12" text-anchor="middle" fill="#f0f6fc">tclsh 8.6</text>
 <text x="284.5" y="564" font-size="12" text-anchor="middle" fill="#9198a1">n/a</text>
 <text x="365.5" y="588" font-size="12" text-anchor="middle" fill="#f0f6fc">Python</text>
-<rect x="340.4" y="460.8" width="50.2" height="111.2" fill="#d29922"/>
-<line x1="365.5" y1="462.6" x2="365.5" y2="452.6" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="360.5" y1="462.6" x2="370.5" y2="462.6" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="360.5" y1="452.6" x2="370.5" y2="452.6" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="365.5" y="446.6" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">585</text>
+<rect x="340.4" y="444.9" width="50.2" height="127.1" fill="#d29922"/>
+<line x1="365.5" y1="446.9" x2="365.5" y2="435.5" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="360.5" y1="446.9" x2="370.5" y2="446.9" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="360.5" y1="435.5" x2="370.5" y2="435.5" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="365.5" y="429.5" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">585</text>
 <text x="446.5" y="588" font-size="12" text-anchor="middle" fill="#f0f6fc">Go</text>
-<rect x="421.4" y="490.0" width="50.2" height="82.0" fill="#3fb950" fill-opacity="0.35" stroke="#3fb950" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="446.5" y1="492.3" x2="446.5" y2="475.0" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="441.5" y1="492.3" x2="451.5" y2="492.3" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="441.5" y1="475.0" x2="451.5" y2="475.0" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="446.5" y="469.0" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">432</text>
+<rect x="421.4" y="478.3" width="50.2" height="93.7" fill="#3fb950" fill-opacity="0.35" stroke="#3fb950" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="446.5" y1="481.0" x2="446.5" y2="461.2" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="441.5" y1="481.0" x2="451.5" y2="481.0" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="441.5" y1="461.2" x2="451.5" y2="461.2" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="446.5" y="455.2" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">432</text>
 <text x="527.5" y="588" font-size="12" text-anchor="middle" fill="#f0f6fc">Zig</text>
-<rect x="502.4" y="533.4" width="50.2" height="38.6" fill="#f0883e" fill-opacity="0.35" stroke="#f0883e" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="527.5" y1="537.4" x2="527.5" y2="519.9" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="522.5" y1="537.4" x2="532.5" y2="537.4" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="522.5" y1="519.9" x2="532.5" y2="519.9" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="527.5" y="513.9" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">203</text>
+<rect x="502.4" y="527.8" width="50.2" height="44.2" fill="#f0883e" fill-opacity="0.35" stroke="#f0883e" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="527.5" y1="532.5" x2="527.5" y2="512.5" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="522.5" y1="532.5" x2="532.5" y2="532.5" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="522.5" y1="512.5" x2="532.5" y2="512.5" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="527.5" y="506.5" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">203</text>
 <text x="20" y="652" font-size="15" font-weight="600" fill="#f0f6fc">CSV to a report, 1,000,000 rows</text>
-<text x="20" y="670" font-size="12" fill="#9198a1">wall clock ms, lower is better, log scale</text>
+<text x="20" y="670" font-size="12" fill="#9198a1">wall clock ms, lower is better</text>
 <line x1="82" y1="844.0" x2="568" y2="844.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="848.0" font-size="11" text-anchor="end" fill="#9198a1">10</text>
-<line x1="82" y1="806.0" x2="568" y2="806.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="810.0" font-size="11" text-anchor="end" fill="#9198a1">100</text>
-<line x1="82" y1="768.0" x2="568" y2="768.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="772.0" font-size="11" text-anchor="end" fill="#9198a1">1,000</text>
-<line x1="82" y1="730.0" x2="568" y2="730.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="734.0" font-size="11" text-anchor="end" fill="#9198a1">10,000</text>
+<text x="76" y="848.0" font-size="11" text-anchor="end" fill="#9198a1">0</text>
+<line x1="82" y1="822.3" x2="568" y2="822.3" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="826.3" font-size="11" text-anchor="end" fill="#9198a1">500</text>
+<line x1="82" y1="800.6" x2="568" y2="800.6" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="804.6" font-size="11" text-anchor="end" fill="#9198a1">1,000</text>
+<line x1="82" y1="778.9" x2="568" y2="778.9" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="782.9" font-size="11" text-anchor="end" fill="#9198a1">1,500</text>
+<line x1="82" y1="757.1" x2="568" y2="757.1" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="761.1" font-size="11" text-anchor="end" fill="#9198a1">2,000</text>
+<line x1="82" y1="735.4" x2="568" y2="735.4" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="739.4" font-size="11" text-anchor="end" fill="#9198a1">2,500</text>
+<line x1="82" y1="713.7" x2="568" y2="713.7" stroke="#3d444d" stroke-width="1"/>
+<text x="76" y="717.7" font-size="11" text-anchor="end" fill="#9198a1">3,000</text>
 <line x1="82" y1="692.0" x2="568" y2="692.0" stroke="#3d444d" stroke-width="1"/>
-<text x="76" y="696.0" font-size="11" text-anchor="end" fill="#9198a1">100,000</text>
+<text x="76" y="696.0" font-size="11" text-anchor="end" fill="#9198a1">3,500</text>
 <text x="122.5" y="860" font-size="12" text-anchor="middle" fill="#f0f6fc">ztcl</text>
-<rect x="97.4" y="757.5" width="50.2" height="86.5" fill="#4493f8" fill-opacity="0.35" stroke="#4493f8" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="122.5" y1="758.2" x2="122.5" y2="756.1" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="117.5" y1="758.2" x2="127.5" y2="758.2" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="117.5" y1="756.1" x2="127.5" y2="756.1" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="122.5" y="750.1" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">1,891</text>
+<rect x="97.4" y="761.9" width="50.2" height="82.1" fill="#4493f8" fill-opacity="0.35" stroke="#4493f8" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="122.5" y1="765.5" x2="122.5" y2="754.5" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="117.5" y1="765.5" x2="127.5" y2="765.5" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="117.5" y1="754.5" x2="127.5" y2="754.5" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="122.5" y="748.5" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">1,891</text>
 <text x="203.5" y="860" font-size="12" text-anchor="middle" fill="#f0f6fc">ztcl no JIT</text>
-<rect x="178.4" y="756.9" width="50.2" height="87.1" fill="#a5d6ff" fill-opacity="0.35" stroke="#a5d6ff" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="203.5" y1="757.5" x2="203.5" y2="754.8" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="198.5" y1="757.5" x2="208.5" y2="757.5" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="198.5" y1="754.8" x2="208.5" y2="754.8" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="203.5" y="748.8" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">1,956</text>
+<rect x="178.4" y="759.1" width="50.2" height="84.9" fill="#a5d6ff" fill-opacity="0.35" stroke="#a5d6ff" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="203.5" y1="762.2" x2="203.5" y2="747.4" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="198.5" y1="762.2" x2="208.5" y2="762.2" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="198.5" y1="747.4" x2="208.5" y2="747.4" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="203.5" y="741.4" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">1,956</text>
 <text x="284.5" y="860" font-size="12" text-anchor="middle" fill="#f0f6fc">tclsh 8.6</text>
-<rect x="259.4" y="715.3" width="50.2" height="128.7" fill="#9198a1" fill-opacity="0.35" stroke="#9198a1" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="284.5" y1="716.4" x2="284.5" y2="713.9" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="279.5" y1="716.4" x2="289.5" y2="716.4" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="279.5" y1="713.9" x2="289.5" y2="713.9" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="284.5" y="707.9" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">24,298</text>
+<rect x="259.4" y="692.0" width="50.2" height="152.0" fill="#9198a1" fill-opacity="0.35" stroke="#9198a1" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="256.4" y1="710.0" x2="312.6" y2="702.0" stroke="#0d1117" stroke-width="4"/>
+<line x1="256.4" y1="718.0" x2="312.6" y2="710.0" stroke="#0d1117" stroke-width="4"/>
+<text x="284.5" y="686.0" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">24,298</text>
 <text x="365.5" y="860" font-size="12" text-anchor="middle" fill="#f0f6fc">Python</text>
-<rect x="340.4" y="760.8" width="50.2" height="83.2" fill="#d29922" fill-opacity="0.35" stroke="#d29922" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="365.5" y1="761.6" x2="365.5" y2="759.3" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="360.5" y1="761.6" x2="370.5" y2="761.6" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="360.5" y1="759.3" x2="370.5" y2="759.3" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="365.5" y="753.3" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">1,545</text>
+<rect x="340.4" y="776.9" width="50.2" height="67.1" fill="#d29922" fill-opacity="0.35" stroke="#d29922" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="365.5" y1="779.9" x2="365.5" y2="770.2" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="360.5" y1="779.9" x2="370.5" y2="779.9" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="360.5" y1="770.2" x2="370.5" y2="770.2" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="365.5" y="764.2" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">1,545</text>
 <text x="446.5" y="860" font-size="12" text-anchor="middle" fill="#f0f6fc">Go</text>
-<rect x="421.4" y="783.6" width="50.2" height="60.4" fill="#3fb950" fill-opacity="0.35" stroke="#3fb950" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="446.5" y1="785.3" x2="446.5" y2="782.5" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="441.5" y1="785.3" x2="451.5" y2="785.3" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="441.5" y1="782.5" x2="451.5" y2="782.5" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="446.5" y="776.5" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">388</text>
+<rect x="421.4" y="827.2" width="50.2" height="16.8" fill="#3fb950" fill-opacity="0.35" stroke="#3fb950" stroke-width="2" stroke-dasharray="4 3"/>
+<line x1="446.5" y1="828.8" x2="446.5" y2="826.0" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="441.5" y1="828.8" x2="451.5" y2="828.8" stroke="#f0f6fc" stroke-width="1.5"/>
+<line x1="441.5" y1="826.0" x2="451.5" y2="826.0" stroke="#f0f6fc" stroke-width="1.5"/>
+<text x="446.5" y="820.0" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">388</text>
 <text x="527.5" y="860" font-size="12" text-anchor="middle" fill="#f0f6fc">Zig</text>
-<rect x="502.4" y="805.1" width="50.2" height="38.9" fill="#f0883e" fill-opacity="0.35" stroke="#f0883e" stroke-width="2" stroke-dasharray="4 3"/>
-<line x1="527.5" y1="805.5" x2="527.5" y2="803.0" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="522.5" y1="805.5" x2="532.5" y2="805.5" stroke="#f0f6fc" stroke-width="1.5"/>
-<line x1="522.5" y1="803.0" x2="532.5" y2="803.0" stroke="#f0f6fc" stroke-width="1.5"/>
-<text x="527.5" y="797.0" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">106</text>
+<rect x="502.4" y="839.4" width="50.2" height="4.6" fill="#f0883e"/>
+<text x="527.5" y="832.8" font-size="12" font-weight="600" text-anchor="middle" fill="#f0f6fc">106</text>
 <rect x="20" y="913" width="14" height="12" fill="#9198a1" fill-opacity="0.35" stroke="#9198a1" stroke-width="2" stroke-dasharray="4 3"/>
 <text x="40" y="924" font-size="12" fill="#9198a1">A pale, dashed bar is noisy: its interquartile range is over 10 % of its median.</text>
 <text x="40" y="941" font-size="12" fill="#9198a1">n/a: the language has no program for the task. Data: bench/compare/results.tsv.</text>
