@@ -575,19 +575,31 @@ pub fn low64Arg(it: *Interp, v: Value) Error!i64 {
     return bigint.low64(it, try intArg(it, v));
 }
 
+/// The side of an operand of a binary operator, for the messages of
+/// Tcl 9. An operand of a unary operator or a function has no side.
+const Side = enum { none, left, right };
+
 fn num(it: *Interp, v: Value, op: []const u8) Error!Value {
+    return numAt(it, v, .none, op);
+}
+
+fn numAt(it: *Interp, v: Value, side: Side, op: []const u8) Error!Value {
     switch (v) {
         .int => return v,
         .double => |d| {
-            if (std.math.isNan(d)) return nanOperand(it, op);
+            if (std.math.isNan(d)) return nanOperand(it, v, side, op);
             return v;
         },
         else => {
             if (try numberOf(it, v)) |n| {
-                if (n == .double and std.math.isNan(n.double)) return nanOperand(it, op);
+                if (n == .double and std.math.isNan(n.double)) return nanOperand(it, v, side, op);
                 return n;
             }
             const s = try it.str(v);
+            if (it.tcl9()) {
+                if (try isLongList(it, v, s)) return it.failCode("ARITH DOMAIN list", "cannot use a list as {s}operand of \"{s}\"", .{ ordinal(side), op });
+                return operand9(it, "non-numeric string", s, side, op);
+            }
             if (s.len == 0) return it.failCode("ARITH DOMAIN {empty string}", "can't use empty string as operand of \"{s}\"", .{op});
             if (badOctal(s)) return it.failCode("ARITH DOMAIN {invalid octal number}", "can't use invalid octal number as operand of \"{s}\"", .{op});
             return it.failCode("ARITH DOMAIN {non-numeric string}", "can't use non-numeric string as operand of \"{s}\"", .{op});
@@ -595,8 +607,37 @@ fn num(it: *Interp, v: Value, op: []const u8) Error!Value {
     }
 }
 
-fn nanOperand(it: *Interp, op: []const u8) Error {
+fn nanOperand(it: *Interp, v: Value, side: Side, op: []const u8) Error {
+    if (it.tcl9()) return operand9(it, "non-numeric floating-point value", try it.str(v), side, op);
     return it.failCode("ARITH DOMAIN {non-numeric floating-point value}", "can't use non-numeric floating-point value as operand of \"{s}\"", .{op});
+}
+
+fn ordinal(side: Side) []const u8 {
+    return switch (side) {
+        .none => "",
+        .left => "left ",
+        .right => "right ",
+    };
+}
+
+/// The message of Tcl 9 for an operand of the wrong type: it names the
+/// value and the side of the operand.
+fn operand9(it: *Interp, comptime what: []const u8, text: []const u8, side: Side, op: []const u8) Error {
+    return it.failCode("ARITH DOMAIN {" ++ what ++ "}", "cannot use " ++ what ++ " \"{s}\" as {s}operand of \"{s}\"", .{ text, ordinal(side), op });
+}
+
+/// True for a value that is a list with more than one word, as Tcl 9
+/// checks it for the message of an operand: the text has space between
+/// two words, and it parses as a list.
+fn isLongList(it: *Interp, v: Value, s: []const u8) Error!bool {
+    if (v == .list) return v.list.len > 1;
+    const t = value.trimSpace(s);
+    if (std.mem.indexOfAny(u8, t, " \t\n\r\x0b\x0c") == null) return false;
+    _ = value.parseList(it.alloc(), s) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.BadList => return false,
+    };
+    return true;
 }
 
 /// True for text in the form of an octal integer with a digit 8 or 9.
@@ -645,8 +686,15 @@ fn toF(v: Value) f64 {
 
 /// An operand of an integer operator: an `int` or big integer text.
 fn intOnly(it: *Interp, v: Value, op: []const u8) Error!Value {
-    const n = try num(it, v, op);
-    if (n == .double) return it.failCode("ARITH DOMAIN {floating-point value}", "can't use floating-point value as operand of \"{s}\"", .{op});
+    return intOnlyAt(it, v, .none, op);
+}
+
+fn intOnlyAt(it: *Interp, v: Value, side: Side, op: []const u8) Error!Value {
+    const n = try numAt(it, v, side, op);
+    if (n == .double) {
+        if (it.tcl9()) return operand9(it, "floating-point value", try it.str(v), side, op);
+        return it.failCode("ARITH DOMAIN {floating-point value}", "can't use floating-point value as operand of \"{s}\"", .{op});
+    }
     return n;
 }
 
@@ -723,7 +771,7 @@ pub fn unaryOp(it: *Interp, op: UnOp, v: Value) Error!Value {
     switch (op) {
         .not => {
             if (try numberOf(it, v)) |n| {
-                if (n == .double and std.math.isNan(n.double)) return nanOperand(it, "!");
+                if (n == .double and std.math.isNan(n.double)) return nanOperand(it, v, .none, "!");
             }
             const t = truthy(it, v) catch |err| {
                 if (err != error.TclError) return err;
@@ -892,15 +940,15 @@ pub fn binaryOp(it: *Interp, op: BinOp, x: Value, y: Value) Error!Value {
         },
         .shl, .shr, .bitand, .bitxor, .bitor, .mod => {
             const name = op.text();
-            const nx = try intOnly(it, x, name);
-            const ny = try intOnly(it, y, name);
+            const nx = try intOnlyAt(it, x, .left, name);
+            const ny = try intOnlyAt(it, y, .right, name);
             if (nx == .int and ny == .int) return intOp(it, op, nx.int, ny.int);
             return bigint.binary(it, op, nx, ny);
         },
         .add, .sub, .mul, .div, .pow => {
             const name = op.text();
-            const nx = try num(it, x, name);
-            const ny = try num(it, y, name);
+            const nx = try numAt(it, x, .left, name);
+            const ny = try numAt(it, y, .right, name);
             if (nx == .int and ny == .int) return intOp(it, op, nx.int, ny.int);
             if (nx != .double and ny != .double) return bigint.binary(it, op, nx, ny);
             const fx = toF(nx);
