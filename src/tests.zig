@@ -4138,3 +4138,19 @@ test "chan push and chan pop give the results of tclsh 8.6.16 (#690)" {
     ));
     try std.testing.expectEqualStrings("1 helloab<F>Zz HELLOAB<F>ZZ<D> HEL {initialize rt2 initialize rt3 write rt3 write rt2 finalize rt3 finalize rt2} {1 {chan handler \"b1 initialize\" returned bad method \"watch\": must be clear, drain, finalize, flush, initialize, limit?, read, or write} {TCL LOOKUP INDEX method watch}} {1 {chan handler \"b2\" makes the channel inaccessible} NONE} {1 {chan handler \"b3\" makes the channel inaccessible} NONE} {0 {} -} {1 {wrong # args: should be \"chan push channel cmdprefix\"} {TCL WRONGARGS}} {1 {wrong # args: should be \"chan pop channel\"} {TCL WRONGARGS}} {1 {can not find channel named \"nochan\"} {TCL LOOKUP CHANNEL nochan}}", got);
 }
+
+test "an error in a literal body of for or try has its line in the script, for the line of the ztcl program" {
+    const cases = [_]struct { script: []const u8, line: u32, trace: []const u8 }{
+        .{ .script = "set n 3\nfor {set i 0} {$i < $n} {incr i} {\n    set a 1\n    set r [expr {$nope + 1}]\n}\n", .line = 4, .trace = "can't read \"nope\": no such variable\n    while executing\n\"expr {$nope + 1}\"" },
+        .{ .script = "try {\n    set q 1\n    error \"in try\"\n} finally {\n    set z 1\n}\n", .line = 3, .trace = "in try\n    while executing\n\"error \"in try\"\"" },
+        .{ .script = "proc p {} {\n    try {\n        set b 2\n        error boom\n    } on ok {} {}\n}\np\n", .line = 7, .trace = "boom\n    while executing\n\"error boom\"\n    (procedure \"p\" line 4)\n    invoked from within\n\"p\"" },
+    };
+    for (cases) |c| {
+        var it: tcl.Interp = undefined;
+        try it.init(std.testing.allocator);
+        defer it.deinit();
+        try std.testing.expectError(error.TclError, it.eval(c.script));
+        try std.testing.expectEqual(c.line, it.proc_line);
+        try std.testing.expectEqualStrings(c.trace, try it.str(it.last_info));
+    }
+}

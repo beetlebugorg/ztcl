@@ -1373,6 +1373,10 @@ pub const Interp = struct {
     logged_len: usize = std.math.maxInt(usize),
     /// The last command of the unwind, for the line of `proc_line`.
     log_cmd: ?*const Cmd = null,
+    /// True when `proc_line` is already a line of the script around the
+    /// command that raised the error again, such as the line of an error
+    /// in the literal body of `try`. The next `noteLine` keeps it.
+    line_known: bool = false,
     /// The words of `-errorstack` of the current error: "INNER" and the
     /// failed command, then "CALL" and the words for each proc and "UP"
     /// and the levels for each `uplevel` that the error leaves.
@@ -2971,7 +2975,8 @@ pub const Interp = struct {
         if (it.error_line == 0) it.error_line = c.line;
         if (it.in_error and it.error_info.items.len == it.logged_len) {
             // A command around the logged one in the same evaluation.
-            it.proc_line = it.outerLine(c);
+            if (!it.line_known) it.proc_line = it.outerLine(c);
+            it.line_known = false;
             it.log_cmd = c;
             return e;
         }
@@ -3068,6 +3073,7 @@ pub const Interp = struct {
         it.error_info = .empty;
         it.logged_len = std.math.maxInt(usize);
         it.log_cmd = null;
+        it.line_known = false;
         it.last_stack = try value.newList(it.alloc(), it.error_stack.items);
         it.error_stack = .empty;
         it.last_info = info;
