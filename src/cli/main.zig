@@ -382,7 +382,9 @@ fn runApp(init: std.process.Init, args: []const [:0]const u8, off: u64, len: u64
     const arena = init.arena.allocator();
     const io = init.io;
     var out_buf: [1 << 16]u8 = undefined;
-    var out_w: Io.File.Writer = .init(.stdout(), io, &out_buf);
+    // Streaming, as in the runner: stdout can be a file that the shell opened
+    // to append (`app >> log`), and a write at offset 0 replaced its start.
+    var out_w: Io.File.Writer = .initStreaming(.stdout(), io, &out_buf);
     const out = &out_w.interface;
     exit_out = out;
     const exe = try std.process.executablePathAlloc(io, arena);
