@@ -16,6 +16,7 @@ command dict {
         The first argument names the subcommand, and a unique prefix of its name is enough.
     }
     returns {The result of the subcommand.}
+    difference {Many errors have `-errorcode NONE` in ztcl, where Tcl 8.6.16 and 9.0.4 give a code such as `TCL LOOKUP DICT` or `TCL VALUE DICTIONARY` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
     see {array list lsort {string map}}
     release {Tcl 9.1 adds `dict getdef` and its other name `dict getwithdefault`.}
     example {set d [dict create text milk done 0]} {text milk done 0}
@@ -346,6 +347,7 @@ command dict {
             `continue` in BODY leaves the key out of the result. `break` ends the loop and gives an empty dict.
         }
         returns {The new dict.}
+        difference {In Tcl 8.6.16 and 9.0.4 the key of the result is the value of KEYVAR after BODY: `dict map {k v} {a 1} {set k z; set v}` gives `z 1` there ([issue 660](https://github.com/beetlebugorg/ztcl/issues/660)).}
         see {{dict for} lmap {dict filter}}
         argument {{KEYVAR VALUEVAR}} {
             type {list of two variable names}
@@ -494,6 +496,7 @@ command dict {
             The value of the key and INCREMENT must be integers.
         }
         returns {The new value of VAR.}
+        difference {For a missing key, Tcl 8.6.16 and 9.0.4 store INCREMENT as written: `dict incr d m 0x10` on an empty dict gives `m 0x10` there ([issue 661](https://github.com/beetlebugorg/ztcl/issues/661)).}
         see {incr {dict set} {dict append}}
         argument VAR {
             type {variable name}
