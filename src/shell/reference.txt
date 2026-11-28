@@ -673,6 +673,13 @@ sub: ztcl::probe list | Gives a dict for each probe.
 sub: ztcl::probe remove ID|all | Removes a probe, or each probe.
 sub: ztcl::probe clear | Removes each record.
 sub: ztcl::probe configure ?-size N? ?-budget N? ?-maxlen N? | Gives or sets the size of the ring, the budget of a hit, and the length of a value.
+== ztcl::pty
+syn: ztcl::pty SUBCOMMAND ?ARG ...?
+sub: ztcl::pty spawn ?-size {COLS ROWS}? ?-cwd DIR? ?-env {NAME VALUE ...}? ?--? PROGRAM ?ARG ...? | Starts a program on a new pseudo terminal and gives a channel.
+sub: ztcl::pty resize CHANNEL COLS ROWS | Sets the size of the terminal.
+sub: ztcl::pty size CHANNEL | Gives the size of the terminal.
+sub: ztcl::pty status CHANNEL | Gives whether the program runs, or how it ended.
+sub: ztcl::pty kill CHANNEL ?SIGNAL? | Sends a signal to the program.
 == ztcl::text ztcl::text::graphemes ztcl::text::words ztcl::text::sentences ztcl::text::width ztcl::text::bounds
 syn: ztcl::text SUBCOMMAND ?ARG ...?
 sub: ztcl::text graphemes STRING | Gives the list of the grapheme clusters of a string.
@@ -727,8 +734,6 @@ opt: -servername name | The DNS name for SNI and for the check of the certificat
 opt: -alpn protocols | A list of up to 8 ALPN protocols.
 opt: -cadata pem | The trust anchors as PEM text, in place of the store of the system.
 opt: -verify boolean | With 0, the chain and the host name are not checked.
-== ztcl::pty
-syn: ztcl::pty subcommand ?arg ...?
 == ztcl::open
 syn: ztcl::open target
 == ztcl::notify
