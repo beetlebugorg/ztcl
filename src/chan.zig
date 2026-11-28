@@ -30,6 +30,10 @@ const ProcJob = if (proc_ok and @hasDecl(proc_mod, "Job")) proc_mod.Job else voi
 const event = @import("event.zig");
 
 pub const Translation = enum { auto, lf, cr, crlf, binary };
+/// The line end of the output of a file of the platform, as in Tcl:
+/// crlf on Windows, lf elsewhere. `-translation auto` and `platform`
+/// give it for the output side.
+pub const platform_eol: Translation = if (builtin.os.tag == .windows) .crlf else .lf;
 
 /// A layer between the buffers of a channel and its descriptor, such as
 /// TLS (`src/tls/cmd.zig`). A channel with a filter blocks. `read` fills
@@ -634,11 +638,14 @@ fn cmdOpen(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     }
     const c = try a.create(Channel);
     const name = try std.fmt.allocPrint(a, "file{d}", .{it.chans.number(false)});
-    c.* = .{ .name = name, .fd = fd, .readable = m.read, .writable = m.write, .append = m.append };
+    // A file writes the line end of the platform, as in Tcl: crlf on
+    // Windows.
+    c.* = .{ .name = name, .fd = fd, .readable = m.read, .writable = m.write, .append = m.append, .output = platform_eol };
     if (m.binary) {
         c.binary = true;
         // Tcl reports the translation of a binary channel as lf.
         if (c.readable) c.input = .lf;
+        c.output = .lf;
     }
     try it.chans.table.put(a, name, c);
     return .{ .str = name };
@@ -1152,6 +1159,7 @@ fn cmdTell(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
 
 fn parseTranslation(it: *Interp, v: Value) Error!Translation {
     const s = try it.str(v);
+    if (eql(s, "platform")) return platform_eol;
     return std.meta.stringToEnum(Translation, s) orelse it.fail("bad value for -translation: must be one of auto, binary, cr, lf, crlf, or platform", .{});
 }
 
@@ -1263,7 +1271,7 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
             const x = try parseTranslation(it, l[0]);
             const y = if (l.len == 2) try parseTranslation(it, l[1]) else x;
             if (c.readable) c.input = x;
-            if (c.writable) c.output = if (y == .auto) .lf else y;
+            if (c.writable) c.output = if (y == .auto) platform_eol else y;
             if (x == .binary) {
                 c.lazy_enc = false;
                 try endEncoding(it, c);
@@ -1273,6 +1281,9 @@ fn cmdConfigure(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
                 c.eof_in = 0;
                 c.eof_out = 0;
             }
+            // Tcl reports each side of a binary channel as lf.
+            if (c.readable and c.input == .binary) c.input = .lf;
+            if (c.writable and c.output == .binary) c.output = .lf;
         } else if (eql(o, "-eofchar")) {
             const l = try it.list(v);
             if (l.len > 2) return it.fail("bad value for -eofchar: should be a list of zero, one, or two elements", .{});
