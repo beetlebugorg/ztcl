@@ -1797,8 +1797,9 @@ test "the Windows jail gives an error for each escape" {
     // Work inside the root still runs.
     for ([_][2][]const u8{
         .{ "set f [open sub/a.txt w]; puts $f ok; close $f; set f [open sub/a.txt]; set x [gets $f]; close $f; set x", "ok" },
-        .{ "set f [open sub/a.txt a]; puts $f more; close $f; file size sub/a.txt", "8" },
-        .{ "set f [open sub/a.txt r+]; seek $f 3; set x [gets $f]; close $f; set x", "more" },
+        // Two lines with the crlf of Windows: ok and more, 10 bytes.
+        .{ "set f [open sub/a.txt a]; puts $f more; close $f; file size sub/a.txt", "10" },
+        .{ "set f [open sub/a.txt r+]; seek $f 4; set x [gets $f]; close $f; set x", "more" },
         .{ "set f [open sub/a.txt w]; close $f; file size sub/a.txt", "0" },
         .{ "file rename sub/a.txt sub/b.txt; list [file exists sub/a.txt] [file exists sub/b.txt]", "0 1" },
         .{ "file copy sub/b.txt sub/c.txt; file isfile sub/c.txt", "1" },
@@ -3838,4 +3839,26 @@ test "file in host mode on Windows: the separator, the native names, the drives,
     // In the root folder the answers stay the ones of the root.
     try tcl.fsroot.setRoot(&it, ".");
     try std.testing.expectEqualStrings("/ / a/b {native root}", try it.str(try it.eval("list [file separator] [file volumes] [file nativename a/b] [file system a]")));
+}
+
+test "a file writes the line end of the platform, and binary reads back as lf" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setRoot(&it, ".");
+    _ = try it.eval("file mkdir .zig-cache/ztcl-crlf-test");
+    const r = try it.str(try it.eval(
+        \\set d .zig-cache/ztcl-crlf-test
+        \\set f [open $d/a.txt w]; puts $f hello; close $f
+        \\set r [list [file size $d/a.txt]]
+        \\set f [open $d/a.txt]; lappend r [gets $f]; chan configure $f -translation binary; lappend r [chan configure $f -translation]; close $f
+        \\set f [open $d/b.bin wb]; puts $f x; close $f; lappend r [file size $d/b.bin]
+        \\set f [open $d/c.txt w+]; lappend r [chan configure $f -translation]; close $f
+        \\set r
+    ));
+    // Tcl on Windows writes crlf by default, and lf elsewhere.
+    const want = if (@import("builtin").os.tag == .windows) "7 hello lf 2 {auto crlf}" else "6 hello lf 2 {auto lf}";
+    try std.testing.expectEqualStrings(want, r);
+    _ = try it.eval("file delete -force .zig-cache/ztcl-crlf-test");
 }
