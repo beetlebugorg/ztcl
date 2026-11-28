@@ -81,24 +81,28 @@ sub: binary encode FORMAT ?-option value ...? DATA | base64, hex, or uuencode te
 sub: binary decode FORMAT ?-option value ...? DATA | The bytes of the text.
 == tcl_endOfWord tcl_startOfNextWord tcl_startOfPreviousWord tcl_wordBreakAfter tcl_wordBreakBefore
 syn: tcl_endOfWord str start
-== list
-syn: list ?arg ...?
-== llength
-syn: llength list
-== lindex
-syn: lindex list ?index ...?
-== lrange
-syn: lrange list first last
 == lappend
-syn: lappend varName ?value ...?
-== linsert
-syn: linsert list index ?element ...?
-== lreplace
-syn: lreplace list first last ?element ...?
-== lset
-syn: lset listVar ?index? ?index ...? value
+syn: lappend VAR ?VALUE ...?
 == lassign
-syn: lassign list ?varName ...?
+syn: lassign LIST ?VAR ...?
+== lindex
+syn: lindex LIST ?INDEX ...?
+== linsert
+syn: linsert LIST INDEX ?ELEMENT ...?
+== list
+syn: list ?ARG ...?
+== llength
+syn: llength LIST
+== lrange
+syn: lrange LIST FIRST LAST
+== lrepeat
+syn: lrepeat COUNT ?ELEMENT ...?
+== lreplace
+syn: lreplace LIST FIRST LAST ?ELEMENT ...?
+== lreverse
+syn: lreverse LIST
+== lset
+syn: lset VAR ?INDEX ...? VALUE
 == lseq
 syn: lseq count
 syn: lseq start ?to|..? end ??by? step?
@@ -111,10 +115,6 @@ syn: lremove list ?index ...?
 syn: ledit listVar first last ?element ...?
 == lfilter
 syn: lfilter varList list ?varList list ...? command
-== lrepeat
-syn: lrepeat count ?value ...?
-== lreverse
-syn: lreverse list
 == lsearch
 syn: lsearch ?-option value ...? list pattern
 opt: -exact | The element equals the pattern.
