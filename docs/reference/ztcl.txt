@@ -14,12 +14,6 @@ flags: --allow socket,channels
 page: modules/tls.md
 names: ztcl::tls::socket
 
-== ztcl::pty
-syn: ztcl::pty subcommand ?arg ...?
-does: Runs a program in a pseudo terminal, for `ztcl::vt` and for tests of terminal apps.
-cap: exec
-page: modules/pty.md
-
 == ztcl::open
 syn: ztcl::open target
 does: Opens a URL or a file in the default app of the host.
