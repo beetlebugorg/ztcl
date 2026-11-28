@@ -29,7 +29,6 @@ fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 
-
 pub fn cmdMeter(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("ztcl::meter subcommand ?arg ...?");
     const Sub = enum { create, delete, get, list, pubkey, record, reset, run, verify };
