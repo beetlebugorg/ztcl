@@ -61,6 +61,9 @@ pub const table: []const Module = blk: {
     // The wasm engine is for native builds: it stays out of ztcl.wasm. Its
     // WASI host needs the files of `fsroot.zig` (not on aarch64 Windows).
     if (options.mod_wasmrt and @import("fsroot.zig").supported and !@import("builtin").cpu.arch.isWasm()) list = list ++ @import("wasmrt/cmd.zig").modules;
+    // The FHE prototype is in the build only with `-Dmod-fhe`. It needs
+    // 64-bit words and the entropy of the host.
+    if (options.mod_fhe and @sizeOf(usize) == 8 and !@import("builtin").cpu.arch.isWasm()) list = list ++ @import("fhe/cmd.zig").modules;
     break :blk list;
 };
 

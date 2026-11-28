@@ -69,6 +69,7 @@ pub const table = [_]Feature{
     .{ .name = "probe", .kind = .module, .commands = &.{ "ztcl::probe", "ztcl::probe::" }, .packages = &.{"ztcl::probe"} },
     .{ .name = "disasm", .kind = .module, .commands = &.{ "ztcl::disasm", "ztcl::disasm::" }, .packages = &.{"ztcl::disasm"} },
     .{ .name = "tls", .kind = .module, .commands = &.{"ztcl::tls::"}, .packages = &.{"ztcl::tls"}, .needs = &.{"socket"} },
+    .{ .name = "fhe", .kind = .module, .commands = &.{"ztcl::fhe"}, .packages = &.{"ztcl::fhe"} },
 };
 
 /// The index of the feature `name`, or null.

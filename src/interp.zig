@@ -1619,6 +1619,8 @@ pub const Interp = struct {
     vt_state: ?*anyopaque = null,
     /// The store of `ztcl::wasm` (`wasmrt/cmd.zig`), or null.
     wasm_state: ?*anyopaque = null,
+    /// The objects of `ztcl::fhe` (`fhe/cmd.zig`), or null.
+    fhe_state: ?*anyopaque = null,
     /// The documents of `ztcl::pdf` (`typeset/cmd.zig`), or null.
     typeset_state: ?*anyopaque = null,
     /// The result of `info nameofexecutable`, from the embedder.
@@ -1934,6 +1936,7 @@ pub const Interp = struct {
         if (comptime @import("build_options").mod_vt) @import("vt.zig").closeAll(it);
         if (comptime @import("build_options").mod_typeset and !@import("builtin").cpu.arch.isWasm()) @import("typeset/cmd.zig").closeAll(it);
         if (comptime @import("build_options").mod_wasmrt and @import("fsroot.zig").supported and !@import("builtin").cpu.arch.isWasm()) @import("wasmrt/cmd.zig").closeAll(it);
+        if (comptime @import("build_options").mod_fhe and @sizeOf(usize) == 8 and !@import("builtin").cpu.arch.isWasm()) @import("fhe/cmd.zig").closeAll(it);
         @import("microvm.zig").closeAll(it);
         if (comptime exec_supported) proc_mod.abandonAll(it);
         if (comptime cext_mod.supported) cext_mod.drop(it);
@@ -2254,6 +2257,7 @@ pub const Interp = struct {
         if (comptime @import("build_options").mod_vt) @import("vt.zig").closeAll(it);
         if (comptime @import("build_options").mod_typeset and !@import("builtin").cpu.arch.isWasm()) @import("typeset/cmd.zig").closeAll(it);
         if (comptime @import("build_options").mod_wasmrt and @import("fsroot.zig").supported and !@import("builtin").cpu.arch.isWasm()) @import("wasmrt/cmd.zig").closeAll(it);
+        if (comptime @import("build_options").mod_fhe and @sizeOf(usize) == 8 and !@import("builtin").cpu.arch.isWasm()) @import("fhe/cmd.zig").closeAll(it);
         @import("microvm.zig").closeAll(it);
         if (comptime exec_supported) proc_mod.abandonAll(it);
         if (comptime cext_mod.supported) cext_mod.drop(it);
