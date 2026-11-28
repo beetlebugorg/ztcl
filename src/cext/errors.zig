@@ -425,7 +425,7 @@ pub fn Tcl_BackgroundException(ip: *Interp, code: c_int) callconv(.c) void {
 }
 
 comptime {
-    if (obj.va.own) {
+    if (obj.va.exports) {
         obj.va.exportBody(&Tcl_SetErrorCodeVA, "ztcl_va_SetErrorCode");
     }
 }

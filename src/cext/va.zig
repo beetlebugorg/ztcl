@@ -36,6 +36,12 @@ const builtin = @import("builtin");
 /// True where this file has its own `va_list` and variadic entry points.
 pub const own = builtin.cpu.arch == .aarch64 and builtin.os.tag == .linux;
 
+/// True where the bodies of the stubs get their exported symbols: on
+/// aarch64 Linux in a build that links libc (libztcl, a runner with
+/// `-Dcext`). The plain runner has no C package code, and a comptime
+/// export of a body there pulls the code of `obj.zig`, which needs libc.
+pub const exports = own and builtin.link_libc;
+
 /// The `va_list` of AAPCS64.
 pub const Aapcs64 = extern struct {
     stack: [*]u8,
@@ -130,7 +136,7 @@ pub fn Stub(comptime nfixed: u3, comptime body: []const u8) type {
 
 /// Exports `f` under `name` with hidden visibility, for a `Stub`.
 pub fn exportBody(comptime f: anytype, comptime name: []const u8) void {
-    if (own) @export(f, .{ .name = name, .visibility = .hidden });
+    if (exports) @export(f, .{ .name = name, .visibility = .hidden });
 }
 
 test "Aapcs64 reads the general area, the vector area, then the stack" {
@@ -163,7 +169,7 @@ fn testSum(n: usize, ap: *VaList) callconv(.c) i64 {
 }
 
 comptime {
-    if (own and builtin.is_test) exportBody(&testSum, "ztcl_va_test_sum");
+    if (own and builtin.is_test) @export(&testSum, .{ .name = "ztcl_va_test_sum", .visibility = .hidden });
 }
 
 test "a Stub reads the arguments of a C call in registers and on the stack" {

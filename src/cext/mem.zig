@@ -219,7 +219,7 @@ pub const slots = struct {
 };
 
 comptime {
-    if (va.own) {
+    if (va.exports) {
         va.exportBody(&slots.Tcl_PanicVA, "ztcl_va_Panic");
     }
 }

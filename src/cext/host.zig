@@ -1229,7 +1229,7 @@ test "Tcl_CommandComplete follows info complete" {
 }
 
 comptime {
-    if (obj.va.own) {
+    if (obj.va.exports) {
         obj.va.exportBody(&Tcl_VarEvalVA, "ztcl_va_VarEval");
     }
 }
