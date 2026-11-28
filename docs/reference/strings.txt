@@ -1,46 +1,6 @@
 # The command reference: strings. tools/reference.py reads each file of
 # this folder. The format is in docs/reference/README.md.
 
-== string
-syn: string subcommand ?arg ...?
-does: The commands for text. An index is a character index from 0, and `end` or `end-N` counts from the last character.
-sub: string length STRING | The count of characters.
-sub: string length -grapheme STRING | The count of grapheme clusters. It needs the module ztcl::text in the build, and no `package require`.
-sub: string bytelength STRING | The count of bytes of the UTF-8 form. Tcl 8.6 only.
-sub: string insert STRING INDEX TEXT | STRING with TEXT before the character at INDEX. `end` puts TEXT after the last character. Tcl 9.1 only.
-sub: string index STRING INDEX | The character at INDEX, or an empty string past the end.
-sub: string index -grapheme STRING INDEX | The grapheme cluster at INDEX, with INDEX in clusters.
-sub: string range STRING FIRST LAST | The characters from FIRST to LAST.
-sub: string range -grapheme STRING FIRST LAST | The grapheme clusters from FIRST to LAST.
-sub: string first NEEDLE HAYSTACK ?START? | The index of the first NEEDLE from START, or -1.
-sub: string last NEEDLE HAYSTACK ?LAST? | The index of the last NEEDLE at or before LAST, or -1.
-sub: string compare ?-nocase? ?-length N? A B | -1, 0, or 1 in the order of the characters.
-sub: string equal ?-nocase? ?-length N? A B | 1 when the strings are the same, else 0.
-sub: string match ?-nocase? PATTERN STRING | 1 when the glob PATTERN matches all of STRING. `*` is any text, `?` is one character, and `[a-z]` is a set.
-sub: string map ?-nocase? MAPPING STRING | Replaces each key of the key and value list MAPPING with its value. It reads STRING once, from left to right, and at each place it tries the keys in their order.
-sub: string repeat STRING COUNT | STRING COUNT times.
-sub: string replace STRING FIRST LAST ?NEW? | STRING with the characters from FIRST to LAST replaced by NEW.
-sub: string reverse STRING | The characters in the reverse order.
-sub: string reverse -grapheme STRING | The grapheme clusters in the reverse order, each with its characters in order.
-sub: string tolower STRING ?FIRST? ?LAST? | Lowercase.
-sub: string toupper STRING ?FIRST? ?LAST? | Uppercase.
-sub: string totitle STRING ?FIRST? ?LAST? | The first character uppercase and the rest lowercase.
-sub: string trim STRING ?CHARS? | STRING with the CHARS (white space by default) removed at both ends.
-sub: string trimleft STRING ?CHARS? | The same at the start only.
-sub: string trimright STRING ?CHARS? | The same at the end only.
-sub: string is CLASS ?-strict? ?-failindex VAR? STRING | 1 when each character is of CLASS: `alnum`, `alpha`, `ascii`, `boolean`, `digit`, `double`, `integer`, `wideinteger`, `list`, `lower`, `upper`, `space`, `xdigit`, and others. Without `-strict` an empty string gives 1. The class `dict` is in Tcl 9.1 only.
-sub: string cat ?STRING ...? | The strings joined with no separator.
-sub: string wordstart STRING INDEX | The index of the first character of the word at INDEX.
-sub: string wordend STRING INDEX | The index after the last character of the word at INDEX.
-ex: string length "buy milk" => 8
-ex: string range "buy milk" 4 end => milk
-ex: string length -grapheme "\U1F1FA\U1F1F8 e\u0301" => 3
-ex: string equal [string reverse -grapheme "ae\u0301"] "e\u0301a" => 1
-ex: string map {a 1 b 2} abcab => 12c12
-ex: string is integer -strict "" => 0
-ex: string first k "buy milk" => 7
-err: string nope x | unknown or ambiguous subcommand "nope": must be cat, compare, equal, first, index, insert, is, last, length, map, match, range, repeat, replace, reverse, tolower, totitle, toupper, trim, trimleft, trimright, wordend, or wordstart
-
 == tcl::prefix
 syn: tcl::prefix subcommand ?arg ...?
 does: Matches a word to a unique prefix of a table, as a command does with its options.

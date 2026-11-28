@@ -1,39 +1,6 @@
 # The command reference: dicts and arrays. The format is in
 # docs/reference/README.md.
 
-== dict
-syn: dict subcommand ?arg ...?
-does: The commands for dicts. A dict is a list of keys and values with each key once. It keeps the order in which the keys came in. A path of keys goes into nested dicts.
-sub: dict create ?KEY VALUE ...? | A new dict.
-sub: dict get DICT ?KEY ...? | The value at the path of keys. A missing key is an error. With no key, the whole dict.
-sub: dict getdef DICT ?KEY ...? KEY DEFAULT | The value at the path of keys, or DEFAULT when a key is missing. `dict getwithdefault` is the same command. Tcl 9.1 only.
-sub: dict getwithdefault DICT ?KEY ...? KEY DEFAULT | The same command as `dict getdef`. Tcl 9.1 only.
-sub: dict exists DICT KEY ?KEY ...? | 1 when the path of keys exists.
-sub: dict set VAR KEY ?KEY ...? VALUE | Sets the value at the path in the dict of a variable, and gives the new dict.
-sub: dict unset VAR KEY ?KEY ...? | Removes a key in the dict of a variable.
-sub: dict keys DICT ?PATTERN? | The keys, or the keys that match a glob pattern.
-sub: dict values DICT ?PATTERN? | The values.
-sub: dict size DICT | The count of keys.
-sub: dict for {KEYVAR VALUEVAR} DICT BODY | Runs BODY for each key and value.
-sub: dict map {KEYVAR VALUEVAR} DICT BODY | A new dict with the same keys and the results of BODY as values.
-sub: dict filter DICT key|value|script ... | The keys and values that match a pattern, or a script that gives true.
-sub: dict merge ?DICT ...? | One dict. A later dict wins for a key in both.
-sub: dict remove DICT ?KEY ...? | A copy with no such keys.
-sub: dict replace DICT ?KEY VALUE ...? | A copy with the new values.
-sub: dict incr VAR KEY ?INCREMENT? | Adds to an integer value in the dict of a variable.
-sub: dict append VAR KEY ?STRING ...? | Adds text to a value in the dict of a variable.
-sub: dict lappend VAR KEY ?VALUE ...? | Adds elements to a list value in the dict of a variable.
-sub: dict update VAR KEY VARNAME ?KEY VARNAME ...? BODY | Links variables to keys while BODY runs, and writes them back after it.
-sub: dict with VAR ?KEY ...? BODY | Makes a variable of each key while BODY runs, and writes them back after it.
-sub: dict info DICT | Text for people with the count of entries of the dict. Tcl gives the statistics of its hash table.
-ex: set d [dict create text milk done 0] => text milk done 0
-ex: dict get $d text => milk
-ex: dict set d done 1 => text milk done 1
-ex: dict exists $d tags => 0
-ex: dict merge {a 1 b 2} {b 3} => a 1 b 3
-ex: dict filter {a 1 b 2 c 3} value {[13]} => a 1 c 3
-err: dict get {a 1} b | key "b" not known in dictionary
-
 == array
 syn: array subcommand ?arg ...?
 does: The commands for arrays. An array is a variable with elements, each with a name: `name(element)`. An array is a variable and has no value of its own: pass its name, and use `array get` for a value.
