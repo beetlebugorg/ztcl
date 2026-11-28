@@ -541,7 +541,7 @@ pub fn setPrefault(m: *Machine, mb: u32) void {
     const s = m.getState();
     if (s != .running and s != .paused) return;
     m.prefault = @as(u64, mb) << 20;
-    m.filler = std.Thread.spawn(.{ .stack_size = 64 * 1024 }, fill, .{m}) catch null;
+    m.filler = std.Thread.spawn(.{ .stack_size = 1024 * 1024 }, fill, .{m}) catch null;
 }
 /// The size of each piece of `fill`.
 const fill_piece: u64 = 64 << 20;

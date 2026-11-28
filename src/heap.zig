@@ -1066,7 +1066,7 @@ const par = struct {
         for (0..n) |_| {
             // The worker gets the epoch of now: a mark that comes after the
             // spawn has a later one, so the worker does not miss it.
-            const t = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, workerMain, .{epoch.load(.acquire)}) catch break;
+            const t = std.Thread.spawn(.{ .stack_size = 1024 * 1024 }, workerMain, .{epoch.load(.acquire)}) catch break;
             t.detach();
             nworkers += 1;
         }

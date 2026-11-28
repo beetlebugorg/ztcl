@@ -2737,7 +2737,7 @@ const lin = if (on_kvm) struct {
         if (go) x.filling = true;
         pool_lock.unlock();
         if (go) {
-            const th = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, spareMain, .{x}) catch {
+            const th = std.Thread.spawn(.{ .stack_size = 1024 * 1024 }, spareMain, .{x}) catch {
                 pool_lock.lock();
                 x.filling = false;
                 pool_lock.unlock();
