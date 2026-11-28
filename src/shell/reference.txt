@@ -662,6 +662,8 @@ sub: ztcl::meter run NAME SCRIPT | Runs a script in the current interpreter and 
 sub: ztcl::meter record NAME ?-tenant TEXT? ?-script TEXT? ?-sign? ?-key SEED? | Gives the usage record of a meter: one line of JSON in a hash chain.
 sub: ztcl::meter verify RECORD PUBLICKEY | Checks the signature of a record.
 sub: ztcl::meter pubkey SEED | Gives the hex public key of a seed.
+== ztcl::open
+syn: ztcl::open URL-OR-PATH
 == ztcl::probe
 syn: ztcl::probe SUBCOMMAND ?ARG ...?
 sub: ztcl::probe add -proc NAME ?-line N? ?OPTION VALUE ...? | Adds a probe and gives its id.
@@ -730,8 +732,6 @@ sub: ztcl::watch add ?-recursive? PATH | Starts a watch of a folder and gives it
 sub: ztcl::watch changes WATCHER | Gives the events that wait, as a list of pairs of a kind and a path.
 sub: ztcl::watch fd WATCHER | Gives the descriptor that an embedder can wait on.
 sub: ztcl::watch remove WATCHER | Stops a watch.
-== ztcl::open
-syn: ztcl::open target
 == ztcl::notify
 syn: ztcl::notify ?-option value ...? title ?body?
 == ztcl::agent
