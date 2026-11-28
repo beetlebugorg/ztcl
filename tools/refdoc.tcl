@@ -1050,9 +1050,7 @@ proc refdoc::convert {runner name {remove 0}} {
     writefile $path "[join $out "\n"]\n"
     # Each text of the old entry must be in the new one.
     set id [loadfile $path]
-    variable N
-    set have {}
-    foreach k [array names N] { append have $N($k) "\n" }
+    set have [join [texts $id] "\n"]
     set lost {}
     dict for {k vals} $e {
         if {$k in {name file line area}} continue
@@ -1091,6 +1089,21 @@ proc refdoc::convert {runner name {remove 0}} {
         puts "removed $name from [file tail $src]"
     }
     return 0
+}
+
+# Each text of a node and of the nodes in it, one item for each value.
+proc refdoc::texts {id} {
+    variable N
+    set out {}
+    dict for {k v} $N($id) {
+        switch -- $k {
+            subs - options - args { foreach c $v { lappend out {*}[texts $c] } }
+            examples - errors - choices { foreach x $v { lappend out {*}[dict values $x] } }
+            synopsis - release - difference - see - names - flags - values { lappend out {*}$v }
+            default { lappend out $v }
+        }
+    }
+    return $out
 }
 
 # The values of one key of a text entry, or an empty list.

@@ -1,52 +1,5 @@
 # The command reference: lists. The format is in docs/reference/README.md.
 
-== list
-syn: list ?arg ...?
-does: Makes a list with each argument as one element. It adds the braces and backslashes that an element needs, so that each value stays one element.
-ex: list a "b c" {} => a {b c} {}
-
-== llength
-syn: llength list
-does: The count of elements of a list.
-ex: llength {a {b c} d} => 3
-err: llength "a {b" | unmatched open brace in list
-
-== lindex
-syn: lindex list ?index ...?
-does: Gets an element. Each further index goes into the element of the earlier one. An index past the end gives an empty string. An index is an integer from 0, `end`, or `end-N`, with `+` and `-` of integers.
-ex: lindex {a b c} end => c
-ex: lindex {{a b} {c d}} 1 0 => c
-
-== lrange
-syn: lrange list first last
-does: The elements from first to last, as a list.
-ex: lrange {a b c d} 1 end-1 => b c
-
-== lappend
-syn: lappend varName ?value ...?
-does: Adds each value as one element to the list in the variable, and gives the new list. It makes the variable when it has no value.
-ex: set l {a}; lappend l "b c" => a {b c}
-
-== linsert
-syn: linsert list index ?element ...?
-does: A new list with the elements put in before index.
-ex: linsert {a d} 1 b c => a b c d
-
-== lreplace
-syn: lreplace list first last ?element ...?
-does: A new list with the elements from first to last replaced by the new elements. With no new elements, it removes them.
-ex: lreplace {a b c d} 1 2 x => a x d
-
-== lset
-syn: lset listVar ?index? ?index ...? value
-does: Sets one element of the list in a variable, and gives the new list. More indexes go into nested lists. The index `end+1` adds an element.
-ex: set l {a b c}; lset l 1 x => a x c
-
-== lassign
-syn: lassign list ?varName ...?
-does: Puts the elements of a list in the variables, in order, and gives the elements that are left. A variable with no element gets an empty string.
-ex: lassign {1 2 3} a b => 3
-
 == lseq
 syn: lseq count
 syn: lseq start ?to|..? end ??by? step?
@@ -85,16 +38,6 @@ syn: lfilter varList list ?varList list ...? command
 does: Runs the command once for each element, as `foreach` does, and gives the values of the first variable for the passes where the command gives true.
 tcl: 9.1
 ex: lfilter x {1 2 3 4} {expr {$x % 2 == 0}} => 2 4
-
-== lrepeat
-syn: lrepeat count ?value ...?
-does: A list of the values, count times.
-ex: lrepeat 3 x => x x x
-
-== lreverse
-syn: lreverse list
-does: The elements in the reverse order.
-ex: lreverse {a b c} => c b a
 
 == lsearch
 syn: lsearch ?-option value ...? list pattern
