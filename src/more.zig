@@ -22,9 +22,12 @@ fn lsetRec(it: *Interp, list: Value, idxs: []const Value, v: Value) Error!Value 
     if (idxs.len == 0) return v;
     const items = try it.list(list);
     const n = try cmds.index(it, idxs[0], items.len);
-    if (n < 0 or n > items.len) return it.fail("list index out of range", .{});
+    // The index of the length adds an item, at each level of the path.
+    if (n < 0 or n > items.len) {
+        if (it.tcl9()) return it.failCode("TCL VALUE INDEX OUTOFRANGE", "index \"{s}\" out of range", .{try it.str(idxs[0])});
+        return it.failCode("TCL OPERATION LSET BADINDEX", "list index out of range", .{});
+    }
     const at: usize = @intCast(n);
-    if (at == items.len and idxs.len > 1) return it.fail("list index out of range", .{});
     const copy = try it.alloc().alloc(Value, @max(items.len, at + 1));
     @memcpy(copy[0..items.len], items);
     copy[at] = try lsetRec(it, if (at < items.len) items[at] else Value.empty, idxs[1..], v);

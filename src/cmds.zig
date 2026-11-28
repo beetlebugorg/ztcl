@@ -2262,7 +2262,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
         },
         .first, .last => {
             if (args.len != 2 and args.len != 3) {
-                return if (which == .first) it.wrongArgs("string first needleString haystackString ?startIndex?") else it.wrongArgs("string last needleString haystackString ?startIndex?");
+                return if (which == .first) it.wrongArgs("string first needleString haystackString ?startIndex?") else if (it.tcl9()) it.wrongArgs("string last needleString haystackString ?lastIndex?") else it.wrongArgs("string last needleString haystackString ?startIndex?");
             }
             const needle = try it.str(args[0]);
             const hay = try it.str(args[1]);
@@ -2310,8 +2310,14 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
                 if (key.len == 0) continue;
                 starts[key[0]] = true;
                 if (nocase) {
-                    starts[std.ascii.toLower(key[0])] = true;
-                    starts[std.ascii.toUpper(key[0])] = true;
+                    // A letter of ASCII matches its two cases, and each
+                    // byte of a letter outside ASCII can start a match.
+                    const low = ucd.toLower(ucd.next(key, 0).cp);
+                    if (low < 128) {
+                        starts[@intCast(low)] = true;
+                        starts[std.ascii.toUpper(@intCast(low))] = true;
+                    }
+                    @memset(starts[128..], true);
                 }
             }
             var out: std.ArrayList(u8) = .empty;
@@ -2338,17 +2344,21 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
                 var k: usize = 0;
                 while (k < keys.len) : (k += 2) {
                     const key = keys[k];
-                    if (key.len == 0 or i + key.len > s.len) continue;
+                    if (key.len == 0) continue;
+                    if (!nocase and i + key.len > s.len) continue;
                     try meter.add(it, key.len);
-                    const same = if (nocase) std.ascii.eqlIgnoreCase(s[i .. i + key.len], key) else eql(s[i .. i + key.len], key);
-                    if (same) {
+                    const got: ?usize = if (nocase) foldPrefix(s[i..], key) else if (eql(s[i .. i + key.len], key)) key.len else null;
+                    if (got) |len| {
                         try out.appendSlice(a, keys[k + 1]);
-                        i += key.len;
+                        i += len;
                         continue :outer;
                     }
                 }
-                try out.append(a, s[i]);
-                i += 1;
+                // With no case, step over a whole character, so that no
+                // match starts inside one.
+                const step_len: usize = if (nocase) @max(1, ucd.next(s, i).len) else 1;
+                try out.appendSlice(a, s[i .. i + step_len]);
+                i += step_len;
             }
             return .{ .str = out.items };
         },
@@ -2696,6 +2706,24 @@ fn boolWordOf(s: []const u8, class: []const u8) bool {
 }
 
 /// Compares by characters. A limit counts characters.
+/// The length in bytes of the start of `s` that matches `key` with no
+/// case, as `string map -nocase` of Tcl compares: each character in
+/// lower case. The two lengths can differ, since a letter and its
+/// lowercase can have UTF-8 forms of two lengths.
+fn foldPrefix(s: []const u8, key: []const u8) ?usize {
+    var i: usize = 0;
+    var j: usize = 0;
+    while (j < key.len) {
+        if (i >= s.len) return null;
+        const p = ucd.next(s, i);
+        const q = ucd.next(key, j);
+        if (ucd.toLower(p.cp) != ucd.toLower(q.cp)) return null;
+        i += p.len;
+        j += q.len;
+    }
+    return i;
+}
+
 fn compareStrings(x: []const u8, y: []const u8, nocase: bool, limit: ?usize) std.math.Order {
     var i: usize = 0;
     var j: usize = 0;

@@ -342,12 +342,11 @@ command dict {
         synopsis {dict map {KEYVAR VALUEVAR} DICT BODY}
         summary {Makes a dict with the same keys and the results of a script as values.}
         description {
-            Runs BODY once for each key of DICT, as `dict for` does, and gives a new dict: each key with the result of BODY as its value. A change of KEYVAR in BODY does not change the key of the result.
+            Runs BODY once for each key of DICT, as `dict for` does, and gives a new dict: each key with the result of BODY as its value. The key of the result is the value of KEYVAR after BODY, so BODY can change the key: a key that BODY gives twice keeps the last value.
 
             `continue` in BODY leaves the key out of the result. `break` ends the loop and gives an empty dict.
         }
         returns {The new dict.}
-        difference {In Tcl 8.6.16 and 9.0.4 the key of the result is the value of KEYVAR after BODY: `dict map {k v} {a 1} {set k z; set v}` gives `z 1` there ([issue 660](https://github.com/beetlebugorg/ztcl/issues/660)).}
         see {{dict for} lmap {dict filter}}
         argument {{KEYVAR VALUEVAR}} {
             type {list of two variable names}
@@ -364,7 +363,8 @@ command dict {
         example {dict map {k v} {a 1 b 2} {expr {$v * 10}}} {a 10 b 20}
         example {dict map {k v} {a 1 b 2 c 3} {if {$k eq "b"} continue; set v}} {a 1 c 3}
         example {dict map {k v} {a 1 b 2 c 3} {if {$k eq "b"} break; set v}} {}
-        example {dict map {k v} {a 1} {set k z; set v}} {a 1}
+        example {dict map {k v} {a 1} {set k z; set v}} {z 1}
+        example {dict map {k v} {a 1 b 2} {set k z; set v}} {z 2} -note {Both keys become `z`, and the last value stays.}
         error {dict map {k} {a 1} {}} {must have exactly two variable names} NONE
         error {dict map {k v} {a 1} {error inner}} inner NONE
     }
@@ -491,12 +491,11 @@ command dict {
         synopsis {dict incr VAR KEY ?INCREMENT?}
         summary {Adds an integer to the value of a key in the dict of a variable.}
         description {
-            Adds INCREMENT to the integer value of KEY in the dict of the variable VAR, and gives the new dict. INCREMENT is 1 by default, and it can be negative or in any integer form, such as `0x10`. A missing key starts at 0, and a VAR with no value starts as an empty dict. The sum has no size limit: it does not wrap at 64 bits.
+            Adds INCREMENT to the integer value of KEY in the dict of the variable VAR, and gives the new dict. INCREMENT is 1 by default, and it can be negative or in any integer form, such as `0x10`. A missing key gets INCREMENT as written, so `0x10` stays `0x10`, and a VAR with no value starts as an empty dict. The sum has no size limit: it does not wrap at 64 bits.
 
             The value of the key and INCREMENT must be integers.
         }
         returns {The new value of VAR.}
-        difference {For a missing key, Tcl 8.6.16 and 9.0.4 store INCREMENT as written: `dict incr d m 0x10` on an empty dict gives `m 0x10` there ([issue 661](https://github.com/beetlebugorg/ztcl/issues/661)).}
         see {incr {dict set} {dict append}}
         argument VAR {
             type {variable name}
@@ -523,7 +522,11 @@ command dict {
         example {
             set d {}
             dict incr d m 0x10
-        } {m 16}
+        } {m 0x10}
+        example {
+            set d {m 0x10}
+            dict incr d m
+        } {m 17}
         example {
             set d {n 1}
             dict incr d n 9223372036854775807

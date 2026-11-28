@@ -61,7 +61,7 @@ opt: -about | Gives the count of groups and the flags of exp.
 ex: regexp -inline {(\d+)-(\d+)} "pages 12-40" => 12-40 12 40
 ex: regexp -all -inline {#\w+} "a #b c #d" => {#b} #d
 ex: regexp {^\d+$} 42abc => 0
-err: regexp {(} x | couldn't compile regular expression pattern: parentheses () not balanced
+err: regexp {(} x | cannot compile regular expression pattern: parentheses () not balanced
 
 == regsub
 syn: regsub ?-option ...? exp string subSpec ?varName?

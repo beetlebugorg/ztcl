@@ -49,15 +49,22 @@ command lset {
         set l {a b}
         lset l x
     } x
+    example {
+        set l {a b c}
+        lset l 3 0 d
+    } {a b c d} -note {The index of the length adds an item at each level of the path: here an empty list at index 3, then `d` in it.}
     error {
         set l {a b}
         lset l 5 c
-    } {list index out of range} NONE
+    } {list index out of range} {TCL OPERATION LSET BADINDEX} -tcl 8.6
+    error {
+        set l {a b}
+        lset l 5 c
+    } {index "5" out of range} {TCL VALUE INDEX OUTOFRANGE} -tcl 9.1
     error {
         unset -nocomplain nv
         lset nv 0 x
     } {can't read "nv": no such variable} NONE
     error {lset} {wrong # args: should be "lset listVar ?index? ?index ...? value"} {TCL WRONGARGS}
-    difference {An index out of range has `-errorcode NONE`, where Tcl 8.6.16 gives `TCL OPERATION LSET BADINDEX` and Tcl 9.0.4 gives `TCL VALUE INDEX OUTOFRANGE` ([issue 658](https://github.com/beetlebugorg/ztcl/issues/658)).}
-    difference {In Tcl 9.0.4 the message of an index out of range names the index: `index "5" out of range` ([issue 665](https://github.com/beetlebugorg/ztcl/issues/665)).}
+    release {In Tcl 9.1 the message of an index out of range names the index, as in `index "5" out of range`, with the code `TCL VALUE INDEX OUTOFRANGE`. Tcl 8.6 gives `list index out of range` with `TCL OPERATION LSET BADINDEX`.}
 }

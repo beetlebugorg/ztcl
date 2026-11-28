@@ -631,7 +631,9 @@ fn dictMore(it: *Interp, name: []const u8, argv: []const Value, cmd: ?*interp.Cm
                 error.TclContinue => continue,
                 else => return cmds.bodyContext(it, e, cmd, 4, true, "(\"dict map\" body line {d})"),
             };
-            try out.append(a, items[i]);
+            // The key of the result is the key variable after the body, so
+            // the body can change it, as in Tcl.
+            try out.append(a, try it.getVar(try it.str(names[0])));
             try out.append(a, v);
         }
         return try value.wrapList(a, try pairs(it, try value.wrapList(a, out.items)));
@@ -867,8 +869,9 @@ pub fn cmdDict(it: *Interp, argv: []const Value, cmd: ?*interp.Cmd) Error!Value 
             switch (sub) {
                 .incr => {
                     const by: Value = if (args.len == 3) try expr.intArg(it, args[2]) else .{ .int = 1 };
-                    const base: Value = if (at != null) try expr.intArg(it, old) else .{ .int = 0 };
-                    new = try expr.addInts(it, base, by);
+                    // A new key gets the increment as written, as in Tcl:
+                    // `dict incr d k 0x10` stores `0x10`.
+                    new = if (at) |_| try expr.addInts(it, try expr.intArg(it, old), by) else if (args.len == 3) args[2] else by;
                 },
                 .lappend => {
                     var l = old.toList(a) catch |e| switch (e) {
