@@ -921,6 +921,9 @@ fn addWasmForm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise:
     addModuleOptions(b, wasm_options, mods_on);
     wasm.root_module.addOptions("build_options", wasm_options);
     if (threads != .shared) addVt(b, wasm.root_module, wasm.root_module.resolved_target.?, .small);
+    // The build with shared threads has no VT module, and src/json
+    // imports `json_index`.
+    if (threads == .shared) addCrypto(b, wasm.root_module);
     wasm.entry = .disabled;
     wasm.rdynamic = true;
     // The interpreter can use 5 MiB of native stack (`max_native`).
