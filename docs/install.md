@@ -29,9 +29,9 @@ The package is not on the AUR yet ([#169](https://github.com/beetlebugorg/ztcl/i
 Each release has an archive for Linux (x86-64 and arm64, static with musl), macOS (x86-64 and arm64), and Windows (x86-64), and a WebAssembly archive. `SHA256SUMS` has the checksum of each file.
 
 ```sh
-curl -LO https://github.com/beetlebugorg/ztcl/releases/download/v0.2.0-beta/ztcl-0.2.0-beta-x86_64-linux-musl.tar.gz
-tar xzf ztcl-0.2.0-beta-x86_64-linux-musl.tar.gz
-./ztcl-0.2.0-beta-x86_64-linux-musl/ztcl script.tcl
+curl -LO https://github.com/beetlebugorg/ztcl/releases/download/v1.0.0-beta.1/ztcl-1.0.0-beta.1-x86_64-linux-musl.tar.gz
+tar xzf ztcl-1.0.0-beta.1-x86_64-linux-musl.tar.gz
+./ztcl-1.0.0-beta.1-x86_64-linux-musl/ztcl script.tcl
 ```
 
 ## npm

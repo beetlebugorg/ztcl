@@ -4,7 +4,7 @@
 #
 #   packaging/homebrew/tap.sh <version> <dist folder> <tap folder>
 #
-# The version is the tag with no v (0.1.0-alpha). The dist folder has
+# The version is the tag with no v (1.0.0-beta.1). The dist folder has
 # the archives of the release.
 # SPDX-License-Identifier: BSD-2-Clause
 set -eu
