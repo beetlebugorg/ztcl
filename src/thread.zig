@@ -404,6 +404,12 @@ pub const Worker = struct {
     wake_fd: std.atomic.Value(i32) = .init(-1),
     /// The write end of the pipe on macOS. It is set before `wake_fd`.
     wake_wr: std.atomic.Value(i32) = .init(-1),
+    /// A function of the embedder that each new message of the thread
+    /// calls, for an event loop of the embedder (the window loop of ztk):
+    /// it ends the wait of that loop. It runs on the sending thread with
+    /// the group lock held, so it only signals. `setMessageHook` sets it.
+    on_message: std.atomic.Value(?*const fn (ctx: ?*anyopaque) void) = .init(null),
+    on_message_ctx: ?*anyopaque = null,
     /// The text of the start script, in group memory.
     script: []u8 = &.{},
     /// A pool worker: the pool and its loop.
@@ -1260,6 +1266,7 @@ pub fn wakeWorker(w: *Worker) void {
 /// Makes the wake descriptor of `w` readable. The caller holds the
 /// group lock, so the descriptor stays open.
 fn poke(w: *Worker) void {
+    if (w.on_message.load(.acquire)) |f| f(w.on_message_ctx);
     if (comptime !fd_os) return;
     const fd = w.wake_fd.load(.acquire);
     if (fd < 0) return;
@@ -1299,6 +1306,20 @@ pub fn wakeFd(it: *Interp) i32 {
     w.wake_wr.store(fds[1], .release);
     w.wake_fd.store(fds[0], .release);
     return fds[0];
+}
+
+/// Sets the function that each new message of the thread of `it` calls,
+/// with `ctx`: an embedder with an event loop of its own wakes the loop
+/// there, and then runs the messages with `serve`. Null removes it.
+/// Gives false when `it` has no thread.
+pub fn setMessageHook(it: *Interp, f: ?*const fn (ctx: ?*anyopaque) void, ctx: ?*anyopaque) bool {
+    const w = it.worker orelse return false;
+    const g = w.group;
+    g.lock.lock();
+    defer g.lock.unlock();
+    w.on_message_ctx = ctx;
+    w.on_message.store(f, .release);
+    return true;
 }
 
 /// Reads the count of the wake descriptor of the thread of `it`.
