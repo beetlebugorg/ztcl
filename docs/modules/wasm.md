@@ -15,7 +15,7 @@ The module is in the native `ztcl` programs. It is not in `ztcl.wasm`. The build
 
 The bytes below are a module with one function `add` of two `i32` values. A module from a compiler is a file, for `ztcl::wasm load`.
 
-<!-- run -->
+<!-- run: native -->
 ```tcl
 package require ztcl::wasm
 set bytes [binary decode hex 0061736d0100000001070160027f7f017f030201000707010361646400000a09010700200020016a0b]
@@ -82,7 +82,7 @@ With `-raw`, `call` reads and gives each value as the unsigned integer of its bi
 
 An import of `-imports` is a Tcl command. Wasm code can call Tcl code with it, and that code can call the instance again.
 
-<!-- run -->
+<!-- run: native -->
 ```tcl
 package require ztcl::wasm
 # (import "env" "log" (func (param i32))) and an export "run" that calls it with 7.

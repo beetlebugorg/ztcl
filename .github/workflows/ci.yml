@@ -992,6 +992,9 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install -r tools/docs-requirements.txt
       - run: python tools/build-docs.py site
+      # Each live example of the site runs in Chrome, and the files of
+      # the examples of ztcl::typeset and ztcl::pdf show in the page.
+      - run: node tools/docs-live.mjs site /usr/bin/google-chrome
       - run: sh tests/targets.sh
       # The first failure stops the other jobs of the run. curl is in
       # each runner and in the container of the self-hosted runner.

@@ -26,6 +26,14 @@
 // with their colors and attributes. The screen shows only after a click,
 // so the layout does not move by itself.
 //
+// An example of ztcl::typeset or ztcl::pdf (data-wasm on the figure)
+// runs in ztcl-shell.wasm, which has them, with the capability `file`.
+// The fonts that it names (data-files) come from book/fonts/ of the site,
+// and `open book/fonts/NAME.ttf rb` reads them. The files that it writes
+// show under the output: each SVG image inline, side by side, after the
+// page drops its scripts, event handlers, and links, and each PDF in a
+// viewer, with a link to open it in a tab and a link to download it.
+//
 // The editor and the highlighter come from docs/site/live.js of ztk
 // (github.com/beetlebugorg/ztk), BSD-2-Clause.
 
@@ -34,6 +42,41 @@ const params = new URLSearchParams(location.search);
 const LIMIT = 50_000_000;
 let lib = null;
 const load = () => (lib ??= import(new URL("ztcl.mjs", base).href));
+
+// The fonts of the site, by name: each one is fetched once for the page.
+const site = new URL("../", import.meta.url);
+const fonts = new Map();
+const fetchFile = (name) => {
+  if (!fonts.has(name)) {
+    fonts.set(name, fetch(new URL(name, site)).then((r) => {
+      if (!r.ok) throw new Error(`${name}: ${r.status}`);
+      return r.arrayBuffer();
+    }));
+  }
+  return fonts.get(name);
+};
+
+// The elements and the attributes of an SVG image of ztcl::typeset that
+// the page shows. Each other element goes away, and so does each event
+// handler and link, so the image runs no script.
+const SVG_TAGS = new Set(["svg", "g", "text", "tspan", "rect", "line", "polyline", "polygon", "path", "circle", "ellipse", "title", "desc"]);
+function cleanSvg(text) {
+  const doc = new DOMParser().parseFromString(text, "image/svg+xml");
+  const root = doc.documentElement;
+  if (root.localName !== "svg" || doc.querySelector("parsererror")) return null;
+  const walk = (el) => {
+    for (const c of [...el.children]) {
+      if (!SVG_TAGS.has(c.localName)) { c.remove(); continue; }
+      walk(c);
+    }
+    for (const a of [...el.attributes]) {
+      const n = a.name.toLowerCase();
+      if (n.startsWith("on") || n.endsWith("href") || n === "style" && /url\(|expression/i.test(a.value)) el.removeAttribute(a.name);
+    }
+  };
+  walk(root);
+  return document.importNode(root, true);
+}
 
 // The trace of the terminal view, and the script that gives the cells:
 // one line for each row, cells split by \x1e, fields by \x1f.
@@ -170,6 +213,13 @@ class Example {
       tabOut = false;
     });
     this.out = fig.querySelector(".ld-out");
+    if (fig.dataset.wasm) {
+      this.files = document.createElement("div");
+      this.files.className = "ld-files";
+      this.files.hidden = true;
+      this.out.after(this.files);
+      this.urls = [];
+    }
     this.stage = fig.dataset.dom ? fig.querySelector(".ld-stage") : null;
     if (this.stage) this.stageHtml = this.stage.innerHTML;
     const bar = fig.querySelector(".ld-bar");
@@ -222,14 +272,27 @@ class Example {
     }
     if (this.stage) return this.runDom(m, seq);
     this.tcl?.stop();
-    const tcl = (this.tcl = new m.WorkerInterp(new URL("ztcl.wasm", base), { computeLimit: LIMIT }));
+    const wasm = this.fig.dataset.wasm || "ztcl.wasm";
+    let files = null;
+    if (this.fig.dataset.wasm) {
+      try {
+        const names = (this.fig.dataset.files || "").split(" ").filter(Boolean);
+        files = Object.fromEntries(await Promise.all(names.map(async (n) => [n, await fetchFile(n)])));
+      } catch (e) {
+        this.fig.dataset.live = "failed";
+        this.out.textContent = `The fonts did not load: ${e.message}`;
+        return;
+      }
+    }
+    const opts = files ? { computeLimit: LIMIT, allow: ["file"], files } : { computeLimit: LIMIT };
+    const tcl = (this.tcl = new m.WorkerInterp(new URL(wasm, base), opts));
     let text = "";
     tcl.onOutput = (t) => { text += t; };
     this.stop.disabled = false;
     const term = this.screen && !this.screen.hidden;
     if (term) await tcl.eval(TERM_TRACE);
     const t0 = performance.now();
-    const r = await tcl.eval(this.ta.value);
+    const r = await tcl.eval(this.ta.value, { collect: !!files });
     const ms = performance.now() - t0;
     const cells = term ? await tcl.eval(TERM_CELLS) : null;
     if (seq !== this.seq) return;
@@ -247,8 +310,52 @@ class Example {
       this.out.append(res);
     }
     if (cells && seq === this.seq) renderScreen(this.screen, cells.ok ? cells.result : "");
+    if (this.files) this.showFiles(r.files ?? {});
     this.info.textContent = `${ms.toFixed(1)} ms in a worker · compute limit ${LIMIT.toLocaleString("en-US")}`;
     return r;
+  }
+
+  // Shows the SVG and PDF files of a run under its output.
+  showFiles(files) {
+    for (const u of this.urls) URL.revokeObjectURL(u);
+    this.urls = [];
+    this.files.replaceChildren();
+    const names = Object.keys(files).filter((n) => /\.(svg|pdf)$/i.test(n)).sort();
+    for (const name of names) {
+      const bytes = files[name];
+      const box = document.createElement("figure");
+      box.className = "ld-file";
+      const cap = document.createElement("figcaption");
+      cap.textContent = `${name} · ${bytes.length.toLocaleString("en-US")} bytes`;
+      if (/\.svg$/i.test(name)) {
+        const svg = cleanSvg(new TextDecoder().decode(bytes));
+        if (!svg) continue;
+        const view = document.createElement("div");
+        view.className = "ld-svg";
+        view.appendChild(svg);
+        box.append(view, cap);
+      } else {
+        const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+        this.urls.push(url);
+        const open = document.createElement("a");
+        open.href = url;
+        open.target = "_blank";
+        open.rel = "noopener";
+        open.textContent = "Open";
+        const save = document.createElement("a");
+        save.href = url;
+        save.download = name.split("/").pop();
+        save.textContent = "Download";
+        cap.append(open, save);
+        const view = document.createElement("iframe");
+        view.src = url;
+        view.title = `The PDF ${name}`;
+        box.append(view, cap);
+      }
+      this.files.appendChild(box);
+    }
+    this.files.hidden = !this.files.children.length;
+    this.fig.dataset.outFiles = names.join(" ");
   }
 
   // Shows the output and the result of a run, or of a run of events.
@@ -300,7 +407,8 @@ if (params.has("snippettest")) {
     const out = { live: [], checks: {} };
     for (const e of examples) {
       const r = await e.run();
-      out.live.push(`${e.fig.id}:${e.fig.dataset.live}:${r?.ok}:${e.out.textContent.slice(0, 40)}`);
+      const made = e.fig.dataset.outFiles ? `:files=${e.fig.dataset.outFiles}` : "";
+      out.live.push(`${e.fig.id}:${e.fig.dataset.live}:${r?.ok}:${e.out.textContent.slice(0, 40)}${made}`);
     }
     const e = examples[0];
     if (e) {
@@ -310,6 +418,9 @@ if (params.has("snippettest")) {
       e.ta.value = "while 1 {}";
       const r = await e.run();
       out.checks.limit = r.ok ? "no" : "yes";
+      // The example gets its own code again, so the page shows its output.
+      e.ta.value = e.original;
+      await e.run();
     }
     const pre = document.createElement("pre");
     pre.id = "result";

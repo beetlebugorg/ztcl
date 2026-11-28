@@ -186,7 +186,16 @@ class Build:
             # HTML is the stage: the root element of `dom`.
             stage = f'<div class="ld-stage">{t.meta["dom"]}</div>' if "dom" in t.meta else ""
             dom = ' data-dom="1"' if stage else ""
-            return (f'<figure class="live-demo" id="{t.meta["id"]}"{term}{dom}><div class="ld-code"><pre><code class="language-tcl">'
+            # An example of ztcl::typeset, ztcl::pdf, ztcl::probe, or
+            # ztcl::disasm runs in ztcl-shell.wasm, the build that has
+            # them, with the fonts of the site that it names (book/fonts/
+            # on the site), and the page shows the SVG and PDF files that
+            # it writes.
+            kit = ""
+            if re.search(r"ztcl::(typeset|pdf|probe|disasm)", t.content):
+                fonts = " ".join(sorted(set(re.findall(r"book/fonts/[\w.-]+\.ttf", t.content))))
+                kit = ' data-wasm="ztcl-shell.wasm"' + (f' data-files="{fonts}"' if fonts else "")
+            return (f'<figure class="live-demo" id="{t.meta["id"]}"{term}{dom}{kit}><div class="ld-code"><pre><code class="language-tcl">'
                     f'{html.escape(t.content)}</code></pre></div>{stage}<pre class="ld-out" aria-live="polite">{html.escape(t.meta.get("out", ""))}</pre>'
                     f'<figcaption class="ld-bar"><span class="ld-tag">Live</span></figcaption></figure>\n')
         self.md.renderer.rules["fence"] = fence
@@ -626,6 +635,12 @@ class Build:
             shutil.copy(SITE_DIR / name, out / "assets" / name)
         if (ROOT / "docs" / "images").is_dir():
             shutil.copytree(ROOT / "docs" / "images", out / "images")
+        # The fonts of the book, under the OFL, for the live examples of
+        # ztcl::typeset and ztcl::pdf and the @font-face of site.css.
+        (out / "book" / "fonts").mkdir(parents=True)
+        for f in (ROOT / "book" / "fonts").iterdir():
+            if f.suffix in (".ttf", ".txt"):
+                shutil.copy(f, out / "book" / "fonts" / f.name)
         (out / "try").mkdir()
         shutil.copy(SITE_DIR / "try" / "index.html", out / "try" / "index.html")
         (out / "playground").mkdir()

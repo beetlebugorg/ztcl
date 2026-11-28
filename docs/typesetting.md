@@ -9,7 +9,7 @@
 
 With no font, `ztcl::typeset justify` breaks the text on a grid of characters. Each line but the last of a paragraph fills the width, and the spaces of a line differ by one character at most:
 
-<!-- run: native -->
+<!-- run -->
 ```tcl
 package require ztcl::typeset
 puts -nonewline [ztcl::typeset justify "The line breaker looks at the whole paragraph,\
@@ -34,11 +34,41 @@ The image below is one paragraph in a column of 240 points, broken four ways by 
 
 ![The same paragraph broken with first fit and total fit, with and without hyphens](images/typeset/compare.png)
 
+The example below breaks one paragraph both ways in the same font, side by side. Edit the text or the width, and the two columns change in the page. The breaks of each column are data, put in an SVG image with `ztcl::typeset svg`:
+
+<!-- run -->
+```tcl
+package require ztcl::typeset
+set f [open book/fonts/SourceSerif4-Regular.ttf rb]
+set font [ztcl::typeset font load [read $f]]
+close $f
+set text "In olden times when wishing still helped one, there lived a king\
+    whose daughters were all beautiful; and the youngest was so beautiful\
+    that the sun itself, which has seen so much, was astonished whenever\
+    it shone in her face."
+foreach method {greedy total} {
+    set opts [list -width 220 -font $font -size 11 -method $method]
+    set out [open $method.svg w]
+    puts -nonewline $out [ztcl::typeset svg $text {*}$opts -family "Source Serif 4"]
+    close $out
+    set worst 0
+    foreach line [ztcl::typeset break $text {*}$opts] {
+        set worst [expr {max($worst, [dict get $line ratio])}]
+    }
+    puts "$method: the loosest line has a ratio of [format %.2f $worst]"
+}
+```
+
+```text
+greedy: the loosest line has a ratio of 5.96
+total: the loosest line has a ratio of 0.66
+```
+
 On a narrow column with no hyphens, no set of breaks is good, and the two methods are close. With hyphens, total fit finds breaks with even spaces on nearly each line, and first fit still leaves loose lines. Each method gets the same text and the same hyphens: the difference is only the choice of the breaks.
 
 To see the numbers, ask `break` for the ratio of each line. Here the text is on a grid of 34 characters, with no hyphens:
 
-<!-- run: native -->
+<!-- run -->
 ```tcl
 package require ztcl::typeset
 set text "In olden times when wishing still helped one, there lived a king\
@@ -64,7 +94,7 @@ First fit fills the first two lines well, and then the third line has to stretch
 
 `ztcl::typeset hyphenate` gives the places where a word can break, from the patterns of Liang:
 
-<!-- run: native -->
+<!-- run -->
 ```tcl
 package require ztcl::typeset
 foreach word {hyphenation typesetting algorithm paragraph} {
@@ -85,33 +115,67 @@ The patterns are those of American English from the hyph-utf8 package, with a pe
 
 ## Words with a font
 
-With `-font` and `-size`, the widths come from a TrueType font, with its kerning and ligatures. Load the bytes of the font file first:
+With `-font` and `-size`, the widths come from a TrueType font, with its kerning and ligatures. Load the bytes of the font file first. In this page the example reads the fonts of the site:
 
+<!-- run -->
 ```tcl
 package require ztcl::typeset
 set f [open book/fonts/SourceSerif4-Regular.ttf rb]
 set font [ztcl::typeset font load [read $f]]
 close $f
-puts [ztcl::typeset font metrics $font 10]
+puts [dict get [ztcl::typeset font metrics $font 10] family]
 puts [ztcl::typeset font measure $font 10 "office"]
-foreach line [ztcl::typeset break $text -width 240 -font $font -size 10] {
-    puts "[dict get $line text] ([dict get $line ratio])"
+set text "In olden times when wishing still helped one, there lived a king\
+    whose daughters were all beautiful."
+foreach line [ztcl::typeset break $text -width 220 -font $font -size 10] {
+    puts "[dict get $line text] ([format %.2f [dict get $line ratio]])"
 }
+```
+
+```text
+Source Serif 4 10pt
+27.09
+In olden times when wishing still helped one, (-0.69)
+there lived a king whose daughters were all (0.76)
+beautiful. (0.00)
 ```
 
 Each line has `words`, a list of x positions and words. Put each word at its x, and the line is justified.
 
 ## A PDF
 
-`ztcl::pdf` draws the words of each line in the same font. The letter of the [PDF guide](pdf.md) has justified, hyphenated paragraphs from this loop:
+`ztcl::pdf` draws the words of each line in the same font. This program writes a page of justified, hyphenated text. In this page it makes the PDF in the browser: open it, or download it, under the example.
 
+<!-- run -->
 ```tcl
+package require ztcl::typeset
+package require ztcl::pdf
+set f [open book/fonts/SourceSerif4-Regular.ttf rb]
+set data [read $f]
+close $f
+set tf [ztcl::typeset font load $data]
+set doc [ztcl::pdf create]
+set font [ztcl::pdf font $doc $data]
+set page [ztcl::pdf page $doc 612 792]
+set para "The line breaker of Knuth and Plass looks at the whole paragraph\
+    before it picks a break, so the spaces of the lines stay even. Each word\
+    goes on the page at the x position that the breaker gives it, and the\
+    right edge of each line but the last is straight."
+set y 720
 foreach line [ztcl::typeset break $para -width 432 -font $tf -size 11] {
     foreach {x word} [dict get $line words] {
         ztcl::pdf text $doc $page $font 11 [expr {90 + $x}] $y $word
     }
     set y [expr {$y - 15}]
 }
+set out [open paragraph.pdf wb]
+puts -nonewline $out [ztcl::pdf bytes $doc]
+close $out
+puts "paragraph.pdf: [ztcl::pdf pages $doc] page"
+```
+
+```text
+paragraph.pdf: 1 page
 ```
 
 `ztcl::typeset markdown` goes further: it lays out a whole Markdown document into pages, with headings, code blocks, notes, cross references, an outline, and an index.
@@ -137,17 +201,26 @@ A canvas has a scale in pixels, and a font size in points. At a scale of 1, give
 
 ## SVG and HTML
 
-`ztcl::typeset svg` gives an SVG image of the paragraph. Each word has its own x, so a browser shows the same breaks as the PDF. Put the image in an HTML page, and give the page the same font with `@font-face`:
+`ztcl::typeset svg` gives an SVG image of the paragraph. Each word has its own x, so a browser shows the same breaks as the PDF. Put the image in an HTML page, and give the page the same font with `@font-face`. This page has the fonts of the book, so the image shows under the example:
 
+<!-- run -->
 ```tcl
-set svg [ztcl::typeset svg $text -width 400 -font $font -size 12 -family "Source Serif 4"]
+package require ztcl::typeset
+set f [open book/fonts/SourceSerif4-Regular.ttf rb]
+set font [ztcl::typeset font load [read $f]]
+close $f
+set text "Each word of an SVG paragraph has its own x position, so a browser\
+    shows the breaks of the line breaker and not its own."
+set out [open paragraph.svg w]
+puts -nonewline $out [ztcl::typeset svg $text -width 400 -font $font -size 12 -family "Source Serif 4"]
+close $out
 ```
 
 ## Pages and columns
 
 `ztcl::typeset pages` places paragraphs in columns and pages. It gets the line count of each paragraph and keeps a first line or a last line from standing alone at the edge of a column:
 
-<!-- run: native -->
+<!-- run -->
 ```tcl
 package require ztcl::typeset
 foreach page [ztcl::typeset pages {4 3 5} -lines 6 -columns 2] {
