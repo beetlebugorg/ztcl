@@ -115,7 +115,7 @@ export class Interp {
     return self;
   }
 
-  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = null, onEvents = null, domComputeLimit = 1000000, webComputeLimit = 1000000, webRoot = globalThis, web = null } = {}) {
+  constructor(instance, { computeLimit = null, memLimit = null, onOutput = null, allow = [], point = false, domRoot = null, now = null, zone = null, packages = null, tcl = null, files = null, onEvents = null, domComputeLimit = 1000000, webComputeLimit = 1000000, webRoot = globalThis, web = null } = {}) {
     this.x = instance.exports;
     this.h = this.x.ztcl_new();
     if (!this.h) throw new Error("ztcl_new: out of memory");
@@ -201,6 +201,7 @@ export class Interp {
       }
       allow = allow.filter((c) => !c.startsWith("web:"));
     }
+    if (files) this.setFiles(files);
     if (allow.length) {
       const bad = allow.filter((c) => c !== "file");
       if (bad.length || !this.x.ztcl_allow) throw new Error(`ztcl_allow: this module has no capability ${bad.join(", ") || "file"}`);
@@ -977,6 +978,53 @@ export class Interp {
   _text(ptr, len) {
     return decoder.decode(new Uint8Array(this.x.memory.buffer, ptr, len));
   }
+
+  /// Gives the scripts the files of `files`, an object of names and
+  /// bytes (a Uint8Array or an ArrayBuffer), for the capability `file`:
+  /// `open name rb` reads them. They take the place of the files of a
+  /// bundle.
+  setFiles(files) {
+    const x = this.x;
+    if (!x.ztcl_files_set) throw new Error("files: this module has no ztcl_files_set");
+    const parts = [encoder.encode("ZTB1")];
+    const names = Object.keys(files);
+    const u32 = (n) => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n, true); return b; };
+    parts.push(u32(names.length));
+    for (const n of names) {
+      const name = encoder.encode(n);
+      const data = files[n] instanceof Uint8Array ? files[n] : new Uint8Array(files[n]);
+      parts.push(Uint8Array.of(1), u32(name.length), u32(data.length), name, data);
+    }
+    const len = parts.reduce((s, p) => s + p.length, 0);
+    const p = x.ztcl_alloc(len || 1);
+    if (!p) throw new Error("ztcl_alloc: out of memory");
+    let at = p;
+    for (const part of parts) { new Uint8Array(x.memory.buffer, at, part.length).set(part); at += part.length; }
+    const rc = x.ztcl_files_set(this.h, p, len);
+    x.ztcl_free(p, len || 1);
+    if (rc !== 0) throw new Error("ztcl_files_set: out of memory");
+  }
+
+  /// The names of the files that the scripts wrote, in a build with
+  /// files in memory (ztcl-shell.wasm).
+  fileNames() {
+    const x = this.x;
+    if (!x.ztcl_file_names || x.ztcl_file_names(this.h) !== 0) return [];
+    return this._text(x.ztcl_result_ptr(this.h), x.ztcl_result_len(this.h)).split("\n").filter(Boolean);
+  }
+
+  /// A copy of the bytes of a file that a script wrote, or null.
+  readFile(name) {
+    const x = this.x;
+    if (!x.ztcl_file_get) return null;
+    const t = encoder.encode(name);
+    const p = x.ztcl_alloc(t.length || 1);
+    new Uint8Array(x.memory.buffer, p, t.length).set(t);
+    const rc = x.ztcl_file_get(this.h, p, t.length);
+    x.ztcl_free(p, t.length || 1);
+    if (rc !== 0) return null;
+    return new Uint8Array(x.memory.buffer, x.ztcl_result_ptr(this.h), x.ztcl_result_len(this.h)).slice();
+  }
 }
 
 /// Runs the scripts of a bundle in a new interpreter and closes it.
@@ -999,8 +1047,10 @@ export class WorkerInterp {
   /// are as for Interp.create.
   constructor(wasm, options = {}) {
     if (isOptions(wasm)) [wasm, options] = [undefined, wasm];
-    const { computeLimit = null, memLimit = null, onOutput = null } = options;
+    const { computeLimit = null, memLimit = null, onOutput = null, allow = [], files = null } = options;
     this.wasm = new URL(wasm ?? wasmURL(), globalThis.location?.href).href;
+    // The capabilities and the files of the interpreter in the worker.
+    this.setup = { allow, files };
     this.computeLimit = computeLimit;
     this.memLimit = memLimit;
     this.onOutput = onOutput;
@@ -1028,21 +1078,23 @@ export class WorkerInterp {
       if (data.error) p.reject(new Error(data.error));
       else {
         if (data.output && this.onOutput) this.onOutput(data.output);
-        p.resolve({ ok: data.ok, result: data.result, output: data.output, memorySize: data.memorySize });
+        p.resolve({ ok: data.ok, result: data.result, output: data.output, memorySize: data.memorySize, files: data.files });
       }
     };
     this.worker.onerror = (e) => this._fail(e.message || "the worker failed");
-    this.worker.postMessage({ init: this.wasm });
+    this.worker.postMessage({ init: this.wasm, setup: this.setup });
   }
 
   /// Runs a script in the worker. Returns a promise of
-  /// { ok, result, output, memorySize }.
-  eval(script) {
+  /// { ok, result, output, memorySize, files }. With `{ collect: true }`,
+  /// `files` is an object of the names and the bytes of the files that
+  /// the scripts wrote (in ztcl-shell.wasm).
+  eval(script, { collect = false } = {}) {
     if (!this.worker) this._start();
     const id = this.next++;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ id, script, computeLimit: this.computeLimit, memLimit: this.memLimit });
+      this.worker.postMessage({ id, script, collect, computeLimit: this.computeLimit, memLimit: this.memLimit });
     });
   }
 

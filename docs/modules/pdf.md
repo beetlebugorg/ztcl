@@ -3,7 +3,7 @@
 `ztcl::pdf` makes PDF files: pages, text in embedded TrueType fonts with kerning and ligatures, rectangles and lines, PNG and JPEG images, links to URLs and to places in the document, the outline (the bookmarks of a reader), and the document information. Use it for reports, invoices, letters, labels, and printed documentation. With `ztcl::typeset`, the same document gets justified paragraphs, hyphenation, and whole books from Markdown.
 
 > [!NOTE]
-> `ztcl::pdf` is on `main` and comes in the next release. [Build from source](../install.md#build-from-source) to use it now. It is in the native builds, and not in `ztcl.wasm`.
+> `ztcl::pdf` is on `main` and comes in the next release. [Build from source](../install.md#build-from-source) to use it now. It is in the native builds and in `ztcl-shell.wasm`, the build of the shell and the live examples of the site, and not in `ztcl.wasm`, which stays small.
 
 The module needs no capability and reads or writes no file. A script reads the bytes of each font and image, and writes the bytes of the PDF:
 

@@ -76,6 +76,9 @@ tcl.close();
 | `interp.close()` | Frees the interpreter. |
 | `options.allow` | A list of capabilities. `ztcl.wasm` has only `"file"`, for the files of a bundle. See [Bundle a script](#bundle-a-script). With `ztcl-host.wasm`, a group of the Web APIs such as `"web:serial"` turns on the commands [`web::`](modules/web.md). |
 | `options.web` | The module `web/ztcl-web.mjs`, for a group of `web:` in `allow`. |
+| `options.files` | Files for `allow: ["file"]`, in place of the files of a bundle: an object of names and bytes (`Uint8Array` or `ArrayBuffer`). `WorkerInterp` takes it too. |
+| `interp.setFiles(files)` | Gives the scripts the files of `files`, as `options.files` does. |
+| `interp.fileNames()` and `interp.readFile(name)` | With `ztcl-shell.wasm`: the names of the files that the scripts wrote, and a copy of the bytes of one, or `null`. `WorkerInterp.eval(script, { collect: true })` gives them in `files`. |
 | `options.webRoot` | The global object of the paths of `web::root`, `globalThis` by default. |
 | `interp.runEvents(now)` | With `ztcl-host.wasm` and `allow: ["event"]`: runs the events (`after`, `after idle`) that are due at `now`, as `update` runs them. `now` is in milliseconds on the clock of `options.now` (`Date.now` by default), and it can be left out. Returns `{ ok, result, output }`. After each `eval` and each run, a timer of `setTimeout` calls it at the time of the next event. `vwait` and `after ms` with no script give an error, because a call into wasm cannot wait for the page. |
 | `options.onEvents(r)` | Gets the `{ ok, result, output }` of each run of the events from the timer. |
@@ -108,6 +111,8 @@ One interpreter keeps its procs and variables from one `eval` to the next. Each 
 | `ztcl_bundle_size()` | The bytes of the payload of a bundle, or 0. |
 | `ztcl_bundle_run(h)` | Runs the scripts of a bundle in order. Returns 0 on success and 1 on an error. |
 | `ztcl_allow(h, bits)` | Turns on capabilities. This module has only `file` (16). Returns 0 on success, 1 when the memory ends, and 2 for another bit. |
+| `ztcl_files_set(h, ptr, len)` | Gives the interpreter a bundle payload (the form of `src/wasmbundle.zig`) in place of the bundle of the module. The interpreter keeps a copy. Returns 0, or 1 when the memory ends. |
+| `ztcl_file_names(h)` and `ztcl_file_get(h, name, len)` | Set the result to the names of the files that the scripts wrote in memory, or to the bytes of one. `ztcl_file_get` returns 1 for no such file. |
 | `ztcl_events_allow(h)` | In `ztcl-host.wasm` only: turns on `event` with the clock of the host. Returns 0, or 1 when the memory ends. |
 | `ztcl_run_events(h, now_ms)` | In `ztcl-host.wasm` only: runs the events that are due at `now_ms` (an `f64`). Returns 0 on success and 1 on an error. |
 | `ztcl_next_event(h, now_ms)` | In `ztcl-host.wasm` only: the milliseconds from `now_ms` to the next event (an `f64`), 0 for a due event, and -1 for no event. |
@@ -165,7 +170,7 @@ tcl.close();
 - `run()` returns `{ ok, result, output }` as `eval` does. On an error, `result` is `name:line: message`, as `ztcl` writes it.
 - The compute limit and the memory limit apply as for `eval`. The compute limit of one `run()` applies to all the scripts together.
 - The files of `--embed` and the scripts are under the mount `//zipfs:/app/`, with the path as given to `ztcl build`. A relative name is relative to the mount, so `open data/a.txt` reads the file of `--embed data`. With `allow: ["file"]`, the module has `source`, `glob`, and `open` with the access `r`, `read`, `gets`, `eof`, and `close` on these files. `open` with another access gives the error `read-only file system`. A name outside the mount is not found. The shell of the site (`ztcl-shell.wasm`) also lets a script write files in memory and make pipes: [The shell](shell.md) tells how. Without the capability, the module has none of these commands.
-- `read` and `gets` give the bytes of the file. They do no encoding conversion and no end-of-line translation.
+- `read` and `gets` give the bytes of the file as UTF-8 text, with no end-of-line translation. A channel of `open name rb`, or one with `fconfigure -translation binary` in `ztcl-shell.wasm`, gives a character for each byte, as a binary channel of the native runner does, so `ztcl::typeset font load [read $f]` gets the bytes of a font. A write to a binary channel puts one byte for each character.
 - A non-JS host calls `ztcl_new`, then `ztcl_allow(h, 16)` for the files, then `ztcl_bundle_run(h)`.
 
 `node tools/wasm-bundle.mjs zig-out/bin/ztcl zig-out/lib/ztcl.wasm` checks that the output of each bundle equals the output of `ztcl`, the limits, and the files. The npm package tests run a bundle in Node.js and in headless Chromium.

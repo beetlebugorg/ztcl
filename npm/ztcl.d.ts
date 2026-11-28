@@ -37,6 +37,11 @@ export interface InterpOptions {
    */
   allow?: ("file" | "event" | "dom" | "dom-html" | "clock" | WebGroup)[];
   /**
+   * Files for the capability `file`, in place of the files of a bundle:
+   * an object of names and bytes. `open name rb` reads them.
+   */
+  files?: Record<string, Uint8Array | ArrayBuffer> | null;
+  /**
    * The module `ztcl-web.mjs`, the bridge of the commands `web::`, for
    * a group of `web:` in `allow`. A page imports it:
    * `import * as web from "./ztcl-web.mjs"`.
@@ -75,6 +80,8 @@ export interface EvalResult {
 export interface WorkerEvalResult extends EvalResult {
   /** The size of the linear memory of the worker interpreter in bytes. */
   memorySize?: number;
+  /** With `collect`, the files that the scripts wrote (ztcl-shell.wasm). */
+  files?: Record<string, Uint8Array>;
 }
 
 /** The URL of the `ztcl.wasm` file next to `ztcl.mjs`. It is the default source. */
@@ -126,6 +133,13 @@ export class Interp {
    * this call. A script blocks the page until it ends or hits a limit.
    */
   eval(script: string): EvalResult;
+
+  /** Gives the scripts files for the capability `file`, as the option `files`. */
+  setFiles(files: Record<string, Uint8Array | ArrayBuffer>): void;
+  /** The names of the files that the scripts wrote (ztcl-shell.wasm). */
+  fileNames(): string[];
+  /** A copy of the bytes of a file that a script wrote, or `null`. */
+  readFile(name: string): Uint8Array | null;
 
   /**
    * The size in bytes of the scripts and files of a bundle from
@@ -191,8 +205,11 @@ export class WorkerInterp {
   /** Gets the text of `puts` when each `eval` ends. */
   onOutput: ((text: string) => void) | null;
 
-  /** Runs a script in the worker. */
-  eval(script: string): Promise<WorkerEvalResult>;
+  /**
+   * Runs a script in the worker. With `collect`, the result has the
+   * files that the scripts wrote.
+   */
+  eval(script: string, options?: { collect?: boolean }): Promise<WorkerEvalResult>;
   /** Makes a new interpreter in the worker for the next `eval`. */
   reset(): void;
   /**

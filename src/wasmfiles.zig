@@ -44,6 +44,7 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const more = @import("more.zig");
 const interp = @import("interp.zig");
 const bundle = @import("wasmbundle.zig");
 const event = @import("event.zig");
@@ -118,6 +119,10 @@ const Chan = struct {
     readable: bool = true,
     writable: bool = false,
     append: bool = false,
+    /// A binary channel (access `b`, or `-translation binary`): a read
+    /// gives a character for each byte, and a write puts one byte for
+    /// each character, as a native channel does.
+    binary: bool = false,
     eof: bool = false,
     blocked: bool = false,
     blocking: bool = true,
@@ -240,7 +245,7 @@ pub fn lookup(payload: []const u8, path: []const u8) ?[]const u8 {
     return bundleData(payload, normalize(path, &buf) orelse return null);
 }
 
-const Access = struct { read: bool = false, write: bool = false, create: bool = false, trunc: bool = false, append: bool = false };
+const Access = struct { read: bool = false, write: bool = false, create: bool = false, trunc: bool = false, append: bool = false, binary: bool = false };
 
 /// The access of `open`: `r`, `w`, or `a` with `+` and `b`, or a list
 /// of the POSIX flags.
@@ -257,7 +262,7 @@ fn parseAccess(m: []const u8) ?Access {
                 acc.read = true;
                 acc.write = true;
             },
-            'b' => {},
+            'b' => acc.binary = true,
             else => return null,
         };
         return acc;
@@ -278,7 +283,9 @@ fn parseAccess(m: []const u8) ?Access {
             acc.create = true;
         } else if (std.mem.eql(u8, w, "TRUNC")) {
             acc.trunc = true;
-        } else if (!std.mem.eql(u8, w, "BINARY") and !std.mem.eql(u8, w, "NOCTTY") and !std.mem.eql(u8, w, "NONBLOCK")) return null;
+        } else if (std.mem.eql(u8, w, "BINARY")) {
+            acc.binary = true;
+        } else if (!std.mem.eql(u8, w, "NOCTTY") and !std.mem.eql(u8, w, "NONBLOCK")) return null;
     }
     if (!acc.read and !acc.write) return null;
     return acc;
@@ -397,10 +404,10 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             };
             if (!writable or !acc.write) {
                 if (s.files.get(name)) |f| {
-                    return .{ .str = try newChan(it, "file", .{ .name = "", .file = f }) };
+                    return .{ .str = try newChan(it, "file", .{ .name = "", .file = f, .binary = acc.binary }) };
                 }
                 const data = bundleData(s.payload, name) orelse return notFound(it, "open", path);
-                return .{ .str = try newChan(it, "zipfs", .{ .name = "", .fixed = data }) };
+                return .{ .str = try newChan(it, "zipfs", .{ .name = "", .fixed = data, .binary = acc.binary }) };
             }
             if (name.len == 0) return it.failCode("POSIX EISDIR {illegal operation on a directory}", "couldn't open \"{s}\": illegal operation on a directory", .{path});
             const a = it.alloc();
@@ -415,7 +422,7 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             };
             if (acc.trunc) f.data.clearRetainingCapacity();
             try it.checkMem();
-            return .{ .str = try newChan(it, "file", .{ .name = "", .file = f, .readable = acc.read, .writable = true, .append = acc.append }) };
+            return .{ .str = try newChan(it, "file", .{ .name = "", .file = f, .readable = acc.read, .writable = true, .append = acc.append, .binary = acc.binary }) };
         }
 
         fn index(it: *Interp, name: []const u8) ?usize {
@@ -513,7 +520,7 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             const c = &stateOf(it).chans.items[n].?;
             if (!c.writable) return it.fail("channel \"{s}\" wasn't opened for writing", .{name});
             const a = it.alloc();
-            try c.out.appendSlice(a, bytes);
+            try c.out.appendSlice(a, if (c.binary) try more.toBytes(it, bytes) else bytes);
             if (newline) try c.out.append(a, '\n');
             try it.checkMem();
             const due = switch (c.buffering) {
@@ -574,7 +581,7 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             c.eof = left == 0 and ended(c);
             c.blocked = left == 0 and !ended(c);
             if (nonl and chunk.len > 0 and chunk[chunk.len - 1] == '\n') chunk = chunk[0 .. chunk.len - 1];
-            return text(it, chunk);
+            return text(it, if (c.binary) try more.fromBytes(it, chunk) else chunk);
         }
 
         fn gets(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
@@ -595,7 +602,7 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
                 consume(c, rest.len);
                 c.eof = true;
             } else c.blocked = true;
-            const v = try text(it, line);
+            const v = try text(it, if (c.binary) try more.fromBytes(it, line) else line);
             if (argv.len == 2) return v;
             try it.setVar(try it.str(argv[2]), v);
             return .{ .int = if (got) @intCast(line.len) else -1 };
@@ -625,7 +632,7 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
             if (argv.len < 2) return it.wrongArgs("fconfigure channelId ?-option value ...?");
             const c = try find(it, argv[1]);
             const opts = argv[2..];
-            const bad = "bad option \"{s}\": should be one of -blocking or -buffering";
+            const bad = "bad option \"{s}\": should be one of -blocking, -buffering, -encoding, or -translation";
             const bad_port = "bad option \"{s}\": should be one of -blocking, -buffering, -handshake, -mode, -queue, or -ttycontrol";
             if (opts.len == 0) {
                 if (streamOf(c)) |st| return .{ .str = try std.fmt.allocPrint(it.alloc(), "-blocking {d} -buffering {s} -mode {s}", .{ @intFromBool(c.blocking), @tagName(c.buffering), if (st.mode.len > 0) st.mode else "{}" }) };
@@ -648,6 +655,10 @@ pub fn Commands(comptime stateOf: fn (*Interp) *State, comptime gpa: std.mem.All
                 const o = try it.str(opts[k]);
                 if (eql(o, "-blocking")) {
                     c.blocking = try @import("expr.zig").truthy(it, opts[k + 1]);
+                } else if (eql(o, "-translation") or eql(o, "-encoding")) {
+                    // `binary` makes a binary channel; another value, such
+                    // as `auto`, `lf`, or `utf-8`, makes a text channel.
+                    c.binary = eql(try it.str(opts[k + 1]), "binary");
                 } else if (eql(o, "-buffering")) {
                     const v = try it.str(opts[k + 1]);
                     c.buffering = std.meta.stringToEnum(Buffering, v) orelse return it.failCode("TCL VALUE FCONFIGURE BUFFERING", "bad value for -buffering: must be one of full, line, or none", .{});

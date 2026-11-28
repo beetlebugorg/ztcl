@@ -3,7 +3,7 @@
 `ztcl::typeset` breaks text into lines and pages. It has the total-fit line breaker of Knuth and Plass, the hyphenation of Liang with the American English patterns, font loading and metrics for TrueType fonts, and a page builder for columns with widow and orphan control. The output is data: lines, words, and their x positions. A script puts them in a PDF (`ztcl::pdf`), on a ztk canvas, in a terminal, or in an SVG image. `ztcl::typeset book` and `ztcl::typeset markdown` lay out Markdown into the pages of a PDF document.
 
 > [!NOTE]
-> `ztcl::typeset` is on `main` and comes in the next release. [Build from source](../install.md#build-from-source) to use it now. It is in the native builds, and not in `ztcl.wasm`.
+> `ztcl::typeset` is on `main` and comes in the next release. [Build from source](../install.md#build-from-source) to use it now. It is in the native builds and in `ztcl-shell.wasm`, the build of the shell and the live examples of the site, and not in `ztcl.wasm`, which stays small.
 
 The module needs no capability. It reads no file: a script reads a font file and gives its bytes to `ztcl::typeset font load`. The work counts toward the compute limit: one unit for each 256 bytes of text, and one for each 64 steps of the line breaker. The guide [Typesetting in Tcl](../typesetting.md) shows the module at work, and [References](../references/typeset.md) lists the papers and the license of the patterns.
 

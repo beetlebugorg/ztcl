@@ -634,6 +634,7 @@ jobs:
       - run: node tools/wasm-smoke.mjs zig-out/lib/ztcl.wasm
       - run: node tools/wasm-web.mjs zig-out/lib/ztcl.wasm
       - run: node tools/wasm-shell.mjs zig-out/lib/ztcl-shell.wasm
+      - run: node tools/wasm-typeset.mjs zig-out/lib/ztcl.wasm zig-out/lib/ztcl-shell.wasm
       - run: node tools/wasm-host.mjs zig-out/lib/ztcl.wasm zig-out/lib/ztcl-host.wasm
       - run: node tools/web-api.mjs zig-out/lib/ztcl.wasm zig-out/lib/ztcl-host.wasm
       - run: node tools/web-groups.mjs zig-out/lib/ztcl-host.wasm
