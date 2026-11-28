@@ -48,12 +48,12 @@ proc parse {n} {
 
 ### ztcl::probe add target ?option value ...?
 
-Adds a probe and gives its id, such as `p1`. The target is one of these options:
+Adds a probe and gives its id, such as `p1`. The target is one of these options, and a probe has one target:
 
 | Target | The probe records |
 |---|---|
 | `-proc name` | At each call of the proc, before the first command of the body. The record has the words of the call. |
-| `-proc name -line n` | Before the first command of line `n` of the body, each time it runs. A command inside it on the same line, such as `incr n` in `if {$x} {incr n}`, does not run the probe again. Line 1 is the text after the open brace, as in the error trace. |
+| `-proc name -line n` | Before the first command of line `n` of the body, each time it runs. A command inside it on the same line, such as `incr n` in `if {$x} {incr n}`, does not run the probe again. Line 1 is the text after the open brace, as in the error trace, and `n` must be 1 or more. |
 | `-command name` | At each call of the command. With `-leave`, at its return, with the result and the return code. A proc gets the probe of `-proc`. |
 | `-var name ?-ops list?` | At each operation of `-ops` on a global or namespace variable: `read`, `write`, `unset`. The default is `write`. A name with no `::` is in the current namespace. |
 | `-error` | At the start of each error, also an error that `catch` or `try` catches. The record has the message, the `errorCode`, and the command that failed. |
@@ -67,9 +67,11 @@ The other options:
 | `-stack` | The record has the call stack: one list of words for each frame, the innermost first. |
 | `-locals` | As `-stack`, and each frame is a list of two: the words, and a dict of its local variables. A value has at most `-maxlen` bytes. |
 | `-count n` | The probe makes at most `n` records. |
-| `-every n` | The probe records each `n`th hit. |
+| `-every n` | The probe records each `n`th hit. `n` must be 1 or more. |
 | `-rate {n units}` | The probe makes at most `n` records in each window of `units` compute units. |
 | `-leave` | With `-command`: record at the return. |
+
+An error of the module has a code: `TCL LOOKUP INDEX option` for an unknown option, `TCL LOOKUP INDEX operation` for an unknown word of `-ops`, `TCL VALUE` for a bad value of an option, `ZTCL PROBE ID` for a bad or unknown probe id, and `TCL LOOKUP SUBCOMMAND` with the word for an unknown subcommand.
 
 A probe on a proc or a line waits when no proc has the name. A new `proc` of the name gets the probe. A probe on a variable makes the variable as `trace add variable` does. An `unset` of the variable removes the probe from it, and `ztcl::probe list` then shows the state `waiting`.
 

@@ -272,3 +272,34 @@ test "the records are outside the memory count of the script" {
     probe.clear(s);
     try std.testing.expectEqual(before, it.memUsed());
 }
+
+test "the argument checks and the error codes of ztcl::probe (#723)" {
+    if (!options.mod_probe) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try newInterp(&it);
+    defer it.deinit();
+    _ = try ev(&it, "package require ztcl::probe\nproc f {n} {\n    set x [string repeat a $n]\n    return $n\n}\n");
+    const one = "{a probe has one target: -proc, -command, -var, or -error} {TCL VALUE}";
+    const cases = [_][2][]const u8{
+        .{ "ztcl::probe add -proc f -var x", one },
+        .{ "ztcl::probe add -proc f -command set", one },
+        .{ "ztcl::probe add -error -proc f", one },
+        .{ "ztcl::probe add -proc f -line 0", "{-line must be 1 or more} {TCL VALUE}" },
+        .{ "ztcl::probe add -proc f -line -1", "{-line must be 1 or more} {TCL VALUE}" },
+        .{ "ztcl::probe add -proc f -every 0", "{-every must be 1 or more} {TCL VALUE}" },
+        .{ "ztcl::probe add -bogus", "{bad option \"-bogus\": must be -capture, -command, -count, -error, -every, -if, -leave, -line, -locals, -ops, -proc, -rate, -stack, or -var} {TCL LOOKUP INDEX option}" },
+        .{ "ztcl::probe add -proc f -bogus 1", "{bad option \"-bogus\": must be -capture, -command, -count, -error, -every, -if, -leave, -line, -locals, -ops, -proc, -rate, -stack, or -var} {TCL LOOKUP INDEX option}" },
+        .{ "ztcl::probe add -proc", "{option \"-proc\" needs a value} {TCL VALUE}" },
+        .{ "ztcl::probe records -bogus", "{bad option \"-bogus\": must be -first, -json, -last, -probe, -since, or -where} {TCL LOOKUP INDEX option}" },
+        .{ "ztcl::probe remove p99", "{no probe \"p99\"} {ZTCL PROBE ID}" },
+        .{ "ztcl::probe remove nope", "{bad probe id \"nope\"} {ZTCL PROBE ID}" },
+        .{ "ztcl::probe add -var v -ops bogus", "{bad operation \"bogus\": must be read, unset, or write} {TCL LOOKUP INDEX operation}" },
+        .{ "ztcl::probe configure -size 2000000", "{-size must be at most 1000000} {TCL VALUE}" },
+        .{ "ztcl::probe bogus", "{unknown subcommand \"bogus\": must be add, clear, configure, list, records, or remove} {TCL LOOKUP SUBCOMMAND bogus}" },
+    };
+    for (cases) |c| {
+        const script = try std.fmt.allocPrint(it.alloc(), "catch {{{s}}} m o; list $m [dict get $o -errorcode]", .{c[0]});
+        try std.testing.expectEqualStrings(c[1], try ev(&it, script));
+    }
+    try std.testing.expectEqualStrings("", try ev(&it, "ztcl::probe list"));
+}
