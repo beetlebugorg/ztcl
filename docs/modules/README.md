@@ -7,6 +7,7 @@ The `ztcl::` modules are built into ztcl. A module loads with `package require`,
 | [ztcl::json](json.md) | Parses and writes JSON. | none | each target, and WebAssembly |
 | [ztcl::vt](vt.md) | Keeps the state of a terminal: the cells, the cursor, the modes, and the scrollback. | none | each target, and WebAssembly except `ztcl-threads.wasm` |
 | [ztcl::text](text.md) | Cuts text into grapheme clusters, words, and sentences (Unicode 18), and gives its display width. | none | each target, and WebAssembly |
+| [ztcl::fhe](fhe.md) | A prototype of computation on encrypted data: CKKS for vectors of real numbers and TFHE for bits. Only in a build with `-Dmod-fhe=true`. | none | each native 64-bit target (tested on x86-64 Linux only) |
 | [ztcl::pdf](pdf.md) | Writes PDF files: pages, text in embedded TrueType fonts, images, links, and the outline. | none | each native target |
 | [ztcl::typeset](typeset.md) | Breaks paragraphs into lines with the algorithm of Knuth and Plass, hyphenates words, and lays out Markdown into PDF pages. | none | each native target |
 | [ztcl::probe](probe.md) | Records the values of a running script at a proc, a line, a command, a variable, or an error, with no change to the script. | none | each target, and the WebAssembly shell (`ztcl-shell.wasm`) |

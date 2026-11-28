@@ -164,6 +164,28 @@ pub fn build(b: *std.Build) void {
         .optimize = .safe,
     }) }));
     virtio_fuzz.addPassthruArgs();
+    // The library of ztcl::fhe imports no file of the interpreter, so its
+    // tests, its fuzzer, and its measurements are small builds.
+    const fhe_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/fhe/fhe.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) }));
+    b.step("fhe-test", "Run the tests of the library of ztcl::fhe. With -Doptimize=ReleaseSafe the TFHE test with the 128-bit parameters runs too").dependOn(&fhe_tests.step);
+    const fhe_fuzz = b.addRunArtifact(b.addExecutable(.{ .name = "fhe-ntt-fuzz", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/fhe/ntt_fuzz.zig"),
+        .target = target,
+        .optimize = .safe,
+    }) }));
+    fhe_fuzz.addPassthruArgs();
+    b.step("fhe-ntt-fuzz", "Fuzz the modular arithmetic and the NTT of ztcl::fhe: zig build fhe-ntt-fuzz -- --seconds N").dependOn(&fhe_fuzz.step);
+    const fhe_bench = b.addRunArtifact(b.addExecutable(.{ .name = "fhe-bench", .root_module = b.createModule(.{
+        .root_source_file = b.path("src/fhe/bench.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) }));
+    fhe_bench.addPassthruArgs();
+    b.step("fhe-bench", "Print the times of docs/dev/fhe.md: zig build fhe-bench -Doptimize=ReleaseFast -- [part ...]").dependOn(&fhe_bench.step);
     b.step("virtio-fuzz", "Fuzz the virtio devices of ztcl::vm as a hostile guest: zig build virtio-fuzz -- --seconds N").dependOn(&virtio_fuzz.step);
     b.step("x509-fuzz", "Fuzz the DER, X.509, PEM, and chain code: zig build x509-fuzz -- --seconds N").dependOn(&x509_fuzz.step);
     // The test client of tools/tls-interop.sh.
@@ -962,6 +984,8 @@ const Mod = struct {
     name: []const u8,
     std: bool,
     needs: []const []const u8 = &.{},
+    /// A prototype: only its flag `-Dmod-NAME` puts it in the build.
+    proto: bool = false,
 };
 
 /// The modules. src/modules.zig reads the flag `mod_NAME` of each one.
@@ -976,6 +1000,7 @@ const all_modules = [_]Mod{
     .{ .name = "wasmrt", .std = true },
     .{ .name = "text", .std = true },
     .{ .name = "typeset", .std = true },
+    .{ .name = "fhe", .std = false, .proto = true },
 };
 
 /// The flag of each module after the preset, the flags, and the rule
@@ -1263,7 +1288,7 @@ fn moduleFlags(b: *std.Build, batteries: Batteries, drop: []const u8) [all_modul
         on[i] = switch (batteries) {
             .core => false,
             .std => m.std,
-            .full => true,
+            .full => !m.proto,
         };
         const flag = b.fmt("mod-{s}", .{m.name});
         if (b.option(bool, flag, b.fmt("Put the module {s} in the build or leave it out", .{m.name}))) |v| on[i] = v;
