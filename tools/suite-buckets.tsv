@@ -12,6 +12,7 @@ skip	*	^(unixCrash)$	tcl	tclsh skips it too
 skip	*	^(localeRegexp|notNetworkFilesystem|asyncPipeChan|pre388|unthreaded|expr:bug-3057639|serverNeeded)$	tcl	the test file sets the constraint false, or it is false in tclsh 8.6 on Linux
 skip	*	^(Tcltest|TcltestPackage|procbodytest|pkgua\.soRequired|applylambda|pairsTo4bytes|testWithLimit|testCPUID|hasIsoLocale|drainEventQueue|expr:testexprparser.*)$	internals	a C test command or package of the Tcl test binary
 skip	*	^zlib$	feature	the `zlib` command
+skip	*	^memory$	design	the leak tests compare the bytes of TCL_MEM_DEBUG; the live bytes of the ztcl heap depend on its layout, so the suite runner keeps the constraint false (ztcl#634)
 skip	*	^utf16$	design	ztcl strings hold full code points, as in Tcl 9; Tcl 8.6 uses UTF-16 surrogates
 skip	*	^(hasLinks|dontCopyLinks)$	design	`file link` is outside the root folder model of the file capability
 skip	*	^(xdev|makeFileInHome|localhost_v6|readonlyAttr|filetime64bit)$	platform	a property of the host: a second device, a writable home, IPv6 on localhost, file attributes, or 64-bit file times
