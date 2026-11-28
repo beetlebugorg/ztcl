@@ -676,6 +676,25 @@ opt: -subtitle TEXT | Gives the subtitle, 0 to 256 bytes.
 opt: -body TEXT | Gives the body, 0 to 4,096 bytes.
 == ztcl::open
 syn: ztcl::open URL-OR-PATH
+== ztcl::pdf
+syn: ztcl::pdf SUBCOMMAND ?ARG ...?
+sub: ztcl::pdf create ?-compress BOOL? | Makes a new document and gives its handle.
+sub: ztcl::pdf font DOC BYTES | Adds a TrueType font and gives its number.
+sub: ztcl::pdf page DOC ?WIDTH HEIGHT? | Adds a page and gives its number.
+sub: ztcl::pdf text DOC PAGE FONT SIZE X Y STRING ?-color RGB? ?-ligatures BOOL? | Shows text and gives its width.
+sub: ztcl::pdf measure DOC FONT SIZE STRING | Gives the width of a string in points.
+sub: ztcl::pdf rect DOC PAGE X Y WIDTH HEIGHT ?-fill RGB? | Fills a rectangle.
+sub: ztcl::pdf line DOC PAGE X0 Y0 X1 Y1 ?-width W? ?-color RGB? | Strokes a line.
+sub: ztcl::pdf image DOC BYTES | Adds a PNG or JPEG image and gives its number and size.
+sub: ztcl::pdf place DOC PAGE IMAGE X Y WIDTH HEIGHT | Shows an image in a rectangle.
+sub: ztcl::pdf link DOC PAGE X0 Y0 X1 Y1 -uri URL | Makes a rectangle a link to a URL or to a named place.
+sub: ztcl::pdf link DOC PAGE X0 Y0 X1 Y1 -dest NAME | Makes a rectangle a link to a URL or to a named place.
+sub: ztcl::pdf dest DOC NAME PAGE X Y | Names a place for a link.
+sub: ztcl::pdf outline DOC TITLE LEVEL PAGE Y | Adds an entry to the outline.
+sub: ztcl::pdf info DOC KEY VALUE | Sets the title, the author, the subject, or the keywords of the document.
+sub: ztcl::pdf bytes DOC | Gives the bytes of the PDF file.
+sub: ztcl::pdf pages DOC | Gives the count of pages.
+sub: ztcl::pdf delete DOC | Frees a document.
 == ztcl::probe
 syn: ztcl::probe SUBCOMMAND ?ARG ...?
 sub: ztcl::probe add -proc NAME ?-line N? ?OPTION VALUE ...? | Adds a probe and gives its id.
@@ -744,24 +763,6 @@ sub: ztcl::watch add ?-recursive? PATH | Starts a watch of a folder and gives it
 sub: ztcl::watch changes WATCHER | Gives the events that wait, as a list of pairs of a kind and a path.
 sub: ztcl::watch fd WATCHER | Gives the descriptor that an embedder can wait on.
 sub: ztcl::watch remove WATCHER | Stops a watch.
-== ztcl::pdf
-syn: ztcl::pdf subcommand ?arg ...?
-sub: create ?-compress bool? | Makes a document and gives its handle.
-sub: font doc bytes | Adds a TrueType font and gives its number.
-sub: page doc ?width height? | Adds a page and gives its number.
-sub: text doc page font size x y string ?-color rgb? ?-ligatures bool? | Shows text and gives its width.
-sub: measure doc font size string | Gives the width of a string in points.
-sub: rect doc page x y width height ?-fill rgb? | Fills a rectangle.
-sub: line doc page x0 y0 x1 y1 ?-width w? ?-color rgb? | Strokes a line.
-sub: image doc bytes | Adds a PNG or JPEG image and gives {number width height}.
-sub: place doc page image x y width height | Shows an image in a rectangle.
-sub: link doc page x0 y0 x1 y1 -uri url|-dest name | Makes a rectangle a link.
-sub: dest doc name page x y | Names a place for a link.
-sub: outline doc title level page y | Adds an entry to the outline.
-sub: info doc key value | Sets the Title, Author, Subject, or Keywords.
-sub: bytes doc | Gives the bytes of the PDF file.
-sub: pages doc | Gives the count of pages.
-sub: delete doc | Frees the document.
 == ztcl::typeset
 syn: ztcl::typeset subcommand ?arg ...?
 sub: break text -width w ?options? | Gives the lines of a paragraph, with the x position of each word.
