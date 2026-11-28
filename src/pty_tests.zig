@@ -137,3 +137,13 @@ test "ztcl::pty checks the program list of exec" {
     it.exec_host.allow = null;
     try std.testing.expectEqualStrings("1", try (ev(&it, "catch {ztcl::pty spawn /no/such}")));
 }
+
+test "ztcl::pty spawn -cwd needs the file capability, also with channels" {
+    if (!tcl.pty.supported or @import("builtin").os.tag == .windows) return error.SkipZigTest;
+    var it: tcl.Interp = undefined;
+    try ptyInterp(&it);
+    defer it.deinit();
+    // channels opens the file system, but -cwd needs the capability file.
+    try std.testing.expectEqualStrings("1 {-cwd needs the file capability}", try (ev(&it, "list [catch {ztcl::pty spawn -cwd / sh} m] $m")));
+    try std.testing.expectEqualStrings("1 {-cwd needs the file capability}", try (ev(&it, "list [catch {ztcl::pty spawn -cwd /no/such sh} m] $m")));
+}
