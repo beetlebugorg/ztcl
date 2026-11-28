@@ -629,6 +629,11 @@ opt: -- | Ends the options.
 syn: pid ?fileId?
 == exit
 syn: exit ?returnCode?
+== ztcl::gc
+syn: ztcl::gc SUBCOMMAND
+sub: ztcl::gc stats | Gives a dict of the counts of the collector.
+sub: ztcl::gc collect | Runs a collection now.
+sub: ztcl::gc reset | Starts the counts again.
 == ztcl::json ztcl::json::parse ztcl::json::valid ztcl::json::get ztcl::json::exists ztcl::json::encode ztcl::json::object ztcl::json::array ztcl::json::string ztcl::json::number ztcl::json::bool ztcl::json::null ztcl::json::raw ztcl::json::pretty
 syn: ztcl::json SUBCOMMAND ?ARG ...?
 sub: ztcl::json parse ?-null VALUE? ?-typed? ?--? TEXT | Gives the Tcl value of a JSON text.
@@ -704,11 +709,6 @@ syn: ztcl::watch subcommand ?arg ...?
 syn: ztcl::open target
 == ztcl::notify
 syn: ztcl::notify ?-option value ...? title ?body?
-== ztcl::gc
-syn: ztcl::gc subcommand
-sub: ztcl::gc stats | A dict of the counts: collections, gc_ns, mark_ns, sweep_ns, pause_p50_ns, pause_p99_ns, pause_max_ns, heap_bytes, heap_peak, live_bytes, used_bytes, threshold, allocated, freed, alloc_rate, uptime_ns, rss, rss_peak, returned, and retained.
-sub: ztcl::gc collect | Runs a collection now, where the build can collect.
-sub: ztcl::gc reset | Starts the counts again.
 == ztcl::meter
 syn: ztcl::meter subcommand ?arg ...?
 sub: ztcl::meter create NAME ?-budget UNITS? ?-tenant TEXT? | Makes the meter NAME, or sets the options of the meter NAME.
