@@ -14,7 +14,6 @@ command ledit {
     }
     returns {The new value of VAR.}
     see {lreplace lset linsert}
-    difference {A variable with no value has `-errorcode NONE`, where Tcl 9.0.4 gives `TCL LOOKUP VARNAME` ([issue 730](https://github.com/beetlebugorg/ztcl/issues/730)).}
     argument VAR {
         type {variable name}
         summary {The variable with the list.}
@@ -56,6 +55,6 @@ command ledit {
     error {
         unset -nocomplain nv
         ledit nv 0 0 a
-    } {can't read "nv": no such variable} NONE
+    } {can't read "nv": no such variable} {TCL LOOKUP VARNAME nv}
     error {ledit l 0} {wrong # args: should be "ledit listVar first last ?element ...?"} {TCL WRONGARGS}
 }

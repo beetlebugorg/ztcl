@@ -186,8 +186,8 @@ test "encoding profiles of Tcl 9.1" {
         .{ "list [encoding convertto -failindex j ascii \"ab\\u00e9c\"] $j", "!wrong # args: should be \"encoding convertto ?encoding? data\"", "ab 2" },
         .{ "encoding convertfrom ascii \"a\\xe9\"", "a\u{e9}", "!unexpected byte sequence starting at index 1: '\\xE9'" },
         .{ "encoding convertfrom -profile bogus utf-8 a", "!wrong # args: should be \"encoding convertfrom ?encoding? data\"", "!bad profile name \"bogus\": must be replace, strict, or tcl8" },
-        .{ "encoding profiles", "!bad option \"profiles\": must be convertfrom, convertto, dirs, names, or system", "replace strict tcl8" },
-        .{ "encoding bogus", "!bad option \"bogus\": must be convertfrom, convertto, dirs, names, or system", "!unknown or ambiguous subcommand \"bogus\": must be convertfrom, convertto, dirs, names, profiles, system, or user" },
+        .{ "encoding profiles", "!unknown or ambiguous subcommand \"profiles\": must be convertfrom, convertto, dirs, names, or system", "replace strict tcl8" },
+        .{ "encoding bogus", "!unknown or ambiguous subcommand \"bogus\": must be convertfrom, convertto, dirs, names, or system", "!unknown or ambiguous subcommand \"bogus\": must be convertfrom, convertto, dirs, names, profiles, system, or user" },
     });
 }
 
@@ -369,5 +369,29 @@ test "the messages of an operand of the wrong type name the value and the side i
 test "file pathtype of a path with a leading ~: Tcl 8.6 expands it, Tcl 9.1 does not" {
     try check(@backingInt(cap.file), &.{
         .{ "lmap p {~ ~/a ~nobody a/~} {file pathtype $p}", "absolute absolute absolute relative", "relative relative relative relative" },
+    });
+}
+
+test "the -errorcode of variable reads, lrepeat, lsearch, lsort, foreach, lmap, array, and encoding" {
+    try check(0, &.{
+        .{ "catch {set nod} m o; dict get $o -errorcode", "TCL LOOKUP VARNAME nod", "TCL LOOKUP VARNAME nod" },
+        .{ "catch {set ::nod} m o; dict get $o -errorcode", "TCL LOOKUP VARNAME ::nod", "TCL LOOKUP VARNAME ::nod" },
+        .{ "catch {set nod(x)} m o; dict get $o -errorcode", "TCL LOOKUP VARNAME nod", "TCL LOOKUP VARNAME nod" },
+        .{ "array set ar {a 1}; catch {set ar(zz)} m o; dict get $o -errorcode", "TCL READ VARNAME", "TCL READ VARNAME" },
+        .{ "array set ar {a 1}; catch {set ar} m o; dict get $o -errorcode", "TCL READ VARNAME", "TCL READ VARNAME" },
+        .{ "proc p {} {set nod}; catch p m o; dict get $o -errorcode", "TCL READ VARNAME", "TCL READ VARNAME" },
+        .{ "proc p {} {set nod(x)}; catch p m o; dict get $o -errorcode", "TCL LOOKUP VARNAME", "TCL LOOKUP VARNAME" },
+        .{ "proc p {} {global nod; set nod}; catch p m o; dict get $o -errorcode", "TCL READ VARNAME", "TCL READ VARNAME" },
+        .{ "catch {dict with nod {}} m o; dict get $o -errorcode", "TCL LOOKUP VARNAME nod", "TCL LOOKUP VARNAME nod" },
+        .{ "catch {lrepeat -1 a} m o; dict get $o -errorcode", "TCL OPERATION LREPEAT NEGARG", "TCL OPERATION LREPEAT NEGARG" },
+        .{ "catch {lsearch -bogus {a} a} m o; dict get $o -errorcode", "TCL LOOKUP INDEX option -bogus", "TCL LOOKUP INDEX option -bogus" },
+        .{ "catch {lsearch -sorted -bisect -all {a b} a} m o; dict get $o -errorcode", "TCL OPERATION LSEARCH BAD_OPTION_MIX", "TCL OPERATION LSEARCH BAD_OPTION_MIX" },
+        .{ "catch {lsort -bogus {a}} m o; dict get $o -errorcode", "TCL LOOKUP INDEX option -bogus", "TCL LOOKUP INDEX option -bogus" },
+        .{ "catch {lsort -real {1 x}} m o; dict get $o -errorcode", "TCL VALUE NUMBER", "TCL VALUE NUMBER" },
+        .{ "catch {lsort -index 1 {{a 1} {b}}} m o; dict get $o -errorcode", "TCL OPERATION LSORT INDEXFAILED", "TCL OPERATION LSORT INDEXFAILED" },
+        .{ "catch {lsort -stride 3 {a b}} m o; dict get $o -errorcode", "TCL OPERATION LSORT BADSTRIDE", "TCL OPERATION LSORT BADSTRIDE" },
+        .{ "catch {foreach {} {1} {}} m o; dict get $o -errorcode", "TCL OPERATION FOREACH NEEDVARS", "TCL OPERATION FOREACH NEEDVARS" },
+        .{ "catch {lmap {} {1} {set x}} m o; dict get $o -errorcode", "TCL OPERATION LMAP NEEDVARS", "TCL OPERATION LMAP NEEDVARS" },
+        .{ "catch {array nope a} m o; dict get $o -errorcode", "TCL LOOKUP SUBCOMMAND nope", "TCL LOOKUP SUBCOMMAND nope" },
     });
 }

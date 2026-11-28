@@ -2336,6 +2336,48 @@ pub const Interp = struct {
         return it.failCode(code, "expected integer but got \"{s}\"", .{try it.str(v)});
     }
 
+    /// `failCode` with an `-errorcode` of the words of `code`, as a list,
+    /// for a code with a word of the script, such as an option.
+    pub fn failWords(it: *Interp, code: []const []const u8, comptime fmt: []const u8, args: anytype) Error {
+        const a = it.alloc();
+        const words = try a.alloc(Value, code.len);
+        for (code, words) |w, *v| v.* = .{ .str = w };
+        it.result = .{ .str = try std.fmt.allocPrint(a, fmt, args) };
+        it.error_code = try value.newList(a, words);
+        return error.TclError;
+    }
+
+    /// The kind of a failed read of a variable, for its `-errorcode`.
+    pub const ReadFail = enum {
+        /// The variable exists, or it is a local variable of a proc,
+        /// and has no value of the kind that the read needs.
+        read,
+        /// The lookup of a plain name found no variable.
+        lookup,
+        /// The lookup of the array of an element found no array.
+        lookup_elem,
+    };
+
+    /// The error of a read of the variable `name`, with the `-errorcode`
+    /// of Tcl. Tcl gives `TCL READ VARNAME` for a variable that it found,
+    /// and a local variable of a proc is always found. A lookup that
+    /// finds no variable gives `TCL LOOKUP VARNAME NAME`, with no NAME
+    /// for a local name of a proc.
+    pub fn readFail(it: *Interp, kind: ReadFail, name: []const u8, comptime fmt: []const u8, args: anytype) Error {
+        const a = it.alloc();
+        const local = it.frame != &it.global and it.frame.ns == null and std.mem.indexOf(u8, name, "::") == null;
+        it.result = .{ .str = try std.fmt.allocPrint(a, fmt, args) };
+        const read = kind == .read or (kind == .lookup and local);
+        if (read) {
+            it.error_code = .{ .str = "TCL READ VARNAME" };
+        } else if (local) {
+            it.error_code = .{ .str = "TCL LOOKUP VARNAME" };
+        } else {
+            it.error_code = try value.newList(a, &.{ .{ .str = "TCL" }, .{ .str = "LOOKUP" }, .{ .str = "VARNAME" }, .{ .str = name } });
+        }
+        return error.TclError;
+    }
+
     pub fn wrongArgs(it: *Interp, comptime usage: []const u8) Error {
         return it.failCode("TCL WRONGARGS", "wrong # args: should be \"" ++ usage ++ "\"", .{});
     }
@@ -3743,12 +3785,12 @@ pub const Interp = struct {
         const cell = try it.findVar(it.frame, r.name, false);
         if (cell) |c| switch (c.v) {
             .val => |v| return v,
-            .arr => return it.fail("can't read \"{s}\": variable is array", .{r.name}),
+            .arr => return it.readFail(.read, r.name, "can't read \"{s}\": variable is array", .{r.name}),
             .traced => return trace.read(it, c, r.name, null),
             .elem => |e| return it.readElemLink(e, r.name),
             else => {},
         };
-        return it.fail("can't read \"{s}\": no such variable", .{r.name});
+        return it.readFail(.lookup, r.name, "can't read \"{s}\": no such variable", .{r.name});
     }
 
     fn getElem(it: *Interp, name: []const u8, idx: []const u8) Error!Value {
@@ -3757,13 +3799,13 @@ pub const Interp = struct {
         if (cell) |c| switch (c.v) {
             .arr => |m| {
                 if (elemOrDefault(m, idx)) |v| return v;
-                return it.fail("can't read \"{s}({s})\": no such element in array", .{ name, idx });
+                return it.readFail(.read, name, "can't read \"{s}({s})\": no such element in array", .{ name, idx });
             },
-            .val => return it.fail("can't read \"{s}({s})\": variable isn't array", .{ name, idx }),
+            .val => return it.readFail(.lookup_elem, name, "can't read \"{s}({s})\": variable isn't array", .{ name, idx }),
             .traced => return trace.read(it, c, name, idx),
             else => {},
         };
-        return it.fail("can't read \"{s}({s})\": no such variable", .{ name, idx });
+        return it.readFail(.lookup_elem, name, "can't read \"{s}({s})\": no such variable", .{ name, idx });
     }
 
     /// Reads a variable by its full name ("a" or "a(i)").
@@ -3917,9 +3959,9 @@ pub const Interp = struct {
         }
         if (e.array.v == .arr) {
             if (elemOrDefault(e.array.v.arr, e.index)) |v| return v;
-            return it.fail("can't read \"{s}({s})\": no such element in array", .{ e.name, e.index });
+            return it.readFail(.read, e.name, "can't read \"{s}({s})\": no such element in array", .{ e.name, e.index });
         }
-        return it.fail("can't read \"{s}({s})\": no such variable", .{ e.name, e.index });
+        return it.readFail(.lookup_elem, e.name, "can't read \"{s}({s})\": no such variable", .{ e.name, e.index });
     }
 
     fn writeElemLink(it: *Interp, e: *ElemLink, v: Value, local: []const u8) Error!void {
