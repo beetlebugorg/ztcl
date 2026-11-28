@@ -49,7 +49,7 @@ jobs:
           node-version: 22
       - name: Check the tag
         run: |
-          echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-alpha|-beta)?$'
+          echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.[0-9]+)?)?$'
       - name: Test
         run: |
           ulimit -v 6000000
