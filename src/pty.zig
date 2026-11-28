@@ -129,7 +129,7 @@ fn spawn(it: *Interp, argv: []const Value) Error!Value {
             cols = try dim(it, l[0], "column count");
             rows = try dim(it, l[1], "row count");
         } else if (std.mem.eql(u8, w, "-cwd")) {
-            if (!it.fs_ok()) return it.fail("-cwd needs the file capability", .{});
+            if (it.capabilities & @backingInt(interp.Capability.file) == 0 or !it.fs_ok()) return it.fail("-cwd needs the file capability", .{});
             cwd = try it.str(argv[i + 1]);
         } else if (std.mem.eql(u8, w, "-env")) {
             const l = try it.list(argv[i + 1]);
