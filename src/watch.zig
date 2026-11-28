@@ -74,7 +74,7 @@ fn find(it: *Interp, v: Value) Error!*Watcher {
         const id = std.fmt.parseInt(u32, name[5..], 10) catch 0;
         for (it.watches.list.items) |w| if (w.id == id) return w;
     }
-    return it.fail("can not find watcher named \"{s}\"", .{name});
+    return it.failCode("ZTCL WATCH HANDLE", "can not find watcher named \"{s}\"", .{name});
 }
 
 /// The normal path of the entry `name` in the folder `dir`. In the jail
@@ -278,7 +278,11 @@ fn cmdWatch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
     if (argv.len < 2) return it.wrongArgs("ztcl::watch add|changes|fd|remove ?arg ...?");
     const sub = try it.str(argv[1]);
     if (std.mem.eql(u8, sub, "add")) return add(it, argv);
-    if (comptime !supported) return it.fail("can not find watcher named \"{s}\"", .{if (argv.len > 2) try it.str(argv[2]) else ""});
+    // The name of the subcommand is checked before the count and the
+    // handle.
+    const known = std.mem.eql(u8, sub, "changes") or std.mem.eql(u8, sub, "fd") or std.mem.eql(u8, sub, "remove");
+    if (!known) return it.failWord("TCL LOOKUP SUBCOMMAND", sub, "unknown subcommand \"{s}\": must be add, changes, fd, or remove", .{sub});
+    if (comptime !supported) return it.failCode("ZTCL WATCH HANDLE", "can not find watcher named \"{s}\"", .{if (argv.len > 2) try it.str(argv[2]) else ""});
     if (argv.len != 3) return it.wrongArgs("ztcl::watch changes|fd|remove watcher");
     const w = try find(it, argv[2]);
     if (std.mem.eql(u8, sub, "changes")) return changes(it, w);
@@ -291,7 +295,7 @@ fn cmdWatch(it: *Interp, argv: []const Value, _: ?*Cmd) Error!Value {
         };
         return .{ .str = "" };
     }
-    return it.fail("bad option \"{s}\": must be add, changes, fd, or remove", .{sub});
+    unreachable;
 }
 
 fn closeOne(it: *Interp, w: *Watcher) void {

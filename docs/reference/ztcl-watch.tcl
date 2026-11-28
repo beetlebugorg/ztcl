@@ -13,7 +13,7 @@ command ztcl::watch {
 
         The command exists when the embedder turns on the capability `file`, and the `ztcl` program turns it on with `--allow file`. It needs no `package require`. On Linux a watch is an inotify descriptor, on macOS an FSEvents stream, and on Windows a handle of the folder with a read of `ReadDirectoryChangesW`. On WebAssembly and WASI, `add` gives the error `ZTCL WATCH UNAVAILABLE`.
 
-        `add` gives a handle such as `watch1`, and the argument of `changes`, `fd`, and `remove` is a handle. They look up the handle before the name of the subcommand, so an unknown subcommand gives the error of the handle, or of a wrong count of arguments, and the errors of a handle have `-errorcode NONE` ([issue 725](https://github.com/beetlebugorg/ztcl/issues/725)). A subcommand has no short form.
+        `add` gives a handle such as `watch1`, and the argument of `changes`, `fd`, and `remove` is a handle. The name of the subcommand is checked first, then the count of arguments, then the handle. An unknown subcommand gives `TCL LOOKUP SUBCOMMAND` with the word, and an unknown handle gives `ZTCL WATCH HANDLE`. A subcommand has no short form.
 
         The examples of this page run in an empty root folder with `--root . --allow file,channels`.
     }
@@ -29,12 +29,12 @@ command ztcl::watch {
         set c
     } {{created /site/index.html}}
     error {ztcl::watch} {wrong # args: should be "ztcl::watch add|changes|fd|remove ?arg ...?"} {TCL WRONGARGS}
-    error {ztcl::watch bogus} {wrong # args: should be "ztcl::watch changes|fd|remove watcher"} {TCL WRONGARGS}
-    error {ztcl::watch bogus watch9} {can not find watcher named "watch9"} NONE
+    error {ztcl::watch bogus} {unknown subcommand "bogus": must be add, changes, fd, or remove} {TCL LOOKUP SUBCOMMAND bogus}
+    error {ztcl::watch bogus watch9} {unknown subcommand "bogus": must be add, changes, fd, or remove} {TCL LOOKUP SUBCOMMAND bogus}
     error {
         file mkdir d
         ztcl::watch bogus [ztcl::watch add d]
-    } {bad option "bogus": must be add, changes, fd, or remove} NONE
+    } {unknown subcommand "bogus": must be add, changes, fd, or remove} {TCL LOOKUP SUBCOMMAND bogus}
 
     subcommand add {
         synopsis {ztcl::watch add ?-recursive? PATH}
@@ -93,7 +93,7 @@ command ztcl::watch {
             - `created`: a file or a folder was made, or moved into the folder;
             - `modified`: the data or the attributes of a file changed;
             - `deleted`: a file or a folder was deleted;
-            - `moved`: a file or a folder was moved out of its folder; on Windows such a move gives `deleted` ([issue 725](https://github.com/beetlebugorg/ztcl/issues/725));
+            - `moved`: a file or a folder was moved out of its folder; on Windows such a move gives `deleted`, since Windows reports it as a removal;
             - `overflow`: too many events came, and the path is `/`, so the script reads the folder again.
 
             The events of one path merge into one pair, in the order of the first event of each path. A create and then a change stay `created`, and a later delete or move replaces the kind. More than 4,096 pairs, or an overflow of the queue of the system, give the pair `{overflow /}`.
@@ -123,7 +123,7 @@ command ztcl::watch {
             file delete d/c
             ztcl::watch changes $w
         } {{deleted /d/c}}
-        error {ztcl::watch changes watch9} {can not find watcher named "watch9"} NONE
+        error {ztcl::watch changes watch9} {can not find watcher named "watch9"} {ZTCL WATCH HANDLE}
         error {ztcl::watch changes} {wrong # args: should be "ztcl::watch changes|fd|remove watcher"} {TCL WRONGARGS}
     }
 
@@ -141,7 +141,7 @@ command ztcl::watch {
             file mkdir d
             string is integer -strict [ztcl::watch fd [ztcl::watch add d]]
         } 1
-        error {ztcl::watch fd nope} {can not find watcher named "nope"} NONE
+        error {ztcl::watch fd nope} {can not find watcher named "nope"} {ZTCL WATCH HANDLE}
         error {ztcl::watch fd} {wrong # args: should be "ztcl::watch changes|fd|remove watcher"} {TCL WRONGARGS}
     }
 
@@ -162,7 +162,7 @@ command ztcl::watch {
             catch {ztcl::watch changes $w} m
             set m
         } {can not find watcher named "watch1"}
-        error {ztcl::watch remove watch9} {can not find watcher named "watch9"} NONE
+        error {ztcl::watch remove watch9} {can not find watcher named "watch9"} {ZTCL WATCH HANDLE}
         error {ztcl::watch remove} {wrong # args: should be "ztcl::watch changes|fd|remove watcher"} {TCL WRONGARGS}
     }
 }
