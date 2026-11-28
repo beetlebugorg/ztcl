@@ -3887,6 +3887,27 @@ test "file extension and file rootname of names with dots, as in tclsh" {
     try std.testing.expectEqualStrings("{} a/ .a . {} foo a.b/c /", try it.str(try it.eval("lmap p {.hidden a/.hidden .a.b .. . foo. a.b/c /.x} {file rootname $p}")));
 }
 
+test "file copy and file rename to a file that exists give the message of tclsh" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.channels) | @backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setRoot(&it, ".zig-cache");
+    _ = try it.eval("file delete -force cp; file mkdir cp/d/n.txt; close [open cp/n.txt w]; file copy cp/n.txt cp/m.txt");
+    defer _ = it.eval("file delete -force cp") catch {};
+    const cases = [_][2][]const u8{
+        .{ "file copy cp/n.txt cp/m.txt", "error copying \"cp/n.txt\" to \"cp/m.txt\": file already exists" },
+        .{ "file rename cp/n.txt cp/m.txt", "error renaming \"cp/n.txt\" to \"cp/m.txt\": file already exists" },
+        .{ "file copy cp/n.txt cp/d", "error copying \"cp/n.txt\" to \"cp/d/n.txt\": file already exists" },
+        .{ "file copy cp/n.txt cp/d/", "error copying \"cp/n.txt\" to \"cp/d/n.txt\": file already exists" },
+    };
+    for (cases) |c| {
+        try std.testing.expectError(error.TclError, it.eval(c[0]));
+        try std.testing.expectEqualStrings(c[1], try it.str(it.result));
+        try std.testing.expectEqualStrings("POSIX EEXIST {file already exists}", try it.str(it.error_code));
+    }
+}
+
 test "a file writes the line end of the platform, and binary reads back as lf" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
