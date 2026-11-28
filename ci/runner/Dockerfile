@@ -2,6 +2,18 @@
 #
 # Each job runs in a new container of this image, as the user ci, with
 # no privileges and the uid of the runner (1000). The Zig cache is a volume at /zig-cache.
+FROM ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b AS tcl
+
+# Tcl 8.6.16 from its source release (build-tcl.sh has the SHA-256):
+# the comparisons of CI with tclsh expect 8.6.16, and Ubuntu 24.04 has
+# 8.6.14. The compiler stays in this stage.
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update -qq \
+ && apt-get install -y -qq --no-install-recommends ca-certificates curl gcc libc6-dev make \
+ && rm -rf /var/lib/apt/lists/*
+COPY build-tcl.sh /build-tcl.sh
+RUN /build-tcl.sh /tcl
+
 FROM ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b
 
 ARG ZIG_VERSION=0.17.0
@@ -16,8 +28,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -qq \
  && apt-get install -y -qq --no-install-recommends \
       ca-certificates curl git xz-utils file python3 python3-venv python3-pip \
-      tcl8.6 tcl8.6-dev qemu-user openssl jq zstd \
+      make qemu-user openssl jq zstd \
  && rm -rf /var/lib/apt/lists/*
+
+# tclsh8.6, libtcl8.6.so, the stub library, the headers, and
+# /usr/local/lib/tclConfig.sh of Tcl 8.6.16.
+COPY --from=tcl /tcl/usr/local /usr/local
+RUN ldconfig && echo 'puts [info patchlevel]' | tclsh8.6 | grep -qx 8.6.16
 
 RUN case "$TARGETARCH" in \
       amd64) a=x86_64; h=$ZIG_SHA256_X86_64 ;; \
