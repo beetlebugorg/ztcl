@@ -3877,6 +3877,16 @@ test "file in host mode on Windows: the separator, the native names, the drives,
     try std.testing.expectEqualStrings("/ / a/b {native root}", try it.str(try it.eval("list [file separator] [file volumes] [file nativename a/b] [file system a]")));
 }
 
+test "file extension and file rootname of names with dots, as in tclsh" {
+    var it: tcl.Interp = undefined;
+    try it.init(std.testing.allocator);
+    defer it.deinit();
+    try it.allow(@backingInt(tcl.interp.Capability.file));
+    try tcl.fsroot.setRoot(&it, ".");
+    try std.testing.expectEqualStrings(".hidden .hidden .b . . . {} .x", try it.str(try it.eval("lmap p {.hidden a/.hidden .a.b .. . foo. a.b/c /.x} {file extension $p}")));
+    try std.testing.expectEqualStrings("{} a/ .a . {} foo a.b/c /", try it.str(try it.eval("lmap p {.hidden a/.hidden .a.b .. . foo. a.b/c /.x} {file rootname $p}")));
+}
+
 test "a file writes the line end of the platform, and binary reads back as lf" {
     var it: tcl.Interp = undefined;
     try it.init(std.testing.allocator);
