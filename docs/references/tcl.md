@@ -30,11 +30,11 @@ The manual pages `trace.n`, `namespace.n`, `mathop.n`, `mathfunc.n`, `prefix.n`,
 
 ### Unicode character classes
 
-The Unicode Character Database. https://www.unicode.org/ucd/
+The Unicode Character Database 17.0.0. https://www.unicode.org/Public/17.0.0/ucd/
 
-**License:** Unicode License
+**License:** the Unicode License V3, [licenses/unicode-license.txt](../../licenses/unicode-license.txt).
 
-**How ztcl uses it:** `src/ucd.zig` is a small hand-written model of the classes and the simple case maps for the common blocks. It has no copy of the data files.
+**How ztcl uses it:** `tools/ucd-case.tcl` reads `UnicodeData.txt` (the general category and the simple uppercase, lowercase, and titlecase maps) and writes `src/ucd_case.zig`, the case maps and the classes upper, lower, and title of `src/ucd.zig`. It leaves out each map to a longer UTF-8 form, as Tcl does. A test of `src/ucd.zig` checks each code point from 0 to 0x1FFFF against the output of `tools/case-check.tcl` in tclsh 9.0.4. The other classes of `src/ucd.zig` are a small hand-written model of the common blocks.
 
 ## Methods
 

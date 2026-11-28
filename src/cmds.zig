@@ -2386,7 +2386,7 @@ pub fn cmdString(it: *Interp, argv: []const Value, cmd: ?*Cmd) Error!Value {
                     const cp = switch (which) {
                         .tolower => ucd.toLower(d.cp),
                         .toupper => ucd.toUpper(d.cp),
-                        else => if (k == first) ucd.toTitle(d.cp) else ucd.toLower(d.cp),
+                        else => if (k == first) ucd.toTitle(d.cp) else ucd.toLowerAfterTitle(d.cp),
                     };
                     try ucd.appendCp(a, &out, cp);
                 }

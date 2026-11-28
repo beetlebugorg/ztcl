@@ -140,6 +140,7 @@ test {
     _ = @import("inflate.zig");
     _ = @import("vfs_tests.zig");
     _ = @import("tcl9_tests.zig");
+    _ = @import("ucd.zig");
     _ = @import("math9.zig");
     _ = @import("wasmweb.zig");
     _ = @import("serial.zig");
