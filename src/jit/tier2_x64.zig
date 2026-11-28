@@ -31,10 +31,9 @@
 //! integer operand goes through `cvtsi2sd`, as `@floatFromInt` does. No
 //! register holds a NaN: the entry and each load after a call check each
 //! double, and a result that can be a NaN has a check after the
-//! operation. A NaN result is a valid result in Tcl, so that check exits
-//! after the instruction, with the result in its place. The interpreter
-//! then raises the error at the next use of the NaN as an operand. So an
-//! operand in a register is never a NaN, and `ucomisd` needs no check of
+//! operation. A NaN result is a domain error in Tcl, so that check exits
+//! before the instruction, and the interpreter runs the instruction again
+//! for the error. So an operand in a register is never a NaN, and `ucomisd` needs no check of
 //! the parity flag. A stack place of a double can be the register of a
 //! slot or of a constant until an instruction needs it in its own
 //! register.
@@ -903,20 +902,13 @@ const Emitter = struct {
         // NaN: no operand in a register is a NaN.
         const safe = lower.nanFree(op, .{ .finite = a.finite, .nonzero = a.nonzero }, .{ .finite = b.finite, .nonzero = b.nonzero });
         var dest = e.xplace(k);
-        var resume_pc = pc + 1;
         var fused = false;
         if (e.nextIs(pc, .store_pop)) {
             if (e.slotX(e.code.ins[pc + 1].a)) |x| {
                 dest = x;
-                resume_pc = pc + 2;
                 fused = true;
             }
         }
-        // The places below the operands keep their values. A NaN check
-        // exits after the instruction, so they go to their registers.
-        if (!safe) try e.settleBelow(pc, k) else try e.settleReg(pc, k, dest);
-        const ax = try e.inX(a, .xmm4);
-        const bx = try e.inX(b, .xmm5);
         const o: Asm.Sse = switch (op) {
             .add => .addsd,
             .sub => .subsd,
@@ -924,10 +916,42 @@ const Emitter = struct {
             .div => .divsd,
             else => unreachable,
         };
+        if (!safe) {
+            // A NaN result is a domain error. The check exits before the
+            // instruction, and the interpreter runs it again for the
+            // error. So each place goes to its register, the result goes
+            // to xmm4, and the operands keep their values until the check.
+            try e.settle(pc);
+            const nan = try e.guardExit(pc, e.left[pc - e.p.head]);
+            const ax = try e.inX(a, .xmm4);
+            const bx = try e.inX(b, .xmm5);
+            if (ax != .xmm4) try s.movapd(.xmm4, ax);
+            try s.sse(o, .xmm4, bx);
+            try s.ucomisd(.xmm4, .xmm4);
+            try s.jcc(.p, nan);
+            try s.movapd(dest, .xmm4);
+        } else {
+            try e.settleReg(pc, k, dest);
+            try e.opInto(o, dest, a, b);
+        }
+        if (i.op == .binary) {
+            e.alias[k + 1 - e.base] = null;
+            e.known[k + 1 - e.base] = null;
+        }
+        e.alias[k - e.base] = null;
+        e.known[k - e.base] = null;
+        if (fused) e.skip = true;
+    }
+
+    /// `dest = a op b` for an operation on doubles.
+    fn opInto(e: *Emitter, o: Asm.Sse, dest: Xmm, a: Operand, b: Operand) Error!void {
+        const s = e.s;
+        const ax = try e.inX(a, .xmm4);
+        const bx = try e.inX(b, .xmm5);
         if (ax == dest) {
             try s.sse(o, dest, bx);
         } else if (bx == dest) {
-            if (op == .add or op == .mul) {
+            if (o == .addsd or o == .mulsd) {
                 try s.sse(o, dest, ax);
             } else {
                 if (ax != .xmm4) try s.movapd(.xmm4, ax);
@@ -937,19 +961,6 @@ const Emitter = struct {
         } else {
             try s.movapd(dest, ax);
             try s.sse(o, dest, bx);
-        }
-        if (i.op == .binary) {
-            e.alias[k + 1 - e.base] = null;
-            e.known[k + 1 - e.base] = null;
-        }
-        e.alias[k - e.base] = null;
-        e.known[k - e.base] = null;
-        if (fused) e.skip = true;
-        if (!safe) {
-            const refund = e.left[resume_pc - e.p.head];
-            try s.ucomisd(dest, dest);
-            try s.jcc(.p, try e.exitFrom(resume_pc, resume_pc, refund, exit_guard));
-            if (e.stress) try e.stressCheck(try e.exitFrom(resume_pc, resume_pc, refund, exit_forced));
         }
     }
 

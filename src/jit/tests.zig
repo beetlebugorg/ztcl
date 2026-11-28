@@ -2253,7 +2253,7 @@ test "tier 2: loops of doubles give the bits of the interpreter" {
     try sameT2(
         \\proc dsum {n} { set s 0.0; set x [expr {1.5}]; for {set i 0} {$i < $n} {incr i} { set s [expr {$s + $x * 0.5}] }; return $s }
         \\proc mix {} { set s [expr {0.1}]; set t [expr {-0.0}]; for {set i 0} {$i < 200} {incr i} { set s [expr {$s * 1.1 + $i / 3.0 - 0.1}]; set t [expr {$t * 1.0}] }; list $s $t [expr {1.0 / $t}] }
-        \\proc div {} { set z [expr {0.0}]; set r {}; for {set i -2} {$i < 3} {incr i} { set q [expr {$i / $z}]; lappend r $q }; return $r }
+        \\proc div {} { set z [expr {0.0}]; set r {}; for {set i -2} {$i < 3} {incr i} { set q [expr {($i + 0.5) / $z}]; lappend r $q }; return $r }
         \\proc cmp {} { set a [expr {0.5}]; set n 0; for {set i 0} {$i < 100} {incr i} { if {$a < $i} { incr n }; if {$i == $a * 2} { incr n 100 }; set a [expr {$a + 0.25}] }; list $n $a }
         \\proc big {} { set s [expr {1e300}]; for {set i 0} {$i < 50} {incr i} { set s [expr {$s * 10.0}] }; set s }
         \\proc prec {} { set s [expr {0.1}]; for {set i 0} {$i < 30} {incr i} { set s [expr {$s + 0.1}] }; set ::tcl_precision 6; set r [list $s]; set ::tcl_precision 0; lappend r $s }
@@ -2261,11 +2261,11 @@ test "tier 2: loops of doubles give the bits of the interpreter" {
     , 6);
 }
 
-test "tier 2: a NaN result exits, and its use as an operand is the error of the interpreter" {
+test "tier 2: a NaN result exits before its instruction, and the interpreter gives the domain error" {
     try sameT2(
         \\proc infs {} { set a [expr {1e290}]; set s [expr {0.0}]; for {set i 0} {$i < 100} {incr i} { set a [expr {$a * 10.0}]; set s [expr {$a - $a}] }; set s }
         \\proc nan2 {} { set a [expr {1e290}]; set s [expr {0.0}]; set k 0; for {set i 0} {$i < 100} {incr i} { set a [expr {$a * 10.0}]; set s [expr {$a - $a}]; set s [expr {$s + 1.0}]; incr k }; list $s $k }
-        \\proc zz {} { set z [expr {0.0}]; set q 1; for {set i 0} {$i < 50} {incr i} { set q [expr {$z / $z}] }; set q }
+        \\proc zz {} { set z [expr {1.0}]; set q 1; for {set i 0} {$i < 50} {incr i} { if {$i == 40} { set z [expr {0.0}] }; set q [expr {$z / $z}] }; set q }
         \\list [catch infs m] $m [catch nan2 m] $m $::errorCode [catch zz m] $m
     , 3);
 }

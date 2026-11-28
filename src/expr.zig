@@ -537,9 +537,14 @@ pub fn numberOf(it: *Interp, v: Value) Error!?Value {
 
 /// The result form of `expr`: a string that is a number is the number,
 /// so `expr {"0x10"}` gives 16.
+/// A NaN is not a result, as in Tcl: it is a domain error.
 pub fn numberForm(it: *Interp, v: Value) Error!Value {
-    if (v != .str) return v;
-    return (try numberOf(it, v)) orelse v;
+    const n = switch (v) {
+        .str => (try numberOf(it, v)) orelse return v,
+        else => v,
+    };
+    if (n == .double and std.math.isNan(n.double)) return domainError(it);
+    return n;
 }
 
 /// An integer argument of a command: an `int` or big integer text.
@@ -900,18 +905,20 @@ pub fn binaryOp(it: *Interp, op: BinOp, x: Value, y: Value) Error!Value {
             if (nx != .double and ny != .double) return bigint.binary(it, op, nx, ny);
             const fx = toF(nx);
             const fy = toF(ny);
-            return .{ .double = switch (op) {
+            const r = switch (op) {
                 .add => fx + fy,
                 .sub => fx - fy,
                 .mul => fx * fy,
                 .div => fx / fy,
                 else => blk: {
                     if (fx == 0 and fy < 0) return it.failCode("ARITH DOMAIN {exponentiation of zero by negative power}", "exponentiation of zero by negative power", .{});
-                    const r = std.math.pow(f64, fx, fy);
-                    if (std.math.isNan(r)) return domainError(it);
-                    break :blk r;
+                    break :blk std.math.pow(f64, fx, fy);
                 },
-            } };
+            };
+            // A NaN result, such as 0.0 / 0 or Inf - Inf, is a domain
+            // error in Tcl.
+            if (std.math.isNan(r)) return domainError(it);
+            return .{ .double = r };
         },
         .land, .lor => unreachable,
     }

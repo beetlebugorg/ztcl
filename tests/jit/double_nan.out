@@ -1,0 +1,12 @@
+quot 5: 1 domain error: argument not in valid range ARITH DOMAIN {domain error: argument not in valid range}
+diff 5: 1 domain error: argument not in valid range ARITH DOMAIN {domain error: argument not in valid range}
+prod 5: 1 domain error: argument not in valid range ARITH DOMAIN {domain error: argument not in valid range}
+quot 50: 1 domain error: argument not in valid range ARITH DOMAIN {domain error: argument not in valid range}
+diff 50: 1 domain error: argument not in valid range ARITH DOMAIN {domain error: argument not in valid range}
+prod 50: 1 domain error: argument not in valid range ARITH DOMAIN {domain error: argument not in valid range}
+quot 500: 1 domain error: argument not in valid range ARITH DOMAIN {domain error: argument not in valid range}
+diff 500: 1 domain error: argument not in valid range ARITH DOMAIN {domain error: argument not in valid range}
+prod 500: 1 domain error: argument not in valid range ARITH DOMAIN {domain error: argument not in valid range}
+99 2.0 {domain error: argument not in valid range}
+1 domain error: argument not in valid range
+1 domain error: argument not in valid range
