@@ -66,7 +66,7 @@ The advanced track comes after lesson 15. Its lessons are longer, and each one i
 
 ## The shell of the course
 
-- One shell for the whole course. It is docked in the window: a panel at the right side on a wide screen (1,100 pixels and more), and a sheet at the bottom on a smaller screen, that the reader can make small. It is always in view, and the page never scrolls to it.
+- One shell for the whole course. It starts closed, as the button "Try it" at the bottom right of the window, and the button never covers the text of the lesson. The button or a Run link opens it: a panel at the bottom right on a wide screen (961 pixels and more) that the reader can resize and close, and a sheet at the bottom on a smaller screen. The browser keeps the state open or closed and the size of the panel for the reader. A small screen opens the sheet only on a tap. The page never scrolls to the shell.
 - The state goes from lesson to lesson. Each lesson has a checkpoint: the Tcl state of `jot` at the start of that lesson, in the source of the lesson. A page loads its checkpoint, and then the commands that the reader ran on this lesson, from `sessionStorage`. The commands of the earlier lessons do not run again, because the checkpoint has their state, and a second run of `add` makes a second note. "Start again" clears them. A reader who opens lesson 9 from a link gets the checkpoint of lesson 9 and a working `jot`.
 - The files of the shell are in memory and writable, so that lesson 8 can write `notes.json`. They go away with the tab.
 - Lesson 11 needs a socket. The web build has no network. The page runs the server and a client in one interpreter over a pair of in-memory channels. The lesson also gives the command for a real port on the reader's computer.

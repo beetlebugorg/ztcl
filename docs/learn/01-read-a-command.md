@@ -2,7 +2,7 @@
 
 This course teaches Tcl to a programmer who reads code, often code from an agent, and must say what it does and fix it. Lessons 1 to 4 are "Read Tcl in 15 minutes". Each lesson adds one part to `jot`, a small notes tool.
 
-The shell of the course is at the side of the page, or at the bottom on a small screen. A Run link, such as [`puts "Hello, jot"`](run: ""), puts its command in the shell and runs it. The page stays where it is. The shell keeps your commands for this lesson until you close the tab, and "Start again" clears them.
+The button "Try it" at the bottom right of the window opens the shell of the course. A Run link, such as [`puts "Hello, jot"`](run: ""), opens the shell, puts its command in it, and runs it. The page stays where it is. The shell keeps your commands for this lesson until you close the tab, and "Start again" clears them.
 
 ## A command is words
 
