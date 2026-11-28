@@ -74,24 +74,6 @@ syn: fcopy input output ?-size size? ?-command callback?
 does: Copies from one channel to another. With `-command`, the copy runs in the event loop, and the callback gets the count of bytes.
 cap: channels
 
-== chan
-syn: chan subcommand ?arg ...?
-does: The channel commands as one ensemble. Each subcommand works as the command of the same name.
-cap: channels
-sub: chan close CHAN ?DIRECTION? | As `close`.
-sub: chan configure CHAN ?-option value ...? | As `fconfigure`.
-sub: chan copy IN OUT ?-size N? ?-command CB? | As `fcopy`.
-sub: chan eof CHAN | As `eof`.
-sub: chan flush CHAN | As `flush`.
-sub: chan gets CHAN ?VAR? | As `gets`.
-sub: chan names ?PATTERN? | The names of the open channels.
-sub: chan pipe | Makes a pipe and gives two channels: the bytes that go into the second come out of the first. Linux and macOS have it, and the shell of the site has it in memory.
-sub: chan puts ?-nonewline? ?CHAN? STRING | As `puts`.
-sub: chan read ?-nonewline? CHAN ?N? | As `read`.
-sub: chan seek CHAN OFFSET ?ORIGIN? | As `seek`.
-sub: chan tell CHAN | As `tell`.
-diff: Windows has no `chan pipe` in this version. `chan pending`, `chan push`, and the other subcommands of Tcl 8.6 that are not in the list are not in ztcl in this version.
-
 == source
 syn: source ?-encoding name? fileName
 does: Runs the script in a file, and gives the result of its last command. `-encoding` names the encoding of the file. The default is `utf-8`. A byte order mark at the start of the file is not part of the script, and the character ^Z ends the script.
