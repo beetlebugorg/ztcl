@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: read
+  # The last step of each job cancels the run when the job fails.
+  actions: write
 
 # A new push to a pull request cancels the run of its old commit. Runs
 # on main do not cancel each other: each one completes and saves the Zig
@@ -99,6 +101,17 @@ jobs:
           opts="--cpus 4 --memory 8g --cpu-shares 256 --pids-limit 4096 --cap-drop ALL --security-opt no-new-privileges"
           printf 'container={"image":"ghcr.io/beetlebugorg/ztcl-ci:%s","volumes":["%s:/zig-cache"],"options":"%s"}\n' "$tag" "$vol" "$opts" | tee -a "$GITHUB_OUTPUT"
           echo "self=$self" | tee -a "$GITHUB_OUTPUT"
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # The module map of src/ (docs/dev/architecture.md): a report of the
   # imports, the cycles, and the layering breaks. The job is a report:
@@ -124,6 +137,17 @@ jobs:
         with:
           name: modmap
           path: modmap/
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   test:
     name: Test (${{ matrix.os }})
@@ -131,7 +155,7 @@ jobs:
     if: needs.changes.outputs.test == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         os: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["ubuntu-latest", "macos-latest", "macos-15-intel", "windows-latest"]' || '["ubuntu-latest"]') }}
     defaults:
@@ -250,6 +274,17 @@ jobs:
         with:
           path: .zig-cache
           key: zig-test-${{ runner.os }}-${{ env.ZIG_VERSION }}-${{ hashFiles('build.zig', 'build.zig.zon') }}-${{ github.sha }}
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # C packages: the build with -Dcext, its unit tests, and the test
   # packages of tests/cext, each one compared with tclsh.
@@ -284,6 +319,17 @@ jobs:
           TCLSH=tclsh8.6 tools/libztcl/tclsh.sh
           zig build libztcl --prefix "$RUNNER_TEMP/kit"
           TCLSH=tclsh8.6 tools/libztcl/kit.sh "$RUNNER_TEMP/kit" zig-out/bin/ztcl
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # C packages in WebAssembly: the test packages of tests/cext built for
   # wasm32-wasi and run on ztcl-host.wasm in Node.js, each one compared
@@ -311,6 +357,17 @@ jobs:
         run: zig build cext-stubs wasm-host -Dcext-wasm=true
       - name: Compare the test packages with tclsh
         run: TCLSH=tclsh8.6 tools/cext/wasm-check.sh
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # ztcl build: each runtime of `zig build runtimes`, and a binary for
   # each target with a payload. Each runner builds and runs the binary
@@ -325,7 +382,7 @@ jobs:
     runs-on: ${{ (needs.changes.outputs.self == 'true' && matrix.os == 'ubuntu-latest') && fromJSON('["self-hosted","Linux","X64","trusted"]') || matrix.os }}
     container: ${{ (needs.changes.outputs.self == 'true' && matrix.os == 'ubuntu-latest') && fromJSON(needs.changes.outputs.container) || '' }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         os: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["ubuntu-latest", "macos-latest", "windows-latest"]' || '["ubuntu-latest"]') }}
     defaults:
@@ -369,6 +426,17 @@ jobs:
       - name: Show the signature
         if: runner.os == 'macOS'
         run: codesign -dv app/hello 2>&1 | head -8
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # The JIT on arm64 macOS: the suite with the JIT at threshold 0 and with
   # tier 2 must give the counts of each file without the JIT, and
@@ -416,6 +484,17 @@ jobs:
           for f in tests/jit/replay/*.tcl; do zig build jit-fuzz -- --replay "$f"; done
           zig build jit-fuzz -- --seconds 600 --mem-runs 4
           zig build jit-fuzz -- --seconds 600 --mem-runs 4 --tier2
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # The JIT on arm64 Linux, on each pull request: the unit tests, the
   # differential test, and the fuzzer for a bounded time.
@@ -471,6 +550,17 @@ jobs:
               echo "time $f ${m:-default} $best ms"
             done
           done
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   suite:
     name: Tcl 8.6.16 suite
@@ -496,6 +586,17 @@ jobs:
           ulimit -v 6000000
           tools/suite.sh -n -t core-8-6-16 | tee suite-off.txt
           awk '$1 == "total" { found = 1; ok = ($3 >= 19241) } END { exit !(found && ok) }' suite-off.txt
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # The WebAssembly checks are three jobs that run at the same time. Each
   # job builds all of its steps with one `zig build`, so that Zig
@@ -532,6 +633,17 @@ jobs:
       - run: node tools/wasm-threads.mjs browser
         env:
           CHROME: /usr/bin/google-chrome
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   wasm-aot:
     name: WebAssembly, compiled procs
@@ -560,6 +672,17 @@ jobs:
           node tools/wasm-aot.mjs --quiet --gc-stress 7 tests/jit/*.tcl tests/mem/*.tcl
           node tools/wasm-aot-suite.mjs
           tools/wasm-aot-fuzz.sh -n 100 -k 2
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   wasm-point:
     name: WebAssembly, point procs
@@ -587,6 +710,17 @@ jobs:
           tools/point-wasm-diff.sh
           zig build point-wasm-fuzz -- --count 300
           node tools/wasm-point.mjs zig-out/lib/ztcl-simd.wasm
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   wasi:
     name: WASI
@@ -651,6 +785,17 @@ jobs:
           zig build wasi-component
           wasm-tools validate --features component-model,cm-async zig-out/bin/ztcl.component.wasm
           tools/wasi-component.sh
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # The wasm engine of ztcl::wasm (docs/dev/wasm-engine.md): the spec
   # tests of WebAssembly 2.0 and the WASI programs of tests/wasm.
@@ -694,6 +839,17 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq tcl8.6 tcl8.6-dev > /dev/null
       - name: C packages in WebAssembly through the engine
         run: zig build cext-stubs && TCLSH=tclsh8.6 tools/cext/engine-check.sh
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # The scheduled run: all 152 files with the suite runner, without and
   # with the JIT. tools/suite-check.py fails the job when the pass count
@@ -722,6 +878,17 @@ jobs:
         with:
           name: suite-counts
           path: "*.tsv"
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # The scheduled run of the 37 core files of Tcl 9.1.0 with --tcl 9.1,
   # without and with the JIT. tools/suite-check.py fails the job when the
@@ -750,12 +917,24 @@ jobs:
         with:
           name: suite-counts-9
           path: "*.tsv"
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # A failure of the scheduled full run opens an issue, so it is fixed
   # in the next batch of work.
   report:
     name: Report a failure of the full run
-    if: failure() && github.event_name == 'schedule'
+    # A cancel of the run after the first failure counts too.
+    if: (failure() || cancelled()) && github.event_name == 'schedule'
     needs: [test, build-native, jit-macos, jit-arm64-linux, suite, suite-full, suite-9, wasm, wasm-aot, wasm-point, wasi]
     runs-on: ubuntu-latest
     permissions:
@@ -797,6 +976,17 @@ jobs:
       - run: python -m pip install -r tools/docs-requirements.txt
       - run: python tools/build-docs.py site
       - run: sh tests/targets.sh
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # The quick check of a pull request: the format and a build of the
   # runner that runs one script.
@@ -817,6 +1007,17 @@ jobs:
           ulimit -v 6000000
           zig build
           test "$(zig-out/bin/ztcl bench/sum.tcl)" = 499999500000
+      # The first failure stops the other jobs of the run. curl is in
+      # each runner and in the container of the self-hosted runner.
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
   # The one check of a run: it passes when each job of the run passed
   # or was skipped, and fails when a job failed or was cancelled. On a
