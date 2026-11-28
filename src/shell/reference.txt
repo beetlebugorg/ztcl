@@ -714,6 +714,12 @@ sub: ztcl::wasm imports MODULE | Gives the module, the name, the kind, and the t
 sub: ztcl::wasm info MODULE | Gives a dict of the counts and the features of a module.
 sub: ztcl::wasm delete ?HANDLE ...? | Deletes modules and instances.
 sub: ztcl::wasm jit ?BOOLEAN? | Reads or sets the use of the JIT tier.
+== ztcl::watch
+syn: ztcl::watch SUBCOMMAND ?ARG ...?
+sub: ztcl::watch add ?-recursive? PATH | Starts a watch of a folder and gives its handle.
+sub: ztcl::watch changes WATCHER | Gives the events that wait, as a list of pairs of a kind and a path.
+sub: ztcl::watch fd WATCHER | Gives the descriptor that an embedder can wait on.
+sub: ztcl::watch remove WATCHER | Stops a watch.
 == ztcl::tls ztcl::tls::socket
 syn: ztcl::tls socket ?-servername name? ?-alpn protocols? ?-cadata pem? ?-verify boolean? host port
 sub: socket ?option value ...? host port | Opens the connection and gives the name of the channel.
@@ -723,8 +729,6 @@ opt: -cadata pem | The trust anchors as PEM text, in place of the store of the s
 opt: -verify boolean | With 0, the chain and the host name are not checked.
 == ztcl::pty
 syn: ztcl::pty subcommand ?arg ...?
-== ztcl::watch
-syn: ztcl::watch subcommand ?arg ...?
 == ztcl::open
 syn: ztcl::open target
 == ztcl::notify
