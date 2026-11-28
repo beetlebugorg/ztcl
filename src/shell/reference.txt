@@ -651,6 +651,17 @@ sub: ztcl::json bool B | Writes a JSON true or false.
 sub: ztcl::json null | Writes a JSON null.
 sub: ztcl::json raw JSON | Checks a JSON text and gives it as it is.
 sub: ztcl::json pretty ?-indent N? TEXT | Lays out a JSON text with one member on each line.
+== ztcl::meter
+syn: ztcl::meter SUBCOMMAND ?ARG ...?
+sub: ztcl::meter create NAME ?-budget UNITS? ?-tenant TEXT? | Makes a meter, or sets the options of a meter, and gives its name.
+sub: ztcl::meter get NAME | Gives the dict of the counts of a meter.
+sub: ztcl::meter list | Gives the names of the meters.
+sub: ztcl::meter reset NAME | Sets each count of a meter to zero.
+sub: ztcl::meter delete NAME | Removes a meter.
+sub: ztcl::meter run NAME SCRIPT | Runs a script in the current interpreter and counts it in a meter.
+sub: ztcl::meter record NAME ?-tenant TEXT? ?-script TEXT? ?-sign? ?-key SEED? | Gives the usage record of a meter: one line of JSON in a hash chain.
+sub: ztcl::meter verify RECORD PUBLICKEY | Checks the signature of a record.
+sub: ztcl::meter pubkey SEED | Gives the hex public key of a seed.
 == ztcl::text ztcl::text::graphemes ztcl::text::words ztcl::text::sentences ztcl::text::width ztcl::text::bounds
 syn: ztcl::text SUBCOMMAND ?ARG ...?
 sub: ztcl::text graphemes STRING | Gives the list of the grapheme clusters of a string.
@@ -709,17 +720,6 @@ syn: ztcl::watch subcommand ?arg ...?
 syn: ztcl::open target
 == ztcl::notify
 syn: ztcl::notify ?-option value ...? title ?body?
-== ztcl::meter
-syn: ztcl::meter subcommand ?arg ...?
-sub: ztcl::meter create NAME ?-budget UNITS? ?-tenant TEXT? | Makes the meter NAME, or sets the options of the meter NAME.
-sub: ztcl::meter get NAME | The dict of the counts of NAME.
-sub: ztcl::meter list | The names of the meters.
-sub: ztcl::meter reset NAME | Sets each count of NAME to zero.
-sub: ztcl::meter delete NAME | Removes NAME.
-sub: ztcl::meter run NAME SCRIPT | Runs SCRIPT in the current interpreter and counts it in NAME.
-sub: ztcl::meter record NAME ?-tenant TEXT? ?-script TEXT? ?-sign? ?-key SEED? | The usage record of NAME: one line of JSON with the SHA-256 of the record before it.
-sub: ztcl::meter verify RECORD PUBLICKEY | 1 when the signature of RECORD matches the hex public key, else 0.
-sub: ztcl::meter pubkey SEED | The hex public key of a hex seed.
 == ztcl::agent
 syn: ztcl::agent subcommand ?arg ...?
 sub: ztcl::agent run ?-option value ...? | Runs the loop.
