@@ -54,7 +54,7 @@ command ztcl::tls {
 
             A server that closes the TCP connection with no `close_notify` alert gives the end of the data, and `eof` gives 1. Many HTTP servers close in this way.
 
-            The errors of the handshake: `ZTCL TLS CERTIFICATE REASON` when the chain or the host name does not pass the checks, with a REASON such as `UnknownIssuer`, `HostName`, or `Expired`; `ZTCL TLS ALERT NAME` when the server sends a fatal alert; and `ZTCL NET DENIED` when the network policy does not allow the host. Wrong data of the server gives a code with the name of the error of the Zig code and `none`, such as `ZTCL TLS EndOfStream none` ([issue 735](https://github.com/beetlebugorg/ztcl/issues/735)). The errors of the options have `-errorcode NONE`.
+            The errors of the handshake: `ZTCL TLS CERTIFICATE REASON` when the chain or the host name does not pass the checks, with a REASON such as `UnknownIssuer`, `HostName`, or `Expired`; `ZTCL TLS ALERT NAME` when the server sends a fatal alert; and `ZTCL NET DENIED` when the network policy does not allow the host. Wrong data of the server gives `ZTCL TLS ERROR ALERT` with the alert that the client sent, such as `unexpected_message` for data that is no TLS, and a close of the server in the handshake gives `ZTCL TLS EOF`. The errors of the options have `-errorcode NONE`.
         }
         returns {The name of the channel.}
         see {socket close}
@@ -75,7 +75,12 @@ command ztcl::tls {
             thread::send $srv [list set ::reply ""]
             catch {ztcl::tls socket 127.0.0.1 $port} msg opts
             list $msg [dict get $opts -errorcode]
-        } {{TLS error: EndOfStream (alert none)} {ZTCL TLS EndOfStream none}}
+        } {{TLS error: the server closed the connection in the handshake} {ZTCL TLS EOF}}
+        example {
+            thread::send $srv [list set ::reply [string repeat "HTTP/1.0 400 Bad\r\n" 20]]
+            catch {ztcl::tls socket 127.0.0.1 $port} msg opts
+            list $msg [dict get $opts -errorcode]
+        } {{TLS error: UnexpectedMessage (alert unexpected_message)} {ZTCL TLS ERROR unexpected_message}}
         error {
             set s [socket -server {apply {{c a p} {close $c}}} -myaddr 127.0.0.1 0]
             set free [lindex [fconfigure $s -sockname] 2]
@@ -134,7 +139,7 @@ command ztcl::tls {
                 catch {ztcl::tls socket -verify 0 127.0.0.1 $port} msg
                 set msg
             } {TLS error: the server sent the alert handshake_failure (40)}
-            error {ztcl::tls socket -verify x 127.0.0.1 1} {expected boolean value but got "x"} NONE
+            error {ztcl::tls socket -verify x 127.0.0.1 1} {expected boolean value but got "x"} {TCL VALUE NUMBER}
         }
     }
 }

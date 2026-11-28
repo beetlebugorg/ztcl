@@ -49,7 +49,8 @@ A server that closes the TCP connection with no `close_notify` alert gives the e
 |---|---|
 | `ZTCL TLS CERTIFICATE REASON` | The chain or the host name did not pass the checks. `REASON` is, for example, `UnknownIssuer`, `HostName`, or `Expired`. |
 | `ZTCL TLS ALERT NAME` | The server sent a fatal alert, such as `handshake_failure`. |
-| `ZTCL TLS ERROR ALERT` | The client found an error in the data of the server and sent the alert `ALERT`. |
+| `ZTCL TLS ERROR ALERT` | The client found an error in the data of the server and sent the alert `ALERT`, such as `unexpected_message` for data that is no TLS. `ALERT` is `none` for an error with no alert. |
+| `ZTCL TLS EOF` | The server closed the connection in the handshake. |
 | `ZTCL NET DENIED` | The network policy does not allow the host. |
 
 ```tcl

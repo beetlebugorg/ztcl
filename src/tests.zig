@@ -1378,10 +1378,11 @@ test "ztcl::tls socket closes the channel after a failed handshake" {
     try it.allow(@backingInt(tcl.interp.Capability.socket) | @backingInt(tcl.interp.Capability.channels));
     const script = try std.fmt.allocPrint(std.testing.allocator,
         \\package require ztcl::tls
-        \\list [catch {{ztcl::tls socket -verify 0 127.0.0.1 {d}}} m o] [lrange [dict get $o -errorcode] 0 1] [llength [lsearch -all [chan names] sock*]]
+        \\list [catch {{ztcl::tls socket -verify 0 127.0.0.1 {d}}} m o] [dict get $o -errorcode] $m [llength [lsearch -all [chan names] sock*]]
     , .{n.server.socket.address.getPort()});
     defer std.testing.allocator.free(script);
-    try std.testing.expectEqualStrings("1 {ZTCL TLS} 0", try it.str(try it.eval(script)));
+    // The first byte of the HTTP reply is no content type of TLS (#735).
+    try std.testing.expectEqualStrings("1 {ZTCL TLS ERROR unexpected_message} {TLS error: UnexpectedMessage (alert unexpected_message)} 0", try it.str(try it.eval(script)));
 }
 
 test "the http package of the Tcl library" {
