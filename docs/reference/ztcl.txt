@@ -1,14 +1,6 @@
 # The command reference: the ztcl modules. Each has its own full page in
 # docs/modules/. The format is in docs/reference/README.md.
 
-== ztcl::json
-syn: ztcl::json subcommand ?arg ...?
-does: JSON: parse to Tcl values, read one value with no full parse, check, and write with a schema. An object is a dict, and an array is a list. Load it with `package require ztcl::json`.
-page: modules/json.md
-names: ztcl::json::parse ztcl::json::valid ztcl::json::get ztcl::json::exists ztcl::json::encode ztcl::json::object ztcl::json::array ztcl::json::string ztcl::json::number ztcl::json::bool ztcl::json::null ztcl::json::raw ztcl::json::pretty
-ex: package require ztcl::json; ztcl::json parse {{"a": [1, 2]}} => a {1 2}
-ex: ztcl::json encode -schema {object {n int}} {n 5} => {"n":5}
-
 == ztcl::vt
 syn: ztcl::vt subcommand ?arg ...?
 does: A terminal screen in memory: feed it the bytes of a program, and read its cells and its text.
