@@ -71,7 +71,10 @@ pub fn build(b: *std.Build) void {
     // `-Dstrip=true` strips the runner, for the size report.
     const strip = b.option(bool, "strip", "Strip the runner") orelse false;
     // `-Drunner-optimize` sets the mode of the runner and the suite runner.
-    const runner_optimize = b.option(std.builtin.OptimizeMode, "runner-optimize", "The mode of the runners") orelse .fast;
+    // It follows `-Doptimize` (Debug by default), so a plain `zig build`
+    // compiles fast with every safety check. Releases, benchmarks, and the
+    // size report pass `-Doptimize=ReleaseFast`.
+    const runner_optimize = b.option(std.builtin.OptimizeMode, "runner-optimize", "The mode of the runners (default: -Doptimize)") orelse optimize;
     // `-Dtsan=true` builds each module with ThreadSanitizer and libc, so
     // `std.Thread` uses pthreads, which ThreadSanitizer sees. It needs a
     // target with a libc, for example `-Dtarget=x86_64-linux-gnu`. Run
