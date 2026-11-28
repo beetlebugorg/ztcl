@@ -19,9 +19,9 @@ Each release also has an archive for Linux on x86-64 and arm64, macOS on x86-64 
 
 ```sh
 $ R=https://github.com/beetlebugorg/ztcl/releases/download
-$ A=ztcl-0.2.0-beta-x86_64-linux-musl.tar.gz
-$ curl -LO $R/v0.2.0-beta/$A             # the archive
-$ curl -LO $R/v0.2.0-beta/SHA256SUMS     # the checksums
+$ A=ztcl-1.0.0-beta.1-x86_64-linux-musl.tar.gz
+$ curl -LO $R/v1.0.0-beta.1/$A             # the archive
+$ curl -LO $R/v1.0.0-beta.1/SHA256SUMS     # the checksums
 $ sha256sum -c SHA256SUMS --ignore-missing
 $ tar xzf $A
 ```
