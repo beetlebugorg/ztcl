@@ -40,7 +40,7 @@ pub fn start(vsock: i32) !i32 {
         _ = os.setsockopt(fd, os.SOL.SOCKET, os.SO.SNDBUF, std.mem.asBytes(&size), @sizeOf(c_int));
         _ = os.setsockopt(fd, os.SOL.SOCKET, os.SO.RCVBUF, std.mem.asBytes(&size), @sizeOf(c_int));
     }
-    const t = std.Thread.spawn(.{ .stack_size = 256 * 1024 }, run, .{ vsock, pair[1] }) catch {
+    const t = std.Thread.spawn(.{ .stack_size = 1024 * 1024 }, run, .{ vsock, pair[1] }) catch {
         _ = os.close(pair[0]);
         _ = os.close(pair[1]);
         return error.NoThread;

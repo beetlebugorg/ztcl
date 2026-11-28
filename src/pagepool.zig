@@ -289,7 +289,7 @@ const releaser = struct {
         if (comptime builtin.single_threaded or !supported) return os.release(base, n);
         grab();
         if (!started) {
-            const t = std.Thread.spawn(.{ .stack_size = 64 * 1024 }, run, .{}) catch {
+            const t = std.Thread.spawn(.{ .stack_size = 1024 * 1024 }, run, .{}) catch {
                 lock.unlock();
                 return os.release(base, n);
             };
