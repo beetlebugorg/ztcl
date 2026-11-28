@@ -448,7 +448,7 @@ fn paraOptions(it: *Interp, argv: []const Value, comptime usage: []const u8) Err
     }
     if (o[8]) |v| try checkLang(it, v);
     po.hy = try hyphenator(it);
-    po.max_steps = @intCast(@min(it.compute_limit, std.math.maxInt(u32)) * 64);
+    po.max_steps = @intCast(@min(@as(u64, it.compute_limit) *| 64, std.math.maxInt(usize)));
     return po;
 }
 
@@ -563,8 +563,18 @@ fn cmdSvg(it: *Interp, argv: []const Value) Error!Value {
     var out: std.ArrayList(u8) = .empty;
     const h = lead * @as(f32, @floatFromInt(r.lines.len)) + po.size * 0.4;
     try out.print(A, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{d:.1}\" height=\"{d:.1}\" viewBox=\"0 0 {d:.1} {d:.1}\">\n", .{ po.width, h, po.width, h });
+    // The family is a CSS string: a family name such as "Source Serif 4"
+    // with no quotes is not valid CSS, because "4" is no identifier, and
+    // a browser then ignores the attribute.
+    var quoted: std.ArrayList(u8) = .empty;
+    try quoted.append(A, '\'');
+    for (family) |ch| {
+        if (ch == '\'' or ch == '\\') try quoted.append(A, '\\');
+        try quoted.append(A, ch);
+    }
+    try quoted.append(A, '\'');
     try out.print(A, "<g font-family=\"", .{});
-    try xmlText(A, &out, family);
+    try xmlText(A, &out, quoted.items);
     try out.print(A, "\" font-size=\"{d:.2}\" xml:space=\"preserve\">\n", .{po.size});
     for (r.lines, 0..) |l, li| {
         const y = po.size + lead * @as(f32, @floatFromInt(li));
@@ -724,7 +734,7 @@ fn cmdBook(it: *Interp, argv: []const Value) Error!Value {
     const runner: ?layout.Runner = if (o[2] != null) .{ .ctx = &rc, .run = runBlock } else null;
     var msgs: std.ArrayList(u8) = .empty;
     defer msgs.deinit(gpa);
-    const limit: usize = @intCast(@min(it.compute_limit, std.math.maxInt(u32)) * 64);
+    const limit: usize = @intCast(@min(@as(u64, it.compute_limit) *| 64, std.math.maxInt(usize)));
     const stats = layout.typeset(gpa, a, d, fonts, st, try hyphenator(it), chapters.items, runner, &msgs, limit) catch |e| return docError(it, e);
     try charge(it, stats.lines);
     var out: std.ArrayList(Value) = .empty;
