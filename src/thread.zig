@@ -389,6 +389,9 @@ pub const Worker = struct {
     status: i64 = 0,
     /// True after `thread::exit`.
     exiting: bool = false,
+    /// True when the error that ends the thread went to the sender of
+    /// a `thread::send` as its reply, so `endError` reports it no more.
+    error_replied: bool = false,
     /// `thread::configure` options.
     eventmark: usize = 0,
     unwind_on_error: bool = false,
@@ -1091,6 +1094,7 @@ pub fn endError(w: *Worker, x: *Interp, e: Error) void {
     if (w.exiting) return;
     if (w.hasFlag(Flag.stop)) return;
     w.status = 1;
+    if (w.error_replied) return;
     const text: []const u8 = switch (e) {
         error.OutOfMemory => "out of memory",
         error.TclError => blk: {
@@ -1543,6 +1547,7 @@ fn runMsg(w: *Worker, it: *Interp, m: *Msg) Error!void {
                 if (m.seq != 0) {
                     const msg = if (e == error.OutOfMemory) "out of memory" else it.str(it.result) catch "error";
                     replyText(g, m.from, m.seq, 1, msg, "THREAD STOPPED");
+                    w.error_replied = true;
                 }
                 return e;
             };

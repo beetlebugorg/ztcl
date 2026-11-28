@@ -156,5 +156,23 @@ test agent-33 {list [ztcl::json get $b1 messages 0 role] [ztcl::json get $b1 too
 test agent-34 {list [ztcl::json get $b2 messages 2 tool_calls 0 id] [ztcl::json get $b2 messages 3]} {c1 {role tool tool_call_id c1 content {draft saved}}}
 test agent-35 {list [dict get $r input_tokens] [dict get $r output_tokens]} {100 20}
 
+# 7. The checks of the arguments (#741).
+proc g {a} {}
+proc ec {script} {list [catch {uplevel 1 $script} m o] $m [dict get $o -errorcode]}
+test agent-36 {ec {ztcl::agent doc g x a bogus}} {1 {bad type "bogus"} {ZTCL AGENT SCHEMA}}
+test agent-37 {ec {ztcl::agent doc nosuch x}} {1 {no command "nosuch" for a tool} {ZTCL AGENT USAGE}}
+test agent-38 {ec {ztcl::agent doc g x b int}} {1 {g has no argument "b": must be a} {ZTCL AGENT USAGE}}
+test agent-39 {ec {ztcl::agent doc g x a}} {1 {the argument "a" has no type} {ZTCL AGENT USAGE}}
+test agent-40 {ec {ztcl::agent post $url {a} {}}} {1 {the headers need a list of names and values} {ZTCL AGENT HEADER}}
+test agent-41 {string match "*-tools, or -turns" [lindex [ec {ztcl::agent run -endpoint $url -bogus 1}] 1]} 1
+test agent-42 {lmap c {post {check {n int}} schema {doc g} describe} {lindex [ec "ztcl::agent $c"] 1}} {{wrong # args: should be "ztcl::agent post url headers body"} {wrong # args: should be "ztcl::agent check spec value"} {wrong # args: should be "ztcl::agent schema spec"} {wrong # args: should be "ztcl::agent doc name text ?arg type ...?"} {wrong # args: should be "ztcl::agent describe name"}}
+test agent-43 {ec {ztcl::agent check {n bogus} {n 1}}} {1 {bad type "bogus"} {ZTCL AGENT SCHEMA}}
+set n0 [llength [requests]]
+test agent-44 {lmap k {-turns -calls -tokens -max-tokens -compute} {lindex [ec {ztcl::agent run -isolation interp -endpoint $url $k x}] 1}} [lrepeat 5 {expected integer but got "x"}]
+test agent-45 {expr {[llength [requests]] - $n0}} 0
+test agent-46 {ec {ztcl::agent run -endpoint $url -isolation bogus}} {1 {bad isolation level "bogus": must be interp, process, or vm} {ZTCL AGENT USAGE}}
+test agent-47 {ec {ztcl::agent run -isolation interp -endpoint $url -data {a}}} {1 {-data needs a list of names and values} {ZTCL AGENT USAGE}}
+test agent-48 {ec {ztcl::agent run -isolation interp -endpoint $url -header {a}}} {1 {the headers need a list of names and values} {ZTCL AGENT HEADER}}
+
 thread::release $srv
 done
