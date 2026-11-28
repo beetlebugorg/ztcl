@@ -1,18 +1,5 @@
 # The command reference: math. The format is in docs/reference/README.md.
 
-== expr
-syn: expr arg ?arg ...?
-does: Computes an expression with the operators of C and the math functions. Put the expression in braces: then `expr` does its own substitution, a value from a variable stays a value, and the expression is compiled once. Integers have no fixed size. An integer divided by an integer is an integer, rounded down.
-ex: expr {2 ** 100} => 1267650600228229401496703205376
-ex: expr {7 / 2} => 3
-ex: expr {-7 / 2} => -4
-ex: expr {7 / 2.0} => 3.5
-ex: expr {"a" eq "a" ? "same" : "other"} => same
-ex: expr {5 in {1 5 9}} => 1
-err: expr {1 / 0} | divide by zero
-err: expr {"ten" + 1} | can't use non-numeric string as operand of "+"
-diff: The operators `eq`, `ne`, `in`, and `ni` compare strings and lists, as in Tcl 8.6.
-
 == incr
 syn: incr varName ?increment?
 does: Adds increment (1 by default) to the integer in a variable, and gives the new value. It makes the variable with 0 first when it has no value.
