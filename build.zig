@@ -787,6 +787,8 @@ pub fn build(b: *std.Build) void {
         const w = addWasm(b, wt[0], wt[1], gc_precise, size_plant, on, false, false);
         threads_step.dependOn(installWasm(b, w));
     }
+    // Last: each module of src/ in each step gets the shared modules.
+    addShared(b);
 }
 
 /// The host program of tools/wasm-pack.zig, made on the first call of
@@ -934,9 +936,6 @@ fn addWasmForm(b: *std.Build, name: []const u8, threads: WebThreads, gc_precise:
     addModuleOptions(b, wasm_options, mods_on);
     wasm.root_module.addOptions("build_options", wasm_options);
     if (threads != .shared) addVt(b, wasm.root_module, wasm.root_module.resolved_target.?, .small);
-    // The build with shared threads has no VT module, and src/json
-    // imports `json_index` and src/more.zig imports `b64_simd`.
-    if (threads == .shared) addCrypto(b, wasm.root_module);
     wasm.entry = .disabled;
     wasm.rdynamic = true;
     // The interpreter can use 5 MiB of native stack (`max_native`).
@@ -1136,25 +1135,88 @@ fn withCrypto(b: *std.Build, m: *std.Build.Module) *std.Build.Module {
 
 fn addCrypto(b: *std.Build, m: *std.Build.Module) void {
     const t = m.resolved_target orelse return;
+    inline for (shared_names) |name| {
+        if (m.import_table.get(name) == null) m.addImport(name, sharedModule(b, name, t, m.optimize));
+    }
+}
+
+/// The modules that the code of src/ imports by name in each build: the
+/// kernels of src/crypto, compiled with more CPU features than the target
+/// (src/tls/aead.zig and src/more.zig check the CPU at run time), and
+/// stage 1 of the JSON parser. `addShared` gives them to each module of
+/// src/ in the build, so a new one goes here and in `sharedModule`.
+const shared_names = [_][]const u8{ "crypto_x86_avx2", "crypto_arm_aes", "json_index", "b64_simd" };
+
+fn sharedModule(b: *std.Build, comptime name: []const u8, t: std.Build.ResolvedTarget, opt: ?std.builtin.OptimizeMode) *std.Build.Module {
     const kt = kernelTarget(b, t);
-    m.addImport("crypto_x86_avx2", b.createModule(.{
-        .root_source_file = b.path("src/crypto/x86_avx2.zig"),
-        .target = kt,
-        .optimize = m.optimize,
-    }));
-    m.addImport("crypto_arm_aes", b.createModule(.{
-        .root_source_file = b.path("src/crypto/arm_aes.zig"),
-        .target = kt,
-        .optimize = m.optimize,
-    }));
-    m.addImport("json_index", jsonIndex(b, t, kt, m.optimize));
+    if (comptime std.mem.eql(u8, name, "json_index")) return jsonIndex(b, t, kt, opt);
+    const file = comptime if (std.mem.eql(u8, name, "crypto_x86_avx2"))
+        "src/crypto/x86_avx2.zig"
+    else if (std.mem.eql(u8, name, "crypto_arm_aes"))
+        "src/crypto/arm_aes.zig"
+    else if (std.mem.eql(u8, name, "b64_simd"))
+        "src/crypto/b64_simd.zig"
+    else
+        @compileError("no shared module " ++ name);
     // The vector loops of base64: the AVX2 features of crypto_x86_avx2
     // on x86-64 (src/more.zig checks the CPU), else the target.
-    m.addImport("b64_simd", b.createModule(.{
-        .root_source_file = b.path("src/crypto/b64_simd.zig"),
-        .target = if (t.result.cpu.arch == .x86_64) kt else t,
-        .optimize = m.optimize,
-    }));
+    const mt = if (comptime std.mem.eql(u8, name, "b64_simd")) (if (t.result.cpu.arch == .x86_64) kt else t) else kt;
+    return b.createModule(.{ .root_source_file = b.path(file), .target = mt, .optimize = opt });
+}
+
+/// True for a module of the interpreter: a root file in src/ of this
+/// build, other than the shared modules and the module of their AVX2
+/// JSON form.
+fn isSrcModule(b: *std.Build, m: *std.Build.Module) bool {
+    if (m.resolved_target == null) return false;
+    const root = m.root_source_file orelse return false;
+    const raw = switch (root) {
+        .src_path => |sp| if (sp.owner == b) sp.sub_path else return false,
+        else => return false,
+    };
+    // `b.path` gives the separators of the host: `src\wasm.zig` on Windows.
+    const p = b.allocator.dupe(u8, raw) catch @panic("OOM");
+    std.mem.replaceScalar(u8, p, '\\', '/');
+    if (!std.mem.startsWith(u8, p, "src/")) return false;
+    return !std.mem.startsWith(u8, p, "src/crypto/") and !std.mem.eql(u8, p, "src/json/index.zig");
+}
+
+/// Gives each module of src/ in each compile step of the build each
+/// shared module that it lacks (`addCrypto`), so a new artifact, target,
+/// or shared module cannot miss one. Then adds `check-targets`: a copy of
+/// each compile step with no output file, so the step checks each
+/// artifact of each target with no link.
+fn addShared(b: *std.Build) void {
+    const a = b.allocator;
+    var seen: std.AutoHashMapUnmanaged(*std.Build.Step, void) = .empty;
+    var compiles: std.ArrayList(*std.Build.Step.Compile) = .empty;
+    var steps: std.ArrayList(*std.Build.Step) = .empty;
+    for (b.top_level_steps.values()) |tl| steps.append(a, &tl.step) catch @panic("OOM");
+    while (steps.pop()) |s| {
+        if ((seen.getOrPut(a, s) catch @panic("OOM")).found_existing) continue;
+        if (s.cast(std.Build.Step.Compile)) |c| compiles.append(a, c) catch @panic("OOM");
+        steps.appendSlice(a, s.dependencies.items) catch @panic("OOM");
+    }
+    var done: std.AutoHashMapUnmanaged(*std.Build.Module, void) = .empty;
+    var mods: std.ArrayList(*std.Build.Module) = .empty;
+    for (compiles.items) |c| mods.append(a, c.root_module) catch @panic("OOM");
+    while (mods.pop()) |m| {
+        if ((done.getOrPut(a, m) catch @panic("OOM")).found_existing) continue;
+        mods.appendSlice(a, m.import_table.values()) catch @panic("OOM");
+        if (isSrcModule(b, m)) addCrypto(b, m);
+    }
+    const check = b.step("check-targets", "Compile each artifact of each target with no output file");
+    for (compiles.items) |c| {
+        const copy = std.Build.Step.Compile.create(b, .{
+            .name = c.name,
+            .root_module = c.root_module,
+            .kind = c.kind,
+            .linkage = c.linkage,
+            .use_llvm = c.use_llvm,
+            .use_lld = c.use_lld,
+        });
+        check.dependOn(&copy.step);
+    }
 }
 
 /// The target of the kernel modules: the CPU of `t`, with its model,
@@ -1252,8 +1314,6 @@ fn addEnclaveCore(b: *std.Build, size_plant: usize) *std.Build.Step.Compile {
     off[moduleIndex("json")] = true;
     addModuleOptions(b, opts, off);
     obj.root_module.addOptions("build_options", opts);
-    // src/more.zig imports `b64_simd`, which is off for UEFI.
-    addCrypto(b, obj.root_module);
     // The enclave CRT has no helpers of 128-bit floats.
     obj.bundle_compiler_rt = true;
     return obj;
@@ -1298,8 +1358,6 @@ fn addUnikernel(b: *std.Build, size_plant: usize, host: std.Build.ResolvedTarget
     const off: [all_modules.len]bool = @splat(false);
     addModuleOptions(b, opts, off);
     exe.root_module.addOptions("build_options", opts);
-    // src/more.zig imports `b64_simd`.
-    addCrypto(b, exe.root_module);
     exe.bundle_compiler_rt = true;
     return exe;
 }

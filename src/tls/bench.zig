@@ -16,13 +16,37 @@
 //! SPDX-License-Identifier: BSD-2-Clause
 
 const std = @import("std");
+const builtin = @import("builtin");
 const record = @import("record.zig");
 const aead = @import("aead.zig");
 
+extern "kernel32" fn QueryPerformanceCounter(count: *i64) callconv(.winapi) i32;
+extern "kernel32" fn QueryPerformanceFrequency(freq: *i64) callconv(.winapi) i32;
+
+/// The CPU time of this thread. Windows counts the time of a thread only
+/// at each tick of the scheduler, about 15.6 ms, so there the clock is the
+/// performance counter: the time of the host, at a fine step.
 fn nowNs() u64 {
-    var ts: std.os.linux.timespec = undefined;
-    _ = std.os.linux.clock_gettime(.THREAD_CPUTIME_ID, &ts);
-    return @as(u64, @intCast(ts.sec)) * std.time.ns_per_s + @as(u64, @intCast(ts.nsec));
+    switch (builtin.os.tag) {
+        .linux => {
+            var ts: std.os.linux.timespec = undefined;
+            _ = std.os.linux.clock_gettime(.THREAD_CPUTIME_ID, &ts);
+            return @as(u64, @intCast(ts.sec)) * std.time.ns_per_s + @as(u64, @intCast(ts.nsec));
+        },
+        .windows => {
+            var count: i64 = 0;
+            var freq: i64 = 1;
+            _ = QueryPerformanceCounter(&count);
+            _ = QueryPerformanceFrequency(&freq);
+            const c: u128 = @intCast(count);
+            return @intCast(c * std.time.ns_per_s / @as(u128, @intCast(freq)));
+        },
+        else => {
+            var ts: std.c.timespec = undefined;
+            _ = std.c.clock_gettime(.THREAD_CPUTIME_ID, &ts);
+            return @as(u64, @intCast(ts.sec)) * std.time.ns_per_s + @as(u64, @intCast(ts.nsec));
+        },
+    }
 }
 
 pub fn main() !void {

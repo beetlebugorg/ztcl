@@ -149,6 +149,30 @@ jobs:
           -H "Accept: application/vnd.github+json"
           "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
 
+  # Each artifact of each target compiles with no output file, so a module
+  # that one target lacks shows here (build.zig `addShared`).
+  check-targets:
+    name: Check targets (Linux)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+      - name: Compile each artifact of each target
+        run: zig build check-targets --summary line
+      - name: Stop the run
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN"
+          -H "Accept: application/vnd.github+json"
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"
+
   test:
     name: Test (${{ matrix.os }})
     needs: changes
@@ -1045,7 +1069,7 @@ jobs:
   linux-ok:
     name: Linux ok
     if: always()
-    needs: [changes, quick, test, cext, cext-wasm, build-native, jit-arm64-linux, suite, wasm, wasm-aot, wasm-point, wasi, wasm-engine, docs]
+    needs: [changes, quick, check-targets, test, cext, cext-wasm, build-native, jit-arm64-linux, suite, wasm, wasm-aot, wasm-point, wasi, wasm-engine, docs]
     runs-on: ubuntu-latest
     steps:
       - name: Check the results of the jobs
