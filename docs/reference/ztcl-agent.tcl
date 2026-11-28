@@ -48,7 +48,7 @@ command ztcl::agent {
 
         A result schema is a list of keys and types. A type is `string`, `int`, `number`, or `bool`; `{enum WORD ...}`, one of the words; `{list TYPE}`, a list of values of TYPE; or `{dict SCHEMA}`, a dict with the keys of SCHEMA. A dict has exactly the keys of its schema.
 
-        An error of the module has a code that starts with `ZTCL AGENT`: `USAGE`, `ENDPOINT`, `HTTP`, `HEADER`, `MODEL`, `LIMIT turns`, `LIMIT calls`, `LIMIT tokens`, `LIMIT thread`, `RESULT`, `PROTOCOL`, and `SCHEMA`. A subcommand has no short form, and the message of a wrong count of arguments names the proc of the module, such as `::ztcl::agent::post` ([issue 741](https://github.com/beetlebugorg/ztcl/issues/741)).
+        An error of the module has a code that starts with `ZTCL AGENT`: `USAGE`, `ENDPOINT`, `HTTP`, `HEADER`, `MODEL`, `LIMIT turns`, `LIMIT calls`, `LIMIT tokens`, `LIMIT thread`, `RESULT`, `PROTOCOL`, and `SCHEMA`. A subcommand has no short form. A wrong count of arguments gives the usage of the subcommand, such as `ztcl::agent post url headers body`.
 
         The examples of this page run with `--allow thread,socket,channels,event,meter`. The setup starts a fake model on 127.0.0.1 in a thread, which gives the replies that `replies` sets, and makes the procs `call`, which writes a reply with one call of a tool, `requests`, and the tool `add`.
     }
@@ -82,7 +82,7 @@ command ztcl::agent {
             replies [call nosuch {{}}] [call result {{"answer":"x"}}]
             lindex [dict get [ztcl::agent run -endpoint $url -isolation interp] log] 1
         } {kind tool where thread name nosuch args {} ok 0 result {invalid command name "nosuch"} errorcode {TCL LOOKUP COMMAND}}
-        error {ztcl::agent run -endpoint $url -bogus 1} {bad option "-bogus": must be -api, -calls, -compute, -data, -endpoint, -header, -isolation, -local, -log, -max-tokens, -meter, -model, -prompt, -result, -setup, -system, -tokens, -tools, -turns} {ZTCL AGENT USAGE}
+        error {ztcl::agent run -endpoint $url -bogus 1} {bad option "-bogus": must be -api, -calls, -compute, -data, -endpoint, -header, -isolation, -local, -log, -max-tokens, -meter, -model, -prompt, -result, -setup, -system, -tokens, -tools, or -turns} {ZTCL AGENT USAGE}
         error {
             thread::send $srv {set ::status 500}
             ztcl::agent run -endpoint $url -isolation interp
@@ -158,13 +158,13 @@ command ztcl::agent {
             value LIST
             type {list of names and values}
             summary {Gives data for the first user message.}
-            description {Each value goes in the first user message as `<data name="NAME">`, after the prompt. An odd list gives no data block and no error (issue 741).}
+            description {Each value goes in the first user message as `<data name="NAME">`, after the prompt. An odd list is an error.}
             example {
                 replies [call result {{"answer":"x"}}]
                 ztcl::agent run -endpoint $url -isolation interp -data {email hello}
                 string match {*<data name=\\"email\\">\\nhello\\n</data>*} [lindex [requests] end 1]
             } 1
-            noerrors {The list is not checked (issue 741).}
+            error {ztcl::agent run -endpoint $url -isolation interp -data {a}} {-data needs a list of names and values} {ZTCL AGENT USAGE}
         }
         option -tools {
             value LIST
@@ -250,7 +250,7 @@ command ztcl::agent {
                 replies [call result {{"answer":"x"}}]
                 dict get [ztcl::agent run -endpoint $url -isolation interp] result
             } {answer x}
-            error {ztcl::agent run -endpoint $url -isolation bogus} {bad isolation level "bogus": must be interp, process, or vm} NONE
+            error {ztcl::agent run -endpoint $url -isolation bogus} {bad isolation level "bogus": must be interp, process, or vm} {ZTCL AGENT USAGE}
         }
         option -compute {
             value UNITS
@@ -268,7 +268,7 @@ command ztcl::agent {
             value NAME
             type {meter name}
             summary {Counts the thread in a meter.}
-            description {The thread counts in the meter NAME of `ztcl::meter`, which needs the capability `meter`. With no capability `meter` the error is the one of `thread::create` (issue 741).}
+            description {The thread counts in the meter NAME of `ztcl::meter`, which needs the capability `meter`. With no capability `meter`, `-meter` is an error of `ZTCL AGENT USAGE`.}
             example {
                 replies [call result {{"answer":"x"}}]
                 ztcl::agent run -endpoint $url -isolation interp -meter m
@@ -281,7 +281,7 @@ command ztcl::agent {
             type integer
             default 8
             summary {Gives the most model calls.}
-            description {At the end of N model calls with no result, `run` gives `ZTCL AGENT LIMIT turns`. N is not checked before the first request (issue 741).}
+            description {At the end of N model calls with no result, `run` gives `ZTCL AGENT LIMIT turns`. `run` checks that N is an integer before the first request, as it does for `-calls`, `-tokens`, `-max-tokens`, and `-compute`.}
             example {
                 replies [call add {{"a":"1","b":"1"}}] [call add {{"a":"1","b":"1"}}]
                 catch {ztcl::agent run -endpoint $url -isolation interp -tools add -turns 1} msg
@@ -353,7 +353,7 @@ command ztcl::agent {
     subcommand doc {
         synopsis {ztcl::agent doc NAME TEXT ?ARG TYPE ...?}
         summary {Sets the text of a tool and the types of its arguments.}
-        description {Sets the text of the tool NAME and the types of its arguments, for its schema, and gives NAME. An argument with no type is a `string`. `doc` checks no type and no name: a bad type gives its error at `describe` or `run` (issue 741).}
+        description {Sets the text of the tool NAME and the types of its arguments, for its schema, and gives NAME. An argument with no entry is a `string`. `doc` checks that NAME is a command, that each ARG is an argument of the proc (`args` for a command that is no proc), and that each TYPE is a type of a schema.}
         returns {NAME.}
         see {{ztcl::agent describe}}
         argument NAME {
@@ -373,7 +373,8 @@ command ztcl::agent {
             ztcl::agent doc greet "Greets a person." times int
             lrange [ztcl::agent describe greet] 0 1
         } {greet {Greets a person.}}
-        error {ztcl::agent doc greet} {wrong # args: should be "::ztcl::agent::doc name text ?arg ...?"} {TCL WRONGARGS}
+        error {ztcl::agent doc greet} {wrong # args: should be "ztcl::agent doc name text ?arg type ...?"} {TCL WRONGARGS}
+        error {ztcl::agent doc nosuch x} {no command "nosuch" for a tool} {ZTCL AGENT USAGE}
     }
 
     subcommand describe {
@@ -397,7 +398,7 @@ command ztcl::agent {
             ztcl::agent doc g x a bogus
             ztcl::agent describe g
         } {bad type "bogus"} {ZTCL AGENT SCHEMA}
-        error {ztcl::agent describe} {wrong # args: should be "::ztcl::agent::describe name"} {TCL WRONGARGS}
+        error {ztcl::agent describe} {wrong # args: should be "ztcl::agent describe name"} {TCL WRONGARGS}
     }
 
     subcommand check {
@@ -420,8 +421,8 @@ command ztcl::agent {
         error {ztcl::agent check {n int} {n x}} {result.n is not int} {ZTCL AGENT RESULT}
         error {ztcl::agent check {n int} {n 1 m 2}} {result has the extra key "m"} {ZTCL AGENT RESULT}
         error {ztcl::agent check {n int} {}} {result has no key "n"} {ZTCL AGENT RESULT}
-        error {ztcl::agent check {n bogus} {n 1}} {bad type "bogus" in -result} {ZTCL AGENT SCHEMA}
-        error {ztcl::agent check {n int}} {wrong # args: should be "::ztcl::agent::check spec value ?path?"} {TCL WRONGARGS}
+        error {ztcl::agent check {n bogus} {n 1}} {bad type "bogus"} {ZTCL AGENT SCHEMA}
+        error {ztcl::agent check {n int}} {wrong # args: should be "ztcl::agent check spec value"} {TCL WRONGARGS}
     }
 
     subcommand schema {
@@ -437,13 +438,13 @@ command ztcl::agent {
         example {ztcl::agent schema {n int}} {{"type":"object","properties":{"n":{"type":"integer"}},"required":["n"],"additionalProperties":false}}
         example {ztcl::agent schema {k {enum a b} l {list number}}} {{"type":"object","properties":{"k":{"type":"string","enum":["a","b"]},"l":{"type":"array","items":{"type":"number"}}},"required":["k","l"],"additionalProperties":false}}
         error {ztcl::agent schema {n bogus}} {bad type "bogus"} {ZTCL AGENT SCHEMA}
-        error {ztcl::agent schema} {wrong # args: should be "::ztcl::agent::schema spec"} {TCL WRONGARGS}
+        error {ztcl::agent schema} {wrong # args: should be "ztcl::agent schema spec"} {TCL WRONGARGS}
     }
 
     subcommand post {
         synopsis {ztcl::agent post URL HEADERS BODY}
         summary {Sends one HTTP/1.1 POST of a JSON body.}
-        description {Sends one HTTP/1.1 POST of the JSON text BODY to URL, with the headers of the list HEADERS, and gives the dict `status N body TEXT`. `run` uses it. An odd list of headers is not checked (issue 741).}
+        description {Sends one HTTP/1.1 POST of the JSON text BODY to URL, with the headers of the list HEADERS, and gives the dict `status N body TEXT`. `run` uses it. An odd list of headers is an error of `ZTCL AGENT HEADER`.}
         returns {A dict of status and body.}
         see {{ztcl::agent run} ztcl::tls}
         argument URL {
@@ -465,6 +466,6 @@ command ztcl::agent {
         } {{status 200 body {{"ok":true}}} {{"a":1}}}
         error {ztcl::agent post ftp://x {} {}} {bad endpoint "ftp://x"} {ZTCL AGENT ENDPOINT}
         error {ztcl::agent post $url {a "b\nc"} {}} {a header has a line end} {ZTCL AGENT HEADER}
-        error {ztcl::agent post} {wrong # args: should be "::ztcl::agent::post url headers body"} {TCL WRONGARGS}
+        error {ztcl::agent post} {wrong # args: should be "ztcl::agent post url headers body"} {TCL WRONGARGS}
     }
 }

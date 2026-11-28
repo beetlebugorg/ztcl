@@ -312,14 +312,49 @@ namespace eval ::ztcl::agent {
 
 # `ztcl::agent doc NAME TEXT ?ARG TYPE ...?`: the text of the host tool
 # NAME and the types of its arguments, for its schema.
-proc ::ztcl::agent::doc {name text args} {
+proc ::ztcl::agent::doc {args} {
+    if {[llength $args] < 2} {
+        return -code error -errorcode {TCL WRONGARGS} "wrong # args: should be \"ztcl::agent doc name text ?arg type ...?\""
+    }
+    set types [lassign $args name text]
     variable docs
-    dict set docs $name [dict create text $text types $args]
+    if {[info commands ::$name] eq ""} {
+        return -code error -errorcode {ZTCL AGENT USAGE} "no command \"$name\" for a tool"
+    }
+    if {[llength $types] % 2} {
+        return -code error -errorcode {ZTCL AGENT USAGE} "the argument \"[lindex $types end]\" has no type"
+    }
+    set known [expr {[info procs ::$name] ne "" ? [info args ::$name] : {args}}]
+    foreach {a type} $types {
+        if {$a ni $known} {
+            return -code error -errorcode {ZTCL AGENT USAGE} "$name has no argument \"$a\": must be [::ztcl::agent::words_or $known]"
+        }
+        # The same check as the schema: an error here names the type.
+        ::ztcl::agent::shared::type_json $type
+    }
+    dict set docs $name [dict create text $text types $types]
     return $name
 }
 
+# The words of a list for a message: "a", "a or b", or "a, b, or c".
+proc ::ztcl::agent::words_or {words} {
+    switch [llength $words] {
+        0 {return ""}
+        1 {return [lindex $words 0]}
+        2 {return "[lindex $words 0] or [lindex $words 1]"}
+    }
+    return "[join [lrange $words 0 end-1] {, }], or [lindex $words end]"
+}
+
+# A wrong count of arguments with the name of the ensemble.
+proc ::ztcl::agent::usage {text} {
+    return -code error -level 2 -errorcode {TCL WRONGARGS} "wrong # args: should be \"ztcl::agent $text\""
+}
+
 # The spec of a host command as a tool: {name text schema params}.
-proc ::ztcl::agent::describe {name} {
+proc ::ztcl::agent::describe {args} {
+    if {[llength $args] != 1} {::ztcl::agent::usage "describe name"}
+    lassign $args name
     variable docs
     if {[info commands ::$name] eq ""} {
         return -code error -errorcode {ZTCL AGENT USAGE} "no command \"$name\" for a tool"
@@ -327,11 +362,19 @@ proc ::ztcl::agent::describe {name} {
     ::ztcl::agent::shared::describe $name $docs
 }
 
-proc ::ztcl::agent::schema {spec} {::ztcl::agent::shared::schema $spec}
+proc ::ztcl::agent::schema {args} {
+    if {[llength $args] != 1} {::ztcl::agent::usage "schema spec"}
+    ::ztcl::agent::shared::schema [lindex $args 0]
+}
 
 # Checks a value against a result schema. Gives the value, or an error
 # with the code ZTCL AGENT RESULT.
-proc ::ztcl::agent::check {spec value {path result}} {
+proc ::ztcl::agent::check {args} {
+    if {[llength $args] != 2} {::ztcl::agent::usage "check spec value"}
+    ::ztcl::agent::check_dict {*}$args result
+}
+
+proc ::ztcl::agent::check_dict {spec value path} {
     if {[catch {dict size $value}]} {
         return -code error -errorcode {ZTCL AGENT RESULT} "$path is not a dict"
     }
@@ -362,14 +405,19 @@ proc ::ztcl::agent::check_type {type v path} {
             set i 0
             foreach e $v {::ztcl::agent::check_type [lindex $type 1] $e "$path.$i"; incr i}
         }
-        dict {::ztcl::agent::check [lindex $type 1] $v $path}
-        default {return -code error -errorcode {ZTCL AGENT SCHEMA} "bad type \"$type\" in -result"}
+        dict {::ztcl::agent::check_dict [lindex $type 1] $v $path}
+        default {return -code error -errorcode {ZTCL AGENT SCHEMA} "bad type \"$type\""}
     }
 }
 
 # One HTTP/1.1 POST. Gives {status N body TEXT}. An https URL needs the
 # module ztcl::tls.
-proc ::ztcl::agent::post {url headers body} {
+proc ::ztcl::agent::post {args} {
+    if {[llength $args] != 3} {::ztcl::agent::usage "post url headers body"}
+    lassign $args url headers body
+    if {[catch {llength $headers} n] || $n % 2} {
+        return -code error -errorcode {ZTCL AGENT HEADER} "the headers need a list of names and values"
+    }
     if {![regexp {^(https?)://([^/:]+)(?::([0-9]+))?(/.*)?$} $url -> scheme host port path]} {
         return -code error -errorcode {ZTCL AGENT ENDPOINT} "bad endpoint \"$url\""
     }
@@ -436,12 +484,30 @@ proc ::ztcl::agent::run {args} {
     }
     foreach {k v} $args {
         if {![dict exists $o $k]} {
-            return -code error -errorcode {ZTCL AGENT USAGE} "bad option \"$k\": must be [join [lsort [dict keys $o]] {, }]"
+            return -code error -errorcode {ZTCL AGENT USAGE} "bad option \"$k\": must be [::ztcl::agent::words_or [lsort [dict keys $o]]]"
         }
         dict set o $k $v
     }
     if {[dict get $o -endpoint] eq ""} {
         return -code error -errorcode {ZTCL AGENT USAGE} "ztcl::agent run needs -endpoint"
+    }
+    foreach k {-turns -calls -tokens -max-tokens -compute} {
+        set v [dict get $o $k]
+        if {($k ne "-compute" || $v ne "") && ![string is entier -strict $v]} {
+            return -code error -errorcode {TCL VALUE NUMBER} "expected integer but got \"$v\""
+        }
+    }
+    if {[dict get $o -isolation] ni {interp process vm}} {
+        return -code error -errorcode {ZTCL AGENT USAGE} "bad isolation level \"[dict get $o -isolation]\": must be interp, process, or vm"
+    }
+    if {[catch {llength [dict get $o -data]} n] || $n % 2} {
+        return -code error -errorcode {ZTCL AGENT USAGE} "-data needs a list of names and values"
+    }
+    if {[catch {llength [dict get $o -header]} n] || $n % 2} {
+        return -code error -errorcode {ZTCL AGENT HEADER} "the headers need a list of names and values"
+    }
+    if {[dict get $o -meter] ne "" && [info commands ::ztcl::meter] eq ""} {
+        return -code error -errorcode {ZTCL AGENT USAGE} "-meter needs the capability meter"
     }
     if {[dict get $o -api] ni {messages openai}} {
         return -code error -errorcode {ZTCL AGENT USAGE} "bad api \"[dict get $o -api]\": must be messages or openai"
@@ -534,7 +600,7 @@ proc ::ztcl::agent::run {args} {
                 }
                 done {
                     set res [dict get $a result]
-                    if {[catch {::ztcl::agent::check $result_spec $res} msg]} {
+                    if {[catch {::ztcl::agent::check_dict $result_spec $res result} msg]} {
                         set e [list kind result ok 0 error $msg]
                         lappend log $e
                         {*}$note $e
